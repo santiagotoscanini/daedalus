@@ -75,6 +75,13 @@ export type AppTabData =
     }
   | { kind: 'access'; access: AppAccess }
   | { kind: 'secrets'; env: EnvPayload; secrets: AppSecretKey[] }
+  /**
+   * The variables themselves come with the FRAME (`app.envVars`), because
+   * that is what the editor edits — the same reason the task list is there.
+   * What the tab fetches is the SECRET key names, which the form needs to
+   * refuse a name that is already sealed in the sops file.
+   */
+  | { kind: 'variables'; secrets: AppSecretKey[] }
   | { kind: 'logs' }
   | { kind: 'database'; database: AppDatabase }
   | { kind: 'vpn'; vpn: AppVpn }
@@ -204,6 +211,9 @@ export async function loadAppTab(data: {
           : noAccess(accessWindow)
       return { kind: 'access', access }
     }
+
+    case 'variables':
+      return { kind: 'variables', secrets: await loadAppSecrets(name) }
 
     case 'secrets': {
       // Secret VALUES are deliberately NOT in this payload. Loader data is

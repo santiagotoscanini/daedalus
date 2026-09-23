@@ -9,6 +9,7 @@ import {
 } from '../../host/nix-manifest'
 import { appEnvVars, apps, appTasks } from '../../host/schema'
 import { readSite } from '../../host/site'
+import { type EnvVar, validateEnvVars } from '../apps/env-vars'
 import { REGISTRY_SCHEMA_VERSION } from '../contract/version'
 import { appNameError, effectiveHostname, hostnameError } from '../hostname'
 import { APP_STAGES, isAppStage, stageExposed } from '../stage'
@@ -315,6 +316,8 @@ export type EditableField = (typeof EDITABLE_FIELDS)[number]
 export type AppPatch = Partial<Pick<typeof apps.$inferInsert, EditableField>> & {
   /** The whole list, in authored order. Absent = leave the task rows alone. */
   tasks?: ManifestTask[]
+  /** The whole list, in authored order. Absent = leave the variable rows alone. */
+  env?: EnvVar[]
 }
 
 /**
@@ -388,9 +391,14 @@ export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
   }
 
   for (const [k, v] of Object.entries(patch)) {
-    switch (k as EditableField | 'tasks') {
+    switch (k as EditableField | 'tasks' | 'env') {
       case 'tasks':
         clean.tasks = validateTasks(v)
+        break
+      // Shape and names here; the collision with the app's SECRETS is in
+      // `updateApp`, where a disk read is allowed.
+      case 'env':
+        clean.env = validateEnvVars(v)
         break
       case 'stage':
         if (!isAppStage(v)) bad(k, APP_STAGES.join(' | '))
@@ -447,9 +455,9 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
   // Whitelist rather than trust the caller's keys: this object is written
   // straight into an UPDATE, and the server function boundary is the only
   // thing between it and the request body.
-  // Typed WITHOUT `tasks`: what this half becomes is the `SET` of an UPDATE on
-  // `apps`, and `tasks` is not a column there.
-  const clean: Omit<AppPatch, 'tasks'> = {}
+  // Typed WITHOUT `tasks` or `env`: what this half becomes is the `SET` of an
+  // UPDATE on `apps`, and neither is a column there.
+  const clean: Omit<AppPatch, 'tasks' | 'env'> = {}
   for (const k of EDITABLE_FIELDS) {
     if (k in patch) (clean as Record<string, unknown>)[k] = patch[k]
   }
@@ -457,7 +465,23 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
   // set rather than left in it — `tasks` is not a column on `apps` and an
   // UPDATE carrying it would be a SQL error, not a no-op.
   const tasks = patch.tasks
-  if (Object.keys(clean).length === 0 && tasks === undefined) return
+  const env = patch.env
+  if (Object.keys(clean).length === 0 && tasks === undefined && env === undefined) return
+
+  // The one rule a variable's name has that the pure validator cannot check:
+  // the app's sops file is on disk. Same placement and the same reasoning as
+  // the hostname collision below — cheaper to refuse here than inside the
+  // rebuild an Apply has already committed.
+  if (env !== undefined) {
+    const { loadAppSecrets } = await import('../apps/secrets')
+    const secretKeys = (await loadAppSecrets(name)).map((s) => s.key)
+    const clash = env.find((e) => secretKeys.includes(e.key))
+    if (clash !== undefined) {
+      throw new Error(
+        `${clash.key} is a secret of this app — remove it there first, or it would sit in the clear beside its encrypted value`,
+      )
+    }
+  }
 
   // Checked on the way in, not just in the form. The form is not a boundary,
   // and an invalid hostname does not fail here — it fails inside
@@ -513,6 +537,24 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
       .update(apps)
       .set({ ...clean, updatedAt: new Date() })
       .where(eq(apps.name, name))
+
+    if (env !== undefined) {
+      // Delete-then-insert, exactly as importFromNix and the task write do,
+      // and inside their transaction for the same reason: a failure between
+      // the two would leave the app stripped of every variable it had.
+      await tx.delete(appEnvVars).where(eq(appEnvVars.appId, record.id))
+      if (env.length > 0) {
+        await tx.insert(appEnvVars).values(
+          env.map((e, i) => ({
+            appId: record.id,
+            key: e.key,
+            value: e.value,
+            note: e.note,
+            position: i,
+          })),
+        )
+      }
+    }
 
     if (tasks === undefined) return
     await tx.delete(appTasks).where(eq(appTasks.appId, record.id))

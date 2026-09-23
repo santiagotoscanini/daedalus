@@ -86,7 +86,8 @@ export function Settings({
           Secrets have no switch because the file is the switch: a tracked{' '}
           <code>stacks/apps/{app.name}-env.sops</code> is loaded into the container, and nothing
           else decides it. Author it with <code>sops</code>, <code>git add</code> it, and the next
-          rebuild injects it.
+          rebuild injects it. A value that is not secret belongs on <b>Variables</b>, where it can
+          be read and edited.
         </p>
       </Board>
 

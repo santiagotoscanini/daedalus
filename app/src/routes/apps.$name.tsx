@@ -8,6 +8,7 @@ import { Secrets } from '../components/apps/secrets'
 import { Settings } from '../components/apps/settings'
 import { CHIP, LEDE } from '../components/apps/shared'
 import { Tasks } from '../components/apps/tasks'
+import { Variables } from '../components/apps/variables'
 import { Vpn } from '../components/apps/vpn'
 import { AppIcon, type AppState, Segmented, StatePill } from '../components/controls'
 import { GuardedAwait } from '../components/error'
@@ -47,6 +48,7 @@ export const APP_TABS = [
   'tasks',
   'access',
   'settings',
+  'variables',
   'secrets',
   'logs',
 ] as const
@@ -307,6 +309,20 @@ function AppDetail() {
             takenHostnames={takenHostnames}
             stateRoot={stateRoot}
           />
+        )
+      case 'variables':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={<BlockSkeleton h={300} />}
+          >
+            {(td) =>
+              td.kind !== 'variables' ? null : (
+                <Variables app={app} readOnly={readOnly} secrets={td.secrets} />
+              )
+            }
+          </GuardedAwait>
         )
       case 'secrets':
         return (

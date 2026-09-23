@@ -44,6 +44,7 @@ export type NavIconName =
   | 'access'
   | 'settings'
   | 'secrets'
+  | 'variables'
   | 'logs'
   | 'tasks'
 
@@ -176,6 +177,14 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
     <>
       <rect x="4.8" y="10.6" width="14.4" height="9.6" rx="2" />
       <path d="M8.2 10.6V7.7a3.8 3.8 0 0 1 7.6 0v2.9" />
+    </>
+  ),
+  // The secrets padlock with its shackle open: the same environment, the
+  // half that is not sealed.
+  variables: (
+    <>
+      <rect x="4.8" y="10.6" width="14.4" height="9.6" rx="2" />
+      <path d="M8.2 10.6V7.7a3.8 3.8 0 0 1 7.6 0" />
     </>
   ),
   // A terminal: where a log is read.

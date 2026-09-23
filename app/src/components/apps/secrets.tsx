@@ -359,7 +359,8 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
         The encrypted file behind the <code>secrets</code> rows above:{' '}
         <code>site/vault/apps/{app}-env.sops</code>. daedalus can seal a value into it and never
         read one back out — so a secret can be added, replaced or removed, never shown. To turn one
-        back into a plain variable, remove it here and type it again in the registry.
+        back into a plain variable, remove it here and add it again on <b>Variables</b> — the same
+        environment, the half that is committed in the clear.
       </p>
 
       {refusal !== null && (
