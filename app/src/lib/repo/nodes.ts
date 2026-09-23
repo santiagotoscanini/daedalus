@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { desc, eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import type { HelloVerdict } from '../../host/agent-hello'
 import { db } from '../../host/db'
 import { nodeTargetsMissing, writeNodeTargets } from '../../host/node-targets'
@@ -113,7 +113,10 @@ function row(n: typeof nodes.$inferSelect): NodeRow {
 }
 
 export async function listNodes(): Promise<NodeRow[]> {
-  const all = await db.select().from(nodes).orderBy(desc(nodes.lastSeenAt))
+  // In the order they joined, and never by when they last spoke: a picker
+  // whose pills swap places between two loads because one machine said
+  // hello a second later reads as a race, not as a list.
+  const all = await db.select().from(nodes).orderBy(asc(nodes.firstSeenAt), asc(nodes.id))
   return all.map(row)
 }
 

@@ -21,10 +21,9 @@ import {
 } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { EMPTY } from '../components/tokens'
-import type { AgentStatus } from '../lib/agent/status'
+import type { NodeSystemData } from '../lib/dashboard/node-system'
 import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
-import type { NodeRow } from '../lib/repo/nodes'
 import { fetchNodeClaudeFn } from '../server/claude'
 import { fetchBoxHeadFn, fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
 import { fetchModuleBoards } from '../server/modules'
@@ -91,13 +90,11 @@ export const Route = createFileRoute('/c/$category')({
       boxHead: picker && machine === null ? await fetchBoxHeadFn() : null,
       machine,
       nodeTab,
-      // A node's Claude tab is its Claude report (the tray's picture of the
-      // remote-control server), not its telemetry; the other tabs are the
-      // telemetry document. One fetch either way.
-      node:
-        machine === null || nodeTab === 'claude'
-          ? null
-          : fetchNodeSystemFn({ data: { id: machine } }),
+      // A node's document is fetched on every tab: it is what the head strip
+      // reads, and a strip that said less on the Claude tab than on Host read
+      // as a page that had not finished. The Claude tab adds its report (the
+      // tray's picture of the remote-control server) for its boards.
+      node: machine === null ? null : fetchNodeSystemFn({ data: { id: machine } }),
       nodeClaude:
         machine !== null && nodeTab === 'claude'
           ? fetchNodeClaudeFn({ data: { id: machine } })
@@ -136,10 +133,8 @@ function CategoryPage() {
         <>
           {/* The strip first, then the tabs, as on the box. It waits for the
               node's answer behind a skeleton of its own size, so the tabs
-              below never move and never wait. Whichever promise the tab is
-              on carries the node and its status, which is all the strip
-              reads. */}
-          <NodeHead promise={nodeClaude ?? node} resetKey={sectionKey} />
+              below never move and never wait. */}
+          <NodeHead promise={node} resetKey={sectionKey} />
           <TabBar
             tabs={NODE_TABS.map((t) => ({ id: t.id, label: t.label }))}
             active={nodeTab}
@@ -312,17 +307,12 @@ function BoardsPlaceholder({ spec, tab }: { spec: PageSpec; tab: string }) {
   )
 }
 
-/**
- * The node's head strip, from whichever of the two node promises the tab is
- * on. Typed loosely on purpose: both resolve to the node and its agent's
- * status, which is what the strip draws, and TypeScript cannot narrow a
- * union of two promise types through `??`.
- */
+/** The node's head strip, behind a skeleton of its own size while the agent answers. */
 function NodeHead({
   promise,
   resetKey,
 }: {
-  promise: Promise<{ node: NodeRow; status: AgentStatus | null } | null> | null
+  promise: Promise<NodeSystemData | null> | null
   resetKey: string
 }) {
   if (promise === null) return null
