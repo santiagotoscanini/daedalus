@@ -112,24 +112,13 @@ in
     # what its own stacks make structural (a netns owner with tenants, a
     # gateway whose sidecars write into another stack's bridge) in
     # host/modules.nix; the module-system rule in the reference host's
-    # repository is the reasoning per stack.
+    # repository is the reasoning per stack. The spine is a DEFINITION below,
+    # not the option's default: list definitions concatenate, a default is
+    # replaced by the first one.
     structuralModules = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [
-        "app-db"
-        "apps"
-        "cloudflared"
-        "daedalus"
-        "gatus"
-        "healthchecks"
-        "logging"
-        "monitoring"
-        "pihole"
-        "pocket-id"
-        "registry"
-        "traefik"
-      ];
-      description = "Module ids the control plane must not switch off; site.json switching one off fails evaluation.";
+      default = [ ];
+      description = "Module ids the control plane must not switch off; site.json switching one off fails evaluation. The engine defines its spine; a host appends its own.";
     };
 
     site = {
@@ -295,131 +284,150 @@ in
     };
   };
 
-  config = lib.mkIf sourced {
-    # The sourced constants. Plain definitions, not mkDefault: there must be
-    # exactly one place these are written, and it is the document.
-    fleet = {
-      # The switches the document names, at a priority the host's own files
-      # yield to. Only declared ids reach a definition; the rest are the
-      # assertion below, which is why this cannot be an "option does not
-      # exist" crash.
-      modules = lib.mapAttrs (_: on: {
-        enable = lib.mkOverride 60 on;
-      }) knownSwitches;
+  config = lib.mkMerge [
+    {
+      # The engine's spine, structural on every host.
+      fleet.structuralModules = [
+        "app-db"
+        "apps"
+        "cloudflared"
+        "daedalus"
+        "gatus"
+        "healthchecks"
+        "logging"
+        "monitoring"
+        "pihole"
+        "pocket-id"
+        "registry"
+        "traefik"
+      ];
+    }
+    (lib.mkIf sourced {
+      # The sourced constants. Plain definitions, not mkDefault: there must be
+      # exactly one place these are written, and it is the document.
+      fleet = {
+        # The switches the document names, at a priority the host's own files
+        # yield to. Only declared ids reach a definition; the rest are the
+        # assertion below, which is why this cannot be an "option does not
+        # exist" crash.
+        modules = lib.mapAttrs (_: on: {
+          enable = lib.mkOverride 60 on;
+        }) knownSwitches;
 
-      # The fields are picked by name so a key the control plane adds later
-      # cannot fail the submodule's type check before this module learns it.
-      nodes = map (n: {
-        inherit (n)
-          id
-          name
-          os
-          ;
-        providers = lib.mapAttrs (_: p: { inherit (p) port; }) (n.providers or { });
-      }) (if nodesDoc == null then [ ] else nodesDoc.nodes);
-      inherit (siteDoc.identity) baseDomain;
-      inherit (siteDoc.network) lanIp;
-      inherit (siteDoc.network) wanHost;
-      lanInterface = siteDoc.network.interface;
-      inherit (siteDoc.network) gateway;
-      inherit (siteDoc.network) dnsUpstreams;
-      dhcp = {
-        inherit (siteDoc.network.dhcp)
-          active
-          router
-          start
-          end
-          leaseTime
-          ;
-      };
-      mail = {
-        inherit (siteDoc.mail) sender alertTo;
-      };
-      cloudflare = {
-        inherit (siteDoc.cloudflare) zoneId accountId tunnelId;
-        tokenEnvFile = config.sops.templates."cloudflare-api-token.env".path;
-      };
-      # `or`: a site.json written before these fields existed still builds,
-      # and keeps the address stacks/daedalus declares. "" reads as unset.
-      controlPlane =
-        let
-          unset = v: if v == "" then null else v;
-        in
-        {
-          label = unset (siteDoc.identity.controlPlane or null);
-          previousLabel = unset (siteDoc.identity.controlPlanePrevious or null);
+        # The fields are picked by name so a key the control plane adds later
+        # cannot fail the submodule's type check before this module learns it.
+        nodes = map (n: {
+          inherit (n)
+            id
+            name
+            os
+            ;
+          providers = lib.mapAttrs (_: p: { inherit (p) port; }) (n.providers or { });
+        }) (if nodesDoc == null then [ ] else nodesDoc.nodes);
+        inherit (siteDoc.identity) baseDomain;
+        inherit (siteDoc.network) lanIp;
+        inherit (siteDoc.network) wanHost;
+        lanInterface = siteDoc.network.interface;
+        inherit (siteDoc.network) gateway;
+        inherit (siteDoc.network) dnsUpstreams;
+        dhcp = {
+          inherit (siteDoc.network.dhcp)
+            active
+            router
+            start
+            end
+            leaseTime
+            ;
         };
-      # `or`: absent (or `"github": null`) until an App exists. The fields are
-      # picked by name so a key the engine adds later cannot fail the
-      # submodule's type check before this module learns about it.
-      github.app =
-        let
-          app = siteDoc.github.app or null;
-        in
-        if app == null then
-          null
-        else
+        mail = {
+          inherit (siteDoc.mail) sender alertTo;
+        };
+        cloudflare = {
+          inherit (siteDoc.cloudflare) zoneId accountId tunnelId;
+          tokenEnvFile = config.sops.templates."cloudflare-api-token.env".path;
+        };
+        # `or`: a site.json written before these fields existed still builds,
+        # and keeps the address stacks/daedalus declares. "" reads as unset.
+        controlPlane =
+          let
+            unset = v: if v == "" then null else v;
+          in
           {
-            inherit (app)
-              id
-              slug
-              clientId
-              htmlUrl
-              owner
-              ownerId
-              ;
+            label = unset (siteDoc.identity.controlPlane or null);
+            previousLabel = unset (siteDoc.identity.controlPlanePrevious or null);
           };
-    };
+        # `or`: absent (or `"github": null`) until an App exists. The fields are
+        # picked by name so a key the engine adds later cannot fail the
+        # submodule's type check before this module learns about it.
+        github.app =
+          let
+            app = siteDoc.github.app or null;
+          in
+          if app == null then
+            null
+          else
+            {
+              inherit (app)
+                id
+                slug
+                clientId
+                htmlUrl
+                owner
+                ownerId
+                ;
+            };
+      };
 
-    # The box's ONE Cloudflare API token. Its only home is site/vault/, where
-    # Settings › Integrations writes a replacement: a binary sops file holding
-    # the raw value. The one template renders it under lego's variable name
-    # CF_DNS_API_TOKEN, the dotenv line every consumer reads (traefik's
-    # DNS-01, ddclient, route-sync, daedalus), and each consumer adds its own
-    # unit to `restartUnits`, so a rotation reaches them without the manual
-    # restart the false-success trap otherwise demands.
-    # Scopes it needs: Zone:Read + DNS:Edit (all zones) and Account "Cloudflare
-    # One Connector: cloudflared" Read (daedalus's tunnel panels).
-    sops.secrets."cloudflare-api-token" = {
-      sopsFile = "${cfg.site.source}/vault/cloudflare-api-token.sops";
-      format = "binary";
-    };
-    sops.templates."cloudflare-api-token.env" = {
-      content = ''
-        CF_DNS_API_TOKEN=${config.sops.placeholder."cloudflare-api-token"}
-      '';
-      owner = cfg.operator.user;
-    };
+      # The box's ONE Cloudflare API token. Its only home is site/vault/, where
+      # Settings › Integrations writes a replacement: a binary sops file holding
+      # the raw value. The one template renders it under lego's variable name
+      # CF_DNS_API_TOKEN, the dotenv line every consumer reads (traefik's
+      # DNS-01, ddclient, route-sync, daedalus), and each consumer adds its own
+      # unit to `restartUnits`, so a rotation reaches them without the manual
+      # restart the false-success trap otherwise demands.
+      # Scopes it needs: Zone:Read + DNS:Edit (all zones) and Account "Cloudflare
+      # One Connector: cloudflared" Read (daedalus's tunnel panels).
+      sops.secrets."cloudflare-api-token" = {
+        sopsFile = "${cfg.site.source}/vault/cloudflare-api-token.sops";
+        format = "binary";
+      };
+      sops.templates."cloudflare-api-token.env" = {
+        content = ''
+          CF_DNS_API_TOKEN=${config.sops.placeholder."cloudflare-api-token"}
+        '';
+        owner = cfg.operator.user;
+      };
 
-    # Every container gets it as TZ (platform/podman.nix), so a change here
-    # restarts the fleet on the next switch. That is what changing a timezone
-    # means on this box, not a side effect of how it is sourced.
-    time.timeZone = siteDoc.identity.timezone;
+      # Every container gets it as TZ (platform/podman.nix), so a change here
+      # restarts the fleet on the next switch. That is what changing a timezone
+      # means on this box, not a side effect of how it is sourced.
+      time.timeZone = siteDoc.identity.timezone;
 
-    # Belt and braces for what is NOT sourced yet: these must agree exactly,
-    # and a stale copy fails the build rather than a page three days later.
-    assertions = [
-      {
-        assertion = unknownSwitches == [ ];
-        message = "site.json modules.enabled names modules this host does not import: ${lib.concatStringsSep ", " unknownSwitches}. Switch them from a host that runs them, or remove the entries.";
-      }
-      {
-        assertion = structuralOff == [ ];
-        message = "site.json modules.enabled switches off structural modules: ${lib.concatStringsSep ", " structuralOff}. These are in fleet.structuralModules; a running box cannot do without them.";
-      }
-      (same "hostname" siteDoc.identity.hostname config.networking.hostName)
-      (same "owner" siteDoc.identity.owner cfg.github.owner)
-      (same "operator.user" siteDoc.identity.operator.user cfg.operator.user)
-      {
-        assertion = cfg.github.app == null || cfg.github.app.ownerId == cfg.github.expectedOwnerId;
-        message = "site.json github.app.ownerId (${toString cfg.github.app.ownerId}) is not fleet.github.expectedOwnerId (${toString cfg.github.expectedOwnerId}): the GitHub App must belong to the account this box trusts. If the account really changed, change fleet.github.expectedOwnerId in the host config deliberately.";
-      }
-    ]
-    ++ lib.optional (nodesDoc != null) {
-      assertion = lib.elem (nodesDoc.schemaVersion or null) nodesSchemaVersions;
-      message = "site/nodes.json declares schemaVersion ${
-        builtins.toJSON (nodesDoc.schemaVersion or null)
-      }, but this engine understands ${builtins.toJSON nodesSchemaVersions}.";
-    };
-  };
+      # Belt and braces for what is NOT sourced yet: these must agree exactly,
+      # and a stale copy fails the build rather than a page three days later.
+      assertions = [
+        {
+          assertion = unknownSwitches == [ ];
+          message = "site.json modules.enabled names modules this host does not import: ${lib.concatStringsSep ", " unknownSwitches}. Switch them from a host that runs them, or remove the entries.";
+        }
+        {
+          assertion = structuralOff == [ ];
+          message = "site.json modules.enabled switches off structural modules: ${lib.concatStringsSep ", " structuralOff}. These are in fleet.structuralModules; a running box cannot do without them.";
+        }
+        (same "hostname" siteDoc.identity.hostname config.networking.hostName)
+        (same "owner" siteDoc.identity.owner cfg.github.owner)
+        (same "operator.user" siteDoc.identity.operator.user cfg.operator.user)
+        {
+          assertion = cfg.github.app == null || cfg.github.app.ownerId == cfg.github.expectedOwnerId;
+          message = "site.json github.app.ownerId (${toString cfg.github.app.ownerId}) is not fleet.github.expectedOwnerId (${toString cfg.github.expectedOwnerId}): the GitHub App must belong to the account this box trusts. If the account really changed, change fleet.github.expectedOwnerId in the host config deliberately.";
+        }
+      ]
+      ++ lib.optional (nodesDoc != null) {
+        assertion = lib.elem (nodesDoc.schemaVersion or null) nodesSchemaVersions;
+        message = "site/nodes.json declares schemaVersion ${
+          builtins.toJSON (nodesDoc.schemaVersion or null)
+        }, but this engine understands ${builtins.toJSON nodesSchemaVersions}.";
+      };
+    })
+  ];
 }
