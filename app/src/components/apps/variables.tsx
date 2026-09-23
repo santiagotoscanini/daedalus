@@ -31,8 +31,16 @@ import { VIZ_EMPTY } from './shared'
 const FIELD = 'h-auto rounded-[6px] bg-(--panel-2) px-[0.5rem] py-[0.25rem] text-[0.8rem]'
 const SMALL_BTN = 'h-auto px-[0.6rem] py-[0.2rem] text-[0.76rem] text-(--text-muted)'
 const LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-(--dim)'
+// Three columns, not two: the name, the value, and the actions in a column
+// of their own so they line up down the page. Trailing the buttons after the
+// value put them at a different x in every row and wrapped them onto a second
+// line whenever a value was long — a Mapbox token is long — which made one
+// row taller than its neighbours for no reason a reader could use.
 const ROW =
-  'grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)] items-baseline gap-x-[1.25rem] gap-y-[0.35rem] border-b border-b-(--border-soft) py-2 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)]'
+  'grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] items-baseline gap-x-[1.25rem] gap-y-[0.15rem] border-b border-b-(--border-soft) py-[0.6rem] last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)_auto]'
+/** The note belongs under the value, not beside the key, and needs air above it. */
+const NOTE_CELL =
+  'col-start-2 col-end-4 mt-[0.35rem] mb-0 text-[0.76rem] leading-[1.45] text-(--dim) max-[60rem]:col-start-1'
 
 export function Variables({
   app,
@@ -136,8 +144,8 @@ export function Variables({
               <div className="flex min-w-0 items-baseline gap-2 [&>code]:[overflow-wrap:anywhere]">
                 <code>{v.key}</code>
               </div>
-              <div className="min-w-0">
-                {form === v.key ? (
+              {form === v.key ? (
+                <div className="col-start-2 col-end-4 min-w-0 max-[60rem]:col-start-1">
                   <VariableForm
                     fixedKey={v.key}
                     initial={v}
@@ -149,68 +157,62 @@ export function Variables({
                       upsert(draft, v.key)
                     }}
                   />
-                ) : (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="min-w-0 [overflow-wrap:anywhere]">{v.value}</span>
-                      {!readOnly && (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className={SMALL_BTN}
-                            disabled={saving}
-                            onClick={() => {
-                              setConfirming(null)
-                              setForm(v.key)
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          {confirming === v.key ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className={cn(SMALL_BTN, 'border-danger/50 text-danger')}
-                              disabled={saving}
-                              onClick={() => {
-                                write(
-                                  vars
-                                    .filter((o) => o.key !== v.key)
-                                    .map((o) => ({ key: o.key, value: o.value, note: o.note })),
-                                )
-                              }}
-                            >
-                              Confirm remove
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className={SMALL_BTN}
-                              disabled={saving}
-                              onClick={() => {
-                                setForm(null)
-                                setConfirming(v.key)
-                              }}
-                            >
-                              Remove
-                            </Button>
-                          )}
-                        </>
+                </div>
+              ) : (
+                <>
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{v.value}</span>
+                  {!readOnly && (
+                    <span className="flex items-baseline gap-2 justify-self-end whitespace-nowrap">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={SMALL_BTN}
+                        disabled={saving}
+                        onClick={() => {
+                          setConfirming(null)
+                          setForm(v.key)
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      {confirming === v.key ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className={cn(SMALL_BTN, 'border-danger/50 text-danger')}
+                          disabled={saving}
+                          onClick={() => {
+                            write(
+                              vars
+                                .filter((o) => o.key !== v.key)
+                                .map((o) => ({ key: o.key, value: o.value, note: o.note })),
+                            )
+                          }}
+                        >
+                          Confirm remove
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className={SMALL_BTN}
+                          disabled={saving}
+                          onClick={() => {
+                            setForm(null)
+                            setConfirming(v.key)
+                          }}
+                        >
+                          Remove
+                        </Button>
                       )}
-                    </div>
-                    {v.note !== null && v.note !== '' && (
-                      <p className="mt-[0.2rem] mb-0 text-[0.76rem] leading-[1.45] text-(--dim)">
-                        {v.note}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
+                    </span>
+                  )}
+                  {v.note !== null && v.note !== '' && <p className={NOTE_CELL}>{v.note}</p>}
+                </>
+              )}
             </div>
           ))}
         </div>
