@@ -52,22 +52,127 @@ function severityTone(s: string | null): Tone {
  * do not act: what is pending, whether a restart is owed, what went in
  * lately.
  */
-export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
-  const { node, status } = d
-  const t = d.telemetry
+/**
+ * The "Update now" row: the same request Settings › Machines makes, here
+ * because this is where you are when you notice the version.
+ */
+export function AgentUpdate({ node }: { node: NodeSystemData['node'] }) {
   const router = useRouter()
   const [busy, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  return (
+    <div className="mt-[0.7rem] flex flex-wrap items-center gap-2 border-(--border-soft) border-t pt-[0.75rem]">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
+        disabled={busy || node.updateCheckRequested}
+        onClick={() => {
+          setError(null)
+          start(async () => {
+            try {
+              await requestUpdateCheckFn({ data: { id: node.id } })
+              await router.invalidate()
+            } catch (e) {
+              setError(errorText(e))
+            }
+          })
+        }}
+      >
+        {node.updateCheckRequested ? 'Update queued' : 'Update now'}
+      </Button>
+      <span className={NOTE}>
+        {node.updateCheckRequested
+          ? 'rides the next hello, within a minute; the agent installs and restarts on its own'
+          : 'the agent looks every ten minutes on its own; this makes it look now'}
+      </span>
+      {error !== null && <span className={cn(NOTE, 'text-danger')}>{error}</span>}
+    </div>
+  )
+}
+
+/** "KB5062553" wherever Windows writes it → Microsoft's note on it. */
+function kbLink(s: string | null): string | null {
+  const m = s?.match(/KB(\d{6,8})/i)
+  return m === null || m === undefined ? null : `https://support.microsoft.com/help/${m[1]}`
+}
+
+/** "25H2 (26200.9457)" → { release: "25H2", build: "26200.9457" }. */
+function windowsVersion(v: string): { release: string; build: string | null } {
+  const m = v.match(/^(\S+)\s*(?:\(([^)]+)\))?/)
+  return m === null ? { release: v, build: null } : { release: m[1] ?? v, build: m[2] ?? null }
+}
+
+/**
+ * The Windows PC's Updates tab: what Windows it is, what Windows Update
+ * holds for it, what went in lately, and the two things this box moves.
+ *
+ * Windows Update is the one list that matters on a PC, and it is already
+ * the vendor's list of what has not been taken — with a KB number on each
+ * line that Microsoft keeps a page for. So the tab reports and links, and
+ * does not act: installing stays with the person at the machine, since an
+ * update that restarts the PC mid-game is not this box's call.
+ */
+export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
+  const { node, status } = d
+  const t = d.telemetry
   if (t === null || status === null) return null
   const u = t.updates
   const pending = u?.pending ?? []
+  const wv = windowsVersion(status.osVersion)
+  const lastCumulative = u?.installed.find((x) => /cumulative|security update/i.test(x.title))
 
   return (
     <BoardGrid>
       <Board
+        title="Windows"
+        icon="▣"
+        span={4}
+        aside={
+          u === null ? undefined : u.rebootPending === true ? (
+            <Chip tone="warn">restart owed</Chip>
+          ) : pending.length === 0 && u.error === null ? (
+            <Chip tone="ok">up to date</Chip>
+          ) : pending.length > 0 ? (
+            <Chip tone="warn">{num(pending.length)} pending</Chip>
+          ) : undefined
+        }
+      >
+        <Facts
+          rows={[
+            { k: 'Edition', v: status.osName },
+            { k: 'Release', v: <span className={MONO}>{wv.release}</span> },
+            {
+              k: 'Build',
+              v: <span className={MONO}>{wv.build ?? t.os.kernel ?? DASH}</span>,
+            },
+            {
+              k: 'Installed',
+              v: t.os.installedAt === null ? DASH : ago(t.os.installedAt),
+            },
+            {
+              k: 'Last patch',
+              v:
+                lastCumulative === undefined
+                  ? DASH
+                  : lastCumulative.at === null
+                    ? lastCumulative.title
+                    : ago(lastCumulative.at),
+            },
+          ]}
+        />
+        <p className={FOOT}>
+          The release is the yearly name Microsoft gives the build line; the build&rsquo;s last
+          number moves with every monthly cumulative update, which is what &ldquo;last patch&rdquo;
+          dates. Installed is when this Windows was first set up, not the PC.
+        </p>
+      </Board>
+
+      <Board
         title="Agent"
         icon="◎"
-        span={12}
+        span={8}
         aside={
           status.restartPending ? (
             <Chip tone="ok">installed, restarting</Chip>
@@ -88,34 +193,7 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
             { k: 'Last hello', v: since(node.lastSeenAgo) },
           ]}
         />
-        <div className="mt-[0.7rem] flex flex-wrap items-center gap-2 border-(--border-soft) border-t pt-[0.75rem]">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={GHOST_BTN}
-            disabled={busy || node.updateCheckRequested}
-            onClick={() => {
-              setError(null)
-              start(async () => {
-                try {
-                  await requestUpdateCheckFn({ data: { id: node.id } })
-                  await router.invalidate()
-                } catch (e) {
-                  setError(errorText(e))
-                }
-              })
-            }}
-          >
-            {node.updateCheckRequested ? 'Update queued' : 'Update now'}
-          </Button>
-          <span className={NOTE}>
-            {node.updateCheckRequested
-              ? 'rides the next hello, within a minute; the agent installs and restarts on its own'
-              : 'the agent looks every ten minutes on its own; this makes it look now'}
-          </span>
-          {error !== null && <span className={cn(NOTE, 'text-danger')}>{error}</span>}
-        </div>
+        <AgentUpdate node={node} />
         <p className={FOOT}>
           Releases are signed by this box&rsquo;s key and published from the engine&rsquo;s
           repository; the agent verifies the signature before it swaps its own binary. Which version
@@ -127,9 +205,9 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
       <Board
         title={
           u === null
-            ? 'Operating system'
+            ? 'Windows Update'
             : u.error !== null && pending.length === 0
-              ? 'Operating system'
+              ? 'Windows Update'
               : pending.length === 0
                 ? 'Nothing pending'
                 : `${num(pending.length)} pending`
@@ -148,38 +226,48 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
           <p className={EMPTY}>On the full document.</p>
         ) : u === null ? (
           <p className={EMPTY}>
-            The agent has not finished its first search yet; it asks the OS within a minute of
-            starting and hourly after.
+            The agent has not finished its first search yet; it asks Windows Update within a minute
+            of starting and hourly after.
           </p>
         ) : u.error !== null && pending.length === 0 ? (
           <p className={cn(EMPTY, 'text-warning')}>The search did not answer: {u.error}</p>
         ) : pending.length === 0 ? (
-          <p className={EMPTY}>
-            {node.os === 'macos'
-              ? 'Software Update has nothing to offer.'
-              : 'Windows Update has nothing to offer.'}
-          </p>
+          <p className={EMPTY}>Windows Update has nothing to offer.</p>
         ) : (
           <ul className={LIST}>
-            {pending.map((p, i) => (
-              <li key={`${p.id ?? p.title}-${String(i)}`} className={`${ROW} flex-wrap`}>
-                {p.severity !== null && <Chip tone={severityTone(p.severity)}>{p.severity}</Chip>}
-                <span className={ROW_MAIN}>{p.title}</span>
-                <span className={ROW_SIDE}>
-                  {p.id !== null && p.id !== p.title && <span className={MONO}>{p.id} · </span>}
-                  {p.sizeBytes !== null && `${bytes(p.sizeBytes)} · `}
-                  {p.restart === true ? 'restarts' : p.restart === false ? 'no restart' : ''}
-                </span>
-              </li>
-            ))}
+            {pending.map((p, i) => {
+              const link = kbLink(p.id) ?? kbLink(p.title)
+              return (
+                <li key={`${p.id ?? p.title}-${String(i)}`} className={`${ROW} flex-wrap`}>
+                  {p.severity !== null && <Chip tone={severityTone(p.severity)}>{p.severity}</Chip>}
+                  <span className={ROW_MAIN}>{p.title}</span>
+                  <span className={ROW_SIDE}>
+                    {p.id !== null && p.id !== p.title && (
+                      <>
+                        {link === null ? (
+                          <span className={MONO}>{p.id}</span>
+                        ) : (
+                          <a href={link} target="_blank" rel="noreferrer" className={MONO}>
+                            {p.id} ↗
+                          </a>
+                        )}
+                        {' · '}
+                      </>
+                    )}
+                    {p.sizeBytes !== null && `${bytes(p.sizeBytes)} · `}
+                    {p.restart === true ? 'restarts' : p.restart === false ? 'no restart' : ''}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         )}
         <DetailNote d={d} />
         <p className={FOOT}>
           {u !== null && u.checkedAt !== null && `Asked ${ago(u.checkedAt)}. `}
-          {node.os === 'macos'
-            ? 'What softwareupdate lists from the OS’s own last scan, which it runs daily. Installing is the person at the machine: the agent runs as a daemon and Apple does not let a daemon restart a Mac into an installer.'
-            : 'What the Windows Update agent answers when searched for installed=0, which is the same list Settings shows. Installing stays with the person at the machine: an update that restarts the PC mid-game is not this box’s call.'}
+          What the Windows Update agent answers when searched for what is not installed, which is
+          the same list Settings shows; each KB number links to Microsoft&rsquo;s own note on what
+          it changes. Installing stays with the person at the machine.
         </p>
       </Board>
 
@@ -195,18 +283,28 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
           <p className={EMPTY}>Nothing on record.</p>
         ) : (
           <ul className={LIST}>
-            {u.installed.map((x, i) => (
-              <li key={`${x.title}-${String(i)}`} className={ROW}>
-                <span className={ROW_MAIN}>{x.title}</span>
-                <span className={ROW_SIDE}>{x.at === null ? DASH : ago(x.at)}</span>
-              </li>
-            ))}
+            {u.installed.map((x, i) => {
+              const link = kbLink(x.title)
+              return (
+                <li key={`${x.title}-${String(i)}`} className={ROW}>
+                  <span className={ROW_MAIN}>
+                    {link === null ? (
+                      x.title
+                    ) : (
+                      <a href={link} target="_blank" rel="noreferrer">
+                        {x.title} ↗
+                      </a>
+                    )}
+                  </span>
+                  <span className={ROW_SIDE}>{x.at === null ? DASH : ago(x.at)}</span>
+                </li>
+              )
+            })}
           </ul>
         )}
         <p className={FOOT}>
-          {node.os === 'macos'
-            ? 'From the install history Software Update keeps, OS updates only.'
-            : 'The hotfixes Windows records, newest first — cumulative updates and servicing stack updates, not Store apps.'}
+          The hotfixes Windows records, newest first — cumulative updates and servicing stack
+          updates, not Store apps, which are on <b>Software</b>.
         </p>
       </Board>
 

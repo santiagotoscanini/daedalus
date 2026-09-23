@@ -11,6 +11,7 @@ import { getJsonResult } from '../http'
 import { getNode, type NodeRow, nodeToken } from '../repo/nodes'
 import { type BoardReleases, boardReleases } from './board-releases'
 import { type BrowserLatest, browserLatest } from './browser-releases'
+import { type MacReleases, macosReleases } from './macos-releases'
 
 // The System page for a machine that is not this box, the same tabs the
 // box draws for itself (components/machine-system/): one read of the
@@ -46,6 +47,8 @@ export type NodeSystemData = {
   releases: BoardReleases | null
   /** The vendors' current stable per installed browser, read only for the Chromium tab. */
   browserLatest: BrowserLatest[] | null
+  /** What Apple has shipped past the running macOS, read only for the macOS tab. */
+  macos: MacReleases | null
   /** Processor busy, six hours at two-minute steps, from the box's Prometheus. */
   cpuSpark: number[]
   error: string | null
@@ -53,7 +56,7 @@ export type NodeSystemData = {
 
 export async function loadNodeSystem(
   id: string,
-  opts: { board?: boolean; browsers?: boolean } = {},
+  opts: { board?: boolean; browsers?: boolean; macos?: boolean } = {},
 ): Promise<NodeSystemData | null> {
   const node = await getNode(id)
   if (node === null) return null
@@ -65,6 +68,7 @@ export async function loadNodeSystem(
     detailError: null,
     releases: null,
     browserLatest: null,
+    macos: null,
     cpuSpark: [] as number[],
   }
   if (node.lanIp === null) {
@@ -113,6 +117,12 @@ export async function loadNodeSystem(
           node.arch,
         )
       : null
+  // The Mac's own version is on the status page, so Apple's list does not
+  // need the full document either.
+  const withMacos = async (t: NodeTelemetry): Promise<MacReleases | null> =>
+    opts.macos === true && node.os === 'macos'
+      ? macosReleases(status.osVersion, t.machine.target)
+      : null
   if (open === null) {
     return { ...none, status, cpuSpark, error: null }
   }
@@ -124,6 +134,7 @@ export async function loadNodeSystem(
       cpuSpark,
       releases: await withReleases(open),
       browserLatest: await withBrowsers(open),
+      macos: await withMacos(open),
       detailError: 'no node token yet: approve the machine',
       error: null,
     }
@@ -146,6 +157,7 @@ export async function loadNodeSystem(
       telemetry: open,
       releases: await withReleases(open),
       browserLatest: await withBrowsers(open),
+      macos: await withMacos(open),
       cpuSpark,
       detailError: why,
       error: null,
@@ -162,6 +174,7 @@ export async function loadNodeSystem(
           full: true,
           releases: await withReleases(t),
           browserLatest: await withBrowsers(t),
+          macos: await withMacos(t),
           cpuSpark,
           error: null,
         }

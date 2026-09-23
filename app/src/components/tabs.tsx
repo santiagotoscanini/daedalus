@@ -60,7 +60,7 @@ export function TabBar<Id extends string>({
           <Link
             {...linkTo(t.id)}
             className={cn(
-              '-mb-px inline-flex cursor-pointer items-center gap-[0.4rem] border-b-2 border-b-transparent px-3 py-2 text-sm capitalize transition-colors duration-150',
+              '-mb-px inline-flex cursor-pointer items-center gap-[0.4rem] border-b-2 border-b-transparent px-3 py-2 text-sm transition-colors duration-150',
               'max-[52rem]:whitespace-nowrap',
               t.id === active
                 ? 'border-b-primary text-foreground'

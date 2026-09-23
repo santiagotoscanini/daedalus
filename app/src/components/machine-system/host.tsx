@@ -25,7 +25,9 @@ import {
   ROW_SIDE,
   rate,
   temp,
+  WipBoard,
 } from './shared'
+import { AgentUpdate } from './updates'
 
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
@@ -120,20 +122,88 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
         </p>
       </Board>
 
-      <Board title="Temperature" icon="◉" span={4}>
-        <BarList
-          items={t.temperatures.map((x) => ({
-            label: x.label,
-            value: x.celsius,
-            display: `${x.celsius.toFixed(0)}°`,
-          }))}
-          tone="info"
-          empty={
-            t.errors.find((e) => /temperature|thermal|powermetrics/i.test(e)) ??
-            'no sensors reporting'
+      {t.temperatures.length > 0 ? (
+        <Board title="Temperature" icon="◉" span={4}>
+          <BarList
+            items={t.temperatures.map((x) => ({
+              label: x.label,
+              value: x.celsius,
+              display: `${x.celsius.toFixed(0)}°`,
+            }))}
+            tone="info"
+            empty="no sensors reporting"
+          />
+        </Board>
+      ) : (
+        // Neither OS publishes a die temperature to a plain program: Windows
+        // leaves it to the vendor's SDK or a kernel driver, Apple Silicon
+        // keeps it in the SMC. Both are readable, neither is read yet.
+        <WipBoard
+          title="Temperature"
+          icon="◉"
+          span={4}
+          waits={
+            node.os === 'macos'
+              ? 'Apple Silicon reports temperatures and fans through the SMC only; the agent does not read it yet.'
+              : 'CPU and GPU temperatures on Windows need a kernel driver or the vendor’s SDK; the agent reads only what Windows publishes, which is none.'
           }
-        />
-      </Board>
+        >
+          <BarList
+            items={
+              node.os === 'macos'
+                ? [
+                    { label: 'CPU die', value: 58, display: '58°' },
+                    { label: 'GPU', value: 54, display: '54°' },
+                    { label: 'Battery', value: 33, display: '33°' },
+                    { label: 'Fan', value: 40, display: '1 890 rpm' },
+                  ]
+                : [
+                    { label: 'CPU die', value: 62, display: '62°' },
+                    { label: 'GPU hotspot', value: 71, display: '71°' },
+                    { label: 'GPU memory', value: 66, display: '66°' },
+                    { label: 'Chipset', value: 48, display: '48°' },
+                  ]
+            }
+            tone="info"
+          />
+        </WipBoard>
+      )}
+
+      {t.battery !== null && (
+        <Board
+          title="Battery"
+          icon="▮"
+          span={4}
+          aside={
+            <Chip tone={t.battery.charging === true ? 'ok' : 'muted'}>
+              {t.battery.charging === true
+                ? 'charging'
+                : t.battery.charging === false
+                  ? 'on battery'
+                  : DASH}
+            </Chip>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'charge', v: pct(t.battery.percent, 0) },
+              { k: 'health', v: pct(t.battery.healthPct, 0) },
+              {
+                k: 'cycles',
+                v: t.battery.cycles === null ? DASH : num(t.battery.cycles),
+              },
+            ]}
+          />
+          <p className={FOOT}>
+            {t.battery.condition !== null
+              ? `Apple calls its condition “${t.battery.condition}”. `
+              : ''}
+            Health is the capacity that remains of the design capacity; a battery is considered
+            spent around eighty percent, and Apple rates this one for a thousand cycles.
+            {t.battery.cycles === null && ' The cycle count arrives with agent 0.10.0.'}
+          </p>
+        </Board>
+      )}
 
       {/* The machine itself, on the tab about the machine itself — as the
           box's own page pictures its case. A node has no photograph, so the
@@ -224,7 +294,7 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
                 : 'Services down'
         }
         icon="⚑"
-        span={8}
+        span={t.battery === null ? 8 : 4}
         aside={
           !d.full ? undefined : t.services.length === 0 ? (
             <Chip tone="ok">none</Chip>
@@ -297,10 +367,19 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
         title="Agent"
         icon="◎"
         span={12}
-        aside={<span className={MONO}>{status.version}</span>}
+        aside={
+          status.restartPending ? (
+            <Chip tone="ok">installed, restarting</Chip>
+          ) : status.updateAvailable !== null ? (
+            <Chip tone="warn">{status.updateAvailable}</Chip>
+          ) : (
+            <span className={MONO}>{status.version}</span>
+          )
+        }
       >
         <Facts
           rows={[
+            { k: 'Running', v: <span className={MONO}>{status.version}</span> },
             {
               k: 'Updates',
               v: status.restartPending
@@ -320,8 +399,11 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
             },
           ]}
         />
+        <AgentUpdate node={node} />
         <p className={FOOT}>
-          The agent&rsquo;s own state; every switch for this machine is on{' '}
+          The agent&rsquo;s own state, and the one thing on this page that this box moves: releases
+          are signed by its key, the agent verifies the signature and swaps its own binary within
+          ten minutes, or now from the button. Every switch for this machine is on{' '}
           <Link to="/settings" search={{ tab: 'machines' }}>
             Settings › Machines
           </Link>

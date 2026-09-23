@@ -7,8 +7,8 @@ import {
   BoxHead,
   MachineHead,
   MachineSystemView,
-  NODE_TABS,
   type NodeTabId,
+  nodeTabsFor,
   resolveNodeTab,
 } from '../components/machine-system'
 import { ModuleBoards } from '../components/modules/boards'
@@ -75,17 +75,22 @@ export const Route = createFileRoute('/c/$category')({
     // A node only makes sense on a module with a picker; elsewhere the
     // search param is ignored rather than honoured.
     const machine = picker ? (deps.machine ?? null) : null
-    // The node's tabs are a subset of the box's with the same ids, so the
-    // same `?tab=` names the same subject on either; an id the node lacks
-    // (pools, backups) opens its first.
-    const nodeTab: NodeTabId | null = machine === null ? null : resolveNodeTab(deps.tab)
+    // The node list is one table read and the picker is part of the frame,
+    // so it is awaited; a node's own page streams in like the boards. It
+    // also says which OS the picked machine runs, which is what shapes its
+    // tab row (components/machine-system/index.tsx).
+    const nodes = picker ? await fetchMachineNodesFn() : []
+    const nodeOs = machine === null ? null : (nodes.find((n) => n.id === machine)?.os ?? 'windows')
+    // The node's tabs share the box's ids where the subject is the same, so
+    // `?tab=memory` names the memory of whichever machine is picked; an id
+    // this machine lacks opens the nearest subject it has.
+    const nodeTab: NodeTabId | null = nodeOs === null ? null : resolveNodeTab(nodeOs, deps.tab)
 
     return {
       spec,
       tab,
-      // The node list is one table read and the picker is part of the frame,
-      // so it is awaited; a node's own page streams in like the boards.
-      nodes: picker ? await fetchMachineNodesFn() : [],
+      nodes,
+      nodeOs,
       // The strip above the box's tabs, cached reads, part of the frame too.
       boxHead: picker && machine === null ? await fetchBoxHeadFn() : null,
       machine,
@@ -98,7 +103,12 @@ export const Route = createFileRoute('/c/$category')({
         machine === null
           ? null
           : fetchNodeSystemFn({
-              data: { id: machine, board: nodeTab === 'board', browsers: nodeTab === 'browsers' },
+              data: {
+                id: machine,
+                board: nodeTab === 'board',
+                browsers: nodeTab === 'browsers',
+                macos: nodeTab === 'macos',
+              },
             }),
       nodeClaude:
         machine !== null && nodeTab === 'claude'
@@ -119,17 +129,27 @@ export const Route = createFileRoute('/c/$category')({
 })
 
 function CategoryPage() {
-  const { spec, tab, boards, tabStatus, nodes, boxHead, machine, nodeTab, node, nodeClaude } =
-    Route.useLoaderData()
+  const {
+    spec,
+    tab,
+    boards,
+    tabStatus,
+    nodes,
+    nodeOs,
+    boxHead,
+    machine,
+    nodeTab,
+    node,
+    nodeClaude,
+  } = Route.useLoaderData()
   const { category } = Route.useParams()
   // Switching module or tab clears a caught failure; staying put does not,
   // so a section that failed stays failed until its loader is re-run.
   const sectionKey = `${category}/${tab}/${machine ?? ''}`
   // The node tab's own shape, for its skeleton; `head` is set on the tabs
   // that open with a ServiceHead (Chromium), as the box's manifest does.
-  const nodeSpec = NODE_TABS.find((t) => t.id === nodeTab) as
-    | { boardSpans: readonly number[]; head?: boolean }
-    | undefined
+  const nodeTabs = nodeOs === null ? [] : nodeTabsFor(nodeOs)
+  const nodeSpec = nodeTabs.find((t) => t.id === nodeTab)
 
   return (
     <>
@@ -146,11 +166,11 @@ function CategoryPage() {
               below never move and never wait. */}
           <NodeHead promise={node} resetKey={sectionKey} />
           <TabBar
-            tabs={NODE_TABS.map((t) => ({
+            tabs={nodeTabs.map((t) => ({
               id: t.id,
               label: t.label,
-              icon: 'icon' in t ? t.icon : undefined,
-              dividerBefore: 'dividerBefore' in t ? t.dividerBefore : undefined,
+              icon: t.icon,
+              dividerBefore: t.dividerBefore,
             }))}
             active={nodeTab}
             linkTo={(id) => ({

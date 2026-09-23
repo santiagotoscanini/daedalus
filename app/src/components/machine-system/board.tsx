@@ -53,6 +53,13 @@ export function BoardView({ info }: { info: BoardInfo }) {
             : { tone: r.behind >= 4 ? 'bad' : 'warn', label: `${num(r.behind)} behind` }
   const newerThan = (v: string) =>
     r.behind !== null && r.releases.findIndex((x) => x.version === v) < r.behind
+  // Only what is ahead of the running firmware, and the running one to
+  // anchor it. The releases before it are history the board has already
+  // lived through, and a list of twenty-two where three matter buried the
+  // three. When nothing could be counted the whole list stands, and the
+  // foot says so.
+  const matched = r.running !== null && r.releases.some((x) => x.version === r.running)
+  const shown = r.behind === null ? r.releases : r.releases.slice(0, r.behind + (matched ? 1 : 0))
   const part = partMatching('board', info.model)
   // Gigabyte writes no revision into SMBIOS ("x.x"); its firmware line does
   // the telling — the FA series ships on the rev 1.2 board, the F series
@@ -114,7 +121,7 @@ export function BoardView({ info }: { info: BoardInfo }) {
             { k: 'running', v: r.running ?? info.bios.version ?? DASH },
             { k: 'newest', v: newest?.version ?? DASH },
             { k: 'published', v: newest?.date ?? DASH },
-            { k: 'releases', v: r.releases.length === 0 ? DASH : num(r.releases.length) },
+            { k: 'newer', v: r.behind === null ? DASH : num(r.behind) },
           ]}
         />
         <p className={FOOT}>
@@ -167,7 +174,15 @@ export function BoardView({ info }: { info: BoardInfo }) {
       </Board>
 
       <Board
-        title={r.releases.length === 0 ? 'Releases' : `${num(r.releases.length)} releases`}
+        title={
+          r.releases.length === 0
+            ? 'Releases'
+            : r.behind === null
+              ? `${num(r.releases.length)} releases`
+              : r.behind === 0
+                ? 'Nothing newer'
+                : `${num(r.behind)} newer`
+        }
         icon="⎌"
         span={12}
         aside={
@@ -188,7 +203,7 @@ export function BoardView({ info }: { info: BoardInfo }) {
           </p>
         ) : (
           <ul className={LIST}>
-            {r.releases.map((rel) => (
+            {shown.map((rel) => (
               <li key={rel.version} className={`${ROW} flex-wrap`}>
                 <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-[0.15rem]`}>
                   <span className="flex flex-wrap items-center gap-2">
@@ -221,11 +236,24 @@ export function BoardView({ info }: { info: BoardInfo }) {
           </ul>
         )}
         <p className={FOOT}>
+          {r.releases.length > 0 && r.behind !== null && (
+            <>
+              What is ahead of the running firmware, newest first
+              {matched ? ', down to the one it runs' : ''}; the{' '}
+              {num(r.releases.length - shown.length)} before it are history the board has already
+              lived through and are left out.{' '}
+            </>
+          )}
+          {r.releases.length > 0 && r.behind === null && (
+            <>The whole list, since nothing could be counted against the running version. </>
+          )}
           {r.make === 'msi'
-            ? 'Newest first, the maker’s own words, English section only. Every package is a link; flashing one is done at the machine, from its BIOS, and is not this page’s to start.'
-            : r.make === 'apple'
-              ? 'The Mac’s pending and installed system updates are the firmware history that exists.'
-              : 'Nothing to list.'}
+            ? 'The maker’s own words, English section only. Every package is a link; flashing one is done at the machine, from its BIOS, and is not this page’s to start.'
+            : r.make === 'gigabyte'
+              ? 'Gigabyte’s own notes. Every package is a link; flashing one is done at the machine, from Q-Flash, and is not this page’s to start.'
+              : r.make === 'apple'
+                ? 'The Mac’s pending and installed system updates are the firmware history that exists.'
+                : 'Nothing to list.'}
         </p>
       </Board>
     </BoardGrid>

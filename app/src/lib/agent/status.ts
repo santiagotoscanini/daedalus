@@ -347,6 +347,8 @@ export type NodeTelemetry = {
     boardProduct: string | null
     /** "laptop" | "desktop" | "tower" | "mini" | "all-in-one" | "server" | "tablet". */
     form: string | null
+    /** Apple's board target ("J516sAP"), which its version feed keys on; null elsewhere. */
+    target: string | null
   }
   os: { kernel: string | null; build: string | null; installedAt: string | null }
   cpu: {
@@ -388,7 +390,12 @@ export type NodeTelemetry = {
   gpus: {
     name: string
     vendor: string | null
+    /** The OS's driver version ("32.0.31041.1004" on Windows). */
     driver: string | null
+    /** The vendor's own name for it: "Adrenalin 25.9.2", "GeForce 566.14". */
+    driverBrand: string | null
+    /** ISO date the driver package was built. */
+    driverDate: string | null
     vramTotalBytes: number | null
     vramUsedBytes: number | null
     usagePct: number | null
@@ -403,7 +410,14 @@ export type NodeTelemetry = {
     rxBps: number | null
     txBps: number | null
   }[]
-  battery: { percent: number | null; charging: boolean | null; healthPct: number | null } | null
+  battery: {
+    percent: number | null
+    charging: boolean | null
+    healthPct: number | null
+    cycles: number | null
+    /** Apple's word: "Normal", "Service Recommended". */
+    condition: string | null
+  } | null
   /** The physical drives; serials only on the token-gated document. */
   drives: NodeDrive[]
   /** The heaviest by memory; empty on the open page. */
@@ -416,7 +430,25 @@ export type NodeTelemetry = {
   browsers: NodeBrowser[]
   /** Null until the agent's first search, and on the open page. */
   updates: NodeUpdates | null
+  /** What is installed; empty on the open page. Agent 0.10.0. */
+  apps: NodeApp[]
+  appCount: number | null
   errors: string[]
+}
+
+export type NodeApp = {
+  name: string
+  version: string | null
+  publisher: string | null
+  /** "YYYY-MM-DD" where the OS records it. */
+  installedAt: string | null
+  sizeBytes: number | null
+  /** "app" | "game" | "launcher" | "runtime" | "driver" */
+  kind: string
+  /** "registry" | "store" | "steam" | "epic" | "applications" | "app-store" | "homebrew" | "setapp" | "apple" */
+  source: string | null
+  /** Install location; only on the token-gated document. */
+  path: string | null
 }
 
 export type NodeMemoryModule = {
@@ -501,6 +533,7 @@ const telemetryShape = obj({
       board_manufacturer: nstr,
       board_product: nstr,
       form: nstr,
+      target: nstr,
     }),
     {
       manufacturer: null,
@@ -512,6 +545,7 @@ const telemetryShape = obj({
       board_manufacturer: null,
       board_product: null,
       form: null,
+      target: null,
     },
   ),
   os: optional(obj({ kernel: nstr, build: nstr, installed_at: nstr }), {
@@ -601,6 +635,8 @@ const telemetryShape = obj({
         name: optional(str, ''),
         vendor: nstr,
         driver: nstr,
+        driver_brand: nstr,
+        driver_date: nstr,
         vram_total_bytes: nnum,
         vram_used_bytes: nnum,
         usage_pct: nnum,
@@ -623,7 +659,12 @@ const telemetryShape = obj({
     ),
     [],
   ),
-  battery: optional(nullable(obj({ percent: nnum, charging: nbool, health_pct: nnum })), null),
+  battery: optional(
+    nullable(
+      obj({ percent: nnum, charging: nbool, health_pct: nnum, cycles: nnum, condition: nstr }),
+    ),
+    null,
+  ),
   drives: optional(
     arrayOf(
       obj({
@@ -706,6 +747,22 @@ const telemetryShape = obj({
     ),
     null,
   ),
+  apps: optional(
+    arrayOf(
+      obj({
+        name: optional(str, ''),
+        version: nstr,
+        publisher: nstr,
+        installed_at: nstr,
+        size_bytes: nnum,
+        kind: optional(str, 'app'),
+        source: nstr,
+        path: nstr,
+      }),
+    ),
+    [],
+  ),
+  app_count: nnum,
   errors: optional(arrayOf(str), []),
 })
 
@@ -723,6 +780,7 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
       boardManufacturer: t.machine.board_manufacturer,
       boardProduct: t.machine.board_product,
       form: t.machine.form,
+      target: t.machine.target,
     },
     os: { kernel: t.os.kernel, build: t.os.build, installedAt: t.os.installed_at },
     cpu: {
@@ -768,6 +826,8 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
       name: g.name,
       vendor: g.vendor,
       driver: g.driver,
+      driverBrand: g.driver_brand,
+      driverDate: g.driver_date,
       vramTotalBytes: g.vram_total_bytes,
       vramUsedBytes: g.vram_used_bytes,
       usagePct: g.usage_pct,
@@ -789,6 +849,8 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
             percent: t.battery.percent,
             charging: t.battery.charging,
             healthPct: t.battery.health_pct,
+            cycles: t.battery.cycles,
+            condition: t.battery.condition,
           },
     drives: t.drives.map((d) => ({
       name: d.name,
@@ -845,6 +907,17 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
             rebootPending: t.updates.reboot_pending,
             error: t.updates.error,
           },
+    apps: t.apps.map((a) => ({
+      name: a.name,
+      version: a.version,
+      publisher: a.publisher,
+      installedAt: a.installed_at,
+      sizeBytes: a.size_bytes,
+      kind: a.kind,
+      source: a.source,
+      path: a.path,
+    })),
+    appCount: t.app_count,
     errors: t.errors,
   }
 }

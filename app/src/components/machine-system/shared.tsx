@@ -265,3 +265,42 @@ export function NotReadable({ t }: { t: NodeTelemetry }) {
     </Board>
   )
 }
+
+/**
+ * A board for a reading the agent does not have yet but could.
+ *
+ * The shape of the answer, blurred, and one line on what it waits for.
+ * Blurred rather than absent because the layout is the promise: the tab is
+ * tuned to the machine, and a Windows PC has die temperatures whether or
+ * not this box can read them this week. What is drawn underneath is a
+ * sample in the right units, never a real number.
+ */
+export function WipBoard({
+  title,
+  icon,
+  span,
+  waits,
+  children,
+}: {
+  title: string
+  icon?: string
+  span: 4 | 6 | 8 | 12
+  /** "needs the SMC, which the agent does not read yet" */
+  waits: string
+  children: ReactNode
+}) {
+  return (
+    <Board title={title} icon={icon} span={span} aside={<Chip tone="muted">in progress</Chip>}>
+      <div className="relative">
+        <div aria-hidden className="pointer-events-none select-none opacity-50 blur-[3px]">
+          {children}
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center p-3">
+          <span className="rounded-md border border-(--border-soft) bg-(--panel) px-3 py-1.5 text-center text-[0.76rem] text-(--text-muted) leading-[1.4] shadow-sm">
+            {waits}
+          </span>
+        </div>
+      </div>
+    </Board>
+  )
+}
