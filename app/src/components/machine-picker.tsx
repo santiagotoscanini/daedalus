@@ -19,11 +19,14 @@ export function MachinePicker({
   nodes,
   active,
   page,
+  tab,
 }: {
   nodes: NodeRow[]
   active: string | null
   /** Which page's picker this is, so each link keeps that page's route and search. */
   page: 'claude' | 'system'
+  /** The System tab to keep while switching machine; the target resolves an id it lacks to its first. */
+  tab?: string
 }) {
   if (nodes.length === 0) return null
   const pill = (selected: boolean) =>
@@ -42,7 +45,7 @@ export function MachinePicker({
       <Link
         to="/c/$category"
         params={{ category: 'system' }}
-        search={machine === null ? {} : { machine }}
+        search={{ ...(tab === undefined ? {} : { tab }), ...(machine === null ? {} : { machine }) }}
         className={className}
       >
         {children}

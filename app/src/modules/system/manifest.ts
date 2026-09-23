@@ -25,8 +25,12 @@ export const manifest = {
   // and a release cycle that the box can switch off — is the Database module
   // now, one rail entry down; and the other machines on the network are
   // Settings › Machines, beside the policy the box sends them.
-  // A machine picker above the tabs: a node's System page is one view of
-  // its telemetry (components/machine-system.tsx) rather than these tabs.
+  // A machine picker above the tabs, and with it a different place on the
+  // rail: a module about every machine on the network is not a directory
+  // entry for something this box runs, so the rail draws it below, beside
+  // Claude. A node's System page keeps these tab ids — Host, Memory, Disks,
+  // Build, Updates — over the one document its agent publishes
+  // (components/machine-system/); Pools and Backups are the box's alone.
   machinePicker: true,
   tabs: [
     { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], head: false },

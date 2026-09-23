@@ -70,9 +70,10 @@ export type ModuleManifest = {
   /**
    * The page has a machine picker above its tabs: this box, then every
    * approved node. Picking a node replaces the tabs with that machine's own
-   * view (System's is components/machine-system.tsx); the box's tabs are
-   * what the module declares. Only a page whose subject exists on every
-   * machine sets it.
+   * (System's mirror the box's: components/machine-system/); the box's tabs
+   * are what the module declares. Only a page whose subject exists on every
+   * machine sets it — and the rail draws that module below the directory,
+   * beside Claude, since it is about the fleet rather than this box.
    */
   machinePicker?: boolean
 }

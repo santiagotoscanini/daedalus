@@ -3,7 +3,12 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 import { StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { MachinePicker } from '../components/machine-picker'
-import { MachineSystemView } from '../components/machine-system'
+import {
+  MachineSystemView,
+  NODE_TABS,
+  type NodeTabId,
+  resolveNodeTab,
+} from '../components/machine-system'
 import { ModuleBoards } from '../components/modules/boards'
 import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton } from '../components/skeleton'
@@ -61,6 +66,10 @@ export const Route = createFileRoute('/c/$category')({
     // A node only makes sense on a module with a picker; elsewhere the
     // search param is ignored rather than honoured.
     const machine = picker ? (deps.machine ?? null) : null
+    // The node's tabs are a subset of the box's with the same ids, so the
+    // same `?tab=` names the same subject on either; an id the node lacks
+    // (pools, backups) opens its first.
+    const nodeTab: NodeTabId | null = machine === null ? null : resolveNodeTab(deps.tab)
 
     return {
       spec,
@@ -69,8 +78,12 @@ export const Route = createFileRoute('/c/$category')({
       // so it is awaited; a node's own page streams in like the boards.
       nodes: picker ? await fetchMachineNodesFn() : [],
       machine,
+      nodeTab,
       node: machine === null ? null : fetchNodeSystemFn({ data: { id: machine } }),
-      boards: fetchModuleBoards({ data: { module: spec.id, tab } }),
+      // The box's boards are not fetched behind a node's page: the picker
+      // switched the subject, and a dozen prometheus queries for a page
+      // nobody is reading is the cost of pretending it did not.
+      boards: machine === null ? fetchModuleBoards({ data: { module: spec.id, tab } }) : null,
       // Only where a tab actually wears a dot. All three ways of declaring one
       // count; testing `probe` alone would skip the request for a module whose
       // tabs each hold several services, and then draw grey dots over health
@@ -82,7 +95,7 @@ export const Route = createFileRoute('/c/$category')({
 })
 
 function CategoryPage() {
-  const { spec, tab, boards, tabStatus, nodes, machine, node } = Route.useLoaderData()
+  const { spec, tab, boards, tabStatus, nodes, machine, nodeTab, node } = Route.useLoaderData()
   const { category } = Route.useParams()
   // Switching module or tab clears a caught failure; staying put does not,
   // so a section that failed stays failed until its loader is re-run.
@@ -93,32 +106,45 @@ function CategoryPage() {
       <PageHead title={spec.label}>
         {node === null
           ? spec.lede
-          : 'Another machine on the network, as its agent reports it every fifteen seconds: what it is, what firmware and system it runs, and how hard it is working right now.'}
+          : 'Another machine on the network, on the same tabs as this box: what it is, what it is running on, what it is storing, and what it is waiting to install — as its agent reports it every fifteen seconds.'}
       </PageHead>
 
       {spec.machinePicker === true && (
-        <MachinePicker nodes={nodes} active={machine} page="system" />
+        <MachinePicker nodes={nodes} active={machine} page="system" tab={tab} />
       )}
 
-      {node !== null ? (
-        <GuardedAwait
-          resetKey={sectionKey}
-          promise={node}
-          fallback={
-            <>
-              <ServiceHeadSkeleton />
-              <BoardsSkeleton spans={[6, 6, 6, 6, 12, 6, 6, 6]} />
-            </>
-          }
-        >
-          {(d) =>
-            d === null ? (
-              <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
-            ) : (
-              <MachineSystemView d={d} />
-            )
-          }
-        </GuardedAwait>
+      {node !== null && nodeTab !== null ? (
+        <>
+          <TabBar
+            tabs={NODE_TABS.map((t) => ({ id: t.id, label: t.label }))}
+            active={nodeTab}
+            linkTo={(id) => ({
+              to: '/c/$category',
+              params: { category },
+              search: { tab: id, machine: machine ?? undefined },
+            })}
+          />
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={node}
+            fallback={
+              <>
+                <ServiceHeadSkeleton />
+                <BoardsSkeleton
+                  spans={[...(NODE_TABS.find((t) => t.id === nodeTab)?.boardSpans ?? [8, 4, 4])]}
+                />
+              </>
+            }
+          >
+            {(d) =>
+              d === null ? (
+                <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
+              ) : (
+                <MachineSystemView d={d} tab={nodeTab} />
+              )
+            }
+          </GuardedAwait>
+        </>
       ) : (
         <>
           {spec.tabs.length > 0 &&
@@ -143,13 +169,15 @@ function CategoryPage() {
               </GuardedAwait>
             ))}
 
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={boards}
-            fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
-          >
-            {(payload) => <ModuleBoards payload={payload} />}
-          </GuardedAwait>
+          {boards !== null && (
+            <GuardedAwait
+              resetKey={sectionKey}
+              promise={boards}
+              fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
+            >
+              {(payload) => <ModuleBoards payload={payload} />}
+            </GuardedAwait>
+          )}
         </>
       )}
     </>

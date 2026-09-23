@@ -20,6 +20,16 @@ export function promEscape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/**
+ * A label VALUE for an exact matcher (`host="…"`), as opposed to the regex
+ * above: PromQL string literals take Go escapes, so only the backslash and
+ * the quote need one, and a regex-escaped `\(` in there is a parse error —
+ * which is how a machine called "MacBook Pro (2)" once had no history.
+ */
+export function promQuote(s: string): string {
+  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
 /** Full instant-query result — for queries that return a labelled series. */
 export async function promVector(query: string): Promise<VectorResult[]> {
   const body = await getJson<{ data?: { result?: VectorResult[] } }>(

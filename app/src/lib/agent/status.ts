@@ -345,6 +345,8 @@ export type NodeTelemetry = {
     biosDate: string | null
     boardManufacturer: string | null
     boardProduct: string | null
+    /** "laptop" | "desktop" | "tower" | "mini" | "all-in-one" | "server" | "tablet". */
+    form: string | null
   }
   os: { kernel: string | null; build: string | null; installedAt: string | null }
   cpu: {
@@ -360,8 +362,19 @@ export type NodeTelemetry = {
     totalBytes: number | null
     usedBytes: number | null
     availableBytes: number | null
+    /** File cache the OS would drop under pressure. */
+    cachedBytes: number | null
+    /** Held compressed rather than swapped. */
+    compressedBytes: number | null
+    /** Windows: commit charge and its limit. */
+    committedBytes: number | null
+    commitLimitBytes: number | null
     swapTotalBytes: number | null
     swapUsedBytes: number | null
+    /** Slots on the board (0 = soldered) and the firmware's ceiling. */
+    slots: number | null
+    maxCapacityBytes: number | null
+    modules: NodeMemoryModule[]
   }
   disks: {
     mount: string
@@ -391,7 +404,73 @@ export type NodeTelemetry = {
     txBps: number | null
   }[]
   battery: { percent: number | null; charging: boolean | null; healthPct: number | null } | null
+  /** The physical drives; serials only on the token-gated document. */
+  drives: NodeDrive[]
+  /** The heaviest by memory; empty on the open page. */
+  processes: NodeProcess[]
+  processCount: number | null
+  /** Should be running and are not; empty on the open page. */
+  services: NodeService[]
+  serviceCount: number | null
+  /** Null until the agent's first search, and on the open page. */
+  updates: NodeUpdates | null
   errors: string[]
+}
+
+export type NodeMemoryModule = {
+  locator: string | null
+  sizeBytes: number | null
+  speedMts: number | null
+  kind: string | null
+  manufacturer: string | null
+  partNumber: string | null
+}
+
+export type NodeDrive = {
+  name: string
+  serial: string | null
+  firmware: string | null
+  sizeBytes: number | null
+  bus: string | null
+  kind: string | null
+  /** "healthy" | "warning" | "unhealthy" | "verified" | "failing" | "not supported". */
+  health: string | null
+  temperatureC: number | null
+  powerOnHours: number | null
+  wearPct: number | null
+  readErrors: number | null
+  writeErrors: number | null
+  removable: boolean | null
+  volumes: string[]
+}
+
+export type NodeProcess = {
+  name: string
+  pid: number
+  memoryBytes: number | null
+  /** Percent of one core. */
+  cpuPct: number | null
+}
+
+export type NodeService = {
+  name: string
+  display: string | null
+  state: string
+  exitCode: number | null
+}
+
+export type NodeUpdates = {
+  checkedAt: string | null
+  pending: {
+    title: string
+    id: string | null
+    sizeBytes: number | null
+    severity: string | null
+    restart: boolean | null
+  }[]
+  installed: { title: string; at: string | null }[]
+  rebootPending: boolean | null
+  error: string | null
 }
 
 const nbool = optional(nullable(bool), null)
@@ -408,6 +487,7 @@ const telemetryShape = obj({
       bios_date: nstr,
       board_manufacturer: nstr,
       board_product: nstr,
+      form: nstr,
     }),
     {
       manufacturer: null,
@@ -418,6 +498,7 @@ const telemetryShape = obj({
       bios_date: null,
       board_manufacturer: null,
       board_product: null,
+      form: null,
     },
   ),
   os: optional(obj({ kernel: nstr, build: nstr, installed_at: nstr }), {
@@ -450,15 +531,41 @@ const telemetryShape = obj({
       total_bytes: nnum,
       used_bytes: nnum,
       available_bytes: nnum,
+      cached_bytes: nnum,
+      compressed_bytes: nnum,
+      committed_bytes: nnum,
+      commit_limit_bytes: nnum,
       swap_total_bytes: nnum,
       swap_used_bytes: nnum,
+      slots: nint,
+      max_capacity_bytes: nnum,
+      modules: optional(
+        arrayOf(
+          obj({
+            locator: nstr,
+            size_bytes: nnum,
+            speed_mts: nnum,
+            kind: nstr,
+            manufacturer: nstr,
+            part_number: nstr,
+          }),
+        ),
+        [],
+      ),
     }),
     {
       total_bytes: null,
       used_bytes: null,
       available_bytes: null,
+      cached_bytes: null,
+      compressed_bytes: null,
+      committed_bytes: null,
+      commit_limit_bytes: null,
       swap_total_bytes: null,
       swap_used_bytes: null,
+      slots: null,
+      max_capacity_bytes: null,
+      modules: [],
     },
   ),
   disks: optional(
@@ -504,6 +611,74 @@ const telemetryShape = obj({
     [],
   ),
   battery: optional(nullable(obj({ percent: nnum, charging: nbool, health_pct: nnum })), null),
+  drives: optional(
+    arrayOf(
+      obj({
+        name: optional(str, ''),
+        serial: nstr,
+        firmware: nstr,
+        size_bytes: nnum,
+        bus: nstr,
+        kind: nstr,
+        health: nstr,
+        temperature_c: nnum,
+        power_on_hours: nnum,
+        wear_pct: nnum,
+        read_errors: nnum,
+        write_errors: nnum,
+        removable: nbool,
+        volumes: optional(arrayOf(str), []),
+      }),
+    ),
+    [],
+  ),
+  processes: optional(
+    arrayOf(
+      obj({
+        name: optional(str, ''),
+        pid: optional(int, 0),
+        memory_bytes: nnum,
+        cpu_pct: nnum,
+      }),
+    ),
+    [],
+  ),
+  process_count: nint,
+  services: optional(
+    arrayOf(
+      obj({
+        name: optional(str, ''),
+        display: nstr,
+        state: optional(str, ''),
+        exit_code: nnum,
+      }),
+    ),
+    [],
+  ),
+  service_count: nint,
+  updates: optional(
+    nullable(
+      obj({
+        checked_at: nstr,
+        pending: optional(
+          arrayOf(
+            obj({
+              title: optional(str, ''),
+              id: nstr,
+              size_bytes: nnum,
+              severity: nstr,
+              restart: nbool,
+            }),
+          ),
+          [],
+        ),
+        installed: optional(arrayOf(obj({ title: optional(str, ''), at: nstr })), []),
+        reboot_pending: nbool,
+        error: nstr,
+      }),
+    ),
+    null,
+  ),
   errors: optional(arrayOf(str), []),
 })
 
@@ -520,6 +695,7 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
       biosDate: t.machine.bios_date,
       boardManufacturer: t.machine.board_manufacturer,
       boardProduct: t.machine.board_product,
+      form: t.machine.form,
     },
     os: { kernel: t.os.kernel, build: t.os.build, installedAt: t.os.installed_at },
     cpu: {
@@ -535,8 +711,22 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
       totalBytes: t.memory.total_bytes,
       usedBytes: t.memory.used_bytes,
       availableBytes: t.memory.available_bytes,
+      cachedBytes: t.memory.cached_bytes,
+      compressedBytes: t.memory.compressed_bytes,
+      committedBytes: t.memory.committed_bytes,
+      commitLimitBytes: t.memory.commit_limit_bytes,
       swapTotalBytes: t.memory.swap_total_bytes,
       swapUsedBytes: t.memory.swap_used_bytes,
+      slots: t.memory.slots,
+      maxCapacityBytes: t.memory.max_capacity_bytes,
+      modules: t.memory.modules.map((m) => ({
+        locator: m.locator,
+        sizeBytes: m.size_bytes,
+        speedMts: m.speed_mts,
+        kind: m.kind,
+        manufacturer: m.manufacturer,
+        partNumber: m.part_number,
+      })),
     },
     disks: t.disks.map((d) => ({
       mount: d.mount,
@@ -573,6 +763,52 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
             charging: t.battery.charging,
             healthPct: t.battery.health_pct,
           },
+    drives: t.drives.map((d) => ({
+      name: d.name,
+      serial: d.serial,
+      firmware: d.firmware,
+      sizeBytes: d.size_bytes,
+      bus: d.bus,
+      kind: d.kind,
+      health: d.health,
+      temperatureC: d.temperature_c,
+      powerOnHours: d.power_on_hours,
+      wearPct: d.wear_pct,
+      readErrors: d.read_errors,
+      writeErrors: d.write_errors,
+      removable: d.removable,
+      volumes: d.volumes,
+    })),
+    processes: t.processes.map((p) => ({
+      name: p.name,
+      pid: p.pid,
+      memoryBytes: p.memory_bytes,
+      cpuPct: p.cpu_pct,
+    })),
+    processCount: t.process_count,
+    services: t.services.map((s) => ({
+      name: s.name,
+      display: s.display,
+      state: s.state,
+      exitCode: s.exit_code,
+    })),
+    serviceCount: t.service_count,
+    updates:
+      t.updates === null
+        ? null
+        : {
+            checkedAt: t.updates.checked_at,
+            pending: t.updates.pending.map((u) => ({
+              title: u.title,
+              id: u.id,
+              sizeBytes: u.size_bytes,
+              severity: u.severity,
+              restart: u.restart,
+            })),
+            installed: t.updates.installed.map((i) => ({ title: i.title, at: i.at })),
+            rebootPending: t.updates.reboot_pending,
+            error: t.updates.error,
+          },
     errors: t.errors,
   }
 }
@@ -583,4 +819,14 @@ export function nodeTelemetry(statusBody: unknown): NodeTelemetry | null {
   const t = (statusBody as { telemetry?: unknown }).telemetry
   if (typeof t !== 'object' || t === null) return null
   return telemetryOf(decode(telemetryShape, t))
+}
+
+/**
+ * The full telemetry document, as `GET /telemetry` answers it to the box's
+ * token (agent 0.8.0+): the open page's block plus drive serials, the
+ * heaviest processes, the services that are down and the OS's updates.
+ */
+export function nodeTelemetryFull(body: unknown): NodeTelemetry | null {
+  if (typeof body !== 'object' || body === null) return null
+  return telemetryOf(decode(telemetryShape, body))
 }
