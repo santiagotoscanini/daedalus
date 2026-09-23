@@ -4,12 +4,12 @@ import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-hea
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
 import { DASH, ms, num, pct, until } from '../../../lib/format'
-import type { AiData } from '../data'
+import type { N8nData } from '../data/n8n'
 import { AXIS, comparePinned, EMPTY, FOOT, LIVE, NOTE, RANKS, REJECTED } from './shared'
 
 // ── n8n ────────────────────────────────────────────────────────────────────
 
-type N8nFlow = Extract<AiData, { tab: 'n8n' }>['flows'][number]
+type N8nFlow = N8nData['flows'][number]
 
 /**
  * The states a workflow can be in that change what its numbers mean.
@@ -39,7 +39,7 @@ function badgesFor(f: N8nFlow): { text: string; tone: 'warn' | 'muted'; why?: st
   return out
 }
 
-export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
+export function N8nView({ data }: { data: N8nData }) {
   const { gap, window: total, daily, flows } = data
   const firstDate = daily[0]?.date ?? ''
   const lastDate = daily[daily.length - 1]?.date ?? ''

@@ -79,6 +79,11 @@ export type ModuleManifest = {
    * on its own, since it is about the fleet rather than this box.
    */
   machinePicker?: boolean
+  /**
+   * Old tab ids and the tab that took each one's subject, so a bookmark
+   * from before a rename opens the right page rather than the first.
+   */
+  aliases?: Readonly<Record<string, string>>
 }
 
 /** What a category page needs to draw its frame — a manifest minus its rail position. */
@@ -100,5 +105,8 @@ export function isDotted(tab: TabSpec): boolean {
  * the module does not have — the behaviour a stale link depends on.
  */
 export function resolveTabOf(spec: PageSpec, tab: string | undefined): string {
-  return tab !== undefined && spec.tabs.some((t) => t.id === tab) ? tab : (spec.tabs[0]?.id ?? '')
+  const has = (id: string) => spec.tabs.some((t) => t.id === id)
+  if (tab !== undefined && has(tab)) return tab
+  const near = tab === undefined ? undefined : spec.aliases?.[tab]
+  return near !== undefined && has(near) ? near : (spec.tabs[0]?.id ?? '')
 }

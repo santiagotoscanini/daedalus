@@ -56,11 +56,14 @@ const NODE_ID = /^[0-9a-f]{16}$/
 export const Route = createFileRoute('/c/$category')({
   // Same reasoning as the app detail page: the sub-tab is in the URL so it
   // survives a refresh, can be linked, and renders on the server. So is the
-  // picked machine, on the one module that has a picker.
+  // picked machine: a node's id on the module with a picker, and on AI's
+  // Providers tab — whose picker is inside the tab and includes this box as
+  // `box` — the machine the tab shows.
   validateSearch: (search: Record<string, unknown>): { tab?: string; machine?: string } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
     machine:
-      typeof search.machine === 'string' && NODE_ID.test(search.machine)
+      typeof search.machine === 'string' &&
+      (NODE_ID.test(search.machine) || search.machine === 'box')
         ? search.machine
         : undefined,
   }),
@@ -75,7 +78,7 @@ export const Route = createFileRoute('/c/$category')({
     const picker = spec.machinePicker === true
     // A node only makes sense on a module with a picker; elsewhere the
     // search param is ignored rather than honoured.
-    const machine = picker ? (deps.machine ?? null) : null
+    const machine = picker && deps.machine !== 'box' ? (deps.machine ?? null) : null
     // The node list is part of the frame — the picker, and which OS the
     // picked machine runs, which is what shapes its tab row
     // (components/machine-system/index.tsx) — so it is awaited: from this

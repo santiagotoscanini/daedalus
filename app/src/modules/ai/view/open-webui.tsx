@@ -5,12 +5,12 @@ import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Measures, Pulse } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
-import type { AiData } from '../data'
+import type { OpenWebUiData } from '../data/open-webui'
 import { comparePinned, EMPTY, FOOT, ITEM, ITEM_MAIN, ITEM_SIDE, ITEMS, LIVE } from './shared'
 
 // ── Open WebUI ─────────────────────────────────────────────────────────────
 
-export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> }) {
+export function OpenWebUiView({ data }: { data: OpenWebUiData }) {
   const { gap, counts } = data
   const busy = data.generating !== null && data.generating > 0
 

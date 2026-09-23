@@ -5,7 +5,7 @@ import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { compact, DASH, ms, num, pct } from '../../../lib/format'
-import type { AiData } from '../data'
+import type { LitellmData } from '../data/litellm'
 import {
   AXIS,
   comparePinned,
@@ -46,7 +46,7 @@ function NotConfigured() {
 
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
-export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
+export function LitellmView({ data }: { data: LitellmData }) {
   if (!data.configured) return <NotConfigured />
   const { gap, daily, window: total } = data
   const busy = data.inFlight !== null && data.inFlight > 0
@@ -284,7 +284,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
   )
 }
 
-type NeighbourData = Extract<AiData, { tab: 'litellm' }>['neighbours'][number]
+type NeighbourData = LitellmData['neighbours'][number]
 
 /**
  * One of the gateway's neighbours, as a pair of half-width boards.
@@ -356,7 +356,7 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
   )
 }
 
-type Caller = Extract<AiData, { tab: 'litellm' }>['callers'][number]
+type Caller = LitellmData['callers'][number]
 
 /**
  * One caller.
