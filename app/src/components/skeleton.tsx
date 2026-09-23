@@ -58,6 +58,11 @@ export function Bar({ w = '100%', h = 12 }: { w?: string; h?: number }) {
   return <span className={SK} style={{ width: w, height: h }} />
 }
 
+/** A grey disc, where a picture will be. */
+export function Disc({ size }: { size: number }) {
+  return <span className={cn(SK, 'flex-none rounded-full')} style={{ width: size, height: size }} />
+}
+
 /**
  * The service header: artwork, name, version, lede, and the button.
  *

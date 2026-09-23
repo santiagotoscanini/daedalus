@@ -17,6 +17,7 @@ import { cn } from '../lib/cn'
 import { useSettled } from '../lib/settled'
 import { isScheme, type Scheme, type ThemeChoice } from '../lib/theme'
 import { saveTheme } from '../server/settings'
+import { Bar, Disc } from './skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,10 +59,13 @@ type Props = {
 }
 
 export function AccountMenu({ account, ...rest }: Props) {
-  // One <Menu>, whatever the promise is doing: null until Pocket ID answers,
-  // then the account, remembered across navigations (lib/settled.ts). A
-  // rejection from Pocket ID leaves it null, never the rail broken.
-  return <Menu account={useSettled('account', account)} {...rest} />
+  // One <Menu>, whatever the promise is doing: a skeleton until Pocket ID
+  // answers, then the account, remembered across navigations
+  // (lib/settled.ts). A rejection from Pocket ID leaves it loading-shaped
+  // rather than the rail broken; under no gate, where nobody is signed in,
+  // it answers null and the menu opens without a header.
+  const a = useSettled('account', account)
+  return <Menu account={a ?? null} loading={a === undefined} {...rest} />
 }
 
 function Avatar({ account, size }: { account: Account | null; size: number }) {
@@ -80,12 +84,13 @@ function Avatar({ account, size }: { account: Account | null; size: number }) {
 
 function Menu({
   account,
+  loading,
   theme,
   active,
   triggerClassName,
   activeClassName,
   labelClassName,
-}: Omit<Props, 'account'> & { account: Account | null }) {
+}: Omit<Props, 'account'> & { account: Account | null; loading: boolean }) {
   const router = useRouter()
   const [, start] = useTransition()
   const pick = (scheme: Scheme) => {
@@ -112,13 +117,29 @@ function Menu({
             active && activeClassName,
           )}
         >
-          <Avatar account={account} size={22} />
-          <span className={cn(labelClassName, 'flex-1')}>{label}</span>
+          {/* A skeleton while the account is on its way, never a stand-in
+              name: the button still opens the menu. */}
+          {loading ? <Disc size={22} /> : <Avatar account={account} size={22} />}
+          <span className={cn(labelClassName, 'flex flex-1 items-center')}>
+            {loading ? <Bar w="60%" h={11} /> : label}
+          </span>
           <ChevronsUpDownIcon className="size-3.5 opacity-60 nav-collapsed:hidden" />
         </button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent side="top" align="start" className="w-[15.5rem]">
+        {loading && (
+          <>
+            <DropdownMenuLabel className="flex items-center gap-2.5 py-2">
+              <Disc size={34} />
+              <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <Bar w="55%" h={11} />
+                <Bar w="80%" h={9} />
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {account !== null && (
           <>
             <DropdownMenuLabel className="flex items-center gap-2.5 py-2">

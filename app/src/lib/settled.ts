@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 
-// A deferred value as a plain value: null until the promise settles, the
-// last answer while the next one is in flight, and remembered across
-// navigations by key.
+// A deferred value as a plain value: undefined until the promise first
+// settles, the last answer while the next one is in flight, and remembered
+// across navigations by key.
 //
 // For the places that render ONE element from a streamed value and have
 // nothing to put in its place — the account button at the rail's foot.
@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 
 const memory = new Map<string, unknown>()
 
-export function useSettled<T>(key: string, promise: Promise<T>): T | null {
+export function useSettled<T>(key: string, promise: Promise<T>): T | undefined {
   const [, tick] = useState(0)
   useEffect(() => {
     let live = true
@@ -31,5 +31,5 @@ export function useSettled<T>(key: string, promise: Promise<T>): T | null {
       live = false
     }
   }, [key, promise])
-  return typeof window === 'undefined' ? null : ((memory.get(key) as T | undefined) ?? null)
+  return typeof window === 'undefined' ? undefined : (memory.get(key) as T | undefined)
 }
