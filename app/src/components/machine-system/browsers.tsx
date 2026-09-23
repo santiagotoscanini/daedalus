@@ -34,7 +34,6 @@ export function NodeBrowsersView({ d }: { d: NodeSystemData }) {
   const t = d.telemetry
   if (t === null) return null
   const latest = new Map((d.browserLatest ?? []).map((l) => [l.kind, l]))
-  const asked = new Set((d.browserLatest ?? []).map((l) => l.kind))
 
   return (
     <BoardGrid>
@@ -53,7 +52,7 @@ export function NodeBrowsersView({ d }: { d: NodeSystemData }) {
             key={`${b.kind}-${b.channel ?? ''}`}
             b={b}
             latest={latest.get(b.kind) ?? null}
-            asked={asked.has(b.kind) || d.browserLatest === null}
+            asked={d.browserLatest === null}
             os={d.node.os}
           />
         ))
@@ -97,10 +96,13 @@ function BrowserBoard({
   asked: boolean
   os: string
 }) {
-  const behind = browserBehind(b.version, latest?.latest ?? null)
+  // An MSIX install (Arc on Windows) has no version resource, but its
+  // package directory is named for the version: read it from the path.
+  const version = b.version ?? b.path?.match(/_(\d+\.\d+\.\d+\.\d+)_/)?.[1] ?? null
+  const behind = browserBehind(version, latest?.latest ?? null)
   const verdict: { tone: Tone; label: string } =
     latest === null
-      ? { tone: 'muted', label: asked ? 'no feed' : 'not checked' }
+      ? { tone: 'muted', label: asked ? 'not checked' : 'no feed' }
       : latest.latest === null
         ? { tone: 'muted', label: 'feed silent' }
         : behind === null
@@ -109,8 +111,8 @@ function BrowserBoard({
             ? { tone: 'warn', label: 'behind' }
             : { tone: 'ok', label: 'current' }
   const stepsBehind =
-    behind === true && b.version !== null && latest?.latest != null
-      ? majorGap(b.version, latest.latest)
+    behind === true && version !== null && latest?.latest != null
+      ? majorGap(version, latest.latest)
       : null
 
   return (
@@ -128,7 +130,7 @@ function BrowserBoard({
       <div className={PART}>
         <div className={PART_ID}>
           <strong className={PART_NAME}>
-            <span className={MONO}>{b.version ?? DASH}</span>
+            <span className={MONO}>{version ?? DASH}</span>
           </strong>
           <span className={PART_DETAIL}>
             {b.channel ?? 'stable'} channel
@@ -139,7 +141,17 @@ function BrowserBoard({
       </div>
       <Facts
         rows={[
-          { k: 'Installed', v: <span className={MONO}>{b.version ?? DASH}</span> },
+          {
+            k: 'Installed',
+            v: (
+              <span className={MONO}>
+                {version ?? DASH}
+                {b.version === null && version !== null && (
+                  <span className={NOTE}> from the package name</span>
+                )}
+              </span>
+            ),
+          },
           {
             k: 'Vendor ships',
             v:
