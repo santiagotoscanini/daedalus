@@ -123,7 +123,12 @@ export async function ghRead<T>(
   // permission the App lacks is a 403, never a 404.
   if (asApp.status === 404) return keep({ access: 'app', value: null, status: 404 }, ttl)
   if (asApp.status === 403 || asApp.error === 'no-token') {
-    if (anonBudget(now).spent) return { access: 'budget', value: null, status: 429 }
+    // Remembered until the budget is back, so a page drawn while it is spent
+    // costs no round trip per path.
+    const untilReset = () => Math.max(MINUTE, Math.min(anon.resetAt - now, 10 * MINUTE))
+    if (anonBudget(now).spent) {
+      return keep({ access: 'budget', value: null, status: 429 }, untilReset())
+    }
     const asAnyone = await ctx.github.anon<unknown>(path)
     if (asAnyone.error !== null) return { access: 'unreachable', value: null, status: null }
     noteAnon(asAnyone.headers)
@@ -134,7 +139,7 @@ export async function ghRead<T>(
     if (asAnyone.retryAfterMs !== null) {
       anon.remaining = 0
       anon.resetAt = Math.max(anon.resetAt, now + asAnyone.retryAfterMs)
-      return { access: 'budget', value: null, status: asAnyone.status }
+      return keep({ access: 'budget', value: null, status: asAnyone.status }, untilReset())
     }
     if (asAnyone.status === 404 || asAnyone.status === 403 || asAnyone.status === 401) {
       return keep({ access: 'needs-actions', value: null, status: asApp.status }, REFUSED_TTL)

@@ -1,5 +1,13 @@
 import type { Ctx } from '../../../core/ctx'
-import { type Access, DONE_TTL, ghRead, knownRepos, type RepoRef, remembered } from './github'
+import {
+  type Access,
+  anonBudget,
+  DONE_TTL,
+  ghRead,
+  knownRepos,
+  type RepoRef,
+  remembered,
+} from './github'
 import {
   contentsFileDecoder,
   contentsListDecoder,
@@ -83,13 +91,18 @@ function jobPriority(r: Run): number {
 
 async function readJobs(
   ctx: Ctx,
-  wanted: { repo: RepoRef; run: Run }[],
+  wanted: { repo: RepoRef; run: Run; access: Access }[],
   now: number,
 ): Promise<Map<number, Job[]>> {
   const out = new Map<number, Job[]>()
   const free = wanted.filter((w) => remembered(jobsPath(w.repo, w.run), now))
+  // A fresh read is only worth issuing where it can answer: as the App where
+  // the App read the runs, as anyone where the runs were public and the
+  // hour's budget is not spent. Anything else would be sixteen refusals.
+  const spent = anonBudget(now).spent
   const fresh = wanted
     .filter((w) => !remembered(jobsPath(w.repo, w.run), now))
+    .filter((w) => w.access === 'app' || (w.access === 'public' && !spent))
     .sort(
       (a, b) =>
         jobPriority(a.run) - jobPriority(b.run) ||
@@ -180,7 +193,7 @@ export async function collect(ctx: Ctx, now: number = Date.now()): Promise<RepoA
   )
   const jobs = await readJobs(
     ctx,
-    read.flatMap(({ repo, runs }) => runs.runs.map((run) => ({ repo, run }))),
+    read.flatMap(({ repo, runs }) => runs.runs.map((run) => ({ repo, run, access: runs.access }))),
     now,
   )
   return read.map(({ repo, runs, wf }) => ({
