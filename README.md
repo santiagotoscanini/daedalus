@@ -47,7 +47,7 @@ to match. The craftsman, not the labyrinth.
 | [`app/`](app/) | Daedalus itself — the TypeScript app (TanStack Start + React 19, drizzle-orm, Tailwind v4). |
 | [`website/`](website/) | The landing site and the [external-setup docs](https://daedalus.toscanini.me/docs), deployed to GitHub Pages by [`.github/workflows/website.yml`](.github/workflows/website.yml). |
 | [`.claude/`](.claude/) | Path-scoped rules for Claude Code sessions working on the app and its UI. |
-| [`PLAN.md`](PLAN.md) | The productization plan: twelve phases, each with its outcome once it lands, and a status table at the top. |
+| [`PLAN.md`](PLAN.md) | What is still missing, and how to build it — forward-looking only; what landed is in git history. |
 
 The NixOS module that runs the app is not in this repository yet. It
 lives in the author's machine configuration, alongside the host-side
