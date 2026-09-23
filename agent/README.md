@@ -20,15 +20,23 @@ macOS launchd daemon, with a tray / menu bar app beside it, that
   compressor and commit charge, every volume, every physical drive with
   the OS's health verdict and, on Windows, its temperature, hours, wear and
   error counters, temperatures where an OS states them, network rates,
-  battery. Sampled every fifteen seconds; drives and the services that
-  should be running and are not every ten minutes; the OS's pending and
-  recently installed updates hourly, and the Chromium-based browsers
+  battery (with its cycle count and the OS's condition on a Mac). Sampled
+  every fifteen seconds; drives and the services that should be running
+  and are not every ten minutes; the OS's pending and recently installed
+  updates hourly; and with the slow facts the Chromium-based browsers
   installed (Chrome, Edge, Brave, Arc, Vivaldi, Opera, Chromium: version,
-  channel, open or not, which is the default) with the slow facts. The
-  status page carries the machine
-  and nothing that identifies a person (no serials, no process list); the
-  full document — the heaviest processes, the failing services, the
-  updates, the serials — is on `/telemetry`, gated like `/claude`; and
+  channel, open or not, which is the default) and everything else
+  installed — on Windows the Uninstall keys, the Store and the Steam and
+  Epic games, each sorted as app, game, launcher, runtime or driver; on a
+  Mac the Applications folders, each tagged App Store, Homebrew, Setapp or
+  Apple's own. A GPU carries its driver's marketed version and build date
+  where the vendor writes one (AMD's Adrenalin, NVIDIA's GeForce number);
+  a Mac carries its board target (`hw.target`), the name Apple's software
+  catalogue lists supported machines by. The status page carries the
+  machine and nothing that identifies a person (no serials, no process
+  list, no installed applications — a count only); the full document —
+  the heaviest processes, the failing services, the updates, the serials,
+  the applications — is on `/telemetry`, gated like `/claude`; and
   `/metrics` renders it as Prometheus gauges for the box to scrape;
 - **updates itself** to the newest `agent-v*` release of this repository,
   verifying every asset against the ed25519 key compiled into it;

@@ -5,9 +5,9 @@
 //! Three cadences, one document. The STATIC facts — make and model,
 //! firmware, board, processor model, core counts, kernel, the memory
 //! modules — are read once at start and again every hour. The SLOW ones —
-//! the physical drives with their health counters, and the services that
-//! should be running and are not — every ten minutes, because they cost a
-//! shell-out. The SAMPLED ones — processor and GPU usage, memory, volumes,
+//! the physical drives with their health counters, the services that
+//! should be running and are not, the browsers and the installed
+//! applications — every ten minutes, because they cost a shell-out. The SAMPLED ones — processor and GPU usage, memory, volumes,
 //! temperatures, network counters, the heaviest processes — every
 //! `SAMPLE_EVERY` on a thread of their own. OS updates are a fourth thing:
 //! a search that can take a minute and touch the network, run hourly on its
@@ -17,8 +17,8 @@
 //!
 //! Two views of the document. The OPEN status page carries `public()`:
 //! nothing that identifies a person — no serial numbers, no process list, no
-//! service list, no pending updates — because the page answers the whole
-//! LAN. The box, holding the node token, reads the full document at
+//! service list, no pending updates, no installed applications — because
+//! the page answers the whole LAN. The box, holding the node token, reads the full document at
 //! `GET /telemetry` (status.rs) and draws the same pages it draws for
 //! itself.
 
@@ -58,6 +58,10 @@ pub struct Machine {
     /// "all-in-one" | "server" | "tablet", from the chassis type (SMBIOS type
     /// 3 on Windows, the model name on a Mac). None when not stated.
     pub form: Option<String>,
+    /// Apple's board target (`hw.target`, "J516sAP"): the name Apple's own
+    /// software catalogue lists supported machines by, which the model
+    /// identifier is not. None on Windows.
+    pub target: Option<String>,
 }
 
 /// The operating system, beyond the name and version facts.rs already carries.
@@ -174,7 +178,14 @@ pub struct Drive {
 pub struct Gpu {
     pub name: String,
     pub vendor: Option<String>,
+    /// The driver version as the OS states it ("32.0.31041.1004").
     pub driver: Option<String>,
+    /// The version the vendor markets it as, where derivable: "Adrenalin
+    /// 25.9.2" from the value AMD's driver writes beside its own, "GeForce
+    /// 566.14" from the last five digits of NVIDIA's. None elsewhere.
+    pub driver_brand: Option<String>,
+    /// When the driver was built, "YYYY-MM-DD", where stated.
+    pub driver_date: Option<String>,
     pub vram_total_bytes: Option<u64>,
     pub vram_used_bytes: Option<u64>,
     /// 0–100, since the previous sample.
@@ -211,6 +222,34 @@ pub struct Battery {
     pub charging: Option<bool>,
     /// Design capacity that remains, 0–100, where readable.
     pub health_pct: Option<f64>,
+    /// Charge cycles completed, where the OS counts them (a Mac does).
+    pub cycles: Option<u64>,
+    /// The OS's own verdict on the battery, as it words it: "Normal",
+    /// "Service Recommended".
+    pub condition: Option<String>,
+}
+
+/// An application installed on the machine, from wherever the OS records
+/// installs: the Uninstall registry keys, the Store and the game launchers
+/// on Windows; the Applications folders on a Mac. Read with the slow facts.
+/// Stripped from the open page: what a person has installed is theirs.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct App {
+    pub name: String,
+    pub version: Option<String>,
+    pub publisher: Option<String>,
+    /// "YYYY-MM-DD" where the OS records it.
+    pub installed_at: Option<String>,
+    pub size_bytes: Option<u64>,
+    /// "app" | "game" | "launcher" | "runtime" | "driver"
+    pub kind: String,
+    /// Where it was found: "registry" | "store" | "steam" | "epic" on
+    /// Windows; "applications" | "app-store" | "homebrew" | "setapp" |
+    /// "apple" on a Mac.
+    pub source: Option<String>,
+    /// Install location. Stripped from the open page.
+    pub path: Option<String>,
 }
 
 /// One of the heaviest processes. Stripped from the open page.
@@ -329,6 +368,10 @@ pub struct Telemetry {
     pub service_count: Option<u32>,
     /// The Chromium-based browsers installed, read with the slow facts.
     pub browsers: Vec<Browser>,
+    /// What is installed, read with the slow facts; empty on the open page.
+    pub apps: Vec<App>,
+    /// How many, which the open page keeps: a count is not a list.
+    pub app_count: Option<usize>,
     /// None until the first search lands.
     pub updates: Option<Updates>,
     /// What could not be read, one line each, so the page says "not
@@ -352,9 +395,24 @@ impl Telemetry {
         for b in &mut t.browsers {
             b.path = None;
         }
+        t.apps.clear();
         t.updates = None;
         t
     }
+}
+
+/// The inventory in the order the page lists it: by name, case aside, one
+/// entry per (name, version) — the 64-bit and 32-bit Uninstall views both
+/// list a product that registered under each.
+pub fn tidy_apps(mut apps: Vec<App>) -> Vec<App> {
+    apps.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.version.cmp(&b.version))
+    });
+    apps.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name) && a.version == b.version);
+    apps
 }
 
 /// The static half, read rarely.
@@ -380,6 +438,8 @@ pub struct Slow {
     pub service_count: Option<u32>,
     /// The Chromium-based browsers installed, read with the slow facts.
     pub browsers: Vec<Browser>,
+    /// What is installed, tidied (`tidy_apps`) by the collector.
+    pub apps: Vec<App>,
     pub errors: Vec<String>,
 }
 
@@ -506,6 +566,8 @@ pub fn assemble(s: &Static, w: &Slow, p: &Sample, updates: Option<&Updates>) -> 
         services: w.services.clone(),
         service_count: w.service_count,
         browsers: w.browsers.clone(),
+        apps: w.apps.clone(),
+        app_count: Some(w.apps.len()),
         updates: updates.cloned(),
         errors,
     }
@@ -537,6 +599,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
         drives = slow.drives.len(),
         services_down = slow.services.len(),
         browsers = slow.browsers.len(),
+        apps = slow.apps.len(),
         "telemetry: slow facts read"
     );
     for e in &slow.errors {
@@ -657,6 +720,12 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, hostname: &str) -> Strin
             ),
             1.0,
         );
+    }
+    // One count per kind, in a fixed order so the series set never moves;
+    // a kind with nothing installed still reports zero.
+    for kind in ["app", "game", "launcher", "runtime", "driver"] {
+        let n = t.apps.iter().filter(|a| a.kind == kind).count();
+        gauge("apps", &format!("kind=\"{kind}\""), n as f64);
     }
     if let Some(u) = &t.updates {
         gauge("os_updates_pending", "", u.pending.len() as f64);
@@ -791,6 +860,12 @@ mod tests {
                 state: "stopped".into(),
                 ..Default::default()
             }],
+            apps: vec![App {
+                name: "Steam".into(),
+                kind: "launcher".into(),
+                path: Some(r"C:\Program Files (x86)\Steam".into()),
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let u = Updates {
@@ -813,6 +888,9 @@ mod tests {
         assert_eq!(open.browsers[0].version.as_deref(), Some("128.0"));
         assert!(open.processes.is_empty());
         assert!(open.updates.is_none());
+        assert_eq!(t.apps.len(), 1);
+        assert!(open.apps.is_empty());
+        assert_eq!(open.app_count, Some(1));
         assert_eq!(t.cpu.model.as_deref(), Some("X"));
         assert_eq!(t.cpu.usage_pct, Some(12.5));
         assert_eq!(t.gpus[0].vram_total_bytes, Some(16));
@@ -839,5 +917,39 @@ mod tests {
         assert!(m.contains("daedalus_agent_cpu_usage_percent{host=\"PC\"} 3\n"));
         assert!(m.contains("daedalus_agent_disk_total_bytes{host=\"PC\",mount=\"C:\"} 10\n"));
         assert!(m.contains("cpu=\"A \\\"B\\\"\""));
+        assert!(m.contains("daedalus_agent_apps{host=\"PC\",kind=\"game\"} 0\n"));
+    }
+
+    #[test]
+    fn apps_are_sorted_and_deduped() {
+        let app = |name: &str, version: Option<&str>| App {
+            name: name.into(),
+            version: version.map(str::to_string),
+            kind: "app".into(),
+            ..Default::default()
+        };
+        let apps = tidy_apps(vec![
+            app("zoom", Some("6.0")),
+            app("Arc", None),
+            app("Zoom", Some("6.0")),
+            app("Zoom", Some("5.0")),
+        ]);
+        let names: Vec<(&str, Option<&str>)> = apps
+            .iter()
+            .map(|a| (a.name.as_str(), a.version.as_deref()))
+            .collect();
+        assert_eq!(
+            names,
+            vec![("Arc", None), ("Zoom", Some("5.0")), ("zoom", Some("6.0"))]
+        );
+        let m = metrics_text(
+            &Telemetry {
+                apps,
+                ..Default::default()
+            },
+            "0.10.0",
+            "PC",
+        );
+        assert!(m.contains("daedalus_agent_apps{host=\"PC\",kind=\"app\"} 3\n"));
     }
 }
