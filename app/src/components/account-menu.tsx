@@ -14,6 +14,7 @@ import { type ReactNode, useTransition } from 'react'
 
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
+import { useHydrated } from '../lib/hydrated'
 import { useSettled } from '../lib/settled'
 import { isScheme, type Scheme, type ThemeChoice } from '../lib/theme'
 import { saveTheme } from '../server/settings'
@@ -28,6 +29,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  MENU_ITEM,
+  MENU_PANEL,
 } from './ui/dropdown-menu'
 
 // The foot of the rail: who is signed in, and the few things that are about
@@ -65,7 +68,65 @@ export function AccountMenu({ account, ...rest }: Props) {
   // rather than the rail broken; under no gate, where nobody is signed in,
   // it answers null and the menu opens without a header.
   const a = useSettled('account', account)
+  // Before React has wired the page — the first load in dev mode is a few
+  // hundred script requests — the server's button would be inert, and a
+  // menu that will not open reads as broken. So until hydration the menu
+  // is a native popover, which the browser opens with no script at all,
+  // holding the rows that are plain links.
+  if (!useHydrated()) return <NativeMenu {...rest} />
   return <Menu account={a ?? null} loading={a === undefined} {...rest} />
+}
+
+// Radix lights a row through its own attribute; a plain link lights on hover.
+const NATIVE_ITEM = cn(MENU_ITEM, 'hover:bg-(--panel-2) hover:text-foreground')
+
+function NativeMenu({
+  active,
+  triggerClassName,
+  activeClassName,
+  labelClassName,
+}: Omit<Props, 'account' | 'theme'>) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Account menu"
+        popoverTarget="account-menu"
+        className={cn(
+          triggerClassName,
+          'w-full cursor-pointer border-0 bg-transparent text-left',
+          active && activeClassName,
+        )}
+      >
+        <Disc size={22} />
+        <span className={cn(labelClassName, 'flex flex-1 items-center')}>
+          <Bar w="60%" h={11} />
+        </span>
+        <ChevronsUpDownIcon className="size-3.5 opacity-60 nav-collapsed:hidden" />
+      </button>
+      {/* In the top layer, so it sits over the page like the real one; the
+          browser centres a popover by default, and this one belongs above
+          its button at the rail's foot. */}
+      <div
+        id="account-menu"
+        popover="auto"
+        className={cn(MENU_PANEL, 'fixed inset-auto bottom-[3.6rem] left-[0.7rem] m-0 w-[15.5rem]')}
+      >
+        <a href="/profile" className={NATIVE_ITEM}>
+          <UserIcon />
+          Profile
+        </a>
+        <a href="/settings" className={NATIVE_ITEM}>
+          <SettingsIcon />
+          Settings
+        </a>
+        <a href="/logout" className={NATIVE_ITEM}>
+          <LogOutIcon />
+          Sign out
+        </a>
+      </div>
+    </>
+  )
 }
 
 function Avatar({ account, size }: { account: Account | null; size: number }) {
