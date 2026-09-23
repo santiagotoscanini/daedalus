@@ -75,7 +75,12 @@ set -euo pipefail
 OUT="$OUT_DIR/installation.json"
 REQ="$APPLY_DIR/github-token-request.json"
 STATUS="$APPLY_DIR/github-token-status.json"
-PERMISSIONS='{"permissions":{"contents":"read","metadata":"read","checks":"write","deployments":"write"}}'
+# Narrowed on purpose: a token carries only what the box uses, so a
+# permission granted at GitHub still does nothing until it is named here.
+# `actions: read` is the Actions page reading runs, jobs and workflows;
+# `pull_requests` is granted to the App but unused until previews, so it
+# is deliberately absent.
+PERMISSIONS='{"permissions":{"contents":"read","metadata":"read","checks":"write","deployments":"write","actions":"read"}}'
 MIN_INTERVAL=60
 # = TOKEN_MIN_REMAINING_MS in the engine's app/src/host/github-token.ts: a
 # token with less left than this is one the engine will not use anyway.
