@@ -354,29 +354,16 @@ priority; each can be done independently unless noted.
    services consume — a model server today, a runner later — with the
    wiring generated, never typed.
 
-   **What is true today**, and shapes the design:
-   - `fleet.gpuHost = "gaming-pc.local.<domain>"` and `gpuHostIp` are
-     literals in the reference host's `configuration.nix`; litellm's
-     `config.yaml` (`@gpuHost@`, eleven hand-curated routes with mode,
-     context sizes, cost 0, timeouts), gatus (a health probe), lemonade-logs
-     (a scrape target and `LEMONADE_HOST`) and pihole (an A record) all
-     read them.
-   - pi-hole already gives every lease `<hostname>.lan` (`localDomain`),
-     and `gaming-pc.lan` already resolves, because the household's
-     encrypted `dhcp-hostsfile` names the PC's MAC `gaming-pc` at .120.
-     That file is sops on purpose: a device inventory (MACs) is not for any
-     git history. The agent reports the same MAC and address in its hello,
-     and the nodes table holds them.
-   - The control plane already writes a runtime file the host reads with no
-     rebuild: `<apply dir>/nodes/targets.json`, Prometheus file_sd for the
-     nodes' `/metrics`.
-   - daedalus's `LITELLM_API_KEY` is the master key, rendered by the litellm
-     stack; LiteLLM runs `STORE_MODEL_IN_DB=True`, so `/model/new`,
-     `/model/delete` and `/model/info` are open to it.
-   - Lemonade's `/api/v1/models` is a catalog with `labels` (`tool-calling`,
-     `vision`, `image`, `edit`, `mtp`, `custom`, the recipe) and
-     `downloaded`; `/api/v1/health` says what is loaded and the version.
-     That is everything the hand-written routes encode, minus the aliases.
+   **Landed 2026-09-23** (engine `21941db`, `f5165fa`, `819d394`; config
+   `6196f54`): agent 0.11.0 reports a provider's presence; a node's policy
+   carries its network name and offered providers (Settings › Machines);
+   the control plane writes the dnsmasq line per MAC that pi-hole's
+   `dhcp-hostsdir` reads (`macbook-pro.lan` resolves from that line alone);
+   `site/nodes.json` is rendered at Apply and read into `fleet.nodes`;
+   LiteLLM, gatus, the log bridge and the dashboard derive the model
+   server from the first lemonade node; `fleet.gpuHost` is gone. What
+   remains is the order of work below; the reasoning between here and
+   there is kept because the next steps rest on it.
 
    **The rule that sorts every piece.** What nix builds from goes in
    `site/` as JSON; what the host needs at runtime and must not be in git
@@ -467,24 +454,17 @@ priority; each can be done independently unless noted.
    would present as chat).
 
    **Order of work**, each step usable on its own:
-   1. Agent 0.11: the `Provider` trait and Lemonade detection in
-      telemetry; the classifier fix rides along. The box reads the
-      catalog from the provider; the Host tab and Settings › Machines show
-      the provider and its models. No nix.
-   2. The slug and the runtime name: policy `name`, the dnsmasq file, the
-      pihole module's `dhcp-hostsdir`/`hostsdir` lines and the HUP path
-      unit (one engine nix change, closure-neutral for a host without
-      nodes). `gaming-pc.lan` follows the MAC; the sops line retires.
-   3. `site/nodes.json` and `fleet.nodes`: the site-write, the option,
-      gatus and lemonade-logs reading it, litellm's `@gpuHost@` bridged
-      to the first lemonade node; `fleet.gpuHost` removed from
-      `configuration.nix` and from the engine. The template host gains
-      `nodes.json` with an empty list and a fixture.
-   4. The model sync and the per-model policy; the lemonade block leaves
+   1. The box reads the provider's catalog and health from its API
+      (`<name>.<lanDomain>:<port>`) and shows them on Settings › Machines
+      and the Host tab, beside the presence the agent reports; the
+      "Lemonade" row on Settings › Machines says "detected" when it is.
+   2. The model sync and the per-model policy; the lemonade block leaves
       `config.yaml`; the AI tab lists the gateway's models by machine.
-   5. Providers as declared services: start, stop, install and update
+   3. Providers as declared services: start, stop, install and update
       Lemonade from the box through the agent; Ollama on the Mac.
-   6. Power verbs (sleep, restart, shut down, wake by magic packet),
+   4. `pinAddress` gets its switch on Settings › Machines (the policy
+      field and the `MAC,IP,name` line exist; no UI yet).
+   5. Power verbs (sleep, restart, shut down, wake by magic packet),
       dashboards and sleep-aware alerts, the WIP boards (die temperatures,
       GPU live figures, the AMD driver feed, Homebrew formulae), signing
       (Apple once the `release` environment holds the six santree
@@ -613,6 +593,14 @@ priority; each can be done independently unless noted.
 
 Hand edits the UI cannot make for itself:
 
+00. **Drop the PC's line from the household reservations.**
+   `host/sops/pihole/dhcp-hosts.sops` still names the gaming PC's MAC
+   `gaming-pc` at .120, which is why the control plane skips that MAC in
+   its own file ("named by the household file" on Settings › Machines).
+   `sops host/sops/pihole/dhcp-hosts.sops`, delete that line, rebuild:
+   the runtime line takes over on the next policy save, and the PC's
+   address becomes the pool's (or pin it, once `pinAddress` has a
+   switch).
 0. **Grant the build App `actions: read`.** GitHub → Settings → Developer
    settings → GitHub Apps → the box's App → Permissions & events →
    Repository permissions → Actions: Read-only → Save; then open the App's

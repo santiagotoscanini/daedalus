@@ -55,6 +55,9 @@ export const Route = createFileRoute('/api/nodes/hello')({
                   ...(answer.policy.claudeWorkdir === null
                     ? {}
                     : { claude_workdir: answer.policy.claudeWorkdir }),
+                  // Where each provider listens, so the agent's presence probe
+                  // asks the right port (agent 0.11.0+; older agents ignore it).
+                  providers: { lemonade: { port: answer.policy.providers.lemonade.port } },
                 },
               }),
           // The node token: the box's credential for the agent's full Claude
