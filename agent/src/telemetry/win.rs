@@ -456,7 +456,21 @@ fn app_kind(name: &str) -> &'static str {
     let is_word_java = n
         .split(|c: char| !c.is_ascii_alphanumeric())
         .any(|w| w == "java");
-    if any(&[
+    // Launchers first: "Battle.net" would otherwise read as a .NET.
+    if n == "steam"
+        || any(&[
+            "epic games launcher",
+            "battle.net",
+            "gog galaxy",
+            "ubisoft connect",
+            "ea app",
+            "riot client",
+            "gamingapp",
+            "xbox",
+        ])
+    {
+        "launcher"
+    } else if any(&[
         "visual c++",
         ".net",
         "directx",
@@ -471,19 +485,6 @@ fn app_kind(name: &str) -> &'static str {
     ]) || is_word_java
     {
         "runtime"
-    } else if n == "steam"
-        || any(&[
-            "epic games launcher",
-            "battle.net",
-            "gog galaxy",
-            "ubisoft connect",
-            "ea app",
-            "riot client",
-            "gamingapp",
-            "xbox",
-        ])
-    {
-        "launcher"
     } else if any(&[
         "amd software",
         "adrenalin",
@@ -538,6 +539,13 @@ fn store_is_system(identity: &str) -> bool {
         "Microsoft.SecHealthUI",
         "Microsoft.StorePurchaseApp",
         "Microsoft.WindowsStore",
+        // The Xbox app's own overlays and sign-in helper, registered beside it.
+        "Microsoft.Xbox.TCUI",
+        "Microsoft.XboxGameOverlay",
+        "Microsoft.XboxGamingOverlay",
+        "Microsoft.XboxIdentityProvider",
+        "Microsoft.XboxSpeechToTextOverlay",
+        "Microsoft.XboxGameCallableUI",
     ]
     .iter()
     .any(|p| identity.starts_with(p))
@@ -3433,6 +3441,8 @@ mod tests {
         assert_eq!(app_kind("Steam"), "launcher");
         assert_eq!(app_kind("Epic Games Launcher"), "launcher");
         assert_eq!(app_kind("GamingApp"), "launcher");
+        assert_eq!(app_kind("Battle.net"), "launcher");
+        assert!(store_is_system("Microsoft.XboxGamingOverlay"));
         assert_eq!(app_kind("AMD Software"), "driver");
         assert_eq!(app_kind("Intel(R) Chipset Device Software"), "driver");
         assert_eq!(app_kind("Intel Unison"), "app");

@@ -41,7 +41,7 @@ export function NodeSoftwareView({ d }: { d: NodeSystemData }) {
   const t = d.telemetry
   if (t === null) return null
   const mac = d.node.os === 'macos'
-  const apps = t.apps
+  const apps = t.apps.flatMap(tidy)
   const none = t.appCount === null
 
   if (none) {
@@ -84,6 +84,7 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
           apps={[...games].sort(bySize)}
           empty="No game is registered with Windows. Steam and Epic register each install; a game from elsewhere may not."
           side={(a) => (a.sizeBytes === null ? sourceName(a.source) : bytes(a.sizeBytes))}
+          fold={12}
         />
         <p className={FOOT}>
           Biggest first, as Steam and Epic register them. The size is what the installer wrote down,
@@ -150,8 +151,10 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
           side={version}
         />
         <p className={FOOT}>
-          Store packages, Windows&rsquo; own components left out. The Store updates these on its
-          own, which is why Arc&rsquo;s version here moves without anyone installing anything.
+          Store packages, Windows&rsquo; own furniture left out — of Microsoft&rsquo;s only Xbox,
+          Minecraft, PowerToys, Terminal, Teams and Office count as chosen. The Store updates these
+          on its own, which is why Arc&rsquo;s version here moves without anyone installing
+          anything.
         </p>
       </Board>
 
@@ -326,6 +329,38 @@ function AppList({
       )}
     </>
   )
+}
+
+// Store packages Windows registers beside the Xbox app — its overlays and
+// sign-in helper — are parts of it, not things anyone launches.
+const XBOX_PARTS =
+  /^Xbox(\.TCUI|GameOverlay|GamingOverlay|IdentityProvider|SpeechToTextOverlay|GameCallableUI)$/i
+const LAUNCHERS =
+  /^(Battle\.net|Steam|Epic Games Launcher|GOG GALAXY|Ubisoft Connect|EA app|Riot Client|Xbox|GamingApp)$/i
+// Of Microsoft's own Store packages, the ones a person chose to have.
+// The rest — Cortana's package id, the Bing tiles, the codec extensions,
+// Get Help — is Windows furniture, and a list of it says nothing.
+const MICROSOFT_KEEP =
+  /^(Xbox|GamingApp|Minecraft\w*|PowerToys|Windows ?Terminal|Teams|MicrosoftTeams|Office\w*|OneNote|Copilot)$/i
+
+/**
+ * The agent's classification, corrected where a name fooled it: Battle.net
+ * is a launcher whatever ".net" suggests, the Store's "GamingApp" is the
+ * Xbox app, the Xbox app's own helper packages are not apps at all, and
+ * Microsoft's own Store packages are kept only where they are apps.
+ */
+function tidy(a: NodeApp): NodeApp[] {
+  if (XBOX_PARTS.test(a.name)) return []
+  if (
+    a.source === 'store' &&
+    /microsoft/i.test(a.publisher ?? '') &&
+    !MICROSOFT_KEEP.test(a.name)
+  ) {
+    return []
+  }
+  const name = a.name === 'GamingApp' ? 'Xbox' : a.name
+  const kind = LAUNCHERS.test(name) ? 'launcher' : a.kind
+  return [name === a.name && kind === a.kind ? a : { ...a, name, kind }]
 }
 
 const version = (a: NodeApp): ReactNode =>

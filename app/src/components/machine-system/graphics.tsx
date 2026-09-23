@@ -47,7 +47,8 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
   const gpus = [...t.gpus].sort((a, b) => (b.vramTotalBytes ?? 0) - (a.vramTotalBytes ?? 0))
   const main = gpus[0] ?? null
   const second = gpus[1] ?? null
-  const runtimes = t.apps.filter((a) => a.kind === 'runtime')
+  // Battle.net is not a .NET; the Software tab makes the same correction.
+  const runtimes = t.apps.filter((a) => a.kind === 'runtime' && !/^Battle\.net$/i.test(a.name))
 
   return (
     <BoardGrid>
