@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
 import { ClockIcon, FolderGit2Icon, MessagesSquareIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -126,7 +126,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           {
             k: 'Latest release',
             v: data.gap.latest,
-            note: 'the weekly flake update is the path; the store binary cannot self-update',
+            note: 'Update Claude Code, on the Remote control board, is what moves the pin',
           },
         ]}
         lede={
@@ -360,12 +360,15 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           aside={<span className={NOTE}>anthropics/claude-code</span>}
           foot={
             <p className={FOOT}>
-              The store binary cannot update itself: the path is{' '}
-              <span className={MONO}>nix flake update</span>, or the weekly{' '}
-              <span className={MONO}>flake-autoupgrade.timer</span>. A rebuild deliberately does NOT
-              restart this unit onto the new build — it once killed its own activation doing so — so
-              the server keeps running the old binary until a reboot or the restart control above.{' '}
-              {verdict.note}
+              The store binary cannot update itself — it is sealed with{' '}
+              <span className={MONO}>DISABLE_UPDATES</span>, because{' '}
+              <span className={MONO}>claude update</span> would leave it alone and build a second,
+              native install nothing reverts. <b>Update Claude Code</b> above is the supported move:
+              it pins the release manifest in the engine, signature-checked, and rebuilds onto it.
+              The weekly <span className={MONO}>flake-autoupgrade.timer</span> gets there on its own
+              whenever nixpkgs does. A rebuild deliberately does NOT restart this unit onto the new
+              build — it once killed its own activation doing so — so the server keeps running the
+              old binary until a reboot or the controls above. {verdict.note}
             </p>
           }
         />
@@ -395,6 +398,164 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
   )
 }
 
+/**
+ * Put every session this box owns back on the binary the flake holds.
+ *
+ * A session runs the CLI it STARTED on, and a rebuild deliberately does not
+ * restart anything (platform/claude-rc.nix), so after an update the roster is
+ * a mix of versions. This is the gesture that resolves it, and it is the only
+ * one that can: a stopped session cannot be picked back up from claude.ai —
+ * the server bridges new sessions rather than re-adopting old ones — so the
+ * way back in is the transcript, through `claude --resume`, which is exactly
+ * what a `claude-session@<uuid>` unit runs.
+ *
+ * So it acts on the MANAGED rows only, and each one is a stop followed by a
+ * resume of the same uuid: same id, same transcript, appended to. Sessions
+ * living inside the Remote Control server's own cgroup are not here — they
+ * cannot be stopped individually, only with the server, which is the button
+ * on the board above; afterwards they appear on this roster as resumable and
+ * Resume per row brings each back.
+ *
+ * Sequential, and that is forced rather than chosen: one request file backs
+ * every verb on this board, so two in flight is not a state the host can be
+ * in. It is also why this shares the board's `running` — a cycle and a row
+ * button must never be pressed at once.
+ */
+function CycleSessionsControl({
+  rows,
+  holds,
+  boardBusy,
+}: {
+  rows: RosterEntry[]
+  holds: string | null
+  boardBusy: boolean
+}) {
+  const router = useRouter()
+  const [armed, setArmed] = useState(false)
+  const [at, setAt] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Managed, alive, and running something other than what the flake holds.
+  // A row already on the new binary is not cycled: restarting it would cost
+  // a live session to change nothing.
+  const stale = rows.filter(
+    (r) =>
+      r.managed &&
+      r.id !== null &&
+      r.live !== null &&
+      holds !== null &&
+      (r.live.version ?? null) !== null &&
+      r.live.version !== holds,
+  )
+
+  useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => {
+      setArmed(false)
+    }, RC_ARM_MS)
+    return () => {
+      clearTimeout(t)
+    }
+  }, [armed])
+
+  if (stale.length === 0) return null
+
+  const run = async () => {
+    setError(null)
+    for (const [i, row] of stale.entries()) {
+      if (row.id === null) continue
+      setAt(i)
+      try {
+        // Stop, then resume the same uuid. The host settles the unit before
+        // it reports, so awaiting each verb in turn is enough — there is no
+        // second status to race.
+        await stopSessionFn({ data: { session: row.id } })
+        await resumeSessionFn({ data: { session: row.id } })
+      } catch (e) {
+        setError(
+          `${row.label}: ${e instanceof Error ? e.message : String(e)}. The rest were left alone.`,
+        )
+        break
+      }
+    }
+    setAt(null)
+    await router.invalidate()
+  }
+
+  if (at !== null) {
+    return (
+      <div className={RESTART}>
+        <p className={RESTART_STATE}>
+          Cycling {num(at + 1)} of {num(stale.length)} — {stale[at]?.label ?? ''}…
+        </p>
+      </div>
+    )
+  }
+
+  if (armed) {
+    return (
+      <div className={cn(RESTART, RESTART_ARMED)}>
+        <p className={RESTART_COST}>
+          {stale.length === 1 ? 'This session' : `These ${num(stale.length)} sessions`} stop and
+          resume, one at a time:{' '}
+          <span className={MONO}>{stale.map((r) => r.label).join(', ')}</span>. Each keeps its id
+          and its transcript and is appended to, not branched. Anything mid-turn loses that turn.{' '}
+          <b>If you are reading this from one of them, it is the one that dies</b> — it comes back,
+          but not this page's connection to it.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              setArmed(false)
+              void run()
+            }}
+          >
+            Cycle {num(stale.length)} onto {text(holds)}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={GHOST_BTN}
+            onClick={() => {
+              setArmed(false)
+            }}
+          >
+            Cancel
+          </Button>
+          <span className={RESTART_NOTE}>disarms on its own in {RC_ARM_MS / 1000}s</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={RESTART}>
+      {error !== null && <p className={cn(RESTART_STATE, 'text-danger')}>{error}</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={GHOST_BTN}
+          disabled={boardBusy}
+          onClick={() => {
+            setArmed(true)
+          }}
+        >
+          Restart {num(stale.length)} session{stale.length === 1 ? '' : 's'} onto {text(holds)}
+        </Button>
+        <span className={RESTART_NOTE}>
+          {stale.length === 1 ? 'one session is' : `${num(stale.length)} sessions are`} still
+          running an older CLI than the flake holds; stop-and-resume is what moves them.
+        </span>
+      </div>
+    </div>
+  )
+}
 const CC_IDLE: ClaudeCodeUpdateStatus = {
   id: null,
   state: 'idle',
@@ -1157,6 +1318,8 @@ function RosterBoard({ data }: { data: ClaudeData }) {
           )}
         </p>
       )}
+
+      <CycleSessionsControl rows={rows} holds={data.facts.cli.version} boardBusy={running} />
 
       {stale > 0 && (
         <p className={FOOT}>

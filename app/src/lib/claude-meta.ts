@@ -188,6 +188,17 @@ export type LiveFacts = {
   lastActivityAt: number | null
   cpuMs: number | null
   rssBytes: number | null
+  /**
+   * The CLI version this PROCESS is running, as the session file reports it.
+   *
+   * Different from `meta.cliVersion`, which is what the transcript recorded
+   * and is therefore historical. On a live row the two disagree exactly when
+   * it matters: a rebuild lands a new binary and nothing restarts onto it —
+   * deliberately, platform/claude-rc.nix — so the process keeps the old one.
+   * That gap is what the roster's restart control is for, and it was in the
+   * payload and dropped here.
+   */
+  version?: string | null
 }
 
 /** What the row already knows without the scan. */
@@ -398,13 +409,23 @@ export function factGroups(row: RowShape, now: number): FactGroup[] {
     }
   }
 
-  if (meta.cliVersion !== null) {
+  // What it is running, preferring the PROCESS over the transcript. On a
+  // dead row the transcript's record is the only answer there is; on a live
+  // one it is the wrong answer, because a session that has been open across
+  // a rebuild recorded a version it is no longer on. Not `secondary` while
+  // the process is alive: it is the fact the restart control acts on.
+  const liveVersion = row.live?.version ?? null
+  const shownVersion = liveVersion ?? meta.cliVersion
+  if (shownVersion !== null) {
     out.push({
       key: 'cli',
       icon: null,
-      text: `v${meta.cliVersion}`,
-      detail: 'the CLI version this session ran under',
-      secondary: true,
+      text: `v${shownVersion}`,
+      detail:
+        liveVersion === null
+          ? 'the CLI version this session ran under, from its transcript'
+          : 'the CLI version this process is running — a restart is what moves it',
+      secondary: liveVersion === null,
     })
   }
 
