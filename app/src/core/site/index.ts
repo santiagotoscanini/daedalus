@@ -94,6 +94,9 @@ export const EDITABLE = [
   // The switches moved from a page (core/site/switches.ts). One field, an
   // object: the bar names each id inside it through `moduleChanges`.
   'modules.enabled',
+  // The hostnames and exposure moved beside a switch (core/site/switches.ts):
+  // one field, an object keyed by webApp, worded per entry the same way.
+  'modules.web',
 ] as const
 
 /** One field of the document that the UI may edit. Dotted path into SiteDocument. */
@@ -137,9 +140,17 @@ const isDoc = (v: unknown): v is SiteDocument => {
   }
 }
 
+/**
+ * The draft as stored, DECODED: a draft written before a field existed
+ * (`modules.web`) reads with that field filled in, the way a committed file
+ * from before it does. Stored raw, it would hand `setField` an undefined
+ * where the renderer expects an object, and every read of the site would
+ * throw until the draft was dropped.
+ */
 async function readDraft(ctx: Ctx): Promise<SiteDocument | null> {
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
-  return (await ctx.store.read(SETTING_KEYS.siteDraft, isDoc)) ?? null
+  const raw = await ctx.store.read(SETTING_KEYS.siteDraft, isDoc)
+  return raw === undefined ? null : decodeSiteDocument(raw)
 }
 
 /**
@@ -201,7 +212,7 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   // can never be pinned to a stale value by an old draft.
   const desired =
     draft === null ? base : EDITABLE.reduce((acc, f) => setField(acc, f, getField(draft, f)), base)
-  const { moduleChangeWords } = await import('../../lib/module-switch')
+  const { moduleChangeWords, webChangeWords } = await import('../../lib/module-switch')
   return {
     committed: committedDoc,
     desired,
@@ -209,7 +220,10 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
     moduleChanges:
       committedDoc === null
         ? []
-        : moduleChangeWords(committedDoc.modules.enabled, desired.modules.enabled),
+        : [
+            ...moduleChangeWords(committedDoc.modules.enabled, desired.modules.enabled),
+            ...webChangeWords(committedDoc.modules.web, desired.modules.web),
+          ],
     render: { before: committed.ok ? committed.value.bytes : null, after: renderSiteFile(desired) },
   }
 }

@@ -28,6 +28,7 @@ import {
 import { readSite } from '../host/site'
 import { bool, type Decoder, recordOf } from '../lib/contract/decode'
 import { getJson, getText } from '../lib/http'
+import type { ModuleState } from '../lib/modules/active'
 import type { Site } from '../lib/site'
 import type { GhResult } from './github-app'
 
@@ -126,8 +127,17 @@ export type Ctx = {
   hosts: Hosts
   /** The box's identity — domain, owner, registry, Grafana — as this process's env binds it. */
   site: Site
-  /** The box's nix modules. `enabled` answers true for anything the export does not deny. */
-  modules: { enabled: (nixModule: string) => boolean }
+  /**
+   * The box's nix modules. `enabled` answers true for anything the export
+   * does not deny; `state` says which of the three a tab's page draws:
+   * `on`, `off` (declared and switched off — the tab stays in the rail,
+   * greyed, with its switch), or `absent` (this box does not import it — the
+   * tab is not offered). Until the export exists everything reads as `on`.
+   */
+  modules: {
+    enabled: (nixModule: string) => boolean
+    state: (nixModule: string) => ModuleState
+  }
 }
 
 /** LiteLLM as the environment binds it: LITELLM_BASE_URL and LITELLM_API_KEY, both optional. */
@@ -187,6 +197,14 @@ export async function makeCtx(): Promise<Ctx> {
     site: readSite(),
     modules: {
       enabled: (id) => (modules.available ? (modules.data[id] ?? true) : true),
+      state: (id) =>
+        !modules.available
+          ? 'on'
+          : modules.data[id] === undefined
+            ? 'absent'
+            : modules.data[id]
+              ? 'on'
+              : 'off',
     },
   }
   return ctx

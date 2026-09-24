@@ -16,6 +16,8 @@ export type TabItem<Id extends string = string> = {
   extra?: ReactNode
   /** A rule before this tab, separating it from the ones preceding it. */
   dividerBefore?: boolean
+  /** Drawn dimmer: the tab is offered but its subject is switched off. */
+  muted?: boolean
   /** A mark before the label. */
   icon?: NavIconName
 }
@@ -24,12 +26,15 @@ export function TabBar<Id extends string>({
   tabs,
   active,
   linkTo,
+  trailing,
 }: {
   tabs: readonly TabItem<Id>[]
   active: string
   /** Where each tab goes. A callback so every caller keeps its own typed
       route, params and search rather than this component guessing them. */
   linkTo: (id: Id) => LinkProps
+  /** A control at the row's far end — the cog a service's page wears. */
+  trailing?: ReactNode
 }) {
   return (
     <nav
@@ -65,6 +70,7 @@ export function TabBar<Id extends string>({
               t.id === active
                 ? 'border-b-primary text-foreground'
                 : 'text-(--text-muted) hover:text-foreground',
+              t.muted === true && 'opacity-55 hover:opacity-90',
             )}
             aria-current={t.id === active ? 'page' : undefined}
             // The `active` prop above is the ONLY source of activeness.
@@ -81,6 +87,7 @@ export function TabBar<Id extends string>({
           </Link>
         </Fragment>
       ))}
+      {trailing !== undefined && <span className="ml-auto self-center pb-1">{trailing}</span>}
     </nav>
   )
 }

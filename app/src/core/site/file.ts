@@ -94,9 +94,19 @@ export type SiteDocument = {
    * host's word. A structural module (the engine's spine plus what the host
    * adds) is refused here before it can reach nix, where it is an assertion.
    * Absent and `{ enabled: {} }` are the same document.
+   *
+   * `web.<webApp>` is the same idea for where a module's hostnames answer:
+   * `label` becomes `fleet.webApps.<webApp>.hostname` as `<label>.<domain>`
+   * and `public` becomes its `exposeRemotely`, each at the same priority. A
+   * null field keeps the host's word, and a webApp with both null leaves
+   * the document. Keyed by the webApp, not the module: a module publishes
+   * several (grafana and prometheus are one), and nix reads it per webApp.
    */
-  modules: { enabled: Record<string, boolean> }
+  modules: { enabled: Record<string, boolean>; web: Record<string, SiteWebOverride> }
 }
+
+/** One published hostname as the operator moved it (core/site/switches.ts). */
+export type SiteWebOverride = { label: string | null; public: boolean | null }
 
 /**
  * The box as the settings page describes it, as the document.
@@ -143,7 +153,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     developer: { engineOverride: null },
     // The running box's switches are its own files' word; the document
     // carries only what the operator moved, which a box read back is none.
-    modules: { enabled: {} },
+    modules: { enabled: {}, web: {} },
   }
 }
 
@@ -164,6 +174,26 @@ export function renderSiteFile(doc: SiteDocument): string {
   const { github, developer, modules, ...rest } = doc
   const app = github?.app ?? null
   const switched = Object.keys(modules.enabled).sort()
+  // A webApp is written while either field says something, each field only
+  // while it does: a null is the host's word, and the host's word is absence.
+  const moved = Object.keys(modules.web)
+    .sort()
+    .filter((n) => {
+      const w = modules.web[n]
+      return w !== undefined && (w.label !== null || w.public !== null)
+    })
+  const webAsWritten = Object.fromEntries(
+    moved.map((n) => {
+      const w = modules.web[n] as SiteWebOverride
+      return [
+        n,
+        {
+          ...(w.label === null ? {} : { label: w.label }),
+          ...(w.public === null ? {} : { public: w.public }),
+        },
+      ]
+    }),
+  )
   const body = {
     ...PREAMBLE,
     ...rest,
@@ -176,11 +206,18 @@ export function renderSiteFile(doc: SiteDocument): string {
       : { developer: { engineOverride: developer.engineOverride } }),
     // Same rule again, and the ids sorted, so two edits that end in the same
     // set render the same bytes.
-    ...(switched.length === 0
+    ...(switched.length === 0 && moved.length === 0
       ? {}
       : {
           modules: {
-            enabled: Object.fromEntries(switched.map((id) => [id, modules.enabled[id] ?? false])),
+            ...(switched.length === 0
+              ? {}
+              : {
+                  enabled: Object.fromEntries(
+                    switched.map((id) => [id, modules.enabled[id] ?? false]),
+                  ),
+                }),
+            ...(moved.length === 0 ? {} : { web: webAsWritten }),
           },
         }),
     // Last, and copied key by key. The fixed order keeps a new App a single

@@ -11,8 +11,8 @@ import { isModuleId, MODULES, resolveModuleTab } from '../lib/modules/registry'
 // registry is client-safe and imported statically; the loaders are behind
 // `await import`, like every value the seam reaches.
 
-/** What one boards request answers: the module it is for, and its resolved tab's data. */
-export type ModulePayload = { kind: string; data: { tab: string } }
+/** What one boards request answers: the module it is for, and its resolved tab's data — or `off` (host/modules.ts). */
+export type ModulePayload = { kind: string; data: { tab: string }; off?: true }
 
 export const fetchModuleBoards = createServerFn()
   .validator((data: unknown): { module: string; tab: string } => {
@@ -38,7 +38,7 @@ export const fetchModuleBoards = createServerFn()
 export const fetchActiveModules = createServerFn().handler(async (): Promise<ModuleManifest[]> => {
   const { makeCtx } = await import('../core/ctx')
   const { activeModules } = await import('../lib/modules/active')
-  return activeModules(MODULES, (await makeCtx()).modules.enabled)
+  return activeModules(MODULES, (await makeCtx()).modules.state)
 })
 
 /* ── switching a module off, and on ───────────────────────────────────── */
@@ -80,4 +80,40 @@ export const setModuleEnabledFn = createServerFn({ method: 'POST' })
     const { makeCtx } = await import('../core/ctx')
     const { setModuleEnabled } = await import('../core/site/switches')
     return setModuleEnabled(await makeCtx(), data.id, data.enabled)
+  })
+
+export const setModuleWebFn = createServerFn({ method: 'POST' })
+  .validator(
+    (
+      data: unknown,
+    ): { id: string; name: string; label?: string | null; public?: boolean | null } => {
+      const d = data as Record<string, unknown> | null
+      if (d === null || typeof d.id !== 'string' || typeof d.name !== 'string') {
+        throw new Error('expected { id, name, label?, public? }')
+      }
+      const out: { id: string; name: string; label?: string | null; public?: boolean | null } = {
+        id: d.id,
+        name: d.name,
+      }
+      if (d.label !== undefined) {
+        if (d.label !== null && typeof d.label !== 'string')
+          throw new Error('label must be text or null')
+        out.label = d.label
+      }
+      if (d.public !== undefined) {
+        if (d.public !== null && typeof d.public !== 'boolean') {
+          throw new Error('public must be true, false or null')
+        }
+        out.public = d.public
+      }
+      return out
+    },
+  )
+  .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { makeCtx } = await import('../core/ctx')
+    const { setModuleWeb } = await import('../core/site/switches')
+    const { id, name, ...patch } = data
+    return setModuleWeb(await makeCtx(), id, name, patch)
   })

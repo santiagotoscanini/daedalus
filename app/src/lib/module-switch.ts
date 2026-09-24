@@ -1,7 +1,28 @@
 // The pure half of switching a module: the shape a page draws, and the
 // reasons the structural ones stay on. Client-safe on purpose — the settings
-// tab and the page footer import from here; the reads and the write are in
-// core/site/switches.ts, which needs the machine.
+// tab and the service dialog import from here; the reads and the writes are
+// in core/site/switches.ts, which needs the machine.
+
+/** One published hostname as the operator may move it: null keeps the host's word. */
+export type WebOverride = { label: string | null; public: boolean | null }
+
+/**
+ * One hostname a module publishes, as the running system has it and as the
+ * document would move it. `name` is `fleet.webApps.<name>`, which is what
+ * the document keys on; `label` is the one label under the base domain,
+ * which is all the operator may edit.
+ */
+export type ModuleWeb = {
+  name: string
+  /** As built: the hostname, its label, and whether the tunnel carries it. */
+  hostname: string
+  label: string
+  public: boolean
+  aliases: string[]
+  /** The document's word, committed and as the next Apply would build it. */
+  committed: WebOverride
+  desired: WebOverride
+}
 
 export type ModuleSwitch = {
   id: string
@@ -13,7 +34,20 @@ export type ModuleSwitch = {
   switched: boolean
   structural: boolean
   containers: string[]
+  /** Every hostname the module publishes, aliases included, as built. */
   hostnames: string[]
+  /** The same hostnames, one entry per webApp, with what the operator moved. */
+  web: ModuleWeb[]
+}
+
+/** What the next Apply would publish for one entry: the moved label, else the built one. */
+export function webLabelAfter(w: ModuleWeb): string {
+  return w.desired.label ?? w.label
+}
+
+/** Whether the tunnel would carry it after the next Apply. */
+export function webPublicAfter(w: ModuleWeb): boolean {
+  return w.desired.public ?? w.public
 }
 
 /**
@@ -59,6 +93,37 @@ export function moduleChangeWords(
 }
 
 /**
+ * "grocy at pantry", "grocy public", "grocy on the LAN only", "grocy as the
+ * host says": the words the Apply bar shows for `modules.web`, one per
+ * webApp whose entry moved.
+ */
+export function webChangeWords(
+  committed: Record<string, WebOverride> | undefined,
+  desired: Record<string, WebOverride>,
+): string[] {
+  const before = committed ?? {}
+  const none: WebOverride = { label: null, public: null }
+  const names = new Set([...Object.keys(before), ...Object.keys(desired)])
+  return [...names].sort().flatMap((n) => {
+    const a = before[n] ?? none
+    const b = desired[n] ?? none
+    const words: string[] = []
+    if (a.label !== b.label)
+      words.push(b.label === null ? `${n} at its own name` : `${n} at ${b.label}`)
+    if (a.public !== b.public) {
+      words.push(
+        b.public === null
+          ? `${n} exposed as the host says`
+          : b.public
+            ? `${n} public`
+            : `${n} on the LAN only`,
+      )
+    }
+    return words
+  })
+}
+
+/**
  * The site fields the Apply bar lists: every changed field by name, except
  * the switches field, which is spelled out per module ("n8n off") — the
  * field's name says nothing anyone would click Apply for.
@@ -67,5 +132,8 @@ export function siteBarFields(
   changes: readonly string[],
   moduleChanges: readonly string[],
 ): string[] {
-  return [...changes.filter((f) => f !== 'modules.enabled'), ...moduleChanges]
+  return [
+    ...changes.filter((f) => f !== 'modules.enabled' && f !== 'modules.web'),
+    ...moduleChanges,
+  ]
 }

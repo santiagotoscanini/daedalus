@@ -1,5 +1,5 @@
 import { arrayOf, bool, nullable, obj, optional, recordOf, str } from '../../lib/contract/decode'
-import { type ModuleSwitch, STRUCTURAL_WHY } from '../../lib/module-switch'
+import { type ModuleSwitch, STRUCTURAL_WHY, type WebOverride } from '../../lib/module-switch'
 import type { Ctx } from '../ctx'
 import { saveSiteEdit, siteEdit } from './index'
 
@@ -37,12 +37,43 @@ const publishingDecoder = obj({
       obj({
         hostname: str,
         serviceName: optional(nullable(str), null),
+        exposeRemotely: optional(bool, false),
         aliases: optional(arrayOf(str), []),
       }),
     ),
     {},
   ),
+  takenHostnames: optional(arrayOf(str), []),
 })
+
+const NONE: WebOverride = { label: null, public: null }
+
+/** The label of a hostname under the base domain, or the whole hostname when it is not under it. */
+function labelOf(hostname: string, domain: string): string {
+  return hostname.endsWith(`.${domain}`) ? hostname.slice(0, -(domain.length + 1)) : hostname
+}
+
+/**
+ * Which webApps a module publishes. By its containers — a webApp whose
+ * serviceName is one of them — and by name, for the ones that dial a URL
+ * (pihole, home-assistant, shelfmark) and have no serviceName to match. A
+ * registry app's webApp (`app-<name>`) is never a module's: its hostname
+ * and stage are the Apps page's, and are excluded by the container rule.
+ */
+function webAppsOf(
+  id: string,
+  containers: string[],
+  webApps: Record<string, { serviceName: string | null }>,
+): string[] {
+  return Object.entries(webApps)
+    .filter(
+      ([name, w]) =>
+        name === id ||
+        (w.serviceName !== null && (containers.includes(w.serviceName) || w.serviceName === id)),
+    )
+    .map(([name]) => name)
+    .sort()
+}
 
 export async function moduleSwitches(ctx: Ctx): Promise<ModuleSwitch[]> {
   const [running, switches, publishing, images, edit] = await Promise.all([
@@ -59,7 +90,7 @@ export async function moduleSwitches(ctx: Ctx): Promise<ModuleSwitch[]> {
     ctx.snapshot({
       path: ctx.exportPath('publishing.json'),
       decoder: publishingDecoder,
-      fallback: { webApps: {} },
+      fallback: { webApps: {}, takenHostnames: [] },
     }),
     ctx.snapshot({
       path: ctx.exportPath('images.json'),
@@ -70,18 +101,27 @@ export async function moduleSwitches(ctx: Ctx): Promise<ModuleSwitch[]> {
   ])
   const structural = new Set(switches.data.structural)
   const enabled = edit.desired.modules.enabled
+  const desiredWeb = edit.desired.modules.web
+  const committedWeb = edit.committed?.modules.web ?? {}
+  const domain = ctx.site.baseDomain
   return Object.entries(running.data)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([id, on]) => {
       const containers = [
         ...new Set([...(id in images.data.pins ? [id] : []), ...(switches.data.stacks[id] ?? [])]),
       ]
-      const hostnames = Object.values(publishing.data.webApps)
-        .filter(
-          (w) =>
-            w.serviceName !== null && (containers.includes(w.serviceName) || w.serviceName === id),
-        )
-        .flatMap((w) => [w.hostname, ...w.aliases])
+      const web = webAppsOf(id, containers, publishing.data.webApps).map((name) => {
+        const w = publishing.data.webApps[name] as (typeof publishing.data.webApps)[string]
+        return {
+          name,
+          hostname: w.hostname,
+          label: labelOf(w.hostname, domain),
+          public: w.exposeRemotely,
+          aliases: w.aliases,
+          committed: committedWeb[name] ?? NONE,
+          desired: desiredWeb[name] ?? NONE,
+        }
+      })
       return {
         id,
         running: on,
@@ -89,7 +129,8 @@ export async function moduleSwitches(ctx: Ctx): Promise<ModuleSwitch[]> {
         switched: id in enabled,
         structural: structural.has(id),
         containers,
-        hostnames,
+        hostnames: web.flatMap((w) => [w.hostname, ...w.aliases]),
+        web,
       }
     })
 }
@@ -128,4 +169,59 @@ export async function setModuleEnabled(
   else next[id] = enabled
   await saveSiteEdit(ctx, { 'modules.enabled': next })
   return { ok: true }
+}
+
+/**
+ * Move where one of a module's hostnames answers, or whether the tunnel
+ * carries it, in the site draft. A field left undefined is not touched; null
+ * puts it back to the host's word. The label is checked the way an app's
+ * hostname is (lib/hostname.ts): one label under the base domain, not one
+ * something else on the box already answers at, not a reserved one. A value
+ * that equals what the box already publishes, with the committed document
+ * silent on it, is the host's word again and leaves the document.
+ */
+export async function setModuleWeb(
+  ctx: Ctx,
+  id: string,
+  name: string,
+  patch: { label?: string | null; public?: boolean | null },
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const m = await moduleSwitch(ctx, id)
+  if (m === null) return { ok: false, reason: `this box declares no module named ${id}` }
+  const w = m.web.find((x) => x.name === name)
+  if (w === undefined) return { ok: false, reason: `${id} publishes no hostname named ${name}` }
+
+  const next: WebOverride = { ...w.desired }
+  if (patch.label !== undefined) {
+    const label = patch.label?.trim().toLowerCase() ?? null
+    if (label !== null && label !== '') {
+      const { hostnameError } = await import('../../lib/hostname')
+      const own = [w.hostname, ...w.aliases]
+      const taken = (await takenHostnames(ctx)).filter((h) => !own.includes(h))
+      const why = hostnameError(ctx.site, `${label}.${ctx.site.baseDomain}`, taken)
+      if (why !== null) return { ok: false, reason: why }
+    }
+    next.label = label === null || label === '' ? null : label
+    if (next.label === w.label && w.committed.label === null) next.label = null
+  }
+  if (patch.public !== undefined) {
+    next.public = patch.public
+    if (next.public === w.public && w.committed.public === null) next.public = null
+  }
+
+  const edit = await siteEdit(ctx)
+  const web = { ...edit.desired.modules.web }
+  if (next.label === null && next.public === null) delete web[name]
+  else web[name] = next
+  await saveSiteEdit(ctx, { 'modules.web': web })
+  return { ok: true }
+}
+
+async function takenHostnames(ctx: Ctx): Promise<string[]> {
+  const publishing = await ctx.snapshot({
+    path: ctx.exportPath('publishing.json'),
+    decoder: publishingDecoder,
+    fallback: { webApps: {}, takenHostnames: [] },
+  })
+  return publishing.data.takenHostnames
 }

@@ -37,7 +37,7 @@ const doc: SiteDocument = {
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
   developer: { engineOverride: null },
-  modules: { enabled: {} },
+  modules: { enabled: {}, web: {} },
 }
 
 const APP: SiteGithubApp = {
@@ -83,6 +83,40 @@ describe('site.json round trip', () => {
       github: { app: APP },
     })
     expect(withApp.indexOf('"developer"')).toBeLessThan(withApp.indexOf('"github"'))
+  })
+
+  it('carries the switches and the moved hostnames, and only what was moved', () => {
+    // A webApp with both fields null is the host's word and leaves the file;
+    // a null field inside a written entry is left out of it. Both blocks
+    // absent is no modules block at all, so an older file keeps its bytes.
+    expect(renderSiteFile(doc)).not.toContain('modules')
+    const moved = renderSiteFile({
+      ...doc,
+      modules: {
+        enabled: { n8n: false },
+        web: {
+          grocy: { label: 'pantry', public: null },
+          gatus: { label: null, public: null },
+          metube: { label: null, public: true },
+        },
+      },
+    })
+    expect(moved).toContain('"n8n": false')
+    expect(moved).toContain('"grocy": {\n        "label": "pantry"\n      }')
+    expect(moved).not.toContain('gatus')
+    expect(moved).toContain('"metube": {\n        "public": true\n      }')
+    expect(reRender(moved)).toBe(moved)
+    expect(decodeSiteDocument(JSON.parse(moved)).modules).toEqual({
+      enabled: { n8n: false },
+      web: { grocy: { label: 'pantry', public: null }, metube: { label: null, public: true } },
+    })
+    // The web block alone is a modules block too.
+    const webOnly = renderSiteFile({
+      ...doc,
+      modules: { enabled: {}, web: { grocy: { label: 'pantry', public: false } } },
+    })
+    expect(webOnly).toContain('"modules"')
+    expect(webOnly).not.toContain('"enabled"')
   })
 
   it('render → parse → decode → render is a fixed point', () => {

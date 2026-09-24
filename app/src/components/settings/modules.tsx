@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { type ModuleSwitch, STRUCTURAL_WHY } from '../../lib/module-switch'
 import { useShown } from '../../lib/shown'
 import { setModuleEnabledFn } from '../../server/modules'
+import { ServiceSettingsButton } from '../service-settings'
 import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../tokens'
 import { Switch } from '../ui/switch'
 import { Board, BoardGrid, Chip } from '../viz'
@@ -35,6 +36,7 @@ function Row({ m }: { m: ModuleSwitch }) {
             ? 'no pinned container'
             : `${String(m.containers.length)} ${m.containers.length === 1 ? 'container' : 'containers'}`}
       </span>
+      <ServiceSettingsButton ids={[m.id]} size="xs" />
       {m.structural ? (
         <span
           className="min-w-[4.5rem] text-right text-[0.7rem] text-muted-foreground"
@@ -87,8 +89,10 @@ export function Modules({ rows }: { rows: ModuleSwitch[] }) {
         </ul>
         <p className={FOOT}>
           A switch is a line in site.json, <span className={MONO}>modules.enabled</span>, and lands
-          on the next Apply: the stack's containers stop, its hostnames stop answering, its page
-          leaves the rail, its data stays under the state root. Off is one Apply from on again.
+          on the next Apply: the stack's containers stop, its hostnames stop answering, its tab
+          stays in the rail greyed, its data stays under the state root. Off is one Apply from on
+          again. The cog holds the rest: where each hostname answers, and whether the tunnel carries
+          it (<span className={MONO}>modules.web</span>).
         </p>
       </Board>
       <Board title="Always on" icon="warn" span={12}>
@@ -101,6 +105,7 @@ export function Modules({ rows }: { rows: ModuleSwitch[] }) {
               <span className={ROW_SIDE}>
                 {STRUCTURAL_WHY[m.id] ?? 'a running box cannot do without it'}
               </span>
+              <ServiceSettingsButton ids={[m.id]} size="xs" />
             </li>
           ))}
         </ul>

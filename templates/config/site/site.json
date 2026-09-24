@@ -32,6 +32,7 @@
     "tunnelId": "00000000-0000-0000-0000-000000000000"
   },
   "auth": { "localLogin": false },
+  "modules": { "web": { "gatus": { "label": "uptime", "public": false } } },
   "developer": { "engineOverride": null },
   "github": {
     "app": {

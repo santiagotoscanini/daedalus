@@ -61,7 +61,20 @@ const shape = obj({
   // The switches the operator moved from a page: id → on/off, only the ids
   // touched (core/site/file.ts). Filled in like `developer`: it is an
   // EDITABLE field, and the renderer drops the block while it is empty.
-  modules: optional(obj({ enabled: optional(recordOf(bool), {}) }), { enabled: {} }),
+  modules: optional(
+    obj({
+      enabled: optional(recordOf(bool), {}),
+      // Per webApp, each field nullable and filled in: null is the host's
+      // word, and the renderer writes only what is not null.
+      web: optional(
+        recordOf(
+          obj({ label: optional(nullable(str), null), public: optional(nullable(bool), null) }),
+        ),
+        {},
+      ),
+    }),
+    { enabled: {}, web: {} },
+  ),
   // The GitHub App's public half. Last, and it must stay last: `obj` copies
   // only the keys named here, so a key missing from this shape is dropped by
   // the next write, and the renderer puts this block after everything else.

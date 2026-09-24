@@ -1,4 +1,4 @@
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound, useLoaderData } from '@tanstack/react-router'
 import { NodeClaudeView } from '../components/claude-node'
 import { StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
@@ -13,6 +13,7 @@ import {
 } from '../components/machine-system'
 import { ModuleBoards } from '../components/modules/boards'
 import { PageHead } from '../components/page'
+import { ServiceSettingsButton } from '../components/service-settings'
 import {
   BoardsSkeleton,
   HeadStripSkeleton,
@@ -21,9 +22,10 @@ import {
 } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { EMPTY } from '../components/tokens'
+import { Chip } from '../components/viz'
 import type { NodeSystemData } from '../lib/dashboard/node-system'
 import { known } from '../lib/known'
-import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
+import { isDotted, nixModulesOf, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
 import { fetchNodeClaudeFn } from '../server/claude'
 import { fetchBoxHeadFn, fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
@@ -313,17 +315,38 @@ function TabNav({
   // services would otherwise render no dots at all — the tab knows its health
   // and silently declines to show it.
   const dotted = spec.tabs.some(isDotted)
+  // Which tabs are switched off on this box: the server marks them on the
+  // rail's copy of the manifest (lib/modules/active.ts), read here from the
+  // root loader so the tabs say it before their boards — which an off tab
+  // never fetches — could.
+  const off = useLoaderData({
+    from: '__root__',
+    select: (d) =>
+      new Set(
+        (d.modules.find((m) => m.id === spec.id)?.tabs ?? [])
+          .filter((t) => t.off === true)
+          .map((t) => t.id),
+      ),
+  })
+  const current = spec.tabs.find((t) => t.id === tab)
+  const fronts = current === undefined ? [] : nixModulesOf(current)
 
   return (
     <TabBar
       tabs={spec.tabs.map((t) => {
         const up = status?.[t.id] ?? null
+        const isOff = off.has(t.id)
         return {
           id: t.id,
           label: t.label,
           dividerBefore: t.dividerBefore,
           icon: t.icon,
-          extra: dotted ? (
+          muted: isOff,
+          // An off tab wears "off" where its dot would go: a grey dot would
+          // claim "status unknown" of a service that was told not to answer.
+          extra: isOff ? (
+            <Chip tone="muted">off</Chip>
+          ) : dotted ? (
             <StateDot
               state={up === null ? 'unknown' : up ? 'running' : 'attention'}
               label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
@@ -342,6 +365,7 @@ function TabNav({
       })}
       active={tab}
       linkTo={(id) => ({ to: '/c/$category', params: { category }, search: { tab: id } })}
+      trailing={<ServiceSettingsButton ids={fronts} />}
     />
   )
 }

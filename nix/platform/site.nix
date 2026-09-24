@@ -95,6 +95,37 @@ let
     lib.filterAttrs (id: on: !on && builtins.elem id cfg.structuralModules) knownSwitches
   );
 
+  # site.json `modules.web` — where a module's published hostnames answer
+  # and whether the tunnel carries them: the two facts a service's page
+  # lets the operator move beside its switch (the cog on the page, or
+  # Settings › Modules). Keyed by the webApp's name, `fleet.webApps.<name>`,
+  # holding only what the operator set. `label` is the one label under the
+  # base domain — the hostname becomes `<label>.<baseDomain>`, never a full
+  # hostname in the document, because one label is all the wildcard
+  # certificate matches and the control plane already validates it as such.
+  # `public` is `exposeRemotely`. Each present, non-null field becomes a
+  # definition at priority 60, like a switch: stronger than a module's own
+  # hostname (`hc.` for healthchecks, `status.` for gatus) or its policy's
+  # default, weaker than a host's mkForce. A name this host publishes
+  # nothing under is refused by the assertion below, by name; the stray
+  # entry would also trip publishing.nix's one-upstream assertion.
+  siteWeb = if sourced then (siteDoc.modules or { }).web or { } else { };
+  webOverride =
+    w:
+    lib.optionalAttrs (w.label or null != null) {
+      hostname = lib.mkOverride 60 "${w.label}.${cfg.baseDomain}";
+    }
+    // lib.optionalAttrs (w.public or null != null) { exposeRemotely = lib.mkOverride 60 w.public; };
+  unknownWeb = builtins.attrNames (
+    lib.filterAttrs (
+      n: _:
+      let
+        w = cfg.webApps.${n};
+      in
+      w.serviceName == null && w.serviceUrl == null && w.traefikService == null
+    ) siteWeb
+  );
+
   same = name: a: b: {
     assertion = a == b;
     message = "site.json disagrees with the configuration about ${name}: site.json says ${builtins.toJSON a}, configuration.nix says ${builtins.toJSON b}. This value is not yet sourced from site.json; write site.json again from Settings › Site.";
@@ -314,6 +345,9 @@ in
           enable = lib.mkOverride 60 on;
         }) knownSwitches;
 
+        # The hostnames and exposure the document moves (`modules.web`).
+        webApps = lib.mapAttrs (_: webOverride) siteWeb;
+
         # The fields are picked by name so a key the control plane adds later
         # cannot fail the submodule's type check before this module learns it.
         nodes = map (n: {
@@ -413,6 +447,10 @@ in
         {
           assertion = structuralOff == [ ];
           message = "site.json modules.enabled switches off structural modules: ${lib.concatStringsSep ", " structuralOff}. These are in fleet.structuralModules; a running box cannot do without them.";
+        }
+        {
+          assertion = unknownWeb == [ ];
+          message = "site.json modules.web names hostnames this host does not publish: ${lib.concatStringsSep ", " unknownWeb}. Move them from a host that publishes them, or remove the entries.";
         }
         (same "hostname" siteDoc.identity.hostname config.networking.hostName)
         (same "owner" siteDoc.identity.owner cfg.github.owner)

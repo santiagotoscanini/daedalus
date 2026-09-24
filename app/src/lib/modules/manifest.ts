@@ -50,11 +50,18 @@ export type TabSpec = {
   head?: boolean
   /**
    * The nix module(s) this tab fronts — `fleet.modules.<id>` on the box. A
-   * tab whose nix modules are all disabled is not offered, and a module
-   * whose tabs are all gone leaves the rail. Omitted means the tab is about
-   * the box itself and is always shown.
+   * tab whose nix modules the box does not import is not offered, one whose
+   * nix modules are all switched off stays and is marked `off`, and a
+   * module whose tabs are all gone leaves the rail. Omitted means the tab is
+   * about the box itself and is always shown.
    */
   nix?: string | readonly string[]
+  /**
+   * Set by the server (lib/modules/active.ts), never by a manifest: every nix
+   * module this tab fronts is declared on the box and switched off. The tab
+   * stays in the rail, greyed, and its page draws the switch, not the boards.
+   */
+  off?: boolean
 }
 
 export type ModuleManifest = {
