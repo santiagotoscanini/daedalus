@@ -161,35 +161,23 @@ in
         # it) until the app's own healthcheck passes, so first-attempt
         # discovery can't race a cold boot.
         systemd.services.podman-pocket-id.serviceConfig.ExecStartPost =
-          # 600s, and the reason is a SCHEMA MIGRATION, not CPU. Two costs
-          # are being traded here and they are not symmetric.
+          # 120s: generous because a mass restart (a podman.nix change touches
+          # every unit) starts the whole fleet at once and the IdP competes
+          # for CPU with ~50 containers.
           #
-          # Generous was already wanted: a mass restart (a podman.nix change
-          # touches every unit) starts the whole fleet at once and the IdP
-          # competes for CPU with ~50 containers. 120s covered that.
-          #
-          # What 120s did NOT cover is the first start of a NEWER pocket-id,
-          # which migrates the database before it answers anything — an
-          # unbounded step that has nothing to do with load. On 2026-09-24
-          # a v2.14.0 → v2.16.0 image update ran the migration, exceeded this
-          # window, and failed the unit. The image updater then did what it
-          # is supposed to do and reverted the batch — and the revert could
-          # not work, because the schema had already moved: v2.14.0 refuses
-          # to start against it ("downgrades are not allowed"). The box lost
-          # SSO until the pin was rolled FORWARD again.
-          #
-          # So a timeout here is not "the IdP is slow, try again"; it is
-          # "the batch this rode in with is about to be reverted onto a
-          # schema that no longer accepts it". Ten minutes is cheap against
-          # that. The failure stays visible — the unit still fails, and
-          # container_up and scrape-target-down both fire — it just stops
-          # firing DURING a migration that was going to succeed.
+          # Measured, and left alone: a version jump that MIGRATES the schema
+          # still fits. v2.14.0 → v2.16.0 on 2026-09-24 migrated and answered
+          # in two seconds. Raising this window was briefly committed on the
+          # theory that the migration had overrun it; the unit journal says
+          # otherwise, and a longer gate is actively worse in the failure that
+          # did happen — a pocket-id that cannot start at all then holds the
+          # switch for ten minutes per attempt instead of two.
           pkgs.writeShellScript "wait-pocket-id-ready" ''
-            for _ in $(seq 1 600); do
+            for _ in $(seq 1 120); do
               ${pkgs.podman}/bin/podman exec pocket-id /app/pocket-id healthcheck && exit 0
               sleep 1
             done
-            echo "pocket-id did not become ready within 600s" >&2
+            echo "pocket-id did not become ready within 120s" >&2
             exit 1
           '';
 
@@ -200,6 +188,14 @@ in
         # unavailable exactly when it is most wanted, which is the blast
         # radius the container's name does not carry. The Updates panel
         # therefore asks for the name to be typed before this one moves.
+        #
+        # Earned on 2026-09-24, and note WHOSE failure it was: a 28-container
+        # batch in which pocket-id itself updated cleanly. Another container
+        # in the batch (janitorr) failed verification, the updater reverted
+        # all 28 as it must, and pocket-id was the one that could not go
+        # back — so the box lost every login over a media janitor. Ceremony
+        # here is not about the risk of updating this container. It is about
+        # never letting it ride in a batch whose revert it cannot survive.
         fleet.imageUpdates.pocket-id.ceremony = "every login on the box rides it, and a downgrade is refused: a newer pocket-id migrates the database on first start, so the updater cannot revert this one — the only way back is forward";
 
         # Unwedges the scheduler's expired-data cleanup, which self-blocks on
