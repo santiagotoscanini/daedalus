@@ -91,6 +91,7 @@
       daedalusModules = [
         "build-agent.nix"
         "builder.nix"
+        "claude-code-update.nix"
         "daedalus.nix"
         "engine-update.nix"
         "railpack.nix"

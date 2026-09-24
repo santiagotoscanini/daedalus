@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { ClockIcon, FolderGit2Icon, MessagesSquareIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -7,6 +8,7 @@ import { useEffect, useState } from 'react'
 // helpers this page needs live at the bottom of this file for the same
 // reason. claude-rc-request is under the same rule (it imports the bridge,
 // which reads node:fs), which is why its idle shape is restated below.
+import type { ClaudeCodeUpdateStatus } from '../host/claude-code-update'
 import type { ClaudeRcStatus } from '../host/claude-rc-request'
 import type { ClaudeSessionStatus } from '../host/claude-session-request'
 // Pure and client-safe — the whole reason the roster's types, its join and
@@ -28,9 +30,11 @@ import type { ShotCounts, ShotRun } from '../lib/dashboard/shotter'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
 import { toneStyle } from '../lib/tone'
 import {
+  fetchClaudeCodeUpdateStatus,
   fetchClaudeRcStatusFn,
   fetchClaudeSessionStatusFn,
   removeSessionFn,
+  requestClaudeCodeUpdateFn,
   requestClaudeRestartFn,
   resumeSessionFn,
   stopSessionFn,
@@ -254,6 +258,15 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             Memory and CPU are the whole unit including every session under it, which is why they
             are large.
           </p>
+          {/* The two verbs, in the order they are used: move the binary,
+              then put the running server onto it. Together rather than on
+              Updates, because the version compare they act on is in this
+              page's header and the restart has always lived here. */}
+          <UpdateClaudeCodeControl
+            pinned={facts.cli.version}
+            latest={data.gap.latest}
+            behind={data.gap.behind.length}
+          />
           <RestartServerControl live={live.length} />
         </Board>
 
@@ -379,6 +392,125 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         />
       </BoardGrid>
     </>
+  )
+}
+
+const CC_IDLE: ClaudeCodeUpdateStatus = {
+  id: null,
+  state: 'idle',
+  phase: '',
+  error: '',
+  from: '',
+  to: '',
+  startedAt: null,
+  finishedAt: null,
+  commit: null,
+}
+
+/**
+ * Move this box's Claude Code to the current release.
+ *
+ * The CLI here is a nix package sealed with `DISABLE_UPDATES`, so
+ * `claude update` is not a path — it would leave the store binary alone and
+ * build a second, native install nothing reverts, which is what it did
+ * before the seal (platform/claude-code/claude-code.nix carries the
+ * measurement). The supported move is a pin: the engine's release manifest,
+ * then the configuration's lock, then a rebuild.
+ *
+ * Two agents do it. `daedalus-claude-code-update` fetches the release,
+ * verifies its signature, commits the manifest into the engine and pushes —
+ * then asks for an engine update, which is the half that builds and
+ * switches. So this control's `done` means PINNED, not installed.
+ *
+ * It does NOT narrate the engine half, and that is deliberate. The engine's
+ * status is one file with one run in it, so a second poller here would
+ * either report somebody else's history — the stale-status bug
+ * `usePolledStatus`'s claim mechanism exists to prevent — or need its own
+ * copy of that mechanism plus the nine-phase tracker System › Updates
+ * already draws. Naming where the rest of the move is being narrated costs a
+ * sentence and cannot be wrong.
+ *
+ * Not armed, unlike the restart beside it: nothing is killed. The switch
+ * deliberately does not restart the Remote Control server, so every live
+ * session keeps running on the old binary and the page flips to
+ * "restart pending" — which is the other button's job.
+ */
+function UpdateClaudeCodeControl({
+  pinned,
+  latest,
+  behind,
+}: {
+  pinned: string | null
+  latest: string | null
+  behind: number
+}) {
+  const { status, running, refusal, start } = usePolledStatus<ClaudeCodeUpdateStatus>({
+    initial: CC_IDLE,
+    fetch: () => fetchClaudeCodeUpdateStatus(),
+    claimTimeoutMs: 30_000,
+  })
+  const upToDate = latest !== null && pinned !== null && latest === pinned
+  const moved = status.state === 'done' && status.to !== '' && status.to !== status.from
+
+  if (running) {
+    return (
+      <div className={RESTART}>
+        <p className={RESTART_STATE}>
+          {status.phase === 'verifying'
+            ? 'Checking the release signature…'
+            : status.phase === 'committing'
+              ? 'Pinning it in the engine…'
+              : status.phase === 'handing-off'
+                ? 'Pinned. Asking for the rebuild…'
+                : `Pinning Claude Code… (${status.phase || 'starting'})`}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className={RESTART}>
+      {status.state === 'done' && !moved && (
+        <p className={RESTART_STATE}>Already pinned to {status.to} — nothing to move.</p>
+      )}
+      {moved && (
+        <p className={cn(RESTART_STATE, 'text-success')}>
+          Pinned {status.from} → {status.to}
+          {status.commit === null || status.commit === '' ? '' : ` (${status.commit})`}. The rebuild
+          that installs it is running as an engine update —{' '}
+          <Link to="/c/$category" params={{ category: 'system' }} search={{ tab: 'updates' }}>
+            System › Updates
+          </Link>{' '}
+          narrates it. Every live session keeps the binary it started on until the server restarts.
+        </p>
+      )}
+      {refusal !== null && <p className={cn(RESTART_STATE, 'text-danger')}>{refusal}</p>}
+      {refusal === null && status.state === 'failed' && (
+        <p className={cn(RESTART_STATE, 'text-danger')}>{status.error}</p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={GHOST_BTN}
+          disabled={upToDate}
+          onClick={() => {
+            start(async () => {
+              const r = await requestClaudeCodeUpdateFn()
+              return r.ok ? { ok: true, value: r.id } : { ok: false, reason: r.reason }
+            })
+          }}
+        >
+          {upToDate ? 'Claude Code is current' : 'Update Claude Code'}
+        </Button>
+        <span className={RESTART_NOTE}>
+          {upToDate
+            ? `the flake holds ${text(pinned)}, which is the current release`
+            : `pins the release manifest in the engine — signature-checked — then builds and switches onto it${behind > 0 ? `, ${num(behind)} release${behind === 1 ? '' : 's'} ahead of what the flake holds` : ''}. No session is interrupted.`}
+        </span>
+      </div>
+    </div>
   )
 }
 

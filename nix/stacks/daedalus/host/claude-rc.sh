@@ -77,4 +77,4 @@ sleep 5
 STATE="$(systemctl is-active "$UNIT" || true)"
 [ "$STATE" = "active" ] || fail "$UNIT is '$STATE' after the restart — read its journal"
 
-write_status "done" "server restarted; sessions reconnect from claude.ai" ""
+write_status "done" "server restarted; its old sessions ended with it — Resume on the roster brings one back" ""

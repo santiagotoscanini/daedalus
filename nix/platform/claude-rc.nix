@@ -33,12 +33,21 @@
 #   - Permission mode: default — the deny/ask/allow matrix and bash-guard.sh
 #     apply; approvals render in the claude.ai/code UI.
 #
-# Sessions survive a server stop and stay resumable for ~4 hours (claude.ai
-# session list, or --session-id). With restartIfChanged=false a rebuild no
-# longer touches the running server; the remaining way to kill it from inside
-# a remote session is an explicit `systemctl restart claude-remote-control` —
-# which also kills the session that typed it. Reconnect and resume from
-# claude.ai/code.
+# A server stop ENDS every session under it, and claude.ai cannot pick one
+# back up: the server bridges NEW sessions, it does not re-adopt old ones.
+# What survives is the transcript, here on this box, and `claude --resume
+# <uuid>` is the way back in — which is the whole reason the `claude-session@`
+# bridge exists (stacks/daedalus, claudeSessionRunner), and why daedalus's
+# Claude page offers Resume per row. This paragraph used to say sessions
+# stayed resumable from claude.ai for about four hours. They do not; both
+# pages in daedalus have said the opposite for a while, and the stale claim
+# here is what a feature got planned around, so it is corrected out loud
+# rather than quietly.
+#
+# With restartIfChanged=false a rebuild no longer touches the running server;
+# the remaining way to kill it from inside a remote session is an explicit
+# `systemctl restart claude-remote-control` — which also kills the session
+# that typed it.
 #
 # Status: no health endpoint exists. `systemctl status claude-remote-control`,
 # `journalctl -fu claude-remote-control` (--verbose logs connection/session

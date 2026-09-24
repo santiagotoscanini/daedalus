@@ -130,3 +130,29 @@ export const fetchNodeClaudeFn = createServerFn()
     const { loadNodeClaude } = await import('../lib/dashboard/node-claude')
     return loadNodeClaude(data.id)
   })
+
+/* ── moving this box's Claude Code pin ────────────────────────────────── */
+
+export const fetchClaudeCodeUpdateStatus = createServerFn().handler(async () => {
+  const { readClaudeCodeUpdateStatus } = await import('../host/claude-code-update')
+  return readClaudeCodeUpdateStatus()
+})
+
+/**
+ * Ask the host to pin the current Claude Code release and rebuild onto it.
+ *
+ * Nothing to validate: the request carries only the actor. Which release is
+ * current, whether its manifest is signed by Anthropic's key, and whether
+ * the box is in a state to take it are all the host's answers, reported
+ * through the status file the caller polls.
+ *
+ * Note what `done` means here — pinned and pushed, with an engine update
+ * asked for. The rebuild that actually installs it belongs to
+ * `fetchEngineUpdateStatus`, which is what the page follows next.
+ */
+export const requestClaudeCodeUpdateFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { assertAdmin } = await import('../core/authz')
+  await assertAdmin()
+  const { runClaudeCodeUpdate } = await import('../host/claude-code-flow')
+  return runClaudeCodeUpdate({ actor: actorLabel() })
+})
