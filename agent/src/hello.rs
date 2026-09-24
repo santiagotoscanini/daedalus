@@ -143,6 +143,8 @@ struct Answer {
     #[serde(default)]
     check_update: bool,
     #[serde(default)]
+    update_claude: bool,
+    #[serde(default)]
     restart_claude: bool,
     /// Absent from an older box, or for a machine it has not approved.
     #[serde(default)]
@@ -283,6 +285,10 @@ pub fn run_loop(
                 if a.check_update {
                     tracing::info!("the box asked for an update check");
                     shared.request_check();
+                }
+                if a.update_claude {
+                    tracing::info!("the box asked for a Claude Code update");
+                    shared.request_claude_update();
                 }
                 if a.restart_claude {
                     tracing::info!("the box asked for a Claude remote-control restart");

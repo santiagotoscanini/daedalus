@@ -428,6 +428,14 @@ impl Session {
             self.sup
                 .set_named_workdir(answer.workdir.or_else(|| self.cfg_workdir.clone()));
             self.sup.set_wanted(answer.wanted);
+            // Update before restart, so a tick carrying both lands the new
+            // binary first and the server comes back up on it. The update
+            // runs on its own thread (claude.rs) — inline it would freeze
+            // this loop for minutes, and this loop is the only thing that
+            // reports to the service.
+            if answer.update {
+                self.sup.update_claude();
+            }
             if answer.restart {
                 self.sup.restart();
             }

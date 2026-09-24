@@ -67,6 +67,10 @@ struct Live {
     policy: Policy,
     /// The tray's last report and when it landed.
     claude: Option<(Report, Instant)>,
+    /// Raised by the box's answer or `POST /claude/update`; the tray takes
+    /// it with its next report. Separate from the restart below because
+    /// updating interrupts nothing and restarting ends every session here.
+    claude_update_requested: bool,
     /// Raised by the box's answer or `POST /claude/restart`; the tray takes
     /// it with its next report.
     claude_restart_requested: bool,
@@ -108,6 +112,7 @@ struct Document<'a> {
     /// the tray has not reported lately.
     claude: Option<Summary>,
     tray: Tray,
+    claude_update_requested: bool,
     claude_restart_requested: bool,
     /// What the machine is and how it is doing (telemetry.rs); null until
     /// the first sample, a few seconds after start.
@@ -133,6 +138,7 @@ impl Shared {
                 control_plane: ControlPlane::default(),
                 policy,
                 claude: None,
+                claude_update_requested: false,
                 claude_restart_requested: false,
                 node_token: None,
                 telemetry: None,
@@ -205,16 +211,24 @@ impl Shared {
         }
     }
 
+    pub fn request_claude_update(&self) {
+        self.lock().claude_update_requested = true;
+    }
+
     pub fn request_claude_restart(&self) {
         self.lock().claude_restart_requested = true;
     }
 
-    /// The tray's report; answers with the policy and takes the restart flag.
+    /// The tray's report; answers with the policy and takes the pending
+    /// instructions. `mem::take` on each, so an instruction is handed out
+    /// exactly once — a tray that reports every five seconds must not be
+    /// told to update five seconds later all over again.
     pub fn set_claude(&self, r: Report) -> ReportAnswer {
         let mut l = self.lock();
         l.claude = Some((r, Instant::now()));
         ReportAnswer {
             wanted: l.policy.claude_remote_control,
+            update: std::mem::take(&mut l.claude_update_requested),
             restart: std::mem::take(&mut l.claude_restart_requested),
             workdir: l.policy.claude_workdir.clone(),
         }
@@ -317,6 +331,7 @@ impl Shared {
                     .is_some_and(|(_, at)| at.elapsed() < REPORT_FRESH),
                 last_report: l.claude.as_ref().map(|(r, _)| r.reported_at.clone()),
             },
+            claude_update_requested: l.claude_update_requested,
             claude_restart_requested: l.claude_restart_requested,
             telemetry: l.telemetry.as_ref().map(Telemetry::public),
             control_plane: &l.control_plane,
@@ -373,6 +388,14 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                         shared.request_check();
                         (202, "checking\n".to_string(), "text/plain")
                     }
+                    (&Method::Post, "/claude/update") if local => {
+                        shared.request_claude_update();
+                        (
+                            202,
+                            "update queued for the tray\n".to_string(),
+                            "text/plain",
+                        )
+                    }
                     (&Method::Post, "/claude/restart") if local => {
                         shared.request_claude_restart();
                         (
@@ -399,9 +422,10 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                             None => (400, "not a report\n".to_string(), "text/plain"),
                         }
                     }
-                    (&Method::Post, "/update/check" | "/claude/restart" | "/claude/report") => {
-                        (403, "only from this machine\n".to_string(), "text/plain")
-                    }
+                    (
+                        &Method::Post,
+                        "/update/check" | "/claude/update" | "/claude/restart" | "/claude/report",
+                    ) => (403, "only from this machine\n".to_string(), "text/plain"),
                     _ => (404, "not found\n".to_string(), "text/plain"),
                 };
                 let header = Header::from_bytes("Content-Type", ctype)

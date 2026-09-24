@@ -24,6 +24,7 @@ import {
   approveNodeFn,
   forgetNodeFn,
   requestClaudeRestartFn,
+  requestClaudeUpdateFn,
   requestUpdateCheckFn,
   revokeNodeFn,
   saveNodePolicyFn,
@@ -446,6 +447,17 @@ function Policy({
     const { claudeWorkdir: _old, ...rest } = base.current
     save(trimmed === '' ? rest : { ...rest, claudeWorkdir: trimmed })
   }
+  const updateClaude = () => {
+    setError(null)
+    start(async () => {
+      try {
+        await requestClaudeUpdateFn({ data: { id: n.id } })
+        await router.invalidate()
+      } catch (e) {
+        setError(errorText(e))
+      }
+    })
+  }
   const restartClaude = () => {
     setError(null)
     start(async () => {
@@ -580,6 +592,19 @@ function Policy({
                     aria-label="Claude remote control"
                   />
                   <span className="text-[0.82rem]">{claude ? 'runs' : 'off'}</span>
+                  {/* Update first, then restart: that is the order they are
+                      used in, and the cheap one should not be reached past
+                      the expensive one. */}
+                  {claude && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || n.claudeUpdateRequested}
+                      onClick={updateClaude}
+                    >
+                      {n.claudeUpdateRequested ? 'Update queued' : 'Update now'}
+                    </Button>
+                  )}
                   {claude && (
                     <Button
                       size="sm"

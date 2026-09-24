@@ -7,7 +7,7 @@ import { DASH, duration, num, since, text, until } from '../lib/format'
 import { errorText } from '../lib/redact'
 import type { NodeRow } from '../lib/repo/nodes'
 import type { Tone } from '../lib/tone'
-import { requestClaudeRestartFn } from '../server/nodes'
+import { requestClaudeRestartFn, requestClaudeUpdateFn } from '../server/nodes'
 import { ServiceHead } from './service-head'
 import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './tokens'
 import { Button } from './ui/button'
@@ -20,8 +20,16 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 // source instead of three: the agent's status page on the node, which
 // carries what its tray reports about the `claude remote-control` it
 // supervises (agent/src/claude.rs). The boards the box's page draws from
-// Loki and the release feed are not here: the node's log stays on the node
-// and Claude Code updates itself there.
+// Loki and the release feed are not here: the node's log stays on the node,
+// and which release is current is a question for the box's own page rather
+// than a second copy of the same feed.
+//
+// The two verbs at the foot are a pair and are NOT interchangeable. Update
+// installs a new CLI and interrupts nothing — a session keeps the binary it
+// started on and takes the new one at its next start. Restart is what moves
+// the running server onto it, and it ENDS every session here: unlike the
+// box, this machine has no per-session resume, so those come back only by
+// being started again.
 //
 // The one thing to know about a node, said once at the top when it applies:
 // the server runs in the user's DESKTOP session, because that is where the
@@ -97,7 +105,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
           {
             k: 'CLI on the node',
             v: c?.cliVersion ?? null,
-            note: 'the installed command; Claude Code updates itself there',
+            note: 'the installed command; Update Claude Code below is what moves it',
           },
         ]}
         lede={
@@ -251,7 +259,17 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                     </span>
                   ),
                 },
-                { k: 'Command', v: <span className={MONO}>{text(c.path)}</span> },
+                {
+                  k: 'Command',
+                  v: (
+                    <span>
+                      <span className={MONO}>{text(c.path)}</span>
+                      {methodOf(c) !== null && (
+                        <span className="text-(--text-muted)"> · {methodOf(c)}</span>
+                      )}
+                    </span>
+                  ),
+                },
                 { k: 'Default model', v: <span className={MONO}>{text(c.settings.model)}</span> },
                 { k: 'Effort', v: text(c.settings.effortLevel) },
               ]}
@@ -263,6 +281,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
             <span className={MONO}>{c?.log ?? 'logs\\claude-rc.log'}</span> on the node; the tray
             menu opens it.
           </p>
+          <UpdateControl node={node} claude={c} />
           <RestartControl node={node} />
         </Board>
 
@@ -417,6 +436,116 @@ function SessionRow({ s }: { s: NodeClaudeSession }) {
  * next hello rather than a bridge — so "queued" is the honest state, and
  * the page's next load shows what happened.
  */
+
+/**
+ * How Claude Code got onto this machine, read from where the agent found it.
+ *
+ * It decides which verb updates it, so an update button that does not say
+ * this is asking to be trusted about something it has not told you. The
+ * agent's `find_cli` searches in a method-revealing order (agent/src/
+ * claude.rs) — the native installer's `~/.local/bin`, npm's global bin,
+ * Homebrew's prefixes, then PATH — so the path it returns is the answer.
+ *
+ * Named from the path rather than reported by the agent on purpose: every
+ * agent already sends the path, including the ones in the field, so this
+ * works before a single machine has been updated.
+ */
+function methodOf(c: NonNullable<NodeClaudeData['report']>): string | null {
+  // The agent's own answer when it sends one (0.12.0+), else the same rule
+  // applied here to the path it does send. Both readings, so the fact
+  // appears on every machine rather than only the updated ones.
+  return c.installMethod ?? installMethod(c.path)
+}
+
+function installMethod(path: string | null): string | null {
+  if (path === null || path === '') return null
+  const p = path.replace(/\\/g, '/').toLowerCase()
+  if (p.includes('/.local/bin/') || p.includes('/.local/share/claude/')) return 'native installer'
+  if (p.includes('/npm/') || p.includes('/node_modules/')) return 'npm'
+  if (p.includes('/homebrew/') || p.includes('/cellar/')) return 'homebrew'
+  if (p.includes('/winget') || p.includes('/windowsapps/')) return 'winget'
+  return null
+}
+
+/**
+ * Update Claude Code on this machine.
+ *
+ * The tray runs it, which is the only thing that can: the CLI's login lives
+ * in the user's profile and the service — session 0 on Windows, root on
+ * macOS — cannot see it. That also fixes the privilege exactly where it
+ * should be. `claude update` is the supported verb for a native or npm
+ * install and needs no elevation; for one a package manager owns it is a
+ * safe no-op that reports "Claude is up to date!", and those upgrade
+ * themselves through the env var the tray sets on the server it spawns.
+ * A machine-wide install under an administrator's path is the case nothing
+ * here can do, and the method beside Command above is what says so.
+ *
+ * No bridge and no poller: the request rides the next hello, so "queued" is
+ * the honest state — the same shape the restart below has always had.
+ *
+ * Nothing is interrupted. The new CLI installs beside the running one and
+ * takes effect the next time it starts, so after this the page shows the
+ * server still on the old version. Restart is what closes that gap, and it
+ * ends every session here.
+ */
+function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData['report'] }) {
+  const router = useRouter()
+  const [busy, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const method = claude === null ? null : methodOf(claude)
+  const last = claude?.lastUpdate ?? null
+  const running = claude?.server.version ?? null
+  const installed = claude?.cliVersion ?? null
+  // The gap this button is for: the CLI on disk has moved and the server is
+  // still on what it started with. Only stated when both are known — two
+  // nulls are not a disagreement.
+  const stale = running !== null && installed !== null && running !== installed
+
+  return (
+    <div className="mt-[0.7rem] flex flex-wrap items-center gap-3 border-(--border-soft) border-t pt-[0.75rem]">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || node.claudeUpdateRequested}
+        onClick={() => {
+          setError(null)
+          start(async () => {
+            try {
+              await requestClaudeUpdateFn({ data: { id: node.id } })
+              await router.invalidate()
+            } catch (e) {
+              setError(errorText(e))
+            }
+          })
+        }}
+      >
+        {node.claudeUpdateRequested ? 'Update queued' : 'Update Claude Code'}
+      </Button>
+      <span className="text-[0.74rem] text-(--dim)">
+        {node.claudeUpdateRequested
+          ? 'rides the next hello, within a minute; no session is interrupted'
+          : stale
+            ? `the CLI on disk is ${text(installed)} and the server is still running ${text(running)} — Restart is what closes that`
+            : `runs \`claude update\` on the machine${method === null ? '' : ` (${method})`}; the new version takes effect the next time the CLI starts`}
+      </span>
+      {/* What the last run actually did, in its own words. The outcomes
+          worth reading are the quiet ones — "Claude is up to date!" from a
+          package-manager install, a refusal from a managed one — and none
+          of them shows up in a version number. */}
+      {last !== null && (
+        <span className={`w-full text-[0.74rem] ${last.ok ? 'text-(--dim)' : 'text-destructive'}`}>
+          last update {since((Date.now() - Date.parse(last.at)) / 1000)}:{' '}
+          {last.from !== null && last.to !== null && last.from !== last.to
+            ? `${last.from} → ${last.to} · `
+            : ''}
+          {last.detail}
+        </span>
+      )}
+      {error !== null && <span className="text-[0.78rem] text-destructive">{error}</span>}
+    </div>
+  )
+}
+
 function RestartControl({ node }: { node: NodeRow }) {
   const router = useRouter()
   const [busy, start] = useTransition()

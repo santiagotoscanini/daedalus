@@ -39,7 +39,21 @@ export type NodeClaudeSession = {
  */
 export type NodeClaude = {
   path: string | null
+  /**
+   * native | npm | homebrew | winget | path, as the agent reads it off the
+   * path it found. Decides which verb updates it, so the page shows it
+   * beside the button that runs one. Null from an agent before 0.12.0.
+   */
+  installMethod: string | null
   cliVersion: string | null
+  /** What the last `claude update` here did. Null until one was asked for. */
+  lastUpdate: {
+    at: string
+    ok: boolean
+    from: string | null
+    to: string | null
+    detail: string
+  } | null
   /** not-installed | off | starting | running | waiting | stopped */
   state: string
   detail: string | null
@@ -151,6 +165,19 @@ const session = obj({
 
 const claude = obj({
   path: nstr,
+  install_method: nstr,
+  last_update: optional(
+    nullable(
+      obj({
+        at: optional(str, ''),
+        ok: optional(bool, false),
+        from: nstr,
+        to: nstr,
+        detail: optional(str, ''),
+      }),
+    ),
+    null,
+  ),
   cli_version: nstr,
   state: optional(str, 'stopped'),
   detail: nstr,
@@ -227,6 +254,8 @@ const shape = obj({
 function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
   return {
     path: c.path,
+    installMethod: c.install_method,
+    lastUpdate: c.last_update,
     cliVersion: c.cli_version,
     state: c.state,
     detail: c.detail,

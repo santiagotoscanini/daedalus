@@ -61,6 +61,7 @@ export type NodeRow = {
   approvedBy: string | null
   revokedAt: string | null
   updateCheckRequested: boolean
+  claudeUpdateRequested: boolean
   claudeRestartRequested: boolean
   policy: NodePolicy
   /** Present once the node's tray has reported Claude Code (agent 0.4.0+). */
@@ -145,6 +146,7 @@ function row(n: typeof nodes.$inferSelect, household: ReadonlySet<string>): Node
     approvedBy: n.approvedBy,
     revokedAt: n.revokedAt?.toISOString() ?? null,
     updateCheckRequested: n.updateCheckRequested,
+    claudeUpdateRequested: n.claudeUpdateRequested,
     claudeRestartRequested: n.claudeRestartRequested,
     policy,
     claude: claudeOf(n.lastHello),
@@ -174,6 +176,7 @@ export async function getNode(id: string): Promise<NodeRow | null> {
 export type HelloAnswer = {
   state: NodeState
   checkUpdate: boolean
+  updateClaude: boolean
   restartClaude: boolean
   policy: ReturnType<typeof effectivePolicy> | null
   /** The node token for an approved node: what opens its full Claude report to the box. */
@@ -227,12 +230,14 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
     .returning({
       state: nodes.state,
       checkUpdate: nodes.updateCheckRequested,
+      updateClaude: nodes.claudeUpdateRequested,
       restartClaude: nodes.claudeRestartRequested,
       policy: nodes.policy,
       token: nodes.token,
     })
   const state = saved?.state ?? 'pending'
   const checkUpdate = saved?.checkUpdate === true
+  const updateClaude = saved?.updateClaude === true
   const restartClaude = saved?.restartClaude === true
   // A machine whose address moved since the last hello moves its scrape
   // target too. Compared on the row before this write; a first hello is
@@ -255,15 +260,20 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
   }
   // An instruction is delivered once: it goes out with this answer and is
   // cleared in the same breath, so a second hello does not repeat it.
-  if (checkUpdate || restartClaude) {
+  if (checkUpdate || updateClaude || restartClaude) {
     await db
       .update(nodes)
-      .set({ updateCheckRequested: false, claudeRestartRequested: false })
+      .set({
+        updateCheckRequested: false,
+        claudeUpdateRequested: false,
+        claudeRestartRequested: false,
+      })
       .where(eq(nodes.id, v.nodeId))
   }
   return {
     state,
     checkUpdate,
+    updateClaude,
     restartClaude,
     policy: state === 'approved' ? effectivePolicy(saved?.policy ?? {}) : null,
     nodeToken: state === 'approved' ? token : null,
@@ -275,6 +285,23 @@ export async function requestUpdateCheck(id: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
     .set({ updateCheckRequested: true })
+    .where(eq(nodes.id, id))
+    .returning({ id: nodes.id })
+  return updated.length > 0
+}
+
+/**
+ * Ask the node's tray to update Claude Code on its next hello.
+ *
+ * Interrupts nothing: the new version installs beside the running one and
+ * takes effect the next time the CLI starts, which is upstream's own model.
+ * Moving the RUNNING server onto it is `requestClaudeRestart`, and that one
+ * ends every session on the machine — which is why these are two verbs.
+ */
+export async function requestClaudeUpdate(id: string): Promise<boolean> {
+  const updated = await db
+    .update(nodes)
+    .set({ claudeUpdateRequested: true })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   return updated.length > 0

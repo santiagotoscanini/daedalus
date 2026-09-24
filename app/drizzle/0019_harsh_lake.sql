@@ -1,0 +1,1 @@
+ALTER TABLE "nodes" ADD COLUMN "claude_update_requested" boolean DEFAULT false NOT NULL;

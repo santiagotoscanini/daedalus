@@ -540,10 +540,18 @@ export const nodes = pgTable('nodes', {
   approvedAt: timestamp('approved_at', { withTimezone: true }),
   approvedBy: text('approved_by'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  /// The two instructions the box can send a node: "check for updates now"
-  /// and "restart Claude remote control". Set by an admin, carried by the
-  /// next hello's answer, cleared as they go out.
+  /// The instructions the box can send a node: "check for AGENT updates
+  /// now", "update Claude Code" and "restart Claude remote control". Set by
+  /// an admin, carried by the next hello's answer, cleared as they go out.
+  ///
+  /// The two Claude ones are deliberately separate flags. Updating installs
+  /// a new CLI and interrupts nothing — a running session keeps the binary
+  /// it started on, which is upstream's own model ("updates take effect the
+  /// next time you start Claude Code"). Restarting is what moves the server
+  /// onto it, and it ENDS every session under it. One flag for both would
+  /// make the harmless act cost the expensive one.
   updateCheckRequested: boolean('update_check_requested').notNull().default(false),
+  claudeUpdateRequested: boolean('claude_update_requested').notNull().default(false),
   claudeRestartRequested: boolean('claude_restart_requested').notNull().default(false),
   /// What the box wants of this machine, set on Settings › Machines and
   /// carried by every hello's answer once the node is approved. A JSON

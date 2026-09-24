@@ -56,6 +56,22 @@ export const requestUpdateCheckFn = createServerFn({ method: 'POST' })
     return { ok: await requestUpdateCheck(data.id) }
   })
 
+/**
+ * Ask the node to update Claude Code on its next hello.
+ *
+ * The harmless half of the pair: the new CLI installs beside the running
+ * one and the machine keeps working. Its sibling below moves the server
+ * onto it and ends every session there.
+ */
+export const requestClaudeUpdateFn = createServerFn({ method: 'POST' })
+  .validator(nodeId)
+  .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { requestClaudeUpdate } = await import('../lib/repo/nodes')
+    return { ok: await requestClaudeUpdate(data.id) }
+  })
+
 export const requestClaudeRestartFn = createServerFn({ method: 'POST' })
   .validator(nodeId)
   .handler(async ({ data }) => {

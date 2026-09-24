@@ -41,8 +41,11 @@ export const Route = createFileRoute('/api/nodes/hello')({
           node: verdict.nodeId,
           state: answer.state,
           // The instructions: the agent's updater looks now instead of on
-          // its next tick; the tray restarts `claude remote-control`.
+          // its next tick; the tray updates Claude Code, which interrupts
+          // nothing; the tray restarts `claude remote-control`, which ends
+          // every session on the machine.
           check_update: answer.checkUpdate,
+          update_claude: answer.updateClaude,
           restart_claude: answer.restartClaude,
           // The policy, in the agent's vocabulary (agent/src/hello.rs
           // `Policy`); absent until the node is approved.

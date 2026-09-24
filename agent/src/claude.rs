@@ -9,8 +9,16 @@
 //! with the user's credentials, and reports to the service over loopback
 //! (`POST /claude/report`, status.rs). The service puts the report on the
 //! status page and a summary in every hello, and hands the tray back what
-//! the box decided: whether the server should run at all (policy) and
-//! whether to restart it now (the one instruction).
+//! the box decided: whether the server should run at all (policy), and its
+//! two instructions — update Claude Code, and restart the server.
+//!
+//! Those two are deliberately separate. An update installs a new CLI beside
+//! the running one and interrupts nothing: a session keeps the binary it
+//! started on and picks the new one up whenever it next starts, which is
+//! upstream's own model. A restart is what moves the RUNNING server onto
+//! it, and it ends every session on this machine — they cannot be picked
+//! back up from claude.ai, only resumed from a console here. One
+//! instruction for both would make the free act cost the expensive one.
 //!
 //! What is reported mirrors what the box's own snapshot reads about itself
 //! (stacks/daedalus/host/claude-snapshot.sh): the server's start banner
@@ -123,14 +131,42 @@ pub struct Settings {
     pub effort_level: Option<String>,
 }
 
+/// What one `claude update` did.
+///
+/// Kept on the report rather than only logged, because whoever pressed the
+/// button is looking at the box, not at this machine's log — and the
+/// interesting outcomes are the quiet ones. "Claude is up to date!" from a
+/// Homebrew install and "Updates are disabled by your administrator" from a
+/// managed one are both successes that changed nothing, and neither shows up
+/// in a version number.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateResult {
+    pub at: String,
+    pub ok: bool,
+    /// The version before and after. Equal when nothing moved, which is a
+    /// normal outcome and not a failure.
+    pub from: Option<String>,
+    pub to: Option<String>,
+    /// The last meaningful line the command printed, cut to 200 characters.
+    pub detail: String,
+}
+
 /// What the tray tells the service, and what the status page shows.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Report {
     /// Where the `claude` command is; None when it was not found.
     pub path: Option<String>,
+    /// How it was installed, inferred from that path: native | npm |
+    /// homebrew | winget | path. It decides which verb updates it, so the
+    /// page shows it beside the button that runs one.
+    pub install_method: Option<String>,
     /// `claude --version`.
     pub cli_version: Option<String>,
+    /// What the last `claude update` on this machine did, and when. None
+    /// until one has been asked for.
+    pub last_update: Option<UpdateResult>,
     /// not-installed | off | starting | running | waiting | stopped
     pub state: String,
     /// One line more, when the state has a reason.
@@ -198,7 +234,10 @@ impl Report {
 pub struct ReportAnswer {
     /// Whether the server should be running at all.
     pub wanted: bool,
-    /// Restart it now, once.
+    /// Update Claude Code now, once. Interrupts nothing: the new version
+    /// installs beside the running one and takes effect at its next start.
+    pub update: bool,
+    /// Restart it now, once. Ends every session under the server.
     pub restart: bool,
     /// The directory the policy names for the server, if any.
     pub workdir: Option<String>,
@@ -259,8 +298,107 @@ fn hidden(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
+/// How Claude Code was installed here, named from where `find_cli` found it.
+///
+/// It decides which verb updates it, and `claude update` is only the right
+/// one for the first two. For a package-manager install it is a documented
+/// no-op that answers "Claude is up to date!", and the upgrade goes through
+/// that manager — which is what `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE`
+/// on the spawned server asks Claude Code to do for itself.
+pub fn install_method(cli: &Path) -> &'static str {
+    let p = cli.to_string_lossy().replace('\\', "/").to_lowercase();
+    if p.contains("/.local/bin/") || p.contains("/.local/share/claude/") {
+        "native"
+    } else if p.contains("/npm/") || p.contains("/node_modules/") {
+        "npm"
+    } else if p.contains("/homebrew/") || p.contains("/cellar/") {
+        "homebrew"
+    } else if p.contains("/winget") || p.contains("/windowsapps/") {
+        "winget"
+    } else {
+        "path"
+    }
+}
+
+/// What a command did: its status and everything it printed.
+///
+/// `first_line` below is this, narrowed to the one line a version probe
+/// wants — it discarded stderr and the exit code, which is exactly what an
+/// update run needs to report. A refusal ("Updates are disabled by your
+/// administrator") arrives on one stream or the other depending on the
+/// version, so both are captured and joined.
+pub struct Ran {
+    pub ok: bool,
+    /// stdout and stderr, in the order each thread finished reading them.
+    pub output: String,
+}
+
+/// Run to completion, or kill it and give up after `timeout`.
+fn run(mut cmd: Command, timeout: Duration) -> Option<Ran> {
+    let mut child = hidden(&mut cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .ok()?;
+    // Both pipes drained on their own threads: a child that fills one while
+    // nobody reads the other blocks forever, and `claude update` is chatty
+    // on both.
+    let mut out = child.stdout.take()?;
+    let mut err = child.stderr.take()?;
+    let (tx, rx) = mpsc::channel();
+    let tx2 = tx.clone();
+    std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = out.read_to_string(&mut s);
+        let _ = tx.send(s);
+    });
+    std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = err.read_to_string(&mut s);
+        let _ = tx2.send(s);
+    });
+    let deadline = Instant::now() + timeout;
+    let mut text = String::new();
+    for _ in 0..2 {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(left) {
+            Ok(s) => {
+                if !s.trim().is_empty() {
+                    if !text.is_empty() {
+                        text.push('\n');
+                    }
+                    text.push_str(s.trim());
+                }
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
+    let status = child.wait().ok()?;
+    Some(Ran {
+        ok: status.success(),
+        output: text,
+    })
+}
+
+/// The last line worth showing of an update run, cut to a status field.
+fn last_meaningful(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .rfind(|l| !l.is_empty())
+        .unwrap_or("no output")
+        .chars()
+        .take(200)
+        .collect()
+}
+
 /// Run a command to completion, or give up after `timeout`; the first line
-/// of its stdout, trimmed.
+/// of its stdout, trimmed. `run` above is this with both streams and the
+/// exit code, which a version probe does not want and an update run does.
 fn first_line(mut cmd: Command, timeout: Duration) -> Option<String> {
     let mut child = hidden(&mut cmd)
         .stdin(Stdio::null())
@@ -546,6 +684,12 @@ pub struct Supervisor {
     next_start: Option<Instant>,
     last_exit: Option<String>,
     recent_lines: Arc<Mutex<VecDeque<String>>>,
+    /// What the last `claude update` did, kept for the report.
+    last_update: Option<UpdateResult>,
+    /// An update is running on its own thread right now.
+    updating: bool,
+    /// Where that thread leaves its result for `tick` to collect.
+    update_slot: Arc<Mutex<Option<UpdateResult>>>,
 }
 
 impl Supervisor {
@@ -568,6 +712,9 @@ impl Supervisor {
             next_start: None,
             last_exit: None,
             recent_lines: Arc::new(Mutex::new(VecDeque::new())),
+            last_update: None,
+            updating: false,
+            update_slot: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -625,8 +772,100 @@ impl Supervisor {
         self.next_start = Some(Instant::now());
     }
 
+    /// Update Claude Code on this machine, and record what happened.
+    ///
+    /// Nothing is stopped. The new version installs beside the running one
+    /// and takes effect at its next start, which is upstream's own model —
+    /// so a session mid-turn is untouched and the server keeps the binary it
+    /// has until `restart` moves it.
+    ///
+    /// `claude update` for every install: it is the supported verb for a
+    /// native or npm one, and for a package-manager one it is a documented
+    /// no-op that reports "Claude is up to date!" rather than doing
+    /// something surprising. Those upgrade themselves through
+    /// CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE, which `start` sets on the
+    /// server. Run as the tray, i.e. the logged-in user, which is right for
+    /// a per-user install and is all the privilege there is here — a
+    /// machine-wide install under an administrator's path is the case this
+    /// cannot serve, and the report's install_method is what says so.
+    ///
+    /// Ten minutes, because this downloads ~80 MB over whatever line the
+    /// machine has. Slow is not stuck; a hung process is killed at the end
+    /// of it and reported as one.
+    /// ON ITS OWN THREAD, and that is not an optimisation. This is called
+    /// from the tray's tick, which runs every five seconds and is the only
+    /// thing that reports to the service, restarts the server and drains the
+    /// menu. Running an ~80 MB download inline would freeze all of it for up
+    /// to ten minutes — the box would see the tray stop reporting and say
+    /// "nobody logged on", which is the opposite of what just happened.
+    /// `tick` collects the result through the slot below.
+    pub fn update_claude(&mut self) {
+        if self.updating {
+            tracing::info!("a claude update is already running; ignoring the request");
+            return;
+        }
+        let Some(cli) = self.cli.clone() else {
+            self.last_update = Some(UpdateResult {
+                at: now_rfc3339(),
+                ok: false,
+                from: None,
+                to: None,
+                detail: "no `claude` command on this machine to update".into(),
+            });
+            return;
+        };
+        let before = self.cli_version.clone();
+        let slot = Arc::clone(&self.update_slot);
+        self.updating = true;
+        std::thread::spawn(move || {
+            let mut cmd = Command::new(&cli);
+            cmd.arg("update");
+            let ran = run(cmd, Duration::from_secs(600));
+            // Re-probed either way: an update that reported failure may
+            // still have moved the binary, and the version on disk is the
+            // fact — not the command's account of itself.
+            let after = cli_version(&cli);
+            let result = match ran {
+                Some(r) => UpdateResult {
+                    at: now_rfc3339(),
+                    ok: r.ok,
+                    from: before,
+                    to: after,
+                    detail: last_meaningful(&r.output),
+                },
+                None => UpdateResult {
+                    at: now_rfc3339(),
+                    ok: false,
+                    from: before,
+                    to: after,
+                    detail: "`claude update` did not finish within ten minutes and was killed"
+                        .into(),
+                },
+            };
+            tracing::info!(detail = %result.detail, ok = result.ok, "claude update finished");
+            if let Ok(mut s) = slot.lock() {
+                *s = Some(result);
+            }
+        });
+    }
+
+    /// Take a finished update off the slot, if one landed since the last
+    /// tick. Called from `tick`; cheap and lock-free in the common case.
+    fn collect_update(&mut self) {
+        if !self.updating {
+            return;
+        }
+        let done = self.update_slot.lock().ok().and_then(|mut s| s.take());
+        if let Some(r) = done {
+            self.cli_version = r.to.clone();
+            self.last_update = Some(r);
+            self.updating = false;
+        }
+    }
+
     /// Advance: reap, wait, start. Cheap; call it often.
     pub fn tick(&mut self) {
+        self.collect_update();
         if let Some(r) = self.running.as_mut() {
             match r.child.try_wait() {
                 Ok(Some(status)) => {
@@ -717,6 +956,20 @@ impl Supervisor {
         cmd.arg("remote-control")
             .arg("--verbose")
             .current_dir(&self.workdir)
+            // Let Claude Code upgrade a package-manager install by itself.
+            // A native or npm install auto-updates already and `claude
+            // update` drives it on demand; a Homebrew or WinGet one does
+            // neither, and this is upstream's own mechanism for it — the
+            // server runs `brew upgrade` / `winget upgrade` in the
+            // background when a release lands. Set here rather than
+            // globally because this is the process that acts on it, and
+            // because it must not reach anything else the tray spawns.
+            //
+            // Known limit, stated so a failure is not a mystery: on WinGet
+            // the upgrade can fail while Claude Code is running, because
+            // Windows locks the executable. It then shows the manual
+            // command and nothing breaks.
+            .env("CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE", "1")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -848,7 +1101,9 @@ impl Supervisor {
         };
         Report {
             path: self.cli.as_ref().map(|p| p.display().to_string()),
+            install_method: self.cli.as_deref().map(|p| install_method(p).to_string()),
             cli_version: self.cli_version.clone(),
+            last_update: self.last_update.clone(),
             state,
             detail,
             pid: self.running.as_ref().map(|r| r.child.id()),
@@ -943,6 +1198,44 @@ fn short_duration(d: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The path find_cli returned is the whole of what names the install
+    // method, so these are the shapes it actually returns on each OS.
+    #[test]
+    fn the_install_method_is_read_off_the_path() {
+        let m = |p: &str| install_method(Path::new(p));
+        assert_eq!(m("/home/u/.local/bin/claude"), "native");
+        assert_eq!(m("C:\\Users\\u\\.local\\bin\\claude.exe"), "native");
+        assert_eq!(m("/home/u/.local/share/claude/versions/2.1.281"), "native");
+        assert_eq!(m("C:\\Users\\u\\AppData\\Roaming\\npm\\claude.cmd"), "npm");
+        assert_eq!(
+            m("/usr/lib/node_modules/@anthropic-ai/claude-code/claude"),
+            "npm"
+        );
+        assert_eq!(m("/opt/homebrew/bin/claude"), "homebrew");
+        // Anything else is still updatable by `claude update`; it just has
+        // no name, and the page says nothing rather than guessing.
+        assert_eq!(m("/usr/local/bin/claude"), "path");
+    }
+
+    // Every branch of the update record has to produce something a person
+    // can read, including the one where the command said nothing at all.
+    #[test]
+    fn the_last_meaningful_line_is_what_gets_reported() {
+        assert_eq!(
+            last_meaningful(
+                "Checking for updates...\nSuccessfully updated from 2.1.276 to version 2.1.281\n\n"
+            ),
+            "Successfully updated from 2.1.276 to version 2.1.281"
+        );
+        assert_eq!(
+            last_meaningful("Claude is up to date!"),
+            "Claude is up to date!"
+        );
+        assert_eq!(last_meaningful("   \n\n  "), "no output");
+        assert_eq!(last_meaningful(""), "no output");
+        assert_eq!(last_meaningful(&"x".repeat(400)).len(), 200);
+    }
 
     #[test]
     fn banner_lines_set_their_fields() {
