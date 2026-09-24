@@ -55,7 +55,14 @@ LOGFILE="$APPLY_DIR/claude-code-last.log"
 # it. Both are the engine's own layout; a configuration that renames the
 # input fails validating with the name rather than writing the wrong tree.
 INPUT=daedalus
-MANIFEST_REL=nix/platform/claude-code/manifest.json
+MANIFEST_REL=nix/platform/claude-code/manifest.zst.json
+
+# The manifest upstream publishes for the ZSTD artifact, which is the one
+# nixpkgs' expression vendors and unpacks. There is a second, `manifest.json`,
+# naming the plain binary; pinning that one does not fail, it makes the
+# engine's override unreachable and the whole run a no-op that reports
+# success. platform/claude-code/claude-code.nix carries the incident.
+MANIFEST_FILE=manifest.zst.json
 
 RELEASES=https://downloads.claude.ai/claude-code-releases
 RELEASE_KEY=https://downloads.claude.ai/keys/claude-code.asc
@@ -186,12 +193,24 @@ if [ "$TO_VERSION" = "$FROM_VERSION" ]; then
   exit 0
 fi
 
-fetch "$RELEASES/$TO_VERSION/manifest.json" "$WORK/manifest.json" ||
-  fail resolving "could not fetch the release manifest for $TO_VERSION"
-fetch "$RELEASES/$TO_VERSION/manifest.json.sig" "$WORK/manifest.json.sig" ||
+fetch "$RELEASES/$TO_VERSION/$MANIFEST_FILE" "$WORK/manifest.json" ||
+  fail resolving "could not fetch $MANIFEST_FILE for $TO_VERSION"
+fetch "$RELEASES/$TO_VERSION/$MANIFEST_FILE.sig" "$WORK/manifest.json.sig" ||
   fail resolving "could not fetch the signature for $TO_VERSION (signatures exist from 2.1.89 onward)"
 fetch "$RELEASE_KEY" "$WORK/key.asc" ||
   fail resolving "could not fetch the release signing key from $RELEASE_KEY"
+
+# The artifact shape must match the one already pinned, or the engine's
+# override goes dormant and this whole run is a no-op that reported success —
+# the failure platform/claude-code/claude-code.nix documents. Compared
+# against the committed manifest rather than against a literal, so the day
+# upstream renames its artifacts this refuses loudly instead of pinning
+# something the build will ignore.
+want="$(jq -r '.platforms | to_entries[0].value.binary // ""' <"$MANIFEST" 2>/dev/null || true)"
+got="$(jq -r '.platforms | to_entries[0].value.binary // ""' <"$WORK/manifest.json" 2>/dev/null || true)"
+if [ -n "$want" ] && [ -n "$got" ] && [ "${want##*.}" != "${got##*.}" ]; then
+  fail resolving "the pinned manifest names '$want' and $TO_VERSION's names '$got' — pinning it would make the engine's override unreachable and change nothing. platform/claude-code/claude-code.nix has the argument."
+fi
 
 # The manifest must actually be about the release it was fetched for.
 # Upstream has never served a mismatch; this is here so that a redirect or a
