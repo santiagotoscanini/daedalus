@@ -98,7 +98,17 @@ in
       volumes = [
         "${config.fleet.stateRoot}/grocy/config:/config"
         # Enable reverse-proxy header auth declaratively (over config.php).
-        "${pkgs.writeText "grocy-auth-class" "Grocy\\Middleware\\ReverseProxyAuthMiddleware"}:/config/data/settingoverrides/AUTH_CLASS.txt:ro"
+        #
+        # The namespace MOVED in grocy v4.7.1: the auth middlewares went from
+        # `Grocy\Middleware\*` into `Grocy\Middleware\Auth\*`. grocy validates
+        # this setting with class_exists and then answers 500 to EVERY request
+        # when it fails — with nothing in its own logs, because the refusal
+        # happens before any handler runs. nginx and php-fpm both stay up, the
+        # container stays green, and the unit stays active, so the only thing
+        # that shows it is a request from inside the proxy's own bridge.
+        # An hour on 2026-09-24. Before bumping this pin, check the new image:
+        # `podman exec grocy find /app/www -ipath '*iddleware/Auth*'`.
+        "${pkgs.writeText "grocy-auth-class" "Grocy\\Middleware\\Auth\\ReverseProxyAuthMiddleware"}:/config/data/settingoverrides/AUTH_CLASS.txt:ro"
         "${pkgs.writeText "grocy-auth-header" "Remote-User"}:/config/data/settingoverrides/REVERSE_PROXY_AUTH_HEADER.txt:ro"
       ];
 
