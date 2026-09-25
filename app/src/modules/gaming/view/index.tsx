@@ -7,6 +7,7 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../../../compone
 import { defineViews } from '../../../lib/modules/tabs'
 import type { GamingData, Tabs } from '../data'
 import { manifest } from '../manifest'
+import { RosterBoard } from './roster'
 
 // The Gaming page. Two servers, and the shape held.
 //
@@ -51,7 +52,7 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
  * elsewhere on this dashboard. Those read a container; this read the game.
  */
 function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' }> }) {
-  const { minecraft: mc, builds, events } = data
+  const { minecraft: mc, builds, events, roster } = data
   const behind = builds.behind.length
   // Being behind on BUILDS is routine — Paper cuts several a day. Being behind
   // on the game is the one that stops people joining, so it is the verdict.
@@ -126,6 +127,8 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
       </StatStrip>
 
       <BoardGrid>
+        <RosterBoard rows={roster} />
+
         <Changelog
           build={builds}
           span={6}
@@ -183,7 +186,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
               { k: 'Address', v: <span className={MONO}>{mc.connect}</span> },
               {
                 k: 'Who gets in',
-                v: 'Mojang session auth, plus an enforced whitelist pinned in nix',
+                v: 'Mojang session auth, plus an enforced whitelist kept in site.json and edited above',
               },
               {
                 k: 'Ingress',

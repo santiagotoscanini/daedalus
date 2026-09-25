@@ -72,8 +72,13 @@ const shape = obj({
         ),
         {},
       ),
+      // A game server's roster, per module id (core/site/players.ts).
+      players: optional(
+        recordOf(arrayOf(obj({ name: str, uuid: str, op: optional(bool, false) }))),
+        {},
+      ),
     }),
-    { enabled: {}, web: {} },
+    { enabled: {}, web: {}, players: {} },
   ),
   // The GitHub App's public half. Last, and it must stay last: `obj` copies
   // only the keys named here, so a key missing from this shape is dropped by

@@ -101,12 +101,24 @@ export type SiteDocument = {
    * null field keeps the host's word, and a webApp with both null leaves
    * the document. Keyed by the webApp, not the module: a module publishes
    * several (grafana and prometheus are one), and nix reads it per webApp.
+   *
+   * `players.<id>` is a game server's whole roster, not an override: who may
+   * join and who may run commands, each resolved from the vendor before it
+   * was written (core/site/players.ts). Nix hands it to the stack as
+   * `fleet.site.players.<id>`. An id with an empty list leaves the document.
    */
-  modules: { enabled: Record<string, boolean>; web: Record<string, SiteWebOverride> }
+  modules: {
+    enabled: Record<string, boolean>
+    web: Record<string, SiteWebOverride>
+    players: Record<string, SitePlayer[]>
+  }
 }
 
 /** One published hostname as the operator moved it (core/site/switches.ts). */
 export type SiteWebOverride = { label: string | null; public: boolean | null }
+
+/** One account on a game server's roster. `uuid` is dashed and lower-case. */
+export type SitePlayer = { name: string; uuid: string; op: boolean }
 
 /**
  * The box as the settings page describes it, as the document.
@@ -153,7 +165,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     developer: { engineOverride: null },
     // The running box's switches are its own files' word; the document
     // carries only what the operator moved, which a box read back is none.
-    modules: { enabled: {}, web: {} },
+    modules: { enabled: {}, web: {}, players: {} },
   }
 }
 
@@ -194,6 +206,18 @@ export function renderSiteFile(doc: SiteDocument): string {
       ]
     }),
   )
+  // Ids sorted and each roster by name, so the same set is the same bytes.
+  const rostered = Object.keys(modules.players)
+    .sort()
+    .filter((id) => (modules.players[id] ?? []).length > 0)
+  const playersAsWritten = Object.fromEntries(
+    rostered.map((id) => [
+      id,
+      [...(modules.players[id] ?? [])]
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+        .map((p) => ({ name: p.name, uuid: p.uuid, op: p.op })),
+    ]),
+  )
   const body = {
     ...PREAMBLE,
     ...rest,
@@ -206,7 +230,7 @@ export function renderSiteFile(doc: SiteDocument): string {
       : { developer: { engineOverride: developer.engineOverride } }),
     // Same rule again, and the ids sorted, so two edits that end in the same
     // set render the same bytes.
-    ...(switched.length === 0 && moved.length === 0
+    ...(switched.length === 0 && moved.length === 0 && rostered.length === 0
       ? {}
       : {
           modules: {
@@ -218,6 +242,7 @@ export function renderSiteFile(doc: SiteDocument): string {
                   ),
                 }),
             ...(moved.length === 0 ? {} : { web: webAsWritten }),
+            ...(rostered.length === 0 ? {} : { players: playersAsWritten }),
           },
         }),
     // Last, and copied key by key. The fixed order keeps a new App a single

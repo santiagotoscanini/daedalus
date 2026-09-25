@@ -114,6 +114,7 @@ the key fails eval):
 - `fleet.cloudflare.{accountId,tunnelId,zoneId}` ← `cloudflare.*`; `fleet.cloudflare.tokenEnvFile` is rendered by the engine from `site/vault/cloudflare-api-token.sops`, which must exist.
 - asserted equal, not yet sourced: `identity.hostname` = `networking.hostName`, `identity.owner` = `fleet.github.owner`, `identity.operator.user` = `fleet.operator.user`.
 - `site.json` `modules.enabled` (optional, id → bool) defines `fleet.modules.<id>.enable` at `mkOverride 60` — the control plane's "Switch off" on a service's page lands there; `fleet.structuralModules` (engine default: the spine) is what it refuses, and `/export/switches.json` tells the page which those are and which containers a stack owns.
+- `site.json` `modules.players` (optional, id → `[{ name, uuid, op }]`) defines `fleet.site.players.<id>` — a game server's whole roster, written from its page after the vendor resolved each name; the stack reads it (the reference host's Minecraft hands it to the running server without a restart). An id no imported module declares fails evaluation.
 - `site/apps.json` must exist (`fleet.registry.file`); `site/nodes.json` is optional and becomes `fleet.nodes` (`platform/nodes.nix`: the approved machines by id, name and what each offers; never a MAC or an address — the control plane binds MAC to name at runtime through `stacks/daedalus`'s `nodes/dhcp-hosts` and the resolver's `dhcp-hostsdir`).
 
 Optional, null/empty by default, host-defined when wanted:

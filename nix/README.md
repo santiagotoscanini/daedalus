@@ -141,6 +141,7 @@ And from `site/site.json`, which `platform/site.nix` turns into options
 | `developer.engineOverride` | read by the host agents at run time, never by nix (below) |
 | `modules.enabled.<id>` | `fleet.modules.<id>.enable`, at a priority above the host's own files — only the ids the operator switched from a page; a structural module (`fleet.structuralModules`) named off fails evaluation |
 | `modules.web.<webApp>.{label,public}` | `fleet.webApps.<webApp>.hostname` (as `<label>.<baseDomain>`) and `.exposeRemotely`, at the same priority — only the hostnames the operator moved from a service's cog; a webApp this host does not publish fails evaluation |
+| `modules.players.<id>` | `fleet.site.players.<id>` — a game server's roster as its page wrote it: `[{ name, uuid, op }]`, both resolved from the vendor first; a stack that reads it takes it as its whole list. An id this host does not import fails evaluation |
 
 plus files beside it: `site/apps.json` (the app registry),
 `site/nodes.json` (the approved nodes — id, name, OS and what each offers,

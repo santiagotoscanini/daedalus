@@ -37,7 +37,7 @@ const doc: SiteDocument = {
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
   developer: { engineOverride: null },
-  modules: { enabled: {}, web: {} },
+  modules: { enabled: {}, web: {}, players: {} },
 }
 
 const APP: SiteGithubApp = {
@@ -99,6 +99,7 @@ describe('site.json round trip', () => {
           gatus: { label: null, public: null },
           metube: { label: null, public: true },
         },
+        players: {},
       },
     })
     expect(moved).toContain('"n8n": false')
@@ -109,14 +110,34 @@ describe('site.json round trip', () => {
     expect(decodeSiteDocument(JSON.parse(moved)).modules).toEqual({
       enabled: { n8n: false },
       web: { grocy: { label: 'pantry', public: null }, metube: { label: null, public: true } },
+      players: {},
     })
     // The web block alone is a modules block too.
     const webOnly = renderSiteFile({
       ...doc,
-      modules: { enabled: {}, web: { grocy: { label: 'pantry', public: false } } },
+      modules: { enabled: {}, web: { grocy: { label: 'pantry', public: false } }, players: {} },
     })
     expect(webOnly).toContain('"modules"')
     expect(webOnly).not.toContain('"enabled"')
+  })
+
+  it('writes a roster sorted by name, and drops an empty one', () => {
+    const bob = { name: 'bob_', uuid: '00000000-0000-4000-8000-000000000002', op: false }
+    const alice = { name: 'Alice', uuid: '00000000-0000-4000-8000-000000000001', op: true }
+    const rostered = renderSiteFile({
+      ...doc,
+      modules: { enabled: {}, web: {}, players: { minecraft: [bob, alice], factorio: [] } },
+    })
+    expect(rostered).not.toContain('factorio')
+    expect(rostered.indexOf('"Alice"')).toBeLessThan(rostered.indexOf('"bob_"'))
+    expect(reRender(rostered)).toBe(rostered)
+    expect(decodeSiteDocument(JSON.parse(rostered)).modules.players).toEqual({
+      minecraft: [alice, bob],
+    })
+    // An entry written without `op` reads as not op.
+    const bare = JSON.parse(rostered)
+    delete bare.modules.players.minecraft[1].op
+    expect(decodeSiteDocument(bare).modules.players.minecraft?.[1]?.op).toBe(false)
   })
 
   it('render → parse → decode → render is a fixed point', () => {

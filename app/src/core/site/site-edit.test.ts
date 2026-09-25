@@ -82,7 +82,7 @@ const committed: SiteDocument = {
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
   developer: { engineOverride: null },
-  modules: { enabled: {}, web: {} },
+  modules: { enabled: {}, web: {}, players: {} },
   github: {
     app: {
       id: 123456,

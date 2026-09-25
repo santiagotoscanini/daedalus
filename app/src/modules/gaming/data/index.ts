@@ -469,6 +469,26 @@ type MinecraftData = {
   builds: CommitGap
   /** Who came and went, newest first. */
   events: { at: number; who: string; kind: 'join' | 'leave' }[]
+  /**
+   * Who may join: site.json `modules.players.minecraft`, committed and as the
+   * next Apply would write it, one row per account in either. `state` is
+   * where the row stands against the committed file; `opPending` is an op
+   * change the Apply has not made yet.
+   */
+  roster: {
+    name: string
+    uuid: string
+    op: boolean
+    state: 'applied' | 'adding' | 'removing'
+    opPending: boolean
+    /** Mojang's name for the uuid now, when it is not the one on the list. */
+    renamed: string | null
+    model: 'slim' | 'classic' | null
+    cape: boolean
+    head: string | null
+    /** ms — the newest join in the last 30 days, else null. */
+    lastSeen: number | null
+  }[]
 }
 
 const PAPER_API = 'https://fill.papermc.io/v3/projects/paper'
@@ -479,7 +499,7 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
   const version = ctx.env('MINECRAFT_VERSION') ?? null
   const build = ctx.env('MINECRAFT_PAPER_BUILD') ?? null
 
-  const [live, online, reported, latestVersion, builds, events] = await Promise.all([
+  const [live, online, reported, latestVersion, builds, events, roster] = await Promise.all([
     ctx.prom.scalars({
       healthy: 'max(minecraft_status_healthy)',
       players: 'max(minecraft_status_players_online_count)',
@@ -493,6 +513,7 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
     latestRelease(),
     paperBuilds(version, build),
     joinsAndLeaves(ctx),
+    minecraftRoster(ctx),
   ])
 
   return {
@@ -512,7 +533,65 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
     },
     builds,
     events,
+    roster,
   }
+}
+
+/**
+ * The roster, with what Mojang and the log say about each account.
+ *
+ * The last join is its own Loki read over 30 days — the events panel's week
+ * is too short to answer "has this person ever come". Failure anywhere is
+ * a thinner row, never a missing one: the list itself comes from the site
+ * document, which is always readable.
+ */
+async function minecraftRoster(ctx: Ctx): Promise<MinecraftData['roster']> {
+  const { profileOf, roster } = await import('../../../core/site/players')
+  const [{ committed, desired }, joins] = await Promise.all([
+    roster(ctx, 'minecraft'),
+    ctx.loki.entries('{stack="minecraft"} |= "joined the game"', 60 * 24 * 30, 200),
+  ])
+
+  const lastJoin = new Map<string, number>()
+  for (const { at, line } of joins) {
+    const who = /:\s*(\w{1,16})\s+joined the game/.exec(line)?.[1]?.toLowerCase()
+    if (who !== undefined && at > (lastJoin.get(who) ?? 0)) lastJoin.set(who, at)
+  }
+
+  const was = new Map(committed.map((p) => [p.uuid, p]))
+  const will = new Set(desired.map((p) => p.uuid))
+  const rows = [
+    ...desired.map((p) => ({
+      p,
+      state: was.has(p.uuid) ? ('applied' as const) : ('adding' as const),
+      opPending: was.has(p.uuid) && was.get(p.uuid)?.op !== p.op,
+    })),
+    ...committed
+      .filter((p) => !will.has(p.uuid))
+      .map((p) => ({ p, state: 'removing' as const, opPending: false })),
+  ]
+
+  const profiles = await Promise.all(rows.map((r) => profileOf(r.p.uuid)))
+  return rows
+    .map(({ p, state, opPending }, i) => {
+      const prof = profiles[i] ?? null
+      const now = prof?.name ?? null
+      return {
+        name: p.name,
+        uuid: p.uuid,
+        op: p.op,
+        state,
+        opPending,
+        renamed: now !== null && now !== p.name ? now : null,
+        model: prof?.model ?? null,
+        cape: prof?.cape ?? false,
+        head: prof?.head ?? null,
+        lastSeen:
+          lastJoin.get(p.name.toLowerCase()) ??
+          (now === null ? null : (lastJoin.get(now.toLowerCase()) ?? null)),
+      }
+    })
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 }
 
 /**

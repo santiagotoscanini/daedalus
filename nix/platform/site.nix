@@ -116,6 +116,17 @@ let
       hostname = lib.mkOverride 60 "${w.label}.${cfg.baseDomain}";
     }
     // lib.optionalAttrs (w.public or null != null) { exposeRemotely = lib.mkOverride 60 w.public; };
+  # site.json `modules.players` — who may join a game server, moved from its
+  # page. Keyed by module id, each a list of accounts: the name as the
+  # vendor spells it, the vendor's id for it, and whether it runs commands.
+  # The control plane resolves both from the vendor before it writes one, so
+  # a stack can admit by id and never looks a name up at start. Unlike
+  # `enabled` and `web` this is not an override of anything: a stack that
+  # reads it takes it as its whole roster. An id no imported module declares
+  # is refused below, like a switch.
+  sitePlayers = if sourced then (siteDoc.modules or { }).players or { } else { };
+  unknownPlayers = builtins.attrNames (removeAttrs sitePlayers declaredSwitches);
+
   unknownWeb = builtins.attrNames (
     lib.filterAttrs (
       n: _:
@@ -176,6 +187,39 @@ in
           locations" while the constants still lived in `configuration.nix`
           and the registry in `stacks/apps/apps.json`; neither exists now, so
           leaving it null fails eval rather than falling back.
+        '';
+      };
+
+      players = lib.mkOption {
+        type = lib.types.attrsOf (
+          lib.types.listOf (
+            lib.types.submodule {
+              options = {
+                # Held to the charsets the vendors allow: these reach rendered
+                # files and RCON command lines.
+                name = lib.mkOption {
+                  type = lib.types.strMatching "[A-Za-z0-9_]{1,16}";
+                  description = "The account's name as the vendor spells it.";
+                };
+                uuid = lib.mkOption {
+                  type = lib.types.strMatching "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+                  description = "The vendor's id for the account, dashed and lower-case. What a server admits on; a rename does not change it.";
+                };
+                op = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                  description = "Whether the account may run server commands.";
+                };
+              };
+            }
+          )
+        );
+        default = { };
+        description = ''
+          Who may join each game server, by module id (site.json
+          `modules.players`), as the control plane wrote it from the server's
+          page. Defined from the document only; a host does not set it. A module absent here has no roster from the document; what it
+          does then is its own choice.
         '';
       };
     };
@@ -348,6 +392,15 @@ in
         # The hostnames and exposure the document moves (`modules.web`).
         webApps = lib.mapAttrs (_: webOverride) siteWeb;
 
+        # Fields picked by name, for the reason `nodes` gives below.
+        site.players = lib.mapAttrs (
+          _:
+          map (p: {
+            inherit (p) name uuid;
+            op = p.op or false;
+          })
+        ) sitePlayers;
+
         # The fields are picked by name so a key the control plane adds later
         # cannot fail the submodule's type check before this module learns it.
         nodes = map (n: {
@@ -447,6 +500,10 @@ in
         {
           assertion = structuralOff == [ ];
           message = "site.json modules.enabled switches off structural modules: ${lib.concatStringsSep ", " structuralOff}. These are in fleet.structuralModules; a running box cannot do without them.";
+        }
+        {
+          assertion = unknownPlayers == [ ];
+          message = "site.json modules.players names modules this host does not import: ${lib.concatStringsSep ", " unknownPlayers}. Move the roster from a host that runs them, or remove the entries.";
         }
         {
           assertion = unknownWeb == [ ];

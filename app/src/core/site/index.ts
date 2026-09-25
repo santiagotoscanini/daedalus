@@ -97,6 +97,8 @@ export const EDITABLE = [
   // The hostnames and exposure moved beside a switch (core/site/switches.ts):
   // one field, an object keyed by webApp, worded per entry the same way.
   'modules.web',
+  // A game server's roster (core/site/players.ts), worded per account.
+  'modules.players',
 ] as const
 
 /** One field of the document that the UI may edit. Dotted path into SiteDocument. */
@@ -212,7 +214,9 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   // can never be pinned to a stale value by an old draft.
   const desired =
     draft === null ? base : EDITABLE.reduce((acc, f) => setField(acc, f, getField(draft, f)), base)
-  const { moduleChangeWords, webChangeWords } = await import('../../lib/module-switch')
+  const { moduleChangeWords, playerChangeWords, webChangeWords } = await import(
+    '../../lib/module-switch'
+  )
   return {
     committed: committedDoc,
     desired,
@@ -223,6 +227,7 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
         : [
             ...moduleChangeWords(committedDoc.modules.enabled, desired.modules.enabled),
             ...webChangeWords(committedDoc.modules.web, desired.modules.web),
+            ...playerChangeWords(committedDoc.modules.players, desired.modules.players),
           ],
     render: { before: committed.ok ? committed.value.bytes : null, after: renderSiteFile(desired) },
   }

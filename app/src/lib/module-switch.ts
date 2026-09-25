@@ -123,9 +123,38 @@ export function webChangeWords(
   })
 }
 
+/** One account on a game server's roster (core/site/file.ts `SitePlayer`). */
+export type RosterPlayer = { name: string; uuid: string; op: boolean }
+
+/**
+ * "minecraft: alice in", "minecraft: bob out", "minecraft: alice op",
+ * "minecraft: alice not op": the words the Apply bar shows for
+ * `modules.players`, one per account that moved. Matched on the uuid, so a
+ * rename is not an out-and-in.
+ */
+export function playerChangeWords(
+  committed: Record<string, RosterPlayer[]> | undefined,
+  desired: Record<string, RosterPlayer[]>,
+): string[] {
+  const before = committed ?? {}
+  const ids = new Set([...Object.keys(before), ...Object.keys(desired)])
+  return [...ids].sort().flatMap((id) => {
+    const a = new Map((before[id] ?? []).map((p) => [p.uuid, p]))
+    const b = new Map((desired[id] ?? []).map((p) => [p.uuid, p]))
+    const words: string[] = []
+    for (const [uuid, p] of b) {
+      const was = a.get(uuid)
+      if (was === undefined) words.push(`${id}: ${p.name} in${p.op ? ' as op' : ''}`)
+      else if (was.op !== p.op) words.push(`${id}: ${p.name} ${p.op ? 'op' : 'not op'}`)
+    }
+    for (const [uuid, p] of a) if (!b.has(uuid)) words.push(`${id}: ${p.name} out`)
+    return words
+  })
+}
+
 /**
  * The site fields the Apply bar lists: every changed field by name, except
- * the switches field, which is spelled out per module ("n8n off") — the
+ * the module fields, which are spelled out per entry ("n8n off") — the
  * field's name says nothing anyone would click Apply for.
  */
 export function siteBarFields(
@@ -133,7 +162,9 @@ export function siteBarFields(
   moduleChanges: readonly string[],
 ): string[] {
   return [
-    ...changes.filter((f) => f !== 'modules.enabled' && f !== 'modules.web'),
+    ...changes.filter(
+      (f) => f !== 'modules.enabled' && f !== 'modules.web' && f !== 'modules.players',
+    ),
     ...moduleChanges,
   ]
 }
