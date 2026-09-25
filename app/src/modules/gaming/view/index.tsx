@@ -162,9 +162,9 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
             aside={<span className={NOTE}>papermc</span>}
             foot={
               <p className={FOOT}>
-                Every commit in Paper's builds for the newer game, newest last, each prefixed with
-                its build. How far it has come since the first build is the best read of how ready
-                it is.
+                The newest fifteen commits in Paper's builds for the newer game, newest last, each
+                prefixed with its build. What is still landing is the best read of how ready it
+                is.
               </p>
             }
           />

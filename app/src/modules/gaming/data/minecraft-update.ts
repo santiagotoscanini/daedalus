@@ -175,7 +175,7 @@ function commitsOf(list: { version: string; builds: PaperBuild[] } | null): Comm
         url: `${PAPER_COMMIT}/${c.sha}`,
       })),
     )
-    .slice(-60)
+    .slice(-15)
   return { running: null, builtOn: null, behind, note: null }
 }
 
