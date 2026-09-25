@@ -12,7 +12,7 @@ import type { NavIconName } from '../../components/nav-icon'
 // every page, so a manifest may hold data only. Anything a tab needs from
 // the machine lives in its `data/` module and arrives through a `Ctx`.
 
-export type TabHealth = 'vpn-egress' | 'uplink' | 'log-pipeline'
+export type TabHealth = 'vpn-egress' | 'uplink' | 'log-pipeline' | 'minecraft-ping'
 
 export type TabSpec = {
   id: string

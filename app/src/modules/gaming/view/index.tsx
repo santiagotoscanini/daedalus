@@ -16,9 +16,9 @@ import { RosterBoard } from './roster'
 // Both lead with the version rather than with uptime because that is the fact
 // that actually breaks things here: a client on a different build cannot join
 // at all, so "am I current" is the question. Whether it is up is answered by
-// the dot on the sub-tab, one level up — see CategorySpec.tabs — except for
-// Minecraft, which has no HTTP endpoint for a probe to read and so answers
-// that question on its own page, from the game's own status ping.
+// the dot on the sub-tab, one level up — see CategorySpec.tabs. Minecraft has
+// no HTTP endpoint for a probe to read, so its dot is computed from the game's
+// own status ping instead (server/tab-status.ts, `minecraft-ping`).
 //
 // ── one number on the page, and its comparisons on demand ─────────────────
 //

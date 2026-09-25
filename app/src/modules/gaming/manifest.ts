@@ -8,6 +8,7 @@ export const manifest = {
   boardSpans: [6, 6, 12],
   tabs: [
     { id: 'factorio', label: 'Factorio', probe: 'factorio-admin', nix: 'factorio' },
-    { id: 'minecraft', label: 'Minecraft', nix: 'minecraft' },
+    // No hostname for gatus to probe; the dot is the game's own status ping.
+    { id: 'minecraft', label: 'Minecraft', nix: 'minecraft', health: 'minecraft-ping' },
   ],
 } as const satisfies ModuleManifest

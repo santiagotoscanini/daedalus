@@ -48,7 +48,7 @@ export const fetchTabStatus = createServerFn()
     if (spec === undefined) return {}
 
     const { promVector } = await import('../host/prom')
-    const [probes, egress, uplink, logs] = await Promise.all([
+    const [probes, egress, uplink, logs, minecraft] = await Promise.all([
       promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
       // Only when a tab actually asks for it — this is two more prometheus
       // queries and every module pays for this handler.
@@ -56,6 +56,9 @@ export const fetchTabStatus = createServerFn()
       spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth() : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'log-pipeline')
         ? logPipelineHealth()
+        : Promise.resolve(null),
+      spec.tabs.some((t) => t.health === 'minecraft-ping')
+        ? minecraftHealth()
         : Promise.resolve(null),
     ])
     // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
@@ -79,14 +82,38 @@ export const fetchTabStatus = createServerFn()
             ? uplink
             : t.health === 'log-pipeline'
               ? logs
-              : t.probes !== undefined
-                ? all(t.probes)
-                : t.probe === undefined
-                  ? null
-                  : (health.get(t.probe) ?? null),
+              : t.health === 'minecraft-ping'
+                ? minecraft
+                : t.probes !== undefined
+                  ? all(t.probes)
+                  : t.probe === undefined
+                    ? null
+                    : (health.get(t.probe) ?? null),
       ]),
     )
   })
+
+/**
+ * Is the Minecraft server answering the game's own status ping.
+ *
+ * It publishes no hostname — the game is a bare TCP protocol on a forwarded
+ * port — so gatus has nothing to probe. mc-monitor speaks the server-list ping
+ * and exports the answer, which is a stronger claim than any container check:
+ * a wedged JVM reads as down here and as up everywhere else. Over the same
+ * window as the probes, so one slow ping during a save is not a red dot.
+ *
+ * The exporter's own `up` beside it: a dead exporter leaves the gauge
+ * absent, and absent is "cannot tell" (grey), never "down".
+ */
+async function minecraftHealth(): Promise<boolean | null> {
+  const { promScalar } = await import('../host/prom')
+  const [answered, exporter] = await Promise.all([
+    promScalar(`max(max_over_time(minecraft_status_healthy[${PROBE_WINDOW}]))`),
+    promScalar('max(up{job="minecraft"})'),
+  ])
+  if (answered === null || exporter !== 1) return null
+  return answered >= 1
+}
 
 /**
  * Are all the VPN egress tunnels working.
