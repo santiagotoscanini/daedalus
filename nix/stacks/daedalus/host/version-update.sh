@@ -96,8 +96,15 @@ VERIFY="$(jq -r '.verify // ""' <<<"$PIN")"
 unknown="$(jq -r --argjson pin "$PIN" '(.values // {}) | keys - ($pin.fields | keys) | join(", ")' <<<"$REQ_JSON")"
 [ -z "$unknown" ] || fail validating "'$TARGET' has no field named: $unknown"
 
-while IFS=$'\t' read -r field binding old pattern new; do
+# One jq read per value rather than a @tsv row: @tsv escapes backslashes, and
+# a pattern is made of them (`\.`).
+while read -r field; do
   [ -n "$field" ] || continue
+  [[ "$field" =~ ^[a-z]+$ ]] || fail validating "'$field' is not a field name"
+  binding="$(jq -r --arg f "$field" '.fields[$f].binding' <<<"$PIN")"
+  old="$(jq -r --arg f "$field" '.fields[$f].value' <<<"$PIN")"
+  pattern="$(jq -r --arg f "$field" '.fields[$f].pattern' <<<"$PIN")"
+  new="$(jq -r --arg f "$field" '.values[$f] | tostring' <<<"$REQ_JSON")"
   # The stack's pattern, anchored, and then a charset that cannot leave a nix
   # string or a sed replacement whatever the pattern allowed.
   [[ "$new" =~ ^($pattern)$ ]] || fail validating "'$new' is not a valid $field for $TARGET"
@@ -106,10 +113,7 @@ while IFS=$'\t' read -r field binding old pattern new; do
     MOVES="$(jq -c --arg f "$field" --arg b "$binding" --arg o "$old" --arg n "$new" \
       '. + [{field:$f, binding:$b, from:$o, to:$n}]' <<<"$MOVES")"
   fi
-done < <(jq -r --argjson req "$REQ_JSON" '
-  .fields | to_entries[]
-  | select(($req.values // {}) | has(.key))
-  | [.key, .value.binding, .value.value, .value.pattern, $req.values[.key]] | @tsv' <<<"$PIN")
+done < <(jq -r '(.values // {}) | keys[]' <<<"$REQ_JSON")
 
 if [ "$(jq length <<<"$MOVES")" = "0" ]; then
   write_status "done" "no-change" ""
