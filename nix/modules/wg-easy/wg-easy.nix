@@ -65,6 +65,7 @@
 {
   config,
   lib,
+  pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
   pinnedImage,
@@ -144,6 +145,84 @@ in
     };
 
     networking.firewall.allowedUDPPorts = [ 51820 ];
+
+    # ── the forwarded ports, at the LAN address, over the tunnel ──────────
+    #
+    # A peer at home types the LAN address (the WAN host resolves to it
+    # through pi-hole), and so does a peer on the tunnel — but inside this
+    # container's rootless netns the LAN address is the netns ITSELF (pasta
+    # copies the host's address in), so a connection to it reaches only what
+    # is published inside the netns: the bridge ports (80/443) answer, and a
+    # port published on the host by its own pasta instance (a game server
+    # kept off the bridge for its client addresses) is refused. The host is
+    # 169.254.1.2 here, pasta's alias for it.
+    #
+    # So every port the router forwards (fleet.directIngress — the ones meant
+    # to be reached from anywhere) that the netns does NOT already serve is
+    # DNATed from the LAN address to that alias, exactly as the DNS hook does
+    # for 10.8.0.1:53. A port a bridge member publishes is served in the
+    # netns by rootlessport and already works; it is left alone rather than
+    # rerouted. Converged after every container start; `-C` first, so a
+    # re-run adds nothing twice.
+    systemd.services.wg-easy-host-ports =
+      let
+        bridgePublished = lib.concatLists (
+          lib.mapAttrsToList (
+            n: c: if (config.fleet.bridgeMemberships.${n} or [ ]) != [ ] then c.ports else [ ]
+          ) config.virtualisation.oci-containers.containers
+        );
+        # `[ip:]host:container[/proto]`, tcp when the proto is left out.
+        publishes =
+          i: p:
+          let
+            m = builtins.match "(.*:)?([0-9]+):[0-9]+(/(tcp|udp))?" p;
+          in
+          m != null
+          && builtins.elemAt m 1 == toString i.port
+          && (if builtins.elemAt m 3 == null then "tcp" else builtins.elemAt m 3) == i.proto;
+        ports = lib.filter (
+          i: !(i.port == 51820 && i.proto == "udp") && !lib.any (publishes i) bridgePublished
+        ) (lib.attrValues config.fleet.directIngress);
+        rule =
+          i:
+          "-d ${config.fleet.lanIp}/32 -i wg0 -p ${i.proto} -m ${i.proto} --dport ${toString i.port} -j DNAT --to-destination 169.254.1.2:${toString i.port}";
+      in
+      lib.mkIf (ports != [ ]) {
+        description = "Reach the router-forwarded ports at the LAN address from the WireGuard tunnel";
+        after = [ "podman-wg-easy.service" ];
+        partOf = [ "podman-wg-easy.service" ];
+        wantedBy = [
+          "podman-wg-easy.service"
+          "multi-user.target"
+        ];
+        path = [
+          pkgs.podman
+          pkgs.util-linux
+          pkgs.coreutils
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        script = ''
+          set -euo pipefail
+          wg() {
+            setpriv --reuid=${config.fleet.operator.user} --regid=${config.fleet.operator.group} --init-groups --inh-caps=-all \
+              env HOME=${config.fleet.operator.home} XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir} \
+              podman exec wg-easy iptables -t nat "$@"
+          }
+          for _ in $(seq 1 30); do
+            wg -S PREROUTING > /dev/null 2>&1 && break
+            sleep 2
+          done
+          ${lib.concatMapStrings (i: ''
+            wg -C PREROUTING ${rule i} 2>/dev/null || wg -A PREROUTING ${rule i}
+          '') ports}
+          echo "tunnel reaches ${
+            lib.concatMapStringsSep ", " (i: "${toString i.port}/${i.proto}") ports
+          } at ${config.fleet.lanIp}"
+        '';
+      };
 
     fleet.statePaths = {
       # Non-traversable parent closes the world-readable window if wg-easy
