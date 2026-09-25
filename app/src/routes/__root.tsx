@@ -13,6 +13,7 @@ import { AccountMenu } from '../components/account-menu'
 import { EngineOverrideBanner } from '../components/engine-override-banner'
 import { ErrorPanel, NotFoundPanel } from '../components/error'
 import { NavIcon, type NavIconName } from '../components/nav-icon'
+import { PendingApplyBar } from '../components/pending-apply-bar'
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
 import { useHydrated } from '../lib/hydrated'
@@ -560,6 +561,7 @@ function Shell({
       <main className="col-start-2 min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
         <EngineOverrideBanner path={engineOverride} />
         {children ?? <Outlet />}
+        <PendingApplyBar />
       </main>
     </div>
   )

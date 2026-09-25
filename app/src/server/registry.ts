@@ -205,6 +205,12 @@ export const fetchApplyStatus = createServerFn().handler(async () => {
   return readApplyStatus()
 })
 
+/** Everything the next Apply would do, for the bar every page draws (host/pending-apply.ts). */
+export const fetchPendingApply = createServerFn().handler(async () => {
+  const { pendingApply } = await import('../host/pending-apply')
+  return pendingApply()
+})
+
 export const triggerDeploy = createServerFn({ method: 'POST' })
   // The one server function here whose request is the bare name rather than a
   // record around it.
