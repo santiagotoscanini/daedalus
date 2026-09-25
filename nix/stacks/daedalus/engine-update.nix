@@ -69,6 +69,8 @@ let
       LOCKFILE=${esc config.fleet.rebuildLock}
       HOSTNAME=${esc config.networking.hostName}
       GIT_EMAIL=${esc config.fleet.mail.sender}
+      GIT_OPERATOR_NAME=${esc config.fleet.operator.gitName}
+      GIT_OPERATOR_EMAIL=${esc config.fleet.operator.gitEmail}
       CONTROL_PLANE_HOST=${esc config.fleet.apps.daedalus.hostname}
       HEALTH_PATH=${esc config.fleet.apps.daedalus.auth.healthPath}
       LAN_IP=${esc config.fleet.lanIp}

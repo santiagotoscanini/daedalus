@@ -2,7 +2,8 @@
 # daedalus owns inside the operator's configuration repository. Inlined by the
 # site-write and apply wrappers after lib.sh; expects SITE_DIR, APPLY_DIR,
 # PREV_DIR, OPERATOR_USER, OPERATOR_GROUP, OPERATOR_HOME, SETPRIV, ENV_BIN,
-# GIT and GIT_EMAIL in the environment.
+# GIT and GIT_EMAIL in the environment, and GIT_OPERATOR_NAME / GIT_OPERATOR_EMAIL
+# for lib.sh's commit_name / commit_email.
 #
 # Source control is the operator's business, with one exception this code
 # cannot delegate: a flake sees only git-TRACKED files. A file written here
@@ -172,7 +173,7 @@ site_commit() {
   if site_git diff --cached --quiet -- "$SITE_DIR"; then
     return 0
   fi
-  site_git -c "user.name=daedalus" -c "user.email=$GIT_EMAIL" \
+  site_git -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     commit -q -m "$summary" -m "Applied from daedalus by $actor." -- "$SITE_DIR"
   site_git rev-parse --short HEAD
   if site_git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then

@@ -1,5 +1,6 @@
 import type { ApplyStatus } from '../../host/apply'
 import type { RepoFacts } from '../../host/contract/domains/repo'
+import type { GitIdentities } from '../../host/contract/domains/site'
 import type { GithubInstallation, GithubTokenKind } from '../../host/github-token'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
 import type { Result } from '../../lib/result'
@@ -58,6 +59,8 @@ export type BoxSettings = {
     applyStatus: ApplyStatus
     /** Same as general.engine.revision; here so the tab can say whether HEAD is what runs. */
     runningRevision: string | null
+    /** The git identities the box can commit as; null until the export carries them. */
+    git: GitIdentities
   }
   developer: {
     /** `source.mode = local`: the container runs the Vite dev server over a bind mount. */

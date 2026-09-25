@@ -330,6 +330,20 @@ in
           mail = {
             inherit (cfg.mail) sender alertTo;
           };
+          # The git identities site.json's `commits.author` chooses between,
+          # for the picker on Settings › Site. The host agents carry the same
+          # two values baked in (stacks/daedalus/host/lib.sh `commit_name`);
+          # the document only ever names which.
+          git = {
+            box = {
+              name = "daedalus";
+              email = cfg.mail.sender;
+            };
+            operator = {
+              name = cfg.operator.gitName;
+              email = cfg.operator.gitEmail;
+            };
+          };
           # The control plane's address as Settings › General edits it: the
           # label site.json carries (null = not written yet), the one still
           # served after a rename until it is confirmed, and what the box

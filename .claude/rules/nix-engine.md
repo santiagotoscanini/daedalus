@@ -89,7 +89,7 @@ Defined directly in the host's configuration:
 - `fleet.operator.user` — login of the one non-root admin; owns the rootless containers, the state tree and the checkout.
 - `fleet.operator.uid` — that user's uid; container uid 0 maps to it.
 - `fleet.operator.email` — the OIDC `email` claim apps match their admin on.
-- `fleet.operator.gitName`, `fleet.operator.gitEmail` — author of the commits the box makes (weekly lock bump, Apply).
+- `fleet.operator.gitName`, `fleet.operator.gitEmail` — author of the weekly lock bump, and of daedalus's own commits while site.json `commits.author` is `operator`.
 - `fleet.config.repo` — where the configuration checkout lives on disk (run-time path).
 - `fleet.github.owner` — the GitHub account the app repos live under.
 - `fleet.github.expectedOwnerId` — that account's numeric id; the one copy the control plane cannot rewrite.

@@ -88,6 +88,18 @@ export type SiteDocument = {
    */
   developer: { engineOverride: string | null }
   /**
+   * Which configured git identity the box's own commits are made as: every
+   * Apply, secret, site write and update. `box` is `daedalus <mail sender>`;
+   * `operator` is `fleet.operator.gitName` / `gitEmail`. The document names a
+   * choice, never a name or an address: the host agents resolve it against
+   * values nix baked into them (host/lib.sh `commit_identity`), so a planted
+   * value can only pick one of the two. Who pressed the button stays in the
+   * commit body either way. Nix does not read it; absent and
+   * `{ author: 'box' }` are the same document, and the renderer drops the
+   * block while it holds that.
+   */
+  commits: { author: CommitAuthor }
+  /**
    * The switches moved from a page, and nothing else: `enabled.<id>` is
    * what `fleet.modules.<id>.enable` becomes on the next Apply, at a
    * priority the host's own files yield to. An id absent here keeps the
@@ -113,6 +125,10 @@ export type SiteDocument = {
     players: Record<string, SitePlayer[]>
   }
 }
+
+/** The git identities the box can commit as (`commits.author`). */
+export const COMMIT_AUTHORS = ['box', 'operator'] as const
+export type CommitAuthor = (typeof COMMIT_AUTHORS)[number]
 
 /** One published hostname as the operator moved it (core/site/switches.ts). */
 export type SiteWebOverride = { label: string | null; public: boolean | null }
@@ -163,6 +179,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     // the NEXT Apply should build, and a system built from an override says
     // nothing about whether the next one should be.
     developer: { engineOverride: null },
+    commits: { author: 'box' },
     // The running box's switches are its own files' word; the document
     // carries only what the operator moved, which a box read back is none.
     modules: { enabled: {}, web: {}, players: {} },
@@ -183,7 +200,7 @@ function identityAsWritten(identity: SiteDocument['identity']): Record<string, u
 }
 
 export function renderSiteFile(doc: SiteDocument): string {
-  const { github, developer, modules, ...rest } = doc
+  const { github, developer, commits, modules, ...rest } = doc
   const app = github?.app ?? null
   const switched = Object.keys(modules.enabled).sort()
   // A webApp is written while either field says something, each field only
@@ -228,6 +245,7 @@ export function renderSiteFile(doc: SiteDocument): string {
     ...(developer.engineOverride === null
       ? {}
       : { developer: { engineOverride: developer.engineOverride } }),
+    ...(commits.author === 'box' ? {} : { commits: { author: commits.author } }),
     // Same rule again, and the ids sorted, so two edits that end in the same
     // set render the same bytes.
     ...(switched.length === 0 && moved.length === 0 && rostered.length === 0

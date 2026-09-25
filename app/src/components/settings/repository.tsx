@@ -1,8 +1,9 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState, useTransition } from 'react'
 import type { BoxSettings } from '../../core/settings/types'
-import type { SiteFileView, SiteState } from '../../core/site'
+import type { SiteEdit, SiteFileView, SiteState } from '../../core/site'
 import type { RepoFacts, SiteDir } from '../../host/contract/domains/repo'
+import type { GitIdentities, GitIdentity } from '../../host/contract/domains/site'
 import { fetchSiteRequestStatus, setSiteCommit, writeSiteFiles } from '../../server/site'
 import { usePolledStatus } from '../status'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
@@ -10,7 +11,8 @@ import { Button } from '../ui/button'
 import { Skeleton } from '../ui/skeleton'
 import { Switch } from '../ui/switch'
 import { Chip } from '../viz'
-import { Commit, Mono, Section, SourceNote, Unset, Value } from './shared'
+import { Commit, Mono, NOTE, Section, SourceNote, Unset, Value } from './shared'
+import { type SelectGroupSpec, SiteSelect } from './site-fields'
 
 // The configuration repository, and the one directory in it that daedalus
 // writes.
@@ -29,10 +31,12 @@ import { Commit, Mono, Section, SourceNote, Unset, Value } from './shared'
 export function Repository({
   settings,
   site,
+  edit,
 }: {
   settings: BoxSettings
   /** Null while the digest comparison is still in flight. */
   site: SiteState | null
+  edit: SiteEdit
 }) {
   const r = settings.repository
   const f = r.facts
@@ -42,7 +46,7 @@ export function Repository({
 
   return (
     <div className="flex flex-col gap-6">
-      <SiteSection dir={f.site} site={site} />
+      <SiteSection dir={f.site} site={site} edit={edit} git={r.git} />
 
       <Section
         title="Configuration repository"
@@ -266,7 +270,60 @@ function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) 
   )
 }
 
-function SiteSection({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
+/**
+ * Which configured identity the box's commits are made as. The two come from
+ * nix (the box's own, and the operator's git identity); the choice is a
+ * site.json field, so it is a pending edit until Apply like the rest.
+ */
+function CommitAs({ edit, git }: { edit: SiteEdit; git: GitIdentities }) {
+  const who = (id: GitIdentity | undefined, fallback: string): string =>
+    id === undefined ? fallback : `${id.name} <${id.email}>`
+  const groups: SelectGroupSpec[] = [
+    {
+      label: 'Identities',
+      options: [
+        { value: 'box', label: who(git?.box, 'daedalus') },
+        { value: 'operator', label: who(git?.operator, 'the operator') },
+      ],
+    },
+  ]
+  return (
+    <div className="flex flex-col gap-2 border-(--border-soft) border-t pt-4">
+      <div className="flex flex-wrap items-center gap-3 text-[0.82rem]">
+        <span>Commit as</span>
+        <SiteSelect
+          edit={edit}
+          field="commits.author"
+          label="Commit as"
+          groups={groups}
+          disabled={git === null}
+        />
+      </div>
+      <p className={NOTE}>
+        Every commit daedalus makes — an Apply, a secret, a site write, an image or engine update —
+        is authored as this identity, whoever pressed the button; the person is still named in the
+        commit's body. Both identities are the ones nix configures: the box's own, and the
+        operator's git identity (<Mono>fleet.operator.gitName</Mono>). The choice is applied like
+        any other change, and that Apply already commits as the new identity.
+        {git === null &&
+          ' The identities appear here once the box publishes them, after its next engine update.'}
+      </p>
+    </div>
+  )
+}
+
+function SiteSection({
+  dir,
+  site,
+  edit,
+  git,
+}: {
+  dir: SiteDir
+  site: SiteState | null
+  edit: SiteEdit
+  git: GitIdentities
+}) {
+  const versioned = dir.toplevel !== null && dir.inThisRepo
   return (
     <>
       {!dir.exists && (
@@ -288,6 +345,7 @@ function SiteSection({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
       >
         <SiteFiles dir={dir} site={site} />
         <SourceControl dir={dir} site={site} />
+        {versioned && <CommitAs edit={edit} git={git} />}
         <WriteControl />
       </Section>
     </>

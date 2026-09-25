@@ -11,6 +11,15 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 export type MailIdentity = { sender: string; alertTo: string }
 
+/** A git author the box can commit as. */
+export type GitIdentity = { name: string; email: string }
+
+/**
+ * The identities site.json's `commits.author` chooses between, as nix
+ * configured them (`site.git`). Null until the export carries them.
+ */
+export type GitIdentities = { box: GitIdentity; operator: GitIdentity } | null
+
 /** The release, as platform/export.nix states it (`site.nixos`). */
 export type NixosFacts = {
   /** `25.11.20260630.b6018f8` */
@@ -53,6 +62,7 @@ export type SiteIdentity = {
   grafanaUrl: string
   mail: MailIdentity
   controlPlane: ControlPlaneFacts
+  git: GitIdentities
 }
 
 const shape = obj({
@@ -100,6 +110,15 @@ const shape = obj({
     }),
     { label: null, previousLabel: null, hostname: null, aliases: [] },
   ),
+  git: optional(
+    nullable(
+      obj({
+        box: obj({ name: str, email: str }),
+        operator: obj({ name: str, email: str }),
+      }),
+    ),
+    null,
+  ),
 })
 
 export const NO_SITE: SiteIdentity = {
@@ -118,6 +137,7 @@ export const NO_SITE: SiteIdentity = {
   grafanaUrl: '',
   mail: { sender: '', alertTo: '' },
   controlPlane: { label: null, previousLabel: null, hostname: null, aliases: [] },
+  git: null,
 }
 
 /**

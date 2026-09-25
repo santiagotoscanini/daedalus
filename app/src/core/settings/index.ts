@@ -89,6 +89,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       meta: meta(repo),
       applyStatus,
       runningRevision: site.revision,
+      git: s.git,
     },
     developer: {
       devServer,

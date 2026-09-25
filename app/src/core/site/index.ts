@@ -15,6 +15,7 @@ import { controlPlaneLabelError, engineOverrideError } from '../../lib/site-fiel
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
 import {
+  COMMIT_AUTHORS,
   renderSiteFile,
   renderSiteReadme,
   renderSiteStamp,
@@ -91,6 +92,9 @@ export const EDITABLE = [
   // Apply that sets it is already governed by it, and the one that clears it
   // is the switch back onto the pinned engine.
   'developer.engineOverride',
+  // Also read only by the host agents, at commit time — so the Apply that
+  // changes it already commits as the identity it chose.
+  'commits.author',
   // The switches moved from a page (core/site/switches.ts). One field, an
   // object: the bar names each id inside it through `moduleChanges`.
   'modules.enabled',
@@ -305,6 +309,13 @@ async function refuseUnknown(
   if ('developer.engineOverride' in patch && !unchanged('developer.engineOverride')) {
     const problem = engineOverrideError(patch['developer.engineOverride'])
     if (problem !== null) throw new Error(problem)
+  }
+
+  if ('commits.author' in patch && !unchanged('commits.author')) {
+    const author = patch['commits.author']
+    if (!(COMMIT_AUTHORS as readonly unknown[]).includes(author)) {
+      throw new Error(`${String(author)} is not an identity this box can commit as`)
+    }
   }
 
   if ('identity.timezone' in patch && !unchanged('identity.timezone')) {

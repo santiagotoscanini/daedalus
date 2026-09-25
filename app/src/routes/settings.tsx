@@ -389,15 +389,15 @@ function SettingsPage() {
           ))}
         {tab === 'repository' &&
           (site === null ? (
-            <Repository settings={settings} site={null} />
+            <Repository settings={settings} site={null} edit={edit} />
           ) : (
             <GuardedAwait
               resetKey={tab}
               slot="site"
               promise={site}
-              fallback={<Repository settings={settings} site={null} />}
+              fallback={<Repository settings={settings} site={null} edit={edit} />}
             >
-              {(state) => <Repository settings={settings} site={state} />}
+              {(state) => <Repository settings={settings} site={state} edit={edit} />}
             </GuardedAwait>
           ))}
         {tab === 'projects' && <ExternalApps rows={externalApps} />}

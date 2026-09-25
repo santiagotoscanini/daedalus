@@ -267,7 +267,7 @@ if ! log_run "$LOGFILE" git_clone merge --ff-only "origin/$REF"; then
   fail committing "could not fast-forward $CLONE to origin/$REF — $(errtail)"
 fi
 
-if ! log_run "$LOGFILE" git_clone -c "user.email=$GIT_EMAIL" -c "user.name=$HOSTNAME" \
+if ! log_run "$LOGFILE" git_clone -c "user.email=$(commit_email)" -c "user.name=$(commit_name "$HOSTNAME")" \
   commit --quiet -m "claude-code: pin $FROM_VERSION → $TO_VERSION
 
 The release manifest for $TO_VERSION, signature-verified against

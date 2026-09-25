@@ -63,6 +63,8 @@ let
       SITE_DIR=${esc config.fleet.site.path}
       HOSTNAME=${esc config.networking.hostName}
       GIT_EMAIL=${esc config.fleet.mail.sender}
+      GIT_OPERATOR_NAME=${esc config.fleet.operator.gitName}
+      GIT_OPERATOR_EMAIL=${esc config.fleet.operator.gitEmail}
       ${operatorVars}
       ${builtins.readFile ./host/lib.sh}
       ${builtins.readFile ./host/claude-code-update.sh}

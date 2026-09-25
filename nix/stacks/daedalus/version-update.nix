@@ -64,6 +64,8 @@ let
       LOCKFILE=${esc config.fleet.rebuildLock}
       HOSTNAME=${esc config.networking.hostName}
       GIT_EMAIL=${esc config.fleet.mail.sender}
+      GIT_OPERATOR_NAME=${esc config.fleet.operator.gitName}
+      GIT_OPERATOR_EMAIL=${esc config.fleet.operator.gitEmail}
       OPERATOR_USER=${esc config.fleet.operator.user}
       OPERATOR_GROUP=${esc config.fleet.operator.group}
       OPERATOR_HOME=${esc config.users.users.${config.fleet.operator.user}.home}

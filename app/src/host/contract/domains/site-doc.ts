@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { SiteDocument } from '../../../core/site/file'
+import type { CommitAuthor, SiteDocument } from '../../../core/site/file'
 import {
   arrayOf,
   bool,
@@ -57,6 +57,11 @@ const shape = obj({
   // The renderer drops the block again while the value is null.
   developer: optional(obj({ engineOverride: optional(nullable(str), null) }), {
     engineOverride: null,
+  }),
+  // Which configured git identity the box commits as (core/site/file.ts).
+  // Filled in like `developer`; the renderer drops the block at the default.
+  commits: optional(obj({ author: optional(literal('box', 'operator'), 'box' as CommitAuthor) }), {
+    author: 'box' as CommitAuthor,
   }),
   // The switches the operator moved from a page: id → on/off, only the ids
   // touched (core/site/file.ts). Filled in like `developer`: it is an

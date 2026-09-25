@@ -37,6 +37,7 @@ const doc: SiteDocument = {
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
   developer: { engineOverride: null },
+  commits: { author: 'box' },
   modules: { enabled: {}, web: {}, players: {} },
 }
 
@@ -291,6 +292,22 @@ describe('changesBetween', () => {
     const edited = structuredClone(doc)
     edited.developer.engineOverride = '/srv/engine'
     expect(changesBetween(doc, edited)).toEqual(['developer.engineOverride'])
+  })
+
+  it('carries the commit identity, and leaves the block out at the default', () => {
+    // A choice between the identities nix configured, never a name: the file
+    // holds `box` or `operator`, and `box` is the same document as none.
+    expect(renderSiteFile(doc)).not.toContain('commits')
+    const operator = renderSiteFile({ ...doc, commits: { author: 'operator' } })
+    expect(operator).toContain('"author": "operator"')
+    expect(decodeSiteDocument(JSON.parse(operator)).commits).toEqual({ author: 'operator' })
+    expect(decodeSiteDocument(JSON.parse(renderSiteFile(doc))).commits).toEqual({ author: 'box' })
+    expect(() =>
+      decodeSiteDocument({ ...JSON.parse(operator), commits: { author: 'someone' } }),
+    ).toThrow()
+    const edited = structuredClone(doc)
+    edited.commits.author = 'operator'
+    expect(changesBetween(doc, edited)).toEqual(['commits.author'])
   })
 
   it('reports nothing pending for a github block the committed file already holds', () => {

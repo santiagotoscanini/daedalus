@@ -113,7 +113,7 @@ error naming it. The template defines every one.
 |---|---|
 | `fleet.operator.user`, `.uid` | The one non-root admin: owns the rootless containers, the state tree and the checkout. Container uid 0 maps to it. |
 | `fleet.operator.email` | The e-mail your identity provider asserts for that person. |
-| `fleet.operator.gitName`, `.gitEmail` | Author of commits the box makes (weekly lock bump, an Apply). |
+| `fleet.operator.gitName`, `.gitEmail` | Author of the weekly lock bump, and of every commit daedalus makes (Apply, secrets, updates) while Settings › Site says to commit as the operator. |
 | `fleet.config.repo` | Where your configuration checkout lives on disk. |
 | `fleet.github.owner` | The account your app repositories live under. |
 | `fleet.github.expectedOwnerId` | That account's numeric id — the one copy the control plane cannot rewrite. |

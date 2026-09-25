@@ -441,7 +441,7 @@ if git_ diff --cached --quiet -- $TOUCHED; then
 fi
 
 # shellcheck disable=SC2086
-git_ -c "user.name=daedalus" -c "user.email=$GIT_EMAIL" \
+git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
   commit -q -m "images: $SUMMARY" -m "$BODY" -m "Applied from daedalus by $ACTOR." -- $TOUCHED ||
   fail committing "git commit failed"
 
@@ -452,7 +452,7 @@ UPDATE_COMMIT="$COMMIT_SHA"
 # `git revert`, not `reset --hard`: this repo is shared, and a reset really
 # did eat an unrelated commit the first time an apply's switch failed.
 rollback() {
-  log_run "$LOGFILE" git_ -c "user.name=daedalus" -c "user.email=$GIT_EMAIL" \
+  log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     revert --no-edit "$UPDATE_COMMIT" ||
     log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
   log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" || true

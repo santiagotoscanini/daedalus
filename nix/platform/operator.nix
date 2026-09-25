@@ -35,7 +35,7 @@ in
 
     gitName = lib.mkOption {
       type = lib.types.str;
-      description = "Author name on the commits this box makes as the operator — the weekly lock bump, and any Apply whose commit switch is on.";
+      description = "Author name on the commits this box makes as the operator: the weekly lock bump always, and every commit daedalus makes (Apply, secrets, updates) while site.json `commits.author` is `operator`.";
     };
 
     gitEmail = lib.mkOption {

@@ -254,3 +254,28 @@ site_engine_override() {
   { read_as_operator "$SITE_DIR/site.json" 2>/dev/null || true; } |
     jq -r '.developer.engineOverride // empty' 2>/dev/null || true
 }
+
+# ── who the box's commits are made as ─────────────────────────────────────
+#
+# site.json's `commits.author` picks one of the git identities nix baked into
+# this script: `operator` is GIT_OPERATOR_NAME / GIT_OPERATOR_EMAIL
+# (fleet.operator.gitName / gitEmail); anything else — no site.json, an
+# unreadable one, the default `box`, or a value this script does not know —
+# is the box's own: the caller's name (daedalus by default) with GIT_EMAIL.
+# The document names a choice, never a name or an address, so a planted value
+# can only pick one of the two. Read as the operator and never through a link,
+# like the override above. Both print; neither fails.
+#
+#   git -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" commit …
+commit_as_operator() {
+  if [ -z "${GIT_OPERATOR_NAME:-}" ] || [ -z "${GIT_OPERATOR_EMAIL:-}" ]; then return 1; fi
+  [ -f "$SITE_DIR/site.json" ] || return 1
+  [ "$({ read_as_operator "$SITE_DIR/site.json" 2>/dev/null || true; } |
+    jq -r '.commits.author // empty' 2>/dev/null || true)" = operator ]
+}
+commit_name() {
+  if commit_as_operator; then printf '%s' "$GIT_OPERATOR_NAME"; else printf '%s' "${1:-daedalus}"; fi
+}
+commit_email() {
+  if commit_as_operator; then printf '%s' "$GIT_OPERATOR_EMAIL"; else printf '%s' "$GIT_EMAIL"; fi
+}

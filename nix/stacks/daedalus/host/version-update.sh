@@ -154,14 +154,14 @@ write_status running committing ""
 git_ add -- $TOUCHED
 SUMMARY="$(jq -r --arg t "$TARGET" '"\($t): " + ([.[] | "\(.field) \(.from) → \(.to)"] | join(", "))' <<<"$MOVES")"
 # shellcheck disable=SC2086
-git_ -c "user.name=daedalus" -c "user.email=$GIT_EMAIL" \
+git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
   commit -q -m "versions: $SUMMARY" -m "Applied from daedalus by $ACTOR." -- $TOUCHED ||
   fail committing "git commit failed"
 COMMIT_SHA="$(git_ rev-parse --short HEAD)"
 UPDATE_COMMIT="$COMMIT_SHA"
 
 revert_commit() {
-  log_run "$LOGFILE" git_ -c "user.name=daedalus" -c "user.email=$GIT_EMAIL" \
+  log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     revert --no-edit "$UPDATE_COMMIT" ||
     log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
   COMMIT_SHA=""

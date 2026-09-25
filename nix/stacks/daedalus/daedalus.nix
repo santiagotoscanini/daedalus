@@ -177,6 +177,8 @@ let
       SECRET_APPS=${lib.escapeShellArg (lib.concatStringsSep " " secretApps)}
       SYSTEMCTL=${pkgs.systemd}/bin/systemctl
       GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
+      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
+      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
       OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
       OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
       OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
@@ -223,6 +225,8 @@ let
       LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
       HOSTNAME=${lib.escapeShellArg config.networking.hostName}
       GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
+      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
+      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
       OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
       OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
 
@@ -343,6 +347,8 @@ let
       SITE_DIR=${lib.escapeShellArg config.fleet.site.path}
       SYSTEMCTL=${pkgs.systemd}/bin/systemctl
       GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
+      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
+      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
       OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
       OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
       OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
@@ -752,6 +758,8 @@ let
       LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
       HOSTNAME=${lib.escapeShellArg config.networking.hostName}
       GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
+      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
+      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
       OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
       OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
       OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
