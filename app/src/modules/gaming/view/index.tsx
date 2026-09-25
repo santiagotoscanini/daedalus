@@ -1,3 +1,4 @@
+import { ImageRow } from '../../../components/image-row'
 import { LogBoard } from '../../../components/logs'
 import { Changelog, ReleaseNotes, UpgradeChain } from '../../../components/release-notes'
 import { ServiceHead } from '../../../components/service-head'
@@ -7,6 +8,7 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../../../compone
 import { defineViews } from '../../../lib/modules/tabs'
 import type { GamingData, Tabs } from '../data'
 import { manifest } from '../manifest'
+import { VersionBoard } from './minecraft-update'
 import { RosterBoard } from './roster'
 
 // The Gaming page. Two servers, and the shape held.
@@ -127,6 +129,47 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
       </StatStrip>
 
       <BoardGrid>
+        <VersionBoard
+          version={mc.version}
+          build={mc.build}
+          latest={mc.latestVersion}
+          players={mc.players}
+          update={data.update}
+          initialStatus={data.versionStatus}
+        />
+
+        {data.update.notes.length > 0 && (
+          <Board
+            title={`What ${data.update.notes[0]?.version ?? ''} brings`}
+            icon="panels"
+            span={6}
+            aside={<span className={NOTE}>mojang</span>}
+          >
+            <ReleaseNotes releases={data.update.notes} />
+            <p className={FOOT}>
+              Mojang's own release notes for every release after the one running, from the
+              launcher's feed — the first bullets of each section; the version links to the full
+              page on the wiki.
+            </p>
+          </Board>
+        )}
+
+        {data.update.commits.behind.length > 0 && (
+          <Changelog
+            build={data.update.commits}
+            span={6}
+            title={`Paper for ${data.update.options.find((o) => o.newGame)?.version ?? 'the next game'}`}
+            aside={<span className={NOTE}>papermc</span>}
+            foot={
+              <p className={FOOT}>
+                Every commit in Paper's builds for the newer game, newest last, each prefixed with
+                its build. How far it has come since the first build is the best read of how ready
+                it is.
+              </p>
+            }
+          />
+        )}
+
         <RosterBoard rows={roster} />
 
         <Changelog
@@ -204,7 +247,59 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
           />
         </Board>
 
-        <LogBoard source={{ container: 'minecraft' }} title="Minecraft logs" />
+        <Board
+          title="Containers"
+          icon="panels"
+          span={12}
+          aside={<span className={NOTE}>the server image and its exporter</span>}
+        >
+          {data.images.length === 0 ? (
+            <p className={EMPTY}>neither container carries a digest pin this box publishes</p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col gap-[0.3rem] p-0">
+              {data.images.map((r) => (
+                <ImageRow key={r.container} r={r} status={data.imageStatus} />
+              ))}
+            </ul>
+          )}
+          <p className={FOOT}>
+            The images, not the game: the server image is itzg's, which downloads the Paper jar
+            above on every start, and minecraft-monitor turns the status ping into the numbers on
+            this page. Open a row for its release notes and the update — the same row System ›
+            Updates draws.
+          </p>
+        </Board>
+
+        <LogBoard
+          source={{ container: 'minecraft' }}
+          title="Minecraft logs"
+          neighbours={[
+            {
+              source: { container: 'minecraft-monitor' },
+              label: 'minecraft-monitor',
+              role: 'the exporter',
+              note: 'The status-ping exporter behind the players and ping numbers. Errors here mean the page reads "not scraped", not that the server is down.',
+            },
+            {
+              source: { unit: 'minecraft-roster' },
+              label: 'minecraft-roster',
+              role: 'the whitelist sync',
+              note: 'Hands the roster to the running server after every start and every Apply that moves it.',
+            },
+            {
+              source: { unit: 'daedalus-version-update' },
+              label: 'daedalus-version-update',
+              role: 'the version updater',
+              note: 'What an Update above did, phase by phase — the build, the snapshot, the verify, any rollback.',
+            },
+            {
+              source: { unit: 'minecraft-backup' },
+              label: 'minecraft-backup',
+              role: 'the nightly archive',
+              note: 'The quiesced world archive written to the data pool every night.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )

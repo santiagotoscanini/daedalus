@@ -1,25 +1,18 @@
-import { imagePins } from '../../../host/contract/domains/images'
 import { type EngineLock, repoFacts } from '../../../host/contract/domains/repo'
 import { type NixosFacts, siteIdentity } from '../../../host/contract/domains/site'
 import { readCommittedSite } from '../../../host/contract/domains/site-doc'
 import { type EngineUpdateStatus, readEngineUpdateStatus } from '../../../host/engine-update'
 import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../host/image-update'
 import { readWorkspaces, type Workspace, workspaceFor } from '../../../host/workspaces'
-import {
-  type CommitGap,
-  commitsSince,
-  EMPTY_GAP,
-  type VersionGap,
-  versionGap,
-} from '../../../lib/dashboard/github'
-import { releaseSourceFor } from '../../../lib/dashboard/image-repos'
-import {
-  type ImageFreshness,
-  imageFreshness,
-  imageVersion,
-  type RunningVersion,
-} from '../../../lib/dashboard/images'
+import { type UpdateRow, updateRows } from '../../../lib/dashboard/update-rows'
 import { ENGINE_REPO } from '../../../lib/engine'
+
+export {
+  loadUpdateNotes,
+  type UpdateNotes,
+  type UpdateRow,
+  type UpdateVerdict,
+} from '../../../lib/dashboard/update-rows'
 
 // Every digest-pinned container on the box, and whether it is behind.
 //
@@ -41,39 +34,7 @@ import { ENGINE_REPO } from '../../../lib/engine'
 // The changelogs are NOT here, deliberately. Sixty-five GitHub release lists
 // on every page load would spend the hourly budget in one visit to answer a
 // question about sixty-four containers nobody asked about. They load per row,
-// on expand — see `loadUpdateNotes`.
-
-/** What the registry and the flake, between them, say about one pin. */
-export type UpdateVerdict =
-  /** The tag moved and the pin did not — a channel pin with a newer image. */
-  | 'tag-moved'
-  /** The tag is frozen, but a higher tag of the same shape exists. */
-  | 'newer-tag'
-  /** Pin and tag agree, and nothing higher was published. */
-  | 'current'
-  /** The probe has not run, went stale, or the registry refused. */
-  | 'unknown'
-
-export type UpdateRow = {
-  container: string
-  /** `<repo>:<tag>` — the ref the registry was asked about. */
-  image: string
-  repo: string
-  tag: string
-  digest: string
-  running: RunningVersion
-  freshness: ImageFreshness | null
-  verdict: UpdateVerdict
-  /** The tag this row would move to by default. Null when there is none. */
-  target: string | null
-  /** Same-shape tags, newest first — what the picker offers. */
-  candidates: string[]
-  updatable: boolean
-  lockstep: string[]
-  ceremony: string | null
-  /** Whether expanding this row would find any notes to show. */
-  hasNotes: boolean
-}
+// on expand — see `loadUpdateNotes` (lib/dashboard/update-rows.ts).
 
 export type UpdatesData = {
   rows: UpdateRow[]
@@ -96,29 +57,6 @@ export type UpdatesData = {
    * `version` is the one string every export has.
    */
   nixos: { facts: NixosFacts | null; version: string | null }
-}
-
-function verdictOf(f: ImageFreshness | null): UpdateVerdict {
-  if (f === null || f.error !== null) return 'unknown'
-  if (f.moved) return 'tag-moved'
-  if (f.newerTag !== null) return 'newer-tag'
-  return 'current'
-}
-
-/**
- * Behind first, then by name.
- *
- * A verdict order rather than an alphabet, because the question the page
- * exists to answer is "what needs attention" — and sixty-five alphabetised
- * rows answer it by making you read all sixty-five. `tag-moved` outranks
- * `newer-tag` because a moved channel is a pin that has silently stopped
- * matching what its own tag means, which is the sharper of the two.
- */
-const ORDER: Record<UpdateVerdict, number> = {
-  'tag-moved': 0,
-  'newer-tag': 1,
-  unknown: 2,
-  current: 3,
 }
 
 // ── the engine itself ─────────────────────────────────────────────────────
@@ -188,46 +126,12 @@ export async function loadEngine(): Promise<EngineFacts> {
 }
 
 export async function loadUpdates(): Promise<UpdatesData> {
-  const [pins, status, engine, site] = await Promise.all([
-    imagePins(),
+  const [rows, status, engine, site] = await Promise.all([
+    updateRows(),
     readImageUpdateStatus(),
     loadEngine(),
     siteIdentity(),
   ])
-
-  const rows = await Promise.all(
-    Object.entries(pins).map(async ([container, pin]): Promise<UpdateRow> => {
-      const [running, freshness, source] = await Promise.all([
-        imageVersion(container),
-        imageFreshness(container),
-        releaseSourceFor(container),
-      ])
-
-      const verdict = verdictOf(freshness)
-
-      return {
-        container,
-        image: pin.image,
-        repo: pin.repo,
-        tag: pin.tag,
-        digest: pin.digest,
-        running,
-        freshness,
-        verdict,
-        // A moved channel updates to the SAME tag — there is no other name for
-        // where it is going, and the digest is the whole change. A frozen tag
-        // updates to the highest of its shape, when there is one.
-        target: verdict === 'tag-moved' ? pin.tag : (freshness?.newerTag ?? null),
-        candidates: freshness?.candidates ?? [],
-        updatable: pin.updatable,
-        lockstep: pin.lockstep,
-        ceremony: pin.ceremony,
-        hasNotes: source !== null,
-      }
-    }),
-  )
-
-  rows.sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || a.container.localeCompare(b.container))
 
   const checked = rows.map((r) => r.freshness?.checkedAt).filter((c) => c !== undefined)
 
@@ -239,52 +143,5 @@ export async function loadUpdates(): Promise<UpdatesData> {
     status,
     engine,
     nixos: { facts: site.data.nixos, version: site.data.nixosVersion },
-  }
-}
-
-// ── the expanded row ──────────────────────────────────────────────────────
-
-/**
- * The notes for ONE container, fetched when its row is opened.
- *
- * Two shapes, exactly as the Changelog board takes them: a release gap for a
- * project that cuts releases, a commit gap for an image that tracks a branch.
- * Which applies is a property of the project, not a choice — see
- * lib/dashboard/image-repos.ts.
- */
-export type UpdateNotes = {
-  container: string
-  gap: VersionGap | null
-  build: CommitGap | null
-  /** The repo the notes came from, for the "we read this" line. */
-  repo: string | null
-}
-
-export async function loadUpdateNotes(container: string): Promise<UpdateNotes> {
-  const source = await releaseSourceFor(container)
-  if (source === null) return { container, gap: null, build: null, repo: null }
-
-  if (source.branch !== undefined) {
-    const { revision } = await imageVersion(container)
-    return {
-      container,
-      gap: null,
-      build: await commitsSince(source.repo, revision, source.branch),
-      repo: source.repo,
-    }
-  }
-
-  const { version } = await imageVersion(container)
-  return {
-    container,
-    gap:
-      version === null && source.opts?.notesWhenUnknown !== true
-        ? {
-            ...EMPTY_GAP,
-            note: 'this pin names a channel, so there is no version to compare against',
-          }
-        : await versionGap(source.repo, version, source.opts),
-    build: null,
-    repo: source.repo,
   }
 }

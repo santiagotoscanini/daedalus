@@ -33,11 +33,15 @@
 //                                 to a changelog that is machine-readable
 
 import type { Ctx } from '../../../core/ctx'
+import type { ImageUpdateStatus } from '../../../host/image-update'
+import type { VersionUpdateStatus } from '../../../host/version-update'
 import type { Commit, CommitGap } from '../../../lib/dashboard/github'
+import type { UpdateRow } from '../../../lib/dashboard/update-rows'
 import { getJson } from '../../../lib/http'
 import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
 import { decodeEntities } from '../../../lib/plain-text'
 import { manifest } from '../manifest'
+import { loadMinecraftUpdate, type MinecraftUpdate } from './minecraft-update'
 
 /**
  * One shape per sub-tab. A union rather than optional fields, so the
@@ -489,7 +493,17 @@ type MinecraftData = {
     /** ms — the newest join in the last 30 days, else null. */
     lastSeen: number | null
   }[]
+  /** Where the game version can go, and what Mojang shipped since (data/minecraft-update.ts). */
+  update: MinecraftUpdate
+  /** The version-update bridge, so a page opened mid-update joins the run. */
+  versionStatus: VersionUpdateStatus
+  /** The stack's two containers as update decisions — the server image and its exporter. */
+  images: UpdateRow[]
+  imageStatus: ImageUpdateStatus
 }
+
+/** The containers this tab answers for, image-wise. */
+const MINECRAFT_CONTAINERS = ['minecraft', 'minecraft-monitor'] as const
 
 const PAPER_API = 'https://fill.papermc.io/v3/projects/paper'
 const PAPER_REPO = 'https://github.com/PaperMC/Paper/commit'
@@ -499,7 +513,21 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
   const version = ctx.env('MINECRAFT_VERSION') ?? null
   const build = ctx.env('MINECRAFT_PAPER_BUILD') ?? null
 
-  const [live, online, reported, latestVersion, builds, events, roster] = await Promise.all([
+  const { readVersionUpdateStatus } = await import('../../../host/version-update')
+  const { readImageUpdateStatus } = await import('../../../host/image-update')
+  const { updateRows } = await import('../../../lib/dashboard/update-rows')
+  const [
+    live,
+    online,
+    reported,
+    latestVersion,
+    builds,
+    events,
+    roster,
+    versionStatus,
+    images,
+    imageStatus,
+  ] = await Promise.all([
     ctx.prom.scalars({
       healthy: 'max(minecraft_status_healthy)',
       players: 'max(minecraft_status_players_online_count)',
@@ -514,7 +542,12 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
     paperBuilds(version, build),
     joinsAndLeaves(ctx),
     minecraftRoster(ctx),
+    readVersionUpdateStatus(),
+    updateRows(MINECRAFT_CONTAINERS),
+    readImageUpdateStatus(),
   ])
+  // After the rest: it needs Mojang's newest release, which the batch above read.
+  const update = await loadMinecraftUpdate(ctx, { version, build }, latestVersion)
 
   return {
     minecraft: {
@@ -534,6 +567,10 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
     builds,
     events,
     roster,
+    update,
+    versionStatus,
+    images,
+    imageStatus,
   }
 }
 

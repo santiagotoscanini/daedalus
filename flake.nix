@@ -95,6 +95,7 @@
         "daedalus.nix"
         "engine-update.nix"
         "railpack.nix"
+        "version-update.nix"
       ];
 
       # The catalog: one stack per directory, `modules/<id>/…`, each behind
