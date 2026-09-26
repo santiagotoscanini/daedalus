@@ -78,8 +78,7 @@
 # Convention enforced #2: an app that needs a disk writes it to
 # /app/data. Same reasoning as the port — we build the images, so we
 # pick the path. `storage.enable = true` bind-mounts
-# <stateRoot>/apps/<name>/data there (overridable via
-# storage.hostPath); fleet.statePaths pre-creates it as the operator, which is
+# <stateRoot>/apps/<name>/data there; fleet.statePaths pre-creates it as the operator, which is
 # what container UID 0 maps to under rootless podman. This is what
 # SQLite / file-backed apps need; Postgres apps use postgres.enable
 # instead, and an app can use both.
@@ -173,7 +172,7 @@ let
       appDbEnvFile = "${appDbEnvBase}/${name}/env";
 
       storageEnabled = app.storage.enable;
-      storageHostPath = app.storage.hostPath;
+      storageHostPath = "${appsDataRoot}/${name}/data";
 
       # `stage = "declared"` is the bottom rung: the row exists, and so do the
       # cheap durable things it will want — its postgres role, its data dir, its
@@ -262,9 +261,10 @@ let
       isolatedAuth = proxyAuth && app.auth.isolated;
       # Where the IdP sends the browser back. The forward-auth plugin
       # owns /oidc/callback on the app's own hostname; a native app
-      # mounts its framework's callback path.
+      # mounts its framework's callback path — Auth.js's shape for the
+      # provider id `pocket-id`, which every native app registers under.
       oidcCallback =
-        if proxyAuth then "${publicUrl}/oidc/callback" else "${publicUrl}${app.auth.callbackPath}";
+        if proxyAuth then "${publicUrl}/oidc/callback" else "${publicUrl}/api/auth/callback/pocket-id";
 
       displayName = lib.toSentenceCase name;
 
@@ -292,15 +292,10 @@ let
               # (< 500) while certifying the middleware rather than the
               # new image. The auth bypass path is the one URL that
               # still reaches the real upstream, so default to it.
-              if app.deploy.healthPath != null then
-                app.deploy.healthPath
-              else if app.auth.healthPath != null then
-                app.auth.healthPath
-              else
-                "/"
+              if app.auth.healthPath != null then app.auth.healthPath else "/"
             )
           }
-          HEALTH_TIMEOUT=${toString app.deploy.healthTimeout}
+          HEALTH_TIMEOUT=90
           # The health check dials the app THROUGH traefik, so `stage = "off"`
           # leaves nothing to dial and every deploy would report failure.
           EXPOSED=${if exposed then "1" else "0"}
@@ -563,15 +558,11 @@ let
       # (uid 0 default = container root = the operator; state-paths.service
       # sorts paths so parents are created before children, and every
       # podman unit orders after it).
-      fleet.statePaths = lib.optionalAttrs storageEnabled (
-        lib.optionalAttrs (lib.hasPrefix "${appsDataRoot}/" storageHostPath) {
-          "${appsDataRoot}" = { };
-          "${appsDataRoot}/${name}" = { };
-        }
-        // {
-          "${storageHostPath}" = { };
-        }
-      );
+      fleet.statePaths = lib.optionalAttrs storageEnabled {
+        "${appsDataRoot}" = { };
+        "${appsDataRoot}/${name}" = { };
+        "${storageHostPath}" = { };
+      };
     };
 
   # How the app is reached: its bridges, its webApp (router, DNS, probe,
@@ -816,7 +807,10 @@ let
           description = "Poll the registry for a new app-${name} image";
           wantedBy = [ "timers.target" ];
           timerConfig = {
-            OnCalendar = app.deploy.interval;
+            # Every 2 min. The safety net, not the path a push takes: the
+            # build agent starts the deploy itself when it publishes, and an
+            # unchanged tag costs one manifest request.
+            OnCalendar = "*:0/2";
             Persistent = true; # catch up if the box was off
             RandomizedDelaySec = 45; # don't have every app hit the registry on the same second
           };
@@ -928,9 +922,11 @@ let
               OIDC_ISSUER_URL = config.fleet.sso.issuerUrl;
               OIDC_CLIENT_ID = name;
               OIDC_REDIRECT_URI = oidcCallback;
-              OIDC_PROVIDER_ID = app.auth.providerId;
+              OIDC_PROVIDER_ID = "pocket-id";
               OIDC_PROVIDER_NAME = "Pocket ID";
-              OIDC_SCOPES = app.auth.scopes;
+              # `groups` is what lets an app read the user's Pocket ID groups
+              # out of the ID token.
+              OIDC_SCOPES = "openid profile email groups";
             })
             # Dev mode: the entrypoint's switch, and — when the box publishes an
             # npm mirror — where the install at start goes. The image reads the
@@ -965,7 +961,6 @@ let
             ++ (lib.optional egressEnabled "--network=container:${app.egress.container}")
             ++ resourceFlags;
           }
-          // (lib.optionalAttrs (app.cmd != null) { inherit (app) cmd; })
           # In egress mode podman needs the netns owner up first; dependsOn
           # adds Requires=+After= on its unit (same as the TV arrs on gluetun).
           // (lib.optionalAttrs egressEnabled { dependsOn = [ app.egress.container ]; })

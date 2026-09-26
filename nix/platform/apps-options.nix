@@ -15,10 +15,9 @@
 # With the apps stack switched off, a host can still define `fleet.apps`
 # entries and nothing will run them.
 #
-# Two defaults read other modules' values, lazily:
-#   image             `<fleet.webApps.registry.hostname>/<name>:latest` — the
-#                     container-registry stack publishes that webApp.
-#   storage.hostPath  under `<fleet.stateRoot>/apps`.
+# One default reads another module's value, lazily: `image`,
+# `<fleet.webApps.registry.hostname>/<name>:latest` — the container-registry
+# stack publishes that webApp.
 
 let
   # The outer config's facts, bound here because the submodule below shadows
@@ -26,7 +25,6 @@ let
   site = config.fleet;
   inherit (config.fleet) operator;
   registryHost = config.fleet.webApps.registry.hostname;
-  appsDataRoot = "${config.fleet.stateRoot}/apps";
 in
 {
   # The apps stack's switch, declared beside the registry it gates so a module
@@ -94,15 +92,6 @@ in
                 runs in — the mounted tree supplies the code.
               '';
               example = "${registryHost}/example:sha-89dfc4456f8b2c4531f84790cce5e179bdaeae6a";
-            };
-
-            cmd = lib.mkOption {
-              type = lib.types.nullOr (lib.types.listOf lib.types.str);
-              default = null;
-              description = ''
-                Optional cmd override (escape hatch — apps should normally
-                bake their start command into the image CMD).
-              '';
             };
 
             hostname = lib.mkOption {
@@ -253,27 +242,17 @@ in
                 type = lib.types.bool;
                 default = false;
                 description = ''
-                  When true, bind-mount `storage.hostPath` at `/app/data`
-                  inside the container and pre-create it (0755 ${operator.user}:${operator.group})
-                  via fleet.statePaths. Off by default — stateless apps get
-                  no disk.
+                  When true, bind-mount `<fleet.stateRoot>/apps/<name>/data`
+                  at `/app/data` inside the container and pre-create it
+                  (0755 ${operator.user}:${operator.group}) via
+                  fleet.statePaths. Off by default — stateless apps get no
+                  disk.
 
-                  /app/data is a convention, not an option, exactly like the
+                  Both paths are conventions, not options, exactly like the
                   port-3000 rule: we build the images, so we pick the path.
-                '';
-              };
-              hostPath = lib.mkOption {
-                type = lib.types.str;
-                default = "${appsDataRoot}/${name}/data";
-                description = ''
-                  Host dir backing /app/data. The default sits under
-                  `fleet.stateRoot` (small records, frequent+hourly+daily
-                  snapshots), which is right for a small SQLite file but
-                  expensive for a large, churning blob cache — snapshot
-                  deltas balloon. Point high-churn apps at a bulk-data root
-                  instead (a `fleet.data` entry; on ZFS, a one-time
-                  `zfs create -o mountpoint=legacy <pool>/<name>` plus an
-                  entry in the host's `fleet.zfs.datasets`).
+                  Under `fleet.stateRoot` the dir is snapshotted
+                  frequent+hourly+daily — right for a small SQLite file,
+                  expensive for a large churning blob cache.
                 '';
               };
             };
@@ -368,37 +347,6 @@ in
                   `prometheus.enable`.
                 '';
               };
-              providerId = lib.mkOption {
-                type = lib.types.str;
-                default = "pocket-id";
-                description = ''
-                  Native mode: the provider id the app registers Pocket
-                  ID under. Frameworks derive the callback path from it
-                  (Auth.js: /api/auth/callback/<providerId>), so it has
-                  to agree with the app's code — it is half of the
-                  redirect URI registered at the IdP.
-                '';
-              };
-              callbackPath = lib.mkOption {
-                type = lib.types.str;
-                default = "/api/auth/callback/pocket-id";
-                description = ''
-                  Native mode: path (on the app's own hostname) the IdP
-                  redirects back to. The default is Auth.js's shape for
-                  `providerId = "pocket-id"`. Registered as the client's
-                  callback URL and handed to the app as
-                  OIDC_REDIRECT_URI, so the two can never disagree.
-                '';
-              };
-              scopes = lib.mkOption {
-                type = lib.types.str;
-                default = "openid profile email groups";
-                description = ''
-                  Native mode: space-separated scopes, passed as
-                  OIDC_SCOPES. `groups` is what lets an app read the
-                  user's Pocket ID groups out of the ID token.
-                '';
-              };
             };
 
             litellm.enable = lib.mkOption {
@@ -434,41 +382,12 @@ in
 
                   Turn OFF to freeze an app on whatever it's running — pair with a
                   digest- or sha-pinned `image` to hold a known-good build.
-                '';
-              };
-              interval = lib.mkOption {
-                type = lib.types.str;
-                default = "*:0/2";
-                description = ''
-                  systemd OnCalendar for the poll. Since the build agent
-                  (stacks/daedalus/host/build.sh) starts the deploy itself,
-                  this is the safety net rather than the path a push takes:
-                  the default (every 2 min) is the worst-case latency when that
-                  start did not happen. A pull of an unchanged tag is one manifest
-                  request.
-                '';
-              };
-              healthPath = lib.mkOption {
-                type = lib.types.nullOr lib.types.str;
-                default = null;
-                description = ''
-                  Path fetched through traefik after the restart to decide whether
-                  the new image is alive. Any status < 500 counts — an Auth.js app
-                  302-ing to a login page is a working app.
 
-                  null falls back to `auth.healthPath`, else "/". That
-                  fallback is what keeps the check honest on a
-                  forward-auth'd app, where "/" is a 302 to the IdP that
-                  a dead container would answer just as well.
-                '';
-              };
-              healthTimeout = lib.mkOption {
-                type = lib.types.int;
-                default = 90;
-                description = ''
-                  Seconds to wait for the app to answer after the restart. On
-                  timeout the new image keeps running and the unit fails loudly
-                  (deploy-and-report — there is no auto-rollback).
+                  The poll runs every 2 min, a safety net behind the build agent,
+                  which starts the deploy itself. After a restart the new image
+                  gets 90 s to answer `auth.healthPath` (else "/") through
+                  traefik with a status < 500; on failure it keeps running and
+                  the unit fails loudly (deploy-and-report, no auto-rollback).
                 '';
               };
             };
