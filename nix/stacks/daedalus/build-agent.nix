@@ -7,8 +7,9 @@
 #   daedalus-build.path       watches build-request.json, starts:
 #   daedalus-build.service    one build, three scripts in order —
 #     ExecStartPre   host/build-fence-gate.sh  no egress fence, no build
-#     ExecStart      host/build.sh             token, clone, railpack prepare,
+#     ExecStart      host/build.sh + build/*   token, clone, railpack prepare,
 #                                              checks, build + push, deploy
+#                                              (one file per stage)
 #     ExecStopPost   host/build-reaper.sh      a run that died unannounced
 #                                              reads `failed: interrupted`
 #   daedalus-build-cancel.{path,service}   build-cancel-request.json →
@@ -183,6 +184,14 @@ let
       ${builtins.readFile ./host/lib.sh}
       ${builtins.readFile ./host/github-lib.sh}
       ${builtins.readFile ./host/build.sh}
+      ${builtins.readFile ./host/build/helpers.sh}
+      ${builtins.readFile ./host/build/0-request.sh}
+      ${builtins.readFile ./host/build/1-token.sh}
+      ${builtins.readFile ./host/build/2-clone.sh}
+      ${builtins.readFile ./host/build/3-detect.sh}
+      ${builtins.readFile ./host/build/4-checks.sh}
+      ${builtins.readFile ./host/build/5-publish.sh}
+      ${builtins.readFile ./host/build/6-done.sh}
     '';
   };
 
