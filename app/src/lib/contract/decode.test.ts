@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   arrayOf,
+  asValidator,
   bool,
   DecodeError,
   decode,
   int,
+  is,
   literal,
   nullable,
   num,
@@ -12,6 +14,7 @@ import {
   optional,
   recordOf,
   str,
+  withMessage,
 } from './decode'
 
 describe('primitives', () => {
@@ -124,5 +127,44 @@ describe('hostile input', () => {
     expect(() =>
       decode(d, { apps: { iris: { env: [{ key: 'A', port: 1 }, { key: 'B' }] } } }),
     ).toThrow('apps.iris.env[1].port: expected a finite number, got undefined')
+  })
+})
+
+describe('server-function inputs', () => {
+  const isEven = (v: unknown): v is number => typeof v === 'number' && v % 2 === 0
+
+  it('is reuses a type guard and names what it expected', () => {
+    expect(decode(is(isEven, 'an even number'), 4)).toBe(4)
+    expect(() => decode(obj({ n: is(isEven, 'an even number') }), { n: 3 })).toThrow(
+      'n: expected an even number, got number',
+    )
+  })
+
+  it('withMessage replaces a DecodeError with exactly its sentence', () => {
+    const d = withMessage(obj({ id: str }), 'expected { id }')
+    expect(decode(d, { id: 'x' })).toEqual({ id: 'x' })
+    const thrown = (() => {
+      try {
+        decode(d, { id: 1 })
+        return null
+      } catch (e) {
+        return e
+      }
+    })()
+    expect(thrown).toBeInstanceOf(Error)
+    expect(thrown).not.toBeInstanceOf(DecodeError)
+    expect((thrown as Error).message).toBe('expected { id }')
+  })
+
+  it('withMessage lets an inner sentence through, so the field that failed speaks', () => {
+    const d = withMessage(obj({ tab: withMessage(str, 'expected a tab') }), 'expected a form')
+    expect(() => decode(d, null)).toThrow(/^expected a form$/)
+    expect(() => decode(d, { tab: 1 })).toThrow(/^expected a tab$/)
+  })
+
+  it('asValidator decodes from the root', () => {
+    const v = asValidator(obj({ id: str }))
+    expect(v({ id: 'x', extra: 1 })).toEqual({ id: 'x' })
+    expect(() => v({})).toThrow('id: expected a string, got undefined')
   })
 })

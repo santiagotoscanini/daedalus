@@ -149,7 +149,47 @@ export function obj<S extends Record<string, Decoder<unknown>>>(
   }
 }
 
+/**
+ * A value an existing type guard accepts. For the predicates the app already
+ * has (`isAppName`, `isModuleId`), so a decoder does not restate their rule.
+ */
+export function is<T>(guard: (v: unknown) => v is T, expected: string): Decoder<T> {
+  return (v, p) => {
+    if (!guard(v)) throw new DecodeError(p, `expected ${expected}, got ${kind(v)}`)
+    return v
+  }
+}
+
+/**
+ * The same decoder, failing with exactly `message` as a plain Error.
+ *
+ * For server-function inputs whose refusal wording predates the decoders and
+ * may be shown to someone: the path-prefixed DecodeError text would change
+ * what they read. Only a DecodeError is replaced — a plain Error from an inner
+ * `withMessage` passes through, so the innermost field's sentence wins, the
+ * way hand-written checks read one field at a time.
+ */
+export function withMessage<T>(d: Decoder<T>, message: string): Decoder<T> {
+  return (v, p) => {
+    try {
+      return d(v, p)
+    } catch (e) {
+      if (e instanceof DecodeError) throw new Error(message)
+      throw e
+    }
+  }
+}
+
 /** Runs a decoder over a whole document; the DecodeError carries the path. */
 export function decode<T>(d: Decoder<T>, value: unknown): T {
   return d(value, '')
+}
+
+/**
+ * A decoder as the one-argument function a server function's `.validator`
+ * takes. Passing a Decoder straight in would run it with no path, and every
+ * refusal would read `undefined: …`.
+ */
+export function asValidator<T>(d: Decoder<T>): (value: unknown) => T {
+  return (value) => decode(d, value)
 }
