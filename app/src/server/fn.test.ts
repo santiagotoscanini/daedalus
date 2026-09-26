@@ -9,7 +9,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { adminFn, adminOnly, adminReadFn, publicFn, readFn } from './fn'
+import { adminFn, adminOnly, publicFn, readFn } from './fn'
 
 const DIR = 'src/server'
 
@@ -25,7 +25,7 @@ const PUBLIC_POSTS = new Set([
   'local-login.ts:localLogoutFn',
 ])
 
-const BUILDERS = ['readFn', 'adminReadFn', 'adminFn', 'publicFn'] as const
+const BUILDERS = ['readFn', 'adminFn', 'publicFn'] as const
 
 const sources = readdirSync(DIR)
   .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'fn.ts')
@@ -55,10 +55,10 @@ describe('server functions come from server/fn.ts', () => {
         expect(text).not.toMatch(/\.middleware\s*\(/)
         // A builder is callable with options: `readFn({ method: 'POST' })`
         // would be a POST with no admin check.
-        expect(text).not.toMatch(/\b(readFn|adminReadFn|adminFn|publicFn)\s*\(/)
+        expect(text).not.toMatch(/\b(readFn|adminFn|publicFn)\s*\(/)
       })
 
-      it('leaves the admin check to adminFn and adminReadFn', () => {
+      it('leaves the admin check to adminFn', () => {
         expect(text).not.toMatch(/\bassertAdmin\b/)
       })
 
@@ -86,12 +86,6 @@ describe('the builders', () => {
   it('adminFn is a POST behind adminOnly, and it runs first', () => {
     expect(adminFn.options.method).toBe('POST')
     expect(chain(adminFn)[0]).toBe(adminOnly)
-  })
-
-  it('adminReadFn is a GET behind adminOnly, and it runs first', () => {
-    expect(adminReadFn.options.method).toBe('GET')
-    expect(chain(adminReadFn)[0]).toBe(adminOnly)
-    expect(chain(adminReadFn)).toEqual(chain(adminFn))
   })
 
   it('readFn is a GET with no check added', () => {

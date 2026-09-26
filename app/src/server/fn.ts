@@ -71,13 +71,6 @@ export const adminFn = createServerFn({ method: 'POST' }).middleware([
 ])
 
 /**
- * A read (GET) only an admin may make — adminFn's chain on a GET, for a read
- * that reaches something a non-admin must not (players.ts's vendor lookup).
- * The check runs before the validator here too.
- */
-export const adminReadFn = createServerFn().middleware([adminOnly, withActor, withCtx])
-
-/**
  * A POST with NO admin check. Only for a door a caller must pass through
  * before they can be an admin (server/local-login.ts). Every use carries a
  * comment saying why, and `server/fn.test.ts` holds the list — adding one
