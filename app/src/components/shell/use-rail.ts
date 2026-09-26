@@ -76,7 +76,21 @@ export function useDrawer(path: string): Drawer {
 
   useEffect(() => {
     if (!open) return
-    closeButton.current?.focus()
+    // Not now, and not "next frame" either: the drawer turns visible through a
+    // `visibility` transition (rail.tsx), which still reads `hidden` in the
+    // frame it starts, and a browser silently refuses focus to a hidden
+    // element — it would stay on the ☰ button. So try each frame until focus
+    // lands, giving up after a few (the transition is 220ms).
+    let frame = 0
+    let tries = 0
+    const focusClose = () => {
+      const button = closeButton.current
+      button?.focus()
+      if (button && document.activeElement !== button && ++tries < 30) {
+        frame = requestAnimationFrame(focusClose)
+      }
+    }
+    frame = requestAnimationFrame(focusClose)
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setOpen(false)
@@ -88,6 +102,7 @@ export function useDrawer(path: string): Drawer {
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
+      cancelAnimationFrame(frame)
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = previous
     }
