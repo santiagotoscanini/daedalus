@@ -167,7 +167,8 @@ let
           # started the flow. Confidential clients here run both.
           isPublic = false;
           pkceEnabled = c.pkce;
-          inherit (c) skipConsent;
+          # No consent screen: own infrastructure, one operator.
+          skipConsent = true;
           requiresReauthentication = false;
           isGroupRestricted = c.allowedGroups != [ ];
         }

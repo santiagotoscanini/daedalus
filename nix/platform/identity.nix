@@ -158,11 +158,6 @@
                 "household"
               ];
             };
-            skipConsent = lib.mkOption {
-              type = lib.types.bool;
-              default = true;
-              description = "Skip the consent screen — own infrastructure, one operator.";
-            };
             pkce = lib.mkOption {
               type = lib.types.bool;
               default = true;

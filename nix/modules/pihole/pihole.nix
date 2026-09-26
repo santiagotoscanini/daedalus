@@ -18,9 +18,9 @@
 # The host brings:
 #   fleet.modules.pihole.enable              the switch (default off, as every catalog module)
 #   fleet.modules.pihole.dhcpHostsSopsFile   the static DHCP reservations, encrypted (optional)
-#   fleet.modules.pihole.localDomain         the LAN's own search domain (default `lan`)
 # The scope, the upstreams and the interface come from site.json
-# (platform/site.nix); the records come from every stack's `fleet.webApps`.
+# (platform/site.nix); the records come from every stack's `fleet.webApps`;
+# the LAN's own search domain is `fleet.lanDomain` (platform/nodes.nix).
 
 {
   config,
@@ -59,18 +59,6 @@ in
         private or not, so the module never sees it decrypted: sops-nix
         hands the file to FTL at activation, and a change is a rotation
         (edit, rebuild). Null: no reservations, and no file.
-      '';
-    };
-
-    localDomain = lib.mkOption {
-      type = lib.types.str;
-      default = config.fleet.lanDomain;
-      defaultText = lib.literalExpression "config.fleet.lanDomain";
-      description = ''
-        The LAN's own DNS domain: dnsmasq answers `<device>.<localDomain>`
-        for every lease and reservation, and marks the zone local. Defaults
-        to `fleet.lanDomain`, the name the platform composes node addresses
-        under, so the two agree unless a host says otherwise.
       '';
     };
   };
@@ -209,7 +197,7 @@ in
           bogusPriv = false;
           hosts = hostEntries;
           domain = {
-            name = cfg.localDomain;
+            name = config.fleet.lanDomain;
             local = true;
           };
           reply.host.force4 = true;
@@ -243,7 +231,7 @@ in
           # Static reservations are the host's `dhcpHostsSopsFile` (see its
           # description for why encrypted), fed to dnsmasq via the
           # dhcp-hostsfile= directive below. The box's own line rides along —
-          # dnsmasq populates `<hostname>.<localDomain> → <lanIp>` from it, no
+          # dnsmasq populates `<hostname>.<lanDomain> → <lanIp>` from it, no
           # DHCP transaction.
         };
 
@@ -293,7 +281,7 @@ in
           dnsmasq_lines =
             map (h: "local=/${h}/") localOnlyHostnames
             ++ map (
-              s: "srv-host=${s.service}.${cfg.localDomain},${s.target},${toString s.port}"
+              s: "srv-host=${s.service}.${config.fleet.lanDomain},${s.target},${toString s.port}"
             ) config.fleet.dnsSrv
             ++ lib.optional haveReservations "dhcp-hostsfile=${config.sops.secrets."pihole-dhcp-hosts".path}"
             # The nodes' MAC-to-name bindings, written at runtime by the control
