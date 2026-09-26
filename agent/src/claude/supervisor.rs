@@ -40,7 +40,7 @@ struct Running {
 pub struct Supervisor {
     cli: Option<PathBuf>,
     cli_version: Option<String>,
-    /// The directory the policy or the config names; None means pick one.
+    /// The directory the policy names; None means pick one.
     named_workdir: Option<String>,
     /// What the running (or next) server uses, and how it was chosen.
     workdir: PathBuf,
@@ -116,7 +116,7 @@ impl Supervisor {
         }
     }
 
-    /// The directory the box (or the config) names. A change restarts the
+    /// The directory the box names. A change restarts the
     /// server there; None goes back to picking the most recent trusted
     /// project.
     pub fn set_named_workdir(&mut self, named: Option<String>) {

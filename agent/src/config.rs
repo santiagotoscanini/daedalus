@@ -12,16 +12,20 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing_appender::non_blocking::WorkerGuard;
 
-/// The GitHub repository whose `agent-v*` releases this agent follows.
+/// The GitHub repository whose `agent-v<semver>` releases this agent
+/// follows. Not a knob: every release is verified against the key compiled
+/// into this binary (update.rs), so another feed would need another build.
 pub const DEFAULT_REPO: &str = "santiagotoscanini/daedalus";
 
+/// What the box decides — holding the machine awake, Claude remote control
+/// and its directory, provider ports — is not here: it is the box's policy
+/// (hello.rs), with `Policy::default()` standing until the box has approved
+/// this machine. Keys an older install wrote for those are ignored.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// The LAN port the status page answers on.
     pub port: u16,
-    /// `owner/name` on GitHub. Releases tagged `agent-v<semver>` are the feed.
-    pub release_repo: String,
     /// How often the feed is asked, in seconds. GitHub allows 60 unauthenticated
     /// requests an hour from one address; the default spends six.
     pub update_check_secs: u64,
@@ -38,32 +42,18 @@ pub struct Config {
     pub search_domains: Vec<String>,
     /// How often the agent announces itself to the box, in seconds.
     pub hello_secs: u64,
-    /// Hold the machine awake. The local default; once the box has approved
-    /// this machine, its Settings › Machines policy replaces it.
-    pub awake_hold: bool,
-    /// Run `claude remote-control` in the user's desktop session (the tray
-    /// supervises it). Same rule: the box's policy replaces it once approved.
-    pub claude_remote_control: bool,
-    /// The directory the server runs in — where a session opened from
-    /// claude.ai lands. Empty means the most recently used trusted project
-    /// (claude/workdir.rs).
-    pub claude_workdir: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             port: 7787,
-            release_repo: DEFAULT_REPO.into(),
             update_check_secs: 600,
             auto_update: true,
             log_level: "info".into(),
             control_plane_url: None,
             search_domains: Vec::new(),
             hello_secs: 60,
-            awake_hold: true,
-            claude_remote_control: true,
-            claude_workdir: None,
         }
     }
 }
@@ -167,4 +157,20 @@ pub fn init_logging(cfg: &Config, foreground: bool) -> Result<WorkerGuard> {
         .with(to_terminal)
         .init();
     Ok(guard)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_config_written_by_an_earlier_install_still_loads() {
+        // `install` wrote every field; the policy knobs and `release_repo`
+        // left, and a file that still names them must parse as before.
+        let text = "port = 7788\nrelease_repo = \"x/y\"\nawake_hold = false\n\
+                    claude_remote_control = false\nclaude_workdir = \"C:/p\"\n";
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.port, 7788);
+        assert_eq!(cfg.hello_secs, 60);
+    }
 }

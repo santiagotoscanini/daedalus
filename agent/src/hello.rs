@@ -51,11 +51,7 @@ const REDISCOVER: Duration = Duration::from_secs(10 * 60);
 struct Payload<'a> {
     hostname: &'a str,
     os: &'a str,
-    os_name: &'a str,
-    os_version: &'a str,
     arch: &'a str,
-    cpu: &'a str,
-    memory_bytes: Option<u64>,
     agent_version: &'a str,
     mac: Option<&'a str>,
     lan_ip: Option<&'a str>,
@@ -75,8 +71,8 @@ struct Envelope<'a> {
     sig: &'a str,
 }
 
-/// What the box wants of this machine. Defaults are the config's, and stand
-/// until the box has answered a hello for an approved machine.
+/// What the box wants of this machine. The defaults stand until the box has
+/// answered a hello for an approved machine; there is no local copy.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Policy {
@@ -90,7 +86,7 @@ pub struct Policy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_workdir: Option<String>,
     /// What the box knows about the providers on this machine — for now,
-    /// the port to look for each on. Absent from an older box.
+    /// the port to look for each on. Absent when it names none.
     #[serde(default, skip_serializing_if = "ProvidersPolicy::is_empty")]
     pub providers: ProvidersPolicy,
 }
@@ -128,17 +124,6 @@ impl Default for Policy {
     }
 }
 
-impl Policy {
-    pub fn from_config(cfg: &Config) -> Self {
-        Self {
-            awake_hold: cfg.awake_hold,
-            claude_remote_control: cfg.claude_remote_control,
-            claude_workdir: cfg.claude_workdir.clone().filter(|d| !d.is_empty()),
-            providers: ProvidersPolicy::default(),
-        }
-    }
-}
-
 #[derive(Deserialize)]
 struct Answer {
     state: String,
@@ -148,7 +133,7 @@ struct Answer {
     update_claude: bool,
     #[serde(default)]
     restart_claude: bool,
-    /// Absent from an older box, or for a machine it has not approved.
+    /// Absent for a machine the box has not approved.
     #[serde(default)]
     policy: Option<Policy>,
     /// The token that opens this node's full Claude report to the box;
@@ -184,11 +169,7 @@ fn send(
     let payload = Payload {
         hostname: &crate::facts::hostname(),
         os: facts.os,
-        os_name: &facts.os_name,
-        os_version: &facts.os_version,
         arch: facts.arch,
-        cpu: &facts.cpu,
-        memory_bytes: facts.memory_bytes,
         agent_version: crate::VERSION,
         mac: adapter.mac.as_deref(),
         lan_ip: adapter.ipv4.as_deref(),
@@ -303,7 +284,7 @@ pub fn run_loop(
                         .filter(|t| !t.is_empty() && a.state == "approved"),
                 );
                 // The policy is the box's to set only once it has approved
-                // this machine; before that the config's defaults stand.
+                // this machine; before that `Policy::default()` stands.
                 if let (Some(p), "approved") = (a.policy, a.state.as_str()) {
                     if shared.set_policy(p.clone()) {
                         tracing::info!(

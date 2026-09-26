@@ -186,8 +186,7 @@ fn status_cmd() -> Result<()> {
 
 fn update_cmd(args: &[String]) -> Result<()> {
     let apply = args.iter().any(|a| a == "--apply");
-    let cfg = config::load_or_default()?;
-    match update::check(&cfg)? {
+    match update::check()? {
         None => println!("no newer release than {VERSION}"),
         Some(rel) => {
             println!("newer release: {} ({})", rel.version, rel.tag);

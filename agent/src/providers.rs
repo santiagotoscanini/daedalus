@@ -6,8 +6,9 @@
 //! API at this machine's name, the same address the gateway dials; a
 //! model list carried here would be a second copy of the provider's state.
 //!
-//! A provider is a `Provider`: a kind and a way to detect it. Lemonade is
-//! the first; Ollama is the next, the same shape on another port.
+//! Lemonade is the one kind the agent detects. Ollama is deliberately not
+//! one: Lemonade's installer brings it along, so detecting it would list
+//! every Lemonade machine twice (app/src/lib/providers/kinds.ts says more).
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -18,7 +19,7 @@ use crate::telemetry::App;
 /// One provider as the telemetry document carries it.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProviderReport {
-    /// `Provider::kind`: "lemonade", the only one so far.
+    /// "lemonade", the one kind the agent detects.
     pub kind: String,
     /// The port it answers on, or would.
     pub port: u16,
@@ -33,52 +34,38 @@ pub struct ProviderReport {
 /// server must not stall the sampling thread for long.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
-pub trait Provider {
-    fn kind(&self) -> &'static str;
-    /// A report when the provider is running, or installed and not; None
-    /// when there is no sign of it.
-    fn detect(&self, policy: &Policy, apps: &[App]) -> Option<ProviderReport>;
-}
+pub const LEMONADE_DEFAULT_PORT: u16 = 13305;
 
 /// Lemonade Server (lemonade-server.ai): an OpenAI-compatible model server
 /// for AMD and other local hardware. Health is `/api/v1/health`, which
-/// carries the version.
-pub struct Lemonade;
-
-pub const LEMONADE_DEFAULT_PORT: u16 = 13305;
-
-impl Provider for Lemonade {
-    fn kind(&self) -> &'static str {
-        "lemonade"
-    }
-
-    fn detect(&self, policy: &Policy, apps: &[App]) -> Option<ProviderReport> {
-        let port = policy
-            .providers
-            .lemonade
-            .as_ref()
-            .and_then(|p| p.port)
-            .unwrap_or(LEMONADE_DEFAULT_PORT);
-        if let Some(version) = probe_health(port) {
-            return Some(ProviderReport {
-                kind: self.kind().into(),
-                port,
-                version,
-                running: true,
-            });
-        }
-        // Not answering: worth a line only if it is installed, and the
-        // inventory the slow facts already read says so.
-        let installed = apps
-            .iter()
-            .any(|a| a.name.to_ascii_lowercase().contains("lemonade"));
-        installed.then(|| ProviderReport {
-            kind: self.kind().into(),
+/// carries the version. A report when it is running, or installed and not;
+/// None when there is no sign of it.
+fn detect_lemonade(policy: &Policy, apps: &[App]) -> Option<ProviderReport> {
+    let port = policy
+        .providers
+        .lemonade
+        .as_ref()
+        .and_then(|p| p.port)
+        .unwrap_or(LEMONADE_DEFAULT_PORT);
+    if let Some(version) = probe_health(port) {
+        return Some(ProviderReport {
+            kind: "lemonade".into(),
             port,
-            version: None,
-            running: false,
-        })
+            version,
+            running: true,
+        });
     }
+    // Not answering: worth a line only if it is installed, and the
+    // inventory the slow facts already read says so.
+    let installed = apps
+        .iter()
+        .any(|a| a.name.to_ascii_lowercase().contains("lemonade"));
+    installed.then(|| ProviderReport {
+        kind: "lemonade".into(),
+        port,
+        version: None,
+        running: false,
+    })
 }
 
 /// GET `/api/v1/health` on loopback. Some(version) on a 200 (the version
@@ -103,13 +90,9 @@ fn probe_health(port: u16) -> Option<Option<String>> {
     )
 }
 
-/// Every provider this build knows how to detect, in the order reported.
-pub fn detect_all(policy: &Policy, apps: &[App]) -> Vec<ProviderReport> {
-    let known: [&dyn Provider; 1] = [&Lemonade];
-    known
-        .iter()
-        .filter_map(|p| p.detect(policy, apps))
-        .collect()
+/// The providers on this machine, as the telemetry document lists them.
+pub fn detect(policy: &Policy, apps: &[App]) -> Vec<ProviderReport> {
+    detect_lemonade(policy, apps).into_iter().collect()
 }
 
 #[cfg(test)]
@@ -130,16 +113,14 @@ mod tests {
         // A port nothing listens on: the probe refuses at once.
         let mut policy = Policy::default();
         policy.providers.lemonade = Some(ProviderPolicy { port: Some(1) });
-        assert!(Lemonade.detect(&policy, &[]).is_none());
+        assert!(detect_lemonade(&policy, &[]).is_none());
     }
 
     #[test]
     fn installed_but_silent_is_found_not_running() {
         let mut policy = Policy::default();
         policy.providers.lemonade = Some(ProviderPolicy { port: Some(1) });
-        let r = Lemonade
-            .detect(&policy, &[app("Lemonade Server")])
-            .expect("installed");
+        let r = detect_lemonade(&policy, &[app("Lemonade Server")]).expect("installed");
         assert_eq!(
             r,
             ProviderReport {
@@ -168,7 +149,7 @@ mod tests {
             serde_json::from_str(r#"{"awake_hold":true,"providers":{"lemonade":{"port":8000}}}"#)
                 .unwrap();
         assert_eq!(parsed.providers.lemonade.unwrap().port, Some(8000));
-        let older: Policy = serde_json::from_str(r#"{"awake_hold":false}"#).unwrap();
-        assert!(older.providers.lemonade.is_none());
+        let without: Policy = serde_json::from_str(r#"{"awake_hold":false}"#).unwrap();
+        assert!(without.providers.lemonade.is_none());
     }
 }

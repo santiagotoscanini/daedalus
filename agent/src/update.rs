@@ -126,10 +126,10 @@ fn assets_of(r: &ApiRelease) -> Option<Vec<Asset>> {
 
 /// Ask the feed. `Ok(None)` is "nothing newer"; an error is the feed not
 /// answering, which the caller reports and retries later.
-pub fn check(cfg: &Config) -> Result<Option<Release>> {
+pub fn check() -> Result<Option<Release>> {
     let url = format!(
         "https://api.github.com/repos/{}/releases?per_page=20",
-        cfg.release_repo
+        crate::config::DEFAULT_REPO
     );
     let releases: Vec<ApiRelease> = crate::http::agent()
         .get(&url)
@@ -313,7 +313,7 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
         wait = interval;
 
         let now = now_rfc3339();
-        match check(&cfg) {
+        match check() {
             Err(e) => {
                 tracing::warn!(error = format!("{e:#}"), "update check failed");
                 shared.with_state(|s| {

@@ -402,8 +402,8 @@ priority; each can be done independently unless noted.
    when a provider joins or leaves, not when a model does.
 
    **The agent reports presence; the box reads the rest from the
-   provider.** A `Provider` trait in the agent (`kind`, `detect`; later
-   `start`, `stop`, `update`) with Lemonade first: probe
+   provider.** The agent detects one kind, Lemonade
+   (`agent/src/providers.rs`): probe
    `127.0.0.1:<port>/api/v1/health` (port from the policy, default
    13305) and carry `providers: [{ kind, port, version, running }]` in
    the telemetry document, nothing more. The catalog, the labels, what is
@@ -412,14 +412,13 @@ priority; each can be done independently unless noted.
    so a provider is by definition reachable from the box, and a model list
    carried by the agent would be a second copy of the provider's state. A
    provider found by the agent is offered unless the node's switch says
-   otherwise; "found but bound to localhost" is a state the page names. A
-   provider can also exist without an agent — a machine not enrolled,
-   running Ollama — added on Settings › Machines by address and port; the
-   agent is one way to discover a provider, an address is the other, and
-   the box-side trait is the same. Ollama is the second `kind`
-   (`/api/tags`, port 11434). The System page's Host tab shows the
-   provider; Settings › Machines › the node shows it with the switch and
-   the model table.
+   otherwise; "found but bound to localhost" is a state the page names.
+   Ollama is deliberately not a kind (`app/src/lib/providers/kinds.ts`:
+   Lemonade's installer brings it along, so it drew every Lemonade machine
+   twice). Future idea, not scheduled: a provider on a machine with no
+   agent, added on Settings › Machines by address and port. The System
+   page's Host tab shows the provider; Settings › Machines › the node
+   shows it with the switch and the model table.
 
    **Models reach LiteLLM through LiteLLM, not through nix.** A model
    comes and goes with a click in Lemonade's window; a rebuild and a
@@ -456,8 +455,7 @@ priority; each can be done independently unless noted.
 
    **Order of work**, each step usable on its own:
    1. Providers as declared services: start, stop, install and update
-      Lemonade from the box through the agent; Ollama on the Mac, which the
-      policy can already express but no machine yet runs.
+      Lemonade from the box through the agent.
    2. Per-model counters from each provider — what the two WIP boards on
       the Providers tab wait for — and GPU figures from the agent.
    3. `pinAddress` gets its switch on Settings › Machines (the policy field

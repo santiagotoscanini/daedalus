@@ -262,7 +262,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
         let sample = c.sample();
         // Presence, every sample: a refused port answers at once, and the
         // page should say "running" within a tick of the server starting.
-        let providers = crate::providers::detect_all(&shared.policy(), &slow.apps);
+        let providers = crate::providers::detect(&shared.policy(), &slow.apps);
         shared.set_telemetry(assemble(&stat, &slow, &sample, updates.as_ref(), providers));
     }
 }

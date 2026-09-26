@@ -359,7 +359,6 @@ struct Session {
     sup: Supervisor,
     ui: Ui,
     next_poll: Instant,
-    cfg_workdir: Option<String>,
 }
 
 impl Session {
@@ -368,14 +367,10 @@ impl Session {
         let logs: PathBuf = config::user_log_dir();
         let claude_log = logs.join("claude-rc.log");
         let ui = Ui::build()?;
-        // The Claude server, in this session with this user's login. Wanted by
-        // the config until the service relays the box's policy; run in the
-        // directory the config names, else the most recent trusted project.
-        let sup = Supervisor::new(
-            cfg.claude_workdir.clone(),
-            claude_log.clone(),
-            cfg.claude_remote_control,
-        );
+        // The Claude server, in this session with this user's login. Wanted
+        // (as `Policy::default()` has it) until the service relays the box's
+        // policy, in the most recent trusted project until it names one.
+        let sup = Supervisor::new(None, claude_log.clone(), true);
         Ok(Self {
             port: cfg.port,
             logs,
@@ -383,7 +378,6 @@ impl Session {
             sup,
             ui,
             next_poll: Instant::now(),
-            cfg_workdir: cfg.claude_workdir,
         })
     }
 
@@ -428,8 +422,7 @@ impl Session {
         self.sup.tick();
         let report = self.sup.report();
         if let Some(answer) = send_report(self.port, &report) {
-            self.sup
-                .set_named_workdir(answer.workdir.or_else(|| self.cfg_workdir.clone()));
+            self.sup.set_named_workdir(answer.workdir);
             self.sup.set_wanted(answer.wanted);
             // The update only starts here: it runs on its own thread
             // (`Supervisor::update_claude` says why), so a restart in the

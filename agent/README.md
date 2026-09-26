@@ -99,7 +99,7 @@ Windows:
 ```
 C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (.old / .new around an update)
 C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
-C:\ProgramData\daedalus-agent\config.toml                 the knobs (src/config.rs); edit and restart the service
+C:\ProgramData\daedalus-agent\config.toml                 local knobs, never policy (src/config.rs); edit and restart
 C:\ProgramData\daedalus-agent\state.json                  the last update check and install
 C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPAPI-wrapped
 C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
@@ -118,8 +118,7 @@ macOS:
 ```
 
 Claude Code is looked for in `~/.local/bin`, npm's bin, Homebrew's bin and
-PATH. Its remote control runs in the directory the policy or config names,
-else the most recently used trusted project (Claude refuses the home
+PATH. Its remote control runs in the directory the policy names, else the most recently used trusted project (Claude refuses the home
 directory; `src/claude/workdir.rs`).
 
 ## How an update happens

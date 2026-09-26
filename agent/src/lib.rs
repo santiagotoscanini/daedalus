@@ -70,13 +70,17 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let state = state::State::load();
     let facts = facts::read();
     tracing::info!(os = %facts.os_name, version = %facts.os_version, cpu = %facts.cpu, "this machine");
-    let policy = hello::Policy::from_config(&cfg);
-    let shared = Arc::new(status::Shared::new(state, facts.clone(), started, policy));
+    let shared = Arc::new(status::Shared::new(
+        state,
+        facts.clone(),
+        started,
+        hello::Policy::default(),
+    ));
 
     update::retire_old_binaries();
 
-    // The point of the whole thing. Held while the policy says so — the
-    // config's default, then the box's word once it has approved this
+    // The point of the whole thing. Held while the policy says so — held by
+    // default, then the box's word once it has approved this
     // machine; the guard releases it on a clean stop, the OS on any other.
     let mut hold: Option<power::Hold> = None;
     let mut hold_wanted: Option<bool> = None;
