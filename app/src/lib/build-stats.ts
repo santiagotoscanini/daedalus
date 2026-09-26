@@ -44,7 +44,7 @@ export type BuildFailure = {
   app: string
   sha: string
   at: string
-  /** The stage it failed in, as the timeline reads it; the row's phase otherwise. */
+  /** The stage it failed in: the row's phase when it names one, else the timeline's reading. */
   phase: string
   /** The first non-empty line of the error, or null when there was none. */
   error: string | null
@@ -87,7 +87,12 @@ export function firstLine(text: string | null): string | null {
   return line ?? null
 }
 
+// The host leaves a failed row's `phase` on the stage it was in, which is
+// the answer; the timeline's guess (the first untimed stage) is only for a
+// row whose phase says something else. A stage that failed can still have
+// been timed — checks that ran for 8 s and then failed.
 function failedPhase(r: BuildStatRow): string {
+  if ((ACTIVE_BUILD_STATES as readonly string[]).includes(r.phase)) return r.phase
   const step = buildTimeline(r.state, r.timings).find((s) => s.status === 'failed')
   return step?.phase ?? (r.phase === '' ? 'unknown' : r.phase)
 }
@@ -119,10 +124,13 @@ export function buildStats(rows: readonly BuildStatRow[], failureLimit = 8): Bui
 
   // Every stage a build finished, whatever became of the build after it: a
   // clone that took four seconds took four seconds even if the checks failed.
+  // The stage a build failed IN is not finished, even when the host timed it
+  // (checks that ran for thirty minutes and timed out).
   const perStage = new Map<string, number[]>()
   for (const r of rows) {
+    const died = r.state === 'failed' ? failedPhase(r) : null
     for (const s of buildTimeline(r.state, r.timings)) {
-      if (s.status === 'done' && s.ms !== null) {
+      if (s.status === 'done' && s.ms !== null && s.phase !== died) {
         perStage.set(s.phase, [...(perStage.get(s.phase) ?? []), s.ms])
       }
     }

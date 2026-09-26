@@ -14,12 +14,18 @@ import {
   Stat,
   StatStrip,
 } from '../../../components/viz'
-import { buildTimeline, type LiveBuild, sha7, type TimelineStep } from '../../../lib/build-display'
+import {
+  buildDurationMs,
+  buildTimeline,
+  type LiveBuild,
+  sha7,
+  type TimelineStep,
+} from '../../../lib/build-display'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, ms, pct, since } from '../../../lib/format'
 import { appRepo } from '../../../lib/site'
 import { useSite } from '../../../lib/site-context'
-import type { Tone } from '../../../lib/tone'
+import { type Tone, toneStyle } from '../../../lib/tone'
 import { fetchBuilderNow } from '../../../server/builds'
 import type { SystemData } from '../data'
 import {
@@ -137,11 +143,9 @@ function NowBoard({ initial }: { initial: LiveBuild[] }) {
 
 function NowRow({ b, now }: { b: LiveBuild; now: number | null }) {
   const steps = buildTimeline(b.state, b.timings)
-  // The running stage has no timing yet: its clock is what has passed since
-  // the hand-off, less the stages already timed.
-  const timed = steps.reduce((n, s) => n + (s.ms ?? 0), 0)
-  const runningMs =
-    now === null || b.startedAt === null ? null : now - Date.parse(b.startedAt) - timed
+  // The host times a stage when it ends, so the running one has no number of
+  // its own; the clock on the right is the whole build since its hand-off.
+  const took = now === null ? null : buildDurationMs(b, now)
   return (
     <li className={cn(ROW, 'flex-wrap gap-y-[0.35rem] py-[0.5rem]')}>
       <Link
@@ -166,16 +170,24 @@ function NowRow({ b, now }: { b: LiveBuild; now: number | null }) {
               s.status === 'pending' ? 'text-(--dim)' : 'text-(--text-muted)',
             )}
           >
-            <Pulse on={s.status === 'running'} tone={STEP_TONE[s.status]} />
+            {s.status === 'running' ? (
+              <Pulse on tone="info" />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="inline-block size-[7px] flex-none rounded-full bg-(--tone)"
+                style={toneStyle(STEP_TONE[s.status])}
+              />
+            )}
             {s.phase}
             <span className="font-mono text-[0.7rem] text-(--dim)">
-              {s.status === 'running' ? ms(runningMs) : s.ms === null ? '' : ms(s.ms)}
+              {s.ms === null ? '' : ms(s.ms)}
             </span>
           </li>
         ))}
       </ol>
       <span className={cn(ROW_N, 'min-w-[5.5rem] text-[0.72rem] text-(--dim)')}>
-        {b.state === 'queued' ? `asked ${ago(now, b.createdAt)}` : ago(now, b.startedAt)}
+        {b.state === 'queued' ? `asked ${ago(now, b.createdAt)}` : ms(took)}
       </span>
     </li>
   )
@@ -198,10 +210,9 @@ function HistoryBoard({ h }: { h: History }) {
         <Stat
           label="Landed"
           value={h.successRate === null ? DASH : pct(h.successRate * 100)}
-          sub={`${String(h.succeeded)} of ${String(h.succeeded + h.failed)} finished`}
+          sub={`${String(h.succeeded)} of ${String(h.succeeded + h.failed)} · ${String(h.failed)} failed`}
         />
-        <Stat label="Failed" value={String(h.failed)} tone={h.failed > 0 ? 'bad' : undefined} />
-        <Stat label="Median build" value={ms(h.medianMs)} />
+        <Stat label="Median build" value={ms(h.medianMs)} sub="hand-off to finish" />
       </StatStrip>
       {h.apps.length === 0 ? (
         <p className={VIZ_EMPTY}>No builds in this window.</p>
@@ -332,6 +343,9 @@ function ToolchainBoard({ d }: { d: Builder }) {
           {facts.mise.map((m) => (
             <li key={m.app} className={ROW}>
               <span className={cn(ROW_MAIN, MONO)}>{m.app}</span>
+              {!d.toolchain.apps.includes(m.app) && (
+                <span className={ROW_SIDE}>no app of that name: inert</span>
+              )}
               <span className={ROW_N}>{bytes(m.bytes)}</span>
             </li>
           ))}
@@ -422,9 +436,19 @@ function MachineryBoard({ m, now }: { m: Machinery; now: number | null }) {
               {
                 k: 'Used',
                 v: (
-                  <span className="tabular-nums">
-                    {bytes(used)}
-                    {quota !== null && <span className="text-(--dim)"> of {bytes(quota)}</span>}
+                  <span className="inline-flex items-center gap-[0.6rem] tabular-nums">
+                    {quota !== null && used !== null && (
+                      <span className="w-[6rem]">
+                        <Progress
+                          pct={(used / quota) * 100}
+                          tone={used / quota > 0.85 ? 'warn' : 'accent'}
+                        />
+                      </span>
+                    )}
+                    <span>
+                      {bytes(used)}
+                      {quota !== null && <span className="text-(--dim)"> of {bytes(quota)}</span>}
+                    </span>
                   </span>
                 ),
               },
@@ -432,9 +456,6 @@ function MachineryBoard({ m, now }: { m: Machinery; now: number | null }) {
               { k: 'Push credential', v: yes(f.credential.wellFormed, 'well-formed', 'refused') },
             ]}
           />
-          {quota !== null && used !== null && (
-            <Progress pct={(used / quota) * 100} tone={used / quota > 0.85 ? 'warn' : 'accent'} />
-          )}
           <h4 className={BOARD_SUB}>Units</h4>
           <ul className={LIST}>
             {f.units.map((u) => (

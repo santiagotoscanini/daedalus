@@ -113,4 +113,18 @@ describe('buildStats', () => {
       buildStats([row({ id: 'old', state: 'failed', timings: { cloning: 1 } })]).failures[0],
     ).toMatchObject({ phase: 'detecting' })
   })
+
+  it('takes the failing stage from the row when it names one, and keeps it out of the medians', () => {
+    const s = buildStats([
+      row({
+        state: 'failed',
+        phase: 'checking',
+        timings: { cloning: 3000, detecting: 500, checking: 1_800_000 },
+        error: 'checks timed out after 30m',
+      }),
+    ])
+    expect(s.failures[0]?.phase).toBe('checking')
+    expect(s.stages.find((x) => x.phase === 'checking')).toMatchObject({ count: 0, medianMs: null })
+    expect(s.stages.find((x) => x.phase === 'cloning')).toMatchObject({ count: 1 })
+  })
 })

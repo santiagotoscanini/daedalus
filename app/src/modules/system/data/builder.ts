@@ -48,6 +48,8 @@ export type BuilderData = {
     rows: ManualRow[]
     /** For ImageRow; no button on these rows moves anything. */
     status: ImageUpdateStatus
+    /** The apps on this box, to tell an app's mise cache from a leftover. */
+    apps: string[]
   }
   machinery: BuilderSnapshot
   github: {
@@ -104,19 +106,20 @@ async function loadGithub(ctx: Ctx): Promise<BuilderData['github']> {
   }
 }
 
-async function loadRegistry(ctx: Ctx): Promise<BuilderData['registry']> {
-  const [catalog, storage, apps] = await Promise.all([
+async function loadRegistry(
+  ctx: Ctx,
+  names: ReadonlySet<string>,
+): Promise<BuilderData['registry']> {
+  const [catalog, storage] = await Promise.all([
     // Anonymous read is allowed on zot (nix/modules/registry), as Apps › Registry relies on.
     ctx.http.getJson<{ repositories?: string[] }>(`${ctx.hosts.base('registry')}/v2/_catalog`),
     ctx.prom.vector('zot_repo_storage_bytes'),
-    listApps(),
   ])
   const size = new Map<string, number>()
   for (const r of storage) {
     const v = Number(r.value[1])
     if (r.metric.repo !== undefined && Number.isFinite(v)) size.set(r.metric.repo, v)
   }
-  const names = new Set(apps.map((a) => a.name))
   const repos = catalog?.repositories ?? []
   const own = repos.filter((r) => !r.startsWith('cache/'))
   const cached = repos.filter((r) => r.startsWith('cache/'))
@@ -142,6 +145,7 @@ async function loadRegistry(ctx: Ctx): Promise<BuilderData['registry']> {
 
 export async function loadBuilder(ctx: Ctx): Promise<BuilderData> {
   const since = new Date(Date.now() - HISTORY_DAYS * 24 * 3600_000)
+  const names = new Set((await listApps()).map((a) => a.name))
   const [now, rows, manual, status, machinery, github, registry] = await Promise.all([
     builderNow(),
     buildsSince(since),
@@ -149,12 +153,16 @@ export async function loadBuilder(ctx: Ctx): Promise<BuilderData> {
     readImageUpdateStatus(),
     readBuilderFacts(),
     loadGithub(ctx),
-    loadRegistry(ctx),
+    loadRegistry(ctx, names),
   ])
   return {
     now,
     history: { ...buildStats(rows), days: HISTORY_DAYS },
-    toolchain: { rows: manual.filter((r) => TOOLCHAIN_PINS.includes(r.container)), status },
+    toolchain: {
+      rows: manual.filter((r) => TOOLCHAIN_PINS.includes(r.container)),
+      status,
+      apps: [...names],
+    },
     machinery,
     github,
     registry,
