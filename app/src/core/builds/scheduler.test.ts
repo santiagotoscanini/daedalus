@@ -142,16 +142,10 @@ const ctx = {
 vi.mock('../ctx', () => ({ makeCtx: async () => ctx }))
 
 const scheduler = await import('./scheduler')
-const {
-  freshState,
-  runSweep,
-  runTick,
-  planDispatch,
-  BOX_BUILDS_OFF,
-  NO_INSTALLATION,
-  PICKUP_MS,
-  REQUEST_TOO_LARGE,
-} = scheduler
+const { freshState, runTick, PICKUP_MS } = scheduler
+const { runSweep } = await import('./sweep')
+const { REQUEST_TOO_LARGE } = await import('./dispatch')
+const { planDispatch, BOX_BUILDS_OFF, NO_INSTALLATION } = await import('../../lib/build-dispatch')
 
 function row(over: Partial<BuildRow> = {}): BuildRow {
   return {

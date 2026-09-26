@@ -277,11 +277,6 @@ export function detectionParts(
   return parts
 }
 
-const DIGEST_PREFIX = /^sha256:/
-
-export const sameDigest = (a: string | null, b: string | null): boolean =>
-  a !== null && b !== null && a.replace(DIGEST_PREFIX, '') === b.replace(DIGEST_PREFIX, '')
-
 /**
  * What became of a build's image. The builds table does not keep the host's
  * `pinned` flag, so a live build that never deployed is read against the app:

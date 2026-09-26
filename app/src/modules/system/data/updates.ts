@@ -9,9 +9,7 @@ import { ENGINE_REPO } from '../../../lib/engine'
 
 export {
   loadUpdateNotes,
-  type UpdateNotes,
   type UpdateRow,
-  type UpdateVerdict,
 } from '../../../lib/dashboard/update-rows'
 
 // Every digest-pinned container on the box, and whether it is behind.

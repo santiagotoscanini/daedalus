@@ -54,8 +54,6 @@ const bridge = defineBridge<EngineUpdateStatus>({
   status: ENGINE_STATUS,
 })
 
-export const IDLE_ENGINE_UPDATE: EngineUpdateStatus = bridge.idle
-
 /**
  * How long a `running` status may go unrefreshed before it is a corpse.
  *

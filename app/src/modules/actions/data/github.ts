@@ -79,11 +79,6 @@ export function remembered(path: string, now: number = Date.now()): boolean {
   return hit !== undefined && now - hit.at < hit.ttl
 }
 
-/** Drop everything remembered — tests, and the day the App is widened. */
-export function forgetGithub(): void {
-  memory.clear()
-}
-
 /**
  * One read, App first then anonymous, decoded, remembered. `ttl` is for a
  * good answer; a refusal is remembered longer on its own. A decode failure

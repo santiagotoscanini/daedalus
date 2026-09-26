@@ -102,47 +102,6 @@ export function modelPolicies(v: unknown): ModelPolicies {
   return out
 }
 
-/** A route the gateway already has, as the collision check sees it. */
-export type TakenAlias = {
-  alias: string
-  /** `openai/<id>` — what the route dials. */
-  upstream: string
-  /** Who made it: `config` for a config.yaml route, else the node id of the sync's tag. */
-  owner: string
-  /** The provider model id the tag names, when the sync made it. */
-  id: string | null
-}
-
-/**
- * Why an alias cannot be given to this model, or null. Another node's or
- * another model's route with that name is a collision. A config.yaml route
- * with that name is one too — unless it dials the very same upstream model,
- * which is the migration of a hand-written route to a synced one: the two
- * coexist under one name until the config line is removed, and LiteLLM
- * balances between two routes to one server.
- */
-export function aliasError(
-  alias: string,
-  owner: string,
-  modelId: string,
-  upstream: string,
-  taken: readonly TakenAlias[],
-): string | null {
-  if (!ALIAS_RE.test(alias)) {
-    return 'an alias is letters, digits, dots, dashes or underscores, up to 63 long'
-  }
-  for (const t of taken) {
-    if (t.alias !== alias) continue
-    if (t.owner === owner && t.id === modelId) continue
-    if (t.owner === 'config') {
-      if (t.upstream === upstream) continue
-      return `"${alias}" is a config.yaml route to ${t.upstream}`
-    }
-    return `"${alias}" is already ${t.id ?? 'a model'} on ${t.owner}`
-  }
-  return null
-}
-
 /** The shape stored under the settings key `providers.box` for this box's own provider. */
 export type BoxProviderPolicy = {
   subgen?: { offer?: boolean; models?: ModelPolicies }

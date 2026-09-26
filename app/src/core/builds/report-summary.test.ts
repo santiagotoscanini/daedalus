@@ -7,7 +7,8 @@ import type { BuildRow } from '../../lib/build-queue'
 
 vi.mock('../github-app', () => ({ ghApp: async () => null, repoById: async () => null }))
 
-const { summaryOf, titleOf } = await import('./report')
+const { titleOf } = await import('./report')
+const { summaryOf } = await import('../../lib/build-report-text')
 
 const SHA = `abcdef0${'1'.repeat(33)}`
 const DIGEST = `sha256:${'a'.repeat(64)}`

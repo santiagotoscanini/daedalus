@@ -102,11 +102,6 @@ export const MCP_TOOLS: readonly McpToolSpec[] = [
   },
 ] as const
 
-/** Whether a scope reaches a tool. `write` reaches everything; `read` reaches reads. */
-export function scopeReaches(held: McpScope, needed: McpScope): boolean {
-  return held === 'write' || needed === 'read'
-}
-
 /** The refusal a read token gets when it calls a write tool. One sentence, everywhere. */
 export function scopeRefusal(tool: string): string {
   return `${tool} needs a write token; this token is read-only, so nothing was done.`

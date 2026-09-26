@@ -48,17 +48,6 @@ import { enqueueChecked, settleQueue } from './dispatch'
 import { logOnce, quietly } from './scheduler-log'
 import { runSweep } from './sweep'
 
-export {
-  type AppBuildFacts,
-  BOX_BUILDS_OFF,
-  type DispatchPlan,
-  NO_INSTALLATION,
-  planDispatch,
-} from '../../lib/build-dispatch'
-export { enqueueChecked, REQUEST_TOO_LARGE } from './dispatch'
-export { LOG_EVERY_MS, logOnce } from './scheduler-log'
-export { DELIVERY_RETENTION_MS, runSweep, type SweepRecord } from './sweep'
-
 /** Tick cadence while a build is dispatched or running. */
 export const ACTIVE_TICK_MS = 3_000
 /** Tick cadence otherwise; the interval still fires every ACTIVE_TICK_MS and skips. */

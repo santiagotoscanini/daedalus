@@ -42,14 +42,6 @@ export function hostnameShapeError(value: string): string | null {
   return null
 }
 
-/** A domain the box publishes under: at least two labels. */
-export function baseDomainError(value: string): string | null {
-  const shape = hostnameShapeError(value)
-  if (shape !== null) return shape
-  if (!value.trim().includes('.')) return 'needs at least two labels, like example.net.'
-  return null
-}
-
 /**
  * The control plane's name: the one label in front of the domain. Lower-case,
  * because that is what the build asserts for every published hostname, and

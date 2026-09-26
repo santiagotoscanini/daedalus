@@ -10,7 +10,6 @@ import {
   detectionParts,
   pushedTags,
   reportFailureText,
-  sameDigest,
 } from './build-display'
 
 const SHA = 'aaaaaaa000000000000000000000000000000001'
@@ -214,12 +213,5 @@ describe('reportFailureText', () => {
     ).toBe(
       'Posting the Deployment to GitHub failed (unreachable), once. It is retried on its own as well.',
     )
-  })
-})
-
-describe('sameDigest', () => {
-  it('ignores the sha256: prefix', () => {
-    expect(sameDigest('sha256:abc', 'abc')).toBe(true)
-    expect(sameDigest('abc', null)).toBe(false)
   })
 })

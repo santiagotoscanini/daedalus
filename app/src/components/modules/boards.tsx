@@ -31,10 +31,6 @@ const VIEWS = import.meta.glob<ViewsRecord>('../../modules/*/view/index.tsx', {
 /** What a module's server function answers with, as the route holds it. */
 export type ModulePayload = { kind: string; data: { tab: string }; off?: true }
 
-export function hasModuleViews(id: string): boolean {
-  return `../../modules/${id}/view/index.tsx` in VIEWS
-}
-
 export function ModuleBoards({ payload }: { payload: ModulePayload }) {
   if (payload.off === true) return <OffPanel module={payload.kind} tab={payload.data.tab} />
   const views = VIEWS[`../../modules/${payload.kind}/view/index.tsx`]

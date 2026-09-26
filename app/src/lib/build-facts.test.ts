@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cacheHitRatio, pullBytes, readBuildFacts } from './build-facts'
+import { cacheHitRatio, readBuildFacts } from './build-facts'
 
 // The two keys as the host build agent writes them, and every way an older or
 // newer agent can fail to: the point of the decoder is that none of them throws
@@ -106,22 +106,6 @@ describe('readBuildFacts', () => {
     const facts = readBuildFacts({ build: { ...BUILD, secrets: { GITHUB_TOKEN: 'ghp_nope' } } })
     expect(JSON.stringify(facts)).not.toContain('ghp_nope')
     expect(facts?.run?.secretsHash).toBe('b3a1c2d4e5f60718')
-  })
-})
-
-describe('pullBytes', () => {
-  it('is the config plus every compressed layer', () => {
-    expect(pullBytes(readBuildFacts({ image: IMAGE })?.image ?? null)).toBe(6_500)
-  })
-
-  it('is null unless the agent listed every part', () => {
-    expect(pullBytes(null)).toBeNull()
-    expect(
-      pullBytes(readBuildFacts({ image: { ...IMAGE, configSize: null } })?.image ?? null),
-    ).toBe(null)
-    expect(pullBytes(readBuildFacts({ image: { ...IMAGE, layerSizes: [] } })?.image ?? null)).toBe(
-      null,
-    )
   })
 })
 

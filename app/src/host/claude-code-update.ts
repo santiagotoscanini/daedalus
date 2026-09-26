@@ -58,8 +58,6 @@ const bridge = defineBridge<ClaudeCodeUpdateStatus>({
   status: CLAUDE_CODE_STATUS,
 })
 
-export const IDLE_CLAUDE_CODE_UPDATE: ClaudeCodeUpdateStatus = bridge.idle
-
 /**
  * How long a `running` status may go unrefreshed before it is a corpse.
  *

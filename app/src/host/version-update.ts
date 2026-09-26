@@ -61,8 +61,6 @@ const bridge = defineBridge<VersionUpdateStatus>({
   status: STATUS,
 })
 
-export const IDLE_VERSION_UPDATE: VersionUpdateStatus = bridge.idle
-
 /** daedalus-version-update's TimeoutStartSec (60 min) plus slack; they move together. */
 const RUNNING_MAX_MS = 65 * 60_000
 

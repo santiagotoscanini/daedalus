@@ -69,12 +69,7 @@ export const NOT_ADMIN_REASON = `Only members of the ${ADMIN_GROUP} group can ch
  * re-sets it on gated paths — so a bypassed path like /api/deploy arrives
  * with none), or unparseable. An empty list can never satisfy `isAdmin`, so
  * every one of those degrades to "not an admin" rather than to an error page.
- */
-function parseGroups(header: string | null | undefined): string[] {
-  return describeGroups(header).groups
-}
-
-/**
+ *
  * How the groups header arrived, for the panel that decides whether arming
  * the check is safe. `groups` alone cannot say: an empty list is what every
  * failure degrades to, and "the proxy sent nothing" and "the proxy sent a
@@ -106,16 +101,6 @@ export function describeGroups(header: string | null | undefined): GroupsRead {
   } catch {
     return { state: 'unparseable', groups: [] }
   }
-}
-
-/** The groups on a request a caller is holding. Never throws; unknown is `[]`. */
-export function groupsOf(request: Request): string[] {
-  return parseGroups(request.headers.get(AUTH_HEADERS.GROUPS))
-}
-
-/** The groups on the request this server function is running inside. */
-export function requireGroups(): string[] {
-  return parseGroups(getRequestHeader(AUTH_HEADERS.GROUPS))
 }
 
 /** The header's arrival state and its groups, over the request this server function is in. */

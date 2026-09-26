@@ -55,23 +55,7 @@ import {
 import type { SiteGithubApp } from '../site/file'
 import { block, clearFailure, failures, logOnce, mayCall, memo, recordFailure } from './report-memo'
 
-export {
-  CHECK_RUN_TEXT_MAX_BYTES,
-  type DeployLike,
-  deliveryOf,
-  fenceLog,
-  matchDeploy,
-  summaryOf,
-} from '../../lib/build-report-text'
-export {
-  REPORT_FAILURES_KEY,
-  REPORT_MAX_RETRIES,
-  RETRY_DELAYS_MS,
-  type ReportFailure,
-  type ReportFailures,
-  type ReportStep,
-  readReportFailures,
-} from './report-memo'
+export { readReportFailures } from './report-memo'
 
 export const PATCH_MIN_INTERVAL_MS = 10_000
 /** A live build whose Deployment sees no deploy this long after it finished gets `error`. */

@@ -110,17 +110,6 @@ export function readBuildFacts(status: { image?: unknown; build?: unknown }): Bu
   return image === null && run === null ? null : { image, run }
 }
 
-/**
- * `size_bytes` restated from the parts, for the label beside it: the manifest's
- * config plus its compressed layers is the number of bytes a `podman pull`
- * moves, which is not the space the image takes once unpacked. Null unless the
- * agent listed every part.
- */
-export function pullBytes(image: ImageFacts | null): number | null {
-  if (image === null || image.configSize === null || image.layerSizes.length === 0) return null
-  return image.layerSizes.reduce((sum, n) => sum + n, image.configSize)
-}
-
 /** Steps the cache answered for, as a share — null unless the agent counted both. */
 export function cacheHitRatio(run: RunFacts | null): number | null {
   if (run === null || run.stepsTotal === null || run.stepsTotal <= 0 || run.stepsCached === null) {

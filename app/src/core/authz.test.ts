@@ -1,12 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  ADMIN_GROUP,
-  describeGroups,
-  groupsOf,
-  isAdmin,
-  NO_ACTOR_REASON,
-  NOT_ADMIN_REASON,
-} from './auth'
+import { ADMIN_GROUP, describeGroups, isAdmin, NO_ACTOR_REASON, NOT_ADMIN_REASON } from './auth'
 import { type Authorization, allow, assertMachineActor, setEnforcingAdmins } from './authz'
 
 // Two rules, asserted apart from the database that stores the flag.
@@ -17,19 +10,10 @@ import { type Authorization, allow, assertMachineActor, setEnforcingAdmins } fro
 // should need a Postgres to state. `enforcingAdmins` is the only part that
 // reads a row, and it is a one-line `readSetting` with a boolean guard.
 
-/** A request as traefik's forward-auth leaves it, groups included. */
-const req = (email?: string, groups?: string): Request =>
-  new Request('https://daedalus-app.test/', {
-    headers: {
-      ...(email === undefined ? {} : { 'x-forwarded-email': email }),
-      ...(groups === undefined ? {} : { 'x-forwarded-groups': groups }),
-    },
-  })
-
 describe('reading the groups header', () => {
   it('parses the JSON array the plugin renders', () => {
-    expect(groupsOf(req('op@test', '["admins","family"]'))).toEqual([ADMIN_GROUP, 'family'])
-    expect(groupsOf(req('op@test', '["family"]'))).toEqual(['family'])
+    expect(describeGroups('["admins","family"]').groups).toEqual([ADMIN_GROUP, 'family'])
+    expect(describeGroups('["family"]').groups).toEqual(['family'])
   })
 
   it('reads every unusable header as no groups at all', () => {
@@ -49,8 +33,8 @@ describe('reading the groups header', () => {
       '["  "]',
       '[',
     ]) {
-      expect(groupsOf(req('op@test', raw)), String(raw)).toEqual([])
-      expect(isAdmin(groupsOf(req('op@test', raw))), String(raw)).toBe(false)
+      expect(describeGroups(raw).groups, String(raw)).toEqual([])
+      expect(isAdmin(describeGroups(raw).groups), String(raw)).toBe(false)
     }
   })
 

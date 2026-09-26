@@ -9,7 +9,6 @@ export {
   PART_DETAIL,
   PART_ID,
   PART_NAME,
-  PART_WIDE,
   PartHead,
   PartPhoto,
 } from '../../../components/part'

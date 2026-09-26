@@ -15,11 +15,6 @@ const LOADERS = import.meta.glob<ModuleLoader>('../modules/*/data/index.ts', { i
 
 const pathOf = (id: string) => `../modules/${id}/data/index.ts`
 
-/** Whether a module ships a data half at all. */
-export function hasModuleLoader(id: string): boolean {
-  return pathOf(id) in LOADERS
-}
-
 /**
  * What a module's server function answers with. `off` is a tab whose every
  * nix module is switched off on this box: no loader ran — the boards would

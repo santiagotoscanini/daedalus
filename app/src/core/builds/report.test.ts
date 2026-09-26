@@ -89,18 +89,12 @@ vi.mock('../../host/contract/domains/site', () => ({
   siteIdentity: async () => ({ data: { controlPlane: { hostname: null } } }),
 }))
 
-const {
-  CHECK_RUN_TEXT_MAX_BYTES,
-  DEPLOY_WAIT_MS,
-  REPORT_FAILURES_KEY,
-  deliveryOf,
-  fenceLog,
-  matchDeploy,
-  readReportFailures,
-  reportBuildChange,
-  reportTick,
-  retryReport,
-} = await import('./report')
+const { CHECK_RUN_TEXT_MAX_BYTES, deliveryOf, fenceLog, matchDeploy } = await import(
+  '../../lib/build-report-text'
+)
+const { REPORT_FAILURES_KEY } = await import('./report-memo')
+const { DEPLOY_WAIT_MS, readReportFailures, reportBuildChange, reportTick, retryReport } =
+  await import('./report')
 
 const ID = '11111111-2222-4333-8444-555555555555'
 const SHA = `abcdef0${'1'.repeat(33)}`

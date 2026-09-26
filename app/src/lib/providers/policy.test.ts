@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProviderModel } from './kinds'
-import { aliasError, isBoxProviderPolicy, modelPolicies, resolveModel } from './policy'
+import { isBoxProviderPolicy, modelPolicies, resolveModel } from './policy'
 
 const gemma: ProviderModel = {
   id: 'Gemma-4-12B-it-MTP-GGUF',
@@ -45,36 +45,6 @@ describe('the policies map from a page', () => {
     expect(() => modelPolicies({ a: { mode: 'video' } })).toThrow(/mode/)
     expect(() => modelPolicies({ a: { offer: 'yes' } })).toThrow(/offer/)
     expect(() => modelPolicies([])).toThrow(/object/)
-  })
-})
-
-describe('an alias against what the gateway holds', () => {
-  const taken = [
-    { alias: 'gemma-4-12b', upstream: 'openai/Gemma-4-12B-it-MTP-GGUF', owner: 'config', id: null },
-    { alias: 'gpt-image-2', upstream: 'openai/gpt-image-2', owner: 'config', id: null },
-    { alias: 'kokoro', upstream: 'openai/kokoro-v1', owner: 'mac', id: 'kokoro-v1' },
-  ]
-  it('allows the migration of a config route to the same upstream', () => {
-    expect(
-      aliasError(
-        'gemma-4-12b',
-        'pc',
-        'Gemma-4-12B-it-MTP-GGUF',
-        'openai/Gemma-4-12B-it-MTP-GGUF',
-        taken,
-      ),
-    ).toBeNull()
-  })
-  it('refuses a config route to something else, and another node’s model', () => {
-    expect(aliasError('gpt-image-2', 'pc', 'Z-Image-Turbo', 'openai/Z-Image-Turbo', taken)).toMatch(
-      /config\.yaml/,
-    )
-    expect(aliasError('kokoro', 'pc', 'kokoro-v1', 'openai/kokoro-v1', taken)).toMatch(/on mac/)
-  })
-  it('allows its own name and a free one', () => {
-    expect(aliasError('kokoro', 'mac', 'kokoro-v1', 'openai/kokoro-v1', taken)).toBeNull()
-    expect(aliasError('new-one', 'pc', 'x', 'openai/x', taken)).toBeNull()
-    expect(aliasError('Bad!', 'pc', 'x', 'openai/x', taken)).toMatch(/letters/)
   })
 })
 

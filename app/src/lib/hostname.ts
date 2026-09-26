@@ -46,12 +46,6 @@ export function isAppName(v: unknown): v is string {
   return typeof v === 'string' && v.length <= APP_NAME_MAX && LABEL.test(v)
 }
 
-/** `isAppName` as a parser, for the request boundaries that must refuse. */
-export function appName(v: unknown): string {
-  if (!isAppName(v)) throw new Error('expected an app name')
-  return v
-}
-
 /**
  * Labels under the base domain that an app may never claim, and why.
  *

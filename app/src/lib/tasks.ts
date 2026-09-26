@@ -130,10 +130,6 @@ export const DEFAULT_TASK_TIMEOUT_SEC = 900
 export const SCHEDULE_PRESETS = ['hourly', 'daily'] as const
 export type SchedulePreset = (typeof SCHEDULE_PRESETS)[number]
 
-export function isSchedulePreset(v: unknown): v is SchedulePreset {
-  return typeof v === 'string' && (SCHEDULE_PRESETS as readonly string[]).includes(v)
-}
-
 /**
  * The minute of the hour this app's scheduled work runs at: stable for a given
  * name, 1..59, and NEVER 0.

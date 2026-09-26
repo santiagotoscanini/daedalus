@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { desc, eq, isNull } from 'drizzle-orm'
-import { type McpScope, scopeReaches } from '../../lib/mcp'
+import { desc, eq } from 'drizzle-orm'
+import type { McpScope } from '../../lib/mcp'
 import { db } from '../db'
 import { safeEqual } from '../github-app-crypto'
 import { mcpTokens } from '../schema'
@@ -113,16 +113,6 @@ export async function revokeMcpToken(id: string): Promise<boolean> {
   return updated.length > 0
 }
 
-/** Whether any usable token exists at all — what the panel says when there are none. */
-export async function anyLiveMcpToken(): Promise<boolean> {
-  const rows = await db
-    .select({ id: mcpTokens.id })
-    .from(mcpTokens)
-    .where(isNull(mcpTokens.revokedAt))
-    .limit(1)
-  return rows.length > 0
-}
-
 /**
  * The identity behind a presented token, or null.
  *
@@ -155,9 +145,4 @@ export async function stampMcpTokenUse(id: string): Promise<void> {
   } catch (err) {
     console.warn('[mcp] could not stamp token use:', err instanceof Error ? err.message : err)
   }
-}
-
-/** Whether this identity reaches a tool of that scope. */
-export function identityReaches(identity: McpIdentity, needed: McpScope): boolean {
-  return scopeReaches(identity.scope, needed)
 }

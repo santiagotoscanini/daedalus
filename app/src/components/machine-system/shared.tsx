@@ -20,7 +20,7 @@ import { Board, Chip } from '../viz'
 // snapshot — and where the difference matters the page says so in the
 // foot, as the box's pages do.
 
-export { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
+export { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../tokens'
 
 /** The part-identity block, as Build draws it on the box. */
 export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
@@ -94,11 +94,6 @@ export function ago(iso: string | null): string {
   if (iso === null) return DASH
   const t = Date.parse(iso)
   return Number.isNaN(t) ? iso : since((Date.now() - t) / 1000)
-}
-
-/** The agent's own line about why a reading is missing, when it wrote one. */
-export function reason(t: NodeTelemetry | null, re: RegExp): string | null {
-  return t?.errors.find((e) => re.test(e)) ?? null
 }
 
 /**

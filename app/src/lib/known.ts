@@ -65,8 +65,3 @@ export async function known<T>(
   }
   return reading
 }
-
-/** Drop a remembered answer, for the rare mutation that does not invalidate. */
-export function forget(key: string): void {
-  store.delete(key)
-}

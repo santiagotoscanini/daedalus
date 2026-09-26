@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  baseDomainError,
   controlPlaneLabelError,
   engineOverrideError,
   hostnameShapeError,
@@ -44,11 +43,6 @@ describe('hostnames', () => {
     expect(hostnameShapeError('-s2.example')).not.toBeNull()
     expect(hostnameShapeError('a b.example')).not.toBeNull()
     expect(hostnameShapeError('')).not.toBeNull()
-  })
-
-  it('wants two labels for the base domain', () => {
-    expect(baseDomainError('toscanini.me')).toBeNull()
-    expect(baseDomainError('toscanini')).not.toBeNull()
   })
 })
 

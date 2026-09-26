@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  appName,
   appNameError,
   effectiveHostname,
   hostnameError,
@@ -39,11 +38,6 @@ describe('isAppName', () => {
     // two must not be able to disagree, which is what a divergence was.
     for (const n of ['iris', 'app-2', 'a', 'abc-', 'a'.repeat(59), 'a'.repeat(60), 'a_b', '-a'])
       expect(isAppName(n)).toBe(appNameError(n) === null)
-  })
-
-  it('parses or throws', () => {
-    expect(appName('iris')).toBe('iris')
-    expect(() => appName('abc-')).toThrow('expected an app name')
   })
 })
 

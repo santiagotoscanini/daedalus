@@ -1,6 +1,6 @@
 import { asValidator, bool, is, obj, str, withMessage } from '../lib/contract/decode'
 import { flagField, nonEmptyStringField } from '../lib/contract/fields'
-import { adminFn, adminReadFn } from './fn'
+import { adminFn } from './fn'
 
 // The server functions behind a game server's roster (core/site/players.ts).
 // Every write is a site edit and lands on the next Apply; nothing here
@@ -22,17 +22,6 @@ async function rosterModule(id: string) {
   if (!isRosterModule(id)) throw new Error(`${id} keeps no roster`)
   return id
 }
-
-/**
- * What the vendor says a name is — a preview, written nowhere. A GET that only
- * an admin may make, as it always was; the roster page it serves is theirs.
- */
-export const lookupPlayerFn = adminReadFn
-  .validator(asValidator(withMessage(obj({ name: str, id: moduleField }), 'expected { id, name }')))
-  .handler(async ({ data }) => {
-    const { lookupPlayer } = await import('../core/site/players')
-    return lookupPlayer(await rosterModule(data.id), data.name)
-  })
 
 export const addPlayerFn = adminFn
   .validator(

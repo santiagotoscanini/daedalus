@@ -21,11 +21,9 @@ import { appNameError, effectiveHostname, hostnameError } from '../hostname'
 // lib/apps/validate.ts, and the manifest ↔ row ↔ export mapping plus the drift
 // comparison against what Nix actually built in lib/apps/manifest-map.ts.
 
-export { driftOf, toRegistryExport, toRow } from '../apps/manifest-map'
+export { driftOf, toRegistryExport } from '../apps/manifest-map'
 export {
   type AppPatch,
-  EDITABLE_FIELDS,
-  type EditableField,
   type NewApp,
   validateAppPatch,
   validateNewApp,
