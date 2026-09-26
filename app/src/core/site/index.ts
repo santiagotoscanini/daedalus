@@ -27,8 +27,8 @@ import {
 
 // The site directory, from this container's side.
 //
-// Since Phase 5 site.json is THE SOURCE of the site constants — nix builds
-// from it — so this module is where editing it lives. The model is the one
+// site.json is THE SOURCE of the site constants — nix builds from it — so
+// this module is where editing it lives. The model is the one
 // the app registry already uses: a stored DESIRED document is the editing
 // surface, the COMMITTED file is the contract, and the difference between
 // them is what an Apply writes. Before any edit the desired document is
@@ -42,10 +42,10 @@ import {
 //
 // "Current" on the Site tab is decided by digest, never by content: the host
 // publishes a sha256 per managed file; this hashes the bytes it would write.
-// Two files are reported without a comparison: apps.json, which is not
-// rendered here at all (only an Apply writes it, from the apps table), and
-// daedalus.json, which is rendered here but carries a timestamp — see
-// siteState. Server-only.
+// Three files are reported without a comparison: apps.json and nodes.json,
+// which are not rendered here at all (only an Apply writes them, from their
+// tables), and daedalus.json, which is rendered here but carries a timestamp
+// — see siteState. Server-only.
 
 export type SiteFileView = {
   name: 'site.json' | 'apps.json' | 'nodes.json' | 'README.md' | 'daedalus.json'
@@ -61,14 +61,13 @@ export type SiteState = {
   commit: boolean
 }
 
-/** The fields nix sources from site.json — the only ones an edit may touch.
-    Everything else in the document is still a copy of the configuration.
+/** The fields nix or the host agents source from site.json — the only ones an
+    edit may touch. Everything else in the document is still a copy of the
+    configuration.
 
-    The list comes first and the type is read off it, not the other way round.
-    Written as `readonly SiteField[]` against a hand-kept union, a field left
-    out of the list still typechecks everywhere and the only symptom is a
-    settings input that quietly refuses to save. Now there is one declaration,
-    so there is nothing to leave out. */
+    The list comes first and `SiteField` is read off it, so there is one
+    declaration and no hand-kept union a field could be left out of (whose only
+    symptom would be a settings input that quietly refuses to save). */
 const EDITABLE = [
   'identity.baseDomain',
   'identity.controlPlane',
@@ -95,11 +94,11 @@ const EDITABLE = [
   // Also read only by the host agents, at commit time — so the Apply that
   // changes it already commits as the identity it chose.
   'commits.author',
-  // The switches moved from a page (core/site/switches.ts). One field, an
-  // object: the bar names each id inside it through `moduleChanges`.
+  // The module switches (core/site/switches.ts). One field, an object: the
+  // bar names each id inside it through `moduleChanges`.
   'modules.enabled',
-  // The hostnames and exposure moved beside a switch (core/site/switches.ts):
-  // one field, an object keyed by webApp, worded per entry the same way.
+  // A switch's hostnames and exposure (core/site/switches.ts): one field, an
+  // object keyed by webApp, worded per entry the same way.
   'modules.web',
   // A game server's roster (core/site/players.ts), worded per account.
   'modules.players',
@@ -189,7 +188,7 @@ export function changesBetween(committed: SiteDocument, desired: SiteDocument): 
 
 /**
  * A document written before the control plane's label was part of site.json
- * reads it as '' — and nix, seeing no label, keeps the address stacks/daedalus
+ * reads it as '' — and nix, seeing no label, keeps the address nix/stacks/daedalus
  * declares. Filled from `from` (the running box), so the page shows the real
  * label and an old file is not reported as a pending rename.
  */
@@ -238,7 +237,9 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
 }
 
 /**
- * The two edits whose valid values are a list somebody else owns.
+ * The edits whose valid values something other than the decoder decides: the
+ * control plane's label and its retirement, the engine override, the commit
+ * author, and the two whose values are a list somebody else owns.
  *
  * A timezone must be one this system's tzdata names: NixOS accepts any string
  * there, and a box handed a zone its tzdata lacks has no local time at all. A
@@ -343,13 +344,6 @@ async function refuseUnknown(
 }
 
 /**
- * Record an edit. The draft stored is the whole desired document, so the
- * editing surface survives a reload and a second edit composes with the
- * first. Setting a field back to its committed value is how an edit is
- * undone; when nothing differs the draft is dropped rather than kept as a
- * copy.
- */
-/**
  * Serve-both-until-confirmed, decided here and not by the page: renaming the
  * control plane keeps the committed label as the previous address, which nix
  * serves as an alias, so a rename can never lock the operator out of the page
@@ -380,6 +374,13 @@ function keepPreviousAddress(
   )
 }
 
+/**
+ * Record an edit. The draft stored is the whole desired document, so the
+ * editing surface survives a reload and a second edit composes with the
+ * first. Setting a field back to its committed value is how an edit is
+ * undone; when nothing differs the draft is dropped rather than kept as a
+ * copy.
+ */
 export async function saveSiteEdit(
   ctx: Ctx,
   patch: Partial<Record<SiteField, unknown>>,
@@ -399,9 +400,8 @@ export async function saveSiteEdit(
   // before it is stored.
   decodeSiteDocument(JSON.parse(renderSiteFile(next)))
   if (current.committed !== null && changesBetween(current.committed, next).length === 0) {
-    // Dropped, not nulled: the settings column is NOT NULL, and writing null
-    // here was the one way to make "put it back" fail while every other edit
-    // succeeded.
+    // Dropped, not nulled: the settings column is NOT NULL, so writing null
+    // would make "put it back" fail while every other edit succeeded.
     await ctx.store.delete(SETTING_KEYS.siteDraft)
   } else {
     await ctx.store.write(SETTING_KEYS.siteDraft, next)
@@ -417,9 +417,7 @@ export async function saveSiteEdit(
 //
 // The one rule the gatherers below all obey: a fact this container cannot
 // READ is null. Not a default, not an empty string, not a stale value from a
-// snapshot whose producer stopped. A stamp that occasionally invents a
-// revision is worth less than no stamp, because nothing distinguishes the
-// invented entries from the real ones afterwards.
+// snapshot whose producer stopped (file.ts `SiteStamp` says why).
 
 /** A snapshot's data, or null when it is missing, undecodable or stale. */
 function fresh<T>(snap: SnapshotResult<T>): T | null {
@@ -514,9 +512,9 @@ export async function siteState(ctx: Ctx, facts?: RepoFacts): Promise<SiteState>
         status: files['README.md'].status,
         current: compare(files['README.md'], renderSiteReadme(desired)),
       },
-      // Never compared, for the same reason apps.json is not — but a
-      // different one. apps.json is not rendered here at all; daedalus.json
-      // IS, and still cannot be compared: it carries `writtenAt`, so the
+      // Never compared, like apps.json, but for a different reason:
+      // apps.json is not rendered here at all; daedalus.json IS, and still
+      // cannot be compared: it carries `writtenAt`, so the
       // bytes this box would write now differ from the committed ones by
       // construction and "differs" would be the permanent answer. A digest
       // that is always red says nothing.
@@ -531,8 +529,7 @@ export type WriteOutcome = Result<string>
 
 /**
  * Ask the host to write site.json (with the README and the stamp) as desired.
- * This is the
- * Site tab's door and does NOT rebuild — it exists for the first write, and
+ * This is the Site tab's door and does NOT rebuild — it exists for the first write, and
  * for a directory that fell out of step. A change to a value nix reads goes
  * through Apply (host/apply-flow.ts), which writes the same bytes and rebuilds.
  */

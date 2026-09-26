@@ -54,7 +54,7 @@ const reRender = (bytes: string): string => renderSiteFile(decodeSiteDocument(JS
 
 describe('site.json round trip', () => {
   it('carries the break-glass login switch, and leaves it out when it was never written', () => {
-    // The one field nix does not read: absent stays absent, so a file from
+    // A field nix does not read: absent stays absent, so a file from
     // before the switch re-renders to its own bytes; present, it survives
     // the round trip the next write is.
     expect(renderSiteFile(doc)).not.toContain('localLogin')

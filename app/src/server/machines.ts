@@ -2,8 +2,7 @@ import { asValidator, obj, withMessage } from '../lib/contract/decode'
 import { flagField, nodeIdField } from '../lib/contract/fields'
 import { readFn } from './fn'
 
-// The machine picker's list and a node's System page. Read-only, so no
-// gate beyond the page's; value imports dynamic, like every server module.
+// The machine picker's list and a node's System page. Read-only.
 
 /** Every approved node: what the pickers on System and Claude offer beside this box. */
 export const fetchMachineNodesFn = readFn.handler(async () => {

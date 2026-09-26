@@ -7,7 +7,7 @@ import { saveSiteEdit, siteEdit } from './index'
 // A game server's roster, edited from its page.
 //
 // site.json `modules.players.<id>` is the whole list — who may join and who
-// may run commands — and platform/site.nix hands it to the stack as
+// may run commands — and nix/platform/site.nix hands it to the stack as
 // `fleet.site.players.<id>`. Like every site edit it goes to the draft and
 // lands on the next Apply; how the running server takes it is the stack's
 // business (the Minecraft stack reloads its whitelist in place, so an Apply

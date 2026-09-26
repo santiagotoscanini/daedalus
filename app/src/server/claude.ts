@@ -2,15 +2,9 @@ import { asValidator, obj, str, withMessage } from '../lib/contract/decode'
 import { nodeIdField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
-// The Claude tab's loaders — the box's (System › Claude and Shotter, through
-// modules/system/data/claude.ts) and a node's.
-//
-// Thin on purpose, like its siblings here: the work is in
-// lib/dashboard/claude.ts, and this exists so the browser bundle never gets
-// near the snapshot reader (node:fs) or the Loki client.
-// The box's own document is loaded by the module loader (fetchModuleBoards)
-// like every other System tab; what stays here is the node's report and the
-// session actions.
+// Server functions behind the Claude tab: a node's report, Remote Control's
+// restart, the per-session actions and this box's Claude Code pin. The box's
+// own report is a System tab, loaded by fetchModuleBoards like the others.
 
 /**
  * Ask the host to restart the Remote Control server.

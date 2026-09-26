@@ -34,14 +34,14 @@ import type { GhResult } from './github-app'
 
 // The capability set a reader is handed instead of reaching for process.env.
 //
-// Every module loader (src/modules/*/data) receives one of these and nothing
-// else: no `process.env` in a loader, no direct database import, no ad-hoc
-// file read — host/boundary.test.ts refuses a `process.env` anywhere under
-// src/modules. core/settings reads through one too.
+// Every module loader (src/modules/*/data) receives one of these as its way to
+// the machine: host/boundary.test.ts refuses a `process.env` anywhere under
+// src/modules, and a value import of host/prom, host/loki or host/keys under a
+// module's data/. core/settings reads through one too.
 //
 // Everything here is server-only — the snapshot reader touches the
-// filesystem and the store is Postgres — so this module must only ever be
-// imported dynamically from a server function, like lib/repo/*.
+// filesystem and the store is Postgres — so the seam never imports it
+// statically: server/fn.ts builds one per request behind `await import`.
 
 /**
  * Which nix modules the box runs, as `/export/modules.json` publishes them:
@@ -187,8 +187,9 @@ export async function makeCtx(): Promise<Ctx> {
       latest: lokiLatest,
       entries: lokiEntries,
     },
-    // Lazy on purpose: core/github-app.ts names this type, and a static
-    // import here would be a cycle.
+    // Lazy, so a Ctx that never asks GitHub never loads core/github-app.ts
+    // (which imports only this file's types, so a static import would not
+    // be a runtime cycle).
     github: {
       app: (path, init) => import('./github-app').then((m) => m.ghApp(ctx, path, init)),
       anon: (path) => import('./github-app').then((m) => m.ghAnon(path)),

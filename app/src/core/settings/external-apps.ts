@@ -17,7 +17,7 @@ import type { Ctx } from '../ctx'
 // than the site repository (see the `settings` table comment in
 // host/schema.ts). And it is the operator's data, not the app's: the source
 // carries no seed, a fresh box lists nothing until a row is added on
-// Settings › General, and the list is written whole on every change — a few
+// Settings › Projects, and the list is written whole on every change — a few
 // rows, edited by one person, are not worth a table.
 
 export async function listExternalApps(ctx: Ctx): Promise<ExternalApp[]> {

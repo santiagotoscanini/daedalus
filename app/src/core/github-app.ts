@@ -329,8 +329,8 @@ export type RepoLookup = Result<RepoById>
  * path names a repo to GitHub.
  *
  * `apps.githubRepoId` is what the sweep pinned and what the webhook matches on;
- * the app's own name is a label that a rename makes wrong, and every path that
- * built `owner/<app name>` broke silently the moment somebody renamed a repo.
+ * the app's own name is a label that a rename makes wrong, and a path that
+ * built `owner/<app name>` would break silently the moment a repo is renamed.
  * Asked every time rather than cached: a rename is exactly the case this
  * exists for, and one GET against a 5000/hour budget is cheaper than a wrong
  * answer kept warm.

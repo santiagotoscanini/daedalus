@@ -8,19 +8,19 @@ import { saveSiteEdit, siteEdit } from './index'
 // A stack's switch is `fleet.modules.<id>.enable`, and the only thing the
 // control plane may write is site.json: `modules.enabled.<id>` becomes that
 // switch on the next Apply, at a priority the host's own files yield to
-// (platform/site.nix). What this file adds is the judgement nix cannot make
+// (nix/platform/site.nix). What this file adds is the judgement nix cannot make
 // before an Apply: which ids exist on this box, which may never be switched,
 // and what a switch takes with it — the containers, the hostnames, the rail
 // entry — so the confirmation says it before the operator agrees to it.
 //
-// Three exports feed that. `/export/modules.json` is every switch the box
+// Four exports feed that. `/export/modules.json` is every switch the box
 // declares with its value as built; `/export/switches.json` is the list a
 // running box cannot do without and the log-stack registry, stack →
 // containers; `/export/images.json` names the pinned containers, which is
 // how a stack's own container (the one with the stack's name, absent from
-// the log registry) is counted. Hostnames come from the publishing export: a
-// webApp whose serviceName is one of the stack's containers stops answering
-// with it. The shape and the reasons are lib/module-switch.ts, client-safe.
+// the log registry) is counted; and hostnames come from
+// `/export/publishing.json`: a webApp whose serviceName is one of the stack's
+// containers stops answering with it. The shape and the reasons are lib/module-switch.ts, client-safe.
 
 export type { ModuleSwitch } from '../../lib/module-switch'
 

@@ -9,10 +9,11 @@ import type { BoxSettings } from '../settings/types'
 // never builds JSON.
 //
 // What this file is: the box's own description of itself, in the one format
-// that is not code. Today it is written FROM what nix already says (the
-// /export domains and the env binds daedalus.nix makes) — a faithful copy that
-// nothing reads yet. It has to be provably identical to what the system is
-// built from before anything is allowed to build from it instead (Phase 5).
+// that is not code, and the source nix builds the site constants from
+// (nix/platform/site.nix). The very first one is written FROM what the running
+// system says (the /export domains and the env binds daedalus.nix makes —
+// `siteDocument` below); every later one from the edited document
+// (core/site/index.ts).
 //
 // Formatting is load-bearing, like the registry's: two spaces, trailing
 // newline, keys in a stable order, so that changing one setting later
@@ -60,7 +61,7 @@ export type SiteDocument = {
   }
   mail: { sender: string; alertTo: string }
   /** Identifiers, not credentials — the ids in every dash.cloudflare.com URL.
-      The tokens stay in the secret tree; this repo gains a vault in Phase 6. */
+      The API token is sealed in the vault (core/settings/cloudflare-token.ts). */
   cloudflare: { accountId: string; zoneId: string; tunnelId: string }
   /** Absent means no App, the same as `app: null`. No settings tab edits it:
       it is carried from the committed document, and only the App-creation
@@ -69,10 +70,9 @@ export type SiteDocument = {
   /**
    * The break-glass local login (core/local-login.ts). Absent means off, and
    * off means the login route does not exist. Deliberately NOT in core/site's
-   * EDITABLE list: a password door into the control plane is turned on by
-   * the onboarding wizard on a fresh install, or by a hand edit and a commit
-   * — never from the UI the door leads into, where a compromised session
-   * could open it for itself. Nix does not read it today.
+   * EDITABLE list: a password door into the control plane is turned on by a
+   * hand edit and a commit — never from the UI the door leads into, where a
+   * compromised session could open it for itself. Nix does not read it.
    */
   auth?: { localLogin: boolean }
   /**
@@ -82,7 +82,7 @@ export type SiteDocument = {
    * lock untouched) and activates it with `nixos-rebuild test` — never
    * `switch` — and the image and engine updaters refuse to run, because a
    * pin moved under an override would name a rev nothing is running. Nix does
-   * not read it; the host agents do (host/lib.sh `engine_override`). Absent
+   * not read it; the host agents do (host/lib.sh `site_engine_override`). Absent
    * and `{ engineOverride: null }` are the same document, and the renderer
    * drops the block while it holds that.
    */
@@ -92,7 +92,7 @@ export type SiteDocument = {
    * Apply, secret, site write and update. `box` is `daedalus <mail sender>`;
    * `operator` is `fleet.operator.gitName` / `gitEmail`. The document names a
    * choice, never a name or an address: the host agents resolve it against
-   * values nix baked into them (host/lib.sh `commit_identity`), so a planted
+   * values nix baked into them (host/lib.sh `commit_as_operator`), so a planted
    * value can only pick one of the two. Who pressed the button stays in the
    * commit body either way. Nix does not read it; absent and
    * `{ author: 'box' }` are the same document, and the renderer drops the
@@ -100,7 +100,7 @@ export type SiteDocument = {
    */
   commits: { author: CommitAuthor }
   /**
-   * The switches moved from a page, and nothing else: `enabled.<id>` is
+   * The module switches as moved from a page, and nothing else: `enabled.<id>` is
    * what `fleet.modules.<id>.enable` becomes on the next Apply, at a
    * priority the host's own files yield to. An id absent here keeps the
    * host's word. A structural module (the engine's spine plus what the host

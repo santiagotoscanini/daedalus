@@ -11,15 +11,16 @@ import {
 } from '../../lib/nixos'
 import type { NixosRelease } from './types'
 
-// The live half of Settings › General's Engine card: where the running NixOS
+// The live half of System › Updates' NixOS card: where the running NixOS
 // release stands, what its channel has picked up past the locked commit, and
 // the release notes for it and for the newest release.
 //
 // Three upstreams, none of them on this box:
 //   endoflife.date   release and end-of-support dates, per release.
 //   GitHub's API     the channel branch's head, and how many commits it is
-//                    past the lock. Two calls an hour, with the dashboard's
-//                    GitHub token when there is one.
+//                    past the lock. Two calls an hour, with the GitHub App's
+//                    installation token (or the GITHUB_REPO_TOKEN override)
+//                    when there is one.
 //   raw.githubusercontent.com
 //                    the release notes as nixpkgs ships them, from each
 //                    release's own `nixos-<release>` branch. Not the API, so

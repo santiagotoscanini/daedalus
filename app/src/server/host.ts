@@ -6,11 +6,7 @@ import { adminFn, readFn } from './fn'
 // Apps UI's surface — the registry rows, the apply request, an app's deploy
 // unit — and a restart belongs to none of it. The System category is the
 // caller, and the one thing this shares with its neighbours (the file-drop
-// bridge) already lives once in lib/.
-//
-// Value imports are dynamic for the same reason as registry.ts: the bridge
-// module reaches for node:fs, and nothing here may be pulled into a client
-// bundle.
+// bridge) already lives once in host/bridge.ts.
 
 /**
  * Ask the host to restart the box.

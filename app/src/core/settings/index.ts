@@ -10,11 +10,8 @@ import type { BoxSettings, SourceMeta } from './types'
 // places a fact can already reach the container — env bound by daedalus.nix,
 // the /export domains, and the host snapshots. Nothing here is editable and
 // nothing here is guessed: a value the box has not stated renders as absent,
-// which is the honest reading of "not configured".
-//
-// The site repository (plan, Phase 3) becomes the fourth source and, for
-// everything nix consumes, the first. This reader is where that swap happens,
-// one section at a time, without the page noticing.
+// which is the honest reading of "not configured". The editable half — the
+// site repository's desired document — is core/site's.
 
 const meta = (r: SnapshotResult<unknown>): SourceMeta => ({
   available: r.available,

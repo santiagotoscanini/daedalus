@@ -17,8 +17,8 @@ import type { Ctx } from '../ctx'
 /**
  * What a reader here needs of the capability set — so a test hands it three
  * fakes. `http` is narrowed to the JSON reader alone: every read here is a
- * getJson, and naming the whole capability made the fake owe a method no
- * reader here calls.
+ * getJson, and naming the whole capability would make the fake owe a method
+ * no reader here calls.
  */
 export type IdentityCtx = Pick<Ctx, 'hosts' | 'secret'> & { http: Pick<Ctx['http'], 'getJson'> }
 
@@ -43,8 +43,8 @@ export type PocketClient = {
 
 export async function idpClients(ctx: IdentityCtx): Promise<PocketClient[]> {
   const body = await ctx.http.getJson<{ data?: PocketClient[] }>(
-    // 100 against a box that has 33: one page, and a second page would be a
-    // second round trip to discover there was nothing on it.
+    // 100, Pocket ID's page cap: one page holds a home box's clients, and a
+    // second would be a round trip to discover there was nothing on it.
     `${base(ctx)}/api/oidc/clients?pagination[limit]=100`,
     auth(ctx),
   )
@@ -55,10 +55,11 @@ export async function idpClients(ctx: IdentityCtx): Promise<PocketClient[]> {
  * Is this the registration the traefik forward-auth middleware signs in with.
  *
  * Matched on the callback, because that is the one thing the generator fixes:
- * `platform`'s publish layer emits exactly `https://<host>/oidc/callback` for
- * every `webApps.auth = "oidc"` entry, and an app's own login never uses that
- * path — it round-trips through whatever its framework mounts. Pocket ID's API
- * exposes no flag for this, so the URL is the tell.
+ * nix/modules/pocket-id/clients.nix emits `https://<host>/oidc/callback` for
+ * every `webApps.auth = "oidc"` entry (one per hostname and alias, so an entry
+ * with aliases has several and does not match here), and an app's own login
+ * never uses that path — it round-trips through whatever its framework mounts.
+ * Pocket ID's API exposes no flag for this, so the URL is the tell.
  */
 export function forwardAuthClient(c: PocketClient, host: string): boolean {
   const urls = c.callbackURLs ?? []

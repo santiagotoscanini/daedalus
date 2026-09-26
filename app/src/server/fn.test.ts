@@ -3,7 +3,7 @@
 // `adminFn` is either on the short list below or a failing test.
 //
 // Read as text, not imported: the rule is about how a file is WRITTEN (what
-// the reviewer sees), and importing twenty server files would drag the
+// the reviewer sees), and importing every server file would drag the
 // app's whole server graph into one test.
 
 import { readdirSync, readFileSync } from 'node:fs'

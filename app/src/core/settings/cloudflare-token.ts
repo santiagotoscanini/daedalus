@@ -8,19 +8,18 @@ import type { Result } from '../../lib/result'
 import type { Ctx } from '../ctx'
 import { sealForVault } from '../vault'
 
-// Settings › Integrations › Cloudflare › Replace token — Phase 6, the first
-// secret set from the UI.
+// Settings › Integrations › Cloudflare › Replace token.
 //
 // The order is the design. The candidate is checked against Cloudflare doing
-// everything the box does with a token — seeing the zone, reading DNS,
+// everything the box does with a token — listing zones and seeing this box's,
 // writing a TXT record and taking it away again (a certificate renewal's two
 // calls), reading the tunnel — so a token that would break the box is refused
 // before anything changes. Only then is it encrypted, HERE, for site/vault/
 // (core/vault.ts): the container holds no age identity, so it can write the
 // secret and never read it back. The ciphertext goes to Apply as its own
-// change (host/apply-flow.ts runSecretApply); nix renders it for all four
-// consumers and restarts them (stacks/cloudflared). site/vault/ is the token's
-// only home: the old env.sops copy and the toggle beside it are gone.
+// change (host/apply-flow.ts runSecretApply); nix renders it once
+// (nix/platform/site.nix) and each consumer's module restarts its own units
+// when it changes.
 //
 // The token is never stored, logged or returned. Every error below is written
 // without it, and sops's stderr is scrubbed of it before it is repeated.

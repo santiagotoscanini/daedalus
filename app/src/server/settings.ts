@@ -28,13 +28,11 @@ import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../l
 import { adminFn, readFn } from './fn'
 
 // Server functions behind Settings: the read-only facts (core/settings), the
-// live integration checks, and the one preference that is editable. Values
-// in the preference store never reach the site repo and never trigger a
-// rebuild — see the `settings` table comment in host/schema.ts for where that
-// line is drawn.
-//
-// Value imports are dynamic so the database module is not pulled into a client
-// bundle by a type import, matching server/registry.ts.
+// live integration checks, the secrets set from the UI (the Cloudflare token,
+// the GitHub App) and the preferences — theme, projects, MCP tokens, the
+// admins switch. Values in the preference store never reach the site repo and
+// never trigger a rebuild — see the `settings` table comment in
+// host/schema.ts for where that line is drawn.
 
 export const fetchBoxSettings = readFn.handler(async ({ context }): Promise<BoxSettings> => {
   const { readBoxSettings } = await import('../core/settings')
@@ -186,8 +184,8 @@ export const saveTheme = adminFn
 
 // ── Settings › Projects ─────────────────────────────────────────────────────
 //
-// The second editable preference, and the same kind as the theme: a row in
-// Postgres, saved on click, nothing rebuilds. core/settings/external-apps.ts
+// A preference of the same kind as the theme: a row in Postgres, saved on
+// click, nothing rebuilds. core/settings/external-apps.ts
 // holds the rules; these are its doors, behind the admin gate like every
 // other mutation.
 
@@ -279,7 +277,7 @@ export const revokeMcpTokenFn = adminFn
 
 /** The decision for the request that rendered the page, flattened for the client. */
 export type AuthorizationView = {
-  /** The forwarded email, or null when the request carried no identity. */
+  /** The forwarded email (or the local session's actor), or null when the request carried no identity. */
   actor: string | null
   header: 'absent' | 'blank' | 'unparseable' | 'list' | 'local'
   groups: string[]

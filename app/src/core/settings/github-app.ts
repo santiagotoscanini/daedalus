@@ -47,10 +47,11 @@ import type {
 // and the seal. No result, error or log line below carries it, the webhook
 // secret, the client secret or the code.
 //
-// Every mutation refuses until the host can take the vault file
-// (GITHUB_APP_ENABLED=1, set by the nix change that teaches apply.sh and sops
-// about it): an App created earlier would lose its key in the Apply. Every
-// mutation also refuses without a signed-in identity (core/auth requireActor).
+// Every mutation refuses unless the host can take the vault file
+// (GITHUB_APP_ENABLED=1, which nix sets where apply.sh and the sops rules know
+// it): otherwise a created App would lose its key in the Apply. Every mutation
+// also refuses without a signed-in identity — the actor its caller read with
+// core/auth's `requireActor` (server/settings.ts) or `actorOf` (the callback).
 
 const APP_NAME_MAX = 34
 const CREATION_TTL_MS = 60 * 60_000

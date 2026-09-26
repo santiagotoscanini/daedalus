@@ -10,7 +10,7 @@ import { renderSiteFile, type SiteDocument } from './file'
 
 // The GitHub block rides every path that renders site.json: the edit the
 // Settings tabs and the Apply bar read (siteEdit, whose render.after is what
-// lib/apply-flow sends), a saved edit, the Site tab's Write (renderSiteFiles),
+// host/apply-flow.ts sends), a saved edit, the Site tab's Write (renderSiteFiles),
 // and its in-sync digest (siteState). No settings tab knows the block, so each
 // of these must carry it from the committed file. A path that dropped it would
 // commit a site.json without the App, and the next rebuild would lose it.

@@ -7,8 +7,8 @@ import { readFn } from './fn'
 //
 // Its own server function rather than a field on the boards payload, because
 // the tab row is the one part of a module page that renders before anything
-// is fetched: the boards fan out across a dozen services and the dots are one
-// prometheus query. Hanging the dots off the boards would hold the whole row
+// is fetched: the boards fan out across a dozen services and the dots are a
+// few prometheus queries. Hanging the dots off the boards would hold the whole row
 // hostage to the slowest upstream on the page, in order to draw a circle.
 
 /** Tab id → is its subject answering. `null` = nothing probes it. */
@@ -21,21 +21,21 @@ export type TabStatus = Record<string, boolean | null>
  * instantaneously makes one timed-out request a red dot for a minute. That is
  * not a hypothetical here: traefik dials the *arrs at a port published out of
  * gluetun's rootless network namespace, where a new connection stalls ~10.5s
- * about one time in forty (measured — see stacks/scraparr for the same fault
- * hitting the exporter). gatus times out at 10s, so roughly 2% of probes for
+ * about one time in forty (measured; the scraparr exporter hits the same
+ * fault). gatus times out at 10s, so roughly 2% of probes for
  * those endpoints fail against a service that is perfectly healthy, and Sonarr
  * and Radarr spent ~30 minutes of the last day reported down between them
  * while answering every request anybody actually made.
  *
  * `max_over_time` over three windows means down requires that NOTHING answered
  * in three minutes — a real outage, not one lost SYN. The cost is detection
- * latency: a service that dies is drawn red up to two minutes later than
- * before. For a dot on a dashboard that is a good trade; the alerting that
- * pages is Grafana's, and it has its own thresholds.
+ * latency: a service that dies is drawn red up to two minutes later than an
+ * instantaneous read would draw it. For a dot on a dashboard that is a good
+ * trade; the alerting that pages is Grafana's, and it has its own thresholds.
  *
  * This matters most on a tab that ANDs several probes, which multiplies the
- * flap rate — Wanted holds three, so it was red several percent of the time
- * with all three services up.
+ * flap rate — Media's Wanted holds four, and read instantaneously it would be
+ * red several percent of the time with every service up.
  */
 const PROBE_WINDOW = '3m'
 
@@ -48,8 +48,8 @@ export const fetchTabStatus = readFn
     const { promVector } = await import('../host/prom')
     const [probes, egress, uplink, logs, minecraft] = await Promise.all([
       promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
-      // Only when a tab actually asks for it — this is two more prometheus
-      // queries and every module pays for this handler.
+      // Each only when a tab actually asks for it — they are more prometheus
+      // queries, and every module pays for this handler.
       spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth() : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'log-pipeline')

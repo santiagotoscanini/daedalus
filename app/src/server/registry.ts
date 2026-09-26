@@ -18,14 +18,11 @@ import { adminFn, readFn } from './fn'
 //
 // ── why the seam and the work are different files ─────────────────────────
 //
-// Two rules push in the same direction. `src/server/**` may hold no static
-// value import of a module that needs the machine (host/boundary.test.ts):
-// anything it names statically lands in the client chunk of every route that
-// imports a server function from it. So work written HERE has to reach its
-// dependencies through `await import()`, one per call site — which is how this
-// file came to hold fifty-four of them. Written in `src/lib/apps/` instead,
-// which is a server region, the same dependencies are plain static imports and
-// one dynamic import per handler loads the lot.
+// `src/server/**` may hold no static value import of a module that needs the
+// machine (server/fn.ts says why), so work written HERE would reach every
+// dependency through its own `await import()`. Written in `src/lib/apps/`
+// instead, which is a server region, the same dependencies are plain static
+// imports and one dynamic import per handler loads the lot.
 //
 // ── why the function names and this filename cannot move ──────────────────
 //
@@ -146,11 +143,9 @@ export const fetchAppPreflight = readFn
   })
 
 export const createAppFn = adminFn
-  // The field rules are validateNewApp's, in lib/repo/apps next to the table
-  // it writes — including the name, which it checks with appNameError so a
-  // create refuses a reserved or taken label too. All this owes is a record to
-  // hand it, which is also what retires the `as unknown as` the handler used
-  // to need to pretend the cast above had happened.
+  // The field rules are validateNewApp's (lib/apps/validate.ts) — including
+  // the name, which it checks with appNameError so a create refuses a reserved
+  // or taken label too. All this owes is a record to hand it.
   .validator(asValidator(withMessage(obj({ app: recordField }), 'expected an app to create')))
   .handler(async ({ data }): Promise<{ name: string }> => {
     const { createApp, validateNewApp } = await import('../lib/repo/apps')
@@ -187,10 +182,8 @@ export const saveApp = adminFn
 
 /**
  * Publish an apply request — an adapter over host/apply-flow.ts, which owns
- * the whole check-and-write. The only thing decided here is the actor:
- * whoever passed the Pocket ID gate. The forward-auth middleware forwards
- * the claim as a header (auth.headers in stacks/daedalus/daedalus.nix), so
- * the commit records a person rather than "daedalus".
+ * the whole check-and-write. The commit is recorded under `context.actor()`
+ * (server/fn.ts).
  */
 export const applyRegistry = adminFn.handler(
   // The outcome's `code` stops here: it exists for the MCP `apply` tool, whose
@@ -314,7 +307,7 @@ export const fetchWorkspaceRequestStatus = readFn.handler(async () => {
 /**
  * Run one of an app's scheduled tasks now, rather than at its next elapse.
  *
- * `taskId` is lib/tasks's — the same rule the export and the generated unit
+ * `taskIdField` is lib/tasks's `isTaskId` — the same rule the export and the generated unit
  * name are built from — and it is the boundary that matters most on this page:
  * what this request names becomes part of a systemd unit that ROOT starts. So
  * the charset is refused here, the task is checked against the app's DECLARED

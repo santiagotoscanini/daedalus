@@ -125,9 +125,9 @@ async function checkGithub(token: string): Promise<GithubCheck> {
         signal: AbortSignal.timeout(ms),
       })
       // The body is read INSIDE the attempt: the timeout covers it too, and a
-      // body cut off by it used to throw outside this try — rejecting every
-      // integration check at once and taking Settings › Integrations down with
-      // it, on the first visit after a container restart.
+      // body cut off by it would otherwise throw outside this try — rejecting
+      // every integration check at once and taking Settings › Integrations
+      // down with it (seen on the first visit after a container restart).
       if (res.ok) body = (await res.json()) as { login?: string }
     } catch {
       continue
@@ -176,8 +176,8 @@ async function mail(ctx: Ctx): Promise<IntegrationStatus['mail']> {
 /**
  * A check that failed outright reads as "did not answer", never as a broken
  * tab. These promises stream into an <Await>, and a rejection there is a
- * render error for the whole page — one slow upstream must not cost the
- * operator the other three answers.
+ * render error for the whole page — one failing upstream must not cost the
+ * operator the other answers.
  */
 async function settled<T>(work: Promise<T>, fallback: T): Promise<T> {
   try {

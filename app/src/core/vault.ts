@@ -21,9 +21,10 @@ import {
 // /site/.sops.yaml are all it takes: the container holds no age identity, so
 // it can write a secret and never read one back, and the bridge directory (on
 // a snapshotted dataset) only ever sees ciphertext. Every secret the UI sets
-// goes through here — the Cloudflare token (core/settings/cloudflare-token.ts)
-// and the GitHub App's key (core/settings/github-app.ts) — and then to Apply
-// as its own change (host/apply-flow.ts runSecretApply).
+// goes through here: the Cloudflare token (core/settings/cloudflare-token.ts)
+// and the GitHub App's key (core/settings/github-app.ts) then go to Apply as
+// their own change (host/apply-flow.ts runSecretApply); an app's secret
+// (lib/apps/secrets.ts) goes to its own bridge verb instead (sealAppSecret).
 
 /** The sops file's bytes, or why nothing was sealed. */
 export type Sealed = Result<string>
@@ -34,6 +35,9 @@ function redact(text: string, secrets: string[]): string {
   return needles.reduce((acc, s) => acc.replaceAll(s, '[secret]'), text)
 }
 
+/** How long sops may run before it is killed. It encrypts a few kilobytes. */
+export const SOPS_TIMEOUT_MS = 30_000
+
 /**
  * Encrypt with the mounted static sops. Resolves with the file sops wrote.
  *
@@ -43,9 +47,6 @@ function redact(text: string, secrets: string[]): string {
  * directory, because the creation rule's `^vault/…` is matched against the
  * `--filename-override` path relative to where sops stands.
  */
-/** How long sops may run before it is killed. It encrypts a few kilobytes. */
-export const SOPS_TIMEOUT_MS = 30_000
-
 function encrypt(
   file: VaultPath,
   type: 'binary' | 'json',
@@ -188,7 +189,7 @@ export async function sealJsonForVault<F extends VaultJsonFile>(
  * sops document holding a single value, sealed to the recipients that file's
  * creation rule names — the same two the host decrypts with — and hands it to
  * the bridge; the host opens it in memory and merges the key
- * (stacks/daedalus/host/secret-set.sh). Reading the file back, re-emitting it,
+ * (nix/stacks/daedalus/host/secret-set.sh). Reading the file back, re-emitting it,
  * or replacing it whole are all impossible here, because the identity that
  * could is deliberately absent.
  *

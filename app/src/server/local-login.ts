@@ -8,11 +8,8 @@ import { publicFn, readFn } from './fn'
 // (core/local-login.ts). These are the DOOR, so they are the one set of
 // mutations in this app that is `publicFn`, not `adminFn`: a caller here has
 // no identity yet, and getting one is the point. What gates them instead is
-// site.json's `auth.localLogin`: off, every one of them throws before touching
-// anything, and the page that would call them answers 404.
-//
-// Value imports are dynamic so argon2 and the database stay out of the client
-// bundle, matching server/settings.ts.
+// site.json's `auth.localLogin`: off, setup and login throw before touching
+// anything, logout does nothing, and the page that would call them answers 404.
 
 /** The page's loader. Null means the route does not exist. */
 export const fetchLocalLoginState = readFn.handler(async (): Promise<LocalLoginState | null> => {

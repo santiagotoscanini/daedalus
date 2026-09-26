@@ -10,13 +10,11 @@ import { adminFn, readFn } from './fn'
 // this box would write, the commit switch, and the one action that writes.
 //
 // The state is deferred and fetched only for the tab that shows it: it
-// renders site.json to hash it, which the page's other five tabs do not need.
-//
-// Value imports are dynamic — the core modules reach for node:fs and the
-// database, and nothing here may be pulled into a client bundle.
+// renders site.json to hash it, which the page's other tabs do not need.
 
 /**
- * The box's identity, for the browser. The root loader awaits it, so it is in
+ * The box's identity, for the browser. The root loader awaits it (through
+ * server/shell.ts), so it is in
  * the server-rendered HTML and `useSite()` never renders a placeholder first.
  */
 export const fetchSite = readFn.handler(async (): Promise<Site> => {
@@ -84,7 +82,7 @@ export const saveSiteEditFn = adminFn
 /**
  * The engine override as the COMMITTED site.json holds it — the value the
  * host agents read — or null. For the banner the shell draws on every page:
- * the root loader awaits it, so it is in the server's HTML like the theme. A
+ * part of server/shell.ts's answer, so it is in the server's HTML like the theme. A
  * pending edit is not an override yet; the Developer tab shows that one.
  */
 export const fetchEngineOverride = readFn.handler(async (): Promise<string | null> => {

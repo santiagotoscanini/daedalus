@@ -3,10 +3,9 @@ import type { Ctx } from '../core/ctx'
 
 // The builders every server function in this directory starts from.
 //
-// Who may call a function is the first thing a reviewer asks of it, and it
-// used to be two lines inside each handler — `await import('../core/authz')`
-// then `await assertAdmin()` — which a new mutation could simply leave out.
-// Here it is the first word instead: `adminFn` or `readFn`, and
+// Who may call a function is the first thing a reviewer asks of it, so it is
+// the first word of the definition — `adminFn`, `readFn` or `publicFn` — not
+// a check inside the handler that a new mutation could leave out.
 // `server/fn.test.ts` fails on a POST that is neither `adminFn` nor on its
 // short list of `publicFn` doors.
 //
@@ -22,8 +21,11 @@ import type { Ctx } from '../core/ctx'
 // sending a malformed body is told they are not an admin rather than what the
 // shape should be — the refusal comes first, which is the right way round.
 //
-// Every impure module is reached with `await import` inside a `.server()`
-// body, which the compiler erases from the browser's copy of this file.
+// Every impure module — here and in every handler in this directory — is
+// reached with `await import` inside the server-side body, which the compiler
+// erases from the browser's copy of the file. A static value import of one
+// would land in the client chunk of every route that uses the function;
+// host/boundary.test.ts refuses it.
 
 /**
  * `context.ctx()`: the request's Ctx (core/ctx.ts), built on first use and
@@ -42,10 +44,10 @@ const withCtx = createMiddleware({ type: 'function' }).server(async ({ next }) =
 /**
  * `context.actor()`: the label a record written by this request carries —
  * exactly `actorLabel()` (core/auth.ts), read when asked. The forward-auth
- * middleware forwards the Pocket ID claim as a header, so a commit, request
- * file or journal line written with it names a person rather than
- * "daedalus". A label, never a
- * gate: it answers a placeholder rather than refusing. A function that must
+ * middleware forwards the Pocket ID claim as a header (auth.headers in
+ * nix/stacks/daedalus/daedalus.nix), so a commit, request file or journal
+ * line written with it names a person rather than "daedalus". A label, never
+ * a gate: it answers a placeholder rather than refusing. A function that must
  * refuse an absent identity still calls `requireActor()` itself.
  */
 const withActor = createMiddleware({ type: 'function' }).server(async ({ next }) => {
@@ -53,7 +55,7 @@ const withActor = createMiddleware({ type: 'function' }).server(async ({ next })
   return next({ context: { actor: (): string => actorLabel() } })
 })
 
-/** Exactly what `await assertAdmin()` at the top of a handler did: the actor, or a throw. */
+/** The admin gate, `assertAdmin()` (core/authz.ts): passes, or throws before the validator and handler run. */
 export const adminOnly = createMiddleware({ type: 'function' }).server(async ({ next }) => {
   const { assertAdmin } = await import('../core/authz')
   await assertAdmin()

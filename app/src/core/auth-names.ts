@@ -7,12 +7,7 @@
 // one import.
 
 /**
- * The Pocket ID group that may change this box.
- *
- * The real gate is one layer earlier — the derived Pocket ID client allows
- * `authGroups`, default [ "admins" ], so someone outside it never gets a
- * session and never reaches us. What `core/auth.ts` adds is a second check at
- * the thing that actually writes, so a widened client (an app shared with
- * "family", say) cannot silently become a licence to press Apply.
+ * The Pocket ID group that may change this box — checked by core/authz.ts,
+ * whose header says how that check relates to the IdP's own.
  */
 export const ADMIN_GROUP = 'admins'

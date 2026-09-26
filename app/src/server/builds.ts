@@ -22,14 +22,13 @@ import { adminFn, readFn } from './fn'
 
 // Server functions behind the build UI: the builds board, the build page, the
 // Build now, Cancel and Retry report buttons and an app's build settings.
-// Value imports of anything that touches the database are dynamic, so it stays
-// out of the client bundle (server/registry.ts does the same). core/auth and
-// the request decoders are pure and imported statically on purpose: what a
-// request has to prove should be legible from the top of the file.
+// core/auth and the request decoders are client-safe and imported statically
+// on purpose: what a request has to prove should be legible from the top of
+// the file.
 
 const LOG_TAIL_BYTES = 64_000
 
-/** `{ app }`, which is what all but two requests here carry. */
+/** `{ app }`: an app named by the page asking. */
 const appRequest = withMessage(obj({ app: appNameField }), 'expected an app name')
 
 /** `{ app, id }`: a build, named under the app whose page is asking. */
@@ -61,7 +60,7 @@ export type BuildPageApp = {
   name: string
   stage: string
   effectiveHostname: string
-  /** The two facts the app rail needs to decide its conditional sections. */
+  /** The facts the app rail needs to decide its conditional sections. */
   postgres: boolean
   egressContainer: string | null
   buildOnBox: boolean
@@ -230,7 +229,7 @@ export const fetchBuildCommit = readFn
     return commit
   })
 
-/** The build row the click produced. Re-exported: the shape is core/builds/actions.ts's. */
+/** What Build now and Cancel answer. Re-exported: the shapes are core/builds/actions.ts's. */
 export type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
 
 /**

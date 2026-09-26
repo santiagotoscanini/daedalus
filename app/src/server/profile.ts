@@ -8,14 +8,11 @@ import { adminFn, readFn } from './fn'
 // Server functions behind the Profile page — see core/settings/profile.ts.
 // Each resolves the account from the forward-auth headers of the request
 // making it; none takes an account id from the page.
-//
-// Value imports are dynamic so the database and filesystem modules are not
-// pulled into a client bundle, matching server/settings.ts.
 
-// `satisfies` rather than a bare `as const`: this list and ProfilePatch were
-// hand-kept in sync, and a field added to one and not the other is now a
-// compile error rather than a save that silently refuses the new field (or a
-// validator that lets through one updateProfile does not write).
+// `satisfies` rather than a bare `as const`: a key here that ProfilePatch
+// lacks is a compile error, not a validator that lets through a field
+// updateProfile does not write. The other direction is not checked — a field
+// added to ProfilePatch must be added here too, or a save refuses it.
 const PATCH_KEYS = [
   'username',
   'firstName',

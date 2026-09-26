@@ -70,9 +70,8 @@ type Call = Result<{ bytes: ArrayBuffer; contentType: string }, CallFailure>
  *
  * The status rides on `cause` rather than in the sentence: it is the one
  * thing the shape went to the trouble of carrying that the message cannot
- * say, and dropping it made every failure here look alike from upstack —
- * which is the same loss routes/api.github.webhook.ts walks a cause chain to
- * avoid.
+ * say, and without it every failure here looks alike from upstack — the same
+ * loss routes/api.github.webhook.ts walks a cause chain to avoid.
  */
 const refusal = (f: CallFailure): Error => new Error(f.message, { cause: f })
 

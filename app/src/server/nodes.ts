@@ -7,11 +7,9 @@ import { isProviderKind } from '../lib/providers/kinds'
 import { modelPolicies } from '../lib/providers/policy'
 import { adminFn, readFn } from './fn'
 
-// Server functions behind Settings › Machines: the page's one read, and
-// its decisions about a node — approve, revoke, forget, the policy. Each
-// write is an admin action under the gate, and each records who made it.
-// Value imports are dynamic, like every other server module here — the
-// repository reaches the database.
+// Server functions behind Settings › Machines: the cards, the decisions about
+// a node — approve (recorded under who made it), revoke, forget, the policy,
+// the update and Claude requests — and the gateway's provider models and sync.
 
 const nodeId = asValidator(withMessage(obj({ id: nodeIdField }), 'expected a node id'))
 
@@ -67,10 +65,10 @@ const NAME_MAX = 40
 const PATH_MAX = 260
 
 /**
- * A policy from the page. Every key optional and every value checked: the
- * display name is one line of bounded length, the two switches booleans.
- * Unknown keys are dropped rather than stored, so the row never carries
- * what the agent would not understand.
+ * A policy from the page. Every key optional and every value checked — text
+ * bounded and on one line, switches booleans, providers by known kind,
+ * hardware from the catalog. Unknown keys are dropped rather than stored, so
+ * the row never carries what the agent would not understand.
  */
 const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
   const { id } = nodeId(data)
@@ -174,12 +172,6 @@ export const fetchNodesChangeFn = readFn.handler(async (): Promise<string[]> => 
 
 /* ── the gateway: providers' models and the sync ──────────────────────── */
 
-/**
- * What a node's provider serves, read from the provider itself, with each
- * model as the operator's policy leaves it. For the models table on
- * Settings › Machines. Read-only; a node the box does not know answers an
- * empty list.
- */
 const nodeProvider = asValidator(
   withMessage(
     obj({
@@ -190,6 +182,12 @@ const nodeProvider = asValidator(
   ),
 )
 
+/**
+ * What a node's provider serves, read from the provider itself, with each
+ * model as the operator's policy leaves it. For the models table on
+ * Settings › Machines. Read-only; a node the box does not know answers an
+ * empty list.
+ */
 export const fetchProviderModelsFn = readFn
   .validator(nodeProvider)
   .handler(async ({ data, context }) => {

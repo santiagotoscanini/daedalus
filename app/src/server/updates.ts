@@ -4,15 +4,12 @@ import { adminFn, readFn } from './fn'
 
 // Server functions behind the Updates page and the Update button.
 //
-// Its own module rather than a corner of server/category.ts: the category
-// loaders answer "what is this service doing", one page at a time, and these
-// three answer "move this pin" — a write, its status, and the notes a person
-// reads before deciding. The Update button also lives on service tabs across
-// five categories, so hanging these off any one category's loader would be
-// backwards.
+// Not part of a module loader: the loaders answer "what is this service
+// doing", one tab at a time, and these answer "move this pin" — a write, its
+// status, and the notes a person reads before deciding. The Update button also
+// appears outside System (Gaming's Minecraft tab), so hanging these off one
+// module's loader would be backwards.
 //
-// Value imports are dynamic, like every other server module here: the bridge
-// reaches for node:fs and nothing below may be pulled into a client bundle.
 // What a container name is lives in lib/contract/fields.ts.
 
 /**
@@ -20,7 +17,7 @@ import { adminFn, readFn } from './fn'
  *
  * Separate from the table's own loader on purpose — see the note in
  * modules/system/data/updates.ts about not spending the GitHub
- * budget on sixty-four containers nobody expanded.
+ * budget on containers nobody expanded.
  */
 export const fetchUpdateNotes = readFn
   .validator(

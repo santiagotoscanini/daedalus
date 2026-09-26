@@ -57,13 +57,13 @@ export type BoxSettings = {
     facts: RepoFacts
     meta: SourceMeta
     applyStatus: ApplyStatus
-    /** Same as general.engine.revision; here so the tab can say whether HEAD is what runs. */
+    /** The commit the running generation was built from (the site export's envelope), so the tab can say whether HEAD is what runs. */
     runningRevision: string | null
     /** The git identities the box can commit as; null until the export carries them. */
     git: GitIdentities
   }
   developer: {
-    /** `source.mode = local`: the container runs the Vite dev server over a bind mount. */
+    /** `fleet.daedalus.dev` (DAEDALUS_DEV): the container runs the Vite dev server over a bind mount. */
     devServer: boolean
     node: string
     exportDir: string
@@ -74,11 +74,8 @@ export type BoxSettings = {
 }
 
 /**
- * The two credential checks below share one rule, which is what the separate
- * `configured` boolean used to say: **a null reason means there was no
- * credential to ask about.** A refusal always has words. That boolean and
- * `ok` were independent fields, so `configured: false, ok: true` typechecked;
- * as a union it cannot be written down.
+ * The two credential checks below share one rule: **a null reason means there
+ * was no credential to ask about.** A refusal always has words.
  */
 
 /** A credential checked against the service that issued it. */

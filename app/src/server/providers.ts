@@ -52,7 +52,7 @@ const kindField = withMessage(is(isProviderKind, 'a provider kind'), 'expected a
  */
 const modelField = nonBlankField('expected a model')
 
-/** The fields in the order they were always checked: kind, machine, model. */
+/** The fields in the order they are checked: kind, machine, model. */
 const targetShape = {
   kind: kindField,
   machine: nonBlankField('expected the machine the provider runs on'),

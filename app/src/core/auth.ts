@@ -6,11 +6,12 @@ import { ADMIN_GROUP } from './auth-names'
 //
 // There is exactly one source of identity in this app: `X-Forwarded-Email`,
 // set by traefik's forward-auth middleware after Pocket ID (auth.headers in
-// stacks/daedalus/daedalus.nix). Nothing else authenticates anybody — the
-// container itself is not reachable except through that gate.
+// nix/stacks/daedalus/daedalus.nix). Nothing else authenticates a person —
+// the container itself is not reachable except through that gate, and the
+// break-glass local login (core/local-login.ts) is consulted only by
+// core/authz.ts when the header is absent.
 //
-// One header, but two completely different questions asked of it, and they
-// used to be written out at twenty call sites in three dialects:
+// One header, but two completely different questions asked of it:
 //
 //   "who should this record say did it"  — a LABEL. Never fails; an absent
 //   header is a placeholder, because a commit message or a journal line has
@@ -20,10 +21,8 @@ import { ADMIN_GROUP } from './auth-names'
 //   refusal, and a blank one must not match another blank one as the same
 //   person. `requireActor`.
 //
-// The gate lived in core/settings/github-app.ts, 878 lines about GitHub Apps,
-// which is where nobody would look for the app's only signed-in-identity
-// predicate. Reviewing what is gated and what is merely labelled now means
-// reading the imports at the top of a file.
+// Reviewing what is gated and what is merely labelled means reading the
+// imports at the top of a file.
 //
 // Both questions come in two forms: the ambient one (`getRequestHeader`, which
 // reads the request the server function is running inside) and the `…Of(request)`
@@ -41,7 +40,7 @@ import { ADMIN_GROUP } from './auth-names'
  * account at the IdP rather than the person named in a record, so the profile
  * lookup pairs the two and nothing else here uses it. It lives here anyway,
  * because "which headers does the gate in front of us set" is one fact, and
- * spreading it over three files is how a third spelling appeared last time.
+ * spelled in several files it drifts.
  */
 export const AUTH_HEADERS = {
   EMAIL: 'x-forwarded-email',
@@ -58,35 +57,35 @@ export { ADMIN_GROUP }
 export const NOT_ADMIN_REASON = `Only members of the ${ADMIN_GROUP} group can change this box, so nothing was done.`
 
 /**
- * The groups the forward-auth proxy says this session carries.
- *
- * The header is a JSON array, because Go renders a bare claim list as
- * `[admins family]` — neither JSON nor comma-separated — so daedalus.nix
- * pipes it through the plugin's own `mapToJsonArray`.
- *
- * Every failure is the empty list rather than a throw: absent (the nix change
- * has not landed yet), blank (traefik strips the header inbound, and only
- * re-sets it on gated paths — so a bypassed path like /api/deploy arrives
- * with none), or unparseable. An empty list can never satisfy `isAdmin`, so
- * every one of those degrades to "not an admin" rather than to an error page.
- *
  * How the groups header arrived, for the panel that decides whether arming
  * the check is safe. `groups` alone cannot say: an empty list is what every
  * failure degrades to, and "the proxy sent nothing" and "the proxy sent a
  * list that does not name admins" call for different fixes.
  *
- *   absent      — no header at all: the nix change has not landed, or the
- *                 request came in under the gate (shotter dials the container
- *                 directly) or on a bypassed path.
+ *   absent      — no header at all: the header is not configured in nix, or
+ *                 the request came in under the gate (shotter dials the
+ *                 container directly).
  *   blank       — present and empty: the strip middleware ran and the plugin
  *                 never re-set it, which is what a bypassed path looks like.
- *   unparseable — present, not a JSON array of strings.
+ *   unparseable — present, not a JSON array (a non-string entry is dropped,
+ *                 not refused).
  *   list        — a JSON array, possibly empty, possibly without `admins`.
  */
 export type GroupsHeader = 'absent' | 'blank' | 'unparseable' | 'list'
 
 export type GroupsRead = { state: GroupsHeader; groups: string[] }
 
+/**
+ * The groups the forward-auth proxy says this session carries.
+ *
+ * The header is a JSON array, because Go renders a bare claim list as
+ * `[admins family]` — neither JSON nor comma-separated — so daedalus.nix
+ * pipes it through the plugin's own `mapToJsonArray`.
+ *
+ * Every failure is the empty list rather than a throw. An empty list can
+ * never satisfy `isAdmin`, so every one of them degrades to "not an admin"
+ * rather than to an error page.
+ */
 export function describeGroups(header: string | null | undefined): GroupsRead {
   if (header === null || header === undefined) return { state: 'absent', groups: [] }
   const raw = header.trim()
@@ -126,8 +125,9 @@ const gate = (header: string | null | undefined): Actor => {
 }
 
 /**
- * The gate, over a request a caller is holding — the `api.*` route handlers
- * and the GitHub callback, which are given one rather than running inside it.
+ * The gate, over a request a caller is holding — the GitHub callback
+ * (core/settings/github-app.ts), which is given one rather than running
+ * inside it.
  *
  * Missing or blank is a refusal, never a placeholder: two requests without an
  * identity must not match each other as the same actor.
@@ -159,9 +159,8 @@ const label = (header: string | null | undefined, fallback: string): string => h
  * operator" for it.
  *
  * Only absence falls back: a header present and blank labels the record with a
- * blank, as it always has. That is the asymmetry with the gate above, and it is
- * kept rather than fixed — tightening it would change what a record says about
- * who wrote it, which is a different change from this one.
+ * blank. That is an asymmetry with the gate above, and a known one; closing it
+ * is a change to what records say about who wrote them, not to who may act.
  */
 export function actorLabelOf(request: Request, fallback: string = UNKNOWN_ACTOR): string {
   return label(request.headers.get(HEADER), fallback)

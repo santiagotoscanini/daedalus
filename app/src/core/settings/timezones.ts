@@ -5,7 +5,7 @@ import { parseZoneTab } from '../../lib/timezones'
 
 // The zones the timezone picker offers, and the save refuses anything else.
 //
-// /export/zone.tab is the host's own tzdata (platform/export.nix), which is
+// /export/zone.tab is the host's own tzdata (nix/platform/export.nix), which is
 // what `time.timeZone` is resolved against. Until a rebuild has published it,
 // the container's Debian tzdata stands in: the zone names are the same for
 // every practical purpose, and a picker that lists nothing is worse.

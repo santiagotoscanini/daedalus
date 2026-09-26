@@ -1,8 +1,8 @@
 // Builds on the box: the driver that moves queued builds to the host build
-// agent and folds its status back into the builds table (plan step 5).
+// agent and folds its status back into the builds table.
 //
 // One interval per process, started by `ensureScheduler()` from /api/healthz
-// (gatus probes it every minute) and the webhook. Each tick: read the host's
+// (gatus probes it every minute) and from Build now (actions.ts). Each tick: read the host's
 // status and fold it into the running row, fail what can no longer finish,
 // dispatch the next queued build when nothing is in flight, then let the
 // reporter run. An hourly sweep, out of band, pins apps to their GitHub repos

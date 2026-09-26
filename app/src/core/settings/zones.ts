@@ -12,7 +12,7 @@ import type { CloudflareZone, ZoneList } from './types'
 // zones than it may edit), but the token this box documents carries Zone:Read
 // and DNS:Edit over the same zones, which makes the list the right filter
 // without asking Cloudflare about permissions zone by zone. A zone added to the
-// account appears here as soon as the token covers it.
+// account appears here once the token covers it and the cache below turns over.
 //
 // Cached five minutes with stale answers served through a failure, like the
 // integration checks. The list only changes when somebody widens the token.

@@ -2,7 +2,7 @@
 // webhook deliveries, pin each registry app to its GitHub repository by name,
 // and enqueue a default-branch HEAD that no push delivered (tunnel down, a
 // lost delivery, a container restart). scheduler.ts decides when it runs; the
-// record it leaves is what Settings shows as the last sweep.
+// record it leaves is stored as `builds.lastSweep` (no page reads it yet).
 
 import {
   BUILD_PUBLISH_MODES,

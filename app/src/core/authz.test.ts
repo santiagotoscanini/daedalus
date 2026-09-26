@@ -5,8 +5,8 @@ import { type Authorization, allow, assertMachineActor, setEnforcingAdmins } fro
 // Two rules, asserted apart from the database that stores the flag.
 //
 // `allow` is the whole authorization decision as a pure function, which is why
-// it is exported separately from `requireAdmin`: the interesting cases are the
-// combinations of (signed in?) x (admin?) x (enforced?), and none of them
+// it is exported apart from the request-reading `authorize`: the interesting
+// cases are the combinations of (signed in?) x (admin?) x (enforced?), and none of them
 // should need a Postgres to state. `enforcingAdmins` is the only part that
 // reads a row, and it is a one-line `readSetting` with a boolean guard.
 
@@ -17,7 +17,7 @@ describe('reading the groups header', () => {
   })
 
   it('reads every unusable header as no groups at all', () => {
-    // Absent is the nix change not landed yet; blank is a traefik-bypassed
+    // Absent is a request with no header at all; blank is a traefik-bypassed
     // path, where the strip middleware ran and the plugin never re-set it;
     // the rest are shapes this app must not crash on. All of them must be
     // "not an admin", never an exception on a page that was only reading.
@@ -83,9 +83,9 @@ describe('the decision', () => {
   })
 
   it('reports but does not refuse while the flag is off', () => {
-    // The rollout state: the header may not even exist yet. A non-admin
-    // decision must still hand back the actor, or every mutation on the box
-    // stops working the moment this module is wired in.
+    // Disarmed, the header may not even arrive. A non-admin decision must
+    // still hand back the actor, or every mutation on the box would refuse
+    // before anyone could arm the flag.
     expect(allow(decision({ groups: [], admin: false, enforced: false }))).toEqual({
       ok: true,
       value: 'op@example.test',
@@ -151,7 +151,7 @@ describe('the machine door', () => {
 describe('the switch', () => {
   // Settings › Developer › Authorization. The request that flips the switch
   // is the proof that the header has landed: arming from one the check would
-  // refuse is the lockout the rollout order exists to prevent, so it is
+  // refuse is the lockout the flag exists to prevent, so it is
   // refused here — server-side, not in a disabled button — and NOTHING is
   // written. Disarming is the way back out and must always work.
 

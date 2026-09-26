@@ -1,5 +1,5 @@
 // Builds on the box: what GitHub hears about a build — the `daedalus` check run
-// and, for live deploys, a Deployment and its statuses (plan step 5).
+// and, for live deploys, a Deployment and its statuses.
 //
 //   progress   the first time a build is seen past `queued`, a check run is
 //              created in progress (Details → the build page); phase changes
@@ -384,9 +384,9 @@ async function newerDeployed(row: BuildRow, deploys: DeployLike[]): Promise<stri
  * Which repository to post this build to, by the id the sweep pinned.
  *
  * Never `owner/<app name>`: the app's name is daedalus's key for its own row
- * and a display label everywhere else, and a repository renamed on GitHub kept
- * that name here — so every check run and Deployment went to a repository that
- * no longer exists, with nothing to show for it but a 404 in the log. The id
+ * and a display label everywhere else, and a repository renamed on GitHub
+ * keeps that name here — so every check run and Deployment would go to a
+ * repository that no longer exists, with nothing to show but a 404 in the log. The id
  * is the one thing a rename does not move, and `repoById` reads today's name
  * off it. Null when GitHub cannot say: the build stays unreported and the next
  * tick asks again, which is the right answer — posting to a guessed name is not.

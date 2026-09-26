@@ -15,11 +15,10 @@ import { adminFn, readFn } from './fn'
 
 // The server functions behind the module pages.
 //
-// One module and one tab per request, for the reason server/category.ts
-// gives: loading everything and letting the client pick would be ~90
-// upstream calls to render a page showing a fifth of them. The manifest
-// registry is client-safe and imported statically; the loaders are behind
-// `await import`, like every value the seam reaches.
+// One module and one tab per request: loading every tab and letting the
+// client pick would call every upstream of the module to render the one tab
+// on screen. The manifest registry is client-safe and imported statically;
+// the loaders are behind `await import`, like every value the seam reaches.
 
 /** What one boards request answers: the module it is for, and its resolved tab's data — or `off` (host/modules.ts). */
 export type ModulePayload = { kind: string; data: { tab: string }; off?: true }

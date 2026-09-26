@@ -118,7 +118,7 @@ const tokenFrom = (f: Fake): string => {
 }
 
 describe('off', () => {
-  // The box this was written on. Everything below must be unobservable.
+  // The default: site.json does not turn it on. Everything below must be unobservable.
   let f: Fake
   beforeEach(() => {
     f = fake({ on: false, cookieUser: 'ghost' })

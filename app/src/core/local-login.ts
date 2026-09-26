@@ -24,18 +24,19 @@ import type { Result } from '../lib/result'
 // ── DORMANT BY CONSTRUCTION ───────────────────────────────────────────────
 //
 // Every function here asks `store.enabled()` first, and that reads ONE fact:
-// site.json's `auth.localLogin`. When it is absent or false — which it is on
-// this box — this module does nothing observable: the login route answers
-// 404 (not a disabled form), no cookie is read, no row is touched, no token
-// is minted. The flag is deliberately not a stored preference and not in
-// core/site's EDITABLE list: a door into the control plane must not be
-// openable from inside the control plane. It is a hand edit and a commit, or
-// the onboarding wizard on a box that has nothing else yet.
+// site.json's `auth.localLogin`. When it is absent or false this module does
+// nothing observable: the login route answers 404 (not a disabled form), no
+// cookie is read, no row is touched, no token is minted. The flag is
+// deliberately not a stored preference and not in core/site's EDITABLE list:
+// a door into the control plane must not be openable from inside the control
+// plane. It is a hand edit and a commit (the planned onboarding wizard,
+// PLAN.md Phase 12, would be the other way).
 //
 // ── THE THREE SECRETS, and where each lives ───────────────────────────────
 //
-//   the setup token   — minted by THIS PROCESS at first start when the login
-//                       is on and no admin exists, printed to the journal
+//   the setup token   — minted by THIS PROCESS on its first /api/healthz or
+//                       /login visit while the login is on and no admin
+//                       exists (announceSetupTokenOnce), printed to the journal
 //                       once, stored as a SHA-256 digest with a 24h expiry
 //                       (settings `auth.localSetupToken`), and deleted the
 //                       moment the first admin is created. It is never

@@ -12,15 +12,13 @@ import type { Result } from '../../lib/result'
 
 // The two build mutations, once.
 //
-// Same argument as host/apply-flow.ts and host/update-flow.ts, which this
-// follows deliberately: a mutation with more than one door gets ONE
-// implementation and the doors become adapters over it. Apply and image-update
-// learned that the hard way — two hand-copied bodies that could drift. Build
-// now and Cancel had exactly one door until /mcp, and this file is what stops
-// the second door from becoming a second body.
+// Same argument as host/apply-flow.ts and host/update-flow.ts: a mutation with
+// more than one door — here the button and the /mcp tool — gets ONE
+// implementation and the doors become adapters over it, so two hand-copied
+// bodies cannot drift.
 //
-// What stays with the doors, not here: WHO may call. The button's door checks a
-// session against `admins` (core/authz assertAdmin); the MCP tool's door checks
+// What stays with the doors, not here: WHO may call. The button's door is an
+// `adminFn` (server/fn.ts, core/authz assertAdmin); the MCP tool's door checks
 // a scoped token (core/authz assertMachineActor). Both then hand in the actor
 // they resolved, because "who is this" is the one question the two doors answer
 // differently and everything after it is identical.
