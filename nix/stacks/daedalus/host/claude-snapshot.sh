@@ -414,8 +414,7 @@ settings_json() {
 # runtimeInputs put on PATH.
 op_roster() {
   local home="$1" cli="$2" cache="$3" projects="$1/projects"
-  local agents stats heads d f rows cached stale scanned
-  local -a files=()
+  local agents stats rows cached stale scanned heads
 
   # Bump whenever the fields `scan` emits below change shape or meaning.
   # Every cached row carries the version it was produced under and a row
@@ -491,191 +490,226 @@ op_roster() {
         id, p, a, t, im, at, sc, sk, ft, lt, br, vr, lp, cs
     }'
 
-  # A refusal is a row that says so, never a failed snapshot: the CLI is a
-  # moving target and `agents` is the newest verb here. `timeout` because a
-  # hung one would wedge a unit that runs every minute.
+  # ── the passes ──────────────────────────────────────────────────────────
   #
-  # HOME is set explicitly because setpriv changes the uid and nothing else:
-  # without it the CLI would look for its state under root's home and answer
-  # an empty list, which reads exactly like "nothing is running". The
-  # operator's home IS the parent of the claude dir this unit was handed —
-  # daedalus.nix composes that path from the same two pieces.
-  agents=$(HOME="${home%/*}" timeout 10 "$cli/bin/claude" agents --json 2>/dev/null)
-  if ! printf '%s' "$agents" | jq -e 'type == "array"' >/dev/null 2>&1; then
-    agents=""
-  fi
+  # In the order they run, each named for what it sets: the locals above,
+  # through bash's dynamic scope, rather than by printing, so every
+  # statement keeps the exact exit and capture behaviour it had inline.
+  # Defined INSIDE op_roster because `as_operator_fn` ships exactly one
+  # function's source to the operator's shell; nested, they travel with it.
 
-  shopt -s nullglob
-  for d in "$projects"/*/; do
-    for f in "$d"*.jsonl; do
-      files+=("$f")
+  # agents — the CLI's own list of live sessions, or "" when it refused.
+  roster_agents() {
+    # A refusal is a row that says so, never a failed snapshot: the CLI is a
+    # moving target and `agents` is the newest verb here. `timeout` because a
+    # hung one would wedge a unit that runs every minute.
+    #
+    # HOME is set explicitly because setpriv changes the uid and nothing else:
+    # without it the CLI would look for its state under root's home and answer
+    # an empty list, which reads exactly like "nothing is running". The
+    # operator's home IS the parent of the claude dir this unit was handed —
+    # snapshots-lib.nix composes that path from the same two pieces.
+    agents=$(HOME="${home%/*}" timeout 10 "$cli/bin/claude" agents --json 2>/dev/null)
+    if ! printf '%s' "$agents" | jq -e 'type == "array"' >/dev/null 2>&1; then
+      agents=""
+    fi
+  }
+
+  # stats — one { id, project, sizeBytes, modifiedAt } per transcript on
+  # disk; rows — the newest 200 non-empty ones, as `<project>\t<id>`.
+  roster_stats() {
+    local d f
+    local -a files=()
+
+    shopt -s nullglob
+    for d in "$projects"/*/; do
+      for f in "$d"*.jsonl; do
+        files+=("$f")
+      done
     done
-  done
 
-  # One `stat` for all of them. %F rather than a `-f` test per file: a
-  # symlink reports "symbolic link" and is dropped in jq below, which is the
-  # same refusal one loop-and-test would reach, in one process instead of 49.
-  # Both spellings of a regular file are kept — GNU stat calls a 0-byte one
-  # a "regular empty file", and those are counted below rather than listed.
-  stats='[]'
-  if [ ${#files[@]} -gt 0 ]; then
-    stats=$(stat -c '%F|%s|%Y|%n' -- "${files[@]}" 2>/dev/null | jq -Rn '
-      [ inputs | select(length > 0) | split("|")
-        | select(.[0] == "regular file" or .[0] == "regular empty file")
-        | (.[3] | split("/")) as $p
-        | { id: ($p[-1] | sub("\\.jsonl$"; "")),
-            project: $p[-2],
-            sizeBytes: (.[1] | tonumber),
-            modifiedAt: ((.[2] | tonumber) * 1000) }
-        # The canonical-uuid gate, which is also what makes the two
-        # separator characters above safe to parse on: anything whose name
-        # could have carried one is already gone.
-        | select(.id | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")) ]')
-  fi
+    # One `stat` for all of them. %F rather than a `-f` test per file: a
+    # symlink reports "symbolic link" and is dropped in jq below, which is the
+    # same refusal one loop-and-test would reach, in one process instead of 49.
+    # Both spellings of a regular file are kept — GNU stat calls a 0-byte one
+    # a "regular empty file", and those are counted below rather than listed.
+    stats='[]'
+    if [ ${#files[@]} -gt 0 ]; then
+      stats=$(stat -c '%F|%s|%Y|%n' -- "${files[@]}" 2>/dev/null | jq -Rn '
+        [ inputs | select(length > 0) | split("|")
+          | select(.[0] == "regular file" or .[0] == "regular empty file")
+          | (.[3] | split("/")) as $p
+          | { id: ($p[-1] | sub("\\.jsonl$"; "")),
+              project: $p[-2],
+              sizeBytes: (.[1] | tonumber),
+              modifiedAt: ((.[2] | tonumber) * 1000) }
+          # The canonical-uuid gate, which is also what makes the two
+          # separator characters above safe to parse on: anything whose name
+          # could have carried one is already gone.
+          | select(.id | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")) ]')
+    fi
 
-  # Newest first, and capped: the board reads the recent end and an
-  # unbounded roster would grow this published file without limit.
-  rows=$(printf '%s' "$stats" | jq -r '
-    [ .[] | select(.sizeBytes > 0) ] | sort_by(-.modifiedAt) | .[0:200][]
-    | "\(.project)\t\(.id)"')
+    # Newest first, and capped: the board reads the recent end and an
+    # unbounded roster would grow this published file without limit.
+    rows=$(printf '%s' "$stats" | jq -r '
+      [ .[] | select(.sizeBytes > 0) ] | sort_by(-.modifiedAt) | .[0:200][]
+      | "\(.project)\t\(.id)"')
+  }
 
-  # ── the scan cache: the previous snapshot, read back ────────────────────
-  #
-  # No cache file of its own. A published transcript row already carries the
-  # `modifiedAt` and `sizeBytes` it was scanned at, so the file this script
-  # wrote a minute ago IS the cache — same directory, same 0600, thrown away
-  # by the same reboot, and impossible to leave behind out of step with the
-  # output it describes.
-  #
-  # Unreadable, absent or last written by a different SCAN_VERSION all mean
-  # the same thing and are handled by meaning it: an empty map, so every
-  # file is read. That is the cold path, and it is ~3 s once.
-  cached='{}'
-  if [ -r "$cache" ]; then
-    cached=$(jq --argjson v "$SCAN_VERSION" '
-      [ (.data.roster.transcripts // [])[]
-        | select((.meta.scanVersion // 0) == $v)
-        | { key: .id, value: { modifiedAt: .modifiedAt, sizeBytes: .sizeBytes, meta: .meta } } ]
-      | from_entries' "$cache" 2>/dev/null) || cached='{}'
-    [ -n "$cached" ] || cached='{}'
-  fi
+  # cached — the previous snapshot's scan results, by transcript id.
+  roster_cache() {
+    # ── the scan cache: the previous snapshot, read back ────────────────────
+    #
+    # No cache file of its own. A published transcript row already carries the
+    # `modifiedAt` and `sizeBytes` it was scanned at, so the file this script
+    # wrote a minute ago IS the cache — same directory, same 0600, thrown away
+    # by the same reboot, and impossible to leave behind out of step with the
+    # output it describes.
+    #
+    # Unreadable, absent or last written by a different SCAN_VERSION all mean
+    # the same thing and are handled by meaning it: an empty map, so every
+    # file is read. That is the cold path, and it is ~3 s once.
+    cached='{}'
+    if [ -r "$cache" ]; then
+      cached=$(jq --argjson v "$SCAN_VERSION" '
+        [ (.data.roster.transcripts // [])[]
+          | select((.meta.scanVersion // 0) == $v)
+          | { key: .id, value: { modifiedAt: .modifiedAt, sizeBytes: .sizeBytes, meta: .meta } } ]
+        | from_entries' "$cache" 2>/dev/null) || cached='{}'
+      [ -n "$cached" ] || cached='{}'
+    fi
+  }
 
-  # Only the files whose (mtime, size) moved. In the steady state that is
-  # the one session being typed into; after a boot it is all of them.
-  stale=$(printf '%s' "$stats" | jq -r --argjson c "$cached" '
-    [ .[] | select(.sizeBytes > 0) ] | sort_by(-.modifiedAt) | .[0:200][]
-    | . as $s | ($c[$s.id] // null) as $hit
-    | select($hit == null or $hit.modifiedAt != $s.modifiedAt or $hit.sizeBytes != $s.sizeBytes)
-    | "\(.project)\t\(.id)"')
+  # stale — the rows whose (mtime, size) moved; scanned — their fresh scan
+  # results, by transcript id.
+  roster_scan() {
+    # Only the files whose (mtime, size) moved. In the steady state that is
+    # the one session being typed into; after a boot it is all of them.
+    stale=$(printf '%s' "$stats" | jq -r --argjson c "$cached" '
+      [ .[] | select(.sizeBytes > 0) ] | sort_by(-.modifiedAt) | .[0:200][]
+      | . as $s | ($c[$s.id] // null) as $hit
+      | select($hit == null or $hit.modifiedAt != $s.modifiedAt or $hit.sizeBytes != $s.sizeBytes)
+      | "\(.project)\t\(.id)"')
 
-  scanned=$(
-    while IFS=$'\t' read -r d f; do
-      [ -n "$f" ] || continue
-      awk -v id="$f" "$scan" "$projects/$d/$f.jsonl" 2>/dev/null || true
-    done <<<"$stale" | jq -Rn --argjson v "$SCAN_VERSION" '
-      # ── the one line of conversation that leaves the tree ───────────────
-      #
-      # Same shapes as the app'"'"'s lib/redact.ts, plus the API-key prefixes
-      # that file has no reason to carry. Best effort and nothing more: see
-      # the residual-risk note in the header. Whitespace collapses FIRST so
-      # a prompt is one line; truncation happens LAST so a pattern is never
-      # handed half a token to miss.
-      def redact:
-        gsub("-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\\s\\S]*?(?:-----END [A-Z0-9 ]*-----|$)"; "[redacted]")
-        | gsub("github_pat_[A-Za-z0-9_]+"; "[redacted]")
-        | gsub("gh[opusr]_[A-Za-z0-9_]{20,}"; "[redacted]")
-        | gsub("(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*"; "[redacted]")
-        | gsub("sk-(?:ant-)?[A-Za-z0-9_-]{16,}"; "[redacted]")
-        | gsub("AKIA[0-9A-Z]{16}"; "[redacted]")
-        | gsub("xox[baprs]-[A-Za-z0-9-]{10,}"; "[redacted]")
-        | gsub("AIza[0-9A-Za-z_-]{35}"; "[redacted]")
-        | gsub("x-access-token:[^@\\s]+"; "x-access-token:[redacted]")
-        | gsub("(?<pre>(?<![A-Za-z0-9+.-])[a-z][a-z0-9+.-]*://[^\\s:@/]*:)[^\\s/]+@"; "\(.pre)[redacted]@"; "i")
-        | gsub("(?<pre>(?:authorization|_authToken)[\"'"'"']?\\s*[:=]\\s*(?:[\"'"'"'])?(?:basic |bearer |token )?)[^\\s\"'"'"',;]+"; "\(.pre)[redacted]"; "i");
-      def oneline: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
-      def cut: if (. | length) > 160 then (.[0:159] + "…") else . end;
-      def s: if . == "" then null else . end;
-      def epoch: sub("\\.[0-9]+Z$"; "Z") | (try fromdateiso8601 catch null)
-                 | if . == null then null else . * 1000 end;
+    scanned=$(
+      while IFS=$'\t' read -r d f; do
+        [ -n "$f" ] || continue
+        awk -v id="$f" "$scan" "$projects/$d/$f.jsonl" 2>/dev/null || true
+      done <<<"$stale" | jq -Rn --argjson v "$SCAN_VERSION" '
+        # ── the one line of conversation that leaves the tree ───────────────
+        #
+        # Same shapes as the app'"'"'s lib/redact.ts, plus the API-key prefixes
+        # that file has no reason to carry. Best effort and nothing more: see
+        # the residual-risk note in the header. Whitespace collapses FIRST so
+        # a prompt is one line; truncation happens LAST so a pattern is never
+        # handed half a token to miss.
+        def redact:
+          gsub("-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\\s\\S]*?(?:-----END [A-Z0-9 ]*-----|$)"; "[redacted]")
+          | gsub("github_pat_[A-Za-z0-9_]+"; "[redacted]")
+          | gsub("gh[opusr]_[A-Za-z0-9_]{20,}"; "[redacted]")
+          | gsub("(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*"; "[redacted]")
+          | gsub("sk-(?:ant-)?[A-Za-z0-9_-]{16,}"; "[redacted]")
+          | gsub("AKIA[0-9A-Z]{16}"; "[redacted]")
+          | gsub("xox[baprs]-[A-Za-z0-9-]{10,}"; "[redacted]")
+          | gsub("AIza[0-9A-Za-z_-]{35}"; "[redacted]")
+          | gsub("x-access-token:[^@\\s]+"; "x-access-token:[redacted]")
+          | gsub("(?<pre>(?<![A-Za-z0-9+.-])[a-z][a-z0-9+.-]*://[^\\s:@/]*:)[^\\s/]+@"; "\(.pre)[redacted]@"; "i")
+          | gsub("(?<pre>(?:authorization|_authToken)[\"'"'"']?\\s*[:=]\\s*(?:[\"'"'"'])?(?:basic |bearer |token )?)[^\\s\"'"'"',;]+"; "\(.pre)[redacted]"; "i");
+        def oneline: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
+        def cut: if (. | length) > 160 then (.[0:159] + "…") else . end;
+        def s: if . == "" then null else . end;
+        def epoch: sub("\\.[0-9]+Z$"; "Z") | (try fromdateiso8601 catch null)
+                   | if . == null then null else . * 1000 end;
 
-      [ inputs | select(length > 0) | split("\t")
-        | select(length >= 14)
-        | { key: .[0],
-            value: {
-              scanVersion: $v,
-              exchanges: (.[1] | tonumber),
-              replies: (.[2] | tonumber),
-              thinking: (.[3] | tonumber),
-              images: (.[4] | tonumber),
-              attached: (.[5] | tonumber),
-              # Unknown, not zero, when the CLI never wrote the marker.
-              subagents: (if .[7] == "1" then (.[6] | tonumber) else null end),
-              # Last timestamp minus first: the SPAN the session was open
-              # across, not time at a keyboard — hence the name. Null when
-              # the file carries no timestamp, which a transcript of nothing
-              # but title records genuinely does.
-              spanMs: (((.[9] | s | if . == null then null else epoch end) // null) as $b
-                         | ((.[8] | s | if . == null then null else epoch end) // null) as $a
-                         | if $a == null or $b == null or $b < $a then null else $b - $a end),
-              branch: (.[10] | s),
-              cliVersion: (.[11] | s),
-              lastPrompt: (.[12] | s | if . == null then null
-                           else ((fromjson? | .lastPrompt?) // null)
-                             | if type == "string" and . != "" then (oneline | redact | cut)
-                               else null end
-                           end),
-              # Present in 3 of 49 transcripts. Published as a block or not
-              # at all — a card must never print a cost the CLI never wrote.
-              cost: (.[13] | s | if . == null then null
-                     else (fromjson? // null)
-                       | if type == "object" then
-                           { usd: (.totalCostUSD // null),
-                             linesAdded: (.totalLinesAdded // null),
-                             linesRemoved: (.totalLinesRemoved // null),
-                             durationMs: (.totalDuration // null) }
-                         else null end
-                     end) } } ]
-      | from_entries')
-  [ -n "$scanned" ] || scanned='{}'
+        [ inputs | select(length > 0) | split("\t")
+          | select(length >= 14)
+          | { key: .[0],
+              value: {
+                scanVersion: $v,
+                exchanges: (.[1] | tonumber),
+                replies: (.[2] | tonumber),
+                thinking: (.[3] | tonumber),
+                images: (.[4] | tonumber),
+                attached: (.[5] | tonumber),
+                # Unknown, not zero, when the CLI never wrote the marker.
+                subagents: (if .[7] == "1" then (.[6] | tonumber) else null end),
+                # Last timestamp minus first: the SPAN the session was open
+                # across, not time at a keyboard — hence the name. Null when
+                # the file carries no timestamp, which a transcript of nothing
+                # but title records genuinely does.
+                spanMs: (((.[9] | s | if . == null then null else epoch end) // null) as $b
+                           | ((.[8] | s | if . == null then null else epoch end) // null) as $a
+                           | if $a == null or $b == null or $b < $a then null else $b - $a end),
+                branch: (.[10] | s),
+                cliVersion: (.[11] | s),
+                lastPrompt: (.[12] | s | if . == null then null
+                             else ((fromjson? | .lastPrompt?) // null)
+                               | if type == "string" and . != "" then (oneline | redact | cut)
+                                 else null end
+                             end),
+                # Present in 3 of 49 transcripts. Published as a block or not
+                # at all — a card must never print a cost the CLI never wrote.
+                cost: (.[13] | s | if . == null then null
+                       else (fromjson? // null)
+                         | if type == "object" then
+                             { usd: (.totalCostUSD // null),
+                               linesAdded: (.totalLinesAdded // null),
+                               linesRemoved: (.totalLinesRemoved // null),
+                               durationMs: (.totalDuration // null) }
+                           else null end
+                       end) } } ]
+        | from_entries')
+    [ -n "$scanned" ] || scanned='{}'
+  }
 
-  # The head of each transcript, and the sidecar title beside it, fed to ONE
-  # jq as `<id>\tab<line>`. `head -c` cuts mid-line, so the last line of each
-  # is usually not JSON; `fromjson?` drops it, which is why this can read a
-  # fixed prefix of a 22 MB file and ask nothing about record boundaries.
-  heads=$(
-    while IFS=$'\t' read -r d f; do
-      [ -n "$f" ] || continue
-      head -c 8192 "$projects/$d/$f.jsonl" 2>/dev/null | sed -e "s|^|$f\t|"
-      printf '\n'
-      if [ -r "$projects/$d/$f/custom-title.json" ]; then
-        printf '%s\t' "$f"
-        head -c 4096 "$projects/$d/$f/custom-title.json" 2>/dev/null
+  # heads — titles, start time and cwd, from each row's first 8 KB and its
+  # sidecar title file.
+  roster_heads() {
+    # The head of each transcript, and the sidecar title beside it, fed to ONE
+    # jq as `<id>\tab<line>`. `head -c` cuts mid-line, so the last line of each
+    # is usually not JSON; `fromjson?` drops it, which is why this can read a
+    # fixed prefix of a 22 MB file and ask nothing about record boundaries.
+    heads=$(
+      while IFS=$'\t' read -r d f; do
+        [ -n "$f" ] || continue
+        head -c 8192 "$projects/$d/$f.jsonl" 2>/dev/null | sed -e "s|^|$f\t|"
         printf '\n'
-      fi
-    done <<<"$rows" | jq -Rn '
-      reduce (inputs
-              | (index("\t")) as $i
-              | select($i != null)
-              | { id: .[0:$i], r: (.[$i+1:] | fromjson?) }
-              | select((.r | type) == "object")) as $e ({};
-        $e.id as $k
-        | .[$k] //= { ai: null, custom: null, sidecar: null, startedAt: null, cwd: null }
-        # Three title slots rather than one, because their precedence is not
-        # the order they arrive in: a title the operator typed outranks one
-        # the model wrote, wherever each was found.
-        | (if $e.r.type == "ai-title" and ($e.r.aiTitle | type) == "string"
-           then .[$k].ai //= $e.r.aiTitle else . end)
-        | (if $e.r.type == "custom-title" and ($e.r.customTitle | type) == "string"
-           then .[$k].custom //= $e.r.customTitle else . end)
-        | (if ($e.r.type | type) == "null" and ($e.r.customTitle | type) == "string"
-           then .[$k].sidecar //= $e.r.customTitle else . end)
-        # The FIRST timestamp anywhere in the prefix, not the first line s.
-        # `custom-title`, `ai-title` and `mode` records carry none at all,
-        # and a transcript can open with any of them.
-        | (if ($e.r.timestamp | type) == "string"
-           then .[$k].startedAt //= $e.r.timestamp else . end)
-        | (if ($e.r.cwd | type) == "string" then .[$k].cwd //= $e.r.cwd else . end))'
-  )
+        if [ -r "$projects/$d/$f/custom-title.json" ]; then
+          printf '%s\t' "$f"
+          head -c 4096 "$projects/$d/$f/custom-title.json" 2>/dev/null
+          printf '\n'
+        fi
+      done <<<"$rows" | jq -Rn '
+        reduce (inputs
+                | (index("\t")) as $i
+                | select($i != null)
+                | { id: .[0:$i], r: (.[$i+1:] | fromjson?) }
+                | select((.r | type) == "object")) as $e ({};
+          $e.id as $k
+          | .[$k] //= { ai: null, custom: null, sidecar: null, startedAt: null, cwd: null }
+          # Three title slots rather than one, because their precedence is not
+          # the order they arrive in: a title the operator typed outranks one
+          # the model wrote, wherever each was found.
+          | (if $e.r.type == "ai-title" and ($e.r.aiTitle | type) == "string"
+             then .[$k].ai //= $e.r.aiTitle else . end)
+          | (if $e.r.type == "custom-title" and ($e.r.customTitle | type) == "string"
+             then .[$k].custom //= $e.r.customTitle else . end)
+          | (if ($e.r.type | type) == "null" and ($e.r.customTitle | type) == "string"
+             then .[$k].sidecar //= $e.r.customTitle else . end)
+          # The FIRST timestamp anywhere in the prefix, not the first line s.
+          # `custom-title`, `ai-title` and `mode` records carry none at all,
+          # and a transcript can open with any of them.
+          | (if ($e.r.timestamp | type) == "string"
+             then .[$k].startedAt //= $e.r.timestamp else . end)
+          | (if ($e.r.cwd | type) == "string" then .[$k].cwd //= $e.r.cwd else . end))'
+    )
+  }
+
+  roster_agents
+  roster_stats
+  roster_cache
+  roster_scan
+  roster_heads
 
   [ -n "$heads" ] || heads='{}'
   [ -n "$stats" ] || stats='[]'
@@ -751,7 +785,7 @@ op_roster() {
 #
 # The third population on the board, and the only one the two sources above
 # cannot name: a session resumed through daedalus runs as
-# `claude-session@<uuid>.service` (stacks/daedalus/daedalus.nix), and the unit
+# `claude-session@<uuid>.service` (stacks/daedalus/daedalus-verbs.nix), and the unit
 # is its whole handle — `systemctl stop` SIGTERMs the cgroup. A session spawned
 # by the Remote Control server looks identical in `claude agents` and has no
 # per-session kill at all, so without this list the board would have to offer
