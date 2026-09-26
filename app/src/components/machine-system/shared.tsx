@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import type { NodeTelemetry } from '../../lib/agent/status'
@@ -203,7 +202,7 @@ export function MachineHead({
 }
 /**
  * What the page can say when there is no document to draw: the agent did
- * not answer, or it is too old to carry one. Returned in place of the tabs'
+ * not answer, or it has not sampled yet. Returned in place of the tabs'
  * boards, so every tab says the same thing rather than each drawing a grid
  * of dashes.
  */
@@ -220,13 +219,8 @@ export function NoDocument({ d }: { d: NodeSystemData }) {
   }
   return (
     <p className={EMPTY}>
-      The agent on {node.hostname} is {status.version}, which reports nothing about the machine
-      beyond its name. Telemetry arrived in agent 0.7.0; the agent installs it on its own within ten
-      minutes of a release, or now from{' '}
-      <Link to="/settings" search={{ tab: 'machines' }}>
-        Settings › Machines
-      </Link>
-      .
+      The agent on {node.hostname} answers but has not sampled the machine yet; its first sample
+      comes a few seconds after it starts.
     </p>
   )
 }

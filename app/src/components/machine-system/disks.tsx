@@ -182,7 +182,7 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
           <DetailNote d={d} />
           <p className={FOOT}>
             {t.drives.length === 0
-              ? 'What the OS mounts, without the drives behind them: the physical drives arrive with the full document from agent 0.8.0, read every ten minutes.'
+              ? 'What the OS mounts, without the drives behind them: the agent reads the physical drives every ten minutes and has reported none.'
               : 'Mounted volumes the agent could not place on a drive above — network shares, disk images, and anything the OS mounts without a physical device.'}
           </p>
         </Board>

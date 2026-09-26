@@ -1,6 +1,5 @@
 import { MonitorSmartphoneIcon } from 'lucide-react'
 
-import { agentHasClaude } from '../../../lib/agent/status'
 import { cn } from '../../../lib/cn'
 import type { Machine, MachinesData } from '../../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../../lib/format'
@@ -99,9 +98,6 @@ function ClaudeCell({ m }: { m: Machine }) {
         {c.detail !== null && <span className={ASIDE}>{c.detail}</span>}
       </Line>
     )
-  }
-  if (s !== null && !agentHasClaude(s.version)) {
-    return <span className={ASIDE}>needs agent 0.4.0 (has {s.version})</span>
   }
   if (s !== null && !s.trayReporting) {
     return (

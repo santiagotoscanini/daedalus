@@ -31,11 +31,11 @@ const PROBE_MS = [800, 1_500, 2_500]
 export type NodeSystemData = {
   node: NodeRow
   status: AgentStatus | null
-  /** Null when the page answered but the agent predates telemetry. */
+  /** Null when the page answered before the agent's first sample, seconds after it starts. */
   telemetry: NodeTelemetry | null
   /**
    * Whether `telemetry` is the full document. False when it is the open
-   * page's block — no token yet, or an agent older than 0.8.0 — and
+   * page's block — no token yet, or the agent refused it — and
    * `detailError` says which.
    */
   full: boolean
@@ -148,9 +148,7 @@ export async function loadNodeSystem(
     const why =
       fullDoc.reason.status === 403
         ? 'the agent refused the box’s token (it may not have heard it yet)'
-        : fullDoc.reason.status === 404
-          ? 'the agent is older than 0.8.0: drives, processes, services and updates arrive with it'
-          : (fullDoc.reason.error ?? `HTTP ${String(fullDoc.reason.status)}`)
+        : (fullDoc.reason.error ?? `HTTP ${String(fullDoc.reason.status)}`)
     return {
       ...none,
       status,

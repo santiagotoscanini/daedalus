@@ -124,11 +124,7 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
         aside={<span className={NOTE}>what games load</span>}
       >
         {t.appCount === null ? (
-          <p className={EMPTY}>
-            {d.full
-              ? 'The software inventory arrives with agent 0.10.0; the agent installs it on its own within ten minutes of the release.'
-              : 'On the full document.'}
-          </p>
+          <p className={EMPTY}>On the full document.</p>
         ) : runtimes.length === 0 ? (
           <p className={EMPTY}>No redistributable runtime is registered on this machine.</p>
         ) : (
@@ -229,9 +225,6 @@ function GpuBoard({
         {main
           ? 'Busy and VRAM are Windows’ own counters, sampled every fifteen seconds. The driver’s vendor name is what the download page and the game patch notes mean by a version; the WDDM number is how Windows files it.'
           : 'The processor’s own graphics, which Windows keeps a driver for even when nothing is plugged into it.'}
-        {g.driverBrand === null &&
-          g.driver !== null &&
-          ' The vendor name arrives with agent 0.10.0.'}
       </p>
     </Board>
   )

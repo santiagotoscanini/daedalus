@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 
-import { agentHasClaude } from '../../lib/agent/status'
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { DASH, duration, num, pct, since, text } from '../../lib/format'
@@ -201,7 +200,6 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
               : ''}
             Health is the capacity that remains of the design capacity; a battery is considered
             spent around eighty percent, and Apple rates this one for a thousand cycles.
-            {t.battery.cycles === null && ' The cycle count arrives with agent 0.10.0.'}
           </p>
         </Board>
       )}
@@ -383,11 +381,7 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
         }
       >
         {t.providers.length === 0 ? (
-          <p className={EMPTY}>
-            {status.version !== null && agentBefore(status.version, '0.11.0')
-              ? 'Providers are reported by agent 0.11.0 and later.'
-              : 'No model server found on this machine.'}
-          </p>
+          <p className={EMPTY}>No model server found on this machine.</p>
         ) : (
           <ul className={LIST}>
             {t.providers.map((p) => (
@@ -445,9 +439,7 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
               v:
                 status.claude != null
                   ? `${status.claude.state}${status.claude.serverVersion !== null ? ` ${status.claude.serverVersion}` : ''} · ${String(status.claude.sessions)} session${status.claude.sessions === 1 ? '' : 's'}`
-                  : agentHasClaude(status.version)
-                    ? DASH
-                    : 'needs agent 0.4.0',
+                  : DASH,
             },
           ]}
         />
@@ -484,16 +476,4 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
  */
 function providerName(kind: string): string {
   return Object.hasOwn(PROVIDER_NAME, kind) ? PROVIDER_NAME[kind as ProviderKind] : kind
-}
-
-/** Whether an agent version predates the one a field arrived in. */
-function agentBefore(version: string, since: string): boolean {
-  const a = version.split('.').map(Number)
-  const b = since.split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
-    const x = a[i] ?? 0
-    const y = b[i] ?? 0
-    if (x !== y) return x < y
-  }
-  return false
 }

@@ -64,7 +64,7 @@ export type NodeRow = {
   claudeUpdateRequested: boolean
   claudeRestartRequested: boolean
   policy: NodePolicy
-  /** Present once the node's tray has reported Claude Code (agent 0.4.0+). */
+  /** Present once the node's tray has reported Claude Code. */
   claude: NodeClaudeSummary | null
   /** Seconds since the last hello, resolved on the server (the page streams). */
   lastSeenAgo: number
@@ -86,7 +86,7 @@ function effectivePolicy(p: NodePolicy): {
     claudeWorkdir: p.claudeWorkdir?.trim() || null,
     // Every kind a node can offer, with the port it would be probed on: the
     // agent looks for the ones it implements and ignores the rest, so a kind
-    // added here reaches an older agent harmlessly.
+    // added here before the agent knows it is harmless.
     providers: Object.fromEntries(
       NODE_PROVIDER_KINDS.map((k) => [k, { port: p.providers?.[k]?.port ?? DEFAULT_PORT[k] }]),
     ) as Record<ProviderKind, { port: number }>,
@@ -251,13 +251,6 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
   // A provider may have changed what it serves since the last hello: the
   // gateway sync runs soon, once for a burst of hellos.
   if (state === 'approved') requestGatewaySync()
-  // An approved row without a token (approved before tokens existed) gets
-  // one now, so the box can read it from this hello on.
-  let token = saved?.token ?? null
-  if (state === 'approved' && token === null) {
-    token = mintToken()
-    await db.update(nodes).set({ token }).where(eq(nodes.id, v.nodeId))
-  }
   // An instruction is delivered once: it goes out with this answer and is
   // cleared in the same breath, so a second hello does not repeat it.
   if (checkUpdate || updateClaude || restartClaude) {
@@ -276,7 +269,8 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
     updateClaude,
     restartClaude,
     policy: state === 'approved' ? effectivePolicy(saved?.policy ?? {}) : null,
-    nodeToken: state === 'approved' ? token : null,
+    // Minted at approval (approveNode), cleared at revocation.
+    nodeToken: state === 'approved' ? (saved?.token ?? null) : null,
   }
 }
 

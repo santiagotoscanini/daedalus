@@ -38,7 +38,6 @@ export const Route = createFileRoute('/api/nodes/hello')({
         const { recordHello } = await import('../lib/repo/nodes')
         const answer = await recordHello(verdict)
         return Response.json({
-          node: verdict.nodeId,
           state: answer.state,
           // The instructions: the agent's updater looks now instead of on
           // its next tick; the tray updates Claude Code, which interrupts
@@ -59,17 +58,13 @@ export const Route = createFileRoute('/api/nodes/hello')({
                     ? {}
                     : { claude_workdir: answer.policy.claudeWorkdir }),
                   // Where each provider listens, so the agent's presence probe
-                  // asks the right port (agent 0.11.0+; older agents ignore it).
+                  // asks the right port.
                   providers: { lemonade: { port: answer.policy.providers.lemonade.port } },
                 },
               }),
           // The node token: the box's credential for the agent's full Claude
           // report. Only for an approved node, only over this HTTPS answer.
           ...(answer.nodeToken === null ? {} : { node_token: answer.nodeToken }),
-          // The box's clock, so an agent whose clock drifts could notice before
-          // verifyHello's five-minute skew check refuses it. No agent reads it
-          // yet (agent/src/hello.rs ignores the field).
-          server_time: Math.floor(Date.now() / 1000),
         })
       },
     },

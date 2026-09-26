@@ -2,48 +2,21 @@ import { describe, expect, it } from 'vitest'
 import { agentStatus } from './status'
 
 describe('agentStatus', () => {
-  it('reads a 0.2.1 document', () => {
+  it('reads a status document', () => {
     const s = agentStatus({
       agent: 'daedalus-agent',
-      version: '0.2.1',
+      version: '0.12.0',
       hostname: 'SANTI-PC',
       os: 'windows',
       uptime_secs: 80,
       os_uptime_secs: 635064,
       booted_at: '2026-09-15T09:31:11Z',
-      awake_hold: true,
+      awake_hold: false,
       hold_error: null,
-      power_requests: 'SYSTEM: …',
       update_available: null,
       restart_pending: false,
       last_update_check: '2026-09-22T17:54:45Z',
       last_update_result: 'up to date',
-      updated_from: '0.2.0',
-      updated_at: '2026-09-22T17:54:07Z',
-    })
-    expect(s.hostname).toBe('SANTI-PC')
-    expect(s.osUptimeSecs).toBe(635064)
-    expect(s.awakeHold).toBe(true)
-  })
-
-  it('reads a 0.2.0 document, which lacks the machine uptime', () => {
-    const s = agentStatus({ version: '0.2.0', hostname: 'X', awake_hold: true })
-    expect(s.osUptimeSecs).toBeNull()
-    expect(s.bootedAt).toBeNull()
-    expect(s.lastUpdateResult).toBeNull()
-  })
-
-  it('refuses a body without a version', () => {
-    expect(() => agentStatus({ hostname: 'X' })).toThrow()
-  })
-})
-
-describe('agentStatus, 0.6.0', () => {
-  it('reads the policy and the open page’s Claude summary', () => {
-    const s = agentStatus({
-      version: '0.6.0',
-      hostname: 'SANTI-PC',
-      awake_hold: false,
       policy: { awake_hold: false, claude_remote_control: true },
       tray: { reporting: true, last_report: '2026-09-22T20:00:00Z' },
       claude: {
@@ -55,17 +28,26 @@ describe('agentStatus, 0.6.0', () => {
         signed_in: true,
       },
     })
+    expect(s.hostname).toBe('SANTI-PC')
+    expect(s.osUptimeSecs).toBe(635064)
     expect(s.policy.awakeHold).toBe(false)
     expect(s.trayReporting).toBe(true)
     expect(s.claude?.sessions).toBe(2)
     expect(s.claude?.signedIn).toBe(true)
   })
 
-  it('gives an older agent the held-awake, no-Claude defaults', () => {
-    const s = agentStatus({ version: '0.3.0', awake_hold: true })
+  it('decodes a field the document lacks to its fallback', () => {
+    const s = agentStatus({ version: '0.12.0', hostname: 'X' })
+    expect(s.osUptimeSecs).toBeNull()
+    expect(s.bootedAt).toBeNull()
+    expect(s.lastUpdateResult).toBeNull()
     expect(s.policy).toEqual({ awakeHold: true, claudeRemoteControl: false })
     expect(s.claude).toBeNull()
     expect(s.trayReporting).toBe(false)
+  })
+
+  it('refuses a body without a version', () => {
+    expect(() => agentStatus({ hostname: 'X' })).toThrow()
   })
 })
 
@@ -74,6 +56,7 @@ describe('nodeClaudeReport', () => {
     const { nodeClaudeReport } = await import('./status')
     const r = nodeClaudeReport({
       path: '/Users/x/.local/bin/claude',
+      install_method: 'native',
       cli_version: '2.1.260',
       state: 'running',
       pid: 1234,
@@ -92,21 +75,12 @@ describe('nodeClaudeReport', () => {
       workdir_via: 'most recent trusted project',
       reported_at: '2026-09-22T20:00:00Z',
     })
+    expect(r?.installMethod).toBe('native')
     expect(r?.server.environmentId).toBe('env_1')
     expect(r?.sessions[0]?.name).toBe('x-ab')
     expect(r?.credentials.store).toBe('keychain')
     expect(r?.credentials.refreshExpiresAt).toBeNull()
     expect(r?.workdirVia).toBe('most recent trusted project')
     expect(nodeClaudeReport(null)).toBeNull()
-  })
-})
-
-describe('agentHasClaude', () => {
-  it('starts at 0.4.0', async () => {
-    const { agentHasClaude } = await import('./status')
-    expect(agentHasClaude('0.3.0')).toBe(false)
-    expect(agentHasClaude('0.4.0')).toBe(true)
-    expect(agentHasClaude('1.0.0')).toBe(true)
-    expect(agentHasClaude('')).toBe(false)
   })
 })

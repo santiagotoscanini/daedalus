@@ -28,8 +28,7 @@ export function Decision({ m }: { m: Machine }) {
     return (
       <p className={NOTE}>
         Its status page answers but no hello has reached the box, so there is no key to trust: the
-        agent is older than 0.3.0, or it cannot find the box in DNS. It will announce itself on its
-        next update; nothing to press here.
+        agent cannot find the box in DNS. It announces itself once it can; nothing to press here.
       </p>
     )
   }

@@ -49,11 +49,7 @@ export function NodeSoftwareView({ d }: { d: NodeSystemData }) {
     return (
       <BoardGrid>
         <Board title={mac ? 'Apps' : 'Software'} icon="⧉" span={12}>
-          <p className={EMPTY}>
-            {!d.full
-              ? 'The inventory is on the full document.'
-              : 'The software inventory arrives with agent 0.10.0; the agent installs it on its own within ten minutes of the release, or now from Host.'}
-          </p>
+          <p className={EMPTY}>The inventory is on the full document.</p>
           <DetailNote d={d} />
         </Board>
       </BoardGrid>

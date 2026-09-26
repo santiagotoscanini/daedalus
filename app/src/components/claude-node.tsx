@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { agentHasClaude, type NodeClaudeSession } from '../lib/agent/status'
+import type { NodeClaudeSession } from '../lib/agent/status'
 import type { NodeClaudeData } from '../lib/dashboard/node-claude'
 import { DASH, duration, num, since, text, until } from '../lib/format'
 import type { NodeRow } from '../lib/repo/nodes'
@@ -43,7 +43,6 @@ function verdict(d: NodeClaudeData): Verdict {
   // The report when the box could read it, else the open page's summary.
   const c = d.report ?? s.claude
   if (c === null) {
-    if (!agentHasClaude(s.version)) return { label: `agent ${s.version} is too old`, tone: 'warn' }
     return s.trayReporting
       ? { label: 'no report yet', tone: 'muted' }
       : { label: 'nobody logged on', tone: 'muted' }
@@ -145,13 +144,11 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
         </p>
       ) : c === null ? (
         <p className={EMPTY}>
-          {!agentHasClaude(status.version)
-            ? `The agent on ${node.hostname} is ${status.version}; running and reporting Claude Code arrived in agent 0.4.0. Check for updates on System › Machines — the agent installs it by itself.`
-            : status.trayReporting
-              ? 'The tray is up but has not reported Claude Code yet; give it a few seconds.'
-              : status.policy.claudeRemoteControl
-                ? `The agent is up but its tray is not reporting, which means nobody is logged on to ${node.hostname}. The server runs in the desktop session because that is where the Claude login is; a machine that reboots unattended needs automatic sign-in for it to come back.`
-                : 'Claude remote control is off for this machine (Settings › Machines).'}
+          {status.trayReporting
+            ? 'The tray is up but has not reported Claude Code yet; give it a few seconds.'
+            : status.policy.claudeRemoteControl
+              ? `The agent is up but its tray is not reporting, which means nobody is logged on to ${node.hostname}. The server runs in the desktop session because that is where the Claude login is; a machine that reboots unattended needs automatic sign-in for it to come back.`
+              : 'Claude remote control is off for this machine (Settings › Machines).'}
         </p>
       ) : null}
 
@@ -263,8 +260,11 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                   v: (
                     <span>
                       <span className={MONO}>{text(c.path)}</span>
-                      {methodOf(c) !== null && (
-                        <span className="text-(--text-muted)"> · {methodOf(c)}</span>
+                      {/* How Claude Code got here, as the agent read it off
+                          the path (agent/src/claude/cli.rs) — it decides
+                          which verb updates it. */}
+                      {c.installMethod !== null && (
+                        <span className="text-(--text-muted)"> · {c.installMethod}</span>
                       )}
                     </span>
                   ),
@@ -430,33 +430,6 @@ function SessionRow({ s }: { s: NodeClaudeSession }) {
 }
 
 /**
- * How Claude Code got onto this machine, read from where the agent found it.
- *
- * It decides which verb updates it, so an update button that does not say
- * this is asking to be trusted about something it has not told you. The
- * agent's `find_cli` searches in a method-revealing order
- * (agent/src/claude/cli.rs) — the native installer's `~/.local/bin`, npm's
- * global bin, Homebrew's prefixes, then PATH — so the path it returns is the
- * answer.
- */
-function methodOf(c: NonNullable<NodeClaudeData['report']>): string | null {
-  // The agent's own answer when it sends one (0.12.0+), else the same rule
-  // applied here to the path every agent sends, so the fact appears on
-  // machines whose agent predates the field too.
-  return c.installMethod ?? installMethod(c.path)
-}
-
-function installMethod(path: string | null): string | null {
-  if (path === null || path === '') return null
-  const p = path.replace(/\\/g, '/').toLowerCase()
-  if (p.includes('/.local/bin/') || p.includes('/.local/share/claude/')) return 'native installer'
-  if (p.includes('/npm/') || p.includes('/node_modules/')) return 'npm'
-  if (p.includes('/homebrew/') || p.includes('/cellar/')) return 'homebrew'
-  if (p.includes('/winget') || p.includes('/windowsapps/')) return 'winget'
-  return null
-}
-
-/**
  * Update Claude Code on this machine.
  *
  * The tray runs it, which is the only thing that can: the CLI's login lives
@@ -479,7 +452,7 @@ function installMethod(path: string | null): string | null {
  */
 function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData['report'] }) {
   const { run, busy, error } = useAction()
-  const method = claude === null ? null : methodOf(claude)
+  const method = claude?.installMethod ?? null
   const last = claude?.lastUpdate ?? null
   const running = claude?.server.version ?? null
   const installed = claude?.cliVersion ?? null

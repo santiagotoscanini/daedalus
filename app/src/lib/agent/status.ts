@@ -3,13 +3,13 @@ import { arrayOf, bool, decode, int, nullable, num, obj, optional, str } from '.
 // The agent's status page, as the box reads it (agent/src/status.rs is the
 // writer). One JSON document on TCP 7787 of a machine the box does not run;
 // this is the half of it the box acts on. Fields the agent adds later are
-// ignored until a reader here wants them, and fields an older agent lacks
-// decode to their fallbacks, so a fleet of mixed agent versions reads.
+// ignored until a reader here wants them, and a field a document lacks
+// decodes to its fallback rather than failing the page.
 
 /** The port every agent answers on unless its config says otherwise. */
 export const AGENT_PORT = 7787
 
-/** What the box asked of the machine, as the agent holds it (agent 0.4.0+). */
+/** What the box asked of the machine, as the agent holds it. */
 type AgentPolicy = {
   awakeHold: boolean
   claudeRemoteControl: boolean
@@ -42,7 +42,7 @@ export type NodeClaude = {
   /**
    * native | npm | homebrew | winget | path, as the agent reads it off the
    * path it found. Decides which verb updates it, so the page shows it
-   * beside the button that runs one. Null from an agent before 0.12.0.
+   * beside the button that runs one. Null while the agent has not found it.
    */
   installMethod: string | null
   cliVersion: string | null
@@ -122,16 +122,16 @@ export type AgentStatus = {
   version: string
   hostname: string
   os: string
-  /** "Windows 11 Pro", "macOS"; empty from an agent older than 0.3.0. */
+  /** "Windows 11 Pro", "macOS". */
   osName: string
-  /** "24H2 (26100.4652)", "15.1"; empty from an older agent. */
+  /** "24H2 (26100.4652)", "15.1". */
   osVersion: string
   arch: string
   cpu: string
   memoryBytes: number | null
   /** The agent process's uptime. */
   uptimeSecs: number
-  /** The machine's; null from an agent older than 0.2.1. */
+  /** The machine's; null when the agent could not read it. */
   osUptimeSecs: number | null
   bootedAt: string | null
   awakeHold: boolean
@@ -140,9 +140,9 @@ export type AgentStatus = {
   restartPending: boolean
   lastUpdateCheck: string | null
   lastUpdateResult: string | null
-  /** The agent's policy; an agent older than 0.4.0 holds the machine awake and has no Claude. */
+  /** The agent's policy. */
   policy: AgentPolicy
-  /** Null when the tray has not reported lately (nobody logged on), or the agent predates it. */
+  /** Null when the tray has not reported lately (nobody logged on). */
   claude: NodeClaudeSummary | null
   /** Whether the tray — the user's session — is reporting to the service. */
   trayReporting: boolean
@@ -328,12 +328,6 @@ export function agentStatus(body: unknown): AgentStatus {
   }
 }
 
-/** Whether this agent version reports Claude Code and takes a policy (0.4.0 and up). */
-export function agentHasClaude(version: string): boolean {
-  const [major = 0, minor = 0] = version.split('.').map((p) => Number.parseInt(p, 10))
-  return major > 0 || minor >= 4
-}
-
 function summaryOf(s: ReturnType<typeof summary>): NodeClaudeSummary {
   return {
     state: s.state,
@@ -356,12 +350,12 @@ export function nodeClaudeReport(body: unknown): NodeClaude | null {
   return nodeClaude(decode(claude, body))
 }
 
-// ── telemetry (agent 0.7.0+) ────────────────────────────────────────────────
+// ── telemetry ───────────────────────────────────────────────────────────────
 //
 // What the machine is and how it is doing, sampled by the agent every 15 s
 // (agent/src/telemetry.rs). Every field the agent could not read is null or
 // an empty list, and `errors` says why, so a page draws a reason rather than
-// a dash. Decoded loosely on purpose: a field an older agent lacks is null.
+// a dash. Decoded loosely on purpose: a field the document lacks is null.
 
 export type NodeTelemetry = {
   sampledAt: string
@@ -459,13 +453,12 @@ export type NodeTelemetry = {
   browsers: NodeBrowser[]
   /** Null until the agent's first search, and on the open page. */
   updates: NodeUpdates | null
-  /** What is installed; empty on the open page. Agent 0.10.0. */
+  /** What is installed; empty on the open page. */
   apps: NodeApp[]
   appCount: number | null
   /**
    * What the machine offers the network — a model server — as presence
-   * only: the box reads the catalog from the provider itself. Agent
-   * 0.11.0; empty from an older one.
+   * only: the box reads the catalog from the provider itself.
    */
   providers: NodeProvider[]
   errors: string[]
@@ -981,7 +974,7 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
   }
 }
 
-/** The telemetry block of a status document, when the agent carries one (0.7.0+). */
+/** The telemetry block of a status document, when it carries one. */
 export function nodeTelemetry(statusBody: unknown): NodeTelemetry | null {
   if (typeof statusBody !== 'object' || statusBody === null) return null
   const t = (statusBody as { telemetry?: unknown }).telemetry
@@ -991,7 +984,7 @@ export function nodeTelemetry(statusBody: unknown): NodeTelemetry | null {
 
 /**
  * The full telemetry document, as `GET /telemetry` answers it to the box's
- * token (agent 0.8.0+): the open page's block plus drive serials, the
+ * token: the open page's block plus drive serials, the
  * heaviest processes, the services that are down and the OS's updates.
  */
 export function nodeTelemetryFull(body: unknown): NodeTelemetry | null {

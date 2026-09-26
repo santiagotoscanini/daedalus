@@ -88,9 +88,8 @@ export function NodeBrowsersView({ d }: { d: NodeSystemData }) {
         {t.browsers.length === 0 ? (
           <Board title="No Chromium" icon="◐" span={12}>
             <p className={EMPTY}>
-              {d.full
-                ? 'The agent found no Chromium-based browser: none of Chrome, Edge, Brave, Arc, Vivaldi, Opera or a bare Chromium is installed where the OS registers applications.'
-                : 'The browser inventory arrives with agent 0.9.0.'}
+              The agent found no Chromium-based browser: none of Chrome, Edge, Brave, Arc, Vivaldi,
+              Opera or a bare Chromium is installed where the OS registers applications.
             </p>
             <DetailNote d={d} />
           </Board>

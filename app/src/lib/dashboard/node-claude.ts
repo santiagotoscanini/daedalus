@@ -27,7 +27,7 @@ export type NodeClaudeData = {
   status: AgentStatus | null
   /** The full report, when the agent accepted the box's token and the tray is reporting. */
   report: NodeClaude | null
-  /** Why the agent refused the report, when it did (an agent older than 0.6.0, no token yet). */
+  /** Why the agent refused the report, when it did (no token yet, a token it has not heard). */
   reportError: string | null
   /** Why the status page did not answer, when it did not. */
   error: string | null
@@ -65,10 +65,8 @@ export async function loadNodeClaude(id: string): Promise<NodeClaudeData | null>
   if (!full.ok) {
     const why =
       full.reason.status === 403
-        ? 'the agent refused the box’s token (it may predate the token, or not have heard it yet)'
-        : full.reason.status === 404
-          ? 'the agent is older than 0.6.0 and has no report endpoint'
-          : (full.reason.error ?? `HTTP ${String(full.reason.status)}`)
+        ? 'the agent refused the box’s token (it may not have heard it yet)'
+        : (full.reason.error ?? `HTTP ${String(full.reason.status)}`)
     return { ...none, status, error: null, reportError: why }
   }
   try {
