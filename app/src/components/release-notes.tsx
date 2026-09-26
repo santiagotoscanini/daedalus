@@ -90,8 +90,10 @@ export function ReleaseNotes({
             {rel.sections.length === 0 ? (
               <p className={EMPTY}>this release shipped no written notes</p>
             ) : (
-              rel.sections.map((s) => (
-                <section key={s.name}>
+              rel.sections.map((s, i) => (
+                // A heading can repeat within one release (railpack 0.40.0 has
+                // two "Fixed"), so the name alone is not a key.
+                <section key={`${String(i)}-${s.name}`}>
                   <h5 className={REL_H5}>{s.name}</h5>
                   <ul className="flex flex-col gap-[0.15rem] pl-4">
                     {s.items.map((it, n) => (
