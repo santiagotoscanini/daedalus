@@ -2,10 +2,11 @@
 # out what the app is, run its checks, build and push it with the box's
 # rootless BuildKit, and start its deploy.
 #
-# ONE script in eight files. build-agent.nix concatenates, in order: the
+# ONE script in nine files. build-agent.nix concatenates, in order: the
 # variables nix hands it, host/lib.sh, host/github-lib.sh, then
 #
 #   host/build.sh              this file: the trust model and the settings
+#   host/build/states.sh       which states mean "in flight"
 #   host/build/helpers.sh      the machinery every stage uses
 #   host/build/0-request.sh    validate the request, start the log
 #   host/build/1-token.sh      a read-only token for this one repository

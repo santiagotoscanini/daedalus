@@ -35,10 +35,9 @@
 }:
 
 let
-  esc = lib.escapeShellArg;
-
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
+    mkUpdateReaper
     mkAgent
     operatorHomeVars
     commitVars
@@ -77,44 +76,12 @@ let
     ];
   };
 
-  # The status file's undertaker — verbs-lib.nix's imageUpdateReaper, for this
-  # verb. The agent writes its own terminal state; this fires when it could
-  # not (killed, out of memory, dead on a line nobody tested), so a crashed
-  # run reads `failed` within seconds instead of after the app's staleness
-  # clock, during which the flow would refuse every new request as busy.
-  updateReaper = pkgs.writeShellApplication {
+  # The status file's undertaker (host/update-reaper.sh), shared by every
+  # rebuilding verb.
+  updateReaper = mkUpdateReaper {
     name = "daedalus-engine-update-reaper";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.coreutils
-    ];
-    text = ''
-      STATUS=${esc "${applyDir}/engine-status.json"}
-      OPERATOR_USER=${esc config.fleet.operator.user}
-      OPERATOR_GROUP=${esc config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-
-      # $SERVICE_RESULT is systemd's, set for ExecStopPost. A clean exit is the
-      # overwhelmingly common case and has nothing to do here.
-      [ "''${SERVICE_RESULT:-success}" = "success" ] && exit 0
-      [ -f "$STATUS" ] || exit 0
-
-      # Read once, as the operator and never through a link — the status sits
-      # in the container's directory (host/lib.sh) — and rewritten from that
-      # copy. Unreadable means there is nothing trustworthy to mark failed.
-      status_json="$(read_as_operator "$STATUS")" || exit 0
-      [ "$(jq -r '.state // ""' <<<"$status_json")" = "running" ] || exit 0
-
-      jq --arg r "''${SERVICE_RESULT:-unknown}" '
-        .state = "failed"
-        | .finishedAt = (now | todate)
-        | .error = "the host agent died during \"" + (.phase // "?") + "\" (" + $r
-            + ") without reporting a result. Nothing was necessarily committed — check"
-            + " `journalctl -u daedalus-engine-update` and `git log` in ${config.fleet.config.repo}."
-      ' <<<"$status_json" | write_json_atomic "$STATUS"
-    '';
+    statusFile = "engine-status.json";
+    nextSteps = "Nothing was necessarily committed — check `journalctl -u daedalus-engine-update` and `git log` in ${config.fleet.config.repo}";
   };
 in
 

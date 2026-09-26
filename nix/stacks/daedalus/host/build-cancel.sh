@@ -1,7 +1,8 @@
 # The `cancel` verb: daedalus-build-cancel.service, started by its path unit
 # when the engine drops build-cancel-request.json.
 #
-# Inlined by build-agent.nix after host/lib.sh; expects REQ (the cancel
+# Inlined by build-agent.nix after host/lib.sh and host/build/states.sh;
+# expects REQ (the cancel
 # request), STATUS (build-status.json), OPERATOR_USER, OPERATOR_GROUP and
 # SETPRIV.
 #
@@ -26,10 +27,7 @@ want="$(jq -r '.id // ""' <<<"$req_json" 2>/dev/null || true)"
 
 status_json="$(read_as_operator "$STATUS")" || exit 0
 [ "$(jq -r '.id // ""' <<<"$status_json" 2>/dev/null || true)" = "$want" ] || exit 0
-case "$(jq -r '.state // ""' <<<"$status_json" 2>/dev/null || true)" in
-cloning | detecting | checking | building | publishing) ;;
-*) exit 0 ;;
-esac
+build_active "$(jq -r '.state // ""' <<<"$status_json" 2>/dev/null || true)" || exit 0 # host/build/states.sh
 
 echo "cancelling build $want at the operator's request"
 systemctl stop daedalus-build.service || true

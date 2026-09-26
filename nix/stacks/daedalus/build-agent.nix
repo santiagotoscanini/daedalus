@@ -184,6 +184,7 @@ let
       ./host/lib.sh
       ./host/github-lib.sh
       ./host/build.sh
+      ./host/build/states.sh
       ./host/build/helpers.sh
       ./host/build/0-request.sh
       ./host/build/1-token.sh
@@ -232,6 +233,7 @@ let
     };
     files = [
       ./host/lib.sh
+      ./host/build/states.sh
       ./host/build-reaper.sh
     ];
   };
@@ -252,6 +254,7 @@ let
     };
     files = [
       ./host/lib.sh
+      ./host/build/states.sh
       ./host/build-cancel.sh
     ];
   };

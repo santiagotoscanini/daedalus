@@ -80,6 +80,35 @@ rec {
     else
       lib.escapeShellArg (toString v);
 
+  # The ExecStopPost every rebuilding verb runs (image, engine, version and
+  # claude-code updates): marks a run that died without a terminal status as
+  # failed, so the verb's button is not wedged until the app's staleness
+  # clock runs out. `nextSteps` ends the message: what to check, no full stop.
+  mkUpdateReaper =
+    {
+      name,
+      statusFile,
+      nextSteps,
+    }:
+    mkAgent {
+      inherit name;
+      runtimeInputs = [
+        pkgs.jq
+        pkgs.coreutils
+      ];
+      # NEXT_STEPS quotes commands in backticks, as Markdown for the page:
+      # literal text in single quotes, which is what SC2016 warns about.
+      excludeShellChecks = [ "SC2016" ];
+      vars = operatorVars // {
+        STATUS = "${applyDir}/${statusFile}";
+        NEXT_STEPS = nextSteps;
+      };
+      files = [
+        ./host/lib.sh
+        ./host/update-reaper.sh
+      ];
+    };
+
   # The variable groups the agents share. host/lib.sh reads and publishes
   # every file in a container-writable directory as the operator, so nearly
   # every agent needs `operatorVars`; those that run git, ssh or podman in the

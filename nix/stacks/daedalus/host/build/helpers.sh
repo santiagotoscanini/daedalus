@@ -360,10 +360,10 @@ _advance() {
   t0="$(cat "$P/t0" 2>/dev/null || printf '%s' "$now")"
   _status_apply '
     (.state as $prev
-     | if ($prev | IN("cloning", "detecting", "checking", "building", "publishing"))
+     | if ($active | split(" ") | any(.[]; . == $prev))
        then .timings[$prev] = ((.timings[$prev] // 0) + ($now - $t0)) else . end)
     | .state = $state | .phase = $phase | ('"$filter"')' \
-    --arg state "$state" --arg phase "$phase" --argjson now "$now" --argjson t0 "$t0" "$@"
+    --arg state "$state" --arg phase "$phase" --arg active "$BUILD_ACTIVE_STATES" --argjson now "$now" --argjson t0 "$t0" "$@"
   printf '%s' "$now" >"$P/t0"
 }
 

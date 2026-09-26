@@ -1,9 +1,10 @@
-# ExecStopPost of daedalus-build.service: the status file's undertaker, after
-# the image-update agent's reaper (verbs-lib.nix).
+# ExecStopPost of daedalus-build.service: the status file's undertaker, like
+# the rebuilding verbs' (host/update-reaper.sh).
 #
-# Inlined by build-agent.nix after host/lib.sh; expects STATUS (the apply
-# dir's build-status.json), LOG_DIR, WORK_ROOT, BUILD_USER, BUILD_GROUP,
-# OPERATOR_USER, OPERATOR_GROUP and SETPRIV. SERVICE_RESULT is systemd's.
+# Inlined by build-agent.nix after host/lib.sh and host/build/states.sh;
+# expects STATUS (the apply dir's build-status.json), LOG_DIR, WORK_ROOT,
+# BUILD_USER, BUILD_GROUP, OPERATOR_USER, OPERATOR_GROUP and SETPRIV.
+# SERVICE_RESULT is systemd's.
 #
 # The agent publishes its own terminal state, including on SIGTERM; this
 # fires when it could not — SIGKILL after the stop timeout, an OOM kill, a
@@ -21,10 +22,7 @@
 # Read once, as the operator and never through a link (host/lib.sh).
 status_json="$(read_as_operator "$STATUS")" || exit 0
 state="$(jq -r '.state // ""' <<<"$status_json" 2>/dev/null || true)"
-case "$state" in
-cloning | detecting | checking | building | publishing) ;;
-*) exit 0 ;;
-esac
+build_active "$state" || exit 0 # host/build/states.sh
 id="$(jq -r '.id // ""' <<<"$status_json")"
 [[ "$id" =~ ^[0-9a-fA-F-]{1,64}$ ]] || exit 0
 

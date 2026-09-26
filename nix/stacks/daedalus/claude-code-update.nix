@@ -30,10 +30,9 @@
 }:
 
 let
-  esc = lib.escapeShellArg;
-
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
+    mkUpdateReaper
     mkAgent
     operatorHomeVars
     commitVars
@@ -68,38 +67,12 @@ let
     ];
   };
 
-  # engine-update.nix's reaper, for this verb's status file. The agent writes
-  # its own terminal state; this fires when it could not, so a crashed run
-  # reads `failed` within seconds rather than after the app's staleness clock.
-  updateReaper = pkgs.writeShellApplication {
+  # The status file's undertaker (host/update-reaper.sh), shared by every
+  # rebuilding verb.
+  updateReaper = mkUpdateReaper {
     name = "daedalus-claude-code-update-reaper";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.coreutils
-    ];
-    text = ''
-      STATUS=${esc "${applyDir}/claude-code-status.json"}
-      OPERATOR_USER=${esc config.fleet.operator.user}
-      OPERATOR_GROUP=${esc config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-
-      [ "''${SERVICE_RESULT:-success}" = "success" ] && exit 0
-      [ -f "$STATUS" ] || exit 0
-
-      status_json="$(read_as_operator "$STATUS")" || exit 0
-      [ "$(jq -r '.state // ""' <<<"$status_json")" = "running" ] || exit 0
-
-      jq --arg r "''${SERVICE_RESULT:-unknown}" '
-        .state = "failed"
-        | .finishedAt = (now | todate)
-        | .error = "the host agent died during \"" + (.phase // "?") + "\" (" + $r
-            + ") without reporting a result. Check `journalctl -u"
-            + " daedalus-claude-code-update` and `git log` in the engine clone"
-            + " before retrying."
-      ' <<<"$status_json" | write_json_atomic "$STATUS"
-    '';
+    statusFile = "claude-code-status.json";
+    nextSteps = "Check `journalctl -u daedalus-claude-code-update` and `git log` in the engine clone before retrying";
   };
 in
 

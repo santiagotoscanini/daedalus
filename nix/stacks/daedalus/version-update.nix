@@ -28,10 +28,9 @@
 }:
 
 let
-  esc = lib.escapeShellArg;
-
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
+    mkUpdateReaper
     mkAgent
     operatorHomeVars
     commitVars
@@ -80,36 +79,12 @@ let
     ];
   };
 
-  # The status file's undertaker, as for the other rebuilding verbs.
-  updateReaper = pkgs.writeShellApplication {
+  # The status file's undertaker (host/update-reaper.sh), shared by every
+  # rebuilding verb.
+  updateReaper = mkUpdateReaper {
     name = "daedalus-version-update-reaper";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.coreutils
-    ];
-    text = ''
-      STATUS=${esc "${applyDir}/version-status.json"}
-      OPERATOR_USER=${esc config.fleet.operator.user}
-      OPERATOR_GROUP=${esc config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-
-      [ "''${SERVICE_RESULT:-success}" = "success" ] && exit 0
-      [ -f "$STATUS" ] || exit 0
-      status_json="$(read_as_operator "$STATUS")" || exit 0
-      [ "$(jq -r '.state // ""' <<<"$status_json")" = "running" ] || exit 0
-
-      jq --arg r "''${SERVICE_RESULT:-unknown}" '
-        .state = "failed"
-        | .finishedAt = (now | todate)
-        | .error = "the host agent died during \"" + (.phase // "?") + "\" (" + $r
-            + ") without reporting a result. Check `journalctl -u daedalus-version-update`,"
-            + " `git log` in ${config.fleet.config.repo}"
-            + (if (.snapshot // "") != "" then ", and whether the container still runs — the pre-update snapshot is " + .snapshot else "" end)
-            + "."
-      ' <<<"$status_json" | write_json_atomic "$STATUS"
-    '';
+    statusFile = "version-status.json";
+    nextSteps = "Check `journalctl -u daedalus-version-update`, `git log` in ${config.fleet.config.repo}";
   };
 in
 

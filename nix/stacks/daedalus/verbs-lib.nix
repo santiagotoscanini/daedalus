@@ -15,6 +15,7 @@ let
     prevDir
     registryApps
     deployableApps
+    mkUpdateReaper
     mkAgent
     operatorVars
     operatorHomeVars
@@ -415,54 +416,13 @@ let
     ];
   };
 
-  # The status file's undertaker.
-  #
-  # The agent writes its own terminal state, so this only ever fires when it
-  # did not get to: killed, out of memory, or dead on a line nobody tested.
-  # Without it that run stays `running` in the status file until the app's
-  # staleness clock expires — and because the flow refuses to start while one
-  # is running, a single crash disables every Update button on the box for the
-  # whole of that window. Observed: a `command not found` in the resolve loop.
-  #
-  # A queued batch is a long run, so the unit's timeout and the app's clock
-  # are both an hour; this bounds the wedge a crash leaves to seconds.
-  #
-  # Reads the file rather than synthesising one: the id, the phase it died in
-  # and the targets are the only things that make the failure readable, and
-  # they are all already there.
-  imageUpdateReaper = pkgs.writeShellApplication {
+  # The status file's undertaker (host/update-reaper.sh). A queued batch is a
+  # long run, so the unit's timeout and the app's clock are both an hour; this
+  # bounds the wedge a crash leaves to seconds.
+  imageUpdateReaper = mkUpdateReaper {
     name = "daedalus-image-update-reaper";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.coreutils
-    ];
-    text = ''
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      STATUS=${lib.escapeShellArg "${applyDir}/image-status.json"}
-
-      ${builtins.readFile ./host/lib.sh}
-
-      # $SERVICE_RESULT is systemd's, set for ExecStopPost. A clean exit is the
-      # overwhelmingly common case and has nothing to do here.
-      [ "''${SERVICE_RESULT:-success}" = "success" ] && exit 0
-      [ -f "$STATUS" ] || exit 0
-
-      # Read once, as the operator and never through a link — the status sits
-      # in the container's directory (host/lib.sh) — and rewritten from that
-      # copy. Unreadable means there is nothing trustworthy to mark failed.
-      status_json="$(read_as_operator "$STATUS")" || exit 0
-      [ "$(jq -r '.state // ""' <<<"$status_json")" = "running" ] || exit 0
-
-      jq --arg r "''${SERVICE_RESULT:-unknown}" '
-        .state = "failed"
-        | .finishedAt = (now | todate)
-        | .error = "the host agent died during \"" + (.phase // "?") + "\" (" + $r
-            + ") without reporting a result. Nothing was necessarily committed — check"
-            + " `journalctl -u daedalus-image-update` and `git log` in ${config.fleet.config.repo}."
-      ' <<<"$status_json" | write_json_atomic "$STATUS"
-    '';
+    statusFile = "image-status.json";
+    nextSteps = "Nothing was necessarily committed — check `journalctl -u daedalus-image-update` and `git log` in ${config.fleet.config.repo}";
   };
 
   # sops for the host-side secrets editor (host/secret-set.sh): a value the
