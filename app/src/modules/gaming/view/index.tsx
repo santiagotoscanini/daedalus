@@ -163,8 +163,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
             foot={
               <p className={FOOT}>
                 The newest fifteen commits in Paper's builds for the newer game, newest last, each
-                prefixed with its build. What is still landing is the best read of how ready it
-                is.
+                prefixed with its build. What is still landing is the best read of how ready it is.
               </p>
             }
           />
