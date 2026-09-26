@@ -1,8 +1,10 @@
-import { createServerFn } from '@tanstack/react-start'
-import { isRecord } from '../lib/is-record'
+import type { Ctx } from '../core/ctx'
+import { asValidator, bool, is, obj, withMessage } from '../lib/contract/decode'
+import { nonBlankField } from '../lib/contract/fields-c'
 import { isProviderKind, managesResidency, type ProviderKind } from '../lib/providers/kinds'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'
+import { adminFn } from './fn'
 
 // The two things worth a button on a provider: put a model into the
 // accelerator, and take it back out.
@@ -37,6 +39,8 @@ export type ModelActionResult = Result<string>
 
 type Target = { machine: string; kind: ProviderKind; model: string }
 
+const kindField = withMessage(is(isProviderKind, 'a provider kind'), 'expected a provider kind')
+
 /**
  * A model id, as a request may carry one.
  *
@@ -46,21 +50,20 @@ type Target = { machine: string; kind: ProviderKind; model: string }
  * `call` reports in words. What this refuses is a request that is not a name
  * at all — which would otherwise reach the provider as `{"model_name": null}`.
  */
-function text(v: unknown, what: string): string {
-  if (typeof v !== 'string' || v.trim() === '') throw new Error(`expected ${what}`)
-  return v
+const modelField = nonBlankField('expected a model')
+
+/** The fields in the order they were always checked: kind, machine, model. */
+const targetShape = {
+  kind: kindField,
+  machine: nonBlankField('expected the machine the provider runs on'),
+  model: modelField,
 }
 
-function target(data: unknown): Target {
-  if (!isRecord(data)) throw new Error('expected a provider and a model')
-  const kind = data.kind
-  if (!isProviderKind(kind)) throw new Error('expected a provider kind')
-  return {
-    machine: text(data.machine, 'the machine the provider runs on'),
-    kind,
-    model: text(data.model, 'a model'),
-  }
-}
+const target = withMessage(obj(targetShape), 'expected a provider and a model')
+
+/** Absent and null both mean "nothing to put down first". */
+const replacingField = (v: unknown, p: string): string | null =>
+  v === undefined || v === null ? null : nonBlankField('expected the model being replaced')(v, p)
 
 /**
  * Where that provider answers, as the fleet says — never as the caller does.
@@ -69,13 +72,12 @@ function target(data: unknown): Target {
  * the box does not drive, so neither a stale page nor a crafted request can
  * turn these into a POST at an arbitrary address.
  */
-async function baseOf(t: Target): Promise<Result<string>> {
-  const { makeCtx } = await import('../core/ctx')
+async function baseOf(t: Target, ctx: () => Promise<Ctx>): Promise<Result<string>> {
   const { fleetProviders } = await import('../host/providers/fleet')
   if (!managesResidency(t.kind)) {
     return { ok: false, reason: `a ${t.kind} provider does not load models on request` }
   }
-  const hit = (await fleetProviders(await makeCtx())).find(
+  const hit = (await fleetProviders(await ctx())).find(
     (p) => p.machine === t.machine && p.kind === t.kind,
   )
   return hit === undefined
@@ -90,12 +92,10 @@ async function baseOf(t: Target): Promise<Result<string>> {
  * that is loaded cannot be re-downloaded or replaced, so a stuck download is
  * frequently just this.
  */
-export const unloadProviderModelFn = createServerFn({ method: 'POST' })
-  .validator(target)
-  .handler(async ({ data }): Promise<ModelActionResult> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const base = await baseOf(data)
+export const unloadProviderModelFn = adminFn
+  .validator(asValidator(target))
+  .handler(async ({ data, context }): Promise<ModelActionResult> => {
+    const base = await baseOf(data, context.ctx)
     if (!base.ok) return base
     return settled(await call(base.value, '/api/v1/unload', { model_name: data.model }))
   })
@@ -117,22 +117,21 @@ export const unloadProviderModelFn = createServerFn({ method: 'POST' })
  * `pinned` carries the incumbent's state forward rather than quietly
  * changing whether the slot survives the next squeeze.
  */
-export const loadProviderModelFn = createServerFn({ method: 'POST' })
-  .validator((data: unknown): Target & { replacing: string | null; pinned: boolean } => {
-    const t = target(data)
-    const d = data as Record<string, unknown>
-    if (typeof d.pinned !== 'boolean') throw new Error('expected pinned to be true or false')
-    const replacing = d.replacing ?? null
-    return {
-      ...t,
-      replacing: replacing === null ? null : text(replacing, 'the model being replaced'),
-      pinned: d.pinned,
-    }
-  })
-  .handler(async ({ data }): Promise<ModelActionResult> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const base = await baseOf(data)
+export const loadProviderModelFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          ...targetShape,
+          pinned: withMessage(bool, 'expected pinned to be true or false'),
+          replacing: replacingField,
+        }),
+        'expected a provider and a model',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<ModelActionResult> => {
+    const base = await baseOf(data, context.ctx)
     if (!base.ok) return base
     if (data.replacing !== null) {
       const freed = await call(base.value, '/api/v1/unload', { model_name: data.replacing })

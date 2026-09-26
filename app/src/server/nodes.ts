@@ -1,10 +1,11 @@
-import { createServerFn } from '@tanstack/react-start'
-import { actorLabel } from '../core/auth'
 import type { NodePolicy } from '../host/schema'
+import { asValidator, is, obj, withMessage } from '../lib/contract/decode'
+import { nodeIdField } from '../lib/contract/fields-c'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
 import { NODE_NAME_RE } from '../lib/nodes-file'
-import { isProviderKind, type ProviderKind } from '../lib/providers/kinds'
+import { isProviderKind } from '../lib/providers/kinds'
 import { modelPolicies } from '../lib/providers/policy'
+import { adminFn, readFn } from './fn'
 
 // Server functions behind Settings › Machines: the page's one read, and
 // its decisions about a node — approve, revoke, forget, the policy. Each
@@ -12,49 +13,27 @@ import { modelPolicies } from '../lib/providers/policy'
 // Value imports are dynamic, like every other server module here — the
 // repository reaches the database.
 
-const NODE_ID = /^[0-9a-f]{16}$/
+const nodeId = asValidator(withMessage(obj({ id: nodeIdField }), 'expected a node id'))
 
-const nodeId = (data: unknown): { id: string } => {
-  const id = (data as { id?: unknown } | null)?.id
-  if (typeof id !== 'string' || !NODE_ID.test(id)) throw new Error('expected a node id')
-  return { id }
-}
+export const approveNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
+  const { approveNode } = await import('../lib/repo/nodes')
+  return { ok: await approveNode(data.id, context.actor()) }
+})
 
-export const approveNodeFn = createServerFn({ method: 'POST' })
-  .validator(nodeId)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { approveNode } = await import('../lib/repo/nodes')
-    return { ok: await approveNode(data.id, actorLabel()) }
-  })
+export const revokeNodeFn = adminFn.validator(nodeId).handler(async ({ data }) => {
+  const { revokeNode } = await import('../lib/repo/nodes')
+  return { ok: await revokeNode(data.id) }
+})
 
-export const revokeNodeFn = createServerFn({ method: 'POST' })
-  .validator(nodeId)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { revokeNode } = await import('../lib/repo/nodes')
-    return { ok: await revokeNode(data.id) }
-  })
+export const forgetNodeFn = adminFn.validator(nodeId).handler(async ({ data }) => {
+  const { forgetNode } = await import('../lib/repo/nodes')
+  return { ok: await forgetNode(data.id) }
+})
 
-export const forgetNodeFn = createServerFn({ method: 'POST' })
-  .validator(nodeId)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { forgetNode } = await import('../lib/repo/nodes')
-    return { ok: await forgetNode(data.id) }
-  })
-
-export const requestUpdateCheckFn = createServerFn({ method: 'POST' })
-  .validator(nodeId)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { requestUpdateCheck } = await import('../lib/repo/nodes')
-    return { ok: await requestUpdateCheck(data.id) }
-  })
+export const requestUpdateCheckFn = adminFn.validator(nodeId).handler(async ({ data }) => {
+  const { requestUpdateCheck } = await import('../lib/repo/nodes')
+  return { ok: await requestUpdateCheck(data.id) }
+})
 
 /**
  * Ask the node to update Claude Code on its next hello.
@@ -63,33 +42,24 @@ export const requestUpdateCheckFn = createServerFn({ method: 'POST' })
  * one and the machine keeps working. Its sibling below moves the server
  * onto it and ends every session there.
  */
-export const requestClaudeUpdateFn = createServerFn({ method: 'POST' })
-  .validator(nodeId)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { requestClaudeUpdate } = await import('../lib/repo/nodes')
-    return { ok: await requestClaudeUpdate(data.id) }
-  })
+export const requestClaudeUpdateFn = adminFn.validator(nodeId).handler(async ({ data }) => {
+  const { requestClaudeUpdate } = await import('../lib/repo/nodes')
+  return { ok: await requestClaudeUpdate(data.id) }
+})
 
-export const requestClaudeRestartFn = createServerFn({ method: 'POST' })
-  .validator(nodeId)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { requestClaudeRestart } = await import('../lib/repo/nodes')
-    return { ok: await requestClaudeRestart(data.id) }
-  })
+export const requestClaudeRestartFn = adminFn.validator(nodeId).handler(async ({ data }) => {
+  const { requestClaudeRestart } = await import('../lib/repo/nodes')
+  return { ok: await requestClaudeRestart(data.id) }
+})
 
 /**
  * Settings › Machines' cards: every node with its policy, joined to what the
  * LAN answered just now. Read-only, so no gate beyond the page's. Built on a
  * Ctx the way the module boards are — the reader asks pi-hole for the LAN.
  */
-export const fetchMachinesFn = createServerFn().handler(async () => {
-  const { makeCtx } = await import('../core/ctx')
+export const fetchMachinesFn = readFn.handler(async ({ context }) => {
   const { loadMachines } = await import('../lib/dashboard/machines')
-  return loadMachines(await makeCtx())
+  return loadMachines(await context.ctx())
 })
 
 const NAME_MAX = 40
@@ -186,21 +156,17 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
   return { id, policy }
 }
 
-export const saveNodePolicyFn = createServerFn({ method: 'POST' })
-  .validator(nodePolicy)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { setNodePolicy } = await import('../lib/repo/nodes')
-    return { ok: await setNodePolicy(data.id, data.policy) }
-  })
+export const saveNodePolicyFn = adminFn.validator(nodePolicy).handler(async ({ data }) => {
+  const { setNodePolicy } = await import('../lib/repo/nodes')
+  return { ok: await setNodePolicy(data.id, data.policy) }
+})
 
 /**
  * What an Apply would do about the machines: the fields the bar shows
  * ("gaming-pc offers lemonade"), or none when site/nodes.json already
  * holds what the table would render.
  */
-export const fetchNodesChangeFn = createServerFn().handler(async (): Promise<string[]> => {
+export const fetchNodesChangeFn = readFn.handler(async (): Promise<string[]> => {
   const { nodesChange } = await import('../host/apply-flow')
   const c = await nodesChange()
   return c.changed ? c.fields : []
@@ -214,22 +180,24 @@ export const fetchNodesChangeFn = createServerFn().handler(async (): Promise<str
  * Settings › Machines. Read-only; a node the box does not know answers an
  * empty list.
  */
-const nodeProvider = (data: unknown): { id: string; kind: ProviderKind } => {
-  const { id } = nodeId(data)
-  const kind = (data as { kind?: unknown }).kind
-  if (!isProviderKind(kind)) throw new Error('kind is not a provider kind')
-  return { id, kind }
-}
+const nodeProvider = asValidator(
+  withMessage(
+    obj({
+      id: nodeIdField,
+      kind: withMessage(is(isProviderKind, 'a provider kind'), 'kind is not a provider kind'),
+    }),
+    'expected a node id',
+  ),
+)
 
-export const fetchProviderModelsFn = createServerFn()
+export const fetchProviderModelsFn = readFn
   .validator(nodeProvider)
-  .handler(async ({ data }) => {
-    const { makeCtx } = await import('../core/ctx')
+  .handler(async ({ data, context }) => {
     const { fleetProviders } = await import('../host/providers/fleet')
     const { readProvider } = await import('../host/providers/read')
     const { resolveModel } = await import('../lib/providers/policy')
     const { getNode } = await import('../lib/repo/nodes')
-    const ctx = await makeCtx()
+    const ctx = await context.ctx()
     const node = await getNode(data.id)
     const provider = (await fleetProviders(ctx)).find(
       (p) => p.machine === data.id && p.kind === data.kind,
@@ -253,25 +221,21 @@ export const fetchProviderModelsFn = createServerFn()
   })
 
 /** The last gateway sync's summary, for the line under the models table. */
-export const fetchGatewaySyncFn = createServerFn().handler(async () => {
+export const fetchGatewaySyncFn = readFn.handler(async () => {
   const { lastGatewaySync } = await import('../host/gateway-sync')
   return lastGatewaySync()
 })
 
 /** "Sync now": one reconcile, awaited, its summary returned. */
-export const runGatewaySyncFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { assertAdmin } = await import('../core/authz')
-  await assertAdmin()
-  const { makeCtx } = await import('../core/ctx')
+export const runGatewaySyncFn = adminFn.handler(async ({ context }) => {
   const { syncGateway } = await import('../host/gateway-sync')
-  return syncGateway(await makeCtx())
+  return syncGateway(await context.ctx())
 })
 
 /** This box's own provider policy (subgen): offered or not, and its alias. */
-export const fetchBoxProvidersFn = createServerFn().handler(async () => {
-  const { makeCtx } = await import('../core/ctx')
+export const fetchBoxProvidersFn = readFn.handler(async ({ context }) => {
   const { BOX_PROVIDERS_KEY, isBoxProviderPolicy } = await import('../lib/providers/policy')
-  const ctx = await makeCtx()
+  const ctx = await context.ctx()
   const policy = (await ctx.store.read(BOX_PROVIDERS_KEY, isBoxProviderPolicy)) ?? {}
   return { present: ctx.modules.enabled('tv'), policy }
 })
@@ -288,15 +252,12 @@ const boxProviders = (data: unknown): { subgen: { offer: boolean; alias: string 
   return { subgen: { offer, alias: checked.whisper?.alias ?? '' } }
 }
 
-export const saveBoxProvidersFn = createServerFn({ method: 'POST' })
+export const saveBoxProvidersFn = adminFn
   .validator(boxProviders)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { makeCtx } = await import('../core/ctx')
+  .handler(async ({ data, context }) => {
     const { BOX_PROVIDERS_KEY } = await import('../lib/providers/policy')
     const { requestGatewaySync } = await import('../host/gateway-sync')
-    const ctx = await makeCtx()
+    const ctx = await context.ctx()
     await ctx.store.write(BOX_PROVIDERS_KEY, {
       subgen: {
         offer: data.subgen.offer,

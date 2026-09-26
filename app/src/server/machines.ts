@@ -1,28 +1,25 @@
-import { createServerFn } from '@tanstack/react-start'
+import { asValidator, obj, withMessage } from '../lib/contract/decode'
+import { flagField, nodeIdField } from '../lib/contract/fields-c'
+import { readFn } from './fn'
 
 // The machine picker's list and a node's System page. Read-only, so no
 // gate beyond the page's; value imports dynamic, like every server module.
 
-const NODE_ID = /^[0-9a-f]{16}$/
-
 /** Every approved node: what the pickers on System and Claude offer beside this box. */
-export const fetchMachineNodesFn = createServerFn().handler(async () => {
+export const fetchMachineNodesFn = readFn.handler(async () => {
   const { listNodes } = await import('../lib/repo/nodes')
   return (await listNodes()).filter((n) => n.state === 'approved')
 })
 
-export const fetchNodeSystemFn = createServerFn()
-  .validator((data: unknown): { id: string; board: boolean; browsers: boolean; macos: boolean } => {
-    const d = data as { id?: unknown; board?: unknown; browsers?: unknown; macos?: unknown } | null
-    const id = d?.id
-    if (typeof id !== 'string' || !NODE_ID.test(id)) throw new Error('expected a node id')
-    return {
-      id,
-      board: d?.board === true,
-      browsers: d?.browsers === true,
-      macos: d?.macos === true,
-    }
-  })
+export const fetchNodeSystemFn = readFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ id: nodeIdField, board: flagField, browsers: flagField, macos: flagField }),
+        'expected a node id',
+      ),
+    ),
+  )
   .handler(async ({ data }) => {
     const { loadNodeSystem } = await import('../lib/dashboard/node-system')
     return loadNodeSystem(data.id, {
@@ -33,7 +30,7 @@ export const fetchNodeSystemFn = createServerFn()
   })
 
 /** The strip above the box's own System tabs: its release, kernel and board. */
-export const fetchBoxHeadFn = createServerFn().handler(async () => {
+export const fetchBoxHeadFn = readFn.handler(async () => {
   const { loadBoxHead } = await import('../lib/dashboard/box-head')
   return loadBoxHead()
 })
