@@ -43,10 +43,7 @@ mod profile;
 mod supervisor;
 mod workdir;
 
-pub use cli::{cli_version, find_cli, install_method, parse_version, Ran};
-pub use profile::{claude_dir, home_dir, read_credentials, read_sessions, read_settings};
 pub use supervisor::Supervisor;
-pub use workdir::{most_recent_trusted_project, pick_workdir};
 
 use serde::{Deserialize, Serialize};
 
