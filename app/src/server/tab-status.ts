@@ -1,6 +1,7 @@
-import { createServerFn } from '@tanstack/react-start'
-import { isRecord } from '../lib/is-record'
-import { isModuleId, moduleById } from '../lib/modules/registry'
+import { asValidator, obj, withMessage } from '../lib/contract/decode'
+import { moduleIdField } from '../lib/contract/fields'
+import { moduleById } from '../lib/modules/registry'
+import { readFn } from './fn'
 
 // The dots on a module page's sub-tab row.
 //
@@ -38,11 +39,8 @@ export type TabStatus = Record<string, boolean | null>
  */
 const PROBE_WINDOW = '3m'
 
-export const fetchTabStatus = createServerFn()
-  .validator((data: unknown): { module: string } => {
-    if (!isRecord(data) || !isModuleId(data.module)) throw new Error('expected a module')
-    return { module: data.module }
-  })
+export const fetchTabStatus = readFn
+  .validator(asValidator(withMessage(obj({ module: moduleIdField }), 'expected a module')))
   .handler(async ({ data }): Promise<TabStatus> => {
     const spec = moduleById(data.module)
     if (spec === undefined) return {}

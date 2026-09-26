@@ -1,5 +1,6 @@
-import { createServerFn } from '@tanstack/react-start'
-import { actorLabel } from '../core/auth'
+import { asValidator, obj, str, withMessage } from '../lib/contract/decode'
+import { nodeIdField } from '../lib/contract/fields-d'
+import { adminFn, readFn } from './fn'
 
 // The Claude tab's loaders — the box's (System › Claude and Shotter, through
 // modules/system/data/claude.ts) and a node's.
@@ -19,17 +20,15 @@ import { actorLabel } from '../core/auth'
  * outlives its action), so no healthz dance — done or failed arrives within
  * ~ten seconds.
  */
-export const requestClaudeRestartFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { assertAdmin } = await import('../core/authz')
-  await assertAdmin()
+export const requestClaudeRestartFn = adminFn.handler(async ({ context }) => {
   const { requestClaudeRcRestart } = await import('../host/claude-rc-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".
-  const actor = actorLabel()
+  const actor = context.actor()
   return { id: await requestClaudeRcRestart({ actor }) }
 })
 
-export const fetchClaudeRcStatusFn = createServerFn().handler(async () => {
+export const fetchClaudeRcStatusFn = readFn.handler(async () => {
   const { readClaudeRcStatus } = await import('../host/claude-rc-request')
   return readClaudeRcStatus()
 })
@@ -43,14 +42,7 @@ export const fetchClaudeRcStatusFn = createServerFn().handler(async () => {
  * whether anything answers to it — this is the first door, and the one that
  * keeps a malformed value from being written into the bridge at all.
  */
-function sessionSelector(data: unknown): { session: string } {
-  if (typeof data !== 'object' || data === null || !('session' in data)) {
-    throw new Error('expected a session')
-  }
-  const { session } = data as { session: unknown }
-  if (typeof session !== 'string') throw new Error('expected a session')
-  return { session }
-}
+const sessionSelector = asValidator(withMessage(obj({ session: str }), 'expected a session'))
 
 /**
  * Resume one session — `claude --resume <uuid>`, an argv fixed in nix, under
@@ -64,15 +56,13 @@ function sessionSelector(data: unknown): { session: string } {
  * action and settles the unit before reporting — so done or failed arrives
  * within about ten seconds.
  */
-export const resumeSessionFn = createServerFn({ method: 'POST' })
+export const resumeSessionFn = adminFn
   .validator(sessionSelector)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+  .handler(async ({ data, context }) => {
     const { requestClaudeSessionResume } = await import('../host/claude-session-request')
     // The forward-auth middleware forwards the Pocket ID claim, so the request
     // and the journal record a person rather than "daedalus".
-    const actor = actorLabel()
+    const actor = context.actor()
     return { id: await requestClaudeSessionResume({ actor, session: data.session }) }
   })
 
@@ -82,13 +72,11 @@ export const resumeSessionFn = createServerFn({ method: 'POST' })
  * cgroup), an eight-digit id is a background agent (`claude stop`, which keeps
  * the conversation for `claude attach`).
  */
-export const stopSessionFn = createServerFn({ method: 'POST' })
+export const stopSessionFn = adminFn
   .validator(sessionSelector)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+  .handler(async ({ data, context }) => {
     const { requestClaudeSessionStop } = await import('../host/claude-session-request')
-    const actor = actorLabel()
+    const actor = context.actor()
     return { id: await requestClaudeSessionStop({ actor, session: data.session }) }
   })
 
@@ -102,30 +90,22 @@ export const stopSessionFn = createServerFn({ method: 'POST' })
  * conversation for `claude attach`, `rm` takes the record and its worktree —
  * so the host refuses anything but an eight-digit id the CLI actually reports.
  */
-export const removeSessionFn = createServerFn({ method: 'POST' })
+export const removeSessionFn = adminFn
   .validator(sessionSelector)
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+  .handler(async ({ data, context }) => {
     const { requestClaudeSessionRemove } = await import('../host/claude-session-request')
-    const actor = actorLabel()
+    const actor = context.actor()
     return { id: await requestClaudeSessionRemove({ actor, session: data.session }) }
   })
 
-export const fetchClaudeSessionStatusFn = createServerFn().handler(async () => {
+export const fetchClaudeSessionStatusFn = readFn.handler(async () => {
   const { readClaudeSessionStatus } = await import('../host/claude-session-request')
   return readClaudeSessionStatus()
 })
 
-const NODE_ID = /^[0-9a-f]{16}$/
-
 /** The Claude page for one node: its row and its live status page. */
-export const fetchNodeClaudeFn = createServerFn()
-  .validator((data: unknown): { id: string } => {
-    const id = (data as { id?: unknown } | null)?.id
-    if (typeof id !== 'string' || !NODE_ID.test(id)) throw new Error('expected a node id')
-    return { id }
-  })
+export const fetchNodeClaudeFn = readFn
+  .validator(asValidator(withMessage(obj({ id: nodeIdField }), 'expected a node id')))
   .handler(async ({ data }) => {
     const { loadNodeClaude } = await import('../lib/dashboard/node-claude')
     return loadNodeClaude(data.id)
@@ -133,7 +113,7 @@ export const fetchNodeClaudeFn = createServerFn()
 
 /* ── moving this box's Claude Code pin ────────────────────────────────── */
 
-export const fetchClaudeCodeUpdateStatus = createServerFn().handler(async () => {
+export const fetchClaudeCodeUpdateStatus = readFn.handler(async () => {
   const { readClaudeCodeUpdateStatus } = await import('../host/claude-code-update')
   return readClaudeCodeUpdateStatus()
 })
@@ -150,9 +130,7 @@ export const fetchClaudeCodeUpdateStatus = createServerFn().handler(async () => 
  * asked for. The rebuild that actually installs it belongs to
  * `fetchEngineUpdateStatus`, which is what the page follows next.
  */
-export const requestClaudeCodeUpdateFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { assertAdmin } = await import('../core/authz')
-  await assertAdmin()
+export const requestClaudeCodeUpdateFn = adminFn.handler(async ({ context }) => {
   const { runClaudeCodeUpdate } = await import('../host/claude-code-flow')
-  return runClaudeCodeUpdate({ actor: actorLabel() })
+  return runClaudeCodeUpdate({ actor: context.actor() })
 })

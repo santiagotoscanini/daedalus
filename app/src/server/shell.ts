@@ -1,5 +1,4 @@
-import { createServerFn } from '@tanstack/react-start'
-
+import { readFn } from './fn'
 import { fetchActiveModules } from './modules'
 import { fetchTheme } from './settings'
 import { fetchEngineOverride, fetchSite } from './site'
@@ -10,7 +9,7 @@ import { fetchEngineOverride, fetchSite } from './site'
 // awaited by the root loader, which is four times the latency on every
 // navigation past the stale window; each is a file read or a row, and
 // together they are one small answer.
-export const fetchShell = createServerFn().handler(async () => {
+export const fetchShell = readFn.handler(async () => {
   const [theme, modules, site, engineOverride] = await Promise.all([
     fetchTheme(),
     fetchActiveModules(),

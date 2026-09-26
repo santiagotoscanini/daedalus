@@ -1,6 +1,6 @@
-import { createServerFn } from '@tanstack/react-start'
-import { actorLabel } from '../core/auth'
-import { isRecord } from '../lib/is-record'
+import { arrayOf, asValidator, obj, withMessage } from '../lib/contract/decode'
+import { containerNameField, imageTargetField } from '../lib/contract/fields-d'
+import { adminFn, readFn } from './fn'
 
 // Server functions behind the Updates page and the Update button.
 //
@@ -13,22 +13,7 @@ import { isRecord } from '../lib/is-record'
 //
 // Value imports are dynamic, like every other server module here: the bridge
 // reaches for node:fs and nothing below may be pulled into a client bundle.
-// core/auth and lib/is-record are pure, so they are static — see the note at
-// the top of server/builds.ts.
-
-/**
- * A container name, as a request may carry one.
- *
- * Deliberately a shape check rather than an allowlist: what the containers on
- * this box are called is the nix-rendered pin registry's answer, and the host
- * checks every target against it (stacks/daedalus/host/image-update.sh). What
- * belongs here is that a name is a string at all — everything downstream,
- * including a `jq` expression in a shell script, has been assuming it.
- */
-const containerName = (v: unknown, what: string): string => {
-  if (typeof v !== 'string' || v === '') throw new Error(`${what} must be a container name`)
-  return v
-}
+// What a container name is lives in lib/contract/fields-d.ts.
 
 /**
  * The notes for one container, on demand.
@@ -37,17 +22,18 @@ const containerName = (v: unknown, what: string): string => {
  * modules/system/data/updates.ts about not spending the GitHub
  * budget on sixty-four containers nobody expanded.
  */
-export const fetchUpdateNotes = createServerFn()
-  .validator((data: unknown): { container: string } => {
-    if (!isRecord(data)) throw new Error('expected a container')
-    return { container: containerName(data.container, 'container') }
-  })
+export const fetchUpdateNotes = readFn
+  .validator(
+    asValidator(
+      withMessage(obj({ container: containerNameField('container') }), 'expected a container'),
+    ),
+  )
   .handler(async ({ data }) => {
     const { loadUpdateNotes } = await import('../modules/system/data/updates')
     return loadUpdateNotes(data.container)
   })
 
-export const fetchImageUpdateStatus = createServerFn().handler(async () => {
+export const fetchImageUpdateStatus = readFn.handler(async () => {
   const { readImageUpdateStatus } = await import('../host/image-update')
   return readImageUpdateStatus()
 })
@@ -69,28 +55,17 @@ export const fetchImageUpdateStatus = createServerFn().handler(async () => {
  * doors onto the same runImageUpdate, and a request one refuses is not one
  * the other should publish to the host.
  */
-export const requestImageUpdateFn = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { targets: { container: string; toTag?: string }[] } => {
-    if (!isRecord(data) || !Array.isArray(data.targets)) {
-      throw new Error('expected a list of targets')
-    }
-    return {
-      targets: data.targets.map((t: unknown) => {
-        if (!isRecord(t)) throw new Error('each target must name a container')
-        const container = containerName(t.container, 'each target')
-        if (t.toTag === undefined) return { container }
-        if (typeof t.toTag !== 'string') throw new Error('toTag must be a string when present')
-        return { container, toTag: t.toTag }
-      }),
-    }
-  })
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+export const requestImageUpdateFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(obj({ targets: arrayOf(imageTargetField) }), 'expected a list of targets'),
+    ),
+  )
+  .handler(async ({ data, context }) => {
     const { runImageUpdate } = await import('../host/update-flow')
     // The forward-auth middleware forwards the Pocket ID claim, so the commit
     // this produces records a person rather than "daedalus".
-    return runImageUpdate({ targets: data.targets, actor: actorLabel() })
+    return runImageUpdate({ targets: data.targets, actor: context.actor() })
   })
 
 // ── the engine ────────────────────────────────────────────────────────────
@@ -100,7 +75,7 @@ export const requestImageUpdateFn = createServerFn({ method: 'POST' })
 // the Updates page is the only page either is on, and the button is the same
 // gesture one card up.
 
-export const fetchEngineUpdateStatus = createServerFn().handler(async () => {
+export const fetchEngineUpdateStatus = readFn.handler(async () => {
   const { readEngineUpdateStatus } = await import('../host/engine-update')
   return readEngineUpdateStatus()
 })
@@ -113,11 +88,9 @@ export const fetchEngineUpdateStatus = createServerFn().handler(async () => {
  * clone not diverged), is the host's answer — reported through the status
  * file the caller polls, like every other bridge verb.
  */
-export const requestEngineUpdateFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { assertAdmin } = await import('../core/authz')
-  await assertAdmin()
+export const requestEngineUpdateFn = adminFn.handler(async ({ context }) => {
   const { runEngineUpdate } = await import('../host/engine-flow')
-  return runEngineUpdate({ actor: actorLabel() })
+  return runEngineUpdate({ actor: context.actor() })
 })
 
 /**
@@ -128,7 +101,7 @@ export const requestEngineUpdateFn = createServerFn({ method: 'POST' }).handler(
  * endoflife.date and GitHub, cached hourly in core/settings/nixos, and the
  * card's facts render from the export before the answer lands.
  */
-export const fetchNixosRelease = createServerFn().handler(async () => {
+export const fetchNixosRelease = readFn.handler(async () => {
   const { nixosRelease } = await import('../core/settings/nixos')
   const { siteIdentity } = await import('../host/contract/domains/site')
   const site = await siteIdentity()
