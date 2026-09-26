@@ -26,7 +26,8 @@ import {
 // no forward-auth, and traefik forwards only POST on this exact path. The
 // signature is therefore the only authentication, so nothing about a delivery
 // is believed before it verifies, and the log gets the delivery id, the event
-// name and what was done with it, never a header value or a byte of the body.
+// name (both sanitised by `loggable`) and what was done with it, never another
+// header value or a byte of the body.
 //
 // A verified delivery is recorded in github_deliveries in the same transaction
 // as anything it causes. The id is the primary key, so a redelivery is a no-op;
@@ -39,7 +40,8 @@ import {
 // replayed or out-of-order push.
 //
 // GitHub never retries a delivery, so every non-2xx here is a lost event until
-// someone redelivers it or the sweep finds the tip.
+// someone redelivers it or the hourly sweep (core/builds/sweep.ts) finds the
+// tip.
 
 export const MAX_BODY_BYTES = 5 * 1024 * 1024
 

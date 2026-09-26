@@ -11,12 +11,12 @@ import { fetchBuild, fetchBuildApp, fetchBuildCommit } from '../server/builds'
 //
 // Trailing `_` on `apps`: apps.$name.tsx renders no <Outlet/>, so this path
 // must not nest under it. The rail still treats it as part of the app
-// (__root.tsx useAppRailContext).
+// (components/shell/app-rail.tsx useAppRailContext).
 
 export const Route = createFileRoute('/apps_/$name/builds/$id')({
   loader: async ({ params }) => {
     // The server functions refuse a name that is not an app's (lib/hostname
-    // appName), and a hand-edited URL deserves this page's own "no such
+    // isAppName), and a hand-edited URL deserves this page's own "no such
     // build", not an error boundary.
     if (!isAppName(params.name)) return { app: null, build: null, commit: null }
     const [app, build] = await Promise.all([

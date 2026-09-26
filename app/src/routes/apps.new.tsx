@@ -23,17 +23,14 @@ import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/re
 
 // Adding an app.
 //
-// The platform half of this has always been one entry: stacks/apps turns a
+// The platform half of this is one entry: nix/modules/apps turns a
 // `fleet.apps.<name>` into a container, a route, DNS, a probe, a database and
-// a deploy timer. The part that used to fail late and confusingly is that an
-// app whose image was never published restart-loops from the moment its entry
-// is applied, which fails the switch, which makes the Apply revert itself.
-//
-// This page answered that by refusing to create the entry until an image
-// existed — which was a deadlock, because the box only builds apps already in
-// site/apps.json. The fix is the `declared` stage: an entry that materializes
-// the app's database, data dir and secrets and runs NOTHING. So this form
-// writes the row, always declared, and the order is
+// a deploy timer. An entry whose image was never published restart-loops from
+// the moment it is applied, which fails the switch and reverts the Apply —
+// but gating creation on an image is a deadlock, because the box only builds
+// apps already in site/apps.json. The `declared` stage breaks it: an entry
+// that materializes the app's database, data dir and secrets and runs
+// NOTHING. So this form writes the row, always declared, and the order is
 //
 //   create (declared) → Apply → build → promote to internal/external → Apply
 //
@@ -43,7 +40,8 @@ import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/re
 // starts nothing.
 //
 // What this page deliberately cannot do: create the repo or push to it.
-// Daedalus reads GitHub; it does not write it.
+// Daedalus reads a repository's contents and never writes them; all it posts
+// to a repo is a build's check run and Deployment (core/builds/report.ts).
 
 export const Route = createFileRoute('/apps/new')({
   loader: () => ({ options: fetchNewAppOptions() }),
@@ -349,14 +347,10 @@ function Wizard({ options }: { options: Options }) {
               </Board>
 
               <Board title="Address" icon="↗" span={4}>
-                {/* No exposure picker here, on purpose. A new app is created
-                    `declared`: the row, its database, its data dir and its
-                    AUTH_SECRET, and nothing running. It is the only stage that
-                    can be applied before an image exists — anything higher
-                    declares a container that cannot pull, which fails the
-                    switch and reverts the Apply. The choice is not lost, it is
-                    moved to where it can be made safely: one click on the app's
-                    page once its first build has published an image. */}
+                {/* No exposure picker here, on purpose: a new app is created
+                    `declared` (the header says why), and the choice moves to
+                    the app's page, one click once its first build has
+                    published an image. */}
                 <p className={BOARD_FOOT}>
                   Created <b>declared</b>: the registry row, the database, the data directory and
                   the generated secrets — and nothing running. Promote it to internal or external on

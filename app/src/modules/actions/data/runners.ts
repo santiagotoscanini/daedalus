@@ -31,7 +31,7 @@ type MachineRunner = {
   labels: string[]
   /** Jobs in the window that asked GitHub for this OS. */
   demand: number
-  /** Billed minutes those jobs cost in the window. */
+  /** Wall minutes those jobs ran, rounded up per job, before any multiplier. */
   minutes: number
 }
 
@@ -44,9 +44,9 @@ type RegisteredRunners = {
 
 export type RunnersData = {
   machines: MachineRunner[]
-  /** GitHub's own list, per repository, where the App can read it. */
+  /** GitHub's own list, per repository, with how it was (or was not) read. */
   registered: RegisteredRunners[]
-  /** Whether any repository answered the runners endpoint at all. */
+  /** Whether any repository answered the runners endpoint as the App. */
   canListRunners: boolean
   demand: { os: RunnerOs; jobs: number; minutes: number; workflows: number }[]
   selfHostedInFiles: number

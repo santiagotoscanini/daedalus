@@ -7,11 +7,10 @@ export const manifest = {
   order: 30,
   // Shaped to the House tab, which opens by default.
   boardSpans: [8, 4, 4, 8],
-  // No tile directory. It held eight tiles, and the two biggest data stores
-  // on this box got four numbers and a link each — no version, no verdict on
-  // whether that version is current, and no log. Every one of them is a tab
-  // now, carrying the same name, dot and link.
-  // The rule divides WHOSE data it is. To its left, what the whole house
+  // A tab per service, not a tile directory: a tile had no room for the
+  // version, the verdict on it, or the log.
+  //
+  // The rule (`dividerBefore`) divides WHOSE data it is. To its left, what the whole house
   // shares: the automation, the photo library, the file sync, the pantry,
   // and the directory of who can open any of them. To its right, what one
   // person keeps here. It is the only axis on which Wealthfolio and
@@ -37,8 +36,7 @@ export const manifest = {
       nix: 'nextcloud',
     },
     { id: 'pantry', label: 'Pantry', probe: 'grocy', boardSpans: [8, 4, 12], nix: 'grocy' },
-    // Pocket ID, which had a category of its own until now — see the note in
-    // ./view/idp.tsx for why it stopped deserving one.
+    // Pocket ID — ./view/idp.tsx says why it is a Home tab.
     {
       id: 'signin',
       label: 'Sign-in',

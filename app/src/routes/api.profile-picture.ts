@@ -9,8 +9,8 @@ import { profilePicture } from '../core/settings/profile'
 // this request's forward-auth headers (core/settings/profile.ts), so the page
 // never needs to know or send a user id, and a picture that was just replaced
 // is revalidated here instead of served from what the browser kept of Pocket
-// ID's origin. Behind the gate like every other path on this app — it is not in
-// the forward-auth bypass, so the headers it reads are traefik's.
+// ID's origin. Behind the gate — it is not in the forward-auth bypass, so the
+// headers it reads are traefik's.
 export const Route = createFileRoute('/api/profile-picture')({
   server: {
     handlers: {

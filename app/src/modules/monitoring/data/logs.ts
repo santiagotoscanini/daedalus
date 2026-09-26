@@ -35,7 +35,7 @@ export type LogsData = {
     /**
      * The journal read rate, the noise-drop stages' rate, and what actually
      * leaves — read minus filtered ≈ sent. Carried together because the gap
-     * between read and sent LOOKS like loss and is stacks/logging's
+     * between read and sent LOOKS like loss and is nix/modules/logging's
      * deliberate drop pipeline; the number that means loss is dropped24h.
      */
     sentPerSec: number | null

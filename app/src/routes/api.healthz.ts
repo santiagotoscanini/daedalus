@@ -4,13 +4,15 @@ import { sql } from '../host/db'
 import { reportEnvOnce } from '../host/env'
 import { ensureGatewaySync } from '../host/gateway-sync'
 
-// Liveness + readiness. This one path carries three jobs, all declared in
-// stacks/daedalus/daedalus.nix as `auth.healthPath = "/api/healthz"`:
+// Liveness + readiness. This one path carries three jobs, all following from
+// `auth.healthPath = "/api/healthz"` in nix/stacks/daedalus/self.json:
 //
-//   1. the gatus probe (stacks/gatus generates it from the webApp)
+//   1. the gatus probe (nix/modules/gatus generates it from the webApp)
 //   2. the forward-auth BYPASS — without it every probe would be answered by a
 //      302 to Pocket ID, which a dead container would serve just as happily
-//   3. the deploy unit's post-restart health check (stacks/apps/assets/deploy.sh)
+//   3. the deploy unit's post-restart health check
+//      (nix/modules/apps/assets/deploy.sh) — on a host running the published
+//      image; dev mode has no deploy unit
 //
 // So it must stay unauthenticated and must mean "serving", not "process
 // alive". 200 = up and can reach Postgres; 503 = up but the DB roundtrip

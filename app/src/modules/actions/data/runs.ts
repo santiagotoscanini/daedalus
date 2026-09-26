@@ -42,7 +42,7 @@ type RepoRunsSummary = {
   access: Access
   runs: number
   failed: number
-  /** GitHub's own count, when the page did not hold the whole window. */
+  /** GitHub's own count for the window; above `runs` when the page did not hold it all. */
   total: number
   p50: number | null
 }

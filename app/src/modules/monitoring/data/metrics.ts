@@ -81,8 +81,6 @@ async function loadTargets(ctx: Ctx): Promise<{
   down: number | null
   list: { job: string; instance: string; error: string }[]
 }> {
-  // Prometheus's own HTTP API rather than PromQL: which targets are failing
-  // and WHY (`lastError`) is not in any series it exposes.
   const body = await getJson<{
     data?: {
       activeTargets?: {

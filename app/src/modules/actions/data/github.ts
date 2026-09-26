@@ -10,7 +10,7 @@ import { listApps } from '../../../lib/repo/apps'
 // The box's App speaks for every repository it is installed on, but only
 // within the permissions it was granted — `actions` is not among them until
 // the operator widens the App (view/shared.tsx says how), and GitHub answers
-// that gap with a 403 that looks exactly like "no such repository". So each
+// that gap with a 403 that does not say whether the repository is public. So each
 // read is tried as the App first and, on a 403, once more with no token at
 // all: a public repository answers the world, which is how the engine's own
 // releases show before the App can read anything else. The two answers are
@@ -42,7 +42,7 @@ const MINUTE = 60_000
 const LIST_TTL = 3 * MINUTE
 /** A 403 will not change until someone edits the App; do not ask again soon. */
 const REFUSED_TTL = 30 * MINUTE
-/** A completed run's jobs, or a workflow file at a sha: immutable. */
+/** A completed run's jobs: immutable. */
 export const DONE_TTL = 24 * 60 * MINUTE
 
 /** An answer anyone could have read is kept longer: the budget it came out of is small. */
@@ -54,7 +54,7 @@ const memory = new Map<string, Slot>()
 /**
  * The anonymous budget as GitHub last reported it. Sixty an hour for the
  * address, shared with everything else on the box that reads GitHub without
- * a token; when it is spent, reads that would need it answer `denied` at
+ * a token; when it is spent, reads that would need it answer `budget` at
  * once instead of spending a round trip on a 403.
  */
 const anon = { remaining: null as number | null, resetAt: 0 }
@@ -81,7 +81,8 @@ export function remembered(path: string, now: number = Date.now()): boolean {
 
 /**
  * One read, App first then anonymous, decoded, remembered. `ttl` is for a
- * good answer; a refusal is remembered longer on its own. A decode failure
+ * good answer (a public one is kept at least PUBLIC_TTL); every other answer
+ * carries its own, and a refusal is kept for REFUSED_TTL. A decode failure
  * is a `denied` with the status GitHub sent: the shape moved, and the page
  * should say so rather than crash.
  */
@@ -118,8 +119,8 @@ export async function ghRead<T>(
   // permission the App lacks is a 403, never a 404.
   if (asApp.status === 404) return keep({ access: 'app', value: null, status: 404 }, ttl)
   if (asApp.status === 403 || asApp.error === 'no-token') {
-    // Remembered until the budget is back, so a page drawn while it is spent
-    // costs no round trip per path.
+    // Remembered until the budget is back (clamped to one to ten minutes), so
+    // a page drawn while it is spent costs no round trip per path.
     const untilReset = () => Math.max(MINUTE, Math.min(anon.resetAt - now, 10 * MINUTE))
     if (anonBudget(now).spent) {
       return keep({ access: 'budget', value: null, status: 429 }, untilReset())

@@ -26,7 +26,7 @@ import {
 // jobs behind the recent ones, and every workflow file, per repository.
 // The tabs are four readings of it.
 
-/** How far back the page looks. GitHub keeps runs for 90 days; a month is the page. */
+/** How far back the page looks, in days. */
 export const WINDOW_DAYS = 30
 /**
  * Jobs are one call per run. Every run whose jobs are already remembered is

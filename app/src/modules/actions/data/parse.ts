@@ -153,7 +153,7 @@ export const workflowsPageDecoder = obj({
   workflows: arrayOf(workflowDecoder),
 })
 
-/** A directory listing from the contents API, reduced to file names. */
+/** A directory listing from the contents API, reduced to name, path, type and size. */
 export const contentsListDecoder = arrayOf(obj({ name: str, path: str, type: str, size: num }))
 
 /** One file from the contents API: base64, split over lines. */
@@ -168,7 +168,10 @@ export function decodeContent(file: { content: string; encoding: string }): stri
   return Buffer.from(file.content.replace(/\n/g, ''), 'base64').toString('utf8')
 }
 
-/** Seconds a run took, or has taken so far; null before it started. */
+/**
+ * Seconds a run took, or has taken so far, from its start (its creation when
+ * it has not started); null only when that timestamp does not parse.
+ */
 export function runSeconds(run: Run, now: number = Date.now()): number | null {
   const start = Date.parse(run.startedAt ?? run.createdAt)
   if (!Number.isFinite(start)) return null
@@ -192,7 +195,7 @@ export type RunsOn = {
   os: RunnerOs
   /** GitHub's machines, as opposed to `self-hosted`. */
   hosted: boolean
-  /** The `-latest` or versioned label the job named, for display. */
+  /** For display: the image label the job named, lowercased, else its first label that is not `self-hosted`. */
   label: string
 }
 
@@ -251,7 +254,7 @@ export type WorkflowFile = {
   /** Top-level `on:` keys — push, pull_request, schedule, workflow_dispatch… */
   triggers: string[]
   crons: string[]
-  /** Every `runs-on` value the file names, matrix entries expanded where they are literal. */
+  /** Every `runs-on` value the file names; a list is one entry, an expression expands per `scanWorkflow`. */
   runsOn: string[]
   /** `owner/repo` of every action `uses:` names, distinct. */
   uses: string[]
@@ -270,7 +273,7 @@ const listItems = (s: string): string[] =>
  * page reads are line-shaped in every workflow this box has ever seen, and
  * the tolerant reading here is right where a strict parser would refuse a
  * `${{ }}` expression. A `runs-on` that is an expression resolves through
- * the matrix's `os:` list when that list is literal, else stays as written.
+ * every inline `os: [...]` list in the file, else stays as written.
  */
 export function scanWorkflow(text: string): WorkflowFile {
   const lines = text.split(/\r?\n/)

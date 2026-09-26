@@ -16,18 +16,18 @@ import { RosterBoard } from './roster'
 // Both lead with the version rather than with uptime because that is the fact
 // that actually breaks things here: a client on a different build cannot join
 // at all, so "am I current" is the question. Whether it is up is answered by
-// the dot on the sub-tab, one level up — see CategorySpec.tabs. Minecraft has
-// no HTTP endpoint for a probe to read, so its dot is computed from the game's
-// own status ping instead (server/tab-status.ts, `minecraft-ping`).
+// the dot on the tab — the manifest's `probe`/`health` (../manifest.ts);
+// Minecraft's comes from the game's own status ping (server/tab-status.ts,
+// `minecraft-ping`).
 //
 // ── one number on the page, and its comparisons on demand ─────────────────
 //
-// The running build is the only version stated outright. What Wube calls
-// stable and what it calls experimental are the numbers it is measured
-// AGAINST, not facts about this server, and as headline cards they read as
-// three unrelated versions competing for the same glance. They live behind
-// the chip that summarises them instead: the chip already says the answer
-// ("current"), and hovering it shows the working.
+// The running version is the only one stated outright. What the vendor calls
+// current (Wube's stable and experimental, Mojang's latest release) is what
+// it is measured AGAINST, not a fact about this server, and as headline
+// cards those read as unrelated versions competing for the same glance. They
+// live in ServiceHead's `compare`, behind the verdict chip that already says
+// the answer ("current").
 
 /* A dated line — a blog post, an arrival, a departure. */
 const NEWS = 'flex list-none flex-col gap-[0.3rem]'
@@ -50,8 +50,8 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
  * protocol, so it keeps answering across version bumps, where every metrics
  * PLUGIN would have to be re-vetted on each one.
  *
- * "Answering" is therefore a stronger claim than the dot on a sub-tab
- * elsewhere on this dashboard. Those read a container; this read the game.
+ * "Answering" is therefore a stronger claim than the dot on most tabs, which
+ * reads an HTTP probe; this one reads the game.
  */
 function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' }> }) {
   const { minecraft: mc, builds, events, roster } = data
@@ -213,9 +213,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
               ))}
             </ul>
           )}
-          {/* Read out of the server's own log rather than kept as a list here.
-              The log already IS the record; a second one could only disagree
-              with it. */}
+          {/* The log is the record — see joinsAndLeaves in data/minecraft.ts. */}
           <p className={FOOT}>
             Parsed from the server’s log in Loki, newest first. The panel below is the whole log;
             this is the part about people.
@@ -305,11 +303,9 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
 }
 
 /**
- * Live only at second hand — see the `live` note in categories/gaming.ts.
- * There is no player count here because RCON never leaves ofsm's netns; the
- * stat strip carries what the log and the container gauge can honestly say,
- * and the game-state stat is the one fact the sub-tab dot gets wrong (the dot
- * reads the manager's UI, which answers happily while the game is shut down).
+ * Live only at second hand — see `FactorioData['live']` in data/factorio.ts.
+ * No player count, because RCON never leaves ofsm's netns; the stat strip
+ * carries what the log and the container gauge can honestly say.
  */
 function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }> }) {
   const { factorio, news, live, events } = data
@@ -400,9 +396,8 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           span={6}
           aside={<span className={NOTE}>wiki.factorio.com</span>}
         >
-          {/* The chain lives here rather than in a panel of its own: when
-              nothing is pending that panel was an empty box next to a full
-              one, which is where the ragged column came from. */}
+          {/* The chain lives here rather than in a panel of its own, which
+              would sit empty beside this one whenever nothing is pending. */}
           <UpgradeChain behind={factorio.behind} />
           <ReleaseNotes releases={data.changelog} running={factorio.installed} />
           {/* These two captions sit side by side, so each says what it is
@@ -440,9 +435,8 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
               ))}
             </ul>
           )}
-          {/* Was "release posts are the changelog — there is no structured
-              one", which was true when this panel stood alone and is now flatly
-              contradicted by the structured changelog sitting next to it. */}
+          {/* Not "release posts are the changelog": the structured changelog
+              is the panel beside this one. */}
           <p className={FOOT}>
             The studio’s own feed, which points forward: Friday Facts are about what is being built.
             What has landed is the panel beside this one.
@@ -477,8 +471,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
               ))}
             </ul>
           )}
-          {/* Same read as Minecraft's board of the same name: the log already
-              IS the record, a second one could only disagree with it. */}
+          {/* Read from the log, as on Minecraft — see gameLines in data/factorio.ts. */}
           <p className={FOOT}>
             Parsed from the server’s log in Loki, newest first: the game announces every arrival and
             departure with a <span className={MONO}>[JOIN]</span>/
@@ -488,8 +481,8 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
         </Board>
 
         {/* Grafana itself rather than a log viewer of our own — see the note
-            in components/logs.tsx and stacks/monitoring, which already allows
-            this exact frame-ancestor. */}
+            in components/logs.tsx; nix/modules/monitoring allows this
+            frame-ancestor. */}
         <LogBoard source={{ container: 'factorio' }} title="Factorio logs" />
       </BoardGrid>
     </>

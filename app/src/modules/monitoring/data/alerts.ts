@@ -23,8 +23,11 @@ export type AlertsData = {
    * The relay itself, read back from what it logged.
    *
    * A dead Gmail app password makes this box QUIETER, not louder — every
-   * alert path ends in msmtp, and msmtp failing produces no alert about
-   * itself. `lastSend` age is a neutral fact: on a healthy box alerts are
+   * alert path ends at the same SMTP relay, and the relay failing produces no
+   * alert about itself. Only msmtp's sends are counted here (OnFailure units,
+   * smartd, anything using sendmail); Grafana's own alerts go to the relay
+   * through its built-in SMTP client (GF_SMTP_*) and never reach this log.
+   * `lastSend` age is a neutral fact: on a healthy box alerts are
    * rare, so weeks of silence is a normal state. Only `failures` — observed
    * delivery errors — is bad news.
    */
@@ -79,9 +82,8 @@ const MAIL_LIMIT = 200
 
 /**
  * One query, cached: a line filter over every stream for thirty days is a
- * multi-gigabyte scan Loki takes seconds over, and this page asked it four
- * near-identical times per render before the numbers ever settled. Five
- * minutes of staleness is free on a board about a month of history; the
+ * multi-gigabyte scan Loki takes seconds over. Five minutes of staleness is
+ * free on a board about a month of history; the
  * two-clock cache keeps serving the last good answer through a slow spell
  * instead of hammering a busy Loki (`null` = unreachable, so stale-serving
  * applies).
@@ -145,7 +147,7 @@ async function loadMail(ctx: Ctx): Promise<AlertsData['mail']> {
 /**
  * Grafana's ruler, not prometheus's.
  *
- * Every alert rule on this box is a Grafana-managed one — stacks/monitoring
+ * Every alert rule on this box is a Grafana-managed one — nix/modules/monitoring
  * provisions them from files — so prometheus's own /rules endpoint is empty
  * and would report "0 alerts" on a box with thirty.
  */

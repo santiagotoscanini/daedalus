@@ -7,16 +7,19 @@ import { isRecord } from '../lib/is-record'
 
 // "A new image landed — redeploy this app."
 //
-// Driven by zot's events extension (stacks/registry): every push to the
+// Driven by zot's events extension (nix/modules/registry): every push to the
 // registry POSTs here, and an app goes live within seconds instead of waiting
-// up to two minutes for its poll timer. Also accepts a hand-rolled
-// {"app":"anansi"} for testing.
+// up to two minutes for its poll timer. An image the box built itself already
+// had its deploy started by build.sh, so for those this is a second trigger
+// the deploy unit no-ops; it is the path for an image pushed from anywhere
+// else. Also accepts a hand-rolled {"app":"anansi"} for testing.
 //
 // This path is OUTSIDE the Pocket ID gate (authBypassRule in
-// stacks/daedalus/daedalus.nix) because zot cannot hold a passkey. It carries
-// its own auth instead: X-Deploy-Token, shared with the registry through
-// stacks/registry/env.sops. Fail-closed — with no token configured the
-// endpoint refuses everything rather than silently becoming open.
+// nix/stacks/daedalus/daedalus.nix) because zot cannot hold a passkey. It
+// carries its own auth instead: X-Deploy-Token, DEPLOY_HOOK_TOKEN in the
+// registry module's sops file (fleet.modules.registry.envSopsFile), which both
+// sides render from. Fail-closed — with no token configured the endpoint
+// refuses everything rather than silently becoming open.
 //
 // It can do exactly one thing: start an existing app's deploy unit. The app
 // name is validated loosely here (fail fast, useful error) and
@@ -133,7 +136,9 @@ export const Route = createFileRoute('/api/deploy')({
         })
 
         // The new image may ship a new icon, and the icon cache holds answers
-        // for an hour — a redeploy is the one event that invalidates it.
+        // for an hour; a registry push is the one event that drops one (the
+        // Redeploy button does not). Dropped at queue time, before the new
+        // container is up, so an icon fetched in between re-caches the old one.
         const { forgetAppIcon } = await import('../host/app-icon')
         forgetAppIcon(app)
 

@@ -21,12 +21,12 @@ import { wanHost } from './shared'
 //                commits carry SHAs, so every line links to the real commit
 //                rather than to a page invented from a build number.
 //   launchermeta whether Mojang has moved past the pinned version at all.
-//                Two versions behind Paper's newest BUILD is routine; being
-//                behind on the game is what stops clients joining.
+//                Being builds behind Paper is routine; being behind on the
+//                game is what stops clients joining.
 //
-// The pinned strings come from the container env because the image downloads
-// exactly them on start — so, as with Factorio, the pin is the running
-// version rather than a record of it.
+// The pinned strings (MINECRAFT_VERSION, MINECRAFT_PAPER_BUILD in daedalus's
+// env) are the ones the image downloads on every start — so, as with
+// Factorio, the pin is the running version rather than a record of it.
 
 export type MinecraftData = {
   minecraft: {
@@ -117,8 +117,8 @@ export async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
       maxPlayers: 'max(minecraft_status_players_max_count)',
       ping: 'max(minecraft_status_response_time_seconds)',
     }),
-    // 24h at the exporter's own resolution. Asking for finer just interpolates
-    // the same samples — see promSeries.
+    // 24h at a 5-minute step: ~288 points, already more than a sparkline can
+    // draw — see promMatrix on why a finer step adds nothing.
     ctx.prom.series('max(minecraft_status_players_online_count)', 24 * 60, 300),
     reportedVersion(ctx),
     latestRelease(),

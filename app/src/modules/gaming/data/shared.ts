@@ -7,8 +7,8 @@ import type { Ctx } from '../../../core/ctx'
  * The name both game servers are reached by, from anywhere.
  *
  * Not a literal: pi-hole answers it with the LAN address and Cloudflare with
- * the WAN one, which is the whole reason there is a single address to print.
- * See platform/ddclient. Read from the env rather than retyped here, because
- * a second copy of a hostname is a second copy that goes stale.
+ * the WAN one (kept current by nix/platform/ddclient), which is the whole
+ * reason there is a single address to print. `WAN_HOST` is bound from
+ * `fleet.wanHost`, because a second copy of a hostname goes stale.
  */
 export const wanHost = (ctx: Ctx) => ctx.env('WAN_HOST') ?? ''

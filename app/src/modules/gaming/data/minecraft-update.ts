@@ -14,11 +14,13 @@ import { decodeEntities } from '../../../lib/plain-text'
 //               Its launcher feed carries each release's notes as HTML.
 //   Paper       what this server CAN run. Paper follows Mojang by days or
 //               weeks, and publishes each build on a channel: ALPHA and BETA
-//               before STABLE. An ALPHA build is offered, because a server
-//               nobody can join is its own failure, but only behind a typed
-//               confirmation — Paper's own warning is that those can damage
-//               a world, and a version bump converts the world for good.
-//   the host    whether an update is running (host/version-update.ts).
+//               before STABLE. A pre-release build is offered, because a
+//               server nobody can join is its own failure, but only behind a
+//               typed confirmation (view/minecraft-update.tsx) — Paper's own
+//               warning is that those can damage a world, and a version bump
+//               converts the world for good.
+//   the host    whether an update is running (host/version-update.ts, read
+//               by minecraft.ts beside this).
 
 const PAPER = 'https://fill.papermc.io/v3/projects/paper'
 const PAPER_COMMIT = 'https://github.com/PaperMC/Paper/commit'
@@ -51,9 +53,13 @@ export type MinecraftUpdate = {
   paperForLatest: { stable: string | null; newest: { build: string; channel: string } | null }
   /** Newest first: the recommended move, then the rest. Empty = nowhere to go. */
   options: VersionOption[]
-  /** Mojang's notes for every release after the pin up to its newest, newest first. */
+  /** Mojang's notes for the releases after the pin up to its newest — at most four, newest first. */
   notes: Release[]
-  /** Commits in the builds of the newest version offered, as the Changelog board takes them. */
+  /**
+   * The newest fifteen commits across Paper's builds for the newest game past
+   * the pin, as the Changelog board takes them. Empty when no newer game has
+   * a build.
+   */
   commits: CommitGap
 }
 
@@ -162,7 +168,7 @@ export async function loadMinecraftUpdate(
   return { mojangAhead, paperForLatest, options, notes, commits }
 }
 
-/** The commits in a version's builds, oldest first — Paper's changelog for it. */
+/** The commits in a version's builds, oldest first and cut to the newest 15 — Paper's changelog for it. */
 function commitsOf(list: { version: string; builds: PaperBuild[] } | null): CommitGap {
   if (list === null) return EMPTY_GAP
   const behind: Commit[] = [...list.builds]

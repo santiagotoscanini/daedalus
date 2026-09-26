@@ -43,10 +43,12 @@ import { fetchTabStatus, type TabStatus } from '../server/tab-status'
 //
 // ── nothing here blocks the navigation ────────────────────────────────────
 //
-// The loader returns UNAWAITED promises. That is the whole design: the page
-// frame — title, lede, sub-tabs — comes from the module's manifest and is on
-// screen the instant you click, while the boards stream in behind their own
-// skeleton.
+// The loader returns the boards, the tab dots and a node's documents as
+// UNAWAITED promises. That is the whole design: the page frame — title, lede,
+// sub-tabs — comes from the module's manifest and is on screen the instant
+// you click, while the boards stream in behind their own skeleton. The two
+// awaited reads (the machine list and the box's head strip) are answered
+// from this browser's memory past the first visit.
 //
 // The router still caches a resolved loader result for `defaultStaleTime`, so
 // coming back to a page you just left renders complete, with no skeleton
@@ -58,12 +60,10 @@ import { fetchTabStatus, type TabStatus } from '../server/tab-status'
  * one — optionally with a provider kind after a colon, because AI's picker
  * is over provider rows and one machine may run more than one model server.
  *
- * It accepted the bare forms only, which silently dropped every id AI's
- * picker produced: `?machine=…:lemonade` validated to undefined, the tab
- * fell back to its default machine, and so every click on a pill appeared
- * to do nothing at all. A search schema that drops what a Link sends is
- * invisible from either side — hence the lab driver that now clicks the
- * pills instead of typing their URLs.
+ * Keep it in step with every picker's links: a search schema that drops what
+ * a Link sends is invisible from either side — the value validates to
+ * undefined, the tab falls back to its default machine, and the click
+ * appears to do nothing.
  */
 const MACHINE = /^(?:[0-9a-f]{16}|box)(?::[a-z][a-z0-9-]{0,31})?$/
 
@@ -311,9 +311,7 @@ function TabNav({
   tab: string
   status: TabStatus | null
 }) {
-  // `probes` counts as much as `probe`. A module whose tabs all hold several
-  // services would otherwise render no dots at all — the tab knows its health
-  // and silently declines to show it.
+  // isDotted, not `probe` alone — the loader's tabStatus comment says why.
   const dotted = spec.tabs.some(isDotted)
   // Which tabs are switched off on this box: the server marks them on the
   // rail's copy of the manifest (lib/modules/active.ts), read here from the

@@ -21,8 +21,9 @@ import { type FactorioData, loadFactorio } from './factorio'
 import { loadMinecraft, type MinecraftData } from './minecraft'
 
 /**
- * One shape per sub-tab. A union rather than optional fields, so the
- * Minecraft tab cannot accidentally read a Factorio number that is not there.
+ * One shape per tab. `TabPayload` turns this into a union keyed on `tab`
+ * rather than one shape with optional fields, so the Minecraft view cannot
+ * read a Factorio number that is not there.
  */
 export type Tabs = { factorio: FactorioData; minecraft: MinecraftData }
 export type GamingData = TabPayload<typeof manifest, Tabs>

@@ -18,9 +18,9 @@ import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skel
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
-// ./access-window, NOT ./access — same split as env-groups below. The window
-// table is a value the picker and validateSearch both need in the browser;
-// ./access talks to Loki and must never follow it there.
+// lib/access-window, NOT host/access. The window table is a value the picker
+// and validateSearch both need in the browser; host/access talks to Loki and
+// must never follow it there.
 import { type AccessWindow, DEFAULT_WINDOW, isAccessWindow } from '../lib/access-window'
 import { cn } from '../lib/cn'
 import { isAppName } from '../lib/hostname'
@@ -35,11 +35,10 @@ import { fetchApp, fetchAppTab, saveApp } from '../server/registry'
 // container — but they stay in this list because it is what validateSearch
 // checks. A URL naming a tab the app does not have renders an explanation of
 // how to turn the feature on, which is strictly more useful than silently
-// bouncing to the overview. `tasks` is unconditional on purpose: it is the one
-// tab whose subject is AUTHORED on it, so hiding it until the app had a task
-// would make the first one unwritable (see AppRail in __root.tsx).
-// Exported for the shell: when this route is matched, the global rail swaps
-// to an app-scoped one (see __root.tsx) and renders these as its sections.
+// bouncing to the overview. `tasks` is unconditional on purpose (AppRail says
+// why). Exported for the shell: when this route is matched, the global rail
+// swaps to the app-scoped one (components/shell/app-rail.tsx) and renders
+// these as its sections.
 export const APP_TABS = [
   'overview',
   'deployments',
@@ -91,12 +90,12 @@ export const Route = createFileRoute('/apps/$name')({
   // The frame is awaited (it is a Postgres read, and a missing app has to be a
   // real 404 rather than a page that renders and then apologises). The tab's
   // own fan-out is NOT: it is returned as a promise and streamed in behind a
-  // skeleton, so opening `access` — ten Loki queries — puts the hero, the tab
-  // bar and the app's identity on screen immediately and fills the body in
-  // when it arrives.
+  // skeleton, so opening `access` — a Loki scan that takes up to a second —
+  // puts the hero, the tab bar and the app's identity on screen immediately
+  // and fills the body in when it arrives.
   loader: async ({ params, deps }) => {
     // fetchApp refuses a name that could not be an app's (lib/hostname
-    // appName). Nothing links here with one, so a URL that carries one was
+    // isAppName). Nothing links here with one, so a URL that carries one was
     // typed, and a typed URL deserves the not-found page below rather than an
     // error boundary over a rejected request.
     if (!isAppName(params.name)) throw notFound()
@@ -186,12 +185,12 @@ function AppDetail() {
     void saveApp({ data: { name: app.name, patch: p } }).then(() => router.invalidate())
   }
 
-  // The sections, as one switch over the tab rather than as eight independent
-  // `{tab === 'x' && …}` siblings. Siblings, a ninth entry in APP_TABS renders
+  // The sections, as one switch over the tab rather than as independent
+  // `{tab === 'x' && …}` siblings. Siblings, a new entry in APP_TABS renders
   // a blank page and nothing anywhere says so; here it is TS7030 at this
   // function, because the return type is inferred and noImplicitReturns is on.
   // Called inline rather than mounted as a <Section/> so each branch stays a
-  // direct child of this component's tree, exactly as it was.
+  // direct child of this component's tree.
   const section = () => {
     switch (tab) {
       case 'overview':
@@ -343,12 +342,10 @@ function AppDetail() {
             }
           </GuardedAwait>
         )
-      // Grafana renders these. Nothing is fetched for this tab any more — the
-      // frame does its own querying, so opening it costs one request to
-      // Grafana rather than a Loki round trip through here AND sixty log lines
-      // serialised into the page for hydration. No Panel around it either: you
-      // are already on the Logs tab, so a box captioned "Logs" inside it is a
-      // second label for the same thing.
+      // Grafana renders these and does its own querying, so tabData is not
+      // read here (lib/apps/tabs.ts says why it is empty). No Panel around
+      // it: you are already on the Logs tab, so a box captioned "Logs" inside
+      // it is a second label for the same thing.
       case 'logs':
         return <GrafanaLogs source={{ container: `app-${app.name}` }} title={`${app.name} logs`} />
     }
@@ -431,7 +428,9 @@ function AppDetail() {
                 value: 'declared',
                 label: 'Declared',
                 icon: '◌',
-                // Same rule as "Off", and for the same reason below it.
+                // Refused like "Off" below, though stricter than the
+                // platform: apps.nix's assertion lets a declared app keep
+                // proxy mode for later, since it has no ingress to lose.
                 disabled: app.authMode === 'proxy',
                 reason:
                   app.authMode === 'proxy'
@@ -444,8 +443,9 @@ function AppDetail() {
                 icon: '⏻',
                 // The forward-auth middleware is generated FROM the ingress,
                 // so an app gated that way has nothing left to gate once the
-                // ingress is gone. The platform asserts this; catching it here
-                // turns a failed Apply into an explanation.
+                // ingress is gone. The platform asserts this
+                // (nix/modules/apps/apps.nix); catching it here turns a failed
+                // Apply into an explanation.
                 disabled: app.authMode === 'proxy',
                 reason:
                   app.authMode === 'proxy'
@@ -518,7 +518,7 @@ function AppDetail() {
 
       {/* No tab bar here: inside an app the sections live in the left rail —
           the shell swaps the category nav for the app-scoped one while this
-          route is matched (__root.tsx). */}
+          route is matched (components/shell/app-rail.tsx). */}
 
       {section()}
 

@@ -5,19 +5,19 @@ import { readJsonObject } from '../lib/http-result'
 //
 // The agent POSTs here every minute: a signed envelope (host/agent-hello.ts)
 // saying who it is, and the answer says what the box has decided about it
-// — `pending` until an admin approves it on System › Machines, `approved`
+// — `pending` until an admin approves it on Settings › Machines, `approved`
 // after, `revoked` if the box has turned it away. For an approved node the
 // answer also carries the policy Settings › Machines set (hold it awake,
-// run Claude remote control) and up to two one-shot instructions (check
-// for updates, restart Claude). A hello from an unknown key creates a
-// pending row and nothing more.
+// run Claude remote control), the node token, and up to three one-shot
+// instructions (check for updates, update Claude Code, restart Claude). A
+// hello from an unknown key creates a pending row and nothing more.
 //
 // OUTSIDE the Pocket ID gate (authBypassRule in the daedalus nix module),
 // because a service has no passkey. Its credential is the signature: the
 // key the agent generated at install signs every hello, and the box keys
-// every row on it. Nothing here is a secret the box hands out, so there is
-// nothing to leak — the worst a stranger on the LAN can do with this route
-// is create a pending row an admin will look at and forget.
+// every row on it. The one secret the answer carries, the node token, goes
+// only to a key an admin approved — the worst a stranger on the LAN can do
+// with this route is create a pending row an admin will look at and forget.
 //
 // Rate: one request a minute per machine, so no limiter; a misbehaving
 // agent shows up as a row whose lastSeenAt moves too fast.
@@ -66,8 +66,9 @@ export const Route = createFileRoute('/api/nodes/hello')({
           // The node token: the box's credential for the agent's full Claude
           // report. Only for an approved node, only over this HTTPS answer.
           ...(answer.nodeToken === null ? {} : { node_token: answer.nodeToken }),
-          // The box's clock, so an agent whose clock drifts can see why it
-          // was refused before it is.
+          // The box's clock, so an agent whose clock drifts could notice before
+          // verifyHello's five-minute skew check refuses it. No agent reads it
+          // yet (agent/src/hello.rs ignores the field).
           server_time: Math.floor(Date.now() / 1000),
         })
       },

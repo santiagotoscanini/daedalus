@@ -1,7 +1,8 @@
 import type { LogNeighbour } from '../../../components/logs'
 
-// What more than one Monitoring tab draws with: the row-list vocabulary, the
-// severity → tone map, and the scrape exporters' log neighbours.
+// What the Monitoring tabs draw with: the row-list vocabulary every tab
+// shares, the severity → tone map (Alerts only) and the scrape exporters'
+// log neighbours (Metrics only).
 
 /* A flat list of named things, each led by a chip saying what kind it is and
    trailed by whatever detail that kind has. Rows of a table, not a stack of
@@ -28,10 +29,8 @@ export const SEVERITY: Record<string, 'bad' | 'warn' | 'info'> = {
  *
  * Neither has a page anywhere and neither ever will — they are exporters, not
  * services anybody opens — but both are exactly the "you would come looking
- * here when the panel above went wrong" case that `LogNeighbour` is for. Half
- * of the System category is drawn from node-exporter and the other half from
- * host-liveness-exporter, and until this existed neither one's log was
- * reachable from anywhere in this dashboard.
+ * here when the panel above went wrong" case that `LogNeighbour` is for: much
+ * of the System category is drawn from them.
  */
 export const SCRAPE_NEIGHBOURS: readonly LogNeighbour[] = [
   {

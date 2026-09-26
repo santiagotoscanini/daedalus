@@ -1,28 +1,8 @@
 import type { Ctx } from '../../../core/ctx'
-// The Home category: the household's own things — a tab per subject.
-//
-// It was one page of eight tiles, and the two biggest data stores on this box
-// (the photo library and the file sync) each got four numbers and a link. A
-// tile could not hold what every other category now answers about a service:
-// what version is running, whether that is current, and what the service
-// itself says is wrong.
-//
-// ── the rule on the tab row ────────────────────────────────────────────────
-//
-// Left of it: things the whole house shares — the automation, the photos, the
-// files, the pantry, and the directory of who can open any of them. Right of
-// it: applications that merely live here, used by one person. The split is
-// about WHOSE data it is, which is the only axis on which Wealthfolio and
-// Nextcloud differ; every other reading of "home" puts them in the same box.
-//
-// ── Pocket ID is here, not in a category of its own ────────────────────────
-//
-// It had one, back when it was the second half of the proxy's page and the
-// argument was that an IdP is not networking. That argument was about traefik.
-// Beside the rest of the household it is plainly one of these: the list of
-// people, and of what each of them can open. Its loader is ./signin; the Pocket
-// ID reads under it are core/identity/pocket-id, because the proxy's routing
-// table borrows the client list and a module must not import another's data.
+// The Home module's data half: the household's own things, a tab per service,
+// each answering what version is running, whether that is current, and what
+// the service itself says is wrong. The tab order and the rule on it are
+// ../manifest.ts's; Sign-in's loader is ./signin.ts.
 
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
@@ -89,13 +69,12 @@ type HouseData = {
   automations: { total: number; on: number }
   unavailable: number
   /**
-   * Which domains the dead entities are in.
+   * Which domains the dead entities are in, top six.
    *
-   * A bare count was the old answer and it cannot be acted on: 25 Tuya bulbs
-   * have been unavailable since they lost their WiFi pairing, so the number is
-   * never zero and never will be until somebody re-pairs them. Split by domain
-   * it says whether the set has grown somewhere NEW, which is the only reading
-   * of that number worth having.
+   * A bare count cannot be acted on when some entities are dead for good (on
+   * this box, Tuya bulbs that lost their WiFi pairing): the number is never
+   * zero. Split by domain it says whether the set has grown somewhere NEW,
+   * which is the only reading of that number worth having.
    */
   unavailableBy: { label: string; value: number }[]
   domains: { label: string; value: number }[]
@@ -293,8 +272,7 @@ async function loadPhotos(ctx: Ctx): Promise<PhotosData> {
 /**
  * Nextcloud's serverinfo app, which answers nearly everything in one call.
  *
- * The share breakdown is the part worth having and the tile had no room for:
- * a link share with no password is a URL that opens the file for anyone
+ * The share breakdown is the part worth having: a link share with no password is a URL that opens the file for anyone
  * holding it, and the count of those is a real fact about this box rather
  * than a statistic.
  */
@@ -367,14 +345,14 @@ async function loadFiles(ctx: Ctx): Promise<FilesData> {
   const d = body?.ocs?.data
   const nc = d?.nextcloud
   const version = nc?.system?.version ?? null
-  // Nextcloud reports four segments (`34.0.2.1`); GitHub tags three (`v34.0.2`).
-  // The comparison walks segment by segment, so the extra one is a tiebreak
-  // rather than a mismatch.
   const size = d?.server?.database?.size
   const dbSize = size === undefined ? null : Number(size)
 
   return {
     version,
+    // Nextcloud reports four segments (`34.0.2.1`); GitHub tags three
+    // (`v34.0.2`). `cmp` walks as many segments as the longer side, so the
+    // extra one is a tiebreak rather than a mismatch.
     gap: await versionGap('nextcloud/server', version),
     freeBytes: nc?.system?.freespace ?? null,
     numFiles: nc?.storage?.num_files ?? null,
@@ -431,9 +409,9 @@ type PantryData = {
 async function loadPantry(ctx: Ctx): Promise<PantryData> {
   const h = { headers: { 'GROCY-API-KEY': ctx.secret('GROCY_API_KEY') } }
   const base = ctx.hosts.base('grocy')
-  // The box's day, not UTC's: grocy states due dates in local time, and past
-  // 21:00 here a UTC 'today' is tomorrow — which marks a whole day's chores
-  // and tasks overdue that are not.
+  // The box's day, not UTC's: grocy states due dates in local time, and on a
+  // box west of UTC a UTC 'today' turns over hours early (at 21:00 on UTC−3)
+  // — which marks a whole day's chores and tasks overdue that are not.
   const today = localDay(Date.now())
 
   const [volatile, info, stock, chores, tasks] = await Promise.all([
@@ -482,9 +460,7 @@ async function loadPantry(ctx: Ctx): Promise<PantryData> {
  *
  * Every path under its hostname returns the single-page app; the API behind it
  * is session-authenticated, and the session is a browser's. So this tab is the
- * version, the gap and the log — deliberately, rather than by omission. The
- * alternative was to leave it as a tile carrying a name and a link, which is
- * what it had before and which answered nothing.
+ * version (from the image — see `imageVersion`), the gap and the log.
  */
 type FinanceData = { running: RunningVersion; gap: VersionGap }
 

@@ -41,9 +41,9 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 //
 // Each section shows what reaches the container — env bound by daedalus.nix,
 // the /export domains, the host snapshots — and says where it read it from.
-// Nothing here is guessed. The rows nix sources from site/site.json are
-// editable (core/site EDITABLE — the domain, the addresses, DHCP, the DNS
-// upstreams, the two mail addresses, the timezone); an edit is a stored draft
+// Nothing here is guessed. The site/site.json fields core/site/index.ts's
+// EDITABLE list names are editable — what nix builds from, plus a few the
+// host agents read at Apply time; an edit is a stored draft
 // against the committed file, shown as `pending` beside the row, and the
 // Apply bar at the foot is what writes the file and rebuilds. Everything else
 // is read-only.
@@ -53,9 +53,11 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // commit and a rebuild. A setting it does not — the theme, the off-box
 // projects, what the box asks of the other machines, and every UI
 // preference after them — belongs in Postgres, where changing it is an
-// UPDATE and nothing rebuilds. Appearance, Projects and Machines are
-// deliberately the second kind, which is why they save on click with no
-// Apply bar. Machines is also where the other machines are SHOWN — what
+// UPDATE and nothing rebuilds. Appearance and Projects are deliberately the
+// second kind, which is why they save on click with no Apply bar. Machines
+// saves on click too, but a machine's id, name, OS and providers also reach
+// nix as site/nodes.json at the next Apply (host/apply-flow.ts
+// nodesChange). Machines is also where the other machines are SHOWN — what
 // each one is, whether it answers, whether the box trusts it — because the
 // decision about a machine and the policy sent to it are one story, and
 // splitting it across a dashboard tab and a settings tab meant reading both.
@@ -67,10 +69,11 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // box RUNS — the NixOS release, its support window, the channel — is on
 // System › Updates beside the engine's pin, with the other things that move.
 //
-// The tabs are the eight subjects a box has, in the order a first visit
+// The tabs are the nine subjects a box has, in the order a first visit
 // reads them: what it is called, how it is reached, what it talks to, where
 // its configuration lives, what else it lists, which other machines it
-// trusts and what it asks of them, how it looks, and how it is driven.
+// trusts and what it asks of them, which catalog modules it runs, how it
+// looks, and how it is driven.
 
 /** A tab's label with its icon: drawn quieter than the word, which carries the meaning. */
 function TabLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {

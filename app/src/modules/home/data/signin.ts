@@ -6,12 +6,6 @@ import type { Ctx } from '../../../core/ctx'
 // Pocket ID calls themselves are core/identity/pocket-id — the proxy's page
 // borrows the client list from there too, and a module must not import
 // another module's data. What is here is this tab's reading of them.
-//
-// It WAS a category, back when it was the second half of the proxy's page and
-// the argument was that neither half belonged to the other. That argument was
-// about traefik. Against the rest of Home — the automation, the photos, the
-// files, the pantry — this is plainly one of the household's own things: it is
-// the list of people, and of what each of them can open.
 
 import {
   clientHost,
@@ -39,7 +33,10 @@ type IdpClient = {
   host: string | null
   /** Authorizations in the window. */
   used: number
-  /** Already rendered — see `TraefikData.upSeconds` for why, not how. */
+  /**
+   * Rendered on the server: an age computed from `Date.now()` in the browser
+   * would disagree with the server's HTML and break hydration.
+   */
   lastAgo: string | null
   /** Restricted to named groups, rather than open to every account. */
   restricted: boolean
@@ -52,11 +49,10 @@ type IdpClient = {
    * from `webApps.auth = "oidc"`) and the app's own login round-trips through
    * its own paths. They cannot be merged — the derived one would overwrite
    * the hand-written callbacks on every rebuild — so a pair here is a design,
-   * not a leftover. This page called it a "duplicate" and invented a rename
-   * to explain it, which was wrong on both counts.
+   * not a duplicate.
    *
-   * Labelled only for a shared hostname: on the other thirty-one it is noise,
-   * because there is nothing to tell apart.
+   * Labelled only for a shared hostname: elsewhere there is nothing to tell
+   * apart.
    */
   role: 'gate' | 'app' | null
   /** Another registration answers for the same hostname. */
@@ -78,13 +74,12 @@ type IdpClient = {
     /**
      * A consent record was CREATED here, rather than an existing one reused.
      *
-     * Not "the first time somebody used this app", which is how it was
-     * labelled and is wrong — the event recurs, and an access older than it
-     * sitting below it in the list is what gives that away. Pocket ID drops
-     * the stored authorization whenever the client is rewritten, and
-     * `pocket-id-clients.service` rewrites every client on every rebuild (a
-     * full PUT of the body, plus a write of the secret, both unconditional).
-     * So this marks where a rebuild made everyone consent again.
+     * Not "the first time somebody used this app": the event recurs. Pocket
+     * ID drops the stored authorization whenever the client is rewritten, and
+     * `pocket-id-clients.service` rewrites every client each time it runs —
+     * every boot, and every switch that changes any declared client (a full
+     * PUT of the body plus a new secret, both unconditional). So this mostly
+     * marks where a rebuild made everyone consent again.
      */
     consent: boolean
   }[]
@@ -120,12 +115,11 @@ export type IdpData = {
   /**
    * What holds a key to this house, newest first.
    *
-   * The raw sign-in stream used to be here and it was the wrong thing: ten
-   * rows of "signed in · santito · Chrome · 24h ago" is a log, and Grafana and
-   * Pocket ID's own audit page already are one. Per DEVICE is the reading this
-   * page can add — a passkey is registered to a device, so this is the list of
-   * things that can authenticate as somebody, which is short, changes rarely,
-   * and is worth noticing when it grows.
+   * Grouped per DEVICE rather than listed per sign-in: the raw stream is a
+   * log, and Grafana and Pocket ID's own audit page already are one. A passkey
+   * is registered to a device, so this is the list of things that can
+   * authenticate as somebody — short, rarely changing, and worth noticing
+   * when it grows.
    */
   devices: { name: string; signIns: number; lastAgo: string }[]
   /** Authorizations per day, oldest first. */
@@ -136,9 +130,6 @@ export type IdpData = {
     authorizations: number
     /**
      * Consent records created. NOT first-ever uses — see `opens[].consent`.
-     * On this box it is mostly the convergence job invalidating consent on
-     * a rebuild, which is why it is a two-figure number for thirty clients
-     * nobody newly adopted.
      */
     consents: number
     /** People, so not the static-API-key principal. */

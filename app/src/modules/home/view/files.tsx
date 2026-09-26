@@ -49,8 +49,7 @@ export function FilesView({ data: d }: { data: Files }) {
               { k: 'to a group', v: num(d.shares.group) },
             ]}
           />
-          {/* The one fact on this page that is worth acting on, and the one a
-              tile of four stats had no room for. */}
+          {/* The one fact on this page that is worth acting on. */}
           <p className={openLinks > 0 ? FOOT_WARN : FOOT}>
             {openLinks > 0 ? (
               <>

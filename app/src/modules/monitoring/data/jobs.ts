@@ -12,12 +12,10 @@ import { TWO_OR_THREE } from '../../../lib/release-tags'
 /**
  * Every scheduled job, and whether anything would notice it stopping.
  *
- * This is the tab that gains most from the split, because the two halves of
- * the answer used to live on different pages: healthchecks' roster was a tile
- * here, and the registry that says which jobs were MEANT to be watched was
- * nowhere at all. Joined, the interesting row is a job declared with a
- * healthchecks slug that healthchecks has never heard of — a dead-man's-switch
- * that was armed in nix and never fired once.
+ * healthchecks' roster joined to the registry that says which jobs were MEANT
+ * to be watched. The interesting row is a job declared with a healthchecks
+ * slug that healthchecks has never heard of — a dead-man's-switch armed in
+ * nix that never fired once.
  *
  * The distinction the registry carries and neither system knows:
  *   - `email`  → a run that FAILS sends mail.
@@ -179,7 +177,7 @@ function joinJobs(
   )
 }
 
-/** healthchecks' roster as rows, in the order you would read them to decide whether to act. */
+/** healthchecks' roster as rows, ranked for deciding whether to act. */
 function rankChecks(checks: readonly HcCheck[], now: number): JobsData['checks'] {
   return (
     checks

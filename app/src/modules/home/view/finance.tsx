@@ -13,7 +13,8 @@ import { DASH } from '../../../lib/format'
 import type { HomeData } from '../data'
 
 // Home › Finance: Wealthfolio — deliberately thin: its API wants a browser
-// session, so the version, its currency and the log are what can be said.
+// session, so the version, whether it is current, and the log are what can be
+// said.
 
 type Finance = Extract<HomeData, { tab: 'finance' }>
 

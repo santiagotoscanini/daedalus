@@ -10,8 +10,8 @@ import { wanHost } from './shared'
 //
 // ofsm does not manage the game version. It downloads exactly
 // $FACTORIO_VERSION on every container start, so the string pinned in
-// stacks/factorio/factorio.nix IS the running version — it reaches this file
-// through the container env rather than being read back off the server, which
+// nix/modules/factorio/factorio.nix IS the running version — it reaches this file
+// through daedalus's own env rather than being read back off the server, which
 // has no unauthenticated endpoint to read it from anyway.
 //
 // Everything about what is CURRENT comes from Wube, unauthenticated:
@@ -48,7 +48,7 @@ export type FactorioData = {
    * credential — so there is no live player COUNT without new nix-side wiring.
    * But the game states its own lifecycle in its log: ofsm prints one line
    * when it starts the server and one when it stops it, and Loki already has
-   * both. That answers the question the sub-tab dot cannot — the dot reads the
+   * both. That answers the question the tab's dot cannot — the dot reads the
    * manager's UI, which keeps answering happily while the game inside it is
    * shut down.
    */

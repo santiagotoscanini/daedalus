@@ -13,7 +13,8 @@ import type { GamingData } from '../data'
 // Who may join the Minecraft server, edited in place.
 //
 // Every control is a site edit (site.json `modules.players.minecraft`) and
-// lands on the next Apply, like the cog's: it writes the draft, says what the
+// lands on the next Apply, like the service cog's
+// (components/service-settings.tsx): it writes the draft, says what the
 // draft would do, and rebuilds nothing. A name is resolved against Mojang
 // before it is written, so what goes in is an account, never a guess.
 

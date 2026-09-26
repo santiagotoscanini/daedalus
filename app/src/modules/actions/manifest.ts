@@ -4,11 +4,9 @@ export const manifest = {
   id: 'actions',
   label: 'Actions',
   lede: 'Every workflow run across the repositories this box knows, and the runners it could lend them.',
-  // After Database, before the fleet: it is about GitHub's machines and this
-  // network's, not about a service the box runs. The apps deploy through
-  // daedalus's own webhook and never through Actions; this page is the rest
-  // of what their repositories do — checks, releases, sites, the agent's
-  // signed builds — and the minutes it costs.
+  // After Database, before Monitoring: it is about GitHub's machines and this
+  // network's, not about a service the box runs. Why it is not part of Apps:
+  // view/index.tsx.
   order: 68,
   boardSpans: [8, 4, 12, 6, 6],
   // No ServiceHead: the subject is a platform, not a container with a

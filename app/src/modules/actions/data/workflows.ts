@@ -7,9 +7,9 @@ import { cronWords, percentile, type RunnerOs, runSeconds, runsOnOf } from './pa
 // triggers it, where it asks to run, and how it has been doing.
 //
 // The files come through `contents`, which the App has always been able to
-// read — so this tab is whole before the App can read a single run, and it
-// is the tab that says how much of the month runs on GitHub's Linux, Windows
-// and macOS images, which is the question the Runners tab answers.
+// read — so this tab is whole before the App can read a single run. Its
+// count of what the files ask of GitHub's Linux, Windows and macOS images is
+// the demand the Runners tab holds this network's machines against.
 
 type WorkflowRow = {
   id: string
@@ -20,7 +20,7 @@ type WorkflowRow = {
   triggers: string[]
   /** In words where the shape is common, else the expression. */
   schedules: string[]
-  /** The literal runs-on values the file names. */
+  /** The runs-on values the file names (see `WorkflowFile.runsOn`). */
   runsOn: string[]
   /** Distinct actions the file uses, `owner/repo`. */
   uses: string[]
@@ -48,7 +48,7 @@ export type WorkflowsData = {
     dispatchable: number
     onPush: number
     onPullRequest: number
-    /** Jobs by the image they ask for, across every file. */
+    /** `runs-on` values by the image they name, across every file; a matrix counts once per image. */
     images: Record<RunnerOs, number>
     selfHosted: number
     /** Every action used, most used first. */

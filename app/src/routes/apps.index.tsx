@@ -26,13 +26,10 @@ import { fetchSiteEdit } from '../server/site'
 // hence drift), and Prometheus (what is happening right now).
 
 // Three tabs, the same shape every category page uses: what this box runs, and
-// the two registries it is built out of.
-//
-// The registries were boards at the foot of the app list. They are services —
-// containers with release cycles, logs and neighbours — and as a footer they
-// got a handful of numbers and no room for any of that. A tab each gives them
-// the header, version verdict, changelog and log every other service here has,
-// and it takes the app list back to being one thing.
+// the two registries it is built out of. The registries are services —
+// containers with release cycles, logs and neighbours — so each gets a tab
+// with the header, version verdict and changelog every other service here
+// has, rather than a few numbers at the foot of the app list.
 const TABS = [
   { id: 'apps', label: 'Apps' },
   { id: 'images', label: 'Container registry' },
@@ -46,9 +43,10 @@ export const Route = createFileRoute('/apps/')({
     tab: TABS.some((t) => t.id === search.tab) ? (search.tab as Tab) : undefined,
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab ?? ('apps' as const) }),
-  // Only the open tab's data is fetched. The registries are two upstreams
-  // through traefik plus a GitHub release lookup each, and the app list is a
-  // Postgres read — pairing them cost the fast one every time.
+  // Only the open tab's data is fetched. Each registry tab is its service
+  // through traefik, a handful of Prometheus queries and a GitHub release
+  // lookup (lib/apps/registries.ts), and the app list is mostly a Postgres
+  // read — pairing them would cost the fast one every time.
   loader: ({ deps }) => ({
     tab: deps.tab,
     list: deps.tab === 'apps' ? fetchAppsTab() : null,
@@ -81,12 +79,10 @@ type ListData = Awaited<ReturnType<typeof fetchAppsTab>>
 type Row = ListData['apps'][number]
 type ExternalEntry = ListData['external'][number]
 
-/* A grid of project cards, the Vercel shape. Rows were tried first (one
-   bordered list, hairline separators) and spent a 1200px line on five facts:
-   the identity hugged the left edge, the readings the right, and the middle
-   was gap. A card puts the same facts in ~300px, three or four abreast, and
-   collapses to one column on a phone with no special-casing — which is also
-   why there is no narrow-viewport rule for it.
+/* A grid of project cards, not rows: a row spends a 1200px line on five
+   facts with a gap in the middle, where a card puts them in ~300px, three or
+   four abreast, and collapses to one column on a phone with no special-casing
+   — which is also why there is no narrow-viewport rule for it.
 
    Exported for `RowsSkeleton`, so the placeholder reserves this grid and not
    an approximation of it. */
@@ -104,9 +100,7 @@ const CARD =
     one of the things being managed". */
 const CARD_ASIDE = 'border-dashed bg-transparent'
 /* The whole card is the link; the foot rides inside it so one hover means
-   one destination. External cards break this on purpose — their actions bar
-   is a sibling of the anchor (a button in an anchor is one click with two
-   meanings, and invalid HTML besides). */
+   one destination. External cards break this on purpose (see ExternalRow). */
 const CARD_LINK =
   'flex min-w-0 flex-1 flex-col gap-[0.55rem] px-4 pt-[0.85rem] pb-[0.9rem] text-inherit hover:no-underline'
 const CARD_HEAD = 'flex min-w-0 items-center gap-[0.65rem]'
@@ -280,7 +274,7 @@ export function AppsList({ data }: { data: ListData }) {
         )}
         {/* The create flow is a page rather than a dialog: it makes a GitHub
             round trip per repo it checks, and a checklist you can leave open
-            in a tab while you go fix a workflow is worth more than one that
+            in a tab while you go fix the repo is worth more than one that
             closes when you click outside it. Parked at the end of the tally
             line rather than in the page header — the header is shared by all
             three tabs, and adding an app is only one of them. */}
@@ -356,7 +350,7 @@ export function AppsList({ data }: { data: ListData }) {
 
       {/* Projects hosted off the box, one section per platform. The registry
           knows nothing about them — the list is the operator's, kept in the
-          settings store (Settings › General) — so the rows link out to the site itself
+          settings store (Settings › Projects) — so the rows link out to the site itself
           rather than to a detail page there is no data to fill. */}
       {PLATFORMS.map((p) => {
         const entries = offBox.filter((e) => e.platform === p.id)

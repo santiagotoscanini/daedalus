@@ -99,10 +99,7 @@ export function HouseView({ data: d }: { data: House }) {
         </Board>
 
         <Board title="Not answering" icon="warn" span={4}>
-          {/* Split by domain rather than counted. The count is never zero and
-              never will be — 25 Tuya bulbs have been unavailable since they
-              lost their WiFi pairing — so the only reading worth having is
-              whether the set has grown somewhere NEW. */}
+          {/* Split by domain rather than counted — see `unavailableBy`. */}
           <BarList items={d.unavailableBy} tone="warn" empty="every entity is reporting" />
           <p className={FOOT}>
             {num(d.unavailable)} of {num(d.entities)} entities are <b>unavailable</b> or{' '}

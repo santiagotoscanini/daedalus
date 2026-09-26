@@ -7,11 +7,10 @@ import { postgresGap } from '../../../lib/dashboard/postgres'
 /**
  * The shared Postgres cluster, which every app on this box is a tenant of.
  *
- * postgres_exporter already publishes all of this and nothing read it — the
- * old page showed the top eight databases by size and stopped, which answers
- * "what is big" and none of the questions you actually have about a cluster:
- * whether it is serving from cache, whether anything is stuck in a
- * transaction, whether a tenant is rolling back more than it commits.
+ * Size alone answers "what is big" and none of the questions you actually
+ * have about a cluster: whether it is serving from cache, whether anything is
+ * stuck in a transaction, whether a tenant is rolling back more than it
+ * commits. postgres_exporter publishes all of those.
  */
 export type PostgresData = {
   databases: {
@@ -35,14 +34,7 @@ export type PostgresData = {
   }
   version: string | null
   up: boolean | null
-  /**
-   * The release gap, from postgresql.org rather than GitHub.
-   *
-   * The mirror at postgres/postgres carries tags and publishes no releases, so
-   * the usual `versionGap` would report the one service on this box whose
-   * minors are almost purely security fixes as having no notes at all. See
-   * lib/dashboard/postgres.ts.
-   */
+  /** The release gap, from postgresql.org rather than GitHub — lib/dashboard/postgres.ts says why. */
   gap: VersionGap
 }
 
@@ -94,9 +86,8 @@ export async function loadPostgres(ctx: Ctx): Promise<PostgresData> {
         deadlocks: dl.get(name) ?? null,
       }
     })
-    // Postgres's own three are real databases and appear in every metric, but
-    // they are not tenants and their presence at the top of a size-ordered
-    // list is noise.
+    // The two templates are real databases and appear in every metric, but
+    // they are not tenants. (`postgres`, the maintenance database, is kept.)
     .filter((d) => !['template0', 'template1'].includes(d.name))
     .sort((a, b) => b.sizeBytes - a.sizeBytes)
 

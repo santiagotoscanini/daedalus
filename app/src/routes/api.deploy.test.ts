@@ -2,14 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // The door in front of the deploy trigger.
 //
-// /api/deploy is one of only two paths outside the Pocket ID gate
-// (authBypassRule in stacks/daedalus/daedalus.nix) — zot cannot hold a
-// passkey, so the endpoint carries its own X-Deploy-Token instead. The other
-// such path has 670 lines of test devoted to its signature check; this one had
-// its body guard tested and its token gate not.
+// /api/deploy is outside the Pocket ID gate (authBypassRule in
+// nix/stacks/daedalus/daedalus.nix) — zot cannot hold a passkey, so the
+// endpoint carries its own X-Deploy-Token instead. (The body guard is
+// api.json-body.test.ts's.)
 //
-// `authFailure` is correct today. The test is to keep it that way, because
-// getting it wrong is invisible from both sides: an inverted condition hands a
+// The test keeps `authFailure` correct, because getting it wrong is
+// invisible from both sides: an inverted condition hands a
 // deploy trigger to anyone who can reach the container, and a deploy nobody
 // asked for looks exactly like the 2-minute timer doing its job.
 //

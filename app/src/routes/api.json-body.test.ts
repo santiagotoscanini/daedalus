@@ -1,12 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-// `null` is valid JSON.
-//
-// This route used to take `(await request.json()) as Record<…>`, which parses
-// `null` without throwing: the catch that answers 400 never ran, and the first
-// property read blew up OUTSIDE the try as a 500. A body guard is the fix, and
-// these are the requests that proved it — driven through the real handler, so
-// the status codes below are the ones a caller sees.
+// `null` is valid JSON, and a body cast to a record would turn it into a 500
+// instead of a 400 (lib/http-result.ts `readJsonObject` says why). Driven
+// through the real handler, so the status codes below are the ones a caller
+// sees.
 
 type Handler = (ctx: { request: Request }) => Promise<Response>
 type RouteLike = { options?: { server?: { handlers?: { POST?: Handler } } } }

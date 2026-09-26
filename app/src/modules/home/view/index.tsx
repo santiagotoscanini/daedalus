@@ -13,11 +13,11 @@ import { ToolsView } from './tools'
 //
 // Read the same way as every Media and AI tab: artwork, the name, the version
 // running, the verdict on whether that version is current, one sentence saying
-// what this thing is FOR, and the link you came to click. Eight services whose
-// UIs look nothing alike become eight pages read identically.
+// what this thing is FOR, and the link you came to click. Services whose UIs
+// look nothing alike become pages read identically.
 //
 // The rule on the tab row separates what the house shares from what one person
-// uses. See the note in the loader for why that is the line.
+// uses. See the note in ../manifest.ts for why that is the line.
 
 export const views = defineViews<typeof manifest, Tabs>(manifest, {
   house: HouseView,
