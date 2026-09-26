@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
