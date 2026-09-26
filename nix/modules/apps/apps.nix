@@ -1054,10 +1054,9 @@ in
 
       fleet = {
         # Every app's AUTH_SECRET used to live under stacks/apps/secrets in the
-        # host's checkout; see platform/machine-state.nix for why it moved and why each
-        # bootstrap REQUIRES the migration rather than merely following it.
+        # host's checkout; see platform/machine-state.nix (the migration is
+        # finished and being retired).
         machineStateLegacy.apps = "${config.fleet.config.repo}/stacks/apps/secrets";
-        machineStateReaders = map (n: "app-${n}-secrets-bootstrap.service") (lib.attrNames cfg);
         appDatabases = attrsOpt [
           "fleet"
           "appDatabases"

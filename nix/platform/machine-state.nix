@@ -10,21 +10,23 @@
 # them in. `fleet.stateRoot` answers all three — it is the snapshotted,
 # mirrored tree every other piece of container state already lives in.
 #
-# ── the migration ─────────────────────────────────────────────────────────
+# ── the migration (finished; being retired in two steps) ─────────────────
 #
-# Owners register the path they used to use (`fleet.machineStateLegacy.<name>`)
-# and read `${fleet.machineState}/<name>` from now on. One root oneshot moves
-# each legacy tree across, once: copy with ownership and modes, compare, and
-# only then delete the original. It is idempotent — a legacy path that is gone
-# is a migration that already happened.
+# Owners registered the path they used to use (`fleet.machineStateLegacy.<name>`)
+# and read `${fleet.machineState}/<name>` from now on; one root oneshot moved
+# each legacy tree across, once. Every box has migrated.
 #
-# The ordering is the load-bearing part, and it is `requiredBy`, not just
-# `before`. Every bootstrap here GENERATES a fresh secret when it finds none:
-# run ahead of the migration, `app-db-cluster-bootstrap` would mint a new
-# superuser password beside a cluster initialised with the old one, and every
-# tenant on the box would fail to authenticate. So a failed migration must
-# stop the bootstraps rather than race them, and the unit lists every reader
-# by name (derived from the same registries that generate those units).
+# STEP 1 (this rev): the unit stays defined, but nothing is tied to it any
+# more — the `requiredBy`/`before` on every bootstrap, state-paths and
+# podman-pg are gone. It cannot simply be deleted in one switch: a removed
+# unit is STOPPED with the old dependency graph still loaded, and a stop
+# propagates to every unit that `Requires=` it — podman-pg among them, which
+# is a fleet event. `restartIfChanged = false` keeps this switch from
+# restarting it (same propagation), and `X-StopOnRemoval = false` keeps the
+# next one from stopping it.
+#
+# STEP 2 (the next rev, after step 1 is switched): delete this unit,
+# `machineStateLegacy` and the owners' registrations.
 {
   config,
   lib,
@@ -63,16 +65,6 @@ in
         an entry can be deleted once no box still carries the old tree.
       '';
     };
-
-    machineStateReaders = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-      description = ''
-        Units that read or generate machine state. Each is ordered after the
-        migration AND requires it, so a migration that failed stops them
-        instead of letting a bootstrap mint a fresh secret over a moved one.
-      '';
-    };
   };
 
   config = lib.mkIf (pairs != [ ]) {
@@ -80,9 +72,13 @@ in
       description = "Move machine-generated state out of the configuration checkout";
       wantedBy = [ "multi-user.target" ];
       after = [ "local-fs.target" ];
-      before = [ "state-paths.service" ] ++ cfg.machineStateReaders;
-      requiredBy = [ "state-paths.service" ] ++ cfg.machineStateReaders;
-      unitConfig.RequiresMountsFor = [ cfg.stateRoot ];
+      # Retirement step 1 (see the header): no unit depends on this one, a
+      # switch neither restarts it nor, once it is deleted, stops it.
+      restartIfChanged = false;
+      unitConfig = {
+        RequiresMountsFor = [ cfg.stateRoot ];
+        X-StopOnRemoval = false;
+      };
       path = [
         pkgs.coreutils
         pkgs.diffutils

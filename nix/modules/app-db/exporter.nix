@@ -44,11 +44,6 @@ let
 in
 {
   config = lib.mkIf (config.fleet.modules.app-db.enable && enabled) {
-    fleet.machineStateReaders = [
-      "app-db-monitoring-role.service"
-      "app-db-exporter-env.service"
-    ];
-
     # app-db-net to dial pg; monitoring-net so prometheus scrapes it.
     fleet.bridgeMemberships."app-db-exporter" = [
       "app-db"

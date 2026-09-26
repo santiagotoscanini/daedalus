@@ -721,10 +721,8 @@ in
 
         # ── Registry push credential ───────────────────────────────────────
         # It lived under stacks/daedalus/secrets in the checkout until it moved
-        # (platform/machine-state.nix). The generator requires the migration: run
-        # first, it would mint a password zot's htpasswd has never seen.
+        # (platform/machine-state.nix; the migration is finished and being retired).
         fleet.machineStateLegacy.builder = "${config.fleet.config.repo}/stacks/daedalus/secrets";
-        fleet.machineStateReaders = [ "daedalus-build-registry-password.service" ];
 
         systemd.services.daedalus-build-registry-password = {
           description = "Generate the zot `builder` push password on first boot";
