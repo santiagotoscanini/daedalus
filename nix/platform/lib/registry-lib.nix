@@ -4,9 +4,9 @@
 # (every app in site/apps.json, via fleet.registry.file) and
 # stacks/daedalus/daedalus.nix (its own entry, from ./self.json —
 # hand-tracked, so an Apply that broke it can't take down the UI you'd use
-# to undo it); nix/tests/site-formats.nix maps every site-format sample through it
-# too. As two copies of the field mapping they would
-# drift the first time the schema grows a field — one reader learns it, the
+# to undo it); checks.example-host in flake.nix maps every entry of the
+# example host's site/apps.json through it too. As two copies of the field
+# mapping they would drift the first time the schema grows a field — one reader learns it, the
 # other silently drops it. So the mapping lives here, once, next to the list
 # of schema versions it understands.
 #
@@ -28,7 +28,7 @@
   # app/src/lib/contract/version.ts, this same repository): ONE version, not a
   # range. Writer and reader ship in one engine rev — the published image's
   # default tag is the rev's own app version — so a version flip is one
-  # commit (writer + reader + a new sample under site-formats/apps/), never a
+  # commit (writer + reader + example-host/site/apps.json), never a
   # migration window. The day a writer can run ahead of its reader this
   # becomes a RANGE. A list only so the assertion message can print it.
   #

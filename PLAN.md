@@ -212,7 +212,7 @@ The spine is in the catalog (19 modules: `app-db`, `apps`, `cloudflared`,
 `intel-gpu-exporter`, `metube`, `myspeed`, `stirling-pdf`, `verdaccio`,
 `wg-easy`); a host made from `templates.config` evaluates to a whole system
 with a control plane to log in to; `developer.engineOverride`, Update
-daedalus and the site-format samples are in. What remains:
+daedalus and the site-file samples are in. What remains:
 
 1. **The other 23 stacks, one by one**, none of them needed for a box to
    run: `argus-vpn`, `calibre-web`, `cleanuparr`, `downloads`, `grocy-mcp`,

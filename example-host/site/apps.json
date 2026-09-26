@@ -1,5 +1,5 @@
 {
-  "_why": "Site-format sample, apps.json (the app registry) at schemaVersion 2 — one entry with every field the version defines, at the values the writer emits for a fresh app. Read by BOTH halves of the contract: the app's vitest parses it through the real registry reader (app/src/host/contract/site-formats.test.ts) and `nix flake check` maps every entry through platform/lib/registry-lib.nix (nix/tests/site-formats.nix). site-formats/site/v1/apps.json is a COPY of this file (a link would not survive the store copy a nix path literal makes), and both readers assert the two are equal. A version bump adds a sibling directory and leaves this one as it was written.",
+  "_why": "Example value, apps.json (the app registry) at schemaVersion 2 — one entry with every field the version defines, at the values the writer emits for a fresh app. Also the sample both halves of the file-format contract are held to: the app's vitest parses it through the real registry reader and re-renders it (app/src/host/contract/site-files.test.ts), and nix flake check maps every entry through platform/lib/registry-lib.nix (the example-host check).",
   "schemaVersion": 2,
   "apps": {
     "example": {

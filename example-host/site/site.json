@@ -1,5 +1,5 @@
 {
-  "_why": "The smallest site.json the engine accepts, with documentation values only (RFC 5737 addresses, example.org, alice). It is two things at once, byte-equal and asserted so: the site a new host starts from (example-host/site — edit every value, then the control plane edits it for you) and the site-format sample both halves of the contract test (site-formats/site/v1: the app parses it through its real reader and asserts it re-renders to itself, and nix flake check evaluates a whole host from it). A version bump adds a sibling sample directory and leaves this one as it was written.",
+  "_why": "The smallest site.json the engine accepts, with documentation values only (RFC 5737 addresses, example.org, alice). It is two things at once: the site a new host starts from (edit every value, then the control plane edits it for you) and the sample both halves of the file-format contract are held to — the app parses it through its real reader and asserts it re-renders to itself (app/src/host/contract/site-files.test.ts), and nix flake check evaluates a whole host from it. When the format's version changes and old files must stay readable, the OLD version's sample gets a folder of its own then.",
   "schemaVersion": 1,
   "identity": {
     "hostname": "box",

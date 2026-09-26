@@ -40,7 +40,7 @@ describe('nodes.json', () => {
     expect(doc.nodes.map((n) => n.id)).toEqual(['07122fc9eb01b748', 'a2272f1b0bdac468'])
     expect(doc.nodes[0]?.providers).toEqual({})
     expect(doc.nodes[1]?.providers).toEqual({ lemonade: { port: 13305 } })
-    // Byte-identical to the site-format sample the nix side builds against.
+    // Byte-identical to its own JSON: the writer emits nothing the reader drops.
     expect(text).toBe(`${JSON.stringify(doc, null, 2)}\n`)
   })
   it('refuses another schema, a bad label and a repeated name', () => {

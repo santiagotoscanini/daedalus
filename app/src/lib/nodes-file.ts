@@ -14,8 +14,7 @@ import { arrayOf, type Decoder, decode, int, obj, optional, recordOf, str } from
 // so `<name>.<lan domain>` follows the machine wherever the pool puts it.
 //
 // Rendered by an Apply like apps.json (host/apply-flow.ts), read back by
-// platform/site.nix as `fleet.nodes`, and its schema versions live under
-// `site-formats/nodes/v<N>/`.
+// platform/site.nix as `fleet.nodes`; example-host/site/nodes.json is its sample.
 
 export const NODES_SCHEMA_VERSION = 1
 

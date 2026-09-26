@@ -11,5 +11,9 @@ files say which — create the secrets (`host/sops/README.md`), swap in your own
 
 In the engine repo it is the test host, never read by a running box: `nix flake
 check` (locally, and in CI on every push) evaluates it as `checks.example-host`,
-and with every catalog module on as `checks.all-modules`. Its `site/site.json` is
-asserted byte-identical to `site-formats/site/v1/site.json`.
+and with every catalog module on as `checks.all-modules`. Its `site/` is also the
+one sample of each `site/` file that both the app's test
+(`app/src/host/contract/site-files.test.ts`) and `nix flake check` read — the
+app↔nix file-format contract. When a format's `schemaVersion` changes and old
+files must stay readable, add a folder holding the OLD version's sample then —
+not before.

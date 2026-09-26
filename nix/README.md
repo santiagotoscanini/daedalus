@@ -10,7 +10,7 @@ drives.
 | `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
 | `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), the mover for versions a stack pins as plain strings (`version-update.nix`, fed by `fleet.versionPins`), `self.json`, and the privileged host agents (`host/*.sh` — among them apply, deploy, build, the image, engine and version updates, secret writes, snapshots, workspaces, power). |
 | `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
-| `tests/` | `example-host/` evaluates the example host (below) as a whole system; `all-modules/` the same host with every leaf switched on; `site-formats.nix` every sample under `../site-formats/` through `platform/site.nix` and `registry-lib.nix`. All run in `nix flake check`; nothing is built — `tests/README.md` has the table. |
+| `tests/` | `example-host/` evaluates the example host (below) as a whole system; `all-modules/` the same host with every leaf switched on. All run in `nix flake check`; nothing is built — `tests/README.md` has the table. |
 
 The root `flake.nix` exports:
 

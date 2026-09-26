@@ -152,11 +152,17 @@
         # forcing the toplevel drvPath instantiates the whole system, so every
         # option the engine reads must be declared by the engine and every
         # assertion must hold. Nothing is built. See
-        # nix/tests/example-host/default.nix. The example host's site/site.json
-        # must stay byte-equal to the current site sample: one document, two
-        # jobs (its `_why` says so).
+        # nix/tests/example-host/default.nix.
+        #
+        # Its site/ is also the sample of the app↔nix file formats (the app's
+        # vitest reads the same files): site.json and nodes.json are read by
+        # platform/site.nix in that evaluation, and every apps.json entry is
+        # mapped and forced through registry-lib.nix here, since the host
+        # evaluation alone forces only the fields some module reads. Both
+        # samples must stay populated, or they would prove nothing.
         example-host =
           let
+            inherit (nixpkgs) lib;
             host = import ./nix/tests/example-host {
               inherit
                 nixpkgs
@@ -166,15 +172,21 @@
                 ;
               engine = self;
             };
-            siteIsTheSample =
-              builtins.readFile ./example-host/site/site.json
-              == builtins.readFile ./site-formats/site/v1/site.json;
+            registryLib = import ./nix/platform/lib/registry-lib.nix { inherit lib; };
+            appsDoc = builtins.fromJSON (builtins.readFile ./example-host/site/apps.json);
+            apps =
+              if !(lib.elem appsDoc.schemaVersion registryLib.acceptedSchemaVersions) then
+                throw "example-host/site/apps.json declares schemaVersion ${toString appsDoc.schemaVersion}; registry-lib.nix accepts ${builtins.toJSON registryLib.acceptedSchemaVersions}"
+              else if appsDoc.apps == { } then
+                throw "example-host/site/apps.json has no apps; the sample must carry one"
+              else
+                lib.mapAttrs (_: registryLib.mkApp) appsDoc.apps;
           in
           assert
-            siteIsTheSample
-            || throw "example-host/site/site.json and site-formats/site/v1/site.json differ — they are one document; copy the sample over the example host's";
+            host.config.fleet.nodes != [ ]
+            || throw "example-host/site/nodes.json has no nodes; the sample must carry one";
           pkgs.runCommand "example-host-evaluates" { } (
-            builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
+            builtins.deepSeq apps (builtins.seq host.config.system.build.toplevel.drvPath "touch $out")
           );
 
         # The example host with every leaf of the catalog switched on as well:
@@ -194,21 +206,6 @@
           pkgs.runCommand "all-modules-evaluate" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
-
-        # The site-format samples under site-formats/ — every site.json,
-        # apps.json and nodes.json version — through platform/site.nix (a
-        # minimal host per site sample) and registry-lib.nix. The app's vitest
-        # reads the same files; a reader that drifts from the writer fails
-        # both. See nix/tests/site-formats.nix.
-        site-formats = import ./nix/tests/site-formats.nix {
-          inherit
-            nixpkgs
-            nixpkgs-unstable
-            sops-nix
-            system
-            ;
-          engine = self;
-        };
       };
 
       # `nix flake init -t github:santiagotoscanini/daedalus#config`: the

@@ -1,4 +1,22 @@
 {
+  "_why": "Example value, like the app in apps.json: two machines that joined the box, one offering a model server. An Apply rewrites this file from the nodes approved on the control plane, so these two go on the first one. It is also the sample the nodes reader is held to: the app's vitest parses it and re-renders it (app/src/host/contract/site-files.test.ts), and nix flake check evaluates the example host with these nodes in fleet.nodes.",
   "schemaVersion": 1,
-  "nodes": []
+  "nodes": [
+    {
+      "id": "07122fc9eb01b748",
+      "name": "macbook-pro",
+      "os": "macos",
+      "providers": {}
+    },
+    {
+      "id": "a2272f1b0bdac468",
+      "name": "gaming-pc",
+      "os": "windows",
+      "providers": {
+        "lemonade": {
+          "port": 13305
+        }
+      }
+    }
+  ]
 }
