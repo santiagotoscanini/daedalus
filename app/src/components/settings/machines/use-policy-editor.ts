@@ -82,9 +82,8 @@ export function usePolicyEditor(n: NodeRow) {
       },
     })
   }
-  // The per-model curation rides the same policy: one model's change,
-  // merged into what was last saved (never the row from before the previous
-  // save — two aliases typed a second apart would undo each other).
+  // The per-model curation rides the same policy: one model's change, merged
+  // into `base` like every other save.
   const changeModel = (kind: ProviderKind, id: string, patch: ModelPolicy) => {
     const stored = base.current.providers?.[kind]
     const current = { ...providerOf(kind), ...stored }

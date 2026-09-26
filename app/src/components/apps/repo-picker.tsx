@@ -1,17 +1,16 @@
 // Choosing the repository — the one input the rest of /apps/new is derived
 // from.
 //
-// A combobox rather than a column of buttons. The account carries ~100
-// repositories and every row used to be a tab stop, so reaching the form below
-// the list cost a hundred presses; here the input owns focus for good and
+// A combobox rather than a column of buttons. An account can carry a hundred
+// repositories, and with a tab stop per row reaching the form below the list
+// would cost a hundred presses; here the input owns focus for good and
 // `aria-activedescendant` moves the reader's cursor without moving the DOM's.
 // That is also why the rows carry `tabIndex={-1}` — they are pointer targets
 // and screen-reader options, never keyboard stops.
 //
-// Repos that are already apps stay in the list and stay legible. They used to
-// be `disabled` at 45% opacity, with the reason hidden in a title attribute;
-// they are now links to the app they became, which is where somebody who typed
-// that name wants to end up.
+// Repos that are already apps stay in the list and stay legible, as links to
+// the app they became — which is where somebody who typed that name wants to
+// end up.
 
 import { Link, useRouter } from '@tanstack/react-router'
 import { Fragment, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
@@ -68,8 +67,7 @@ export const REPO_OPT = cn('group/opt col-span-full grid min-w-0 grid-cols-subgr
 
 /* A button for a repo that can be picked, a link for one that is already an
    app — the same row either way, because the difference is where it takes you,
-   not how much it matters. Never a tab stop: the search field owns focus and
-   moves this highlight through aria-activedescendant. */
+   not how much it matters. Never a tab stop (see the file header). */
 export const REPO_ROW = cn(
   'group/row col-span-full grid min-h-(--repo-row-h) w-full cursor-pointer grid-cols-subgrid items-baseline border-0 bg-transparent px-4 py-[0.62rem] text-left text-foreground',
   NO_SUBGRID,
@@ -276,8 +274,6 @@ export function RepoPicker({
                 role="option"
                 aria-selected={isActive}
                 data-index={String(i)}
-                // Focusable but never a tab stop: the input holds focus for the
-                // life of the picker and moves aria-activedescendant instead.
                 tabIndex={-1}
               >
                 {already ? (

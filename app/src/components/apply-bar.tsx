@@ -67,7 +67,7 @@ export function ApplyBar({
 
   if (changed.length === 0 && !running && status.state !== 'failed') return null
 
-  // The phase vocabulary lives in host/apply.sh; a phase this list has not
+  // The phase vocabulary lives in nix/stacks/daedalus/host/apply.sh; a phase this list has not
   // heard of must still render as progress, not blank the tracker.
   //
   // Under an engine override (site.json `developer.engineOverride`) the agent

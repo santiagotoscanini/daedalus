@@ -42,8 +42,8 @@ export function Vpn({
         <Stat
           label="Forwarded port"
           value={data.forwardedPort === null ? DASH : String(data.forwardedPort)}
-          // Only ProtonVPN's port-forwarding instances get one, and the TV
-          // stack is the only thing here that needs inbound.
+          // Only a port-forwarding instance (ProtonVPN's) gets one; gluetun
+          // publishes no series at all otherwise.
           sub={data.forwardedPort === null ? 'none requested' : 'inbound reaches the app'}
         />
       </StatStrip>

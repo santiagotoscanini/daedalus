@@ -1,12 +1,6 @@
-// Log lines, rendered by Grafana rather than by us.
-//
-// This app used to draw its own: a `<div>` per line with a level class. That
-// is fine until you want the things you actually want from logs — search,
-// level filtering, a time range you can drag, live tail, context around a
-// line, copy-with-timestamps — every one of which Grafana already has and
-// took years to get right. The hand-rolled list was never going to catch up,
-// and two half-implementations of it (one here, one on the Gaming page) was
-// the point at which that stopped being a reasonable trade.
+// Log lines, rendered by Grafana rather than by us: search, level filtering,
+// live tail, context around a line — Grafana already has all of it, and a
+// hand-rolled list never catches up.
 //
 // ── which Grafana URL, and why it matters ─────────────────────────────────
 //
@@ -14,11 +8,12 @@
 // `/a/grafana-lokiexplore-app` — is an investigation surface that brings its
 // own label editor, datasource selector, time picker and histogram; `&kiosk`
 // does not strip any of that, because none of it is Grafana's chrome. In a
-// card, d-solo is the only sensible one.
+// card, d-solo is the only sensible one; the Drilldown is the Search button.
 //
-// The panel comes from the `container-logs` dashboard provisioned by
-// stacks/monitoring, whose sole variable is the container name — so a caller
-// only ever supplies that, and every embed on this box stays identical.
+// The panel comes from the `container-logs` dashboard the monitoring module
+// provisions (nix/modules/monitoring/assets/dashboards/container-logs.json),
+// whose sole variable is a raw Loki label matcher — so a caller only ever
+// supplies a `LogSource`, and every embed stays identical.
 //
 // ── the session caveat, stated rather than discovered ─────────────────────
 //
@@ -66,16 +61,10 @@ const EMBED =
 const EMBED_COVERED = 'animate-[embed-reveal_0s_linear_15s_forwards] opacity-0'
 const EMBED_READY = 'animate-none opacity-100 [transition:opacity_0.2s_ease]'
 
-/* A second log stream inside a Logs board, for the process that ships the
-   first one. Collapsed: it is diagnostics for the panel above rather than a
-   service anybody watches, so it should be one click away on the day the
-   panel goes quiet and invisible on every other day.
-
-   Stacked, they are a list of sibling streams rather than a series of
-   afterthoughts — the rule between them is enough separation, so the gap
-   above is dropped between neighbours. The range bar inside is laid out by
-   the same rules as the one above it and only needs the breathing room the
-   summary does not provide. */
+/* `LogDetails`' box. Stacked, they are a list of sibling streams — the rule
+   between them is enough separation, so the gap above is dropped between
+   neighbours. The range bar inside only needs the breathing room the summary
+   does not provide. */
 const SUBLOG =
   'group mt-4 border-t border-(--border-soft) pt-[0.7rem] [&+&]:mt-0 [&>summary+div]:mt-[0.7rem]'
 const SUBLOG_SUMMARY = cn(
@@ -98,26 +87,16 @@ const SUBLOG_SUMMARY = cn(
  * It costs nothing to be wide: the panel sorts newest-first, so a chatty
  * container still opens on its most recent line.
  *
- * ── no `refresh` ──────────────────────────────────────────────────────────
+ * ── no `&refresh=` ────────────────────────────────────────────────────────
  *
- * This used to carry `&refresh=30s`, and that is half of what made the frame
- * flicker. Grafana does not re-query a panel quietly: every tick it paints a
- * centred "Loading ..." spinner over the panel body for about a tenth of a
- * second before the rows come back. Once every thirty seconds for as long as
- * the page was open — visible in traefik's log as query bursts at a
- * metronomic 29-30s spacing — and, because the timer is suspended while the
- * tab is hidden and fires on the way back, guaranteed to greet you the
- * moment you alt-tab in. It reads as the panel breaking and recovering.
+ * Grafana does not re-query a panel quietly: every tick paints a centred
+ * "Loading ..." spinner over the rows, and a timer suspended in a hidden tab
+ * fires the moment you come back to it — it reads as the panel breaking and
+ * recovering. It would buy nothing: on a seven-day window a new line moves the
+ * view by under a pixel, live tail is the Drilldown behind Search, and a range
+ * change remounts the frame anyway.
  *
- * Refresh bought nothing to pay for it. The window this opens on is SEVEN
- * DAYS: a line arriving thirty seconds ago moves the view by well under a
- * pixel. Anyone actually tailing a service wants the Drilldown behind the
- * Search button, which has live tail and a great deal else this frame does
- * not. Changing the range here already reloads the panel, and so does
- * reloading the page.
- *
- * With it gone the frame renders exactly once per mount, which is what makes
- * the first-load cover below sufficient rather than a band-aid.
+ * Rendering once per mount is what makes `LogFrame`'s one-shot cover enough.
  */
 function grafanaLogsEmbed(
   site: Site,
@@ -144,15 +123,14 @@ function grafanaLogsFull(site: Site, source: LogSource, from = 'now-7d'): string
 /**
  * Which Loki stream to show.
  *
- * `container` is the ordinary case: everything on this box logs to journald and
- * alloy labels it with the podman container name. `stack` exists for the one
- * service whose logs did not come from this box's journal at all — Lemonade
- * runs on the gaming PC and reaches Loki through the WebSocket bridge in
- * stacks/lemonade-logs, which pushes directly and therefore has no container
- * to be named after. `unit` is for host plumbing that is not containerised at
- * all: ddclient and pi-hole are NixOS services, so their lines carry a
- * systemd unit label and no container one. A union rather than three optional
- * fields, so a caller cannot pass two and leave the query to guess.
+ * The three labels alloy puts on a journal line (nix/modules/logging).
+ * `container` is the ordinary case: the podman container name. `stack` groups
+ * several containers under one name (`fleet.logStacks`: `nextcloud`, `immich`,
+ * `app-db`), and also covers streams with no container at all — `kernel`, and
+ * `lemonade`, which a bridge pushes into Loki from another machine. `unit` is
+ * a systemd unit: native services (`pihole-ftl.service`, `ddclient.service`)
+ * and the oneshots around a stack. A union rather than three optional fields,
+ * so a caller cannot pass two and leave the query to guess.
  */
 export type LogSource = { container: string } | { stack: string } | { unit: string }
 
@@ -164,16 +142,18 @@ const value = (s: LogSource) => ('container' in s ? s.container : 'stack' in s ?
  *
  * `d-solo` renders a panel with no time picker — that is the whole reason it
  * is the right URL, since the picker comes attached to Grafana's entire
- * toolbar. So the picker is ours: four ranges, swapped into the iframe's src,
- * which is a page-local reload of one frame rather than a route change.
+ * toolbar. So the picker is ours: four ranges, each a remount of the one
+ * frame (see the `key` in GrafanaLogs) rather than a route change.
+ *
+ * `settle` is how long `LogFrame` keeps the cover on after `load`.
  */
 const RANGES = [
   { value: 'now-1h', label: '1h', settle: 1_200 },
   { value: 'now-24h', label: '24h', settle: 1_200 },
   { value: 'now-7d', label: '7d', settle: 1_200 },
   // Three times the others, and the reason is the opposite of the obvious
-  // one. Loki walks BACKWARDS from `now` and stops at the panel's 1000-line
-  // limit, so a chatty container fills the quota in the first few hours and
+  // one. Loki walks BACKWARDS from `now` and stops at the datasource's
+  // 1000-line `maxLines`, so a chatty container fills the quota in the first few hours and
   // answers a 30-day question as fast as a one-hour one — traefik and pg both
   // come back in 25-70ms at either width. A QUIET container never fills it,
   // so Loki has to scan all thirty days of chunks to prove there is nothing
@@ -181,8 +161,7 @@ const RANGES = [
   //
   // So the wide window is slow exactly where there is least to show, which is
   // most of this box. Grafana boots, then issues that query, then renders —
-  // and 1200ms of cover ran out in the middle of it, which is why this was
-  // the one range still flickering.
+  // and 1200ms of cover runs out in the middle of it.
   { value: 'now-30d', label: '30d', settle: 3_000 },
 ] as const
 
@@ -214,16 +193,16 @@ const REVEAL_CAP_MS = 10_000
  * That number is a guess and cannot be anything else: the frame is
  * cross-origin, d-solo sends no postMessage, and there is no other signal to
  * wait on. But it is a guess that only has to hold ONCE per mount, because
- * with `refresh` gone the panel never renders a second time. If it is short,
+ * with no `refresh` the panel never renders a second time. If it is short,
  * the cost is bounded — the cover lifts a beat early and you see the tail of
- * Grafana's boot, which is exactly the old behaviour.
+ * Grafana's boot.
  *
  * The cover has to be in the SERVER-rendered markup: the browser begins
  * fetching the iframe the instant that HTML lands, well before React
  * hydrates, so nothing done on mount can get in front of the first paint.
  * That means a page whose JS never runs would keep the frame hidden forever,
  * so the reveal also has a pure-CSS backstop on a longer timer — see
- * `.embed` in styles.css.
+ * `EMBED_COVERED`.
  */
 function LogFrame({ src, title, settle }: { src: string; title: string; settle: number }) {
   const [loaded, setLoaded] = useState(false)
@@ -283,10 +262,11 @@ function LogFrame({ src, title, settle }: { src: string; title: string; settle: 
 /**
  * A second log stream, folded away until it is wanted.
  *
- * For the containers standing NEXT to a service — the bridge shipping its
- * lines, the tool servers its gateway proxies. They belong on the page (the day
- * the main panel goes quiet, one of these is why) and they do not belong open
- * (on every other day they are noise under the log you came for).
+ * For the streams standing NEXT to a service — the bridge shipping its lines,
+ * the oneshot that renders its config. They belong on the page (the day the
+ * main panel goes quiet, one of these is why) and they do not belong open (on
+ * every other day they are noise under the log you came for). `LogBoard`
+ * renders one per neighbour; the IdP page uses it directly.
  *
  * ── why the frame is mounted on open rather than hidden ───────────────────
  *
@@ -331,12 +311,13 @@ export function LogDetails({
 }
 
 /**
- * A container standing beside the tab's subject, with no page of its own.
+ * A log stream standing beside the tab's subject, with no page of its own.
  *
  * The light kind of neighbour: something whose only question is "what did it
  * say". flaresolverr solving a challenge for an indexer, subgen transcribing
- * an episode, recyclarr writing a profile — each is a plausible answer to "it
- * failed and its own log only blamed its upstream", and none is worth a tab.
+ * an episode, the snapshot behind a version number — each is a plausible
+ * answer to "it failed and its own log only blamed its upstream", and none is
+ * worth a tab.
  *
  * What does NOT belong here is a container everybody shares. `pg` is behind
  * Nextcloud, Immich, the *arrs and every app on the platform; a container that
@@ -347,8 +328,8 @@ export type LogNeighbour = {
    * A container, a systemd unit, or a stack.
    *
    * Not just a container name: some of what a page depends on is a oneshot,
-   * and the version snapshot behind Shelfmark's and Recyclarr's numbers is
-   * exactly that. A neighbour is defined by "you would come looking here when
+   * and the version snapshot behind the media pages' channel-pinned versions
+   * (`VERSION_SNAPSHOT`) is exactly that. A neighbour is defined by "you would come looking here when
    * the panel above went wrong", which has nothing to do with whether the
    * thing happens to be a container.
    */
@@ -433,11 +414,11 @@ export function GrafanaLogs({
           </a>
         </Button>
       </div>
-      {/* `key` on the range (and the scheme) so a change remounts the frame rather than
-          mutating src — Grafana keeps its own history otherwise, and the back
-          button would start walking through time ranges instead of pages. It
-          also resets the cover, so switching range gets the same skeleton the
-          first load does rather than Grafana's boot in the raw. */}
+      {/* `key` on the range and the scheme so a change remounts the frame
+          rather than mutating src — an iframe navigation lands in the page's
+          history otherwise, and the back button would start walking through
+          time ranges instead of pages. It also resets the cover, so a switch
+          gets the same skeleton the first load does. */}
       <LogFrame
         key={`${from}-${scheme}`}
         src={grafanaLogsEmbed(site, source, from, scheme)}

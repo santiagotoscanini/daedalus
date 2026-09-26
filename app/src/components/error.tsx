@@ -103,11 +103,11 @@ function AwaitError({ error, reset }: ErrorComponentProps) {
  * and which, once it has answered, never shows its skeleton again.
  *
  * Every loader hands the page NEW promises, on purpose: the frame renders
- * the instant you click and the boards stream in behind it. The cost was
- * that a page you had already read streamed in again — the router keeps
+ * the instant you click and the boards stream in behind it. The cost is
+ * that a page you had already read would stream in again — the router keeps
  * its loader result for `defaultStaleTime`, but past that (or on a reload
- * it decided to run) the section got a fresh promise, suspended, and the
- * skeleton flashed over content that was on screen a second ago. What the
+ * it decided to run) the section gets a fresh promise, suspends, and the
+ * skeleton flashes over content that was on screen a second ago. What the
  * eye expects from a native app is the opposite: what you saw last time,
  * at once, and the new answer replacing it in place if it differs.
  *
@@ -116,8 +116,8 @@ function AwaitError({ error, reset }: ErrorComponentProps) {
  * plus its `slot` — the name a page gives a section when it draws several
  * behind one key. On the client, a section with a
  * memory renders it immediately and settles the new promise in an effect;
- * a section without one — the first visit, and every server render — goes
- * through `<Await>` as before, which is what keeps SSR streaming intact and
+ * a section without one — the first visit, and every server render — awaits
+ * the promise itself, which is what keeps SSR streaming intact and
  * the skeleton honest: it means "never loaded", not "loading again".
  *
  * The memory is per browser tab, unbounded, and never read on the server —
@@ -189,11 +189,11 @@ function Settled<T>({
   if (remembered && failure !== null && failure.promise === promise) throw failure.error
 
   // One <Await> in both cases, so the children keep their place in the
-  // tree. A remembered section used to render them bare, and the first
-  // refresh after a first sight moved them from inside <Await> to outside
-  // it — a remount, which threw away every input and switch state below
-  // and re-ran every effect. React's `use` returns at once from a thenable
-  // already marked fulfilled, which is what the memory hands it.
+  // tree: rendering a remembered section bare would move them from inside
+  // <Await> to outside it on the first refresh — a remount, which throws
+  // away every input and switch state below and re-runs every effect.
+  // React's `use` returns at once from a thenable already marked fulfilled,
+  // which is what the memory hands it.
   return (
     <Await
       promise={remembered ? fulfilled(settled.get(cacheKey) as T) : promise}

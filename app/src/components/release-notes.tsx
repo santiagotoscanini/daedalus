@@ -1,9 +1,10 @@
 // Release notes for the versions that matter: the one running, and every one
 // between it and current.
 //
-// One component for two very different sources — Factorio's wikitext and four
-// projects' GitHub Markdown — because they were parsed into the same shape on
-// the server precisely so this could be. What reaches here is already
+// One component for very different sources — Factorio's wikitext, the NixOS
+// manual's release notes, upstream projects' GitHub Markdown — because they
+// are parsed into the same shape on the server precisely so this can be. What
+// reaches here is already
 // headings-and-bullets; nothing renders Markdown in the browser.
 //
 // Everything is collapsed. A point release is forty-odd fixes to somebody

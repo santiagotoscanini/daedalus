@@ -35,7 +35,8 @@ import {
  * download that only updates itself.
  *
  * The full list is long on purpose. An inventory that hides entries is
- * not one; each group folds past a dozen, and unfolds.
+ * not one; each group folds past its own limit (AppList's `fold`), and
+ * unfolds.
  */
 export function NodeSoftwareView({ d }: { d: NodeSystemData }) {
   const t = d.telemetry

@@ -6,8 +6,8 @@ import { ApplyBar } from './apply-bar'
 
 // The Apply bar for every page that does not draw its own.
 //
-// Site edits are made from more places than the pages that used to carry the
-// bar — a service's cog on any module page, a game server's roster — and an
+// Site edits are made from more places than the pages with a bar of their
+// own — a service's cog on any module page, a game server's roster — and an
 // edit whose Apply button lives on another page is an edit that looks like it
 // did nothing. So the root layout draws the bar too, fed by the whole of what
 // the next Apply would do (host/pending-apply.ts).

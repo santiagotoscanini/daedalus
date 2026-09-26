@@ -207,9 +207,10 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
       )}
 
       {/* The machine itself, on the tab about the machine itself — as the
-          box's own page pictures its case. A node has no photograph, so the
-          OS mark stands where the case would: it is the one thing about the
-          machine you would recognise from across the room. */}
+          box's own page pictures its case. A machine the catalog knows (a
+          Mac, by model and the finish chosen on Settings › Machines) gets its
+          photograph; any other gets the OS mark where the case would be: the
+          one thing about it you would recognise from across the room. */}
       <Board title="The machine" icon="▣" span={4}>
         <div className={PART}>
           {machinePart !== null ? (

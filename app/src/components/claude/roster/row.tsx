@@ -21,14 +21,11 @@ import { NARROW_HIDE, RC_ARM_MS } from '../shared'
 import { working } from '../verdicts'
 import { ROW_ACCENT, STATE_ACCENT, STATE_LABEL, STATE_TONE } from './tones'
 
-/* The verb at the right edge OF the row, not under it.
-
-   It used to be a second line of its own, which made every row two lines tall
-   and turned fifty of them into a ragged column with a button floating under
-   each one. The rest of this page lays a row out as chip · name · facts, with
-   anything actionable at the right edge (the queue on System › Updates is the
-   same shape), and this board reads as part of that page only if it does the
-   same. `shrink-0` because the two truncating side slots to its left will
+/* The verb at the right edge OF the row, not under it: a button on a line of
+   its own makes every row taller and a long list a ragged column. The rest of
+   this page lays a row out as chip · name · facts, with anything actionable at
+   the right edge, and this board reads as part of that page only if it does
+   the same. `shrink-0` because the truncating side slots to its left would
    otherwise give away the button's width before their own. */
 const ROW_BTN = 'ml-auto h-auto shrink-0 px-[0.55rem] py-[0.2rem] text-[0.7rem]'
 
@@ -77,9 +74,10 @@ type ActiveControl = Extract<RowControl, { session: string }>
 /**
  * One row, and — where there is an honest one — its verb.
  *
- * Four populations end four different ways and a fifth does not end at all, so
- * this deliberately does not render one button five times. `rowControl` makes
- * that decision (it is pure, and tested); this only draws it.
+ * Four kinds of row end four different ways and the rest (a session the server
+ * spawned, an orphan) cannot be ended from here at all, so this deliberately
+ * does not render one button for every row. `rowControl` makes that decision
+ * (it is pure, and tested); this only draws it.
  */
 export function RosterRow({
   row,
@@ -198,9 +196,9 @@ function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl 
   const idCandidate = row.shortId ?? (row.id === null ? null : row.id.slice(0, 8))
   const shownId = idCandidate === row.label ? null : (idCandidate ?? DASH)
   // `busy` is the CLI saying it is mid-turn, which no clock can infer. The
-  // fallback is "touched within the last minute", which is what the Sessions
-  // board called `working` and the honest reading of active for a session
-  // being driven from a phone. Only ever shown for a row with a process.
+  // fallback is "touched within the last minute" (`working`, verdicts.ts), the
+  // honest reading of active for a session being driven from a phone. Only
+  // ever shown for a row with a process.
   const lifecycle = row.lifecycle ?? (row.live !== null && working(row.live) ? 'working' : null)
   // The name claude.ai shows. When it IS the label there is nothing to add;
   // when a title outranks it, this is the only place it survives, and the
@@ -226,16 +224,13 @@ function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl 
           misleads: `blocked` is an agent waiting on a human, and reads as a
           live thing pausing. The missing pid is the fact underneath it. */}
       {row.state === 'dormant' && <span className={ROW_SIDE}>no process</span>}
-      {/* The id stays on the top line and only there: it is what the CLI
-          verbs take, so it belongs beside the name it labels rather than
-          down among the measurements. The directory, the size and the last
-          write all moved to the metadata line below, each into the group it
-          actually belongs to — they were four separate readings of three
-          questions. */}
+      {/* The ids stay on the top line and only there: they are what the CLI
+          verbs and claude.ai go by, so they belong beside the name they label
+          rather than down among the measurements on the metadata line. */}
       {cliName !== null && <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{cliName}</span>}
       {/* The id claude.ai shows, which is NOT the transcript uuid beside
-          it. It came off the Sessions board, and it is the thing you match
-          a row here against a session over there by. */}
+          it — the thing you match a row here against a session over there
+          by. */}
       {row.live?.remoteId != null && (
         <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{row.live.remoteId}</span>
       )}
@@ -243,7 +238,8 @@ function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl 
       {/* No button, and the reason in its place. A session the Remote
           Control server spawned has no per-session kill anywhere — not in
           the CLI, not in systemd — so the only honest thing here is a
-          sentence. The board foot points at the one lever that does end it. */}
+          sentence. The one lever that does end it is the server restart on
+          the Remote control board. */}
       {control.kind === 'none' && control.why === 'server' && (
         <span className={cn(ROW_SIDE, NARROW_HIDE)}>ends with the server</span>
       )}

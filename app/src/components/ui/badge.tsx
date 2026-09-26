@@ -12,9 +12,9 @@ const badgeVariants = cva(
         secondary: 'border-transparent bg-secondary text-secondary-foreground',
         outline: 'text-foreground',
         destructive: 'border-transparent bg-destructive text-destructive-foreground',
-        // The status triad carries the badge as tinted text on a wash rather
-        // than a solid fill: `success`/`warning` have no paired *-foreground
-        // token, so there is no colour guaranteed legible on top of them.
+        // Tinted text on a wash rather than a solid fill like `destructive`:
+        // `success`/`warning` have no paired *-foreground token, so there is
+        // no colour guaranteed legible on top of them.
         success: 'border-success/30 bg-success/12 text-success',
         warning: 'border-warning/30 bg-warning/12 text-warning',
       },

@@ -21,15 +21,9 @@ import {
 /* ── Chromium ─────────────────────────────────────────────────────────── */
 
 /**
- * The browsers on a node, as Shotter is the browser on the box.
- *
- * Shotter is more than a browser — a lab, with runs and an archive — because
- * the box has no screen and had to be given eyes. A laptop has a screen and
- * a browser already; what the page can add is what a person at the keyboard
- * rarely checks: which Chromium each one is, whether it is the version the
- * vendor is shipping this week, whether it is open, and which one links
- * open in. One board per browser, the vendor's feed beside it, and a foot
- * that says where the "current" came from.
+ * The browsers on a node, as Shotter is the browser on the box — the lede
+ * below says why the page is this and not a lab. One board per browser, the
+ * vendor's feed beside it, and a foot that says where the "current" came from.
  */
 export function NodeBrowsersView({ d }: { d: NodeSystemData }) {
   const t = d.telemetry

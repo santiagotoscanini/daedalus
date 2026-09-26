@@ -10,8 +10,8 @@
 //                   can set it before React exists.
 
 /**
- * One rail row, in three places: the directory, the fleet rows at the foot,
- * and the app-scoped rail.
+ * One rail row, in four places: the directory, the fleet rows at the foot,
+ * the account menu's button (account-menu.tsx) and the app-scoped rail.
  *
  * The `after:` half is the collapsed rail's tooltip. At 64px the icon is the
  * only thing naming the destination, so the label has to come back somewhere
@@ -19,9 +19,9 @@
  * after the second the native `title` waits. `attr(data-label)` is why every
  * caller sets that attribute.
  *
- * Selected is quiet, not orange: it is the one row the eye rests on at every
- * glance, and a block of accent there outshouted every reading on the page.
- * The accent's job on this rail is the wordmark.
+ * Selected is quiet, not the accent: it is the one row the eye rests on at
+ * every glance, and a block of accent there outshouted every reading on the
+ * page. The accent's job on this rail is the logo.
  */
 export const NAV_ITEM = [
   'relative flex items-center gap-2.5 rounded-[7px] px-2.5 py-[0.45rem]',
@@ -57,7 +57,7 @@ export const NAV_DIVIDER = 'my-2 mx-[0.7rem] h-px bg-(--border-soft) nav-collaps
 
 export const NAV_LIST = 'flex flex-col gap-[0.12rem]'
 
-/** The wordmark. Letter-spaced small caps, which the collapsed rail centres. */
+/** The wordmark. Letter-spaced capitals, which the collapsed rail centres. */
 export const BRAND = [
   'flex min-w-0 flex-1 items-center gap-[0.7rem] px-[0.55rem] py-1',
   'font-semibold text-[0.76rem] text-foreground uppercase tracking-[0.14em]',

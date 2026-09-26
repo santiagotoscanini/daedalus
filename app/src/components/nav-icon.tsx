@@ -1,21 +1,19 @@
 // The rail's icons.
 //
-// Drawn rather than typed. The rail used Unicode glyphs — ▦ ◈ ▶ ⌂ ⛶ ⇄ ◔ ◎ —
-// and they come from whatever font the browser has for each codepoint, so they
-// arrived at different weights, different optical sizes and different vertical
-// alignments. A solid black triangle sat beside a hairline diamond in a column
-// that is supposed to read as one set. These are one viewBox, one stroke width
-// and one colour, which is the only way eight icons look like eight icons.
+// Drawn rather than typed: a Unicode glyph comes from whatever font the
+// browser has for its codepoint, at its own weight, optical size and vertical
+// alignment, so a column of them never reads as one set. These are one
+// viewBox, one stroke width and one colour.
 //
 // `currentColor` throughout: the rail already states rest/hover/active in the
 // text colour, and an icon that inherits it needs no rules of its own.
 
 /**
- * Icon names, which are the category ids plus the shell's own controls.
+ * Icon names, which are the module ids plus the shell's own controls.
  *
- * There is deliberately no `icon` field on CategorySpec. The name of a
- * category's icon was always its id spelled a second way, and the second
- * spelling is the one that goes stale.
+ * There is deliberately no `icon` field on ModuleManifest
+ * (lib/modules/manifest.ts): the rail keys the icon by the module id, since a
+ * second spelling of the same name is the one that goes stale.
  */
 export type NavIconName =
   | 'apps'
@@ -37,7 +35,7 @@ export type NavIconName =
   | 'close'
   | 'chevron'
   // The app rail's sections (routes/apps.$name.tsx APP_TABS) — same rule as
-  // the categories: the icon name IS the tab id, nothing to keep in sync.
+  // the modules: the icon name IS the tab id, nothing to keep in sync.
   | 'overview'
   | 'deployments'
   | 'vpn'
@@ -209,7 +207,7 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
 }
 
 /**
- * @param size in px. The rail uses 19 for a nav row and 17 for its controls —
+ * @param size in px. The rail uses 19 for a nav row and 17–18 for its controls —
  *   an icon that is doing the same job as a label wants to be a shade smaller
  *   than one that is the whole button.
  */

@@ -39,19 +39,6 @@ function severityTone(s: string | null): Tone {
 }
 
 /**
- * The box's Updates tab, for a node: the agent's own pin, then the
- * operating system's.
- *
- * The box's page is a list of sixty container pins and a button that moves
- * one. A node has two things that update: the agent, which this box
- * releases and the machine installs on its own within ten minutes (or now,
- * from the button here — the same one Settings › Machines has, because
- * this is where you are when you notice the version); and the OS, which
- * only the person at the keyboard can move. So the OS boards report and
- * do not act: what is pending, whether a restart is owed, what went in
- * lately.
- */
-/**
  * The "Update now" row: the same request Settings › Machines makes, here
  * because this is where you are when you notice the version.
  */
@@ -95,9 +82,14 @@ function windowsVersion(v: string): { release: string; build: string | null } {
 
 /**
  * The Windows PC's Updates tab: what Windows it is, what Windows Update
- * holds for it, what went in lately, and the two things this box moves.
+ * holds for it, what went in lately, and the agent and Claude Code beside
+ * them. (nodeTabsFor also gives it to a node that is neither Windows nor a
+ * Mac, which it draws with the same Windows labels.)
  *
- * Windows Update is the one list that matters on a PC, and it is already
+ * A node has two kinds of thing that update: the agent, which installs its
+ * own releases within ten minutes (or now, from AgentUpdate), and the OS,
+ * which only the person at the keyboard can move. Windows Update is the one
+ * list that matters on a PC, and it is already
  * the vendor's list of what has not been taken — with a KB number on each
  * line that Microsoft keeps a page for. So the tab reports and links, and
  * does not act: installing stays with the person at the machine, since an

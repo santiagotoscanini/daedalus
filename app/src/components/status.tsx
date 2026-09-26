@@ -9,7 +9,7 @@ import type { Result } from '../lib/result'
 // so for a second or two the status file still shows the PREVIOUS run's
 // terminal state. A poller that trusts the file alone reads that stale `done`,
 // declares victory, and flips the button back to idle while a multi-minute
-// rebuild is just starting. That was the Apply bar's oldest bug.
+// rebuild is just starting.
 //
 // The fix is a claim: start() records the id the submit returned, and until
 // the status file speaks for THAT id, whatever it says is somebody else's
@@ -22,10 +22,9 @@ import type { Result } from '../lib/result'
 // host can decline one (already busy, nothing to do) and the server function
 // can throw before the host is even asked (an app that builds from source has
 // no image to pull; a repo is not one of this box's). Both live here rather
-// than in each caller, because when they did not, three buttons swallowed the
-// throw entirely — they spun, reset, and said nothing. A submit is a Result
-// and a rejection becomes one, so there is no path out of this hook that
-// leaves a failure unsaid.
+// than in each caller, so no button can swallow the throw and spin, reset and
+// say nothing. A submit is a Result and a rejection becomes one, so there is
+// no path out of this hook that leaves a failure unsaid.
 
 type HostStatus = { id: string | null; state: string; error: string }
 

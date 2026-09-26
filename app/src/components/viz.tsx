@@ -1,10 +1,9 @@
-// Visual primitives for the category pages.
+// Visual primitives for the module pages.
 //
-// All hand-rolled SVG and CSS, no charting library — same reasoning as the
-// existing AreaChart: a chart dependency would be the largest thing in
-// node_modules by an order of magnitude, in a container whose entire design is
-// to start fast and reload faster (source.mode = "local" runs vite dev in
-// production, so every byte here is parsed on a cold page load).
+// All hand-rolled SVG and CSS, no charting library: a chart dependency would
+// be the largest thing in node_modules by an order of magnitude, and a host in
+// dev mode (`fleet.daedalus.dev`) serves the app through Vite, so every byte
+// here is parsed on a cold page load.
 //
 // Two rules every component below follows:
 //
@@ -38,8 +37,8 @@ export type { Tone }
  * A proportion, as a ring.
  *
  * Chosen over a bar wherever the number is a *share of a whole* that the eye
- * should read without comparing to anything else — block rate, CPU, pool
- * capacity. The ring is drawn as a stroke-dasharray on a circle and grows from
+ * should read without comparing to anything else — stills against video, a
+ * library's share of its disk. The ring is drawn as a stroke-dasharray on a circle and grows from
  * empty on mount, so a page load reads as the numbers arriving.
  *
  * `pct === null` draws the track alone with the value slot showing an em dash:
@@ -155,12 +154,11 @@ export function BarList({
  *
  * The bar carries the comparison — the whole question a ranking answers is
  * which of these is the big one — and the line under it carries everything the
- * bar cannot: what it cost, how slowly it went, when it was last seen. A bar
- * list alone said only "n8n is the big one", which was true on the first read
- * and had nothing to add on any later one.
+ * bar cannot: what it cost, how slowly it went, when it was last seen — what
+ * a `BarList` has no room for.
  *
- * Shared by the gateway's callers, n8n's workflows and Prowlarr's indexers
- * because they are the same object: a named thing, a count worth comparing, and
+ * Shared by the gateway's callers, n8n's workflows, Prowlarr's indexers and
+ * Seerr's requesters because they are the same object: a named thing, a count worth comparing, and
  * a few facts that only make sense next to it.
  *
  * `note` is the answer to "what IS this row" — a bare hash, a name that turns
@@ -197,7 +195,7 @@ export function RankRow({
         <span
           // A name that cannot be read at face value — an internal credential,
           // or a hash — carries its explanation on a hover, and says so with
-          // the same dotted underline the host strip uses for the same promise.
+          // a dotted underline, the same promise the Disks tab's model names make.
           className={cn('min-w-0 truncate', note !== null && 'cursor-help border-b border-dotted')}
           title={note ?? name}
         >
@@ -503,8 +501,8 @@ export function Stat({
 /**
  * A single job's progress.
  *
- * `active` adds a travelling sheen. That is the one piece of ambient motion on
- * these pages and it is load-bearing: a paused torrent and a downloading
+ * `active` adds a travelling sheen — with `Pulse`, the only looping motion in
+ * this file, and load-bearing: a paused torrent and a downloading
  * torrent at the same percentage are otherwise identical, and which one it is
  * is the question you opened the page to answer.
  */
@@ -591,9 +589,8 @@ export const BOARD_BODY =
 export const BOARD_GRID = 'grid grid-cols-12 gap-[0.8rem]'
 
 /**
- * A labelled box. Distinct from the existing `Panel` (used on the app detail
- * pages) in that the body is not padded and the header can carry a live
- * reading — these panels hold charts that should touch their own edges.
+ * A labelled box on a `BoardGrid`: a title, an optional `aside` in the header
+ * (a live reading, a count), and a body laid out as a column.
  */
 export function Board({
   title,
@@ -609,7 +606,7 @@ export function Board({
       without rejecting it. */
   icon?: GlyphName | (string & {})
   aside?: ReactNode
-  /** Columns of the 12-wide category grid. Defaults to 6 (half width). */
+  /** Columns of the 12-wide `BoardGrid`. Defaults to 6 (half width). */
   span?: 3 | 4 | 6 | 8 | 9 | 12
   children: ReactNode
 }) {
@@ -646,8 +643,7 @@ export function BoardGrid({ children }: { children: ReactNode }) {
  * each other: what a model has done, what a gateway carried today. The reason
  * this exists rather than a headline band of large stat cards is that a stat
  * card is a claim on the reader's attention, and four of them spend a whole
- * band of the page saying
- * things nobody came to look at. As a measure line the same numbers cost one
+ * band of the page saying things nobody came to look at. As a measure line the same numbers cost one
  * row inside the panel they belong to.
  *
  * A tone is for the one figure that can be a FAULT (failures, an expiry). Every

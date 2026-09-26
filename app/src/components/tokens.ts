@@ -1,21 +1,8 @@
 // The board vocabulary, spelled once for every category page.
 //
-// These nine strings were the last of styles.css's `.note`, `.foot`, `.mono`
-// and friends, and each category file restated them while the legacy sheet was
-// being retired — deliberately, so that a half-migrated file had nothing to
-// keep in step with. That migration is finished (styles.css is element
-// defaults and keyframes now), and what the restating left behind is what it
-// was always going to leave behind: forty-six declarations of nine strings,
-// drifting. `text-(--dim)` here, `text-muted-foreground` there;
-// `[overflow-wrap:anywhere]` on one page and `wrap-anywhere` on the next; an
-// `m-0` that only some of them carried. Every one of those pairs is the same
-// rendered pixel — `--dim` IS `--muted-foreground` (theme.css) and
-// `wrap-anywhere` IS `overflow-wrap: anywhere` — which is the tell: nothing
-// was choosing between them, they were just being retyped.
-//
 // A caption set at 0.73rem on one tab and 0.75rem on the next reads as a
 // rendering fault and no diff would show it. That is the whole argument for
-// one module.
+// one module: reuse these rather than retyping a near-copy.
 //
 // What is NOT here, because it genuinely looks different: Settings' own note
 // and mono (a larger 0.78rem/0.8rem at `--text-muted`, which is a darker ink
@@ -71,9 +58,8 @@ export const AXIS =
   'm-0 -mt-[0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] text-muted-foreground tabular-nums'
 
 /* A flat list of named things: rows of a table, not a stack of pills. The
-   hairline is on every row and removed from the first, which is what `li + li`
-   used to say. Grew up on the System tabs and is read by the Claude page too,
-   so it lives with the rest of the vocabulary rather than inside a module. */
+   hairline is on every row and removed from the first. Read by the System
+   tabs, the Claude page and several module views. */
 export const LIST = 'flex flex-col'
 export const ROW =
   'flex min-w-0 items-center gap-[0.45rem] border-(--border-soft) border-t px-[0.1rem] py-[0.34rem] text-[0.77rem] first:border-t-0'

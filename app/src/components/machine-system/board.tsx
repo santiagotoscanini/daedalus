@@ -28,15 +28,17 @@ import {
 /* ── Motherboard ──────────────────────────────────────────────────────── */
 
 /**
- * The board, its firmware, and what the maker has published since.
+ * The board, its firmware, and what the maker has published since — for the
+ * box's Motherboard tab and a node's alike.
  *
  * Build already names the board. This tab exists for the one question
- * Build refuses to answer — "am I behind?" — and answers it only where a
- * feed exists that will not change shape under us: MSI's download host,
- * which names every package by board code and version and puts a
- * one-page note at the front of each (lib/dashboard/board-releases.ts).
- * Where there is no such feed the tab says why, in the maker's own terms,
- * rather than scraping a page that refuses this box anyway.
+ * Build refuses to answer — "am I behind?" — and answers it from the maker's
+ * list (lib/dashboard/board-releases.ts): MSI's download host, which names
+ * every package by board code and version and puts a one-page note at the
+ * front of each; Gigabyte's support page, which refuses plain clients and is
+ * read by the box's own browser instead. Apple's firmware moves with macOS.
+ * For any other maker the tab says there is no feed and leaves the version
+ * alone.
  */
 export function BoardView({ info }: { info: BoardInfo }) {
   const r = info.releases

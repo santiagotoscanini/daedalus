@@ -13,9 +13,8 @@ import { Policy } from './policy'
 
 // Settings › Machines — the other computers on this network that run the
 // agent: what each one is, whether the box trusts it, and what the box asks
-// of it. One card per machine, and the whole story on it, because the
-// decision about a machine and the policy sent to it were two tabs on two
-// pages, and reading either meant visiting the other.
+// of it. One card per machine, and the whole story on it: the decision about a
+// machine and the policy sent to it are read together, so they sit together.
 //
 // Two kinds of machine, told apart by the chip. One that said hello has a
 // node row and a state — pending until approved, approved, or revoked — and
@@ -32,7 +31,7 @@ import { Policy } from './policy'
 // to do nothing is worse than none.
 //
 // The install line is on the page rather than in a doc: a machine that is
-// not here yet is one PowerShell line away, and this is where the person
+// not here yet is one shell line away, and this is where the person
 // looking for it is standing.
 //
 // This file is the tab and one card per machine; the trust buttons are

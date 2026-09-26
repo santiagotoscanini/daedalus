@@ -23,7 +23,7 @@ import { Board, Chip, Facts, type Tone } from './viz'
 // Two facts and their comparison. The lock (the repo snapshot) is what the
 // box was built from; the clone's `main` (the workspace snapshot) is what an
 // update would pin, and how far origin is past it as of the last fetch. The
-// phases are the host agent's (stacks/daedalus/host/engine-update.sh), and a
+// phases are the host agent's (nix/stacks/daedalus/host/engine-update.sh), and a
 // phase this list has not heard of still renders as progress.
 
 const PHASES = [
@@ -55,8 +55,9 @@ const day = (iso: string | null | undefined): string =>
 export function EngineCard({ e }: { e: EngineFacts }) {
   const router = useRouter()
   // Whether the run on screen is one this browser started, for the reason
-  // the queue panel keeps the same flag: the status file is never cleared,
-  // and a finished run would otherwise sit at the top of the page forever.
+  // the image queue panel (modules/system/view/updates.tsx) keeps the same
+  // flag: the status file is never cleared, and a finished run would
+  // otherwise sit on the card forever.
   const [startedHere, setStartedHere] = useState(false)
 
   const { status, running, refusal, start } = usePolledStatus({

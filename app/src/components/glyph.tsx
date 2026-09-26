@@ -4,7 +4,7 @@
 // and one stroke width is what makes a page of boards read as one set.
 //
 // A separate file from NavIcon on that file's own rule — its names are the
-// category ids and nothing else, and these are pictographs. Named by shape,
+// module ids and the shell's controls, and these are pictographs. Named by shape,
 // not subject: "clock" captions queues, schedules and history alike, and a
 // name like "queue" would be wrong on two of them.
 //

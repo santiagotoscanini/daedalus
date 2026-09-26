@@ -2,13 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 
 // The two client-side clocks this dashboard runs: one that ticks, and one that
 // asks.
-//
-// Both were written out per page — the same six lines of `setInterval`,
-// `clearInterval` and a cleanup, four times — and the copies had quietly
-// stopped agreeing: three of the four pollers fire again on schedule whether
-// or not the previous request has come back, so one slow answer leaves several
-// in flight at once and the newest one to return wins, which is not the newest
-// one sent.
 
 /**
  * `Date.now()` after mount only, ticking every second while `active`.
@@ -37,13 +30,12 @@ export function useNow(active: boolean): number | null {
 /**
  * Call `fn` every `ms` while `active`, never twice at once.
  *
- * The in-flight guard is the reason this is a hook rather than four
- * `setInterval`s. These poll server functions that read a host file or a
- * database, on a 2–3s tick against a box that is often rebuilding: a request
- * that takes longer than the interval used to be overlapped by the next one,
- * and since nothing ordered the answers, a slow reply landing after a fast one
- * would put the OLDER state on the page and leave it there until the next
- * tick. Skipping a tick while one is outstanding costs at most one period of
+ * The in-flight guard is the point. Callers poll server functions that read a
+ * host file or a database, on a 3–5s tick against a box that is often
+ * rebuilding: without it a request slower than the interval is overlapped by
+ * the next one, and since nothing orders the answers, a slow reply landing
+ * after a fast one would put the OLDER state on the page until the next tick.
+ * Skipping a tick while one is outstanding costs at most one period of
  * latency and cannot reorder anything.
  *
  * `fn` is read through a ref: it is a fresh closure every render, and taking it

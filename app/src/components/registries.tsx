@@ -30,15 +30,7 @@ const REPO_MUTED = 'bg-transparent text-muted-foreground'
 
 /* ── container registry ───────────────────────────────────────────────── */
 
-/**
- * zot's neighbours.
- *
- * The build service is what PUSHES here, so "the image never arrived" is
- * answered in its log rather than zot's — zot only ever saw the pushes it got.
- * The config render is the other end: it writes the htpasswd zot authenticates
- * against, and a failure there leaves a registry that starts and then refuses
- * every credential.
- */
+/** zot's neighbours: the two logs that answer what zot's own cannot (each `note` says why). */
 const ZOT_NEIGHBOURS: readonly LogNeighbour[] = [
   {
     source: { unit: 'daedalus-build.service' },
@@ -186,10 +178,9 @@ export function ImagesView({ d }: { d: ImagesData }) {
 /* ── npm registry ─────────────────────────────────────────────────────── */
 
 /**
- * verdaccio's neighbours.
- *
- * Both are here for the same reason: verdaccio can be perfectly healthy and
- * still be wrong, and neither failure shows up in its own log.
+ * verdaccio's neighbours. Both are here for the same reason: verdaccio can be
+ * perfectly healthy and still be wrong, and neither failure shows up in its
+ * own log.
  */
 const VERDACCIO_NEIGHBOURS: readonly LogNeighbour[] = [
   {

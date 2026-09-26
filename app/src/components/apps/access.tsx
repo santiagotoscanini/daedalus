@@ -17,8 +17,8 @@ type AccessData = Extract<AppTabData, { kind: 'access' }>['access']
  * Who is reaching this app from the internet.
  *
  * Only the Cloudflare tunnel can answer that. The edge forwards
- * Cf-Connecting-Ip and Cf-Ipcountry, traefik keeps exactly those two headers,
- * and Loki has the access log — so an app published through the tunnel has a
+ * Cf-Connecting-Ip and Cf-Ipcountry, traefik's access log keeps both (beside
+ * User-Agent and X-Forwarded-For), and Loki has that log — so an app published through the tunnel has a
  * real client identity per request. A LAN request has none: rootlessport
  * rewrites the source address on the way in, and every device in the house
  * arrives as the same bridge IP.
@@ -105,8 +105,9 @@ export function Access({
   return (
     // The strip, the board grid and the range picker are plain siblings here,
     // so the column supplies the gap between them — and the strip's own bottom
-    // margin, for normal flow, is taken back off so the two do not add up.
-    // `.strip` is StatStrip's class in components/viz.tsx.
+    // margin, for normal flow, is meant to be taken back off so the two do not
+    // add up. StatStrip no longer carries a `.strip` class (its box is
+    // viz.tsx's STAT_STRIP), so `[&>.strip]:mb-0` currently matches nothing.
     <div className="flex flex-col gap-[0.85rem] [&>.strip]:mb-0">
       <div className="flex flex-wrap items-baseline justify-between gap-[0.6rem]">
         {/* No cap on the measure: the sentence names a hostname and a window
@@ -308,17 +309,17 @@ export function Access({
 }
 
 /**
- * The Security dashboard's geomap, pinned to one host.
+ * The App access dashboard's geomap, pinned to one host.
  *
  * A real Grafana panel in an iframe rather than a map rebuilt here. Grafana
  * already owns the projection, the basemap and the ISO-code gazetteer that
  * turns `Cf-Ipcountry` into a coordinate, and none of that is worth a second
- * implementation. `stacks/monitoring/assets/dashboards/System/app-access.json`
- * carries a `$host` variable for exactly this; the same dashboard opened
+ * implementation. The dashboard
+ * (`nix/modules/monitoring/assets/dashboards/System/app-access.json`) carries a `$host` variable for exactly this; the same dashboard opened
  * without one is the fleet-wide view.
  *
  * Two things had to be true for this to work, and both live in
- * stacks/monitoring: grafana no longer sends `X-Frame-Options: deny`
+ * nix/modules/monitoring: grafana no longer sends `X-Frame-Options: deny`
  * (GF_SECURITY_ALLOW_EMBEDDING), and the narrower `frame-ancestors` CSP that
  * replaced it names daedalus. daedalus and grafana are both under
  * the base domain, so they are same-site and grafana's session cookie rides along

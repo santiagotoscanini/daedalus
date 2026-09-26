@@ -1,14 +1,12 @@
 /* ── the roster ───────────────────────────────────────────────────────────
 
    Everything this box could still be asked about, joined from two sources
-   that disagree on purpose — and, since the Sessions board was folded into
-   it, the only list of connected sessions on the page as well. That board
-   drew the live sessions and this one drew the same sessions again as its
-   `alive` rows; one population in two lists meant holding both to answer
-   "what is running". What was only on that board — the `cse_…` id, the CLI's
-   own name, RSS, CPU, and the session's own activity clock — is on the row it
-   describes now. The `StatStrip` above is not a duplicate of either and
-   stays: `N of 32` is a fact about the server, not about a session. */
+   that disagree on purpose (lib/claude-roster.ts), and the page's only list
+   of connected sessions: one population in two lists would mean holding both
+   to answer "what is running". A connected session's own facts — the
+   claude.ai id, the CLI's name, RSS, CPU, its activity clock — are on its
+   row. The `StatStrip` above is not a duplicate: `N of <max>` is a fact
+   about the server, not about a session. */
 
 // Types ONLY: the host module behind this type reads node:fs, so its idle
 // shape is restated below rather than imported.
@@ -47,9 +45,9 @@ const SESSION_IDLE: ClaudeSessionStatus = {
 export function RosterBoard({ data }: { data: ClaudeData }) {
   const { roster } = data.facts
   const rows = sessionRows(roster, data.facts.sessions)
-  // Session files with no process behind them. Carried over from the Sessions
-  // board's foot: they are not rows — there is nothing running to draw — and
-  // they are not an error either, so a count is the whole of what to say.
+  // Session files with no process behind them. Not rows — there is nothing
+  // running to draw — and not an error either, so a count is the whole of
+  // what to say.
   const stale = data.facts.sessions.filter((s) => !s.alive).length
   const shown = rows.slice(0, ROSTER_ROWS)
 
@@ -137,20 +135,14 @@ export function RosterBoard({ data }: { data: ClaudeData }) {
         </p>
       )}
 
-      {/* ONE paragraph, deliberately. This foot carried ten, and nine of them
-          explained things the board now says by itself: the populations and
-          their verbs are the chips and the buttons, a dormant row prints `no
-          process`, an armed row states what the press costs, and a fact the
-          CLI never recorded is simply absent from the metadata line. That
-          reasoning was not deleted, only moved to where the behaviour is —
-          lib/claude-roster.ts (two sources, the pid rule, the four verbs, the
-          trust guard), lib/claude-meta.ts (how the counts and the prompt are
-          derived, why a zero never prints, what the file mode pays for),
-          lib/dashboard/claude.ts (the two clocks behind "last seen"),
-          host/claude-session-request.ts (the selector and its guards),
-          host/claude-rc-request.ts (what a restart does to a session).
-          What stays here is the one thing a reader would otherwise get
-          WRONG, and the one limit on what the board is able to claim. */}
+      {/* ONE paragraph, deliberately: the board says the rest by itself (the
+          chips and buttons are the populations and their verbs, an armed row
+          states its cost), and the reasoning lives where the behaviour is —
+          lib/claude-roster.ts (the two sources, the pid rule, the four verbs),
+          lib/claude-meta.ts (the counts, the prompt, why a zero never prints),
+          host/claude-session-request.ts (the selector and its guards). What
+          stays here is the one thing a reader would otherwise get WRONG, and
+          the one limit on what the board is able to claim. */}
       <p className={FOOT}>
         <b>Resume continues the session it names.</b>{' '}
         <span className={MONO}>claude --resume &lt;id&gt;</span> keeps that id and appends to that
@@ -165,13 +157,13 @@ export function RosterBoard({ data }: { data: ClaudeData }) {
   )
 }
 
-/* `dormant` counted apart from both, because it is the population that was
-   being read as the wrong one: a background RECORD with no process behind it
-   is not running, and it is not resumable either — the CLI still owns that
-   conversation.
+/* `dormant` counted apart from `background` and `resumable`, because it is
+   the population most easily read as one of them: a background RECORD with no
+   process behind it is not running, and it is not resumable either — the CLI
+   still owns that conversation.
 
-   Only the populations that exist. Four counts with zeroes in two of them is
-   a legend, not a reading — and the board's whole argument is that these four
+   Only the populations that exist. Five counts with zeroes in three of them is
+   a legend, not a reading — and the board's whole argument is that these five
    are different things, which is easiest to see when only the present ones
    are named. */
 function populationLine(rows: RosterEntry[]): string {

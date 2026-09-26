@@ -211,10 +211,9 @@ export function Segmented<T extends string>({
   // written to the database and then failing at Apply with a build error.
   //
   // `dot` puts each option's own health on the button that selects it, which
-  // is the only place it can be read WITHOUT selecting it — the alternative
-  // was a second row of the same names carrying the same dots, and a name
-  // printed twice is a name the reader has to reconcile. `null` is "cannot
-  // tell", drawn grey, and is not the same claim as down.
+  // is the only place it can be read WITHOUT selecting it and without a
+  // second row printing the same names. `null` is "cannot tell", drawn grey,
+  // and is not the same claim as down.
   options: {
     value: T
     label: string
@@ -233,7 +232,7 @@ export function Segmented<T extends string>({
         // A pill of buttons that has to be allowed to become two rows.
         // `inline-flex` with no wrap is a single unbreakable box as wide as
         // its labels, so a control with five options — or three long ones —
-        // was simply wider than a phone, and the page scrolled sideways.
+        // would be wider than a phone and scroll the page sideways.
         'inline-flex max-w-full flex-wrap overflow-hidden rounded-[9px] border bg-(--panel-2)',
       )}
     >
@@ -306,8 +305,8 @@ export function Slider({
         // width underneath — and only laid out in three columns when the board
         // it sits in is wide enough for the label column to hold its hint
         // without wrapping one word per line. `board` is the query container
-        // declared on `.board-body`, so the shape follows the panel's width
-        // rather than the viewport's.
+        // declared on `BOARD_BODY` (viz.tsx), so the shape follows the panel's
+        // width rather than the viewport's.
         'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-[0.4rem] border-b border-b-(color:--border-soft) py-[0.7rem] last-of-type:border-b-0',
         '@min-[34rem]/board:grid-cols-[minmax(15rem,1fr)_minmax(10rem,1.5fr)_6.5rem] @min-[34rem]/board:gap-x-6 @min-[34rem]/board:gap-y-2',
         disabled === true && 'opacity-50',

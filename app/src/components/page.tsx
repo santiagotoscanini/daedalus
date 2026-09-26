@@ -7,8 +7,8 @@ import { cn } from '../lib/cn'
  *
  * A component rather than a pair of class names, because the two pieces have
  * a relationship — the lede's negative top margin closes the gap the header's
- * bottom margin opens, and every page that spelled them out separately had to
- * remember both. There were three spellings of that pair before this existed.
+ * bottom margin opens, and a page that spelled them out separately would have
+ * to remember both.
  */
 export function PageHead({
   title,

@@ -13,9 +13,9 @@ import { ASIDE, Bad, ERROR_NOTE, Mono, NOTE, Pending, Stack, Unset } from './sha
 // box is configured with and whether the token can still read it, and the one
 // form that replaces the token.
 //
-// Its own module because the token is the only credential on this page the
-// operator can change from here, and the rules around it — checked before it
-// is kept, never echoed back — are the whole reason the form exists.
+// Its own module because the rules around the token — checked before it is
+// kept, never echoed back — are the whole reason the form exists (the GitHub
+// App's key has its own file, github-paste-key.tsx, for the same reason).
 
 /** An id the box is configured with, and the name the service knows it by. */
 export function Identified({

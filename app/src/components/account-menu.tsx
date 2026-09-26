@@ -35,14 +35,13 @@ import {
 
 // The foot of the rail: who is signed in, and the few things that are about
 // that person rather than about the box — their profile (a page of its own,
-// /profile), the settings, the theme, their passkeys, signing out. Settings moved in here from a row of its
-// own: it is reached far less often than it was taking up room, and the corner
+// /profile), the settings, the theme, their passkeys, signing out. Settings
+// lives here rather than on a rail row: it is reached rarely, and the corner
 // of a control plane is where people look for themselves.
 //
 // The account arrives deferred (routes/__root.tsx) because it asks Pocket ID,
-// and no page should wait on that to paint. Until it lands — and under the
-// gate, where nobody is signed in — the button opens the same menu without
-// the header.
+// and no page should wait on that to paint. Until it lands — and when it
+// answers null — the button opens the same menu without the header.
 
 const SCHEMES: { value: Scheme; label: string; icon: ReactNode }[] = [
   { value: 'light', label: 'Light', icon: <SunIcon /> },
@@ -55,7 +54,7 @@ type Props = {
   theme: ThemeChoice
   /** Settings or Profile is open: the button lights like a rail row would. */
   active: boolean
-  /** The rail's own row, label and active looks (routes/__root.tsx). */
+  /** The rail's own row, label and active looks (shell/rail.tsx). */
   triggerClassName: string
   activeClassName: string
   labelClassName: string
@@ -64,9 +63,8 @@ type Props = {
 export function AccountMenu({ account, ...rest }: Props) {
   // One <Menu>, whatever the promise is doing: a skeleton until Pocket ID
   // answers, then the account, remembered across navigations
-  // (lib/settled.ts). A rejection from Pocket ID leaves it loading-shaped
-  // rather than the rail broken; under no gate, where nobody is signed in,
-  // it answers null and the menu opens without a header.
+  // (lib/settled.ts). `fetchAccount` never rejects: nobody signed in, or
+  // Pocket ID failing, answers null and the menu opens without a header.
   const a = useSettled('account', account)
   // Before React has wired the page — the first load in dev mode is a few
   // hundred script requests — the server's button would be inert, and a

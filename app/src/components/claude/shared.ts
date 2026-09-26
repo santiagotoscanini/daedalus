@@ -8,11 +8,14 @@
    Dropping the least important outright gives the rest room to be read. */
 export const NARROW_HIDE = 'max-[50rem]:hidden'
 
-/** Same arming window as the box restart, for the same reason. */
+/** Same arming window as the box restart (modules/system/view/host.tsx), for
+    the same reason: a control left armed by a distraction must not be
+    finished by a stray click later. */
 export const RC_ARM_MS = 10_000
 
-/* The restart control, the same shape as the box's on the Host tab: quiet at
-   rest, and the cost — and the red — appear only once it is armed. */
+/* The look of every control at a board's foot here, armed or not — the same
+   shape as the box restart on System › Host: quiet at rest, and the cost — and
+   the red — appear only once it is armed. */
 export const RESTART =
   'mt-[0.7rem] flex flex-col items-start gap-[0.55rem] border-(--border-soft) border-t pt-[0.75rem]'
 export const RESTART_ARMED = 'border-t-[color-mix(in_srgb,var(--danger)_40%,var(--border-soft))]'

@@ -3,8 +3,8 @@ import type { fetchApp } from '../../server/registry'
 export type LoaderData = Awaited<ReturnType<typeof fetchApp>>
 export type AppRecord = NonNullable<LoaderData>['app']
 
-/* The three prose faces every tab body on this page uses. Spelled once here
-   rather than repeated across ten files, the way lib/tone.ts spells the
+/* The prose faces and small shapes the app page's tab bodies share. Spelled
+   once here rather than repeated across a dozen files, the way lib/tone.ts spells the
    tone utilities: they are one decision, and a copy that drifts is a tab
    whose captions are a different grey from its neighbour's.
 
@@ -32,12 +32,13 @@ export const SECTION_HEAD =
 /** The subtitle beside a section head, back in sentence case. */
 export const SECTION_HEAD_SMALL = 'text-[0.76rem] font-normal tracking-normal normal-case'
 
-/** The pill shape `.chip` had: rounder and smaller than shadcn's Badge. */
+/** A pill, rounder and smaller than shadcn's Badge. */
 export const CHIP = 'rounded-full border px-[0.48rem] py-[0.1rem] text-[0.68rem]'
 
 /**
- * The quiet bordered button these pages use for a secondary action:
- * `Button variant="outline"` in the muted ink, so it reads as available but
- * not asked for. Kept as a constant because twenty call sites spell it.
+ * The quiet bordered button for a secondary action, on this page and the
+ * others that import it: `Button variant="outline"` in the muted ink, so it
+ * reads as available but not asked for. A constant because some thirty call
+ * sites spell it.
  */
 export const GHOST_BTN = 'text-(--text-muted)'

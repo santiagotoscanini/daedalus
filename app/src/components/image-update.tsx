@@ -23,7 +23,7 @@ import { Chip } from './viz'
 // impossible to trigger by accident. It names the tag it is moving to, it
 // names every OTHER container that moves with it, and while it runs it reports
 // the phase the host agent is actually in rather than spinning. The vocabulary
-// lives in host/image-update.sh; a phase this list has not heard of still
+// lives in nix/stacks/daedalus/host/image-update.sh; a phase this list has not heard of still
 // renders as progress rather than blanking the tracker.
 //
 // ── one run, one narrator ─────────────────────────────────────────────────
@@ -31,9 +31,9 @@ import { Chip } from './viz'
 // A queued batch is one run over several containers, so exactly one place on
 // the page reports it: the queue panel. A row narrates only a run whose sole
 // target IS that row, which is why `mine` reads `targets` rather than matching
-// the status's back-compat `container` field. Sixty-five rows each drawing the
-// same phase tracker for the same rebuild would be sixty-five copies of one
-// fact — and the tracker in the row would be claiming the run belongs to it.
+// the status's back-compat `container` field. Every row drawing the same phase
+// tracker for the same rebuild would be one fact copied down the page — and
+// the tracker in a row would be claiming the run belongs to it.
 
 const PHASES = [
   'validating',
@@ -327,9 +327,9 @@ export function UpdateControl({
 /**
  * The phase tracker, wherever the run is being narrated.
  *
- * Exported because a queued batch is narrated by the queue panel instead of by
- * a row, and a second copy of the phase vocabulary is a second copy that falls
- * behind host/image-update.sh.
+ * Exported because a queued batch is narrated by the queue panel
+ * (modules/system/view/updates.tsx) instead of by a row, and a second copy of
+ * the phase vocabulary would fall behind the host script's.
  */
 export function UpdateProgress({ status }: { status: ImageUpdateStatus }) {
   const at = PHASES.indexOf(status.phase as (typeof PHASES)[number])

@@ -76,8 +76,8 @@ export function TabBar<Id extends string>({
             // The `active` prop above is the ONLY source of activeness.
             // Without this, Link's default activeProps injects its own
             // `active` class by location match — which subset-matches on
-            // search params, so a default tab with empty search (Claude's
-            // Remote Control) stays lit while its sibling is selected.
+            // search params, so a default tab linked with empty search stays
+            // lit while its sibling is selected.
             activeProps={{}}
             replace
           >

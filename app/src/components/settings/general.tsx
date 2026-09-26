@@ -19,9 +19,7 @@ import { type SelectGroupSpec, SiteSelect, SiteText, SiteUnwritten } from './sit
 // and not the only guard.
 //
 // `zones` is null while Cloudflare is being asked; everything else renders at
-// once. What the box RUNS — the NixOS release, its support window, the
-// channel — is not a setting and lives on System › Updates with the other
-// things that can move.
+// once. The NixOS release is not here on purpose (routes/settings.tsx says why).
 
 export function General({
   settings,

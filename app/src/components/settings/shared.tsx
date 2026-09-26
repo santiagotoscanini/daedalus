@@ -84,7 +84,7 @@ export function Section({
   title: string
   /**
    * Drawn before the title. A path under public/ is a service's own logo —
-   * used when the section IS that service (Cloudflare, Pi-hole, Pocket ID);
+   * used when the section IS that service (Cloudflare, Pi-hole, GitHub);
    * an element is a lucide icon, for sections that are a concept instead.
    */
   icon?: string | ReactNode
@@ -226,10 +226,11 @@ export function SourceNote({
   )
 }
 
-/* The three form idioms Integrations' panels share: the red line under a
-   field, the label above one, and the bordered box a disclosed form sits in.
-   Here rather than in one of them because a form that looked slightly
-   different from the one beside it would read as a different kind of thing. */
+/* The three form idioms every settings form shares (and the login page
+   borrows): the red line under a field, the label above one, and the bordered
+   box a disclosed form sits in. Here rather than in one of them because a form
+   that looked slightly different from the one beside it would read as a
+   different kind of thing. */
 
 export const ERROR_NOTE = 'm-0 text-[0.78rem] text-destructive'
 export const FIELD_LABEL = 'font-medium text-[0.8rem]'

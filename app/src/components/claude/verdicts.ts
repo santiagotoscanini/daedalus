@@ -1,21 +1,14 @@
 // The Claude and Shotter pages' pure helpers: the version verdicts, the live
 // session filter, the shot-run issue phrase.
 //
-// Types ONLY from lib/dashboard. The module behind them reads the host
-// snapshot through node:fs, and a value import from there would put that in
-// the browser bundle — see the warning at the foot of lib/dashboard/claude.ts.
-// That is why these derived helpers live beside the view and not beside the
-// loader.
+// Beside the view rather than beside the loader, and not by preference: types
+// ONLY from lib/dashboard, whose modules read the host snapshot through
+// node:fs (the import rule at the top of index.tsx).
 import type { ClaudeData, ClaudeFacts, ClaudeSession } from '../../lib/dashboard/claude'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { ShotCounts } from '../../lib/dashboard/shotter'
 import { num } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
-
-/* ── derived from the payload ─────────────────────────────────────────────
-   Beside the view rather than beside the loader, and not by preference: the
-   loader's module reads the host snapshot through node:fs, so importing a
-   value from it here is what takes the page down. */
 
 /** Mid-turn now, by the session's own word or by its clock. */
 export function working(session: Pick<ClaudeSession, 'status' | 'lastActivityAt'>): boolean {

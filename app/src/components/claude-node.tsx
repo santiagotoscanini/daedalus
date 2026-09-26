@@ -18,7 +18,7 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 // build it should be, when does the login run out — answered from one
 // source instead of three: the agent's status page on the node, which
 // carries what its tray reports about the `claude remote-control` it
-// supervises (agent/src/claude.rs). The boards the box's page draws from
+// supervises (agent/src/claude/). The boards the box's page draws from
 // Loki and the release feed are not here: the node's log stays on the node,
 // and which release is current is a question for the box's own page rather
 // than a second copy of the same feed.
@@ -430,29 +430,19 @@ function SessionRow({ s }: { s: NodeClaudeSession }) {
 }
 
 /**
- * Restart the node's server. Not the box's two-step arming: the cost is the
- * node's sessions, which are named right here, and the request rides the
- * next hello rather than a bridge — so "queued" is the honest state, and
- * the page's next load shows what happened.
- */
-
-/**
  * How Claude Code got onto this machine, read from where the agent found it.
  *
  * It decides which verb updates it, so an update button that does not say
  * this is asking to be trusted about something it has not told you. The
- * agent's `find_cli` searches in a method-revealing order (agent/src/
- * claude.rs) — the native installer's `~/.local/bin`, npm's global bin,
- * Homebrew's prefixes, then PATH — so the path it returns is the answer.
- *
- * Named from the path rather than reported by the agent on purpose: every
- * agent already sends the path, including the ones in the field, so this
- * works before a single machine has been updated.
+ * agent's `find_cli` searches in a method-revealing order
+ * (agent/src/claude/cli.rs) — the native installer's `~/.local/bin`, npm's
+ * global bin, Homebrew's prefixes, then PATH — so the path it returns is the
+ * answer.
  */
 function methodOf(c: NonNullable<NodeClaudeData['report']>): string | null {
   // The agent's own answer when it sends one (0.12.0+), else the same rule
-  // applied here to the path it does send. Both readings, so the fact
-  // appears on every machine rather than only the updated ones.
+  // applied here to the path every agent sends, so the fact appears on
+  // machines whose agent predates the field too.
   return c.installMethod ?? installMethod(c.path)
 }
 
@@ -480,7 +470,7 @@ function installMethod(path: string | null): string | null {
  * here can do, and the method beside Command above is what says so.
  *
  * No bridge and no poller: the request rides the next hello, so "queued" is
- * the honest state — the same shape the restart below has always had.
+ * the honest state — the same shape as the restart below.
  *
  * Nothing is interrupted. The new CLI installs beside the running one and
  * takes effect the next time it starts, so after this the page shows the
@@ -535,6 +525,12 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
   )
 }
 
+/**
+ * Restart the node's server. Not the box's two-step arming: the cost is the
+ * node's sessions, which are named right here, and the request rides the
+ * next hello rather than a bridge — so "queued" is the honest state, and
+ * the page's next load shows what happened.
+ */
 function RestartControl({ node }: { node: NodeRow }) {
   const { run, busy, error } = useAction()
   return (

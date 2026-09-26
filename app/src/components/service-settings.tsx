@@ -29,9 +29,9 @@ import { Chip } from './viz'
 // Every control here is a site edit (modules.enabled and modules.web in
 // site.json) and lands on the next Apply, so each does two things and never a
 // third: it writes the draft, and it says what the draft would do. Nothing
-// here rebuilds. The Apply bar at the top of Apps is where the change lands,
-// as for every other site change, and the dialog says so at its foot. The
-// same dialog opens from a tab's head and from Settings › Modules.
+// here rebuilds. The Apply bar (pending-apply-bar.tsx, on every page) is where
+// the change lands, as for every other site change. The same dialog opens
+// from a module page's tab row, the module boards, and Settings › Modules.
 
 const OVERLAY = 'fixed inset-0 z-[70] bg-[color-mix(in_srgb,var(--overlay)_45%,transparent)]'
 const PANEL = cn(

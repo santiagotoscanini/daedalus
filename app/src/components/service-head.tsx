@@ -10,14 +10,15 @@ import { Chip } from './viz'
 
 // The header a page gets when its subject is one identifiable SERVICE.
 //
-// Used by every tab of Gaming and AI: artwork, the name, the version running,
-// one sentence, and the link you actually came to click. Shared rather than
+// Opens nearly every service tab (a tab opts out with `TabSpec.head: false`,
+// lib/modules/manifest.ts): artwork, the name, the version running, one
+// sentence, and the link you actually came to click. Shared rather than
 // copied because the layout carries an argument that should not be re-decided
-// per page — the version sits directly under the name, because on both of
-// those pages every other number is a comparison against it.
+// per page — the version sits directly under the name, because on a service
+// page every other number is a comparison against it.
 //
-// The category rail is monochrome and the sub-tabs are text, so this is the
-// one place on a page where the subject is identifiable at a glance.
+// The rail is monochrome and the sub-tabs are text, so this is the one place
+// on a page where the subject is identifiable at a glance.
 
 export type CompareRow = {
   k: string
@@ -74,10 +75,9 @@ export function ServiceHead({
           )}
           {verdict !== undefined && <VersionCompare verdict={verdict} rows={compare ?? []} />}
         </p>
-        {/* Out of the 74ch prose measure the rest of the app's ledes keep. That
-            cap is right for a paragraph read down a column and wrong here: this
+        {/* Out of the 74ch prose measure the rest of the app's ledes keep: this
             is one sentence on a line with a 44px logo and a button beside it,
-            and the cap folded it in half while a third of the header sat
+            and the cap would fold it in half while a third of the header sat
             empty. The header is the measure. */}
         <p className="mt-[0.3rem] mb-0 max-w-none text-[0.82rem] text-(--text-muted)">{lede}</p>
       </div>
@@ -96,10 +96,10 @@ export function ServiceHead({
  * The verdict, with what produced it one hover away.
  *
  * "current" is the answer; the versions it was compared against are the
- * working. As headline cards those comparisons read as unrelated numbers
- * competing for the same glance, and they spent a quarter of the page
- * restating what the one word already said. The reveal mechanics — and why
- * `title` is not the mechanism — live on InfoHint.
+ * working. As headline cards those comparisons would read as unrelated
+ * numbers competing for the same glance, restating what the one word already
+ * says. The reveal mechanics — and why `title` is not the mechanism — live on
+ * InfoHint.
  */
 function VersionCompare({
   verdict,
@@ -214,7 +214,8 @@ export function freshnessRow(f: ImageFreshness | null): CompareRow[] {
  *
  * Split out because the OTHER half is not the same question everywhere. Most
  * pages pair it with the running version and say where that reading came from;
- * the AI tabs pair it with what the flake PINS, because on those the running
+ * the AI tabs pair it with what the flake PINS (`comparePinned`,
+ * modules/ai/view/shared.tsx), because on those the running
  * number and the pin are genuinely different facts. Sharing this row is what
  * stops two tabs from wording "3 releases between them" differently.
  *
@@ -255,13 +256,9 @@ export function compareOf(gap: VersionGap, note: string): CompareRow[] {
 /**
  * Where a running version came from, in the four words the header has room for.
  *
- * Not decoration: the three sources carry different weight. A version the
- * service reported about itself is a measurement. One read off the tag the
- * flake pins is reproducible from git but only true while the tag names a
- * release. One read off the image's OCI label is a claim the publisher made
- * about an artefact that a re-pull could silently replace — which is exactly
- * the case for every service pinned to a moving tag, and the reason those
- * pages used to say nothing at all.
+ * Not decoration: the sources carry different weight — see `RunningVersion`
+ * (lib/dashboard/images.ts) for why a pinned tag and an image label are not
+ * the same kind of claim.
  */
 export const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
   pin: 'from the tag the flake pins',

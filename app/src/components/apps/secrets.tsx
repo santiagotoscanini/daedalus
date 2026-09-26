@@ -3,11 +3,10 @@ import { type ReactNode, useState } from 'react'
 import type { SecretSetStatus } from '../../host/secret-set-request'
 import { type AppSecretKey, secretKeyError } from '../../lib/apps/secret-keys'
 import { cn } from '../../lib/cn'
-// ./env-groups, NOT ./env-snapshot: this is client code, and env-snapshot
-// imports node:fs/promises. Vite externalises node builtins for the browser,
-// so importing a VALUE from that module — even a lookup table — makes the
-// page throw on load. Type-only imports would be erased and safe; GROUP_LABELS
-// is not.
+// lib/env-groups, NOT host/env-snapshot: this is client code, and a VALUE
+// import from the module that reads the disk (GROUP_LABELS is one) pulls node
+// builtins into the browser bundle and the page throws on load. Type-only
+// imports would be erased and safe.
 import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../../lib/env-groups'
 import { when } from '../../lib/format'
 import type { Result } from '../../lib/result'
@@ -502,8 +501,8 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
  * Name + value, or value alone when the name is fixed (Replace).
  *
  * The name is validated as you type with the same function the server function
- * and the host agent use, so the three cannot disagree about what a variable
- * name is. The value is a password field that starts empty, is never given a
+ * uses (lib/apps/secret-keys.ts, which also names the host agent's third
+ * check), so the form cannot accept a name the server refuses. The value is a password field that starts empty, is never given a
  * value from the server, and goes out of scope with the form.
  */
 function SecretForm({

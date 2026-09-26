@@ -186,10 +186,11 @@ export function Overview({
                 v: <code title={app.effectiveImage}>{shortImage(app.effectiveImage)}</code>,
               },
               {
-                // The registry hook is the real trigger (zot POSTs
-                // api.deploy on every push — live in seconds); the timer is
-                // the safety net behind it. "Every 2 min" alone had the
-                // operator believing the poll was the mechanism.
+                // A push is the real trigger — the box build starts the deploy
+                // unit itself, and zot POSTs api.deploy for any image pushed —
+                // so an app is live in seconds; the timer is the safety net.
+                // "Every 2 min" alone had the operator believing the poll was
+                // the mechanism.
                 k: 'auto-deploy',
                 v: app.sourceMode === 'local' ? 'n/a, source is live' : 'on push · 2-min fallback',
               },
@@ -227,7 +228,7 @@ export function Overview({
           {d.build !== null && <DetectionLine app={app.name} build={d.build} />}
         </Board>
 
-        {/* No Database, Access or Egress boards here: each is a section in
+        {/* No Database, Access or VPN boards here: each is a section in
             the app rail with a fuller page, and the overview repeating their
             facts was the rail's list restated as cards. */}
 

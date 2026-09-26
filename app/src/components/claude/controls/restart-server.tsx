@@ -1,9 +1,8 @@
 // The Remote control board's second verb: restart the server, armed first
 // because every connected session dies with it.
 
-// Types ONLY. claude-rc-request imports the bridge, which reads node:fs, so a
-// value import would put that in the browser bundle — which is why its idle
-// shape is restated below rather than imported.
+// Types ONLY (the import rule at the top of ../index.tsx): claude-rc-request
+// reads node:fs through the bridge, so its idle shape is restated below.
 import type { ClaudeRcStatus } from '../../../host/claude-rc-request'
 import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
@@ -41,8 +40,8 @@ const RC_IDLE: ClaudeRcStatus = {
  * recovering a wedged server, or landing the build a rebuild left pending,
  * is either this button or a reboot of the whole box.
  *
- * Two steps like the box restart, but the cost spelled out at arm time is a
- * different one: sessions, not the house. And unlike its big sibling this
+ * Two steps like the box restart on System › Host, but the cost spelled out at
+ * arm time is a different one: sessions, not the house. And unlike that one this
  * flow settles normally — the host agent outlives the restart and writes a
  * real done/failed, so the ordinary status poll covers it.
  */

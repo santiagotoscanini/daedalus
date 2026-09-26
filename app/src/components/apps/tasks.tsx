@@ -42,13 +42,8 @@ type TaskDraft = AppRecord['tasks'][number]
  *
  * One card per declared task: what it is, when it runs (in words AND as the
  * raw `OnCalendar` string, because the sentence is a convenience and the
- * string is the contract), what it runs, and how its last run ended.
- *
- * The output is NOT under the app's container label. A task is its own
- * systemd unit — `app-<name>-task-<id>.service` — so its lines carry a `unit`
- * label and no container one, which is the case `LogSource = { unit }` exists
- * for. Reading them under `container="app-<name>"` would show the app's own
- * log and silently omit every line the task ever wrote.
+ * string is the contract), what it runs, and how its last run ended. The
+ * output is read by unit, not by the app's container — see TaskLogs.
  */
 export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
   const { tasks, running } = td.tasks
@@ -66,8 +61,8 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
    * field: straight to Postgres through `saveApp`, then invalidate so the
    * loader recomputes drift and the Apply bar lights.
    *
-   * The whole list rather than one task because that is what the column is —
-   * `updateApp` replaces the rows, so a partial send would be a deletion of
+   * The whole list rather than one task because `updateApp` replaces the
+   * app's task rows wholesale, so a partial send would be a deletion of
    * everything omitted. The refusal from the boundary is shown as it came
    * back: those sentences name the task and the rule, and are the same ones
    * the form shows while you type.
@@ -258,7 +253,7 @@ function EmptyState({
  * One log panel, with a picker, rather than one panel per task.
  *
  * Each panel is a cross-origin Grafana iframe that boots a whole app to draw
- * sixty lines, so a page with four tasks would pay for four of them before
+ * one log view, so a page with four tasks would pay for four of them before
  * anybody had asked to read any. The Loki selector is an exact `unit="…"`
  * match — there is no prefix form — so one panel means one chosen task.
  */
@@ -288,9 +283,10 @@ function TaskLogs({ tasks }: { tasks: TaskRow[] }) {
         </div>
       )}
       {/* `.service`, and the `unit` form of LogSource: a task is its own
-          systemd unit, so alloy labels its lines with that unit and with no
-          container at all. Asking for `container="app-<name>"` here would
-          show the app's own log and silently omit every line the task wrote. */}
+          systemd unit (`app-<name>-task-<id>.service`), so alloy labels its
+          lines with that unit and with no container at all. Asking for
+          `container="app-<name>"` here would show the app's own log and
+          silently omit every line the task wrote. */}
       <GrafanaLogs source={{ unit: `${shown.unit}.service` }} title={`${shown.id} output`} />
     </>
   )
@@ -499,7 +495,7 @@ function RunNowButton({
   )
 }
 
-/** The input face the app's other editors use (settings.tsx spells the same). */
+/** The input face the app's other editors use (settings.tsx spells the same string inline). */
 const INPUT =
   'h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)'
 

@@ -16,7 +16,7 @@ import { VIZ_EMPTY } from './shared'
 // read, changed and diffed in the open.
 //
 // The mirror of the Secrets tab beside it, and deliberately its opposite in
-// every way that matters. A secret is write-only because the container holds
+// every way that matters. A secret is write-only because daedalus holds only
 // an encrypt-only sops identity; a variable is a row in Postgres, shown in
 // full, exported into site/apps.json by an Apply and committed in the clear.
 // So this editor shows values, and the one thing it refuses is a name the

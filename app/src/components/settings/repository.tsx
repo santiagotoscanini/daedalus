@@ -17,16 +17,15 @@ import { type SelectGroupSpec, SiteSelect } from './site-fields'
 // The configuration repository, and the one directory in it that daedalus
 // writes.
 //
-// `site/` is data, not code: what this box is, as JSON. Nothing is built from
-// it yet — it is written FROM the running configuration, and it has to be
-// provably identical to that for a while before anything is allowed to build
-// from it instead. So the interesting row is not the commit; it is whether the
-// file is what this box would write now.
+// `site/` is data, not code: what this box is, as JSON, and the document nix
+// defines the site constants from (nix/platform/site.nix). So the interesting
+// row is not the commit; it is whether each file is what this box would write
+// now (core/site siteState compares it with the desired document).
 //
 // Source control is the operator's. What the host cannot delegate is staging:
 // a flake sees only tracked files, so a file written here and never added
-// fails the very rebuild it was written for. The tab says which of the three
-// states the directory is in, in one sentence each.
+// fails the very rebuild it was written for. The tab says which state the
+// directory is in, in one sentence each (SourceControl).
 
 export function Repository({
   settings,
@@ -198,8 +197,8 @@ function AgainstOrigin({ upstream }: { upstream: RepoFacts['upstream'] }) {
 /* ── The site directory ────────────────────────────────────────────────── */
 
 /**
- * One of three sentences, and the switch that only makes sense in one of
- * them. The sentences are the whole point: each state has a consequence the
+ * One sentence per state of the directory, and the switch that only makes
+ * sense once it is inside the configuration repository. The sentences are the whole point: each state has a consequence the
  * operator should know about before pressing anything.
  */
 function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) {

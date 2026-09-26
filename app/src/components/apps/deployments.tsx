@@ -159,9 +159,9 @@ export function Deployments({
 /**
  * The deploy journal, folded.
  *
- * Deploys only: the build half is not a log stream any more — builds run on
- * this box and are rows with their own page (BuildsBoard above), so what is
- * left here is deploy.sh's own account of pull, restart and health-check.
+ * Deploys only — builds are rows with their own page (BuildsBoard above) — so
+ * this is the deploy unit's own journal (deploy.sh's account of pull, restart
+ * and health-check), the last 6 hours of it from Loki.
  */
 function Activity({ activity }: { activity: ActivityData }) {
   const rolled = rollUp(activity)

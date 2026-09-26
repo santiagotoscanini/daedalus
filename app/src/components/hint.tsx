@@ -5,7 +5,7 @@ import { cn } from '../lib/cn'
  * The house disclosure: a trigger whose explanation appears beside it on
  * hover or keyboard focus.
  *
- * CSS-only, revealed by `group-hover` and `group-focus-within`: these pages
+ * CSS-only, revealed by `group-hover` and `group-focus-visible`: these pages
  * stream, so a popover that needed hydration would be inert for the first
  * moment, and a keyboard has no hover. The trigger is a real <button>, which
  * is what makes it focusable without a suppressed lint.
@@ -13,13 +13,9 @@ import { cn } from '../lib/cn'
  * `title` is deliberately NOT the mechanism: it truncates, it cannot hold
  * labelled rows, and it appears after a delay long enough that nobody waits.
  *
- * The reveal lives HERE rather than in the caller's class pair, which is the
- * one thing that changed in the Tailwind migration. It used to be a rule per
- * site (`.vercmp:hover .vercmp-card`), so a card only appeared if its host
- * class had a matching selector somewhere in the stylesheet — an invisible
- * dependency that broke silently the moment a caller was restyled. Callers
- * now supply position and size only; showing and hiding is not theirs to
- * get wrong.
+ * The reveal lives HERE, not in the caller: callers supply the card's
+ * position and size only, so no caller's restyle can silently orphan the
+ * show/hide rule.
  */
 export function InfoHint({
   className,

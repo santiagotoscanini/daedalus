@@ -29,8 +29,9 @@ import { FollowLog } from './follow-log'
 // The build page's boards, one per question: what was built (Commit), what came
 // out (Result), how it went (Phases, Checks), what Railpack made of the repo
 // (Detection, Resolved tools, Railpack said), what the push produced (Image),
-// and the log. A `…Board` component is the whole card; the others are a card's
-// body, placed in their card by BuildDetail.
+// and the log. Commit, Result, Phases and Log draw their own card; the rest —
+// ImageBoard too, despite its name — are a card's body, placed in their card
+// by BuildDetail.
 
 /** A moment as UTC minutes: the same string on the server and in the browser. */
 export const at = (iso: string | null): string =>

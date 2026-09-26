@@ -15,7 +15,7 @@ import { Board, Chip, Facts } from './viz'
 // (weekly, by the autoupgrade timer) and by release (a hand edit to the
 // flake's input, and the one this card exists to argue for or against).
 //
-// Two halves, like the engine card's neighbours on this page. The facts —
+// Two halves. The facts —
 // release, nixpkgs commit, kernel, state version — come from the site export
 // with the rest of the tab's loader, at no network cost. Where the release
 // stands (support window, the channel's newer commits, the latest release,

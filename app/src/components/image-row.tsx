@@ -15,12 +15,12 @@ import { Chip, type Tone } from './viz'
 //
 // That order is the argument. Reading what changed is not a step before
 // updating, it IS the update decision, so the control lives INSIDE the
-// disclosure, never on the closed row. System › Updates draws every pin with
-// it; a service tab draws its own containers with the same row.
+// disclosure, never on the closed row. Who draws these rows:
+// lib/dashboard/update-rows.ts.
 //
 // Notes load on open, once. `<details>` renders its children whether or not it
 // is open, so a fetch on mount would be every row on the page asking GitHub at
-// once — the all-at-once load the row loader exists to avoid.
+// once — the budget spend that keeps notes out of the rows' own loader.
 
 const VERDICT: Record<UpdateVerdict, { label: string; tone: Tone }> = {
   'tag-moved': { label: 'tag moved', tone: 'warn' },
@@ -29,9 +29,7 @@ const VERDICT: Record<UpdateVerdict, { label: string; tone: Tone }> = {
   unknown: { label: 'no verdict', tone: 'muted' },
 }
 
-/* The same disclosure idiom as a release entry — same triangle, same hover,
-   same open rotation. Opening a container and opening a release inside it are
-   the same gesture one level apart. */
+/* A release entry's disclosure idiom, one level up (release-notes.tsx). */
 const SUMMARY = cn(
   'flex min-w-0 cursor-pointer list-none items-baseline gap-[0.7rem] px-[0.7rem] py-[0.45rem]',
   'hover:bg-(--raise) [&::-webkit-details-marker]:hidden',

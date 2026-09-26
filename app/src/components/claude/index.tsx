@@ -3,7 +3,7 @@
 // One file per board: remote-control-board, sign-in-board, connection-board,
 // roster/ (the session roster — board, row, tone tables), controls/ (the
 // three verbs with state machines behind them), verdicts.ts (the pure
-// helpers), shotter.tsx.
+// helpers), shared.ts (what several of them spell alike), shotter.tsx.
 //
 // The import rule every file here follows. Values come from server/claude —
 // server functions, which are the client-safe door to the host. From host/*
@@ -63,8 +63,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
 
         {/* Sign-in comes up beside Remote control. The two are one subject —
             what this server is, and whether it can still reach Anthropic —
-            and row 1 is where the page's standing facts belong. It takes the
-            8 the Sessions board vacated. */}
+            and row 1 is where the page's standing facts belong. */}
         <SignInBoard credentials={facts.credentials} refreshIn={refreshIn} />
 
         <ConnectionBoard events={data.events} />
@@ -76,10 +75,8 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         <ClaudeReleases gap={data.gap} note={verdict.note} />
 
         {/* The reason to open this page, so it sits where the attention goes
-            rather than at the foot, where it landed only because it was added
-            last. It is also now the ONLY list of sessions here: the Sessions
-            board above it drew the live ones a second time, and those are its
-            `alive` rows. */}
+            rather than at the foot. It is the page's only list of sessions:
+            the connected ones are its `alive` rows. */}
         <RosterBoard data={data} />
 
         <RemoteControlLogs />

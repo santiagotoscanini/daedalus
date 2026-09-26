@@ -16,10 +16,10 @@ import { BOARD, BOARD_BODY, BOARD_GRID, BOARD_HEAD, STAT, STAT_STRIP } from './v
 
 // Placeholders for content that has not arrived yet.
 //
-// Every page here is a fan-out across a dozen services, and the loader used to
-// hold the whole navigation until the slowest one answered. Now the shell
-// renders immediately and each region streams in behind one of these, so a
-// click always produces a page.
+// Every page here is a fan-out across a dozen services. Rather than holding
+// the navigation until the slowest one answers, the shell renders immediately
+// and each region streams in behind one of these, so a click always produces
+// a page.
 //
 // Three rules:
 //
@@ -33,17 +33,16 @@ import { BOARD, BOARD_BODY, BOARD_GRID, BOARD_HEAD, STAT, STAT_STRIP } from './v
 //   state is indistinguishable from a real reading is the one bug none of this
 //   is allowed to have.
 //
-//   The shimmer is the only unconditional animation in the app. Everything
-//   else here moves because something is happening; this moves because nothing
-//   has happened yet, which is exactly what it needs to say.
+//   A loading placeholder is the only unconditional animation in the app.
+//   Everything else moves because something is happening; this moves because
+//   nothing has happened yet, which is exactly what it needs to say.
 //
 // Every box below is IMPORTED from the file that owns the real component (the
 // UPPER_CASE constants above), never restated: a restated box is a box that
 // drifts, and the first rule is only true while the two strings are one.
 
-// The sweep, and the one place it is spelled. `@keyframes sk-sweep` still lives
-// in styles.css — a keyframes name is not a class, so it survives the rules
-// this file used to name.
+// The sweep, and the one place it is spelled. `@keyframes sk-sweep` lives in
+// styles.css, which keeps keyframes (a name, not a class) but no classes.
 const SWEEP = 'animate-[sk-sweep_1.35s_ease-in-out_infinite] motion-reduce:animate-none'
 
 // One grey block's own look, so `Bar` and the boxes that borrow it agree.
@@ -72,7 +71,8 @@ export function Disc({ size }: { size: number }) {
  * by ~80px the moment the loader resolves — at exactly the moment you have
  * started reading the first board.
  *
- * Which tabs get one is declared on the tab (`CategorySpec.tabs[].head`), not
+ * Which tabs get one is declared on the tab (`TabSpec.head` in
+ * lib/modules/manifest.ts), not
  * guessed here: the placeholder has to know before the data exists, and the
  * System layers genuinely have no service to head.
  */
@@ -95,9 +95,9 @@ export function ServiceHeadSkeleton() {
 /**
  * The board grid.
  *
- * Spans are passed in rather than assumed so the placeholder matches the real
- * layout of the page being loaded — all five category pages open with a wide
- * board next to a narrow one, and a uniform grid of six would visibly reflow.
+ * Spans are passed in (a manifest's `boardSpans`) rather than assumed so the
+ * placeholder matches the real layout of the page being loaded — a uniform
+ * grid would visibly reflow when the boards land.
  */
 export function BoardsSkeleton({ spans = [8, 4, 6, 6] }: { spans?: readonly number[] }) {
   return (
@@ -158,13 +158,10 @@ export function RowsSkeleton({ count = 3, height = 58 }: { count?: number; heigh
 /**
  * The first step of /apps/new: section head, search row, repository list.
  *
- * A generic `RowsSkeleton` was standing in for this, and it reserved neither
- * the head nor the search field — so the placeholder started where the lede
- * ended and the real thing started ~5rem lower. It borrows the picker's own
- * boxes (`PICKER_HEAD`, `PICKER_BOX`, `REPO_ROW`) rather than approximating
- * them, which is what keeps the reserved space and the real space the same
- * space; the rows are the picker's grid, so the bars land in the picker's
- * columns.
+ * Not a generic `RowsSkeleton`: that reserves neither the head nor the search
+ * field, so the real picker would land ~5rem lower. This borrows the picker's
+ * own boxes (`PICKER_HEAD`, `PICKER_BOX`, `REPO_ROW`), so the bars land in the
+ * picker's columns.
  */
 export function NewAppSkeleton() {
   return (

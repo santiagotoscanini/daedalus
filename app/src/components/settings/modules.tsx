@@ -9,8 +9,8 @@ import { Switch } from '../ui/switch'
 import { Board, BoardGrid, Chip } from '../viz'
 
 // Settings › Modules: every switch the box declares, in one list. The same
-// move as the foot of a service's page, without the walk there; a
-// structural module is a row that says why it stays.
+// move as the cog on a service's page (components/service-settings.tsx),
+// without the walk there; a structural module is a row that says why it stays.
 
 function Row({ m }: { m: ModuleSwitch }) {
   const router = useRouter()

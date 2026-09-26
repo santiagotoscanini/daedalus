@@ -10,8 +10,9 @@ import { type AppRecord, BOARD_FOOT, LEDE, STRIP_FOOT } from './shared'
  * Read entirely from postgres_exporter, and that is a boundary rather than a
  * shortcut: each app's role can reach its own database and nothing else, so
  * daedalus — which holds credentials for `daedalus` — genuinely cannot connect
- * to anything here. The exporter runs inside the cluster and publishes
- * per-database counters for all of them.
+ * to anything here. The exporter connects as a stats-only `monitoring` role
+ * (pg_monitor, no table data) and publishes per-database counters for all
+ * of them.
  *
  * So this page shows size, traffic and pressure, and never schema. A table
  * list would mean handing the control plane a connection to every app's data,

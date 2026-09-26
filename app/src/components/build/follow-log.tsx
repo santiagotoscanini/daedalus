@@ -7,7 +7,6 @@ const LOG_BOX =
   'm-0 max-h-[36rem] overflow-auto overscroll-contain rounded-[9px] border border-(--border-soft) bg-background p-3 font-mono text-[0.74rem] leading-[1.5] whitespace-pre text-(--text-muted)'
 
 export function FollowLog({ text }: { text: string }) {
-  // Follow the log's end while it grows, unless the reader has scrolled up.
   const logRef = useRef<HTMLPreElement>(null)
   const follow = useRef(true)
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the text changes, by design.

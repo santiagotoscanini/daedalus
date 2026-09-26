@@ -7,10 +7,9 @@
 // first, and anything settled folded away, so the step gets SHORTER the less
 // there is to say.
 //
-// Nothing it draws is a blocker any more. A new app is created `declared` —
-// nothing runs until it is promoted — so the step reports rather than gates,
-// and the one red thing it could once draw (a missing image) is now the
-// expected state of the app being created.
+// Nothing it draws is a blocker. A new app is created `declared` — nothing
+// runs until it is promoted — so the step reports rather than gates, and a
+// missing image is the expected state of the app being created.
 
 import { cn } from '../../lib/cn'
 import type { Check, CheckState, Readiness } from '../../lib/readiness'
@@ -158,9 +157,9 @@ function Row({
       <span
         className={cn(
           'font-bold',
-          // Numbered rather than marked: everything in the act list has
-          // already failed, so the useful thing to print is the order the
-          // fixes have to happen in.
+          // Numbered rather than marked for a `bad` check (see the act list
+          // above): the useful thing to print is the order the fixes have
+          // to happen in.
           step === undefined ? 'text-(--tone)' : 'font-normal text-danger',
         )}
         aria-hidden="true"

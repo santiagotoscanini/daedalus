@@ -17,9 +17,9 @@ export { BoxHead, MachineHead } from './shared'
 // The System page for a machine that is not this box, drawn from the one
 // document its agent publishes — and shaped to the KIND of machine.
 //
-// Three machines, three tab rows. Four tabs are the machine as a machine
-// and are the same everywhere: Host, Memory, Disks, Build, with the box's
-// ids so `?tab=memory` means the memory of whichever machine is picked.
+// Three kinds of node, three tab rows. Four tabs are the machine as a
+// machine and are the same everywhere: Host, Memory, Disks, Build, with the
+// box's ids so `?tab=memory` means the memory of whichever machine is picked.
 // After them the row is the operating system's own story:
 //
 // - a Windows PC has a motherboard whose maker publishes firmware, a
@@ -28,7 +28,10 @@ export { BoxHead, MachineHead } from './shared'
 // - a Mac has none of that. Its firmware moves with macOS, Apple publishes
 //   one list of what is newer with notes, and its apps come from the App
 //   Store, Homebrew and a folder; so it gets macOS and Apps;
-// - the box has pools, backups and the browser lab, on its own manifest.
+// - any other OS gets Motherboard and Updates only.
+//
+// The box itself is not a node: its row, with pools, backups and the browser
+// lab, is modules/system/manifest.ts.
 //
 // Claude and Chromium close every row: the remote-control server and the
 // sessions' eyes exist on each machine.

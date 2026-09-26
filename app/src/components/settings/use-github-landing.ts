@@ -33,10 +33,7 @@ export function useGithubLanding(
 } {
   const router = useRouter()
 
-  // The GitHub callback's verdict, or GitHub's install redirect, arrives in
-  // the query once. It is held here, above the Await that remounts the tab
-  // when the live checks land, and the query is dropped so a reload does not
-  // repeat it.
+  // Dropping the query is what keeps a reload from repeating the notice.
   const landed = search.setup_action !== undefined
   const [githubNotice, setGithubNotice] = useState<GithubCallbackNotice | null>(() =>
     search.github !== undefined
@@ -78,8 +75,8 @@ export function useGithubLanding(
   loaderApp.current = githubApp
   usePoll(
     async () => {
-      // Re-read rather than closed over: `usePoll` calls the newest closure,
-      // so this is the current deadline and not the one the watch started with.
+      // `usePoll` calls the newest closure, so this is the current deadline
+      // and not the one the watch started with.
       if (watchUntil === null) return
       try {
         const s = await fetchGithubAppStatus()

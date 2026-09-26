@@ -225,8 +225,10 @@ export function Settings({
               value: 'proxy',
               label: 'Forward-auth',
               icon: '⛨',
-              // Both are assertions in stacks/apps/apps.nix. Greyed out with
-              // the reason rather than accepted and failed mid-Apply.
+              // Both are nix assertions (the ingress one in
+              // nix/modules/apps/apps.nix, the health path in
+              // platform/publishing.nix). Greyed out with the reason rather
+              // than accepted and failed mid-Apply.
               disabled: !stageExposed(app.stage) || !app.authHealthPath,
               reason: !stageExposed(app.stage)
                 ? app.stage === 'declared'

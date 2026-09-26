@@ -5,11 +5,9 @@ import type { Part } from '../lib/hardware/catalog'
 // box's Build and Host tabs and by every node's, so a page of six parts
 // reads as one inventory rather than six designs, on any machine.
 
-/* One vocabulary for every component panel, so a page of six parts reads as
-   one inventory rather than six designs. Photo beside identity — a physical
-   object named, pictured, and then measured underneath. The panels that build
-   their own `PartHead` (Host's case, Build's board, cpu, cooler, gpu and
-   supply) compose these directly. */
+/* The panels whose name or detail is read from the machine rather than the
+   catalogue (Build's board, cpu and gpu, Host's case) compose these directly;
+   the rest use `PartHead`. */
 export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
 export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-[0.25rem]'
 export const PART_NAME = 'text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere'

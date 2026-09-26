@@ -24,10 +24,10 @@ import { ERROR_NOTE, Mono, NOTE, PANEL, Section, Unset } from './shared'
 //
 // ── the switch ────────────────────────────────────────────────────────────
 //
-// Two steps, like the box and server restarts on the Claude page, with the
-// cost spelled out at arm time: enforcement refuses every mutation from an
-// account outside `admins`, including this one if the rows above do not name
-// it. The server refuses that case on its own (setEnforcingAdmins) — the
+// Two steps (use-armed.ts), like the server restart and session cycle on the
+// Claude page, with the cost spelled out at arm time: enforcement refuses
+// every mutation from an account outside `admins`, including this one if the
+// rows above do not name it. The server refuses that case on its own (setEnforcingAdmins) — the
 // disabled button here is a courtesy, not the check. Disarming is one click
 // and always allowed: it is the way back out.
 

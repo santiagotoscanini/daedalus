@@ -22,7 +22,7 @@ import { Board, Chip } from '../viz'
 
 export { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../tokens'
 
-/** The part-identity block, as Build draws it on the box. */
+/** The part-identity block: the same four strings components/part.tsx exports. */
 export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
 export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-[0.25rem]'
 export const PART_NAME = 'text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere'
@@ -34,7 +34,7 @@ export const OS_MARK: Record<string, { src: string; invert: boolean }> = {
   linux: { src: '/icon-linux.svg', invert: true },
 }
 
-/** A percentage's tone: the same thresholds the box's own pages use. */
+/** A load or fill percentage's tone on a node's gauges. */
 export function loadTone(p: number | null): Tone {
   if (p === null) return 'muted'
   if (p >= 90) return 'bad'
@@ -103,7 +103,7 @@ export function ago(iso: string | null): string {
  * all of them, and the same strip for this box and for a node, because the
  * picker above can change what every board below is about and the eye
  * should not have to learn two shapes to follow it. The mark is the OS's:
- * NixOS for the box, Windows or Apple for a node.
+ * NixOS for the box, OS_MARK's for a node.
  */
 export function HeadStrip({
   mark,
