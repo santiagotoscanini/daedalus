@@ -12,7 +12,8 @@ import { decodeSiteDocument } from './domains/site-doc'
 //
 // `fixtures/` at the repository root holds one directory per document per
 // schema version: `site/v<N>/` is a whole site directory whose site.json is
-// at version N, `apps/v<N>/apps.json` is the registry at version N. The nix
+// at version N, `apps/v<N>/apps.json` is the registry and
+// `nodes/v<N>/nodes.json` the nodes document at version N. The nix
 // side reads the same files (`nix/tests/fixtures.nix`, in `nix flake check`):
 // a fixture is the one artefact both halves of the contract are held to, so
 // a reader that drifts from the writer fails here AND there, not on a box.
@@ -23,8 +24,9 @@ import { decodeSiteDocument } from './domains/site-doc'
 // asserted once: there is a fixture for the version the writer emits today,
 // so a bump that forgets its fixture fails before the old one is deleted.
 //
-// Both documents have ONE accepted version today (lib/contract/version.ts,
-// registry-lib.nix). A migration, when one exists, gets its case here: read
+// Each document has ONE accepted version today (for the registry,
+// lib/contract/version.ts and nix/platform/lib/registry-lib.nix; the site and
+// nodes readers name their own). A migration, when one exists, gets its case here: read
 // the old fixture, migrate, and compare against the new fixture.
 
 // vitest runs from app/, like every other path-reading test here.

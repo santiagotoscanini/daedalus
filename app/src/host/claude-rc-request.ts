@@ -6,11 +6,11 @@ import { defineBridge } from './bridge'
 // The case power-request.ts is oversized for: that bridge's one verb takes
 // the whole house offline, and the commonest fault it was reached for — a
 // wedged or version-stale claude-remote-control — is a single unit. Rebuilds
-// deliberately never restart that unit (platform/claude-rc.nix), and a
+// deliberately never restart that unit (nix/platform/claude-rc.nix), and a
 // remote session restarting it would kill itself mid-command, so this button
 // is the out-of-band hand.
 //
-// Unlike power, the agent (stacks/daedalus/host/claude-rc.sh) outlives its
+// Unlike power, the agent (nix/stacks/daedalus/host/claude-rc.sh) outlives its
 // action: `done` and `failed` are both real terminal states, and the
 // ordinary status poll covers the whole flow.
 //

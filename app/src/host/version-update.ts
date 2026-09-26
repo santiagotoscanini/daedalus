@@ -15,11 +15,12 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 //
 // A stack that pins its version as plain strings (a game server's release and
 // build) declares them in fleet.versionPins; the host agent rewrites them,
-// commits, builds, snapshots the stack's dataset, switches, runs the stack's
-// verifier, and on failure after the switch rolls the dataset and the commit
-// back (stacks/daedalus/host/version-update.sh). What crosses the bridge is a
-// target and the new values — which fields exist, what they may look like and
-// where they live is the host's registry, which is also the allowlist.
+// commits, builds, snapshots the stack's dataset (when it names one),
+// switches, runs the stack's verifier, and on failure after the switch rolls
+// the dataset and the commit back (nix/stacks/daedalus/host/version-update.sh).
+// What crosses the bridge is a target and the new values — which fields
+// exist, what they may look like and where they live is the host's registry,
+// which is also the allowlist.
 
 type VersionUpdateState = 'idle' | 'running' | 'done' | 'failed'
 

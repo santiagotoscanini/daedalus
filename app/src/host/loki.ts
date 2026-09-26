@@ -2,16 +2,17 @@ import { getJson } from '../lib/http'
 import { env } from './env'
 import type { MatrixResult, VectorResult } from './prom'
 
-// The Loki client — every LogQL read in the app goes through these.
+// The Loki client — every LogQL read in the app goes through these, except
+// host/access.ts's one-scan fetch, which sets its own longer timeout.
 //
 // Loki's budget is ONE attempt, and a long one. The escalating ladder in
 // lib/http.ts exists for a stalled CONNECTION, which is a rootless-netns
 // problem on published host ports. Loki is reached over the `monitoring`
 // bridge, so that failure mode does not apply to it at all — and the one it
 // DOES have is the opposite. A LogQL aggregation over every stream is
-// genuinely slow, Loki runs a small number of them at once, and this box asks
-// it eight questions to render one page. Under that load an individual query
-// blows past 400ms for no reason worth acting on.
+// genuinely slow, Loki runs a small number of them at once, and one page can
+// ask it several. Under that load an individual query blows past 400ms for no
+// reason worth acting on.
 //
 // Retrying there is not neutral, it is harmful: each retry queues ANOTHER
 // query behind the one still running, so five slow queries became twenty and
@@ -82,7 +83,7 @@ export type LokiStream = { stream: Record<string, string>; values: [string, stri
 /**
  * Raw matching streams from a range query, newest first per Loki's
  * `direction=backward`. The primitive under `lokiLatest` / `lokiEntries` and
- * under metrics.ts's level-tagged log readers — exposed because stream labels
+ * under metrics.ts's level-tagged log reader — exposed because stream labels
  * (level, unit) only exist at this layer; every derived shape throws them
  * away.
  */
@@ -139,9 +140,9 @@ export async function lokiLatest(query: string, minutes = 60 * 24 * 30): Promise
  * Matching log lines with their timestamps, newest first.
  *
  * `lokiLatest` answers "what does it say"; this answers "when did it say it",
- * which is a different question and the one a history needs. Used for the two
- * things ddclient states only in its journal: every address it has published,
- * and when it last ran at all.
+ * which is a different question and the one a history needs — every address
+ * ddclient has published, players joining a game server, the mail relay's
+ * last send.
  */
 export async function lokiEntries(
   query: string,

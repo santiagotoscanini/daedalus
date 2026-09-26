@@ -14,10 +14,10 @@ import { env } from '../../env'
 import { readSnapshot } from '../snapshot'
 
 // /export/publishing.json — the publish registry as platform/publishing.nix
-// declares it: the FULL per-webApp record (the old manifest exported only
-// hostname, which is why the dashboard grew hardcoded host ports), the
-// taken-hostname list for the live collision check, direct ingress, and the
-// VPN egress map daedalus.nix derives from the tenants' own netns flags.
+// declares it: the FULL per-webApp record, the taken-hostname list for the
+// live collision check, direct ingress, and the VPN egress map
+// (fleet.vpnEgress, with each tunnel's tenants added by
+// nix/stacks/daedalus/daedalus.nix from their own netns flags).
 
 const ns = optional(nullable(str), null)
 

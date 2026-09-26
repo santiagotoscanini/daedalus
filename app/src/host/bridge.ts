@@ -12,9 +12,11 @@ import { env } from './env'
 // file the host writes back. A systemd.path unit on the host watches each
 // request file and starts the matching root-side service; the trust boundary
 // is "can write into /apply", and the Pocket ID gate in front of the app is
-// what guards that. apply.ts, deploy.ts and build-bridge.ts each instantiate
-// this with their own file names and status shape — the mechanics live here
-// once.
+// what guards that. Each verb's module (apply.ts, deploy.ts, workspaces.ts,
+// core/github-app.ts, …) instantiates this with its own file names and status
+// shape — the mechanics live here once. build-bridge.ts is the exception: its
+// request id is the builds row id rather than one minted here, so it writes
+// through `writeAtomic` alone.
 
 export type BridgeStatus = { id: string | null; state: string }
 
@@ -96,7 +98,7 @@ export function defineBridge<S extends BridgeStatus>(opts: {
      * the host derives the same name from the id it read, so nothing in the
      * request body names a path. A second request queued while the host is
      * mid-run therefore cannot overwrite the bytes the first one is committing
-     * (a fixed payload name was the last TOCTOU sliver in this bridge).
+     * — a fixed payload name would reopen exactly that race.
      */
     async request(body: Record<string, unknown>, payload?: string): Promise<string> {
       const id = randomUUID()

@@ -4,7 +4,7 @@ import { defineBridge } from './bridge'
 // Asking the host to restart the machine.
 //
 // The narrowest bridge here on purpose: one verb, `reboot`, and the host agent
-// (stacks/daedalus/host/power.sh) has no branch for powering the box OFF. That
+// (nix/stacks/daedalus/host/power.sh) has no branch for powering the box OFF. That
 // asymmetry is the requirement, not a default — the way back on is physical,
 // and whoever is looking at this page is usually not in the house.
 //

@@ -17,8 +17,9 @@ import { env } from './env'
 // a Claude Code session works on a project directly from this box.
 //
 // Two channels, the standard pair. Facts arrive via the /workspaces snapshot
-// (published by daedalus-workspace-{publish,sync} — live git state per clone
-// plus its last sync outcome). The one action — "make this repo's workspace
+// (published by daedalus-workspace-{publish,sync}, nix/stacks/daedalus/
+// daedalus-snapshots.nix — live git state per clone plus its last sync
+// outcome). The one action — "make this repo's workspace
 // exist and make it current" — goes out through the file-drop bridge as a
 // repo slug; the host clones over the operator's SSH identity, which is a
 // push-capable credential this container must never hold.
@@ -65,8 +66,8 @@ const workspaceDecoder: Decoder<Workspace> = obj({
   dirty: bool,
   ahead: nullable(num),
   behind: nullable(num),
-  // Optional-with-null rather than nullable alone: a clone that predates its
-  // first sync has no state file, and the host publishes `null` for it.
+  // `null` is what the host publishes for a clone with no sync state file
+  // yet; `optional` also accepts an entry that omits the key.
   sync: optional(nullable(obj({ result: str, detail: str, at: str })), null),
 })
 

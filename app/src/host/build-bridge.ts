@@ -26,7 +26,7 @@ import { env } from './env'
 //
 //   /apply/build-request.json         written here; daedalus-build.path starts the host builder
 //   /apply/build-cancel-request.json  written here; daedalus-build-cancel.path stops it
-//   /apply/build-status.json          written by host/build.sh, heartbeated while running
+//   /apply/build-status.json          written by nix/stacks/daedalus/host/build.sh, heartbeated while running
 //   /builds/<id>.log                  the host's already-redacted log, mounted read-only
 
 const processEnv: EnvReader = (name) => env.text(name)
@@ -38,7 +38,7 @@ export async function requestBuild(req: BuildRequest, env: EnvReader = processEn
   const checked = buildRequestDecoder(req, '')
   const dir = applyDir(env)
   await mkdir(dir, { recursive: true })
-  // The same bytes the scheduler measured against BUILD_REQUEST_MAX_BYTES.
+  // The same bytes core/builds/dispatch.ts measured against BUILD_REQUEST_MAX_BYTES.
   await writeAtomic(join(dir, BUILD_REQUEST_FILE), serializeBuildRequest(checked))
 }
 
@@ -59,8 +59,9 @@ export async function requestBuildCancel(
 }
 
 /**
- * The host's last status. `stale` past 90 s: a running build that stopped
- * heartbeating (lib/build-queue.ts `reconcile` turns that into `interrupted`).
+ * The host's last status. `stale` past BUILD_STATUS_MAX_AGE_MS (90 s): a
+ * running build that stopped heartbeating (lib/build-queue.ts `reconcile`
+ * turns that into `interrupted`).
  */
 export async function readBuildStatus(
   env: EnvReader = processEnv,

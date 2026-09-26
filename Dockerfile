@@ -16,9 +16,10 @@ ARG NODE_IMAGE=docker.io/library/node:24-slim@sha256:0e0ff40c39bc087845bfb27465a
 
 # --- sops --------------------------------------------------------------------
 #
-# Settings › Integrations › Cloudflare › Replace token seals the new token to
-# the recipients in /site/.sops.yaml before it leaves the container, so the
-# plaintext never lands on the bridge directory. Encrypt-only by construction:
+# Every secret the app writes (the Cloudflare token, the GitHub App's key, an
+# app's secrets — core/vault.ts) is sealed to the recipients in
+# /site/.sops.yaml before it leaves the container, so the plaintext never
+# lands on the bridge directory. Encrypt-only by construction:
 # the image holds no age identity, so sops here can write a secret it can
 # never read back. The upstream release binary is static (no libc to match
 # the run stage's), fetched by version and refused on a checksum mismatch.

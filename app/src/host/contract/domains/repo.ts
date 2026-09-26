@@ -77,7 +77,7 @@ export type SiteDir = {
  * `type` and `url` are the input as the host WROTE it: `git` with a
  * `file://` url is a local clone (the reference arrangement, where "latest"
  * is that clone's `main`), `github` is a published rev. The update agent
- * (stacks/daedalus/host/engine-update.sh) branches on the same fields.
+ * (nix/stacks/daedalus/host/engine-update.sh) branches on the same fields.
  */
 export type EngineLock = {
   rev: string

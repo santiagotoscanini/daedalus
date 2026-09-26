@@ -18,9 +18,10 @@ import type { Result } from '../../../lib/result'
 import { env } from '../../env'
 
 // /site/site.json — the committed document, read from the site directory
-// mounted read-only into the container. Since Phase 5 this is THE source of
-// the site constants nix builds with, and the thing the settings page edits
-// against. The mount holds only the directory, never the repository root.
+// mounted read-only into the container. It is THE source of the site
+// constants nix builds with (nix/platform/site.nix), and the thing the
+// settings page edits against. The mount holds only the directory, never the
+// repository root.
 
 const shape = obj({
   schemaVersion: literal('1'),
@@ -28,7 +29,8 @@ const shape = obj({
     hostname: str,
     baseDomain: str,
     // Optional: a site.json written before the control plane's address was
-    // part of it still reads, and nix keeps the address stacks/daedalus names.
+    // part of it still reads, and nix falls back to self.json's `hostLabel`
+    // (nix/stacks/daedalus/).
     controlPlane: optional(str, ''),
     controlPlanePrevious: optional(nullable(str), null),
     timezone: str,

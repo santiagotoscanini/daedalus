@@ -3,10 +3,10 @@ import { arrayOf, obj, optional, str } from '../../../lib/contract/decode'
 import { env } from '../../env'
 import { readSnapshot } from '../snapshot'
 
-// /export/sso.json — the OIDC clients nix DECLARES (fleet.ssoClients, in
-// stacks/pocket-id/clients.nix). The convergence job converges but never
-// prunes, so the IdP's live list can only grow; diffing it against this is
-// the one way to see a client that outlived its stack.
+// /export/sso.json — the OIDC clients nix DECLARES (fleet.ssoClients,
+// exported by nix/modules/pocket-id/clients.nix). The convergence job
+// converges but never prunes, so the IdP's live list can only grow; diffing
+// it against this is the one way to see a client that outlived its stack.
 
 export type DeclaredSsoClient = { id: string; displayName: string }
 

@@ -4,12 +4,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readClaudeCodeUpdateStatus } from './claude-code-update'
 
-// The staleness rule, as host/engine-update.ts carries it — but against a
-// far shorter clock, because this verb does not build: three small fetches,
-// a signature check and a push. The window here follows its own unit's
-// TimeoutStartSec (10 minutes, stacks/daedalus/claude-code-update.nix), not
-// the engine's hour, and a test that passes for both numbers would not be
-// testing the one that matters.
+// The staleness rule, against this verb's own clock (RUNNING_MAX_MS in
+// claude-code-update.ts says why it is not the engine's hour). A test that
+// passed for both numbers would not be testing the one that matters.
 
 let dir: string
 let previous: string | undefined

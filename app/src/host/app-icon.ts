@@ -16,7 +16,7 @@
 //   https://<hostname>  through traefik. The fallback for everything else,
 //                       and subject to the gate: an app in proxy auth mode
 //                       with no bypass for its icon path answers with the
-//                       IdP's HTML, which `looksLikeImage` is what rejects.
+//                       IdP's HTML, which `sniff` is what rejects.
 //
 // An app that answers on neither renders a monogram in the UI. That is a real
 // state, not a failure. It is also why a forward-auth'd app has to name its
@@ -104,9 +104,9 @@ async function fromOrigin(origin: string): Promise<ResolvedIcon | null> {
   // guesses. Deduped so a declared /icon.svg is not fetched twice.
   //
   // Probed in PARALLEL and picked in order: the requests are cheap GETs to
-  // the box's own containers and the answer is cached for an hour, but a
-  // serial walk paid the 4s timeout once per missing path — an app with no
-  // icon cost ~30s to give up on, on the page's first render.
+  // the box's own containers and the answer is cached for an hour, whereas a
+  // serial walk would pay the 4s timeout once per missing path — ~30s to give
+  // up on an app with no icon, on the page's first render.
   const paths = [...new Set([...declared, ...FALLBACK_PATHS])]
   const results = await Promise.all(paths.map((p) => fetchIcon(origin, p)))
   return results.find((r) => r !== null) ?? null

@@ -8,15 +8,16 @@ import type { McpIdentity } from './tokens'
 //
 // ── what this layer is, and what it deliberately is not ───────────────────
 //
-// It is an ADAPTER. Every tool below calls the same `lib/` or `host/` function
-// the corresponding page or button calls, and adds nothing: no second query,
+// It is an ADAPTER. Every tool below calls the same function the corresponding
+// page or button calls, and adds nothing: no second query,
 // no second validation of what may be built, no second idea of what an Apply
 // carries. That is the property that makes a write token defensible — an MCP
 // call can do nothing the UI cannot, because it is running the UI's code.
 //
-// It is NOT a wrapper over `createServerFn`. Those expect to be running inside
-// a TanStack request: they read forward-auth headers through `getRequestHeader`
-// and gate on `assertAdmin()`, and an MCP request carries neither. Calling them
+// It is NOT a wrapper over the server functions. Those expect to be running
+// inside a TanStack request: they read forward-auth headers through
+// `getRequestHeader` and gate on `assertAdmin()` (server/fn.ts's `adminFn`),
+// and an MCP request carries neither. Calling them
 // from here would be asking a session gate to authorise something with no
 // session. So the writes reach the flows directly and bring their own actor —
 // see `authoriseWrite` below.

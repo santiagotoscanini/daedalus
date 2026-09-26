@@ -42,7 +42,7 @@ const SRC = 'src'
  *
  * `lib/repo`, `lib/dashboard` and `lib/apps` are server-only too and stay in
  * `lib/` on purpose: their names already say what they are (the drizzle
- * repositories, the category pages' data layer, and the Apps page's), which is
+ * repositories, the readers several modules share, and the Apps page's data), which is
  * the same standard `host/` is held to. `routes/api.*` are server routes that
  * never reach a browser; `server/**` is the createServerFn seam, which has a
  * rule of its own below.
@@ -181,7 +181,10 @@ for (let moved = true; moved; ) {
   }
 }
 
-/** The shortest static import chain from `f` into the taint set. */
+/**
+ * A static import chain from `f` into the taint set: the first tainted edge
+ * at each step, so a real path but not necessarily the shortest.
+ */
 function chain(f: string): string[] {
   const path = [f]
   for (let at = f; ; ) {
@@ -224,9 +227,9 @@ describe('the host boundary', () => {
     // `process.env` read in one is a configuration path the Ctx does not
     // know about, which is exactly what the capability set exists to prevent.
     //
-    // `host/env.ts` is where every other `process.env` read in the app now
-    // goes, so importing it is the same reach by another name — the LiteLLM
-    // loader did exactly that until the gateway became a capability.
+    // `host/env.ts` is where every other non-secret `process.env` read in the
+    // app goes (the DASH_* secrets are `host/keys.ts`, the next rule), so
+    // importing it is the same reach by another name.
     const offenders = files.filter(
       (f) =>
         isModule(f) &&

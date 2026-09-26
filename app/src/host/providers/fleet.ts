@@ -6,7 +6,7 @@ import { networkFacts } from '../contract/domains/network'
 import { type ProviderReading, readProvider } from './read'
 
 // Every provider on the network, as one list: this box's own, and each
-// approved node's offered ones, each with the address the gateway dials.
+// approved node's, offered or not, each with the address the gateway dials.
 // The AI page draws it; the gateway sync reconciles from it.
 //
 // Server-side by nature and so under host/: the node list is a database
@@ -16,7 +16,7 @@ import { type ProviderReading, readProvider } from './read'
 
 /**
  * What `<name>.<domain>` uses when the export does not carry a domain: the
- * same default platform/nodes.nix declares. Named rather than inlined so a
+ * same default nix/platform/nodes.nix declares. Named rather than inlined so a
  * fallback in a LiteLLM route is greppable when one turns out to be wrong.
  */
 const LAN_DOMAIN_FALLBACK = 'lan'
@@ -47,14 +47,13 @@ export type FleetProvider = {
 }
 
 /**
- * The box as a provider: subgen, when the tv stack runs it. Reached the way
- * every host-netns service is, through the host gateway alias, never the
- * LAN address.
+ * The box as a provider: subgen, when the tv stack runs it. It is a gluetun
+ * netns tenant published on a host port, so it is reached through the host
+ * gateway alias (`ctx.hosts.hc`), never the LAN address.
  *
  * Its `offered` is the box's own policy — the setting Settings › Machines
- * writes. It was hardcoded false here and corrected afterwards by the sync
- * alone, so the AI page said "not offered" about a provider whose model the
- * gateway was already serving. One answer, read once, for both readers.
+ * writes — read here rather than patched in by the sync, so the AI page and
+ * the gateway get one answer.
  */
 async function boxProviders(ctx: Ctx): Promise<FleetProvider[]> {
   if (!ctx.modules.enabled('tv')) return []

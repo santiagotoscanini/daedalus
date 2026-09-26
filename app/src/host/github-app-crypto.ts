@@ -1,13 +1,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-// The two comparisons that stand in front of unauthenticated paths: the deploy
-// hook's shared token and GitHub's webhook signature. Server-side only (it
-// needs node:crypto), but a plain module so both are table-testable.
+// The comparisons that check a secret a caller presents: `safeEqual` (the
+// deploy hook's token, MCP tokens, local-login digests, the App manifest's
+// state) and GitHub's webhook signature. Server-side only (it needs
+// node:crypto), but a plain module so both are table-testable.
 
 /**
  * Constant-time compare. `===` on a secret leaks its length and prefix through
  * timing; irrelevant over a LAN in practice, but these credentials stand in
- * front of unauthenticated paths that start privileged units.
+ * front of paths that are otherwise unauthenticated, some of which start
+ * privileged units.
  */
 export function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a)
@@ -22,8 +24,9 @@ const HEX = /^[0-9a-f]+$/i
 /**
  * GitHub's `X-Hub-Signature-256`: HMAC-SHA256 of the raw body, hex, prefixed
  * `sha256=`. The body must be the exact bytes received, so only bytes are
- * accepted (the route streams the body into a capped `Uint8Array`): a string has already been
- * decoded, and a re-serialised JSON object never matches.
+ * accepted (routes/api.github.webhook.ts streams it into a capped
+ * `Uint8Array`): a string has already been decoded, and a re-serialised JSON
+ * object never matches.
  *
  * A blank secret is refused rather than verified: HMAC with an empty key is a
  * signature anyone can compute. So is one with surrounding whitespace — that is

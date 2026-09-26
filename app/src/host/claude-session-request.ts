@@ -13,10 +13,11 @@ import { defineBridge } from './bridge'
 // So this side sends a SELECTOR and nothing else. No path, no working
 // directory, no flags — a `--permission-mode` the container could choose would
 // be the whole ballgame. The argv lives in `claude-session@.service`
-// (stacks/daedalus/daedalus.nix) and the three real guards live in
-// stacks/daedalus/host/claude-session.sh: the uuid charset, the transcript
-// having to exist as a regular file under a nix-rendered project slug, and the
-// working directory having to be one nix trusts.
+// (nix/stacks/daedalus/daedalus-verbs.nix) and the three real guards live in
+// nix/stacks/daedalus/host/claude-session.sh, whose header explains them: the
+// selector charset, the transcript having to exist as a regular file under a
+// nix-rendered project slug, and the working directory having to be one nix
+// trusts.
 //
 // The charset check below is therefore not the security control — it is the
 // thing that keeps a mistyped id from ever becoming a request file. The host
@@ -34,17 +35,14 @@ import { defineBridge } from './bridge'
 // reads plus what it finds running — never by a flag from here.
 //
 // `remove` is a background agent's short id and nothing else. It is the verb
-// for a RECORD with no process behind it: `claude stop` on one has no object,
-// and pressing it is what put a red "failed" on the board for an agent that
-// had been dead for weeks. `claude rm` is what the CLI's own help points at
-// for an already-exited session — and unlike `stop` it is destructive, since
-// it takes the record and its worktree with it, so `claude attach` has
-// nothing to reopen afterwards. The header of lib/claude-roster.ts carries
-// the pid rule that decides which row gets which.
+// for a RECORD with no process behind it, where `claude stop` has no object.
+// Unlike `stop` it is destructive — `claude rm` takes the record and its
+// worktree with it, so `claude attach` has nothing to reopen afterwards. The
+// header of lib/claude-roster.ts carries the pid rule that decides which row
+// gets which.
 //
-// Like claude-rc-request.ts, the agent outlives its action, so `done` and
-// `failed` are both real terminal states and the ordinary status poll covers
-// the flow end to end.
+// The agent outlives its action, so `done` and `failed` are both real
+// terminal states and the ordinary status poll covers the flow end to end.
 
 type ClaudeSessionAction = 'resume' | 'stop' | 'remove'
 type ClaudeSessionState = 'idle' | 'running' | 'done' | 'failed'

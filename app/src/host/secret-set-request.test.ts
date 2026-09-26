@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readSecretSetStatus, requestSecretRemove, requestSecretSet } from './secret-set-request'
 
 // The file names on both halves of this bridge are a contract with a host unit
-// this repository cannot see: stacks/daedalus watches `secret-set-request.json`
-// and writes `secret-set-status.json`. A rename here fails nothing — the
+// no TypeScript check reaches: nix/stacks/daedalus/daedalus-verbs.nix watches
+// `secret-set-request.json` and host/secret-set.sh writes
+// `secret-set-status.json`. A rename here fails nothing — the
 // button would simply stop reaching the box, silently, with requests piling up
 // under a name nothing watches. So the names are asserted, exactly as
 // task-run.test.ts asserts its own.

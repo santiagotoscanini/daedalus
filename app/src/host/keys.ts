@@ -1,10 +1,9 @@
 import type { SecretName } from './env'
 
-// Per-service API keys, rendered to /run/daedalus-dashboard/env by nix.
+// Per-service API keys (`DASH_*`), rendered to /run/daedalus-dashboard/env by
+// daedalus-dashboard-keys.service (nix/stacks/daedalus/daedalus.nix).
 //
-// Its own module — the ONE process.env read the formatter file used to carry,
-// which was the only thing keeping every pure string formatter server-side.
-// Splitting it is what lets lib/format.ts be imported from components without
-// dragging a secrets accessor into a client chunk. That `process.env` is also
-// why the accessor lives here under host/ and the formatters stayed in lib/.
+// Its own module, apart from lib/format.ts, because it reads process.env: kept
+// out of lib/, the formatters stay importable from a component without pulling
+// a secrets accessor into a client chunk.
 export const key = (name: SecretName): string => process.env[`DASH_${name}`] ?? ''

@@ -3,27 +3,23 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
-// daedalus runs `vite dev` in production — deliberately. It is an internal
-// control plane for one operator, so the value of editing a file and seeing the
-// browser update beats the value of a built bundle. There is NO Nitro adapter
-// here: including it in dev adds a Vite environment that breaks
-// server-function id resolution ("Invalid server function ID" at call time, not
-// at startup).
+// One image, two ways to run it (docker-entrypoint.sh picks). In dev mode
+// (`fleet.daedalus.dev`, the host that develops the engine) the container
+// bind-mounts this repository's `app/` at /app and runs `vite dev` against
+// it, so editing a file is the whole deploy; `nixos-rebuild` is only needed
+// for nix/stacks/daedalus/ or the Dockerfile and its entrypoint. Every other
+// host runs the published image: `vite build`, then `server.mjs` as the
+// listener (its header says why no adapter). There is NO Nitro adapter here
+// either: including it in dev adds a Vite environment that breaks
+// server-function id resolution ("Invalid server function ID" at call time,
+// not at startup).
 //
-// The container bind-mounts this repository's `app/` at /app, so the files Vite
-// watches ARE the files in the clone. Editing one is the whole deploy;
-// `nixos-rebuild` is only needed for the .nix module or the Containerfile,
-// which live in the machine's private configuration.
-//
-// A built runtime exists beside it and needs no adapter either: `vite build`
-// emits `dist/server/server.js` as a *fetch handler* — zero `.listen()` calls —
-// and `server.mjs` is the listener (srvx, the same adapter `vite preview` uses,
-// plus the static files, migrations and the rejection guard). Server-function
-// ids differ between the two — path-derived in dev, sha256 in a build — and
-// that is fine: a build derives both sides from sha256(file--function), and
-// `scripts/check-build.mjs` fails the build if they ever disagree.
+// Server-function ids differ between the two — path-derived in dev, sha256 in
+// a build — and that is fine: a build derives both sides from
+// sha256(file--function), and `scripts/check-build.mjs` fails the build if
+// they ever disagree.
 
-// Injected by the apps platform (stacks/apps/apps.nix sets APP_HOSTNAME from
+// Injected by the apps platform (nix/modules/apps/apps.nix sets APP_HOSTNAME from
 // the webApp's hostname). Read rather than restated so the vhost has one source
 // of truth; the fallback keeps a bare `pnpm dev` on a laptop working.
 const appHost = process.env.APP_HOSTNAME ?? 'localhost'
@@ -33,12 +29,12 @@ const appHost = process.env.APP_HOSTNAME ?? 'localhost'
 const appHostAliases = (process.env.APP_HOSTNAME_ALIASES ?? '').split(',').filter((h) => h !== '')
 
 // Node turns an unhandled rejection into an uncaught exception and exits, so
-// one rejected promise in one server function took the whole dev server with
-// it — and the container with that. Nothing noticed: the unit is
-// `Type=oneshot` + `RemainAfterExit`, so it stayed green over a dead
-// container, and daedalus is the one app whose deploy timer is masked, so no
-// timer resurrected it either. Registering a listener at all is what stops
-// Node's conversion to a fatal exception; the body only has to report.
+// one rejected promise in one server function would take the whole dev server
+// with it — and the container with that. Nothing would notice: the unit is
+// `Type=oneshot` + `RemainAfterExit`, so it stays green over a dead
+// container, and dev mode suppresses the app's deploy timer, so no timer
+// resurrects it either. Registering a listener at all is what stops Node's
+// conversion to a fatal exception; the body only has to report.
 //
 // Seen in the wild: Vite's SSR module runner failing to load a category data
 // module mid-HMR, surfacing as ERR_LOAD_URL out of a server function. That
@@ -119,7 +115,7 @@ export default defineConfig(({ command }) => ({
 
     // The HMR websocket is the one connection the browser opens on its own, so
     // it does not inherit the proxy's scheme or port — left alone the client
-    // tries ws://daedalus-app.toscanini.me:3000, which nothing listens on, and HMR
+    // tries ws://<APP_HOSTNAME>:3000, which nothing listens on, and HMR
     // silently degrades to full page reloads. Point it back at traefik's TLS
     // entrypoint instead.
     hmr: {

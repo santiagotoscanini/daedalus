@@ -11,19 +11,17 @@ import {
 import { readSnapshot } from './contract/snapshot'
 import { env } from './env'
 
-// Deliberately NOT re-exporting GROUP_LABELS and friends. A convenience
-// re-export here would let a component import them from this module, which
-// pulls node:fs/promises into the browser bundle — exactly the bug this split
-// fixes. Client code imports lib/env-groups; only this module reads the disk,
-// which is the whole reason it sits under host/ and the table does not.
-
 // The merged environment a container actually has, as published by
-// daedalus-env-snapshot (stacks/daedalus/host/env-snapshot.sh).
+// daedalus-env-snapshot (nix/stacks/daedalus/host/env-snapshot.sh).
 //
 // Read from the container rather than re-derived: it is the only place where
 // what the platform injects, what the registry declares, what the image bakes
 // in, and every --env-file value are already combined. Reconstructing it here
-// would mean reimplementing stacks/apps and then drifting from it.
+// would mean reimplementing nix/modules/apps and then drifting from it.
+//
+// Deliberately NOT re-exporting GROUP_LABELS and friends: a component that
+// imported them from here would pull node:fs/promises into the browser
+// bundle. Client code imports lib/env-groups; only this module reads the disk.
 
 const ENV_DIR = env.get('ENV_SNAPSHOT_DIR')
 

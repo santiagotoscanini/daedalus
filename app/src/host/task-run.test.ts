@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readTaskRunStatus, requestTaskRun } from './task-run'
 
 // The file names on both halves of this bridge are a contract with a host unit
-// this repository cannot see: stacks/apps watches `task-run-request.json` and
-// writes `task-run-status.json`. A rename here does not fail anything — the
+// no TypeScript check reaches: nix/stacks/daedalus/daedalus-verbs.nix watches
+// `task-run-request.json` and its agent writes `task-run-status.json`. A
+// rename here does not fail anything — the
 // button would simply stop reaching the box, silently, with the request file
 // piling up under a name nothing watches. So the names are asserted.
 //

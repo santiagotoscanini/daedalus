@@ -11,11 +11,11 @@ import {
 
 // Reading a provider: the catalog and the health, from the provider's own
 // API at the address the gateway dials. Server-only (it reads the network
-// through the Ctx); the pure decoders are in ./kinds.ts.
+// through the Ctx); the pure decoders are in lib/providers/kinds.ts.
 //
 // Remembered for a minute per address: the AI page asks on every visit,
-// the gateway sync asks on every telemetry tick, and a catalog does not
-// move between them. A provider that does not answer is `reachable:
+// the gateway sync (host/gateway-sync.ts) after every node hello and every
+// five minutes, and a catalog does not move between them. A provider that does not answer is `reachable:
 // false` with the last catalog it gave, so a machine asleep keeps its
 // rows on the page and loses its routes in the gateway — the two readers
 // decide that for themselves.

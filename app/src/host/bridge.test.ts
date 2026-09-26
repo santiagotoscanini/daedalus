@@ -52,10 +52,10 @@ describe('readStatus', () => {
     expect(await bridge().readStatus()).toEqual({ ...IDLE, state: 'running' })
   })
 
-  // The cast this replaced took whatever JSON.parse produced, so a field of
-  // the wrong type reached the page as itself and a `state` nobody defined
-  // reached it as a state. Both are the host agent being broken, and idle is
-  // the only honest reading of a status that cannot be read.
+  // A cast would take whatever JSON.parse produced, so a field of the wrong
+  // type would reach the page as itself and a `state` nobody defined would
+  // reach it as a state. Both are the host agent being broken, and idle is the
+  // only honest reading of a status that cannot be read.
   it('reports idle on a well-formed file of the wrong shape', async () => {
     await writeFile(join(dir, 'status.json'), '{"state":"running","phase":7}', 'utf8')
     expect(await bridge().readStatus()).toEqual(IDLE)

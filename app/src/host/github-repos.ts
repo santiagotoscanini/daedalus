@@ -3,15 +3,16 @@
 //
 // It is the GitHub App's installation — exactly the repositories the box was
 // given, which is what a "connect a repo" picker should show and nothing more.
-// Nothing here holds a credential: core/github-app.ts `ghApp` is the one door
-// to GitHub as the installation, and the token never leaves it.
+// The installation token is never held here: core/github-app.ts `ghApp` is the
+// one door to GitHub as the installation (`listInstallationRepos` goes through
+// it), and the token never leaves it.
 //
 // Read-only, deliberately. Daedalus creates the registry ENTRY; it does not
 // create repos or push to them. The App's permissions say the same.
 //
 // `GITHUB_REPO_TOKEN` (service-keys.sops, rendered as DASH_GITHUB_REPO_TOKEN)
-// is the explicit override, and the only reason a PAT path still exists here:
-// a personal token lists the ACCOUNT's repositories rather than the
+// is the explicit override, and the only PAT path here: a personal token
+// lists the ACCOUNT's repositories rather than the
 // installation's, which is the escape hatch for connecting a repo the App has
 // not been given yet. Unset — the normal case — nothing here reads a PAT.
 

@@ -15,7 +15,7 @@ import { defineBridge } from './bridge'
 // Everything privileged happens on the host: a systemd.path unit watches
 // image-request.json and starts daedalus-image-update.service, which resolves
 // the new digest, rewrites the pin in the flake, commits, and runs
-// nixos-rebuild (stacks/daedalus/host/image-update.sh). This container cannot
+// nixos-rebuild (nix/stacks/daedalus/host/image-update.sh). This container cannot
 // rebuild anything and holds no credential that would let it — host/bridge.ts
 // has the mechanics and the trust boundary.
 //
@@ -58,8 +58,8 @@ export type ImageUpdateStatus = {
   /**
    * The first container the request named.
    *
-   * Kept because it is what the status file has always carried and the API
-   * response still reports; `targets` is the one to read.
+   * The host still writes it for readers that predate batching; `targets` is
+   * the one to read.
    */
   container: string
   /**
@@ -118,39 +118,35 @@ const bridge = defineBridge<ImageUpdateStatus>({
  *
  * The host rewrites the whole status file — `finishedAt` included — at every
  * phase transition, so that field is really "last written". Past the unit's
- * own `TimeoutStartSec` of 60 minutes, systemd has killed the run and no
- * further write is coming; five minutes of slack keeps a slow switch from
- * being declared dead while it is still going.
- *
- * Tied to that unit's timeout in daedalus.nix — a queue makes long runs
- * ordinary, and declaring one dead while it is still pulling would put a
- * failure on the page over a rebuild that then succeeds.
+ * own `TimeoutStartSec` of 60 minutes (nix/stacks/daedalus/daedalus-verbs.nix),
+ * systemd has killed the run and no further write is coming; five minutes of
+ * slack keeps a slow switch from being declared dead while it is still going.
+ * The two move together — a queue makes long runs ordinary, and declaring one
+ * dead while it is still pulling would put a failure on the page over a
+ * rebuild that then succeeds.
  */
 const RUNNING_MAX_MS = 65 * 60_000
 
 /**
  * The status, with a dead run reported as dead.
  *
- * A run CAN be killed without writing its terminal state: the first real
- * update this performed was SIGTERMed mid-switch by its own rebuild (see the
- * `restartIfChanged` note in daedalus.nix), which left the file saying
- * "running switching" permanently. Nothing would ever have cleared it — and
- * because the flow refuses to start while one is running, that single stuck
- * file would have disabled every Update button on the box until a container
- * restart.
+ * A run CAN end without writing its terminal state. The unit's ExecStopPost
+ * reaper marks a killed run failed within seconds, but nothing runs it when
+ * the box itself goes down mid-run — and because the flow refuses to start
+ * while one is running, a status stuck on "running" would disable every
+ * Update button until something cleared it. This clock is that something.
  *
- * Sanitising here rather than at the two call sites, because the status file
- * has three readers (the flow's busy check, the page loader, the API's GET)
- * and a rule only two of them applied is a rule that gets it wrong somewhere.
+ * Sanitising here rather than at the call sites, because the status file has
+ * several readers (the flow's busy check, the Updates and Minecraft loaders,
+ * the status server function) and a rule only some of them applied is a rule
+ * that gets it wrong somewhere.
  */
 export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
   const raw = await bridge.readStatus()
 
-  // A status written before batching existed has no `targets`, and one written
-  // by a host agent that has not been rebuilt yet still will not. Filling it
-  // from `container` here means the three readers all see one shape instead of
-  // each remembering the old one — the same argument as the staleness rule
-  // below.
+  // A status written before batching existed has no `targets`. Filling it from
+  // `container` here means every reader sees one shape — the same argument as
+  // the staleness rule below.
   const s: ImageUpdateStatus =
     raw.targets.length > 0 || raw.container === '' ? raw : { ...raw, targets: [raw.container] }
 
@@ -177,11 +173,10 @@ export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
  * moved and the pin has not. For a release pin it is the tag the operator
  * chose off the candidate list after reading what changed.
  *
- * A one-target request ALSO carries the old top-level `container`/`toTag`.
- * This app hot-reloads on save while the host agent only changes on a
- * rebuild, so the two are never guaranteed to be the same age: writing both
- * means a single update still works against an agent that has not learned
- * about `targets` yet. A batch has no such fallback and does not pretend to.
+ * A one-target request ALSO carries the pre-batching top-level
+ * `container`/`toTag`, for a host agent older than `targets`: this app
+ * hot-reloads on save while the agent only changes on a rebuild, so the two
+ * are not guaranteed to be the same age. A batch has no such fallback.
  */
 export async function requestImageUpdate(input: {
   targets: ImageTarget[]

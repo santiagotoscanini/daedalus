@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readWorkspaces, workspaceFor } from './workspaces'
 
 // The decode side of the workspaces contract. The producing half is
-// stacks/daedalus/host/workspace-lib.sh's publish_workspaces; the envelope
+// nix/stacks/daedalus/host/workspace-lib.sh's publish_workspaces; the envelope
 // and field shapes here mirror what its jq emits.
 
 let dir: string

@@ -18,11 +18,11 @@ import { env } from '../env'
 //
 // WHERE THEY COME FROM. The container bind-mounts `/app` — the engine repo's
 // `app/` directory, the dev server's source — and nothing above it, so the
-// repo root's markdown is not reachable by default. stacks/daedalus mounts the
-// engine workspace read-only at ENGINE_DOCS_DIR for exactly these two files.
-// Until that mount lands (it arrives with the operator's next switch), a read
-// answers with the sentence below rather than throwing: a missing design doc
-// is a degraded resource, not a broken server.
+// repo root's markdown is not reachable through it.
+// nix/stacks/daedalus/daedalus.nix mounts the engine clone read-only at
+// /engine (ENGINE_DOCS_DIR) for exactly these two files. Without that mount a
+// read answers with the sentence below rather than throwing: a missing design
+// doc is a degraded resource, not a broken server.
 
 const DEFAULT_DIR = '/engine'
 
@@ -58,8 +58,8 @@ const docsDir = (): string => env.get('ENGINE_DOCS_DIR') ?? DEFAULT_DIR
 /**
  * A document's text, or an explanation of why it is not here.
  *
- * Never throws. The failure this actually has — the mount not existing yet —
- * is an operations fact the caller can act on, and reading it as a sentence
+ * Never throws. The failure this actually has — the mount missing — is an
+ * operations fact the caller can act on, and reading it as a sentence
  * beats reading it as a stack trace.
  */
 export async function readMcpDoc(doc: McpDoc): Promise<string> {

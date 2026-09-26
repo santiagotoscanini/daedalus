@@ -14,7 +14,7 @@ import { lemonadeFigures, type ModelFigures } from '../../lib/providers/metrics'
 //
 // Split from ./read.ts because the two have different lifetimes and
 // different readers. The catalog and the health are what the GATEWAY SYNC
-// needs, on every telemetry tick, remembered a minute. These three are for
+// needs too, so ./read.ts remembers them a minute. These three are for
 // the page alone and one of them — a download's percentage — is worthless
 // if it is a minute old, so nothing here is memoized and nothing here is on
 // the sync's path.

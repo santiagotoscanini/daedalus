@@ -16,9 +16,10 @@ import { env } from './env'
 // The GitHub App installation token, as the host's minter publishes it
 // (daedalus-github-token, every 30 minutes and on request) into a read-only
 // mount. The App's private key never reaches this container; this file is the
-// most it ever holds — a one-hour token scoped to contents/metadata read and
-// checks/deployments write. Server-only, and the token must never be logged,
-// returned in an error, or sent to the browser (`publicInstallation`).
+// most it ever holds — a one-hour token scoped to the App's permissions
+// (lib/github-app.ts `GITHUB_APP_PERMISSIONS`). Server-only, and the token
+// must never be logged, returned in an error, or sent to the browser
+// (`publicInstallation`).
 
 const DEFAULT_GITHUB_TOKEN_PATH = '/github-token/installation.json'
 /** The minter runs every 30 minutes; a 70-minute-old file means it stopped. */

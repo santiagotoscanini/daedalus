@@ -103,7 +103,10 @@ export async function listMcpTokens(): Promise<McpTokenRow[]> {
   }))
 }
 
-/** Revoke a token. Idempotent: a second call keeps the first revocation's time. */
+/**
+ * Revoke a token. True when the id named a row. A second call re-stamps
+ * `revokedAt` with its own time: the token stays refused either way.
+ */
 export async function revokeMcpToken(id: string): Promise<boolean> {
   const updated = await db
     .update(mcpTokens)
@@ -120,8 +123,8 @@ export async function revokeMcpToken(id: string): Promise<boolean> {
  * malformed and absent all answer the same thing, because telling a caller
  * WHICH of those it is tells an attacker whether a guess existed.
  *
- * `lastUsedAt` is written on the way through. Deliberately not awaited by the
- * caller's critical path below — see the note there.
+ * Reads only: `lastUsedAt` is written by `stampMcpTokenUse`, which http.ts
+ * calls after the gate and does not await.
  */
 export async function identifyMcpToken(presented: string | null): Promise<McpIdentity | null> {
   const token = presented?.trim() ?? ''

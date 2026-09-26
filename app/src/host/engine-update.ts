@@ -9,7 +9,7 @@ import { defineBridge } from './bridge'
 // file: resolve what "latest" is, move the pin, build, switch, verify, revert
 // if the control plane does not come back, push. Everything privileged is the
 // host's: a systemd.path unit watches engine-request.json and starts
-// daedalus-engine-update.service (stacks/daedalus/host/engine-update.sh),
+// daedalus-engine-update.service (nix/stacks/daedalus/host/engine-update.sh),
 // which also does the one thing this container must never do — fast-forward
 // the engine clone that this very process is running out of.
 //
@@ -57,13 +57,8 @@ const bridge = defineBridge<EngineUpdateStatus>({
 /**
  * How long a `running` status may go unrefreshed before it is a corpse.
  *
- * The same rule as host/image-update.ts, for the same reason: a run killed
- * without writing its terminal state would otherwise say "running" forever,
- * and the flow refuses to start while one is running. The host rewrites the
- * whole file — `finishedAt` included — at every phase, so that field is
- * really "last written". The unit's own TimeoutStartSec is 60 minutes
- * (engine-update.nix); five minutes of slack keeps a slow switch from being
- * declared dead while it is still going. The two move together.
+ * host/image-update.ts's rule, against this unit's TimeoutStartSec of 60
+ * minutes (nix/stacks/daedalus/engine-update.nix); the two move together.
  */
 const RUNNING_MAX_MS = 65 * 60_000
 

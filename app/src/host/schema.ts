@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-// TYPE-ONLY, all five, and they have to stay that way: `import type` is erased
+// TYPE-ONLY, every one, and they have to stay that way: `import type` is erased
 // whole (verbatimModuleSyntax), so naming the build vocabulary here costs the
 // schema no import edge at all — see host/boundary.test.ts on why the
 // one-keyword difference between this and `import { type X }` matters.
@@ -30,25 +30,23 @@ import type { McpScope } from '../lib/mcp'
 import type { ProviderKind } from '../lib/providers/kinds'
 import type { ModelPolicies } from '../lib/providers/policy'
 
-// The app registry — daedalus's authoritative copy of what stacks/apps
-// declares. It mirrors the `fleet.apps` submodule (stacks/apps/apps.nix)
-// field for field, because the Apply flow has to be able to round-trip it
-// back out to site/apps.json without losing anything.
+// The app registry — daedalus's authoritative copy of what nix/modules/apps
+// runs. It mirrors the `fleet.apps` submodule (nix/platform/apps-options.nix)
+// field for field, because the Apply flow has to be able to write it back
+// out to site/apps.json without losing anything.
 //
 // Two things this stores that Nix could not:
 //
-//   `notes`  — the *why* behind each setting. In declarations.nix these were
-//              nix comments, which would have evaporated in the round-trip
-//              through a database. They are first-class here and rendered
-//              next to the setting they explain, which is strictly better
-//              than a comment nobody reads.
+//   `notes`  — the *why* behind each setting, which a nix comment could not
+//              carry through a database. Rendered next to the setting it
+//              explains.
 //   ordering + timestamps — so the UI can show what changed and when.
 //
 // What it deliberately does NOT store: secret VALUES, and not whether an app
 // HAS operator secrets either. That one is decided by a tracked
-// <name>-env.sops existing at stacks/apps/, so a column here could only ever
-// agree or disagree with the filesystem — and the disagreements were the whole
-// problem. It arrives from the Nix manifest as a fact instead. The ciphertext
+// site/vault/apps/<name>-env.sops existing, so a column here could only ever
+// agree or disagree with the filesystem. It arrives from the Nix manifest as a
+// fact instead (`operatorSecretApps`, host/nix-manifest.ts). The ciphertext
 // stays in sops, in git, decrypted at activation — never in Postgres, never in
 // a page render.
 
@@ -62,18 +60,20 @@ export const apps = pgTable(
     // change without a migration of everything downstream.
     name: text('name').notNull(),
 
-    // "lab" = LAN-only; "live" = also published through the Cloudflare tunnel.
+    // One rung of APP_STAGES (lib/stage.ts): declared → off → lab → live.
     stage: text('stage').notNull().default('lab'),
 
     // True for apps declared by hand in Nix rather than managed here —
     // currently only daedalus itself. Shown read-only in the UI: an Apply that
     // broke daedalus's own entry would take down the interface you would use
-    // to undo it, so that entry stays in stacks/daedalus/daedalus.nix.
+    // to undo it, so that entry stays in nix/stacks/daedalus/self.json.
     managedInNix: boolean('managed_in_nix').notNull().default(false),
 
     // "registry" (the box builds the image, zot hosts it, the deploy timer
-    // pulls it) or "local" (source in the flake repo, bind-mounted, dev
-    // server). See the `source.mode` option in stacks/apps/apps.nix.
+    // pulls it) or "local" (no box build, no deploy unit). Nix reads it in
+    // nix/stacks/daedalus/{build-agent,verbs-lib}.nix; dev mode itself is the
+    // `source.dev` option (nix/platform/apps-options.nix), which apps.json
+    // does not carry.
     sourceMode: text('source_mode').notNull().default('registry'),
 
     // null = the platform default, <registryHost>/<name>:latest.
@@ -83,7 +83,7 @@ export const apps = pgTable(
     // null = the platform default, <name>.<baseDomain>. Constrained to one
     // label under the base domain — the traefik wildcard cert matches exactly
     // one, so a deeper name serves the wrong certificate. Enforced in the UI,
-    // and again by an assertion in stacks/apps/apps.nix that fails the build.
+    // and again by an assertion in nix/modules/apps/apps.nix that fails the build.
     hostname: text('hostname'),
 
     postgres: boolean('postgres').notNull().default(false),
@@ -113,7 +113,7 @@ export const apps = pgTable(
     authBypassRule: text('auth_bypass_rule'),
 
     // VPN egress: borrow a gluetun container's netns for all traffic. Both
-    // columns move together — see the assertion in stacks/apps/apps.nix.
+    // columns move together — see the assertion in nix/modules/apps/apps.nix.
     egressContainer: text('egress_container'),
     egressHostPort: integer('egress_host_port'),
 
@@ -132,8 +132,7 @@ export const apps = pgTable(
     //
     // There is no icon column to go with it. Every app already publishes its
     // own icon — it is what the browser tab shows — so a column here could
-    // only agree or disagree with that, and the disagreements were the whole
-    // problem. host/app-icon.ts reads it from the app.
+    // only agree or disagree with that. host/app-icon.ts reads it from the app.
     description: text('description').notNull().default(''),
 
     // Free-form rationale keyed by area: app, auth, storage, egress, stage,
@@ -162,8 +161,8 @@ export const apps = pgTable(
     // RAILPACK_NODE_PLAYWRIGHT_INSTALL.
     railpackEnv: jsonb('railpack_env').$type<Record<string, string>>().notNull().default({}),
     // Whether pushes to this app's repo build on the box. Off by default: the
-    // GitHub App is installed on every repository, and a repo moves to box
-    // builds one at a time (plan step 7) by turning this on.
+    // GitHub App is installed on every repository, and a repo builds on the
+    // box only once this is turned on.
     buildOnBox: boolean('build_on_box').notNull().default(false),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -177,7 +176,7 @@ export const apps = pgTable(
 // shows inline, and because ordering is stable and editable.
 //
 // NOT for secrets — these end up in /nix/store, world-readable. Secrets ride
-// the stack's sops env file (stacks/apps/<name>-env.sops).
+// the app's sops env file (site/vault/apps/<name>-env.sops).
 export const appEnvVars = pgTable(
   'app_env_vars',
   {
@@ -188,22 +187,20 @@ export const appEnvVars = pgTable(
     key: text('key').notNull(),
     value: text('value').notNull(),
     note: text('note'),
-    // Preserves the author's ordering across an export/import round-trip;
-    // nix turns the list into an attrset and would otherwise sort it.
+    // Preserves the author's ordering in the exported list; nix turns the
+    // list into an attrset and would otherwise sort it.
     position: integer('position').notNull().default(0),
   },
   (t) => [uniqueIndex('app_env_vars_app_key_idx').on(t.appId, t.key)],
 )
 
 // Scheduled work an app wants run on a clock: one systemd timer + service pair
-// per row (`app-<app>-task-<taskId>`), generated by stacks/apps from the
-// exported registry.
+// per row (`app-<app>-task-<taskId>`), generated by nix/modules/apps/apps.nix
+// from the exported registry.
 //
-// A child table for the same two reasons appEnvVars is one. Each row is edited
-// on its own and carries its own fields, and the ORDER is authored — nix turns
-// the exported list into an attrset, which has no order at all, so `position`
-// is what survives an export/import round trip and keeps a re-sync from
-// reshuffling the list.
+// A child table for the same two reasons appEnvVars is one: each row is edited
+// on its own and carries its own fields, and the ORDER is authored, which
+// `position` keeps.
 //
 // `taskId` rather than `id`, because `id` here is the row's uuid and the
 // task's id is a different thing entirely: the contract's
@@ -235,7 +232,7 @@ export const appTasks = pgTable(
 //
 // The platform's own state file (/var/lib/app-deploy/<name>) holds only the
 // LATEST result, overwritten every run — so on its own there is no history at
-// all. stacks/apps/assets/deploy.sh therefore appends one JSON line per real
+// all. nix/modules/apps/assets/deploy.sh therefore appends one JSON line per real
 // deploy to a sibling .log, and daedalus ingests those lines here.
 //
 // Recorded by deploy.sh rather than by daedalus because most deploys never
@@ -273,8 +270,8 @@ export const deployments = pgTable(
     imageCreatedAt: timestamp('image_created_at', { withTimezone: true }),
   },
   // A deploy is identified by which image landed and when it started. Makes
-  // ingest idempotent: the journal is re-read on every page load and the same
-  // line must not become a second row.
+  // ingest idempotent: the journal is re-read on every Deployments tab load
+  // and by the build reporter, and the same line must not become a second row.
   (t) => [uniqueIndex('deployments_app_digest_started_idx').on(t.appId, t.digest, t.startedAt)],
 )
 
@@ -297,11 +294,12 @@ export const builds = pgTable(
       .notNull()
       .references(() => apps.id, { onDelete: 'cascade' }),
 
-    // Eleven columns below carry `.$type<>()`. Postgres knows these as text and
+    // Ten columns below carry `.$type<>()`. Postgres knows these as text and
     // jsonb and would take any string or any document; every one of them in
-    // fact holds a member of a union lib/builds.ts owns. Recording that here
-    // rather than at the reader is the same trust either way — this module is
-    // written by lib/repo/builds.ts alone — but it puts the narrowing where the
+    // fact holds a type the build modules own (lib/builds.ts and its
+    // neighbours). Recording that here rather than at the reader is the same
+    // trust either way — this table is written by lib/repo/builds.ts alone —
+    // but it puts the narrowing where the
     // next reader looks first, and it makes a column whose vocabulary changes
     // an error at every use instead of a cast that keeps compiling.
     //
@@ -310,7 +308,7 @@ export const builds = pgTable(
     // system reaches rows already in the table — which is exactly why the
     // partition over BUILD_STATES is asserted in lib/build-states.test.ts.
 
-    // 'main' in v1; pull-request lanes come later, with prNumber set.
+    // 'main' or 'pr'; a 'pr' row carries prNumber.
     lane: text('lane').$type<BuildLane>().notNull().default('main'),
     prNumber: integer('pr_number'),
     sha: text('sha').notNull(),
@@ -508,7 +506,8 @@ export const localAdmins = pgTable('local_admins', {
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
 })
 
-// The other machines, once they have said hello (core/nodes.ts).
+// The other machines, once they have said hello (lib/repo/nodes.ts; the
+// signature and the id are checked in host/agent-hello.ts).
 //
 // A row is a machine's KEY, not its address: the agent generates an ed25519
 // keypair at install and signs every hello with it, and `id` is the first

@@ -4,15 +4,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readImageUpdateStatus } from './image-update'
 
-// The one rule in this module that is not a straight file read: a `running`
-// status that has stopped being refreshed is a corpse, and must not be
-// reported as a live run.
-//
-// This is not hypothetical. The first real update this bridge ever performed
-// was SIGTERMed mid-switch by its own rebuild, and left `running switching` in
-// the file with nothing on the box that would ever clear it. Because the flow
-// refuses to start while a run is in flight, that single file would have
-// disabled every Update button until the container was restarted.
+// The staleness rule: a `running` status that has stopped being refreshed is
+// a corpse, and must not be reported as a live run — the flow refuses to
+// start while one is in flight, so a stuck file disables every Update button.
+// readImageUpdateStatus's doc has when the host's reaper cannot catch it.
 
 let dir: string
 
@@ -55,9 +50,8 @@ describe('a run that stopped writing is reported as failed', () => {
   // The unit's own TimeoutStartSec is 60 minutes, so a switch still going at
   // 59 is slow rather than dead — and declaring it dead would let a second
   // rebuild start against a flake the first one is mid-way through changing.
-  // These two numbers are the ones that moved when queued updates doubled the
-  // unit's timeout; keep them either side of RUNNING_MAX_MS, not of a
-  // remembered value.
+  // Keep these two numbers either side of RUNNING_MAX_MS, not of a remembered
+  // value.
   it('a slow-but-live run inside the unit timeout is left alone', async () => {
     await status('running', 59)
     expect((await readImageUpdateStatus()).state).toBe('running')

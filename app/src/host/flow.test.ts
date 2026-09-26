@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineFlow, defineGate, type FlowPlan, PICKUP_MS } from './flow'
 
-// host/apply-flow.test.ts and host/update-flow.test.ts prove the lock through
-// a real bridge. What they cannot show is the skeleton's own contract — the
-// ORDER of the steps, and that two flows on one gate refuse each other — since
-// each of them has exactly one arrangement of it. The status and the write are
+// host/apply-flow.test.ts, update-flow.test.ts and engine-flow.test.ts prove
+// the lock through a real bridge. What they cannot show is the skeleton's own
+// contract — the ORDER of the steps, and that two flows on one gate refuse
+// each other — since each of them has exactly one arrangement of it. The status and the write are
 // fakes here for that reason: `published` is the list of requests that reached
 // the bridge, and a refusal is only a refusal if it is not on it.
 

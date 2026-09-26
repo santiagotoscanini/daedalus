@@ -6,8 +6,8 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 // /export/site.json — the box's identity, as nix built it. The four facts both
 // sides of the app spell hostnames from come from env instead (host/site.ts
 // says why); this reader is for the server-only facts a page renders: mail,
-// the operator, and since Settings › General, the rest of what the box calls
-// itself.
+// the operator, the release and the rest of what the box calls itself
+// (Settings › General).
 
 export type MailIdentity = { sender: string; alertTo: string }
 

@@ -228,7 +228,8 @@ describe('the reconcile', () => {
     expect(second.kept.sort()).toEqual(['gemma', 'k'])
     expect(gw.log).toEqual([])
 
-    // A rename is an update; a model gone from a provider that answered is a delete.
+    // A rename is reported as an update; a model gone from a provider that
+    // answered is a delete.
     const third = await reconcile(
       gw,
       [{ provider: pc, reading: reading([model('G')]) }],

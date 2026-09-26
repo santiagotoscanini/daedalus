@@ -47,12 +47,13 @@ async function readAppSecretKeys(app: string): Promise<string[]> {
 }
 
 /**
- * Every key of an app's secrets file with the git facts for it, newest write
- * first as the file orders them.
+ * Every key of an app's secrets file with the git facts for it, in the
+ * file's own order.
  *
  * The history is looked up per key rather than merged in by the producer, so a
  * key that exists in the file but not in the snapshot (committed since the
- * last run of the 5-minute timer, or never committed at all) still appears.
+ * last run of the repo snapshot's 5-minute timer, or never committed at all)
+ * still appears.
  */
 export async function readAppSecrets(app: string): Promise<AppSecretKey[]> {
   const keys = await readAppSecretKeys(app)

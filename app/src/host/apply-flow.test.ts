@@ -6,11 +6,11 @@ import type { ApplyOutcome } from './apply-flow'
 
 // Two Applies must never both publish.
 //
-// `locked()` writes the finished bytes of apps.json and site.json into the
-// bridge directory, and the host commits and rebuilds from exactly those
-// bytes. A second Apply that got past the checks would replace apps.json under
-// a rebuild that is about to read it — the module's own comment names that
-// failure, and nothing until now proved the three things that prevent it: the
+// `runApply` writes the finished bytes of apps.json (and site.json, nodes.json)
+// into the bridge directory, and the host commits and rebuilds from exactly
+// those bytes. A second Apply that got past the checks would replace them
+// under a rebuild that is about to read them (host/flow.ts's `pending` comment
+// names that failure). This file proves the three things that prevent it: the
 // `running` check, the pickup window that covers the gap between requesting
 // and the host writing `running`, and `serialised()` keeping two callers from
 // interleaving their check and their write.

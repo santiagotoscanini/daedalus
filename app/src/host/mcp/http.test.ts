@@ -4,7 +4,7 @@ import { MCP_TOOLS } from '../../lib/mcp'
 // The door in front of daedalus's tools.
 //
 // /mcp is one of the paths outside the Pocket ID gate (authBypassRule in
-// stacks/daedalus/daedalus.nix), because an agent cannot hold a passkey. It
+// nix/stacks/daedalus/daedalus.nix), because an agent cannot hold a passkey. It
 // carries a scoped token instead — and a write token can start a build, move an
 // image pin and press Apply, which is the widest thing any credential on this
 // box does. So the gate gets the same treatment api.deploy.test.ts gives its

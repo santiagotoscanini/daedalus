@@ -1,6 +1,6 @@
 // The environment, as one schema.
 //
-// Every variable this app understands is a row in SCHEMA: its shape, whether
+// Every variable `src/` understands is a row in SCHEMA: its shape, whether
 // the app can run without it, what it is for and which nix binding sets it.
 // Nothing is read from a .env file. A name that is not a row does not compile
 // (`env.get('WAN_HSOT')`), and `Ctx.env` is typed against the same union, so
@@ -27,7 +27,8 @@
 // Two groups are listed and not read here. APP_HOSTNAME_ALIASES and
 // APP_EXTRA_HOSTS are read by vite.config.ts before any of `src` exists. The
 // DASH_* credentials are rows too, read through host/keys.ts, whose names are
-// typed from here.
+// typed from here. server.mjs, outside `src`, reads PORT, HOST and (for its
+// migrations) DATABASE_URL straight from process.env.
 //
 // No row is read through `import.meta.env`. Vite inlines that into both
 // bundles at build time, and an image is built once for every box: the box's
@@ -524,8 +525,8 @@ export const parsers: { [K in Kind]: (raw: string) => KindValue[K] } = {
     }
     return n
   },
-  // nix writes "1" and "0". `true` is refused rather than guessed at: the
-  // readers that predate this schema compared against "1" and nothing else.
+  // nix writes "1" and "0". `true` is refused rather than guessed at, so a
+  // binding that spells it differently is a warning rather than a silent guess.
   flag: (raw) => {
     if (raw !== '1' && raw !== '0') throw new EnvFormatError('"1" or "0"')
     return raw === '1'

@@ -3,9 +3,9 @@ import { arrayOf, bool, obj, optional, str } from '../../../lib/contract/decode'
 import { env } from '../../env'
 import { readSnapshot, type SnapshotResult } from '../snapshot'
 
-// /export/network.json — the resolver facts, contributed by the pihole stack
-// that owns the settings (see the note there on why lanHosts reads FTL's
-// merged config rather than fleet.dnsHosts).
+// /export/network.json — the resolver facts, contributed by the pihole module
+// that owns the settings (nix/modules/pihole/pihole.nix; see the note there on
+// why lanHosts reads FTL's merged config rather than fleet.dnsHosts).
 
 export type NetworkFacts = {
   /**
@@ -17,7 +17,7 @@ export type NetworkFacts = {
   lanDomain: string
   lanHosts: { ip: string; host: string }[]
   dnsUpstreams: string[]
-  // No reservations here: they moved to an encrypted hostsfile (a household
+  // No reservations here: they live in an encrypted hostsfile (a household
   // device inventory has no place in the public repo, and nix cannot read a
   // sops file at eval). The dhcp tab reads the decrypted copy the host
   // mounts at DHCP_HOSTS_PATH instead.

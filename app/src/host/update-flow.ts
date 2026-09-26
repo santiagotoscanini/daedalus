@@ -10,9 +10,9 @@ import {
 //
 // Both doors — the Update button's server function (server/updates.ts) and
 // the MCP `image.update` tool (host/mcp/server.ts) — call runImageUpdate and
-// only translate its outcome into their own response shape. Same argument as host/apply-flow.ts: two hand-copied bodies are two
-// bodies that drift. The lock, the pickup window and the order of the steps
-// are host/flow.ts's, shared with it.
+// only translate its outcome into their own response shape: two hand-copied
+// bodies are two bodies that drift. The lock, the pickup window and the order
+// of the steps are host/flow.ts's, shared with Apply and the engine update.
 //
 // A queued batch is not a third door. It is the same call with more targets,
 // which is what keeps "several at once" from becoming a second mechanism with
@@ -47,11 +47,9 @@ export const runImageUpdate: (input: {
       return { ok: false, code: 'refused', reason: 'no container named' }
     }
 
-    // Structural, not factual. Whether a pin exists, may move, or already
-    // moves as somebody's lockstep member is checked on the host against the
-    // nix-rendered registry that is also the allowlist — see the note below. A
-    // container listed twice is neither of those: it is a malformed request,
-    // and catching it here costs one comparison instead of a round trip.
+    // Structural, not factual (the facts are the host's — see `prepare`). A
+    // container listed twice is a malformed request, and catching it here
+    // costs one comparison instead of a round trip; the host refuses it too.
     const names = input.targets.map((t) => t.container)
     const dupe = names.find((n, i) => names.indexOf(n) !== i)
     if (dupe !== undefined) {

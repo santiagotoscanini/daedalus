@@ -43,8 +43,8 @@ process.on('unhandledRejection', (reason) => {
 // --- 2. migrations ----------------------------------------------------------
 //
 // drizzle's migrator and `drizzle-kit migrate` keep the same ledger
-// (`drizzle.__drizzle_migrations`), so a database migrated by hand until now
-// is picked up where it stands. Its own one-connection client, closed before
+// (`drizzle.__drizzle_migrations`), so a database migrated by hand
+// (`pnpm db:migrate`, the dev-mode path) is picked up where it stands. Its own one-connection client, closed before
 // the app opens its pool. A failure here exits non-zero on purpose: serving
 // on a schema the code does not match is how data gets damaged.
 async function runMigrations() {
@@ -181,7 +181,7 @@ const server = serve({
       const entry = files.get(decoded)
       if (entry !== undefined) return staticResponse(request, entry, decoded)
       // A hashed name that is not in this build is a tab from the previous
-      // one. It gets a bare 404, not the app's 34 kB not-found page rendered
+      // one. It gets a bare 404, not the app's whole not-found page rendered
       // as a script.
       if (decoded.startsWith('/assets/')) return new Response('Not Found', { status: 404 })
     }
@@ -195,10 +195,12 @@ const server = serve({
 
 await server.ready()
 
-// node is PID 1 in the container, where a signal with no handler is ignored:
-// without this `podman stop` waits out its ten seconds and SIGKILLs. Stop
-// accepting, give in-flight requests a moment, then leave — the pool and the
-// scheduler's timers would otherwise hold the process open forever.
+// Run without `--init`, node is PID 1, where a signal with no handler is
+// ignored and `podman stop` waits out its ten seconds before SIGKILL; under
+// the apps platform's `--init` the default handler would drop in-flight
+// requests instead. Either way: stop accepting, give in-flight requests a
+// moment, then leave — the pool and the scheduler's timers would otherwise
+// hold the process open after the listener closes.
 let stopping = false
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {

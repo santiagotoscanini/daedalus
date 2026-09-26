@@ -13,10 +13,11 @@ import { env } from './env'
 // `app-<name>-deploy.service` — the one that already knows how to compare
 // digests, health-check through traefik and mail on failure.
 //
-// This is push on top of the poll, not instead of it. The 2-minute timer in
-// stacks/apps stays: a notification that arrives while the box is off is lost,
-// whereas the timer's Persistent=true catches up on boot. Push removes
-// latency, the timer keeps the system self-healing.
+// This is push on top of the poll, not instead of it. The deploy timer
+// (nix/modules/apps/apps.nix, every 2 minutes by default) stays: a
+// notification that arrives while the box is off is lost, whereas the timer's
+// Persistent=true catches up on boot. Push removes latency, the timer keeps
+// the system self-healing.
 
 const DEPLOY_STATE = env.get('DEPLOY_STATE_DIR')
 
@@ -27,7 +28,7 @@ export type DeployStatus = {
   app: string | null
   state: DeployState
   error: string
-  /** When the host agent took the request — null on statuses from before v2. */
+  /** When the host agent took the request — null until it has taken one. */
   startedAt: string | null
   finishedAt: string | null
 }
@@ -55,12 +56,12 @@ export async function readDeployStatus(): Promise<DeployStatus> {
 /**
  * The last deploy as the app's own deploy unit published it —
  * `/deploy-state/<app>.json`, enveloped, written by publish_state in
- * stacks/apps/assets/deploy.sh.
+ * nix/modules/apps/assets/deploy.sh.
  *
- * Timing fields are null on records migrated from the pre-JSON text state
- * (the script synthesises those once, on its first tick after the format
- * change); `httpCode` is the probe's answer, `"unverified"` for stage=off
- * deploys where there is no ingress to ask.
+ * Timing fields are null wherever deploy.sh had none to record (a record it
+ * synthesised from its older text state, a tick where nothing new was pulled,
+ * a failure before the restart finished); `httpCode` is the probe's answer,
+ * `"unverified"` for stage=off deploys where there is no ingress to ask.
  */
 export type DeployRecord = {
   app: string
@@ -100,7 +101,7 @@ export async function lastDeploy(app: string): Promise<DeployRecord | null> {
   return snap.available ? snap.data : null
 }
 
-/** True when pulls are currently failing (sibling marker file from deploy.sh). */
+/** True when pulls are currently failing (deploy.sh's `<app>.pull` marker beside the record). */
 export async function pullFailing(app: string): Promise<boolean> {
   try {
     await readFile(join(DEPLOY_STATE, `${app}.pull`), 'utf8')

@@ -2,8 +2,8 @@ import { getJson } from '../lib/http'
 import { env } from './env'
 
 // The Prometheus client — every PromQL read in the app goes through these.
-// Reached over the `monitoring` bridge stacks/daedalus/daedalus.nix adds to
-// this container; null/[] on failure per the rule in lib/http.ts.
+// Reached over the `monitoring` bridge nix/stacks/daedalus/daedalus.nix adds
+// to this container; null/[] on failure per the rule in lib/http.ts.
 
 export const PROM = () => env.get('PROMETHEUS_URL')
 
@@ -11,10 +11,10 @@ export type VectorResult = { metric: Record<string, string>; value: [number, str
 export type MatrixResult = { metric: Record<string, string>; values: [number, string][] }
 
 /**
- * Escape a string landing inside a PromQL regex or label value. App names are
- * constrained to [a-z][a-z0-9_-]* by the platform, but interpolations get
- * escaped, not trusted. Exported so every module that interpolates a name
- * into PromQL uses the same rule.
+ * Escape a string landing inside a PromQL regex. App names are already one
+ * DNS label (lib/hostname.ts `isAppName`), but interpolations get escaped,
+ * not trusted. Exported so every module that interpolates a name into PromQL
+ * uses the same rule.
  */
 export function promEscape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

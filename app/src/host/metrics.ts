@@ -3,13 +3,13 @@ import { type MatrixResult, promEscape, promMatrix, promVector, type VectorResul
 
 // The app pages' readings from Prometheus + Loki, over the shared clients in
 // host/prom.ts / host/loki.ts (which carry the retry ladder and the one-patient-
-// attempt Loki rule — this file used to hand-roll bare fetches without them).
+// attempt Loki rule).
 //
 // Per-container CPU/memory/pids come from the textfile exporter in
-// stacks/monitoring, which reads cgroup v2 directly under
-// user@1000.service. cadvisor cannot see those — it walks the system cgroup
-// tree — which is why this box has no packaged container exporter and why
-// these series are hand-rolled.
+// nix/modules/monitoring/monitoring.nix, which reads cgroup v2 directly under
+// the operator's user@<uid>.service. cadvisor cannot see those — it walks the
+// system cgroup tree — which is why this box has no packaged container
+// exporter and why these series are hand-rolled.
 //
 // Two consequences worth remembering when reading anything below:
 //
@@ -28,7 +28,7 @@ export type AppStatus = {
   state: 'running' | 'attention' | 'stopped' | 'unknown'
   /** container_up textfile metric: is the container process alive? */
   containerUp: boolean | null
-  /** gatus probing the public URL from outside: is it actually serving? */
+  /** gatus probing the app's healthPath through traefik: is it actually serving? */
   healthy: boolean | null
   /** Requests per minute through traefik, 5m average. */
   rpm: number | null
@@ -49,9 +49,8 @@ const firstSeries = (m: MatrixResult[]): number[] =>
   m[0] ? m[0].values.map(([, v]) => Number(v)) : []
 
 /**
- * Status for every app in one round trip per metric, rather than per app —
- * the list page renders 3 apps today but this is the query that would get
- * silly first.
+ * Status for every app in one round trip per metric, rather than per app, so
+ * the list page's cost does not grow with the registry.
  *
  * State is deliberately two signals, not one. `container_up` says the process
  * exists; gatus says it answers. An app that is up but failing its health
@@ -181,9 +180,9 @@ export async function databaseSize(name: string): Promise<number | null> {
  * Everything comes from postgres_exporter (`app-db-exporter`), which is the
  * only way in: each app's role can reach its own database and nothing else, so
  * daedalus — which holds credentials for `daedalus` alone — cannot connect to
- * another app's database to ask. The exporter runs as a superuser inside the
- * cluster and publishes per-database counters for all of them, which is the
- * whole reason it exists.
+ * another app's database to ask. The exporter connects as the cluster's
+ * `monitoring` role and publishes per-database counters for all of them,
+ * which is the whole reason it exists.
  *
  * The consequence is that this page can show shape and traffic but never
  * schema: no table list, no row counts, no slow queries. Those need a
@@ -314,8 +313,8 @@ export const NO_DATABASE: AppDatabase = {
  * An egress app borrows a gluetun container's whole network namespace, so
  * "the app's VPN" is really that gluetun instance — and every instance is
  * scraped under a prometheus job named after its container
- * (`scrapeJob ? name` in platform/gluetun-lib.nix). That naming is what lets
- * this take the container name straight off the app record instead of keeping
+ * (`scrapeJob ? name` in nix/platform/lib/gluetun-lib.nix). That naming is
+ * what lets this take the container name straight off the app record instead of keeping
  * a second table of control-API ports.
  */
 export type AppVpn = {
@@ -382,11 +381,10 @@ export async function logVolume(name: string): Promise<number | null> {
 /**
  * The live deploy stream for an app: this box pulling the new image,
  * restarting the container and health-checking it. alloy ships the host
- * journal (stacks/logging), so this is complete and live.
+ * journal (nix/modules/logging), so this is complete and live.
  *
- * Deploys only. The build half is not a log stream any more — builds run on
- * the box and are recorded as rows (lib/repo/builds.ts), with their full
- * output on the build's own page.
+ * Deploys only: builds are recorded as rows (lib/repo/builds.ts), with their
+ * full output on the build's own page.
  */
 export async function activityLog(name: string, limit = 60, hours = 6): Promise<LogLine[]> {
   const lines = await lokiLines(`{unit="app-${name}-deploy.service"}`, limit, hours)

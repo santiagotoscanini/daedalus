@@ -1,12 +1,11 @@
 import type { BridgeStatus } from './bridge'
 
-// What a bridge verb with more than one door has in common.
-//
-// Apply and image-update are each reachable from a button (its server
-// function) and an MCP tool, and each is one implementation (host/apply-flow.ts,
-// host/update-flow.ts) the doors adapt. Those two implementations were
-// themselves the same skeleton written twice — a promise chain, a `pending`
-// request, a pickup window, a `running` check — and this is that skeleton once:
+// The skeleton every bridge verb that must refuse a second request while the
+// host is busy shares: a promise chain, a `pending` request, a pickup window,
+// a `running` check. Its arrangements are host/apply-flow.ts,
+// host/update-flow.ts (both reachable from a button and an MCP tool),
+// host/engine-flow.ts, host/claude-code-flow.ts and host/version-update.ts
+// (a button each). The steps are
 //
 //   check the input → refuse if the host is busy → prepare → publish → remember
 //
@@ -17,14 +16,16 @@ import type { BridgeStatus } from './bridge'
 //
 // WHAT IS NOT HERE, on purpose.
 //
-// Who may call. The button asks core/authz `assertAdmin()`, the MCP tool
-// `assertMachineActor(proof)` — two different questions with one answer, the actor, which every flow takes as
-// input. Same argument as core/builds/actions.ts: a flow that read the ambient
-// request could not be called from /mcp, which has none.
+// Who may call. The button's server function is an `adminFn` (server/fn.ts,
+// which runs core/authz `assertAdmin()`), the MCP tool asks
+// `assertMachineActor(proof)` — two different questions with one answer, the
+// actor, which every flow takes as input. Same argument as
+// core/builds/actions.ts: a flow that read the ambient request could not be
+// called from /mcp, which has none.
 //
-// Waiting for the outcome. Neither flow waits: both return the request's id
-// the moment it is published and every door's caller polls the status file
-// (the button's status query; the MCP tool hands its caller the id). A rebuild outlives any
+// Waiting for the outcome. No flow waits: each returns the request's id the
+// moment it is published and the caller polls the status file (the button's
+// status query; the MCP tool hands its caller the id). A rebuild outlives any
 // request that could wait on it.
 //
 // The gate and the flow are two things because Apply has two flows behind ONE
@@ -36,9 +37,10 @@ export type FlowRefusal<C extends string> = { ok: false; code: C; reason: string
 
 /**
  * lib/result.ts's shape, flat: the published request's `id` and the flow's own
- * fields on success, a `code` beside the `reason` on failure. Flat because the
- * doors branch on `code` (the route maps it to an HTTP status, the MCP tool
- * prefixes it) — see lib/result.ts for why that is not a nested `reason.code`.
+ * fields on success, a `code` beside the `reason` on failure. Flat because a
+ * machine caller branches on `code` (the MCP tool prefixes it to the refusal;
+ * the buttons show only the reason) — see lib/result.ts for why that is not a
+ * nested `reason.code`.
  * `busy` is the gate's own code and every flow can answer it.
  */
 export type FlowOutcome<T extends object, C extends string = never> =
@@ -87,7 +89,8 @@ export function defineGate<S extends BridgeStatus>(opts: {
 
   return {
     async blocked() {
-      // Refuse while one is in flight. The host script holds fleet.rebuildLock,
+      // Refuse while one is in flight. The rebuilding host scripts hold
+      // fleet.rebuildLock (claude-code's hands its rebuild to engine-update),
       // so a second request could not corrupt anything — it would queue behind
       // the first and then act on a snapshot taken BEFORE the first one landed.
       // Rejecting here is both faster feedback and the correct answer.

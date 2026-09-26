@@ -10,15 +10,16 @@ import { env } from './env'
 // The box's Prometheus config is nix-generated and cannot know which
 // machines were approved after the last rebuild, so the nodes reach it the
 // way Prometheus itself provides for: file-based discovery. This writes
-// `<apply dir>/nodes/targets.json` in file_sd's shape, and the daedalus nix
-// module mounts that directory into the prometheus container and points a
+// `<apply dir>/nodes/targets.json` in file_sd's shape, and
+// nix/stacks/daedalus/daedalus-nodes.nix mounts that directory into the prometheus container and points a
 // `nodes` job at it (`fleet.prometheusFileSd.nodes`). Prometheus re-reads
 // the file on change, so an approval scrapes within its refresh interval
 // and a revoke stops it — no rebuild.
 //
 // Rewritten whole on every change that could move a target: approve,
 // revoke, forget, a policy change, and a hello whose address differs from
-// the last. The dnsmasq lines below ride the same writes.
+// the last (lib/repo/nodes.ts `publishNodeTargets`). The dnsmasq lines below
+// ride the same writes.
 
 export type NodeTarget = {
   id: string
@@ -61,9 +62,9 @@ export function nodeTargetsMissing(): boolean {
 
 // How a machine gets its name on the network. pi-hole's dnsmasq gives a
 // lease the hostname a `dhcp-host=<MAC>,<name>` line names, over whatever
-// the client sent, so `<name>.lan` follows the machine to any address the
-// pool hands it. The box writes one line per approved node here, the
-// daedalus nix module copies the file into the directory pi-hole reads as
+// the client sent, so `<name>.<lanDomain>` follows the machine to any address
+// the pool hands it. The box writes one line per approved node here,
+// daedalus-nodes.nix copies the file into the directory pi-hole reads as
 // `dhcp-hostsdir` and reloads FTL (a HUP, no restart), and no rebuild is
 // involved — a join must not cost one, and a MAC must not enter git.
 //

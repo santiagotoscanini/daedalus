@@ -9,10 +9,11 @@ import {
 } from './claude-session-request'
 
 // The file names on both halves of this bridge are a contract with a host unit
-// this repository cannot see: stacks/daedalus watches
-// `claude-session-request.json` and writes `claude-session-status.json`. A
-// rename here fails nothing — the buttons would simply stop reaching the box,
-// silently, with request files piling up under a name nothing watches.
+// no TypeScript check reaches: nix/stacks/daedalus/daedalus-verbs.nix watches
+// `claude-session-request.json` and its agent writes
+// `claude-session-status.json`. A rename here fails nothing — the buttons
+// would simply stop reaching the box, silently, with request files piling up
+// under a name nothing watches.
 //
 // The rest of this file is about the one property that matters more than the
 // names: a selector this side refuses must leave the bridge directory exactly

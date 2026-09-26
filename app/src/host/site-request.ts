@@ -31,7 +31,7 @@ export type SiteRequestStatus = {
   id: string | null
   action: SiteAction | null
   state: SiteRequestState
-  /** Drives the progress display: validating, writing, staging, committing. */
+  /** Drives the progress display: validating, writing, staging, committing, publishing. */
   phase: string
   /** What happened, in the host's words — shown verbatim on success. */
   detail: string

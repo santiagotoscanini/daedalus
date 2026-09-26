@@ -1,13 +1,8 @@
 import { webAppHosts } from './nix-manifest'
 
-// Where a dashboard loader dials, and nothing else.
-//
-// This is NOT core/ctx.ts's `Ctx`. That one is a capability set — env, secret,
-// snapshot, store, http, loki — handed to a reader so it never reaches for the
-// machine itself. This is two strings' worth of addressing, read from the nix
-// manifest, and it is all a category tab needs to know about where a service
-// lives. They were both called `Ctx`, both built by a `makeCtx`, and which one
-// `await makeCtx()` meant depended on the file it was written in.
+// Where a dashboard loader dials, and nothing else: two strings' worth of
+// addressing, read from the nix manifest. Loaders receive it as `ctx.hosts`
+// (core/ctx.ts builds the `Ctx` with this).
 
 export type Hosts = {
   /**

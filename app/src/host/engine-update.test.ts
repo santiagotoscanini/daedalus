@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readEngineUpdateStatus } from './engine-update'
 
 // The one rule in this module that is not a straight file read — the same
-// one host/image-update.ts carries, for the same incident: a `running`
-// status that has stopped being refreshed is a corpse, and reporting it as
-// live would disable the button until a container restart.
+// one host/image-update.ts carries, for the same reason: a `running` status
+// that has stopped being refreshed is a corpse, and reporting it as live
+// would disable the button.
 
 let dir: string
 let previous: string | undefined

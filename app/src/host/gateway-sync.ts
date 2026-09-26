@@ -33,7 +33,10 @@ export type SyncSummary = {
   deleted: string[]
   kept: string[]
   skipped: { alias: string; why: string }[]
-  /** The gateway could not be read or written: nothing changed. */
+  /**
+   * No gateway, the providers or the gateway could not be read, or a write failed. The
+   * run stopped there: writes before the failure stand, and the lists are empty.
+   */
   error: string | null
 }
 
@@ -369,8 +372,9 @@ export function syncGateway(ctx: Ctx, gw?: GatewayClient): Promise<SyncSummary> 
       }
     }
     try {
-      // `offered` comes from the provider list itself now — the box reads
-      // its own policy in host/providers/fleet.ts, where a node reads its.
+      // Each reading carries its provider's `offered` (host/providers/fleet.ts
+      // reads it from the box's policy or the node's); the policies below are
+      // the per-model offer, alias and mode.
       const readings = await readFleetProviders(ctx)
       const summary = await reconcile(
         gw ?? litellmClient(ctx.gateway),
@@ -420,8 +424,7 @@ export function requestGatewaySync(): void {
 
 /**
  * The five-minute run, started once per process the way the build scheduler
- * is (from /api/healthz, which gatus calls every minute). Idempotent; an
- * earlier module version's interval is replaced.
+ * is (from /api/healthz, which gatus calls every minute). Idempotent.
  */
 let armedHere = false
 export function ensureGatewaySync(): void {

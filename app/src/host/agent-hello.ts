@@ -3,7 +3,7 @@ import { bool, decode, int, nullable, obj, optional, str } from '../lib/contract
 
 // The hello: how a machine running the agent introduces itself to the box.
 //
-// The agent generates an ed25519 keypair at install and signs every hello
+// The agent generates an ed25519 keypair on first start and signs every hello
 // with it. The signature is over the PAYLOAD STRING exactly as the agent
 // serialised it — the box never re-serialises JSON to check a signature,
 // which is the mistake that makes signed JSON fragile. The envelope is
@@ -14,9 +14,8 @@ import { bool, decode, int, nullable, obj, optional, str } from '../lib/contract
 // timestamp inside it bounds a replay: a hello older than five minutes (or
 // from the future by as much) is refused even with a valid signature.
 //
-// Pure: node's crypto and nothing else, so it is tested without a database
-// and reused by the route and by anything that later wants to verify what a
-// node signed.
+// Pure: node's crypto and nothing else, so it is tested without a database.
+// The caller is routes/api.nodes.hello.ts.
 
 /** How far a hello's clock may be from ours, in seconds, and still count. */
 export const HELLO_MAX_SKEW_SECS = 300

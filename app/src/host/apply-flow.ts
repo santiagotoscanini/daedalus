@@ -5,17 +5,16 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 //
 // Both doors — the Apply button's server function (server/registry.ts) and
 // the MCP `apply` tool (host/mcp/server.ts) — call runApply and only translate
-// its outcome into their own response shape. Before this module the doors were
-// hand-copied bodies that could drift.
+// its outcome into their own response shape, so the two cannot drift.
 //
 // runSecretApply is the third door, for a vault secret set from Settings
 // (core/settings/cloudflare-token.ts, core/settings/github-app.ts). It shares
 // the lock, the busy checks and the pickup window, and differs in one rule: it
 // is always its own Apply.
 //
-// The lock, the pickup window and the order of the steps are host/flow.ts's,
-// shared with host/update-flow.ts. What is here is what an Apply IS: what it
-// carries, and when there is nothing to carry.
+// The lock, the pickup window and the order of the steps are host/flow.ts's.
+// What is here is what an Apply IS: what it carries, and when there is nothing
+// to carry.
 
 /**
  * `noop` is runApply's and `pending` is runSecretApply's; one union because
@@ -165,11 +164,12 @@ const apply = defineFlow<string, { changed: { name: string; fields: string[] }[]
       publish: async () =>
         requestApply({
           // Finished files, not data structures: the host agent writes these
-          // bytes verbatim and never parses either. apps.json always — its
-          // render is idempotent and the agent reports no-change; site.json
-          // only when its desired document differs from the committed one;
-          // nodes.json always, for the same reason as apps.json; daedalus.json always, because the point of the stamp is that every
-          // write into the directory says which engine made it.
+          // bytes verbatim and never parses them. apps.json and nodes.json
+          // always — their renders are idempotent and the agent reports
+          // no-change; site.json only when its desired document differs from
+          // the committed one; daedalus.json always, because the point of the
+          // stamp is that every write into the directory says which engine
+          // made it.
           files: {
             'apps.json': renderRegistryFile(toRegistryExport(records)),
             'nodes.json': nodesFile.text,
@@ -279,10 +279,10 @@ export function runSecretApply(
  * rebuilding the comparison somewhere else. A preview that could disagree with
  * the Apply it previews would be worse than no preview.
  *
- * Nothing here takes the lock, writes a request file, or touches `pending`:
- * two callers previewing at once is a pair of reads. Added for the MCP
- * `apply.preview` tool, which is how an agent sees what it is about to commit
- * to before it calls `apply`.
+ * Nothing here takes the lock or writes a request file, and `gate.blocked()`
+ * only ever forgets a `pending` the host has settled: two callers previewing
+ * at once is a pair of reads. The MCP `apply.preview` tool's body — how an
+ * agent sees what it is about to commit to before it calls `apply`.
  */
 export async function applyPreview(): Promise<{
   changed: { name: string; fields: string[] }[]

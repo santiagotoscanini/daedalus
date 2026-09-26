@@ -4,8 +4,9 @@ import { defineBridge } from './bridge'
 // The app half of Apply. It writes one file and reads another.
 //
 // Everything privileged happens on the host: a systemd.path unit watches
-// request.json and starts daedalus-apply.service, which commits the export
-// and runs nixos-rebuild (stacks/daedalus/host/apply.sh). This container
+// request.json and starts daedalus-apply.service, which writes the payload
+// under site/, stages (and on the operator's switch, commits) it and runs
+// nixos-rebuild (nix/stacks/daedalus/host/apply.sh). This container
 // cannot rebuild anything and holds no credential that would let it — see
 // host/bridge.ts for the mechanics and the trust boundary.
 
@@ -16,7 +17,7 @@ export type ApplyStatus = {
   state: ApplyState
   phase: string
   error: string
-  /** When the host agent took the request — null on statuses from before v2. */
+  /** When the host agent took the request — null while idle. */
   startedAt: string | null
   finishedAt: string | null
   commit: string | null
@@ -44,12 +45,11 @@ export async function readApplyStatus(): Promise<ApplyStatus> {
 }
 
 /**
- * Publish an apply request: the exact bytes to land under site/, rendered here
- * (lib/registry-file.ts, core/site/file.ts) so the host agent never
- * manipulates JSON — it writes each file of the id-stamped payload verbatim.
- * The payload is a map keyed by file name; the names the host will write are
- * fixed in the agent, never taken from the map. request.json carries metadata
- * only; the payload's name is derived from the id on both sides.
+ * The payload of an apply request: the exact bytes to land under site/,
+ * rendered in this container (lib/registry-file.ts, core/site/file.ts) so the
+ * host agent never manipulates JSON — it writes each file verbatim. Keyed by
+ * file name, but the names the host will write are fixed in the agent
+ * (apply.sh's MANAGED), never taken from the map.
  */
 export type ApplyFiles = {
   'apps.json'?: string
@@ -64,6 +64,7 @@ export type ApplyFiles = {
   Record<import('../lib/vault').VaultFile, string>
 >
 
+/** Publish an apply request. request.json carries metadata only; the files ride the id-stamped payload. */
 export async function requestApply(input: {
   files: ApplyFiles
   summary: string
@@ -83,8 +84,8 @@ export function summarise(changed: { name: string; fields: string[] }[]): string
   if (changed.length === 1) {
     const only = changed[0]
     if (!only) return 'update app registry'
-    // The host prefixes the subject with what it wrote (`site:`, `apps:`), so a
-    // site-only change names its fields and nothing else.
+    // The host prefixes the subject with what it wrote (`site:`, `nodes:`,
+    // `apps:`), so a site- or nodes-only change names its fields and nothing else.
     if (only.name === 'site') return only.fields.join(', ')
     if (only.name === 'nodes') return only.fields.join(', ')
     return `${only.name}: ${only.fields.join(', ')}`

@@ -14,8 +14,8 @@ import { readSnapshot } from '../snapshot'
 // `pins` is the same containers seen from the other end: not the tag but the
 // ref that tag was frozen from, and whether this app may move it. It exists
 // because the Updates page has to render EVERY digest-pinned container —
-// including the two dozen sidecars and exporters that have no page of their
-// own — and a page cannot enumerate what nothing publishes.
+// including the sidecars and exporters that have no page of their own — and
+// a page cannot enumerate what nothing publishes.
 //
 // Schema 2 added `pins`. Read tolerantly rather than gated at 2, because the
 // two halves fail independently: a box that has not re-published since the

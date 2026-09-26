@@ -16,10 +16,7 @@ import {
 // combinators they decode with, and the schema version they agree on, are
 // pure and stayed behind in lib/contract/.
 //
-// Before this module, each snapshot mount had its own read site doing
-// `JSON.parse(raw) as T` — eighteen casts, no staleness signal on most, and a
-// malformed file rendering as its typed fallback with nothing saying so. This
-// replaces the casts with real decoding and makes the three failure modes
+// Every file is decoded, never cast, and the three failure modes stay
 // distinct, because they mean different things on a dashboard:
 //
 //   missing   the producer has never run (available: false, no error)
@@ -27,16 +24,16 @@ import {
 //   stale     the producer stopped — the file says something, but its age
 //             exceeds what its timer promises (stale: true)
 //
-// "A stale file shows yesterday's temperatures as though they were now —
-// which is worse than an empty panel, because it looks like an answer."
-// (stacks/daedalus/daedalus.nix, on the system snapshot.)
+// A stale file is the one that must not pass for fresh: it shows yesterday's
+// temperatures as though they were now, which is worse than an empty panel
+// because it looks like an answer (nix/stacks/daedalus/daedalus-snapshots.nix,
+// on the system snapshot).
 //
-// Files come in two framings. The v2 envelope (daedalusExport: 1) carries
-// domain, schemaVersion, source and generatedAt around a `data` key — nix
-// exports and host snapshots share it. Legacy files are bare documents;
-// detected by the absent marker, decoded whole, aged by mtime. Legacy support
-// exists so this layer could ship before any producer changed, and each
-// fallback dies when its producer adopts the envelope.
+// Files come in two framings. The envelope (daedalusExport: 1) carries
+// domain, schemaVersion, source and generatedAt around a `data` key — the nix
+// exports (platform/export.nix) and the newer host snapshots use it. Bare
+// documents, from every producer that has not adopted it, are detected by the
+// absent marker, decoded whole and aged by mtime.
 
 export type SnapshotResult<T> = {
   data: T
@@ -76,8 +73,9 @@ export async function readSnapshot<T>(opts: {
   /** Envelope schemaVersions this reader understands. Unset = any. */
   acceptVersions?: number[]
   /**
-   * When the file counts as stale. Convention: 3× the producing timer's
-   * interval, so one missed run is jitter and three is a stopped producer.
+   * When the file counts as stale. Convention: about 3× the producing
+   * timer's interval, so one missed run is jitter and three is a stopped
+   * producer.
    */
   maxAgeMs?: number
 }): Promise<SnapshotResult<T>> {

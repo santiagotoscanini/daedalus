@@ -5,7 +5,7 @@ import { identifyMcpToken, type McpIdentity, stampMcpTokenUse } from './tokens'
 //
 // ── the posture, and why it is the same one /api/deploy has ───────────────
 //
-// /mcp is in daedalus's `authBypassRule` (stacks/daedalus/daedalus.nix), so a
+// /mcp is in daedalus's `authBypassRule` (nix/stacks/daedalus/daedalus.nix), so a
 // request arrives here WITHOUT passing Pocket ID — an agent cannot hold a
 // passkey any more than zot can. Three things make that acceptable, and all
 // three have to stay true:
@@ -13,7 +13,9 @@ import { identifyMcpToken, type McpIdentity, stampMcpTokenUse } from './tokens'
 //   1. The endpoint is LAN-only. daedalus is `stage = "lab"`: no Cloudflare
 //      tunnel route, no public CNAME. The only callers are on this network.
 //   2. `isolated = true` puts the container on a private bridge whose only
-//      other member is traefik, so nothing else on the box can dial it.
+//      other member is traefik, so nothing on traefik-net can dial it past
+//      the gate. (It also sits on app-db and monitoring for its own reads;
+//      those bridges' members are the only other containers that can reach it.)
 //   3. THIS FILE. A scoped token, hashed, compared in constant time, checked
 //      BEFORE any work — no body parse, no database read beyond the token
 //      lookup, no tool registration. Fail-closed: no token, unknown token,
@@ -21,8 +23,9 @@ import { identifyMcpToken, type McpIdentity, stampMcpTokenUse } from './tokens'
 //
 // The token IS the authentication on this path, exactly as X-Deploy-Token is
 // on /api/deploy. It is also the AUTHORIZATION for the writes, which is why
-// core/authz.ts grew one named function for a machine caller rather than a
-// flag on the human gate.
+// core/authz.ts has one named function for a machine caller
+// (`assertMachineActor`, called from server.ts) rather than a flag on the
+// human gate.
 //
 // ── stateless ─────────────────────────────────────────────────────────────
 //
@@ -98,8 +101,9 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
     sessionIdGenerator: undefined,
     // Answer with a plain JSON body rather than opening an SSE stream. Nothing
     // here is long-running from the transport's point of view — a write tool
-    // returns as soon as the bridge request is published, and the host agent's
-    // progress is read back by polling a status tool, not by streaming.
+    // returns as soon as the bridge request is published, and the host's
+    // progress is read back by a later read-tool call (builds.get,
+    // deployments, apply.preview's `blocked`), not by streaming.
     enableJsonResponse: true,
   })
 

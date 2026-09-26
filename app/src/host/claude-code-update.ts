@@ -5,14 +5,15 @@ import { defineBridge } from './bridge'
 // reads another.
 //
 // The CLI here is a nix package sealed with DISABLE_UPDATES
-// (platform/claude-code/claude-code.nix says why), so `claude update` is not
-// a path and a flake bump is the only one. The bump starts in the ENGINE —
-// its `nix/platform/claude-code/manifest.json` is what the packaged
-// expression takes as its manifest — and the host agent does exactly that
-// half: fetch the current release, verify the detached signature against
+// (nix/platform/claude-code/claude-code.nix says why), so `claude update` is
+// not a path and a flake bump is the only one. The bump starts in the ENGINE —
+// its `nix/platform/claude-code/manifest.zst.json` is what the packaged
+// expression takes as its manifest — and the host agent
+// (nix/stacks/daedalus/host/claude-code-update.sh) does exactly that half:
+// fetch the current release, verify the detached signature against
 // Anthropic's published key, commit the manifest into the engine clone, push
-// it, and then publish an `engine-request.json` so the proven engine verb
-// (host/engine-update.ts) carries out the rebuild.
+// it, and then publish an `engine-request.json` so the engine-update verb
+// (host/engine-update.ts is its bridge) carries out the rebuild.
 //
 // That handoff is why `state: 'done'` here does not mean the new CLI is
 // installed — it means it is PINNED and the engine update has been asked for.
@@ -61,10 +62,11 @@ const bridge = defineBridge<ClaudeCodeUpdateStatus>({
 /**
  * How long a `running` status may go unrefreshed before it is a corpse.
  *
- * Far shorter than the engine's hour, because nothing here builds: three
+ * Far shorter than the engine's hour, because nothing here builds: a few
  * small fetches, a signature check and a push. The unit's own
- * TimeoutStartSec is 10 minutes (stacks/daedalus/claude-code-update.nix) and
- * this is that plus slack; the two move together.
+ * TimeoutStartSec is 10 minutes (nix/stacks/daedalus/claude-code-update.nix)
+ * and this is that plus slack; the two move together. `finishedAt` is the
+ * heartbeat: the agent rewrites it at every phase.
  */
 const RUNNING_MAX_MS = 12 * 60_000
 
