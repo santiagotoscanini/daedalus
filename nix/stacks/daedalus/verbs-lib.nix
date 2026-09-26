@@ -15,7 +15,11 @@ let
     prevDir
     registryApps
     deployableApps
-    workspaceEnv
+    mkAgent
+    operatorVars
+    operatorHomeVars
+    commitVars
+    workspaceVars
     workspaceRuntimeInputs
     githubAppField
     githubTokenDir
@@ -52,7 +56,7 @@ let
   # the write-only secrets editor: daedalus can seal a value (sopsStatic, the
   # public recipients) and can never open one, so every step that needs the
   # decryption identity is here. See host/secret-set.sh.
-  secretSetScript = pkgs.writeShellApplication {
+  secretSetScript = mkAgent {
     name = "daedalus-secret-set";
     runtimeInputs = [
       pkgs.coreutils
@@ -63,37 +67,33 @@ let
       pkgs.systemd # refresh the repo snapshot when it is done
       pkgs.util-linux # setpriv
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      PREV_DIR=${lib.escapeShellArg prevDir}
-      SITE_DIR=${lib.escapeShellArg config.fleet.site.path}
-      SECRET_APPS=${lib.escapeShellArg (lib.concatStringsSep " " secretApps)}
-      SYSTEMCTL=${pkgs.systemd}/bin/systemctl
-      GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
-      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
-      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      GIT=${pkgs.git}/bin/git
-      # sopsStatic, the same binary the container bind-mounts. Nothing here
-      # runs in a container, but `pkgs.sops` would be a SECOND 49 MB sops in
-      # the system closure for no difference in behaviour.
-      SOPS=${sopsStatic}/bin/sops
-      # The same derivation sops-nix uses at activation, which is why the
-      # identity it produces matches the `age13…` recipient in site/.sops.yaml.
-      SSH_TO_AGE=${pkgs.ssh-to-age}/bin/ssh-to-age
-      HOST_SSH_KEY=${lib.escapeShellArg (lib.head config.sops.age.sshKeyPaths)}
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/site-lib.sh}
-      ${builtins.readFile ./host/secret-set.sh}
-    '';
+    vars =
+      operatorHomeVars
+      // commitVars
+      // {
+        APPLY_DIR = applyDir;
+        PREV_DIR = prevDir;
+        SITE_DIR = config.fleet.site.path;
+        SECRET_APPS = lib.concatStringsSep " " secretApps;
+        SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
+        GIT = "${pkgs.git}/bin/git";
+        # sopsStatic, the same binary the container bind-mounts. Nothing here
+        # runs in a container, but `pkgs.sops` would be a SECOND 49 MB sops in
+        # the system closure for no difference in behaviour.
+        SOPS = "${sopsStatic}/bin/sops";
+        # The same derivation sops-nix uses at activation, which is why the
+        # identity it produces matches the `age13…` recipient in site/.sops.yaml.
+        SSH_TO_AGE = "${pkgs.ssh-to-age}/bin/ssh-to-age";
+        HOST_SSH_KEY = lib.head config.sops.age.sshKeyPaths;
+      };
+    files = [
+      ./host/lib.sh
+      ./host/site-lib.sh
+      ./host/secret-set.sh
+    ];
   };
 
-  applyScript = pkgs.writeShellApplication {
+  applyScript = mkAgent {
     name = "daedalus-apply";
     runtimeInputs = [
       pkgs.jq
@@ -105,28 +105,24 @@ let
       pkgs.nixos-rebuild
       pkgs.openssh # git push over ssh
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      PREV_DIR=${lib.escapeShellArg prevDir}
-      FLAKE=${lib.escapeShellArg config.fleet.config.repo}
-      SITE_DIR=${lib.escapeShellArg config.fleet.site.path}
-      VAULT_APP_SECRETS=(${lib.concatMapStringsSep " " lib.escapeShellArg vaultAppSecrets})
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      GIT=${pkgs.git}/bin/git
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
-      HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-      GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
-      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
-      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/site-lib.sh}
-      ${builtins.readFile ./host/apply.sh}
-    '';
+    vars =
+      operatorHomeVars
+      // commitVars
+      // {
+        APPLY_DIR = applyDir;
+        PREV_DIR = prevDir;
+        FLAKE = config.fleet.config.repo;
+        SITE_DIR = config.fleet.site.path;
+        VAULT_APP_SECRETS = vaultAppSecrets;
+        GIT = "${pkgs.git}/bin/git";
+        LOCKFILE = config.fleet.rebuildLock;
+        HOSTNAME = config.networking.hostName;
+      };
+    files = [
+      ./host/lib.sh
+      ./host/site-lib.sh
+      ./host/apply.sh
+    ];
   };
 
   # The `<app>:<taskId>` pairs that actually have an
@@ -151,46 +147,42 @@ let
     ) registryApps
   );
 
-  deployTriggerScript = pkgs.writeShellApplication {
+  deployTriggerScript = mkAgent {
     name = "daedalus-deploy-trigger";
     runtimeInputs = [
       pkgs.jq
       pkgs.systemd
       pkgs.coreutils
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      DEPLOYABLE=${lib.escapeShellArg (lib.concatStringsSep " " deployableApps)}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/deploy-trigger.sh}
-    '';
+    vars = operatorVars // {
+      APPLY_DIR = applyDir;
+      DEPLOYABLE = lib.concatStringsSep " " deployableApps;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/deploy-trigger.sh
+    ];
   };
 
   # Run one of an app's scheduled tasks now. A sibling of the deploy trigger,
   # and the same shape: the unit already exists (modules/apps generates it from
   # the registry's `tasks`), this only starts it out of band and reports the
   # outcome to the page that asked. See host/task-run.sh.
-  taskRunScript = pkgs.writeShellApplication {
+  taskRunScript = mkAgent {
     name = "daedalus-task-run";
     runtimeInputs = [
       pkgs.jq
       pkgs.systemd
       pkgs.coreutils
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      RUNNABLE=${lib.escapeShellArg (lib.concatStringsSep " " runnableTasks)}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/task-run.sh}
-    '';
+    vars = operatorVars // {
+      APPLY_DIR = applyDir;
+      RUNNABLE = lib.concatStringsSep " " runnableTasks;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/task-run.sh
+    ];
   };
 
   # Restart the box. A bridge with a single verb: see
@@ -200,7 +192,7 @@ let
   # No allowlist to carry and no argument from the request reaches a command —
   # the request body is read for exactly one string, which is compared against
   # one literal.
-  powerScript = pkgs.writeShellApplication {
+  powerScript = mkAgent {
     name = "daedalus-power";
     runtimeInputs = [
       pkgs.jq
@@ -209,16 +201,14 @@ let
       pkgs.util-linux # flock
       pkgs.coreutils
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/power.sh}
-    '';
+    vars = operatorVars // {
+      APPLY_DIR = applyDir;
+      LOCKFILE = config.fleet.rebuildLock;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/power.sh
+    ];
   };
 
   # Restart the Remote Control server. It exists because rebooting the box
@@ -228,22 +218,20 @@ let
   # lives in that unit's cgroup — see platform/claude-rc.nix, whose
   # restartIfChanged = false is also why rebuilds no longer land updates
   # onto it). See host/claude-rc.sh for the verb and its guards.
-  claudeRcScript = pkgs.writeShellApplication {
+  claudeRcScript = mkAgent {
     name = "daedalus-claude-rc";
     runtimeInputs = [
       pkgs.jq
       pkgs.systemd
       pkgs.coreutils
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/claude-rc.sh}
-    '';
+    vars = operatorVars // {
+      APPLY_DIR = applyDir;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/claude-rc.sh
+    ];
   };
 
   # ── resuming and ending ONE session ───────────────────────────────────────
@@ -343,7 +331,7 @@ let
   # lists below are rendered from ONE source, index for index, so the slug the
   # agent composes a path from and the directory it names in a refusal can
   # never disagree.
-  claudeSessionScript = pkgs.writeShellApplication {
+  claudeSessionScript = mkAgent {
     name = "daedalus-claude-session";
     runtimeInputs = [
       pkgs.coreutils
@@ -353,35 +341,34 @@ let
       pkgs.systemd
       pkgs.util-linux # setpriv
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      CLAUDE_HOME=${lib.escapeShellArg "${config.users.users.${config.fleet.operator.user}.home}/.claude"}
-      CLI_STORE=${lib.escapeShellArg (toString pkgs.claude-code)}
-      TRUSTED_CWDS=${lib.escapeShellArg (lib.concatStringsSep " " claudeSessionCwds)}
-      TRUSTED_SLUGS=${lib.escapeShellArg (lib.concatStringsSep " " (map claudeSessionSlug claudeSessionCwds))}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/claude-session.sh}
-    '';
+    vars = operatorVars // {
+      APPLY_DIR = applyDir;
+      OPERATOR_HOME = config.users.users.${config.fleet.operator.user}.home;
+      CLAUDE_HOME = "${config.users.users.${config.fleet.operator.user}.home}/.claude";
+      CLI_STORE = toString pkgs.claude-code;
+      TRUSTED_CWDS = lib.concatStringsSep " " claudeSessionCwds;
+      TRUSTED_SLUGS = lib.concatStringsSep " " (map claudeSessionSlug claudeSessionCwds);
+    };
+    files = [
+      ./host/lib.sh
+      ./host/claude-session.sh
+    ];
   };
 
   # The clone agent. See host/workspace-clone.sh
   # for why the ssh key never enters the container and what shape the slug
   # is held to.
-  workspaceCloneScript = pkgs.writeShellApplication {
+  workspaceCloneScript = mkAgent {
     name = "daedalus-workspace-clone";
     runtimeInputs = workspaceRuntimeInputs;
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      ${workspaceEnv}
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/workspace-lib.sh}
-      ${builtins.readFile ./host/workspace-clone.sh}
-    '';
+    vars = workspaceVars // {
+      APPLY_DIR = applyDir;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/workspace-lib.sh
+      ./host/workspace-clone.sh
+    ];
   };
 
   # Move a pin and rebuild onto it — the one bridge verb here that edits nix
@@ -392,7 +379,7 @@ let
   # the allowlist (a container absent from it reaches no command) and the
   # lockstep table. Rendered by nix from the running config, so it cannot
   # describe a container the box does not have.
-  imageUpdateScript = pkgs.writeShellApplication {
+  imageUpdateScript = mkAgent {
     name = "daedalus-image-update";
     runtimeInputs = [
       pkgs.jq
@@ -406,28 +393,26 @@ let
       pkgs.nixos-rebuild
       pkgs.openssh # git push over ssh
     ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      FLAKE=${lib.escapeShellArg config.fleet.config.repo}
-      # For lib.sh's site_engine_override: the agent refuses while one is set.
-      SITE_DIR=${lib.escapeShellArg config.fleet.site.path}
-      PINS=${pkgs.writeText "daedalus-image-pins.json" (builtins.toJSON config.fleet.export.domains.images.data.pins)}
-      LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
-      HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-      GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
-      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
-      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      OPERATOR_RUNTIME_DIR=${lib.escapeShellArg config.fleet.operator.runtimeDir}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      PODMAN=${pkgs.podman}/bin/podman
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/image-update.sh}
-    '';
+    vars =
+      operatorHomeVars
+      // commitVars
+      // {
+        APPLY_DIR = applyDir;
+        FLAKE = config.fleet.config.repo;
+        # For lib.sh's site_engine_override: the agent refuses while one is set.
+        SITE_DIR = config.fleet.site.path;
+        PINS = pkgs.writeText "daedalus-image-pins.json" (
+          builtins.toJSON config.fleet.export.domains.images.data.pins
+        );
+        LOCKFILE = config.fleet.rebuildLock;
+        HOSTNAME = config.networking.hostName;
+        OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
+        PODMAN = "${pkgs.podman}/bin/podman";
+      };
+    files = [
+      ./host/lib.sh
+      ./host/image-update.sh
+    ];
   };
 
   # The status file's undertaker.
@@ -492,7 +477,7 @@ let
   });
 
   # The token minter. host/github-token.sh opens with why the key stays here.
-  githubTokenScript = pkgs.writeShellApplication {
+  githubTokenScript = mkAgent {
     name = "daedalus-github-token";
     runtimeInputs = [
       pkgs.openssl
@@ -502,23 +487,21 @@ let
       pkgs.gnused # gh_redact
       pkgs.util-linux # setpriv, for lib.sh's operator-side status publish
     ];
-    text = ''
-      PEM=${lib.escapeShellArg config.sops.secrets."github-app-pem".path}
-      CLIENT_ID=${lib.escapeShellArg (githubAppField "clientId")}
-      OWNER=${lib.escapeShellArg (githubAppField "owner")}
+    vars = operatorVars // {
+      PEM = config.sops.secrets."github-app-pem".path;
+      CLIENT_ID = githubAppField "clientId";
+      OWNER = githubAppField "owner";
       # The trusted constant, never site.json's copy (platform/site.nix
       # asserts the two agree).
-      OWNER_ID=${lib.escapeShellArg (toString config.fleet.github.expectedOwnerId)}
-      OUT_DIR=${lib.escapeShellArg githubTokenDir}
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/github-lib.sh}
-      ${builtins.readFile ./host/github-token.sh}
-    '';
+      OWNER_ID = config.fleet.github.expectedOwnerId;
+      OUT_DIR = githubTokenDir;
+      APPLY_DIR = applyDir;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/github-lib.sh
+      ./host/github-token.sh
+    ];
   };
 in
 {

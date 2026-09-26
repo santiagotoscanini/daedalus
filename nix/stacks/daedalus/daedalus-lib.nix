@@ -45,6 +45,63 @@ rec {
     startLimitIntervalSec = 0;
   };
 
+  # ── the agents' scripts ─────────────────────────────────────────────────
+  #
+  # Every host agent is ONE shell script: the variables nix hands it, then
+  # shell files under host/, in the order `files` names them (host/lib.sh
+  # first, almost always). `vars` is an attrset, written one `NAME=value` line
+  # each, in name order — the scripts only ever read them:
+  #   string, number, derivation   shell-quoted (a store path needs no quotes)
+  #   path                         copied into the store, then its store path
+  #   list                         a bash array, each element quoted
+  # `excludeShellChecks` passes through to writeShellApplication, which also
+  # runs shellcheck over the whole script when the system is built.
+  mkAgent =
+    {
+      name,
+      runtimeInputs,
+      vars,
+      files,
+      excludeShellChecks ? [ ],
+    }:
+    pkgs.writeShellApplication {
+      inherit name runtimeInputs excludeShellChecks;
+      text =
+        lib.concatStrings (lib.mapAttrsToList (n: v: "${n}=${shellValue v}\n") vars)
+        + lib.concatMapStrings (f: "\n" + builtins.readFile f) files;
+    };
+
+  shellValue =
+    v:
+    if lib.isList v then
+      "(${lib.concatMapStringsSep " " shellValue v})"
+    else if builtins.isPath v then
+      "${v}"
+    else
+      lib.escapeShellArg (toString v);
+
+  # The variable groups the agents share. host/lib.sh reads and publishes
+  # every file in a container-writable directory as the operator, so nearly
+  # every agent needs `operatorVars`; those that run git, ssh or podman in the
+  # operator's own home add the rest of `operatorHomeVars`.
+  operatorVars = {
+    OPERATOR_USER = config.fleet.operator.user;
+    OPERATOR_GROUP = config.fleet.operator.group;
+    SETPRIV = "${pkgs.util-linux}/bin/setpriv";
+  };
+  operatorHomeVars = operatorVars // {
+    OPERATOR_HOME = config.users.users.${config.fleet.operator.user}.home;
+    # Absolute, like every binary a setpriv child runs: it does not inherit
+    # writeShellApplication's PATH resolution for the command itself.
+    ENV_BIN = "${pkgs.coreutils}/bin/env";
+  };
+  # The identities a commit the box makes may carry (host/lib.sh commit_name).
+  commitVars = {
+    GIT_EMAIL = config.fleet.mail.sender;
+    GIT_OPERATOR_NAME = config.fleet.operator.gitName;
+    GIT_OPERATOR_EMAIL = config.fleet.operator.gitEmail;
+  };
+
   # The previous bytes of every site file an Apply (or a secret-set) replaces,
   # which a failed Apply's rollback puts back, commits and pushes. A SIBLING of
   # applyDir and deliberately never mounted: rollback state is trusted for a
@@ -147,19 +204,12 @@ rec {
   # snapshot dirs: derived state, republished on every sync, gone on reboot.
   workspacesDir = "/run/daedalus-workspaces";
 
-  # The env both workspace agents share. The git binary is passed absolute
-  # like PODMAN/SETPRIV in the siblings: the setpriv child does not inherit
-  # writeShellApplication's PATH resolution for the command itself.
-  workspaceEnv = ''
-    WORKSPACE_ROOT=${lib.escapeShellArg workspaceRoot}
-    OUT_DIR=${lib.escapeShellArg workspacesDir}
-    OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-    OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-    OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-    SETPRIV=${pkgs.util-linux}/bin/setpriv
-    ENV_BIN=${pkgs.coreutils}/bin/env
-    GIT=${pkgs.git}/bin/git
-  '';
+  # The variables both workspace agents share (mkAgent's `vars`).
+  workspaceVars = operatorHomeVars // {
+    WORKSPACE_ROOT = workspaceRoot;
+    OUT_DIR = workspacesDir;
+    GIT = "${pkgs.git}/bin/git";
+  };
 
   workspaceRuntimeInputs = [
     pkgs.jq

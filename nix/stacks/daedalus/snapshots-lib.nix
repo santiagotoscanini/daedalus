@@ -13,7 +13,10 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     registryApps
-    workspaceEnv
+    mkAgent
+    operatorVars
+    operatorHomeVars
+    workspaceVars
     workspaceRuntimeInputs
     envDir
     imageDir
@@ -27,19 +30,23 @@ let
   # host/workspace-sync.sh for the split.
   mkWorkspaceSyncScript =
     doSync:
-    pkgs.writeShellApplication {
+    mkAgent {
       name = "daedalus-workspace-${if doSync then "sync" else "publish"}";
       runtimeInputs = workspaceRuntimeInputs;
-      text = ''
-        DO_SYNC=${if doSync then "1" else "0"}
-        ${workspaceEnv}
-        ${builtins.readFile ./host/lib.sh}
-        ${builtins.readFile ./host/workspace-lib.sh}
-        ${builtins.readFile ./host/workspace-sync.sh}
-      '';
+      vars = workspaceVars // {
+        DO_SYNC = if doSync then "1" else "0";
+      };
+      files = [
+        ./host/lib.sh
+        ./host/workspace-lib.sh
+        ./host/workspace-sync.sh
+      ];
     };
 
-  envSnapshotScript = pkgs.writeShellApplication {
+  # Every snapshot below publishes into an operator-owned /run directory
+  # ($OUT_DIR) as the operator (host/lib.sh), hence operatorVars throughout.
+
+  envSnapshotScript = mkAgent {
     name = "daedalus-env-snapshot";
     runtimeInputs = [
       pkgs.podman
@@ -48,28 +55,23 @@ let
       pkgs.gnugrep
       pkgs.jq # write_json_atomic validates before publishing
     ];
-    text = ''
-      OUT_DIR=${lib.escapeShellArg envDir}
-      # host/lib.sh publishes into the operator-owned $OUT_DIR as the operator.
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      OPERATOR_RUNTIME_DIR=${lib.escapeShellArg config.fleet.operator.runtimeDir}
+    vars = operatorHomeVars // {
+      OUT_DIR = envDir;
+      OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
       # The registry's apps plus daedalus itself — exactly the set with a page
       # in the UI. Derived from apps.json, so an Apply keeps it current. ALL
       # registry apps, not just the deployable ones: a frozen app still has a
       # page, and that page still shows its environment.
-      APPS=${lib.escapeShellArg (lib.concatStringsSep " " (lib.attrNames registryApps ++ [ "daedalus" ]))}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      PODMAN=${pkgs.podman}/bin/podman
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/env-snapshot.sh}
-    '';
+      APPS = lib.concatStringsSep " " (lib.attrNames registryApps ++ [ "daedalus" ]);
+      PODMAN = "${pkgs.podman}/bin/podman";
+    };
+    files = [
+      ./host/lib.sh
+      ./host/env-snapshot.sh
+    ];
   };
 
-  imageSnapshotScript = pkgs.writeShellApplication {
+  imageSnapshotScript = mkAgent {
     name = "daedalus-image-snapshot";
     runtimeInputs = [
       pkgs.podman
@@ -83,21 +85,16 @@ let
     # quotes is jq's variable, not the shell's. Letting the shell near it is
     # the bug SC2016 is warning about, in reverse.
     excludeShellChecks = [ "SC2016" ];
-    text = ''
-      OUT_DIR=${lib.escapeShellArg imageDir}
-      # host/lib.sh publishes into the operator-owned $OUT_DIR as the operator.
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      OPERATOR_RUNTIME_DIR=${lib.escapeShellArg config.fleet.operator.runtimeDir}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      PODMAN=${pkgs.podman}/bin/podman
-      JQ=${pkgs.jq}/bin/jq
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/image-snapshot.sh}
-    '';
+    vars = operatorHomeVars // {
+      OUT_DIR = imageDir;
+      OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
+      PODMAN = "${pkgs.podman}/bin/podman";
+      JQ = "${pkgs.jq}/bin/jq";
+    };
+    files = [
+      ./host/lib.sh
+      ./host/image-snapshot.sh
+    ];
   };
 
   # Every image pinned as `:tag@sha256:…`, rendered at eval so the freshness
@@ -121,7 +118,7 @@ let
   # runtime probe whose answer changes while the config sits still. The
   # snapshot contract (timer, envelope, staleness aged by the reader) is
   # exactly the shape of that.
-  imageFreshnessScript = pkgs.writeShellApplication {
+  imageFreshnessScript = mkAgent {
     name = "daedalus-image-freshness";
     runtimeInputs = [
       pkgs.skopeo
@@ -130,20 +127,17 @@ let
       pkgs.gnused
       pkgs.coreutils
     ];
-    text = ''
-      OUT_DIR=${lib.escapeShellArg imageDir}
-      PINNED=${pkgs.writeText "daedalus-pinned-images.json" (builtins.toJSON pinnedImages)}
-      # host/lib.sh publishes into the operator-owned $OUT_DIR as the operator.
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/image-freshness.sh}
-    '';
+    vars = operatorVars // {
+      OUT_DIR = imageDir;
+      PINNED = pkgs.writeText "daedalus-pinned-images.json" (builtins.toJSON pinnedImages);
+    };
+    files = [
+      ./host/lib.sh
+      ./host/image-freshness.sh
+    ];
   };
 
-  systemSnapshotScript = pkgs.writeShellApplication {
+  systemSnapshotScript = mkAgent {
     name = "daedalus-system-snapshot";
     # SC2016 is "expressions don't expand in single quotes", which is exactly
     # what every jq program in this script relies on: `$dev`, `$status` and
@@ -163,40 +157,33 @@ let
       pkgs.jq
       pkgs.systemd
     ];
-    text = ''
-      OUT_DIR=${lib.escapeShellArg systemDir}
-      # host/lib.sh publishes into the operator-owned $OUT_DIR as the operator.
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
+    vars = operatorVars // {
+      OUT_DIR = systemDir;
       # The replications the host declares (fleet.backup), one "source<TAB>target"
       # per line, so the panel watches exactly what the backup does.
-      REPLICATION_PAIRS=${
-        lib.escapeShellArg (
-          lib.concatStringsSep "\n" (
-            lib.mapAttrsToList (source: r: "${source}\t${r.target}") config.fleet.backup.replications
-          )
-        )
-      }
-      SMARTCTL=${pkgs.smartmontools}/bin/smartctl
-      DMIDECODE=${pkgs.dmidecode}/bin/dmidecode
-      ZPOOL=${pkgs.zfs}/bin/zpool
-      ZFS=${pkgs.zfs}/bin/zfs
-      LSBLK=${pkgs.util-linux}/bin/lsblk
-      NIX_ENV=${pkgs.nix}/bin/nix-env
-      UNAME=${pkgs.coreutils}/bin/uname
-      SED=${pkgs.gnused}/bin/sed
-      GREP=${pkgs.gnugrep}/bin/grep
-      AWK=${pkgs.gawk}/bin/awk
-      JQ=${pkgs.jq}/bin/jq
-      SYSTEMCTL=${pkgs.systemd}/bin/systemctl
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/system-snapshot.sh}
-    '';
+      REPLICATION_PAIRS = lib.concatStringsSep "\n" (
+        lib.mapAttrsToList (source: r: "${source}\t${r.target}") config.fleet.backup.replications
+      );
+      SMARTCTL = "${pkgs.smartmontools}/bin/smartctl";
+      DMIDECODE = "${pkgs.dmidecode}/bin/dmidecode";
+      ZPOOL = "${pkgs.zfs}/bin/zpool";
+      ZFS = "${pkgs.zfs}/bin/zfs";
+      LSBLK = "${pkgs.util-linux}/bin/lsblk";
+      NIX_ENV = "${pkgs.nix}/bin/nix-env";
+      UNAME = "${pkgs.coreutils}/bin/uname";
+      SED = "${pkgs.gnused}/bin/sed";
+      GREP = "${pkgs.gnugrep}/bin/grep";
+      AWK = "${pkgs.gawk}/bin/awk";
+      JQ = "${pkgs.jq}/bin/jq";
+      SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
+    };
+    files = [
+      ./host/lib.sh
+      ./host/system-snapshot.sh
+    ];
   };
 
-  claudeSnapshotScript = pkgs.writeShellApplication {
+  claudeSnapshotScript = mkAgent {
     name = "daedalus-claude-snapshot";
     # Same reason as the system snapshot: every `$name` inside the jq
     # programs is jq's own variable, bound with --arg. Letting the shell near
@@ -210,36 +197,34 @@ let
       pkgs.jq
       pkgs.systemd
     ];
-    text = ''
-      OUT_DIR=${lib.escapeShellArg claudeDir}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
+    vars = operatorVars // {
+      OUT_DIR = claudeDir;
       # The CLI's own state directory, and the /tmp dir the Remote Control
       # bridge writes a per-session debug log into — both keyed off the
       # operator this unit reads on behalf of, so neither is a literal that
       # can drift from platform/claude-rc.nix's User=.
-      CLAUDE_HOME=${lib.escapeShellArg "${config.users.users.${config.fleet.operator.user}.home}/.claude"}
-      BRIDGE_LOG_DIR=${lib.escapeShellArg "/tmp/claude-${toString config.fleet.operator.uid}"}
+      CLAUDE_HOME = "${config.users.users.${config.fleet.operator.user}.home}/.claude";
+      BRIDGE_LOG_DIR = "/tmp/claude-${toString config.fleet.operator.uid}";
       # What the flake built. Read from the package rather than by running
       # `claude --version`, which is a node start-up to learn a string nix
       # already knows — and which would report the same number either way,
       # hiding exactly the drift this is here to show.
-      CLI_VERSION=${lib.escapeShellArg pkgs.claude-code.version}
-      CLI_STORE=${lib.escapeShellArg (toString pkgs.claude-code)}
-      SED=${pkgs.gnused}/bin/sed
-      GREP=${pkgs.gnugrep}/bin/grep
-      AWK=${pkgs.gawk}/bin/awk
-      JQ=${pkgs.jq}/bin/jq
-      SYSTEMCTL=${pkgs.systemd}/bin/systemctl
-      JOURNALCTL=${pkgs.systemd}/bin/journalctl
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/claude-snapshot.sh}
-    '';
+      CLI_VERSION = pkgs.claude-code.version;
+      CLI_STORE = toString pkgs.claude-code;
+      SED = "${pkgs.gnused}/bin/sed";
+      GREP = "${pkgs.gnugrep}/bin/grep";
+      AWK = "${pkgs.gawk}/bin/awk";
+      JQ = "${pkgs.jq}/bin/jq";
+      SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
+      JOURNALCTL = "${pkgs.systemd}/bin/journalctl";
+    };
+    files = [
+      ./host/lib.sh
+      ./host/claude-snapshot.sh
+    ];
   };
 
-  repoSnapshotScript = pkgs.writeShellApplication {
+  repoSnapshotScript = mkAgent {
     name = "daedalus-repo-snapshot";
     # The jq program binds its own variables with --arg; `$path` in single
     # quotes is jq's, not the shell's — the same exclusion as image-snapshot.
@@ -251,23 +236,19 @@ let
       pkgs.jq
       pkgs.util-linux # setpriv
     ];
-    text = ''
-      OUT_DIR=${lib.escapeShellArg repoDir}
-      REPO_DIR=${lib.escapeShellArg config.fleet.config.repo}
-      SITE_DIR=${lib.escapeShellArg config.fleet.site.path}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      GIT=${pkgs.git}/bin/git
-      JQ=${pkgs.jq}/bin/jq
-      AWK=${pkgs.gawk}/bin/awk
-      DATE=${pkgs.coreutils}/bin/date
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/repo-snapshot.sh}
-    '';
+    vars = operatorHomeVars // {
+      OUT_DIR = repoDir;
+      REPO_DIR = config.fleet.config.repo;
+      SITE_DIR = config.fleet.site.path;
+      GIT = "${pkgs.git}/bin/git";
+      JQ = "${pkgs.jq}/bin/jq";
+      AWK = "${pkgs.gawk}/bin/awk";
+      DATE = "${pkgs.coreutils}/bin/date";
+    };
+    files = [
+      ./host/lib.sh
+      ./host/repo-snapshot.sh
+    ];
   };
 
   # Copies the committed registry to a FIXED path inside the bind mount, so the

@@ -15,7 +15,7 @@
 #   host/build/5-publish.sh    build the image and push it
 #   host/build/6-done.sh       start the deploy, publish the final status
 #
-# The variables (build-agent.nix's legend says what each is for): APPLY_DIR,
+# The variables (build-agent.nix comments each one): APPLY_DIR,
 # BUILDABLE, DEPLOYABLE, OWNER, OWNER_ID, CLIENT_ID, PEM, REGISTRY,
 # NPM_MIRROR_HOST, LAN_IP, NODE_IMAGE, BUILDKIT_ADDR, RAILPACK_FRONTEND,
 # DOCKER_CONFIG_DIR, BUILD_ROOT, WORK_ROOT, MISE_CACHE_DIR, MISE_MOUNT,

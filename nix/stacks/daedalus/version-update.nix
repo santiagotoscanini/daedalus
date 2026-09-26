@@ -30,7 +30,12 @@
 let
   esc = lib.escapeShellArg;
 
-  applyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
+    applyDir
+    mkAgent
+    operatorHomeVars
+    commitVars
+    ;
 
   # The registry as the agent reads it: the allowlist and the parse at once,
   # like image-update's PINS. Rendered from the running config, so it cannot
@@ -41,7 +46,7 @@ let
     verify = if p.verify == null then null else "${p.verify}";
   }) config.fleet.versionPins;
 
-  updateScript = pkgs.writeShellApplication {
+  updateScript = mkAgent {
     name = "daedalus-version-update";
     runtimeInputs = [
       pkgs.jq
@@ -56,27 +61,23 @@ let
       pkgs.systemd # systemctl stop, before a rollback
       config.boot.zfs.package
     ];
-    text = ''
-      APPLY_DIR=${esc applyDir}
-      FLAKE=${esc config.fleet.config.repo}
-      SITE_DIR=${esc config.fleet.site.path}
-      PINS=${pkgs.writeText "daedalus-version-pins.json" (builtins.toJSON pins)}
-      LOCKFILE=${esc config.fleet.rebuildLock}
-      HOSTNAME=${esc config.networking.hostName}
-      GIT_EMAIL=${esc config.fleet.mail.sender}
-      GIT_OPERATOR_NAME=${esc config.fleet.operator.gitName}
-      GIT_OPERATOR_EMAIL=${esc config.fleet.operator.gitEmail}
-      OPERATOR_USER=${esc config.fleet.operator.user}
-      OPERATOR_GROUP=${esc config.fleet.operator.group}
-      OPERATOR_HOME=${esc config.users.users.${config.fleet.operator.user}.home}
-      OPERATOR_RUNTIME_DIR=${esc config.fleet.operator.runtimeDir}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      PODMAN=${pkgs.podman}/bin/podman
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/version-update.sh}
-    '';
+    vars =
+      operatorHomeVars
+      // commitVars
+      // {
+        APPLY_DIR = applyDir;
+        FLAKE = config.fleet.config.repo;
+        SITE_DIR = config.fleet.site.path;
+        PINS = pkgs.writeText "daedalus-version-pins.json" (builtins.toJSON pins);
+        LOCKFILE = config.fleet.rebuildLock;
+        HOSTNAME = config.networking.hostName;
+        OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
+        PODMAN = "${pkgs.podman}/bin/podman";
+      };
+    files = [
+      ./host/lib.sh
+      ./host/version-update.sh
+    ];
   };
 
   # The status file's undertaker, as for the other rebuilding verbs.

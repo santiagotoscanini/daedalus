@@ -75,8 +75,9 @@ let
     applyDir
     buildableApps
     deployableApps
+    mkAgent
+    operatorVars
     ;
-  esc = lib.escapeShellArg;
 
   # ── values the scripts are handed ─────────────────────────────────────────
 
@@ -104,39 +105,13 @@ let
     builder.buildkitPackage
   ];
 
-  # Who host/lib.sh reads requests and publishes status as: the operator, so
-  # root never touches a file in the container-writable apply dir by name.
-  operatorVars = ''
-    OPERATOR_USER=${esc config.fleet.operator.user}
-    OPERATOR_GROUP=${esc config.fleet.operator.group}
-    SETPRIV=${pkgs.util-linux}/bin/setpriv
-  '';
-
   # ── the scripts ───────────────────────────────────────────────────────────
+  #
+  # Each is daedalus-lib.nix's mkAgent: the variables below, then the named
+  # files under host/, as one shell script.
 
-  # daedalus-build's ExecStart. Its variables, by what they are for:
-  #   the bridge        APPLY_DIR — where the request and the status live
-  #   allowlists        BUILDABLE — apps this may build at all
-  #                     DEPLOYABLE — apps whose deploy it starts once pushed
-  #   the GitHub App    OWNER, CLIENT_ID, OWNER_ID (the trusted constant),
-  #                     PEM — the App's private key, which never leaves the host
-  #   where images go   REGISTRY — the box's zot
-  #                     NPM_MIRROR_HOST + LAN_IP — installs go through the
-  #                     mirror, its name pinned to the LAN address in BuildKit
-  #   BuildKit          BUILDKIT_ADDR — the rootless daemon's socket
-  #                     RAILPACK_FRONTEND — the gateway image that turns a
-  #                     Railpack plan into build steps
-  #                     DOCKER_CONFIG_DIR — the push credential, copied in for
-  #                     the one publishing call
-  #   scratch           BUILD_ROOT, WORK_ROOT (one dir per build), LOG_DIR
-  #   Railpack's mise   MISE_CACHE_DIR (one cache per app), MISE_MOUNT and
-  #                     MISE_PATH (where railpack looks), MISE_BINARY (the pin)
-  #   the build user    BUILD_USER, BUILD_GROUP, BUILD_PATH (its whole PATH)
-  #   Dockerfile route  NODE_IMAGE, CHECKS_DOCKERFILE — unused while every app
-  #                     builds with Railpack
-  #   the fence         FENCE_CHECK — re-run per build
-  #   the operator      OPERATOR_USER, OPERATOR_GROUP, SETPRIV (operatorVars)
-  buildScript = pkgs.writeShellApplication {
+  # daedalus-build's ExecStart.
+  buildScript = mkAgent {
     name = "daedalus-build";
     # SC2016 is "expressions don't expand in single quotes" — exactly what
     # every jq program here relies on ($state, $tip … are jq's own variables).
@@ -153,90 +128,117 @@ let
       pkgs.util-linux # setpriv, flock
       pkgs.systemd # systemctl, journalctl
     ];
-    text = ''
-      APPLY_DIR=${esc applyDir}
-      BUILDABLE=${esc (lib.concatStringsSep " " buildableApps)}
-      DEPLOYABLE=${esc (lib.concatStringsSep " " deployableApps)}
-      OWNER=${esc (appField "owner")}
-      OWNER_ID=${esc (toString config.fleet.github.expectedOwnerId)}
-      CLIENT_ID=${esc (appField "clientId")}
-      PEM=${esc config.sops.secrets."github-app-pem".path}
-      REGISTRY=${esc builder.registryHost}
-      NPM_MIRROR_HOST=${esc (toString builder.npmMirrorHost)}
-      LAN_IP=${esc config.fleet.lanIp}
-      NODE_IMAGE=${esc nodeImage}
-      BUILDKIT_ADDR=${esc builder.socket}
-      RAILPACK_FRONTEND=${esc builder.railpackFrontend}
-      DOCKER_CONFIG_DIR=${esc builder.dockerConfigDir}
-      BUILD_ROOT=${esc builder.root}
-      WORK_ROOT=${esc builder.workDir}
-      MISE_CACHE_DIR=${esc builder.miseCacheDir}
-      MISE_MOUNT=${esc (dirOf (dirOf builder.misePath))}
-      MISE_PATH=${esc builder.misePath}
-      MISE_BINARY=${esc "${builder.miseBinary}"}
-      LOG_DIR=${esc builder.logDir}
-      BUILD_USER=${esc builder.user}
-      BUILD_GROUP=${esc buildGroup}
-      BUILD_PATH=${esc buildPath}
-      CHECKS_DOCKERFILE=${./build/Dockerfile.checks}
-      FENCE_CHECK=${esc "${builder.fenceCheck}"}
-      ${operatorVars}
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/github-lib.sh}
-      ${builtins.readFile ./host/build.sh}
-      ${builtins.readFile ./host/build/helpers.sh}
-      ${builtins.readFile ./host/build/0-request.sh}
-      ${builtins.readFile ./host/build/1-token.sh}
-      ${builtins.readFile ./host/build/2-clone.sh}
-      ${builtins.readFile ./host/build/3-detect.sh}
-      ${builtins.readFile ./host/build/4-checks.sh}
-      ${builtins.readFile ./host/build/5-publish.sh}
-      ${builtins.readFile ./host/build/6-done.sh}
-    '';
+    vars = operatorVars // {
+      # the bridge: where the request and the status live
+      APPLY_DIR = applyDir;
+
+      # the allowlists: apps this may build at all, and apps whose deploy it
+      # starts once the image is pushed
+      BUILDABLE = lib.concatStringsSep " " buildableApps;
+      DEPLOYABLE = lib.concatStringsSep " " deployableApps;
+
+      # the GitHub App; its private key never leaves the host
+      OWNER = appField "owner";
+      OWNER_ID = config.fleet.github.expectedOwnerId; # the trusted constant
+      CLIENT_ID = appField "clientId";
+      PEM = config.sops.secrets."github-app-pem".path;
+
+      # where images go, and where installs come from: the npm mirror's name
+      # is pinned to the LAN address inside BuildKit
+      REGISTRY = builder.registryHost;
+      NPM_MIRROR_HOST = builder.npmMirrorHost;
+      LAN_IP = config.fleet.lanIp;
+
+      # BuildKit: the rootless daemon's socket, the gateway image that turns
+      # a Railpack plan into build steps, and the push credential (copied in
+      # for the one publishing call)
+      BUILDKIT_ADDR = builder.socket;
+      RAILPACK_FRONTEND = builder.railpackFrontend;
+      DOCKER_CONFIG_DIR = builder.dockerConfigDir;
+
+      # scratch: one work dir per build, one log per build
+      BUILD_ROOT = builder.root;
+      WORK_ROOT = builder.workDir;
+      LOG_DIR = builder.logDir;
+
+      # Railpack's mise: one cache per app, where railpack looks for mise,
+      # and the pinned binary bound there
+      MISE_CACHE_DIR = builder.miseCacheDir;
+      MISE_MOUNT = dirOf (dirOf builder.misePath);
+      MISE_PATH = builder.misePath;
+      MISE_BINARY = builder.miseBinary;
+
+      # the unprivileged build user, and its whole PATH
+      BUILD_USER = builder.user;
+      BUILD_GROUP = buildGroup;
+      BUILD_PATH = buildPath;
+
+      # the Dockerfile route — unused while every app builds with Railpack
+      NODE_IMAGE = nodeImage;
+      CHECKS_DOCKERFILE = ./build/Dockerfile.checks;
+
+      # the egress fence, checked again per build
+      FENCE_CHECK = builder.fenceCheck;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/github-lib.sh
+      ./host/build.sh
+      ./host/build/helpers.sh
+      ./host/build/0-request.sh
+      ./host/build/1-token.sh
+      ./host/build/2-clone.sh
+      ./host/build/3-detect.sh
+      ./host/build/4-checks.sh
+      ./host/build/5-publish.sh
+      ./host/build/6-done.sh
+    ];
   };
 
   # daedalus-build's ExecStartPre: the fence check, with an answer for the
   # pending request when it fails — a bare failed check would read as
   # "interrupted" on the build page.
-  fenceGate = pkgs.writeShellApplication {
+  fenceGate = mkAgent {
     name = "daedalus-build-fence-gate";
     runtimeInputs = [
       pkgs.jq
       pkgs.coreutils
       pkgs.util-linux # setpriv, for lib.sh's operator-side reads and publish
     ];
-    text = ''
-      APPLY_DIR=${esc applyDir}
-      FENCE_CHECK=${esc "${builder.fenceCheck}"}
-      ${operatorVars}
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/build-fence-gate.sh}
-    '';
+    vars = operatorVars // {
+      APPLY_DIR = applyDir;
+      FENCE_CHECK = builder.fenceCheck;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/build-fence-gate.sh
+    ];
   };
 
   # daedalus-build's ExecStopPost: marks a run that died without publishing
   # its own end, and drops its work dir.
-  buildReaper = pkgs.writeShellApplication {
+  buildReaper = mkAgent {
     name = "daedalus-build-reaper";
     runtimeInputs = [
       pkgs.jq
       pkgs.coreutils
     ];
-    text = ''
-      STATUS=${esc "${applyDir}/build-status.json"}
-      LOG_DIR=${esc builder.logDir}
-      WORK_ROOT=${esc builder.workDir}
-      BUILD_USER=${esc builder.user}
-      BUILD_GROUP=${esc buildGroup}
-      ${operatorVars}
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/build-reaper.sh}
-    '';
+    vars = operatorVars // {
+      STATUS = "${applyDir}/build-status.json";
+      LOG_DIR = builder.logDir;
+      WORK_ROOT = builder.workDir;
+      BUILD_USER = builder.user;
+      BUILD_GROUP = buildGroup;
+    };
+    files = [
+      ./host/lib.sh
+      ./host/build-reaper.sh
+    ];
   };
 
   # daedalus-build-cancel's ExecStart: stops the build in flight, and only
   # the one the request names.
-  cancelScript = pkgs.writeShellApplication {
+  cancelScript = mkAgent {
     name = "daedalus-build-cancel";
     runtimeInputs = [
       pkgs.jq
@@ -244,35 +246,36 @@ let
       pkgs.util-linux # setpriv, for lib.sh's operator-side reads
       config.systemd.package # systemctl
     ];
-    text = ''
-      REQ=${esc "${applyDir}/build-cancel-request.json"}
-      STATUS=${esc "${applyDir}/build-status.json"}
-      ${operatorVars}
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/build-cancel.sh}
-    '';
+    vars = operatorVars // {
+      REQ = "${applyDir}/build-cancel-request.json";
+      STATUS = "${applyDir}/build-status.json";
+    };
+    files = [
+      ./host/lib.sh
+      ./host/build-cancel.sh
+    ];
   };
 
-  # daedalus-build-gc's ExecStart: old work dirs, old logs, unused cache.
-  gcScript = pkgs.writeShellApplication {
+  # daedalus-build-gc's ExecStart: old work dirs, old logs, unused cache. It
+  # touches no container-writable directory, so it needs no operator.
+  gcScript = mkAgent {
     name = "daedalus-build-gc";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.findutils
       pkgs.util-linux # setpriv, flock
     ];
-    text = ''
-      WORK_ROOT=${esc builder.workDir}
-      LOG_DIR=${esc builder.logDir}
-      BUILDKIT_ADDR=${esc builder.socket}
-      BUILD_USER=${esc builder.user}
-      BUILD_GROUP=${esc buildGroup}
-      BUILD_PATH=${esc buildPath}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-
-      ${builtins.readFile ./host/build-gc.sh}
-    '';
+    vars = {
+      WORK_ROOT = builder.workDir;
+      LOG_DIR = builder.logDir;
+      BUILDKIT_ADDR = builder.socket;
+      BUILD_USER = builder.user;
+      BUILD_GROUP = buildGroup;
+      BUILD_PATH = buildPath;
+      SETPRIV = "${pkgs.util-linux}/bin/setpriv";
+      ENV_BIN = "${pkgs.coreutils}/bin/env";
+    };
+    files = [ ./host/build-gc.sh ];
   };
 in
 

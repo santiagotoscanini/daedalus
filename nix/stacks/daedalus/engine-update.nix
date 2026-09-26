@@ -25,8 +25,7 @@
 #                     fleet.apps.daedalus — the address and health path the
 #                     control plane publishes, which is what "came back" is
 #                     checked against, through the proxy on fleet.lanIp.
-#   applyDir          the same literal daedalus-lib.nix and build-agent.nix
-#                     derive from fleet.stateRoot.
+#   applyDir          daedalus-lib.nix's, like every other bridge agent's.
 
 {
   config,
@@ -38,18 +37,14 @@
 let
   esc = lib.escapeShellArg;
 
-  applyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
+    applyDir
+    mkAgent
+    operatorHomeVars
+    commitVars
+    ;
 
-  operatorVars = ''
-    OPERATOR_USER=${esc config.fleet.operator.user}
-    OPERATOR_GROUP=${esc config.fleet.operator.group}
-    OPERATOR_HOME=${esc config.users.users.${config.fleet.operator.user}.home}
-    SETPRIV=${pkgs.util-linux}/bin/setpriv
-    ENV_BIN=${pkgs.coreutils}/bin/env
-    GIT=${pkgs.git}/bin/git
-  '';
-
-  updateScript = pkgs.writeShellApplication {
+  updateScript = mkAgent {
     name = "daedalus-engine-update";
     runtimeInputs = [
       pkgs.jq
@@ -62,22 +57,24 @@ let
       pkgs.nixos-rebuild
       pkgs.openssh # git fetch and push over ssh, as the operator
     ];
-    text = ''
-      APPLY_DIR=${esc applyDir}
-      FLAKE=${esc config.fleet.config.repo}
-      SITE_DIR=${esc config.fleet.site.path}
-      LOCKFILE=${esc config.fleet.rebuildLock}
-      HOSTNAME=${esc config.networking.hostName}
-      GIT_EMAIL=${esc config.fleet.mail.sender}
-      GIT_OPERATOR_NAME=${esc config.fleet.operator.gitName}
-      GIT_OPERATOR_EMAIL=${esc config.fleet.operator.gitEmail}
-      CONTROL_PLANE_HOST=${esc config.fleet.apps.daedalus.hostname}
-      HEALTH_PATH=${esc config.fleet.apps.daedalus.auth.healthPath}
-      LAN_IP=${esc config.fleet.lanIp}
-      ${operatorVars}
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/engine-update.sh}
-    '';
+    vars =
+      operatorHomeVars
+      // commitVars
+      // {
+        APPLY_DIR = applyDir;
+        FLAKE = config.fleet.config.repo;
+        SITE_DIR = config.fleet.site.path;
+        LOCKFILE = config.fleet.rebuildLock;
+        HOSTNAME = config.networking.hostName;
+        CONTROL_PLANE_HOST = config.fleet.apps.daedalus.hostname;
+        HEALTH_PATH = config.fleet.apps.daedalus.auth.healthPath;
+        LAN_IP = config.fleet.lanIp;
+        GIT = "${pkgs.git}/bin/git";
+      };
+    files = [
+      ./host/lib.sh
+      ./host/engine-update.sh
+    ];
   };
 
   # The status file's undertaker — verbs-lib.nix's imageUpdateReaper, for this
