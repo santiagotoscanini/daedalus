@@ -24,7 +24,7 @@ import { ACTION, FOOT, GROUP, MAIN, MONO, N, NOTE, ROW, ROWS, SIDE, SUB } from '
 type Dns = Extract<NetworkData, { tab: 'dns' }>
 type Resolver = Dns['resolver']
 
-/** The four ways a query ends, in the order they are tried. */
+/** The four ways a query ends — see `answeredSplit` in ../data/dns-resolver.ts. */
 const SOURCES = [
   { k: 'cached' as const, label: 'From cache', tone: 'ok' as Tone },
   { k: 'local' as const, label: 'Answered here', tone: 'accent' as Tone },

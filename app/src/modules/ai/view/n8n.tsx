@@ -74,9 +74,8 @@ export function N8nView({ data }: { data: N8nData }) {
         ]}
       />
 
-      {/* No headline band, for the same reason the gateway lost its: three of
-          the four cards were counts of things listed a few pixels below, and
-          the fourth repeated the version verdict already in the header. */}
+      {/* No headline band: its figures would be counts of things listed a few
+          pixels below, or the version verdict already in the header. */}
       <BoardGrid>
         <Board
           title="Runs"
@@ -124,8 +123,8 @@ export function N8nView({ data }: { data: N8nData }) {
             </p>
           )}
 
-          {/* Few enough to name, which is the whole point of naming them: one
-              failure a fortnight is a thing to go and read, not a rate. */}
+          {/* Few enough to name, which is the whole point of naming them: a
+              rare failure is a thing to go and read, not a rate. */}
           {data.failures.length > 0 && (
             <p className={REJECTED}>
               {data.failures.map((f, i) => (

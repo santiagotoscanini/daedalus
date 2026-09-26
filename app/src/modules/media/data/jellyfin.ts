@@ -108,9 +108,7 @@ export async function loadJellyfin(ctx: Ctx): Promise<JellyfinData> {
       freeBytes: disk.avail,
       growth,
     },
-    // Days rather than timestamps, computed here: this page renders on the
-    // server and hydrates in the browser, and a relative time derived from two
-    // clocks is a hydration mismatch waiting for midnight.
+    // Days rather than timestamps, computed here — see `daysSince`.
     people: (users ?? [])
       .map((u) => ({
         name: u.Name ?? '?',

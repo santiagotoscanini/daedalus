@@ -468,21 +468,20 @@ export async function loadBazarr(ctx: Ctx): Promise<BazarrData> {
 /**
  * Recyclarr, which lives with Sonarr and Radarr rather than with the cleaners.
  *
- * It was grouped with Cleanuparr and Janitorr on the grounds that all three are
- * timers nobody watches — true, and the wrong axis. What Recyclarr actually
- * DOES is write custom formats and scoring into the two *arrs, so its output
- * is their configuration and the page you want it next to is theirs. The
- * cleaners act on the download queue and the library instead.
+ * It and the cleaners (Cleanuparr, Janitorr) are all timers nobody watches,
+ * but that is the wrong axis: what
+ * Recyclarr DOES is write custom formats and scoring into the two *arrs, so
+ * its output is their configuration and the page you want it next to is
+ * theirs. The cleaners act on the download queue and the library instead.
  */
 export type RecyclarrData = {
   /**
-   * From the image label, and it took a snapshot to get there.
+   * From the image label.
    *
    * Recyclarr is pinned to a bare major (`:8`) — a channel — prints no banner,
-   * exposes no API and logs no version, so this was reported as genuinely
-   * unknowable. That was wrong: the image says 8.7.0 in
-   * `org.opencontainers.image.version`, which is a fact about the artefact on
-   * disk and needed nothing but somewhere to read it from.
+   * exposes no API and logs no version; the image's
+   * `org.opencontainers.image.version` is the one place the running version
+   * is written down.
    */
   running: RunningVersion
   gap: VersionGap
@@ -512,8 +511,7 @@ export async function loadRecyclarr(ctx: Ctx): Promise<RecyclarrData> {
     ctx.loki.scalar(
       `sum(count_over_time({container="recyclarr"} |~ \`\\[ERR\\]|job failed\` [${window}])) or vector(0)`,
     ),
-    // Pinned to a bare major, which is a channel — the image label is the only
-    // thing that knows the version.
+    // See `RecyclarrData.running`.
     imageVersion('recyclarr'),
     recyclarrSynced(ctx, CLEANUP_DAYS),
   ])

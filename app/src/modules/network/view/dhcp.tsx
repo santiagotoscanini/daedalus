@@ -31,9 +31,10 @@ const DEVICE_ROW =
  *
  * Split by whether the address is ours to decide rather than by how recently
  * the thing was seen, because that is the distinction a reader is here for:
- * the fixed ones are a nix file and changing one is a rebuild, everything else
- * took whatever the pool had. Ranking them together and marking the difference
- * would bury the nine among sixty-three.
+ * the fixed ones are declared in the configuration repo and changing one is a
+ * rebuild, everything else took whatever the pool had. Ranking them together
+ * and marking the difference would bury the handful of reservations among
+ * dozens of devices.
  *
  * Within each section, most recently seen first, and the quiet tail folds. A
  * reservation that has never been seen sorts last and says so — a declared
@@ -121,14 +122,8 @@ type Dhcp = Extract<NetworkData, { tab: 'dhcp' }>
 // ── DHCP ───────────────────────────────────────────────────────────────
 
 /**
- * Who gets which address, which is a different question from what a name
- * resolves to and now has its own page for saying so.
- *
- * The two shared a tab because they share a process — FTL is both servers —
- * and that is a fact about the software rather than about the subject. DNS
- * answers "where does this name point"; DHCP answers "what is this device
- * called and what address does it hold". A reader chasing a lease was reading
- * past a zone to get to it.
+ * Who gets which address — a different question from what a name resolves
+ * to, even though FTL serves both (the manifest's `dhcp` tab says why).
  */
 export function DhcpView({ data }: { data: Dhcp }) {
   const { dhcp, devices, admin } = data
@@ -291,13 +286,10 @@ export function DhcpView({ data }: { data: Dhcp }) {
           </p>
         </Board>
 
-        {/* The same file the DNS tab reads, and worth repeating rather than
-          leaving this tab as the one page with a header and no log: one
-          process serves both, so the lease that was never handed out and the
-          name that never resolved are the same log line, and a reader chasing
-          a device should not have to know they share a binary to find it.
-          There is deliberately no changelog here — see the note on the header
-          above, and the panel that carries it one tab over. */}
+        {/* The same log the DNS tab shows, repeated on purpose: one process
+          serves both, and a reader chasing a device should not have to know
+          they share a binary to find it. No changelog here — see the note on
+          the header above. */}
         <LogBoard
           source={{ unit: 'pihole-ftl.service' }}
           title="pihole-FTL logs"

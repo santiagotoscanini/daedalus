@@ -18,8 +18,8 @@ export const releases: Record<string, ReleaseSource> = {
   shelfmark: { repo: 'calibrain/shelfmark', opts: { notesWhenUnknown: true } },
   cleanuparr: { repo: 'Cleanuparr/Cleanuparr' },
   janitorr: { repo: 'Schaka/janitorr', opts: { notesWhenUnknown: true } },
-  // No curated entry on this box until now, and no label either — both are
-  // sidecars of the chain above rather than services anyone opens.
+  // The three sidecars: no page of their own, only a log folded under the
+  // tab they serve.
   flaresolverr: { repo: 'FlareSolverr/FlareSolverr' },
   subgen: { repo: 'McCloudS/subgen', opts: { notesWhenUnknown: true } },
   scraparr: { repo: 'thecfu/scraparr' },

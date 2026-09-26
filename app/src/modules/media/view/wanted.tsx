@@ -44,7 +44,7 @@ import {
 
 /**
  * scraparr is what turns the *arrs into prometheus series, and it has no page
- * anywhere: it serves only /metrics. It belongs under these three because a
+ * anywhere: it serves only /metrics. It belongs under the *arrs because a
  * gap in the *arr graphs on the Monitoring page is nearly always this
  * container having stopped, not the *arr.
  */
@@ -87,9 +87,8 @@ const EVENT_INK: Record<Wanted['sonarr']['history'][number]['tone'], string> = {
 type Wanted = Extract<MediaData, { tab: 'wanted' }>
 
 export function WantedView({ d }: { d: Wanted }) {
-  // Seerr first: it is where a title enters the system, and the other two are
-  // what happens to it afterwards. Reading them in that order is reading them
-  // in the order the work actually flows.
+  // Seerr first: it is where a title enters the system, and the rest are what
+  // happens to it afterwards, in the order the work flows.
   const [who, setWho] = useState<'seerr' | 'sonarr' | 'radarr' | 'recyclarr' | 'bazarr'>('seerr')
 
   return (

@@ -45,7 +45,8 @@ const RESTART_NOTE = 'text-[0.7rem] text-muted-foreground leading-[1.5]'
     armed by a distraction cannot be finished by an accidental click later. */
 const ARM_MS = 10_000
 /** No status naming our request within this long means the host agent never
-    came for it — the same claim window components/status.tsx uses. */
+    came for it — the claim window of components/status.tsx (60 s by default),
+    shorter here because the power bridge answers within a second or two. */
 const PICKUP_MS = 20_000
 const HEALTH_MS = 3_000
 
@@ -282,8 +283,7 @@ export function HostView({ d }: { d: Host }) {
       </Board>
 
       <Board title="Pressure" icon="⌁" span={4}>
-        {/* PSI is the number load average was always a proxy for. Everything
-            here is normally zero; the panel exists for the day it is not. */}
+        {/* PSI — see `HostData.pressure`. */}
         <Facts
           rows={[
             { k: 'CPU stalled', v: pct(d.pressure.cpu, 2) },

@@ -14,24 +14,21 @@ export {
 
 // Every digest-pinned container on the box, and whether it is behind.
 //
-// The page this feeds is the only one in the app whose subject is not a
-// service. Sixty-five containers, and roughly a third of them — the exporters,
-// the redis and postgres sidecars, the *arr janitors, the exporters behind one
-// dashboard — have no tab and never will: nobody opens scraparr, and
-// a Board about node-exporter would say nothing a person wants. What they DO
-// have is a pin that ages exactly like Jellyfin's, and until this page there
-// was nowhere in the app where that fact appeared at all.
+// Dozens of containers — the exporters, the redis and postgres sidecars — have
+// no tab and never will: nobody opens scraparr, and a Board about
+// node-exporter would say nothing a person wants. What they DO have is a pin
+// that ages exactly like Jellyfin's, and this is where that fact appears.
 //
 // ── it costs no network ───────────────────────────────────────────────────
 //
 // Everything here is a local read: the pins come from the nix export, the
-// verdicts from the daily registry probe, the running versions from image
-// labels — three snapshot files, all already cached by their own modules. That
-// is what makes a table of sixty-five rows reasonable to render at all.
+// verdicts from the registry probe, the running versions from image labels —
+// snapshot files, all already cached by their own modules. That is what makes
+// a table of every container reasonable to render at all.
 //
-// The changelogs are NOT here, deliberately. Sixty-five GitHub release lists
-// on every page load would spend the hourly budget in one visit to answer a
-// question about sixty-four containers nobody asked about. They load per row,
+// The changelogs are NOT here, deliberately. A GitHub release list per
+// container on every page load would spend the hourly budget in one visit to
+// answer a question about containers nobody asked about. They load per row,
 // on expand — see `loadUpdateNotes` (lib/dashboard/update-rows.ts).
 
 export type UpdatesData = {

@@ -21,13 +21,11 @@ import { listNodes } from '../../../lib/repo/nodes'
 // the whole fleet's catalog is small, the provider reads are remembered a
 // minute, and a switch in the picker is then a re-render, not a round trip.
 //
-// A machine is ONE row here. It was one row per machine-and-kind, which is
-// the shape the fleet has underneath — but with Lemonade the only kind a
-// node offers (lib/providers/kinds.ts says why), a pair per machine only
-// ever drew the same computer twice, once per installer side effect. The
-// pair survives in `id` because the gateway sync still tags a route with
-// both, and because a machine that one day runs two model servers must not
-// silently show one of them.
+// A row is a machine-and-kind, the shape the fleet has underneath; with
+// Lemonade the only kind a node offers (lib/providers/kinds.ts says why),
+// that is one row per machine. The kind stays in `id` because the gateway
+// sync tags a route with both, and because a machine that one day runs two
+// model servers must not silently show one of them.
 
 export type CatalogEntry = ProviderModel & {
   /** The name the gateway publishes it under, per the operator's policy. */
@@ -123,8 +121,7 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
     listNodes().catch(() => []),
   ])
   // The same policy the gateway sync resolves against, so the alias this
-  // page prints and the alias the gateway publishes cannot disagree — the
-  // page used to print the id's plain form and ignore a chosen alias.
+  // page prints and the alias the gateway publishes cannot disagree.
   const policiesOf = (p: FleetProvider): ModelPolicies | undefined =>
     p.machine === 'box'
       ? undefined
@@ -227,10 +224,10 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
 /**
  * Which provider the log bridge is pointed at, if the box runs one.
  *
- * ONE bridge, one target, so the panel belongs to one machine — it was
- * drawn under every Lemonade, which told a second machine its logs were
- * being shipped when they were not. The rule mirrors the bridge's own
- * (`lib.head config.fleet.lemonadeNodes`): nodes.json is written sorted by
+ * ONE bridge, one target, so the panel belongs to one machine — drawn under
+ * every Lemonade, it would tell a second machine its logs were being shipped
+ * when they are not. The rule mirrors the bridge's own (`lib.head
+ * config.fleet.lemonadeNodes`, stacks/lemonade-logs): nodes.json is written sorted by
  * id and carries only offered providers, so the first offered Lemonade in
  * id order is the one the bridge reads.
  */

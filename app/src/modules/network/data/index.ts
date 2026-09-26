@@ -1,14 +1,14 @@
 // The Network module's data half: everything between a packet and this box.
 //
-// Ordered the way traffic actually arrives — the WAN link, then the two ways
-// in (Cloudflare tunnel from outside, WireGuard for us), then the proxy that
-// terminates it, then the resolver every device on the LAN depends on, and
-// finally the VPN the download stack exits through.
+// Ordered the way traffic arrives — the wire, the ways in (the address itself,
+// the Cloudflare tunnel, WireGuard), the proxy that terminates them, the
+// resolver and DHCP server every device on the LAN depends on, and finally the
+// VPN tunnels traffic leaves through.
 //
-// Two readings here come from prometheus rather than the service's own API,
-// and in both cases that is the better source rather than a fallback: MySpeed
-// already exports its last test, and wg-easy v2 requires TOTP on /api/session
-// so a credential login cannot work unattended at all.
+// Two services are read from prometheus rather than their own API, and in both
+// cases that is the better source rather than a fallback: MySpeed already
+// exports its last test, and wg-easy v2 requires TOTP on /api/session so a
+// credential login cannot work unattended at all.
 
 import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'

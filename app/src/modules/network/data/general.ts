@@ -85,7 +85,10 @@ type Hop = {
   history: number[]
 }
 
-/** Everything the box has that is not the loopback — in practice, enp3s0. */
+/**
+ * Every host interface but the loopback — in practice the one physical NIC:
+ * node-exporter reads the host netns, where rootless podman adds no bridges.
+ */
 const NIC = 'node_network_%s_bytes_total{device!="lo"}'
 const nic = (dir: 'receive' | 'transmit') => NIC.replace('%s', dir)
 
@@ -129,8 +132,7 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
     ]),
     loadHops(ctx),
     ctx.prom.scalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
-    // One number wanted out of it — the router count under the headline —
-    // and it is a call to a container on the next bridge over, so it costs
+    // One number wanted out of it — the router count — and it is a call to a container on the same private bridge, so it costs
     // less than the prometheus query that would half-answer it.
     getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
     ctx.prom.series('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
@@ -275,10 +277,11 @@ async function loadHops(ctx: Ctx): Promise<Hop[]> {
  * Bytes per container over a day.
  *
  * Only containers with a network namespace of their own appear, which is the
- * exporter's doing rather than a filter here: one sharing gluetun's namespace
- * has no traffic separable from the other nine, and one on the host's would
- * report the whole box. gluetun stands in for the download stack, and its
- * figure is the encrypted traffic that crossed the wire.
+ * exporter's doing (host-liveness-exporter, in nix/modules/monitoring) rather
+ * than a filter here: one sharing gluetun's namespace has no traffic separable
+ * from its neighbours', and one on the host's would report the whole box.
+ * gluetun stands in for the download stack, and its figure is the encrypted
+ * traffic that crossed the wire.
  */
 async function loadServiceTraffic(ctx: Ctx): Promise<GeneralData['services']> {
   const [inBytes, outBytes] = await Promise.all([

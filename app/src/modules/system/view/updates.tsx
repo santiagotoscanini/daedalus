@@ -16,11 +16,8 @@ import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 
 // Every pinned image on the box, and what it would take to move it.
 //
-// The one page here whose subject is the fleet rather than a service — and the
-// only place a third of these containers appear at all. The exporters, the
-// redis and postgres sidecars, the *arr janitors, the exporters
-// behind one web app: none has a tab, none will get one, and every one of them
-// carries a pin that ages exactly like Jellyfin's.
+// The one page here whose subject is the fleet rather than a service — see
+// ../data/updates.ts for why the tab-less containers need it.
 //
 // ── the row is the unit, and it opens ─────────────────────────────────────
 //
@@ -33,13 +30,11 @@ import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 // without passing the notes is a button that gets pressed without them. So the
 // control lives INSIDE the disclosure, never in the closed row.
 //
-// Notes load per row, on open. Sixty-five GitHub release lists on page load
-// would spend an hourly budget answering a question about sixty-four
-// containers nobody asked about — see the loader for the rest of that.
+// Notes load per row, on open — the loader says why.
 //
 // ── the queue ─────────────────────────────────────────────────────────────
 //
-// Reading sixty-five rows and deciding six of them should move is one sitting;
+// Reading every row and deciding six of them should move is one sitting;
 // six rebuilds, six rounds of container restarts and six waits is not. So a row
 // can be added to a queue instead of updated, and the queue goes to the host as
 // ONE request: one commit, one build, one switch.
@@ -163,7 +158,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
       >
         {/* The settled half of the page. Dimmed as a group rather than per
             row: it is a long list whose whole message is "nothing to do here",
-            and sixty rows at full contrast compete with the eight that need
+            and dozens of rows at full contrast compete with the few that need
             reading. */}
         <ul className={cn(ROWS, 'opacity-[0.72] hover:opacity-100')}>
           {rest.map((r) => (

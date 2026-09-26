@@ -1,15 +1,12 @@
 // The System module's data half: the machine itself, a tab per layer.
 //
-// It was one page trying to be six. Host vitals, container memory, pool
-// capacity, log volume and probe counts all shared a scroll, which meant none
-// of them had room to say anything and two of them did not belong there at all
-// — "is anything failing to report" is Monitoring's question, not this page's.
+// "Is anything failing to report" is Monitoring's question, not this page's.
 //
 // ── where each tab's numbers come from ────────────────────────────────────
 //
-// Host and Memory are pure prometheus: node_exporter and the cgroup reader in
-// host-liveness-exporter. There is nothing to publish for them because they
-// are already scraped every 60s.
+// Host and Memory are prometheus — node_exporter and the cgroup reader in
+// host-liveness-exporter, already scraped every 60s — plus a few facts out of
+// the host snapshot (kernel, failed units, generations, memory modules).
 //
 // Disks, Pools and Backups are the opposite: SMART, self-test history, scrub
 // state, `usedbysnapshots` and replication lag have NO prometheus collector on
@@ -50,8 +47,9 @@ export type Tabs = {
 }
 export type SystemData = TabPayload<typeof manifest, Tabs>
 
-// No tab here reads the env: every number is prometheus's or the host
-// snapshot's.
+// No loader here reads `ctx.env`: the numbers are prometheus's or a host
+// snapshot's, plus MSI's release list (Motherboard) and the Claude snapshot's
+// Loki history (Claude, Shotter).
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   host: loadHost,
   memory: loadMemory,

@@ -88,11 +88,10 @@ export type TraefikData = {
 }
 
 /**
- * traefik, and only traefik.
+ * traefik, and only traefik — Pocket ID's own page is Home › Sign-in.
  *
- * The IdP used to share this page and has a category of its own now. What
- * stays is the borrow that made them worth pairing in the first place: the
- * routing table asks Pocket ID for its client list, because that list is the
+ * One borrow remains: the routing table asks Pocket ID for its client list
+ * (`core/identity/pocket-id.ts`), because that list is the
  * only thing that distinguishes a router with no middleware in front of it
  * from an open door — an app doing its own OIDC has a registration, and an
  * unprotected one does not. One request, for one column.
@@ -240,7 +239,8 @@ async function loadTraefik(
  * A wildcard matches exactly ONE label, which is the rule the whole naming
  * convention on this box rests on — `*.example.org` covers `immich.…` and
  * does not cover `a.b.…`, which is why every published name is one level
- * under the apex (see the assertion in stacks/apps).
+ * under the apex (asserted in nix/platform/publishing.nix and
+ * nix/modules/apps/apps.nix).
  */
 function sanCovers(san: string, host: string): boolean {
   if (!san.startsWith('*.')) return san === host
@@ -273,8 +273,9 @@ function buildRoutes(
   const rows = new Map<string, RouteRow>()
 
   for (const r of routers) {
-    // `provider === 'internal'` is traefik's own api@internal / ping — real
-    // routers, but not published names, and they carry no Host rule anyway.
+    // Only the first Host() of a rule is read. Routers without one (traefik's
+    // own api@internal, ping) are real but not published names, so they drop
+    // out here.
     const host = /Host\(`([^`]+)`\)/.exec(r.rule ?? '')?.[1]
     if (host === undefined) continue
 
@@ -294,8 +295,8 @@ function buildRoutes(
     row.disabled ||= r.status !== undefined && r.status !== 'enabled'
     if (oidc !== undefined) {
       row.protection = 'gate'
-      // Strip the provider suffix and the `-strip` companion's prefix: the
-      // reader wants the app's name, not traefik's internal one.
+      // Drop the provider suffix: the reader wants the middleware's name, not
+      // traefik's qualified one.
       row.via = oidc.replace(/@file$/, '')
     }
     rows.set(host, row)

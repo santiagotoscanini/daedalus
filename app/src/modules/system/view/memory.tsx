@@ -222,9 +222,7 @@ export function MemoryView({ d }: { d: Memory }) {
         </p>
       </Board>
 
-      {/* This was the one tab in the whole dashboard with no log at all, which
-          made it the one page whose numbers could not be checked against
-          anything. The kernel is the right stream: an OOM kill, a zram
+      {/* The kernel is the right stream for this tab: an OOM kill, a zram
           allocation failure and ZFS shrinking the ARC under pressure are all
           kernel lines and appear in no container's log — including the log of
           the container that was killed. */}

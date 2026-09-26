@@ -46,20 +46,17 @@ export type OpenWebUiData = {
  * What this page deliberately does NOT report is usage. Open WebUI knows how
  * many chats it holds and could be made to draw them, and on a household
  * instance with one account that number is vanity: it goes up when somebody
- * talks to a model, which is the thing the model server's own tab measures
- * properly, per model, with latency. Counting it a second time here would be a
- * chart of the same fact with less in it.
+ * talks to a model, which the Gateway tab measures properly, per caller and
+ * model, with latency. Counting it a second time here would be a chart of the
+ * same fact with less in it.
  *
  * What is worth reading off a running instance is everything a restart could
  * silently take away: the models the picker offers, the tool servers that
  * registered, the knowledge bases that hold anything.
  *
- * Nor does it report how sign-in is configured. That was four facts —
- * identity provider, login form off, sign-up closed — every one of them
- * declared in stacks/open-webui and none of them able to say anything the file
- * does not. `/api/config` and `/api/v1/users/` are not fetched at all now,
- * which is the point: a panel nobody reads still costs two requests on every
- * page load.
+ * Nor does it report how sign-in is configured (`/api/config`,
+ * `/api/v1/users/`): identity provider, login form, sign-up are all declared
+ * in stacks/open-webui, and the instance could say nothing the file does not.
  */
 export async function loadOpenWebUi(ctx: Ctx): Promise<OpenWebUiData> {
   const base = ctx.hosts.base('open-webui')

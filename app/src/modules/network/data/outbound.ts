@@ -32,7 +32,7 @@ type Tunnel = {
   /** Days until the WireGuard key expires. Negative once it has. */
   expiryDays: number
   keyExpiry: string
-  /** Where this tunnel surfaces, from the provider's own view of it. */
+  /** Where this tunnel surfaces, from gluetun's public-IP lookup. */
   exit: {
     ip: string | null
     country: string | null
@@ -56,11 +56,11 @@ export type OutboundData = {
   /**
    * The software, which is shared by every tunnel on the page.
    *
-   * Both instances come out of one `mkGluetunInstance`, which pins ONE image
-   * digest for gluetun and one for the exporter — so however many tunnels are
-   * declared, they are always the same two builds. Reporting it per tunnel
-   * would print the same answer twice and invite the reader to check whether
-   * they differ.
+   * Every instance `mkGluetunInstance` creates reads the same two pins,
+   * `fleet.gluetun.image` and `fleet.gluetun.exporterImage` — so however many
+   * tunnels are declared, they are always the same two builds. Reporting them
+   * per tunnel would print the same answer twice and invite the reader to
+   * check whether they differ.
    */
   gluetun: CommitGap
   exporter: VersionGap
@@ -100,9 +100,7 @@ export async function loadOutbound(ctx: Ctx): Promise<OutboundData> {
 
   const [tunnels, gluetun, exporter] = await Promise.all([
     Promise.all(declared.map((d) => loadTunnel(ctx, d, upOf))),
-    // Read from the first instance's banner, and correct for all of them:
-    // `mkGluetunInstance` pins one image digest, so a second tunnel is the
-    // same binary. See `OutboundData.gluetun`.
+    // The first instance's banner speaks for all — see `OutboundData.gluetun`.
     gluetunBuild(ctx, declared[0]?.container ?? ''),
     // No running version to compare against, deliberately unfaked: the image
     // is a digest-pinned `:latest` and the exporter prints no version in its
@@ -136,9 +134,10 @@ async function loadTunnel(
   const job = JSON.stringify(d.job)
 
   const [ip, port, up, uptime7d, daily] = await Promise.all([
-    // The provider's own view of where this tunnel surfaces. Nothing on this
-    // box can answer it — the container sees a tun0 with a private address,
-    // and the exit address is only knowable from outside.
+    // Where this tunnel surfaces, as gluetun's public-IP lookup found it.
+    // Nothing on this box can answer it locally — the container sees a tun0
+    // with a private address, and the exit address is only knowable from
+    // outside.
     getJson<{
       public_ip?: string
       country?: string

@@ -12,7 +12,7 @@ export type HostData = {
   kernel: string | null
   temps: { label: string; value: number }[]
   /**
-   * Pressure-stall: the share of the last ten seconds in which SOMETHING was
+   * Pressure-stall: the share of the last five minutes in which SOMETHING was
    * waiting on cpu, io or memory.
    *
    * The number load average was always a proxy for, and a better one — load
@@ -32,9 +32,8 @@ export type HostData = {
   /**
    * Every boot generation on the box.
    *
-   * `configurationLimit = 10` bounds the BOOT MENU, not the profile — a
-   * distinction nothing on this box surfaced, and the count below is usually
-   * the surprise.
+   * `configurationLimit` bounds the BOOT MENU, not the profile, so the count
+   * here is usually larger than the menu's.
    */
   generations: { id: number; date: string; current: boolean }[]
 }

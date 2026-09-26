@@ -10,13 +10,7 @@ import { FOOT, MONO } from './shared'
 
 type Calibre = Extract<MediaData, { tab: 'calibre' }>
 
-/**
- * The shelf, next to Jellyfin rather than paired with its downloader.
- *
- * Both are where a pipeline ENDS — the thing a person opens — which is what
- * the rule on the tab row divides. Pairing Calibre with Shelfmark instead put
- * one downloader on the far side of that line from the other three.
- */
+/** The shelf, next to Jellyfin rather than paired with its downloader — see `CalibreData`. */
 export function CalibreView({ d }: { d: Calibre }) {
   const calibre = d
   const { disk } = d

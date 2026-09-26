@@ -4,7 +4,10 @@ import { versionGap } from '../../../lib/dashboard/github'
 import { getJson } from '../../../lib/http'
 import type { ResolverData, Upstream } from './dns'
 
-// Network › DNS, the resolver: pi-hole's FTL, read over its own API.
+// Network › DNS, the resolver: pi-hole's FTL, read over its own API on the
+// public hostname (`base`). Every endpoint here is aggregate counts, inside the
+// read-only bypass nix/modules/pihole puts in front of the gate; the reads that
+// carry identities go direct instead (`PIHOLE` in shared.ts).
 // fetchResolver asks every endpoint at once; the helpers under loadResolver
 // turn FTL's shapes into the tab's.
 
@@ -133,8 +136,8 @@ function upstreamRows(rows: FtlUpstream[], declared: readonly string[]): Upstrea
   return (
     rows
       // `cache` and `blocklist` arrive in the same list and are not resolvers
-      // — they are the two ways a query never left the box. They are already
-      // the larger half of `answered` above.
+      // — they are two of the ways a query never left the box, and are
+      // counted in `answered` above.
       .filter((u) => u.ip !== undefined && u.ip !== 'cache' && u.ip !== 'blocklist')
       .map((u) => ({
         ip: u.ip ?? '',

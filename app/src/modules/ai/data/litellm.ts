@@ -17,9 +17,9 @@ type Volume = { requests: number; failed: number; tokens: number }
 /**
  * One virtual key, and everything the gateway knows about what it did.
  *
- * The caller is the interesting axis on this tab and the model is not: the
- * models are all on one machine in the next room, and which checkpoint a
- * published name resolves to is a fact you configured and already know. Who is
+ * The caller is the interesting axis on this tab and the model is not: which
+ * checkpoint a published name resolves to is a fact you configured and
+ * already know (the Providers tab shows it). Who is
  * hammering the gateway, how slowly it is being answered, and whether it is
  * getting answers at all — none of that is knowable from anywhere else.
  */
@@ -88,13 +88,8 @@ export type LitellmData = {
 }
 
 /**
- * A container the gateway dials, with its own update state.
- *
- * These three have no tab of their own and no tile, which used to mean their
- * updates were invisible: three services on this box could go a year behind
- * and nothing would say so. Each is pinned like everything else here, so
- * "nothing is ever automatically up to date" (CLAUDE.md) applies to them too —
- * they just had nowhere to report it.
+ * A container the gateway dials, with its own update state — see
+ * `loadNeighbours` for why they are here and where each version comes from.
  *
  * `gap` and `build` are alternatives, not both: a project that cuts releases
  * gets the release list, one that ships a moving branch gets the commits since
@@ -233,8 +228,8 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
         'model',
       ),
       // What the gateway costs, separated from what the model costs. Every other
-      // latency figure on this page is end-to-end and therefore mostly Lemonade;
-      // this is the part that is actually attributable to litellm.
+      // latency figure on this page is end-to-end and therefore mostly the
+      // model server; this is the part that is actually attributable to litellm.
       ctx.prom.scalar(
         `sum(increase(litellm_overhead_latency_metric_sum[${RANGE}]))` +
           ` / sum(increase(litellm_overhead_latency_metric_count[${RANGE}]))`,
@@ -357,17 +352,14 @@ function notConfigured(url: string): LitellmData {
 }
 
 /**
- * The three containers the gateway dials, and whether each is behind.
+ * The four containers the gateway dials, and whether each is behind.
  *
- * They had logs on this page and nothing else, which meant their UPDATES were
- * invisible — three pinned services that could drift a year behind with
- * nothing on the dashboard saying so. Every image on this box is pinned, so
- * none of them is ever automatically current; the only difference between
- * these three and the four with tabs was that the four had somewhere to say
- * it.
+ * None has a tab of its own, and every image on this box is pinned (oci-
+ * containers runs `--pull missing`), so without this they could drift a year
+ * behind with nothing on the dashboard saying so.
  *
  * Each reads its version from wherever that version actually exists, which is
- * three different places for three projects:
+ * a different place per project:
  *
  *   searxng            no releases, no tags, a rolling build — and it prints
  *                      `SearXNG 2026.7.30-afdfd8161` in its startup banner,
@@ -576,7 +568,7 @@ const GONE =
  * What litellm's own two credentials actually are.
  *
  * Both are honest entries in the caller list — they make real inference calls
- * and burn real GPU on the gaming PC — and both are unreadable without a
+ * and burn real GPU on a provider machine — and both are unreadable without a
  * sentence. The master key in particular is not one caller: it is the admin
  * credential, and everything configured with it lands in one row.
  */

@@ -41,9 +41,6 @@ function NotConfigured() {
   )
 }
 
-// `ReleaseBoard` is gone: it was `Changelog` with one of its two shapes, and
-// the neighbour panels below needed the other.
-
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
 export function LitellmView({ data }: { data: LitellmData }) {
@@ -90,12 +87,9 @@ export function LitellmView({ data }: { data: LitellmData }) {
         ]}
       />
 
-      {/* No headline band. Four stat cards spent the width of the page on
-          "requests today: 18" and "failed today: 0" — one figure each, most of
-          them zero most of the time, none of them worth the glance they were
-          demanding. The same numbers are a measure line inside the panel whose
-          chart they describe, which is also where they can be read AGAINST that
-          chart instead of a screen away from it. */}
+      {/* No headline band. Today's requests and failures are a measure line
+          inside the panel whose chart they describe, where they can be read
+          AGAINST that chart instead of a screen away from it. */}
       <BoardGrid>
         <Board
           title="Traffic"
@@ -121,9 +115,8 @@ export function LitellmView({ data }: { data: LitellmData }) {
                 tone: total.failed > 0 ? 'bad' : undefined,
               },
               // The one latency figure on this page that is actually about the
-              // gateway. Every other one is end-to-end and therefore mostly
-              // Lemonade, and this is the number that says so — three lines of
-              // caption replaced by the measurement they were describing.
+              // gateway. Every other one is end-to-end and therefore mostly the
+              // model server, and this is the number that says so.
               { k: 'gateway adds', v: ms(data.overheadMs) },
             ]}
           />
@@ -188,7 +181,7 @@ export function LitellmView({ data }: { data: LitellmData }) {
                     {t.tool}
                   </span>
                   {/* The tool's own time, which is the only latency on this
-                      page that is NOT mostly Lemonade — a tool call is the
+                      page that is NOT mostly the model server — a tool call is the
                       gateway talking to a container on this box, so tens of
                       milliseconds is what right looks like. */}
                   <span className={ITEM_SIDE}>{ms(t.latencyMs)}</span>
@@ -204,12 +197,9 @@ export function LitellmView({ data }: { data: LitellmData }) {
           </p>
         </Board>
 
-        {/* The one axis on this page worth a panel of this size. What a
-            published name resolves to is a fact you configured — the checkpoint
-            is on a machine in the next room and the mapping does not change on
-            its own — so the routing table this replaced said nothing you did
-            not already know, in nine rows, six of which were idle. Who is
-            calling cannot be known from anywhere else.
+        {/* The one axis on this page worth a panel of this size (see `Caller`
+            in ../data/litellm.ts): who is calling cannot be known from
+            anywhere else.
 
             It also opens the second row rather than sharing the first, and that
             is a layout decision rather than an editorial one: it runs to about
@@ -237,10 +227,9 @@ export function LitellmView({ data }: { data: LitellmData }) {
             </ul>
           )}
 
-          {/* Ranked by requests, not tokens, and that is the reason this box
-              exists in the shape it does: a key that is rejected returns no
-              tokens at all, so on a token ranking the eleven of them below
-              scored zero and never appeared. */}
+          {/* Rejected keys are split out rather than ranked — see `callersOf`:
+              a rejected key returns no tokens at all, so on a token ranking it
+              would score zero and never appear. */}
           {data.rejected.keys > 0 && (
             <p className={REJECTED}>
               <b>{num(data.rejected.keys)}</b> keys never completed a request.{' '}
@@ -271,11 +260,8 @@ export function LitellmView({ data }: { data: LitellmData }) {
           <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
         </Board>
 
-        {/* The containers the gateway dials, each as a pair: what a
-            re-pull would bring, and what it has been saying. They used to be
-            three folded log frames and nothing else, which meant three pinned
-            services could drift a year behind with nothing on this dashboard
-            reporting it — the logs were there, the updates were not. */}
+        {/* The containers the gateway dials, each as a pair: what a re-pull
+            would bring, and what it has been saying (`loadNeighbours`). */}
         {data.neighbours.map((n) => (
           <NeighbourPair key={n.container} n={n} />
         ))}
@@ -293,10 +279,6 @@ type NeighbourData = LitellmData['neighbours'][number]
  * things ever wanted from a container with no page of its own: what would
  * change if I updated it, and what has it been saying. The title carries the
  * verdict, so the row answers "is anything here behind" before it is read.
- *
- * These were three folded log frames and nothing else, which was the gap: the
- * logs were on the page and the UPDATES were not, so three pinned services
- * could drift a year behind with nothing on this dashboard reporting it.
  *
  * A container that is two projects (`via`) gets a third of the row for each:
  * two changelogs and the one log, rather than one changelog silently speaking
@@ -379,8 +361,8 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
           {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
           {caller.failed > 0 && <span className="text-danger">{num(caller.failed)} failed</span>}
           {/* One name and a count. A caller reaching a single model is the
-              norm, the master key reaches seven, and two full model names
-              wrapped this line onto a second row for the one caller that did —
+              norm, and two full model names wrap this line onto a second row
+              for the one caller (usually the master key) that reaches several —
               the rest is a hover away. */}
           {caller.models[0] !== undefined && (
             <span className={cn(MONO, 'truncate')} title={caller.models.join(', ')}>

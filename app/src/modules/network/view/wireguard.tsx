@@ -41,15 +41,14 @@ type Inbound = Extract<NetworkData, { tab: 'wireguard' }>
  *
  * Three different pieces of software, three different failure modes, so each
  * gets its own header and its own boards rather than a shared row that would
- * fit none of them. What IS shared is the strip above the switch: which of the
- * three is working, all at once, so a broken one is visible without visiting
- * it. That is the whole reason they live on one tab instead of three.
+ * fit none of them. What IS shared is the switch, whose buttons say which of
+ * the three is working, all at once, so a broken one is visible without
+ * visiting it. That is the whole reason they live on one tab instead of three.
  */
 export function InboundView({ data }: { data: Inbound }) {
   // Direct first and selected by default: it is the plainest of the three —
   // a name resolving to this house's address, no proxy and no tunnel — and
-  // the other two are each a layer added on top of it. Reading them in that
-  // order is reading them in the order they were built.
+  // the other two are each a layer added on top of it.
   const [route, setRoute] = useState<'direct' | 'tunnel' | 'wireguard'>('direct')
   const { wireguard, tunnel, ddns } = data
 
@@ -62,11 +61,9 @@ export function InboundView({ data }: { data: Inbound }) {
 
   return (
     <>
-      {/* Each route's health rides the button that selects it. There was a
-          second row of the same three names carrying the same three dots, and
-          a name printed twice is a name the reader has to reconcile — this
-          says it once, in the only place it can be read without selecting the
-          route it belongs to. */}
+      {/* Each route's health rides the button that selects it — said once,
+          in the only place it can be read without selecting the route. A
+          separate status row would print each name twice. */}
       <div className={SWITCH_BAR}>
         <Segmented
           value={route}
@@ -98,7 +95,7 @@ export function InboundView({ data }: { data: Inbound }) {
  * not be. So the peer list is the page — every peer, whether or not it has
  * ever connected, with the handshake that is the only liveness WireGuard has.
  * A peer that exists and has never handshaken is a credential somebody was
- * issued and never used, which is worth seeing on a list of two.
+ * issued and never used, which is worth seeing.
  */
 function WireguardView({ data }: { data: Inbound['wireguard'] }) {
   const { gap, counts, peers, daily } = data

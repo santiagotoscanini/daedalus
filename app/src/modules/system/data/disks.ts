@@ -12,7 +12,7 @@ export type DisksData = {
     writtenBytes: number | null
     utilPct: number | null
   }[]
-  /** When smartd's own timers last ran, so a silent scheduler is visible. */
+  /** Whether smartd.service is active, so a silent scheduler is visible. Null when unread. */
   smartdActive: boolean | null
 }
 

@@ -7,21 +7,18 @@ import { DASH } from '../../../lib/format'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
-/* The class strings more than one Media tab writes. Named once for the same
-   reason the CSS they replace was: two tabs rendering the same object must not
-   drift into two slightly different rows.
+/* The class strings more than one Media tab writes, named once so two tabs
+   rendering the same object cannot drift into two slightly different rows.
 
-   The board vocabulary itself is one module (components/tokens.ts): it is the
-   same handful of strings on every category page, and was restated per file
-   only while styles.css was being retired. Re-exported here so a tab still
-   imports its own page's shared file. */
+   The board vocabulary every category page uses lives in components/tokens.ts;
+   it is re-exported here so a tab imports only its own page's shared file. */
 export { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
 
 /** A bare vertical list — no marker, no padding, no default margins. */
 export const LIST = 'm-0 flex list-none flex-col p-0'
 
-/* A download in flight, shared by qBittorrent, NZBGet, Shelfmark and the *arr
-   queues — the same object every time: a name, a line of figures, a bar. */
+/* A download in flight, shared by qBittorrent, NZBGet and Shelfmark — the same
+   object every time: a name, a line of figures, a bar. */
 export const TRANSFERS = `${LIST} gap-[0.6rem]`
 export const TRANSFER_ROW = 'flex flex-col gap-[0.25rem]'
 export const TRANSFER_HEAD = 'flex min-w-0 items-baseline justify-between gap-[0.8rem]'
@@ -151,7 +148,7 @@ const CHECK_TINT: Record<'warn' | 'bad', string> = {
 }
 
 /**
- * The oneshot behind every "from the image's own label" version on this page.
+ * The oneshot behind every "from the image's own label" version in this module.
  *
  * A neighbour of Shelfmark, Janitorr and Recyclarr specifically — the three
  * whose pin is a channel, so the snapshot is the ONLY thing that knows what

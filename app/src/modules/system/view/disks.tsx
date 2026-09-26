@@ -31,7 +31,7 @@ type Disks = Extract<SystemData, { tab: 'disks' }>
  * not interchangeable in any way that matters when you are about to open the
  * case. Nothing infers a photo from `rotationRate` — a stock image of "a hard
  * disk" would be decoration, and a wrong one would be worse than none, so an
- * unrecognised model gets no picture and the panel reads exactly as before.
+ * unrecognised model gets no picture and the panel reads without one.
  *
  * The intrinsic dimensions are the files' own, so the aspect ratio is reserved
  * before the image loads and nothing below it jumps.
@@ -137,7 +137,7 @@ const SEG_INK: Record<Segment['key'], string> = {
  * it readable.
  *
  * Positioned inside the board rather than floating above the page, because
- * `.board` is `overflow: hidden` and anything escaping it would be clipped
+ * a `Board` is `overflow-hidden` and anything escaping it would be clipped
  * rather than shown. It overlays the panel below it, which is what a tooltip
  * does anyway, and it needs no positioning library to do it.
  *
@@ -269,13 +269,12 @@ export function DisksView({ d }: { d: Disks }) {
             key={disk.device}
             title={disk.device}
             icon={nvme ? '⚡' : '▦'}
-            /* A third each, so the machine's three drives are one row and one
-               reading. At a half they were a pair and an orphan, which put the
-               NVMe on a line of its own beside empty grid and read as a second
-               subject — and the comparison this page is for is across all
-               three: which is hottest, which is oldest, which has the counter
-               that moved. Boards stretch to a shared bottom edge, so the row
-               is as tall as the drive with the most to say. */
+            /* A third each, so three drives are one row and one reading — at a
+               half, the third lands alone on a line beside empty grid and reads
+               as a second subject, while the comparison this page is for is
+               across all of them: which is hottest, which is oldest, which has
+               the counter that moved. Boards stretch to a shared bottom edge,
+               so the row is as tall as the drive with the most to say. */
             span={4}
             aside={
               disk.passed === null ? (

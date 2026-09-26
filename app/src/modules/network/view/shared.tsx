@@ -14,10 +14,9 @@ export function tone(ok: boolean | null): Tone | null {
 }
 
 /* ── the vocabulary the six tabs share ─────────────────────────────────────
-   The board vocabulary is one module now (components/tokens.ts): it is the
-   same handful of strings on every category page, and was restated per file
-   only while styles.css was being retired. Re-exported here so a tab still
-   imports its own page's shared file. Below is what is genuinely Network's. */
+   The board vocabulary every category page uses lives in components/tokens.ts;
+   it is re-exported here so a tab imports only its own page's shared file.
+   Below is what is genuinely Network's. */
 export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from '../../../components/tokens'
 
 /* Rows of a table, not a stack of pills: a hairline between rows says what a
@@ -55,13 +54,12 @@ export const MORE = `${FOLD} mt-[0.4rem] border-t border-(--border-soft) [&>summ
 export const GROUP = `${FOLD} [&>summary]:text-[0.78rem] [&>summary]:text-foreground`
 
 /**
- * The one link a page header carries.
+ * The primary link of a header or board ("Open the admin").
  *
- * The Geist signature: the primary action is the FOREGROUND colour, not the
- * brand one — the accent identifies the app, this identifies the one thing you
- * came to press. It was a literal near-black label, which on a light theme is
- * black on black; `text-background` is the same pixel in dark and readable in
- * both.
+ * The primary action is the FOREGROUND colour, not the brand one — the accent
+ * identifies the app, this identifies the one thing you came to press. The
+ * label is `text-background` rather than a literal near-black, which would be
+ * black on black in the light theme.
  */
 export const ACTION =
   'inline-flex cursor-pointer items-center rounded-[7px] border border-foreground bg-foreground px-[0.85rem] py-[0.42rem] text-[0.84rem] font-[550] whitespace-nowrap text-background no-underline transition-colors hover:border-foreground/85 hover:bg-foreground/85 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--brand-dim)'

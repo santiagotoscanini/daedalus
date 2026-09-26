@@ -6,10 +6,11 @@ import { ATTEMPT_MS, getJson, getText } from '../../../lib/http'
 /* ── Downloads ────────────────────────────────────────────────────────── */
 
 /**
- * Three downloaders on one tab, and it is one tab because they are one job.
+ * Four downloaders on one tab, and it is one tab because they are one job.
  *
  * qBittorrent and NZBGet are fed by the same *arrs and land in the same folder;
- * MeTube is the manual case, the thing you point at a URL yourself. Each has
+ * MeTube is the manual case, the thing you point at a URL yourself; Shelfmark
+ * fetches books. Each has
  * its own version and its own log, which is why they get sections rather than a
  * merged list — but "what is downloading right now" has one answer and it
  * should be in one place.
@@ -18,7 +19,7 @@ export type DownloadsData = {
   qbt: {
     version: string | null
     gap: VersionGap
-    /** Null when the login failed — everything below it is then empty. */
+    /** False when the login failed — everything below it is then empty. */
     reachable: boolean
     down: number | null
     up: number | null
@@ -74,13 +75,7 @@ export type DownloadsData = {
     /** The most recent finished items, newest last as MeTube stores them. */
     recent: { title: string; status: string }[]
   }
-  /**
-   * The fourth downloader, and the reason it is here rather than beside the
-   * shelf it fills: it is a downloader. Pairing it with Calibre-Web put one
-   * downloader on the far side of the tab row's rule from the other three,
-   * which made "where do I look when something is not arriving" depend on
-   * whether the thing was a book.
-   */
+  /** Here rather than beside the shelf it fills — the manifest says why. */
   shelfmark: {
     /**
      * From the image's own OCI label, because the pin cannot say.
@@ -142,7 +137,7 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
     getJson<{ result?: { NZBName?: string; FileSizeMB?: number; RemainingSizeMB?: number }[] }>(
       `${nzbBase}/jsonrpc/listgroups`,
     ),
-    // Through traefik on a scoped bypass (`GET /history`, stacks/metube):
+    // Through traefik on a scoped bypass (`GET /history`, nix/modules/metube):
     // metube is on traefik-net only, and daedalus is deliberately not.
     getJson<{
       queue?: { title?: string; status?: string }[]
@@ -170,9 +165,9 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
     versionGap('qbittorrent/qBittorrent', qbt.version, { tag: /^release-(\d+\.\d+\.\d+)$/ }),
     versionGap('nzbgetcom/nzbget', nzbVer, { tag: /^v?(\d+\.\d+(?:\.\d+)?)$/ }),
     versionGap('alexta69/metube', metubeVer, { tag: /^(\d{4}\.\d{2}\.\d{2})$/ }),
-    // A real gap now that the label supplies a version. `notesWhenUnknown`
-    // stays as the fallback for the day a publisher stops setting the label:
-    // the panel then shows what has shipped rather than going blank.
+    // `notesWhenUnknown` covers the day the publisher stops setting the
+    // version label: the panel then shows what has shipped rather than going
+    // blank.
     versionGap('calibrain/shelfmark', shelfmark.version, { notesWhenUnknown: true }),
   ])
 
@@ -252,9 +247,9 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
 
 /**
  * qBittorrent's API is cookie-authenticated: POST the credentials, keep the
- * SID. Not cached across requests — the dashboard reloads at most every 30s
- * and a stale cookie would fail silently, which is exactly the kind of "the
- * tile has been wrong for a week" bug this app exists to not have. Lives here
+ * SID. Not cached across requests — one login per page load is cheap, and a
+ * stale cookie would fail silently, which is exactly the kind of "the tile
+ * has been wrong for a week" bug this app exists to not have. Lives here
  * rather than in lib/http.ts because qBittorrent is this tab's upstream and
  * nobody else's.
  */
@@ -287,7 +282,8 @@ async function qbtCookie(base: string, ctx: Ctx): Promise<string | null> {
  *
  * The auth is a cookie handed out by a POST, and that POST is the most
  * expensive call on this page — a password check against a service inside
- * gluetun's netns. Four readings want it; they get one session between them.
+ * gluetun's netns. Three readings want it (the version endpoint needs none);
+ * they get one session between them.
  */
 async function loadQbt(base: string, ctx: Ctx): Promise<Omit<DownloadsData['qbt'], 'gap'>> {
   const empty = {

@@ -30,9 +30,9 @@ function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
 /**
  * The digest's per-class ink, spelled out one literal string per class.
  *
- * Composed at runtime as code-<c>xx before, which is a name Tailwind's scanner cannot
- * see — the utility has to appear in the source for the rule to be emitted at
- * all. Only the tiny class label carries the colour; the numbers beside it
+ * Never composed at runtime (`code-${c}xx`): Tailwind's scanner cannot see a
+ * built name, and the utility has to appear in the source for the rule to be
+ * emitted at all. Only the tiny class label carries the colour; the numbers beside it
  * keep the text tokens, so this stays inside the rule that colour never IS the
  * information.
  */
@@ -51,11 +51,9 @@ const ENDPOINTS =
 
 // ── The proxy ──────────────────────────────────────────────────────────────
 
-// One page, one subject. Pocket ID shared this tab and has a category of its
-// own now: they were paired because the routing table joins them, and that
-// join is still here — the protection column below is drawn from the IdP's
-// client list — but a join is a reason for a column, not for a second header
-// and a switch above it.
+// One page, one subject. The protection column is drawn from Pocket ID's
+// client list (see `loadProxy`), but a join is a reason for a column, not for
+// a second service's header.
 type Proxy = Extract<NetworkData, { tab: 'proxy' }>
 
 /** How each protection class reads, and in what order the table groups them. */
@@ -118,8 +116,8 @@ export function TraefikView({ data: d }: { data: Proxy }) {
           {
             k: 'Read from',
             v: null,
-            // Worth stating: every other version on this dashboard is the tag
-            // the flake pinned, which is what was ASKED for.
+            // Worth stating: most versions on this dashboard are the tag the
+            // flake pinned, which is what was ASKED for.
             note: 'the running process, not the tag in the flake',
           },
         ]}
@@ -286,9 +284,7 @@ export function TraefikView({ data: d }: { data: Proxy }) {
           </ul>
           {d.certs.length === 0 && <p className={EMPTY}>no certificate in the store</p>}
 
-          {/* The join worth making on a page that has both: a certificate is
-              only worth renewing if something published matches it, and traefik
-              renews whatever is in the store regardless. */}
+          {/* The certificate ↔ route join — see `TraefikData.certs`. */}
           <p className={FOOT}>
             {d.certs.map((c) => (
               <span key={c.cn} className={ENDPOINTS}>
@@ -311,8 +307,8 @@ export function TraefikView({ data: d }: { data: Proxy }) {
             />
           )}
 
-          {/* A quarter of the width now, so this keeps the two facts that
-              change how the list is read and drops the tour. */}
+          {/* A quarter-width board, so this keeps only the facts that change
+              how the list is read. */}
           <p className={FOOT}>
             The store, not a probe. <b>Every</b> certificate this box serves HTTPS with is here, and
             one wildcard is why that is a short list. Issued over DNS-01 against Cloudflare, so a
@@ -366,11 +362,11 @@ export function TraefikView({ data: d }: { data: Proxy }) {
 }
 
 /**
- * Response codes: one line by default, seventeen bars on request.
+ * Response codes: one line by default, a bar per code on request.
  *
- * Seventeen distinct codes in a day is normal for a proxy in front of forty
- * services, and as a bar list it was three times the height of the panel
- * beside it, which is where the hole under the traffic chart came from.
+ * A proxy in front of forty services sees well over a dozen distinct codes a
+ * day, and as an always-open bar list that is several times the height of the
+ * panel beside it.
  *
  * The summary is not a teaser for the list, it is the answer: the question
  * anybody brings to a status-code panel is "is anything broken", and that is
@@ -427,8 +423,3 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
     </details>
   )
 }
-
-/* The audit log's event names were translated here — "signed in", "opened",
-   "first time" — for a raw stream that no longer exists. Nothing renders a
-   verb now: the aggregates say which verb they counted, and the only events
-   still shown are one kind, inside the row they belong to. */

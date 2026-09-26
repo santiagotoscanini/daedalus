@@ -15,8 +15,8 @@ export type MemoryData = {
    *
    * ARC is charged to the kernel rather than to any process, so a box with
    * 64 GiB and 40 GiB of ARC reads as nearly full while having tens of
-   * gigabytes it will hand back on demand. Nothing on this dashboard showed
-   * it, which made the memory number unreadable.
+   * gigabytes it will hand back on demand. Without it the memory number is
+   * unreadable.
    */
   arc: { size: number | null; max: number | null; min: number | null; hitRate: number | null }
   /** zram is this box's only swap — bytes in it are pressure that happened. */
@@ -36,19 +36,18 @@ export type MemoryData = {
    *
    * Only the ones with a non-zero counter: this is the one number that means a
    * cap is genuinely too tight (usage-at-limit is normal for page-cache-heavy
-   * apps), and a roster of seventy zeros would bury the signal it exists to
-   * carry. Empty means it has never happened — a fact, not missing data. No
-   * restart column next to it: the cgroup exporter reads memory.events only,
-   * and rootless containers have no start-time series to derive one from.
+   * apps), and a roster of zeros for every container would bury the signal it
+   * exists to carry. Empty means it has never happened — a fact, not missing
+   * data. No restart column next to it: the cgroup exporter keeps no restart
+   * count, and rootless containers have no start-time series to derive one from.
    */
   oomKilled: { label: string; value: number }[]
   /**
    * What is physically in the slots.
    *
    * Prometheus can say how many bytes there are; only SMBIOS can say that
-   * they arrive as two 32 GB DDR4 modules with two slots left over — which
-   * is the fact an upgrade decision turns on and the one this tab was
-   * missing.
+   * they arrive as, say, two 32 GB DDR4 modules with two slots left over —
+   * which is the fact an upgrade decision turns on.
    */
   modules: Hardware['memory']
 }

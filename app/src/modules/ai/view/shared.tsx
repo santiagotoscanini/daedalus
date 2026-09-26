@@ -2,25 +2,22 @@ import { type CompareRow, latestRow } from '../../../components/service-head'
 import type { VersionGap } from '../../../lib/dashboard/github'
 
 /**
- * The working, paired with the PIN rather than with the running version.
+ * The latest release, paired with the PIN rather than with the running version.
  *
- * The one place this dashboard departs from the shared `compareOf`, and on
- * purpose: on these four the running number and the pin are different facts.
- * Lemonade is installed on Windows and is in no flake at all; LiteLLM and Open
- * WebUI are digests pinned against a moving tag. "Running" would restate the
- * number already sitting two centimetres to the left; "pinned by" is the thing
- * you would have to go and edit.
+ * A departure from the shared `compareOf`, and on purpose: for LiteLLM, Open
+ * WebUI and n8n the running number and the pin are different facts — the
+ * first two are digests pinned against a moving tag, n8n an exact tag.
+ * "Running" would restate the number already sitting beside it; "pinned by"
+ * is the thing you would have to go and edit.
  */
 export function comparePinned(gap: VersionGap, note: string): CompareRow[] {
   return [latestRow(gap), { k: 'Pinned by', v: null, note }]
 }
 
-/* ── the vocabulary the four tabs share ────────────────────────────────────
-   The board vocabulary is one module now (components/tokens.ts): it is the
-   same handful of strings on every category page, and was restated per file
-   only while styles.css was being retired. Re-exported here so a tab still
-   imports its own page's shared file. Below is what is genuinely the AI
-   pages'. */
+/* ── the vocabulary the AI tabs share ──────────────────────────────────────
+   The board vocabulary every category page uses lives in components/tokens.ts;
+   it is re-exported here so a tab imports only its own page's shared file.
+   Below is what is genuinely the AI pages'. */
 export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../../../components/tokens'
 
 /** A ranking: `RankRow`s, stacked. */

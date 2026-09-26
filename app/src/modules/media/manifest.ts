@@ -7,16 +7,16 @@ export const manifest = {
   order: 20,
   // Shaped to Jellyfin, the tab that opens by default.
   boardSpans: [8, 4, 4, 8],
-  // No tile directory. It held eleven tiles, each three numbers and a link,
-  // and every one of those services is now a tab with a page — the same name,
-  // dot and link, plus the version verdict, the health checks and the log a
-  // tile had no room for.
-  // Split by what a thing IS, and the rule is the split: the two tabs to its
-  // left are where a pipeline ENDS — the libraries a person actually opens —
-  // and everything to its right is machinery that fills them.
+  // No tile directory: every service has a tab page with room for the version
+  // verdict, the health checks and the log a tile had none for.
   //
-  // Four of these hold more than one service, picked by a switch inside the
-  // page — the same shape Network uses for its three ways in. The grouping
+  // Split by what a thing IS, and the rule (`dividerBefore`) is the split: the
+  // two tabs before it are where a pipeline ENDS — the libraries a person
+  // actually opens — and everything after it is machinery that fills them.
+  //
+  // Three of these (Wanted, Downloaders, Cleanup) hold more than one service,
+  // picked by a switch inside the page — the same shape Network uses for its
+  // three ways in. The grouping
   // follows the job rather than the software: Recyclarr sits with the two
   // *arrs whose configuration it writes, Bazarr with the other fetchers, and
   // Shelfmark with the other downloaders rather than beside the shelf it

@@ -6,28 +6,22 @@ export const manifest = {
   lede: 'Everything between a packet and this box: the link, the ways in, the proxy, the resolver.',
   order: 50,
   boardSpans: [12, 12, 8, 4],
-  // No tiles on any tab here. The nine that used to sit under General were
-  // each a service already given a whole tab, restating three of its numbers
-  // one screen below the panel that explains them, plus four bare links —
-  // and every one of those links now lives on the tab whose subject it is.
-  // Split by DIRECTION, because that is the only axis on which these two
-  // are alike: both are WireGuard, both are tunnels, and everything else
-  // about them is opposite. One lets a phone reach the house from a hotel;
-  // the other stops the house being recognised from outside. Keeping them
-  // as two boards on one page meant the words "VPN", "WireGuard" and
-  // "tunnel" each meant two things a scroll apart.
+  // No tiles on any tab here: each would restate a number from the board
+  // that explains it, one screen further down.
+  //
+  // The two tunnels ("Coming in", "Going out") are split by DIRECTION: both
+  // are WireGuard and everything else about them is opposite — one lets a
+  // phone reach the house from a hotel, the other stops the house being
+  // recognised from outside. On one page, "VPN", "WireGuard" and "tunnel"
+  // each meant two things a scroll apart.
   tabs: [
     // The wire itself, and everyone using it: what crosses the cable, what
     // the line behind it can carry, and which container moved which bytes.
     //
-    // No gatus probe, because there is no one service here to check — but
-    // the tab is not therefore unknowable. The two things that would make
-    // this page meaningless are the router being unreachable and the
-    // internet being down, and both are measured every minute, so the dot
-    // is computed from them instead of left permanently grey.
-    // The one tab in this module with no service head: its subject is the
-    // cable, which has no version and nothing to open — and no nix module,
-    // because the wire is the box's own.
+    // No gatus probe, because there is no one service here to check. The
+    // dot is computed from the router and internet hop probes, measured
+    // every minute. No service head either — the cable has no version and
+    // nothing to open — and no nix module, because the wire is the box's own.
     {
       id: 'general',
       label: 'General',

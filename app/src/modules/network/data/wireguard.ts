@@ -18,7 +18,7 @@ type Peer = {
   name: string
   ipv4: string | null
   enabled: boolean
-  /** Null for a peer that has never completed one — see loadPeers. */
+  /** Null for a peer that has never completed one — see loadWgPeers. */
   handshakeAgo: number | null
   ago: string
   rx: number
@@ -72,7 +72,7 @@ type TunnelData = {
  *
  * The tunnel carries HTTP and nothing else, so anything speaking another
  * protocol has to be dialled directly — and a home connection's address
- * moves. `platform/ddclient` is what keeps a name pointed at it, and this is
+ * moves. `nix/platform/ddclient` is what keeps a name pointed at it, and this is
  * the page that says whether it is currently pointed at the right one.
  */
 type DdnsData = {
@@ -101,8 +101,8 @@ type DdnsData = {
    *
    * ddclient logs a line only when it CHANGES the record, so this is exactly
    * the change history and nothing else — no rows for the ~8,600 runs a month
-   * that found nothing to do. Bounded by Loki's retention rather than by
-   * choice: thirty days is all there is.
+   * that found nothing to do. Bounded by Loki's thirty-day retention and by
+   * `ctx.loki.entries`' default of 40 lines.
    */
   history: { at: number; ip: string; heldDays: number | null }[]
   /** ddclient runs that could not work out the address, by window. */
@@ -163,27 +163,13 @@ function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null
   }
 }
 
-// ── WireGuard: the way in ──────────────────────────────────────────────────
-
-/**
- * wg-easy, read entirely from its Prometheus endpoint.
- *
- * Not from its API, and that is a property of the software rather than a
- * shortcut: wg-easy v2 requires a TOTP code on `/api/session`, so there is no
- * unattended credential login to be had. The exporter it publishes is
- * unauthenticated on the same container and carries everything this page
- * shows — peers, their addresses, their handshakes and their byte counters.
- *
- * The version comes from nix for the same reason: nothing a read-only caller
- * can reach reports it, so the tag the image is pinned to IS the version.
- */
 /**
  * All three ways in, whichever one the page is showing.
  *
- * Every route is loaded on every visit and that is deliberate: the strip above
- * the switch says which of the three is working, and a strip that only knew
- * about the selected one would be a strip nobody could trust. The switch is
- * client-side, so the server could not know which to fetch anyway.
+ * Every route is loaded on every visit and that is deliberate: the switch's
+ * dots say which of the three is working, and dots that only knew about the
+ * selected one would be dots nobody could trust. The switch is client-side,
+ * so the server could not know which to fetch anyway.
  *
  * The Cloudflare tunnel is fetched ONCE and handed to both consumers. It
  * answers two unrelated questions — is the tunnel healthy, and what is this
@@ -222,6 +208,20 @@ async function cfTunnel(ctx: Ctx): Promise<CfTunnelRead> {
   )
 }
 
+// ── WireGuard: the way in ──────────────────────────────────────────────────
+
+/**
+ * wg-easy, read entirely from its Prometheus endpoint.
+ *
+ * Not from its API, and that is a property of the software rather than a
+ * shortcut: wg-easy v2 requires a TOTP code on `/api/session`, so there is no
+ * unattended credential login to be had. The exporter it publishes is
+ * unauthenticated on the same container and carries everything this page
+ * shows — peers, their addresses, their handshakes and their byte counters.
+ *
+ * The version comes from nix for the same reason: nothing a read-only caller
+ * can reach reports it, so the tag the image is pinned to IS the version.
+ */
 async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
   const version = await pinnedVersion('wg-easy', ctx.env('WG_EASY_VERSION'))
 
@@ -416,7 +416,7 @@ async function loadDdns(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<DdnsData>
     .filter((h) => h.ip !== '')
     .map((h, i, all) => ({
       ...h,
-      // How long the PREVIOUS address lasted, measured to this change. The
+      // How long THIS address lasted, measured to the next (newer) change. The
       // newest row has no successor, so its span is still running and is left
       // null rather than dated to now — "held 2 days so far" is a different
       // claim from "held 2 days".
@@ -433,9 +433,9 @@ async function loadDdns(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<DdnsData>
     actual: cf.ok ? (cf.value.result?.connections?.[0]?.origin_ip ?? null) : null,
     lastRunAt,
     // Derived rather than asked: the timer lives in systemd and this container
-    // cannot see it. `OnUnitActiveSec` restarts the clock when the last run
-    // finished, so last + interval IS the next elapse — give or take the
-    // seconds the run itself took.
+    // cannot see it. NixOS's ddclient timer is `OnUnitInactiveSec`, which
+    // restarts the clock when the last run finished, and `runs` is that
+    // "Finished" line — so last + interval IS the next elapse.
     nextRunAt: lastRunAt === null || seconds === null ? null : lastRunAt + seconds * 1000,
     history,
     lookupFailures: { day, week, month },

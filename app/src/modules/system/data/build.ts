@@ -4,14 +4,8 @@ import { type Hardware, hostFacts } from '../../../lib/dashboard/host-facts'
 /* ── Build ────────────────────────────────────────────────────────────── */
 
 /**
- * The parts this machine is made of, and what each of them is doing.
- *
- * The one tab here whose subject is not a layer of the operating system but
- * the objects in the cupboard. It exists because every other System tab
- * answers "how is it behaving" and none of them could answer "what is it" —
- * and on a box that gets opened once a year, the second question is the one
- * you have no way to look up when you are standing in front of it with a
- * screwdriver.
+ * The parts this machine is made of, and what each of them is doing — "what
+ * is it" rather than "how is it behaving" (the manifest says why).
  *
  * Half declared, half measured, and the split is deliberate. What a part IS —
  * its name, its rating, its photograph — cannot be read from the machine: no

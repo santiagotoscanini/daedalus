@@ -45,13 +45,9 @@ const UPLINK_READERS: readonly LogNeighbour[] = [
 /**
  * The house network: the cable, the line behind it, and who is using both.
  *
- * The organising distinction is one that gets collapsed constantly and is two
- * different measurements. The NIC counters are USAGE — every byte that crossed
- * the cable, most of which never leaves the house. The hourly speed test is
- * CAPACITY — what the ISP line can carry. A film streamed to the TV moves a
- * gigabyte of the first and none of the second, so the wire routinely carries
- * more than the line could, and neither number bounds the other. They are two
- * boards for that reason, never one chart with two lines on it.
+ * The NIC counters (USAGE) and the speed test (CAPACITY) are two boards, never
+ * one chart with two lines on it — neither bounds the other; `GeneralData`
+ * says why.
  */
 export function GeneralView({ data }: { data: General }) {
   const { wire, line, hops, router, services, dns } = data
@@ -263,9 +259,8 @@ export function GeneralView({ data }: { data: General }) {
           <Trend values={line.downHistory} height={64} />
           <h4 className={SUB}>Upload, Mbps</h4>
           <Trend values={line.upHistory} tone="info" height={48} />
-          {/* The hourly test saturates the WAN for a couple of minutes and has
-              historically taken LAN DNS down with it — worth knowing when a
-              gap in another chart lines up with the top of an hour. */}
+          {/* The DNS side effect of the same test is told on the MySpeed log
+              board below, not here. */}
           <p className={FOOT}>
             What the connection can do rather than what it is doing, measured hourly by{' '}
             {line.url === null ? (
@@ -296,17 +291,14 @@ export function GeneralView({ data }: { data: General }) {
           </p>
         </Board>
 
-        {/* The device list was here. It is on DHCP now, merged with the
-            reservations that name those devices — what is on the LAN is a
-            lease fact, not a throughput one. */}
+        {/* No device list here: what is on the LAN is a lease fact, not a
+            throughput one, so it lives on the DHCP tab. */}
 
-        {/* This tab had no log at all, which made it the only page here whose
-            numbers could not be checked against the thing that produced them.
-            Its subject is the wire and the wire keeps no log — but the three
-            processes that MEASURE it do, and every reading above comes from
-            one of them. MySpeed leads because it is the only one of the three
-            that is a service rather than plumbing, and the only one whose
-            failure is visible as a wrong number rather than a missing one. */}
+        {/* The wire keeps no log, but the three processes that MEASURE it do,
+            and every reading above comes from one of them. MySpeed leads
+            because it is the only one that is a service rather than plumbing,
+            and the only one whose failure shows as a wrong number rather than
+            a missing one. */}
         <LogBoard
           source={{ container: 'myspeed' }}
           title="MySpeed logs"

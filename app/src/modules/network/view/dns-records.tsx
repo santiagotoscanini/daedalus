@@ -36,8 +36,8 @@ export function RecordList({
 }) {
   if (records.length === 0) return null
 
-  /* A record's own fields are not unique: Leftovers holds exact duplicates by
-     definition, and a ZoneRecord carries no Cloudflare id to tell them apart.
+  /* A record's own fields are not unique: Leftovers can hold exact duplicates
+     (one of its two rules), and a ZoneRecord carries no Cloudflare id to tell them apart.
      So each key is the fields plus which copy of them this row is — stable
      when other records come and go, unlike a bare row index. */
   const copies = new Map<string, number>()
@@ -56,9 +56,10 @@ export function RecordList({
       </summary>
       {/* Grid tracks, not flex — a per-row flex layout put each type chip at a
           different x, so a column of CNAMEs read as scattered rather than as a
-          column. `min-w-0` on the giving track is what lets its ellipsis fire
-          at all: a grid item's default `auto` minimum refuses to shrink below
-          its content, so without it the row overflows instead of truncating. */}
+          column. `min-w-0` on the content cell (SIDE) is what lets its
+          ellipsis fire at all: a grid item's default `auto` minimum refuses to
+          shrink below its content, so without it the row overflows instead of
+          truncating. */}
       <ul className={ROWS}>
         {records.map((r, i) => (
           <li
@@ -67,9 +68,8 @@ export function RecordList({
           >
             <span className={cn(MAIN, MONO)}>{r.short}</span>
             <Chip tone="muted">{r.type}</Chip>
-            {/* Content is the widest thing in the row and the least important —
-                a DKIM key is 200 characters of base64 nobody reads on a
-                dashboard. */}
+            {/* Content is the widest thing in the row and the least important
+                (see SIDE). */}
             <span className={cn(MONO, SIDE, 'max-w-none flex-auto text-left opacity-85')}>
               {r.content}
             </span>

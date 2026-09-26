@@ -15,13 +15,10 @@ export {
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
-/* The board vocabulary is one module now (components/tokens.ts): it is the
-   same handful of strings on every category page, and was restated per file
-   only while styles.css was being retired. These tabs call four of them
-   by their own longer names, which is why this is an aliased re-export rather
-   than an import in each tab. */
-/* The row vocabulary moved out to tokens.ts the day the Claude page needed
-   it; the tabs keep reading it from here. */
+/* The board and row vocabulary every category page uses lives in
+   components/tokens.ts. These tabs call four of them by their own longer
+   names, which is why this is an aliased re-export rather than an import in
+   each tab. */
 export {
   EMPTY as VIZ_EMPTY,
   FOOT as BOARD_FOOT,
@@ -53,10 +50,9 @@ export const SYSTEM_SNAPSHOT: LogNeighbour = {
 /**
  * The two readers behind Host and Memory.
  *
- * Same argument as `SYSTEM_SNAPSHOT` and the same gap: every number on those
- * two tabs comes from one of these, and until now neither one's log was
- * reachable from anywhere in this dashboard — so a gauge that had quietly
- * stopped moving looked exactly like a machine that had quietly gone idle.
+ * Same argument as `SYSTEM_SNAPSHOT`: every number on those two tabs comes
+ * from one of these, and without their logs a gauge that had quietly stopped
+ * moving looks exactly like a machine that had quietly gone idle.
  */
 export const HOST_READERS: readonly LogNeighbour[] = [
   {
@@ -73,7 +69,7 @@ export const HOST_READERS: readonly LogNeighbour[] = [
   },
 ]
 
-/** Seconds → a date, computed server-side is not needed: this is a duration. */
+/** Hours → a duration phrase (`36h`, `12d`, `2.3y`). */
 export function hours(h: number | null): string {
   if (h === null) return DASH
   if (h < 48) return `${String(h)}h`
@@ -86,8 +82,9 @@ export function hours(h: number | null): string {
  *
  * SMBIOS knows the board, the cpu and the memory modules, and that is where
  * this page reads them from. It has never heard of the cooler, the case or
- * the power supply — nothing in a PC reports those — so those three are
- * CHOSEN, here, by catalog id (lib/hardware/catalog.ts: the photo, the name
+ * the power supply — nothing in a PC reports those — so those three, and the
+ * memory kit's catalog entry, are CHOSEN here by catalog id
+ * (lib/hardware/catalog.ts: the photo, the name
  * and the spec of every part this house has bought, one entry each). A
  * node chooses the same three on Settings › Machines; the box chooses them
  * in code, because the box is configuration.

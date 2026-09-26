@@ -26,7 +26,7 @@ type N8nFlow = {
   medianMs: number | null
   /** Typical gap between starts, once there are enough runs to say. */
   everyMs: number | null
-  /** Words, computed here — see the note on hydration below. */
+  /** Words, computed here — see the hydration note on `failures.ago`. */
   ago: string
   /**
    * Ran on a cadence, and has since missed it.
@@ -60,8 +60,8 @@ export type N8nData = {
   /**
    * The failures themselves, newest first.
    *
-   * Few enough to name — one in a fortnight here — which is the whole reason
-   * this is a list and the rejected keys on the gateway tab are a count.
+   * Few enough to name, which is the whole reason this is a list and the
+   * rejected keys on the gateway tab are a count.
    */
   failures: {
     name: string
@@ -148,9 +148,8 @@ const RUNNING = new Set(['running', 'new', 'waiting'])
  * execution can: a workflow that is switched on and has never fired, and one
  * whose draft has drifted ahead of the version its schedule actually runs.
  *
- * Archived workflows are dropped outright. Six of the eleven on this box are
- * archived TickTick experiments; they cannot run, and listing them would bury
- * the two that can under things that are finished.
+ * Archived workflows are dropped outright: they cannot run, and listing them
+ * would bury the ones that can under things that are finished.
  */
 export async function loadN8n(ctx: Ctx): Promise<N8nData> {
   const base = ctx.hosts.base('n8n')

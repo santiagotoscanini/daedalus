@@ -12,12 +12,12 @@ import { CLEANUP_DAYS } from './shared'
 /* ── Cleanup ──────────────────────────────────────────────────────────── */
 
 /**
- * The three services that act ON the library rather than filling it.
+ * The two services that act ON the library rather than filling it.
  *
- * They share a tab because they share a failure mode: all three do their work
- * on a timer, none of them has a UI you would open unprompted, and the only
- * evidence any of them is alive is a log line. Two publish no numbers at all,
- * so the counts here are counted out of Loki — which is why the panel says so.
+ * They share a tab because they share a failure mode: both do their work on a
+ * timer, neither has a UI you would open unprompted, and the only evidence
+ * either is alive is a log line. Neither publishes the numbers this tab shows,
+ * so they are counted out of Loki — which is why the panel says so.
  */
 export type CleanupData = {
   cleanuparr: {
@@ -44,7 +44,7 @@ export type CleanupData = {
      */
     schedules: { name: string; enabled: boolean }[]
   }
-  /** The window both counts are over. */
+  /** The window the Loki counts are over. */
   days: number
 }
 
@@ -66,10 +66,9 @@ export async function loadCleanup(ctx: Ctx): Promise<CleanupData> {
     over('cleanuparr', 'Replacement search triggered'),
     over('janitorr', 'Deleting'),
     // Pinned to the channel `jvm-stable`, so the version comes off the image's
-    // own OCI label. It used to be scraped out of Janitorr's startup banner in
-    // Loki, which worked only while the container had restarted inside the
-    // retention window; past 30 days Loki refuses the range outright and the
-    // version silently became "unknown". The label has no such expiry.
+    // own OCI label. Not Janitorr's startup banner in Loki: that only exists
+    // while the container restarted inside the 30-day retention window, and
+    // the version silently became "unknown" past it.
     imageVersion('janitorr'),
     // And whether that channel has moved on from the pin — the label says
     // what the frozen artefact is, the registry says whether it is still what
@@ -113,8 +112,8 @@ async function janitorrSchedules(ctx: Ctx): Promise<CleanupData['janitorr']['sch
   const seen = await Promise.all(
     kinds.map(async (k) => {
       const line = await ctx.loki.latest(`{container="janitorr"} |= \`${k.match}\``, 24 * 60)
-      // Absent from the log is not "enabled" — it is "we have not seen it say
-      // either", which lands as disabled=false only if a line exists.
+      // No line in the last day drops the schedule from the list rather than
+      // guessing its state either way.
       return line === null ? null : { name: k.name, enabled: !line.includes('disabled') }
     }),
   )

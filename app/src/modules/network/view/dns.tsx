@@ -14,14 +14,9 @@ import { SWITCH_BAR, tone } from './shared'
 type Dns = Extract<NetworkData, { tab: 'dns' }>
 
 /**
- * How a name becomes an address, on both sides of the front door.
- *
- * Two halves of one sentence rather than two subjects: pi-hole answers
- * everything asked from inside the house, the base domain's zone answers
- * everything asked from outside it, and neither is legible alone. The zone
- * cannot explain why a name works on the sofa and not on mobile data; the
- * resolver cannot explain what the internet is told. The tables on both sides
- * are joined on the same list of published names.
+ * How a name becomes an address, on both sides of the front door: pi-hole for
+ * the house, the zone for the internet. Why they share a tab is in
+ * ../data/dns.ts.
  */
 export function DnsView({ data }: { data: Dns }) {
   const [side, setSide] = useState<'resolver' | 'zone'>('resolver')

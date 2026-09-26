@@ -4,14 +4,15 @@ import { getJson, type JsonResult } from '../../../lib/http'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
-/** How far back the two VPN tabs chart. A column per day, same as the AI tabs. */
+/** How far back the per-day charts on Coming in, Going out and Proxy reach. */
 export const DAYS = 14
 
 /**
- * Pi-hole off the bridge rather than on its public hostname.
+ * Pi-hole dialled directly rather than on its public hostname.
  *
- * Both reads below carry identities — which names the house looked up, which
- * devices are on it, what their MAC addresses are. On the public hostname they
+ * The reads that use it (General's top lookups, DHCP's devices) carry
+ * identities — which names the house looked up, which devices are on it, what
+ * their MAC addresses are. On the public hostname they
  * would have to be added to the unauthenticated bypass that lets this app read
  * the aggregate counts, which would put the whole list one unauthenticated GET
  * away from anything on the LAN. Dialled directly there is nothing to widen.
@@ -19,10 +20,12 @@ export const DAYS = 14
 export const PIHOLE = (ctx: Ctx) => ctx.env('PIHOLE_URL') ?? 'http://host.containers.internal:8080'
 
 /**
- * Pi-hole v6 hands out a session id even with no password set (`api.pwhash`
- * is blank — the Pocket ID gate is the real boundary, see stacks/pihole), but
- * the stats endpoints still want the `sid` header. Lives here rather than in
- * lib/http.ts because pi-hole is this tab's upstream and nobody else's.
+ * A session id for the blank password. `api.pwhash` is blank (the Pocket ID
+ * gate is the real boundary, see nix/modules/pihole), and with it blank FTL
+ * answers every read this module makes without a `sid` at all — dns-resolver.ts
+ * sends none — so this handshake is a precaution, not a requirement. Lives
+ * here rather than in lib/http.ts because pi-hole is this module's upstream
+ * and nobody else's.
  */
 export async function piholeSid(base: string): Promise<string | null> {
   const body = await getJson<{ session?: { sid: string | null } }>(`${base}/api/auth`, {
@@ -48,9 +51,8 @@ export const CF_TUNNEL_READ = 'Account › Cloudflare One Connector: cloudflared
 
 /**
  * Why a Cloudflare read came back empty, in words a person can act on; null
- * when it did not fail. A 401 or 403 is the token lacking `needs` — the case
- * that used to render as a quiet dash, because a refused read and an empty one
- * looked exactly alike.
+ * when it did not fail. A 401 or 403 is the token lacking `needs`, said out
+ * loud because a refused read and an empty one otherwise look alike.
  */
 export function cfReadError(ctx: Ctx, r: JsonResult<unknown>, needs: string): string | null {
   if (r.ok) return null
@@ -60,7 +62,6 @@ export function cfReadError(ctx: Ctx, r: JsonResult<unknown>, needs: string): st
   const { status, error } = r.reason
   if (status === 401 || status === 403) return `Cloudflare refused the token: it needs ${needs}`
   if (status !== null) return `Cloudflare answered HTTP ${String(status)}`
-  // Silence and an answer that is not JSON used to read as the same sentence.
   return error === 'malformed'
     ? 'Cloudflare answered with something that is not JSON'
     : 'Cloudflare did not answer'
@@ -78,12 +79,10 @@ export type TraefikRouter = {
 /**
  * Where pi-hole's own admin is, from the manifest.
  *
- * The hostname is a nix fact and guessing it produces a link that 404s, which
- * is exactly what the hand-written one here used to do — for a second reason
- * as well: this installation serves the interface from the site ROOT, not from
- * `/admin/`. `/admin/` answers 404 and `/settings-dhcp` answers 200, so the
- * paths below are the verified ones rather than the ones the docs describe for
- * the Docker image.
+ * The hostname is a nix fact; guessing it produces a link that 404s. Callers
+ * append paths from the site ROOT, not `/admin/`: this installation (the NixOS
+ * service, not the Docker image the docs describe) answers 404 on `/admin/`
+ * and 200 on `/settings-dhcp`.
  */
 export async function piholeAdmin(): Promise<string | null> {
   const host = (await webAppHosts()).pihole

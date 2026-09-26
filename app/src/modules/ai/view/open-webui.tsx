@@ -25,8 +25,7 @@ export function OpenWebUiView({ data }: { data: OpenWebUiData }) {
         compare={[
           ...comparePinned(gap, 'a digest in the flake, against a moving main tag'),
           ...freshnessRow(data.freshness),
-          // Its own update check, which used to be a whole stat card saying
-          // "up to date". It is a second opinion on the line above it, so it
+          // Its own update check: a second opinion on the line above it, so it
           // belongs beside that line — and it only earns a sentence when the
           // two disagree.
           {
@@ -61,11 +60,9 @@ export function OpenWebUiView({ data }: { data: OpenWebUiData }) {
         ]}
       />
 
-      {/* No headline band. It held four cards, and all four were either a
-          number this page states better in context (models offered, sitting a
-          few pixels above the list of them) or a number that is zero almost
-          always and means nothing when it is not (users seen in the last three
-          minutes, on a one-account instance). */}
+      {/* No headline band: every candidate figure is either stated better in
+          context (models offered, above the list of them) or zero almost
+          always on a one-account instance (users seen recently). */}
       <BoardGrid>
         <Board
           title="What the chat can reach"
@@ -114,16 +111,12 @@ export function OpenWebUiView({ data }: { data: OpenWebUiData }) {
           </p>
         </Board>
 
-        {/* Three panels, and the sign-in readback is deliberately not one of
-            them. It was four facts that are declared in the stack and change
-            when somebody edits nix — an identity provider, a login form that
-            is off, a sign-up that is closed — so it could only ever agree with
-            what you already wrote. */}
+        {/* No sign-in readback — see `loadOpenWebUi`. */}
         <Changelog gap={gap} span={6} />
 
         {/* No neighbours. Everything this app dials either has its own tab
             (LiteLLM), is already folded under that tab (searxng), or is the
-            whole box's database. See the bar on `Neighbour`. */}
+            whole box's database. */}
         <LogBoard source={{ container: 'open-webui' }} title="Open WebUI logs" />
       </BoardGrid>
     </>

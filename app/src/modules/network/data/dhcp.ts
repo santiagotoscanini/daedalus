@@ -5,14 +5,10 @@ import { getJson } from '../../../lib/http'
 import { PIHOLE, piholeAdmin, piholeSid } from './shared'
 
 /**
- * One thing on the LAN.
- *
- * Two sources merged on the hardware address, because between them they answer
- * a question neither does alone. pi-hole's network table knows everything that
- * has ever asked for a name — including machines with static addresses that
- * never took a lease. Nix knows the nine addresses this house FIXES. A device
- * in the first and not the second got whatever was free; one in the second and
- * not the first is declared and has not been switched on.
+ * One thing on the LAN: pi-hole's network table and the declared reservations,
+ * merged on the hardware address (see `loadDevices`). A device only in the
+ * first got whatever was free; one only in the second is declared and has not
+ * been switched on.
  */
 export type Device = {
   name: string | null
@@ -28,7 +24,7 @@ export type Device = {
    */
   lastSeenAgo: number | null
   knownForDays: number | null
-  /** Given a fixed address in nix, rather than whatever the pool had free. */
+  /** Given a fixed address by a declared reservation, rather than whatever the pool had free. */
   reserved: boolean
 }
 
@@ -42,7 +38,16 @@ type FtlDevice = {
 }
 
 /**
- * Everything on the LAN: what the resolver has seen, and what nix fixes.
+ * Everything on the LAN as the DHCP tab lists it, for a reader elsewhere —
+ * the Machines tab probes each of these for an agent.
+ */
+export async function lanDevices(ctx: Ctx): Promise<Device[]> {
+  const dhcp = dhcpConfig((await networkFacts()).dhcp, await loadReservationLines(ctx), undefined)
+  return loadDevices(ctx, dhcp.reservations)
+}
+
+/**
+ * Everything on the LAN: what the resolver has seen, and what is reserved.
  *
  * The observed half is the nearest thing this house has to the router's own
  * client list, and it arrives by a different route entirely — the router
@@ -56,21 +61,12 @@ type FtlDevice = {
  * device, and the fact worth seeing is which devices have one. A reservation
  * whose MAC never appears is kept and marked never seen — declaring an address
  * for something that has not existed in months is exactly the drift a separate
- * panel of nine rows would never surface.
+ * panel of reservations would never surface.
  *
  * The loopback row is dropped: it is this box talking to itself, it is the
  * single busiest "device" by two orders of magnitude, and leaving it in makes
  * every real device's share round to zero.
  */
-/**
- * Everything on the LAN as the DHCP tab lists it, for a reader elsewhere —
- * the Machines tab probes each of these for an agent.
- */
-export async function lanDevices(ctx: Ctx): Promise<Device[]> {
-  const dhcp = dhcpConfig((await networkFacts()).dhcp, await loadReservationLines(ctx), undefined)
-  return loadDevices(ctx, dhcp.reservations)
-}
-
 async function loadDevices(ctx: Ctx, reservations: Dhcp['reservations']): Promise<Device[]> {
   const base = PIHOLE(ctx)
   const sid = await piholeSid(base)
@@ -128,12 +124,10 @@ async function loadDevices(ctx: Ctx, reservations: Dhcp['reservations']): Promis
 }
 
 /**
- * The other half of what this resolver does.
- *
- * pi-hole is the DHCP server as well, so the addresses on the LAN are decided
- * here rather than by the router — and the fixed ones are declared in the repo, not
- * clicked into the admin. That is what makes them worth a panel: a reservation
- * is the reason something else on this box is allowed to name an address.
+ * pi-hole's DHCP server: the addresses on the LAN are decided here rather than
+ * by the router, and the fixed ones are declared in the configuration repo, not
+ * clicked into the admin. A reservation is the reason something else on this
+ * box is allowed to name an address.
  */
 type Dhcp = {
   active: boolean
@@ -149,7 +143,7 @@ type Dhcp = {
    * quietly rendering zero reservations.
    */
   reservationsKnown: boolean
-  /** Offers, acks and declines since FTL started — see `loadResolver`. */
+  /** Offers, acks, declines and NAKs since FTL started, from `/api/info/metrics`. */
   counters: {
     offers: number | null
     acks: number | null
@@ -159,30 +153,26 @@ type Dhcp = {
 }
 
 /**
- * The other half of what this box does for the LAN.
- *
- * Its own tab rather than a corner of the resolver's, because it is a
- * different service that happens to share a process: DNS answers "what
- * address is this name", DHCP decides "what address is this device". The only
- * thing they have in common is FTL, and a reader looking for a lease is not
- * looking for a zone.
- *
- * Loaded on its own rather than out of `loadResolver`, so the tab costs the
- * one metrics call it actually reads instead of the nine that page makes.
+ * The DHCP tab. Its own tab rather than a corner of the resolver's (the
+ * manifest says why), and loaded on its own rather than out of
+ * `loadResolver`, so it costs the metrics call and the device table it
+ * actually reads instead of the resolver's eight endpoints.
  */
 export type DhcpData = {
   dhcp: Dhcp
   devices: Device[]
-  /** The service behind both halves — see `piholeAdmin`. */
+  /** pi-hole's version — the same process serves DNS and DHCP. */
   version: string | null
+  /** See `piholeAdmin`. */
   admin: string | null
 }
 
 /**
  * The reservation lines, from the same encrypted hostsfile pi-hole's dnsmasq
- * reads — the host renders a copy at DHCP_HOSTS_PATH (see daedalus.nix). Not
- * part of the network export domain, because nix cannot read a sops file at
- * eval and the household inventory has no place in the (public) repo.
+ * reads — the host renders a copy at DHCP_HOSTS_PATH (nix/modules/pihole,
+ * `pihole-daedalus-dhcp`). Not part of the network export domain, because nix
+ * cannot read a sops file at eval, and a household device inventory does not
+ * belong in the world-readable store.
  *
  * Null when the file cannot be read: the mount or render broke, which is a
  * different fact from "no reservations declared".
@@ -224,7 +214,7 @@ export async function loadDhcp(ctx: Ctx): Promise<DhcpData> {
  *
  * The configuration is bound in rather than asked of FTL, because the
  * reservations are DECLARED — a list read back from the running service would
- * be the same nine lines with no way to tell a declared one from something
+ * be the same lines with no way to tell a declared one from something
  * somebody clicked in. The pool comes from the network export domain; the
  * reservations come from the rendered hostsfile (the declared source, just
  * decrypted); the counters come from FTL because only it knows them.

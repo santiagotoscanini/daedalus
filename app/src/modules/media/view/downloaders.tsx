@@ -51,10 +51,7 @@ export function DownloadersView({ d }: { d: Downloaders }) {
           { value: 'qbt', label: 'qBittorrent', dot: tone(d.qbt.reachable) },
           { value: 'nzb', label: 'NZBGet', dot: tone(d.nzb.version !== null) },
           { value: 'metube', label: 'MeTube', dot: tone(d.metube.done !== null) },
-          // Shelfmark is here rather than beside the shelf it fills, because
-          // what it IS is a downloader — and the question "why has this not
-          // arrived" should not be answered in a different part of the tab row
-          // depending on whether the thing is a book.
+          // Here rather than beside the shelf it fills — the manifest says why.
           { value: 'shelfmark', label: 'Shelfmark', dot: tone(d.shelfmark.counts !== null) },
         ]}
       />
@@ -72,14 +69,7 @@ export function DownloadersView({ d }: { d: Downloaders }) {
   )
 }
 
-/**
- * The tunnel, as three facts rather than a panel.
- *
- * It has a page of its own on Network › Going out, and the only part that
- * belongs on a downloader page is the part that silently changes what the page
- * is reporting: a tunnel that is up but has lost its forwarded port looks
- * perfectly healthy and cannot seed.
- */
+/** The tunnel, as three facts rather than a panel — see `DownloadsData.vpn`. */
 function TunnelBoard({ vpn, span }: { vpn: Downloaders['vpn']; span: 4 | 6 }) {
   return (
     <Board title="The tunnel" icon="⛨" span={span}>

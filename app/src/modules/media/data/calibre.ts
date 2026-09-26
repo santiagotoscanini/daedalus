@@ -9,9 +9,9 @@ import { getJson } from '../../../lib/http'
  * The book shelf, beside Jellyfin rather than in a "Books" section.
  *
  * Both are the END of a pipeline — the thing a person actually opens — and
- * everything after the rule on the tab row is machinery that fills them. Books
- * used to be its own tab pairing the shelf with its downloader, which put a
- * downloader on the far side of that line from every other downloader.
+ * everything after the rule on the tab row is machinery that fills them. The
+ * shelf's downloader (Shelfmark) sits with the other downloaders, past that
+ * rule, rather than beside it.
  */
 export type CalibreData = {
   version: string | null

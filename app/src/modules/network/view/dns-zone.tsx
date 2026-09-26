@@ -14,7 +14,7 @@ import { ACTION, EMPTY, FOOT, GROUP, MAIN, MONO, N, NOTE, ROW, ROWS, SIDE, SUB }
 type Dns = Extract<NetworkData, { tab: 'dns' }>
 type Zone = Dns['zone']
 
-/** Under a month is the point at which an expiry stops being a date. */
+/** Under 45 days is the point at which an expiry stops being a date. */
 const EXPIRY_WARN_DAYS = 45
 
 function expiryVerdict(r: Dns['zone']['registration']): { label: string; tone: Tone } {
@@ -265,9 +265,9 @@ function Registration({ d }: { d: Zone }) {
 
 /** Each mail domain's posture, with the records it was read from. */
 function MailRecords({ d }: { d: Zone }) {
-  // What the mail board is a reading OF. Derived rather than typed out: every
-  // record in the zone is in exactly one of the four groups, so whatever is
-  // not in the other three is mail.
+  // What the mail board is a reading OF: the zone's count less the names,
+  // elsewhere and leftovers groups. `unclassified` is not subtracted, so this
+  // equals `tally.mail` only while that group is empty.
   const mailRecords =
     d.cf.records === null
       ? 0

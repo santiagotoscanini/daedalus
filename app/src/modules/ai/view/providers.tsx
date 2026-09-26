@@ -89,10 +89,10 @@ function ChainBoard({ chain }: { chain: Chain }) {
 
 /* ── the picker ───────────────────────────────────────────────────────── */
 
-/* Its own band, with air above and below. It sat flush under the chain
-   board, which read as a caption on it rather than as the control that
-   decides everything below. The label earns its line for the same reason: a
-   bare row of machine names does not say what picking one does. */
+/* Its own band, with air above and below: flush under the chain board it
+   reads as a caption on it rather than as the control that decides
+   everything below. The label earns its line for the same reason: a bare row
+   of machine names does not say what picking one does. */
 const PICKER = 'mt-[1.6rem] mb-[1.35rem] flex flex-wrap items-center gap-[0.5rem]'
 const PICKER_LABEL = 'mr-[0.3rem] text-[0.6rem] tracking-[0.09em] text-(--dim) uppercase'
 
@@ -685,9 +685,7 @@ function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersData['log
           </WipBoard>
         )}
 
-        {/* One bridge, one target: the panel belongs to the machine whose
-            log this box actually ships. Drawn under every provider of the
-            kind, it told a second machine its logs were being collected. */}
+        {/* One bridge, one target — see `logsFor` in ../data/providers.ts. */}
         {logs?.machine === m.machine && (
           <LogBoard
             source={{ stack: logs.stack }}
@@ -725,9 +723,8 @@ export function ProvidersView({ data }: { data: ProvidersData }) {
         </p>
       ) : (
         <>
-          {/* The pill the URL selected, by id — it was compared against the
-              machine, which is only half of a row's identity, so nothing
-              ever looked picked. */}
+          {/* Matched by row id, not machine: the machine is only half of a
+              row's identity (`<machine>:<kind>`). */}
           <MachinePills machines={data.machines} active={active?.id ?? ''} />
           {active !== undefined && <MachineView m={active} logs={data.logs} />}
         </>

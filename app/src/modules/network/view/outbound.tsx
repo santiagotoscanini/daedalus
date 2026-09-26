@@ -86,11 +86,8 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
         ]}
       />
 
-      {/* The SOFTWARE first, because it is shared: however many tunnels this
-          page grows, `mkGluetunInstance` pins one gluetun digest and one
-          exporter digest, so both builds are the same on every one of them.
-          Repeating them per tunnel would print the same answer twice and
-          invite the reader to check whether they differ. */}
+      {/* The SOFTWARE first, because it is shared by every tunnel — see
+          `OutboundData.gluetun`. */}
       <BoardGrid>
         <Changelog
           build={data.gluetun}

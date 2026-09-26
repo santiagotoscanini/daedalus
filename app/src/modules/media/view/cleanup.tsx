@@ -29,11 +29,9 @@ export function CleanupView({ d }: { d: Cleanup }) {
         options={[
           { value: 'cleanuparr', label: 'Cleanuparr', dot: tone(d.cleanuparr.removed !== null) },
           // Whether it has SPOKEN in the last day, not whether we know its
-          // version. That used to be the same test by accident — the version
-          // came from a startup line in the log — and it stopped meaning
-          // anything the moment the version started coming from the image,
-          // which is present whether or not the container ever runs. Janitorr
-          // announces its schedules hourly, so silence for a day is the signal.
+          // version: the version comes from the image label, which is there
+          // whether or not the container ever runs. Janitorr announces its
+          // schedules hourly, so silence for a day is the signal.
           { value: 'janitorr', label: 'Janitorr', dot: tone(d.janitorr.schedules.length > 0) },
         ]}
       />

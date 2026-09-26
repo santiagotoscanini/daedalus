@@ -19,9 +19,8 @@ import { lanIp, piholeAdmin } from './shared'
 // The registration sits here too because it is the failure nothing on this box
 // would notice: every hostname, certificate, tunnel route and OIDC redirect
 // URI on the machine is a leaf of one domain name with one expiry date.
-
 //
-// One file per half: dns-resolver.ts (pi-hole), dns-zone.ts (Cloudflare, with
+// One file per source: dns-resolver.ts (pi-hole), dns-zone.ts (Cloudflare, with
 // its rules in lib/dns-zone.ts) and dns-registration.ts (RDAP). This one holds
 // the tab's shapes and the join that pairs pi-hole's names with the zone's.
 
@@ -58,7 +57,7 @@ export type ResolverData = {
 /** One resolver every name not answered locally is forwarded to. */
 export type Upstream = {
   ip: string
-  /** FTL's reverse lookup of it — both of these answer as `dns.google`. */
+  /** FTL's reverse lookup of it — two resolvers can share one, e.g. `dns.google`. */
   name: string
   count: number
   /** Mean reply time. FTL reports seconds; this is milliseconds. */
@@ -111,8 +110,8 @@ export type ZoneData = {
    * Always rendered when non-empty, and the reason it exists is that the four
    * groups are RULES — "has an MX", "is an _acme-challenge", "points at the
    * tunnel" — and a rule set that does not cover the zone should say so
-   * instead of quietly showing 34 of 37 records. Empty today; a record type
-   * nobody here has used yet lands in it rather than nowhere.
+   * instead of quietly showing 34 of 37 records. A record type nobody here
+   * has used yet lands in it rather than nowhere.
    */
   unclassified: ZoneRecord[]
   /** Group totals plus the zone's own count, so the arithmetic is on the page. */
@@ -125,7 +124,7 @@ export type ZoneData = {
     unclassified: number
   }
   changed: ZoneRecord[]
-  /** Published names with no record in the zone at all — LAN-only. */
+  /** pi-hole hosts entries the zone points neither at the tunnel nor at the WAN — LAN-only. */
   lanOnly: number
   drift: { publishedWithoutLan: string[]; lanWithoutRoute: string[]; tunnelWithoutApp: string[] }
   note: string | null
@@ -144,7 +143,7 @@ type LanName = {
   short: string
   fqdn: string
   ip: string
-  /** Anything but the LAN address — the gaming PC is the only one today. */
+  /** Points anywhere but this box's LAN address (another machine on the LAN). */
   elsewhere: boolean
   /**
    * traefik has a router, HTTP or TCP, for this name.
