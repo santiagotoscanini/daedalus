@@ -93,7 +93,7 @@ export async function deploymentOfDigest(appId: string, digest: string) {
   return row
 }
 
-// ── System › Builder ─────────────────────────────────────────────────────
+// ── Apps › Builder ───────────────────────────────────────────────────────
 
 /**
  * Every queued and running build, oldest first, with its stage timings — the

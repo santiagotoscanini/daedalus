@@ -48,7 +48,7 @@ export async function pruneDeliveries(olderThan: Date): Promise<number> {
   return rows.length
 }
 
-/** The newest deliveries, newest first — System › Builder's webhook board. */
+/** The newest deliveries, newest first — Apps › Builder's webhook board. */
 export async function latestDeliveries(limit = 5) {
   return db.select().from(githubDeliveries).orderBy(desc(githubDeliveries.receivedAt)).limit(limit)
 }

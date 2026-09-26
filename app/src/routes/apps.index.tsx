@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
+import { BuilderView } from '../components/apps/builder'
 import { CHIP, SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
 import { AppIcon, type AppState, Segmented, StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
@@ -17,6 +18,7 @@ import { cn } from '../lib/cn'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
 import { siteBarFields } from '../lib/module-switch'
 import { type AppStage, isAppStage } from '../lib/stage'
+import { fetchBuilderTab } from '../server/builds'
 import { fetchNodesChangeFn } from '../server/nodes'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 import { fetchSiteEdit } from '../server/site'
@@ -25,15 +27,18 @@ import { fetchSiteEdit } from '../server/site'
 // daedalus believes), the Nix manifest (what the box was actually built from,
 // hence drift), and Prometheus (what is happening right now).
 
-// Three tabs, the same shape every category page uses: what this box runs, and
-// the two registries it is built out of. The registries are services —
-// containers with release cycles, logs and neighbours — so each gets a tab
-// with the header, version verdict and changelog every other service here
-// has, rather than a few numbers at the foot of the app list.
+// Four tabs, the same shape every category page uses: what this box runs, the
+// two registries it is built out of, and the builder that fills the first of
+// them. The registries are services — containers with release cycles, logs and
+// neighbours — so each gets a tab with the header, version verdict and
+// changelog every other service here has, rather than a few numbers at the
+// foot of the app list. The builder is the box's own machinery, so its tab
+// opens straight into its boards.
 const TABS = [
   { id: 'apps', label: 'Apps' },
   { id: 'images', label: 'Container registry' },
   { id: 'packages', label: 'npm packages' },
+  { id: 'builder', label: 'Builder' },
 ] as const
 
 type Tab = (typeof TABS)[number]['id']
@@ -52,6 +57,7 @@ export const Route = createFileRoute('/apps/')({
     list: deps.tab === 'apps' ? fetchAppsTab() : null,
     images: deps.tab === 'images' ? fetchImagesTab() : null,
     packages: deps.tab === 'packages' ? fetchPackagesTab() : null,
+    builder: deps.tab === 'builder' ? fetchBuilderTab() : null,
   }),
   component: AppsPage,
 })
@@ -136,13 +142,13 @@ const STAGE_CHIP: Record<
 }
 
 function AppsPage() {
-  const { tab, list, images, packages } = Route.useLoaderData()
+  const { tab, list, images, packages, builder } = Route.useLoaderData()
 
   return (
     <>
       <PageHead title="Apps">
-        What this box runs of its own, what lives on someone else's infrastructure, and the two
-        registries everything here is built out of.
+        What this box runs of its own, what lives on someone else's infrastructure, the two
+        registries everything here is built out of, and the builder that makes the images.
       </PageHead>
 
       <TabBar tabs={TABS} active={tab} linkTo={(id) => ({ to: '/apps', search: { tab: id } })} />
@@ -177,6 +183,17 @@ function AppsPage() {
           fallback={<BoardsSkeleton spans={[6, 6, 12]} />}
         >
           {(data) => <PackagesView d={data} />}
+        </GuardedAwait>
+      )}
+
+      {builder !== null && (
+        <GuardedAwait
+          resetKey={tab}
+          slot="builder"
+          promise={builder}
+          fallback={<BoardsSkeleton spans={[12, 8, 4, 12, 6, 6, 12]} />}
+        >
+          {(data) => <BuilderView d={data} />}
         </GuardedAwait>
       )}
     </>

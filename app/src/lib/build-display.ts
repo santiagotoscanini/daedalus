@@ -30,7 +30,7 @@ export type BuildSummary = {
   updatedAt: string
 }
 
-/** A queued or running build on System › Builder: whose it is, and its stages so far. */
+/** A queued or running build on Apps › Builder: whose it is, and its stages so far. */
 export type LiveBuild = BuildSummary & { app: string; timings: Record<string, number> }
 
 /** What happened to the image after the build, as far as this box can tell. */

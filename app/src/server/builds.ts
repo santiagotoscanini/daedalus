@@ -1,6 +1,7 @@
 import { requireActor } from '../core/auth'
 import type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
 import type { Ctx } from '../core/ctx'
+import type { BuilderData } from '../lib/apps/builder'
 import {
   type BuildCommit,
   type BuildReportFailure,
@@ -57,7 +58,13 @@ export const fetchBuilds = readFn
     return (await listBuilds(record.id, data.limit)).map((r) => summarize(toBuildRow(r)))
   })
 
-/** System › Builder's "Now" board: every queued and running build, re-read while one is open. */
+/** Apps › Builder, the whole tab: fetched only while it is the open one. */
+export const fetchBuilderTab = readFn.handler(async ({ context }): Promise<BuilderData> => {
+  const { loadBuilder } = await import('../lib/apps/builder')
+  return loadBuilder(await context.ctx())
+})
+
+/** Apps › Builder's "Now" board: every queued and running build, re-read while one is open. */
 export const fetchBuilderNow = readFn.handler(async (): Promise<LiveBuild[]> => {
   const { builderNow } = await import('../lib/repo/build-views')
   return builderNow()

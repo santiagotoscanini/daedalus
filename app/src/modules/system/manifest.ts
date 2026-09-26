@@ -73,16 +73,6 @@ export const manifest = {
       boardSpans: [12, 12, 12, 12, 12],
       head: false,
     },
-    // The box's image builder, as one machine: what it is building now, how
-    // its builds have gone, the toolchain and machinery under it, how GitHub
-    // reaches it and what it has pushed. The box's alone, like Pools and
-    // Backups: no node builds images. Not `build`, which is the hardware.
-    {
-      id: 'builder',
-      label: 'Builder',
-      boardSpans: [12, 8, 4, 12, 6, 6, 6, 6],
-      head: false,
-    },
     {
       id: 'backups',
       label: 'Backups',

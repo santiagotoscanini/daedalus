@@ -1,7 +1,7 @@
 import { buildTimeline } from './build-display'
 import { ACTIVE_BUILD_STATES, type BuildPublish, type BuildState } from './builds'
 
-// What the builder's history says in aggregate, for System › Builder: per app,
+// What the builder's history says in aggregate, for Apps › Builder: per app,
 // how often a build lands and how long it takes; per stage, how long each one
 // usually runs; and the latest failures with the line that explains them.
 // Pure — the rows come from lib/repo/build-views.ts `buildsSince`.

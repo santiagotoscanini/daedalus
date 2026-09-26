@@ -5,7 +5,6 @@ import { manifest } from '../manifest'
 import { BackupsView } from './backups'
 import { BoardView } from './board'
 import { BuildView } from './build'
-import { BuilderView } from './builder'
 import { DisksView } from './disks'
 import { HostView } from './host'
 import { MemoryView } from './memory'
@@ -35,7 +34,6 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   build: ({ data }) => <BuildView d={data} />,
   board: ({ data }) => <BoardView d={data} />,
   updates: ({ data }) => <UpdatesView d={data} />,
-  builder: ({ data }) => <BuilderView d={data} />,
   backups: ({ data }) => <BackupsView d={data} />,
   claude: ({ data }) => <ClaudeView data={data} />,
   shotter: ({ data }) => <ShotterView data={data} />,
