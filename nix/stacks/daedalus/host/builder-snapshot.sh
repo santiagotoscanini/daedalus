@@ -1,5 +1,5 @@
 # What only the HOST can say about the builder (builder.nix, build-agent.nix),
-# for System › Builder.
+# for Apps › Builder.
 #
 # The builds themselves are the app's own records; this is the machinery
 # under them, none of which the container can see:

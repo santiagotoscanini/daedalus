@@ -288,7 +288,7 @@ rec {
 
   # The builder's machinery as the host sees it — BuildKit's cache, the scratch
   # dataset, the per-app mise caches, whether the egress fence and the push
-  # credential are in place, the builder units' states — for System › Builder.
+  # credential are in place, the builder units' states — for Apps › Builder.
   # Exit codes, sizes, versions and unit states only; see
   # host/builder-snapshot.sh for what it runs and what it never keeps.
   builderDir = "/run/daedalus-builder";
