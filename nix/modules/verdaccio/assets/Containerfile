@@ -4,7 +4,7 @@
 # pattern as nextcloud-ffmpeg). Each plugin dir name must be the full
 # package name; config.yaml references them as `openid` /
 # `cached-packages` (verdaccio prepends `verdaccio-`).
-FROM docker.io/library/node:22-alpine AS builder
+FROM docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS builder
 RUN mkdir -p /verdaccio/plugins \
   && cd /verdaccio/plugins \
   && npm install --install-strategy=shallow --no-bin-links \
