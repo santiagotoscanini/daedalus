@@ -6,54 +6,14 @@ paths:
 # daedalus — developing the control-plane app
 
 TanStack Start + React 19 + Vite 8, drizzle-orm on the shared pg
-cluster, pnpm 11, node ≥ 24, TS 6. This is the box's admin UI; it runs
-as a `source.mode = "local"` app — the NixOS module that runs it is this
-repo's `nix/stacks/daedalus/daedalus.nix` (imported
-by the operator's configuration as a flake input) and bind-mounts
-THIS repo's `app/` at /app, running the Vite dev server against it.
+cluster, pnpm 11, node ≥ 24, TS 6. This is the box's admin UI; the NixOS
+module that runs it is this repo's `nix/stacks/daedalus/daedalus.nix`.
 
-## The dev loop (what restarts what)
-
-- `app/**` (routes, components, lib) → **nothing**. Vite is watching;
-  saving the file IS the deploy. Verify with `shot quick
-  https://daedalus-app.toscanini.me/<page>` — but the SSO gate stops an
-  unauthenticated browser at Pocket ID, so for content checks go UNDER
-  the gate instead (auth is traefik's job; the dev server trusts its
-  caller): `podman exec app-daedalus node -e
-  "fetch('http://localhost:3000/<page>').then(r=>r.text()).then(t=>console.log(t.includes('<needle>')))"`
-  renders the real SSR page, loaders included. Vite compile errors land
-  in `podman logs app-daedalus`. For PIXELS under the gate (visual
-  work), run the shotter image on the app's own bridge — vite allows
-  the `app-daedalus` host for exactly this:
-  `podman run --rm --network=iso-daedalus-net --shm-size=1g -v
-  ~santiago/selfhost/shotter:/lab localhost/shotter:pw<ver>-<hash>
-  node /opt/lab/runner.mjs --out /lab/runs/<id> --url
-  http://app-daedalus:3000/<page> --label <label>` (use the PINNED
-  tag from `podman images`, NOT `:latest` — that's a stale pre-stack
-  leftover). Expect 2 baseline pageerrors in events.json on every run
-  this way: the HMR websocket 302s at the gate, and a pre-existing
-  Date.now() hydration mismatch — compare counts against those, not
-  against zero.
-- `app/package.json` → `sudo systemctl restart podman-app-daedalus`
-  (re-runs `pnpm install --frozen-lockfile`; the npm registry is a hard
-  startup dependency, minutes on a cold cache). **`dependencies` holds
-  only what the built server resolves at run time** (`srvx`, `postgres`,
-  `drizzle-orm`, `@node-rs/argon2`) — the image installs `--prod`, and
-  `check-build` fails on a mismatch either way. Everything the build
-  bundles, React included, is a devDependency: `pnpm add -D`.
-- `Dockerfile`, `docker-entrypoint.sh` (the runtime image's context) →
-  commit + push on `main`, `nix flake update daedalus` +
-  `nixos-rebuild` in the configuration repo (context hash → new image
-  tag → restart).
-- `nix/stacks/daedalus/daedalus.nix` → the same two-step.
-
-**Before calling any change done: `pnpm typecheck`** (runs
-`tsr generate && tsc --noEmit`) from `app/`.
-`src/routeTree.gen.ts` is generated + gitignored — never edit it; if
-routes changed, `pnpm generate-routes` (or typecheck, which runs it).
-
-This clone lives under `~/projects`, which is snapshotted and mirrored;
-the remote is still the copy that survives a disk. Commit often.
+The dev loop (what a change needs, what restarts what) and the
+verification commands — typecheck, biome, vitest, a page fetched under the
+SSO gate, pixels through the shotter image, the two baseline page errors —
+are in the root `CLAUDE.md`, which is always loaded. They are not repeated
+here.
 
 ## Architecture map
 
@@ -62,23 +22,26 @@ the remote is still the copy that survives a disk. Commit often.
   dashboard shell), `apps.index.tsx` / `apps.$name.tsx` (loader + frame
   only; its tab bodies live in `src/components/apps/*`) /
   `apps.new.tsx`, `apps_.$name.builds.$id.tsx` (one build: its log,
-  facts and cancel), `settings.tsx`, `claude.tsx`, and
-  `settings_.github.callback.ts`, where GitHub returns the App
-  manifest's `?code&state`. The `api.*.ts` server routes are only what an
+  facts and cancel), `settings.tsx`, `claude.tsx`, `profile.tsx`,
+  `login.tsx` (the break-glass local login, a 404 unless site.json turns
+  it on — `core/local-login.ts`), and `settings_.github.callback.ts`,
+  where GitHub returns the App manifest's `?code&state`. The `api.*.ts`
+  server routes are only what an
   outside caller needs — healthz, the deploy hook (zot's push event),
   the GitHub push webhook, a node agent's hello, app-icon,
   profile-picture, and the two image servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
   screenshot. No route is a "scriptable twin" of a button: the UI's
   writes go through server functions (`src/server/**`) and an agent's
-  through the MCP tools at `/mcp` — those are the two doors onto a flow.
+  through the MCP tools at `/mcp` (`host/mcp/`) — those are the two
+  doors onto a flow.
 - **The dashboard modules — `src/modules/<id>/`**: one directory per
   category page (actions, ai, database, gaming, home, media, monitoring,
   network, system),
   found by `import.meta.glob`, never listed. Each holds `manifest.ts`
   (pure data: label, lede, rail `order`, the tabs with their probes,
-  spans and the `nix` module ids each tab fronts), `releases.ts` (the
-  release sources of the containers it fronts, merged into
+  spans and the `nix` module ids each tab fronts), `releases.ts` when it
+  fronts containers (their release sources, merged into
   `lib/dashboard/image-repos.ts`), `data/` (server-only: `index.ts`
   exports `load = defineLoader(manifest, { <tab>: (ctx) => … })` and
   a `Tabs` map; one file per tab; `shared.ts` for cross-tab helpers)
@@ -90,8 +53,8 @@ the remote is still the copy that survives a disk. Commit often.
   `host/modules.ts` (loaders, lazy) and `components/modules/boards.tsx`
   (views, eager). A new module = a new directory; nothing else changes.
 - **Loaders reach the machine only through `Ctx`** (`core/ctx.ts`:
-  env, secret, gateway, snapshot, store, http, prom, loki, github, hosts,
-  site, modules). `ctx.prom` and `ctx.loki` are the only way a module
+  env, secret, gateway, exportPath, snapshot, store, http, prom, loki,
+  github, hosts, site, modules). `ctx.prom` and `ctx.loki` are the only way a module
   reads PromQL or LogQL, and `ctx.github.app` / `ctx.github.anon` the
   only way it reads GitHub — the boundary test refuses a value import of
   `host/prom`, `host/loki` or `host/keys` under a module's `data/`.
@@ -123,18 +86,17 @@ the remote is still the copy that survives a disk. Commit often.
   otherwise, naming the file and the edge.
 - **The shared fetch layer**: `lib/http.ts` (retry ladder, request
   coalescer, pool) and `lib/cache.ts` (swrCache / swrValue, the
-  two-clock stale-serving contract) are pure and stayed in `lib/`;
+  two-clock stale-serving contract) are pure and live in `lib/`;
   `host/prom.ts` (PromQL + promEscape) and `host/loki.ts` (LogQL,
-  one-patient-attempt budget) read their base URL from the env and did
-  not. `lib/format.ts` (isomorphic formatters) is importable from a
-  component precisely because `host/keys.ts` — the DASH_* secrets
-  accessor, the one `process.env` read it used to carry — was split out
-  of it.
-- `src/core/` — the productization core (plan, Phases 2+). `ctx.ts` is
-  the capability set a reader is handed instead of `process.env`
-  (env, secrets, snapshots, the preferences store, http, loki) —
-  server-only, imported dynamically like `lib/repo/*`; every module
-  loader receives one from Phase 10 on. `core/settings/` is the
+  one-patient-attempt budget) read their base URL from the env, so they
+  live in `host/`. `lib/format.ts` (isomorphic formatters) is importable
+  from a component; the DASH_* secrets accessor is `host/keys.ts`, apart
+  from it on purpose.
+- `src/core/` — server-only decisions, imported dynamically like
+  `lib/repo/*`. `ctx.ts` is the capability set above; `auth.ts` /
+  `authz.ts` are who is calling and whether they may (`assertAdmin`,
+  and `assertMachineActor` for the MCP token); `builds/` is the
+  scheduler, dispatch, sweep and GitHub reporting. `core/settings/` is the
   read-only reader behind `/settings` (`index.ts` assembles env +
   /export + snapshots into `BoxSettings`; `integrations.ts` is the
   deferred, 5-min-cached live token checks; `external-apps.ts` reads
@@ -152,29 +114,32 @@ the remote is still the copy that survives a disk. Commit often.
   `site-request.json` bridge). `file.ts` renders the exact bytes the
   host writes; `index.ts` compares them against the digests
   `/repo/repo.json` publishes, which is what "in sync" means on the
-  tab. **apps.json in it is copied from `/export/applied.json`, never
-  re-rendered from the apps table**: the mirror's claim is that it holds
-  what the running system was BUILT from, and between an edit and an
-  Apply those two legitimately differ.
-  `types.ts` is client-safe; nothing else in `core/` is.
-- `src/server/` — server functions (category, lemonade, registry,
-  settings). The seam a route imports STATICALLY, so its module top
-  level must be client-safe: **every value import here is `await
-  import(...)` inside the handler**, which the Start plugin erases from
-  the client build. A static import of `host/`, `core/`, `lib/repo/` or
-  `lib/dashboard/` from this directory puts that module in the browser
-  chunk of every route that uses the server function; `host/boundary.test.ts`
-  fails on it.
-- `src/lib/repo/` — drizzle repositories (apps, deployments);
+  tab. **apps.json is not rendered here at all**: only an Apply writes
+  it, from the apps table, so the tab reports it without a comparison.
+  `settings/types.ts` and `auth-names.ts` are the client-safe files in
+  `core/`; a component imports nothing else from it.
+- `src/server/` — server functions, one file per area (registry,
+  builds, settings, site, modules, updates, …), each starting from a
+  `server/fn.ts` builder: `readFn`, `adminFn` (the admin check runs as
+  middleware before the handler) or `publicFn`, and `server/fn.test.ts`
+  fails on a POST that is neither `adminFn` nor on the short `publicFn`
+  list. The seam a route imports STATICALLY, so its module top level
+  must stay client-safe: anything that needs the machine is `await
+  import(...)`ed inside the handler, which the Start plugin erases from
+  the client build. A static import of such a module (a `node:`
+  builtin, the database or `process.env`, directly or through what it
+  imports) puts it in the browser chunk of every route that uses the
+  function; `host/boundary.test.ts` fails on it.
+- `src/lib/repo/` — drizzle repositories (apps, builds, deployments,
+  github deliveries, nodes, settings);
   `src/host/schema.ts` + `host/db.ts` for the database side
   (`pnpm db:generate` / `db:migrate` for schema changes; drizzle.config
   points at `src/host/schema.ts`).
 - `src/host/` — everything that needs the machine: the bridge and one
-  module per verb (`bridge.ts`, `apply.ts`, `apply-flow.ts`,
-  `engine-update.ts`, `engine-flow.ts`,
-  `deploy.ts`, `image-update.ts`, `update-flow.ts`, `site-request.ts`,
-  `power-request.ts`, `claude-rc-request.ts`, `build-bridge.ts`), the
-  database (`db.ts`, `schema.ts`), the env schema and the snapshot
+  module per verb (`bridge.ts`, then e.g. `apply.ts`, `build-bridge.ts`,
+  `deploy.ts`, `image-update.ts`, `engine-update.ts`, `site-request.ts`
+  — the full set is below), the flows (`*-flow.ts`), the MCP server
+  (`mcp/`), the database (`db.ts`, `schema.ts`), the env schema and the snapshot
   readers (`env.ts`, `env-snapshot.ts`, `nix-manifest.ts`,
   `workspaces.ts`), the credential-carrying clients (`keys.ts`,
   `prom.ts`, `loki.ts`, `metrics.ts`, `access.ts`, `registry.ts`,
@@ -182,7 +147,8 @@ the remote is still the copy that survives a disk. Commit often.
   `app-icon.ts`, `vpn-egress.ts`), and `host/contract/`.
 - **The contract, in two halves.** `src/lib/contract/` is the pure
   half — `decode.ts` (the combinators; `lib/repo` and `lib/dashboard`
-  decode with them too) and `version.ts` (the registry schema version).
+  decode with them too), `fields.ts` (the shared request-field
+  decoders) and `version.ts` (the registry schema version).
   `src/host/contract/` is the half that opens files: `snapshot.ts` (the
   one reader for every host-published file) and `domains/*.ts` (one
   reader per `/export` domain).
@@ -205,8 +171,10 @@ the remote is still the copy that survives a disk. Commit often.
   own git facts come from /workspaces, not /repo.) The committed site
   directory is at /site, read-only like the rest even though it is the
   one directory daedalus writes — the writes go through the bridge —
-  and since Phase 5 its site.json is THE source of the site constants
-  nix builds with, so the settings tabs edit against it. **/apply is the
+  and its site.json is THE source of the site constants nix builds
+  with, so the settings tabs edit against it. The engine repository's
+  root is at /engine, for the two design documents the MCP server
+  serves (`host/mcp/docs.ts`). **/apply is the
   only writable mount**, apart from /app, which is this clone itself.
   Never reach around them (no SSH-ing the host, no reading host paths
   directly) — if a page needs a new host fact, extend the matching
@@ -237,7 +205,8 @@ the remote is still the copy that survives a disk. Commit often.
   `/site` (the file header says why). A module loader reads `ctx.site`;
   other server code calls `readSite()` at the entry point and passes the
   value down; a component calls `useSite()` (`lib/site-context.tsx`),
-  which the root route fills from its awaited loader (`fetchSite`), so the
+  which the root route fills from its awaited loader (`fetchShell`,
+  which carries `fetchSite`), so the
   value is in the server's HTML and hydration matches. No module-level
   constant may hold any of it.
 - Secrets (service API keys) arrive via rendered env files
@@ -245,37 +214,26 @@ the remote is still the copy that survives a disk. Commit often.
 - Writes to the box go through the file-drop bridges — one request file
   written into `/apply`, a host `.path` unit watching it, one status
   file written back; the container deliberately holds no host
-  privilege. Eleven verbs, as request file → host unit → status file:
-  `request.json` → `daedalus-apply` → `status.json`;
-  `image-request.json` → `daedalus-image-update` → `image-status.json`;
-  `engine-request.json` → `daedalus-engine-update` →
-  `engine-status.json` (the engine's own pin — the `daedalus` flake
-  input — moved to the clone's `main`);
-  `deploy-request.json` → `daedalus-deploy-trigger` →
-  `deploy-status.json`; `build-request.json` → `daedalus-build` →
-  `build-status.json`; `build-cancel-request.json` →
-  `daedalus-build-cancel` → no status of its own (it stops the build
-  `build-status.json` names, and only that one); `site-request.json` →
-  `daedalus-site-write` → `site-status.json`; `workspace-request.json`
-  → `daedalus-workspace-clone` → `workspace-status.json`;
-  `power-request.json` → `daedalus-power` → `power-status.json`;
-  `claude-rc-request.json` → `daedalus-claude-rc` →
-  `claude-rc-status.json`; `github-token-request.json` →
-  `daedalus-github-token` → `github-token-status.json`. `host/bridge.ts`
-  is the one implementation of the mechanics (temp + rename, payload
-  written before the request that points at it).
-  A dedicated flow module in `host/` exists for exactly three of them —
-  `apply-flow.ts`, `update-flow.ts` and `engine-flow.ts` — because apply,
-  image-update and engine-update
-  are the verbs whose button and MCP tool would otherwise be two
-  hand-copied bodies. All three are arrangements of `host/flow.ts`:
-  `defineGate` (the lock, the `running` check, the pickup window) and
-  `defineFlow` (check input → refuse busy → prepare → publish, in that
-  order). WHO may call stays with each door. The rest write their bridge straight from their
-  own module (`deploy.ts`, whose redeploy button and zot push event
-  both call its `requestDeploy`; `build-bridge.ts`, `site-request.ts`,
+  privilege. The verbs (request file → host unit → status file) are the
+  table in `ARCHITECTURE.md` § The bridge; the host half of each is in
+  `nix/stacks/daedalus/`. `host/bridge.ts` is the one implementation of
+  the mechanics (temp + rename, payload written before the request that
+  points at it), and each verb's app half is one module under `host/`
+  named for it (`apply.ts`, `build-bridge.ts`, `deploy.ts`,
+  `image-update.ts`, `engine-update.ts`, `site-request.ts`,
   `workspaces.ts`, `power-request.ts`, `claude-rc-request.ts`,
-  `core/github-app.ts`) — all of them under `host/`.
+  `claude-session-request.ts`, `secret-set-request.ts`, `task-run.ts`,
+  `version-update.ts`, `claude-code-update.ts`) — except
+  `github-token-request.json`, which `core/github-app.ts` writes.
+  The verbs that take a lock and a busy check before they publish are
+  arrangements of `host/flow.ts` — `defineGate` (the lock, the `running`
+  check, the pickup window) and `defineFlow` (check input → refuse busy
+  → prepare → publish, in that order): `apply-flow.ts`,
+  `update-flow.ts`, `engine-flow.ts`, `claude-code-flow.ts` and the flow
+  inside `version-update.ts`. The first three are also what the MCP
+  write tools call, so a button and a tool share one body. WHO may call
+  stays with each door. `deploy.ts`'s `requestDeploy` is shared the same
+  way by the redeploy button and zot's push event (`api.deploy.ts`).
   `build-request.json` is the one the box's own builder watches:
   `daedalus-build.service` picks it up, writes progress back to
   `/apply/build-status.json` (heartbeated; stale past 90 s) and its log

@@ -2,14 +2,16 @@
 //!
 //! The box runs the LAN's DNS and DHCP, so it announces itself where every
 //! machine already looks: an SRV record `_daedalus._tcp.<domain>` under the
-//! search domain DHCP handed out. The agent asks each suffix its adapters
-//! carry (net.rs), takes the first answer, and turns it into a URL — port
-//! 443 is https, anything else plain http on that port. A URL in config.toml
-//! wins over all of it, for a machine whose DNS is not the box's.
+//! search domain DHCP handed out. The agent asks config.toml's
+//! `search_domains`, then each suffix its adapters carry (net.rs), takes the
+//! first answer, and turns it into a URL — port 443 is https, anything else
+//! plain http on that port. A `control_plane_url` in config.toml wins over
+//! all of it, for a machine whose DNS is not the box's.
 //!
-//! The query goes through the OS resolver (`DnsQuery_W` on Windows, `dig`
-//! through the system settings on macOS), so it honours the
-//! machine's DNS settings and cache like everything else on it.
+//! On Windows the query goes through the OS resolver (`DnsQuery_W`), with
+//! the machine's DNS settings and cache. On macOS it is `dig`, which reads
+//! the resolv.conf macOS generates from its primary resolver and bypasses
+//! the system cache.
 
 use crate::config::Config;
 use crate::net::Adapter;

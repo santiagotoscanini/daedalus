@@ -33,6 +33,7 @@ impl std::fmt::Display for Failed {
     }
 }
 
+/// A command's whole stdout, or why not; killed at the deadline.
 pub(super) fn output_or(mut cmd: Command, deadline: Duration) -> Result<String, Failed> {
     let started = Instant::now();
     let mut child = cmd
@@ -98,8 +99,8 @@ pub(super) fn output_or(mut cmd: Command, deadline: Duration) -> Result<String, 
     }
 }
 
-/// A command's whole stdout, or `None` when it fails, prints nothing usable,
-/// or is still running at the deadline (then it is killed).
+/// `output_or` without the reason: `None` when the command fails or is
+/// still running at the deadline.
 pub(super) fn output(cmd: Command, deadline: Duration) -> Option<String> {
     output_or(cmd, deadline).ok()
 }

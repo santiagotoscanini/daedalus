@@ -9,7 +9,7 @@ path unit notices; a root oneshot reads the file and acts.
 That constraint is the whole design. Everything below is a consequence of it:
 the engine decides, the host executes, and the boundary between them is a
 filename allowlist rather than an API. A compromised control plane can ask for
-the eleven things the host knows how to do, and nothing else.
+the sixteen things the host knows how to do, and nothing else.
 
 The machine is a NixOS box, so "act" mostly means: write a file into a git
 repository, commit it, and run `nixos-rebuild switch`. The system's real source
@@ -17,8 +17,9 @@ of truth is that repository, not daedalus's database. daedalus is an editor for
 it that happens to have a dashboard attached.
 
 - **[BUILDS.md](BUILDS.md)** — how a `git push` becomes a running container.
-- **[PLAN.md](PLAN.md)** — the dated record of how this was built, phase by phase.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — running it on your own machine.
+- **[nix/README.md](nix/README.md)** — the NixOS side: how a host imports the engine.
+- **[PLAN.md](PLAN.md)** — what is still missing; what landed is in git history.
 
 ---
 
@@ -42,11 +43,11 @@ flowchart LR
   end
 
   Bridge[/"apply/ the one writable mount<br/>NAME-request.json, NAME-status.json"/]
-  Snaps[/"/export /repo /site /system /images /claude<br/>/workspaces /deploy-state /env-snapshot<br/>/dhcp /builds /github /github-token (all ro)"/]
+  Snaps[/"read-only snapshot mounts<br/>(listed under The bridge)"/]
 
   subgraph root["systemd — root"]
     Paths["daedalus-*.path"]
-    Agents["daedalus-apply, -build, -build-cancel<br/>-image-update, -engine-update, -deploy-trigger, -site-write<br/>-power, -workspace-clone, -claude-rc, -github-token"]
+    Agents["one agent per verb<br/>(the table under The bridge)"]
     SnapJobs["daedalus-*-snapshot timers"]
     DeployU["app-NAME-deploy.service / .timer"]
   end
@@ -70,9 +71,9 @@ flowchart LR
 
 Two things worth noticing. The engine never reaches out and *takes* host state:
 timers push snapshots of it into read-only mounts, so a hung snapshot job makes
-a page stale rather than making the engine hang. And the engine is a single
-process holding a single `setInterval` — the scheduler that drives every build
-on the box is one tick loop in one container, restartable at any moment.
+a page stale rather than making the engine hang. And the scheduler that drives
+every build on the box is one `setInterval` tick loop in one process,
+restartable at any moment.
 
 ---
 
@@ -85,14 +86,14 @@ does goes through it.
 flowchart TB
   subgraph unpriv["app-daedalus: rootless podman, container root maps to an unprivileged host user"]
     Engine["the engine<br/>TanStack Start + drizzle"]
-    Rd[/"reads, all ro: /export /repo /site /system /images<br/>/claude /workspaces /deploy-state /env-snapshot<br/>/dhcp /builds /github /github-token /registry"/]
+    Rd[/"reads, all ro: /export /repo /site /system /images<br/>/claude /workspaces /deploy-state /env-snapshot<br/>/builds /github /github-token /registry /engine<br/>and what stacks contribute: /dhcp /shotter"/]
     Sops["/usr/local/bin/sops: static, holds no age identity<br/>so it can encrypt and never decrypt"]
   end
 
-  Wr[/"the ONE writable mount: apply/<br/>11 request files, their status files, payload-ID.json"/]
+  Wr[/"the ONE writable mount: apply/<br/>16 request files, their status files, payload-ID.json"/]
 
   subgraph priv["systemd — root"]
-    P["daedalus-apply, -build, -build-cancel, -image-update<br/>-engine-update, -deploy-trigger, -site-write, -power<br/>-workspace-clone, -claude-rc, -github-token<br/>each a .path watching one filename"]
+    P["one daedalus-VERB.path per request file<br/>and the agent it starts (table below)"]
     Caps["may: commit and push as the operator<br/>nixos-rebuild switch under the rebuild lock<br/>start a deploy unit, reboot<br/>read the sops vault, sign as the GitHub App"]
   end
 
@@ -128,6 +129,11 @@ the same directory:
 | `power-request.json` | `daedalus-power` | `power-status.json` |
 | `claude-rc-request.json` | `daedalus-claude-rc` | `claude-rc-status.json` |
 | `github-token-request.json` | `daedalus-github-token` | `github-token-status.json` |
+| `claude-session-request.json` | `daedalus-claude-session` | `claude-session-status.json` |
+| `secret-set-request.json` | `daedalus-secret-set` | `secret-set-status.json` |
+| `task-run-request.json` | `daedalus-task-run` | `task-run-status.json` |
+| `version-request.json` | `daedalus-version-update` | `version-status.json` + `version-last.log` |
+| `claude-code-request.json` | `daedalus-claude-code-update` | `claude-code-status.json` + `claude-code-last.log` |
 
 Five rules make this safe, and each of them was learned the hard way:
 
@@ -150,9 +156,12 @@ Five rules make this safe, and each of them was learned the hard way:
 
 **What the container can and cannot reach.** It can *encrypt* a secret — it has
 a sops binary with no age identity — and it can never read one back. It can ask
-for a commit of four specific filenames and nothing else: the apply agent's
-allowlist is `apps.json`, `site.json`, and the two vault files. It cannot run a
-command, name a path, or choose a unit to restart.
+for a commit of a fixed set of filenames and nothing else: the apply agent's
+allowlist is `apps.json`, `nodes.json`, `site.json`, the two vault files, one
+`vault/apps/<name>-env.sops` per app already in the committed registry (the
+list is built host-side, never read from the request), and the `daedalus.json`
+provenance stamp. It cannot run a command, name a path, or choose a unit to
+restart.
 
 ---
 
@@ -177,7 +186,7 @@ flowchart TB
   Req[/"apply/request.json {actor, summary, commit}<br/>+ apply/payload-ID.json"/]
   PathU["daedalus-apply.path"]
   Sh["daedalus-apply.service, root<br/>restartIfChanged = false"]
-  Allow{"payload filename in the allowlist?<br/>apps.json, site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops"}
+  Allow{"any payload file on the allowlist?<br/>apps.json, nodes.json, site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops<br/>vault/apps/NAME-env.sops, daedalus.json<br/>other names are skipped"}
   Prev["copy the current bytes aside,<br/>outside the bridge directory"]
   Git["write verbatim, git add, commit<br/>as the operator, never as root"]
   Lock["take the shared rebuild lock"]
@@ -185,7 +194,7 @@ flowchart TB
   Ok(["status: done, commit recorded"])
   Roll["restore the previous bytes, revert the commit<br/>rebuild again and keep the FIRST error<br/>because the rollback's own log ends in Done."]
   Bad(["status: failed, with the real error verbatim"])
-  NixRead["nix reads the committed file: evaluation is pure<br/>and can never query Postgres"]
+  NixRead["nix reads the committed file"]
 
   UI --> DBT --> Render --> Req --> PathU --> Sh --> Allow
   Allow -- no --> Bad
@@ -207,6 +216,11 @@ mid-run, losing its verify and rollback phases and leaving a status stuck on
 `running`. And the rollback must preserve the *first* error: rebuilding after a
 revert succeeds, so a naive implementation reports `Done` for a failed Apply.
 
+One switch changes the last step: while site.json names an engine override
+(Settings › Developer), every Apply builds against that local engine clone and
+activates with `nixos-rebuild test`, never `switch` — the lock is left alone and
+a reboot undoes it.
+
 **Database versus repository.** The database is the editing surface; the
 committed file is the contract. Nix evaluation is pure and can never query
 Postgres, and the repository has to stay sufficient to rebuild the machine from
@@ -220,21 +234,22 @@ and preferences, not the system.
 ```mermaid
 flowchart TB
   subgraph client["runs in the browser"]
-    Routes["src/routes/**<br/>/, /apps, /apps/NAME, /apps/NAME/builds/ID<br/>/c/CATEGORY, /settings, /claude"]
+    Routes["src/routes/**<br/>/, /apps, /apps/NAME, /apps/NAME/builds/ID<br/>/c/CATEGORY, /settings, /claude, /profile, /login"]
     Comps["src/components/**"]
+    Views["src/modules/ID/view/**"]
   end
 
-  subgraph edge["server only — the two doors"]
-    Srv["src/server/**  createServerFn<br/>registry, builds, settings, site, category<br/>host, claude, profile, updates"]
+  subgraph edge["server only — the doors"]
+    Srv["src/server/**  createServerFn via fn.ts<br/>readFn, adminFn, publicFn<br/>registry, builds, settings, site, modules, updates, ..."]
     Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/nodes/hello, and the image servers (icons, shots)"]
     Mcp["src/routes/mcp.ts → src/host/mcp/**<br/>/mcp — Streamable HTTP, 16 tools, 2 resources<br/>a scoped token, not a session"]
   end
 
   subgraph core["src/core/ — server-only decisions"]
-    Ctx["ctx.ts: the capability set every reader is handed<br/>env, secret, exportPath, snapshot, store, http, loki"]
-    Bld["builds/scheduler.ts, builds/report.ts"]
+    Ctx["ctx.ts: the capability set every loader is handed<br/>env, secret, snapshot, store, http, prom, loki, github, site, ..."]
+    Bld["builds/: scheduler, dispatch, sweep, report"]
     Ghc["github-app.ts, github-checks.ts"]
-    Set["settings/**, site/**, vault.ts"]
+    Set["auth, authz, settings/**, site/**, vault.ts"]
   end
 
   subgraph lib["src/lib/ — pure, client-safe, unit-tested"]
@@ -243,9 +258,9 @@ flowchart TB
     Shared["http, cache, format, hostname<br/>site-fields, env-groups, cn, ..."]
   end
 
-  subgraph named["still src/lib/: server-only, and the name says so"]
-    Repo["repo/**: the only path to the database"]
-    Dash["dashboard/**: the category pages' data"]
+  subgraph named["server-only outside src/host/, and the path says so"]
+    Repo["lib/repo/**: the only path to the database"]
+    Dash["lib/dashboard/**, lib/apps/**<br/>modules/ID/data/**: each category page's loaders"]
   end
 
   subgraph host["src/host/: needs the machine, node builtins, the database, process.env"]
@@ -255,11 +270,12 @@ flowchart TB
     Clients["env, keys, prom, loki, metrics, registry<br/>nix-manifest, env-snapshot, workspaces<br/>github-token, github-repos, app-icon"]
   end
 
-  DB[("Postgres: apps, app_env_vars, deployments<br/>builds, github_deliveries, settings")]
+  DB[("Postgres: apps, builds, deployments, nodes, settings, ...<br/>(The data model, below)")]
   Snap[/"read-only mounts"/]
   Apply[/"apply/ — write"/]
 
   Routes --> Comps
+  Routes --> Views
   Routes -- "loaders" --> Srv
   Srv --> Ctx
   Api --> Ctx
@@ -267,10 +283,13 @@ flowchart TB
   Srv --> Set
   Srv --> Dash
   Api --> Bld
+  Mcp -- "the same loaders and flows" --> Dash
+  Mcp --> Bridges
+  Mcp --> Bld
   Bld --> BuildLib
   Bld --> Ghc
   Bld --> Bridges
-  BuildLib --> Repo
+  Bld --> Repo
   Set --> Contract
   Dash --> Contract
   Dash --> Clients
@@ -283,15 +302,16 @@ flowchart TB
 ```
 
 The invariants the picture states: nothing in `client` imports a *value* from
-`core` or from `host`, `lib/repo` is the only path to the database, and `core`
-is imported dynamically so it never reaches a client bundle.
+`host`, or from `core` beyond its two pure files (`auth-names.ts`,
+`settings/types.ts`); `lib/repo` is the only path to the database; and the
+server functions import `core` dynamically so it never reaches a client bundle.
 
 The `lib` / `host` line is the one a reader uses first, so it is drawn to be
 answerable from the path alone: **a module lives in `src/host/` if it needs the
 machine** — a `node:` builtin, the database, or `process.env` — or if it
-statically imports something that does. `lib/repo/**` and `lib/dashboard/**`
-are server-only as well and stay where they are, because *their* names already
-carry the same information.
+statically imports something that does. `lib/repo/**`, `lib/dashboard/**`,
+`lib/apps/**` and each module's `data/**` are server-only as well and stay
+where they are, because *their* paths already carry the same information.
 
 None of that holds by discipline. `src/host/boundary.test.ts` builds the real
 import graph — static value imports only, since `import type` is erased by
@@ -301,9 +321,10 @@ the machine, or if such a module appears outside the server regions. A
 component may still name a host module's *type*; deleting the `type` keyword
 from that import is the mistake the test is there to catch.
 
-`Ctx` is the seam that makes the server half testable — it is the set of
-capabilities a reader is handed (environment, secrets, export paths, snapshots,
-the settings store, HTTP, logs) rather than reaching for them directly.
+`Ctx` is the seam that makes the server half testable — a loader is handed its
+capabilities (environment, secrets, snapshots, the settings store, HTTP,
+metrics, logs, GitHub, the box's identity) rather than reaching for them
+directly.
 
 ---
 
@@ -317,7 +338,8 @@ cannot reach is a control plane an agent works around.
 
 **It is an adapter, not a second implementation.** Every read tool calls the
 loader the corresponding page calls; every write tool calls the same
-`host/apply-flow.ts`, `host/update-flow.ts` or `core/builds/actions.ts` the
+`host/apply-flow.ts`, `host/update-flow.ts`, `core/builds/actions.ts` or
+`lib/apps/deploy.ts` the
 button calls. So an MCP call can do nothing the UI cannot, and an MCP answer
 cannot disagree with the page that mirrors it. Sixteen tools:
 
@@ -377,8 +399,11 @@ control plane's own UI has.
 
 ## The data model
 
-Columns are trimmed to the load-bearing ones; the schema itself is the complete
-answer.
+Tables and columns are trimmed to the load-bearing ones; the schema
+(`app/src/host/schema.ts`) is the complete answer. Not drawn: `app_tasks` (an
+app's scheduled commands), `local_admins` (the break-glass password login,
+dormant unless site.json turns it on) and `nodes` (the other machines, keyed by
+the agent's public key, `pending` until an admin approves them).
 
 ```mermaid
 erDiagram
@@ -477,10 +502,12 @@ happen in one transaction, so a redelivered webhook collides and is ignored.
 | Boundary | What crosses it | What holds |
 |---|---|---|
 | Internet → engine | GitHub webhooks only, over the tunnel, on one hostname and one path | HMAC over the raw body, verified before anything is believed; a body cap enforced while streaming; the delivery id inserted before any work |
-| Operator → engine | Every page and action | Forward-auth in front of the whole host; the engine trusts a header it can only receive from the proxy |
+| Operator → engine | Every page and action | Forward-auth in front of the whole host, bar the self-authenticating paths in the rows below and the app's icons; the engine trusts a header it can only receive from the proxy (or a break-glass local login, dormant unless site.json turns it on); mutations are `adminFn`, which requires the `admins` group once enforcement is armed |
 | Agent → engine | The MCP tools at `/mcp`, on the LAN only | A scoped bearer token, matched against a stored SHA-256 digest in constant time before any work; fail-closed with none minted; write tools additionally pass `assertMachineActor` and are recorded under the token's label |
-| Engine → host | Eleven filenames | The rules in [The bridge](#the-bridge) |
-| Engine → GitHub | An installation token, minted by the host, never the private key | The key is root-only on the host and never enters the container; the token carries contents+metadata read, checks+deployments write |
+| Registry → engine | zot's push events at `/api/deploy` | A shared `X-Deploy-Token`; the only thing it can do is start an existing app's deploy unit |
+| Node → engine | A machine's hello at `/api/nodes/hello`, on the LAN | Every hello is signed by the ed25519 key the agent made at install; an unknown key creates a `pending` row and nothing else until an admin approves it |
+| Engine → host | Sixteen request filenames | The rules in [The bridge](#the-bridge) |
+| Engine → GitHub | An installation token, minted by the host, never the private key | The key is root-only on the host and never enters the container; the token carries contents, metadata and actions read, checks and deployments write |
 | Host → repository code | A clone and a build | Repository content only ever runs as an unprivileged user inside an egress fence; the registry push credential exists for the duration of the one publishing call and is deleted after it |
 | Build step → the box | Nothing by design | Rootless BuildKit in its own subuid range; a step that escapes lands as a user that owns nothing of the operator's |
 
@@ -506,8 +533,9 @@ Most of this vocabulary is invented here, so it is worth stating plainly.
   request filename, one path unit, one script.
 - **Snapshot** — a read-only copy of host state, refreshed by a timer into a
   mount the engine reads. Never a live query.
-- **The site directory** — the git directory daedalus writes: `apps.json`,
-  `site.json`, and the sops vault. The one directory the engine owns.
+- **The site directory** — the git directory daedalus writes: `site.json`,
+  `apps.json`, `nodes.json`, the `daedalus.json` stamp and the sops vault. The
+  one directory the engine owns.
 - **Drift** — the database and the committed file disagree; an Apply is owed.
 - **Stage** — how much of an app exists, as four rungs: `declared` (the row,
   its database, data dir and secrets — no container, no ingress), `off` (the
@@ -516,8 +544,8 @@ Most of this vocabulary is invented here, so it is worth stating plainly.
   builds apps already in the committed registry and an entry whose image does
   not exist yet would fail the switch and revert its own Apply. The order is
   create → Apply → build → promote → Apply.
-- **Publish mode** — what a build does with its image: `live` tags and deploys,
-  `candidate` builds and publishes under a candidate tag and deploys nothing.
+- **Publish mode** — what a build does with its image: `live` deploys it,
+  `candidate` only publishes it ([BUILDS.md](BUILDS.md#publish-modes)).
 - **Lane** — which stream of commits a build belongs to. One queued build per
   app per lane.
 - **Sweep** — the hourly pass that re-queues a commit whose webhook was lost.

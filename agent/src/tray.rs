@@ -3,22 +3,24 @@
 //!
 //! A separate, windowless program in the desktop session, because the
 //! service runs in session 0 where there is no taskbar to draw on. It reads
-//! the status page on loopback every few seconds and reflects it: the icon
-//! (ember when the hold is on, an amber dot when something wants attention,
+//! the status page on loopback every `POLL` and reflects it: the icon
+//! (ember when all is well, an amber dot when something wants attention,
 //! grey when the service does not answer), the tooltip, and a menu whose
 //! first lines are the state and whose rest are the few things worth a
-//! click — the status page, a check for updates, the log folder.
+//! click — the status page, a check for updates, a Claude restart, the two
+//! logs, quit.
 //!
 //! It is also the Claude supervisor (claude/): this process is the one in
 //! the user's session, with the user's Claude login, so `claude
 //! remote-control` runs as its child. Every poll it sends the service a
-//! report of that and reads back the box's policy — run it or not — and
-//! the one instruction, restart. The service, in session 0, could do
-//! neither.
+//! report of that and reads back a `ReportAnswer` — run it or not, where,
+//! and the one-shot update and restart. The service (session 0 on Windows,
+//! root on macOS) could do neither.
 //!
 //! It also keeps itself current: when the page reports a version other than
 //! its own, an update has swapped the binaries under it, and it restarts
-//! itself onto the new one. One instance at a time, through a named mutex.
+//! itself onto the new one. One instance at a time: a named mutex on
+//! Windows, a file lock on macOS.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -106,9 +108,9 @@ fn request_check(port: u16) {
         .call();
 }
 
-/// Time of day from an RFC 3339 UTC stamp, in the machine's local clock is
-/// more than this tray needs; the UTC hour and minute say "recent" well
-/// enough beside the date-less menu.
+/// `HH:MM` of an RFC 3339 stamp, left in UTC: converting to the local clock
+/// is more than the tray needs, and the hour and minute say "recent" well
+/// enough in the date-less menu.
 fn clock(ts: &str) -> &str {
     ts.get(11..16).unwrap_or(ts)
 }
@@ -315,7 +317,8 @@ fn claude_line(r: &Report) -> String {
 }
 
 /// Send the supervisor's report to the service; its answer says whether the
-/// box wants the server running and whether to restart it now.
+/// box wants the server running, where, and whether to update or restart
+/// it now.
 fn send_report(port: u16, report: &Report) -> Option<ReportAnswer> {
     ureq::post(&format!("http://127.0.0.1:{port}/claude/report"))
         .timeout(Duration::from_secs(2))
@@ -428,11 +431,10 @@ impl Session {
             self.sup
                 .set_named_workdir(answer.workdir.or_else(|| self.cfg_workdir.clone()));
             self.sup.set_wanted(answer.wanted);
-            // Update before restart, so a tick carrying both lands the new
-            // binary first and the server comes back up on it. The update
-            // runs on its own thread (claude/) — inline it would freeze
-            // this loop for minutes, and this loop is the only thing that
-            // reports to the service.
+            // The update only starts here: it runs on its own thread
+            // (`Supervisor::update_claude` says why), so a restart in the
+            // same answer does not wait for it and comes back up on the
+            // binary that was already installed.
             if answer.update {
                 self.sup.update_claude();
             }
@@ -455,8 +457,7 @@ mod platform {
     /// Tried for up to ten seconds: after an update the OLD tray spawns us and
     /// then leaves, and its leaving first stops the Claude server it
     /// supervised — a second or two during which its mutex is still held. A
-    /// single check here quit the new tray on that overlap and left the
-    /// machine with no tray until the next login.
+    /// single check would quit the new tray on that overlap.
     pub fn claim_single_instance() -> bool {
         use windows::core::w;
         use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS};

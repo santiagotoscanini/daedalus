@@ -1,12 +1,12 @@
 //! The Windows collector: registry and Win32 for everything sampled, so a
 //! sample costs microseconds and never blocks on a provider. Two tiers are
 //! the deliberate exception to "nothing shells out": the ten-minute one
-//! (drives) and the hourly one (OS updates) each run ONE hidden PowerShell
-//! process, because SMART counters and the Windows Update agent have no
-//! Win32 surface — only the Storage cmdlets and the `Microsoft.Update`
-//! COM object. Each is killed at its deadline, and the tier answers with
-//! an empty list and a line in `errors` rather than a stale or guessed
-//! value.
+//! runs two hidden PowerShell processes (drives, Store packages) and the
+//! hourly one runs one (OS updates), because SMART counters, Store packages
+//! and the Windows Update agent have no Win32 surface — only the Storage
+//! and Appx cmdlets and the `Microsoft.Update` COM object. Each is killed
+//! at its deadline, and that part answers empty with an error line rather
+//! than a stale or guessed value.
 //!
 //! What comes from where:
 //! - machine and firmware: `HKLM\HARDWARE\DESCRIPTION\System\BIOS`, the
@@ -17,8 +17,10 @@
 //! - processor: `CentralProcessor\0` for the name and MHz,
 //!   `GetLogicalProcessorInformationEx` for cores, `GetSystemInfo` for threads,
 //!   `GetSystemTimes` deltas for usage;
-//! - GPUs: the display class registry keys (name, driver, VRAM) and the
-//!   PDH "GPU Engine" / "GPU Adapter Memory" counters for usage;
+//! - GPUs: the display class registry keys (name, driver, VRAM, and the
+//!   marketed driver version from the value AMD writes beside it or
+//!   NVIDIA's digit convention) and the PDH "GPU Engine" / "GPU Adapter
+//!   Memory" counters for usage;
 //! - memory: `GlobalMemoryStatusEx` for the totals, `GetPerformanceInfo`
 //!   for the cache and the commit charge, the "Memory Compression"
 //!   process's working set for what is held compressed;
@@ -27,24 +29,24 @@
 //! - drives: `Get-PhysicalDisk` joined to `Get-StorageReliabilityCounter`
 //!   and `Get-Partition`, in the ten-minute PowerShell;
 //! - services: `EnumServicesStatusEx`, with `QueryServiceConfig` on each
-//!   stopped one to learn whether it was meant to be running;
+//!   one down with a failure exit code, to learn whether it was meant to
+//!   be running;
 //! - browsers: the Chromium family, from the registry's `App Paths` keys
 //!   (HKLM, its WOW6432Node twin, and the console user's own hive, where
 //!   a per-user Chrome or Brave registers) and the well-known install
 //!   directories under Program Files and the user's Local AppData when
 //!   the registry names nothing; the version from the exe's own version
 //!   resource (`GetFileVersionInfo`), or the `NNN.N.NNNN.NNN` directory
-//!   Chromium keeps beside it; whether one is running from the same
-//!   Toolhelp snapshot the processes use; the default browser from the
+//!   Chromium keeps beside it; whether one is running from a Toolhelp
+//!   snapshot of its own (`processes`); the default browser from the
 //!   console user's `UrlAssociations\http\UserChoice`. The console user is
 //!   the session token the service may take as LocalSystem
 //!   (`WTSQueryUserToken`), or failing that the loaded `HKEY_USERS` hive
 //!   with a `Volatile Environment`;
 //! - apps: the Uninstall keys (HKLM, its 32-bit view, the console user's
 //!   hive), the Epic launcher's manifests under ProgramData, and the Store
-//!   packages through `Get-AppxPackage` in a third hidden PowerShell, with
-//!   the drives' deadline; the GPU driver's marketed version comes from
-//!   the value AMD writes beside it or NVIDIA's digit convention;
+//!   packages through `Get-AppxPackage` in the second ten-minute
+//!   PowerShell, with a deadline of its own;
 //! - processes: a Toolhelp snapshot for names and pids, then
 //!   `GetProcessMemoryInfo` and `GetProcessTimes` on each one the service
 //!   can open;
@@ -64,7 +66,7 @@
 //! bounded shell-out and its JSON helpers), `drives` and `updates` (the
 //! two PowerShell tiers), `pdh` (the GPU counters), `processes`,
 //! `services`, `browsers` and `apps`. This file keeps the collector and
-//! the tiers' deadlines.
+//! the drives' and updates' deadlines (the Store's is in `apps`).
 
 mod apps;
 mod browsers;
@@ -105,7 +107,7 @@ use processes::{process_cpu, process_snapshot, process_usage};
 use services::read_services;
 use smbios::{read_smbios, Smbios};
 
-/// How long the ten-minute PowerShell may take before it is killed.
+/// How long the drives PowerShell may take before it is killed.
 const SLOW_DEADLINE: Duration = Duration::from_secs(60);
 /// How long the Windows Update search may take before it is killed.
 const UPDATES_DEADLINE: Duration = Duration::from_secs(120);
@@ -357,8 +359,7 @@ impl Collector {
         if pdh.collections < 2 {
             return out;
         }
-        // The counters carry a LUID per instance while the registry keys do
-        // not, so the machine's total goes on the first GPU and the rest
+        // Machine-wide totals, on `gpu_main` (see `read_static`); the rest
         // stay unsampled.
         match Pdh::sum(pdh.usage) {
             Ok(v) => out[self.gpu_main].usage_pct = Some(v.clamp(0.0, 100.0)),

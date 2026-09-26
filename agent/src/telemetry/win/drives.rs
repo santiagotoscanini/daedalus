@@ -114,6 +114,7 @@ pub(super) fn parse_drives(v: &Value) -> Vec<Drive> {
         let id = j_id(&d, "DeviceId");
         let bus = j_str(&d, "BusType").and_then(|s| bus_name(&s));
         let c = id.as_ref().and_then(|id| counters.get(id));
+        // A physical disk's DeviceId is the disk number `Get-Partition` names.
         let mut volumes = id
             .as_ref()
             .and_then(|id| letters.get(id))

@@ -3,8 +3,10 @@
 
 use super::Telemetry;
 
-/// Prometheus text exposition of the document. Gauges only; the counters
-/// the OS keeps (network bytes) are exposed as counters.
+/// Prometheus text exposition of the document. No `# TYPE` lines: every
+/// series goes through the one `gauge` writer, so Prometheus stores them
+/// untyped. The OS's own counters (network bytes) carry a counter's
+/// `_total` suffix, and a query `rate()`s them.
 pub fn metrics_text(t: &Telemetry, agent_version: &str, hostname: &str) -> String {
     let mut out = String::new();
     let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");

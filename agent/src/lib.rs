@@ -1,30 +1,22 @@
 //! daedalus-agent — the box's presence on a machine it does not run.
 //!
-//! PLAN.md feature 6, phases 1–3: a Windows service (a launchd daemon on
-//! macOS) that holds the machine awake for as long as the box wants it to,
-//! answers a small status page on
+//! A Windows service (a launchd daemon on macOS) that holds the machine
+//! awake for as long as the box wants it to, answers a small status page on
 //! the LAN, announces itself to the box with a signed hello once a minute
-//! and follows the policy the answer carries, and updates itself to the
-//! newest `agent-v*` release of the engine repository; and a tray program
-//! in the desktop session that shows what the service reports and — with
-//! the user's own login, which only that session has — runs `claude
-//! remote-control` the way the box runs its own (claude/). Everything
-//! the agent will later be able to do arrives as a new release the existing
-//! one installs on its own — which is why the update path shipped first.
+//! and follows the policy the answer carries, samples the machine's
+//! telemetry, and updates itself to the newest `agent-v*` release of the
+//! engine repository; and a tray program in the desktop session that shows
+//! what the service reports and — with the user's own login, which only
+//! that session has — runs `claude remote-control` the way the box runs
+//! its own (claude/).
 //!
 //! Two executables from this crate (no `.exe` on macOS):
 //!
 //!   daedalus-agent.exe        the service and its verbs (src/bin/daedalus-agent.rs)
 //!   daedalus-agent-tray.exe   the tray icon + the Claude supervisor (src/bin/daedalus-agent-tray.rs)
 //!
-//! Layout on the machine (Windows; launchd.rs has the macOS one):
-//!
-//!   C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (and .old / .new around an update)
-//!   C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
-//!   C:\ProgramData\daedalus-agent\config.toml                 what install wrote; edit and restart
-//!   C:\ProgramData\daedalus-agent\state.json                  what the agent last did
-//!   C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
-//!   C:\ProgramData\daedalus-agent\logs\claude-rc.log          what `claude remote-control` printed
+//! Where each lands on the machine, with its config, state and logs:
+//! agent/README.md, "On the machine".
 
 pub mod claude;
 pub mod config;
@@ -63,8 +55,8 @@ pub const TRAY_EXE: &str = "daedalus-agent-tray";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The agent's work, shared by `run` (as a service) and `serve` (in a
-/// terminal): hold the machine awake, answer the status page, and check
-/// for updates until `stop` is raised.
+/// terminal): hold the machine awake, answer the status page, announce
+/// itself, sample telemetry and check for updates until `stop` is raised.
 pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let cfg = config::load_or_default().context("reading config")?;
     let _log = config::init_logging(&cfg, foreground)?;
@@ -137,7 +129,8 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     // The tray watchdog (Windows): a tray that has not reported for a
     // while is started again in the console user's session, at most once a
     // minute. Nothing starts it otherwise until the next logon — the Run
-    // key fires once. launchd does this for the Mac by itself.
+    // key fires once. On the Mac, KeepAlive and `launchd::kickstart_tray`
+    // cover it.
     #[cfg(windows)]
     let mut tray_tried = std::time::Instant::now();
     while !stop.load(Ordering::Relaxed) {

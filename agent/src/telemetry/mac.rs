@@ -1,6 +1,6 @@
 //! The macOS collector. Apple's own tools do the reading — `system_profiler`
 //! for the hardware, the GPUs, the memory modules and the physical drives,
-//! `sysctl`, `vm_stat`, `df`, `mount`, `diskutil`, `netstat`, `pmset`,
+//! `sysctl`, `vm_stat`, `df`, `mount`, `diskutil`, `route`, `netstat`, `pmset`,
 //! `ioreg`, `ps`, `launchctl`, `softwareupdate`, `plutil`, `stat`, `dscl`,
 //! and `powermetrics` (root only, which the launchd daemon is) for power
 //! and, on Intel, die temperatures — plus two Mach calls for the CPU ticks
@@ -21,10 +21,13 @@
 //!   `dscl` where their home is), each one's `Info.plist` through `plutil`
 //!   for the version and bundle id, `ps` for which of them has a process
 //!   alive, and the user's LaunchServices handler list (`plutil` again; it
-//!   is binary on disk) for which one opens `http`.
-//! - SAMPLED (every 15 s): the Mach calls, `vm_stat`, `df` + `mount`,
-//!   `ioreg` for the GPU, `powermetrics`, `netstat`, `pmset`, and `ps` for
-//!   the heaviest processes.
+//!   is binary on disk) for which one opens `http`; then every `.app` in
+//!   the same folders for the installed applications (apps.rs).
+//! - SAMPLED (every 15 s): the Mach calls, `sysctl` for memory and swap,
+//!   `vm_stat`, `df` + `mount`, `ioreg` for the GPU, `powermetrics`,
+//!   `route` + `netstat`, `pmset`, and `ps` for the heaviest processes;
+//!   every `SLOW_EVERY` samples also `diskutil info /` for the root
+//!   volume's name and `SPPowerDataType` for the battery's health.
 //! - UPDATES (hourly, on its own thread): `softwareupdate -l` for what is
 //!   pending and the install-history plist for what was installed.
 //!
@@ -99,9 +102,10 @@ const CONSOLE_USER: Duration = Duration::from_secs(3);
 /// `~/Applications`.
 const APPLICATIONS: &str = "/Applications";
 
-/// Battery health and the root volume's name are read once per this many
-/// samples (a hundred at 15 s is 25 minutes); both are static-ish and
-/// `system_profiler`/`diskutil` are not free.
+/// Battery health and the root volume's name and kind are read once per
+/// this many samples (a hundred at 15 s is 25 minutes); both are
+/// static-ish and `system_profiler`/`diskutil` are not free. A count of
+/// samples, not telemetry.rs's `SLOW_EVERY` duration.
 const SLOW_EVERY: u32 = 100;
 
 /// What the collector keeps between samples.
@@ -111,7 +115,8 @@ pub struct Collector {
     prev_ticks: Option<[u32; 4]>,
     /// Per interface: rx bytes, tx bytes, when read.
     prev_net: HashMap<String, (u64, u64, Instant)>,
-    /// Samples since the slow facts were last read; `None` means never.
+    /// Samples since the battery health and root volume were last read;
+    /// `None` means never.
     slow_age: Option<u32>,
     battery_health: Option<BatteryHealth>,
     /// The root volume's name and kind, from `diskutil info /`.
@@ -262,7 +267,8 @@ impl Collect for Collector {
         let mut s = Sample::default();
         let apple_silicon = is_apple_silicon();
 
-        // Slow, static-ish facts: on the first sample and every SLOW_EVERY after.
+        // Battery health and root volume: on the first sample and every
+        // SLOW_EVERY after.
         let refresh_slow = self.slow_age.is_none_or(|n| n >= SLOW_EVERY);
         self.slow_age = Some(if refresh_slow {
             0
@@ -324,7 +330,7 @@ impl Collector {
     }
 
     /// Every local volume from `df`, its file system from `mount`, and the
-    /// root volume's name and kind (re-read with the slow facts).
+    /// root volume's name and kind (re-read every `SLOW_EVERY` samples).
     fn sample_disks(&mut self, s: &mut Sample, refresh_slow: bool) {
         if refresh_slow {
             self.root_volume = run("diskutil", &["info", "/"])
@@ -456,7 +462,7 @@ impl Collector {
     }
 
     /// Battery: charge from `pmset`, health from `system_profiler` (re-read
-    /// with the slow facts and carried between samples).
+    /// every `SLOW_EVERY` samples and carried between them).
     fn sample_battery(&mut self, s: &mut Sample, refresh_slow: bool) {
         match run("pmset", &["-g", "batt"]) {
             Some(t) => {

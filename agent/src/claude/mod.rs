@@ -1,16 +1,18 @@
 //! Claude Code on this machine: found, supervised, reported.
 //!
 //! The box runs `claude remote-control` as a unit under the operator's own
-//! login (platform/claude-rc.nix), so a session on it can be opened from
+//! login (nix/platform/claude-rc.nix), so a session on it can be opened from
 //! claude.ai/code or a phone at any time. This is the same thing on a node,
 //! with the one difference the OS forces: Claude Code's login lives in the
-//! user's profile (`~/.claude`), which the service — session 0, LocalSystem —
-//! cannot see. So the TRAY supervises the server, in the desktop session
-//! with the user's credentials, and reports to the service over loopback
-//! (`POST /claude/report`, status.rs). The service puts the report on the
-//! status page and a summary in every hello, and hands the tray back what
-//! the box decided: whether the server should run at all (policy), and its
-//! two instructions — update Claude Code, and restart the server.
+//! user's profile (`~/.claude`), and the service is not that user — it is
+//! LocalSystem in session 0 on Windows, root on macOS. So the TRAY
+//! supervises the server, in the desktop session with the user's
+//! credentials, and reports to the service over loopback
+//! (`POST /claude/report`, status.rs). The service keeps the full report for
+//! `/claude`, puts a summary on the status page and in every hello, and
+//! hands the tray back what the box decided: whether the server should run
+//! at all and where (policy), and its two instructions — update Claude
+//! Code, and restart the server.
 //!
 //! Those two are deliberately separate. An update installs a new CLI beside
 //! the running one and interrupts nothing: a session keeps the binary it
@@ -21,16 +23,18 @@
 //! instruction for both would make the free act cost the expensive one.
 //!
 //! What is reported mirrors what the box's own snapshot reads about itself
-//! (stacks/daedalus/host/claude-snapshot.sh): the server's start banner
+//! (nix/stacks/daedalus/host/claude-snapshot.sh): the server's start banner
 //! (version, environment id, spawn mode, session ceiling), the sessions in
 //! `~/.claude/sessions/*.json` and whether each process is alive, the
 //! credential CLOCK (the plan and two dates — never a token), and the model
-//! settings. The server's output goes to `logs\claude-rc.log` beside the
-//! agent's own.
+//! settings. The server's output goes to `claude-rc.log` in
+//! `config::user_log_dir`.
 //!
 //! None of the environment variables that disable Remote Control are set
-//! (DISABLE_TELEMETRY, DO_NOT_TRACK, ANTHROPIC_BASE_URL and friends — the
-//! nix module lists them); the child inherits the user's environment as is.
+//! (DISABLE_TELEMETRY, DO_NOT_TRACK, ANTHROPIC_BASE_URL and friends —
+//! nix/platform/claude-rc.nix lists them); the child inherits the user's
+//! environment, plus `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE` and, on
+//! macOS, a wider PATH (supervisor.rs `build_command`).
 //!
 //! Where each part lives: this file holds the report's types; `cli` finds
 //! the `claude` command and runs it (version probe, `claude update`),
@@ -219,15 +223,14 @@ impl Report {
     }
 }
 
-/// What the service answers a report with: the box's policy and its one
-/// instruction, cleared as it goes out.
+/// What the service answers a report with: the tray's part of the box's
+/// policy and its two instructions, each cleared as it goes out.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ReportAnswer {
     /// Whether the server should be running at all.
     pub wanted: bool,
-    /// Update Claude Code now, once. Interrupts nothing: the new version
-    /// installs beside the running one and takes effect at its next start.
+    /// Update Claude Code now, once. Interrupts nothing (see the module doc).
     pub update: bool,
     /// Restart it now, once. Ends every session under the server.
     pub restart: bool,

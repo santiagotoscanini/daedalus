@@ -6,15 +6,17 @@
 //! re-serialisation. The payload says who this machine is (hostname, OS,
 //! architecture, agent version, address, hardware address, the status page's
 //! port) and how it is (up for how long, held awake or not), stamped with the
-//! agent's clock so a captured hello cannot be replayed later.
+//! agent's clock: the box refuses a hello more than five minutes off its own
+//! (`HELLO_MAX_SKEW_SECS`, app/src/host/agent-hello.ts), so a captured one
+//! cannot be replayed after that window.
 //!
 //! The answer is what the box has decided: `pending` until an admin approves
-//! the machine on System › Machines, `approved` after, `revoked` if turned
+//! the machine on Settings › Machines, `approved` after, `revoked` if turned
 //! away. An approved machine's answer also carries the box's POLICY for it
-//! — whether to hold it awake, whether to run Claude remote control — as
-//! set on Settings › Machines, and up to two instructions: `check_update`
-//! (the updater looks now) and `restart_claude` (the tray restarts the
-//! server). Nothing else rides it.
+//! (`Policy` below) and the node token, and any answer may carry three
+//! one-shot instructions: `check_update` (the updater looks now),
+//! `update_claude` and `restart_claude` (relayed to the tray; claude/mod.rs
+//! says why they are two). Nothing else rides it.
 //!
 //! The payload carries a summary of Claude Code on this machine when the
 //! tray has reported one (claude/): its state, versions
@@ -24,7 +26,7 @@
 //! answer hands down (status.rs).
 //!
 //! Finding the box is discover.rs's job; it is re-done when a hello fails
-//! and every few minutes regardless, so a box that moves is found again.
+//! and every `REDISCOVER` regardless, so a box that moves is found again.
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;

@@ -129,8 +129,8 @@ pub fn install(cfg: &Config) -> Result<()> {
         .context("setting the description")?;
 
     // Restart on any exit that is not a clean stop — including the exit
-    // the updater makes on purpose. Three tries a few seconds apart, reset
-    // after a day.
+    // the updater makes on purpose. Three tries (after 3 s, 10 s, 60 s); the
+    // failure count resets after a day.
     service
         .update_failure_actions(ServiceFailureActions {
             reset_period: ServiceFailureResetPeriod::After(Duration::from_secs(86_400)),
@@ -185,8 +185,9 @@ pub fn install(cfg: &Config) -> Result<()> {
     Ok(())
 }
 
-/// `daedalus-agent uninstall`: stop, delete, drop the firewall rule. The
-/// data directory (config, state, logs) is left for the operator.
+/// `daedalus-agent uninstall`: stop, delete, drop the tray's Run key (and
+/// the running tray) and the firewall rule. The data directory (config,
+/// state, identity, logs) is left for the operator.
 pub fn uninstall() -> Result<()> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
         .context("opening the Service Control Manager — run this from an administrator shell")?;
@@ -315,7 +316,8 @@ fn tray_start(tray: &std::path::Path) {
 // put it back: it runs as LocalSystem, which may take the console user's
 // token and start a process in that session on the interactive desktop.
 // This is what agent_main calls when the tray has not reported for a while
-// (status.rs `tray.reporting`), and what launchd's KeepAlive does on macOS.
+// (`Shared::tray_reporting`, status.rs); on macOS launchd's KeepAlive and
+// `launchd::kickstart_tray` do the same.
 
 /// Start the tray as the user at the console, in their session, with their
 /// environment. Err when nobody is logged on, or the token is refused.

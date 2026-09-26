@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 pub struct Machine {
     pub manufacturer: Option<String>,
     pub model: Option<String>,
-    /// "Apple M3 Pro" on a Mac; the firmware vendor's name elsewhere is in `bios_vendor`.
+    /// The chip a Mac is built on ("Apple M3 Pro", or the Intel CPU type
+    /// `system_profiler` states). None on Windows.
     pub chip: Option<String>,
     pub bios_vendor: Option<String>,
     pub bios_version: Option<String>,
@@ -36,7 +37,8 @@ pub struct Machine {
 pub struct Os {
     /// The kernel: Darwin's `uname -r` on a Mac, the NT build on Windows.
     pub kernel: Option<String>,
-    /// The build string the OS shows in its own About box, when distinct.
+    /// The OS's build string: `sw_vers`'s ("23G93") on a Mac, `BuildLabEx`
+    /// on Windows.
     pub build: Option<String>,
     /// When the OS was installed, RFC 3339, when known.
     pub installed_at: Option<String>,
@@ -58,8 +60,8 @@ pub struct Cpu {
     pub temperature_c: Option<f64>,
 }
 
-/// One stick, as the firmware describes it (SMBIOS type 17; on a Mac the
-/// memory is on the package and `system_profiler` describes it as one).
+/// One stick, as the firmware describes it (SMBIOS type 17; on Apple
+/// Silicon the memory is on the package and is reported as one module).
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct MemoryModule {
@@ -79,8 +81,9 @@ pub struct Memory {
     pub total_bytes: Option<u64>,
     pub used_bytes: Option<u64>,
     pub available_bytes: Option<u64>,
-    /// File cache the OS would drop under pressure: the standby list on
-    /// Windows, file-backed pages on a Mac.
+    /// File cache the OS would drop under pressure: `SystemCache` on
+    /// Windows (the standby list plus the system working set), file-backed
+    /// pages on a Mac.
     pub cached_bytes: Option<u64>,
     /// Memory held compressed rather than swapped (both OSes do this).
     pub compressed_bytes: Option<u64>,
@@ -101,13 +104,13 @@ pub struct Memory {
 pub struct Disk {
     /// "C:" or "/".
     pub mount: String,
-    /// The device or volume name, when the OS names it ("Macintosh HD", "Samsung SSD 990").
+    /// The volume's name, when it has one ("Macintosh HD", a Windows label).
     pub name: Option<String>,
     pub fs: Option<String>,
     pub total_bytes: Option<u64>,
     pub used_bytes: Option<u64>,
     pub free_bytes: Option<u64>,
-    /// "ssd" | "hdd" | "nvme" | "removable", when known.
+    /// "nvme" (Windows only) | "ssd" | "hdd", when known.
     pub kind: Option<String>,
 }
 
@@ -123,7 +126,7 @@ pub struct Drive {
     pub size_bytes: Option<u64>,
     /// "nvme" | "sata" | "usb" | "thunderbolt" | "sd" | …, lowercase.
     pub bus: Option<String>,
-    /// "ssd" | "hdd", when the OS says.
+    /// "ssd" | "hdd" (Windows also "scm"), when the OS says.
     pub kind: Option<String>,
     /// The OS's own verdict: "healthy" | "warning" | "unhealthy" on Windows,
     /// "verified" | "failing" | "not supported" from SMART on a Mac.
@@ -227,15 +230,16 @@ pub struct Process {
     pub pid: u32,
     /// Resident memory (working set / RSS).
     pub memory_bytes: Option<u64>,
-    /// 0–100 of one core, since the previous sample, where measured.
+    /// Percent of one core (above 100 on several cores), where measured:
+    /// since the previous sample on Windows, `ps`'s decaying average on a Mac.
     pub cpu_pct: Option<f64>,
 }
 
 /// A Chromium-based browser installed on the machine.
 ///
 /// Read every ten minutes with the drives and services: the version moves
-/// when the browser updates itself, and whether it is running is a
-/// process-list fact the same read already has. Chrome, Edge, Brave, Arc,
+/// when the browser updates itself, and whether it is running comes from a
+/// process list the slow read takes for itself. Chrome, Edge, Brave, Arc,
 /// Vivaldi, Opera and a bare Chromium are the kinds looked for; Firefox and
 /// Safari are not Chromium and are not here.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -260,9 +264,10 @@ pub struct Browser {
 
 /// A service that should be running and is not. Stripped from the open page.
 ///
-/// Windows: an Automatic service that is stopped with an exit code other
-/// than 0 or 1077 (never started). macOS: a launchd job in the system domain
-/// whose last exit status was non-zero, Apple's own excluded.
+/// Windows: an Automatic service that is not running, with an exit code
+/// other than 0 or 1077 (never started). macOS: a launchd job in the system
+/// domain that is not running and whose last exit status was non-zero,
+/// Apple's own excluded.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Service {
@@ -330,7 +335,7 @@ pub struct Telemetry {
     pub processes: Vec<Process>,
     pub process_count: Option<u32>,
     pub services: Vec<Service>,
-    /// How many services the OS has in total, for the "n of m" the page says.
+    /// How many services the OS has in total, for the page's "of N installed".
     pub service_count: Option<u32>,
     /// The Chromium-based browsers installed, read with the slow facts.
     pub browsers: Vec<Browser>,

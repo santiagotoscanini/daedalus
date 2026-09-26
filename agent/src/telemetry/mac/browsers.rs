@@ -131,7 +131,7 @@ fn parse_dscl_value(text: &str, key: &str) -> Option<String> {
 }
 
 /// The console user's home. `/dev/console` is owned by whoever is logged
-/// in at the login window — root when nobody is, and Setup Assistant's
+/// in at the console — root when nobody is, and Setup Assistant's
 /// `_mbsetupuser` before there is anybody — and Directory Services says
 /// where their home is; `/Users/<name>` when it does not answer.
 pub(super) fn console_home() -> Option<String> {

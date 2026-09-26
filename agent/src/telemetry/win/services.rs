@@ -1,6 +1,6 @@
 //! The Automatic services that are down: `EnumServicesStatusEx` for every
-//! Win32 service, `QueryServiceConfig` on each stopped one to learn
-//! whether it was meant to be running.
+//! Win32 service, `QueryServiceConfig` on each one not running with a
+//! failure exit code, to learn whether it was meant to be running.
 
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{
@@ -42,7 +42,7 @@ fn service_exit_code(win32: u32, specific: u32) -> u32 {
     }
 }
 
-/// Whether a stopped Automatic service is worth listing: an exit code
+/// Whether an Automatic service that is not running is worth listing: an exit code
 /// other than success or "never started" (a trigger-start service that
 /// has had no trigger yet).
 fn service_is_down(exit: u32) -> bool {
@@ -92,7 +92,8 @@ fn service_is_automatic(scm: SC_HANDLE, name: PCWSTR) -> Option<bool> {
     Some(start == SERVICE_AUTO_START)
 }
 
-/// Every Win32 service's status, and which Automatic ones are down.
+/// The Automatic services that are down, and how many Win32 services there
+/// are in all.
 pub(super) fn read_services() -> Result<(Vec<Service>, u32), String> {
     // SAFETY: the local manager, for enumeration only; the handle is
     // closed by `ScHandle`.

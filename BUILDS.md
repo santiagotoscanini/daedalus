@@ -190,8 +190,8 @@ The whole list, so nobody has to infer it:
 - **The App's private key never enters the container.** It is root-only on the
   host. A host timer signs with it and mints installation tokens.
 - **The container's token** carries `contents:read`, `metadata:read`,
-  `checks:write`, `deployments:write`. It cannot push code, change settings,
-  merge anything, or read another account.
+  `actions:read` (the Actions page), `checks:write`, `deployments:write`. It
+  cannot push code, change settings, merge anything, or read another account.
 - **The build's token** is narrower still: one repository, `contents:read` and
   `metadata:read`, and it is revoked before repository code runs.
 - **What daedalus writes back**: a check run named `daedalus` whose details link

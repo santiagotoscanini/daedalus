@@ -1,14 +1,16 @@
 //! The status page: one JSON document on a LAN port, so the box can see the
 //! agent is there and awake before there is any channel between them.
 //!
-//! `GET /status` (and `/`) answers the document below; `GET /healthz`
-//! answers `ok`. The writes are few and only from this machine — refused
-//! from any address but loopback:
+//! Open to the LAN: `GET /status` (and `/`), the document below;
+//! `GET /healthz`, `ok`; `GET /metrics`, the telemetry as Prometheus text
+//! (telemetry/metrics.rs). The writes are few and only from this machine —
+//! refused from any address but loopback:
 //!
-//!   GET  /metrics         the telemetry as Prometheus text (telemetry/metrics.rs)
 //!   POST /update/check    the updater looks now (the tray's "check for updates")
 //!   POST /claude/report   the tray's picture of Claude Code (claude/); the
-//!                         answer carries the box's policy and, once, a restart
+//!                         answer is a `ReportAnswer`: the policy's part for
+//!                         the tray and, once each, a pending update or restart
+//!   POST /claude/update   ask the tray to update Claude Code on its next report
 //!   POST /claude/restart  ask the tray to restart the server on its next report
 //!
 //! And two reads that are not for the LAN, answered on loopback or to a
@@ -21,8 +23,8 @@
 //! `Telemetry::public` of the second.
 //!
 //! No auth otherwise: the page states facts about this machine that the LAN
-//! can already observe, and the firewall rule `install` adds scopes it to
-//! the local subnet. The tokens in the user's Claude profile never reach
+//! can already observe, and on Windows the firewall rule `install` adds
+//! scopes it to the local subnet. The tokens in the user's Claude profile never reach
 //! this page — the report copies dates and a plan name, not credentials.
 
 use std::io::Read;
@@ -63,13 +65,13 @@ struct Live {
     check_requested: bool,
     control_plane: ControlPlane,
     /// What the box wants of this machine; the config's defaults until the
-    /// box has answered a hello.
+    /// box has approved it.
     policy: Policy,
     /// The tray's last report and when it landed.
     claude: Option<(Report, Instant)>,
     /// Raised by the box's answer or `POST /claude/update`; the tray takes
-    /// it with its next report. Separate from the restart below because
-    /// updating interrupts nothing and restarting ends every session here.
+    /// it with its next report. Separate from the restart below (claude/mod.rs
+    /// says why).
     claude_update_requested: bool,
     /// Raised by the box's answer or `POST /claude/restart`; the tray takes
     /// it with its next report.
@@ -114,8 +116,8 @@ struct Document<'a> {
     tray: Tray,
     claude_update_requested: bool,
     claude_restart_requested: bool,
-    /// What the machine is and how it is doing (telemetry.rs); null until
-    /// the first sample, a few seconds after start.
+    /// What the machine is and how it is doing, as `Telemetry::public`
+    /// (telemetry.rs); null until the first sample, a few seconds after start.
     telemetry: Option<Telemetry>,
     /// The box, as this agent last saw it.
     control_plane: &'a ControlPlane,

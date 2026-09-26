@@ -8,17 +8,17 @@
 //! ed25519 signature over the asset's bytes — is checked against the public
 //! key compiled in below. Only then is the running binary renamed to `.old`
 //! and the new one moved into its place; then the process exits non-zero,
-//! and the Service Control Manager's recovery action starts it again on the
-//! new binary. The `.old` is deleted on the next clean start.
+//! and the Service Control Manager's recovery action (launchd's KeepAlive on
+//! macOS) starts it again on the new binary. The `.old` is deleted on the
+//! next clean start.
 //!
 //! Trust is the key, not the transport: GitHub over TLS says where the file
-//! came from, the signature says who built it. A release without a valid
-//! `.sig` is reported on the status page and never installed. Losing the
-//! private key strands every agent on its version — the recovery copy is
-//! the operator's, outside this repository.
+//! came from, the signature says who built it. A release missing a `.sig` is
+//! skipped; one whose signature fails is reported on the status page and
+//! never installed. Losing the private key strands every agent on its
+//! version — the recovery copy is the operator's, outside this repository.
 //!
-//! Until the box learns to pin an agent version (PLAN.md, feature 6), the
-//! newest release is the pin.
+//! The box cannot pin an agent version; the newest release is the pin.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -354,7 +354,8 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
                         );
                         // A moment for the log to flush and the status page to
                         // say why, then a non-zero exit: the recovery action
-                        // `install` configured restarts the service.
+                        // `install` configured (KeepAlive on macOS) restarts
+                        // the service.
                         std::thread::sleep(Duration::from_secs(2));
                         std::process::exit(3);
                     }

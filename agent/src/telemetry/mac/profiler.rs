@@ -364,7 +364,8 @@ pub(super) fn parse_physical_store(text: &str) -> Option<String> {
 }
 
 /// What `system_profiler` knows about the battery that `pmset` does not:
-/// slow-changing, so read with the slow facts and carried between samples.
+/// slow-changing, so re-read every `SLOW_EVERY` samples (mac.rs) and
+/// carried between them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct BatteryHealth {
     /// Of the design capacity, 0–100.

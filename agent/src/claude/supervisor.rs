@@ -146,10 +146,9 @@ impl Supervisor {
 
     /// Update Claude Code on this machine, and record what happened.
     ///
-    /// Nothing is stopped. The new version installs beside the running one
-    /// and takes effect at its next start, which is upstream's own model —
-    /// so a session mid-turn is untouched and the server keeps the binary it
-    /// has until `restart` moves it.
+    /// Nothing is stopped; the server keeps the binary it has until
+    /// `restart` moves it (the module doc, claude/mod.rs, says why the two
+    /// are separate).
     ///
     /// `claude update` for every install: it is the supported verb for a
     /// native or npm one, and for a package-manager one it is a documented
@@ -164,13 +163,14 @@ impl Supervisor {
     /// Ten minutes, because this downloads ~80 MB over whatever line the
     /// machine has. Slow is not stuck; a hung process is killed at the end
     /// of it and reported as one.
+    ///
     /// ON ITS OWN THREAD, and that is not an optimisation. This is called
-    /// from the tray's tick, which runs every five seconds and is the only
-    /// thing that reports to the service, restarts the server and drains the
-    /// menu. Running an ~80 MB download inline would freeze all of it for up
-    /// to ten minutes — the box would see the tray stop reporting and say
-    /// "nobody logged on", which is the opposite of what just happened.
-    /// `tick` collects the result through the slot below.
+    /// from the tray's loop, the only thing that reports to the service,
+    /// restarts the server and drains the menu. Running the download inline
+    /// would freeze all of it for up to ten minutes — the service would see
+    /// the tray stop reporting and the box would say "nobody logged on",
+    /// the opposite of what just happened. `tick` collects the result
+    /// through `update_slot`.
     pub fn update_claude(&mut self) {
         if self.updating {
             tracing::info!("a claude update is already running; ignoring the request");

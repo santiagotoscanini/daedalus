@@ -1,7 +1,9 @@
 #!/bin/sh
 # The agent's gate, from a Linux box without Rust on it: fmt, clippy for
 # Linux, Windows and macOS, and the tests, in a throwaway rust container.
-# Prints "GATE OK" only when every part passed; exits non-zero otherwise.
+# `fmt` and `all` run `cargo fmt`, which rewrites the tree; every mode ends
+# with `cargo fmt --check`. Prints "GATE OK" only when every part passed;
+# exits non-zero otherwise.
 # Usage: agent/gate.sh [fmt|check|test|all]   (default all)
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"

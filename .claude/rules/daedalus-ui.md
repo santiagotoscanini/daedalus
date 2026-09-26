@@ -33,18 +33,19 @@ on an element beats them. Both directions matter.
 
 ## Writing a component
 
-The migration from hand-written CSS finished on 2026-09-08: no
-component names a class `styles.css` defines (`scripts/dead-css.mjs`
-checks). What the converted code looks like, and what a new one must:
+No component names a class `styles.css` defines (`scripts/dead-css.mjs`
+checks). What a component looks like:
 
 1. Utilities through `cn()` (`src/lib/cn.ts`), which lets a caller's
    `className` override the component's own. Repeated class strings
    are module-level `UPPER_CASE` constants; the shared ones live in
-   the directory's `shared.tsx` (`BOARD_FOOT`, `SECTION_HEAD`, `MONO`,
-   `GHOST_BTN`…) — reuse before re-spelling.
+   `src/components/tokens.ts` (`MONO`, `FOOT`, `ROW`…), `viz.tsx`
+   (`BOARD`, `STAT`…) and a directory's `shared.tsx` (`BOARD_FOOT`,
+   `SECTION_HEAD`, `GHOST_BTN`…) — reuse before re-spelling.
 2. Reach for a shadcn primitive in `src/components/ui/` before
-   hand-rolling: `Card` for a panel, `Badge` for a pill, `Select` for
-   a closed list, `Field` for a form row, `Alert` (body in
+   hand-rolling: `Card` for a panel, `Badge` for a pill, `Picker` for
+   a closed list (it wraps `Select`; nothing else uses `Select`
+   directly), `Field` for a form row, `Alert` (body in
    `AlertDescription`, never bare text — its grid puts bare text in a
    zero-width column). The kit holds only what something renders: a
    primitive nothing uses is deleted, and added back from shadcn
@@ -55,10 +56,11 @@ checks). What the converted code looks like, and what a new one must:
    quiet bordered one, `ghost` muted text, `destructive` outlined in
    the danger colour. A link styled as a button is `<Button asChild>`.
    Never hand-roll a `BTN_*` constant beside it.
-4. **Keep an exported API identical** when restyling. These components
-   have ~65 call sites; a props change turns a restyle into a refactor.
+4. **Keep an exported API identical** when restyling. The shared
+   components have many call sites; a props change turns a restyle into
+   a refactor.
 5. A loading skeleton borrows the real component's box constant
-   (`BOARD`, `STAT_BAND`, `APP_LIST`…) rather than approximating it,
+   (`BOARD`, `STAT_STRIP`, `APP_LIST`…) rather than approximating it,
    so nothing reflows when data lands.
 
 ## Tone is a variable, not a class
@@ -86,8 +88,7 @@ colour on a component that does NOT take a tone is fine as a utility.
 
 - **Never write a hex, `rgb()` or `oklch()` outside `theme.css`.** If
   a component needs a colour the tokens do not have, the answer is a
-  new token, not a literal. This was already violated eleven times by
-  one blue that is now `--info`.
+  new token, not a literal.
 - **Never use Tailwind's built-in palette** (`text-gray-400`,
   `bg-zinc-900`). Those are fixed values that ignore the theme; a
   preset swap would leave them behind. Only token-backed colours
@@ -115,13 +116,12 @@ a generic icon set does not survive.
 ## Verifying a restyle
 
 `pnpm typecheck` and `pnpm lint` do not see a single pixel, and there
-are no component tests — the suite is node-side table tests over
-`src/lib` and `src/host`. So the check is a browser:
+are no component tests — the suite is node-side tests over `src/lib`,
+`src/core`, `src/host` and the modules' data. So the check is a browser
+(the shotter command in the root `CLAUDE.md`):
 
-1. `events.json` before the pictures, always. Baseline under the gate
-   is **2 page errors per load** (the HMR websocket 302s, plus a
-   known `Date.now()` hydration mismatch). Anything above that is
-   yours.
+1. `events.json` before the pictures, always, against the baseline of
+   page errors `CLAUDE.md` names. Anything above that is yours.
 2. Compare against a before-shot of the same page. Restyling is
    supposed to change how a page looks, so "it renders" is not the
    bar — the bar is that nothing LOST information: no dropped label,

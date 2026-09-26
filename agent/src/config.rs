@@ -45,7 +45,8 @@ pub struct Config {
     /// supervises it). Same rule: the box's policy replaces it once approved.
     pub claude_remote_control: bool,
     /// The directory the server runs in — where a session opened from
-    /// claude.ai lands. Empty means the user's profile directory.
+    /// claude.ai lands. Empty means the most recently used trusted project
+    /// (claude/workdir.rs).
     pub claude_workdir: Option<String>,
 }
 

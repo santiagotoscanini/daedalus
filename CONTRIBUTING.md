@@ -32,11 +32,9 @@ dev entrypoint both take. The 7-day `minimumReleaseAge` cooldown is
 re-verified on every install, `--frozen-lockfile` included; it costs about
 three seconds and needs no configuration.
 
-Install is 264 packages and 189 MB, done in seconds. Lint, typecheck, test
-and build take under fifteen seconds together; 857 tests pass and 2 skip —
-those two read the host's `/etc/nixos` and skip everywhere else. Nothing in
-the four opens a database or a socket. The clone stays clean afterwards:
-`routeTree.gen.ts`, `dist/` and `.output/` are all gitignored.
+Nothing in the four opens a database or a socket, and the clone stays
+clean afterwards: `routeTree.gen.ts`, `dist/` and `.output/` are all
+gitignored.
 
 ## Running it
 
@@ -47,7 +45,7 @@ docker run -d --name daedalus-dev-db -p 127.0.0.1:5432:5432 \
 
 cd app
 export DATABASE_URL=postgres://daedalus:devpass@127.0.0.1:5432/daedalus
-pnpm db:migrate    # six tables into an empty database
+pnpm db:migrate    # the schema into an empty database
 pnpm dev           # http://localhost:3000
 ```
 
@@ -77,8 +75,8 @@ After which `/apps` renders its empty state — 0 running, and Add an app.
 ## What a laptop sees
 
 Every other route answers 200 with no further setup. The category pages
-(`/c/home`, `/c/system`, `/c/network`, `/c/ai`, `/c/media`, `/c/gaming`,
-`/c/monitoring`), `/apps/new`, `/settings` and `/claude` all render whole:
+(`/c/<id>`, one per directory under `src/modules/`), `/apps/new`,
+`/settings` and `/claude` all render whole:
 the rail, the panels, the prose. What is missing is the readings. Those
 come from host snapshots at paths like `/system/system.json` and from
 Prometheus and Loki, and the snapshot reader treats an absent file as
@@ -93,11 +91,12 @@ together without one.
 
 ## There is no login locally
 
-The deployed app has no auth of its own. Traefik's forward-auth sits in
-front of it and passes `X-Forwarded-User` and `X-Forwarded-Email`; the app
-trusts them because the bridge it sits on has traefik as its only other
-member. Locally nothing sets those headers and nothing blocks you — every
-route answers. The one visible difference is the account button at the foot
+The deployed app has no auth of its own beyond a break-glass password
+login that stays off unless site.json turns it on (`core/local-login.ts`).
+Traefik's forward-auth sits in front of it and passes `X-Forwarded-User`
+and `X-Forwarded-Email`; the app trusts them because the bridge it sits on
+has traefik as its only other member. Locally nothing sets those headers
+and nothing blocks you — every route answers. The one visible difference is the account button at the foot
 of the rail, which reads `Account` with no name: `fetchAccount` catches the
 lookup failure and returns null, because a shell that cannot say who you
 are still has to render. Setting the headers by hand buys nothing without a
@@ -114,17 +113,17 @@ request. Reload the page yourself.
 
 ## What you cannot do here
 
-Apply, deploys, builds, image updates and the logs panel all go through
-file-drop bridges that the NixOS module mounts into the container, and that
-module is not in this repository yet (`PLAN.md`, Phase 11). The pages
-render and the write paths are not exercisable locally. Changes to them are
+Apply, deploys, builds and image updates go through file-drop bridges whose
+host half is the NixOS module in `nix/stacks/daedalus/`, and the logs panel
+reads a Loki the host runs. Without a NixOS host running that module the
+pages render and the write paths are not exercisable. Changes to them are
 best reviewed as code plus a test; `pnpm test` covers the bridge, build and
 contract logic without a host.
 
 ## Building and running the built server
 
-The box runs `vite dev`; this is the other way to run the same app, and what
-a released image will do (`PLAN.md`, Phase 10b).
+The developing box runs `vite dev`; this is the other way to run the same
+app, and what the published image does.
 
 ```
 cd app

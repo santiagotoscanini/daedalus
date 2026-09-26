@@ -7,16 +7,17 @@
 # What each job proves:
 #   app        frozen install, route generation + tsc, biome, vitest, the
 #              production build, and that src/host/schema.ts and drizzle/ agree
+#   nix        `nix flake check` — formatting and lint over every .nix file,
+#              and the test hosts under nix/tests evaluated as whole systems
 #   workflows  actionlint and zizmor over every file in .github/workflows
 #   codeql     CodeQL's JavaScript/TypeScript and Actions queries; findings land
 #              in the Security tab rather than failing the run
 #
 # The app job runs every check even after one fails, so a lint error does not
-# hide a broken test. There is no nix or shell in this repository yet: the NixOS
-# module lives in the private machine configuration until PLAN.md Phase 11 moves
-# it here, and the nix checks join this file then.
+# hide a broken test.
 #
 # website/ has its own workflow (website.yml) and does not trigger this one.
+# The agent's own checks are agent.yml's.
 #
 # Convention (same as website.yml): third-party actions are pinned to full
 # commit SHAs, and container images to digests.
@@ -117,10 +118,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
-      # nixfmt, statix and deadnix over every .nix file, plus nix's own check
-      # that each exported nixosModule is a module. It does NOT evaluate a
-      # system: the modules read registries that some stacks still declare in
-      # the operator's private config, so there is no system here to build yet.
+      # nixfmt, statix and deadnix over every .nix file, nix's own check that
+      # each exported nixosModule is a module, and the flake's `checks`:
+      # templates/config evaluated as a host (minimal-host), that host with
+      # every catalog leaf switched on (full-catalog), and the schema fixtures.
       - run: nix flake check --print-build-logs
 
   workflows:

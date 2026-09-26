@@ -251,7 +251,8 @@ this tree has.)
 - **`nixpkgs-unstable` is a `specialArg` two modules ask for**
   (`platform/claude-code`, `stacks/daedalus/builder.nix`). The modules take
   nothing from this flake's inputs, so the host must hand it in (the
-  `nixpkgs-unstable` input here feeds only `checks.minimal-host`); say so in `nix/README.md` if you
+  `nixpkgs-unstable` input here feeds only the test hosts under
+  `nix/tests/`); say so in `nix/README.md` if you
   add a third.
 - **Every container unit is `Type=oneshot` + `RemainAfterExit`** (rootless
   podman cannot do notify). A green unit proves nothing about the

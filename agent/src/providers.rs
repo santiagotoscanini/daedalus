@@ -18,7 +18,7 @@ use crate::telemetry::App;
 /// One provider as the telemetry document carries it.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProviderReport {
-    /// "lemonade" | "ollama"
+    /// `Provider::kind`: "lemonade", the only one so far.
     pub kind: String,
     /// The port it answers on, or would.
     pub port: u16,

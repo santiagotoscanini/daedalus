@@ -11,8 +11,9 @@ use crate::telemetry::{Battery, Disk, Process, Service};
 
 /// `launchctl list` in the system domain: a "PID\tStatus\tLabel" header,
 /// then one row per job — PID "-" when not running, Status its last exit
-/// status. The jobs whose last exit was not 0, Apple's own excluded (they
-/// exit non-zero as a matter of course), and how many rows there were.
+/// status. The jobs not running whose last exit was not 0, Apple's own
+/// excluded (they exit non-zero as a matter of course), and how many rows
+/// there were.
 pub(super) fn parse_launchctl(text: &str) -> (Vec<Service>, u32) {
     let mut count = 0u32;
     let mut down = Vec::new();

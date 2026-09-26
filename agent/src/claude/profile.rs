@@ -23,7 +23,7 @@ pub fn claude_dir() -> Option<PathBuf> {
 }
 
 /// Sessions reported, at most; a profile with hundreds of stale files
-/// would otherwise make every hello a long one.
+/// would otherwise make every report the tray sends a long one.
 const MAX_SESSIONS: usize = 40;
 
 fn pid_alive(pid: u32) -> bool {

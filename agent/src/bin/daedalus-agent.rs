@@ -1,11 +1,6 @@
-//! The service executable and its verbs. See the crate root for the layout.
-//!
-//!   install    register the service, the tray, the firewall rule and the data dir; start
-//!   uninstall  stop and remove all of that
-//!   run        the service entry point — what the Service Control Manager calls
-//!   serve      the same work in the foreground, for a terminal
-//!   status     print what the running agent reports
-//!   update     ask the release feed now (`--apply` to install what it finds)
+//! The service executable and its verbs; `print_help` below is the list.
+//! `run` is what the Service Control Manager (launchd on macOS) calls;
+//! `serve` is the same work in the foreground, for a terminal.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -83,9 +78,9 @@ fn serve_foreground() -> Result<()> {
 }
 
 /// A Ctrl-C hook without a crate: on Windows through the console control
-/// handler, on unix through `signal(2)`; elsewhere by ignoring it (the
-/// foreground mode is a convenience
-/// there, not a deployment).
+/// handler, on unix through `signal(2)` (SIGINT and SIGTERM); elsewhere by
+/// ignoring it (the foreground mode is a convenience there, not a
+/// deployment).
 fn ctrlc_handler<F: Fn() + Send + Sync + 'static>(f: F) {
     #[cfg(windows)]
     {

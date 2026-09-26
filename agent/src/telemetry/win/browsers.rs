@@ -430,7 +430,7 @@ pub(super) fn read_browsers(errors: &mut Vec<String>) -> Vec<Browser> {
         }
     }
 
-    // What is running, by image name, from the snapshot the sample uses.
+    // What is running, by image name, from a fresh process snapshot.
     let running: HashSet<String> = match process_snapshot() {
         Ok(entries) => entries
             .into_iter()

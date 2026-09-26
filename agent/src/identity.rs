@@ -4,10 +4,11 @@
 //! The box keys everything it knows about a machine on the public half, so
 //! the private half IS the machine's identity: a copy of the file on another
 //! computer would let it impersonate this one. On Windows the seed is
-//! wrapped with DPAPI under the machine's scope before it touches disk — the
-//! file is only readable back on this machine, by a process on it (and the
-//! service runs as SYSTEM, so ordinary users still cannot). Elsewhere the
-//! seed is a plain file, mode 0600, which is the ordinary SSH-key posture.
+//! wrapped with DPAPI under the machine's scope before it touches disk, so a
+//! copy is useless on any other computer — but any process on THIS machine
+//! can unwrap it, so keeping local users out rests on the file's ACL (see
+//! `write_private`). Elsewhere the seed is a plain file, mode 0600, which is
+//! the ordinary SSH-key posture.
 //!
 //! Signing is over bytes the caller hands in; see hello.rs for what is
 //! signed and why it is the serialised string and not the value.
@@ -78,9 +79,8 @@ fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
     }
     #[cfg(not(unix))]
     {
-        // ProgramData\daedalus-agent is created by the installer running as an
-        // administrator, so it inherits an ACL ordinary users cannot read; the
-        // DPAPI wrapping is the layer that matters here.
+        // No ACL is set: the file inherits ProgramData's, whose default lets
+        // the Users group read. DPAPI only binds it to this machine.
         std::fs::write(path, bytes).with_context(|| format!("writing {}", path.display()))
     }
 }

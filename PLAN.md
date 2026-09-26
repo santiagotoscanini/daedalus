@@ -29,7 +29,7 @@ either done or was decided against ("Not in v1").
 |---|---|---|
 | 8 | Auth hardening | armed; the break-glass login has never been tried against a real IdP outage |
 | 9 | Nix: enable surface, literals, state out of the tree | nothing for the engine; two usernames in private stacks become options when those stacks move (Phase 11) |
-| 10 | App module system and a real build | 10a: three host clients still reached around `Ctx`; 10b: the first `v*` tag, the operator's call |
+| 10 | App module system and a real build | 10a: data files still import some `host/` readers directly; 10b: the first `v*` tag, the operator's call |
 | 11 | The engine becomes importable | 23 stacks are still the reference host's own; the host names the engine's 55 files one by one instead of `nixosModules.default` |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
@@ -189,13 +189,11 @@ requires a dataset mounted at its root.
 
 ### Phase 10 — App module system and build
 
-- **10a, the last seam.** The data files under `src/modules/*/data/` reach
-  `host/prom`, `host/loki` and `host/keys` directly — 24 files today —
-  rather than through `Ctx`. The capability set already covers env, hosts,
-  secrets, snapshots and the store; those three clients are what stands
-  between a module and a test against a fake `Ctx` alone. Fold them in as
-  `ctx.prom`, `ctx.loki`, `ctx.keys`, and extend the boundary test that
-  forbids `process.env` under `src/modules/` to forbid `host/*` imports too.
+- **10a, the last seam.** `ctx.prom`, `ctx.loki` and `ctx.secret` are in,
+  and the boundary test refuses a value import of those three clients under
+  `src/modules/*/data/`. What a data file still imports from `host/`
+  directly — nix-manifest, hosts, workspaces, the contract domains — is the
+  rest of the seam (the test's own comment names them).
 - **10b, the first tag.** The image builds, walks (`scripts/image-walk.sh`
   is run before a tag) and runs a box in dev mode as its `runtime` stage;
   `.github/workflows/image.yml` publishes to ghcr on a `v*` tag and has never
@@ -203,9 +201,8 @@ requires a dataset mounted at its root.
   `app/package.json`, add `LICENSE`, tag `v<version>`, push the tag. The
   ghcr package is private until its visibility is changed by hand. amd64
   only — the run stage holds the build platform's argon2 binary. The config
-  still binds the `VITE_` spellings of the identity env; rename them to
-  `BASE_DOMAIN`, `GITHUB_OWNER`, `REGISTRY_HOST`, `GRAFANA_URL` and drop the
-  fallback.
+  binds the bare identity names now; `host/site.ts` still falls back to the
+  old `VITE_` spellings, and that fallback can go.
 
 ### Phase 11 — The engine becomes importable (the leaves remain)
 
@@ -238,10 +235,6 @@ daedalus and the schema fixtures are in. What remains:
    positions. Once nothing is left to interleave with, one deliberate,
    separately-gated rebuild replaces the list with the single import; its
    closure diff will not be empty and must be read line by line.
-3. **`README.md` and `CONTRIBUTING.md` still say the module "is not in
-   this repository yet"** (the paragraph after `README.md`'s layout table, `CONTRIBUTING.md` lines
-   119 and 127). Rewrite
-   those paragraphs for what the repo is now.
 
 Decisions already taken for the moves, so they are not re-litigated: the
 identity interface stays in `platform/identity.nix`; `catalogModules` lists
@@ -673,16 +666,14 @@ What exists: `ARCHITECTURE.md` (5 Mermaid diagrams; Mermaid stays in the repo
 by decision), `BUILDS.md`, `CONTRIBUTING.md`, `nix/README.md`,
 `agent/README.md`, and the website's boundary document. Missing:
 
-- **Bridge API reference.** The file-drop request shapes (apply, build,
-  cancel, site-write, secret-apply, secret-set, workspace-clone,
-  deploy-trigger, image-update, export-publish, task-run, claude-resume,
-  claude-rc, engine-update, power) have no standalone doc beyond the code
+- **Bridge API reference.** The file-drop request shapes of the verbs in
+  `ARCHITECTURE.md`'s bridge table have no standalone doc beyond the code
   and `apply.sh`'s subject cases.
 - **Operational runbook** for the build pipeline beyond what `BUILDS.md`
   covers — what to do when a build hangs, how to force-rebuild, how to read
   the build log, how to cancel.
-- **The stale paragraphs** in `README.md` and `CONTRIBUTING.md` (Phase 11,
-  item 3) and an agent section in `ARCHITECTURE.md` (feature 6).
+- **An agent section in `ARCHITECTURE.md`** (feature 6); today it has the
+  node's trust boundary and the `nodes` table, nothing more.
 - **An install guide** for a stranger's box (Phase 12).
 
 ## Verification owed (cross-cutting)

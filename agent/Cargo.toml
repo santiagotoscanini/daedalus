@@ -19,8 +19,9 @@ name = "daedalus-agent"
 path = "src/bin/daedalus-agent.rs"
 
 # The tray: a windowless program in the desktop session that shows what the
-# service reports. Separate binary so it can be a GUI-subsystem executable
-# (no console window at logon) while the verbs keep their console.
+# service reports and supervises Claude Code. Separate binary so it can be a
+# GUI-subsystem executable (no console window at logon) while the verbs keep
+# their console.
 [[bin]]
 name = "daedalus-agent-tray"
 path = "src/bin/daedalus-agent-tray.rs"

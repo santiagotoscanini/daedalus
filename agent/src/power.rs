@@ -1,8 +1,10 @@
 //! Keeping the machine awake.
 //!
-//! Two lines of defence, both taken at start:
+//! Two lines of defence, both taken whenever the policy turns the hold on
+//! (`agent_main`, lib.rs):
 //!
-//! 1. A power request, held for the life of the process. On Windows that is
+//! 1. A power request, held until the policy turns it off or the process
+//!    ends. On Windows that is
 //!    `PowerCreateRequest` + `PowerSetRequest` with `PowerRequestSystemRequired`
 //!    — what Windows itself uses and what `powercfg /requests` lists, with
 //!    the reason string beside it. On macOS it is an IOKit power assertion

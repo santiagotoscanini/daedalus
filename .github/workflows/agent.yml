@@ -1,7 +1,7 @@
 # The agent (agent/ — the Rust service for machines the box does not run).
 #
-# `check` runs on every push and PR that touches agent/: fmt, clippy with
-# warnings denied, and the tests, on Windows and macOS (the targets that
+# `check` runs on every PR and push to main that touches agent/: fmt, clippy
+# with warnings denied, and the tests, on Windows and macOS (the targets that
 # ship) and Linux (where the tests also run and where the box does its own
 # checks). On an `agent-v*` tag, `build-windows` and `build-macos` produce
 # the binaries, and `release` signs every one with the release key and

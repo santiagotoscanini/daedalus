@@ -7,7 +7,8 @@
 //! modules — are read once at start and again every hour. The SLOW ones —
 //! the physical drives with their health counters, the services that
 //! should be running and are not, the browsers and the installed
-//! applications — every ten minutes, because they cost a shell-out. The SAMPLED ones — processor and GPU usage, memory, volumes,
+//! applications — every ten minutes, because they cost a shell-out. The
+//! SAMPLED ones — processor and GPU usage, memory, volumes,
 //! temperatures, network counters, the heaviest processes — every
 //! `SAMPLE_EVERY` on a thread of their own. OS updates are a fourth thing:
 //! a search that can take a minute and touch the network, run hourly on its
@@ -17,14 +18,13 @@
 //!
 //! Two views of the document. The OPEN status page carries `public()`:
 //! nothing that identifies a person — no serial numbers, no process list, no
-//! service list, no pending updates, no installed applications — because
-//! the page answers the whole LAN. The box, holding the node token, reads the full document at
-//! `GET /telemetry` (status.rs) and draws the same pages it draws for
-//! itself.
+//! service list, no updates, no installed applications, no browser install
+//! paths — because the page answers the whole LAN. The box, holding the
+//! node token, reads the full document at `GET /telemetry` (status.rs) and
+//! draws the same pages it draws for itself.
 //!
 //! The document's types are in model.rs and its Prometheus rendering in
-//! metrics.rs; both are re-exported here, so `telemetry::Telemetry` and
-//! `telemetry::metrics_text` are where they always were.
+//! metrics.rs; both are re-exported here.
 
 mod metrics;
 mod model;
@@ -45,7 +45,7 @@ use crate::status::Shared;
 
 /// How often the sampled facts are read.
 pub const SAMPLE_EVERY: Duration = Duration::from_secs(15);
-/// How often the slow facts (drives, services) are re-read.
+/// How often the slow facts (drives, services, browsers, apps) are re-read.
 pub const SLOW_EVERY: Duration = Duration::from_secs(600);
 /// How often the static facts are re-read (a firmware update, a new drive).
 pub const STATIC_EVERY: Duration = Duration::from_secs(3600);
@@ -56,8 +56,9 @@ pub const UPDATES_EVERY: Duration = Duration::from_secs(3600);
 pub const TOP_PROCESSES: usize = 12;
 
 /// The inventory in the order the page lists it: by name, case aside, one
-/// entry per (name, version) — the 64-bit and 32-bit Uninstall views both
-/// list a product that registered under each.
+/// entry per (name, version): Windows' 64-bit and 32-bit Uninstall views
+/// both list a product that registered under each, and a Mac can hold the
+/// same bundle in `/Applications` and `~/Applications`.
 pub fn tidy_apps(mut apps: Vec<App>) -> Vec<App> {
     apps.sort_by(|a, b| {
         a.name
@@ -71,8 +72,8 @@ pub fn tidy_apps(mut apps: Vec<App>) -> Vec<App> {
 
 /// What a platform provides. The collector keeps whatever it needs between
 /// samples (previous CPU times, previous network counters, previous
-/// per-process CPU times).
-/// The platform's `Collector` is a struct that implements this and `Default`.
+/// per-process CPU times). The platform's `Collector` implements this and
+/// `Default`.
 pub trait Collect {
     fn read_static(&mut self) -> Static;
     fn read_slow(&mut self) -> Slow;

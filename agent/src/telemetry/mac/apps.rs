@@ -145,8 +145,8 @@ fn modified_day(path: &str) -> Option<String> {
     stamp.get(..10).map(str::to_string)
 }
 
-/// Everything installed under `/Applications` (and one folder down) and
-/// the console user's `~/Applications`: name and version from each
+/// Everything installed under `/Applications` and the console user's
+/// `~/Applications` (each with one folder down): name and version from each
 /// bundle's `Info.plist`, the day the bundle was written, and where it
 /// came from. Homebrew's own list is not asked for — `brew` refuses to run
 /// as root, which the daemon is. The error lines name bundles, not paths,

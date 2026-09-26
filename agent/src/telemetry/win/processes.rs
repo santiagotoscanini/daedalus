@@ -1,6 +1,7 @@
 //! Processes: one Toolhelp snapshot for names and pids, then each one's
 //! working set and CPU time where the service can open it. The browsers
-//! tier reads the same snapshot to tell which browser is running.
+//! read takes a snapshot of its own through `process_snapshot` to tell
+//! which browser is running.
 
 use windows::Win32::Foundation::{CloseHandle, FILETIME};
 use windows::Win32::System::Diagnostics::ToolHelp::{

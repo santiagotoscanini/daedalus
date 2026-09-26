@@ -273,7 +273,7 @@ fn parse_store(v: &Value) -> Vec<App> {
         .collect()
 }
 
-/// Everything installed, from the four places Windows records it: the
+/// Everything installed, from where Windows records it: the
 /// Uninstall keys (both views, and the console user's own hive for
 /// per-user installs), the Epic manifests, and the Store through one
 /// PowerShell with a deadline. The registry and the manifests are

@@ -45,23 +45,20 @@ to match. The craftsman, not the labyrinth.
 | Where | What |
 |---|---|
 | [`app/`](app/) | Daedalus itself — the TypeScript app (TanStack Start + React 19, drizzle-orm, Tailwind v4). |
+| [`nix/`](nix/) | The NixOS side: the platform layer, the control plane's own module and its host agents (the bridges that apply, build, deploy and snapshot on the app's behalf), and the catalog of stacks a host can switch on. Exported by [`flake.nix`](flake.nix); [`nix/README.md`](nix/README.md) says how a host imports it and what is not done yet. |
+| [`templates/config/`](templates/config/) | A host to start from (`nix flake init -t github:santiagotoscanini/daedalus#config`). |
+| [`agent/`](agent/) | The Rust service for the other machines the box talks to — [`agent/README.md`](agent/README.md). |
 | [`website/`](website/) | The landing site and the [external-setup docs](https://daedalus.toscanini.me/docs), deployed to GitHub Pages by [`.github/workflows/website.yml`](.github/workflows/website.yml). |
-| [`.claude/`](.claude/) | Path-scoped rules for Claude Code sessions working on the app and its UI. |
+| [`.claude/`](.claude/) | Path-scoped rules for Claude Code sessions working on the app, its UI and the nix tree. |
 | [`PLAN.md`](PLAN.md) | What is still missing, and how to build it — forward-looking only; what landed is in git history. |
-
-The NixOS module that runs the app is not in this repository yet. It
-lives in the author's machine configuration, alongside the host-side
-agents (the bridges that apply, deploy and snapshot on the app's
-behalf) and the platform layer it depends on. It moves here as an
-importable module in Phase 11 of [`PLAN.md`](PLAN.md); today this repo is
-the app and its site.
 
 ## Developing
 
-The app runs as a `source.mode = "local"` app on the machine it
-manages: the container bind-mounts `app/` and runs the Vite dev server
-against it, so saving a file is the deploy. `CLAUDE.md` has the loop,
-the verification commands and where everything else lives.
+On the machine that develops it, the control plane runs in dev mode
+(`fleet.daedalus.dev`): the container bind-mounts `app/` and runs the
+Vite dev server against it, so saving a file is the deploy.
+[`CLAUDE.md`](CLAUDE.md) has the loop, the verification commands and
+where everything else lives.
 
 None of that is needed to work on it. Node 24, a throwaway Postgres and
 one environment variable are enough, and the checks need nothing at all:

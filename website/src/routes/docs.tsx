@@ -130,16 +130,16 @@ const SECTIONS: DocSection[] = [
     rows: [
       {
         name: "the config repo",
-        body: "Private. It holds the machine: every stack, every sops-encrypted secret, and the ledger of what's outside it. A deploy SSH key, its public half registered by hand in account settings, signs the weekly autoupgrade push.",
+        body: "Private. It holds the machine: every stack, every sops-encrypted secret, and the ledger of what's outside it. A deploy SSH key, its public half registered by hand in account settings, authenticates the weekly autoupgrade push.",
         tag: "re-issuable",
       },
       {
         name: "one repo per app",
-        body: "Each app is a repo. A push to main reaches the box as a webhook, which builds the image on its own hardware (Railpack when the repo carries a railpack.json, its Dockerfile otherwise) and pushes it to the box's registry; the deploy timer picks up the digest change.",
+        body: "Each app is a repo. A push to main reaches the box as a webhook, which builds the image on its own hardware (Railpack, unless the repo has a Dockerfile and no railpack.json) and pushes it to the box's registry, then starts the app's deploy.",
       },
       {
         name: "the box's own GitHub App",
-        body: "Created and installed from the control plane. Its private key is sealed into the config repo and stays host-side; the container only ever sees a one-hour installation token, scoped to reading contents and writing checks and deployments.",
+        body: "Created and installed from the control plane. Its private key is sealed into the config repo and stays host-side; the container only ever sees a one-hour installation token, scoped to reading contents and Actions runs and writing checks and deployments.",
         tag: "re-issuable",
       },
       {

@@ -9,8 +9,8 @@ path-scoped rules load as you touch files.
   drizzle-orm, Tailwind v4 + shadcn) and its public landing site
   (`website/`, a standalone pnpm project deployed to GitHub Pages by
   `.github/workflows/website.yml`). Public: `santiagotoscanini/daedalus`.
-- **Also is:** the app builder. Since 2026-09-12 daedalus owns the fleet's
-  image builds — the box's GitHub App takes the push webhook, the queue and
+- **Also is:** the app builder. Daedalus owns the fleet's image builds —
+  the box's GitHub App takes the push webhook, the queue and
   the `build` bridge verb live in `app/src/lib/` (`builds.ts`,
   `build-queue.ts`) and `app/src/host/` (`build-bridge.ts`, the half that
   touches the disk), the driver that dispatches them and
@@ -37,29 +37,35 @@ path-scoped rules load as you touch files.
   check`, commit on `main`, push,
   then `nix flake update daedalus` + a rebuild in the configuration.
   Read `nix/README.md`, and `.claude/rules/nix-engine.md` loads on
-  `nix/**`. It is NOT yet a module a stranger can import and evaluate —
-  the stacks it rides on are still in the private configuration (plan
-  Phase 11); do not describe it as finished.
+  `nix/**`. `templates/config` evaluates as a whole host in `nix flake
+  check`, but most of the reference host's stacks are still in its private
+  configuration — `nix/README.md` "What is NOT done yet" is the list; do
+  not describe the engine as finished.
 - The `website/` docs page inventories the operator's external setup.
   Keep it honest about what the linked repo contains.
 
 ## The dev loop
 
-On the box, the running container bind-mounts this clone's `app/` at
-`/app` (`source.mode = "local"`) and runs the Vite dev server against
-it. What a change needs:
+On the box, the running container is in dev mode (`fleet.daedalus.dev`):
+it bind-mounts this clone's `app/` at `/app` and runs the Vite dev server
+against it. What a change needs:
 
 - `app/src/**` → nothing. Saving the file is the deploy; Vite compile
   errors land in `podman logs app-daedalus`.
 - `app/package.json` → `sudo systemctl restart podman-app-daedalus`
   (re-runs `pnpm install --frozen-lockfile`; the npm registry is a hard
-  startup dependency, minutes on a cold cache).
+  startup dependency, minutes on a cold cache). `dependencies` holds only
+  what the built server resolves at run time; everything the build
+  bundles, React included, is `pnpm add -D` — CONTRIBUTING.md "Building
+  and running the built server" says why, and `check-build` enforces it.
 - routes added/renamed → `pnpm generate-routes`, or `pnpm typecheck`,
   which runs it. `app/src/routeTree.gen.ts` is generated and
   gitignored; never edit it.
 - schema changes → `pnpm db:generate` / `pnpm db:migrate`.
-- anything under `nix/` → `nix fmt` + `nix flake check`, commit on `main`, push, then
-  `nix flake update daedalus` and a rebuild in the configuration repo.
+- anything under `nix/`, and the image's context (`Dockerfile`,
+  `docker-entrypoint.sh`) → `nix fmt` + `nix flake check`, commit on
+  `main`, push, then `nix flake update daedalus` and a rebuild in the
+  configuration repo.
 
 No node/pnpm on the host: everything runs inside the container.
 
@@ -96,8 +102,11 @@ against that, not zero.
 ## The rules are the guides
 
 `.claude/rules/daedalus-app.md` (loads on `app/**`) is the architecture
-map, the data-flow rules (snapshot mounts, env schema, file-drop
-bridges, the escalating-retry ladder) and the style rule.
+map, the data-flow rules (snapshot mounts, env schema, the app side of
+the file-drop bridges, the escalating-retry ladder) and the style rule.
+`ARCHITECTURE.md` and `BUILDS.md` are the design as a reader outside the
+code needs it — the bridge protocol and its verb table, the two loops,
+trust boundaries — and the MCP server serves both to agents.
 `.claude/rules/daedalus-ui.md` (loads on `app/src/components/**`,
 `app/src/routes/**`, `app/src/*.css`) is how to write a component:
 the three stylesheets, the cascade layer order, the colour-literal ban.

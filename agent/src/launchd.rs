@@ -7,15 +7,12 @@
 //!
 //! Root for the same two reasons as LocalSystem on Windows: the power
 //! assertion should outlive any login, and the updater writes over the
-//! binaries. Where they live:
-//!
-//!   /Library/Application Support/daedalus-agent/bin/daedalus-agent        the service
-//!   /Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the tray
-//!   /Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,logs/}
+//! binaries. The file layout is in agent/README.md, "On the machine".
 //!
 //! An update swaps the binaries in place (unix lets a running file be
 //! renamed away) and exits; launchd's KeepAlive brings the service back on
-//! the new one, and the tray relaunches itself as on Windows.
+//! the new one; the tray sees the new version on the page and exits, and
+//! KeepAlive starts it again too.
 //!
 //! `run` is `agent_main` with SIGTERM as the stop: launchd sends it on
 //! `bootout` and at shutdown.
@@ -98,8 +95,9 @@ fn plist(label: &str, program: &Path, args: &[&str], log: &Path, agent: bool) ->
     for a in args {
         argv.push_str(&format!("      <string>{a}</string>\n"));
     }
-    // A LaunchAgent is loaded into every Aqua session and, being Interactive,
-    // may draw; the daemon is Background.
+    // The LaunchAgent loads only into Aqua (GUI login) sessions and runs as
+    // Interactive, so launchd does not throttle it like a background job;
+    // the daemon is Background.
     let session = if agent {
         "    <key>LimitLoadToSessionType</key>\n    <string>Aqua</string>\n    <key>ProcessType</key>\n    <string>Interactive</string>\n"
     } else {
@@ -217,7 +215,8 @@ pub fn install(cfg: &Config) -> Result<()> {
 }
 
 /// `daedalus-agent uninstall`: stop and remove both jobs. The binaries,
-/// config and identity stay for the installer script to remove or keep.
+/// config and identity stay on disk; nothing here or in install.sh deletes
+/// them.
 pub fn uninstall() -> Result<()> {
     if !is_root() {
         bail!("uninstall needs root: sudo daedalus-agent uninstall");

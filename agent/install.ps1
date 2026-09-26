@@ -3,20 +3,21 @@
   Install or update the daedalus agent on this Windows machine.
 
 .DESCRIPTION
-  Downloads the newest agent-v* release of the engine repository, places it
-  under Program Files, registers it as a service that starts at boot, and
-  starts it. From then on the agent keeps this machine awake, answers a
-  status page on TCP 7787 for the LAN, and updates itself. Run from an
-  administrator PowerShell:
+  Downloads the newest agent-v* release of the engine repository, places the
+  service and the tray under Program Files, and runs `daedalus-agent install`
+  (the service, the tray's Run key, the firewall rule, config.toml). From
+  then on the agent keeps this machine awake, answers a status page on TCP
+  7787 for the LAN, announces itself to the box, and updates itself. Run
+  from an administrator PowerShell:
 
     Set-ExecutionPolicy -Scope Process Bypass -Force
     irm https://daedalus.toscanini.me/install.ps1 | iex
 
   (the site serves this file from agent/install.ps1 on main, so the line never
   names a version; the script finds the newest agent-v* release itself).
-  Re-running on an installed machine
-  replaces the binary and keeps config.toml. `daedalus-agent uninstall`
-  removes the service.
+  Re-running on an installed machine replaces the binaries and keeps
+  config.toml. `daedalus-agent uninstall` removes the service, the tray's
+  Run key and the firewall rule.
 
   Trust at install is HTTPS to GitHub. Every later update is verified by
   the agent itself against the release key it carries.
@@ -91,8 +92,8 @@ foreach ($name in $assets.Keys) {
 if ($LASTEXITCODE -ne 0) { throw "daedalus-agent install exited $LASTEXITCODE" }
 
 if ($service) {
-  # `install` refreshes the registration but does not restart a service that
-  # was already registered and stopped by us above; start it on the new binary.
+  # `install` already starts a service it finds stopped (service.rs), so this
+  # is a no-op in the normal case; kept as a second try on the new binary.
   Start-Service -Name "daedalus-agent" -ErrorAction SilentlyContinue
 }
 

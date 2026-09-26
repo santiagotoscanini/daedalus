@@ -11,8 +11,10 @@ use std::time::{Duration, Instant};
 use super::profile::home_dir;
 
 /// The `claude` command: the native install's place first, then npm's, then
-/// PATH — asked in that order because the tray's PATH is the one Explorer
-/// had at logon, which predates an install made since.
+/// Homebrew's two prefixes, then PATH — the fixed places before PATH
+/// because the tray's PATH is the one it was started with (Explorer's at
+/// logon, launchd's system default), which misses them or predates an
+/// install made since.
 pub fn find_cli() -> Option<PathBuf> {
     let names: &[&str] = if cfg!(windows) {
         &["claude.exe", "claude.cmd", "claude.bat"]
@@ -26,8 +28,8 @@ pub fn find_cli() -> Option<PathBuf> {
     if let Some(a) = std::env::var_os("APPDATA") {
         dirs.push(PathBuf::from(a).join("npm"));
     }
-    // A LaunchAgent's PATH is the system's four directories; Homebrew and
-    // the native installer both live outside it.
+    // A LaunchAgent's PATH is the system's four directories; Homebrew
+    // (Apple silicon and Intel) lives outside it.
     for d in ["/opt/homebrew/bin", "/usr/local/bin"] {
         dirs.push(PathBuf::from(d));
     }
@@ -71,13 +73,9 @@ pub fn install_method(cli: &Path) -> &'static str {
     }
 }
 
-/// What a command did: its status and everything it printed.
-///
-/// `first_line` below is this, narrowed to the one line a version probe
-/// wants — it discarded stderr and the exit code, which is exactly what an
-/// update run needs to report. A refusal ("Updates are disabled by your
-/// administrator") arrives on one stream or the other depending on the
-/// version, so both are captured and joined.
+/// What a command did: its status and everything it printed. A refusal
+/// ("Updates are disabled by your administrator") arrives on one stream or
+/// the other depending on the version, so both are captured and joined.
 pub struct Ran {
     pub ok: bool,
     /// stdout and stderr, in the order each thread finished reading them.
