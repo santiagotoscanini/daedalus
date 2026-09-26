@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import {
   CodeIcon,
   FolderGit2Icon,
@@ -10,25 +10,15 @@ import {
   PlugIcon,
   SlidersHorizontalIcon,
 } from 'lucide-react'
-import { type ReactNode, useEffect, useRef, useState, useTransition } from 'react'
+import type { ReactNode } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
-import { GuardedAwait } from '../components/error'
 import { Measure, PageHead } from '../components/page'
-import { usePoll } from '../components/poll'
-import { Appearance } from '../components/settings/appearance'
-import { Developer } from '../components/settings/developer'
-import { ExternalApps } from '../components/settings/external-apps'
-import { General } from '../components/settings/general'
-import { Integrations } from '../components/settings/integrations'
-import { Machines } from '../components/settings/machines'
-import { Modules } from '../components/settings/modules'
-import { Network } from '../components/settings/network'
-import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
-import { BoardsSkeleton } from '../components/skeleton'
+import { SettingsTabBody } from '../components/settings/tab-body'
+import { useGithubLanding } from '../components/settings/use-github-landing'
 import { TabBar } from '../components/tabs'
-import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/types'
+import type { GithubCallbackNotice } from '../core/settings/types'
 import { known } from '../lib/known'
 import { siteBarFields } from '../lib/module-switch'
 import { fetchModuleSwitches } from '../server/modules'
@@ -44,7 +34,6 @@ import {
   fetchTheme,
   fetchTimezones,
   fetchZones,
-  githubInstallLandedFn,
 } from '../server/settings'
 import { fetchSiteEdit, fetchSiteState } from '../server/site'
 
@@ -112,10 +101,6 @@ type SettingsTab = (typeof TABS)[number]['id']
 function isTab(v: string | undefined): v is SettingsTab {
   return TABS.some((t) => t.id === v)
 }
-
-/** How long the GitHub App section keeps asking after an install, and how often. */
-const INSTALL_WATCH_MS = 60_000
-const INSTALL_POLL_MS = 5_000
 
 export const Route = createFileRoute('/settings')({
   // The sub-tab is in the URL for the same reason the category pages put it
@@ -220,22 +205,8 @@ export const Route = createFileRoute('/settings')({
 })
 
 function SettingsPage() {
-  const {
-    theme,
-    settings,
-    integrations,
-    site,
-    edit,
-    applyStatus,
-    timezones,
-    zones,
-    externalApps,
-    githubApp,
-    mcpTokens,
-    authorization,
-    machines,
-    modules,
-  } = Route.useLoaderData()
+  const data = Route.useLoaderData()
+  const { edit, applyStatus, githubApp } = data
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
   const changed =
@@ -244,82 +215,9 @@ function SettingsPage() {
       : []
   const search = Route.useSearch()
   const tab: SettingsTab = isTab(search.tab) ? search.tab : 'general'
-
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
-
-  // The GitHub callback's verdict, or GitHub's install redirect, arrives in
-  // the query once. It is held here, above the Await that remounts the tab
-  // when the live checks land, and the query is dropped so a reload does not
-  // repeat it.
-  const landed = search.setup_action !== undefined
-  const [githubNotice, setGithubNotice] = useState<GithubCallbackNotice | null>(() =>
-    search.github !== undefined
-      ? { github: search.github, code: search.reason ?? null }
-      : landed
-        ? { github: 'installed', code: null }
-        : null,
-  )
-  useEffect(() => {
-    if (search.github === undefined && search.reason === undefined && !landed) return
-    void router.navigate({
-      to: '/settings',
-      search: { tab: landed ? 'integrations' : search.tab },
-      replace: true,
-    })
-  }, [search.github, search.reason, search.tab, landed, router])
-
-  // After an install the host's minter has not looked yet, so the App reads
-  // "not installed". Ask it to look now, then re-read the App's status every
-  // few seconds for a minute, so "installed" arrives without a reload.
-  const [watchUntil, setWatchUntil] = useState<number | null>(null)
-  // Tagged with the loader read it was polled over: a fresh loader read is
-  // newer than anything the poll held, so a stale tag falls back to it.
-  const [polled, setPolled] = useState<{
-    over: typeof githubApp
-    status: GithubAppStatus
-  } | null>(null)
-  const askedMinter = useRef(false)
-  useEffect(() => {
-    if (!landed || askedMinter.current) return
-    askedMinter.current = true
-    void githubInstallLandedFn()
-      .then((r) => {
-        if (r.ok) setWatchUntil(Date.now() + INSTALL_WATCH_MS)
-      })
-      .catch(() => {})
-  }, [landed])
-  const loaderApp = useRef(githubApp)
-  loaderApp.current = githubApp
-  usePoll(
-    async () => {
-      // Re-read rather than closed over: `usePoll` calls the newest closure,
-      // so this is the current deadline and not the one the watch started with.
-      if (watchUntil === null) return
-      try {
-        const s = await fetchGithubAppStatus()
-        setPolled({ over: loaderApp.current, status: s })
-        if (s.state === 'installed' || Date.now() >= watchUntil) setWatchUntil(null)
-      } catch {
-        if (Date.now() >= watchUntil) setWatchUntil(null)
-      }
-    },
-    INSTALL_POLL_MS,
-    watchUntil !== null,
-  )
-
-  const github = {
-    app: polled !== null && polled.over === githubApp ? polled.status : githubApp,
-    notice: githubNotice,
-    onDismissNotice: () => {
-      setGithubNotice(null)
-    },
-  }
-  // The choice is held here as well as in the loader so a click repaints the
-  // page immediately. The save is what makes it durable; the router
-  // invalidation below is what makes the SERVER agree, which matters because
-  // the palette is server-rendered into the document head.
-  const [choice, setChoice] = useState(theme)
+  // Held here, above the GuardedAwait in the tab body that remounts the tab
+  // when the live checks land (components/settings/use-github-landing.ts).
+  const github = useGithubLanding(search, githubApp)
 
   return (
     <Measure>
@@ -338,111 +236,7 @@ function SettingsPage() {
         {/* One place for the bytes an Apply would write, whichever tab the
             edit was made on — the tabs show fields, this shows the file. */}
         <SiteDiff edit={edit} />
-
-        {tab === 'general' &&
-          (zones === null ? (
-            <General settings={settings} edit={edit} timezones={timezones} zones={null} />
-          ) : (
-            <GuardedAwait
-              resetKey={tab}
-              slot="zones"
-              promise={zones}
-              fallback={
-                <General settings={settings} edit={edit} timezones={timezones} zones={null} />
-              }
-            >
-              {(z) => <General settings={settings} edit={edit} timezones={timezones} zones={z} />}
-            </GuardedAwait>
-          ))}
-        {tab === 'network' && <Network settings={settings} edit={edit} />}
-        {tab === 'integrations' &&
-          (integrations === null ? (
-            <Integrations
-              settings={settings.integrations}
-              status={null}
-              edit={edit}
-              github={github}
-            />
-          ) : (
-            <GuardedAwait
-              resetKey={tab}
-              slot="integrations"
-              promise={integrations}
-              fallback={
-                <Integrations
-                  settings={settings.integrations}
-                  status={null}
-                  edit={edit}
-                  github={github}
-                />
-              }
-            >
-              {(status) => (
-                <Integrations
-                  settings={settings.integrations}
-                  status={status}
-                  edit={edit}
-                  github={github}
-                />
-              )}
-            </GuardedAwait>
-          ))}
-        {tab === 'repository' &&
-          (site === null ? (
-            <Repository settings={settings} site={null} edit={edit} />
-          ) : (
-            <GuardedAwait
-              resetKey={tab}
-              slot="site"
-              promise={site}
-              fallback={<Repository settings={settings} site={null} edit={edit} />}
-            >
-              {(state) => <Repository settings={settings} site={state} edit={edit} />}
-            </GuardedAwait>
-          ))}
-        {tab === 'projects' && <ExternalApps rows={externalApps} />}
-        {tab === 'modules' && modules !== null && (
-          <GuardedAwait
-            resetKey={tab}
-            slot="modules"
-            promise={modules}
-            fallback={<BoardsSkeleton spans={[12, 12]} />}
-          >
-            {(rows) => <Modules rows={rows} />}
-          </GuardedAwait>
-        )}
-        {tab === 'machines' && machines !== null && (
-          <GuardedAwait
-            resetKey={tab}
-            slot="machines"
-            promise={machines}
-            fallback={<BoardsSkeleton spans={[12, 12, 12]} />}
-          >
-            {(d) => <Machines d={d} />}
-          </GuardedAwait>
-        )}
-        {tab === 'appearance' && (
-          <Appearance
-            value={choice}
-            saving={pending}
-            onChange={(next) => {
-              setChoice(next)
-              startTransition(async () => {
-                const { saveTheme } = await import('../server/settings')
-                await saveTheme({ data: next })
-                await router.invalidate()
-              })
-            }}
-          />
-        )}
-        {tab === 'developer' && authorization !== null && (
-          <Developer
-            settings={settings}
-            edit={edit}
-            tokens={mcpTokens}
-            authorization={authorization}
-          />
-        )}
+        <SettingsTabBody tab={tab} data={data} github={github} />
       </div>
 
       <ApplyBar changed={changed} initialStatus={applyStatus} />
