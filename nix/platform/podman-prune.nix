@@ -1,11 +1,10 @@
 # platform/podman-prune — weekly reclaim of the rootless image store.
 #
-# The fleet pins images and pulls out-of-band (see CLAUDE.md "A moving
-# tag is never re-pulled"), so every update, every mkLocalImage rebuild,
-# and every apps-platform redeploy leaves the previous image behind as an
-# unreferenced orphan. Left alone the operator's rootless store grows
-# unbounded (it had crept to ~26 GB reclaimable / 46% before the first
-# manual sweep). This prunes it on a schedule.
+# The fleet pins images and pulls out-of-band (oci-containers' `--pull
+# missing` never re-pulls a tag), so every update, every mkLocalImage
+# rebuild, and every apps-platform redeploy leaves the previous image behind
+# as an unreferenced orphan. Left alone the operator's rootless store grows
+# unbounded. This prunes it on a schedule.
 #
 # Scope is deliberately narrow: `image prune` only — never `system prune`,
 # which would also drop the podman networks (the traefik/app-db/… bridges)
@@ -33,9 +32,9 @@
     description = "Prune unreferenced images from ${config.fleet.operator.user}'s rootless podman store";
     serviceConfig.Type = "oneshot";
     # Runs as root and drops to the operator via setpriv (no PAM session,
-    # matching stacks/apps + autoupgrade) — the image store lives in
+    # matching modules/apps + autoupgrade) — the image store lives in
     # the operator's rootless graphroot, reachable only through their runtime
-    # session (lingering is on, so /run/user/1000 exists at boot).
+    # session (lingering is on, so the runtime dir exists at boot).
     script = ''
       ${pkgs.util-linux}/bin/setpriv --reuid ${config.fleet.operator.user} --regid ${config.fleet.operator.group} --init-groups --inh-caps=-all \
         ${pkgs.coreutils}/bin/env HOME=${config.fleet.operator.home} XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir} \

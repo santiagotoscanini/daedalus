@@ -1,9 +1,9 @@
-# ddclient — dynamic DNS for the LAN public IP.
+# ddclient — dynamic DNS for the house's public IP.
 #
 # Updates the Cloudflare A record for fleet.wanHost every 5 minutes if our
 # home public IP changes. It authenticates with the box's one Cloudflare API
 # token, whose only home is site/vault/cloudflare-api-token.sops (rendered as
-# a dotenv file by stacks/cloudflared); a render unit below hands ddclient the
+# a dotenv file by platform/site.nix); a render unit below hands ddclient the
 # bare value (ddclient runs as root).
 #
 # ── split horizon ─────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ in
   # one source rather than stored a second time. `LINE=$(grep …)` fails the
   # unit under `set -e` if the key is missing: an empty token here would only
   # surface the next time the WAN address changes, which is the worst moment.
-  # A rotation (site/vault, rendered by stacks/cloudflared) re-renders the bare
+  # A rotation (site/vault, rendered by platform/site.nix) re-renders the bare
   # token; ddclient itself reads it on its next timer run.
   sops.templates."cloudflare-api-token.env".restartUnits = [ "ddclient-token.service" ];
 
@@ -84,8 +84,9 @@ in
 
   # First-boot race: ddclient hits cloudflare.com before pi-hole is
   # actually serving DNS. Gate on pihole-ready so the first run resolves
-  # (accepted layering inversion: platform/ depending on a stacks/ unit —
-  # ddclient is host plumbing but the box resolves through the pihole stack)
+  # (accepted layering inversion: platform/ depending on a catalog unit —
+  # ddclient is host plumbing but the box resolves through modules/pihole;
+  # with that module off the `wants` names no unit and is a no-op)
   # without burning ~5s of DNS retries.
   systemd.services.ddclient = {
     after = [ "pihole-ready.service" ];

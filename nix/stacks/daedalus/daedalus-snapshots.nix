@@ -155,10 +155,10 @@ in
     # of something that moves in days.
     fleet.monitoredJobs.daedalus-image-freshness = { };
 
-    # The host facts behind three System tabs. Runs as ROOT and unprivileged
-    # nowhere: smartctl needs a raw device, and `zpool status` needs the pool.
-    # No setpriv drop like its two siblings — there is no rootless store to
-    # reach into here, only root-only tools.
+    # The host facts behind three System tabs. Reads as ROOT: smartctl needs a
+    # raw device, and `zpool status` needs the pool.
+    # Unlike the env and image snapshots it reads no rootless store, so it
+    # drops to the operator only to publish (host/lib.sh).
     systemd.services.daedalus-system-snapshot = {
       description = "Publish SMART, ZFS and generation facts for daedalus";
       before = [ "podman-app-daedalus.service" ];
@@ -254,7 +254,7 @@ in
     #     pushes nothing on this box hears about;
     #   - the path unit below — the hosted apps' push channel. Their deploy
     #     units rewrite /var/lib/app-deploy/<name>.json exactly when a new
-    #     image lands (stacks/apps/assets/deploy.sh), which is minutes after
+    #     image lands (modules/apps/assets/deploy.sh), which is minutes after
     #     the push that built it, so the workspace pulls right behind the code
     #     it is now running.
     #

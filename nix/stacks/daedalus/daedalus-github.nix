@@ -44,7 +44,7 @@ in
     #     itself (HMAC over the raw body, against the webhook secret below), and
     #     answers 503 while no secret exists.
     #   - The strip middleware, exactly as the app's own router and the deploy
-    #     hook (stacks/registry) carry it: a request that skips the gate must
+    #     hook (modules/registry) carry it: a request that skips the gate must
     #     not arrive holding a forged X-Forwarded-Email.
     #   - A rate limit per client, because this is the one daedalus path on the
     #     open internet. 10/s with a burst of 50 is far above GitHub's delivery
@@ -99,7 +99,7 @@ in
     );
 
     # The tunnel ingress + the proxied CNAME route-sync keeps for it. The label
-    # is reserved by the assertion at the top of this module.
+    # is reserved by the reservedLabels assertion in daedalus.nix.
     fleet.cloudflareRoutes = lib.mkIf appsOn { daedalus-hooks.hostname = hooksHost; };
 
     # ── the GitHub App: credentials (once site/vault/github-app.sops exists) ─

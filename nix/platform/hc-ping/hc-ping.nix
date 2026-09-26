@@ -1,5 +1,5 @@
 # platform/hc-ping — report scheduled-job start/success/fail to the local
-# healthchecks instance (stacks/healthchecks). Complements OnFailure email:
+# healthchecks instance (modules/healthchecks). Complements OnFailure email:
 # email fires when a job RUNS and fails; healthchecks also catches a job that
 # stops running entirely — its check goes red when no ping arrives within the
 # expected window.

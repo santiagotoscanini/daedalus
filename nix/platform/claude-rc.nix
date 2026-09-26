@@ -1,16 +1,18 @@
-# Claude Code Remote Control server — always-on remote sessions in /etc/nixos.
+# Claude Code Remote Control server — always-on remote sessions in the
+# configuration checkout (`fleet.config.repo`).
 #
 # Runs `claude remote-control` as a persistent systemd service so the operator
 # can connect from claude.ai/code or the Claude mobile app at any time and get
-# a session on this box (same-dir spawn, one session pre-created in /etc/nixos,
-# default capacity 32). The CLI has no daemon mode; this unit IS the daemon.
+# a session on this box (same-dir spawn, one session pre-created in the
+# checkout, default capacity 32). The CLI has no daemon mode; this unit IS the
+# daemon.
 #
-# What it leans on, all pre-existing:
-#   - `claude` is pkgs.claude-code (unstable overlay in configuration.nix) —
-#     the store binary can't self-update; the weekly flake-autoupgrade bumps it,
-#     which changes ExecStart. **Updates land on reboot or a manual restart,
-#     never on switch**: `restartIfChanged = false`, for the same reason the
-#     daedalus bridge agents carry it (apps-platform rule). Without it, the
+# What it leans on:
+#   - `claude` is pkgs.claude-code (the unstable overlay in
+#     platform/claude-code) — the store binary can't self-update; a flake bump
+#     moves it, which changes ExecStart. **Updates land on reboot or a manual
+#     restart, never on switch**: `restartIfChanged = false`, for the same
+#     reason the daedalus host agents carry it (stacks/daedalus). Without it, the
 #     first rebuild run FROM a remote session after a claude-code bump is a
 #     murder-suicide: the session's `sudo nixos-rebuild` lives inside this
 #     unit's cgroup (sudo doesn't migrate cgroups), activation stops the unit
@@ -21,31 +23,28 @@
 #     `nixos-rebuild boot`, so reboot-gated updates were the design anyway.
 #     SuccessExitStatus=143 keeps SIGTERM stops from firing the OnFailure
 #     email.
-#   - The ExecStartPre gcroot pins the RUNNING version against nix-gc
-#     (weekly, --delete-older-than 30d): after later switches move
+#   - The ExecStartPre gcroot pins the RUNNING version against the host's
+#     nix-gc: after later switches move
 #     current-system past it, an unrestarted server could outlive every
 #     generation referencing its binary — new sessions would then spawn from
 #     a deleted store path. The root tracks whatever version each start uses.
 #   - Credentials: ~operator/.claude/.credentials.json (subscription login).
-#     Expiry runbook: SSH in, run `claude` in /etc/nixos, `/login`, then
-#     `systemctl restart claude-remote-control`. Workspace trust for /etc/nixos
-#     is already accepted (one-time, persisted).
-#   - Permission mode: default — the deny/ask/allow matrix and bash-guard.sh
-#     apply; approvals render in the claude.ai/code UI.
+#     Expiry runbook: SSH in, run `claude` in the checkout, `/login`, then
+#     `systemctl restart claude-remote-control`. Workspace trust for the
+#     checkout is a one-time acceptance, persisted.
+#   - Permission mode: default — the checkout's own `.claude/settings.json`
+#     (and any hooks it wires) apply; approvals render in the claude.ai/code UI.
 #
 # A server stop ENDS every session under it, and claude.ai cannot pick one
 # back up: the server bridges NEW sessions, it does not re-adopt old ones.
 # What survives is the transcript, here on this box, and `claude --resume
 # <uuid>` is the way back in — which is the whole reason the `claude-session@`
 # bridge exists (stacks/daedalus, claudeSessionRunner), and why daedalus's
-# Claude page offers Resume per row. This paragraph used to say sessions
-# stayed resumable from claude.ai for about four hours. They do not; both
-# pages in daedalus have said the opposite for a while, and the stale claim
-# here is what a feature got planned around, so it is corrected out loud
-# rather than quietly.
+# Claude page offers Resume per row. Sessions are NOT resumable from
+# claude.ai after a stop — don't plan a feature around that.
 #
-# With restartIfChanged=false a rebuild no longer touches the running server;
-# the remaining way to kill it from inside a remote session is an explicit
+# With restartIfChanged=false a rebuild never touches the running server;
+# the one way to kill it from inside a remote session is an explicit
 # `systemctl restart claude-remote-control` — which also kills the session
 # that typed it.
 #

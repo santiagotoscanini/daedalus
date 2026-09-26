@@ -32,10 +32,6 @@
 }:
 
 let
-  # Pinned game version ofsm downloads + runs on every start. Surfaced on
-  # daedalus's Gaming tile so it can be matched against the Steam client at
-  # a glance, without opening the admin UI. Bump this one place on a
-  # game update (clients on a different version can't join).
   cfg = config.fleet.modules.factorio;
   factorioVersion = cfg.version;
 in
@@ -70,15 +66,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Handed to the control plane (fleet.dashboard) so its tile renders the
-    # running version rather than carrying a second copy of the number. It is
-    # the same string the container downloads on start, so the tile cannot
-    # drift from what is actually installed — and it is absent, not stale,
+    # Handed to the control plane (fleet.dashboard) so its Gaming tile shows
+    # the running version rather than carrying a second copy of the number.
+    # It is the same string the container downloads on start, so the tile
+    # cannot drift from what is installed — and it is absent, not stale,
     # when this stack is switched off.
     fleet.dashboard.factorio.env.FACTORIO_VERSION = factorioVersion;
 
-    # ofsm admin credentials: sops-encrypted env.sops, decrypted to
-    # /run/secrets/factorio-env at activation. Edit with `sops env.sops`.
+    # ofsm admin credentials, decrypted to /run/secrets/factorio-env at
+    # activation. Edit the host's file (`envSopsFile`) with `sops`.
     sops.secrets."factorio-env" = mkDotenvSecret cfg.envSopsFile;
 
     fleet.bridgeMemberships.factorio = [ "traefik" ];
@@ -111,7 +107,7 @@ in
       "${config.fleet.stateRoot}/factorio/data/saves" = { };
     };
 
-    # The one stack here whose blast radius is other people. The port is
+    # Its blast radius is other people. The port is
     # router-forwarded and the server has live players, so a restart kicks
     # whoever is on it — and a Factorio version bump can force a save
     # migration that the previous build will not open afterwards.

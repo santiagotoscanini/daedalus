@@ -1,5 +1,5 @@
 # sops-nix host configuration. Secrets are age-encrypted *.sops files
-# tracked in git (see /.sops.yaml for recipients + conventions); at
+# tracked in the host's git (its `.sops.yaml` names the recipients); at
 # activation sops-nix decrypts each declared `sops.secrets.<name>` to
 # /run/secrets/<name> (tmpfs — never touches disk) with the declared
 # owner/mode. Stacks reference them via
@@ -7,7 +7,7 @@
 #
 # Rootless-podman note: secrets read by containers need
 # `owner = <the operator>` — podman runs as the operator and reads env files /
-# bind-mount sources with her uid before the userns remap.
+# bind-mount sources with their uid before the userns remap.
 { options, pkgs, ... }:
 
 {
@@ -17,7 +17,7 @@
   sops.age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
 
   # sops-nix master tracks nixpkgs-unstable, and on 2026-09-20 its
-  # `sops-install-secrets` go.mod moved to `go 1.26.0`, while this flake's
+  # `sops-install-secrets` go.mod moved to `go 1.26.0`, while the host's
   # stable nixpkgs (25.11) still builds Go modules with 1.25 — the weekly
   # autoupgrade committed that lock and then could not build it. The default
   # package is the module's own callPackage, so overriding the two Go inputs

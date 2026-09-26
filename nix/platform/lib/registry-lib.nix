@@ -1,14 +1,16 @@
 # The ONE mapper from a registry entry to a `fleet.apps.<name>` value.
 #
-# Two readers consume the registry schema: declarations.nix (every app in
-# site/apps.json, via fleet.registry.file) and stacks/daedalus/daedalus.nix (its own entry, from
-# ./self.json — hand-tracked, so an Apply that broke it can't take down the
-# UI you'd use to undo it). As two copies of the field mapping they would
+# Two readers consume the registry schema: modules/apps/declarations.nix
+# (every app in site/apps.json, via fleet.registry.file) and
+# stacks/daedalus/daedalus.nix (its own entry, from ./self.json —
+# hand-tracked, so an Apply that broke it can't take down the UI you'd use
+# to undo it); nix/tests/fixtures.nix maps every schema fixture through it
+# too. As two copies of the field mapping they would
 # drift the first time the schema grows a field — one reader learns it, the
 # other silently drops it. So the mapping lives here, once, next to the list
 # of schema versions it understands.
 #
-# A `*-lib.nix` file: never listed in configuration.nix's imports (same
+# A `*-lib.nix` file: never listed in a module import list (same
 # convention as its neighbour gluetun-lib.nix), imported by path from the two
 # readers. It is pure JSON→attrset — no config reads, which is what lets
 # daedalus.nix use it without the fleet.apps self-reference loop its header
@@ -22,16 +24,13 @@
 { lib }:
 
 {
-  # Kept in lockstep with the writer (the daedalus app,
-  # REGISTRY_SCHEMA_VERSION in ~operator/projects/daedalus/app): ONE version,
-  # not a range. The writer is bind-mounted from the operator's own clone on
-  # this same box, so a version flip is still one person changing both sides
-  # on one machine in one sitting — two commits now that the repos are
-  # separate, but one act (writer + reader + a regenerated apps.json), never
-  # a migration window. The day the app ships as a published image to other
-  # boxes (plan Phase 12) the writer moves independently of any one reader
-  # and this becomes a RANGE. A list only so the assertion message can print
-  # it.
+  # Kept in lockstep with the writer (REGISTRY_SCHEMA_VERSION in
+  # app/src/lib/contract/version.ts, this same repository): ONE version, not a
+  # range. Writer and reader ship in one engine rev — the published image's
+  # default tag is the rev's own app version — so a version flip is one
+  # commit (writer + reader + a new fixture under fixtures/apps/), never a
+  # migration window. The day a writer can run ahead of its reader this
+  # becomes a RANGE. A list only so the assertion message can print it.
   #
   # v2 added `deploy: { enable }` per entry — the freeze switch.
   acceptedSchemaVersions = [ 2 ];
@@ -90,16 +89,16 @@
       tasks = a.tasks or [ ];
 
       # `env` is a LIST of {key, value, note} rather than an attrset: the note is
-      # the reason a flag is set the way it is, which used to live in a nix
-      # comment here and would otherwise be lost in the round-trip through the
-      # database. daedalus renders them next to the value; nix only needs the pair.
+      # the reason a flag is set the way it is, and would otherwise be lost in
+      # the round-trip through the database. daedalus renders it next to the
+      # value; nix only needs the pair.
       env = lib.listToAttrs (map (e: lib.nameValuePair e.key e.value) a.env);
     }
     # Emitted ONLY when the entry carries it: the option's default is
-    # `source.mode == "registry"`, so writing `true` unconditionally would
-    # turn the deploy machinery on for a local-source entry (daedalus's
-    # self.json, which carries no `deploy` key), and there is no registry
-    # image to poll there.
+    # `!source.dev`, so writing `true` unconditionally would turn the deploy
+    # machinery on for daedalus's own entry (self.json carries no `deploy`
+    # key) even in dev mode, where a new image would only restart the dev
+    # server.
     // lib.optionalAttrs (a ? deploy) {
       deploy.enable = a.deploy.enable or true;
     }

@@ -29,9 +29,9 @@
 #   - `ALTER ROLE` keeps role passwords in sync with the env file
 #     (rotation = delete the env file + rebuild).
 #
-# Per-app resource limits:
-#   - Connection cap via `ALTER ROLE <name> CONNECTION LIMIT N` if
-#     needed (default: cluster-wide max_connections shared).
+# Per-app resource limits — none set today (every tenant shares the
+# cluster-wide max_connections); the levers, if one is needed:
+#   - Connection cap via `ALTER ROLE <name> CONNECTION LIMIT N`.
 #   - statement_timeout / lock_timeout per-role via ALTER ROLE.
 #   - For full container-level isolation, switch that app to a
 #     dedicated container — escape hatch, not implemented yet.
@@ -97,9 +97,9 @@ let
   dataDir = "${hostRoot}/postgres";
 
   # Locally-built postgres image with pgvector compiled in (see
-  # assets/pg-image/Containerfile). Built FROM the same alpine base as
-  # the old plain image, so the postgres UID stays 70 — the data dir
-  # ownership (100069:100069) is unchanged and there is no migration.
+  # assets/pg-image/Containerfile). The base must stay Alpine: its
+  # postgres UID is 70, which the data dir's ownership (100069:100069,
+  # statePaths below) assumes — a Debian base (UID 105) breaks the cluster.
   # The tag embeds the build-context hash: editing the Containerfile
   # rebuilds the image and restarts pg; unchanged contexts are ~instant
   # (layer cache). Enables `CREATE EXTENSION vector` in any tenant db
@@ -112,8 +112,8 @@ let
   };
 
   # The bash body lives at assets/bootstrap.sh (shellcheckable
-  # standalone). This wrapper exports the four parameters it reads
-  # (APP_NAME, ENV_BASE, CLUSTER_ENV, APP_ENV_FILE) and concatenates
+  # standalone). This wrapper exports every parameter the body reads
+  # (APP_NAME, the paths, the DB host/port, the operator…) and concatenates
   # the body so it all runs in a single shell with `set -eu` from
   # the systemd script preamble.
   perAppBootstrapScript = name: ''
@@ -143,7 +143,7 @@ in
 
   options.fleet.appDatabases = lib.mkOption {
     # An entry's presence IS the enable signal; per-app fields live
-    # in the submodule (room to grow: connection caps, extensions...).
+    # in the submodule.
     type = lib.types.attrsOf (
       lib.types.submodule (
         { name, ... }:
@@ -208,10 +208,9 @@ in
               `mkGluetunInstance`'s `hostEgress` does that.
             '';
           };
-          # Derived, so no tenant restates the host or the port. bazarr
-          # and the *arrs used to carry both as literals in their own
-          # module; a second copy of a fact the cluster already knows is
-          # a copy that can disagree with it.
+          # Derived, so no tenant restates the host or the port: a second
+          # copy of a fact the cluster already knows is a copy that can
+          # disagree with it.
           options.dbHost = lib.mkOption {
             type = lib.types.str;
             readOnly = true;
@@ -250,13 +249,13 @@ in
       database name, and the env-file directory — the nameRegex
       assertion enforces the allowed shape.
 
-      See stacks/app-db/README.md.
+      See modules/app-db/README.md.
     '';
   };
 
   config = lib.mkIf (config.fleet.modules.app-db.enable && enabled) {
     # The cluster and per-app credentials used to live under
-    # stacks/app-db/secrets in the checkout. Every unit that generates or
+    # stacks/app-db/secrets in the host's checkout. Every unit that generates or
     # reads them REQUIRES the migration (platform/machine-state.nix): a
     # cluster bootstrap that ran first would mint a new superuser password
     # beside a cluster initialised with the old one.
@@ -491,9 +490,10 @@ in
       };
       volumes = [ "${dataDir}:/var/lib/postgresql/data" ];
       ports = [
-        # Plain-TCP LAN access for tenants that can't ride a bridge:
-        # the VPN-netns tenants dial `<lanIp>:5433` directly
-        # (their Npgsql client can't do the direct-TLS handshake the
+        # Plain-TCP access for tenants that can't ride a bridge
+        # (`reach = "hostPort"`): the netns tenants dial
+        # `host.containers.internal:5433` (their Npgsql client can't do
+        # the direct-TLS handshake the
         # traefik :5432 TCP/SNI route requires — that route stays the
         # TLS front door for DBeaver-style clients).
         "5433:5432"

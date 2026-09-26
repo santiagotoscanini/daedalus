@@ -16,10 +16,10 @@
 # Editing apps.json directly works for one rebuild but daedalus will report the
 # app as drifted, and the next Apply overwrites it.
 #
-# NOT in here: `source.mode = "local"` apps, which carry source and a
-# Containerfile alongside their declaration and so own a stack folder of their
-# own. stacks/daedalus is the only one — deliberately hand-written, so a bad
-# edit to daedalus's own entry can't take down the app you'd use to fix it.
+# NOT in here: the control plane's own entry. stacks/daedalus/daedalus.nix
+# builds it from its hand-written self.json through the same registry-lib —
+# deliberately outside this file, so a bad edit to daedalus's own entry can't
+# take down the app you'd use to fix it.
 #
 # Defaults still inferred from the app's key by modules/apps/apps.nix:
 #   image     = <registry hostname>/<name>:latest (the box's own zot)
@@ -59,9 +59,9 @@
 # client secret is machine-generated on the box, like every app-db password (see
 # modules/pocket-id/clients.nix). Operator secrets have no flag at all — a
 # tracked site/vault/apps/<name>-env.sops IS the switch
-# (platform/lib/operator-secrets-lib.nix). VPN egress is the one thing still authored
-# here, because it needs a gluetun instance to exist before an app can join
-# its netns.
+# (platform/lib/operator-secrets-lib.nix). VPN egress is the one setting the
+# app's page does not make, because it needs a gluetun instance to exist
+# before an app can join its netns.
 #
 # From then on, every push to main goes live on its own: the box builds the
 # image and its build agent starts `app-<name>-deploy.service` the moment that
@@ -119,8 +119,8 @@ in
   config = lib.mkIf config.fleet.modules.apps.enable {
     # One sops secret per app that HAS an operator-secrets file. Same
     # mkDotenvSecret shape as every other stack; the app's own machine-generated
-    # secrets/<name>/env (AUTH_SECRET) is separate and never carries operator
-    # values.
+    # <machineState>/apps/<name>/env (AUTH_SECRET) is separate and never carries
+    # operator values.
     #
     # `restartUnits` is the half that makes a ROTATION reach the app, and it is
     # not decoration. sops-nix re-decrypts every `sops.secrets.<n>` at every
@@ -128,9 +128,8 @@ in
     # the new value — but the container read that file once, at `podman run`, and
     # nothing about the unit's text changed, so systemd has no reason to restart
     # it. Without this line a rebuild that "applied" a new secret would leave the
-    # app serving the old one, with every unit green: the false-success trap
-    # .claude/rules/secrets-sops.md documents for mkSecretRender, arriving by a
-    # different road. sops-nix restarts the unit only when the decrypted bytes
+    # app serving the old one, with every unit green: mkSecretRender's
+    # false-success trap, arriving by a different road. sops-nix restarts the unit only when the decrypted bytes
     # actually changed, so an unrelated rebuild still bounces nothing.
     #
     # This is what the app-secrets editor (stacks/daedalus, host/secret-set.sh)

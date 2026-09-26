@@ -1,14 +1,15 @@
 # platform/mail — outbound email relay + OS-level alert wiring.
 #
-# msmtp is the system `sendmail`, relaying through Gmail
-# (smtp.gmail.com:587, STARTTLS) as the relay account (`fleet.mail.sender`). The app
+# msmtp is the system `sendmail`, relaying through `fleet.mail.smtpHost`
+# (STARTTLS on `smtpPort`) as the relay account (`fleet.mail.sender`). The
 # password is the single sops secret `fleet.mail.passwordSopsFile` (the host's
-# file — host/sops/smtp-app-password.sops), read by
+# file, handed in), read by
 # root (msmtp, invoked by smartd/ZED/systemd) and — bind-mounted — by the
-# grafana container (which runs --user=0:0 → the operator). n8n can't read a
-# bind mount the operator owns (it runs as an unprivileged mapped uid), so it
-# gets the value via a rendered --env-file (see stacks/n8n). owner=<the operator>
-# 0400 satisfies msmtp (root ignores the mode) and grafana.
+# grafana container (which runs --user=0:0 → the operator). A container that
+# runs as an unprivileged mapped uid can't read a file the operator owns, so
+# it gets the value via a rendered --env-file instead (modules/healthchecks
+# does). owner=<the operator> 0400 satisfies msmtp (root ignores the mode)
+# and grafana.
 #
 # What emails you, and why:
 #   - smartd            → a failing / pre-failing disk
@@ -17,11 +18,11 @@
 #     email=true (grep the registry), plus per-job mail from the apps
 #     deploy oneshots and the gluetun WG-expiry reminders
 #
-# Grafana + n8n send their OWN mail (configured in their stack modules
-# against the same Gmail account + password secret), not via this sendmail.
+# Grafana and healthchecks send their OWN mail (configured in their modules
+# against the same relay account + password secret), not via this sendmail.
 #
 # Known limitation: the box resolves DNS through the local pi-hole, so if
-# pi-hole is down msmtp can't resolve smtp.gmail.com and mail won't send —
+# pi-hole is down msmtp can't resolve the relay host and mail won't send —
 # a pi-hole-down alert therefore can't email out (accepted single-node SPOF).
 
 {

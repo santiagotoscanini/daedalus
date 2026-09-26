@@ -1,7 +1,8 @@
 # A nightly `git bundle` of the configuration checkout into the state tree.
 #
-# `/etc/nixos` IS the system, and it lives on the root filesystem, which nothing
-# snapshots. Its only other copy is the GitHub remote — so a commit that has
+# The checkout (`fleet.config.repo`) IS the system, and on the reference host
+# it lives on the root filesystem, which nothing snapshots. Its only other
+# copy is the GitHub remote — so a commit that has
 # not been pushed (the weekly upgrade when the WAN is down, a session that
 # stopped before its push) exists exactly once, on the one disk whose failure
 # is the reason to want it. The state tree is snapshotted and mirrored to the
@@ -11,7 +12,8 @@
 # verify`, and restorable with `git clone <file>`. It carries tracked history
 # only — no working-tree dirt, and none of the secrets a checkout never held.
 #
-# 03:47, not the hour: see CLAUDE.md on what runs at :00.
+# 03:47, not the hour: :00 is where scheduled network-heavy work (a
+# speedtest) lands, and a job there shares its blackout.
 {
   config,
   pkgs,

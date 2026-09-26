@@ -1,6 +1,7 @@
 # monitoring — prometheus + grafana + node-exporter.
 #
-# Three containers on `monitoring-net`:
+# Three containers — prometheus and grafana on `monitoring-net`,
+# node-exporter on the host network:
 #   - prometheus scrapes node-exporter at host.containers.internal:9100
 #     (node-exporter runs on the host network to read real NIC stats,
 #     so bridge DNS can't reach it).
@@ -17,8 +18,8 @@
 #   - `prometheusConfig`: base scrape list + each stack's
 #     `fleet.prometheusScrapes` contribution.
 #   - `dashboardsDir`: static JSON under ./assets/dashboards/, plus
-#     `fleet.grafanaDashboards` (root) and `grafanaDashboardsByFolder`
-#     (organized into sidebar folders via `foldersFromFilesStructure`).
+#     `fleet.grafanaDashboardsByFolder` (organized into sidebar folders
+#     via `foldersFromFilesStructure`).
 # Changing either changes the /nix/store hash → container restarts on
 # rebuild. No manual reload.
 #
@@ -63,13 +64,12 @@ let
   # newly-added stack is covered automatically.
   #
   # The dir lives at /var/lib/node-exporter/textfile — deliberately NOT
-  # under ~/selfhost (rewriting a .prom every minute would churn the
-  # 16K-recordsize, snapshotted + replicated selfhost dataset) and NOT on
-  # /run (nixos activation's `systemd-tmpfiles` wipes /run dirs on every
-  # rebuild, racing the node-exporter bind-mount → podman 125). /var/lib is
-  # on the root filesystem, which this box opts out of snapshots, so it
-  # dodges the churn concern while being persistent — the bind source is
-  # always present.
+  # under <stateRoot> (rewriting a .prom every minute would churn a
+  # snapshotted + replicated state dataset) and NOT on /run (nixos
+  # activation's `systemd-tmpfiles` wipes /run dirs on every rebuild,
+  # racing the node-exporter bind-mount → podman 125). /var/lib is on the
+  # root filesystem, normally left out of snapshots, so it dodges the churn
+  # concern while being persistent — the bind source is always present.
   containerNames = lib.attrNames config.virtualisation.oci-containers.containers;
 
   textfileDir = "/var/lib/node-exporter/textfile";
@@ -180,8 +180,7 @@ let
       echo "# HELP container_network_transmit_bytes_total Bytes out of the container's network namespace, tunnels excluded."
       echo "# TYPE container_network_transmit_bytes_total counter"
 
-      # One inspect for the whole fleet — the same single call the
-      # `podman ps --no-trunc` this replaces cost, and the two extra fields
+      # One inspect for the whole fleet; the pid and network-mode fields
       # are what make per-container NETWORK counters possible at all. A
       # cgroup accounts cpu, memory and pids but never bytes, because a
       # network namespace is not a cgroup; /proc/<pid>/net/dev is the same
@@ -225,8 +224,8 @@ let
         # `host` shares the host's interfaces, so its counters ARE
         # node-exporter's — printing them under one app's name would
         # attribute the entire box to it. `container:<id>` borrows another
-        # container's namespace: the ten sharing gluetun's all read the same
-        # numbers, so emitting each would multiply one flow by ten. The
+        # container's namespace: every tenant of a gluetun reads the same
+        # numbers, so emitting each would multiply one flow per tenant. The
         # namespace owner reports for the group, which is also the only
         # honest reading available — a shared namespace has no per-member
         # split to report.
@@ -446,9 +445,6 @@ in
       };
     };
 
-    # Grafana's database on the shared app-db cluster (see
-    # modules/app-db). Dashboards/datasources stay nix-provisioned; the
-    # DB holds what the UI created: alert rules, users, service accounts.
     # The narrow replacement for grafana's `X-Frame-Options: deny`.
     #
     # `frame-ancestors` is the modern, per-origin form of the same control,
@@ -469,6 +465,10 @@ in
               contentSecurityPolicy: "frame-ancestors 'self' https://${controlPlane.hostname}"
     '';
 
+    # Grafana's database on the shared app-db cluster (see
+    # modules/app-db). Dashboards, datasources and alert rules stay
+    # nix-provisioned; the DB holds what the UI created: users, service
+    # accounts, anything added by hand.
     fleet.appDatabases.grafana.consumers = [ "grafana" ];
 
     fleet.bridgeMemberships = {
@@ -594,12 +594,12 @@ in
         # Grafana preinstalls its own Drilldown apps (Logs/Metrics/Traces/
         # Profiles) into the PERSISTED /var/lib/grafana bind mount, and
         # auto-updates them on startup — but the stock `minor` strategy
-        # refuses to cross a major boundary. So the Logs Drilldown app sat
-        # at 1.0.37 (built for Grafana 11) while the server moved to 13,
-        # and its preloaded module failed at runtime: every Drilldown ->
-        # Logs route rendered "App not found", including the deep links
-        # from the Janitorr and per-app Logs tiles. `latest` lets the major
-        # bump through, which is what keeps plugins in step with a Grafana
+        # refuses to cross a major boundary. So a Drilldown app built for
+        # an older Grafana major stays behind while the server moves on,
+        # and its preloaded module fails at runtime: every Drilldown ->
+        # Logs route (deep links included) renders "App not found".
+        # `latest` lets the major bump through, which is what keeps plugins
+        # in step with a Grafana
         # upgrade. Trade-off: plugin versions track upstream instead of
         # being pinned like the container image.
         GF_PLUGINS_UPDATE_STRATEGY = "latest";
@@ -618,7 +618,7 @@ in
         #
         # Off on its own would make grafana framable by any site on the
         # internet, so the narrower policy that replaces it is the
-        # `grafana-embed` middleware below: a frame-ancestors CSP naming
+        # `grafana-embed` middleware (traefikRawRules above): a frame-ancestors CSP naming
         # daedalus and nothing else. The two belong together — do not set
         # this without it.
         GF_SECURITY_ALLOW_EMBEDDING = "true";
@@ -634,9 +634,9 @@ in
         GF_SMTP_FROM_NAME = "${config.networking.hostName} Grafana";
         GF_SMTP_STARTTLS_POLICY = "MandatoryStartTLS";
 
-        # Pocket ID SSO (AUTH.md). Client creds are rendered from the
-        # declarative client below, under the two GF_* names grafana
-        # reads. Single-user box:
+        # Pocket ID SSO. Client creds are rendered from the declarative
+        # client above (ssoClients.grafana), under the two GF_* names
+        # grafana reads. Single-user box:
         # every Pocket ID account maps to Grafana Admin. Basic auth stays
         # on — daedalus authenticates with the admin user/pass against the
         # API. Escape hatch: /login?disableAutoLogin.

@@ -40,9 +40,9 @@
 # sends /login straight to Pocket ID; `/login?auto_launch=false` shows
 # the password form.
 #
-# DISABLE_PASSWORD_AUTH is on (since 2026-09-03, after the first
-# Pocket ID login succeeded — upstream says to link an admin BEFORE
-# disabling passwords). The pre-OIDC admin stays in wg-easy.db as
+# DISABLE_PASSWORD_AUTH is on — set only once a Pocket ID login had
+# succeeded, since upstream says to link an admin BEFORE disabling
+# passwords. The pre-OIDC admin stays in wg-easy.db as
 # dormant rows; INIT_USERNAME/INIT_PASSWORD (the host's env file) matter only for
 # a fresh-bootstrap first init, which is why they are not removed.
 # Break-glass on a fresh bootstrap: comment the flag out, rebuild, log in
@@ -97,13 +97,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # wg-easy INIT_USERNAME + INIT_PASSWORD: sops-encrypted env.sops, decrypted to
-    # /run/secrets/wg-easy-env at activation. Edit with `sops env.sops`.
+    # INIT_USERNAME + INIT_PASSWORD, decrypted to /run/secrets/wg-easy-env
+    # at activation from the host's `envSopsFile`.
     sops.secrets."wg-easy-env" = mkDotenvSecret cfg.envSopsFile;
 
     # Pocket ID client — id `wg-easy`, secret generated on the box, rendered
     # into the container as the OAUTH_OIDC_* pair. PKCE stays on (default):
-    # wg-easy sends S256. Logo: assets/logos/wg-easy.png in stacks/pocket-id.
+    # wg-easy sends S256. No `logo` here: the sync falls back to
+    # `wg-easy.png` in the host's fleet.sso.logoDir, when it has one.
     fleet.ssoClients.wg-easy = {
       displayName = "WireGuard";
       description = "VPN — peers + profiles";
@@ -130,7 +131,8 @@ in
       };
     };
 
-    # tv stack's gluetun adds the same modules; NixOS merges the lists.
+    # A gluetun tunnel (platform/lib/gluetun-lib.nix) adds the same modules;
+    # NixOS merges the lists.
     boot.kernelModules = [
       "wireguard"
       "iptable_nat"
@@ -285,7 +287,8 @@ in
 
       # INIT_USERNAME + INIT_PASSWORD (first-init admin credentials; inert
       # once wg-easy.db exists). The OIDC client pair is appended by
-      # stacks/pocket-id via `consumers` above.
+      # the identity provider's client sync (pocket-id/clients.nix) via
+      # `consumers` above.
       environmentFiles = [
         config.sops.secrets."wg-easy-env".path
       ];

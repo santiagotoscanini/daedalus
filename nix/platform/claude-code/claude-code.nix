@@ -29,13 +29,9 @@
 # (the plain binary) and `manifest.zst.json` (the zstd one), each with its own
 # checksums and its own detached signature, and nixpkgs' expression takes the
 # zstd one and runs `unzstd` on what it fetches. Vendoring the wrong one does
-# not fail loudly — it makes the override's guard go false, and the whole pin
-# becomes unreachable. That is exactly what happened on 2026-09-23: the file
-# here was `manifest.json`, the guard read "only while nixpkgs still fetches
-# the plain binary", nixpkgs had moved to zstd, and a pin could be fetched,
-# signature-checked, committed, pushed, locked and built while changing
-# nothing — every status reporting success. The guard now compares the two
-# shapes instead of asserting one.
+# not fail loudly — the override's guard goes false and the pin changes
+# nothing while every status reports success (the guard's comment below has
+# the incident).
 #
 # It is a ratchet, not a pin: the condition below goes false on its own as
 # soon as nixpkgs catches up, and the file becomes dead weight rather than a
@@ -85,11 +81,7 @@
         };
         packaged = unstable.claude-code;
 
-        # Upstream publishes two manifests per release — `manifest.json`,
-        # naming the plain binary, and `manifest.zst.json`, naming the
-        # zstd-compressed one — each with its own checksums and its own
-        # detached signature. nixpkgs vendors the zstd one and its expression
-        # pipes the artifact through `unzstd`, so that is the one to pin.
+        # The zstd manifest, the one nixpkgs vendors (header).
         pinned = lib.importJSON ./manifest.zst.json;
 
         # Whether a manifest and the packaged expression agree about the
@@ -98,15 +90,14 @@
         # and then unpacks the result the one way it knows, so a manifest of
         # the other shape fetches a file the build cannot open.
         #
-        # Compared rather than asserted in one direction, which is the bug
-        # this replaces. The guard used to read "only while the packaged
-        # expression still fetches the PLAIN binary" — written when nixpkgs
-        # did. nixpkgs has since moved to zstd, so the condition went false
-        # forever and the override became unreachable: a pin could be
-        # fetched, signature-checked, committed, pushed and built, and change
-        # nothing at all, with every status along the way reporting success.
-        # Comparing the two shapes arms correctly whichever one is current
-        # and falls dormant only on a genuine disagreement.
+        # Compared rather than asserted in one direction. A guard that read
+        # "only while the packaged expression still fetches the PLAIN binary"
+        # went false forever when nixpkgs moved to zstd (2026-09-23): a pin
+        # could be fetched, signature-checked, committed, pushed and built,
+        # and change nothing at all, with every status along the way
+        # reporting success. Comparing the two shapes arms correctly
+        # whichever one is current and falls dormant only on a genuine
+        # disagreement.
         zstShaped = m: lib.hasSuffix ".zst" m.platforms.${platformKey}.binary;
         platformKey =
           {

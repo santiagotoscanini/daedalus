@@ -1,6 +1,6 @@
-# platform/fleet-lib — pure helpers shared across the platform layer,
-# as a by-path library (`*-lib.nix` files are never listed in
-# configuration.nix's imports; consumers import this by path). Owner of the
+# platform/lib/fleet-lib — pure helpers shared across the platform layer,
+# as a by-path library (`*-lib.nix` files are never listed in a module
+# import list; consumers import this by path). Owner of the
 # bridge-membership spec syntax, consumed by podman.nix (flag
 # injection) and publishing.nix (isolation assertions).
 

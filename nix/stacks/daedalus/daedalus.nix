@@ -73,11 +73,11 @@ let
   # What the stacks show the control plane — `fleet.dashboard` (platform/
   # export.nix), read whole and never indexed by a fixed key. Each stack
   # contributes inside its own `mkIf`: a version under the name the engine
-  # reads (`N8N_VERSION`), an endpoint (`PIHOLE_URL`), a rendered secret
+  # reads (`FACTORIO_VERSION`), an endpoint (`PIHOLE_URL`), a rendered secret
   # (`LITELLM_API_KEY`), a mount (/shotter). Switch the stack off and its
-  # entry is simply absent — the page renders "unknown" or nothing — where
-  # this module used to reach into `containers.n8n.image`, `webApps.pihole`
-  # and `sops.secrets."litellm-env"` and fail eval the moment one was gone.
+  # entry is simply absent — the page renders "unknown" or nothing — rather
+  # than this module failing eval on another stack's missing container,
+  # webApp or secret.
   dashboard = lib.attrValues config.fleet.dashboard;
 
   # Which containers ride each VPN tunnel, derived rather than declared: a
@@ -102,37 +102,6 @@ let
     _: v: v // { tenants = netnsTenantsOf v.container; }
   ) config.fleet.vpnEgress;
 
-  # What Nix currently believes, handed to the container as one read-only
-  # store file. Two parts, because they have different provenance:
-  #
-  #   registry   — site/apps.json, the committed export of daedalus's
-  #                own `apps` table. Comparing the DB against THIS is how the
-  #                UI reports drift: it is not "what the DB says", it is what
-  #                the running system was actually built from.
-  #   nixManaged — apps declared by hand in Nix and therefore not editable
-  #                here. Only daedalus itself, from the `self` binding below.
-  #
-  # A store path, not a bind mount of the committed file: the
-  # path itself changes when the content does, so the container's ExecStart
-  # changes and it restarts with the new manifest. Binding the live file
-  # instead would pin its inode and survive an Apply that rewrote it.
-  # ONLY the hand-written entries. The committed registry deliberately does NOT
-  # ride in here.
-  #
-  # It used to, and that made every Apply restart daedalus: this is a store
-  # path bound into the container, so changing apps.json changed the path,
-  # changed the volume argument, changed the unit, and systemd restarted it —
-  # right at the "switching" phase, killing the very page that was showing the
-  # progress bar. The registry now arrives through a stable path instead (see
-  # daedalus-registry-snapshot in daedalus-snapshots.nix), so applying a change no longer takes the app down.
-  # Every hostname already published on this box, apps and non-apps alike
-  # (pihole, grafana, chat, …). Handed to the container so a hostname edit can
-  # be rejected while it is being typed.
-  #
-  # (takenHostnames, webAppHosts, lanHosts and monitoredJobs all ride the
-  # /export domains now — publishing.json, network.json, jobs.json — see
-  # platform/export.nix and the stacks that contribute them.)
-
   # Apps with a tracked site/vault/apps/<name>-env.sops. A FACT, read from the
   # same directory listing declarations.nix reads, not a setting: this is the
   # only thing that decides whether an app gets operator secrets, so the page
@@ -148,6 +117,16 @@ let
     }
   );
 
+  # What only Nix knows, handed to the container as one read-only store file:
+  # the hand-declared apps (`nixManaged` — only daedalus itself, from `self`
+  # below, and therefore not editable from the UI) and operatorSecretApps.
+  #
+  # ONLY those. The committed registry (apps.json) deliberately does NOT ride
+  # in here: this is a store path bound into the container, so a change to it
+  # changes the unit and systemd restarts the app — which, for apps.json,
+  # meant every Apply killed the page showing its progress at the "switching"
+  # phase. The registry arrives through a stable path instead
+  # (daedalus-registry-snapshot, daedalus-snapshots.nix → NIX_REGISTRY_PATH).
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
@@ -180,7 +159,7 @@ let
   # On its values: `stage = "lab"` keeps it LAN-only — a control plane for
   # this box has no business answering on a public CNAME, wildcard cert or
   # not. `postgres` puts role + database `daedalus` on the shared cluster
-  # (stacks/app-db), REVOKE'd from PUBLIC like every other tenant, with
+  # (modules/app-db), REVOKE'd from PUBLIC like every other tenant, with
   # DATABASE_URL arriving via the bootstrap-generated env file; joining
   # app-db-net for it is also how the container reaches `litellm:4000` on the
   # same bridge. `litellm` sets LITELLM_BASE_URL against the shared gateway —
@@ -312,7 +291,7 @@ in
   config = lib.mkIf config.fleet.modules.daedalus.enable {
     # Reach the monitoring stack: prometheus for liveness/traffic/DB size, loki
     # for the log panels. Both live on `monitoring`. This list MERGES with the
-    # one stacks/apps/apps.nix contributes for this container (app-db, plus the
+    # one modules/apps/apps.nix contributes for this container (app-db, plus the
     # iso bridge from webApps.isolated) — bridgeMemberships is the single source
     # of membership and its lists concatenate across modules.
     #
@@ -468,12 +447,13 @@ in
           # (core/authz.ts assertMachineActor).
           "X-Forwarded-Groups" = "{{ .claims.groups | mapToJsonArray }}";
         };
-        # Five paths skip the Pocket ID gate, for the same reason healthPath
+        # Six paths skip the Pocket ID gate, for the same reason healthPath
         # does — whatever fetches them cannot hold a passkey:
         #
-        #   /api/deploy — zot's push events (stacks/registry). Carries its own
+        #   /api/deploy — zot's push events (modules/registry). Carries its own
         #                 auth instead: X-Deploy-Token, checked in the route
-        #                 against DEPLOY_HOOK_TOKEN below, and it can do exactly
+        #                 against DEPLOY_HOOK_TOKEN (the registry's envFiles
+        #                 contribution), and it can do exactly
         #                 one thing — start an existing app's deploy unit.
         #
         #   /mcp        — the engine's MCP server, for Claude Code sessions ON
@@ -518,8 +498,8 @@ in
         #                 in any client that requests it outside a page load.
         #
         # A bypassed path is effectively public on the LAN, so each is written to
-        # deserve it: three of these are the app's own artwork and the other two
-        # authenticate themselves. Everything else on this app still needs a
+        # deserve it: three of these are the app's own artwork and the other
+        # three authenticate themselves. Everything else on this app still needs a
         # passkey.
         authBypassRule = "Path(`/api/deploy`) || PathPrefix(`/mcp`) || Path(`/api/nodes/hello`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`)";
       };
@@ -578,7 +558,7 @@ in
             # rides the rendered env file below; this is an identifier that appears
             # in the public dashboard URLs anyway. The box's zone (site.json); the
             # account and tunnel ids beside it are the tunnel's business and arrive
-            # from stacks/cloudflared through fleet.dashboard while it runs.
+            # from modules/cloudflared through fleet.dashboard while it runs.
             CF_ZONE_ID = config.fleet.cloudflare.zoneId;
             # The default route, which is the router. Bound from the site's gateway
             # (site.nix, from site.json) — the one place that says where this box
@@ -608,18 +588,12 @@ in
             # address and Cloudflare with the WAN one. Bound rather than typed so
             # the page cannot print a hostname this box no longer maintains.
             WAN_HOST = config.fleet.wanHost;
-            # The per-service versions the pages read by name (N8N_VERSION,
-            # POCKET_ID_VERSION, FACTORIO_VERSION, MINECRAFT_*, the AI sidecars'
-            # …) are each stack's own contribution to fleet.dashboard now: the
-            # stack that pins a version says what it is, and a stack that is off
-            # says nothing. The full tag map rides /export/images.json (platform/
-            # export.nix), and each named variable is deleted the day the engine
-            # reads it from there instead. Traefik gets no variable either way — it
-            # serves /api/version on the internal entrypoint, which reports what
-            # the process is actually running rather than what the flake asked
-            # for. The labels baked into the images on disk — the other half of the
-            # version answer, for services whose pin is a moving tag — still arrive
-            # as a snapshot:
+            # Per-service versions still read by name (FACTORIO_VERSION, …) are
+            # each stack's own fleet.dashboard contribution (see its `env`
+            # description in platform/export.nix); pinned tags ride
+            # /export/images.json. The labels baked into the images on disk —
+            # the version answer for services whose pin is a moving tag —
+            # arrive as a snapshot:
             IMAGE_LABELS_PATH = "/images/labels.json";
             # The project workspaces snapshot (clones under ~/projects), published
             # by daedalus-workspace-{publish,sync}. The ROOT is bound too, display
@@ -702,8 +676,8 @@ in
         # container uid 0 = the operator on the host.
         "${claudeDir}:/claude:ro"
         # The configuration repository's state, published by
-        # daedalus-repo-snapshot. Facts about the repo, never the repo: the tree
-        # holds machine-generated plaintext under gitignored secrets/ dirs.
+        # daedalus-repo-snapshot. Facts about the repo, never the repo: a
+        # checkout can hold untracked or gitignored plaintext.
         "${repoDir}:/repo:ro"
         # site/ — the one directory daedalus writes — read-only here: the app
         # reads the committed site.json to edit against; the writes go through
@@ -809,8 +783,8 @@ in
           "WGEASY_PASS"
           # Optional override for the GitHub reads (the add-an-app repo picker
           # and the release-notes panels): a narrow read-only PAT, taking
-          # precedence over GHTOKEN below. Empty by default, and the reason to
-          # fill it is scope rather than capability — see the note on GHTOKEN.
+          # precedence over the App's installation token. Empty by default —
+          # see the note after CF_TOKEN below.
           "GITHUB_REPO_TOKEN"
         ];
       in
@@ -831,17 +805,13 @@ in
             # the tunnel panels. It is DNS-edit-capable (lego and route-sync
             # need that); daedalus only ever GETs with it.
             "CF_TOKEN=$(grep -m1 '^CF_DNS_API_TOKEN=' ${config.fleet.cloudflare.tokenEnvFile} | cut -d= -f2- | tr -d '\"' || true)"
-            # There is no DASH_GITHUB_TOKEN any more. It used to be the GHCR
-            # pull credential re-shaped — a classic PAT carrying `repo`, which
-            # is read-WRITE on every repository on the account — and that
-            # credential died with the Actions runners. Its two consumers each
-            # have a better source now: the release-notes panels and the NixOS
-            # channel check fall back to the GitHub App's installation token
-            # (GITHUB_TOKEN_PATH), and for the add-an-app repo picker, which
-            # genuinely needs to SEE this account's private repos, the supported
-            # credential is a fine-grained read-only PAT in GITHUB_REPO_TOKEN
-            # (service-keys.sops, in serviceKeys above). Unset, the picker lists
-            # the account's PUBLIC repos and says so.
+            # No general GitHub token is rendered here, on purpose: the old one
+            # was a classic PAT carrying `repo` — read-WRITE on every
+            # repository on the account. The GitHub reads use the App's
+            # installation token (GITHUB_TOKEN_PATH); GITHUB_REPO_TOKEN above
+            # is only the escape hatch for a picker that must list repos the
+            # App has not been given, and should be a fine-grained read-only
+            # PAT.
           ]
         );
         content = lib.concatStringsSep "\n" (

@@ -17,18 +17,11 @@
 # app's AUTH_SECRET: born on the box, never in git, rotated by deleting
 # the key and rebuilding.
 #
-# It used to be operator state — a key per client in a tracked
-# `clients.sops`, hand-authored with `sops`. That made declaring a client
-# a two-step act, and since the render below is ONE unit for every
-# client, forgetting the second step failed the login path for all of
-# them at activation. The defences that grew around that (an eval-time
-# assertion reading the ciphertext for key presence, then a whole
-# privileged agent so daedalus could write the file on request) were
-# elaborate answers to a question that did not need asking: nothing about
-# a random 32-byte string wants a human in the loop. The file's last job
-# was seeding this one, and it is gone from the tree (the reference host's
-# configuration history still has it, if a value is ever needed
-# from before the switch.
+# Don't move it back to operator state (a tracked sops file per key): that
+# makes declaring a client a two-step act, and since the render below is
+# ONE unit for every client, a forgotten second step fails the login path
+# for all of them at activation. Nothing about a random 32-byte string
+# wants a human in the loop.
 #
 # Losing the state file costs nothing but a rotation. The sync pushes
 # our secret to the IdP on every boot — adding it and pruning whatever
@@ -95,8 +88,8 @@ let
   envName = n: lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
   secretKey = n: "SSO_SECRET_${envName n}";
 
-  # Machine-generated, one key per client, gitignored like every other
-  # machine-generated state on the box. Not in /run: it has to survive a reboot,
+  # Machine-generated, one key per client, in the state tree rather than any
+  # checkout. Not in /run: it has to survive a reboot,
   # or every client would rotate on every boot.
   secretsFile = "${stateDir}/client-secrets.env";
   stateDir = "${config.fleet.stateRoot}/pocket-id/secrets";
@@ -165,9 +158,9 @@ let
           # OIDC app `consumers = [ "<container>" ]` + the `consumerEnv.secret`
           # name its image reads.
           #
-          # This bit wealthfolio: it was a hand-made PUBLIC client until the
-          # sync landed and overwrote it, and the break stayed invisible for
-          # thirteen days because nothing logs in on a schedule.
+          # A hand-made PUBLIC client overwritten by the sync once broke an
+          # app's login this way, invisibly for thirteen days, because
+          # nothing logs in on a schedule.
           #
           # PKCE below is not the alternative to a secret. The secret proves
           # which client is asking; PKCE proves it is the same party that
@@ -262,8 +255,9 @@ in
 
         systemd.services.sso-client-secrets = lib.mkIf (cfg != { }) {
           description = "Generate the Pocket ID client secret for every fleet.ssoClients entry";
-          # /home is ZFS, and the renders that read this file are ordered
-          # after it rather than the other way round.
+          # The state tree may be its own (ZFS) mount, and the renders that
+          # read this file are ordered after it rather than the other way
+          # round.
           after = [ "local-fs.target" ];
           serviceConfig = {
             Type = "oneshot";

@@ -8,7 +8,7 @@
 # in. Every git command here runs AS the operator: the clones are theirs, the
 # GitHub SSH identity (platform/git) is theirs, and root-made objects in a
 # working tree are exactly the "unable to open loose object" trap CLAUDE.md
-# warns about for /etc/nixos.
+# warns about for the configuration checkout.
 
 # setpriv, not runuser/sudo, for the same reason as deploy.sh: no PAM session
 # lines in the journal for something that runs every half hour. Absolute

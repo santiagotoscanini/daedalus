@@ -4,7 +4,7 @@
 # what the platform injects, what the registry declares, what the image bakes
 # in, and every value that arrives through an --env-file (database URL,
 # AUTH_SECRET, OIDC client secret, operator sops vars). Re-deriving that in the
-# app would mean reimplementing stacks/apps and drifting from it.
+# app would mean reimplementing modules/apps and drifting from it.
 #
 # Written to /run — tmpfs — and never to the state root. These are
 # real secrets: on the selfhost dataset they would land in every ZFS snapshot

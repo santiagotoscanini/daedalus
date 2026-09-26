@@ -29,7 +29,7 @@
 # the operator's home, is the interactive credential and is not managed here.
 #
 # The private key is sops-managed (the host hands the ciphertext in as
-# `fleet.git.sshKeySopsFile` — host/sops/github-key.sops; it decrypts to
+# `fleet.git.sshKeySopsFile`; it decrypts to
 # /run/secrets/github-ssh-key at activation, operator-owned 0400); the
 # flake-autoupgrade push consumes the same secret. Rotation: generate a
 # new keypair, `sops -e` the private half over that file,

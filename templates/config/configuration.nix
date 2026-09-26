@@ -11,8 +11,8 @@
 #   host/images.nix              the digest pin of every container those run
 #   host/secrets.nix             the encrypted files engine modules read
 #   host/storage.nix             bulk-data roots, and the ZFS table if any
-#   site/                        site.json, apps.json, vault/ — the control
-#                                plane's own directory; edited from its UI
+#   site/                        site.json, apps.json, nodes.json, vault/ — the
+#                                control plane's own directory; edited from its UI
 { config, ... }:
 {
   imports = [
@@ -26,7 +26,7 @@
 
   # The site directory, read at evaluation: the constants every module shares
   # (domain, addresses, mail, Cloudflare ids) come from site/site.json, the
-  # app registry from site/apps.json.
+  # app registry from site/apps.json, the approved nodes from site/nodes.json.
   fleet.site.source = ./site;
 
   # The operator's account. The engine declares who that is (host/identity.nix)

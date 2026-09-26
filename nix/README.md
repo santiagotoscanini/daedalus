@@ -8,7 +8,7 @@ drives.
 |---|---|
 | `platform/` | The base every stack rides on, with no enable switches: the rootless-podman runtime and its helpers (`mkRootlessContainer`, `mkDotenvSecret`, `mkSecretRender`, `mkLocalImage`, `pinnedImage`), the publish layer (`fleet.webApps` → reverse-proxy routes, LAN DNS, tunnel routes, health probes; the observability registries), the single-sign-on interface (`identity.nix`: `fleet.sso.*`, `fleet.ssoClients`), the apps registry (`apps-options.nix`: `fleet.apps`), the site constants read from the host's `site/` directory, sops wiring, ZFS and replication mechanisms, mail, git identity, dead-man pings, the nodes (`nodes.nix`: `fleet.nodes`, `fleet.lanDomain`), the weekly lock upgrade, and the export domains the app reads its facts from. |
 | `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
-| `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), the mover for versions a stack pins as plain strings (`version-update.nix`, fed by `fleet.versionPins`), `self.json`, and the privileged host agents (`host/*.sh` — apply, deploy, build, image update, engine update, version update, site write, snapshots). |
+| `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), the mover for versions a stack pins as plain strings (`version-update.nix`, fed by `fleet.versionPins`), `self.json`, and the privileged host agents (`host/*.sh` — among them apply, deploy, build, the image, engine and version updates, site and secret writes, snapshots, workspaces, power). |
 | `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
 | `tests/` | `minimal-host/` evaluates the config template (below) as a whole system; `full-catalog/` the same host with every leaf switched on; `fixtures.nix` every schema fixture under `../fixtures/` through `platform/site.nix` and `registry-lib.nix`. All run in `nix flake check`; nothing is built. |
 
@@ -61,10 +61,11 @@ evaluation with the option's name.
 | `verdaccio` | A private npm mirror; the box's builds and the control plane's dev container install through it. | nothing — its image is built on the box |
 | `wg-easy` | A WireGuard server and its admin UI; the tunnel port is forwarded by the router. | `envSopsFile`, `fleet.images.wg-easy` |
 
-The spine — everything above but the leaves (grocy, intel-gpu-exporter,
-metube, myspeed, stirling-pdf, verdaccio, wg-easy) — is switched on in
-`templates/config`, so a host made
-from the template is a box with a control plane to log in to.
+The spine — everything above but the leaves (factorio, grocy,
+intel-gpu-exporter, metube, myspeed, stirling-pdf, verdaccio, wg-easy) — is
+switched on in `templates/config`, with `stirling-pdf` as the one example
+leaf, so a host made from the template is a box with a control plane to log
+in to. `nix/tests/full-catalog` switches on the other leaves.
 
 ## Importing it
 
@@ -101,7 +102,7 @@ host/modules.nix            fleet.modules.<id>.enable + each module's policy
 host/images.nix             fleet.images.<container>, one file, full literals
 host/secrets.nix            the *SopsFile options the platform and the control plane read
 host/storage.nix            fleet.data (+ fleet.zfs.datasets, fleet.backup.replications)
-site/                       site.json, apps.json, vault/ — what the control plane writes
+site/                       site.json, apps.json, nodes.json, vault/ — what the control plane writes
 ```
 
 ### What the host must define
@@ -197,7 +198,7 @@ deploy. `CONTRIBUTING.md` has the image's own story.
 ## What is NOT done yet
 
 - **The rest of the reference host's stacks.** The spine — everything a
-  box needs to log in to its control plane — is in the catalog, and seven
+  box needs to log in to its control plane — is in the catalog, and eight
   leaves beside it. About
   twenty-three more stacks (media, home automation, the AI cluster, VPN
   tenants, small tools) are still in the reference operator's private

@@ -1,8 +1,8 @@
 # Idempotent Cloudflare DNS reconciler — concatenated into a
-# writeShellApplication wrapper in stacks/cloudflared/cloudflared.nix.
-# Required env (exported by the wrapper):
-#   CF_DNS_API_TOKEN  — from secrets/env (EnvironmentFile=)
-#   ZONE_ID           — Cloudflare zone (toscanini.me)
+# writeShellApplication wrapper in cloudflared.nix.
+# Required variables:
+#   CF_DNS_API_TOKEN  — the unit's EnvironmentFile (fleet.cloudflare.tokenEnvFile)
+#   ZONE_ID           — the baseDomain's Cloudflare zone (set by the wrapper, as are the rest)
 #   TUNNEL_ID         — the locally-managed tunnel
 #   MANAGED_COMMENT   — marker stamped on every CNAME we own
 #   HOSTS             — newline-separated declared hostnames

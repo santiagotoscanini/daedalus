@@ -237,12 +237,13 @@ log_errtail() {
 # ── the engine override ───────────────────────────────────────────────────
 #
 # site.json's `developer.engineOverride`: an absolute path to an engine clone
-# on this box, or nothing. Nix never reads the key; the three agents that
-# rebuild do, at run time, and each answers it differently — apply.sh builds
-# from that tree (`--override-input`, lock untouched) and activates with
-# `test` rather than `switch`; image-update.sh and engine-update.sh refuse,
-# because a pin moved under an override would name a rev nothing is running.
-# Read here, once, so the three cannot disagree about where the key lives.
+# on this box, or nothing. Nix never reads the key; the agents that rebuild
+# or move a pin do, at run time — apply.sh builds from that tree
+# (`--override-input`, lock untouched) and activates with `test` rather than
+# `switch`; image-update.sh, engine-update.sh, version-update.sh and
+# claude-code-update.sh refuse, because a pin moved under an override would
+# name a rev nothing is running. Read here, once, so they cannot disagree
+# about where the key lives.
 #
 # Prints the path, or nothing: no site.json, an unreadable one, or a null
 # key all mean "no override". Read as the operator and never through a link

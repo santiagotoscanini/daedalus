@@ -2,10 +2,9 @@
 # reads — and of the SITE DIRECTORY inside it (fleet.site.path), the one
 # directory daedalus writes, for the Settings › Site tab.
 #
-# The container deliberately never mounts either: root inside it is the
-# operator uid, and the configuration tree holds machine-generated plaintext
-# (app-db passwords, per-app AUTH_SECRETs) under gitignored secrets/ dirs. So
-# the facts are read here on the host and published like the image labels and
+# The container never mounts the configuration repository (site/ alone, read-
+# only): root inside it is the operator uid, and a checkout can hold untracked
+# or gitignored plaintext, and git facts need the .git directory. So the facts are read here on the host and published like the image labels and
 # the SMART data: a file in /run, read through a read-only mount.
 #
 # For each managed site file the facts include a DIGEST rather than bytes:

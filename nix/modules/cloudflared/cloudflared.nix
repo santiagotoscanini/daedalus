@@ -7,9 +7,10 @@
 #   - `config.yml` is rendered from those entries via `pkgs.formats.yaml`
 #     with a catch-all `http_status:404` appended (required by cloudflared).
 #   - `cloudflared-route-sync.service` reconciles Cloudflare DNS CNAMEs
-#     against `cloudflareRoutes` on every nixos-rebuild, using
-#     the box's CF_DNS_API_TOKEN (platform/site.nix renders it from
-#     site/vault/cloudflare-api-token.sops). Idempotent.
+#     against `cloudflareRoutes` — at boot, and on any rebuild that changes
+#     the declared set (its script embeds the hostnames) or rotates the
+#     token — using the box's CF_DNS_API_TOKEN (platform/site.nix renders
+#     it from site/vault/cloudflare-api-token.sops). Idempotent.
 #   - `credentials.json.sops` (sops) carries `{AccountTag, TunnelID,
 #     TunnelSecret}` — CF exposes the secret ONLY at tunnel creation
 #     (POST response). Encrypted and tracked, the tunnel identity is in
@@ -68,17 +69,20 @@ let
   # whatever zone this is; daedalus only offers the zones that token can see.
   inherit (cfg.cloudflare) zoneId;
 
-  # Stamped on every CNAME we create; the sweep ONLY touches records
-  # carrying this exact comment, so it can never wipe a hand-edited
-  # DNS record or an ACME challenge record.
+  # Stamped on every CNAME the reconciler writes — a marker for a human
+  # reading the zone. Ownership is NOT the comment: the sweep deletes by
+  # target (below), so a comment rename cannot strand orphans.
   managedComment = "Managed by fleet.cloudflareRoutes";
 
   # Idempotent CF DNS reconciler:
   #   1. UPSERT — for each cloudflareRoutes entry, ensure a proxied
-  #      CNAME `<hostname> -> <tunnelId>.cfargotunnel.com` exists.
-  #   2. SWEEP — DELETE any CNAME with our managedComment whose name
-  #      isn't in the declared set (so removing an entry + rebuild
-  #      removes the CNAME).
+  #      CNAME `<hostname> -> <tunnelId>.cfargotunnel.com` exists. An
+  #      existing CNAME of that name is PATCHED onto the tunnel whatever it
+  #      pointed at, hand-made or not — never declare a hostname whose record
+  #      is managed elsewhere.
+  #   2. SWEEP — DELETE any CNAME that points at this tunnel but isn't in
+  #      the declared set (so removing an entry + rebuild removes the
+  #      CNAME). Records pointing elsewhere are never touched.
   # Script body lives at assets/route-sync.sh (pure Bash, shellcheckable
   # standalone). This wrapper sets the parameters it expects as env
   # vars, then concatenates the body so writeShellApplication runs it
@@ -139,9 +143,7 @@ in
       CF_TUNNEL_ID = tunnelId;
     };
 
-    # Tunnel credentials (AccountTag/TunnelID/TunnelSecret — CF shows the
-    # secret only at tunnel creation). Sops-encrypted and tracked: the tunnel
-    # identity is in the rebuild trail, so no out-of-tree backup is needed.
+    # Tunnel credentials (see the header).
     sops.secrets."cloudflared-credentials" = {
       sopsFile = cfg.modules.cloudflared.credentialsSopsFile;
       format = "binary";
@@ -191,8 +193,8 @@ in
       ];
     };
 
-    # Runs on every rebuild (and at boot) before cloudflared starts;
-    # safe if cloudflared is already up.
+    # Runs at boot before cloudflared starts, and again whenever its script
+    # or the token changes (header); safe if cloudflared is already up.
     systemd.services.cloudflared-route-sync = {
       description = "Reconcile CF DNS CNAMEs for fleet.cloudflareRoutes";
       # pihole-ftl as well as pihole-ready: the latter is RemainAfterExit, so on

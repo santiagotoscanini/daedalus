@@ -1,9 +1,9 @@
-# platform/bluetooth.nix — host Bluetooth radio (ASUS USB-BT500).
+# platform/bluetooth — host Bluetooth radio (ASUS USB-BT500).
 #
 # Host-level for the same reason as gpu.nix: the adapter is one piece of
 # hardware that any stack may want, so enablement lives here and the
 # per-consumer wiring (the D-Bus bind mount) lives with the consumer —
-# today only stacks/home-assistant.
+# today only the reference host's home-assistant stack.
 #
 # The dongle is a Realtek RTL8761BU (usb 0b05:190e). Its firmware is
 # already in the kernel's search path (`rtl_bt/rtl8761bu_fw.bin`, from
@@ -33,8 +33,8 @@
 # Root cause, measured from inside the container: D-Bus EXTERNAL auth
 # compares the uid the client CLAIMS against SO_PEERCRED. Home Assistant
 # runs as container-root, so it claims uid 0, while the host's
-# dbus-daemon sees uid 1000 (rootless podman maps container root to
-# the operator). Claiming 1000 over the same socket returns OK; claiming 0
+# dbus-daemon sees the operator's uid (rootless podman maps container root
+# to the operator). Claiming that uid over the same socket returns OK; claiming 0
 # returns REJECTED — so this is purely a userns uid mismatch, not a
 # policy, permission or mount problem.
 #
@@ -48,8 +48,8 @@
 # xdg-dbus-proxy does NOT fix this — tested before writing anything: it
 # validates SO_PEERCRED identically and rejects the container the same
 # way. Hence `ha-dbus-relay` below, which rewrites exactly one line of
-# the handshake. Full reasoning and its one limitation (no fd passing,
-# so GATT connections are out) live in dbus-uid-relay.py.
+# the handshake and forwards file descriptors (SCM_RIGHTS), so GATT
+# connections work too. Full reasoning lives in dbus-uid-relay.py.
 #
 # A second, separate error (`Missing NET_ADMIN/NET_RAW ... Automatic
 # adapter recovery is unavailable`) remains and is cosmetic by
@@ -72,9 +72,10 @@
       # without this they are simply absent.
       Experimental = true;
 
-      # Passive scanning only makes sense with a controller that
-      # supports it; the RTL8761B does. Leaving the rest of BlueZ's
-      # defaults alone deliberately — this box pairs nothing by hand.
+      # A device whose bond was lost re-pairs through "just works"
+      # without a confirmation prompt — this box pairs nothing by hand,
+      # so there is no one to answer one. The rest of BlueZ's defaults
+      # are left alone deliberately.
       JustWorksRepairing = "always";
     };
   };
@@ -128,7 +129,7 @@
 
   # A dead relay means Home Assistant silently loses Bluetooth. The
   # failure mail is off while HA itself is muted (see the HA-MUTED
-  # block in stacks/monitoring/.../rules.yaml) — the relay bounces
+  # block in modules/monitoring/assets/provisioning/alerting/rules.yaml) — the relay bounces
   # whenever HA's Bluetooth setup is being worked on. Drop the
   # email = false to re-arm it along with the rest of HA.
   fleet.monitoredJobs.ha-dbus-relay = {

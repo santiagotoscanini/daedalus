@@ -6,25 +6,19 @@
 # thing that can mean it. Author the file, `git add` it, and the next rebuild
 # injects it.
 #
-# It used to be a boolean in the registry too, and that pairing was the whole
-# problem: two facts that had to agree, whose disagreement was only discovered
-# during an Apply. Flag without file failed `nixos-rebuild build` (the sops
-# entry pointed at nothing) and cost the operator a self-reverting Apply; file
-# without flag was worse, because it failed silently — the app came up missing
-# every operator-supplied variable and looked healthy doing it. Deriving the
-# flag from the file removes both states rather than validating them.
+# Don't add a registry boolean beside it: two facts that must agree are only
+# found to disagree during an Apply. Flag without file fails `nixos-rebuild
+# build` (the sops entry points at nothing) and costs a self-reverting Apply;
+# file without flag is worse, because it fails silently — the app comes up
+# missing every operator-supplied variable and looks healthy doing it.
+# Deriving the flag from the file removes both states rather than validating
+# them.
 #
 # WHERE the files live, and why it is an argument and not `./.`:
 #
-# They used to sit beside this library, at `stacks/apps/<name>-env.sops`, and
-# it read `builtins.readDir ./.` — its own directory. They live in the site
-# vault now, because `site/` is the ONE directory daedalus writes: an editor
-# that sets a single key can reach `site/vault/apps/`, and cannot reach
-# `stacks/`. Moving the files without moving the read would have been the
-# silent failure above, in its purest form — six apps losing every operator
-# variable while every unit stayed green.
-#
-# So the directory can no longer be derived from this file's own location, and
+# In the site vault, because `site/` is the ONE directory daedalus writes: an
+# editor that sets a single key can reach `site/vault/apps/`, and nothing
+# else. So the directory cannot be derived from this file's own location, and
 # `site/` is not a constant either: `fleet.site.source` is the module-side view
 # of it (a store path; `fleet.site.path` is the host agents' runtime string and
 # must never be read at eval). Hence `site` is PASSED IN by both consumers,
@@ -32,11 +26,11 @@
 # where the site directory is. The `vault/apps` tail stays HERE, so the layout
 # is written down once.
 #
-# A by-path library, not a module (see the `*-lib.nix` note in configuration.nix
-# — these are never listed in the imports). Two consumers:
+# A by-path library, not a module (never listed in a module import list —
+# nix-engine.md §3). Two consumers:
 #
-#   stacks/apps/declarations.nix   builds the sops.secrets entry + environmentFiles
-#   stacks/daedalus                reports the derived truth into the UI's nix manifest,
+#   modules/apps/declarations.nix  builds the sops.secrets entry + environmentFiles
+#   stacks/daedalus/daedalus.nix   reports the derived truth into the UI's nix manifest,
 #                                  where it is a fact to display, not a control to flip
 #
 # Both read this one directory listing, so neither can describe a different set
@@ -44,8 +38,7 @@
 #
 # Only files GIT-TRACKED at eval time count: a flake evaluates from its store
 # copy, which is the git tree. `fleet.site.source` is `./site` in the flake, so
-# it is a path INSIDE that same store copy — the move changed the directory,
-# not this property. That is the useful reading — an uncommitted
+# it is a path INSIDE that same store copy. That is the useful reading — an uncommitted
 # `<name>-env.sops` is invisible to the build that would need it, so treating it
 # as absent is what the rebuild is going to do anyway. It also means turning
 # this on can no longer break an Apply: worst case the secrets are not there

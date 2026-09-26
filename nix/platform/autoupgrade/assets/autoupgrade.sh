@@ -22,7 +22,7 @@ cd "$FLAKE"
 # `nixos-rebuild boot` needs root. Everything that touches .git runs as
 # the operator, or the repo grows root-owned objects that a later `git` as
 # the operator cannot write. setpriv, not sudo/runuser: no PAM session per call
-# (same reasoning as stacks/apps' deploy).
+# (same reasoning as modules/apps' deploy).
 as_operator() {
   setpriv --reuid "$OPERATOR_USER" --regid "$OPERATOR_GROUP" --init-groups env HOME="$OPERATOR_HOME" "$@"
 }

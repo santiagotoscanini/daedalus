@@ -196,10 +196,11 @@ as_operator podman exec pg psql -U postgres -d postgres \
   -c "SELECT datname FROM pg_database WHERE datname='foo';" \
   -c "SELECT rolname FROM pg_roles WHERE rolname='foo';"
 
-# Consumer container has DATABASE_URL
+# Consumer container has DATABASE_URL (count only — the value carries
+# the password)
 as_operator podman inspect app-foo \
   --format '{{range .Config.Env}}{{println .}}{{end}}' \
-  | grep '^DATABASE_URL='
+  | grep -c '^DATABASE_URL='
 ```
 
 ## Escape hatch: dedicated cluster for one app

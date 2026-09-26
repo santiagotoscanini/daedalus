@@ -202,7 +202,8 @@ in
     # wantedBy (not requiredBy): a failed converge must never block the
     # data mounts — and with them most of the container fleet. Ordering
     # via `before` still guarantees properties apply first when it runs;
-    # a failure surfaces through emailOnFailure + the failed-units alert.
+    # a failure surfaces through its monitoredJobs mail (below) + the
+    # failed-units alert.
     systemd.services.zfs-converge = {
       description = "Converge ZFS dataset properties";
       # zfs-import.target covers every imported pool (the root pool is imported in

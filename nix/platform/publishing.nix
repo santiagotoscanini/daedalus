@@ -2,9 +2,11 @@
 #
 # Declares the fleet.* options a stack uses to expose itself — webApps
 # (the primary one-block interface), the lower-level traefikRoutes /
-# traefikRawRules / cloudflareRoutes / dnsHosts escape hatches, the
-# observability registries (prometheusScrapes, grafanaDashboards{,ByFolder},
-# logStacks, logDrops, logFiles)
+# traefikRawRules / cloudflareRoutes / dnsHosts / dnsSrv escape hatches,
+# directIngress and vpnEgress, the observability registries
+# (prometheusScrapes, prometheusFileSd, grafanaDashboardsByFolder, logStacks,
+# logDrops, logFiles) and the network constants they are built from (lanIp,
+# baseDomain, wanHost, cloudflare.*; defined by platform/site.nix)
 # — plus the materialization that turns each webApp into routes, DNS
 # entries, tunnel CNAMEs, probes and scrapes, and the assertions that keep
 # those combinations coherent.
@@ -42,10 +44,9 @@ in
     lanIp = lib.mkOption {
       type = lib.types.str;
       description = ''
-        The box's static LAN IPv4 — single source of truth, set in
-        configuration.nix (which also feeds it to the interface
-        config). Consumed by the dnsHosts generator and any stack that
-        must dial the host by IP.
+        The box's static LAN IPv4 — single source of truth, defined from
+        site.json's `network.lanIp` by platform/site.nix. Consumed by the
+        dnsHosts generator and any stack that must dial the host by IP.
       '';
       example = "10.0.0.2";
     };
@@ -152,7 +153,7 @@ in
       default = { };
       description = ''
         `Host(...) -> serviceUrl` routes, rendered by
-        stacks/traefik/traefik.nix into one YAML per route under a
+        modules/traefik/traefik.nix into one YAML per route under a
         /nix/store-backed rules dir bind-mounted into the traefik
         container. Every published hostname sits one level under
         baseDomain, so the entrypoint-level wildcard cert covers all
@@ -165,10 +166,10 @@ in
       default = { };
       description = ''
         Raw YAML rule contents keyed by filename. For Traefik dynamic
-        configs that don't fit the `traefikRoutes` shape. Current users:
-        named TLS options (tls-opts), entrypoint-default middlewares
-        (sec-headers), the oidc middleware file, and app-db's TCP/SNI
-        postgres router.
+        configs that don't fit the `traefikRoutes` shape: named TLS
+        options, entrypoint-default middlewares, the oidc middleware file,
+        app-db's TCP/SNI postgres router, and per-route middlewares or
+        routers a stack needs beside its webApp.
       '';
     };
 
@@ -180,8 +181,9 @@ in
           in every dash.cloudflare.com URL — but it is an identifier
           used in more than one place, so it gets a single home. Read
           from site/site.json by platform/site.nix like `zoneId`; the
-          tunnel (stacks/cloudflared) consumes it and, while it runs,
-          hands it to daedalus's Network page through `fleet.dashboard`.
+          tunnel (modules/cloudflared) consumes it and, while it runs,
+          hands the tunnel's ids to daedalus's Network page through
+          `fleet.dashboard`.
         '';
       };
       tunnelId = lib.mkOption {
@@ -246,7 +248,7 @@ in
       default = { };
       description = ''
         Public hostnames published through the Cloudflare tunnel.
-        stacks/cloudflared renders these into the tunnel's config.yml
+        modules/cloudflared renders these into the tunnel's config.yml
         ingress block (with the mandatory `http_status:404` catch-all
         appended).
 
@@ -266,8 +268,8 @@ in
       description = ''
         Lines appended to `services.pihole-ftl.settings.dns.hosts`.
         Format: `"<IP> <hostname>"`. Per-stack modules add their
-        LAN-resolvable hostnames here so pi-hole.nix doesn't need a
-        hand-maintained list.
+        LAN-resolvable hostnames here so the resolver (modules/pihole)
+        doesn't need a hand-maintained list.
       '';
       example = [ "10.0.0.2 foo.example.com" ];
     };
@@ -365,8 +367,9 @@ in
         The tunnel carries HTTP and nothing else, so anything speaking
         another protocol needs the address itself — which is what
         `platform/ddclient` keeps current, and the whole reason that job
-        exists. Two things qualify today: WireGuard and the Factorio
-        server, both UDP.
+        exists. In the catalog, wg-easy and factorio register one each
+        (both UDP); a host's own stacks add theirs (a game server on TCP,
+        say).
 
         This is the ONE registry here that records a fact nix does not
         own: the router's port-forward table lives in the router. It is
@@ -446,8 +449,9 @@ in
 
         Written by `mkGluetunInstance` itself rather than by hand: every
         field here is an argument that call already takes, so a third
-        tunnel registers by existing. Read by daedalus (serialised into
-        its environment as VPN_EGRESS), which is why facts that live only
+        tunnel registers by existing. Read by daedalus (exported as the
+        publishing domain's `vpnEgress`, stacks/daedalus/daedalus.nix),
+        which is why facts that live only
         in nix — the key expiry date, the renewal runbook, what the
         tunnel is FOR — belong in it. The rest of what that page shows is
         fetched live from the control API and prometheus.
@@ -467,9 +471,9 @@ in
         Outer key is folder name (rendered via Grafana's
         `foldersFromFilesStructure` provisioner mode); inner is
         dashboard JSON keyed by filename (without `.json`).
-        monitoring.nix combines these with the static dashboards under
-        stacks/monitoring/assets/dashboards/ and bind-mounts the
-        resulting derivation into grafana.
+        modules/monitoring combines these with the static dashboards under
+        its assets/dashboards/ and bind-mounts the resulting derivation
+        into grafana.
 
         Use this when a stack emits multiple related dashboards
         (e.g. the apps platform's per-app dashboards, all under "Apps").
@@ -477,7 +481,7 @@ in
       example = lib.literalExpression ''
         {
           "Apps" = {
-            "app-anansi" = builtins.readFile ./dashboard.json;
+            "app-example" = builtins.readFile ./dashboard.json;
           };
         }
       '';
@@ -717,12 +721,11 @@ in
                   the cfweb twin when `exposeRemotely` — behind the
                   generated `oidc-<name>@file` forward-auth middleware.
                   Each gated app is its OWN Pocket ID client (consent +
-                  audit log name the service): create it via the admin
-                  API and land its creds in stacks/traefik/env.sops as
-                  POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET} — see AUTH.md
-                  for the per-service rollout recipe. "none" for apps
-                  that authenticate against Pocket ID natively or keep
-                  their own auth.
+                  audit log name the service), derived automatically by
+                  modules/pocket-id/clients.nix with a machine-generated
+                  secret — no operator step; `authGroups` says who may
+                  pass. "none" for apps that authenticate against Pocket
+                  ID natively or keep their own auth.
                 '';
               };
               authGroups = lib.mkOption {
@@ -730,10 +733,11 @@ in
                 default = [ "admins" ];
                 description = ''
                   Pocket ID group names allowed on the client this
-                  webApp auto-derives (stacks/pocket-id/clients.nix)
+                  webApp auto-derives (modules/pocket-id/clients.nix)
                   when `auth = "oidc"` — authorization enforced at the
                   IdP, before the middleware forwards anything.
-                  Admin-only by default; household apps add "family".
+                  Admin-only by default; a household app adds the
+                  household's group.
                   `[ ]` leaves the client unrestricted, i.e. any account
                   with a passkey gets in.
                 '';
@@ -898,10 +902,10 @@ in
 
   config = {
     # The publish registry, as daedalus renders it: the full per-webApp
-    # record (the manifest used to export only hostname, which is why the
-    # dashboard grew hardcoded host ports), the taken-hostname list for the
-    # live collision check, and the router-forwarded direct ingress. The
-    # dashboard reads /export/publishing.json; see platform/export.nix.
+    # record (upstream included, so no page has to hardcode a host port),
+    # the taken-hostname list for the live collision check, and the
+    # router-forwarded direct ingress. The dashboard reads
+    # /export/publishing.json; see platform/export.nix.
     fleet.export.domains.publishing.data = {
       webApps = lib.mapAttrs (_: w: {
         inherit (w)

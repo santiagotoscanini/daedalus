@@ -8,37 +8,34 @@
 # fleet.site — the site directory: the one place in the operator's
 # configuration that daedalus writes, and the seam through which nix reads it.
 #
-# The end state this is a piece of: the box is two repositories. An ENGINE
-# (public, a single NixOS module import) and the operator's own CONFIG flake —
-# hardware, host identity, whatever they hand-write — with one directory,
-# `site/`, that holds what this particular box IS as plain JSON: its domain,
-# its addresses, its app registry, its encrypted secrets. Only that directory
-# changes when an operator configures the box from the UI, and it is the one
-# directory a web UI can safely write to, because nothing in it is code.
+# The box is two repositories: an ENGINE (public, a single NixOS module
+# import) and the operator's own CONFIG flake — hardware, host identity,
+# whatever they hand-write — with one directory, `site/`, that holds what
+# this particular box IS as plain JSON: its domain, its addresses, its app
+# registry, its encrypted secrets. Only that directory changes when an
+# operator configures the box from the UI, and it is the one directory a web
+# UI can safely write to, because nothing in it is code.
 #
 #   path     the host agents' door — the directory daedalus writes (site-write
 #            and Apply). A runtime string.
 #   source   the MODULE side — the same directory as nix sees it: `./site` in
-#            the operator's flake, a store path at eval. Null used to mean
-#            "read the legacy locations"; there are none left, so it now fails
-#            eval. Nix must never read `path` directly: it is a runtime
-#            string, and eval is pure.
+#            the operator's flake, a store path at eval. Null fails eval.
+#            Nix must never read `path` directly: it is a runtime string, and
+#            eval is pure.
 #
-# Since Phase 5, site.json is THE SOURCE of the site constants: the domain, the
-# LAN address and interface, the gateway, the WAN host, the DHCP scope, the DNS
+# site.json is THE SOURCE of the site constants: the domain, the LAN address
+# and interface, the gateway, the WAN host, the DHCP scope, the DNS
 # upstreams, the mail identities, the timezone and the Cloudflare zone,
 # account and tunnel ids. They are defined HERE from the document and nowhere
-# else — the host config and the tunnel stack no longer carry them — so
-# editing one in the UI is a commit to site/ and a rebuild, and nothing can
-# drift. The parts of site.json that are NOT yet sourced (hostname, owner,
-# operator) stay asserted equal to the configuration, as belt and braces,
-# until a later phase moves them too.
+# else, so editing one in the UI is a commit to site/ and a rebuild, and
+# nothing can drift. The parts of site.json that are NOT sourced (hostname,
+# owner, operator) are asserted equal to the configuration instead.
 #
 # The Cloudflare identity is the BOX's, not the tunnel's, which is why it
 # lives here with the box's one API token (site/vault/) rather than in
-# stacks/cloudflared: traefik's DNS-01, ddclient and daedalus's DNS panel all
-# read the token whether or not the tunnel runs, and Phase 9c made the tunnel
-# switchable on exactly that observation.
+# modules/cloudflared: traefik's DNS-01, ddclient and daedalus's DNS panel all
+# read the token whether or not the tunnel runs, which is what lets the
+# tunnel be switched off.
 #
 # The zone travels with the domain: daedalus offers the zones the DNS token
 # can see and writes the pair together, because a domain whose zone id still
@@ -46,8 +43,7 @@
 # DNS reconciler at the wrong place.
 #
 # `registry.file` is the same idea for the app registry: `site/apps.json`,
-# and nothing else — the legacy `stacks/apps/apps.json` was deleted, so the
-# unsourced branch is a `throw` rather than a path that no longer resolves.
+# and nothing else — the unsourced branch is a `throw`.
 #
 # Source control of that directory is the operator's business, with one
 # exception the agents cannot delegate: a flake sees only git-TRACKED files,
@@ -183,10 +179,8 @@ in
         default = null;
         description = ''
           Where nix READS site data from: `./site` in the operator's flake
-          (a store path), never `fleet.site.path`. Null was "read the legacy
-          locations" while the constants still lived in `configuration.nix`
-          and the registry in `stacks/apps/apps.json`; neither exists now, so
-          leaving it null fails eval rather than falling back.
+          (a store path), never `fleet.site.path`. Leaving it null fails
+          eval: there is no fallback location.
         '';
       };
 
@@ -232,15 +226,15 @@ in
         else
           throw "fleet.registry.file: the app registry lives at site/apps.json now — the legacy stacks/apps/apps.json is gone. Set fleet.site.source (configuration.nix does: site.source = ./site).";
       description = ''
-        The app registry daedalus exports and `stacks/apps/declarations.nix`
+        The app registry daedalus exports and `modules/apps/declarations.nix`
         builds from — NOT the container registry (`fleet.webApps.registry`,
         the zot).
       '';
     };
 
-    # The network facts that used to be literals in configuration.nix and
-    # stacks/pihole. Declared here because site.json is their source; a
-    # configuration without a site would set them by hand.
+    # The network facts. Declared here because site.json is their source
+    # (defined below); lanIp, baseDomain and wanHost are declared with the
+    # publishing layer that reads them.
     lanInterface = lib.mkOption {
       type = lib.types.str;
       description = "The NIC carrying fleet.lanIp. Hardware, and the one place the name is written.";
@@ -490,8 +484,9 @@ in
       # means on this box, not a side effect of how it is sourced.
       time.timeZone = siteDoc.identity.timezone;
 
-      # Belt and braces for what is NOT sourced yet: these must agree exactly,
-      # and a stale copy fails the build rather than a page three days later.
+      # The document's refusals (ids and hostnames this host lacks, a
+      # structural module switched off), then belt and braces for what is NOT sourced: those must agree exactly, and
+      # a stale copy fails the build rather than a page three days later.
       assertions = [
         {
           assertion = unknownSwitches == [ ];

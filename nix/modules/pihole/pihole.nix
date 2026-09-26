@@ -103,11 +103,10 @@ in
 
     # The resolver facts daedalus renders (see platform/export.nix), contributed
     # from the stack that owns the settings. Read back from the FTL config
-    # rather than fleet.dnsHosts, because this module appends hosts that belong
-    # to no stack (the GPU box) and a page showing only the stack half would
-    # be quietly missing entries that exist. lanHosts split into address and
-    # name: nearly every one points at this box, and the ones that do not are
-    # exactly the interesting rows.
+    # rather than fleet.dnsHosts, so the page shows what the resolver serves
+    # even if a host appends to `dns.hosts` directly. lanHosts split into
+    # address and name: nearly every one points at this box, and the ones
+    # that do not are exactly the interesting rows.
     fleet.export.domains.network.data =
       let
         parse = e: {
@@ -128,11 +127,10 @@ in
             end
             leaseTime
             ;
-          # No `hosts` here: the reservations moved to the encrypted
+          # No `hosts` here: the reservations are the encrypted
           # dhcp-hostsfile, which nix cannot read at eval (sops decrypts at
-          # activation), so the export simply doesn't have them any more.
-          # daedalus reads the decrypted file at runtime instead
-          # (fleet.dashboard.pihole below).
+          # activation). daedalus reads the decrypted file at runtime
+          # instead (fleet.dashboard.pihole below).
         };
       };
 
@@ -242,23 +240,19 @@ in
             end
             leaseTime
             ;
-          # Static reservations live in dhcp-hosts.sops (same "MAC,IP,hostname"
-          # lines, fed to dnsmasq via the dhcp-hostsfile= directive below).
-          # Encrypted rather than listed here because this is the one config
-          # atom that is a household device inventory — real MACs and family
-          # device names — and that does not belong in cleartext in ANY git
-          # history, private or not (a leaked clone or a later flip to public
-          # would carry every past revision). The box's own line rides along —
-          # dnsmasq populates `<hostname>.<localDomain> → <lanIp>` from it, no DHCP transaction.
+          # Static reservations are the host's `dhcpHostsSopsFile` (see its
+          # description for why encrypted), fed to dnsmasq via the
+          # dhcp-hostsfile= directive below. The box's own line rides along —
+          # dnsmasq populates `<hostname>.<localDomain> → <lanIp>` from it, no
+          # DHCP transaction.
         };
 
         webserver = {
           # No admin password — the web UI sits behind traefik's Pocket ID
-          # gate (AUTH.md) and :8080 stays LAN-closed. Deliberate
-          # trade-off (2026-07-18): the API remains reachable WITHOUT
-          # auth from any container on the box via
+          # gate and :8080 stays LAN-closed. Deliberate trade-off: the API
+          # remains reachable WITHOUT auth from any container on the box via
           # host.containers.internal:8080 (that's also how traefik and
-          # daedalus gets in). FTL has no "password on the API,
+          # daedalus get in). FTL has no "password on the API,
           # UI stays login-free" mode — the UI is an API client, so ANY
           # configured hash (app passwords included) re-enables the login
           # wall, and a second login behind SSO is explicitly not wanted.
@@ -339,7 +333,7 @@ in
     # KNOWN path needs; without `r` nothing can enumerate the directory to
     # discover what else is in it. What that exposes is exactly the two files
     # already world-readable — FTL.log and webserver.log, both 0644 from FTL
-    # itself. `pihole.log` is the per-query log, 0640, currently 2 GB, and stays
+    # itself. `pihole.log` is the per-query log, 0640, often gigabytes, and stays
     # unreadable to everything but pihole: it is the most revealing file on the
     # machine and emphatically not something to put in Loki.
     #

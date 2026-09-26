@@ -67,11 +67,8 @@ in
 
       # Load-bearing, for the reason spelled out on daedalus-image-update below:
       # a unit that runs `nixos-rebuild switch` must not be restarted by that
-      # switch. It used to survive only because its ExecStart happened to embed
-      # nothing an Apply changes — luck rather than design, and silent when it
-      # ran out. It no longer does: VAULT_APP_SECRETS is derived from apps.json,
-      # so an Apply that adds an app now moves this unit's ExecStart, exactly
-      # like its sibling daedalus-deploy-trigger. This line is what keeps that
+      # switch. VAULT_APP_SECRETS is derived from apps.json, so an Apply that
+      # adds an app moves this unit's ExecStart; this line is what keeps that
       # from SIGTERMing the apply that caused it.
       restartIfChanged = false;
 
@@ -99,7 +96,7 @@ in
     # watching the UI. Mail it.
     fleet.monitoredJobs.daedalus-apply = { };
 
-    # Image updates. Same file-drop bridge, fifth verb — and the sibling of
+    # Image updates. Same file-drop bridge — and the sibling of
     # apply rather than of the trigger below: it takes the shared rebuild lock,
     # commits to the flake, and switches the system. What is different is that
     # it EDITS nix source to get there; host/image-update.sh opens with why the
@@ -160,7 +157,7 @@ in
     # starts an app's EXISTING deploy unit rather than rebuilding the system.
     #
     # Push, not a replacement for the poll. `app-<name>-deploy.timer` still runs
-    # (see stacks/apps) and is what makes deploys self-healing: a notification
+    # (see modules/apps) and is what makes deploys self-healing: a notification
     # that arrives while the box is off is simply lost, whereas the timer's
     # Persistent=true catches up on boot. This only removes latency.
     systemd.services.daedalus-deploy-trigger = bridgeAgent // {
@@ -184,7 +181,7 @@ in
 
     fleet.monitoredJobs.daedalus-deploy-trigger = { };
 
-    # The workspace clone agent — same file-drop bridge, sixth verb. Root
+    # The workspace clone agent — same file-drop bridge. Root
     # because a path unit can only start a system unit; every git call inside
     # drops to the operator (the clones and the SSH identity are theirs).
     systemd.services.daedalus-workspace-clone = bridgeAgent // {
@@ -209,13 +206,13 @@ in
     # Not monitoredJobs, like power and claude-rc: both outcomes land in the
     # status file the page that asked is polling, and a genuine refusal exits 0.
 
-    # The site repository. Same file-drop bridge, sixth verb.
+    # The site repository. Same file-drop bridge.
     #
-    # `restartIfChanged = false` for the reason on the apps-platform rule: an
-    # agent that can change its own unit definition must not be SIGTERMed
-    # mid-run by the switch that lands the change. This one does not rebuild
-    # anything today, but it is the agent the site repo's own settings will flow
-    # through, and inheriting the flag now is cheaper than discovering it later.
+    # `restartIfChanged = false` for the reason on daedalus-image-update above:
+    # an agent that can change its own unit definition must not be SIGTERMed
+    # mid-run by the switch that lands the change. This one does not rebuild,
+    # but it writes the site files the host's configuration is built from, so
+    # it carries the flag rather than rediscover the trap.
     systemd.services.daedalus-site-write = bridgeAgent // {
       description = "Write daedalus's site files into the configuration repository";
       after = [ "network-online.target" ];
@@ -239,10 +236,10 @@ in
     # because somebody pressed a button and is watching the page, and the
     # failure is reported there with the host's own message.
 
-    # Restart. Same file-drop bridge, fourth verb, and the only one whose agent
-    # does not outlive its own action.
+    # Restart. Same file-drop bridge, and the only verb whose agent does not
+    # outlive its own action.
     #
-    # No network ordering, unlike the three above: this reads a local file, asks
+    # No network ordering, unlike the agents above: this reads a local file, asks
     # systemd three questions and calls `systemctl reboot`. Nothing it does needs
     # a resolver.
     systemd.services.daedalus-power = bridgeAgent // {
@@ -304,8 +301,8 @@ in
     # is a unit rather than a `tmux new-session -d` the way the operator has been
     # doing it by hand.
     #
-    # `restartIfChanged = false` IS MANDATORY, for the reason written up at
-    # platform/claude-rc.nix:9-27. A `sudo nixos-rebuild` typed inside a resumed
+    # `restartIfChanged = false` IS MANDATORY, for the reason written up in
+    # platform/claude-rc.nix's header. A `sudo nixos-rebuild` typed inside a resumed
     # session runs in THIS unit's cgroup — sudo does not migrate cgroups — so an
     # activation that restarted the unit would SIGTERM the in-flight activation
     # that ordered the restart, leaving the box half-switched and the session
@@ -395,7 +392,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${secretSetScript}/bin/daedalus-secret-set";
-        # Two sops runs, a git commit and a push. A minute is generous; past it
+        # Two sops runs, a git commit and a push. Two minutes is generous; past it
         # something is wedged and the page should say so rather than hang.
         TimeoutStartSec = "2min";
       };

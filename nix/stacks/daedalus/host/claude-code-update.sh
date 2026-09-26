@@ -1,5 +1,5 @@
 # Move the Claude Code pin — the engine's own `nix/platform/claude-code/
-# manifest.json` — and hand the rebuild to the engine-update verb.
+# manifest.zst.json` — and hand the rebuild to the engine-update verb.
 #
 # The CLI on this box is a nix package, and platform/claude-code/ seals it
 # with DISABLE_UPDATES precisely so that nothing else can move it. That makes

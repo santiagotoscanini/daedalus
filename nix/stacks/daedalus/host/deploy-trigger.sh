@@ -1,7 +1,7 @@
 # Start an app's existing deploy unit on daedalus's behalf.
 #
 # This does NOT deploy anything itself. `app-<name>-deploy.service`
-# (stacks/apps/assets/deploy.sh) already pulls, compares the digest, restarts
+# (modules/apps/assets/deploy.sh) already pulls, compares the digest, restarts
 # only if it actually moved, health-checks through traefik, records state in
 # /var/lib/app-deploy/<name> and mails on failure. Reimplementing any of that
 # here would be a second source of truth for what "deployed" means.

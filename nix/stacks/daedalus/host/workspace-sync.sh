@@ -1,6 +1,6 @@
 # Keep every workspace current, and publish what they look like.
 #
-# One script, two wrappers (stacks/daedalus/daedalus.nix):
+# One script, two wrappers (snapshots-lib.nix):
 #
 #   DO_SYNC=1  daedalus-workspace-sync — fetch + fast-forward every clone,
 #              then publish. Runs from a 30-minute timer (the off-box

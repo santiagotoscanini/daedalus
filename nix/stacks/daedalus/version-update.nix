@@ -183,7 +183,7 @@ in
         "linger-users.service"
       ];
       wants = [ "network-online.target" ];
-      # daedalus.nix's bridgeAgent: a path unit makes each request a start.
+      # daedalus-lib.nix's bridgeAgent: a path unit makes each request a start.
       startLimitIntervalSec = 0;
       # PINS embeds the values it just moved, so the switch changes this unit;
       # restarted by that switch it would lose its verify and push phases.

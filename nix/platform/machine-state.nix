@@ -2,14 +2,13 @@
 # (the pg cluster and per-app roles, each app's AUTH_SECRET, the builder's
 # registry credential) — and where it lives.
 #
-# It used to live INSIDE the configuration checkout, under `stacks/*/secrets/`,
-# gitignored. Three things were wrong with that: plaintext credentials sat in
-# a directory whose whole point is to be cloned and pushed; `/etc/nixos` is not
-# a snapshotted dataset, so the one copy of every database password on the box
-# was in no backup; and an importable engine (plan, Phase 11) has no checkout
-# of its own to keep them in. `fleet.stateRoot` answers all three — it is the
-# snapshotted, mirrored tree every other piece of container state already
-# lives in.
+# Never INSIDE the configuration checkout (where it once sat, under
+# `stacks/*/secrets/`, gitignored): plaintext credentials do not belong in a
+# directory whose whole point is to be cloned and pushed; the checkout is not
+# a snapshotted dataset, so the one copy of every database password would be
+# in no backup; and an importable engine has no checkout of its own to keep
+# them in. `fleet.stateRoot` answers all three — it is the snapshotted,
+# mirrored tree every other piece of container state already lives in.
 #
 # ── the migration ─────────────────────────────────────────────────────────
 #

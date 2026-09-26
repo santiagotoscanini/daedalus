@@ -10,8 +10,9 @@ _: {
       uid = 1000;
       # The OIDC `email` claim apps match their admin on.
       email = "alice@example.org";
-      # Author of the commits the box makes for itself (the weekly lock bump,
-      # an Apply from the control plane).
+      # Author of the commits the box makes as the operator: the weekly lock
+      # bump always, and the control plane's (an Apply, an update) while
+      # site.json `commits.author` is `operator`.
       gitName = "Alice Example";
       gitEmail = "alice@example.org";
     };

@@ -31,10 +31,9 @@ let
   # Every app, not just the registry-mode ones: `<name>-env.sops` is the
   # operator's environment for the app, and nothing about that depends on where
   # the image comes from (buildableApps is a different question and has its own
-  # filter). Baking this in does make apps.json part of daedalus-apply's
-  # ExecStart, which the unit's `restartIfChanged = false` already covers —
-  # see the note there, which called the previous absence of such a dependency
-  # "luck rather than design".
+  # filter). Baking this in makes apps.json part of daedalus-apply's
+  # ExecStart, which the unit's `restartIfChanged = false` covers — see the
+  # note there.
   vaultAppSecrets = map (n: "vault/apps/${n}-env.sops") (lib.attrNames registryApps);
 
   # The apps whose operator-secrets file the secret-set bridge may write: the
@@ -138,9 +137,10 @@ let
   # is excluded for free, because it has no deploy unit at all.
   #
   # This list is the security control on the trigger: its contents become part
-  # of a unit name that root starts. It MUST stay in lockstep with the
-  # entries registry-lib.nix maps `deploy.enable` for — an allowlist wider
-  # than the generated units would let root start a unit that does not exist.
+  # of a unit name that root starts. It MUST stay in lockstep with the deploy
+  # units modules/apps/apps.nix generates (`deploy.enable && running`) — an
+  # allowlist wider than those units would let root start a unit that does
+  # not exist.
   deployableApps = lib.attrNames (
     lib.filterAttrs (
       _: a:
@@ -152,7 +152,7 @@ let
 
   # The `<app>:<taskId>` pairs that actually have an
   # `app-<app>-task-<taskId>.service` to start. Same gate the platform applies
-  # (stacks/apps/apps.nix generates a task's units only while the app is past
+  # (modules/apps/apps.nix generates a task's units only while the app is past
   # `stage = "declared"`, because a podman exec into a container that does not
   # exist fails every tick) — and the same registry, read from the committed
   # file rather than `config.fleet.apps`, for the reason on `registryApps`.
@@ -192,7 +192,7 @@ let
   };
 
   # Run one of an app's scheduled tasks now. A sibling of the deploy trigger,
-  # and the same shape: the unit already exists (stacks/apps generates it from
+  # and the same shape: the unit already exists (modules/apps generates it from
   # the registry's `tasks`), this only starts it out of band and reports the
   # outcome to the page that asked. See host/task-run.sh.
   taskRunScript = pkgs.writeShellApplication {
@@ -216,7 +216,7 @@ let
 
   # Write the site files — the JSON description of this box — into the site
   # directory inside the configuration repository, staging (and, on the
-  # operator's switch, committing) as the operator. The sixth file-drop verb.
+  # operator's switch, committing) as the operator.
   siteWriteScript = pkgs.writeShellApplication {
     name = "daedalus-site-write";
     runtimeInputs = [
@@ -248,7 +248,7 @@ let
       ${builtins.readFile ./host/site-write.sh}
     '';
   };
-  # Restart the box. The fourth bridge, and the one with a single verb: see
+  # Restart the box. A bridge with a single verb: see
   # host/power.sh for why poweroff has no branch there at all, and why the
   # replay guard matters more here than in any of its siblings.
   #
@@ -276,8 +276,8 @@ let
     '';
   };
 
-  # Restart the Remote Control server. The fifth bridge, and the one that
-  # exists because the fourth is oversized for its commonest customer: a
+  # Restart the Remote Control server. It exists because rebooting the box
+  # (the power bridge) is oversized for its commonest customer: a
   # wedged or version-stale claude-remote-control is a single unit, and a
   # remote session cannot restart it without killing itself (the session
   # lives in that unit's cgroup — see platform/claude-rc.nix, whose
@@ -372,7 +372,7 @@ let
   #     idle (~400k lines/day). ANSI is stripped, the box frames dropped, the
   #     timestamped events and anything unexpected kept.
   #
-  # The uuid is re-validated here, a fourth time, because this is also the
+  # The uuid is re-validated here, not only by the agent, because this is also the
   # entry point for a hand-typed `systemctl start claude-session@<anything>`.
   claudeSessionRunner = pkgs.writeShellApplication {
     name = "claude-session-run";
@@ -424,7 +424,7 @@ let
     '';
   };
 
-  # The clone agent — the sixth file-drop verb. See host/workspace-clone.sh
+  # The clone agent. See host/workspace-clone.sh
   # for why the ssh key never enters the container and what shape the slug
   # is held to.
   workspaceCloneScript = pkgs.writeShellApplication {
@@ -439,8 +439,8 @@ let
     '';
   };
 
-  # Move a pin and rebuild onto it — the fifth bridge, and the only one that
-  # edits nix source rather than copying bytes the app rendered.
+  # Move a pin and rebuild onto it — the one bridge verb here that edits nix
+  # source rather than copying bytes the app rendered.
   #
   # `PINS` is the same registry the freshness probe reads, plus the update
   # policy: it is simultaneously the parse (what ref is this container on),
@@ -494,9 +494,8 @@ let
   # is running, a single crash disables every Update button on the box for the
   # whole of that window. Observed: a `command not found` in the resolve loop.
   #
-  # It matters more since queueing arrived. A batch is a longer run, so the
-  # unit's timeout and the app's clock both had to grow with it, and the wedge
-  # they leave behind on a crash grew in step. This bounds it to seconds.
+  # A queued batch is a long run, so the unit's timeout and the app's clock
+  # are both an hour; this bounds the wedge a crash leaves to seconds.
   #
   # Reads the file rather than synthesising one: the id, the phase it died in
   # and the targets are the only things that make the failure readable, and

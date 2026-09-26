@@ -83,7 +83,7 @@ in
               default = "${registryHost}/${name}:latest";
               description = ''
                 OCI image. Default: `${registryHost}/<name>:latest` —
-                the box's own zot (stacks/registry). Convention is to host
+                the box's own zot (modules/registry). Convention is to host
                 each app at `github.com/${site.github.owner}/<name>`; a push to
                 main there is built on this box by the build agent
                 (daedalus-build) and pushed here. Override for placeholders,
@@ -118,11 +118,11 @@ in
 
                   * traefik's ACME cert is a single entrypoint-level wildcard,
                     `main=<baseDomain>` + `sans=*.<baseDomain>`
-                    (stacks/traefik). A wildcard matches one label, so
+                    (modules/traefik). A wildcard matches one label, so
                     `a.b.${site.baseDomain}` would serve the wrong cert and every
                     browser would refuse it.
                   * the Cloudflare tunnel's CNAMEs are upserted into that one
-                    zone (stacks/cloudflared).
+                    zone (modules/cloudflared).
                   * pi-hole short-circuits `*.<baseDomain>` to the LAN IP.
 
                 A second apex would need its own cert, its own tunnel config
@@ -191,7 +191,7 @@ in
                 Consequence of "off" worth knowing: the deploy health check
                 runs THROUGH traefik, so with no ingress there is nothing to
                 check. Deploys still pull and restart, they just cannot certify
-                that the new image serves — see assets/deploy.sh.
+                that the new image serves — see modules/apps/assets/deploy.sh.
               '';
             };
 
@@ -226,22 +226,22 @@ in
               };
             };
 
-            # Plain Postgres-per-app, materialized by stacks/app-db/.
+            # Plain Postgres-per-app, materialized by modules/app-db/.
             postgres = {
               enable = lib.mkOption {
                 type = lib.types.bool;
                 default = false;
                 description = ''
                   When true, materialize a role + database `<name>` on
-                  the shared `pg` cluster via stacks/app-db/. The app
+                  the shared `pg` cluster via modules/app-db/. The app
                   container joins the shared `app-db-net` bridge and
                   receives DATABASE_URL
                   (postgresql://<name>:<pwd>@pg:5432/<name>) via env
-                  file. See stacks/app-db/README.md.
+                  file. See modules/app-db/README.md.
                 '';
               };
               # No per-app resource tunables: the cluster is shared, so
-              # cpus/memory are set once in stacks/app-db/app-db.nix.
+              # cpus/memory are set once in modules/app-db/app-db.nix.
               # For app-scoped throttling, use postgres role-level
               # settings: ALTER ROLE <name> CONNECTION LIMIT N;
               # ALTER ROLE <name> SET statement_timeout = '30s'; etc.
@@ -305,8 +305,7 @@ in
                   and OIDC_SCOPES in its environment, plus
                   OIDC_CLIENT_SECRET from a rendered env file. Preferred
                   whenever the app HAS accounts, since only the app can
-                  map an IdP identity onto its own per-user data
-                  (AUTH.md's order of preference).
+                  map an IdP identity onto its own per-user data.
                 '';
               };
               allowedGroups = lib.mkOption {
@@ -418,7 +417,7 @@ in
             };
 
             # Auto-deploy — the "push to main and it's live" half of the platform.
-            # See this module's header and assets/deploy.sh.
+            # See modules/apps/apps.nix's header and its assets/deploy.sh.
             deploy = {
               enable = lib.mkOption {
                 type = lib.types.bool;
@@ -441,8 +440,9 @@ in
                 type = lib.types.str;
                 default = "*:0/2";
                 description = ''
-                  systemd OnCalendar for the poll. Since build.sh starts the deploy
-                  itself, this is the safety net rather than the path a push takes:
+                  systemd OnCalendar for the poll. Since the build agent
+                  (stacks/daedalus/host/build.sh) starts the deploy itself,
+                  this is the safety net rather than the path a push takes:
                   the default (every 2 min) is the worst-case latency when that
                   start did not happen. A pull of an unchanged tag is one manifest
                   request.
@@ -517,10 +517,10 @@ in
               };
             };
 
-            # cgroup v2 caps. All three are enforceable rootless on this box
-            # because systemd delegates `cpu io memory pids` down to
-            # user@1000.service (check with `cat
-            # /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/cgroup.controllers`);
+            # cgroup v2 caps. All three are enforceable rootless because
+            # systemd delegates `cpu io memory pids` down to the operator's
+            # user manager (check with `cat
+            # /sys/fs/cgroup/user.slice/user-<uid>.slice/user@<uid>.service/cgroup.controllers`);
             # without that delegation podman would accept the flags and the
             # kernel would ignore them.
             #
@@ -558,8 +558,8 @@ in
                   docker flag names suggest: podman 5.7 + crun 1.24 write
                   `--memory-swap` into `memory.swap.max` verbatim, without
                   subtracting `--memory` the way the docker docs describe. So
-                  the cap is `N` of RAM plus up to `N` of swap — and this box
-                  swaps to zram, so that overflow is compressed RAM, not disk.
+                  the cap is `N` of RAM plus up to `N` of swap — on a host
+                  that swaps to zram, that overflow is compressed RAM, not disk.
                   Anonymous pages past `N` get pushed to zram; the OOM kill
                   lands at `2N`. Leaving `--memory-swap` off is worse: podman
                   defaults it to `2*memory`, i.e. a `3N` kill point.
@@ -689,8 +689,10 @@ in
                 Additional env files passed via --env-file. Common uses:
                 per-app secrets, third-party API keys, the litellm
                 master key (config.sops.secrets."litellm-env".path).
-                Conventions: `0600 ${operator.user}:${operator.group}`; hand-managed files
-                live under `**/secrets/` so the path is gitignored.
+                Conventions: `0600 ${operator.user}:${operator.group}`. An
+                app's operator secrets need no entry here: a tracked
+                `site/vault/apps/<name>-env.sops` is added by the apps
+                module itself.
               '';
             };
           };

@@ -1,6 +1,6 @@
 # gluetun-lib — shared plumbing for the box's gluetun (VPN netns owner)
-# instances, as a PLAIN LIBRARY (`*-lib.nix` files are never listed in
-# configuration.nix's imports; consumers import this by path).
+# instances, as a PLAIN LIBRARY (`*-lib.nix` files are never listed in a
+# module import list; consumers import this by path).
 #
 # Why not a module exporting _module.args: the consumers build their
 # whole `config` with `lib.mkMerge [ (mkGluetunInstance {...}) {...} ]`,
@@ -8,14 +8,13 @@
 # through the `_module.args` option evaluation. A by-path import has no
 # such round-trip.
 #
-# Two instances live today, deliberately separate tunnels: stacks/downloads
-# (torrent + book-downloader egress, with ProtonVPN port forwarding) and
-# stacks/argus-vpn (scanner egress). One WireGuard key cannot run two live
-# sessions, and their traffic must not mix.
+# Each instance is a deliberately separate tunnel with its own key (the
+# reference host runs two, from its own stacks): one WireGuard key cannot
+# run two live sessions, and their traffic must not mix.
 #
-# Host-port convention: the TV instance owns host 8000 (control API) +
+# Host-port convention: the first instance owns host 8000 (control API) +
 # 8001 (exporter); each further instance publishes the same in-netns
-# ports at +2 (argus: 8002/8003; a third takes 8004/8005).
+# ports at +2 (the second 8002/8003, a third 8004/8005).
 #
 # Usage (in a stack module):
 #   inherit (import (enginePath + "/platform/lib/gluetun-lib.nix") {
@@ -64,9 +63,8 @@ rec {
   # netns (`--network=container:<owner>`) instead of a bridge. Rootless
   # podman maps container root -> the host operator, so PUID/PGID=0 means "run
   # as the user that owns the data" (non-linuxserver images ignore the
-  # vars). Orders after the netns owner. Used by the downloads stack
-  # (flaresolverr), the tv stack (qbittorrent/nzbget/*arrs/subgen) and the
-  # shelfmark book downloader.
+  # vars). Orders after the netns owner. Used by the host's own stacks
+  # that ride a tunnel (on the reference host: its downloaders and *arrs).
   mkNetnsTenant =
     netnsOwner: args:
     mkRootlessContainer (

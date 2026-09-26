@@ -107,7 +107,7 @@ fi
 COMMIT_SHA=""
 
 # --- serialise against every other rebuild --------------------------------
-# One lock for anything that rebuilds this system or commits to /etc/nixos.
+# One lock for anything that rebuilds this system or commits to the configuration repo.
 # The other holder in practice is flake-autoupgrade, which does `nix flake
 # update --commit-lock-file` AND `nixos-rebuild boot` — so it can be building,
 # committing and pushing at the same moment an apply is doing all three.
@@ -169,7 +169,7 @@ jq -e .files "$PAYLOAD_COPY" >/dev/null 2>&1 || fail writing "payload-$REQ_ID.js
 # below, which drops it anyway.
 #
 # $VAULT_APP_SECRETS is the per-app half: `vault/apps/<name>-env.sops`, the
-# operator-supplied environment of a platform app (stacks/apps —
+# operator-supplied environment of a platform app (modules/apps —
 # operator-secrets-lib.nix turns a tracked one into that app's env file). It is
 # a LIST, not a pattern, and Nix builds it from the committed registry into
 # this script's wrapper — so the names are still fixed host-side, which is the

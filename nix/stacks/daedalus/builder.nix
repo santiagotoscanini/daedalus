@@ -1,6 +1,6 @@
 # The builder — rootless BuildKit as its own user, the fenced client user that
 # drives it, the scratch dataset they share, and the registry credential the
-# box pushes with. Plan step 5, design D. The build AGENT (host/build.sh,
+# box pushes with. The build AGENT (host/build.sh,
 # daedalus-build.service) is ./build-agent.nix; everything it needs from here
 # it reads as `config.fleet.builder.*`, declared at the bottom of this file
 # (the railpack and mise fields are filled by ./railpack.nix).
@@ -35,7 +35,7 @@
 #   - /etc/resolv.conf inside the namespace is a bind mount of rootlesskit's
 #     generated file (nameserver 10.0.2.3), so start.sh OVERWRITES it in place
 #     with pi-hole's LAN address — an `rm` fails "Device or resource busy"
-#     (spike B1). Steps get the same nameserver from `[dns]`, and their queries
+#     (measured). Steps get the same nameserver from `[dns]`, and their queries
 #     leave slirp4netns for <lanIp>:53, pi-hole's budget for <lanIp>. That is
 #     a default, not a boundary: a step can still ask slirp4netns' built-in
 #     forwarder at 10.0.2.3, which relays to the HOST resolver, 127.0.0.1:53 —
@@ -68,7 +68,7 @@
 # for.
 #
 # BuildKit's GC is written as explicit gcpolicy blocks: a bare maxUsedSpace
-# expands into the default four rules, one of them 512 MB / 48 h (spike B6).
+# expands into the default four rules, one of them 512 MB / 48 h.
 #
 # The egress fence (firewall extraCommands): every packet sent by buildkit, by
 # buildkit's subuid range (a step that got out into the host network
@@ -93,15 +93,14 @@
 # fenced owner (both uids and the subuid range) is loaded in iptables and
 # ip6tables.
 #
-# The registry credential is machine-generated (CLAUDE.md, two secret classes):
+# The registry credential is machine-generated state, not a sops secret:
 # daedalus-build-registry-password.service writes a random password once to
 # <machineState>/builder/registry-builder.env (fleet.machineState; the file root 0600
-# via a temp file and a rename, the secrets/ dir left at the stacks' operator
-# 0755 convention). Every reader goes through `fleet.builder.registryPasswordRead`,
+# via a temp file and a rename, its directory operator 0755). Every reader goes through `fleet.builder.registryPasswordRead`,
 # which parses the file rather than sourcing it and refuses anything that is not
 # root-owned 0600 with exactly 64 hex characters: an empty password in htpasswd
 # would be an unauthenticated push to every app's :latest, live two minutes
-# later. stacks/registry renders it into zot's htpasswd as `builder` (read +
+# later. modules/registry renders it into zot's htpasswd as `builder` (read +
 # create + update on every repository, never delete; left OUT of htpasswd when
 # the reader refuses), and the render below writes the docker config.json
 # (root 0400; host/build.sh copies it for the build user around the one
@@ -131,8 +130,8 @@ let
   cfg = config.fleet.builder;
   inherit (config.fleet) lanIp;
 
-  # The same condition as daedalus.nix's `haveGithubApp` (a let binding there,
-  # so it cannot be read from here): the App's credentials are in the flake.
+  # The same condition as daedalus-lib.nix's `haveGithubApp`, restated: the
+  # App's credentials are in the flake.
   githubAppVault =
     if config.fleet.site.source == null then
       null
@@ -160,7 +159,7 @@ let
       # Always under rootlesskit. buildkitd defaults to rootless inside a user
       # namespace anyway; stated so the file says what it runs.
       rootless = true;
-      # Spike B1: `auto` picked overlayfs on this kernel + ZFS 2.3.7. Pinned so
+      # Measured: `auto` picked overlayfs on this kernel + ZFS 2.3.7. Pinned so
       # a regression lands as an error, not as `native` quietly filling the
       # quota with full copies.
       snapshotter = "overlayfs";
@@ -482,7 +481,7 @@ in
     in
     {
       # A default, unlike the rest (and so not readOnly — a default counts as
-      # a definition there): stacks/registry reads this to decide whether the
+      # a definition there): modules/registry reads this to decide whether the
       # builder gets an htpasswd user, and must get "no" rather than an eval
       # error when the control plane is switched off.
       enable = lib.mkOption {
@@ -520,7 +519,7 @@ in
       registryUser = ro types.str "zot htpasswd user for pushes.";
       registryPasswordFile = ro types.str "Machine-generated dotenv carrying REGISTRY_BUILDER_PASSWORD (root 0600).";
       registryPasswordRead = ro types.path "Script printing the builder password; refuses a missing, foreign-owned, non-0600, empty or short file. Capture into a variable, never argv.";
-      fenceCheck = ro types.path "Fails unless the egress fence's OUTPUT jumps for both builder uids are loaded. Run it as root (`+`) in ExecStartPre of every unit that runs as, or drives, the builder users.";
+      fenceCheck = ro types.path "Fails unless the egress fence's OUTPUT jumps for both builder uids and buildkit's subuid range are loaded. Run it as root (`+`) in ExecStartPre of every unit that runs as, or drives, the builder users.";
     };
 
   config = lib.mkIf config.fleet.modules.daedalus.enable (
@@ -655,7 +654,7 @@ in
             pkgs.slirp4netns
             pkgs.runc
             # rootlesskit sets up slirp4netns's tap with `nsenter … ip tuntap`:
-            # both must be on PATH (the spikes inherited the login PATH and hid it).
+            # both must be on PATH (a login shell's PATH hides the omission).
             pkgs.util-linux
             pkgs.iproute2
             buildkit
@@ -700,7 +699,7 @@ in
             CPUQuota = "800%";
             TasksMax = 8192;
             IOWeight = 50;
-            # A step's OOM kill fails that build, not the daemon (spike B5).
+            # A step's OOM kill fails that build, not the daemon.
             OOMPolicy = "continue";
 
             Restart = "on-failure";
@@ -708,7 +707,7 @@ in
             # Stop signals the main process only: both rootlesskit layers forward
             # SIGTERM, so the default control-group kill delivered it three
             # times ("got 3 SIGTERM/SIGINTs, forcibly terminating"). With one
-            # delivery, startScript turns the requested stop into exit 0 (step 6
+            # delivery, startScript turns the requested stop into exit 0 (a stop
             # drill). Anything left afterwards (build steps, slirp4netns) still
             # gets the cgroup-wide SIGKILL.
             KillMode = "mixed";

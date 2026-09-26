@@ -1,10 +1,10 @@
-# Who runs this box, and where its configuration lives — the facts every
-# module used to spell as a login name, `1000`, a home directory, `/etc/nixos`.
+# Who runs this box, and where its configuration lives — a login name, a uid,
+# a home directory, the checkout's path — so no module spells them.
 #
-# DECLARED here, DEFINED by the host (configuration.nix). That split is the
-# point: platform/ and stacks/ are on their way to being an importable engine
-# (plan, Phase 11), and an engine cannot carry one person's login name in its
-# text. Nothing below has a default that names a person or a path outside
+# DECLARED here, DEFINED by the host (the template does it in
+# host/identity.nix). That split is the point: an importable engine cannot
+# carry one person's login name in its text. Nothing below has a default
+# that names a person or a path outside
 # what it derives from `user` and `uid`; a host that forgets to set `user`
 # fails evaluation on the missing definition, which is the right failure.
 #

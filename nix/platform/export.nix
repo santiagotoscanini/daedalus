@@ -11,15 +11,15 @@
 # each domain renders to a store-path JSON document wrapped in the shared
 # envelope, and a publisher oneshot installs them under /run/daedalus-export
 # with a generatedAt stamp. The container mounts that directory read-only at
-# /export and decodes each file through src/host/contract/ — one mechanism,
-# versioned and stamped, replacing the hand-built manifest, the per-fact env
-# variables and their ad-hoc JSON blobs.
+# /export and decodes each file through app/src/host/contract/ — one
+# mechanism, versioned and stamped, instead of per-fact env variables and
+# JSON blobs.
 #
 # Why this shape:
 #
-#   Stable-path delivery, store-path change detection. The old manifest was a
-#   store path bound straight into the container, so ANY change restarted the
-#   app — during an Apply, that killed the page showing the progress bar. Here
+#   Stable-path delivery, store-path change detection. A store path bound
+#   straight into the container would restart the app on ANY change — during
+#   an Apply, killing the page showing the progress bar. Here
 #   the publisher's ExecStart embeds the rendered store paths, so systemd
 #   re-runs it exactly when a domain changed, and the container just sees new
 #   bytes at a fixed path on its next read.
@@ -81,10 +81,11 @@ let
   # fall out of the match.
   #
   # `digest` is the load-bearing field. It is the one part of a pin that is
-  # ALWAYS a literal in the .nix source — immich's two interpolate a shared
-  # version variable into the tag, so the
+  # ALWAYS a literal in the .nix source — two containers on one release may
+  # interpolate a shared version variable into the tag, so the
   # rendered `tag` appears nowhere in the file. The update agent anchors every
-  # edit on the digest for exactly that reason; see host/image-update.sh.
+  # edit on the digest for exactly that reason; see
+  # stacks/daedalus/host/image-update.sh.
   imagePins = lib.filterAttrs (_: v: v != null) (
     lib.mapAttrs (
       _: c:
@@ -169,7 +170,7 @@ in
                 It is not a warning label for risk in general — every update
                 here builds, switches and reverts on failure. It is for blast
                 radius the container's own name does not carry: gluetun owns
-                a netns ten containers ride, and a pg bounce takes pocket-id
+                a netns other containers ride, and a pg bounce takes pocket-id
                 with it and everything pocket-id gates.
               '';
             };
@@ -229,13 +230,13 @@ in
               description = ''
                 Environment the control plane's container carries on this
                 stack's behalf, read by the engine BY NAME
-                (`process.env.N8N_VERSION`, `PIHOLE_URL`, `CF_TUNNEL_ID`).
-                Two kinds live here. Config — an endpoint or an id the app
-                needs to reach the stack — belongs here for good. A pinned
-                version is the honest intermediate: the same fact already
-                rides `/export/images.json`, and each `*_VERSION` entry is
-                deleted the day the engine reads it from there
-                (`imageTag()`) instead of by name. A key two stacks both set
+                (`ctx.env('PIHOLE_URL')`, `CF_TUNNEL_ID`). Two kinds live
+                here. Config — an endpoint or an id the app needs to reach
+                the stack — belongs here for good. A pinned version
+                (`*_VERSION`) is only a fallback: the engine prefers the same
+                fact from `/export/images.json` (`pinnedVersion()` in
+                app/src/lib/dashboard/images.ts), so an entry is needed only
+                where the tag is not the version. A key two stacks both set
                 is a conflicting definition, not a silent override.
               '';
             };
@@ -267,12 +268,12 @@ in
       );
       default = { };
       description = ''
-        What a stack shows the control plane, keyed by the stack's id. The
-        inversion Phase 9c made: a stack that has something daedalus needs
-        CONTRIBUTES it inside its own `mkIf`, so switching the stack off
-        removes the entry, and daedalus reads the whole registry with
-        defaults — it never indexes another stack's config by a fixed key.
-        Same shape as `fleet.logStacks` and `fleet.mcpServers`.
+        What a stack shows the control plane, keyed by the stack's id. A
+        stack that has something daedalus needs CONTRIBUTES it inside its
+        own `mkIf`, so switching the stack off removes the entry, and
+        daedalus reads the whole registry with defaults — it never indexes
+        another stack's config by a fixed key. Same shape as
+        `fleet.logStacks`.
 
         Facts a PAGE renders still go through `fleet.export.domains`; this is
         the config half — how the container is wired to a stack (env by
@@ -288,8 +289,8 @@ in
 
   config = {
     fleet.export.domains = {
-      # The box's identity — everything that used to be a literal in the app.
-      # After the readers flip, a grep of app/src for the domain returns prose.
+      # The box's identity, so the app never spells a domain, an address or
+      # an account of its own.
       site = {
         data = {
           inherit (cfg)
@@ -385,9 +386,8 @@ in
       # `pins` is the same containers seen from the other end: not what tag
       # they carry but what ref that tag was frozen from, and whether the
       # dashboard may move it. Together they are what the Updates page renders
-      # — every digest-pinned container on the box, including the two dozen
-      # sidecars and exporters that have no page of their own and until now
-      # appeared in this app only as somebody else's log embed.
+      # — every digest-pinned container on the box, including the sidecars
+      # and exporters that have no page of their own.
       images = {
         schemaVersion = 2;
         data = {
@@ -399,8 +399,8 @@ in
       # Which stacks this box runs: `fleet.modules.<id>.enable`, one boolean
       # per switch. The control plane's rail is derived from it — each tab
       # names the nix modules it fronts, and a tab whose modules are all off
-      # is not offered (engine: core/ctx.ts reads this, lib/modules/active.ts
-      # decides). A flat id → bool map on purpose: the engine treats an id
+      # is not offered (app/src/core/ctx.ts reads this,
+      # app/src/lib/modules/active.ts decides). A flat id → bool map on purpose: the engine treats an id
       # this file does not mention as enabled, so a module the box has never
       # heard of cannot empty the rail.
       modules = {

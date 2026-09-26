@@ -1,7 +1,8 @@
 # platform/autoupgrade — weekly flake-native upgrade.
 #
-# Advances flake.lock within the pinned branches, commits the lock,
-# stages the new generation for next boot, pushes. Never auto-reboots
+# Advances flake.lock within the pinned branches (only
+# `fleet.autoupgrade.inputs`), builds it, and only then commits the lock,
+# stages the new generation for next boot and pushes. Never auto-reboots
 # (you reboot manually) and never touches the running system. Every
 # upgrade is a git commit — inspectable, revertible.
 #
@@ -21,11 +22,11 @@ let
   # standalone). This wrapper sets the parameters it expects as env vars,
   # then concatenates the body so writeShellApplication runs it all in one
   # shell with shellcheck across the whole. Same shape as
-  # cloudflared-route-sync and the app-db bootstrap.
+  # cloudflared-route-sync (modules/cloudflared).
   #
   # runtimeInputs is what lets the body call `git`/`ssh`/`setpriv`/`flock` by
-  # name instead of interpolating store paths into it — which is what made the
-  # old inline version unreadable and un-lintable.
+  # name instead of interpolating store paths into it, which keeps it
+  # readable and lintable.
   upgradeScript = pkgs.writeShellApplication {
     name = "flake-autoupgrade";
     runtimeInputs = [
@@ -53,18 +54,19 @@ in
   # The one lock every rebuild takes.
   #
   # Declared here because this module is the OTHER rebuilder: a weekly
-  # `nix flake update --commit-lock-file` + `nixos-rebuild boot` + push, any of
+  # `nix flake update` + build + commit + `nixos-rebuild boot` + push, any of
   # which can collide with daedalus applying a registry change — both building,
   # both committing to the same repo, both pushing. Overlapping activations and
   # interleaved commits are how the running system ends up matching neither
   # branch.
   #
-  # Anything that rebuilds or commits to /etc/nixos should take it, including a
-  # human:
+  # Anything that rebuilds or commits to the configuration checkout should
+  # take it, including a human:
   #   flock /run/lock/fleet-rebuild.lock sudo nixos-rebuild switch
   # That cannot be enforced on an interactive shell — a lock nobody is obliged
-  # to take is advisory by nature — but both automated paths respect it, and
-  # those are the ones that fire unattended.
+  # to take is advisory by nature — but every automated path takes it (this
+  # job, and daedalus's apply, updaters and power verbs), and those are the
+  # ones that fire unattended.
   options.fleet.autoupgrade.inputs = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [ ];

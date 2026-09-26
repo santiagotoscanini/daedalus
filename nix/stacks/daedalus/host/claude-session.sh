@@ -3,7 +3,7 @@
 # The most powerful verb on this bridge, and the reason its guards are longer
 # than its work. Every other agent here starts a unit whose argv nix already
 # fixed against a target nix already enumerated. This one causes root to start
-# a process AS THE OPERATOR, in /etc/nixos, with passwordless sudo on PATH,
+# a process AS THE OPERATOR, in the configuration checkout, with passwordless sudo on PATH,
 # the operator's Claude credentials and GitHub SSH identity, and an outbound
 # channel that exposes that shell to claude.ai. Nothing about that is
 # recoverable by a rollback, so the request is allowed to supply exactly one

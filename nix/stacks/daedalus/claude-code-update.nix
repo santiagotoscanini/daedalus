@@ -3,7 +3,7 @@
 #
 # platform/claude-code/ seals the store binary with DISABLE_UPDATES, so
 # `claude update` is not a path here and a flake bump is the only one. That
-# bump starts in the ENGINE — `nix/platform/claude-code/manifest.json`, which
+# bump starts in the ENGINE — `nix/platform/claude-code/manifest.zst.json`, which
 # the packaged expression takes as its `manifest` argument — and only then
 # reaches the configuration's lock. So this verb does the first half and hands
 # the second to `daedalus-engine-update` by publishing the very request file
@@ -20,7 +20,7 @@
 #               it and the lock is what actually decides.
 #   GIT_EMAIL,
 #   HOSTNAME    the identity of the commit it makes in the engine.
-#   applyDir    the same literal daedalus.nix and engine-update.nix derive
+#   applyDir    the same literal daedalus-lib.nix and engine-update.nix derive
 #               from fleet.stateRoot.
 
 {
@@ -116,7 +116,7 @@ in
       ];
       wants = [ "network-online.target" ];
 
-      # Every bridge agent's one property (daedalus.nix, bridgeAgent): a path
+      # Every bridge agent's one property (daedalus-lib.nix, bridgeAgent): a path
       # unit makes each request a start, and systemd's default start limit
       # would silently drop the next request after a burst.
       startLimitIntervalSec = 0;

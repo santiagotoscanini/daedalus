@@ -1,7 +1,7 @@
-# platform/gpu.nix — Intel Alder Lake iGPU (UHD 770), shared by
-# jellyfin QSV transcoding (stacks/tv), immich OpenVINO ML, and
-# intel-gpu-exporter — host-level because the render node crosses
-# stack boundaries.
+# platform/gpu.nix — Intel Alder Lake iGPU (UHD 770), shared by the
+# reference host's jellyfin (QSV transcoding) and immich (OpenVINO ML)
+# and the catalog's intel-gpu-exporter — host-level because the render
+# node crosses stack boundaries.
 
 { pkgs, ... }:
 

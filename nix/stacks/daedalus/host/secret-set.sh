@@ -3,7 +3,7 @@
 #
 # The host half of the write-only secrets editor. daedalus holds an
 # encrypt-only sops identity — a static sops binary and the PUBLIC recipients
-# in $SITE_DIR/.sops.yaml, no age key anywhere (stacks/daedalus/daedalus.nix)
+# in $SITE_DIR/.sops.yaml, no age key anywhere (the image's Dockerfile, sops stage)
 # — so it can seal a value and can never open one. Everything that needs the
 # decryption key happens here:
 #

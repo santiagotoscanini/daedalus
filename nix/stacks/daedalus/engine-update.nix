@@ -25,7 +25,7 @@
 #                     fleet.apps.daedalus — the address and health path the
 #                     control plane publishes, which is what "came back" is
 #                     checked against, through the proxy on fleet.lanIp.
-#   applyDir          the same literal daedalus.nix and build-agent.nix
+#   applyDir          the same literal daedalus-lib.nix and build-agent.nix
 #                     derive from fleet.stateRoot.
 
 {
@@ -80,7 +80,7 @@ let
     '';
   };
 
-  # The status file's undertaker — daedalus.nix's imageUpdateReaper, for this
+  # The status file's undertaker — verbs-lib.nix's imageUpdateReaper, for this
   # verb. The agent writes its own terminal state; this fires when it could
   # not (killed, out of memory, dead on a line nobody tested), so a crashed
   # run reads `failed` within seconds instead of after the app's staleness
@@ -135,7 +135,7 @@ in
       ];
       wants = [ "network-online.target" ];
 
-      # The one property every bridge agent shares (daedalus.nix, bridgeAgent):
+      # The one property every bridge agent shares (daedalus-lib.nix, bridgeAgent):
       # a path unit makes each request a start, and systemd's default start
       # limit would silently drop the next request after a burst.
       startLimitIntervalSec = 0;

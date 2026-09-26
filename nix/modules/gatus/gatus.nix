@@ -88,16 +88,14 @@ let
   #
   # One per node that offers a model server (platform/nodes.nix, from
   # site/nodes.json): a host with none has an empty list rather than a probe
-  # of nowhere. The first keeps the name the probe has always had, so the
-  # rule and the dot on daedalus's AI → Lemonade tab keep their series; a
-  # second node's probe is named after the node.
+  # of nowhere. The first keeps the plain name `lemonade`, so its series
+  # (and the per-name alert rule's history) carries on; a second node's
+  # probe is named after the node.
   offBoxEndpoints = lib.imap0 (i: node: {
-    # The model server on a node (lemonade.md in the configuration repo).
-    # Every AI workload on this box terminates there, and until this probe
-    # nothing watched it: LiteLLM stays green while returning errors, so a
-    # Lemonade outage surfaced as "the chat is broken" rather than as an
-    # alert. Feeds the same gatus_results_endpoint_success rule as everything
-    # else.
+    # The model server on a node. A gateway in front of it stays green while
+    # returning errors, so without this probe an outage surfaces as "the chat
+    # is broken" rather than as an alert. Feeds the same
+    # gatus_results_endpoint_success rule as everything else.
     name = if i == 0 then "lemonade" else "lemonade-${node.name}";
     group = "off-box";
     url = "http://${config.fleet.nodeHost node}:${toString node.providers.lemonade.port}/api/v1/health";
@@ -124,8 +122,9 @@ let
       };
       metrics = true;
       ui.title = "${config.networking.hostName} · status";
-      # Pocket ID SSO (AUTH.md). gatus expands ''${VAR} from its env at
-      # load — creds come from env.sops, never the /nix/store YAML.
+      # Pocket ID SSO. gatus expands ''${VAR} from its env at load — the
+      # client pair arrives from the identity provider's render (see
+      # ssoClients.gatus below), never in this /nix/store YAML.
       # allowed-subjects is MANDATORY: without it any account at the IdP
       # gets in. The host names them (fleet.modules.gatus.allowedSubjects).
       security.oidc = {

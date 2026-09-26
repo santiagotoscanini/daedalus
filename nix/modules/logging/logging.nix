@@ -9,13 +9,12 @@
 #            no traefik route by design (see the bridgeMemberships
 #            comment below); grafana is the query UI.
 #
-#   - alloy: log collector. Reads the host's systemd journal — the ONE
+#   - alloy: log collector. Reads the host's systemd journal — the main
 #            source (every rootless-podman unit's stdout/stderr lands
-#            there via --log-driver=journald, plus pi-hole/ddclient/
-#            smartd/fail2ban). Forwards to loki with labels
-#            {unit, container, host, level, stack}. Add `loki.source.file`
-#            to the rendered config below if a specific service stops
-#            journald.
+#            there via --log-driver=journald, plus ddclient/smartd/
+#            fail2ban) — and the few files a service writes instead
+#            (`fleet.logFiles`, below: pi-hole's FTL.log). Forwards to
+#            loki with labels {unit, container, host, level, stack}.
 #
 # The alloy config is nix-rendered (pkgs.writeText) and bind-mounted
 # from /nix/store — changing it changes the store hash, so the

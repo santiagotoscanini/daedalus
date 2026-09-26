@@ -17,8 +17,8 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # For `checks.minimal-host` ONLY: the test host imports sops-nix beside the
-    # engine and hands in `nixpkgs-unstable`, as any host does. No module reads
+    # For the checks ONLY: each test host imports sops-nix beside the engine
+    # and hands in `nixpkgs-unstable`, as any host does. No module reads
     # either from here. A host follows both too
     # (`inputs.daedalus.inputs.sops-nix.follows = "sops-nix"`, and the same for
     # `nixpkgs-unstable`).
@@ -45,8 +45,8 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      # The same three tools, with the same settings, the operator's config
-      # held these files to before they moved here.
+      # nixfmt, statix, deadnix — the settings the host's configuration uses
+      # too, so a file lints the same in either repo.
       treefmtEval = treefmt-nix.lib.evalModule pkgs {
         projectRootFile = "flake.nix";
         programs.nixfmt.enable = true;
@@ -148,13 +148,13 @@
       checks.${system} = {
         formatting = treefmtEval.config.build.check self;
 
-        # A stranger's smallest host, EVALUATED against this tree: forcing the
-        # toplevel drvPath instantiates the whole system, so every option the
-        # engine reads must be declared by the engine and every assertion must
-        # hold. Nothing is built. See nix/tests/minimal-host/default.nix.
-        # The template, evaluated as written — a stranger's first evaluation is
-        # the one CI ran. Its site/site.json must stay byte-equal to the current
-        # site fixture: one document, two jobs (the fixture's preamble says so).
+        # templates/config — a stranger's smallest host — EVALUATED as written:
+        # forcing the toplevel drvPath instantiates the whole system, so every
+        # option the engine reads must be declared by the engine and every
+        # assertion must hold. Nothing is built. See
+        # nix/tests/minimal-host/default.nix. The template's site/site.json
+        # must stay byte-equal to the current site fixture: one document, two
+        # jobs (the fixture's `_why` says so).
         minimal-host =
           let
             host = import ./nix/tests/minimal-host {

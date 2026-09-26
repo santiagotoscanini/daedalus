@@ -165,13 +165,10 @@ in
           # every unit) starts the whole fleet at once and the IdP competes
           # for CPU with ~50 containers.
           #
-          # Measured, and left alone: a version jump that MIGRATES the schema
-          # still fits. v2.14.0 → v2.16.0 on 2026-09-24 migrated and answered
-          # in two seconds. Raising this window was briefly committed on the
-          # theory that the migration had overrun it; the unit journal says
-          # otherwise, and a longer gate is actively worse in the failure that
-          # did happen — a pocket-id that cannot start at all then holds the
-          # switch for ten minutes per attempt instead of two.
+          # Don't raise it for schema migrations: a migrating version jump
+          # (v2.14.0 → v2.16.0) answered in two seconds, and a longer gate is
+          # worse in the real failure — a pocket-id that cannot start at all
+          # then holds the switch for ten minutes per attempt instead of two.
           pkgs.writeShellScript "wait-pocket-id-ready" ''
             for _ in $(seq 1 120); do
               ${pkgs.podman}/bin/podman exec pocket-id /app/pocket-id healthcheck && exit 0
@@ -189,13 +186,11 @@ in
         # radius the container's name does not carry. The Updates panel
         # therefore asks for the name to be typed before this one moves.
         #
-        # Earned on 2026-09-24, and note WHOSE failure it was: a 28-container
-        # batch in which pocket-id itself updated cleanly. Another container
-        # in the batch (janitorr) failed verification, the updater reverted
-        # all 28 as it must, and pocket-id was the one that could not go
-        # back — so the box lost every login over a media janitor. Ceremony
-        # here is not about the risk of updating this container. It is about
-        # never letting it ride in a batch whose revert it cannot survive.
+        # The failure that earned it was not pocket-id's: it updated cleanly
+        # inside a batch, another container failed verification, the updater
+        # reverted the whole batch, and pocket-id could not go back — every
+        # login lost over an unrelated container. Ceremony is about never
+        # letting it ride in a batch whose revert it cannot survive.
         fleet.imageUpdates.pocket-id.ceremony = "every login on the box rides it, and a downgrade is refused: a newer pocket-id migrates the database on first start, so the updater cannot revert this one — the only way back is forward";
 
         # Unwedges the scheduler's expired-data cleanup, which self-blocks on

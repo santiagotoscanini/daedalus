@@ -69,11 +69,11 @@ in
       auth = "oidc";
       inherit (cfg) authGroups;
       healthPath = "/favicon.ico";
-      # The control plane cannot dial metube container-direct — `isolated`
-      # would keep it off the shared bridge — so it reads the queue through
+      # The control plane is `isolated` (off the proxy's shared bridge), so
+      # it cannot dial metube container-direct; it reads the queue through
       # this hostname instead. GET only, and only that one path; every
-      # mutating route (/add, /delete, the socket.io channel) still needs a
-      # passkey.
+      # mutating route (/add, /delete, the socket.io channel) still goes
+      # through the login gate.
       authBypassRule = "Method(`GET`) && Path(`/history`)";
     };
     # Consent screen and the identity provider's My Apps page.

@@ -128,10 +128,9 @@ in
 
     virtualisation.oci-containers.containers."app-db-exporter" = mkRootlessContainer {
       image = pinnedImage "app-db-exporter" "quay.io/prometheuscommunity/postgres-exporter";
-      # DATA_SOURCE_NAME is read directly from podman's --env-file.
-      # The DSN file stays out of `podman inspect` output (env file
-      # contents aren't reflected in Config.Env when injected via
-      # --env-file).
+      # DATA_SOURCE_NAME is read directly from podman's --env-file. This
+      # keeps the DSN out of the store and the unit text — NOT out of
+      # `podman inspect`, whose Config.Env includes env-file values.
       environmentFiles = [ envFile ];
       cmd = [
         "--web.listen-address=:9187"

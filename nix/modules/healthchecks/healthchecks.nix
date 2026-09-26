@@ -2,7 +2,7 @@
 # gatus: gatus probes live HTTP endpoints from outside ("is it up?");
 # healthchecks tracks jobs that must PING on a schedule and emails when one
 # stops reporting. The box's periodic units (syncoid backups, zfs snapshot/
-# scrub, flake-autoupgrade) ping it — see platform/hc-ping.nix.
+# scrub, flake-autoupgrade) ping it — see platform/hc-ping/hc-ping.nix.
 #
 # LAN-only; traefik dials http://healthchecks:8000 over its private
 # iso-bridge. Runs as the image's `hc` user (UID 999 -> host 100998),
@@ -16,9 +16,8 @@
 # SECURE_PROXY_SSL_HEADER makes Django trust traefik's X-Forwarded-Proto so
 # the HTTPS-terminated login POST passes Django's CSRF origin check.
 #
-# Secrets: SECRET_KEY (the host's env file). EMAIL_HOST_PASSWORD is rendered from
-# the shared platform/mail secret — one source of truth for the relay
-# password.
+# Secrets: SECRET_KEY (the host's env file); EMAIL_HOST_PASSWORD is rendered
+# from the shared relay secret (below).
 #
 # The host brings:
 #   fleet.modules.healthchecks.enable       the switch (default off, as every catalog module)
@@ -75,7 +74,7 @@
         hostname = lib.mkDefault "hc.${config.fleet.baseDomain}";
         serviceName = "healthchecks";
         port = 8000;
-        # Pocket ID gate + trusted header (AUTH.md tier 2): the middleware
+        # Pocket ID gate + trusted header: the middleware
         # asserts the login and hands Django the email via
         # X-Forwarded-Email; REMOTE_USER_HEADER below auto-logs-in that
         # account (the operator's, created at first login — same address
@@ -97,8 +96,8 @@
       sops.secrets."healthchecks-env" = mkDotenvSecret cfg.envSopsFile;
 
       # EMAIL_HOST_PASSWORD is the shared relay password from
-      # platform/mail — rendered from that single sops source (same idiom
-      # as every other mail consumer) so rotation touches one file.
+      # platform/mail/mail.nix — rendered from that single sops source, not
+      # copied, so rotation touches one file.
       systemd.services.healthchecks-smtp-env = mkSecretRender {
         description = "Render EMAIL_HOST_PASSWORD from the shared mail relay secret";
         gates = [ "podman-healthchecks.service" ];

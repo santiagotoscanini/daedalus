@@ -10,7 +10,7 @@
 # of host-port publishing. Stacks set
 # `fleet.webApps.<name>.serviceName = "<container>"` to opt in; the
 # rule then dials `http://<container>:<in-port>`. Stacks that
-# structurally can't join the bridge (gluetun-shared TV stack, pi-hole
+# structurally can't join the bridge (a gluetun netns tenant, pi-hole
 # as a native service) set `serviceUrl` to an explicit
 # `host.containers.internal` URL instead.
 #
@@ -47,7 +47,7 @@ let
 
   yamlFormat = pkgs.formats.yaml { };
 
-  # OIDC forward-auth plugin (AUTH.md) — vendored into the nix store so
+  # OIDC forward-auth plugin — vendored into the nix store so
   # traefik startup never fetches from the network (localPlugins loads
   # it in-process via Yaegi from /plugins-local/src/<module>).
   oidcPlugin = pkgs.fetchFromGitHub {
@@ -71,8 +71,7 @@ let
       http = {
         routers."${name}-rtr" = {
           entryPoints = [ entry ];
-          # One Host() per name; a route with no extraHosts renders exactly as
-          # it always has, so adding the option changed no existing file.
+          # One Host() per name (the route's host, then its extraHosts).
           rule = lib.concatMapStringsSep " || " (h: "Host(`${h}`)") ([ route.host ] ++ route.extraHosts);
           service = if internal then route.service else "${name}-svc";
         }
@@ -194,9 +193,11 @@ in
 
     # One forward-auth middleware per gated webApp (`auth = "oidc"`),
     # each dialing Pocket ID as its OWN client, so consent screens and
-    # the audit log name the actual service. Creds live in env.sops as
+    # the audit log name the actual service. Creds arrive as
     # POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET} (name uppercased, dashes to
-    # underscores); the PLUGIN resolves the ''${VAR} placeholders from
+    # underscores) — from the declarative clients' render, or env.sops for
+    # a hand-made client (environmentFiles below); the PLUGIN resolves the
+    # ''${VAR} placeholders from
     # traefik's process env — the rendered file in /nix/store carries no
     # secrets. Session cookies stay host-scoped (no SessionCookie.Domain):
     # one silent redirect through id.* per app instead of a domain-wide
@@ -232,8 +233,10 @@ in
               # Always redirect unauthenticated requests to Pocket ID instead
               # of 401'ing AJAX (the plugin can't tell XHR from page loads;
               # Auto's 401 shows as an "Unauthorized" screen on SPA reloads
-              # after logout). Safe here: every gated app's /api* paths are
-              # bypassed, so only top-level documents ever hit the gate.
+              # after logout). Safe for apps whose machine paths are bypassed
+              # (`authBypassRule`), since only their top-level documents hit
+              # the gate; an app without one gets a redirect on an expired
+              # XHR instead of a 401.
               UnauthorizedBehavior = "Challenge";
               # Lax so the state cookie survives the cross-subdomain redirect
               # back from id.* to the app's /oidc/callback (top-level nav).
@@ -364,7 +367,7 @@ in
         "${config.fleet.stateRoot}/traefik/acme.json:/acme.json"
         # No /var/log/traefik mount: both app + access logs go to stdout
         # (journald -> Loki). File logging is intentionally off so nothing
-        # grows unbounded under ~/selfhost/traefik/logs.
+        # grows unbounded under <stateRoot>/traefik.
       ];
 
       environmentFiles = [

@@ -1,4 +1,4 @@
-# Verdaccio config — consumed by stacks/verdaccio/verdaccio.nix.
+# Verdaccio config — templated (@ssoIssuer@) and mounted by verdaccio.nix.
 # Trimmed default docker.yaml; diff against
 # https://github.com/verdaccio/verdaccio/blob/master/packages/config/src/conf/docker.yaml
 # when bumping the image tag to catch upstream drift.
@@ -13,7 +13,8 @@ web:
 
 auth:
   # Pocket ID SSO. client-id/secret are ENV VAR NAMES the plugin reads
-  # at runtime (VERDACCIO_OPENID_CLIENT_{ID,SECRET} from env.sops) — no
+  # at runtime (VERDACCIO_OPENID_CLIENT_{ID,SECRET}, rendered by the
+  # identity provider's client sync) — no
   # secrets in this tracked file. provider-host discovery finds
   # <host>/.well-known/openid-configuration. username-claim=preferred_username
   # (Pocket ID). File store survives restarts (in-memory default is 60s

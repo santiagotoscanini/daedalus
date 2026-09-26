@@ -280,9 +280,7 @@ let
   # container's definition stays put. Nothing else about the app moves.
   # Into /run/daedalus-export — the READ-ONLY mount — not the rw apply dir:
   # applied.json is the drift-comparison target, the one file the app must
-  # not be able to overwrite. It used to sit in /apply purely because that
-  # was the convenient stable path; the export dir is the same trick without
-  # handing the app write access to its own baseline.
+  # not be able to overwrite.
   registrySnapshot = pkgs.writeShellApplication {
     name = "daedalus-registry-snapshot";
     runtimeInputs = [ pkgs.coreutils ];

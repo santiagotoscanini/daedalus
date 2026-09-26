@@ -6,7 +6,7 @@
 # so the tracked copy is sops-encrypted and materialized at activation.
 # Unlike a mkSecretRender oneshot, sops-nix re-decrypts on EVERY
 # activation, so editing the sops file and rebuilding actually lands the
-# new value — see CLAUDE.md, "a rotated secret does not reach the box".
+# new value — no render unit to restart by hand.
 #
 # The rendered path is gitignored; the ciphertext is the tracked source —
 # and it is the HOST's file (`fleet.claude.mcpSopsFile`): an engine has no

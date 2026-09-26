@@ -9,7 +9,7 @@
 # yet finalized", so a CLI from one version feeding the frontend of another is
 # an unsupported combination. A bump edits `version`, `hash` and the frontend
 # digest in the same commit, and goes through candidate builds of every app
-# before any app builds `live` again (plan, edge-case register).
+# before any app builds `live` again.
 #
 # mise is the third artifact of that release. `prepare` resolves versions by
 # running mise ON THE HOST, and railpack gets it by downloading
@@ -38,9 +38,9 @@
 # and re-read install.go/mise.go at the new tag: if the install path or the
 # asset layout moved, `misePath` and the install phase move with it.
 #
-# A module rather than a callPackage file because configuration.nix imports
-# every .nix under stacks/ as a module; it fills the railpack and mise fields
-# of `fleet.builder` (declared in ./builder.nix).
+# A module rather than a callPackage file: it fills the railpack and mise
+# fields of `fleet.builder` (declared in ./builder.nix), and is listed in
+# flake.nix's `daedalusModules` like its siblings.
 
 {
   config,

@@ -12,10 +12,7 @@
 # Auth model (three doors, one house):
 #   - podman/push protocol traffic: htpasswd basic auth. The `builder`
 #     user (machine-generated, stacks/daedalus/builder.nix) is the ONLY
-#     writer — the box's own build agent. (The Actions-era `ci` user went
-#     with the runners, and its REGISTRY_CI_* keys are now out of env.sops
-#     too, so nothing names a credential this registry does not have.)
-#     Anonymous = pull-only
+#     writer — the box's own build agent. Anonymous = pull-only
 #     (accessControl anonymousPolicy) — that's what lets deploy timers
 #     and app containers pull with zero credentials. NOTE: zot
 #     deliberately rejects anonymous DOCKER-CLI pulls when auth is
@@ -23,8 +20,9 @@
 #     unaffected, and everything on this box is podman.
 #   - browser UI: native Pocket ID OIDC (generic "oidc" provider —
 #     confidential client, no PKCE: zot only does PKCE for public
-#     clients). Client registered via the Pocket ID API; id+secret in
-#     env.sops. Callback: <externalUrl>/zot/auth/callback/oidc.
+#     clients). A declarative `fleet.ssoClients.zot`; its id+secret come
+#     from the identity provider's render, not env.sops. Callback:
+#     <externalUrl>/zot/auth/callback/oidc.
 #   - apikey extension is on: a logged-in UI user can mint per-purpose
 #     basic-auth API keys if ever needed.
 #
@@ -61,22 +59,22 @@
 # Two policies, and ORDER MATTERS: "a repository will apply the FIRST policy
 # it matches", so `cache/**` must stay above `**`. Within one policy the
 # keepTags rules are additive — a tag survives if ANY rule keeps it — which
-# is why a catch-all `pushedWithin` rule can only ever ADD retention, and why
-# the old 2160h catch-all quietly defeated the two rules above it.
+# is why a catch-all `pushedWithin` rule can only ever ADD retention: a long
+# one silently defeats every tighter rule above it.
 #
 #   First, when the host names any: its `retireRepositories` (an option; the
 #   description there says why zot, not `rm -rf`, empties a repository).
 #
-#   cache/** — BuildKit's registry cache export (build.sh's
-#   `--export-cache ref=<registry>/cache/<app>:buildkit`). Exactly one tag
+#   cache/** — BuildKit's registry cache export (stacks/daedalus/host/build.sh's
+#   `--export-cache` to `<registry>/cache/<app>:buildkit`). Exactly one tag
 #   there is live, `buildkit`, and it is kept BY NAME with no time condition:
 #   that is the defence against zot #4233 (a metaDB rebuild loses the
 #   timestamps and a purely time-based rule then expires everything). Beside
 #   it, every build leaves a crowd of digest-named tags: `mode=max` exports one
 #   per cached step, so the count grows with build traffic rather than with the
-#   number of apps (plutus alone carried 630). Those are what the 48h rule is
-#   for — a steady-state window, not a safety net for a mistaken push. This is
-#   where the store actually lives: at 168h it was 15 GB of a 20 GB tree. Two
+#   number of apps (one app alone has carried hundreds). Those are what the
+#   48h rule is for — a steady-state window, not a safety net for a mistaken
+#   push. This is where most of the store lives, so the window is tight. Two
 #   days is chosen against how these apps are built, not how long cache stays
 #   theoretically useful: a repo that is pushed at all is pushed most days, so
 #   it re-warms its own cache, and a repo that has been quiet for a week is
@@ -91,8 +89,8 @@
 #   marginal per build (shared base layers + dedupe) that is well under a
 #   gigabyte per app. Last, a 72h catch-all: it expires `candidate-` tags
 #   (built only to compare against a live image, and read within minutes)
-#   three days after the comparison instead of the old ninety, and it keeps a
-#   hand-pushed tag alive long enough for a human to notice it is there.
+#   three days after the comparison, and it keeps a hand-pushed tag alive
+#   long enough for a human to notice it is there.
 #
 # `deleteUntagged` + `delay: 24h` cover the blobs a push leaves behind; an
 # untagged manifest younger than a day is an upload in flight, not garbage.
@@ -208,10 +206,9 @@ in
 
     sops.secrets."registry-env" = mkDotenvSecret cfg.envSopsFile;
 
-    # traefik only, for the webApps serviceName route. The `registry` bridge
-    # that used to sit beside it existed for the Actions runner containers —
-    # those are gone, and everything that pushes now (the host's build agent)
-    # or pulls (the deploy oneshots, podman) reaches zot through traefik.
+    # traefik only, for the webApps serviceName route: everything that
+    # pushes (the host's build agent) or pulls (the deploy oneshots, podman)
+    # reaches zot through traefik.
     fleet.bridgeMemberships.zot = [ "traefik" ];
 
     fleet.statePaths.${dataDir} = { };

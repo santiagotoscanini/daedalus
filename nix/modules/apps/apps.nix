@@ -1,4 +1,4 @@
-# apps — vibe-coded app wrapper.
+# apps — the platform for the box's own self-built apps.
 #
 # Each entry in `fleet.apps` materializes:
 #   - A container `app-<name>` on `traefik-net`, listening on the
@@ -19,7 +19,7 @@
 # Convention enforced: every app container LISTENS ON PORT 3000.
 # No per-app port override. The image is built by us; the rule is ours.
 #
-# Naming: the declaration key (e.g. `anansi`) is used verbatim for the
+# Naming: the declaration key (e.g. `foo`) is used verbatim for the
 # hostname `<name>.<baseDomain>`, the dashboard tag, the container name
 # `app-<name>`, the
 # postgres role + database `<name>` on the shared cluster (when
@@ -52,7 +52,7 @@
 # Optional features (opt-in; `false` by default):
 #   - postgres.enable   → injects DATABASE_URL (+ POSTGRES_*)
 #   - storage.enable    → bind-mounts a persistent data dir at /app/data
-#   - litellm           → injects LITELLM_BASE_URL
+#   - litellm.enable    → injects LITELLM_BASE_URL
 #   - prometheus.enable → /metrics scrape + per-app Grafana dashboard
 #   - auth.mode         → SSO against Pocket ID, either shape (below)
 #   - …future features follow the same pattern (off by default,
@@ -62,12 +62,12 @@
 #
 #   "proxy"  — traefik's forward-auth middleware gates the router; the
 #              app never learns there is an IdP. For apps with no user
-#              model of their own (argus). Zero app-side work.
+#              model of their own. Zero app-side work.
 #   "native" — the app IS the OIDC client: it gets OIDC_ISSUER_URL,
 #              OIDC_CLIENT_ID, OIDC_REDIRECT_URI, OIDC_PROVIDER_ID,
 #              OIDC_SCOPES in its environment and OIDC_CLIENT_SECRET in
-#              an env file. For apps with accounts of their own
-#              (anansi), which keep per-user data isolation.
+#              an env file. For apps with accounts of their own, which
+#              keep per-user data isolation.
 #
 # Either way the client itself is declared, not clicked: the entry
 # materializes `fleet.ssoClients.<name>` (modules/pocket-id/clients.nix),
@@ -93,8 +93,9 @@
 #   ];
 #   environment = {
 #     APP_NAME, APP_HOSTNAME, APP_PUBLIC_URL, PORT     # always
-#     LITELLM_BASE_URL = http://litellm:4000           # when litellm = true
+#     LITELLM_BASE_URL = http://litellm:4000           # when litellm.enable
 #     <user-supplied static env>                       # via .env
+#   };
 #
 # The host brings:
 #   fleet.modules.apps.enable   the switch (platform/apps-options.nix; default off)
@@ -102,7 +103,6 @@
 #   site/vault/apps/<n>-env.sops   an app's operator secrets, when it has any
 # Requires the reverse proxy, the shared cluster (for postgres apps), the
 # identity provider (for gated apps) and the registry (for the deploy loop).
-#   };
 
 {
   config,
@@ -124,8 +124,8 @@ let
   appDbEnvBase = "${config.fleet.machineState}/app-db";
 
   # Host tree backing `storage.enable`. One dir per app underneath —
-  # and the app-adjacent state other stacks own (argus's gluetun/,
-  # daedalus's apply/) nests in the same per-app dirs.
+  # and the app-adjacent state other stacks own (an app's VPN tunnel
+  # state, daedalus's apply/) nests in the same per-app dirs.
   appsDataRoot = "${config.fleet.stateRoot}/apps";
 
   # Last deploy result per app, `<digest> ok|failed`; a sibling
@@ -185,9 +185,6 @@ let
       # site/apps.json, and an apps.json entry whose image does not exist yet
       # declares a container that cannot pull, which fails the switch, which
       # makes the Apply revert the very entry that would have allowed the build.
-      # Under the Actions runners the repo's own CI published an image before
-      # daedalus had ever heard of the app; nothing replaced that when the
-      # runners went.
       running = app.stage != "declared";
 
       # `stage = "off"` means no ingress: no webApp, so no traefik router, no
@@ -202,8 +199,7 @@ let
       inherit (app.source) dev;
 
       # cgroup v2 caps — see the `resources` option descriptions for what each
-      # one actually enforces. Omitted entirely when null, so an app with no
-      # limits produces the same podman command line it always did.
+      # one actually enforces. Each flag is omitted entirely when null.
       #
       # `--memory-swap` is pinned to `--memory` deliberately: podman writes it
       # into memory.swap.max verbatim and defaults it to 2× memory when unset,
@@ -225,10 +221,9 @@ let
       # ── scheduled tasks ───────────────────────────────────────────────────
       #
       # One `app-<name>-task-<id>` .service + .timer per entry, each a
-      # `podman exec` into this app's own container — the same shape
-      # nextcloud-cron has used for years (a file-sync stack the reference host runs), which is why
-      # `User = <operator>` + XDG_RUNTIME_DIR is what makes rootless podman work
-      # from a system unit. A task restarts nothing, so unlike the deploy unit
+      # `podman exec` into this app's own container. `User = <operator>` +
+      # XDG_RUNTIME_DIR is what makes rootless podman work from a system
+      # unit (the shape the host's nextcloud-cron uses). A task restarts nothing, so unlike the deploy unit
       # it needs no root and no setpriv.
       #
       # Gated on `running`: `podman exec` into a container that does not exist
@@ -323,7 +318,7 @@ let
           OPERATOR_RUNTIME_DIR=${lib.escapeShellArg config.fleet.operator.runtimeDir}
           # Names the box in the alert subjects.
           HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-          # Deploy-failure alert relay (platform/mail msmtp -> Gmail).
+          # Deploy-failure alert relay (platform/mail's msmtp).
           NOTIFY_FROM=${lib.escapeShellArg config.fleet.mail.sender}
           NOTIFY_TO=${lib.escapeShellArg config.fleet.mail.alertTo}
 
@@ -596,23 +591,20 @@ let
       ...
     }:
     {
-      # Register in bridgeMemberships either way — that's what earns the
-      # mandatory Type=oneshot systemd override (rootless podman + Type=notify
-      # is broken on this box). "traefik" joins the bridge for DNS routing;
-      # `[ ]` means pasta/netns with NO bridge (egress mode borrows gluetun's
-      # netns via extraOptions, and traefik reaches it via the published host
-      # port — see webApps below). Same shape as the TV stack's `sonarr = [ ]`.
-      # `auth.isolated` swaps the shared bridge for a private one; that
-      # membership comes from webApps.isolated, and listing "traefik"
+      # The key is emitted for every RUNNING app, even as `[ ]`: registration
+      # is what earns the mandatory Type=oneshot systemd override (rootless
+      # podman cannot do Type=notify). Not for a `declared` one — a membership
+      # naming a container this configuration never declares fails eval on
+      # the missing image.
+      #
+      # "traefik" joins the shared bridge for DNS routing, and only while
+      # `exposed` (an app with no router has no reason to sit on it). `[ ]`
+      # means pasta/netns with NO bridge: egress mode borrows gluetun's netns
+      # via extraOptions, and traefik reaches it via the published host port
+      # (webApps below). `auth.isolated` swaps the shared bridge for a private
+      # one whose membership comes from webApps.isolated; listing "traefik"
       # here as well would re-open the shared path (assertion in
       # platform/publishing.nix).
-      # `exposed` gates the traefik membership too: an app with no router has
-      # no reason to sit on the shared bridge. The key itself is still emitted
-      # (possibly as `[ ]`), because that registration is what earns the
-      # mandatory Type=oneshot override.
-      # …and `running` gates the key itself, because that registration is what
-      # MAKES the systemd override; a membership naming a container this
-      # configuration never declares fails eval on the missing image.
       fleet.bridgeMemberships = lib.optionalAttrs running {
         "${cName}" =
           lib.optional (exposed && !egressEnabled && !isolatedAuth) "traefik"
@@ -957,7 +949,7 @@ let
             # anonymous reads — container pulls carry no credential at all.
             #
             # `--init`: every app here is node as PID 1, and node does not reap.
-            # An app that spawns processes (plutus drives chromium) leaves each
+            # An app that spawns processes (a headless browser, say) leaves each
             # orphaned grandchild as a zombie holding a pid until the container's
             # 2048 ceiling, where it can no longer fork and dies under a green
             # oneshot — the failure one MCP sidecar documented, measured there at
@@ -1067,7 +1059,7 @@ in
 
       fleet = {
         # Every app's AUTH_SECRET used to live under stacks/apps/secrets in the
-        # checkout; see platform/machine-state.nix for why it moved and why each
+        # host's checkout; see platform/machine-state.nix for why it moved and why each
         # bootstrap REQUIRES the migration rather than merely following it.
         machineStateLegacy.apps = "${config.fleet.config.repo}/stacks/apps/secrets";
         machineStateReaders = map (n: "app-${n}-secrets-bootstrap.service") (lib.attrNames cfg);

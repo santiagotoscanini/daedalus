@@ -17,9 +17,9 @@
 #     container, bridge-creation oneshots, state-paths.service, and the
 #     1:1 registry assertion.
 #
-# The publishing layer (webApps and friends) lives in
-# platform/publishing.nix; appDatabases, logStacks and monitoredJobs
-# are declared in their owning modules.
+# The publishing layer (webApps, logStacks and the other registries)
+# lives in platform/publishing.nix; monitoredJobs is declared in
+# platform/mail, appDatabases in modules/app-db.
 
 {
   config,
@@ -77,9 +77,9 @@ let
       };
     }
     // {
-      # user@1000.service in after/wants: at shutdown systemd stops each
-      # container BEFORE the operator's user manager and /run/user/1000 tear
-      # down. Without it, `podman stop` finds the rootless runtime gone
+      # The operator's user manager (`fleet.operator.userService`) in
+      # after/wants: at shutdown systemd stops each container BEFORE that
+      # manager and its runtime dir tear down. Without it, `podman stop` finds the rootless runtime gone
       # ("RunRoot not writable" → crun not found), the stop fails, and the
       # container is cgroup-killed — dirty DB shutdowns / WAL recovery next
       # boot (app-db pg is stopped last, so it is the most exposed).
@@ -95,14 +95,14 @@ let
 
   # Container-UID -> host-UID under the operator's subuid range
   # (100000:65536) for uids >= 1: www-data 33 -> 100032, linuxserver
-  # abc 911 -> 100910. NOT for uid 0 (container root is the operator,
-  # 1000, outside the subuid range). Exposed via _module.args below.
+  # abc 911 -> 100910. NOT for uid 0 (container root is the operator's
+  # own uid, outside the subuid range). Exposed via _module.args below.
   hostUid = containerUid: 99999 + containerUid;
 
   # Shared shell for "run rootless podman as the operator at boot" oneshots
   # (bridge creation, local image builds): ordered after the
   # podman-rootless-ready gate (the userns exists, see below), linger
-  # ordering so /run/user/1000 exists, /run/wrappers on PATH (newuidmap
+  # ordering so the operator's runtime dir exists, /run/wrappers on PATH (newuidmap
   # is a setuid wrapper only there, and the store-only default PATH
   # cannot see it), oneshot + retry. `needsNetwork = false` for work
   # that only writes local state (a network-online edge would delay
@@ -386,6 +386,14 @@ in
   };
 
   config = {
+    # Container runtime for the whole fleet: rootless podman as the operator
+    # (subuid 100000:65536). dockerCompat installs a `docker` shim.
+    virtualisation.podman = {
+      enable = true;
+      dockerCompat = true;
+    };
+    virtualisation.oci-containers.backend = "podman";
+
     # Decorator exposed to per-stack modules:
     #   virtualisation.oci-containers.containers.foo = mkRootlessContainer { ... };
     #
@@ -396,14 +404,6 @@ in
     # stacks keep functioning. Opt out per-container with
     # `noNewPrivileges = false` (the key is stripped before reaching
     # oci-containers) for the rare image that legitimately needs to escalate.
-    # Container runtime for the whole fleet: rootless podman as the operator
-    # (subuid 100000:65536). dockerCompat installs a `docker` shim.
-    virtualisation.podman = {
-      enable = true;
-      dockerCompat = true;
-    };
-    virtualisation.oci-containers.backend = "podman";
-
     _module.args.mkRootlessContainer = mkRootlessContainer;
 
     # Locally-built image + its build oneshot, as one helper:
@@ -466,9 +466,10 @@ in
           fleet.images.${name} = "${upstream}:<tag>@sha256:<digest>";
       '');
 
-    # Standard operator-managed dotenv secret: age-encrypted file at
-    # the stack root, decrypted to /run/secrets/<name> owned by
-    # the operator so rootless podman reads it pre-userns-remap.
+    # Standard operator-managed dotenv secret: an age-encrypted file (a
+    # host stack's own `env.sops`, or the `*SopsFile` a host hands a catalog
+    # module), decrypted to /run/secrets/<name> owned by the operator so
+    # rootless podman reads it pre-userns-remap.
     #   sops.secrets."foo-env" = mkDotenvSecret ./env.sops;
     _module.args.mkDotenvSecret = sopsFile: {
       inherit sopsFile;
@@ -561,7 +562,7 @@ in
         # A pause process is only good if podman could move it into
         # its own `podman-pause-<id>.scope` under the user manager.
         # That needs the user's session bus, which exists only once
-        # user@1000 is up; a podman run before that (the first reboot
+        # the user manager is up; a podman run before that (the first reboot
         # with this gate caught a daedalus snapshot doing exactly
         # this) leaves a pause in its caller's cgroup, which dies with
         # the caller, and whoever runs next creates another one. So

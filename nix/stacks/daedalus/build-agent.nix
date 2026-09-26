@@ -4,7 +4,7 @@
 # the requested commit with a token narrowed to that one repository, works out
 # what the app is (Railpack, or the repo's Dockerfile), runs the repo's checks
 # on the box, builds and pushes the image with the rootless BuildKit
-# stacks/daedalus/builder.nix runs, and starts the app's deploy.
+# ./builder.nix runs, and starts the app's deploy.
 # host/build.sh opens with the trust model; this file wires it.
 #
 # Gated like the builder itself (`fleet.builder.enable`: the GitHub App's vault
@@ -13,8 +13,8 @@
 # What it reads from elsewhere, and why each is a derivation rather than a copy:
 #   BUILDABLE   registry-mode apps in site/apps.json, deploy.enable ignored —
 #               a frozen app can still build (it just is not deployed).
-#   DEPLOYABLE  the same list daedalus.nix gives its deploy trigger. That one
-#               is a let binding in another module, so it is recomputed here
+#   DEPLOYABLE  the same list verbs-lib.nix gives the deploy trigger. That one
+#               is not exported, so it is recomputed here
 #               from the same file with the same filter; the two must agree,
 #               because a name in it becomes part of a unit root starts.
 #   OWNER_ID    fleet.github.expectedOwnerId — the box's constant, never
@@ -22,7 +22,7 @@
 #   OWNER, CLIENT_ID  site.json's github.app, as the token minter reads them.
 #   fenceCheck, miseBinary/misePath — builder.nix's, never restated.
 #
-# Known residuals (accepted for v1; each is on the adversarial review's list):
+# Known residuals, accepted:
 #   - Sandbox escape. A build step that escapes BuildKit's sandbox lands as
 #     `buildkit`: its own subuids, no socket, no secrets, fenced (builder.nix).
 #   - ONBUILD cache mounts. build.sh refuses a repo Dockerfile whose cache
@@ -37,7 +37,7 @@
 #     rather than fixed: the strategy is still supported, and the first repo
 #     to bring a Dockerfile back brings it with them.
 #   - The mise cache outlives a build and is the build user's to write, so
-#     code a repo's mise config runs during `railpack prepare` (spike B12) can
+#     code a repo's mise config runs during `railpack prepare` can
 #     leave files that a later prepare runs. Each app has its own cache
 #     (build.sh mounts `miseCacheDir/<app>` at /tmp/railpack for that app's
 #     prepare alone, under a root-only parent), so this no longer crosses
@@ -64,7 +64,7 @@ let
   # apps.json is exactly what earns it the first build.
   isRunning = a: (a.stage or "lab") != "declared";
   buildableApps = lib.attrNames (lib.filterAttrs (_: isRegistry) registryApps);
-  # Lockstep with daedalus.nix `deployableApps`.
+  # Lockstep with verbs-lib.nix `deployableApps`.
   deployableApps = lib.attrNames (
     lib.filterAttrs (_: a: (a.deploy.enable or true) && isRegistry a && isRunning a) registryApps
   );
@@ -169,7 +169,7 @@ let
     '';
   };
 
-  # The status file's undertaker, after daedalus.nix's imageUpdateReaper. The
+  # The status file's undertaker, after verbs-lib.nix's imageUpdateReaper. The
   # agent publishes its own terminal state, including on SIGTERM; this fires
   # when it could not — SIGKILL after the stop timeout, an OOM kill, a crash
   # in the trap — so a dead run reads `failed: interrupted` within seconds
@@ -190,10 +190,10 @@ let
       ${operatorVars}
       ${builtins.readFile ./host/lib.sh}
 
-      # NOT gated on $SERVICE_RESULT: a SIGTERM stop is now a clean exit
-      # (SuccessExitStatus 143, below — cancelling a build must not mail),
-      # so the state check IS the guard. A run that ended normally has already
-      # published a terminal state and falls through the case below.
+      # A clean result — including a SIGTERM stop, which SuccessExitStatus
+      # 143 below counts as success — means the agent's own trap already
+      # published a terminal state. Otherwise the state check is the guard:
+      # a run that did publish one falls through the case below.
       [ "''${SERVICE_RESULT:-success}" = "success" ] && exit 0
       [ -f "$STATUS" ] || exit 0
 
@@ -328,9 +328,9 @@ in
         # A SIGTERM stop is a requested stop: the operator cancelling a
         # build (daedalus-build-cancel), a shutdown, or buildkitd going
         # down and taking its Requires= with it. None of those are worth
-        # mail, and the reaper still publishes the interrupted state from
-        # ExecStopPost. A crash, an OOM kill or the timeout SIGKILL exits
-        # otherwise, fails the unit, and does mail.
+        # mail, and build.sh's TERM trap publishes the interrupted state. A
+        # crash, an OOM kill or the timeout SIGKILL exits otherwise, fails
+        # the unit, mails, and leaves the state to the ExecStopPost reaper.
         SuccessExitStatus = "143";
         # The token, the JWT, the secret files, the per-build push credential
         # copy and root's plan copies live in a mktemp dir under /tmp; a
@@ -374,8 +374,8 @@ in
       # Deliberately NOT monitoredJobs: its refusals are the normal case
       # (a late request, a build that already finished) and they exit 0.
       #
-      # No start limit, for the reason argued over the same setting in
-      # daedalus.nix: a path unit makes each request a start, and a refused
+      # No start limit, for the reason argued over bridgeAgent in
+      # daedalus-lib.nix: a path unit makes each request a start, and a refused
       # start is a dropped verb rather than a delayed one. It matters more
       # here than anywhere — the moment an operator presses Cancel twice is
       # exactly the moment they most want it to work.

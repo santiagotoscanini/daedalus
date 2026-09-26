@@ -23,7 +23,8 @@ rec {
   # state sits with the other apps' dirs rather than as a root-level stack.
   applyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
 
-  # Mixed into every bridge agent (daedalus-verbs.nix, daedalus-github.nix). One property, one argument, written
+  # Mixed into every bridge agent (daedalus-verbs.nix, daedalus-github.nix,
+  # the workspace sync in daedalus-snapshots.nix). One property, one argument, written
   # once — the agents differ in what they do and in how long they may take, but
   # not in this.
   #
@@ -67,7 +68,7 @@ rec {
   # unconditional: its router answers nothing but a POST to one path, and the
   # engine refuses those until a webhook secret exists. Everything that needs
   # the App's credentials waits for site/vault/github-app.sops to be in the
-  # flake (the platform/git and stacks/cloudflared precedent — a flake sees
+  # flake (the platform/git and modules/cloudflared precedent — a flake sees
   # only tracked files, so "exists" means "committed by an Apply").
   hooksHost = at "hooks";
 
@@ -94,8 +95,8 @@ rec {
   # platform/git). NOT under fleet.stateRoot: these are development trees,
   # not container state, and no container mounts them.
   #
-  # ~/projects rides the `home` dataset, so unlike /etc/nixos these trees ARE
-  # snapshotted and syncoid-mirrored — uncommitted vibecode survives a disk.
+  # On the reference host the home directory is snapshotted and mirrored, so
+  # uncommitted work in these trees survives a disk.
   workspaceRoot = "${config.users.users.${config.fleet.operator.user}.home}/projects";
 
   # The engine clone — daedalus's own source, and one of those workspaces.

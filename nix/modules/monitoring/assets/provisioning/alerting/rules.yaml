@@ -3,9 +3,10 @@
 # Predictive / Warning). File-provisioned — this file is the source of
 # truth; UI edits to these rules don't persist.
 #
-# NOTE: no per-container CPU/RAM alerts exist because no rootless-visible
-# per-container metric exists — cgroup exporters can't see cgroups under
-# user.slice/user@1000.service. Liveness (container_up) is the coverage.
+# NOTE: no per-container CPU/RAM alerts. Packaged cgroup exporters can't
+# see rootless containers; monitoring.nix's liveness sweep exports
+# container_{cpu,memory,pids,oom_kills}* from cgroup v2 for the dashboards,
+# but liveness (container_up) is the only per-container alert coverage.
 #
 # HOME ASSISTANT IS MUTED. Home Assistant is a work in progress and
 # its devices/integrations fail routinely while being worked on, so

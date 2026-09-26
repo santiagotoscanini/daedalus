@@ -31,8 +31,8 @@ WORKDIR /app
 
 # corepack only installs shims; the pnpm binary is fetched on the first `pnpm`
 # call and corepack reads none of pnpm's config — without its own registry
-# variable it goes straight to npmjs and skips the proxy (see iris's
-# Dockerfile). The dependency registry itself is the repo's choice, read by
+# variable it goes straight to npmjs and skips the proxy. The dependency
+# registry itself is the repo's choice, read by
 # pnpm from pnpm-workspace.yaml as in every other build of that repo.
 ENV CI=true \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \

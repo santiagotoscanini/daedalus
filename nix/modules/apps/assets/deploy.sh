@@ -1,9 +1,10 @@
 # Body of app-<name>-deploy.service — poll the image registry (the box's
 # own zot by default), redeploy on a new digest.
 #
-# Nix injects APP / IMAGE / UNIT / APP_HOST / HEALTH_PATH / HEALTH_TIMEOUT /
-# LAN_IP / STATE / SETPRIV / ENV_BIN / PODMAN above this body, and
-# writeShellApplication prepends `set -euo pipefail`.
+# Nix injects the parameters above this body (APP, IMAGE, UNIT, APP_HOST,
+# HEALTH_*, EXPOSED, LAN_IP, STATE*, the binaries, OPERATOR_*, NOTIFY_* — see
+# `deployScript` in apps.nix), and writeShellApplication prepends
+# `set -euo pipefail`.
 #
 # Why this exists at all: the generated container unit runs
 # `podman run --pull missing`, which matches on TAG, not digest. Once
@@ -89,19 +90,15 @@ last=$(cat "$STATE" 2>/dev/null || true)
 # outage that spans ticks (a registry this deploy can't reach is a local
 # failure now, not a WAN one).
 #
-# The nightly dynamic-IP reset (Argentine ISP, ~04:00) drops the WAN for
-# anywhere from a minute to ~10 min — long enough to blow past --retry and span
-# several ticks. Alerting on that is pure noise (and the alert email can't even
-# send while the WAN is down: "No route to host", so a threshold crossed
-# mid-outage yields only a confusing lone RECOVERED). So the $STATE.pull marker
-# is a CONSECUTIVE-FAILURE COUNTER, not a boolean: we only email once the pull
-# has failed PULL_ALERT_AFTER ticks running (~16 min at a 2-min tick), mirroring
-# Grafana's `for:` pending period. The threshold is set ABOVE the longest
-# expected WAN outage so a reset stays fully silent; a real failure (a wedged
-# or unreachable zot is the classic) persists well past that and still alerts
-# — just later, which is fine for a stalled pull — and keeps the unit failed so
-# `systemctl --failed` shows it. Marker existence still means "pulls are
-# failing"; only its contents changed to a count.
+# So the $STATE.pull marker is a CONSECUTIVE-FAILURE COUNTER, not a boolean:
+# we only email once the pull has failed PULL_ALERT_AFTER ticks running
+# (~16 min at a 2-min tick), mirroring Grafana's `for:` pending period. A
+# short outage (zot restarting, a WAN drop that also stops the alert mail
+# from sending) stays silent; a real failure (a wedged or unreachable zot is
+# the classic) persists well past that and still alerts — just later, which
+# is fine for a stalled pull — and keeps the unit failed so `systemctl
+# --failed` shows it. Marker existence means "pulls are failing"; its
+# contents are the count.
 PULL_ALERT_AFTER=8
 if ! podman_ pull --retry 3 --retry-delay 5s --quiet "$IMAGE" >/dev/null; then
   fails=$(( $(cat "$STATE.pull" 2>/dev/null || echo 0) + 1 ))
@@ -173,7 +170,8 @@ if [ "$new_id" = "$running" ]; then
 fi
 
 # The image the container was running is what this deploy supersedes (rmi'd
-# after a healthy deploy so a moving :latest doesn't fill rpool/selfhost).
+# after a healthy deploy so a moving :latest doesn't fill the operator's
+# rootless image store).
 old_id=$running
 [ "$old_id" = "none" ] && old_id=""
 
@@ -204,7 +202,7 @@ record_deploy() {
     "$(( (SECONDS - deploy_started_s) * 1000 ))" "${2-}" >>"$STATE.log"
 
   # Bound it. Deploys are infrequent (digest changes only), but this file is
-  # append-only on a dataset with 16K recordsize and frequent snapshots.
+  # append-only and daedalus re-reads it whole.
   if [ "$(wc -l <"$STATE.log")" -gt 200 ]; then
     tail -n 200 "$STATE.log" >"$STATE.log.tmp" && mv "$STATE.log.tmp" "$STATE.log"
   fi
@@ -272,7 +270,7 @@ EOF
     esac
 
     # Drop only the image this deploy superseded, so a moving :latest doesn't
-    # slowly fill rpool/selfhost with <none> layers.
+    # slowly fill the rootless image store with <none> layers.
     if [ -n "$old_id" ]; then
       podman_ rmi "$old_id" >/dev/null 2>&1 || true
     fi
