@@ -1,7 +1,6 @@
-import { createServerFn } from '@tanstack/react-start'
 import { asValidator, bool, is, obj, str, withMessage } from '../lib/contract/decode'
-import { flagField } from '../lib/contract/fields-c'
-import { adminFn } from './fn'
+import { flagField, nonEmptyStringField } from '../lib/contract/fields'
+import { adminFn, adminReadFn } from './fn'
 
 // The server functions behind a game server's roster (core/site/players.ts).
 // Every write is a site edit and lands on the next Apply; nothing here
@@ -14,10 +13,7 @@ import { adminFn } from './fn'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Any non-empty string, untrimmed; whether it names a roster is `rosterModule`'s question. */
-const moduleField = withMessage(
-  is((v): v is string => typeof v === 'string' && v !== '', 'a module id'),
-  'expected a module id',
-)
+const moduleField = withMessage(nonEmptyStringField, 'expected a module id')
 
 const uuid = is((v): v is string => typeof v === 'string' && UUID.test(v), 'a uuid')
 
@@ -28,16 +24,12 @@ async function rosterModule(id: string) {
 }
 
 /**
- * What the vendor says a name is — a preview, written nowhere.
- *
- * A GET that is still admin-only, checked inside the handler (after the
- * validator, as it always was): fn.ts has no admin-gated GET builder yet.
+ * What the vendor says a name is — a preview, written nowhere. A GET that only
+ * an admin may make, as it always was; the roster page it serves is theirs.
  */
-export const lookupPlayerFn = createServerFn()
+export const lookupPlayerFn = adminReadFn
   .validator(asValidator(withMessage(obj({ name: str, id: moduleField }), 'expected { id, name }')))
   .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { lookupPlayer } = await import('../core/site/players')
     return lookupPlayer(await rosterModule(data.id), data.name)
   })

@@ -20,7 +20,7 @@ import {
   str,
   withMessage,
 } from '../lib/contract/decode'
-import { strMax } from '../lib/contract/fields-b'
+import { strMax } from '../lib/contract/fields'
 import { type ExternalApp, isPlatform } from '../lib/external-apps'
 import { isMcpScope } from '../lib/mcp'
 import type { Result } from '../lib/result'

@@ -1,6 +1,6 @@
 import type { LocalLoginState } from '../core/local-login'
 import { asValidator, obj, withMessage } from '../lib/contract/decode'
-import { strMax } from '../lib/contract/fields-b'
+import { strMax } from '../lib/contract/fields'
 import type { Result } from '../lib/result'
 import { publicFn, readFn } from './fn'
 

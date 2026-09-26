@@ -1,6 +1,6 @@
 import type { NodePolicy } from '../host/schema'
 import { asValidator, is, obj, withMessage } from '../lib/contract/decode'
-import { nodeIdField } from '../lib/contract/fields-c'
+import { nodeIdField } from '../lib/contract/fields'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
 import { NODE_NAME_RE } from '../lib/nodes-file'
 import { isProviderKind } from '../lib/providers/kinds'

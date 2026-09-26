@@ -1,5 +1,5 @@
 import { asValidator, obj, str, withMessage } from '../lib/contract/decode'
-import { nodeIdField } from '../lib/contract/fields-d'
+import { nodeIdField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
 // The Claude tab's loaders — the box's (System › Claude and Shotter, through

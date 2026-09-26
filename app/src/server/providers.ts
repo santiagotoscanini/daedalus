@@ -1,6 +1,6 @@
 import type { Ctx } from '../core/ctx'
 import { asValidator, bool, is, obj, withMessage } from '../lib/contract/decode'
-import { nonBlankField } from '../lib/contract/fields-c'
+import { nonBlankField } from '../lib/contract/fields'
 import { isProviderKind, managesResidency, type ProviderKind } from '../lib/providers/kinds'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'

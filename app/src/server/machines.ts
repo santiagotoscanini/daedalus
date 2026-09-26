@@ -1,5 +1,5 @@
 import { asValidator, obj, withMessage } from '../lib/contract/decode'
-import { flagField, nodeIdField } from '../lib/contract/fields-c'
+import { flagField, nodeIdField } from '../lib/contract/fields'
 import { readFn } from './fn'
 
 // The machine picker's list and a node's System page. Read-only, so no

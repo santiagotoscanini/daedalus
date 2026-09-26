@@ -1,5 +1,5 @@
 import { arrayOf, asValidator, obj, withMessage } from '../lib/contract/decode'
-import { containerNameField, imageTargetField } from '../lib/contract/fields-d'
+import { containerNameField, imageTargetField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
 // Server functions behind the Updates page and the Update button.
@@ -13,7 +13,7 @@ import { adminFn, readFn } from './fn'
 //
 // Value imports are dynamic, like every other server module here: the bridge
 // reaches for node:fs and nothing below may be pulled into a client bundle.
-// What a container name is lives in lib/contract/fields-d.ts.
+// What a container name is lives in lib/contract/fields.ts.
 
 /**
  * The notes for one container, on demand.

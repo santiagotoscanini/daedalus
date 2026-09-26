@@ -1,12 +1,12 @@
 import { isAccessWindow } from '../lib/access-window'
 import { asValidator, is, nullable, obj, optional, str, withMessage } from '../lib/contract/decode'
-import { appNameField } from '../lib/contract/fields'
 import {
+  appNameField,
   nonEmptyStringField,
   recordField,
   secretKeyField,
   taskIdField,
-} from '../lib/contract/fields-a'
+} from '../lib/contract/fields'
 import type { Result } from '../lib/result'
 import { adminFn, readFn } from './fn'
 

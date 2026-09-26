@@ -1,5 +1,5 @@
 import { asValidator, obj, str, withMessage } from '../lib/contract/decode'
-import { stringMapField } from '../lib/contract/fields-a'
+import { stringMapField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
 // The server functions behind a stack's version-update button

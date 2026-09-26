@@ -16,8 +16,7 @@ import {
 } from '../lib/build-settings'
 import { BUILD_SHA_RE } from '../lib/builds'
 import { asValidator, is, obj, str, withMessage } from '../lib/contract/decode'
-import { appNameField } from '../lib/contract/fields'
-import { pageSizeField } from '../lib/contract/fields-a'
+import { appNameField, pageSizeField } from '../lib/contract/fields'
 import type { Result } from '../lib/result'
 import { adminFn, readFn } from './fn'
 
