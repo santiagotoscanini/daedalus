@@ -70,7 +70,7 @@ export function AppRail({ app }: { app: AppRailContext }) {
           default would keep this lit on every page of the section. */}
       <Link
         to="/apps"
-        className={cn(NAV_ITEM, 'text-(--dim) normal-case hover:text-foreground')}
+        className={cn(NAV_ITEM, 'text-(--dim) hover:text-foreground')}
         data-label="All apps"
         activeProps={{}}
       >
@@ -93,7 +93,10 @@ export function AppRail({ app }: { app: AppRailContext }) {
           // Carry the rest of the search forward, so switching to another
           // section and back does not silently reset the access window.
           search={(prev) => ({ ...prev, tab: t })}
-          className={cn(NAV_ITEM, t === app.tab && NAV_ITEM_ACTIVE)}
+          // The label is the lowercase tab id, capitalized here on the row
+          // itself. Not as a descendant rule on the rail: that also reached
+          // the wordmark and beat its `uppercase`.
+          className={cn(NAV_ITEM, 'capitalize', t === app.tab && NAV_ITEM_ACTIVE)}
           // Manual activeness only — Link's default activeProps matches by
           // location and would light every row (see components/tabs.tsx).
           activeProps={{}}

@@ -85,9 +85,6 @@ export function Rail({
         'max-rail:ease-[cubic-bezier(0.4,0,0.2,1)] max-rail:delay-[0s,220ms]',
         'max-rail:data-[open=true]:visible max-rail:data-[open=true]:translate-x-0',
         'max-rail:data-[open=true]:delay-0',
-        // Inside an app the rail's entries are that app's sections, which are
-        // lowercase tab ids.
-        app !== null && '[&_a]:capitalize',
       )}
       data-open={drawer.open ? 'true' : 'false'}
     >
