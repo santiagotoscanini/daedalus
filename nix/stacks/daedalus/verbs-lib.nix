@@ -14,6 +14,7 @@ let
     applyDir
     prevDir
     registryApps
+    deployableApps
     workspaceEnv
     workspaceRuntimeInputs
     githubAppField
@@ -127,28 +128,6 @@ let
       ${builtins.readFile ./host/apply.sh}
     '';
   };
-
-  # Apps that actually have an `app-<name>-deploy.service` to start: the
-  # registry-mode entries whose deploy is not frozen (schema v2's
-  # `deploy.enable`, absent = on — the same default the platform applies). A
-  # frozen app keeps its page and its env snapshot; what it loses is exactly
-  # this — the trigger refuses it, so a freeze holds against the UI's
-  # Redeploy button too, not just the timer. A local-source app like daedalus
-  # is excluded for free, because it has no deploy unit at all.
-  #
-  # This list is the security control on the trigger: its contents become part
-  # of a unit name that root starts. It MUST stay in lockstep with the deploy
-  # units modules/apps/apps.nix generates (`deploy.enable && running`) — an
-  # allowlist wider than those units would let root start a unit that does
-  # not exist.
-  deployableApps = lib.attrNames (
-    lib.filterAttrs (
-      _: a:
-      (a.deploy.enable or true)
-      && ((a.sourceMode or "registry") == "registry")
-      && ((a.stage or "lab") != "declared")
-    ) registryApps
-  );
 
   # The `<app>:<taskId>` pairs that actually have an
   # `app-<app>-task-<taskId>.service` to start. Same gate the platform applies

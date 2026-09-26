@@ -60,6 +60,41 @@ rec {
   # `fleet.site.source`, a path set in configuration.nix.
   registryApps = (builtins.fromJSON (builtins.readFile config.fleet.registry.file)).apps;
 
+  # The two allowlists the bridge agents are handed, both from the registry
+  # above. Defined once here because a name in either becomes part of a unit
+  # name root starts: the deploy trigger (verbs-lib.nix) and the build agent
+  # (build-agent.nix) must never disagree about them.
+
+  # Apps the box builds: every registry-mode entry, `deploy.enable` ignored (a
+  # frozen app still builds; it is just not deployed) and `declared` included
+  # (being in apps.json is exactly what earns an app its first build).
+  buildableApps = lib.attrNames (
+    lib.filterAttrs (_: a: (a.sourceMode or "registry") == "registry") registryApps
+  );
+
+  # Apps that actually have an `app-<name>-deploy.service` to start: the
+  # registry-mode entries whose deploy is not frozen (schema v2's
+  # `deploy.enable`, absent = on — the same default the platform applies) and
+  # that are past `declared` (a declared app has no container, so no deploy
+  # unit). A frozen app keeps its page and its env snapshot; what it loses is
+  # exactly this — the trigger refuses it, so a freeze holds against the UI's
+  # Redeploy button too, not just the timer. A local-source app like daedalus
+  # is excluded for free, because it has no deploy unit at all.
+  #
+  # This list is the security control on the deploy trigger and on the build
+  # agent's final step. It MUST stay in lockstep with the deploy units
+  # modules/apps/apps.nix generates (`deploy.enable && running`) — an
+  # allowlist wider than those units would let root start a unit that does
+  # not exist.
+  deployableApps = lib.attrNames (
+    lib.filterAttrs (
+      _: a:
+      (a.deploy.enable or true)
+      && ((a.sourceMode or "registry") == "registry")
+      && ((a.stage or "lab") != "declared")
+    ) registryApps
+  );
+
   at = label: "${label}.${config.fleet.baseDomain}";
 
   # ── the GitHub App ─────────────────────────────────────────────────────

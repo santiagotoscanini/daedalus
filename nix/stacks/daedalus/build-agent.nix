@@ -1,22 +1,39 @@
-# daedalus-build — the host side of daedalus's `build` bridge verb.
+# daedalus-build — the host side of daedalus's `build` bridge verb: turn a
+# `build-request.json` the engine drops into the apply dir into an image in
+# the box's registry, then start the app's deploy.
 #
-# The engine drops `build-request.json` into the apply dir; this unit fetches
-# the requested commit with a token narrowed to that one repository, works out
-# what the app is (Railpack, or the repo's Dockerfile), runs the repo's checks
-# on the box, builds and pushes the image with the rootless BuildKit
-# ./builder.nix runs, and starts the app's deploy.
-# host/build.sh opens with the trust model; this file wires it.
+# ── the units ─────────────────────────────────────────────────────────────
 #
-# Gated like the builder itself (`fleet.builder.enable`: the GitHub App's vault
-# file is in the flake). Nothing here exists before the App does.
+#   daedalus-build.path       watches build-request.json, starts:
+#   daedalus-build.service    one build, three scripts in order —
+#     ExecStartPre   host/build-fence-gate.sh  no egress fence, no build
+#     ExecStart      host/build.sh             token, clone, railpack prepare,
+#                                              checks, build + push, deploy
+#     ExecStopPost   host/build-reaper.sh      a run that died unannounced
+#                                              reads `failed: interrupted`
+#   daedalus-build-cancel.{path,service}   build-cancel-request.json →
+#                                          host/build-cancel.sh
+#   daedalus-build-gc.{timer,service}      nightly sweep → host/build-gc.sh
+#
+# ── how each script is made ───────────────────────────────────────────────
+#
+# A writeShellApplication whose text is, in order: the variables nix hands it
+# (`NAME='value'` lines, fixed when the system is built), the shared helpers
+# (host/lib.sh — the bridge's rules for touching files the container can
+# write; host/github-lib.sh for the build itself), then the script under
+# host/. So a change to apps.json or to a builder path is a new script, never
+# a run-time lookup. host/build.sh opens with the trust model.
+#
+# Gated like the builder itself (`fleet.builder.enable`: the GitHub App's
+# vault file is in the flake). Nothing here exists before the App does. The
+# daemon, the build user, the scratch dataset and the egress fence are
+# ./builder.nix; the Railpack and mise pins are ./railpack.nix.
 #
 # What it reads from elsewhere, and why each is a derivation rather than a copy:
-#   BUILDABLE   registry-mode apps in site/apps.json, deploy.enable ignored —
-#               a frozen app can still build (it just is not deployed).
-#   DEPLOYABLE  the same list verbs-lib.nix gives the deploy trigger. That one
-#               is not exported, so it is recomputed here
-#               from the same file with the same filter; the two must agree,
-#               because a name in it becomes part of a unit root starts.
+#   BUILDABLE, DEPLOYABLE  daedalus-lib.nix's `buildableApps` / `deployableApps`,
+#               from the committed site/apps.json — the same lists the deploy
+#               trigger gets, because a name in them becomes part of a unit
+#               root starts.
 #   OWNER_ID    fleet.github.expectedOwnerId — the box's constant, never
 #               site.json's copy (platform/site.nix asserts they agree).
 #   OWNER, CLIENT_ID  site.json's github.app, as the token minter reads them.
@@ -53,21 +70,14 @@
 
 let
   inherit (config.fleet) builder;
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
+    applyDir
+    buildableApps
+    deployableApps
+    ;
   esc = lib.escapeShellArg;
 
-  applyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
-
-  registryApps = (builtins.fromJSON (builtins.readFile config.fleet.registry.file)).apps;
-  isRegistry = a: (a.sourceMode or "registry") == "registry";
-  # A `declared` app has no deploy unit, and an allowlist wider than the units
-  # would let root start one that does not exist. It IS buildable: being in
-  # apps.json is exactly what earns it the first build.
-  isRunning = a: (a.stage or "lab") != "declared";
-  buildableApps = lib.attrNames (lib.filterAttrs (_: isRegistry) registryApps);
-  # Lockstep with verbs-lib.nix `deployableApps`.
-  deployableApps = lib.attrNames (
-    lib.filterAttrs (_: a: (a.deploy.enable or true) && isRegistry a && isRunning a) registryApps
-  );
+  # ── values the scripts are handed ─────────────────────────────────────────
 
   appField = f: if config.fleet.github.app == null then "" else toString config.fleet.github.app.${f};
 
@@ -93,12 +103,38 @@ let
     builder.buildkitPackage
   ];
 
+  # Who host/lib.sh reads requests and publishes status as: the operator, so
+  # root never touches a file in the container-writable apply dir by name.
   operatorVars = ''
     OPERATOR_USER=${esc config.fleet.operator.user}
     OPERATOR_GROUP=${esc config.fleet.operator.group}
     SETPRIV=${pkgs.util-linux}/bin/setpriv
   '';
 
+  # ── the scripts ───────────────────────────────────────────────────────────
+
+  # daedalus-build's ExecStart. Its variables, by what they are for:
+  #   the bridge        APPLY_DIR — where the request and the status live
+  #   allowlists        BUILDABLE — apps this may build at all
+  #                     DEPLOYABLE — apps whose deploy it starts once pushed
+  #   the GitHub App    OWNER, CLIENT_ID, OWNER_ID (the trusted constant),
+  #                     PEM — the App's private key, which never leaves the host
+  #   where images go   REGISTRY — the box's zot
+  #                     NPM_MIRROR_HOST + LAN_IP — installs go through the
+  #                     mirror, its name pinned to the LAN address in BuildKit
+  #   BuildKit          BUILDKIT_ADDR — the rootless daemon's socket
+  #                     RAILPACK_FRONTEND — the gateway image that turns a
+  #                     Railpack plan into build steps
+  #                     DOCKER_CONFIG_DIR — the push credential, copied in for
+  #                     the one publishing call
+  #   scratch           BUILD_ROOT, WORK_ROOT (one dir per build), LOG_DIR
+  #   Railpack's mise   MISE_CACHE_DIR (one cache per app), MISE_MOUNT and
+  #                     MISE_PATH (where railpack looks), MISE_BINARY (the pin)
+  #   the build user    BUILD_USER, BUILD_GROUP, BUILD_PATH (its whole PATH)
+  #   Dockerfile route  NODE_IMAGE, CHECKS_DOCKERFILE — unused while every app
+  #                     builds with Railpack
+  #   the fence         FENCE_CHECK — re-run per build
+  #   the operator      OPERATOR_USER, OPERATOR_GROUP, SETPRIV (operatorVars)
   buildScript = pkgs.writeShellApplication {
     name = "daedalus-build";
     # SC2016 is "expressions don't expand in single quotes" — exactly what
@@ -150,8 +186,8 @@ let
     '';
   };
 
-  # ExecStartPre: the fence, with an answer for the pending request when it is
-  # down (host/build-fence-gate.sh) — a bare failed check would read as
+  # daedalus-build's ExecStartPre: the fence check, with an answer for the
+  # pending request when it fails — a bare failed check would read as
   # "interrupted" on the build page.
   fenceGate = pkgs.writeShellApplication {
     name = "daedalus-build-fence-gate";
@@ -169,12 +205,8 @@ let
     '';
   };
 
-  # The status file's undertaker, after verbs-lib.nix's imageUpdateReaper. The
-  # agent publishes its own terminal state, including on SIGTERM; this fires
-  # when it could not — SIGKILL after the stop timeout, an OOM kill, a crash
-  # in the trap — so a dead run reads `failed: interrupted` within seconds
-  # instead of after the engine's 90 s staleness clock. It also drops the
-  # run's work dir, which a skipped trap leaves behind.
+  # daedalus-build's ExecStopPost: marks a run that died without publishing
+  # its own end, and drops its work dir.
   buildReaper = pkgs.writeShellApplication {
     name = "daedalus-build-reaper";
     runtimeInputs = [
@@ -189,48 +221,12 @@ let
       BUILD_GROUP=${esc buildGroup}
       ${operatorVars}
       ${builtins.readFile ./host/lib.sh}
-
-      # A clean result — including a SIGTERM stop, which SuccessExitStatus
-      # 143 below counts as success — means the agent's own trap already
-      # published a terminal state. Otherwise the state check is the guard:
-      # a run that did publish one falls through the case below.
-      [ "''${SERVICE_RESULT:-success}" = "success" ] && exit 0
-      [ -f "$STATUS" ] || exit 0
-
-      # Read once, as the operator and never through a link (host/lib.sh).
-      status_json="$(read_as_operator "$STATUS")" || exit 0
-      state="$(jq -r '.state // ""' <<<"$status_json" 2>/dev/null || true)"
-      case "$state" in
-      cloning | detecting | checking | building | publishing) ;;
-      *) exit 0 ;;
-      esac
-      id="$(jq -r '.id // ""' <<<"$status_json")"
-      [[ "$id" =~ ^[0-9a-fA-F-]{1,64}$ ]] || exit 0
-
-      jq --arg at "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
-        '.state = "failed" | .error = "interrupted" | .updatedAt = $at' <<<"$status_json" |
-        write_json_atomic "$STATUS"
-
-      # $LOG_DIR is root's alone; the name is a validated id.
-      if [ -f "$LOG_DIR/$id.log" ] && [ ! -L "$LOG_DIR/$id.log" ]; then
-        printf '\n[interrupted: the build unit ended (%s) during %s]\n' "''${SERVICE_RESULT:-?}" "$state" >>"$LOG_DIR/$id.log"
-      fi
-      "$SETPRIV" --reuid="$BUILD_USER" --regid="$BUILD_GROUP" --init-groups --inh-caps=-all \
-        rm -rf -- "$WORK_ROOT/$id" || true
+      ${builtins.readFile ./host/build-reaper.sh}
     '';
   };
 
-  # The `cancel` verb. The engine cannot stop a build itself — the agent is a
-  # root unit — so it drops a request naming the build it means, and this
-  # turns that into the one thing that actually stops a run: stopping the
-  # unit, whose ExecStopPost reaper then publishes `failed: interrupted`
-  # (the engine has already written the row as cancelled-by-operator, and
-  # `cancelled` is terminal, so the reaper cannot overwrite it).
-  #
-  # It stops the CURRENT run only: a request that names anything other than
-  # the build the status file says is in flight is ignored. Without that, a
-  # cancel that arrived a second late — after the build it named finished and
-  # the next one started — would kill an innocent build.
+  # daedalus-build-cancel's ExecStart: stops the build in flight, and only
+  # the one the request names.
   cancelScript = pkgs.writeShellApplication {
     name = "daedalus-build-cancel";
     runtimeInputs = [
@@ -244,25 +240,11 @@ let
       STATUS=${esc "${applyDir}/build-status.json"}
       ${operatorVars}
       ${builtins.readFile ./host/lib.sh}
-
-      # Every refusal is exit 0: a cancel that arrives too late is ordinary,
-      # and a failing unit here would mail the operator about nothing.
-      req_json="$(read_request "$REQ")" || exit 0
-      [ "$(jq -r '.version // 0' <<<"$req_json" 2>/dev/null || echo 0)" = "1" ] || exit 0
-      want="$(jq -r '.id // ""' <<<"$req_json" 2>/dev/null || true)"
-      [[ "$want" =~ ^[0-9a-fA-F-]{1,64}$ ]] || exit 0
-
-      status_json="$(read_as_operator "$STATUS")" || exit 0
-      [ "$(jq -r '.id // ""' <<<"$status_json" 2>/dev/null || true)" = "$want" ] || exit 0
-      case "$(jq -r '.state // ""' <<<"$status_json" 2>/dev/null || true)" in
-      cloning | detecting | checking | building | publishing) ;;
-      *) exit 0 ;;
-      esac
-
-      echo "cancelling build $want at the operator's request"
-      systemctl stop daedalus-build.service || true
+      ${builtins.readFile ./host/build-cancel.sh}
     '';
   };
+
+  # daedalus-build-gc's ExecStart: old work dirs, old logs, unused cache.
   gcScript = pkgs.writeShellApplication {
     name = "daedalus-build-gc";
     runtimeInputs = [
@@ -287,6 +269,16 @@ in
 
 {
   config = lib.mkIf (config.fleet.modules.daedalus.enable && builder.enable) {
+
+    # ── the build ─────────────────────────────────────────────────────────
+
+    systemd.paths.daedalus-build = {
+      description = "Watch for a daedalus build request";
+      wantedBy = [ "multi-user.target" ];
+      # Fires on the rename the engine publishes the request with.
+      pathConfig.PathChanged = "${applyDir}/build-request.json";
+    };
+
     systemd.services.daedalus-build = {
       description = "Build an app image on daedalus's behalf (BuildKit + Railpack)";
       after = [
@@ -356,12 +348,11 @@ in
       };
     };
 
-    systemd.paths.daedalus-build = {
-      description = "Watch for a daedalus build request";
-      wantedBy = [ "multi-user.target" ];
-      # Fires on the rename the engine publishes the request with.
-      pathConfig.PathChanged = "${applyDir}/build-request.json";
-    };
+    # Refusals (a bad request, failed checks, GitHub saying no) exit 0 and are
+    # on the build page; what mails is the agent itself breaking.
+    fleet.monitoredJobs.daedalus-build = { };
+
+    # ── cancel ────────────────────────────────────────────────────────────
 
     systemd.paths.daedalus-build-cancel = {
       description = "Watch for a daedalus build cancel request";
@@ -387,9 +378,7 @@ in
       };
     };
 
-    # Refusals (a bad request, failed checks, GitHub saying no) exit 0 and are
-    # on the build page; what mails is the agent itself breaking.
-    fleet.monitoredJobs.daedalus-build = { };
+    # ── the nightly sweep ─────────────────────────────────────────────────
 
     systemd.services.daedalus-build-gc = {
       description = "Sweep daedalus build work dirs, old logs and unused BuildKit cache";
@@ -407,8 +396,8 @@ in
       };
     };
 
-    # 04:37, off the hour (myspeed's :00 blackout) and after the nightly
-    # snapshot churn.
+    # 04:37, off the hour (a speed test on the hour takes the house's DNS down
+    # for a minute or two) and after the nightly snapshot churn.
     systemd.timers.daedalus-build-gc = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
