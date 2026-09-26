@@ -36,6 +36,18 @@ export function RecordList({
 }) {
   if (records.length === 0) return null
 
+  /* A record's own fields are not unique: Leftovers holds exact duplicates by
+     definition, and a ZoneRecord carries no Cloudflare id to tell them apart.
+     So each key is the fields plus which copy of them this row is — stable
+     when other records come and go, unlike a bare row index. */
+  const copies = new Map<string, number>()
+  const rowKeys = records.map((r) => {
+    const base = `${r.fqdn}-${r.type}-${r.content}`
+    const n = copies.get(base) ?? 0
+    copies.set(base, n + 1)
+    return `${base}-${n}`
+  })
+
   return (
     <details data-fold className={cn(GROUP, FOLD_STACK)} open={open}>
       <summary>
@@ -48,9 +60,9 @@ export function RecordList({
           at all: a grid item's default `auto` minimum refuses to shrink below
           its content, so without it the row overflows instead of truncating. */}
       <ul className={ROWS}>
-        {records.map((r) => (
+        {records.map((r, i) => (
           <li
-            key={`${r.fqdn}-${r.type}-${r.content}`}
+            key={rowKeys[i]}
             className={cn(ROW, 'grid grid-cols-[minmax(6rem,16rem)_3.4rem_1fr] gap-[0.4rem]')}
           >
             <span className={cn(MAIN, MONO)}>{r.short}</span>
