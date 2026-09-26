@@ -1,4 +1,4 @@
-# host/build/3-detect.sh — stage 3 of the build (see host/build.sh).
+# host/build-stages/3-detect.sh — stage 3 of the build (see host/build.sh).
 #
 # `railpack prepare` writes the build plan; the build-time placeholder values
 # become secret files BuildKit mounts, never arguments or layers.

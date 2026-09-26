@@ -1,4 +1,4 @@
-# host/build/4-checks.sh — stage 4 of the build (see host/build.sh).
+# host/build-stages/4-checks.sh — stage 4 of the build (see host/build.sh).
 #
 # Run the repository's own ci / lint / typecheck / test scripts inside
 # BuildKit, on the image's own toolchain, exporting nothing. A failure stops

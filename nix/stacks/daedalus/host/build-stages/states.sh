@@ -1,4 +1,4 @@
-# host/build/states.sh — what "a build is in flight" means on the host side.
+# host/build-stages/states.sh — what "a build is in flight" means on the host side.
 #
 # Read by the build itself (helpers.sh: the stage clock in _advance), by its
 # reaper (host/build-reaper.sh: only an in-flight run is marked interrupted)

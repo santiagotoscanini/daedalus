@@ -1,7 +1,7 @@
 # ExecStopPost of daedalus-build.service: the status file's undertaker, like
 # the rebuilding verbs' (host/update-reaper.sh).
 #
-# Inlined by build-agent.nix after host/lib.sh and host/build/states.sh;
+# Inlined by build-agent.nix after host/lib.sh and host/build-stages/states.sh;
 # expects STATUS (the apply dir's build-status.json), LOG_DIR, WORK_ROOT,
 # BUILD_USER, BUILD_GROUP, OPERATOR_USER, OPERATOR_GROUP and SETPRIV.
 # SERVICE_RESULT is systemd's.
@@ -22,7 +22,7 @@
 # Read once, as the operator and never through a link (host/lib.sh).
 status_json="$(read_as_operator "$STATUS")" || exit 0
 state="$(jq -r '.state // ""' <<<"$status_json" 2>/dev/null || true)"
-build_active "$state" || exit 0 # host/build/states.sh
+build_active "$state" || exit 0 # host/build-stages/states.sh
 id="$(jq -r '.id // ""' <<<"$status_json")"
 [[ "$id" =~ ^[0-9a-fA-F-]{1,64}$ ]] || exit 0
 

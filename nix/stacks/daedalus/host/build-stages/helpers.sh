@@ -1,8 +1,8 @@
-# host/build/helpers.sh — the machinery every stage of the build uses.
+# host/build-stages/helpers.sh — the machinery every stage of the build uses.
 #
 # Part of daedalus-build's script: build-agent.nix concatenates host/lib.sh,
 # host/github-lib.sh, host/build.sh (the settings), this file, then the stages
-# host/build/0-request.sh … 6-done.sh, in that order.
+# host/build-stages/0-request.sh … 6-done.sh, in that order.
 #
 # In here: the log (redact, say), running things as the build user
 # (build_env, as_build, timed_as_build, reap_build_processes), Railpack's

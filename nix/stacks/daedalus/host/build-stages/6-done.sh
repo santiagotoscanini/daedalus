@@ -1,4 +1,4 @@
-# host/build/6-done.sh — stage 6 of the build (see host/build.sh).
+# host/build-stages/6-done.sh — stage 6 of the build (see host/build.sh).
 #
 # Start the app's deploy (a live build of a deployable app) and publish the
 # terminal status.

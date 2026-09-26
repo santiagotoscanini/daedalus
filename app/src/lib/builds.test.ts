@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   BUILD_REQUEST_MAX_BYTES,
@@ -227,34 +228,23 @@ describe('build request env', () => {
 })
 
 describe('the build env rules, identical in host/build.sh', () => {
-  // host/build.sh's RESERVED_ENV_RE and RAILPACK_KNOBS as of 2026-09-12.
-  //
-  // Where the host file is visible — on the box, with DAEDALUS_HOST_BUILD_SH
-  // naming it, or at s2-server's own path — the tests read it, and it must equal
-  // this copy. Where it is not (this public repo's CI), the copy stands in. The
-  // copy therefore cannot go stale without a run on the box failing, and the
-  // engine's lists are held to the host's text in both places.
-  const HOST_RESERVED_ENV_RE =
-    '^(PATH|HOME|SHELL|USER|LOGNAME|PWD|OLDPWD|IFS|ENV|BASH|BASH_ENV|BASHOPTS|SHELLOPTS|CDPATH|GLOBIGNORE|PS4|PROMPT_COMMAND|UID|EUID|PPID|SHLVL|TMPDIR|TZ|LANG|LANGUAGE|TERM|HOSTNAME|GCONV_PATH|GLIBC_TUNABLES|LOCPATH|GITHUB_TOKEN|DAEDALUS_TOKEN_FILE|NO_PROXY|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|FTP_PROXY|GODEBUG|GOFLAGS|GOTRACEBACK|GOENV|GOROOT|GOPATH|GOBIN|GOCACHE|GOCACHEPROG|GOMODCACHE|GOTMPDIR|GOWORK|GOPROXY|GONOPROXY|GOPRIVATE|GOSUMDB|GONOSUMDB|GONOSUMCHECK|GOINSECURE|GOVCS|GOAUTH|GOTOOLCHAIN|GOEXPERIMENT|GO111MODULE|RUSTDOC|RUSTFLAGS|RUSTDOCFLAGS|RUBYOPT|RUBYLIB|GEM_PATH|GEM_HOME|PERLLIB|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$|^(LD_|BASH_FUNC_|GIT_|BUILDKIT_|BUILDCTL_|DOCKER_|MISE_|RAILPACK_|XDG_|LC_|SSL_|NIX_SSL_|CURL_|SYSTEMD_|NPM_CONFIG_|PNPM_|COREPACK_|YARN_|BUN_|NODE_|CGO_|PIP_|UV_|PYTHON|CARGO_|RUSTUP_|RUSTC|BUNDLE_|PERL5)'
-  const APT = '[a-z0-9][a-z0-9+.-]*(?:=[A-Za-z0-9.+~:-]+)?'
-  const FLAG = '^(?:true|false|1|0)$'
-  const HOST_RAILPACK_KNOBS: Record<string, string> = {
-    RAILPACK_PRUNE_DEPS: FLAG,
-    RAILPACK_NODE_PLAYWRIGHT_INSTALL: FLAG,
-    RAILPACK_NO_SPA: FLAG,
-    RAILPACK_DISABLE_CACHES: '^(?:\\*|[A-Za-z0-9_.:-]+(?: [A-Za-z0-9_.:-]+)*)$',
-    RAILPACK_SPA_OUTPUT_DIR: '^(?!/)(?!(?:.*/)?\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,200}$',
-    RAILPACK_NODE_VERSION: '^[0-9]{1,3}(?:\\.[0-9]{1,4}){0,2}$',
-    RAILPACK_BUILD_APT_PACKAGES: `^${APT}(?: ${APT})*$`,
-    RAILPACK_DEPLOY_APT_PACKAGES: `^${APT}(?: ${APT})*$`,
+  // host/build.sh sits in this same repository (nix/stacks/daedalus/host/), so
+  // its RESERVED_ENV_RE and RAILPACK_KNOBS are read straight out of it and the
+  // engine's lists are held to that text. In the dev container app/ is mounted
+  // alone at /app and the whole engine read-only at /engine, so that is looked
+  // at next — a missing file fails, never skips.
+  function hostBuildSh(): string {
+    const candidates = [
+      fileURLToPath(new URL('../../../nix/stacks/daedalus/host/build.sh', import.meta.url)),
+      '/engine/nix/stacks/daedalus/host/build.sh',
+    ]
+    const found = candidates.find((path) => existsSync(path))
+    if (found === undefined) {
+      throw new Error(`host/build.sh not found at ${candidates.join(' or ')}`)
+    }
+    return readFileSync(found, 'utf8')
   }
-
-  const hostPath = process.env.DAEDALUS_HOST_BUILD_SH ?? '/etc/nixos/stacks/daedalus/host/build.sh'
-  // A path named on purpose must exist; the default path is simply absent off the box.
-  const hostText =
-    process.env.DAEDALUS_HOST_BUILD_SH !== undefined || existsSync(hostPath)
-      ? readFileSync(hostPath, 'utf8')
-      : null
+  const hostText = hostBuildSh()
 
   /** A `NAME='…'` assignment's value, which build.sh keeps in exactly that form. */
   function assignment(text: string, name: string): string {
@@ -263,15 +253,8 @@ describe('the build env rules, identical in host/build.sh', () => {
     return m[1]
   }
 
-  const hostReserved =
-    hostText === null ? HOST_RESERVED_ENV_RE : assignment(hostText, 'RESERVED_ENV_RE')
-  const hostKnobs: Record<string, string> =
-    hostText === null ? HOST_RAILPACK_KNOBS : JSON.parse(assignment(hostText, 'RAILPACK_KNOBS'))
-
-  it.runIf(hostText !== null)('are read from the host file, which matches the copy here', () => {
-    expect(hostReserved).toBe(HOST_RESERVED_ENV_RE)
-    expect(hostKnobs).toEqual(HOST_RAILPACK_KNOBS)
-  })
+  const hostReserved = assignment(hostText, 'RESERVED_ENV_RE')
+  const hostKnobs: Record<string, string> = JSON.parse(assignment(hostText, 'RAILPACK_KNOBS'))
 
   it("build the host's reserved-name pattern from the engine's lists, in order", () => {
     expect(`^(${RESERVED_ENV_NAMES.join('|')})$|^(${RESERVED_ENV_PREFIXES.join('|')})`).toBe(

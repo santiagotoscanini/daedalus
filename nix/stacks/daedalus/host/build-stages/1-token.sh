@@ -1,4 +1,4 @@
-# host/build/1-token.sh — stage 1 of the build (see host/build.sh).
+# host/build-stages/1-token.sh — stage 1 of the build (see host/build.sh).
 #
 # Mint a read-only token for this one repository, and confirm the repository
 # is still the one the app was connected to, owned by the trusted account.

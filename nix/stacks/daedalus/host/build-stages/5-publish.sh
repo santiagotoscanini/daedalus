@@ -1,4 +1,4 @@
-# host/build/5-publish.sh — stage 5 of the build (see host/build.sh).
+# host/build-stages/5-publish.sh — stage 5 of the build (see host/build.sh).
 #
 # The real build: BuildKit builds the image and pushes it to the registry in
 # one call, the only one that holds the push credential. The digest, size,

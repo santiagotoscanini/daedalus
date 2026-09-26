@@ -1,4 +1,4 @@
-# host/build/0-request.sh — stage 0 of the build (see host/build.sh).
+# host/build-stages/0-request.sh — stage 0 of the build (see host/build.sh).
 #
 # Read and validate build-request.json; make the scratch dirs, start the log
 # and the heartbeat; check the egress fence and that the daemon answers.

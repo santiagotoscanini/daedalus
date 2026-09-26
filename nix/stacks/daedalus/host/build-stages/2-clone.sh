@@ -1,4 +1,4 @@
-# host/build/2-clone.sh — stage 2 of the build (see host/build.sh).
+# host/build-stages/2-clone.sh — stage 2 of the build (see host/build.sh).
 #
 # Fetch the default branch's tip as the build user, check out the requested
 # commit (or finish as superseded), decide the strategy — Railpack or the

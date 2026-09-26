@@ -7,9 +7,10 @@
 #   daedalus-build.path       watches build-request.json, starts:
 #   daedalus-build.service    one build, three scripts in order —
 #     ExecStartPre   host/build-fence-gate.sh  no egress fence, no build
-#     ExecStart      host/build.sh + build/*   token, clone, railpack prepare,
-#                                              checks, build + push, deploy
-#                                              (one file per stage)
+#     ExecStart      host/build.sh             token, clone, railpack prepare,
+#                    + host/build-stages/*     checks, build + push, deploy
+#                                              (one file per stage; not named
+#                                              `build/`, which editors hide)
 #     ExecStopPost   host/build-reaper.sh      a run that died unannounced
 #                                              reads `failed: interrupted`
 #   daedalus-build-cancel.{path,service}   build-cancel-request.json →
@@ -175,7 +176,7 @@ let
 
       # the Dockerfile route — unused while every app builds with Railpack
       NODE_IMAGE = nodeImage;
-      CHECKS_DOCKERFILE = ./build/Dockerfile.checks;
+      CHECKS_DOCKERFILE = ./host/build-stages/Dockerfile.checks;
 
       # the egress fence, checked again per build
       FENCE_CHECK = builder.fenceCheck;
@@ -184,15 +185,15 @@ let
       ./host/lib.sh
       ./host/github-lib.sh
       ./host/build.sh
-      ./host/build/states.sh
-      ./host/build/helpers.sh
-      ./host/build/0-request.sh
-      ./host/build/1-token.sh
-      ./host/build/2-clone.sh
-      ./host/build/3-detect.sh
-      ./host/build/4-checks.sh
-      ./host/build/5-publish.sh
-      ./host/build/6-done.sh
+      ./host/build-stages/states.sh
+      ./host/build-stages/helpers.sh
+      ./host/build-stages/0-request.sh
+      ./host/build-stages/1-token.sh
+      ./host/build-stages/2-clone.sh
+      ./host/build-stages/3-detect.sh
+      ./host/build-stages/4-checks.sh
+      ./host/build-stages/5-publish.sh
+      ./host/build-stages/6-done.sh
     ];
   };
 
@@ -233,7 +234,7 @@ let
     };
     files = [
       ./host/lib.sh
-      ./host/build/states.sh
+      ./host/build-stages/states.sh
       ./host/build-reaper.sh
     ];
   };
@@ -254,7 +255,7 @@ let
     };
     files = [
       ./host/lib.sh
-      ./host/build/states.sh
+      ./host/build-stages/states.sh
       ./host/build-cancel.sh
     ];
   };

@@ -5,16 +5,16 @@
 # ONE script in nine files. build-agent.nix concatenates, in order: the
 # variables nix hands it, host/lib.sh, host/github-lib.sh, then
 #
-#   host/build.sh              this file: the trust model and the settings
-#   host/build/states.sh       which states mean "in flight"
-#   host/build/helpers.sh      the machinery every stage uses
-#   host/build/0-request.sh    validate the request, start the log
-#   host/build/1-token.sh      a read-only token for this one repository
-#   host/build/2-clone.sh      fetch the commit, pick the strategy
-#   host/build/3-detect.sh     `railpack prepare` → the build plan
-#   host/build/4-checks.sh     the repository's own checks, in BuildKit
-#   host/build/5-publish.sh    build the image and push it
-#   host/build/6-done.sh       start the deploy, publish the final status
+#   host/build.sh                     this file: the trust model and the settings
+#   host/build-stages/states.sh       which states mean "in flight"
+#   host/build-stages/helpers.sh      the machinery every stage uses
+#   host/build-stages/0-request.sh    validate the request, start the log
+#   host/build-stages/1-token.sh      a read-only token for this one repository
+#   host/build-stages/2-clone.sh      fetch the commit, pick the strategy
+#   host/build-stages/3-detect.sh     `railpack prepare` → the build plan
+#   host/build-stages/4-checks.sh     the repository's own checks, in BuildKit
+#   host/build-stages/5-publish.sh    build the image and push it
+#   host/build-stages/6-done.sh       start the deploy, publish the final status
 #
 # The variables (build-agent.nix comments each one): APPLY_DIR,
 # BUILDABLE, DEPLOYABLE, OWNER, OWNER_ID, CLIENT_ID, PEM, REGISTRY,
@@ -139,8 +139,8 @@ PUBLISH_SECS=900
 # The same two rules as the engine's (app/src/lib/builds.ts), refused here on
 # their own because the container can write a request without the engine: a
 # request this host accepts is exactly one the engine's decoder accepts.
-# builds.test.ts reads both assignments out of this file when it can see it
-# (DAEDALUS_HOST_BUILD_SH) and fails on any difference, so each stays one
+# builds.test.ts reads both assignments out of this file (it sits in the same
+# repository) and fails on any difference, so each stays one
 # `NAME='…'` assignment and changes together with the engine.
 #
 # RESERVED_ENV_RE — names a placeholder may not take: they steer the tools
