@@ -1053,10 +1053,6 @@ in
       ];
 
       fleet = {
-        # Every app's AUTH_SECRET used to live under stacks/apps/secrets in the
-        # host's checkout; see platform/machine-state.nix (the migration is
-        # finished and being retired).
-        machineStateLegacy.apps = "${config.fleet.config.repo}/stacks/apps/secrets";
         appDatabases = attrsOpt [
           "fleet"
           "appDatabases"

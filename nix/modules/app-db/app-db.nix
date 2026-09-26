@@ -254,11 +254,6 @@ in
   };
 
   config = lib.mkIf (config.fleet.modules.app-db.enable && enabled) {
-    # The cluster and per-app credentials used to live under
-    # stacks/app-db/secrets in the host's checkout (platform/machine-state.nix;
-    # the migration is finished and being retired).
-    fleet.machineStateLegacy.app-db = "${config.fleet.config.repo}/stacks/app-db/secrets";
-
     # Validate app names at eval time. The name lands in SQL (via
     # psql's `%I` for the role/db) and in the env file path — catch
     # garbage names at build time, not at first podman exec.

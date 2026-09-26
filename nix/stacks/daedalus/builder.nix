@@ -720,10 +720,6 @@ in
         networking.firewall.extraCommands = fenceSetup;
 
         # ── Registry push credential ───────────────────────────────────────
-        # It lived under stacks/daedalus/secrets in the checkout until it moved
-        # (platform/machine-state.nix; the migration is finished and being retired).
-        fleet.machineStateLegacy.builder = "${config.fleet.config.repo}/stacks/daedalus/secrets";
-
         systemd.services.daedalus-build-registry-password = {
           description = "Generate the zot `builder` push password on first boot";
           wantedBy = [ "multi-user.target" ];
