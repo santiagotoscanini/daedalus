@@ -1,8 +1,9 @@
-import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import { AUTH_HEADERS } from '../core/auth'
 import type { Account, OperatorAccount, ProfilePatch, ProfileRead } from '../core/settings/types'
-import { PICTURE_TYPES, type PictureType } from '../lib/profile-fields'
+import { asValidator, is, literal, obj, withMessage } from '../lib/contract/decode'
+import { PICTURE_TYPES } from '../lib/profile-fields'
+import { adminFn, readFn } from './fn'
 
 // Server functions behind the Profile page — see core/settings/profile.ts.
 // Each resolves the account from the forward-auth headers of the request
@@ -23,6 +24,11 @@ const PATCH_KEYS = [
   'email',
 ] as const satisfies readonly (keyof ProfilePatch)[]
 
+/**
+ * The account this request is for: the forwarded subject and email, blank as
+ * null. Not `context.actor()` — that is one display label with a
+ * placeholder; the profile store keys on the two claims themselves.
+ */
 function who() {
   const header = (name: string) => {
     const v = getRequestHeader(name)
@@ -31,27 +37,27 @@ function who() {
   return { sub: header(AUTH_HEADERS.SUBJECT), email: header(AUTH_HEADERS.EMAIL) }
 }
 
-export const fetchProfile = createServerFn().handler(async (): Promise<ProfileRead> => {
-  const { makeCtx } = await import('../core/ctx')
+export const fetchProfile = readFn.handler(async ({ context }): Promise<ProfileRead> => {
   const { readProfile } = await import('../core/settings/profile')
-  return readProfile(await makeCtx(), who())
+  return readProfile(await context.ctx(), who())
 })
 
 /**
  * The rail's account button, on every page. Never throws: a shell that cannot
  * say who is signed in still has to render, so any failure reads as "nobody".
  */
-export const fetchAccount = createServerFn().handler(async (): Promise<Account | null> => {
+export const fetchAccount = readFn.handler(async ({ context }): Promise<Account | null> => {
   try {
-    const { makeCtx } = await import('../core/ctx')
     const { readAccount } = await import('../core/settings/profile')
-    return await readAccount(await makeCtx(), who())
+    return await readAccount(await context.ctx(), who())
   } catch {
     return null
   }
 })
 
-export const saveProfileFn = createServerFn({ method: 'POST' })
+// Kept as a plain check rather than a decoder: the keys are open-ended, and
+// each refusal names the key it refused.
+export const saveProfileFn = adminFn
   .validator((data: unknown): ProfilePatch => {
     if (data === null || typeof data !== 'object') throw new Error('not a profile edit')
     const out: ProfilePatch = {}
@@ -63,41 +69,35 @@ export const saveProfileFn = createServerFn({ method: 'POST' })
     }
     return out
   })
-  .handler(async ({ data }): Promise<ProfileRead> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { makeCtx } = await import('../core/ctx')
+  .handler(async ({ data, context }): Promise<ProfileRead> => {
     const { updateProfile } = await import('../core/settings/profile')
-    return updateProfile(await makeCtx(), who(), data)
+    return updateProfile(await context.ctx(), who(), data)
   })
 
-export const uploadProfilePictureFn = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { contentType: PictureType; base64: string } => {
-    const d = data as { contentType?: unknown; base64?: unknown } | null
-    if (d === null || typeof d !== 'object') throw new Error('not a picture')
-    if (!(PICTURE_TYPES as readonly unknown[]).includes(d.contentType)) {
-      throw new Error('a PNG or JPEG is what Pocket ID accepts')
-    }
-    if (typeof d.base64 !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(d.base64)) {
-      throw new Error('the picture did not arrive as base64')
-    }
-    return { contentType: d.contentType as PictureType, base64: d.base64 }
-  })
-  .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
-    const { makeCtx } = await import('../core/ctx')
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
+
+const pictureUpload = withMessage(
+  obj({
+    contentType: withMessage(literal(...PICTURE_TYPES), 'a PNG or JPEG is what Pocket ID accepts'),
+    base64: withMessage(
+      is((v: unknown): v is string => typeof v === 'string' && BASE64.test(v), 'base64'),
+      'the picture did not arrive as base64',
+    ),
+  }),
+  'not a picture',
+)
+
+export const uploadProfilePictureFn = adminFn
+  .validator(asValidator(pictureUpload))
+  .handler(async ({ data, context }) => {
     const { uploadPicture } = await import('../core/settings/profile')
-    await uploadPicture(await makeCtx(), who(), data)
+    await uploadPicture(await context.ctx(), who(), data)
     return { ok: true as const }
   })
 
-export const resetProfilePictureFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { assertAdmin } = await import('../core/authz')
-  await assertAdmin()
-  const { makeCtx } = await import('../core/ctx')
+export const resetProfilePictureFn = adminFn.handler(async ({ context }) => {
   const { resetPicture } = await import('../core/settings/profile')
-  await resetPicture(await makeCtx(), who())
+  await resetPicture(await context.ctx(), who())
   return { ok: true as const }
 })
 
@@ -105,7 +105,7 @@ export const resetProfilePictureFn = createServerFn({ method: 'POST' }).handler(
  * The Linux account the box runs as, for the Profile page's one card about
  * this machine. A file read, awaited like a fact.
  */
-export const fetchOperator = createServerFn().handler(async (): Promise<OperatorAccount> => {
+export const fetchOperator = readFn.handler(async (): Promise<OperatorAccount> => {
   const { siteIdentity } = await import('../host/contract/domains/site')
   const s = (await siteIdentity()).data
   return { user: s.operator.user, group: s.operator.group }
