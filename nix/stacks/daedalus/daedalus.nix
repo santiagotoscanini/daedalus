@@ -68,6 +68,7 @@ let
     systemDir
     claudeDir
     repoDir
+    builderDir
     ;
 
   # What the stacks show the control plane — `fleet.dashboard` (platform/
@@ -500,7 +501,11 @@ in
       env = lib.mkMerge (
         map (d: d.env) dashboard
         ++ [
-          (lib.optionalAttrs haveGithubApp { BUILD_LOGS_PATH = "/builds"; })
+          (lib.optionalAttrs haveGithubApp {
+            BUILD_LOGS_PATH = "/builds";
+            # The builder's machinery, from daedalus-builder-snapshot.
+            BUILDER_FACTS_PATH = "/builder/builder.json";
+          })
           {
             # Reached over the `monitoring` bridge added above.
             PROMETHEUS_URL = "http://prometheus:9090";
@@ -696,6 +701,10 @@ in
         # already redacted, on the root filesystem so this mount never waits for the
         # builder's dataset. The directory, not a file — logs come and go.
         "${config.fleet.builder.logDir}:/builds:ro"
+        # The builder's machinery (daedalus-builder-snapshot): exit codes, sizes,
+        # versions and unit states — nothing secret. The directory, like every
+        # snapshot mount.
+        "${builderDir}:/builder:ro"
       ]
       # What the stacks mount into the control plane (fleet.dashboard.<id>.volumes):
       # pi-hole's rendered DHCP reservations at /dhcp, shotter's run archive at

@@ -1,7 +1,8 @@
 # snapshots-lib — the scripts that publish what only the host can see into
 # /run directories the container mounts read-only: app environments, image
 # labels and their freshness, SMART/ZFS/generation facts, Claude Code's
-# state, the repositories, the project workspaces, the committed registry.
+# state, the builder's machinery, the repositories, the project workspaces,
+# the committed registry.
 # The services and timers that run them are daedalus-snapshots.nix. A plain
 # function, imported by path; never a module.
 {
@@ -23,6 +24,7 @@ let
     systemDir
     claudeDir
     repoDir
+    builderDir
     ;
 
   # One body, two cadences: sync (fetch + fast-forward, network) and publish
@@ -236,6 +238,58 @@ let
     ];
   };
 
+  # Everything it names comes from `fleet.builder` (builder.nix), so it is only
+  # forced where daedalus-snapshots.nix gates it: while the builder exists.
+  builderSnapshotScript =
+    let
+      b = config.fleet.builder;
+    in
+    mkAgent {
+      name = "daedalus-builder-snapshot";
+      # The jq programs bind their own variables with --arg; `$v` in single
+      # quotes is jq's, not the shell's — the same exclusion as its siblings.
+      excludeShellChecks = [ "SC2016" ];
+      runtimeInputs = [
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gnused
+        pkgs.jq
+        pkgs.systemd
+        pkgs.util-linux # findmnt, setpriv
+      ];
+      vars = operatorVars // {
+        OUT_DIR = builderDir;
+        BUILDCTL = "${b.buildkitPackage}/bin/buildctl";
+        BUILDKIT_ADDR = b.socket;
+        # What the flake built, like the claude snapshot's CLI_VERSION: nix
+        # already knows the string.
+        BUILDKIT_VERSION = b.buildkitPackage.version;
+        FENCE_CHECK = b.fenceCheck;
+        CREDENTIAL_READ = b.registryPasswordRead;
+        BUILD_ROOT = b.root;
+        # The fileSystems entry the dataset table generates — the same source
+        # builder/storage.nix's mount check compares against.
+        DATASET = config.fileSystems.${b.root}.device;
+        MISE_CACHE_DIR = b.miseCacheDir;
+        ZFS = "${pkgs.zfs}/bin/zfs";
+        # Every unit the builder is made of (builder/*.nix, build-agent.nix).
+        UNITS = [
+          "buildkitd.service"
+          "daedalus-build.path"
+          "daedalus-build.service"
+          "daedalus-build-gc.service"
+          "daedalus-builds-mounted.service"
+          "daedalus-builds-layout.service"
+          "daedalus-build-registry-password.service"
+          "daedalus-build-dockerconfig.service"
+        ];
+      };
+      files = [
+        ./host/lib.sh
+        ./host/builder-snapshot.sh
+      ];
+    };
+
   repoSnapshotScript = mkAgent {
     name = "daedalus-repo-snapshot";
     # The jq program binds its own variables with --arg; `$path` in single
@@ -291,6 +345,7 @@ in
     imageFreshnessScript
     systemSnapshotScript
     claudeSnapshotScript
+    builderSnapshotScript
     repoSnapshotScript
     registrySnapshot
     ;

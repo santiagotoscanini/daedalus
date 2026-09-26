@@ -20,9 +20,11 @@ let
     imageFreshnessScript
     systemSnapshotScript
     claudeSnapshotScript
+    builderSnapshotScript
     repoSnapshotScript
     registrySnapshot
     ;
+  builderOn = config.fleet.builder.enable;
 in
 
 {
@@ -221,6 +223,39 @@ in
     # operator would be TALKING to this box when it broke. A mail is the only
     # channel that does not depend on the thing it reports on.
     fleet.monitoredJobs.daedalus-claude-snapshot = { };
+
+    # The builder's machinery, for System › Builder — only while the builder
+    # exists (builder.nix), like the /builder mount in daedalus.nix. Root:
+    # buildctl's socket, `zfs get`, the fence check's iptables and the push
+    # credential's root-0600 file all want it. Ordered before the container
+    # because the mount source must exist (rootless podman cannot create a
+    # root-owned /run dir). Its BuildKit read is bounded (host/builder-snapshot.sh),
+    # so a wedged daemon cannot hold the container's start.
+    systemd.services.daedalus-builder-snapshot = lib.mkIf builderOn {
+      description = "Publish the builder's machinery for daedalus";
+      before = [ "podman-app-daedalus.service" ];
+      wantedBy = [ "podman-app-daedalus.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${builderSnapshotScript}/bin/daedalus-builder-snapshot";
+      };
+    };
+
+    # One minute, like the claude snapshot: the unit states are what someone
+    # opening the page after a failed build wants, and a run costs one
+    # buildctl call, a zfs get, a du over a few small caches and a handful of
+    # systemctl reads — well under a second.
+    systemd.timers.daedalus-builder-snapshot = lib.mkIf builderOn {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "90s";
+        OnUnitActiveSec = "1min";
+      };
+    };
+
+    # Silent from the reader's side like every snapshot here: a stopped one
+    # reads as "unknown" on the page, never as healthy, and this mail says why.
+    fleet.monitoredJobs.daedalus-builder-snapshot = lib.mkIf builderOn { };
 
     # Ordered before the container like the other snapshots, so a fresh boot
     # has a repo.json before the first render of the settings page.
