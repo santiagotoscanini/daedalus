@@ -14,26 +14,22 @@ import {
 // as one interface. A kind knows three things — how to read the catalog,
 // how to read health, and how one of its models becomes a LiteLLM route.
 // This file is the pure half: decoders and mappings, no network. The
-// readers live in ./read.ts; the AI page and the gateway sync both use
-// them, and neither knows a provider by anything but its kind and address.
+// readers live in host/providers/read.ts; the AI page and the gateway sync
+// both use them, and neither knows a provider by anything but its kind and
+// address.
 //
 // Two kinds cover every provider on this network today:
 // - `lemonade`: Lemonade Server, OpenAI-compatible under /api/v1, a catalog
-//   with labels, a health document with what is loaded. Windows today,
-//   macOS with Metal the day it is installed there, same API, same port.
+//   with labels, a health document with what is loaded. Same API and port on
+//   every OS it runs on.
 // - `subgen`: the tv stack's faster-whisper, one STT model behind
 //   /v1/audio/transcriptions — a provider with no catalog to read.
 //
-// ── Ollama was a kind here, and is not any more ───────────────────────────
-//
-// Lemonade's installer brings Ollama along, so every machine that ran one
-// ran both — and a kind per machine meant one computer drew two rows, two
-// pills and two catalogs of the same weights under different names. The
-// second row was never something the operator had chosen; it was an
-// installer's side effect being reported as a decision. Removed rather than
-// hidden, because a kind nothing offers is a decoder, a port and a name
-// that no reader can tell is dead. `git show 8410e1f` has the mapping if a
-// machine ever runs Ollama on its own.
+// Ollama is deliberately NOT a kind. Lemonade's installer brings it along,
+// so a kind for it drew every Lemonade machine twice — two rows, two
+// catalogs of the same weights under different names — for something the
+// operator never chose. `git show 8410e1f` has the mapping if a machine ever
+// runs Ollama on its own.
 
 export type ProviderKind = 'lemonade' | 'subgen'
 

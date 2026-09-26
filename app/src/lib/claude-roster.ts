@@ -8,7 +8,7 @@
 //
 // ── the two sources, and why they stay two ────────────────────────────────
 //
-// stacks/daedalus/host/claude-snapshot.sh publishes them separately because
+// nix/stacks/daedalus/host/claude-snapshot.sh publishes them separately because
 // they answer different questions and routinely disagree:
 //
 //   agents       `claude agents --json`. Authoritative for what is ALIVE, and
@@ -28,12 +28,10 @@
 // appended to. Measured on this box with CLI 2.1.260, both plain and with
 // `--remote-control` (the form a Resume button would use) — the transcript
 // grew in place and the live session reported back the id it had been given.
-// Branching is the opt-in, `--fork-session`; nothing here passes it.
-//
-// An earlier reading of the tree claimed the opposite. It inferred a fork
-// from three transcripts with millisecond-adjacent timestamps; the experiment
-// refuted that inference. What did produce those separate files is not known,
-// and this module does not guess.
+// Branching is the opt-in, `--fork-session`; nothing here passes it. (Separate
+// transcripts with millisecond-adjacent timestamps do exist and look like
+// forks; the experiment says they are not, and this module does not guess
+// what they are.)
 //
 // So `canResume` below is about whether there is anything to pick up, not
 // about what picking it up would do to it. A row that is already running is
@@ -48,9 +46,8 @@
 // `claude --bg` agent that asked a question and never got an answer sits at
 // `state: "blocked"` — which means "waiting on a human", not "running" — and
 // when the process behind it dies (a reboot, an upgrade, an OOM) the RECORD
-// survives it unchanged. All three background rows on this box are in exactly
-// that shape: `state: "blocked"`, `cliVersion` from three CLI releases ago,
-// and no process anywhere.
+// survives it unchanged: `state: "blocked"`, an old `cliVersion`, and no
+// process anywhere.
 //
 // The field that separates the two is `pid`. The CLI reports one for an agent
 // it has a process for and omits it otherwise, so:
@@ -63,19 +60,16 @@
 //                sessions". `claude attach <short id>` still reopens the
 //                conversation, which is why Remove is offered rather than done.
 //
-// Drawing a dormant record as running is the bug this distinction exists to
-// kill: it offered Stop on a row nothing could stop, and every press mailed
-// the fleet about a failure that was really a record that had never moved.
+// Drawing a dormant record as running offers Stop on a row nothing can stop,
+// and every press reports a failure that is really a record that never moved.
 //
 // What is NOT read here, ever: the `detail` the agent last printed and the
 // `needs` question it is parked on, both of which sit in
-// `~/.claude/jobs/<id>/state.json`. Those are session CONTENT. The snapshot
-// now carries exactly one line of that — a row's last prompt, truncated and
-// redacted host-side, which the operator asked for and which paid for itself
-// by the file being tightened to 0600 first — and these two are not it:
-// nobody asked for them, and neither is bounded the way one cut prompt is.
-// State and liveness are facts about the machine; the question the agent
-// asked is not.
+// `~/.claude/jobs/<id>/state.json`. Those are session CONTENT. The only
+// content the snapshot carries is a row's last prompt (lib/claude-meta.ts
+// says why that one line is allowed); these two are not bounded the way one
+// cut prompt is. State and liveness are facts about the machine; the question
+// the agent asked is not.
 //
 // ── the trap behind the Resume button ─────────────────────────────────────
 //
@@ -87,7 +81,7 @@
 // carries no such guarantee — which is why the host runs a resume in
 // the configuration checkout and nowhere else, refusing any other cwd up front rather than
 // leaving a unit started and useless. The guard is in
-// stacks/daedalus/host/claude-session.sh; host/claude-session-request.ts
+// nix/stacks/daedalus/host/claude-session.sh; host/claude-session-request.ts
 // carries the rest of the selector rules.
 
 // Type only, and the dependency points this way on purpose: claude-meta.ts
@@ -140,7 +134,7 @@ export type ClaudeAgent = {
  * which the operator asked for and which is redacted and cut host-side before
  * it is written. Nothing else from the conversation is here; the titles are
  * still derived labels. See the "last prompt" section of
- * stacks/daedalus/host/claude-snapshot.sh for the trade and its residual risk.
+ * nix/stacks/daedalus/host/claude-snapshot.sh for the trade and its residual risk.
  */
 export type ClaudeTranscript = {
   id: string
@@ -201,11 +195,10 @@ export const NO_ROSTER: ClaudeRoster = {
  * `claude-session@` instance name is made of.
  *
  * The same charset the host agent applies as its first layer
- * (stacks/daedalus/host/claude-session.sh), restated here so a malformed
+ * (nix/stacks/daedalus/host/claude-session.sh), restated here so a malformed
  * selector never becomes a request file at all. This side is not the only
  * guard and must not be the only guard; it is the one that keeps a mistyped
- * id from ever reaching the bridge. All 49 transcripts and 44 sidecar
- * directories on this box match it with zero exceptions.
+ * id from ever reaching the bridge.
  */
 export const isSessionId = (v: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)
@@ -282,22 +275,18 @@ export type RosterEntry = {
    */
   managed: boolean
   /**
-   * The connected session behind this row, where there is one.
-   *
-   * This is what the Sessions board used to be. That board drew the live
-   * sessions, and this one drew the same sessions again as its `alive` rows —
-   * one population, two lists, and a reader had to hold both to answer "what
-   * is running". Everything that was only on that board (the `cse_…` id, the
-   * CLI's own name, RSS, CPU, the session's own activity clock) arrives here
-   * instead, on the row it describes.
+   * The connected session behind this row, where there is one: the `cse_…`
+   * id, the CLI's own name, RSS, CPU and the session's own activity clock,
+   * on the row they describe rather than on a second list of the same
+   * population.
    */
   live: LiveSession | null
 }
 
 /**
  * Which verb, if any, a row can be offered — the one decision the board must
- * not get wrong, because three of the four populations here die differently
- * and the fourth does not die at all.
+ * not get wrong, because each population ends differently and some cannot be
+ * ended from here at all.
  *
  * - `resume`   a transcript with nothing behind it. `claude --resume <uuid>`
  *              continues that very session: same id, same transcript.
@@ -330,8 +319,7 @@ export function rowControl(row: RosterEntry): RowControl {
   // The two background populations first, and DORMANT before RUNNING: their
   // ids are not uuids, and the whole point of the split is that a record with
   // no process behind it must never be offered a Stop. `claude stop` on one
-  // has no object — it is what put "failed" on the operator's screen for an
-  // agent that had been dead for weeks.
+  // has no object and reports a failure.
   if (row.state === 'dormant' && row.shortId !== null) {
     return { kind: 'remove-agent', session: row.shortId }
   }
@@ -367,8 +355,7 @@ export function sessionRows(
   }
 
   // The live sessions, by the transcript each one is writing. Kept as the
-  // whole session rather than as a set of ids: the row it lands on is the only
-  // place the Sessions board's facts have left to go.
+  // whole session rather than as a set of ids: the row carries its facts.
   const liveById = new Map<string, LiveSession>()
   for (const s of live) {
     if (s.alive && s.transcriptId !== null) liveById.set(s.transcriptId, s)
@@ -456,20 +443,16 @@ export function sessionRows(
       // Nothing on disk under the scanned tree, so there is no transcript for
       // `--resume` to continue in the first place.
       canResume: false,
-      // A row with no transcript is one our own units never started: the
-      // instance name IS the transcript uuid.
+      // Our own units are named by the transcript uuid, so this is normally
+      // false for a row with no transcript in the scanned tree.
       managed: a.sessionId !== null && managed.has(a.sessionId),
       live: a.sessionId === null ? null : (liveById.get(a.sessionId) ?? null),
     })
   }
 
-  // A connected session neither source accounted for.
-  //
-  // The Sessions board drew every live session unconditionally; this board
-  // draws what the two roster sources report. So a session whose transcript is
-  // outside the scanned tree, or one running while `claude agents` is
-  // unavailable, would simply have vanished when that board was folded in
-  // here — and it is exactly the row a reader opens this page for.
+  // A connected session neither source accounted for: its transcript is
+  // outside the scanned tree, or `claude agents` is unavailable. Without this
+  // it would vanish, and it is exactly the row a reader opens this page for.
   for (const s of live) {
     if (!s.alive) continue
     if (s.transcriptId !== null && seenRows.has(s.transcriptId)) continue
@@ -500,9 +483,8 @@ export function sessionRows(
   // Running first, then by last write. A board whose top row is a 70 MB
   // transcript from last month, with the session you are typing into halfway
   // down, is sorted correctly and reads wrong.
-  // Dormant above the resumable tail rather than in it: there are three of
-  // them, each one has a verb waiting, and burying them under fifty
-  // transcripts is how they stayed drawn as running for weeks.
+  // Dormant above the resumable tail rather than in it: each one has a verb
+  // waiting, and buried under the transcripts it goes unnoticed.
   const RANK: Record<SessionState, number> = {
     alive: 0,
     background: 1,

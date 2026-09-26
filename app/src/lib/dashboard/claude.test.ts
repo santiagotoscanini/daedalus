@@ -5,10 +5,10 @@ import { factsShape } from './claude'
 
 // The rollout property, and the only reason this decoder is worth a test.
 //
-// The roster key is published by stacks/daedalus/host/claude-snapshot.sh, and
+// The roster key is published by nix/stacks/daedalus/host/claude-snapshot.sh, and
 // between the rebuild that installs the new script and its next timer tick the
 // file on disk is the OLD script's output. A decoder that treated the new key
-// as required would blank the whole Claude page for that minute — including
+// as required would blank the whole Claude tab for that minute — including
 // the boards that have nothing to do with the roster, which is the shape of
 // failure this page exists to be immune to.
 

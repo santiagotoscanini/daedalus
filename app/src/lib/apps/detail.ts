@@ -17,10 +17,10 @@ import { stageExposed } from '../stage'
 // and the live signals the hero draws. Null for a name the registry does not
 // know — the route renders its own not-found rather than this inventing one.
 //
-// Deliberately NOT the per-tab payload (./tabs.ts): this is a Postgres read,
-// two file reads and four prometheus queries, and the page cannot render at
-// all without it, since the tab bar depends on whether the app has a database
-// or an egress container. The expensive part is always the tab.
+// Deliberately NOT the per-tab payload (./tabs.ts): this is the registry row
+// plus one parallel round of status, snapshot and probe reads, and the page
+// cannot render at all without it, since the tab bar depends on whether the
+// app has a database or an egress container. The expensive part is the tab.
 
 export async function loadAppDetail(data: { name: string }) {
   const { name } = data

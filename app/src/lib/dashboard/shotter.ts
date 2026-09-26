@@ -1,7 +1,8 @@
-// Shotter — the box's headless-browser lab (stacks/shotter), read for the
-// Claude page. It is the eyes of the sessions that page shows: `shot` is how
-// an agent here looks at a web page, and this module is how the operator
-// looks at what the agent looked at.
+// Shotter — the box's headless-browser lab (the configuration's
+// stacks/shotter), read through `loadClaude` for System's Claude and Shotter
+// tabs. It is the eyes of the sessions the Claude tab shows: `shot` is how an
+// agent here looks at a web page, and this module is how the operator looks
+// at what the agent looked at.
 //
 // Three files, all under the read-only /shotter mount that the shotter stack
 // itself binds into this container (the litellm idiom — the owner of the
@@ -98,7 +99,7 @@ const shotterDir = () => env.get('SHOTTER_DIR')
 
 /**
  * The Playwright pin, bound as an env var by the same module that mounts
- * /shotter (stacks/shotter/shotter.nix) — the nix side already knows it, so
+ * /shotter (the configuration's stacks/shotter/shotter.nix) — the nix side already knows it, so
  * TypeScript never restates it. This IS the running version: the image tag
  * embeds it and the npm package inside is required to match.
  */
@@ -262,6 +263,6 @@ export async function loadShotter(): Promise<ShotterData> {
 }
 
 // ⚠ Same rule as every module here that touches node:fs — views import
-// TYPES only, and reach the data through the Claude page's server function.
+// TYPES only, and reach the data through a server function.
 // See the foot of dashboard/claude.ts for the failure shape one value
 // import produces.

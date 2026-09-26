@@ -8,9 +8,8 @@ import type { ModuleManifest } from './manifest'
 // record with one entry per tab id; its `view/index.tsx` exports `views`, a
 // record of the same keys. The keys come from the manifest's `as const` tab
 // list, so a tab declared without a loader, or a loader without a view, is a
-// compile error in the module that forgot it — where the `switch (tab)` this
-// replaced fell through to a default case and quietly rendered the wrong
-// page.
+// compile error in the module that forgot it, rather than a default case that
+// quietly renders the wrong page.
 //
 // The two records are typed against ONE map, `D`, of tab id → that tab's
 // data. The data half declares it and the view half imports it with `import

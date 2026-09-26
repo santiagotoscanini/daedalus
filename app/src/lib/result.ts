@@ -9,12 +9,10 @@
 //           branch on, or hand back to whoever asked. A refusal is data, so
 //           it gets a place in the type rather than a stack trace.
 //
-// Before this type there were ~24 hand-declared copies of the same union,
-// four of which had quietly drifted — `{ok, message}`, `{ok, status,
-// message}`, `{present, error}`, and a `{ok: boolean}` pair that did not
-// narrow at all, so a `configured: false, ok: true` was representable. The
-// value is uniform because a reviewer should be able to answer "how does this
-// codebase report failure?" once.
+// One shared union rather than hand-declared copies, because copies drift
+// (`{ok, message}`, `{present, error}`, an `{ok: boolean}` that does not
+// narrow) and a reviewer should be able to answer "how does this codebase
+// report failure?" once.
 //
 // `E` is a type parameter because a reason is not always a sentence: an HTTP
 // read keeps the status it failed with (lib/http.ts `HttpFailure`), and a
@@ -25,14 +23,15 @@
 // carries a field the caller BRANCHES on rather than shows, and a nested
 // `reason.code` would read worse than a flat one:
 //
-//   host/flow.ts `FlowOutcome` (apply-flow,   `code`, which an MCP caller
-//   update-flow)                              branches on
+//   host/flow.ts `FlowOutcome` (every        `code`, which an MCP caller
+//   defineFlow)                               branches on
 //   core/settings/github-app.ts `convert`     the same `code`, for the
 //                                             callback's redirect
 //   core/github-app.ts `InstallationRepos`    `retryAfterMs`, a backoff
 //   core/github-checks.ts `GhCall`            `failure`/`status`/`retryAfterMs`
 //
-// They are extensions of this shape, not alternatives to it: same `ok`
-// discriminant, same `reason`, and `GhCall` already names its payload `value`.
+// They are extensions of this shape, not alternatives to it: the same `ok`
+// discriminant, a `reason` on failure in all but `GhCall` (whose `failure`
+// plays that part), and `GhCall` names its payload `value`.
 
 export type Result<T, E = string> = { ok: true; value: T } | { ok: false; reason: E }

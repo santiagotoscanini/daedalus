@@ -1,5 +1,5 @@
 // The timezone picker's list: tzdata's zone.tab, from the tzdata this system
-// is built with (platform/export.nix copies it to /export/zone.tab). Pure, so
+// is built with (nix/platform/export.nix copies it to /export/zone.tab). Pure, so
 // it is testable and the client can group what the server sends; the file
 // read is core/settings/timezones.ts's.
 //

@@ -1,10 +1,11 @@
 // A line diff, for showing what an Apply will write.
 //
-// The site document is forty-odd lines and an edit changes one or two of
-// them, so the preview wants the whole file with the changed lines marked —
-// not hunks, not a word diff. A longest-common-subsequence walk over lines is
-// exact for that, and at these sizes the quadratic table is a few thousand
-// cells. No dependency: this is the entire algorithm.
+// The site document is under a hundred lines and an edit changes one or two
+// of them, so the preview wants the file with the changed lines marked in
+// place (long unchanged runs folded, see `foldUnchanged`) — not a word diff.
+// A longest-common-subsequence walk over lines is exact for that, and at
+// these sizes the quadratic table is a few thousand cells. No dependency:
+// this is the entire algorithm.
 
 export type DiffLine = { kind: 'same' | 'add' | 'del'; text: string }
 
@@ -65,8 +66,8 @@ export type FoldedLine = DiffLine | { kind: 'fold'; count: number }
 
 /**
  * The diff with long unchanged runs collapsed to `context` lines either side
- * of a change, the way a hunk view does. A one-line edit to a forty-line
- * file otherwise puts the change below the fold of any box that shows it;
+ * of a change, the way a hunk view does. A one-line edit to a long file
+ * otherwise puts the change below the fold of any box that shows it;
  * the reader should see what moved without scrolling past what did not.
  * Runs shorter than a fold marker is worth (2·context + 1) are kept whole.
  */

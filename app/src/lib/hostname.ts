@@ -2,12 +2,12 @@
 //
 // The rule is one DNS label under the base domain, and it comes from
 // infrastructure rather than taste. traefik serves a single entrypoint-level
-// ACME cert — `main=<baseDomain>` + `sans=*.<baseDomain>` (stacks/traefik) —
+// ACME cert — `main=<baseDomain>` + `sans=*.<baseDomain>` (nix/modules/traefik) —
 // and a wildcard matches exactly one label. `a.b.example.org` would resolve,
 // route, and then serve a certificate no browser accepts. The Cloudflare
 // tunnel's CNAMEs and pi-hole's short-circuit make the same assumption.
 //
-// stacks/apps/apps.nix asserts this too, so a bad value cannot reach a running
+// nix/modules/apps/apps.nix asserts this too, so a bad value cannot reach a running
 // system either way. It is checked HERE as well because the nix assertion
 // fires during Apply — after the commit, mid-rebuild — and recovering from
 // that is a revert. Rejecting it at the edit is the difference between a red
@@ -33,10 +33,10 @@ const APP_NAME_MAX = 59
  * The shape half of `appNameError` below, without the creation-time questions
  * (is the name taken, is the label reserved) — so a request naming an app that
  * already exists is checked against the same rule the app was created under.
- * That rule was written out four more times as `/^[a-z0-9][a-z0-9-]{0,62}$/`,
- * which accepts a trailing hyphen and 63 characters that creation refuses: the
- * one string that is the container name, the DNS label, the postgres role and
- * the systemd unit name had two definitions. This is the stricter one.
+ * Use this, not a looser local regex: `/^[a-z0-9][a-z0-9-]{0,62}$/` accepts a
+ * trailing hyphen and 63 characters that creation refuses, and the one string
+ * that is the container name, the DNS label, the postgres role and the
+ * systemd unit name must have one definition.
  *
  * Nothing is trimmed or lowercased here. `appNameError` does that because it
  * reads a repository name a person just picked; a name arriving over the wire

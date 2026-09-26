@@ -3,7 +3,7 @@ import { db } from '../../host/db'
 import { settings } from '../../host/schema'
 
 // The preferences store. One row per key; see the `settings` table comment in
-// schema.ts for what does and does not belong in it.
+// host/schema.ts for what does and does not belong in it.
 
 /**
  * Read one preference, narrowed by a caller-supplied guard.

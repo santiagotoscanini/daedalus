@@ -361,7 +361,7 @@ describe('driftOf', () => {
 })
 
 // `tasks` rides the same patch as every editable column (there is no task
-// server function — saveApp already carries the assertAdmin gate), so this is
+// server function — saveApp, an adminFn, already carries the admin gate), so this is
 // the boundary that keeps a malformed task out of the registry. Refusals are
 // asserted on the sentence, because the sentence is what the operator reads:
 // each one names the task and the rule rather than "invalid input".

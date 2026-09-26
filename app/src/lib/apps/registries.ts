@@ -60,7 +60,7 @@ export type PackagesData = {
 export async function loadImages(hosts: Hosts): Promise<ImagesData> {
   const base = hosts.base
   const [catalog, storage, pulls, pushes, requests, errors, info] = await Promise.all([
-    // Anonymous read is deliberately allowed on zot (stacks/registry), which is
+    // Anonymous read is deliberately allowed on zot (nix/modules/registry), which is
     // what lets this work with no credential at all.
     getJson<{ repositories?: string[] }>(`${base('registry')}/v2/_catalog`),
     promVector('zot_repo_storage_bytes'),
@@ -103,7 +103,7 @@ export async function loadImages(hosts: Hosts): Promise<ImagesData> {
 export async function loadPackages(hosts: Hosts): Promise<PackagesData> {
   const base = hosts.base
   const [npm, requests, errors, running] = await Promise.all([
-    // Served by the cached-packages plugin (stacks/verdaccio/assets):
+    // Served by the cached-packages plugin (nix/modules/verdaccio/assets):
     // verdaccio's own /-/v1/search saturates at that endpoint's 250-result cap
     // and cannot tell a package published here from one pulled off npmjs.
     getJson<{

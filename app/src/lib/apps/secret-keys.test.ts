@@ -5,7 +5,7 @@ import { appSecretFile, appSecretKeys, isSecretKey, secretKeyError } from './sec
 // so what is pinned here is what a NAME may be — not formatting taste. The
 // same rule is written three times by design (browser, server function, host
 // agent); these tests are the one place it is stated as a list of cases, and
-// stacks/daedalus/host/secret-set.sh's `case` must agree with them.
+// nix/stacks/daedalus/host/secret-set.sh's `case` must agree with them.
 
 describe('secretKeyError', () => {
   it('accepts the names an environment variable actually has', () => {

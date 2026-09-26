@@ -1,17 +1,16 @@
-// The Claude page: Remote Control, the sessions on it, and the CLI underneath.
-//
-// This is the one page in the app whose subject is not something the box
-// serves to the house — it is the thing that maintains the box, which is why
-// it sits at the foot of the rail rather than eighth in a list of subjects.
+// The box's Claude tab (System › Claude, loaded by
+// modules/system/data/claude.ts): Remote Control, the sessions on it, and the
+// CLI underneath. Its subject is not something the box serves to the house —
+// it is the thing that maintains the box.
 //
 // Three sources, and the split between them is the interesting part:
 //
 //   the snapshot   Everything that is TRUE NOW: is the unit up, which
 //                  sessions are connected, when does the login expire. None
 //                  of it is scrapeable — `claude remote-control` publishes no
-//                  health endpoint at all (platform/claude-rc.nix), and the
+//                  health endpoint at all (nix/platform/claude-rc.nix), and the
 //                  session roster is a directory of files in the operator's
-//                  home. See stacks/daedalus/host/claude-snapshot.sh.
+//                  home. See nix/stacks/daedalus/host/claude-snapshot.sh.
 //   Loki           Everything that HAPPENED: sessions starting, the
 //                  connection dropping, the reconnect that followed. The unit
 //                  logs those and nothing else records them.
@@ -60,11 +59,9 @@ export type ClaudeSession = {
   rssBytes: number | null
   /**
    * The later of two clocks: the session file's own `updatedAt` /
-   * `statusUpdatedAt`, and the bridge debug log's mtime. The file used to be
-   * written once at start, which left every session with no `cse_…` — every
-   * console and tmux-resumed one — reporting no activity at all. CLI 2.1.260
-   * keeps that file current as the session runs, so both populations have a
-   * reading now and the later of the two wins.
+   * `statusUpdatedAt`, and the bridge debug log's mtime. Both, because a
+   * session with no `cse_…` (a console or tmux-resumed one) has no debug log,
+   * and an older CLI wrote the session file only once, at start.
    *
    * On a live row this REPLACES the transcript's own mtime rather than
    * sitting beside it (see the `time` group in lib/claude-meta.ts): it is the
@@ -96,10 +93,8 @@ export type ClaudeFacts = {
   sessions: ClaudeSession[]
   /**
    * Every session this box could still be asked about, as against `sessions`
-   * above, which is only what is connected right now. Absent from any
-   * snapshot written before this key existed — which is what the `optional`
-   * in the decoder is for: the rollout window is one timer tick wide and the
-   * page has to render through it.
+   * above, which is only what is connected right now. Decoded as optional,
+   * for the reason `factsShape` gives.
    */
   roster: ClaudeRoster
   credentials: {
@@ -198,8 +193,7 @@ export const factsShape = obj({
     [],
   ),
   // Every field optional, the whole block optional, and the fallback a real
-  // empty roster: this key did not exist one snapshot ago, and the page has
-  // to draw correctly against a file written by the previous script.
+  // empty roster, for the rollout window the doc above describes.
   roster: optional(
     obj({
       agentsAvailable: optional(bool, false),
@@ -234,12 +228,9 @@ export const factsShape = obj({
             startedAt: optional(nn, null),
             modifiedAt: optional(num, 0),
             sizeBytes: optional(num, 0),
-            // Every field optional and the block itself optional, for the
-            // same reason `roster` is: a snapshot written before the host
-            // scanned anything has no `meta` at all, and the correct reading
-            // of that is NOT KNOWN on every field — never zero. `NO_META` is
-            // exactly that shape, so the page draws a pre-scan row as a row
-            // with nothing extra to say rather than as a silent session.
+            // Optional throughout, like `roster`: a row with no `meta` reads
+            // as NOT KNOWN on every field — never zero — which is exactly
+            // `NO_META`'s shape.
             meta: optional(
               obj({
                 scanVersion: optional(num, 0),
@@ -274,10 +265,9 @@ export const factsShape = obj({
       transcriptTotal: optional(num, 0),
       emptyCount: optional(num, 0),
       // The sessions this box started, as the instance names of the active
-      // `claude-session@` units. Optional like everything else here: a
-      // snapshot written before the Resume button existed knows nothing about
-      // them, and an empty list is the correct reading of that — no row then
-      // claims a kill it cannot perform.
+      // `claude-session@` units. Optional like everything else here; an
+      // empty list is the safe reading — no row then claims a kill it cannot
+      // perform.
       managedIds: optional(arrayOf(str), []),
     }),
     NO_ROSTER,
@@ -414,6 +404,6 @@ export async function loadClaude(): Promise<ClaudeData> {
 //
 // Views import TYPES only (`import type { … }`, erased under
 // verbatimModuleSyntax) and reach the data through a server function. Every
-// other data module here follows the same rule — see the top of
-// modules/gaming/view for the shape. Anything derived from this
+// other data module here follows the same rule (host/boundary.test.ts holds
+// it for src/modules). Anything derived from this
 // payload that a view wants lives beside the view, not here.

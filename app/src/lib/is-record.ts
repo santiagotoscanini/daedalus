@@ -1,11 +1,10 @@
 /**
- * "Is this a plain object I can read keys off?" — the guard five modules had
- * each written for themselves.
+ * "Is this a plain object I can read keys off?" — one shared guard, so the
+ * name means one thing everywhere.
  *
  * Arrays are excluded deliberately: every caller goes on to read named keys,
  * and an array satisfies `typeof v === 'object'` while answering `undefined`
- * for all of them. The copy in core/builds/report.ts was missing that clause,
- * so the same-named guard meant two things in one codebase.
+ * for all of them.
  */
 export const isRecord = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v)

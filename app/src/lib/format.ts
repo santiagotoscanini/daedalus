@@ -1,10 +1,9 @@
-// Value formatting for everything under the category pages.
+// Value formatting, pure and client-safe — components import it too.
 //
-// This lives on the SERVER side of the boundary on purpose. The unit is part
-// of what a source means — `myspeed_download` is Mbps, `container_memory_
-// usage_bytes` is bytes, a Jellyfin tick is 100ns — and the component that
-// renders a number has no way to know which. Formatting where the number is
-// read keeps that knowledge next to the query that produced it.
+// The category loaders format on the server, where the number is read: the
+// unit is part of what a source means — `myspeed_download` is Mbps,
+// `container_memory_usage_bytes` is bytes, a Jellyfin tick is 100ns — and the
+// component that renders a number has no way to know which.
 //
 // Every helper takes null/undefined and renders an em dash, because "could not
 // read this" is a real and common state on a page that talks to thirty
@@ -135,22 +134,20 @@ export function when(iso: string): string {
  * A log line's timestamp: "14:22:09.214" for today, "Jul 31 23:22:09" for
  * anything older. In the BOX'S timezone (TZ is bound into the container),
  * not UTC — these lines are read to correlate with "what was I doing at
- * half past two", and an earlier version rendered the same-day clock in UTC,
- * which put every entry three hours into the future of the wall clock.
+ * half past two", and a UTC clock reads hours off the wall clock.
  *
  * ── CALL THIS ON THE SERVER, and ship the string ──────────────────────────
  *
- * It is the only formatter in this file that reads anything but its argument:
- * the ambient timezone, for both of its branches, and `new Date()` for the
- * choice between them. A browser in another zone — or simply on the far side
- * of midnight from the box, which is a three-hour window here every night —
- * formats the same instant differently, so calling this during a render that
- * is also server-rendered is a hydration mismatch. Text, so React regenerates
- * the whole document rather than patching an attribute.
+ * It reads the ambient timezone, for both of its branches, and `new Date()`
+ * for the choice between them. A browser in another zone — or simply on the
+ * far side of midnight from the box — formats the same instant differently,
+ * so calling this during a render that is also server-rendered is a hydration
+ * mismatch. (`when`, `localDay` and `since`'s callers that pass `Date.now()`
+ * share the hazard to a lesser degree.)
  *
  * "The box's timezone" is the intent anyway, and the server is the only place
- * that knows it. Both callers now format at the source and hand the component
- * a finished string: `ActivityRow.at` (lib/activity-lines.ts) and
+ * that knows it. Both callers format at the source and hand the component a
+ * finished string: `ActivityRow.at` (built in lib/apps/tabs.ts) and
  * `RejectRow.at` (host/access.ts).
  */
 export function logTime(iso: string): string {

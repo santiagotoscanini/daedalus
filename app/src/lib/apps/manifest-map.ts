@@ -9,15 +9,17 @@ import type { AppRecord } from '../repo/apps'
 // describes what Nix built (`driftOf`).
 //
 // Pure — types only from host/ and lib/repo — so the round trip
-// export → render → parse → import → export is testable without a database
-// (apps.test.ts). Kept in one file because the three must agree field for
-// field: a field exported but not compared is an edit that never ships.
+// export → render → parse → toRow → export is testable without a database
+// (lib/repo/apps.test.ts, today `toRow`'s only caller). Kept in one file
+// because the three must agree field for field: a field exported but not
+// compared is an edit that never ships.
 
 /**
- * The platform default for `deploy.enable`, mirrored from the option default
- * in stacks/apps/apps.nix: registry apps auto-deploy, local-source ones have
- * no registry image to poll. Applied where a manifest entry omits `deploy`
- * (hand-written entries like daedalus's self.json).
+ * The platform default for `deploy.enable`, approximating the option default
+ * in nix/platform/apps-options.nix (`!source.dev`): registry apps
+ * auto-deploy, local-source ones have no registry image to poll. Applied
+ * where a manifest entry omits `deploy` (hand-written entries like daedalus's
+ * self.json).
  */
 const deployDefault = (sourceMode: string | undefined): boolean =>
   (sourceMode ?? 'registry') === 'registry'
@@ -159,10 +161,10 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
 }
 
 /**
- * Rebuild the export that stacks/apps/declarations.nix reads. Not written to
- * disk here — the Apply flow (next iteration) owns that, along with the git
- * commit and the rebuild. Having it now keeps the round-trip honest: the UI
- * can show exactly what Apply WOULD write.
+ * Rebuild the export that nix/modules/apps/declarations.nix reads. Not written
+ * to disk here — the Apply flow (host/apply-flow.ts) owns that, along with the
+ * git commit and the rebuild — so the UI can show exactly what Apply WOULD
+ * write.
  */
 export function toRegistryExport(records: AppRecord[]): {
   schemaVersion: number

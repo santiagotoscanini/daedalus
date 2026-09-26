@@ -8,8 +8,7 @@
 // in a PC will ever say, so those are CHOSEN: on the box, here; on a node,
 // on Settings › Machines, from the entries of that kind below.
 //
-// Every entry is one object holding the photo, the name and the spec, for
-// the reason the box's Build tab wrote its parts down in one table: when a
+// Every entry is one object holding the photo, the name and the spec: when a
 // part is replaced the edit is one entry, and a part whose photo and
 // specification live together cannot show last year's cooler beside this
 // year's numbers. The list is what this house has bought; a second house

@@ -97,8 +97,8 @@ export type BuildEnv = {
 
 export type BuildEnvKind = keyof BuildEnv
 
-// Every limit below is host/build.sh's own (its buildEnv jq check), so a
-// request this decoder passes is one the host accepts.
+// Every limit below is nix/stacks/daedalus/host/build.sh's own (its buildEnv
+// jq check), so a request this decoder passes is one the host accepts.
 export const BUILD_ENV_PLACEHOLDER_RE = /^[A-Z_][A-Z0-9_]{0,63}$/
 export const BUILD_ENV_RAILPACK_RE = /^RAILPACK_[A-Z0-9_]{1,55}$/
 export const BUILD_ENV_VALUE_MAX = 512

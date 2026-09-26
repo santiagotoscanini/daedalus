@@ -1,12 +1,12 @@
 // The site vault — site/vault/, where the secrets set from the UI are kept as
-// sops ciphertext (PLAN.md Phase 6). The names apply.sh will write, and the
-// last check on what sops produced before it leaves the container.
+// sops ciphertext. The names apply.sh will write, and the last check on what
+// sops produced before it leaves the container.
 //
 // Client-safe: no node imports. The encrypting half is core/vault.ts.
 
 /**
  * Every vault entry daedalus may seal. apply.sh allowlists what it writes
- * (stacks/daedalus/host/apply.sh MANAGED): the Cloudflare token and the
+ * (nix/stacks/daedalus/host/apply.sh MANAGED): the Cloudflare token and the
  * GitHub App's sealed key.
  */
 export const VAULT_FILES = ['vault/github-app.sops', 'vault/cloudflare-api-token.sops'] as const

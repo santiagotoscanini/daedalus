@@ -208,7 +208,7 @@ export function buildTimeline(state: BuildState, timings: Record<string, number>
   return steps
 }
 
-/** The tags the host pushes (plan D): live → sha-<sha> + latest, candidate → candidate-<sha>. */
+/** The tags the host build agent pushes: live → sha-<sha> + latest, candidate → candidate-<sha>. */
 export function buildTags(publish: BuildPublish, sha: string): string[] {
   return publish === 'candidate' ? [`candidate-${sha}`] : [`sha-${sha}`, 'latest']
 }

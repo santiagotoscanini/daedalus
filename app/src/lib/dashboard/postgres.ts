@@ -1,5 +1,4 @@
-// "Is it worth updating?" for the one service on this box that does not
-// publish GitHub releases.
+// "Is it worth updating?" for postgres, which publishes no GitHub releases.
 //
 // Postgres is the shared cluster every app is a tenant of, and its minor
 // releases are almost entirely security and data-corruption fixes — which
@@ -24,10 +23,7 @@
 //   /docs/release/<v>/        — one page per minor, with the notes on it.
 //
 // Both are static pages on postgresql.org with no key, no rate limit worth
-// worrying about, and a layout that has not changed in a decade. The cache
-// below is the same two-clock one github.ts uses and exists for the same
-// reason: a failure must serve the last good answer rather than blanking the
-// panel.
+// worrying about, and a layout that has not changed in a decade.
 
 import { swrCache } from '../cache'
 import { decodeEntities, stripTags } from '../plain-text'
@@ -50,8 +46,8 @@ const MAX_PAGES = 4
 /** Bullets kept per section — the same cut github.ts makes, for the same reason. */
 const MAX_ITEMS = 8
 
-// Fetch-once-per-TTL, keep the previous answer on failure — the two-clock
-// contract documented in lib/cache.ts.
+// Fetch-once-per-TTL, keep the previous answer on failure rather than blank
+// the panel — the two-clock contract documented in lib/cache.ts.
 const cache = swrCache({ ttlMs: TTL_MS, retryMs: RETRY_MS })
 
 async function getText(url: string): Promise<string | null> {

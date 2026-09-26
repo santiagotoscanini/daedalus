@@ -1,17 +1,21 @@
-// The one HTTP layer under every upstream read this app makes.
+// The shared HTTP layer under the app's upstream reads. Not the only one: a
+// caller whose answer does not fit these (qBittorrent's login lives in a
+// response header) hand-rolls the fetch and reuses ATTEMPT_MS.
 //
 // ── how a page reaches a service ──────────────────────────────────────────
 //
 // daedalus is deliberately NOT on traefik-net: `auth.isolated` puts it on a
 // private bridge with traefik as the only other member, which is what makes it
-// safe for the app to trust the `X-Forwarded-Email` header that names whoever
-// runs an Apply. Dialling a service by container DNS would mean joining
-// traefik-net and handing ~50 containers a path to the control plane's apply
-// endpoint, so it reaches everything three other ways instead, in this order
-// of preference:
+// safe for the app to trust the `X-Forwarded-Email` header that names the
+// signed-in person (core/auth.ts). Dialling a service by container DNS would
+// mean joining traefik-net and handing every container on it a path to the
+// control plane, so it reaches everything three other ways instead, in this
+// order of preference:
 //
-//   prometheus / loki  — already reachable over the `monitoring` bridge, and
-//                        the right answer whenever the number is scraped. Two
+//   a bridge it shares — prometheus / loki over `monitoring` (litellm and pg
+//                        over app-db-net, traefik's API over its own iso
+//                        bridge). Prometheus is the right answer whenever the
+//                        number is scraped. Two
 //                        tiles (MySpeed, WireGuard) use it INSTEAD of the
 //                        service's own API: the numbers are identical, and it
 //                        avoids both an auth bypass and WireGuard's TOTP.
@@ -19,14 +23,13 @@
 //                      — the must-keep host ports (CLAUDE.md): everything
 //                        sharing gluetun's netns, plus Home Assistant on the
 //                        host netns.
-//   https://<hostname> — through traefik, on the published hostname. Pi-hole's
-//                        widget already worked this way; the rest are apps
+//   https://<hostname> — through traefik, on the published hostname: apps
 //                        whose API path is either unauthenticated or on the
 //                        forward-auth bypass list.
 //
 // ── failure is per-tile ───────────────────────────────────────────────────
 //
-// Every fetch here returns null / [] rather than throwing. A dashboard where
+// Every fetch here returns null (or a failed Result) rather than throwing. A dashboard where
 // one dead service blanks the page is worse than no dashboard: the whole point
 // is to see WHICH thing is down. Tiles render "—" for a stat they could not
 // read and keep their status dot, which comes from gatus. (The one deliberate
@@ -44,7 +47,7 @@ import type { Result } from './result'
  * (Open WebUI's update check reaches the internet, ~500ms) wants to be waited
  * out, since retrying it just pays the same cost twice.
  *
- * Short first attempts catch the stall for a few hundred ms instead of 3s, and
+ * Short first attempts cut the stall off after a few hundred ms, and
  * anything that legitimately needs longer gets it on a later attempt — by which
  * point the socket is warm, so it is a real measurement of the service rather
  * than of the network path. Four rungs because the stall occasionally survives
@@ -56,23 +59,24 @@ export const ATTEMPT_MS = [400, 800, 1_500, 2_500]
 /**
  * Identical GETs in flight at the same moment, answered once.
  *
- * A category page and the tile catalogue underneath it legitimately want the
- * same numbers — "errors in the last hour" belongs in the headline AND on the
- * Logs tile — and asking twice is pure duplicate load on the slowest upstream
- * here. Keyed by URL and cleared as soon as the request settles, so this is a
+ * Two readers on one page can legitimately want the same number (host/loki.ts
+ * reads go through getJson, and Loki is the upstream least able to afford
+ * answering twice). Keyed by URL alone — the attempt ladder is not part of
+ * the key — and cleared as soon as the request settles, so this is a
  * request-coalescer, not a cache: nothing is ever served from a previous page
- * load, and the dashboard's numbers stay as live as they were.
+ * load.
  */
 const inFlight = new Map<string, Promise<unknown>>()
 
 /**
  * Run `jobs` with at most `limit` in flight.
  *
- * A burst cap, not a correctness fix — the connection stall `getJson` retries
- * around happens at any concurrency, including one. This just keeps a page
- * load from opening ~34 sockets across the box at once, on a machine where
- * everything else is also running. Six is enough that a tab costs one or two
- * waves of round trips.
+ * A burst cap for the few inner fan-outs that aim a batch at ONE upstream:
+ * Seerr's per-request title lookups (modules/media/data/wanted.ts, 4) and the
+ * MSI support-site probes and release notes (lib/dashboard/board-releases.ts,
+ * 6 and 4). Page loads themselves fan out with plain Promise.all. Not a
+ * correctness fix — the connection stall `getJson` retries around happens at
+ * any concurrency, including one.
  */
 export async function pool<T>(jobs: (() => Promise<T>)[], limit = 6): Promise<T[]> {
   const out = new Array<T>(jobs.length)
@@ -106,14 +110,16 @@ export function basicAuth(user: string | undefined, pass: string | undefined): s
  * namespace occasionally hangs on the SYN and only gives up after the kernel's
  * retransmit ladder, ~10.5s. It is not load — it reproduces with a single
  * request in flight — and it is not DNS, since dialling 169.254.1.2 directly
- * does it too. One or two of the ~8 host-port origins a tab touches hit it,
- * always on the first connection; a warm keep-alive socket never does. Node
- * closes idle sockets after ~4s, so any pause between visits pays it again —
- * which is exactly the visit a person makes.
+ * does it too. It strikes one or two of the host-port origins a tab touches
+ * (the Media tabs dial several inside gluetun's netns), always on the first
+ * connection; a warm keep-alive socket never does. Node closes idle sockets
+ * after ~4s, so any pause between visits pays it again — which is exactly the
+ * visit a person makes.
  *
- * Retrying on a short budget turns that from 6s of dead page into ~600ms. The
- * retry is only for a THROWN request: a 4xx/5xx is the service answering, and
- * asking twice would not change its mind.
+ * Retrying on a short budget turns that ~10.5s hang into a 400ms abort and a
+ * fresh connection. The retry is only for a THROWN request (a body that fails
+ * to parse included): a 4xx/5xx is the service answering, and asking twice
+ * would not change its mind.
  */
 export function getJson<T>(
   url: string,
@@ -122,7 +128,7 @@ export function getJson<T>(
 ): Promise<T | null> {
   // Only plain GETs are shared. Anything carrying headers, a method or a body
   // is a different request that happens to have the same URL — qBittorrent's
-  // login and pi-hole's session POST both look like that.
+  // cookie-carrying reads and pi-hole's session POST both look like that.
   if (Object.keys(init).length > 0) return attempt<T>(url, init, attempts)
 
   const existing = inFlight.get(url)
@@ -137,14 +143,11 @@ export function getJson<T>(
  * Why a JSON read has no body.
  *
  * `status` is what the service answered with, and null when it never
- * answered — and WHICH WAY it did not answer is what this type used to drop.
- * `{ ok: false; status: null }` was the whole failure, so a timeout, a
- * refused connection and a 200 carrying something that is not JSON were one
- * indistinguishable value, and every caller had to render them as the same
- * sentence. `error` is that missing half, in the same vocabulary
- * core/github-app.ts's `GhResult` already uses for the same problem; it is
- * null exactly when there IS a status, because then the service spoke for
- * itself.
+ * answered. `error` then says which way it did not answer — a timeout, a
+ * refused connection and a 200 whose body is not JSON are different sentences
+ * to a person — in the vocabulary core/github-app.ts's `GhResult` uses for the
+ * same problem. It is null exactly when there IS a status, because then the
+ * service spoke for itself.
  */
 type HttpFailure = {
   status: number | null
@@ -165,8 +168,8 @@ const timedOut = (e: unknown): boolean =>
  * permission answers 401 or 403, and "the token needs X" is a different
  * sentence from "the service did not answer" — getJson folds both into null,
  * which is how a refused Cloudflare token once blanked the tunnel panels for
- * weeks without a word. Same retry ladder, same no-redirect rule; not
- * de-duplicated, since every caller here sends an Authorization header.
+ * weeks without a word. Same retry ladder, same no-redirect rule; never
+ * coalesced through `inFlight`, even when `init` is empty.
  */
 export async function getJsonResult<T>(
   url: string,
@@ -198,11 +201,11 @@ export async function getJsonResult<T>(
 /**
  * The same fetch, without the JSON.
  *
- * For the one upstream here that is not an API: the router, which answers
- * every question with a login page and states what it is in a meta tag on it.
- * Sharing `attempt`'s retry ladder matters as much as for the JSON callers —
- * this is a first connection to an address off the bridge, which is exactly
- * the case that stalls.
+ * For the answers that are not JSON: the router's login page, which states
+ * its model in a meta tag (modules/network/data/general.ts), and
+ * qBittorrent's plain-text version (modules/media/data/downloaders.ts). Same
+ * retry ladder and no-redirect rule as `attempt`. Takes no `init`, so it
+ * cannot carry headers.
  */
 export async function getText(
   url: string,

@@ -6,10 +6,9 @@
 // host's files are host/contract/.
 //
 // Every fact this app renders arrives as JSON from outside its type system —
-// nix exports, host snapshots, service APIs — and for years each read site
-// cast with `as T`, which is a promise the file never made. These combinators
-// are the runtime half of those types: ~120 lines, zero dependencies, throwing
-// DecodeError with the path that failed so a malformed snapshot names its own
+// nix exports, host snapshots, service APIs — and an `as T` cast is a promise
+// the file never made. These combinators are the runtime half of those types:
+// zero dependencies, throwing DecodeError with the path that failed so a malformed snapshot names its own
 // problem instead of surfacing as `undefined is not a function` three renders
 // later.
 //

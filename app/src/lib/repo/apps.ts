@@ -193,7 +193,7 @@ export async function deleteApp(name: string): Promise<void> {
   if (record.managedInNix) {
     throw new Error(`${name} is declared by hand in Nix — remove it there, not here`)
   }
-  // Env vars and deployment history are `onDelete: cascade`.
+  // Env vars, tasks, builds and deployment history are `onDelete: cascade`.
   await db.delete(apps).where(eq(apps.id, record.id))
 }
 
@@ -215,10 +215,9 @@ async function editableApp(name: string): Promise<AppRecord> {
  * Whitelist rather than trust the caller's keys: `clean` is written straight
  * into an UPDATE, and the server function boundary is the only thing between
  * it and the request body. Typed WITHOUT `tasks` or `env`: what this half
- * becomes is the `SET` of an UPDATE on `apps`, and neither is a column there.
- * The task and env rows are their own writes, so they are pulled out of the
- * column set rather than left in it — `tasks` is not a column on `apps` and an
- * UPDATE carrying it would be a SQL error, not a no-op.
+ * becomes is the `SET` of an UPDATE on `apps`, neither is a column there, and
+ * an UPDATE carrying one would be a SQL error, not a no-op. Their rows are
+ * their own writes.
  */
 function splitPatch(patch: AppPatch): {
   clean: AppColumns
@@ -239,8 +238,9 @@ const nothingToWrite = (
 ): boolean => Object.keys(clean).length === 0 && tasks === undefined && env === undefined
 
 /**
- * The one rule a variable's name has that the pure validator cannot check:
- * the app's sops file is on disk. Same placement and the same reasoning as
+ * The one rule a variable's name has that the pure validator cannot check: it
+ * must not already be a key in the app's secrets file, which is on disk. Same
+ * placement and the same reasoning as
  * the hostname collision in `normalizeHostname` — cheaper to refuse here than
  * inside the rebuild an Apply has already committed.
  */

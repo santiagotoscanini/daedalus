@@ -15,7 +15,7 @@ type AgentPolicy = {
   claudeRemoteControl: boolean
 }
 
-/** One session on the node, from its `~/.claude/sessions` (agent/src/claude.rs). */
+/** One session on the node, from its `~/.claude/sessions` (agent/src/claude/). */
 export type NodeClaudeSession = {
   pid: number
   transcriptId: string | null
@@ -472,7 +472,7 @@ export type NodeTelemetry = {
 }
 
 type NodeProvider = {
-  /** "lemonade" | "ollama" */
+  /** "lemonade" — the only kind an agent detects today (agent/src/providers.rs). */
   kind: string
   port: number
   /** From the provider's health endpoint; null when it is not answering. */

@@ -5,7 +5,7 @@ import { bool, type Decoder, nullable, num, obj, optional, str } from './contrac
 // The daedalus GitHub App, the pure half: the manifest the operator registers,
 // what a push delivery means, and the shape a check run's output must fit.
 // Client-safe — no server-only imports; the signature check is in
-// github-app-crypto.ts because it needs node:crypto.
+// host/github-app-crypto.ts because it needs node:crypto.
 
 /** Site-relative path of the sealed App credentials (pem, webhookSecret, clientSecret). */
 export const GITHUB_APP_FILE = 'vault/github-app.sops'

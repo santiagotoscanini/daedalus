@@ -28,7 +28,8 @@ type JournalLine = ReturnType<typeof journalLine>
  * Fold `/deploy-state/<app>.log` into the deployments table.
  *
  * Idempotent — the journal is a bounded ring (deploy.sh keeps the last 200
- * lines) that gets re-read on every page load, so re-inserting the same line
+ * lines) that gets re-read on every Deployments tab load and by the build
+ * reporter, so re-inserting the same line
  * must be a no-op. The unique index on (app, digest, startedAt) is what makes
  * onConflictDoNothing sufficient.
  *

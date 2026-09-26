@@ -1,14 +1,13 @@
-// The one cache under every slow-or-rationed upstream read.
+// The shared cache for slow-or-rationed upstream reads.
 //
 // This app deliberately caches almost nothing — the request coalescer in
 // lib/http.ts is explicitly not a cache, because a dashboard's numbers have
 // to be live. What DOES get cached is the reads where staleness is free and
 // the upstream is either rationed (GitHub's 60 unauthenticated requests an
 // hour) or slow out of proportion to how often its answer changes (release
-// lists move weekly; an icon probe walks six paths). Before this module each
-// of those sites hand-rolled its own map-and-timestamp, and the two-clock
-// stale-serving below existed in some of them — which is how one of them
-// quietly loses it.
+// lists move weekly; an icon probe walks several paths). Use this rather
+// than a hand-rolled map-and-timestamp, which is how the stale-serving below
+// gets quietly lost.
 //
 // ── the two-clock contract ────────────────────────────────────────────────
 //

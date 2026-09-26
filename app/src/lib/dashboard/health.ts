@@ -2,15 +2,12 @@ import { promVector } from '../../host/prom'
 
 // Is anything down, in one answer.
 //
-// The app never needed this: a page draws the dot for the service it is about,
-// and `server/category.ts fetchTabStatus` answers "which of THIS category's
-// tabs are green" — so there was nowhere that asked the box-wide question,
-// because a person asking it just looks at the dashboard.
-//
-// An agent cannot look at the dashboard. "What is broken right now" is the
-// first thing anything driving this box wants to know and the last thing it
-// should have to assemble from eleven category calls, so the MCP `health` tool
-// gets the aggregate that the UI's shape never called for.
+// The pages never ask the box-wide question: a page draws the dot for the
+// service it is about, and `fetchTabStatus` (server/tab-status.ts) answers
+// "which of THIS module's tabs are green". An agent cannot look at the
+// dashboard, and "what is broken right now" is the first thing it wants to
+// know, so the MCP `health` tool gets this aggregate rather than assembling
+// it from one call per module.
 //
 // ONE prometheus query, and deliberately the same one the dots use — gatus
 // probes every published webApp's `healthPath` plus a couple of off-box

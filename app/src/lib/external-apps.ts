@@ -17,7 +17,8 @@ import { hostnameShapeError } from './site-fields'
 /**
  * The hosting platforms, in the order their sections render. The UI keys its
  * brand icons off `id` (components live with the JSX, not here), so adding a
- * platform means an entry here plus a mark in the route's PLATFORM_ICONS.
+ * platform means an entry here plus a mark in PLATFORM_ICONS
+ * (routes/apps.index.tsx) — a compile error until it has one.
  */
 export const PLATFORMS = [
   {

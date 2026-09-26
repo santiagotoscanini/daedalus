@@ -6,7 +6,7 @@
 
 import type { VaultFile } from './vault'
 
-/** The vault entry, as apply.sh allowlists it (stacks/daedalus/host/apply.sh). */
+/** The vault entry, as apply.sh allowlists it (nix/stacks/daedalus/host/apply.sh). */
 export const CLOUDFLARE_TOKEN_FILE = 'vault/cloudflare-api-token.sops' as const satisfies VaultFile
 export const CLOUDFLARE_TOKEN_SECRET = 'cloudflare-api-token' as const
 

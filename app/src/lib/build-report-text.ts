@@ -287,7 +287,7 @@ export type DeployLike = {
 /**
  * The deploy of this build, from newest-first journal rows: the pushed digest,
  * else the image's revision. Only deploys that started after the build did —
- * an older deploy of the same sha (an Actions-built image, say) is not this one.
+ * an older deploy of the same sha (an earlier build of it, say) is not this one.
  */
 export function matchDeploy<D extends DeployLike>(
   deploys: D[],

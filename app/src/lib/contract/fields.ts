@@ -5,9 +5,9 @@ import { isModuleId } from '../modules/registry'
 import { isTaskId } from '../tasks'
 import { DecodeError, type Decoder, is, obj, optional, str, withMessage } from './decode'
 
-// Field decoders more than one server function reads (src/server/**), each
-// refusing with the sentence the hand-written check it replaced used — those
-// reach the page as the error text, so the wording is part of the contract.
+// Field decoders more than one server function reads (src/server/**). Their
+// refusals reach the page as the error text, so the wording is part of the
+// contract.
 //
 // Pure, and only ever named inside a `.validator(...)`, which the Start
 // compiler erases from the browser's copy of a server-function file.
@@ -32,9 +32,7 @@ export function nonBlankField(message: string): Decoder<string> {
 }
 
 /**
- * A string of at most `max` characters — the `typeof v === 'string' &&
- * v.length <= max` check those validators each wrote. Refuses with a
- * DecodeError, so a `withMessage` around it supplies the sentence the page
+ * A string of at most `max` characters. Refuses with a DecodeError, so a `withMessage` around it supplies the sentence the page
  * shows (the messages name the field, never its value).
  */
 export function strMax(max: number): Decoder<string> {
@@ -116,7 +114,7 @@ export const secretKeyField: Decoder<string> = (v) => {
  *
  * Deliberately a shape check rather than an allowlist: what the containers on
  * this box are called is the nix-rendered pin registry's answer, and the host
- * checks every target against it (stacks/daedalus/host/image-update.sh). What
+ * checks every target against it (nix/stacks/daedalus/host/image-update.sh). What
  * belongs here is that a name is a string at all — everything downstream,
  * including a `jq` expression in a shell script, has been assuming it.
  *

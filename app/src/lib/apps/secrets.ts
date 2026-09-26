@@ -49,7 +49,7 @@ export async function revealAppEnvVar(data: { name: string; key: string }) {
 // deliberately not the last one: the browser checks the name to colour the
 // input, `setAppSecret` below refuses it again with the app checked against
 // the registry Nix actually built, and the host agent checks both a third time
-// against a list Nix generated (stacks/daedalus/host/secret-set.sh). The one
+// against a list Nix generated (nix/stacks/daedalus/host/secret-set.sh). The one
 // that matters is the host's — the other two exist so a refusal is a sentence
 // on the page rather than a failed unit.
 
@@ -62,7 +62,7 @@ export async function loadAppSecrets(name: string): Promise<AppSecretKey[]> {
  * The apps whose secrets file this box will write, exactly as Nix sees it.
  *
  * The COMMITTED registry, not the database: `VAULT_APP_SECRETS` and
- * `SECRET_APPS` in stacks/daedalus/daedalus.nix are generated from the same
+ * `SECRET_APPS` in nix/stacks/daedalus/verbs-lib.nix are generated from the same
  * `site/apps.json`, so an app created in daedalus but not yet applied has no
  * writable path on the host. Refusing it here says so in a sentence instead of
  * letting the host reject it a second later with less context.

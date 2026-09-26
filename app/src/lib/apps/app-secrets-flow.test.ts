@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // BRIDGE rather than over what was returned.
 //
 // That distinction is the whole point of this file. A request published into
-// $APPLY_DIR is picked up by a root-side agent (stacks/daedalus,
+// $APPLY_DIR is picked up by a root-side agent (nix/stacks/daedalus,
 // host/secret-set.sh) which decrypts it and rewrites a committed file. So a
 // refusal that still published, or a published request carrying a plaintext,
 // is a real fault that a test of the return value alone would pass straight

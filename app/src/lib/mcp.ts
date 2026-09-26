@@ -16,11 +16,11 @@
 /**
  * What a token may reach.
  *
- * Two values and no more. `read` is every loader the UI renders from; `write`
- * is those plus the five already-fenced mutations. There is deliberately no
- * per-tool scope: the writes all end at the same two bridge verbs and the same
- * rebuild lock, so a token that may start one may start any of them, and
- * pretending otherwise would be a security story the mechanism does not back.
+ * Two values and no more. `read` reaches the read tools below; `write` is
+ * those plus the five mutations, each already fenced by the same host-side
+ * gates as the button it mirrors. There is deliberately no per-tool scope:
+ * every write ends at a bridge verb the host agent guards on its own, so
+ * splitting the token would be a security story the mechanism does not back.
  */
 const MCP_SCOPES = ['read', 'write'] as const
 export type McpScope = (typeof MCP_SCOPES)[number]
@@ -43,8 +43,9 @@ export type McpToolSpec = {
  *
  * Read tools are the loaders the pages already use — the same function, no
  * second implementation, so an MCP answer and the page it mirrors can never
- * disagree. Write tools are the five doors the UI has, reached through the
- * same `host/` flows the buttons call: an MCP call can do nothing the UI
+ * disagree. Write tools are five of the UI's doors, reached through the same
+ * functions the buttons call (core/builds, lib/apps/deploy, the host/ flows):
+ * an MCP call can do nothing the UI
  * cannot, which is the property that makes a write token defensible at all.
  */
 export const MCP_TOOLS: readonly McpToolSpec[] = [

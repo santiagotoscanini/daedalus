@@ -79,11 +79,11 @@ const THEMEABLE = [
   'sidebar-border',
   'sidebar-ring',
   'radius',
-  // The legacy vocabulary. styles.css aliases most of these onto the
-  // shadcn tokens above, so a preset normally leaves them alone — but the
-  // surfaces that have no shadcn equivalent (`panel-2`, `raise`,
-  // `border-soft`) have to be settable or a light preset cannot get its
-  // raised layers right.
+  // The legacy tokens with no shadcn equivalent. theme.css aliases the rest
+  // of the legacy vocabulary (`--bg`, `--panel`, `--text`, `--dim`,
+  // `--brand`) onto the tokens above, but these are literal colours there,
+  // so they have to be settable or a light preset cannot get its raised
+  // layers right.
   'panel-2',
   'raise',
   'border-soft',

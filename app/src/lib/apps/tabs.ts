@@ -31,9 +31,10 @@ import { loadTasksTab, type TasksPayload } from './tasks'
 // does not need.
 //
 // Split from ./detail.ts because the two have completely different costs. The
-// frame is tens of milliseconds and the page cannot draw without it; these are
-// nine prometheus queries (overview), ten Loki ones (access) or sixteen
-// (database), and every one of them streams in behind a skeleton.
+// frame is cheap and the page cannot draw without it; these are rounds of
+// prometheus queries (overview, database — host/metrics.ts) or a wide Loki
+// scan (access — host/access.ts), and every one of them streams in behind a
+// skeleton.
 //
 // Static imports, not the seam's dynamic ones: `src/lib/apps/` is a server
 // region (host/boundary.test.ts), so nothing here can reach a browser, and the
@@ -42,12 +43,6 @@ import { loadTasksTab, type TasksPayload } from './tasks'
 /**
  * Everything one tab of the app detail page needs, and nothing another one
  * does.
- *
- * The route calls this WITHOUT awaiting it, so the frame is on screen while
- * this runs and each tab body streams in behind a skeleton. That is what makes
- * the expensive tabs affordable: `overview` is nine prometheus queries,
- * `access` is ten Loki ones, `database` sixteen. None of them ever delays the
- * page, and switching tabs re-runs exactly one of them.
  *
  * Discriminated by `kind` so a tab cannot read another tab's payload — the
  * union is what stops a future edit from rendering `access` data on the logs
@@ -172,11 +167,8 @@ export async function loadAppTab(data: {
       return {
         kind: 'deployments',
         builds,
-        // `at` is formatted HERE rather than in the component: `logTime`
-        // reads the clock and the timezone, and a browser in either a
-        // different zone or on the other side of midnight from the box
-        // formats the same instant differently — which is a hydration
-        // mismatch, and a whole-document one because it is text.
+        // `at` is formatted HERE rather than in the component — see
+        // `logTime` in lib/format.ts for why.
         activity: activity.map((l) => ({
           ts: l.ts.toISOString(),
           at: logTime(l.ts.toISOString()),
@@ -200,8 +192,8 @@ export async function loadAppTab(data: {
 
     case 'access': {
       // Gated on the app actually being published through the tunnel:
-      // `stage != live` means there is no cfweb traffic to find, so the ten
-      // queries would all be a round trip to confirm zero.
+      // `stage != live` means there is no cfweb traffic to find, so the Loki
+      // scan would be a round trip to confirm zero.
       const access =
         record.stage === 'live'
           ? await appAccess(
@@ -216,10 +208,8 @@ export async function loadAppTab(data: {
       return { kind: 'variables', secrets: await loadAppSecrets(name) }
 
     case 'secrets': {
-      // Secret VALUES are deliberately NOT in this payload. Loader data is
-      // serialised into the HTML, so shipping them and masking with CSS
-      // would put every database password in view-source — theatre, not
-      // concealment. The reveal button fetches one value at a time.
+      // Secret VALUES are deliberately NOT in this payload (./secrets.ts says
+      // why); the reveal button fetches one value at a time.
       const declared = new Map(record.envVars.map((e) => [e.key, e.note]))
       const snapshot = await readEnvSnapshot(
         name,
@@ -258,7 +248,7 @@ export async function loadAppTab(data: {
 
     case 'database': {
       // Gated on the app actually having a database: without it every app
-      // without postgres would pay for sixteen round trips to be told that
+      // without postgres would pay for a round of queries to be told that
       // `pg_database_size_bytes{datname="…"}` matches nothing.
       return {
         kind: 'database',

@@ -26,8 +26,8 @@ import { type EnvVar, validateEnvVars } from './env-vars'
  *
  * `authMode` and `egress` are not here: a new app arrives ungated and gets its
  * gate in a second, deliberate step, and egress needs a gluetun instance to
- * exist before anything can join its netns. Operator secrets are not a field at
- * all any more — a tracked `stacks/apps/<name>-env.sops` is the whole switch.
+ * exist before anything can join its netns. Operator secrets are not a field:
+ * the presence of `site/vault/apps/<name>-env.sops` is the whole switch.
  *
  * `stage` is not here either, and that one is not a default but a fact: a new
  * app is born `declared` (see createApp). There is nothing to choose yet.
@@ -62,11 +62,10 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
     if (v !== null && typeof v !== 'string') throw new Error(`${k} must be a string or null`)
     return v
   }
-  // Refused rather than ignored. A caller that asks for `live` here has the
-  // old model in mind — create it exposed, then apply — and that model is what
-  // deadlocked: the image does not exist yet, so the Apply would fail the
-  // switch and revert the very row it was shipping. Saying so beats silently
-  // creating something other than what was asked for.
+  // Refused rather than ignored: created exposed, an app whose image does not
+  // exist yet would fail the switch and revert the very Apply shipping it (see
+  // lib/stage.ts). Saying so beats silently creating something other than
+  // what was asked for.
   if (input.stage !== undefined && input.stage !== 'declared') {
     throw new Error(
       'stage cannot be chosen at create: a new app is declared — the row, its database and its ' +
@@ -91,14 +90,14 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
  * Every one of them is a pure data change the existing Nix modules already know
  * how to act on, with no state anybody has to author first. `authMode` included:
  * its Pocket ID client secret is generated on the box the first time the client
- * is declared (see stacks/pocket-id/clients.nix), the same way an app's database
- * password and AUTH_SECRET are.
+ * is declared (see nix/modules/pocket-id/clients.nix), the same way an app's
+ * database password and AUTH_SECRET are.
  *
  * The omissions are deliberate, not unfinished. `egress` needs a gluetun
  * instance to exist first. `sourceMode` and `name` rewrite paths across the
- * whole platform. `operatorSecrets` is gone entirely rather than omitted — the
- * presence of a tracked `stacks/apps/<name>-env.sops` is the setting, and the
- * page reports it from the Nix manifest.
+ * whole platform. Operator secrets have no field: the presence of
+ * `site/vault/apps/<name>-env.sops` is the setting, and the page reports it
+ * from the Nix manifest.
  */
 export const EDITABLE_FIELDS = [
   'stage',
@@ -125,8 +124,8 @@ type EditableField = (typeof EDITABLE_FIELDS)[number]
  * `tasks` is deliberately not one of EDITABLE_FIELDS and cannot be: those are
  * columns on `apps`, set by one UPDATE, while the tasks are rows in a child
  * table this patch replaces wholesale. It rides the same patch anyway so the
- * Tasks tab needs no server function of its own — `saveApp` already carries
- * the `assertAdmin()` gate and this validator.
+ * Tasks tab needs no server function of its own — `saveApp` (an `adminFn`,
+ * server/fn.ts) already carries the admin gate and this validator.
  */
 export type AppPatch = Partial<Pick<typeof apps.$inferInsert, EditableField>> & {
   /** The whole list, in authored order. Absent = leave the task rows alone. */
@@ -141,7 +140,7 @@ export type AppColumns = Omit<AppPatch, 'tasks' | 'env'>
 /**
  * The `tasks` of a patch, or an error naming the task and the rule it broke.
  *
- * Every rule here mirrors an assertion in stacks/apps/apps.nix, and that is
+ * Every rule here mirrors an assertion in nix/modules/apps/apps.nix, and that is
  * the point rather than duplication for its own sake: the nix assertion fires
  * INSIDE the rebuild an Apply has already committed, so reaching it costs a
  * revert. Catching it here is the cheap path to the same answer — the same
@@ -269,7 +268,7 @@ export function normalizeAuthHealthPath(path: string): string | null {
 }
 
 /**
- * The same two rules stacks/apps/apps.nix asserts, checked before the write
+ * The same two rules nix/modules/apps/apps.nix asserts, checked before the write
  * rather than during the rebuild an Apply has already committed.
  *
  * `proxy` gates the router with the generated forward-auth middleware, and

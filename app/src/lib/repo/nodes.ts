@@ -20,7 +20,7 @@ import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../provide
 
 /**
  * Claude Code on the node, as the last hello summarised it (agent/src/
- * claude.rs `Summary`): what the open page also carries — a state, versions
+ * claude/mod.rs `Summary`): what the open page also carries — a state, versions
  * and a count, never a session's name, path or id. Read out of the hello
  * payload rather than columns: it is the agent's word, refreshed every
  * minute, and nothing here joins on it.

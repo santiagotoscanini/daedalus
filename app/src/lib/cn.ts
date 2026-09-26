@@ -11,9 +11,8 @@ import { twMerge } from 'tailwind-merge'
  * and have that override its own defaults. Every shadcn primitive is
  * written against that guarantee.
  *
- * It only knows about Tailwind utilities. This app's legacy class names
- * (`.barlist-row`, `.pill-ok`) pass through untouched, so mixing the two
- * during the migration is safe.
+ * It only knows about Tailwind utilities; any other class name passes
+ * through untouched.
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

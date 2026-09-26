@@ -1,8 +1,8 @@
 import { siteIdentity } from '../../host/contract/domains/site'
 import { hostFacts } from './host-facts'
 
-// The strip above the box's System tabs: the same head a node wears, so the
-// three machines on the picker read alike. Two cached reads — the site
+// The strip above the box's System tabs: the same head a node wears, so every
+// machine on the picker reads alike. Two cached reads — the site
 // export for the release and the kernel, the host snapshot for the board —
 // and nothing live: what is live is on the tabs below.
 

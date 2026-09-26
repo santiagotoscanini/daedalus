@@ -69,7 +69,7 @@ export type CfRecord = {
 /**
  * Records the cloudflared reconciler owns.
  *
- * The same string `stacks/cloudflared` stamps on everything it creates, and
+ * The same string `nix/modules/cloudflared` stamps on everything it creates, and
  * the same string its sweep matches on when it deletes. Restated here because
  * this is the reader of a contract the writer defines; if it ever changes
  * there, this page stops claiming ours are ours, which is the safe direction.
@@ -170,12 +170,10 @@ export function zoneDrift(input: {
     // router for it, so every request for it lands on the default
     // certificate and 404s.
     //
-    // Two filters, both of which this check got wrong on the way here.
-    // Traefik rather than the webApps registry, because not everything
-    // traefik serves is a webApp — the shared postgres cluster is a TCP/SNI
-    // router contributed as raw YAML, and comparing against webApps alone
-    // reported it as broken while it was working exactly as designed. And
-    // only entries whose address IS this box: a record naming a machine points
+    // Two filters. Traefik rather than the webApps registry, because not
+    // everything traefik serves is a webApp — the shared postgres cluster is a
+    // TCP/SNI router contributed as raw YAML, and comparing against webApps
+    // alone reports it as broken. And only entries whose address IS this box: a record naming a machine points
     // at another machine, so traefik is not in its path and "no router" would be
     // a true statement about an irrelevant program.
     lanWithoutRoute:
@@ -215,7 +213,7 @@ export const age = (iso: string | undefined): number | null => {
  * What a record points at, said in a way worth reading.
  *
  * Every tunnel CNAME in this zone is the same forty-character tunnel id, and
- * printing it seven times says only that seven rows are identical — while
+ * printing it on every row says only that those rows are identical — while
  * being long enough to push the name that DOES differ out of the row. The
  * substitution is safe because the id is the tunnel's: `cfargotunnel.com` is
  * not a name anything else resolves to.

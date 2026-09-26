@@ -4,9 +4,7 @@
  *
  * Every visual primitive on a category page — the big number, the ring, the
  * bar list, the column chart, the trend line, the progress bar, the pulse
- * dot — carries a tone, and all seven used to resolve it through a class per
- * family per tone: forty-two rules setting seven differently-named custom
- * properties to the same six colours. This is that table, once.
+ * dot — carries a tone, and all of them resolve it through this one table.
  *
  * The mechanism is a CSS variable rather than a colour utility because a
  * primitive tints several things at once — a fill, a track, a glow, a
@@ -37,8 +35,8 @@ const TONE_TOKEN: Record<Tone, string> = {
  * The inline style that arms `--tone` on a primitive's root.
  *
  * Inline rather than a class, and it has to be: a class would have to be one
- * of six literal strings for Tailwind's scanner to emit it, which is exactly
- * the forty-two-rule table this replaces.
+ * of six literal strings per primitive for Tailwind's scanner to emit it — a
+ * rule per primitive per tone.
  */
 export function toneStyle(tone: Tone, extra?: CSSProperties): CSSProperties {
   return { ...extra, ['--tone' as string]: TONE_TOKEN[tone] }

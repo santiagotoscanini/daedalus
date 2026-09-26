@@ -3,12 +3,10 @@ import { imageLabels } from './images'
 
 // Which project's release notes belong to which container.
 //
-// Every service tab on this dashboard already answers this, one hardcoded
-// `versionGap('owner/repo', …)` at a time, and that was fine while the only
-// pages asking were the pages that had a service head. The Updates page asks
-// about all sixty-five pinned containers at once — including the two dozen
-// exporters, sidecars and janitors that have no tab, and whose changelog
-// nobody could read anywhere in this app before it existed.
+// Every service tab answers this for its own subject, one
+// `versionGap('owner/repo', …)` at a time. The Updates page asks about every
+// pinned container at once — including the exporters, sidecars and janitors
+// that have no tab — so it needs the answers in one table.
 //
 // ── why this is a table and not a label read ──────────────────────────────
 //

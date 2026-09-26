@@ -4,16 +4,15 @@
 //
 // ── the pin ───────────────────────────────────────────────────────────────
 //
-// `IMAGE_TAGS` is every container's image tag as the flake wrote it. It is the
-// best answer whenever it carries a version, because it is what this box ASKED
+// `/export/images.json`'s `tags` (host/contract/domains/images.ts) is every
+// container's image tag as the flake wrote it. It is the best answer whenever it carries a version, because it is what this box ASKED
 // for: it is in git, it is what a rebuild would reproduce, and it is what a
 // bump would change.
 //
 // It is silent for a pin that names a channel rather than a release —
-// `:latest`, `jvm-stable`, a bare major. Five containers here are in that
-// state, and until this file existed the dashboard reported them as unknown,
-// or read a version back out of a startup banner in Loki, which only works
-// while the container has restarted inside Loki's retention window.
+// `:latest`, `jvm-stable`, a bare major. The alternative for those — reading a
+// version back out of a startup banner in Loki — only works while the
+// container has restarted inside Loki's retention window.
 //
 // ── the label ─────────────────────────────────────────────────────────────
 //
@@ -28,7 +27,7 @@
 // label-first rule would have made that service confidently wrong, which is
 // worse than the blank it replaced.
 //
-// Published by daedalus-image-snapshot (stacks/daedalus/host/image-snapshot.sh)
+// Published by daedalus-image-snapshot (nix/stacks/daedalus/host/image-snapshot.sh)
 // because this app cannot run podman — it is a container itself.
 
 import { imagePins, imageTagMap } from '../../host/contract/domains/images'
@@ -118,9 +117,9 @@ function asVersion(raw: string | null | undefined): string | null {
 /**
  * The tag a container is pinned to, from the flake. Null for a moving tag.
  *
- * `IMAGE_TAGS` is written by nix over every oci container, so a page that
- * wants to report a version costs no nix edit — see the binding in
- * stacks/daedalus/daedalus.nix.
+ * The tag map is written by nix over every oci container
+ * (nix/platform/export.nix → /export/images.json), so a page that wants to
+ * report a version costs no nix edit.
  */
 export async function imageTag(container: string): Promise<string | null> {
   return asVersion((await imageTagMap())[container])
@@ -242,7 +241,7 @@ export type ImageFreshness = {
    * difference and "new digest" is all a row can otherwise say — while the
    * truth is `3.13.14 → 3.13.15`, a CPython patch release. For an image whose
    * project publishes no changelog this IS the changelog, which is why the
-   * probe spends a request on it (see host/image-freshness.sh).
+   * probe spends a request on it (see nix/stacks/daedalus/host/image-freshness.sh).
    *
    * Null unless the tag moved AND the image follows the `<LANG>_VERSION`
    * convention — most do not.
@@ -263,7 +262,7 @@ export type ImageFreshness = {
    *
    * Shape-matched rather than newest-wins, which is what keeps a linuxserver
    * `-lsNNN` build from being "updated" to a plain tag, or `-openvino` to the
-   * CPU image. The full argument is in host/image-freshness.sh; the important
+   * CPU image. The full argument is in the host probe (image-freshness.sh); the important
    * half here is that this is a shortlist to choose from, not a
    * recommendation — crossing a major is a reading of a changelog.
    */
@@ -305,7 +304,7 @@ const freshnessShape = recordOf(
 )
 
 // Three days: the producing timer is daily, and the shared convention (see
-// contract/snapshot.ts) is that one missed run is jitter and three is a
+// host/contract/snapshot.ts) is that one missed run is jitter and three is a
 // stopped producer. A stale file is treated as absent rather than served —
 // "the tag moved" asserted by a probe that died last week is exactly the
 // confidently-wrong answer this dashboard exists to avoid.

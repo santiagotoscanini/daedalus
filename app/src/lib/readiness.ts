@@ -1,20 +1,13 @@
 // Step 3 of "add an app": what the box will find when it goes to build and run
 // this repo — and, deliberately, nothing that stops it being created.
 //
-// It used to be a graph. Seven repo-side checks came back from GitHub — the
-// workflows, the publishing one, the repo secret, the runner credential — and
-// this module untangled which of them were causes and which were consequences.
-// Builds run on the box now (the GitHub App, the build queue, Railpack), so
-// none of those facts is daedalus's to read any more.
-//
-// What changed after that: the image check stopped being a gate. It was one
-// because an entry whose image does not exist declares a container that cannot
-// pull, which fails the switch and reverts the Apply — but the fix for that is
-// the `declared` stage (stacks/apps/apps.nix), not a disabled button. A new
-// app is created declared, so a missing image is not a failure here; it is the
-// expected state, and the whole reason the entry has to exist first. Nothing
-// in this file blocks any more, and nothing should: being in site/apps.json is
-// what earns an app its first build.
+// The image check is not a gate. An entry whose image does not exist would
+// declare a container that cannot pull, failing the switch and reverting the
+// Apply — but the answer to that is the `declared` stage
+// (nix/modules/apps/apps.nix), not a disabled button. A new app is created
+// declared, so a missing image is the expected state, and the reason the entry
+// has to exist first: being in site/apps.json is what earns an app its first
+// build. Nothing in this file blocks, and nothing should.
 //
 // Pure on purpose — no React, no server imports. The component that renders
 // this should have nothing left to decide.

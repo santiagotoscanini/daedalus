@@ -176,13 +176,12 @@ const listWithApp = () =>
 /**
  * A row in the queue reducer's shape (build-queue.ts `BuildRow`).
  *
- * The table is still looser than the reducer where it has to be — phase,
- * timings and warnings are nullable in postgres and are not here — and this is
- * the one place that resolves that. What it no longer does is assert the
- * vocabularies: the schema carries `.$type<>()` on all eleven of those columns,
- * so `state`, `lane`, `strategy`, `publish`, `requestedBy`, the two jsonb
- * caches and the timings arrive narrowed. The trust behind that is unchanged —
- * this module is the only writer — it is just written down where the column is.
+ * The table is looser than the reducer where it has to be — phase, timings
+ * and warnings are nullable in postgres and are not here — and this is the one
+ * place that resolves that. It does not assert the vocabularies: the schema's
+ * `.$type<>()` on the builds columns narrows `state`, `lane`, `strategy`,
+ * `publish`, `requestedBy`, the jsonb caches and the timings, on the trust
+ * that this module is the only writer.
  *
  * A list record (every read but getBuild) has no detected, checks, timings or
  * warnings, so its row reads as none of them — warnings as null, "nobody

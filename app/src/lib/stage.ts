@@ -1,11 +1,10 @@
 // The exposure ladder an app climbs, bottom rung first.
 //
-// One tuple, because four different files used to spell the rungs out by hand
-// and a fifth value had to be added to all of them at once. The order is the
+// One tuple, so no file spells the rungs out by hand. The order is the
 // ladder itself: every rung adds to the one below it, so `APP_STAGES.indexOf`
 // is a real comparison and the pickers can render the list verbatim.
 //
-// Mirrors the `stage` option in stacks/apps/apps.nix, which is where the rungs
+// Mirrors the `stage` option in nix/modules/apps/apps.nix, which is where the rungs
 // actually mean something:
 //
 //   declared — nothing runs. No container, no deploy unit, no ingress. The row

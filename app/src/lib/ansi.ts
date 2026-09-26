@@ -1,7 +1,7 @@
 // Terminal escape sequences, removed. Pure and client-safe: the check run
-// output (lib/github-app.ts) strips them for GitHub, and the build log
-// redaction (lib/builds.ts) strips them before matching, so a colour code
-// cannot split a token past the patterns.
+// output (lib/github-app.ts) strips them for GitHub, and secret redaction
+// (lib/redact.ts) strips them before matching, so a colour code cannot split
+// a token past the patterns.
 
 // Built from char codes so no control character sits in a regex literal.
 const ESC = String.fromCharCode(0x1b)

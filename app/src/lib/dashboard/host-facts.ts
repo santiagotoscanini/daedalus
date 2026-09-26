@@ -1,6 +1,6 @@
 // What the host knows about itself and no scrape can reach.
 //
-// Published by daedalus-system-snapshot (stacks/daedalus/host/system-snapshot.sh)
+// Published by daedalus-system-snapshot (nix/stacks/daedalus/host/system-snapshot.sh)
 // because this app is a container: `smartctl` needs root and a raw device,
 // `zpool status` needs the pool, and `usedbysnapshots` is a ZFS property
 // rather than a filesystem statistic. Every one of those is a fact about the
@@ -93,19 +93,6 @@ export type ReplicationPair = {
   lagSeconds: number | null
 }
 
-/**
- * What the machine IS, from SMBIOS.
- *
- * None of it changes between reboots, which is exactly why it was missing:
- * every other number here moves, so the reader was built for things that
- * move. The dashboard could report the cpu at 40% without being able to say
- * which cpu, and 64 GB in use without being able to say what is in the slots
- * or how many are free.
- *
- * `null` throughout rather than optional, because a field that is absent and
- * a field that could not be read must render the same way — as a dash, not as
- * a gap in the layout.
- */
 type MemoryModule = {
   locator: string | null
   sizeGb: number | null
@@ -116,17 +103,22 @@ type MemoryModule = {
   rank: number | null
 }
 
+/**
+ * What the machine IS, from SMBIOS: which cpu, what is in the memory slots
+ * and how many are free — facts that do not change between reboots.
+ *
+ * `null` throughout rather than optional, because a field that is absent and
+ * a field that could not be read must render the same way — as a dash, not as
+ * a gap in the layout.
+ */
 export type Hardware = {
   board: {
     vendor: string | null
     model: string | null
     version: string | null
     /**
-     * Read and not compared against anything. MSI publishes no
-     * machine-readable feed of BIOS releases, so a "2 behind" verdict here
-     * would mean scraping a vendor page that changes shape without notice —
-     * and a version panel that lies is worse than one that only states what
-     * is installed.
+     * What SMBIOS states, uncompared here; the Motherboard tab holds it
+     * against the maker's release list (lib/dashboard/board-releases.ts).
      */
     bios: { vendor: string | null; version: string | null; date: string | null }
   }
@@ -336,8 +328,8 @@ const hostFactsShape = obj({
 
 const TTL_MS = 60_000
 
-// A failed read keeps the previous answer (lib/cache.ts) — a missing snapshot
-// would blank three tabs at once. A decode error still surfaces in the log.
+// A failed read keeps the previous answer (lib/cache.ts; the header says why).
+// A decode error still surfaces in the log.
 const cached = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () => {
   const result = await readSnapshot({
     path: env.get('HOST_FACTS_PATH'),

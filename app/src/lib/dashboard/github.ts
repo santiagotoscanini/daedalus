@@ -1,28 +1,26 @@
 // "Is it worth updating?" — answered from the vendor's own release notes.
 //
-// Every service on the AI page is pinned: the flake names an image digest, or
-// Lemonade sits on whatever the gaming PC last installed. Pinning is the right
-// default, but it means nothing here is ever "automatically up to date" (see
-// CLAUDE.md on `--pull missing`), so the update decision is a deliberate act —
+// Every service the pages front is pinned: the flake names an image digest, or
+// a node's provider sits on whatever its machine last installed. Pinning is
+// the right default, but it means nothing here is ever "automatically up to
+// date" (oci-containers pulls `--pull missing`), so the update decision is a
+// deliberate act —
 // and the only thing that makes it a decision rather than a coin flip is
 // reading what actually changed in between.
 //
 // So this fetches the releases BETWEEN what is running and what is current,
 // inclusive of the running one. The running release answers "what did I last
 // get", the ones above it answer "what am I missing", and one panel shows both
-// without you opening four GitHub tabs.
+// without opening GitHub at all.
 //
-// ── why there is a cache here, and only here ──────────────────────────────
+// ── why there is a cache here ─────────────────────────────────────────────
 //
-// Unauthenticated GitHub allows 60 requests per hour per IP. A category page
-// that asked on every render would exhaust that in a couple of minutes of
-// clicking around and then show nothing at all — the worst failure mode, since
-// it looks like the feature is broken rather than throttled. Release lists
-// also change a handful of times a WEEK, so a cache costs nothing in accuracy.
-//
-// This is deliberately not in clients.ts: the coalescer there is explicitly
-// not a cache, because every other number on this dashboard has to be live.
-// Release history is the one upstream where staleness is free.
+// Unauthenticated GitHub allows 60 requests per hour per IP. A page that asked
+// on every render would exhaust that in a couple of minutes of clicking around
+// and then show nothing at all — the worst failure mode, since it looks like
+// the feature is broken rather than throttled. Release lists also change a
+// handful of times a WEEK, so a cache costs nothing in accuracy. The mechanism
+// is lib/cache.ts's two-clock contract.
 
 import { readGithubInstallation, usableToken } from '../../host/github-token'
 import { key } from '../../host/keys'
@@ -32,10 +30,11 @@ import { stripTags } from '../plain-text'
 /**
  * How long a repo's release list is reused.
  *
- * Fifteen minutes against a ~60/hr budget means four repos cost 16 calls an
- * hour with the tab left open, which leaves the rest of the allowance for the
- * occasional cold start. Nothing on the shelf is ever more than one release
- * behind reality, and a release is a thing that happens weekly at best.
+ * Fifteen minutes is four calls an hour per repo with a tab left open, which
+ * the unauthenticated ~60/hr budget covers only for a handful of repos — the
+ * installation token (`githubHeaders`) is what carries the rest. Nothing on
+ * the shelf is ever more than one release behind reality, and a release is a
+ * thing that happens weekly at best.
  */
 const TTL_MS = 15 * 60_000
 
@@ -43,13 +42,8 @@ const TTL_MS = 15 * 60_000
  * How long to wait before trying again after GitHub says no.
  *
  * Shorter than the TTL, because a refusal is usually the rate-limit window
- * closing and those open on the hour — but not zero, which is what "retry on
- * every render" amounts to and is precisely how a window stays shut.
- *
- * The last good answer keeps being served throughout. Release history is not
- * a live number: a list that is an hour stale is still the right list, and
- * showing it beats replacing a full panel with an apology because one fetch
- * was throttled.
+ * closing — but not zero (lib/cache.ts says why). The last good answer keeps
+ * being served throughout.
  */
 const RETRY_MS = 90_000
 
@@ -112,17 +106,17 @@ type GhRelease = {
  * Authenticated when a credential is available, which is only about the rate
  * limit.
  *
- * Everything read here is PUBLIC — four projects' release notes — so the
- * credential buys no access, just headroom: 60 requests an hour per IP
+ * Everything read here is PUBLIC — projects' release notes and commits — so
+ * the credential buys no access, just headroom: 60 requests an hour per IP
  * unauthenticated against 5000 authenticated. It is the GitHub App's
  * installation token, the same one-hour token the build side uses, read from
  * the minter's file; `GITHUB_REPO_TOKEN` overrides it for anyone who would
  * rather spend a PAT's budget here.
  *
  * Absent is a supported state, not a misconfiguration: without either this
- * falls back to the unauthenticated budget, which normal use spends about a
- * quarter of. So the minter stopping costs nothing here — it is caught by the
- * builds that actually need a token.
+ * falls back to the unauthenticated budget, and the stale-serving cache rides
+ * out a refusal. So the minter stopping costs little here — it is caught by
+ * the builds that actually need a token.
  */
 export async function githubHeaders(): Promise<Record<string, string>> {
   const override = key('GITHUB_REPO_TOKEN')
@@ -133,9 +127,6 @@ export async function githubHeaders(): Promise<Record<string, string>> {
   }
 }
 
-// The two-clock stale-serving contract now lives in lib/cache.ts — it was
-// written here first, for the unauthenticated rate limit: 60 requests an hour
-// per IP, shared with anything else on this box that talks to GitHub.
 const cache = swrCache({ ttlMs: TTL_MS, retryMs: RETRY_MS })
 
 /** A repo's published releases, newest first, at most once per `TTL_MS`. */
@@ -295,7 +286,7 @@ export async function versionGap(
  * A GitHub release body — Markdown — into the same shape the wiki-sourced
  * Factorio changelog produces, so one component renders both.
  *
- * These are hand-written by four different projects and the only structure
+ * These are hand-written by many different projects and the only structure
  * they reliably share is "headings, then bullets under them". So that is all
  * this looks for: any `##`-level heading starts a section, any `-`/`*` line is
  * an item, and prose before the first heading becomes a lead section rather
@@ -352,7 +343,7 @@ function parseBody(md: string): { sections: ReleaseNote['sections']; truncated: 
   return { sections: sections.slice(0, MAX_SECTIONS), truncated }
 }
 
-/** Markdown → plain text. Only the markup these four projects actually use. */
+/** Markdown → plain text. Only the markup these projects actually use. */
 function clean(s: string): string {
   const unlinked = s
     // Images first: `![alt](url)` would otherwise leave a stray `!`.

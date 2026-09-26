@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //   platform/publishing.nix asserts `auth == "oidc" -> healthPath != null`
 //   (without one the middleware 302s every gatus probe to the IdP, and a probe
 //   passes on anything under 500 — the gate would certify itself), and
-//   stacks/apps/apps.nix asserts `proxyAuth -> exposed`. Both fire inside the
+//   nix/modules/apps/apps.nix asserts `proxyAuth -> exposed`. Both fire inside the
 //   rebuild an Apply has already committed. So these checks are the difference
 //   between a red field on a form and a revert on the box.
 //
@@ -245,7 +245,7 @@ describe('forward auth needs an ingress and a health path', () => {
 })
 
 // The scheduled-tasks half of the same boundary. Every rule below is also an
-// assertion in stacks/apps/apps.nix — and that one fires inside the rebuild an
+// assertion in nix/modules/apps/apps.nix — and that one fires inside the rebuild an
 // Apply has already committed, so it costs a revert. These tests are what says
 // the cheap refusal happens first, and that a refused patch writes NOTHING:
 // no column set, no task row inserted, and crucially no delete of the rows the

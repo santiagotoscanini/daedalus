@@ -52,8 +52,7 @@ const REPO_BUILD = swrCache({ ttlMs: 15_000 })
  *
  * Read through the GitHub App's `contents:read`. Reported, never enforced: a
  * repo with neither file is a warning on the form, because Railpack CAN build
- * one, and refusing to create the entry over it would be the same mistake the
- * image gate was.
+ * one.
  */
 async function repoBuild(name: string): Promise<RepoBuild> {
   return REPO_BUILD.get(name, async () => {
@@ -73,12 +72,7 @@ async function repoBuild(name: string): Promise<RepoBuild> {
  * What the form reports before it offers to create the entry: whether the
  * image exists yet, and how the repo would be built.
  *
- * Neither is a gate any more. The image gate existed because an entry whose
- * image does not exist declares a container that cannot pull, which fails the
- * switch and reverts the Apply — and the `declared` stage is what actually
- * fixes that, since a declared app runs nothing to fail. Being in
- * site/apps.json is what earns the app its first build, so the entry has to
- * come first.
+ * Neither is a gate; lib/readiness.ts says why.
  */
 export async function appPreflight(data: { name: string; image: string | null }) {
   const site = readSite()

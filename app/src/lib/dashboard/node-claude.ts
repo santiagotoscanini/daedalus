@@ -8,7 +8,7 @@ import {
 import { getJsonResult } from '../http'
 import { getNode, type NodeRow, nodeToken } from '../repo/nodes'
 
-// The Claude page for a machine that is not this box.
+// The Claude tab (System › Claude) for a machine that is not this box.
 //
 // Two reads of the agent's status page. `/status` is open to the LAN and
 // carries a summary; `/claude` is the tray's full report — session names,

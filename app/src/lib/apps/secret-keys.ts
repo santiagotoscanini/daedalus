@@ -3,11 +3,11 @@
 // Pure, no node builtins: the Secrets tab imports it, and the rule of this
 // codebase is that a module a route imports VALUES from must be browser-safe
 // (see lib/env-groups.ts). Everything that touches the disk or a subprocess
-// lives in host/app-secrets.ts and core/app-secrets.ts.
+// lives in host/app-secrets.ts, host/secret-set-request.ts and core/vault.ts.
 //
 // WHY THERE IS NO "READ" HALF ANYWHERE. daedalus holds an encrypt-only sops
 // identity — the container mounts a static sops binary and the PUBLIC
-// recipients in site/.sops.yaml, and no age key at all (stacks/daedalus).
+// recipients in site/.sops.yaml, and no age key at all (nix/stacks/daedalus).
 // So it can seal a value it can never open again. The editor this module
 // serves is therefore write-only by construction, not by policy: Add, Replace,
 // Remove. There is no reveal, and "turn this secret back into a plain
@@ -29,7 +29,7 @@
  * `sops --set` invocation on the host and a key in a dotenv file a container
  * sources, so anything that could carry a quote, a bracket, a newline or a
  * path separator is refused here, again at the server function, and a third
- * time by the host agent (stacks/daedalus/host/secret-set.sh). Three checks
+ * time by the host agent (nix/stacks/daedalus/host/secret-set.sh). Three checks
  * because no one of them may be the only one.
  */
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -95,7 +95,7 @@ export function appSecretKeys(ciphertext: string): string[] {
  * `^vault/(apps/)?[a-z0-9-]+\.sops$` creation rule matches and the file is
  * sealed to the right recipients), the host agent's target, and the UI's
  * caption. The host still derives its own copy from nix rather than trusting
- * this one — see VAULT_APP_SECRETS in stacks/daedalus/daedalus.nix.
+ * this one — see VAULT_APP_SECRETS in nix/stacks/daedalus/verbs-lib.nix.
  */
 export function appSecretFile(app: string): `vault/apps/${string}-env.sops` {
   return `vault/apps/${app}-env.sops`

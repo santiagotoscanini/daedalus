@@ -15,11 +15,12 @@
 /**
  * Where a variable came from — which is also who can change it.
  *
- *   platform  the apps module injected it (stacks/apps/apps.nix) or a feature
- *             toggle did. Read-only here: it moves when the toggle moves.
+ *   platform  the apps module injected it (nix/modules/apps/apps.nix) or a
+ *             feature toggle did. Read-only here: it moves when the toggle moves.
  *   registry  declared in apps.json, so it round-trips through daedalus.
- *   secrets   from the app's <name>-env.sops. Host-managed — `sops` on the
- *             box, never through this UI.
+ *   secrets   from the app's site/vault/apps/<name>-env.sops. Write-only from
+ *             here: the Secrets editor sets and removes keys through the host
+ *             (lib/apps/secrets.ts), never reads the file back.
  *   image     baked into the base image or set by podman.
  */
 export type EnvOrigin = 'platform' | 'registry' | 'secrets' | 'image'
@@ -28,12 +29,9 @@ export type EnvOrigin = 'platform' | 'registry' | 'secrets' | 'image'
  * Sub-grouping within `platform`: which feature put it there, in the order the
  * Secrets tab renders them.
  *
- * The list is the source and the type is read off it, because the two had
- * already drifted the other way round: the group order lived in the component
- * as its own literal array and was missing `runtime`, which nothing could
- * catch. Order and membership are now the same declaration, and GROUP_LABELS
- * being keyed by the derived type closes the far end — a group added here is
- * an error until it has a label.
+ * The list is the source and the type is read off it, so order and membership
+ * are one declaration; GROUP_LABELS being keyed by the derived type closes the
+ * far end — a group added here is an error until it has a label.
  */
 export const ENV_GROUP_ORDER = [
   'identity',
@@ -62,7 +60,7 @@ export type EnvVar = {
  *
  * An explicit list rather than a prefix rule, because the prefixes lie in both
  * directions: `DB_POSTGRESDB_PASSWORD` and `GF_DATABASE_PASSWORD` are the
- * shared cluster's doing (stacks/app-db emits the same password under every
+ * shared cluster's doing (nix/modules/app-db emits the same password under every
  * name a stock image might read), while an app's own `DB_HOST` would not be.
  * A key that is not on this list is not silently called "platform".
  */

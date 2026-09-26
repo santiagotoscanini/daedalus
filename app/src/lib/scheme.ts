@@ -8,15 +8,14 @@
  * is right; after hydration THIS is what resolves it, so React's own idea of
  * the attribute agrees with the DOM. It has to: React owns `data-theme`,
  * and any re-render of the document — a failed hydration regenerating the
- * tree, a route change — writes React's value back. When that value was the
- * server's guess ("dark"), every click on the rail flipped a light system
+ * tree, a route change — writes React's value back. If that value were the
+ * server's guess ("dark"), every click on the rail would flip a light system
  * back to dark.
  *
  * `useSyncExternalStore` rather than an effect because it has the two
- * snapshots this needs: the server one (the guess the HTML was rendered
- * with, so hydration matches) and the client one (the real answer), which
- * React swaps in immediately after hydrating — and it re-renders when the OS
- * preference changes under an open tab.
+ * snapshots this needs — the "server" one (see below for why it is not
+ * simply the guess) and the client one (the real answer) — and it re-renders
+ * when the OS preference changes under an open tab.
  */
 
 import { useLoaderData } from '@tanstack/react-router'
@@ -57,11 +56,9 @@ export function useResolvedScheme(choice: Scheme): ResolvedScheme {
     // so it is the guess. But React also calls this during HYDRATION, in the
     // browser — and by then THEME_BOOT has already replaced the guess on
     // `<html data-theme>` with the real answer. Returning the guess there
-    // disagreed with the DOM on every machine whose preference is not `dark`,
-    // which is one failed hydration of the whole document per page load, on
-    // every page. It had been read as a `Date.now()` mismatch and written into
-    // the operator's notes as a baseline to expect: two page errors a load,
-    // masking every hydration bug that might come after it.
+    // disagrees with the DOM on every machine whose preference is not `dark`:
+    // one failed hydration of the whole document per page load, easy to
+    // mistake for a baseline and so masking every hydration bug after it.
     () => (typeof document === 'undefined' ? serverScheme(choice) : browserScheme(choice)),
   )
 }
@@ -82,11 +79,10 @@ export function useResolvedScheme(choice: Scheme): ResolvedScheme {
  *
  * Nothing rewrites ordinary markup. A `?theme=dark` the server baked into an
  * iframe's `src` is still `dark` in the DOM at hydration, so a hook that
- * answers `light` there disagrees with the HTML — eleven "a tree hydrated but
- * some attributes … didn't match" warnings, one per embedded Grafana panel,
- * plus the geo map on an app's Access tab. Recoverable, unlike the document
- * regeneration THEME_BOOT's mismatch caused, but the same bug: React's first
- * client render disagreeing with the HTML it was handed.
+ * answers `light` there disagrees with the HTML — an "attributes didn't
+ * match" warning per embedded Grafana panel, plus the geo map on an app's
+ * Access tab. Recoverable, unlike a document-level mismatch, but the same
+ * bug: React's first client render disagreeing with the HTML it was handed.
  *
  * So this one answers with the guess through hydration and the truth after —
  * which is the honest order anyway, because the guess is what the HTML says.

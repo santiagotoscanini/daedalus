@@ -7,7 +7,7 @@
 //
 // ── the source, and what it is honest about ───────────────────────────────
 //
-// `stacks/daedalus/host/claude-snapshot.sh` makes one awk pass over each
+// `nix/stacks/daedalus/host/claude-snapshot.sh` makes one awk pass over each
 // transcript whose (mtime, size) moved and publishes the counts below. Two
 // of its decisions are load-bearing here and are the reason this file does
 // not simply print what it is given:
@@ -16,7 +16,7 @@
 //   count is four times larger and would read as four times the conversation.
 //
 //   Anything the CLI did not record is `null`, never `0`. `cost-state` is in
-//   3 of 49 transcripts on this box, and `subagents` is only a number when
+//   only a small minority of transcripts, and `subagents` is only a number when
 //   the `isSidechain` marker was written at all. A card that says "0
 //   subagents" when the truth is "this CLI version never wrote them" is worse
 //   than a card that says nothing, so this file's whole convention is:
@@ -43,9 +43,7 @@
 // in an owner-only directory before the first character of it was written:
 // operator and root, no build, no other container, no other user. A secret
 // pasted inside those 160 characters does land in that file — that is the
-// trade, taken deliberately, and the mode is what makes it payable. The page
-// itself no longer argues any of this; it shows the line and this is the
-// record of why it is allowed to.
+// trade, taken deliberately, and the mode is what makes it payable.
 
 import { bytes, ms } from './format'
 import { redactSecrets } from './redact'
@@ -163,18 +161,17 @@ export type FactGroup = {
   text: string
   /** The long form, for `title`. Null where the text is already complete. */
   detail: string | null
-  /** True for the groups a phone drops. The first three always survive. */
+  /**
+   * True for the groups a phone drops. Where, size and time always survive,
+   * and so does the CLI version on a live row.
+   */
   secondary: boolean
 }
 
 /**
- * The facts a row has only while a process is behind it.
- *
- * These came off the Sessions board, which drew the same live sessions this
- * board draws as its `alive` rows — two lists of one population, and a reader
- * had to hold both to answer "what is running". They are per-session facts, so
- * they belong on the session's row; the server-wide summary above the boards
- * (`N of 32`, drops, the login clock) is a different thing and stays.
+ * The facts a row has only while a process is behind it. Per-session, so
+ * they ride the session's row; the server-wide summary above the boards
+ * (`N of 32`, drops, the login clock) is a different thing.
  */
 export type LiveFacts = {
   /** When the PROCESS started — not when the conversation did. */
@@ -194,9 +191,8 @@ export type LiveFacts = {
    * Different from `meta.cliVersion`, which is what the transcript recorded
    * and is therefore historical. On a live row the two disagree exactly when
    * it matters: a rebuild lands a new binary and nothing restarts onto it —
-   * deliberately, platform/claude-rc.nix — so the process keeps the old one.
-   * That gap is what the roster's restart control is for, and it was in the
-   * payload and dropped here.
+   * deliberately, nix/platform/claude-rc.nix — so the process keeps the old
+   * one. That gap is what the roster's restart control is for.
    */
   version?: string | null
 }

@@ -54,7 +54,7 @@ const KEY_RULE: Record<EnvMapKind, { re: RegExp; says: string }> = {
 /**
  * Why this app may not turn on Build on this box, or null. The builder
  * namespaces cache mounts as `<app>-…`, so a `-` in the name could reach
- * another app's caches, and host/build.sh refuses the build.
+ * another app's caches, and the host's build.sh refuses the build.
  */
 export function boxBuildRefusal(app: string): string | null {
   return app.includes('-')

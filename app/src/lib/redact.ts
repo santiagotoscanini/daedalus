@@ -10,13 +10,10 @@ import { stripAnsi } from './ansi'
 // lib/builds.ts so that a component can reach it without dragging the build
 // contract into its chunk.
 //
-// `errorText` is the one way this app turns an `unknown` from a `catch` into
-// a sentence. There used to be ~21 hand-copied `e instanceof Error ?
-// e.message : String(e)` expressions, and they were not equivalent: the build
-// scheduler's redacted and capped, every other one did not — so the same
-// expression meant "safe to show" in one file and "possibly a secret" in the
-// next. One helper, redacting, so that distinction cannot be made by
-// accident.
+// `errorText` turns an `unknown` from a `catch` into a sentence a person may
+// be shown. Prefer it to a bare `e instanceof Error ? e.message : String(e)`,
+// which neither redacts nor caps — so the same expression would mean "safe to
+// show" in one file and "possibly a secret" in the next.
 
 const REDACTED = '[redacted]'
 

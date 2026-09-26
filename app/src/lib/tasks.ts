@@ -2,10 +2,10 @@
 // the two schedule presets expand to.
 //
 // Pure, and in `lib/` rather than `lib/apps/`, because three different places
-// need the same answers and one of them is the browser: the seam validates a
-// run request with `isTaskId`, the exporter and the importer normalise with
-// these rules, and the Tasks tab renders `describeSchedule` next to the raw
-// OnCalendar string. A second copy of the minute derivation anywhere would be
+// need the same answers and one of them is the browser: the server seam
+// validates a run request with `isTaskId`, registry validation and the
+// contract's field rules apply the rest, and the Tasks tab renders
+// `describeSchedule` next to the raw OnCalendar string. A second copy of the minute derivation anywhere would be
 // a task whose UI says :23 and whose timer fires at :41.
 //
 // ── why the app expands the presets, and nix never does ───────────────────
@@ -46,7 +46,7 @@ export function taskIdError(id: string, taken: readonly string[] = []): string |
  * (`minutely` fires on every :00 second, which is the same trap sixty times
  * over). Refused everywhere a schedule is accepted — see `taskScheduleError`.
  *
- * The same list stacks/apps/apps.nix asserts against. That assertion fires
+ * The same list nix/modules/apps/apps.nix asserts against. That assertion fires
  * mid-Apply, after the commit, so it costs a revert; these functions are how
  * the same answer arrives before anything is written.
  */
@@ -69,11 +69,8 @@ function isShorthandSchedule(v: string): boolean {
 /**
  * An operator-facing reason the schedule is unusable, or null.
  *
- * The shorthand refusal is the one rule here that is not obvious, and it is a
- * scar: `hourly` and `daily` both elapse at :00, which is when myspeed's
- * speedtest saturates the uplink and takes house-wide DNS down for a minute or
- * two. A job that lands there resolves nothing and can still report success —
- * exactly how the RSS digest failed silently for three days.
+ * The shorthand refusal is the one rule here that is not obvious: `hourly`
+ * and `daily` both elapse at :00, the minute `taskMinute` exists to avoid.
  */
 export function taskScheduleError(schedule: string): string | null {
   const s = schedule.trim()
@@ -114,9 +111,9 @@ export function taskTimeoutError(seconds: number): string | null {
 
 /**
  * The platform default, mirrored from the `timeoutSec` option in
- * stacks/apps/apps.nix. Here rather than in host/nix-manifest.ts (where it
- * used to be) because the editor needs it too, and a component may not import
- * a host module — host/ reads it from here now, so there is one number.
+ * nix/platform/apps-options.nix. Here rather than in host/nix-manifest.ts
+ * because the editor needs it too and a component may not import a host
+ * module; host/ reads it from here, so there is one number.
  */
 export const DEFAULT_TASK_TIMEOUT_SEC = 900
 
