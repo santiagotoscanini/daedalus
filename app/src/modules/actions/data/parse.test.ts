@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { decode } from '../../../lib/contract/decode'
 import {
@@ -18,11 +19,19 @@ import {
 
 // The engine's own workflow file is the fixture: it has a matrix runs-on,
 // three OS images, a dispatch trigger and a permissions block right after
-// `on:` that a naive scan would read as a trigger.
-const AGENT_YML = readFileSync(
-  new URL('../../../../../.github/workflows/agent.yml', import.meta.url),
-  'utf8',
-)
+// `on:` that a naive scan would read as a trigger. In the dev container app/
+// is mounted alone at /app and the whole engine read-only at /engine, so the
+// repository root is looked for there next — a missing file fails, never skips.
+function agentYml(): string {
+  const candidates = [
+    fileURLToPath(new URL('../../../../../.github/workflows/agent.yml', import.meta.url)),
+    '/engine/.github/workflows/agent.yml',
+  ]
+  const found = candidates.find((path) => existsSync(path))
+  if (found === undefined) throw new Error(`agent.yml not found at ${candidates.join(' or ')}`)
+  return readFileSync(found, 'utf8')
+}
+const AGENT_YML = agentYml()
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 1,

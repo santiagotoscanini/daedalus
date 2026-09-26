@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderSiteFile } from '../../core/site/file'
@@ -29,8 +29,19 @@ import { decodeSiteDocument } from './domains/site-doc'
 // nodes readers name their own). A migration, when one exists, gets its case here: read
 // the old fixture, migrate, and compare against the new fixture.
 
-// vitest runs from app/, like every other path-reading test here.
-const FIXTURES = resolve(process.cwd(), '../fixtures')
+// vitest runs from app/, like every other path-reading test here. In the dev
+// container app/ is mounted alone at /app and the whole engine read-only at
+// /engine, so that is looked at next. Neither is a failure, never a skip: a
+// skipped fixture test would hide the contract it exists to hold.
+function fixturesDir(): string {
+  const candidates = [resolve(process.cwd(), '../fixtures'), '/engine/fixtures']
+  const found = candidates.find((dir) => existsSync(dir))
+  if (found === undefined) {
+    throw new Error(`schema fixtures not found at ${candidates.join(' or ')}`)
+  }
+  return found
+}
+const FIXTURES = fixturesDir()
 
 /** `v3` → 3, for the directories under one document's fixture root. */
 function versions(doc: 'site' | 'apps' | 'nodes'): number[] {
