@@ -161,11 +161,6 @@ export const SCHEMA = {
     about: 'The committed site directory.',
     source: DAEDALUS,
   },
-  NIX_MANIFEST_PATH: {
-    kind: 'path',
-    about: 'The nix manifest: hand-written entries and webApp hosts.',
-    source: DAEDALUS,
-  },
   NIX_REGISTRY_PATH: {
     kind: 'path',
     about: 'The app registry nix last built.',

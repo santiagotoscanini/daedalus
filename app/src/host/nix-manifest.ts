@@ -206,18 +206,6 @@ export function decodeRegistryFile(raw: unknown): NixManifest['registry'] {
   return registry
 }
 
-// TEMPORARY (W5): the store-path manifest /export/apps.json replaces, read only
-// while the running generation predates the export. Delete with the
-// NIX_MANIFEST_PATH row once the engine switch has landed.
-async function legacyNixApps(): Promise<Pick<NixManifest, 'nixManaged' | 'operatorSecretApps'>> {
-  const managedPath = env.get('NIX_MANIFEST_PATH')
-  if (!managedPath) return { nixManaged: {}, operatorSecretApps: [] }
-  return decode(
-    obj({ nixManaged: recordOf(manifestApp), operatorSecretApps: optional(arrayOf(str), []) }),
-    JSON.parse(await readFile(managedPath, 'utf8')),
-  )
-}
-
 export async function readNixManifest(): Promise<NixManifest> {
   const registryPath = env.get('NIX_REGISTRY_PATH')
   if (!registryPath) {
@@ -233,8 +221,7 @@ export async function readNixManifest(): Promise<NixManifest> {
   const { nixApps } = await import('./contract/domains/apps')
   const apps = await nixApps()
   if (apps.error !== null) throw new Error(`/export/apps.json: ${apps.error}`)
-  // TEMPORARY (W5): becomes `const nix = apps.data` with the fallback gone.
-  const nix = apps.available ? apps.data : await legacyNixApps()
+  const nix = apps.data
 
   // Neither file is cached. Both live at fixed paths that a rebuild rewrites —
   // which is precisely what lets an Apply update them without restarting this
