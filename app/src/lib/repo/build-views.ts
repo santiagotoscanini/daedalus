@@ -1,12 +1,13 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, or } from 'drizzle-orm'
 import { db } from '../../host/db'
 import { apps, builds, deployments } from '../../host/schema'
 import { detectionFromStatus } from '../build-detect'
-import { type BuildSummary, summarizeBuild } from '../build-display'
+import { type BuildSummary, type LiveBuild, summarizeBuild } from '../build-display'
 import type { BuildLane } from '../build-queue'
 import type { BuildSettingsPatch } from '../build-settings'
+import type { BuildStatRow } from '../build-stats'
 import { ACTIVE_BUILD_STATES, type BuildState } from '../builds'
-import { getBuild, latestSucceeded, listBuilds, toBuildRow } from './builds'
+import { BUILD_LIST_COLUMNS, getBuild, latestSucceeded, listBuilds, toBuildRow } from './builds'
 
 // The reads the build UI needs that lib/repo/builds.ts (the queue's own
 // repository) does not have, and the one write to an app's engine-only build
@@ -90,4 +91,93 @@ export async function deploymentOfDigest(appId: string, digest: string) {
     .orderBy(desc(deployments.startedAt))
     .limit(1)
   return row
+}
+
+// ── System › Builder ─────────────────────────────────────────────────────
+
+/**
+ * Every queued and running build, oldest first, with its stage timings — the
+ * Builder page's "Now" board, re-read every few seconds while it is open.
+ */
+export async function builderNow(): Promise<LiveBuild[]> {
+  const rows = await db
+    .select({ ...BUILD_LIST_COLUMNS, app: apps.name, timings: builds.timings })
+    .from(builds)
+    .innerJoin(apps, eq(apps.id, builds.appId))
+    .where(inArray(builds.state, ['queued', ...ACTIVE_BUILD_STATES]))
+    .orderBy(asc(builds.createdAt))
+  return rows.map((r) => ({
+    ...summarizeBuild(toBuildRow(r)),
+    app: r.app,
+    timings: r.timings ?? {},
+  }))
+}
+
+/**
+ * Builds asked for since `since`, newest first, light: what lib/build-stats.ts
+ * aggregates. Timings ride along (a handful of numbers per row); the heavy
+ * jsonb columns do not.
+ */
+export async function buildsSince(since: Date, limit = 500): Promise<BuildStatRow[]> {
+  const rows = await db
+    .select({
+      id: builds.id,
+      app: apps.name,
+      sha: builds.sha,
+      state: builds.state,
+      publish: builds.publish,
+      phase: builds.phase,
+      error: builds.error,
+      timings: builds.timings,
+      createdAt: builds.createdAt,
+      startedAt: builds.startedAt,
+      updatedAt: builds.updatedAt,
+    })
+    .from(builds)
+    .innerJoin(apps, eq(apps.id, builds.appId))
+    .where(gte(builds.createdAt, since))
+    .orderBy(desc(builds.createdAt))
+    .limit(limit)
+  return rows.map((r) => ({
+    ...r,
+    phase: r.phase ?? '',
+    timings: r.timings ?? {},
+    createdAt: r.createdAt.toISOString(),
+    startedAt: r.startedAt === null ? null : r.startedAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  }))
+}
+
+/** A build that posted to GitHub: its check run and Deployment ids. */
+export type ReportedBuild = {
+  id: string
+  app: string
+  sha: string
+  state: BuildState
+  checkRunId: number | null
+  deploymentId: number | null
+  /** The final state reached GitHub. */
+  reported: boolean
+  createdAt: string
+}
+
+/** The newest builds that posted a check run or a Deployment. */
+export async function recentReported(limit = 10): Promise<ReportedBuild[]> {
+  const rows = await db
+    .select({
+      id: builds.id,
+      app: apps.name,
+      sha: builds.sha,
+      state: builds.state,
+      checkRunId: builds.checkRunId,
+      deploymentId: builds.deploymentId,
+      reported: builds.reported,
+      createdAt: builds.createdAt,
+    })
+    .from(builds)
+    .innerJoin(apps, eq(apps.id, builds.appId))
+    .where(or(isNotNull(builds.checkRunId), isNotNull(builds.deploymentId)))
+    .orderBy(desc(builds.createdAt))
+    .limit(limit)
+  return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }))
 }

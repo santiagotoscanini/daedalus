@@ -1,4 +1,4 @@
-import { eq, lt } from 'drizzle-orm'
+import { desc, eq, lt } from 'drizzle-orm'
 import { db, type Executor } from '../../host/db'
 import { githubDeliveries } from '../../host/schema'
 
@@ -46,4 +46,9 @@ export async function pruneDeliveries(olderThan: Date): Promise<number> {
     .where(lt(githubDeliveries.receivedAt, olderThan))
     .returning({ id: githubDeliveries.id })
   return rows.length
+}
+
+/** The newest deliveries, newest first — System › Builder's webhook board. */
+export async function latestDeliveries(limit = 5) {
+  return db.select().from(githubDeliveries).orderBy(desc(githubDeliveries.receivedAt)).limit(limit)
 }

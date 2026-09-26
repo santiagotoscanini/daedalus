@@ -26,6 +26,7 @@ import { manifest } from '../manifest'
 import { type BackupsData, loadBackups } from './backups'
 import { type BoardData, loadBoard } from './board'
 import { type BuildData, loadBuild } from './build'
+import { type BuilderData, loadBuilder } from './builder'
 import { type ClaudeData, loadClaude } from './claude'
 import { type DisksData, loadDisks } from './disks'
 import { type HostData, loadHost } from './host'
@@ -41,6 +42,7 @@ export type Tabs = {
   build: BuildData
   board: BoardData
   updates: UpdatesData
+  builder: BuilderData
   backups: BackupsData
   claude: ClaudeData
   shotter: ClaudeData
@@ -58,6 +60,7 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   build: loadBuild,
   board: loadBoard,
   updates: loadUpdates,
+  builder: loadBuilder,
   backups: loadBackups,
   claude: loadClaude,
   shotter: loadClaude,

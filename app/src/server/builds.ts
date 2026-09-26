@@ -6,6 +6,7 @@ import {
   type BuildReportFailure,
   type BuildSummary,
   type BuildView,
+  type LiveBuild,
   summarizeBuild,
 } from '../lib/build-display'
 import type { BuildRow } from '../lib/build-queue'
@@ -55,6 +56,12 @@ export const fetchBuilds = readFn
     if (!record) return null
     return (await listBuilds(record.id, data.limit)).map((r) => summarize(toBuildRow(r)))
   })
+
+/** System › Builder's "Now" board: every queued and running build, re-read while one is open. */
+export const fetchBuilderNow = readFn.handler(async (): Promise<LiveBuild[]> => {
+  const { builderNow } = await import('../lib/repo/build-views')
+  return builderNow()
+})
 
 export type BuildPageApp = {
   name: string

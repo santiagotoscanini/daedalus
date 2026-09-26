@@ -190,6 +190,12 @@ export const SCHEMA = {
     about: 'Remote Control’s state.',
     source: DAEDALUS,
   },
+  BUILDER_FACTS_PATH: {
+    kind: 'path',
+    fallback: '/builder/builder.json',
+    about: 'The builder’s machinery: BuildKit, its dataset, the fence, its units.',
+    source: `${DAEDALUS}, once the GitHub App exists`,
+  },
   REPO_FACTS_PATH: {
     kind: 'path',
     fallback: '/repo/repo.json',
