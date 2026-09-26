@@ -17,7 +17,7 @@
 //! server). Nothing else rides it.
 //!
 //! The payload carries a summary of Claude Code on this machine when the
-//! tray has reported one (claude.rs): its state, versions
+//! tray has reported one (claude/): its state, versions
 //! and session count, so the box's Claude page can list this machine. The
 //! full report — sessions, paths, the environment id — is not in the hello:
 //! the box reads it from the agent's `/claude` with the node token the

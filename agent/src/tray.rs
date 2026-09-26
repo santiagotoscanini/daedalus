@@ -9,7 +9,7 @@
 //! first lines are the state and whose rest are the few things worth a
 //! click — the status page, a check for updates, the log folder.
 //!
-//! It is also the Claude supervisor (claude.rs): this process is the one in
+//! It is also the Claude supervisor (claude/): this process is the one in
 //! the user's session, with the user's Claude login, so `claude
 //! remote-control` runs as its child. Every poll it sends the service a
 //! report of that and reads back the box's policy — run it or not — and
@@ -430,7 +430,7 @@ impl Session {
             self.sup.set_wanted(answer.wanted);
             // Update before restart, so a tick carrying both lands the new
             // binary first and the server comes back up on it. The update
-            // runs on its own thread (claude.rs) — inline it would freeze
+            // runs on its own thread (claude/) — inline it would freeze
             // this loop for minutes, and this loop is the only thing that
             // reports to the service.
             if answer.update {

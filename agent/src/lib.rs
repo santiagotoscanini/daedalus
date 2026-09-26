@@ -8,7 +8,7 @@
 //! newest `agent-v*` release of the engine repository; and a tray program
 //! in the desktop session that shows what the service reports and — with
 //! the user's own login, which only that session has — runs `claude
-//! remote-control` the way the box runs its own (claude.rs). Everything
+//! remote-control` the way the box runs its own (claude/). Everything
 //! the agent will later be able to do arrives as a new release the existing
 //! one installs on its own — which is why the update path shipped first.
 //!
