@@ -1,18 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-
-// The admin gate is the first statement of /api/image-update's POST handler,
-// and it reads the preference store — which these cases have no database
-// behind. What is under test is the body guard, so the gate is stubbed to the
-// answer a signed-in admin gets rather than moved out of its way.
-vi.mock('../core/authz', () => ({ assertAdminOf: async () => 'operator@example.com' }))
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 // `null` is valid JSON.
 //
-// Both of these routes used to take `(await request.json()) as Record<…>`,
-// which parses `null` without throwing: the catch that answers 400 never ran,
-// and the first property read blew up OUTSIDE the try as a 500. A body guard
-// is the fix, and these are the requests that proved it — driven through the
-// real handler, so the status codes below are the ones a caller sees.
+// This route used to take `(await request.json()) as Record<…>`, which parses
+// `null` without throwing: the catch that answers 400 never ran, and the first
+// property read blew up OUTSIDE the try as a 500. A body guard is the fix, and
+// these are the requests that proved it — driven through the real handler, so
+// the status codes below are the ones a caller sees.
 
 type Handler = (ctx: { request: Request }) => Promise<Response>
 type RouteLike = { options?: { server?: { handlers?: { POST?: Handler } } } }
@@ -40,27 +34,6 @@ async function post(route: RouteLike, url: string, body: string, extra: HeadersI
     }),
   })
 }
-
-describe('/api/image-update refuses a body it cannot read', () => {
-  it('answers 400 for null, a list and a bare string', async () => {
-    const { Route } = (await import('./api.image-update')) as { Route: RouteLike }
-    for (const body of ['null', '[]', '"anansi"', '3']) {
-      const res = await post(Route, 'http://x/api/image-update', body)
-      expect(res.status, body).toBe(400)
-      expect(await res.json()).toEqual({
-        status: 'refused',
-        reason: 'body must be a JSON object',
-      })
-    }
-  })
-
-  it('still answers 400 for a body that is not JSON at all', async () => {
-    const { Route } = (await import('./api.image-update')) as { Route: RouteLike }
-    const res = await post(Route, 'http://x/api/image-update', 'not json')
-    expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ status: 'refused', reason: 'body is not JSON' })
-  })
-})
 
 describe('/api/deploy refuses a body it cannot read', () => {
   it('answers 400 for null rather than throwing past the catch', async () => {

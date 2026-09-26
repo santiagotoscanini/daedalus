@@ -64,12 +64,14 @@ the remote is still the copy that survives a disk. Commit often.
   `apps.new.tsx`, `apps_.$name.builds.$id.tsx` (one build: its log,
   facts and cancel), `settings.tsx`, `claude.tsx`, and
   `settings_.github.callback.ts`, where GitHub returns the App
-  manifest's `?code&state`. The `api.*.ts` server routes are healthz,
-  the registry's apply/export/import, image-update, engine-update, the
-  deploy hook (zot's push event), the GitHub push webhook, app-icon,
+  manifest's `?code&state`. The `api.*.ts` server routes are only what an
+  outside caller needs — healthz, the deploy hook (zot's push event),
+  the GitHub push webhook, a node agent's hello, app-icon,
   profile-picture, and the two image servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
-  screenshot.
+  screenshot. No route is a "scriptable twin" of a button: the UI's
+  writes go through server functions (`src/server/**`) and an agent's
+  through the MCP tools at `/mcp` — those are the two doors onto a flow.
 - **The dashboard modules — `src/modules/<id>/`**: one directory per
   category page (actions, ai, database, gaming, home, media, monitoring,
   network, system),

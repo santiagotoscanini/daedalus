@@ -1,10 +1,9 @@
 import { asc, eq } from 'drizzle-orm'
 import { db, type Tx } from '../../host/db'
-import { type ManifestEnvVar, type ManifestTask, manifestEntries } from '../../host/nix-manifest'
+import type { ManifestEnvVar, ManifestTask } from '../../host/nix-manifest'
 import { appEnvVars, apps, appTasks } from '../../host/schema'
 import { readSite } from '../../host/site'
 import type { EnvVar } from '../apps/env-vars'
-import { toRow } from '../apps/manifest-map'
 import {
   type AppColumns,
   type AppPatch,
@@ -114,44 +113,6 @@ async function replaceTasks(tx: Tx, appId: string, tasks: ManifestTask[]): Promi
       })),
     )
   }
-}
-
-/**
- * Load the registry from what Nix currently has. Idempotent — this is both the
- * one-time seed and the "re-sync from Nix" direction of the Apply flow, so it
- * upserts rather than inserting.
- *
- * Env vars and tasks are replaced wholesale rather than diffed: they are small
- * ordered lists owned entirely by the manifest, and a partial merge would
- * silently keep one somebody deleted in Nix.
- */
-export async function importFromNix(): Promise<{ imported: string[] }> {
-  const entries = await manifestEntries()
-  const imported: string[] = []
-
-  // One transaction for the whole sync: the per-app shape is delete-then-insert
-  // on env vars, and a failure between the two would leave an app stripped of
-  // its vars — a partial re-sync the next Apply would then ship.
-  await db.transaction(async (tx) => {
-    for (const entry of entries) {
-      const row = toRow(entry)
-
-      const [saved] = await tx
-        .insert(apps)
-        .values(row)
-        .onConflictDoUpdate({ target: apps.name, set: { ...row, updatedAt: new Date() } })
-        .returning({ id: apps.id })
-
-      if (!saved) continue
-
-      await replaceEnvVars(tx, saved.id, entry.env)
-      await replaceTasks(tx, saved.id, entry.tasks ?? [])
-
-      imported.push(entry.name)
-    }
-  })
-
-  return { imported }
 }
 
 /**
@@ -330,7 +291,7 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
   }
   assertAuthRules(clean, record)
 
-  // One transaction, for the reason importFromNix states: the task write is a
+  // One transaction, for the reason replaceEnvVars states: the task write is a
   // delete-then-insert, and a failure between the two would leave the app
   // stripped of every task it had — which the next Apply would ship, deleting
   // the timers. The column UPDATE joins it so an edit that moves both lands

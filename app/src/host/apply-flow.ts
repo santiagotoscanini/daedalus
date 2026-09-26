@@ -3,10 +3,10 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 
 // The one apply implementation.
 //
-// Both doors — the Apply button (server/registry.ts) and the scriptable
-// POST /api/registry/apply — call runApply and only translate its outcome
-// into their own response shape. Before this module they were two hand-copied
-// bodies that could drift; the route's header even claimed otherwise.
+// Both doors — the Apply button's server function (server/registry.ts) and
+// the MCP `apply` tool (host/mcp/server.ts) — call runApply and only translate
+// its outcome into their own response shape. Before this module the doors were
+// hand-copied bodies that could drift.
 //
 // runSecretApply is the third door, for a vault secret set from Settings
 // (core/settings/cloudflare-token.ts, core/settings/github-app.ts). It shares
@@ -20,8 +20,8 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 /**
  * `noop` is runApply's and `pending` is runSecretApply's; one union because
  * the doors that render a refusal do not care which flow it came from. The
- * `code` is the one thing the scriptable door (routes/api.registry.apply.ts)
- * maps to an HTTP status.
+ * `code` is the word a machine caller branches on: the MCP tool puts it in
+ * front of the sentence, and the button shows only the sentence.
  */
 export type ApplyOutcome = FlowOutcome<
   { changed: { name: string; fields: string[] }[] },

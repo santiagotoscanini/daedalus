@@ -4,8 +4,8 @@ import type { BridgeStatus } from './bridge'
 
 // What a bridge verb with more than one door has in common.
 //
-// Apply and image-update are each reachable from a button, an `api.*` route
-// and an MCP tool, and each is one implementation (host/apply-flow.ts,
+// Apply and image-update are each reachable from a button (its server
+// function) and an MCP tool, and each is one implementation (host/apply-flow.ts,
 // host/update-flow.ts) the doors adapt. Those two implementations were
 // themselves the same skeleton written twice — a promise chain, a `pending`
 // request, a pickup window, a `running` check — and this is that skeleton once:
@@ -19,15 +19,14 @@ import type { BridgeStatus } from './bridge'
 //
 // WHAT IS NOT HERE, on purpose.
 //
-// Who may call. The button asks core/authz `assertAdmin()`, the route
-// `assertAdminOf(request)`, the MCP tool `assertMachineActor(proof)` — three
-// different questions with one answer, the actor, which every flow takes as
+// Who may call. The button asks core/authz `assertAdmin()`, the MCP tool
+// `assertMachineActor(proof)` — two different questions with one answer, the actor, which every flow takes as
 // input. Same argument as core/builds/actions.ts: a flow that read the ambient
 // request could not be called from /mcp, which has none.
 //
 // Waiting for the outcome. Neither flow waits: both return the request's id
 // the moment it is published and every door's caller polls the status file
-// (GET on the same route, the button's status query). A rebuild outlives any
+// (the button's status query; the MCP tool hands its caller the id). A rebuild outlives any
 // request that could wait on it.
 //
 // The gate and the flow are two things because Apply has two flows behind ONE

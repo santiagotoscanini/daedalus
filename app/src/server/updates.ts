@@ -65,9 +65,9 @@ export const fetchImageUpdateStatus = createServerFn().handler(async () => {
  * there is no single-container path that could behave differently from the
  * batch one.
  *
- * The validator says what POST /api/image-update's body check already said:
- * both are doors onto the same runImageUpdate, and a request one refuses is
- * not one the other should publish to the host.
+ * The validator says what the MCP `image.update` tool's schema says: both are
+ * doors onto the same runImageUpdate, and a request one refuses is not one
+ * the other should publish to the host.
  */
 export const requestImageUpdateFn = createServerFn({ method: 'POST' })
   .validator((data: unknown): { targets: { container: string; toTag?: string }[] } => {

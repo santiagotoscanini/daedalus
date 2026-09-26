@@ -281,7 +281,7 @@ export function UpdateControl({
                   ],
                 },
               })
-              // The outcome's `code` is for the scriptable door's HTTP status.
+              // The outcome's `code` is for the MCP tool's caller; a person reads the sentence.
               return r.ok ? { ok: true, value: r.id } : { ok: false, reason: r.reason }
             })
           }}

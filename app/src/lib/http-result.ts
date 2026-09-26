@@ -3,9 +3,11 @@ import type { Result } from './result'
 
 // A `Result` as an HTTP response, and back.
 //
-// The scriptable doors (routes/api.registry.apply.ts, routes/api.image-update.ts)
-// answer in one dialect, which this file names so that something other than a
-// person reading curl output can decode it:
+// One dialect for a route that answers a script, named here so that something
+// other than a person reading curl output can decode it. No route speaks it
+// today: the scriptable doors that did (apply, image-update, engine-update)
+// were removed — the UI reaches those flows through server functions and an
+// agent through /mcp — and the helpers stay for the next route that needs it:
 //
 //   2xx  { "status": "queued", …the value's own fields }
 //   4xx/5xx  { "status": "<code>", "reason": "<sentence>" }

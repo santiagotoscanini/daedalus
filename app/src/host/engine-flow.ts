@@ -8,11 +8,11 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 
 // The one engine-update implementation.
 //
-// Both doors — the button on System › Updates and the scriptable
-// POST /api/engine-update — call runEngineUpdate and only translate its
-// outcome into their own response shape. Same argument as host/update-flow.ts:
-// two hand-copied bodies are two bodies that drift. The lock, the pickup
-// window and the order of the steps are host/flow.ts's, shared with it.
+// One door today — the button on System › Updates, through its server
+// function (server/updates.ts) — and runEngineUpdate is still its own module,
+// for host/update-flow.ts's reason: a second door (an MCP tool) would call
+// this and only translate the outcome, never copy the body. The lock, the
+// pickup window and the order of the steps are host/flow.ts's, shared with it.
 //
 // There is nothing to check about the input — the request carries only the
 // actor — but there is one fact about the box to read before publishing: an

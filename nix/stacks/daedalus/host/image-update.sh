@@ -52,8 +52,9 @@
 # update that container alone.
 #
 # `container`/`toTag` at the top level is the older single form. It is still
-# accepted, and normalised into a one-element `targets` immediately, because
-# the scriptable door (POST /api/image-update) documents it.
+# accepted, and normalised into a one-element `targets` immediately, so a
+# request file written in that shape still works. Both doors today (the UI's
+# server function and the MCP `image.update` tool) always write `targets`.
 #
 # ── failure ───────────────────────────────────────────────────────────────
 #

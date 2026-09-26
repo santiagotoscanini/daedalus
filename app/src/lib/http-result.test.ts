@@ -33,8 +33,7 @@ describe('httpResult', () => {
     const res = httpResult({ ok: true, value: { id: 'abc', changed: [] } }, { kind })
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('application/json')
-    // Byte-for-byte what routes/api.registry.apply.ts answered before this
-    // helper existed, key order included.
+    // Byte-for-byte, key order included: `status` first, then the value.
     expect(await res.text()).toBe('{"status":"queued","id":"abc","changed":[]}')
   })
 

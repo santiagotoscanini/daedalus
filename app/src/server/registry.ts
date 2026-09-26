@@ -186,9 +186,9 @@ export const saveApp = createServerFn({ method: 'POST' })
  * the commit records a person rather than "daedalus".
  */
 export const applyRegistry = createServerFn({ method: 'POST' }).handler(
-  // The outcome's `code` stops here: it exists so the scriptable door
-  // (routes/api.registry.apply.ts) can map a refusal to an HTTP status, and
-  // the button has nothing to do with it but read the sentence.
+  // The outcome's `code` stops here: it exists for the MCP `apply` tool, whose
+  // machine caller branches on it, and the button has nothing to do with it
+  // but read the sentence.
   async (): Promise<Result<{ id: string; changed: { name: string; fields: string[] }[] }>> => {
     const { assertAdmin } = await import('../core/authz')
     await assertAdmin()

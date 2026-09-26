@@ -10,10 +10,9 @@ import {
   validateNewApp,
 } from './apps'
 
-// The registry's central invariant, stated in api.registry.export.ts and
-// checked nowhere until now: export → render → parse → import → export must be
-// lossless, and every field the export emits must register in driftOf when it
-// changes. A field exported but not compared is an edit that never lights the
+// The registry's central invariant: export → render → parse (what
+// declarations.nix reads back) → export must be lossless, and every field
+// the export emits must register in driftOf when it changes. A field exported but not compared is an edit that never lights the
 // Apply bar and silently never ships — the exact bug this file exists to keep
 // dead.
 
@@ -104,7 +103,7 @@ function recordOf(entry: ManifestEntry): AppRecord {
   }
 }
 
-/** What declarations.nix (and importFromNix) would read back from the file. */
+/** What declarations.nix would read back from the file. */
 function reparse(bytes: string): ManifestEntry[] {
   const parsed = JSON.parse(bytes) as {
     apps: Record<string, Omit<ManifestEntry, 'name' | 'managedInNix' | 'operatorSecrets'>>
@@ -171,7 +170,7 @@ describe('engine-only columns', () => {
     )
   })
 
-  it('survive a re-sync from Nix — toRow never carries them', () => {
+  it('are never read from a manifest entry — toRow never carries them', () => {
     const row = toRow(RICH)
     for (const k of [
       'githubRepoId',

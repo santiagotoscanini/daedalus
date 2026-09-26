@@ -25,9 +25,9 @@
 // carries a field the caller BRANCHES on rather than shows, and a nested
 // `reason.code` would read worse than a flat one:
 //
-//   host/flow.ts `FlowOutcome` (apply-flow,   `code`, which the `api.*` routes
-//   update-flow)                              map to an HTTP status; `flowResult`
-//                                             nests it for lib/http-result.ts
+//   host/flow.ts `FlowOutcome` (apply-flow,   `code`, which an MCP caller
+//   update-flow)                              branches on; `flowResult` nests
+//                                             it for lib/http-result.ts
 //   core/settings/github-app.ts `convert`     the same `code`, for the
 //                                             callback's redirect
 //   core/github-app.ts `InstallationRepos`    `retryAfterMs`, a backoff

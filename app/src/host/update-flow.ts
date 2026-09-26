@@ -8,9 +8,9 @@ import {
 
 // The one image-update implementation.
 //
-// Both doors — the Update button and the scriptable POST /api/image-update —
-// call runImageUpdate and only translate its outcome into their own response
-// shape. Same argument as host/apply-flow.ts: two hand-copied bodies are two
+// Both doors — the Update button's server function (server/updates.ts) and
+// the MCP `image.update` tool (host/mcp/server.ts) — call runImageUpdate and
+// only translate its outcome into their own response shape. Same argument as host/apply-flow.ts: two hand-copied bodies are two
 // bodies that drift. The lock, the pickup window and the order of the steps
 // are host/flow.ts's, shared with it.
 //

@@ -226,7 +226,7 @@ flowchart TB
 
   subgraph edge["server only — the two doors"]
     Srv["src/server/**  createServerFn<br/>registry, builds, settings, site, category<br/>host, claude, profile, updates"]
-    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/image-update, /api/engine-update, /api/registry/apply|export|import"]
+    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/nodes/hello, and the image servers (icons, shots)"]
     Mcp["src/routes/mcp.ts → src/host/mcp/**<br/>/mcp — Streamable HTTP, 16 tools, 2 resources<br/>a scoped token, not a session"]
   end
 
