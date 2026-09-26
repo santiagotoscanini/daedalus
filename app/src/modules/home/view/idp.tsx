@@ -1,10 +1,8 @@
 // Home › Sign-in: Pocket ID.
 //
-// Its own file rather than a section of index.tsx because it is the longest
-// of this module's tabs by a wide margin — the audit log carries a list of
-// registrations, a list of people, a list of devices and a drill-down behind
-// every row — and folding it in would bury seven short tabs under one long
-// one.
+// The longest of this module's tabs by a wide margin — the audit log carries a
+// list of registrations, a list of people, a list of devices and a drill-down
+// behind every row — which is why it had a file of its own before the others.
 //
 // It was a category of its own until now, and before that the second half of
 // the proxy's page. The argument that split it from traefik still holds: that
@@ -23,20 +21,11 @@ import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Columns, Measures } from '../../../components/viz'
 import { DASH, num } from '../../../lib/format'
 import type { IdpData } from '../data/signin'
+import { LIST, MAIN, SIDE } from './shared'
 
 /** How many registrations the list shows before it is asked for the rest. */
 const APPS_SHOWN = 5
 
-/* A flat list of named things, each led by a chip saying what kind it is and
-   trailed by whatever detail that kind has. Rows of a table, not a stack of
-   pills: a hairline between rows says the same thing at a fraction of the ink.
-   The row rules hang off the list so the <li>s stay bare. */
-const LIST =
-  'flex list-none flex-col [&>li]:flex [&>li]:min-w-0 [&>li]:items-center [&>li]:gap-[0.45rem] [&>li]:px-[0.1rem] [&>li]:py-[0.34rem] [&>li]:text-[0.77rem] [&>li+li]:border-t [&>li+li]:border-(--border-soft)'
-/* The name takes the slack, so the detail is pushed right without a spacer.
-   Both truncate: one long row must not widen the panel. */
-const MAIN = 'min-w-0 flex-auto truncate text-foreground'
-const SIDE = 'max-w-[60%] min-w-0 flex-[0_1_auto] truncate text-[0.68rem] tabular-nums text-(--dim)'
 /* An identifier in the side slot keeps the slot's own size — the legacy
    `.mono` sat earlier in the sheet and lost that half of the pair. */
 const SIDE_MONO = `${SIDE} font-mono`
