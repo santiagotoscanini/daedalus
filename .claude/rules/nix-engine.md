@@ -98,7 +98,7 @@ Defined directly in the host's configuration:
 - `fleet.git.sshKeySopsFile` — sops ciphertext (binary) of the SSH key the box pushes to its forge with.
 - `fleet.daedalus.serviceKeysSopsFile` — sops dotenv of the read-only API keys the control plane reads other services with.
 - `fleet.gluetun.image`, `fleet.gluetun.exporterImage` — digest-pinned images for `mkGluetunInstance`; forced only when a host builds a tunnel (see §4).
-- `fleet.images.<container>` — the digest-pinned image of every container of every catalog module the host switches on (§4, §7). `pinnedImage` throws naming the missing key.
+- `fleet.images.<container>` — the digest-pinned image of every container of every catalog module the host switches on, and every base of an image one builds, keyed by its pin id (§4, §7). `pinnedImage` throws naming the missing key.
 - `fleet.modules.<id>.*SopsFile`, `fleet.modules.gatus.allowedSubjects` — a catalog module's own required inputs, forced only while its switch is on.
 - `fleet.site.source` — has a `null` default, but null fails evaluation on purpose: the host sets `./site`.
 
@@ -178,8 +178,11 @@ by hand, as ordinary engine commits, and each is declared as a
 `fleet.manualPins` entry so System › Updates lists it with the file to
 edit: `nodeImage` in `stacks/daedalus/build-agent.nix`, `railpackFrontend`
 (with the Railpack release hashes) in `stacks/daedalus/railpack.nix`, the
-dev image's `ARG NODE_IMAGE` in the root `Dockerfile`, and the bases of
-the images the catalog builds (below).
+dev image's `ARG NODE_IMAGE` in the root `Dockerfile`, and `pgBase` in
+`modules/app-db/app-db.nix` — kept here on purpose: a pg restart is a
+fleet event the update agent's verify step cannot see. The bases of the
+OTHER images the catalog builds are the host's, so the Update button moves
+them (§7).
 
 ## 5. The dev loop
 
@@ -318,10 +321,15 @@ version variable (two containers on one release) is a `let` in that
 file. `fleet.imageUpdates.<container>` policy (lockstep, ceremony,
 updatable) is mechanism knowledge about the image and moves WITH the
 module. An image the module BUILDS (`mkLocalImage` from a Containerfile
-in its assets) takes its base as `bases.BASE = "<repo>:<tag>@sha256:…"` in
-the module (the file reads `ARG BASE` + `FROM ${BASE}`), bumped by hand,
-and contributes `fleet.manualPins = <image>.pins` inside its switch — the
-platform asserts every locally built container is in some entry.
+in its assets) takes each base as `bases.BASE = pinnedImage "<id>" "<repo>"`
+(the file reads `ARG BASE` + `FROM ${BASE}`), where `<id>` is the base's
+`fleet.manualPins` id (the image name for BASE, `<name>-<arg>` for any
+other), and contributes `fleet.manualPins = <image>.pins` inside its
+switch — the platform asserts every locally built container is in some
+entry. The host pins the base in `host/images.nix` like a container, and
+the Update button moves it: the agent rewrites it, rebuilds, and checks
+the image each container runs carries the new base's digest in the label
+mkLocalImage stamps (`modules/verdaccio` is the example).
 
 **Policy is the host's, mechanism is the module's.** Mechanism: which
 upstream image, ports, mounts and their uids, env that makes the app work

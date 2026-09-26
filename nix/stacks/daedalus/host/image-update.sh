@@ -32,6 +32,17 @@
 # host/image-freshness.sh for why candidates are shape-matched rather than
 # newest-wins.
 #
+# ── a base is a pin too ───────────────────────────────────────────────────
+#
+# An image built on the box (mkLocalImage) has no pin of its own; its BASE
+# does, as a `fleet.manualPins` entry, and one whose literal is in this
+# checkout arrives in PINS as `local` and updatable, keyed by the pin's id.
+# Everything up to the switch is the same — resolve, pull the new base, find
+# the digest, rewrite, commit, build — and the build re-runs the image's own
+# build unit, because the base ref is folded into its tag. Only verify
+# differs: see there. An engine pin, or a version that is not an image, is in
+# PINS only to be refused with the file a bump edits.
+#
 # ── one request, several containers ───────────────────────────────────────
 #
 # A request carries `targets: [{container, toTag}]`. Everything below the
@@ -186,15 +197,29 @@ dupes="$(jq -r '[.[].container] | group_by(.) | map(select(length > 1) | .[0]) |
 while read -r c t; do
   [ -n "$c" ] || fail validating "a target in this request names no container"
 
-  # The pin registry is rendered by nix from the running config, so a container
-  # absent from it is one that has no digest pin — a local build, or an app on
-  # the registry loop, neither of which is updated by editing a pin. This is
-  # also the allowlist: nothing reaches skopeo or sed that nix did not name.
+  # The pin registry is rendered by nix from the running config, so a name
+  # absent from it has no pin at all — a local build names its BASE's pin id,
+  # not the container, and an app on the registry loop is not updated by
+  # editing a pin. This is also the allowlist: nothing reaches skopeo or sed
+  # that nix did not name.
   pin="$(jq -c --arg c "$c" '.[$c] // empty' "$PINS")"
   [ -n "$pin" ] || fail validating "'$c' has no digest-pinned image in this configuration"
 
-  [ "$(jq -r '.updatable' <<<"$pin")" = "true" ] ||
-    fail validating "'$c' is declared not updatable from daedalus (fleet.imageUpdates)"
+  if [ "$(jq -r '.updatable' <<<"$pin")" != "true" ]; then
+    # A hand-moved pin says where it is moved instead, because that is the
+    # whole answer: this agent edits the configuration checkout and nothing
+    # else, and a commit or a release number is not a digest it can resolve.
+    [ "$(jq -r '.local // false' <<<"$pin")" = "true" ] ||
+      fail validating "'$c' is declared not updatable from daedalus (fleet.imageUpdates)"
+    where="$(jq -r '.pinnedIn.path' <<<"$pin")"
+    if [ "$(jq -r '.pinnedIn.repo' <<<"$pin")" = "engine" ]; then
+      fail validating "'$c' is pinned in the engine ($where): bump it with an engine commit, then Engine › Update"
+    elif [ "$(jq -r '.digest // ""' <<<"$pin")" = "" ]; then
+      fail validating "'$c' is not an image pin: bump it by hand in $where"
+    else
+      fail validating "'$c' is not updatable from daedalus (fleet.imageUpdates, or its image is not built by mkLocalImage) — bump it by hand in $where"
+    fi
+  fi
 
   # A tag is a registry reference that becomes part of a `docker://` URL and a
   # nix string literal. Constrain it to what a tag may actually contain rather
@@ -491,8 +516,41 @@ write_status running verifying ""
 sleep 15
 
 bad=""
+
+# A base's move lands in an image the box BUILT, whose digest nothing can
+# predict — so the question is not "which digest is it running" but "was the
+# image it runs built on the new base". mkLocalImage stamps each base's
+# digest on the image under the pin's `label`; read it off the image each
+# container runs. A base no container runs (a tool image run ad hoc) is
+# checked on the images themselves: some local build must carry it.
+verify_local() {
+  local m="$1" to_digest="$2" pin label c id got
+  pin="$(jq -c --arg c "$m" '.[$c]' "$PINS")"
+  label="$(jq -r '.label' <<<"$pin")"
+  if [ "$(jq '.containers | length' <<<"$pin")" -eq 0 ]; then
+    podman_ images --format json 2>/dev/null |
+      jq -e --arg l "$label" --arg d "$to_digest" 'any(.[]; (.Labels // {})[$l] == $d)' >/dev/null ||
+      bad="$bad $m(no image built on the new base)"
+    return 0
+  fi
+  while read -r c; do
+    [ -n "$c" ] || continue
+    id="$(podman_ container inspect "$c" --format '{{.Image}}' </dev/null 2>/dev/null || true)"
+    if [ -z "$id" ]; then
+      bad="$bad $c(no container)"
+      continue
+    fi
+    got="$(podman_ image inspect "$id" </dev/null 2>/dev/null | jq -r --arg l "$label" '.[0].Labels[$l] // ""' || true)"
+    [ "$got" = "$to_digest" ] || bad="$bad $c(built on ${got:-an unlabelled base})"
+  done < <(jq -r '.containers[]' <<<"$pin")
+}
+
 while read -r m to_digest; do
   [ -n "$m" ] || continue
+  if [ "$(jq -r --arg c "$m" '.[$c].local // false' "$PINS")" = "true" ]; then
+    verify_local "$m" "$to_digest"
+    continue
+  fi
   running="$(podman_ inspect "$m" --format '{{.ImageDigest}}' 2>/dev/null || true)"
   if [ -z "$running" ]; then
     bad="$bad $m(no container)"

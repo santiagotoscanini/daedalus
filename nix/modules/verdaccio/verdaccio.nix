@@ -31,9 +31,11 @@
 # handed the same mirror. Switch it off and both go to npmjs.
 #
 # The host brings:
-#   fleet.modules.verdaccio.enable  the switch (default off, as every catalog module)
-# The image is built here from assets/Containerfile (its two base pins are
-# `bases` below, bumped by hand in the engine); no `fleet.images` entry.
+#   fleet.modules.verdaccio.enable          the switch (default off, as every catalog module)
+#   fleet.images.verdaccio-openid           the verdaccio base the image is built FROM
+#   fleet.images.verdaccio-openid-builder   the node the plugins are npm-installed with
+# The image is built here from assets/Containerfile; its two bases are the
+# host's pins (keyed by their Updates row), moved by the Update button.
 
 {
   config,
@@ -41,6 +43,7 @@
   pkgs,
   mkRootlessContainer,
   mkLocalImage,
+  pinnedImage,
   ...
 }:
 
@@ -49,14 +52,13 @@ let
   # plugins, built locally from assets/Containerfile. The tag carries
   # the build-context hash and both bases, so editing either plugin, the
   # Containerfile or a base produces a new tag and restarts the consumer.
-  # The two bases are the one place each is pinned (the plugins are npm-
-  # installed in the node BUILDER stage), bumped by hand in the engine and
-  # listed on System › Updates.
+  # The two bases are the host's pins (the plugins are npm-installed in the
+  # node BUILDER stage), each keyed by the id of its System › Updates row.
   verdaccioImage = mkLocalImage {
     name = "verdaccio-openid";
     bases = {
-      BASE = "docker.io/verdaccio/verdaccio:6.9.0@sha256:11e75353c8363650cbf43adf8594b2cd633be6f191056c6e08ba6ff4b1398f62";
-      BUILDER = "docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402";
+      BASE = pinnedImage "verdaccio-openid" "docker.io/verdaccio/verdaccio";
+      BUILDER = pinnedImage "verdaccio-openid-builder" "docker.io/library/node";
     };
     contextDir = ./assets;
     gates = [ "podman-verdaccio.service" ];

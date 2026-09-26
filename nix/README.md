@@ -58,7 +58,7 @@ evaluation with the option's name.
 | `myspeed` | Internet speed tracker. | `authGroups`, `fleet.images.myspeed` |
 | `stirling-pdf` | A PDF toolbox — the first leaf, and the template for one. | `authGroups`, `fleet.images.stirling-pdf` |
 | `traefik` | The reverse proxy: every published hostname, the forward-auth middlewares, the wildcard certificate. | `envSopsFile`, `fleet.images.traefik` |
-| `verdaccio` | A private npm mirror; the box's builds and the control plane's dev container install through it. | nothing — its image is built on the box |
+| `verdaccio` | A private npm mirror; the box's builds and the control plane's dev container install through it. | `fleet.images.{verdaccio-openid,verdaccio-openid-builder}` — the two bases its image is built on |
 | `wg-easy` | A WireGuard server and its admin UI; the tunnel port is forwarded by the router. | `envSopsFile`, `fleet.images.wg-easy` |
 
 The spine — everything above but the leaves (factorio, grocy,

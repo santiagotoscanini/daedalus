@@ -379,7 +379,11 @@ let
   # policy: it is simultaneously the parse (what ref is this container on),
   # the allowlist (a container absent from it reaches no command) and the
   # lockstep table. Rendered by nix from the running config, so it cannot
-  # describe a container the box does not have.
+  # describe a container the box does not have. The hand-moved pins ride in
+  # it too, keyed by their id and marked `local`: a base the configuration
+  # pins is moved exactly like a container's pin and verified by its label;
+  # the rest are there so a request for one is refused by name, with the file
+  # to edit, rather than as an unknown container.
   imageUpdateScript = mkAgent {
     name = "daedalus-image-update";
     runtimeInputs = [
@@ -402,9 +406,32 @@ let
         FLAKE = config.fleet.config.repo;
         # For lib.sh's site_engine_override: the agent refuses while one is set.
         SITE_DIR = config.fleet.site.path;
-        PINS = pkgs.writeText "daedalus-image-pins.json" (
-          builtins.toJSON config.fleet.export.domains.images.data.pins
-        );
+        PINS =
+          let
+            inherit (config.fleet.export.domains.images) data;
+          in
+          pkgs.writeText "daedalus-image-pins.json" (
+            builtins.toJSON (
+              data.pins
+              // lib.mapAttrs (
+                _: p:
+                {
+                  local = true;
+                }
+                // lib.getAttrs [
+                  "repo"
+                  "tag"
+                  "digest"
+                  "updatable"
+                  "lockstep"
+                  "ceremony"
+                  "containers"
+                  "label"
+                  "pinnedIn"
+                ] p
+              ) data.manual
+            )
+          );
         LOCKFILE = config.fleet.rebuildLock;
         HOSTNAME = config.networking.hostName;
         OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;

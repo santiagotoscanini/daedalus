@@ -326,7 +326,10 @@ in
         from, `<registry>/<repo>:<tag>@sha256:<digest>`. DEFINED BY THE HOST,
         for every container of every engine module it switches on; read by the
         module through the `pinnedImage` module argument, which fails
-        evaluation naming the missing key.
+        evaluation naming the missing key. A module that BUILDS its image
+        reads each base the same way, keyed by the base's `fleet.manualPins`
+        id (mkLocalImage's `pins`: the image name, or `<name>-<arg>`) — so
+        that base's Updates row can say it is pinned here and move it.
 
         Pins are host data because the control plane's image-update agent
         rewrites a digest literal in place in the host's configuration
@@ -424,8 +427,11 @@ in
     # even though they are no longer part of the context. `pins` returns
     # them as `fleet.manualPins` entries (id `<name>` for BASE,
     # `<name>-<arg>` for any other), each naming the containers its gates
-    # start; the caller contributes them inside its own switch:
+    # start and the image label that carries its digest; the caller
+    # contributes them inside its own switch:
     #   fleet.manualPins = img.pins;
+    # A base pinned in the host's configuration is then moved by the Update
+    # button like a container's pin (stacks/daedalus/host/image-update.sh).
     _module.args.mkLocalImage =
       {
         name, # localhost/<name>
@@ -459,6 +465,30 @@ in
         buildArgs = lib.concatStrings (
           lib.mapAttrsToList (arg: ref: "\n  --build-arg ${lib.escapeShellArg "${arg}=${ref}"} \\") bases
         );
+        # Each base is stamped on the image it built, so "does this container
+        # run on the new base?" is a question the image answers — the
+        # image-update agent's verify step asks exactly that after moving one
+        # (the pin's `label`). The base the final stage starts FROM (BASE, or
+        # the only one) takes the OCI keys; any other, a build stage's, the
+        # same pair under `daedalus.base.<arg>`.
+        finalArg = if bases ? BASE then "BASE" else lib.head (lib.attrNames bases ++ [ null ]);
+        labelKey =
+          arg:
+          if arg == finalArg then "org.opencontainers.image.base" else "daedalus.base.${lib.toLower arg}";
+        labels = lib.concatStrings (
+          lib.concatLists (
+            lib.mapAttrsToList (
+              arg: ref:
+              let
+                p = parsePin ref;
+              in
+              lib.optionals (p != null) [
+                "\n  --label ${lib.escapeShellArg "${labelKey arg}.name=${p.image}"} \\"
+                "\n  --label ${lib.escapeShellArg "${labelKey arg}.digest=${p.digest}"} \\"
+              ]
+            ) bases
+          )
+        );
         # The containers this image runs as: the podman-<c>.service gates.
         # A gate that is not a container (multi-user.target) names none.
         containers = lib.concatMap (
@@ -475,6 +505,7 @@ in
           arg: ref:
           lib.nameValuePair (if arg == "BASE" then name else "${name}-${lib.toLower arg}") {
             image = ref;
+            label = "${labelKey arg}.digest";
             inherit containers;
           }
         ) bases;
@@ -489,7 +520,7 @@ in
             set -eu
             cd ${ctx}
             ${pkgs.podman}/bin/podman build \
-              --tag ${image} \${buildArgs}
+              --tag ${image} \${buildArgs}${labels}
               --file ${file} \${lib.optionalString (target != null) "\n  --target ${target} \\"}
               .
           '';
@@ -505,8 +536,8 @@ in
     _module.args.pinnedImage =
       name: upstream:
       cfg.images.${name} or (throw ''
-        fleet.images.${name} is not defined. An engine module runs the container
-        "${name}" and the host pins its image — in your configuration:
+        fleet.images.${name} is not defined. An engine module runs (or builds on) the
+        image "${name}" and the host pins it — in your configuration:
           fleet.images.${name} = "${upstream}:<tag>@sha256:<digest>";
       '');
 

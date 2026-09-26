@@ -107,34 +107,46 @@ let
       updatable = if p == null then true else p.updatable;
       lockstep = if p == null then [ ] else p.lockstep;
       ceremony = if p == null then null else p.ceremony;
+      majorCeremony = if p == null then null else p.majorCeremony;
     }
   ) imagePins;
 
   # ── the hand-moved pins (fleet.manualPins) ──────────────────────────────
   #
-  # Which file wrote each entry, so its Updates row can say where a bump is
-  # made. The module system already records it: every definition of the
-  # option carries its file. An engine file is named from the engine's root
-  # (`nix/…`), anything else from the root of the flake source it came from
-  # — the configuration checkout. The first file to name an id wins; an entry
-  # whose fields are spread over two files is still one pin, bumped where its
-  # `image` or `version` is.
+  # Which file holds each pin's literal, so its Updates row can say where a
+  # bump is made — and, for the configuration's, whether the Update button
+  # can make it. The module system already records it: every definition of
+  # an option carries its file. An engine file is named from the engine's
+  # root (`nix/…`), anything else from the root of the flake source it came
+  # from — the configuration checkout.
+  #
+  # Two ways to find the file. A catalog module that builds its image reads
+  # each base from `fleet.images` (keyed by the pin's id), so the literal is
+  # wherever the HOST defined that key; otherwise it is the file that defined
+  # the entry — the first to name the id, since an entry whose fields are
+  # spread over two files is still one pin, bumped where its `image` or
+  # `version` is.
   engineRoot = toString ../..;
-  definedIn = lib.foldl' (
-    acc: def:
-    acc // lib.genAttrs (lib.filter (id: !(acc ? ${id})) (lib.attrNames def.value)) (_: def.file)
-  ) { } options.fleet.manualPins.definitionsWithLocations;
+  firstFileOf =
+    defs:
+    lib.foldl' (
+      acc: def:
+      acc // lib.genAttrs (lib.filter (id: !(acc ? ${id})) (lib.attrNames def.value)) (_: def.file)
+    ) { } defs;
+  definedIn = firstFileOf options.fleet.manualPins.definitionsWithLocations;
+  imagesDefinedIn = firstFileOf options.fleet.images.definitionsWithLocations;
   pinnedIn =
     id: p:
     let
-      file = definedIn.${id} or "";
+      hostDefined = p.image != null && (cfg.images.${id} or null) == p.image;
+      file = if hostDefined then imagesDefinedIn.${id} or "" else definedIn.${id} or "";
       inEngine = lib.hasPrefix "${engineRoot}/" file;
       inStore = builtins.match "/nix/store/[^/]+/(.*)" file;
     in
     {
       repo = if inEngine then "engine" else "config";
       path =
-        if p.pinnedIn != null then
+        if p.pinnedIn != null && !hostDefined then
           p.pinnedIn
         else if inEngine then
           lib.removePrefix "${engineRoot}/" file
@@ -144,21 +156,39 @@ let
           file;
     };
 
-  manualPins = lib.mapAttrs (id: p: {
-    inherit (p)
-      repo
-      tag
-      digest
-      version
-      upstream
-      branch
-      parts
-      containers
-      note
-      ;
-    image = if p.repo == null then null else "${p.repo}:${p.tag}";
-    pinnedIn = pinnedIn id p;
-  }) cfg.manualPins;
+  # What the Update button may move: an image pin whose literal is in the
+  # configuration checkout (the only tree the agent edits), built with the
+  # label that proves the move landed (the agent's verify step reads it), and
+  # not ruled out by policy. Everything else stays a row with the file to
+  # edit — an engine pin is an engine commit, then Engine › Update.
+  manualPins = lib.mapAttrs (
+    id: p:
+    let
+      where = pinnedIn id p;
+      policy = cfg.imageUpdates.${id} or null;
+    in
+    {
+      inherit (p)
+        repo
+        tag
+        digest
+        version
+        upstream
+        branch
+        parts
+        containers
+        note
+        label
+        ;
+      image = if p.repo == null then null else "${p.repo}:${p.tag}";
+      pinnedIn = where;
+      updatable =
+        p.repo != null && p.label != null && where.repo == "config" && (policy == null || policy.updatable);
+      lockstep = [ ];
+      ceremony = if policy == null then null else policy.ceremony;
+      majorCeremony = if policy == null then null else policy.majorCeremony;
+    }
+  ) cfg.manualPins;
 in
 {
   options.fleet = {
@@ -173,9 +203,8 @@ in
                 Whether daedalus may rewrite this container's pin.
 
                 False draws the changelog and no button — for a pin whose
-                move is not a pin edit at all. The precedent is a Nextcloud
-                MAJOR, which is a version variable plus a run of `occ`
-                chores that no rebuild performs.
+                move is not a pin edit at all — a database image whose next
+                major needs its data directory upgraded first.
               '';
             };
             lockstep = lib.mkOption {
@@ -214,14 +243,26 @@ in
                 with it and everything pocket-id gates.
               '';
             };
+            majorCeremony = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              example = "needs the upgrade chores in the module header run by hand, one major at a time";
+              description = ''
+                `ceremony`, but only for a move that changes the tag's
+                leading version number (`34` → `35`, `v2.x` → `v3.x`): what a
+                new MAJOR takes that a rebuild does not do. A re-pull or a
+                minor on the same line arms like any other update.
+              '';
+            };
           };
         }
       );
       default = { };
       description = ''
-        Per-container policy for updating a digest-pinned image from
-        daedalus. Every pinned container is updatable with no entry here;
-        this registry exists for the ones where that is not the whole truth.
+        Per-pin policy for updating an image from daedalus, keyed by
+        container — or by a `fleet.manualPins` id, for a base the Update
+        button moves. Every pin is updatable with no entry here; this
+        registry exists for the ones where that is not the whole truth.
       '';
     };
 
@@ -317,7 +358,20 @@ in
                   The file the literal lives in, relative to the root of the
                   repository whose module defines this entry. Null: that
                   module's own file, which is right unless the module reads
-                  the pin from somewhere else.
+                  the pin from somewhere else. Ignored for a base the host
+                  defines in `fleet.images`: that file is found by itself.
+                '';
+              };
+              label = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "org.opencontainers.image.base.digest";
+                description = ''
+                  The label of the built image that carries this base's
+                  digest — set by mkLocalImage's `pins`. It is how the
+                  image-update agent proves a moved base reached the running
+                  containers, so a configuration pin without one gets no
+                  Update button.
                 '';
               };
             };
@@ -326,17 +380,19 @@ in
       );
       default = { };
       description = ''
-        A version moved by an ordinary commit, not by the Update button.
+        The pins that are not a container's own image: the base of a locally
+        built image (mkLocalImage's `bases`, whose `pins` land here), a build
+        tool's release, a source commit an image is built from. Each entry is
+        a row on System › Updates that says what runs, whether its registry
+        has something newer, and which file a bump edits.
 
-        Every digest-pinned container is already listed on System › Updates
-        and moved from there (`fleet.imagePins`). What that leaves out is
-        everything else the box runs on a pin: the base of a locally built
-        image (mkLocalImage's `bases`, whose `pins` land here), a build
-        tool's release, a source commit an image is built from. Each entry
-        is a row that says what runs, whether its registry has something
-        newer, and which file a bump edits — a list, never a button, because
-        the image-update agent only rewrites pins it can find in the
-        configuration checkout, and half of these are in the engine.
+        A base whose literal is in the configuration checkout — a host
+        stack's, or a catalog module's read from `fleet.images` — is moved by
+        the Update button like any container's pin: the agent rewrites it,
+        rebuilds, and checks the running containers' images carry the new
+        base (`label`). The rest are ordinary commits: the agent cannot write
+        into the engine, so an engine pin is an engine commit, then
+        Engine › Update; a version or a source commit is an edit by hand.
 
         Every container whose image is built on the box must appear in some
         entry's `containers` (asserted), so a new local image cannot be the
@@ -553,7 +609,8 @@ in
         data = {
           tags = imageTags;
           pins = imagePinsWithPolicy;
-          # The pins no button moves, with the file each one is bumped in —
+          # The pins that are not a container's own image, with the file each
+          # one is bumped in and whether the button moves it —
           # fleet.manualPins. Additive: a reader that predates it ignores it.
           manual = manualPins;
         };

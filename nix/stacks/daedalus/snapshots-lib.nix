@@ -112,8 +112,8 @@ let
   # The hand-moved pins that are images (fleet.manualPins with an `image`: a
   # local build's base, the build tools' images) are asked about too, keyed by
   # their id — export.nix asserts no id is also a container's — so their rows
-  # carry the same verdict. The update agent does NOT get them: no button
-  # moves those.
+  # carry the same verdict — and a base the configuration pins is what its
+  # Update button moves to (verbs-lib.nix hands the agent the same ids).
   pinnedImages =
     lib.mapAttrs (_: p: {
       inherit (p) image repo tag;
