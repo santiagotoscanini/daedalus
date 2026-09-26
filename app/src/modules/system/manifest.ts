@@ -64,13 +64,13 @@ export const manifest = {
     // No head, like its neighbours: dozens of containers have no one version
     // and no one thing to open.
     //
-    // Four full-width boards: the engine's own pin, the NixOS release, then
-    // the two image lists (behind, and on the newest tag) — plus the update
-    // queue between them while anything is queued or running.
+    // Five full-width boards: the engine's own pin, the NixOS release, the
+    // two image lists (behind, and on the newest tag), then the pins moved by
+    // hand — plus the update queue while anything is queued or running.
     {
       id: 'updates',
       label: 'Updates',
-      boardSpans: [12, 12, 12, 12],
+      boardSpans: [12, 12, 12, 12, 12],
       head: false,
     },
     {

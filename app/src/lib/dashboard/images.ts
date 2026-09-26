@@ -30,7 +30,7 @@
 // Published by daedalus-image-snapshot (nix/stacks/daedalus/host/image-snapshot.sh)
 // because this app cannot run podman — it is a container itself.
 
-import { imagePins, imageTagMap } from '../../host/contract/domains/images'
+import { imagePins, imageTagMap, manualPins } from '../../host/contract/domains/images'
 import { readSnapshot } from '../../host/contract/snapshot'
 import { env } from '../../host/env'
 import { swrValue } from '../cache'
@@ -327,6 +327,9 @@ const cachedFreshness = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () =>
  *     repo and therefore does not go stale the way a comparison does. Being at
  *     index 0 means nothing of this shape was published above us.
  *
+ * `container` may also be a hand-moved pin's id (`manualPins`): the probe asks
+ * about the image ones under that id, and they age the same way.
+ *
  * Null when there is nothing to say: not digest-pinned, the probe has never
  * run, or its file has gone stale. Callers render null as no verdict at all —
  * absence of evidence, stated as absence.
@@ -336,9 +339,13 @@ export async function imageFreshness(container: string): Promise<ImageFreshness 
   if (raw === null) return null
 
   const pin = (await imagePins())[container]
-  if (pin === undefined) return raw
+  if (pin !== undefined) return reconcileFreshness(raw, pin)
 
-  return reconcileFreshness(raw, pin)
+  const manual = (await manualPins())[container]
+  if (manual !== undefined && manual.tag !== null && manual.digest !== null) {
+    return reconcileFreshness(raw, { tag: manual.tag, digest: manual.digest })
+  }
+  return raw
 }
 
 /** Exported for its test; `imageFreshness` is the door callers use. */

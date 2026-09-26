@@ -1,5 +1,14 @@
 import { join } from 'node:path'
-import { arrayOf, bool, nullable, obj, optional, recordOf, str } from '../../../lib/contract/decode'
+import {
+  arrayOf,
+  bool,
+  literal,
+  nullable,
+  obj,
+  optional,
+  recordOf,
+  str,
+} from '../../../lib/contract/decode'
 import { env } from '../../env'
 import { readSnapshot } from '../snapshot'
 
@@ -16,6 +25,11 @@ import { readSnapshot } from '../snapshot'
 // because the Updates page has to render EVERY digest-pinned container —
 // including the sidecars and exporters that have no page of their own — and
 // a page cannot enumerate what nothing publishes.
+//
+// `manual` is everything else the box runs on a pin (fleet.manualPins in
+// nix/platform/export.nix): the bases of the images built on the box, the
+// build tools' images, a source commit. No button moves these; the page lists
+// them with the file a bump edits.
 
 const pinShape = obj({
   /** `<repo>:<tag>`, the ref the registry is asked about. */
@@ -35,16 +49,54 @@ const pinShape = obj({
 
 export type ImagePin = ReturnType<typeof pinShape>
 
+const pinnedInShape = obj({
+  /** Which repository holds the literal: the engine, or this box's configuration. */
+  repo: literal('engine', 'config'),
+  /** Relative to that repository's root. */
+  path: str,
+})
+
+export type PinnedIn = ReturnType<typeof pinnedInShape>
+
+const manualShape = obj({
+  /** `<repo>:<tag>` when the pin is an image; null for a commit or a release number. */
+  image: nullable(str),
+  repo: nullable(str),
+  tag: nullable(str),
+  digest: nullable(str),
+  /** What runs: the tag, a release, or — with `branch` — a commit. */
+  version: str,
+  /** GitHub `owner/repo` for the notes; null = what the first container reads. */
+  upstream: optional(nullable(str), null),
+  /** Compare `version` as a commit on this branch. */
+  branch: optional(nullable(str), null),
+  /** Versions that move with this one, as a set. */
+  parts: optional(recordOf(str), {}),
+  containers: optional(arrayOf(str), []),
+  note: optional(nullable(str), null),
+  pinnedIn: pinnedInShape,
+})
+
+export type ManualPin = ReturnType<typeof manualShape>
+
 const shape = obj({
   tags: optional(recordOf(str), {}),
   pins: optional(recordOf(pinShape), {}),
+  // Optional: a box whose engine predates it publishes none.
+  manual: optional(recordOf(manualShape), {}),
 })
 
-async function domain(): Promise<{ tags: Record<string, string>; pins: Record<string, ImagePin> }> {
+type Images = {
+  tags: Record<string, string>
+  pins: Record<string, ImagePin>
+  manual: Record<string, ManualPin>
+}
+
+async function domain(): Promise<Images> {
   const r = await readSnapshot({
     path: join(env.get('EXPORT_DIR'), 'images.json'),
     decoder: shape,
-    fallback: { tags: {}, pins: {} },
+    fallback: { tags: {}, pins: {}, manual: {} },
     acceptVersions: [2],
   })
   return r.data
@@ -60,8 +112,13 @@ export async function imageTagMap(): Promise<Record<string, string>> {
  * Empty for every container that has no `:tag@sha256:` pin at all — a locally
  * built image (mkLocalImage) or an app on the registry deploy loop. Neither is
  * updated by editing a pin, so their absence here is the correct answer rather
- * than missing data.
+ * than missing data. A local image's BASE is in `manualPins` instead.
  */
 export async function imagePins(): Promise<Record<string, ImagePin>> {
   return (await domain()).pins
+}
+
+/** Pin id → a pin moved by an ordinary commit, and where that commit edits. */
+export async function manualPins(): Promise<Record<string, ManualPin>> {
+  return (await domain()).manual
 }

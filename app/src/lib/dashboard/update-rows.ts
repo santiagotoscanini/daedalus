@@ -1,14 +1,25 @@
-import { imagePins } from '../../host/contract/domains/images'
+import {
+  imagePins,
+  type ManualPin,
+  manualPins,
+  type PinnedIn,
+} from '../../host/contract/domains/images'
 import { type CommitGap, commitsSince, EMPTY_GAP, type VersionGap, versionGap } from './github'
-import { releaseSourceFor } from './image-repos'
+import { type ReleaseSource, releaseSourceFor } from './image-repos'
 import { type ImageFreshness, imageFreshness, imageVersion, type RunningVersion } from './images'
 
-// One digest-pinned container as an update decision: what runs, what the
-// registry has, and what the button would move it to.
+// One pin as an update decision: what runs, what the registry has, and — for
+// a container's digest pin — what the button would move it to.
 //
 // System › Updates draws every pin on the box from this; a service tab draws
 // the few containers it fronts from the same rows, so a verdict never reads
 // one way on the fleet page and another on the service's own.
+//
+// Two kinds of row. A CONTAINER row is a `:tag@sha256:` pin the Update button
+// rewrites. A MANUAL row is a pin moved by an ordinary commit
+// (fleet.manualPins: a local build's base, a build tool, a source commit) —
+// the same verdict where a registry can give one, and instead of a button the
+// file the commit edits.
 //
 // Local reads only — the pins from the nix export, the verdicts from the daily
 // registry probe, the running versions from image labels. The changelogs are
@@ -27,16 +38,24 @@ export type UpdateVerdict =
   /** The probe has not run, went stale, or the registry refused. */
   | 'unknown'
 
-export type UpdateRow = {
+type RowBase = {
+  /** The container, or a manual pin's id. */
   container: string
+  running: RunningVersion
+  freshness: ImageFreshness | null
+  verdict: UpdateVerdict
+  /** Whether expanding this row would find any notes to show. */
+  hasNotes: boolean
+}
+
+/** A container's digest pin — the row with the button. */
+export type ContainerRow = RowBase & {
+  kind: 'container'
   /** `<repo>:<tag>` — the ref the registry was asked about. */
   image: string
   repo: string
   tag: string
   digest: string
-  running: RunningVersion
-  freshness: ImageFreshness | null
-  verdict: UpdateVerdict
   /** The tag this row would move to by default. Null when there is none. */
   target: string | null
   /** Same-shape tags, newest first — what the picker offers. */
@@ -44,9 +63,22 @@ export type UpdateRow = {
   updatable: boolean
   lockstep: string[]
   ceremony: string | null
-  /** Whether expanding this row would find any notes to show. */
-  hasNotes: boolean
 }
+
+/** A pin no button moves: the row names the file a commit edits instead. */
+export type ManualRow = RowBase & {
+  kind: 'manual'
+  /** `<repo>:<tag>`, or null for a commit or a release number. */
+  image: string | null
+  digest: string | null
+  pinnedIn: PinnedIn
+  /** Versions that move with this one, as a set. */
+  parts: Record<string, string>
+  containers: string[]
+  note: string | null
+}
+
+export type UpdateRow = ContainerRow | ManualRow
 
 function verdictOf(f: ImageFreshness | null): UpdateVerdict {
   if (f === null || f.error !== null) return 'unknown'
@@ -70,11 +102,15 @@ const ORDER: Record<UpdateVerdict, number> = {
   current: 3,
 }
 
+function byVerdict(a: RowBase, b: RowBase): number {
+  return ORDER[a.verdict] - ORDER[b.verdict] || a.container.localeCompare(b.container)
+}
+
 /**
  * The rows for every pin, or only for `containers` when given — in that case
  * a name with no digest pin is simply absent, never an error.
  */
-export async function updateRows(containers?: readonly string[]): Promise<UpdateRow[]> {
+export async function updateRows(containers?: readonly string[]): Promise<ContainerRow[]> {
   const pins = await imagePins()
   const wanted =
     containers === undefined
@@ -82,7 +118,7 @@ export async function updateRows(containers?: readonly string[]): Promise<Update
       : Object.entries(pins).filter(([c]) => containers.includes(c))
 
   const rows = await Promise.all(
-    wanted.map(async ([container, pin]): Promise<UpdateRow> => {
+    wanted.map(async ([container, pin]): Promise<ContainerRow> => {
       const [running, freshness, source] = await Promise.all([
         imageVersion(container),
         imageFreshness(container),
@@ -92,6 +128,7 @@ export async function updateRows(containers?: readonly string[]): Promise<Update
       const verdict = verdictOf(freshness)
 
       return {
+        kind: 'container',
         container,
         image: pin.image,
         repo: pin.repo,
@@ -113,15 +150,73 @@ export async function updateRows(containers?: readonly string[]): Promise<Update
     }),
   )
 
-  return rows.sort(
-    (a, b) => ORDER[a.verdict] - ORDER[b.verdict] || a.container.localeCompare(b.container),
+  return rows.sort(byVerdict)
+}
+
+// ── the pins moved by hand ────────────────────────────────────────────────
+
+/**
+ * Where a manual pin's notes live: its own `upstream`, else whatever the
+ * first container it builds already reads. A pin with neither has no notes.
+ */
+async function manualSource(pin: ManualPin): Promise<ReleaseSource | null> {
+  if (pin.upstream !== null) {
+    return pin.branch === null ? { repo: pin.upstream } : { repo: pin.upstream, branch: pin.branch }
+  }
+  const first = pin.containers[0]
+  return first === undefined ? null : releaseSourceFor(first)
+}
+
+/** A commit is shown short; the full one is what the notes compare from. */
+function shownVersion(pin: ManualPin): string {
+  return pin.branch === null ? pin.version : pin.version.slice(0, 7)
+}
+
+/**
+ * Every hand-moved pin on the box, behind first.
+ *
+ * The verdict is the registry probe's where the pin is an image (it asks
+ * about those under the pin's id); a commit or a release number has no
+ * registry, so its verdict is `unknown` and its notes say how far behind it is.
+ */
+export async function manualRows(): Promise<ManualRow[]> {
+  const pins = await manualPins()
+
+  const rows = await Promise.all(
+    Object.entries(pins).map(async ([id, pin]): Promise<ManualRow> => {
+      const [freshness, source] = await Promise.all([
+        pin.digest === null ? Promise.resolve(null) : imageFreshness(id),
+        manualSource(pin),
+      ])
+      const version = shownVersion(pin)
+      return {
+        kind: 'manual',
+        container: id,
+        image: pin.image,
+        digest: pin.digest,
+        running: {
+          version,
+          source: 'pin',
+          revision: pin.branch === null ? null : version,
+        },
+        freshness,
+        verdict: verdictOf(freshness),
+        hasNotes: source !== null,
+        pinnedIn: pin.pinnedIn,
+        parts: pin.parts,
+        containers: pin.containers,
+        note: pin.note,
+      }
+    }),
   )
+
+  return rows.sort(byVerdict)
 }
 
 // ── the expanded row ──────────────────────────────────────────────────────
 
 /**
- * The notes for ONE container, fetched when its row is opened.
+ * The notes for ONE row, fetched when it is opened.
  *
  * Two shapes, exactly as the Changelog board takes them: a release gap for a
  * project that cuts releases, a commit gap for an image that tracks a branch.
@@ -136,12 +231,34 @@ export type UpdateNotes = {
   repo: string | null
 }
 
+/** `container` is a container name or a manual pin's id; manual ids win. */
 export async function loadUpdateNotes(container: string): Promise<UpdateNotes> {
+  const manual = (await manualPins())[container]
+  if (manual !== undefined) {
+    const source = await manualSource(manual)
+    if (source === null) return { container, gap: null, build: null, repo: null }
+    // A pin's own branch compares its own commit; a borrowed source that
+    // tracks a branch compares the commit the container's image was built from.
+    const revision =
+      manual.upstream !== null
+        ? manual.version
+        : (await imageVersion(manual.containers[0] ?? container)).revision
+    return notesFrom(container, source, manual.version, revision)
+  }
+
   const source = await releaseSourceFor(container)
   if (source === null) return { container, gap: null, build: null, repo: null }
+  const { version, revision } = await imageVersion(container)
+  return notesFrom(container, source, version, revision)
+}
 
+async function notesFrom(
+  container: string,
+  source: ReleaseSource,
+  version: string | null,
+  revision: string | null,
+): Promise<UpdateNotes> {
   if (source.branch !== undefined) {
-    const { revision } = await imageVersion(container)
     return {
       container,
       gap: null,
@@ -150,7 +267,6 @@ export async function loadUpdateNotes(container: string): Promise<UpdateNotes> {
     }
   }
 
-  const { version } = await imageVersion(container)
   return {
     container,
     gap:

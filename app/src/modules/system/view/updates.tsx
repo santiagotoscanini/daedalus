@@ -11,7 +11,7 @@ import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { ImageUpdateStatus } from '../../../host/image-update'
 import { cn } from '../../../lib/cn'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../../../server/updates'
-import type { UpdateRow, UpdatesData } from '../data/updates'
+import type { ContainerRow, UpdatesData } from '../data/updates'
 import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 
 // Every pinned image on the box, and what it would take to move it.
@@ -31,6 +31,10 @@ import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 // control lives INSIDE the disclosure, never in the closed row.
 //
 // Notes load per row, on open — the loader says why.
+//
+// Last, the pins no button moves: the bases of the images built on the box,
+// the build tools, a source commit. Same rows, same verdicts where a registry
+// can give one, and in place of the button the file a bump edits.
 //
 // ── the queue ─────────────────────────────────────────────────────────────
 //
@@ -78,7 +82,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
     for (const m of q.lockstep) covered.set(m, q.container)
   }
 
-  const bind = (r: UpdateRow) => {
+  const bind = (r: ContainerRow) => {
     const owner = covered.get(r.container)
     return {
       queued: owner === r.container,
@@ -169,6 +173,29 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
           Open one to read what its current version shipped. “No verdict” means the registry did not
           answer for it, or the pin names a channel with nothing to compare against. Treat it as
           unknown.
+        </p>
+      </Board>
+
+      <Board
+        title="Pinned by hand"
+        icon="logs"
+        span={12}
+        aside={<span className={BOARD_NOTE}>{String(d.manual.length)} pins</span>}
+      >
+        {d.manual.length === 0 ? (
+          <p className={VIZ_EMPTY}>Nothing on this box is pinned outside a container image.</p>
+        ) : (
+          <ul className={ROWS}>
+            {d.manual.map((r) => (
+              <ImageRow key={r.container} r={r} status={d.status} />
+            ))}
+          </ul>
+        )}
+        <p className={BOARD_FOOT}>
+          Versions an ordinary commit moves, not the Update button: the bases of the images built on
+          this box, the build tools, a source commit. An engine pin is an engine commit, then Engine
+          › Update; a configuration pin is an edit to the named file and a rebuild. A commit pin has
+          no registry to ask, so it reads “no verdict” — open it for the commits since.
         </p>
       </Board>
     </BoardGrid>

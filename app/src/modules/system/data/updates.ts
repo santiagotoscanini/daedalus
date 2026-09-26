@@ -4,15 +4,23 @@ import { readCommittedSite } from '../../../host/contract/domains/site-doc'
 import { type EngineUpdateStatus, readEngineUpdateStatus } from '../../../host/engine-update'
 import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../host/image-update'
 import { readWorkspaces, type Workspace, workspaceFor } from '../../../host/workspaces'
-import { type UpdateRow, updateRows } from '../../../lib/dashboard/update-rows'
+import {
+  type ContainerRow,
+  type ManualRow,
+  manualRows,
+  updateRows,
+} from '../../../lib/dashboard/update-rows'
 import { ENGINE_REPO } from '../../../lib/engine'
 
 export {
+  type ContainerRow,
   loadUpdateNotes,
+  type ManualRow,
   type UpdateRow,
 } from '../../../lib/dashboard/update-rows'
 
-// Every digest-pinned container on the box, and whether it is behind.
+// Every digest-pinned container on the box, and whether it is behind — then
+// every pin no button moves (fleet.manualPins), with the file a bump edits.
 //
 // Dozens of containers — the exporters, the redis and postgres sidecars — have
 // no tab and never will: nobody opens scraparr, and a Board about
@@ -32,7 +40,12 @@ export {
 // on expand — see `loadUpdateNotes` (lib/dashboard/update-rows.ts).
 
 export type UpdatesData = {
-  rows: UpdateRow[]
+  rows: ContainerRow[]
+  /**
+   * The pins no button moves (fleet.manualPins): local builds' bases, the
+   * build tools, a source commit — each with the file a bump edits.
+   */
+  manual: ManualRow[]
   /** Rows whose verdict is `tag-moved` or `newer-tag`, updatable or not. */
   behind: number
   /** When the registry probe last ran. Null if it never has. */
@@ -117,17 +130,21 @@ async function loadEngine(): Promise<EngineFacts> {
 }
 
 export async function loadUpdates(): Promise<UpdatesData> {
-  const [rows, status, engine, site] = await Promise.all([
+  const [rows, manual, status, engine, site] = await Promise.all([
     updateRows(),
+    manualRows(),
     readImageUpdateStatus(),
     loadEngine(),
     siteIdentity(),
   ])
 
-  const checked = rows.map((r) => r.freshness?.checkedAt).filter((c) => c !== undefined)
+  const checked = [...rows, ...manual]
+    .map((r) => r.freshness?.checkedAt)
+    .filter((c) => c !== undefined)
 
   return {
     rows,
+    manual,
     behind: rows.filter((r) => r.verdict === 'tag-moved' || r.verdict === 'newer-tag').length,
     checkedAt: checked.length === 0 ? null : (checked.sort().at(-1) ?? null),
     probeMissing: checked.length === 0,

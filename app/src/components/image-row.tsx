@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import type { ImageUpdateStatus } from '../host/image-update'
 import { cn } from '../lib/cn'
-import type { UpdateRow, UpdateVerdict } from '../lib/dashboard/update-rows'
+import type { ManualRow, UpdateRow, UpdateVerdict } from '../lib/dashboard/update-rows'
+import { ENGINE_REPO } from '../lib/engine'
 import { DASH } from '../lib/format'
 import { fetchUpdateNotes } from '../server/updates'
 import { UpdateControl } from './image-update'
 import { Changelog } from './release-notes'
-import { EMPTY, MONO_FACE } from './tokens'
+import { EMPTY, MONO, MONO_FACE, NOTE } from './tokens'
 import { Chip, type Tone } from './viz'
 
 // One pinned container as a disclosure: closed, the decision in one line —
@@ -17,6 +18,10 @@ import { Chip, type Tone } from './viz'
 // updating, it IS the update decision, so the control lives INSIDE the
 // disclosure, never on the closed row. Who draws these rows:
 // lib/dashboard/update-rows.ts.
+//
+// A MANUAL row (a pin moved by an ordinary commit) opens the same way, with
+// the file that commit edits where the button would be: there is nothing
+// here to press, and saying where the literal lives is the whole instruction.
 //
 // Notes load on open, once. `<details>` renders its children whether or not it
 // is open, so a fetch on mount would be every row on the page asking GitHub at
@@ -64,7 +69,7 @@ export function ImageRow({
         <summary className={SUMMARY}>
           <span className="min-w-[11rem] text-[0.84rem] text-foreground">{r.container}</span>
           <span className={cn(MONO_FACE, 'text-[0.76rem] text-(--text-muted)')}>
-            {r.running.version ?? r.tag}
+            {r.running.version ?? (r.kind === 'container' ? r.tag : DASH)}
           </span>
           {/* For a moved CHANNEL pin both tags are the same string, so the
               only honest thing the digests can say is "new digest" — unless
@@ -83,7 +88,7 @@ export function ImageRow({
           </span>
           <span className="ml-auto flex items-baseline gap-[0.4rem]">
             <Chip tone={v.tone}>{v.label}</Chip>
-            {!r.updatable && <Chip tone="muted">pinned</Chip>}
+            {r.kind === 'container' && !r.updatable && <Chip tone="muted">pinned</Chip>}
             {/* On the closed row, because the whole point of a queue is to
                 build it while scrolling past rows that are shut. */}
             {queue?.queued === true && <Chip tone="ok">queued</Chip>}
@@ -92,28 +97,81 @@ export function ImageRow({
 
         <div className="flex flex-col gap-[0.7rem] border-(--border-soft) border-t px-3 pt-2 pb-[0.7rem]">
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />
-          <UpdateControl
-            target={{
-              container: r.container,
-              tag: r.tag,
-              target: r.target,
-              candidates: r.candidates,
-              updatable: r.updatable,
-              lockstep: r.lockstep,
-              ceremony: r.ceremony,
-            }}
-            initialStatus={status}
-            queue={queue}
-          />
-          {/* The exact ref this row would rewrite, last and quiet — it is what
+          {r.kind === 'manual' ? (
+            <ManualFacts r={r} />
+          ) : (
+            <>
+              <UpdateControl
+                target={{
+                  container: r.container,
+                  tag: r.tag,
+                  target: r.target,
+                  candidates: r.candidates,
+                  updatable: r.updatable,
+                  lockstep: r.lockstep,
+                  ceremony: r.ceremony,
+                }}
+                initialStatus={status}
+                queue={queue}
+              />
+              {/* The exact ref this row would rewrite, last and quiet — it is what
               a person copies into a shell to check something by hand, and it
               is not part of the decision. */}
-          <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
-            {`${r.image}@${r.digest.slice(0, 19)}…`}
-          </p>
+              <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
+                {`${r.image}@${r.digest.slice(0, 19)}…`}
+              </p>
+            </>
+          )}
         </div>
       </details>
     </li>
+  )
+}
+
+/**
+ * What a hand-moved pin says instead of a button: the versions that move
+ * with it, what a bump takes, and where the literal is.
+ *
+ * An engine file links to the engine's source on GitHub. A configuration
+ * file is named, not linked — that repository is the box's own, and nothing
+ * here knows where (or whether) it is published.
+ */
+function ManualFacts({ r }: { r: ManualRow }) {
+  const parts = Object.entries(r.parts)
+  const { repo, path } = r.pinnedIn
+  return (
+    <div className="flex flex-col gap-[0.45rem]">
+      {parts.length > 0 && (
+        <div className="flex flex-wrap items-baseline gap-[0.4rem]">
+          {parts.map(([name, version]) => (
+            <Chip key={name}>
+              {name} <span className={cn(MONO, 'ml-[0.3em]')}>{version}</span>
+            </Chip>
+          ))}
+        </div>
+      )}
+      {r.note !== null && <p className={NOTE}>{r.note}</p>}
+      <p className={NOTE}>
+        pinned in {repo} ·{' '}
+        {repo === 'engine' ? (
+          <a
+            className={MONO}
+            href={`https://github.com/${ENGINE_REPO}/blob/main/${path}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {path}
+          </a>
+        ) : (
+          <span className={MONO}>{path}</span>
+        )}
+      </p>
+      {r.image !== null && r.digest !== null && (
+        <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
+          {`${r.image}@${r.digest.slice(0, 19)}…`}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -124,8 +182,8 @@ function NotesPanel({ notes, hasNotes }: { notes: Notes | null; hasNotes: boolea
   if (!hasNotes) {
     return (
       <p className={EMPTY}>
-        No release notes: nothing maps this container to a project whose changelog we can read. The
-        tag delta above is still the real answer to what a re-pull would bring. See
+        No release notes: nothing maps this pin to a project whose changelog we can read. The tag
+        delta above is still the real answer to what a re-pull would bring. See
         <code> lib/dashboard/image-repos.ts</code> for why a guess is not offered instead.
       </p>
     )
