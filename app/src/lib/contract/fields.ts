@@ -73,7 +73,7 @@ export const pageSizeField =
 
 // ── Names of things the dashboard knows ─────────────────────────────────
 
-/** An app's name (lib/hostname.ts `isAppName`) — what `appName(v)` checked. */
+/** An app's name (lib/hostname.ts `isAppName`). */
 export const appNameField: Decoder<string> = withMessage(
   is(isAppName, 'an app name'),
   'expected an app name',
@@ -85,7 +85,7 @@ export const moduleIdField: Decoder<string> = withMessage(
   'expected a module',
 )
 
-/** A scheduled task's id (lib/tasks.ts `isTaskId`) — what `taskId(v)` checked. */
+/** A scheduled task's id (lib/tasks.ts `isTaskId`). */
 export const taskIdField: Decoder<string> = withMessage(
   is(isTaskId, 'a task id'),
   'expected a task id',

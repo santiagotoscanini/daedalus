@@ -5,7 +5,6 @@ import {
   expandSchedule,
   isTaskId,
   taskCommandError,
-  taskId,
   taskIdError,
   taskMinute,
   taskScheduleError,
@@ -107,7 +106,6 @@ describe('taskId', () => {
   it('accepts the contract’s charset and refuses everything else', () => {
     for (const ok of ['digest', 'a', 'daily-digest', 'x9', 'a'.repeat(40)]) {
       expect(isTaskId(ok), ok).toBe(true)
-      expect(taskId(ok)).toBe(ok)
     }
     // Every one of these would either break a unit name apart or smuggle a
     // second token into the command ROOT runs.
@@ -127,7 +125,6 @@ describe('taskId', () => {
       ['digest'],
     ]) {
       expect(isTaskId(bad), JSON.stringify(bad)).toBe(false)
-      expect(() => taskId(bad)).toThrow('expected a task id')
     }
   })
 

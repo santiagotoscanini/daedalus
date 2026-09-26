@@ -10,7 +10,6 @@ import {
   enqueueSkip,
   failedTip,
   INTERRUPTED,
-  markDispatched,
   nextToRun,
   reconcile,
   TIMED_OUT,
@@ -349,14 +348,6 @@ describe('nextToRun', () => {
   })
 })
 
-describe('markDispatched', () => {
-  it('takes the row out of the queue so the lane can queue again', () => {
-    const r = markDispatched(row(), at(5))
-    expect(r).toMatchObject({ state: 'cloning', phase: 'requested', startedAt: at(5) })
-    expect(enqueue([r], req({ sha: SHA_B })).result).toMatchObject({ superseded: [] })
-  })
-})
-
 describe('applyStatus', () => {
   const running = () => row({ id: '00000001', state: 'cloning', startedAt: T0 })
 
@@ -530,8 +521,10 @@ describe('the terminal rule: the host is the source of truth', () => {
 })
 
 describe('reconcile', () => {
-  const dispatched = (secondsAgo: number, now: number) =>
-    markDispatched(row({ id: '00000001' }), at(now - secondsAgo))
+  const dispatched = (secondsAgo: number, now: number) => {
+    const t = at(now - secondsAgo)
+    return row({ id: '00000001', state: 'cloning', phase: 'requested', startedAt: t, updatedAt: t })
+  }
 
   it('fails a running row the host never picked up after 90 s', () => {
     const { rows, changed } = reconcile([dispatched(120, 1000)], null, at(1000))

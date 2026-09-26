@@ -3,7 +3,7 @@
 //
 // Pure, and in `lib/` rather than `lib/apps/`, because three different places
 // need the same answers and one of them is the browser: the seam validates a
-// run request with `taskId`, the exporter and the importer normalise with
+// run request with `isTaskId`, the exporter and the importer normalise with
 // these rules, and the Tasks tab renders `describeSchedule` next to the raw
 // OnCalendar string. A second copy of the minute derivation anywhere would be
 // a task whose UI says :23 and whose timer fires at :41.
@@ -28,12 +28,6 @@ const TASK_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 export function isTaskId(v: unknown): v is string {
   return typeof v === 'string' && TASK_ID.test(v)
-}
-
-/** `isTaskId` as a parser, for the request boundaries that must refuse. */
-export function taskId(v: unknown): string {
-  if (!isTaskId(v)) throw new Error('expected a task id')
-  return v
 }
 
 /** An operator-facing reason the id is unusable, or null. */

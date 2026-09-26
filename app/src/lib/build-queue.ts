@@ -20,7 +20,7 @@ import {
 // `queued` — the partial unique index enforces it — so a newer sha supersedes
 // the queued one instead of queueing behind it: that row becomes `superseded`
 // and a new row takes its place (the repository does both in one transaction).
-// A dispatched row leaves `queued` immediately (`markDispatched`), which is
+// A dispatched row leaves `queued` immediately, which is
 // what lets the next push queue without touching the build the host is
 // already running.
 
@@ -294,11 +294,6 @@ export function nextToRun(
     return { row: null, held, blockedBy: 'in-flight' }
   }
   return { row: runnable[0] ?? null, held, blockedBy: null }
-}
-
-/** The row as handed to the host: out of `queued`, so the lane can queue again. */
-export function markDispatched<R extends BuildRow>(row: R, now: Date): R {
-  return { ...row, state: 'cloning', phase: 'requested', startedAt: now, updatedAt: now }
 }
 
 /**
