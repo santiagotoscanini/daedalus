@@ -5,9 +5,9 @@
 //! answers `ok`. The writes are few and only from this machine — refused
 //! from any address but loopback:
 //!
-//!   GET  /metrics         the telemetry as Prometheus text (telemetry.rs)
+//!   GET  /metrics         the telemetry as Prometheus text (telemetry/metrics.rs)
 //!   POST /update/check    the updater looks now (the tray's "check for updates")
-//!   POST /claude/report   the tray's picture of Claude Code (claude.rs); the
+//!   POST /claude/report   the tray's picture of Claude Code (claude/); the
 //!                         answer carries the box's policy and, once, a restart
 //!   POST /claude/restart  ask the tray to restart the server on its next report
 //!
