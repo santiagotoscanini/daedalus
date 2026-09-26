@@ -183,32 +183,12 @@ export function changesBetween(committed: SiteDocument, desired: SiteDocument): 
   return EDITABLE.filter((f) => !sameValue(getField(committed, f), getField(desired, f)))
 }
 
-/**
- * A document written before the control plane's label was part of site.json
- * reads it as '' — and nix, seeing no label, keeps the address nix/stacks/daedalus
- * declares. Filled from `from` (the running box), so the page shows the real
- * label and an old file is not reported as a pending rename.
- */
-function withControlPlane(doc: SiteDocument, from: SiteDocument): SiteDocument {
-  if (doc.identity.controlPlane !== '') return doc
-  return {
-    ...doc,
-    identity: {
-      ...doc.identity,
-      controlPlane: from.identity.controlPlane,
-      controlPlanePrevious: doc.identity.controlPlanePrevious ?? from.identity.controlPlanePrevious,
-    },
-  }
-}
-
 /** Committed, desired, and the difference — what the editable tabs render from. */
 export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   const committed = await readCommittedSite()
-  const running = await runningSite(ctx)
-  const committedDoc = committed.ok ? withControlPlane(committed.value.doc, running) : null
-  const base = committedDoc ?? running
-  const stored = await readDraft(ctx)
-  const draft = stored === null ? null : withControlPlane(stored, base)
+  const committedDoc = committed.ok ? committed.value.doc : null
+  const base = committedDoc ?? (await runningSite(ctx))
+  const draft = await readDraft(ctx)
   // A draft only carries the editable fields' intent: everything else comes
   // from the base, so a hostname or Cloudflare id the configuration moved
   // can never be pinned to a stale value by an old draft.
@@ -476,7 +456,7 @@ export async function renderSiteMeta(
       writtenBy: { actor, door: 'apply' },
       engine,
       config: { revision: nonEmpty(fresh(repo)?.head?.rev) },
-      nixos: { version: nonEmpty(fresh(identity)?.nixos?.version) },
+      nixos: { version: nonEmpty(fresh(identity)?.nixos.version) },
     }),
   }
 }

@@ -56,18 +56,8 @@ type ImageMove = {
 export type ImageUpdateStatus = {
   id: string | null
   /**
-   * The first container the request named.
-   *
-   * The host still writes it for readers that predate batching; `targets` is
-   * the one to read.
-   */
-  container: string
-  /**
    * Every container the REQUEST named, which is not every container that
    * moves — lockstep members are in `moves` and were nobody's choice.
-   *
-   * Normalised by `readImageUpdateStatus`, so a reader never has to handle the
-   * pre-batching shape where this field did not exist.
    */
   targets: string[]
   state: ImageUpdateState
@@ -83,7 +73,6 @@ export type ImageUpdateStatus = {
 /** The status file the host agent writes; decoding `{}` is the idle status. */
 const IMAGE_STATUS: Decoder<ImageUpdateStatus> = obj({
   id: optional(nullable(str), null),
-  container: optional(str, ''),
   targets: optional(arrayOf(str), []),
   state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
   phase: optional(str, ''),
@@ -142,13 +131,7 @@ const RUNNING_MAX_MS = 65 * 60_000
  * that gets it wrong somewhere.
  */
 export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
-  const raw = await bridge.readStatus()
-
-  // A status written before batching existed has no `targets`. Filling it from
-  // `container` here means every reader sees one shape — the same argument as
-  // the staleness rule below.
-  const s: ImageUpdateStatus =
-    raw.targets.length > 0 || raw.container === '' ? raw : { ...raw, targets: [raw.container] }
+  const s = await bridge.readStatus()
 
   if (s.state !== 'running') return s
 
@@ -172,11 +155,6 @@ export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
  * which is the entire update for a channel pin like `:latest` — the tag has
  * moved and the pin has not. For a release pin it is the tag the operator
  * chose off the candidate list after reading what changed.
- *
- * A one-target request ALSO carries the pre-batching top-level
- * `container`/`toTag`, for a host agent older than `targets`: this app
- * hot-reloads on save while the agent only changes on a rebuild, so the two
- * are not guaranteed to be the same age. A batch has no such fallback.
  */
 export async function requestImageUpdate(input: {
   targets: ImageTarget[]
@@ -186,11 +164,5 @@ export async function requestImageUpdate(input: {
     container: t.container,
     ...(t.toTag === undefined ? {} : { toTag: t.toTag }),
   }))
-  const only = targets.length === 1 ? targets[0] : undefined
-
-  return bridge.request({
-    targets,
-    ...(only === undefined ? {} : only),
-    actor: input.actor,
-  })
+  return bridge.request({ targets, actor: input.actor })
 }

@@ -123,10 +123,11 @@ async function notesFor(release: string, known: NixosCycle[] | null): Promise<Ni
   }
 }
 
-export async function nixosRelease(facts: NixosFacts | null): Promise<NixosRelease> {
+export async function nixosRelease(facts: NixosFacts): Promise<NixosRelease> {
   const checkedAt = new Date().toISOString()
   const today = checkedAt.slice(0, 10)
-  if (facts === null || facts.release === '') {
+  // Only while the site export is missing.
+  if (facts.release === '') {
     return {
       checkedAt,
       running: null,
@@ -135,7 +136,7 @@ export async function nixosRelease(facts: NixosFacts | null): Promise<NixosRelea
       latestSupport: null,
       channel: { branch: '', head: null, newer: null },
       notes: [],
-      note: 'the export does not describe the release yet',
+      note: 'the site export is missing, so the release is unknown',
     }
   }
 

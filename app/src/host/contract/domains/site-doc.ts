@@ -28,9 +28,8 @@ const shape = obj({
   identity: obj({
     hostname: str,
     baseDomain: str,
-    // Optional: a site.json written before the control plane's address was
-    // part of it still reads, and nix falls back to self.json's `hostLabel`
-    // (nix/stacks/daedalus/).
+    // Optional: a site.json that names no label is valid, and nix then keeps
+    // self.json's `hostLabel` (nix/stacks/daedalus/).
     controlPlane: optional(str, ''),
     controlPlanePrevious: optional(nullable(str), null),
     timezone: str,

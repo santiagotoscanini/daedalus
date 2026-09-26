@@ -29,7 +29,7 @@ const gate = defineGate({
     const what =
       inFlight.targets.length > 1
         ? `an update of ${String(inFlight.targets.length)} containers`
-        : `an update of ${inFlight.targets[0] ?? inFlight.container}`
+        : `an update of ${inFlight.targets[0] ?? 'one container'}`
     return `${what} is already running (${inFlight.phase})`
   },
 })

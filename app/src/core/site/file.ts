@@ -189,7 +189,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
 /**
  * The inverse of the decoder's fallbacks. A field the decoder fills in when it
  * is absent is left out again while it holds exactly that fallback, so a file
- * written before the field existed re-renders to its own bytes. Nix reads the
+ * without it re-renders to its own bytes. Nix reads the
  * absent label and the empty one alike, as unset.
  */
 function identityAsWritten(identity: SiteDocument['identity']): Record<string, unknown> {

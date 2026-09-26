@@ -46,12 +46,8 @@ export type UpdatesData = {
   status: ImageUpdateStatus
   /** The engine's own pin — the card above the table. */
   engine: EngineFacts
-  /**
-   * The NixOS release this generation was built with, from the site export;
-   * `facts` is null before the export carries the release in detail, and
-   * `version` is the one string every export has.
-   */
-  nixos: { facts: NixosFacts | null; version: string | null }
+  /** The NixOS release this generation was built with, from the site export. */
+  nixos: NixosFacts
 }
 
 // ── the engine itself ─────────────────────────────────────────────────────
@@ -137,6 +133,6 @@ export async function loadUpdates(): Promise<UpdatesData> {
     probeMissing: checked.length === 0,
     status,
     engine,
-    nixos: { facts: site.data.nixos, version: site.data.nixosVersion },
+    nixos: site.data.nixos,
   }
 }

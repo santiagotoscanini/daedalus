@@ -49,28 +49,9 @@ function useNixosRelease(): Live {
 
 const ASIDE = 'ml-2 text-(--dim)'
 
-export function NixosCard({
-  facts,
-  version,
-}: {
-  facts: NixosFacts | null
-  /** The version string alone, for an export older than the release facts. */
-  version: string | null
-}) {
+export function NixosCard({ facts }: { facts: NixosFacts }) {
   const live = useNixosRelease()
   const release = live.state === 'answered' ? live.release : null
-
-  if (facts === null) {
-    return (
-      <Board title="NixOS" span={12}>
-        <Facts rows={[{ k: 'Version', v: <span className={MONO}>{version ?? '—'}</span> }]} />
-        <p className={FOOT}>
-          The export names the version only. The release, its channel and its support window arrive
-          with the next rebuild.
-        </p>
-      </Board>
-    )
-  }
 
   const next =
     release?.latest !== null &&

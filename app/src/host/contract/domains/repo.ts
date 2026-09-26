@@ -37,7 +37,7 @@ export type SiteFileStatus =
 export type SiteFile = { status: SiteFileStatus; sha256: string | null }
 /**
  * When each app secret was last written, and by whom: `<app> → <KEY> →
- * facts`. Published from v5 on; an older snapshot decodes as {}.
+ * facts`.
  *
  * Derived from the git history of `site/vault/apps/<app>-env.sops` — the
  * newest commit whose diff added that key's line. Git IS the audit trail
@@ -54,25 +54,24 @@ export type SiteDir = {
   toplevel: string | null
   /** That work tree is the configuration repository — the intended arrangement. */
   inThisRepo: boolean
-  /** Every file daedalus writes there. README.md and daedalus.json arrived
-      with the v4 snapshot; an older one decodes them as absent. */
+  /** Every file daedalus writes there. */
   files: {
     'site.json': SiteFile
     'apps.json': SiteFile
-    /** The machines (lib/nodes-file.ts); v7 on, absent before. */
+    /** The machines (lib/nodes-file.ts). */
     'nodes.json': SiteFile
     'README.md': SiteFile
     'daedalus.json': SiteFile
   }
-  /** Per-key git facts; see `AppSecretHistory`. Empty on a pre-v5 snapshot. */
+  /** Per-key git facts; see `AppSecretHistory`. */
   appSecrets: AppSecretHistory
 }
 
 /**
  * The engine as the configuration's `flake.lock` pins it — the `daedalus`
- * input's locked node. Published from v6 on; null on an older snapshot, on a
- * lock without that input, and on a lock the host could not read, and the
- * Updates page says "unknown" for all three rather than guessing.
+ * input's locked node. Null on a lock without that input and on a lock the
+ * host could not read, and the Updates page says "unknown" for both rather
+ * than guessing.
  *
  * `type` and `url` are the input as the host WROTE it: `git` with a
  * `file://` url is a local clone (the reference arrangement, where "latest"
@@ -141,17 +140,14 @@ const siteShape = obj({
     obj({
       'site.json': optional(siteFile, NO_FILE),
       'apps.json': optional(siteFile, NO_FILE),
-      // Published from v4 on. Each is optional so a v3 snapshot — the one on
-      // disk for the minutes between a switch and the timer's next run —
-      // still decodes, reporting them absent rather than failing whole.
       'README.md': optional(siteFile, NO_FILE),
       'daedalus.json': optional(siteFile, NO_FILE),
       'nodes.json': optional(siteFile, NO_FILE),
     }),
     NO_SITE_DIR.files,
   ),
-  // Published from v5 on: the key names are already visible to the container
-  // (it reads the ciphertext), so what is added here is only WHEN and BY WHOM.
+  // The key names are already visible to the container (it reads the
+  // ciphertext), so what this adds is only WHEN and BY WHOM.
   // `recordOf(recordOf(...))` rather than a fixed key set — the apps and their
   // variables are both open sets.
   appSecrets: optional(
@@ -174,13 +170,8 @@ const shape = obj({
     null,
   ),
   lastApply: optional(nullable(commit), null),
-  // Absent in the v1 and v2 shapes. A reader newer than its producer is the
-  // normal state for the minutes between a switch and the timer's next run.
   site: optional(siteShape, NO_SITE_DIR),
-  // Published from v6 on, and `null` there too when the lock has no
-  // `daedalus` input. Optional-with-null so a pre-v6 file — the one on disk
-  // until the timer's next run after the switch that added it — reads as
-  // "unknown" rather than failing the whole snapshot.
+  // `null` when the lock has no `daedalus` input.
   engine: optional(
     nullable(
       obj({
@@ -215,13 +206,7 @@ export async function repoFacts(): Promise<SnapshotResult<RepoFacts>> {
     path: env.get('REPO_FACTS_PATH'),
     decoder: shape,
     fallback: NO_REPO,
-    // v2 carried a `site` of a different shape (the retired separate-repo
-    // design); decoding it lands on the fallbacks, which is the honest answer.
-    // v3 is v4 without README.md and daedalus.json, and is kept because a
-    // snapshot written before the rebuild that added them must still decode.
-    // v6 added `engine`, the pinned engine's lock node — same argument.
-    // v7 added nodes.json to site.files, optional for the same minutes.
-    acceptVersions: [1, 2, 3, 4, 5, 6, 7],
+    acceptVersions: [7],
     maxAgeMs: MAX_AGE_MS,
   })
 }

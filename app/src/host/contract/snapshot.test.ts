@@ -57,10 +57,10 @@ describe('the three failure modes stay distinct', () => {
   })
 })
 
-describe('legacy documents', () => {
+describe('bare documents', () => {
   it('decode whole and age by mtime', async () => {
-    await writeFile(join(dir, 'legacy.json'), '{"host": "pg", "port": 5432}', 'utf8')
-    const r = await read('legacy.json')
+    await writeFile(join(dir, 'bare.json'), '{"host": "pg", "port": 5432}', 'utf8')
+    const r = await read('bare.json')
     expect(r.data).toEqual({ host: 'pg', port: 5432 })
     expect(r.available).toBe(true)
     expect(r.generatedAt).not.toBeNull()

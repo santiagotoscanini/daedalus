@@ -252,12 +252,11 @@ async function fetchOwner(ctx: Ctx): Promise<Result<Owner>> {
   return { ok: true, value: { id, login, type } }
 }
 
-async function controlPlaneHost(ctx: Ctx, doc: SiteDocument): Promise<string | null> {
+async function controlPlaneHost(doc: SiteDocument): Promise<string | null> {
   const { baseDomain, controlPlane } = doc.identity
   if (controlPlane !== '' && baseDomain !== '') return `${controlPlane}.${baseDomain}`
   const { siteIdentity } = await import('../../host/contract/domains/site')
-  const host = (await siteIdentity()).data.controlPlane.hostname ?? ctx.env('APP_HOSTNAME') ?? ''
-  return host === '' ? null : host
+  return (await siteIdentity()).data.controlPlane.hostname
 }
 
 export async function startAppCreation(
@@ -291,7 +290,7 @@ export async function startAppCreation(
   if (existing !== null && input.replace !== true) {
     return refuse(`This box already has a GitHub App, ${existing.slug}.`)
   }
-  const host = await controlPlaneHost(ctx, site.value.doc)
+  const host = await controlPlaneHost(site.value.doc)
   if (host === null) {
     return refuse(
       'The control plane’s address is not known yet, so GitHub would have nowhere to send you back.',

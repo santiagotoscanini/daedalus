@@ -21,8 +21,8 @@ const ARCH: Record<string, string> = { x64: 'x86_64', arm64: 'aarch64' }
 export async function loadBoxHead(): Promise<BoxHead> {
   const [site, facts] = await Promise.all([siteIdentity(), hostFacts()])
   const n = site.data.nixos
-  const release = n?.release ?? site.data.nixosVersion
-  const os = release === null ? 'NixOS' : `NixOS ${release}${n?.codeName ? ` (${n.codeName})` : ''}`
+  const os =
+    n.release === '' ? 'NixOS' : `NixOS ${n.release}${n.codeName ? ` (${n.codeName})` : ''}`
   const board = facts.hardware.board
   // "Micro-Star International Co., Ltd." is a legal name, not a brand.
   const vendor = board.vendor
@@ -32,7 +32,7 @@ export async function loadBoxHead(): Promise<BoxHead> {
   return {
     hostname: site.data.hostname,
     os,
-    kernel: facts.kernel ?? n?.kernel ?? null,
+    kernel: facts.kernel ?? (n.kernel || null),
     arch: ARCH[process.arch] ?? process.arch,
     model,
   }

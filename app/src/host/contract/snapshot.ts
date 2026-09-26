@@ -29,17 +29,18 @@ import {
 // because it looks like an answer (nix/stacks/daedalus/daedalus-snapshots.nix,
 // on the system snapshot).
 //
-// Files come in two framings. The envelope (daedalusExport: 1) carries
-// domain, schemaVersion, source and generatedAt around a `data` key — the nix
-// exports (platform/export.nix) and the newer host snapshots use it. Bare
-// documents, from every producer that has not adopted it, are detected by the
-// absent marker, decoded whole and aged by mtime.
+// Files come in two framings. The envelope (daedalusExport: 1) wraps a `data`
+// key with its schemaVersion and, from the host snapshots, a generatedAt — the
+// nix exports (platform/export.nix) and most host snapshots use it. Its
+// `domain` and `source` name the producer for a person reading the file; no
+// reader needs them, so they are not decoded. Bare documents are detected by
+// the absent marker, decoded whole and aged by mtime.
 
 export type SnapshotResult<T> = {
   data: T
   /** File existed and decoded. False = data is the caller's fallback. */
   available: boolean
-  /** From the envelope, or mtime for legacy files. Null when unavailable. */
+  /** From the envelope, or mtime when it has none. Null when unavailable. */
   generatedAt: string | null
   ageMs: number | null
   /** Age exceeded maxAgeMs — the producing timer has stopped keeping its promise. */
@@ -50,9 +51,7 @@ export type SnapshotResult<T> = {
 
 const envelope = obj({
   daedalusExport: num,
-  domain: str,
   schemaVersion: num,
-  source: str,
   generatedAt: optional(str, ''),
 })
 
@@ -67,7 +66,7 @@ function logOnce(path: string, message: string): void {
 
 export async function readSnapshot<T>(opts: {
   path: string
-  /** Decodes the envelope's `data` (or, for legacy files, the whole document). */
+  /** Decodes the envelope's `data` (or, for a bare file, the whole document). */
   decoder: Decoder<T>
   fallback: T
   /** Envelope schemaVersions this reader understands. Unset = any. */

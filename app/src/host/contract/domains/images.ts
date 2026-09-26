@@ -16,11 +16,6 @@ import { readSnapshot } from '../snapshot'
 // because the Updates page has to render EVERY digest-pinned container —
 // including the sidecars and exporters that have no page of their own — and
 // a page cannot enumerate what nothing publishes.
-//
-// Schema 2 added `pins`. Read tolerantly rather than gated at 2, because the
-// two halves fail independently: a box that has not re-published since the
-// upgrade still has correct `tags`, and blanking every version on the dash to
-// insist on a field only one page needs is the wrong trade.
 
 const pinShape = obj({
   /** `<repo>:<tag>`, the ref the registry is asked about. */
@@ -50,7 +45,7 @@ async function domain(): Promise<{ tags: Record<string, string>; pins: Record<st
     path: join(env.get('EXPORT_DIR'), 'images.json'),
     decoder: shape,
     fallback: { tags: {}, pins: {} },
-    acceptVersions: [1, 2],
+    acceptVersions: [2],
   })
   return r.data
 }

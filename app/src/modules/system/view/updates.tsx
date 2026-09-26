@@ -107,7 +107,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
           one whose update restarts the page reporting it. Then the release the
           whole generation stands on. */}
       <EngineCard e={d.engine} />
-      <NixosCard facts={d.nixos.facts} version={d.nixos.version} />
+      <NixosCard facts={d.nixos} />
       <QueuePanel
         queue={queue}
         initialStatus={d.status}

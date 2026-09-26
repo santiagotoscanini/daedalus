@@ -100,7 +100,7 @@ describe('an update the host is already running', () => {
   it('is refused, and does not replace the request it is reading', async () => {
     await hostStatus({
       id: 'abc',
-      container: 'intel-gpu-exporter',
+      targets: ['intel-gpu-exporter'],
       state: 'running',
       phase: 'pull',
     })

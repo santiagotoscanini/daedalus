@@ -8,7 +8,7 @@ import { NO_REPO, repoFacts } from './repo'
 // the script's own output, so a change to either side that the other does
 // not follow fails here rather than as an empty tab.
 
-const envelope = (data: unknown, generatedAt = new Date().toISOString(), schemaVersion = 3) =>
+const envelope = (data: unknown, generatedAt = new Date().toISOString(), schemaVersion = 7) =>
   JSON.stringify({
     daedalusExport: 1,
     domain: 'repo',
@@ -68,29 +68,11 @@ describe('repoFacts', () => {
     expect(r.data.site.files['apps.json'].status).toBe('absent')
   })
 
-  it('reads a v1 snapshot — the shape published before the site repo existed', async () => {
-    await publish(
-      envelope(
-        {
-          path: '/etc/nixos',
-          remote: null,
-          branch: 'main',
-          head: { rev: 'abc123', subject: 'x', committedAt: '2026-09-09T10:00:00-03:00' },
-          tree: { modified: 0, untracked: 0 },
-          upstream: null,
-          lastApply: null,
-        },
-        new Date().toISOString(),
-        1,
-      ),
-    )
+  it('refuses a schemaVersion the producer no longer writes', async () => {
+    await publish(envelope({ path: '/etc/nixos' }, new Date().toISOString(), 6))
     const r = await repoFacts()
-    expect(r.available).toBe(true)
-    expect(r.data.branch).toBe('main')
-    // A reader newer than its producer: the minutes between a switch and the
-    // timer's next run must read as "no site directory", not as an unavailable tab.
-    expect(r.data.site.exists).toBe(false)
-    expect(r.data.site.path).toBe('')
+    expect(r.available).toBe(false)
+    expect(r.error).toContain('schemaVersion 6')
   })
 
   it('tolerates the null-heavy shape of a repo with no upstream and no head', async () => {
@@ -114,34 +96,25 @@ describe('repoFacts', () => {
     expect(r.data.site.path).toBe('/site')
   })
 
-  it('reads the pinned engine from a v6 snapshot, and "unknown" from anything older', async () => {
+  it('reads the pinned engine, and null for a lock without one', async () => {
     await publish(
-      envelope(
-        {
-          path: '/etc/nixos',
-          engine: {
-            rev: 'c2c88482a0b3c1287bda221f7ef4ae914a9304c0',
-            lastModified: '2026-09-21T10:11:53Z',
-            type: 'git',
-            url: 'file:///srv/engine',
-            ref: 'main',
-          },
+      envelope({
+        path: '/etc/nixos',
+        engine: {
+          rev: 'c2c88482a0b3c1287bda221f7ef4ae914a9304c0',
+          lastModified: '2026-09-21T10:11:53Z',
+          type: 'git',
+          url: 'file:///srv/engine',
+          ref: 'main',
         },
-        new Date().toISOString(),
-        6,
-      ),
+      }),
     )
     const r = await repoFacts()
     expect(r.data.engine?.rev).toBe('c2c88482a0b3c1287bda221f7ef4ae914a9304c0')
     expect(r.data.engine?.url).toBe('file:///srv/engine')
 
-    // The minutes between a switch and the timer's next run: the file on disk
-    // is still v5, and the Updates page must read that as not knowing.
-    await publish(envelope({ path: '/etc/nixos' }, new Date().toISOString(), 5))
-    expect((await repoFacts()).data.engine).toBeNull()
-
-    // A v6 lock with no `daedalus` input is published as null, not omitted.
-    await publish(envelope({ path: '/etc/nixos', engine: null }, new Date().toISOString(), 6))
+    // A lock with no `daedalus` input is published as null, not omitted.
+    await publish(envelope({ path: '/etc/nixos', engine: null }))
     expect((await repoFacts()).data.engine).toBeNull()
   })
 

@@ -273,14 +273,13 @@ function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) 
  * site.json field, so it is a pending edit until Apply like the rest.
  */
 function CommitAs({ edit, git }: { edit: SiteEdit; git: GitIdentities }) {
-  const who = (id: GitIdentity | undefined, fallback: string): string =>
-    id === undefined ? fallback : `${id.name} <${id.email}>`
+  const who = (id: GitIdentity): string => `${id.name} <${id.email}>`
   const groups: SelectGroupSpec[] = [
     {
       label: 'Identities',
       options: [
-        { value: 'box', label: who(git?.box, 'daedalus') },
-        { value: 'operator', label: who(git?.operator, 'the operator') },
+        { value: 'box', label: who(git.box) },
+        { value: 'operator', label: who(git.operator) },
       ],
     },
   ]
@@ -288,13 +287,7 @@ function CommitAs({ edit, git }: { edit: SiteEdit; git: GitIdentities }) {
     <div className="flex flex-col gap-2 border-(--border-soft) border-t pt-4">
       <div className="flex flex-wrap items-center gap-3 text-[0.82rem]">
         <span>Commit as</span>
-        <SiteSelect
-          edit={edit}
-          field="commits.author"
-          label="Commit as"
-          groups={groups}
-          disabled={git === null}
-        />
+        <SiteSelect edit={edit} field="commits.author" label="Commit as" groups={groups} />
       </div>
       <p className={NOTE}>
         Every commit daedalus makes — an Apply, a secret, an image or engine update — is authored as
@@ -302,8 +295,6 @@ function CommitAs({ edit, git }: { edit: SiteEdit; git: GitIdentities }) {
         Both identities are the ones nix configures: the box's own, and the operator's git identity
         (<Mono>fleet.operator.gitName</Mono>). The choice is applied like any other change, and that
         Apply already commits as the new identity.
-        {git === null &&
-          ' The identities appear here once the box publishes them, after its next engine update.'}
       </p>
     </div>
   )

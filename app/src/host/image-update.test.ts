@@ -27,7 +27,7 @@ const status = (state: string, minutesAgo: number, phase = 'switching') =>
     join(dir, 'image-status.json'),
     JSON.stringify({
       id: 'abc',
-      container: 'intel-gpu-exporter',
+      targets: ['intel-gpu-exporter'],
       state,
       phase,
       error: '',

@@ -16,9 +16,9 @@ export type GitIdentity = { name: string; email: string }
 
 /**
  * The identities site.json's `commits.author` chooses between, as nix
- * configured them (`site.git`). Null until the export carries them.
+ * configured them (`site.git`).
  */
-export type GitIdentities = { box: GitIdentity; operator: GitIdentity } | null
+export type GitIdentities = { box: GitIdentity; operator: GitIdentity }
 
 /** The release, as platform/export.nix states it (`site.nixos`). */
 export type NixosFacts = {
@@ -36,11 +36,11 @@ export type NixosFacts = {
 
 /** The control plane's address, as platform/export.nix states it (`site.controlPlane`). */
 type ControlPlaneFacts = {
-  /** The label site.json carries; null before a site.json that has one. */
+  /** The label site.json carries; null when it names none and the engine's default applies. */
   label: string | null
   /** The label before a rename, still served until the new one is confirmed. */
   previousLabel: string | null
-  /** Where the control plane answers; null before the export carries it. */
+  /** Where the control plane answers; null on a box that publishes no daedalus webApp. */
   hostname: string | null
   aliases: string[]
 }
@@ -52,9 +52,7 @@ export type SiteIdentity = {
   lanIp: string
   stateRoot: string
   timezone: string
-  nixosVersion: string | null
-  /** Null until the export carries it. */
-  nixos: NixosFacts | null
+  nixos: NixosFacts
   network: { interface: string | null; gateway: string | null }
   owner: string
   operator: { user: string; group: string; uid: number | null }
@@ -65,6 +63,8 @@ export type SiteIdentity = {
   git: GitIdentities
 }
 
+const identity = obj({ name: str, email: str })
+
 const shape = obj({
   hostname: optional(str, ''),
   baseDomain: optional(str, ''),
@@ -72,20 +72,14 @@ const shape = obj({
   lanIp: optional(str, ''),
   stateRoot: optional(str, ''),
   timezone: optional(str, ''),
-  nixosVersion: optional(nullable(str), null),
-  nixos: optional(
-    nullable(
-      obj({
-        version: optional(str, ''),
-        release: optional(str, ''),
-        codeName: optional(str, ''),
-        revision: optional(nullable(str), null),
-        kernel: optional(str, ''),
-        stateVersion: optional(str, ''),
-      }),
-    ),
-    null,
-  ),
+  nixos: obj({
+    version: str,
+    release: str,
+    codeName: str,
+    revision: nullable(str),
+    kernel: str,
+    stateVersion: str,
+  }),
   network: optional(
     obj({ interface: optional(nullable(str), null), gateway: optional(nullable(str), null) }),
     { interface: null, gateway: null },
@@ -101,26 +95,18 @@ const shape = obj({
     sender: '',
     alertTo: '',
   }),
-  controlPlane: optional(
-    obj({
-      label: optional(nullable(str), null),
-      previousLabel: optional(nullable(str), null),
-      hostname: optional(nullable(str), null),
-      aliases: optional(arrayOf(str), []),
-    }),
-    { label: null, previousLabel: null, hostname: null, aliases: [] },
-  ),
-  git: optional(
-    nullable(
-      obj({
-        box: obj({ name: str, email: str }),
-        operator: obj({ name: str, email: str }),
-      }),
-    ),
-    null,
-  ),
+  controlPlane: obj({
+    label: nullable(str),
+    previousLabel: nullable(str),
+    hostname: nullable(str),
+    aliases: arrayOf(str),
+  }),
+  git: obj({ box: identity, operator: identity }),
 })
 
+const NO_GIT: GitIdentity = { name: '', email: '' }
+
+/** What every reader sees while the export is missing (`available: false`). */
 const NO_SITE: SiteIdentity = {
   hostname: '',
   baseDomain: '',
@@ -128,8 +114,7 @@ const NO_SITE: SiteIdentity = {
   lanIp: '',
   stateRoot: '',
   timezone: '',
-  nixosVersion: null,
-  nixos: null,
+  nixos: { version: '', release: '', codeName: '', revision: null, kernel: '', stateVersion: '' },
   network: { interface: null, gateway: null },
   owner: '',
   operator: { user: '', group: '', uid: null },
@@ -137,7 +122,7 @@ const NO_SITE: SiteIdentity = {
   grafanaUrl: '',
   mail: { sender: '', alertTo: '' },
   controlPlane: { label: null, previousLabel: null, hostname: null, aliases: [] },
-  git: null,
+  git: { box: NO_GIT, operator: NO_GIT },
 }
 
 /**

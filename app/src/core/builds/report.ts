@@ -80,17 +80,16 @@ type SiteFacts = {
 }
 
 /** The control plane host as core/settings/github-app.ts derives it. Never a request header. */
-async function siteFacts(ctx: Ctx): Promise<SiteFacts> {
+async function siteFacts(): Promise<SiteFacts> {
   const { readCommittedSite } = await import('../../host/contract/domains/site-doc')
   const site = await readCommittedSite()
   const doc = site.ok ? site.value.doc : null
-  let controlPlane: string | null = null
+  let controlPlane: string | null
   if (doc !== null && doc.identity.controlPlane !== '' && doc.identity.baseDomain !== '') {
     controlPlane = `${doc.identity.controlPlane}.${doc.identity.baseDomain}`
   } else {
     const { siteIdentity } = await import('../../host/contract/domains/site')
-    const host = (await siteIdentity()).data.controlPlane.hostname ?? ctx.env('APP_HOSTNAME') ?? ''
-    controlPlane = host === '' ? null : host
+    controlPlane = (await siteIdentity()).data.controlPlane.hostname
   }
   return {
     app: doc?.github?.app ?? null,
@@ -430,7 +429,7 @@ async function reportRow(ctx: Ctx, row: BuildRow, manual: boolean): Promise<void
     }
     if (!mayCall(row.id, manual)) return
 
-    const site = await siteFacts(ctx)
+    const site = await siteFacts()
     if (site.app === null) {
       logOnce(row.id, 'no-app', 'site.json names no GitHub App; nothing was reported')
       return

@@ -51,11 +51,6 @@
 # so before the button is pressed. Someone who wants a bad pin isolated should
 # update that container alone.
 #
-# `container`/`toTag` at the top level is the older single form. It is still
-# accepted, and normalised into a one-element `targets` immediately, so a
-# request file written in that shape still works. Both doors today (the UI's
-# server function and the MCP `image.update` tool) always write `targets`.
-#
 # ── failure ───────────────────────────────────────────────────────────────
 #
 # Identical to apply.sh, because it is the same risk: `build` before `switch`
@@ -90,7 +85,7 @@ TARGET_NAMES='[]'
 
 write_status() {
   write_json_atomic "$STATUS" <<EOF
-{"id":"$REQ_ID","container":$(jq -Rn --arg c "${CONTAINER-}" '$c'),"targets":$TARGET_NAMES,"state":"$1","phase":"$2","error":$(jq -Rn --arg e "${3-}" '$e'),"moves":$MOVES,"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)","commit":"${COMMIT_SHA-}"}
+{"id":"$REQ_ID","targets":$TARGET_NAMES,"state":"$1","phase":"$2","error":$(jq -Rn --arg e "${3-}" '$e'),"moves":$MOVES,"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)","commit":"${COMMIT_SHA-}"}
 EOF
 }
 
@@ -132,20 +127,13 @@ if [ -f "$STATUS" ] && [ "$(published_id "$STATUS")" = "$REQ_ID" ]; then
   exit 0
 fi
 
-# One shape below this line. A `targets` array is the batch form; a top-level
-# `container`/`toTag` is the older single form, folded into a one-element array
-# here so nothing downstream has to know which door the request came through.
 TARGETS="$(jq -c '
-  if (.targets | type) == "array" and (.targets | length) > 0
+  if (.targets | type) == "array"
   then [ .targets[] | { container: (.container // ""), toTag: (.toTag // "") } ]
-  else [ { container: (.container // ""), toTag: (.toTag // "") } ]
+  else []
   end' <<<"$REQ_JSON")"
 
 TARGET_NAMES="$(jq -c '[.[].container]' <<<"$TARGETS")"
-
-# Back-compat field on the status: the first target. Readers that predate
-# batching see the shape they always saw, and `targets` is where the truth is.
-CONTAINER="$(jq -r '.[0].container // ""' <<<"$TARGETS")"
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 
 git_() {
@@ -187,7 +175,7 @@ override="$(site_engine_override)"
 [ -z "$override" ] ||
   fail validating "clear the engine override first: the running system is built from $override, not from the pinned engine (site.json developer.engineOverride, Settings › Developer)"
 
-[ -n "$CONTAINER" ] || fail validating "no container named in the request"
+[ "$(jq length <<<"$TARGETS")" -gt 0 ] || fail validating "no container named in the request"
 
 # The same container twice would pass validation and then fail in `writing`,
 # after the commit, because the second edit looks for a digest the first
