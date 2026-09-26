@@ -1,12 +1,13 @@
 import { useRouter } from '@tanstack/react-router'
 import { ShieldCheckIcon } from 'lucide-react'
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { ADMIN_GROUP } from '../../core/auth-names'
 import { cn } from '../../lib/cn'
 import { errorText } from '../../lib/redact'
 import { type AuthorizationView, setEnforceAdminsFn } from '../../server/settings'
 import { GHOST_BTN } from '../apps/shared'
 import { Button } from '../ui/button'
+import { useArmed } from '../use-armed'
 import { Chip } from '../viz'
 import { ERROR_NOTE, Mono, NOTE, PANEL, Section, Unset } from './shared'
 
@@ -123,23 +124,13 @@ export function Authorization({ view }: { view: AuthorizationView }) {
 
 function EnforceControl({ view }: { view: AuthorizationView }) {
   const router = useRouter()
-  const [armed, setArmed] = useState(false)
+  const [armed, arm, disarm] = useArmed(ARM_MS)
   const [busy, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!armed) return
-    const t = setTimeout(() => {
-      setArmed(false)
-    }, ARM_MS)
-    return () => {
-      clearTimeout(t)
-    }
-  }, [armed])
-
   const flip = (on: boolean) => {
-    setArmed(false)
+    disarm()
     setError(null)
     setDone(null)
     start(async () => {
@@ -206,7 +197,7 @@ function EnforceControl({ view }: { view: AuthorizationView }) {
             size="sm"
             className={GHOST_BTN}
             onClick={() => {
-              setArmed(false)
+              disarm()
             }}
           >
             Cancel
@@ -234,7 +225,7 @@ function EnforceControl({ view }: { view: AuthorizationView }) {
           size="sm"
           disabled={busy || !view.admin}
           onClick={() => {
-            setArmed(true)
+            arm()
           }}
         >
           Turn enforcement on…
