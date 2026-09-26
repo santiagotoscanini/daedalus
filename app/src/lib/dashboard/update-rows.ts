@@ -16,10 +16,11 @@ import { type ImageFreshness, imageFreshness, imageVersion, type RunningVersion 
 // one way on the fleet page and another on the service's own.
 //
 // Two kinds of row. A CONTAINER row is a `:tag@sha256:` pin the Update button
-// rewrites. A MANUAL row is a pin moved by an ordinary commit
+// rewrites. A MANUAL row is a pin that is not a container's own image
 // (fleet.manualPins: a local build's base, a build tool, a source commit) —
-// the same verdict where a registry can give one, and instead of a button the
-// file the commit edits.
+// the same verdict where a registry can give one, and the file a bump edits.
+// A manual row whose base the configuration pins is `updatable` too: the
+// button moves it under the pin's id, through the same agent.
 //
 // Local reads only — the pins from the nix export, the verdicts from the daily
 // registry probe, the running versions from image labels. The changelogs are
@@ -48,14 +49,8 @@ type RowBase = {
   hasNotes: boolean
 }
 
-/** A container's digest pin — the row with the button. */
-export type ContainerRow = RowBase & {
-  kind: 'container'
-  /** `<repo>:<tag>` — the ref the registry was asked about. */
-  image: string
-  repo: string
-  tag: string
-  digest: string
+/** What the Update button needs to move a pin — both kinds of row carry it. */
+type UpdatePolicy = {
   /** The tag this row would move to by default. Null when there is none. */
   target: string | null
   /** Same-shape tags, newest first — what the picker offers. */
@@ -63,22 +58,51 @@ export type ContainerRow = RowBase & {
   updatable: boolean
   lockstep: string[]
   ceremony: string | null
+  /** `ceremony` for a move to a new major only (lib/image-ceremony.ts). */
+  majorCeremony: string | null
 }
 
-/** A pin no button moves: the row names the file a commit edits instead. */
-export type ManualRow = RowBase & {
-  kind: 'manual'
-  /** `<repo>:<tag>`, or null for a commit or a release number. */
-  image: string | null
-  digest: string | null
-  pinnedIn: PinnedIn
-  /** Versions that move with this one, as a set. */
-  parts: Record<string, string>
-  containers: string[]
-  note: string | null
-}
+/** A container's digest pin — the row with the button. */
+export type ContainerRow = RowBase &
+  UpdatePolicy & {
+    kind: 'container'
+    /** `<repo>:<tag>` — the ref the registry was asked about. */
+    image: string
+    repo: string
+    tag: string
+    digest: string
+  }
+
+/**
+ * A pin that is not a container's own image: the row names the file a bump
+ * edits, and — when `updatable`, a base the configuration pins — carries the
+ * button as well.
+ */
+export type ManualRow = RowBase &
+  UpdatePolicy & {
+    kind: 'manual'
+    /** `<repo>:<tag>`, or null for a commit or a release number. */
+    image: string | null
+    /** The image's tag; null for a commit or a release number. */
+    tag: string | null
+    digest: string | null
+    pinnedIn: PinnedIn
+    /** Versions that move with this one, as a set. */
+    parts: Record<string, string>
+    containers: string[]
+    note: string | null
+  }
 
 export type UpdateRow = ContainerRow | ManualRow
+
+/**
+ * Where the button goes by default. A moved channel updates to the SAME tag —
+ * there is no other name for where it is going, and the digest is the whole
+ * change. A frozen tag updates to the highest of its shape, when there is one.
+ */
+function targetOf(verdict: UpdateVerdict, tag: string, f: ImageFreshness | null): string | null {
+  return verdict === 'tag-moved' ? tag : (f?.newerTag ?? null)
+}
 
 function verdictOf(f: ImageFreshness | null): UpdateVerdict {
   if (f === null || f.error !== null) return 'unknown'
@@ -137,14 +161,12 @@ export async function updateRows(containers?: readonly string[]): Promise<Contai
         running,
         freshness,
         verdict,
-        // A moved channel updates to the SAME tag — there is no other name for
-        // where it is going, and the digest is the whole change. A frozen tag
-        // updates to the highest of its shape, when there is one.
-        target: verdict === 'tag-moved' ? pin.tag : (freshness?.newerTag ?? null),
+        target: targetOf(verdict, pin.tag, freshness),
         candidates: freshness?.candidates ?? [],
         updatable: pin.updatable,
         lockstep: pin.lockstep,
         ceremony: pin.ceremony,
+        majorCeremony: pin.majorCeremony,
         hasNotes: source !== null,
       }
     }),
@@ -189,10 +211,15 @@ export async function manualRows(): Promise<ManualRow[]> {
         manualSource(pin),
       ])
       const version = shownVersion(pin)
+      const verdict = verdictOf(freshness)
+      // Only a base the configuration pins is moved from here; the host agent
+      // decides that again against its own registry before touching anything.
+      const updatable = pin.updatable && pin.tag !== null
       return {
         kind: 'manual',
         container: id,
         image: pin.image,
+        tag: pin.tag,
         digest: pin.digest,
         running: {
           version,
@@ -200,8 +227,14 @@ export async function manualRows(): Promise<ManualRow[]> {
           revision: pin.branch === null ? null : version,
         },
         freshness,
-        verdict: verdictOf(freshness),
+        verdict,
         hasNotes: source !== null,
+        target: updatable && pin.tag !== null ? targetOf(verdict, pin.tag, freshness) : null,
+        candidates: updatable ? (freshness?.candidates ?? []) : [],
+        updatable,
+        lockstep: [],
+        ceremony: pin.ceremony,
+        majorCeremony: pin.majorCeremony,
         pinnedIn: pin.pinnedIn,
         parts: pin.parts,
         containers: pin.containers,

@@ -245,12 +245,20 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       container: z
         .string()
         .optional()
-        .describe('One container. Omit for every digest-pinned container on the box.'),
+        .describe(
+          'One container, or the id of a pinned base. Omit for every digest pin on the box — containers and the bases of the images built on it (these carry pinnedIn, and updatable when image.update can move them).',
+        ),
     },
     async (args) => {
-      const { imagePins } = await import('../contract/domains/images')
+      const { imagePins, manualPins } = await import('../contract/domains/images')
       const { imageFreshness } = await import('../../lib/dashboard/images')
-      const pins = await imagePins()
+      const [containers, manual] = await Promise.all([imagePins(), manualPins()])
+      // The probe asks about both under one key space (nix asserts no id is
+      // shared), so one lookup serves both.
+      const pins: Record<string, unknown> = {
+        ...Object.fromEntries(Object.entries(manual).filter(([, m]) => m.digest !== null)),
+        ...containers,
+      }
       const wanted =
         args.container === undefined
           ? Object.keys(pins)
@@ -327,12 +335,14 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
           }),
         )
         .min(1)
-        .describe('One or more pins to move. Several become ONE commit, build and switch.'),
+        .describe(
+          'One or more pins to move, each by the name its System › Updates row shows: a container, or the id of a base the configuration pins (e.g. the one a locally built image is built FROM). Several become ONE commit, build and switch.',
+        ),
       confirm: z
         .string()
         .optional()
         .describe(
-          'The container name, typed out. Required for a pin whose fleet.imageUpdates entry declares a ceremony.',
+          'The pin name, typed out. Required for a pin whose fleet.imageUpdates entry declares a ceremony, or a majorCeremony and the move is to a new major.',
         ),
     },
     async (args, actor) => {
@@ -343,11 +353,23 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       // the container's name first — see lib/image-ceremony.ts, which the
       // Updates panel uses for the same check. An agent is exactly the caller
       // this gate exists for, so it is enforced here rather than assumed.
-      const { imagePins } = await import('../contract/domains/images')
-      const { ceremonyArmed, ceremonyRefusal } = await import('../../lib/image-ceremony')
-      const pins = await imagePins()
+      //
+      // A base's pin is looked up under its id, the name the host agent takes
+      // it by; whether it may move at all is the agent's to say.
+      const { imagePins, manualPins } = await import('../contract/domains/images')
+      const { ceremonyArmed, ceremonyFor, ceremonyRefusal } = await import(
+        '../../lib/image-ceremony'
+      )
+      const [pins, manual] = await Promise.all([imagePins(), manualPins()])
       for (const t of targets) {
-        const ceremony = pins[t.container]?.ceremony ?? null
+        const container = pins[t.container]
+        const base = manual[t.container]
+        const pin =
+          container ??
+          (base?.tag == null
+            ? undefined
+            : { tag: base.tag, ceremony: base.ceremony, majorCeremony: base.majorCeremony })
+        const ceremony = pin === undefined ? null : ceremonyFor(pin, t.toTag)
         if (!ceremonyArmed(t.container, ceremony, args.confirm as string | undefined)) {
           return refuse(ceremonyRefusal(t.container, ceremony ?? ''))
         }

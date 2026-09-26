@@ -10,8 +10,9 @@ import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { ImageUpdateStatus } from '../../../host/image-update'
 import { cn } from '../../../lib/cn'
+import { ceremonyFor } from '../../../lib/image-ceremony'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../../../server/updates'
-import type { ContainerRow, UpdatesData } from '../data/updates'
+import type { UpdateRow, UpdatesData } from '../data/updates'
 import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 
 // Every pinned image on the box, and what it would take to move it.
@@ -32,9 +33,10 @@ import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 //
 // Notes load per row, on open — the loader says why.
 //
-// Last, the pins no button moves: the bases of the images built on the box,
-// the build tools, a source commit. Same rows, same verdicts where a registry
-// can give one, and in place of the button the file a bump edits.
+// Last, the images built on the box: their bases, the build tools, a source
+// commit. Same rows, same verdicts where a registry can give one, each naming
+// the file a bump edits — and, for a base this configuration pins, the same
+// button and the same queue as a container's.
 //
 // ── the queue ─────────────────────────────────────────────────────────────
 //
@@ -82,7 +84,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
     for (const m of q.lockstep) covered.set(m, q.container)
   }
 
-  const bind = (r: ContainerRow) => {
+  const bind = (r: UpdateRow) => {
     const owner = covered.get(r.container)
     return {
       queued: owner === r.container,
@@ -93,9 +95,10 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
           {
             container: r.container,
             toTag,
-            tag: r.tag,
+            tag: r.tag ?? '',
             lockstep: r.lockstep,
-            ceremony: r.ceremony,
+            // What THIS move owes: a new major can, where its re-pull does not.
+            ceremony: ceremonyFor({ ...r, tag: r.tag ?? '' }, toTag),
           },
         ])
       },
@@ -177,7 +180,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
       </Board>
 
       <Board
-        title="Pinned by hand"
+        title="Built on the box"
         icon="logs"
         span={12}
         aside={<span className={BOARD_NOTE}>{String(d.manual.length)} pins</span>}
@@ -187,15 +190,21 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         ) : (
           <ul className={ROWS}>
             {d.manual.map((r) => (
-              <ImageRow key={r.container} r={r} status={d.status} />
+              <ImageRow
+                key={r.container}
+                r={r}
+                status={d.status}
+                queue={r.updatable ? bind(r) : undefined}
+              />
             ))}
           </ul>
         )}
         <p className={BOARD_FOOT}>
-          Versions an ordinary commit moves, not the Update button: the bases of the images built on
-          this box, the build tools, a source commit. An engine pin is an engine commit, then Engine
-          › Update; a configuration pin is an edit to the named file and a rebuild. A commit pin has
-          no registry to ask, so it reads “no verdict” — open it for the commits since.
+          The bases of the images built on this box, the build tools, a source commit. A base this
+          configuration pins has the Update button: it rewrites the pin, rebuilds the image on the
+          new base and checks the container came back carrying it. The rest are commits by hand — an
+          engine pin is an engine commit, then Engine › Update. A commit pin has no registry to ask,
+          so it reads “no verdict” — open it for the commits since.
         </p>
       </Board>
     </BoardGrid>
@@ -369,7 +378,7 @@ function QueuePanel({
                 })
               }}
             >
-              {running ? 'Updating…' : `Update ${String(n)} container${n === 1 ? '' : 's'}`}
+              {running ? 'Updating…' : `Update ${String(n)} pin${n === 1 ? '' : 's'}`}
             </Button>
           </div>
         </>

@@ -2,7 +2,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { ImageUpdateStatus } from '../host/image-update'
 import { cn } from '../lib/cn'
-import { ceremonyArmed } from '../lib/image-ceremony'
+import { ceremonyArmed, ceremonyFor } from '../lib/image-ceremony'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../server/updates'
 import { usePolledStatus } from './status'
 import { MONO, MONO_FACE } from './tokens'
@@ -78,6 +78,8 @@ export type UpdateTarget = {
   lockstep: string[]
   /** What else this takes down. Non-null demands the name be typed. */
   ceremony: string | null
+  /** The same, owed only by a move to a new major. */
+  majorCeremony?: string | null
 }
 
 /**
@@ -152,7 +154,9 @@ export function UpdateControl({
   // A channel pin moves to the tag it is already on: the digest is the change,
   // so "update to latest" is right and "update to a newer tag" is not.
   const sameTag = to === t.tag
-  const armed = ceremonyArmed(t.container, t.ceremony, typed)
+  // Per move, not per pin: a new major can owe a ceremony its re-pull does not.
+  const ceremony = ceremonyFor(t, to)
+  const armed = ceremonyArmed(t.container, ceremony, typed)
 
   if (mine && running) return <UpdateProgress status={status} />
 
@@ -228,10 +232,10 @@ export function UpdateControl({
         </label>
       )}
 
-      {t.ceremony !== null && (
+      {ceremony !== null && (
         <div className={CEREMONY}>
           <p className="mb-2 text-[0.78rem] text-(--text-muted)">
-            <strong>{t.container}</strong> {t.ceremony}.
+            <strong>{t.container}</strong> {ceremony}.
           </p>
           <label className="flex items-center gap-2 text-[0.74rem] text-muted-foreground">
             <span>

@@ -28,8 +28,9 @@ import { readSnapshot } from '../snapshot'
 //
 // `manual` is everything else the box runs on a pin (fleet.manualPins in
 // nix/platform/export.nix): the bases of the images built on the box, the
-// build tools' images, a source commit. No button moves these; the page lists
-// them with the file a bump edits.
+// build tools' images, a source commit. Each names the file a bump edits; a
+// base pinned in the configuration is also `updatable` — the Update button
+// moves it through the same agent, under the pin's id.
 
 const pinShape = obj({
   /** `<repo>:<tag>`, the ref the registry is asked about. */
@@ -45,6 +46,8 @@ const pinShape = obj({
   lockstep: optional(arrayOf(str), []),
   /** What else this update takes down, in one clause. Null = only itself. */
   ceremony: optional(nullable(str), null),
+  /** `ceremony`, but only for a move to a new major (lib/image-ceremony.ts). */
+  majorCeremony: optional(nullable(str), null),
 })
 
 export type ImagePin = ReturnType<typeof pinShape>
@@ -75,6 +78,10 @@ const manualShape = obj({
   containers: optional(arrayOf(str), []),
   note: optional(nullable(str), null),
   pinnedIn: pinnedInShape,
+  /** A configuration base the Update button moves. An engine that predates it: false. */
+  updatable: optional(bool, false),
+  ceremony: optional(nullable(str), null),
+  majorCeremony: optional(nullable(str), null),
 })
 
 export type ManualPin = ReturnType<typeof manualShape>

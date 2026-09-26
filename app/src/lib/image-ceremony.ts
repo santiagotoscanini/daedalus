@@ -35,3 +35,25 @@ export function ceremonyArmed(
 export function ceremonyRefusal(container: string, ceremony: string): string {
   return `Updating ${container} ${ceremony}. Pass confirm: "${container}" to proceed.`
 }
+
+/** The leading version number of a tag — `34`, `v3.1.0` → `3`, `24-slim` → `24`. Null for a channel. */
+function majorOf(tag: string): string | null {
+  return /^v?(\d+)/.exec(tag)?.[1] ?? null
+}
+
+/**
+ * The ceremony a move from `tag` to `toTag` owes: the pin's own, else its
+ * `majorCeremony` when the move changes the leading version number. `toTag`
+ * absent is a re-pull of the same tag, which is never a new major.
+ */
+export function ceremonyFor(
+  pin: { tag: string; ceremony: string | null; majorCeremony?: string | null },
+  toTag: string | null | undefined,
+): string | null {
+  if (pin.ceremony !== null) return pin.ceremony
+  const mc = pin.majorCeremony ?? null
+  if (mc === null || toTag == null || toTag === pin.tag) return null
+  const from = majorOf(pin.tag)
+  const to = majorOf(toTag)
+  return from !== null && to !== null && from !== to ? mc : null
+}

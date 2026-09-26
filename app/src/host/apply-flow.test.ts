@@ -55,12 +55,20 @@ vi.mock('../lib/repo/settings', () => ({
 }))
 
 let dir: string
+let site: string
 let previousApplyDir: string | undefined
+let previousSitePath: string | undefined
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'apply-flow-'))
   previousApplyDir = process.env.APPLY_DIR
   process.env.APPLY_DIR = dir
+  // An empty site dir of its own: the committed nodes.json is read from
+  // SITE_PATH, and the box's real one would make "nothing to apply" depend
+  // on which machines it has approved.
+  site = await mkdtemp(join(tmpdir(), 'apply-flow-site-'))
+  previousSitePath = process.env.SITE_PATH
+  process.env.SITE_PATH = site
   h.apps = [{ name: 'iris', managedInNix: false }]
   h.drift = ['image']
   h.siteChanges = []
@@ -70,7 +78,10 @@ afterEach(async () => {
   vi.useRealTimers()
   if (previousApplyDir === undefined) delete process.env.APPLY_DIR
   else process.env.APPLY_DIR = previousApplyDir
+  if (previousSitePath === undefined) delete process.env.SITE_PATH
+  else process.env.SITE_PATH = previousSitePath
   await rm(dir, { recursive: true, force: true })
+  await rm(site, { recursive: true, force: true })
 })
 
 /** A fresh module, so the previous test's `pending` and `chain` are gone. */

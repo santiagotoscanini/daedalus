@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ManualPin } from '../../host/contract/domains/images'
 import type { ImageFreshness } from './images'
 
-// The pins no button moves (fleet.manualPins), as rows and as notes.
+// The pins that are not a container's own image (fleet.manualPins), as rows
+// and as notes — and which of them carry the Update button.
 //
 // What would go wrong quietly: a commit pin rendered with a registry verdict it
 // never had, a commit shown as forty characters, a base image's row asking
@@ -58,6 +59,9 @@ const pin = (over: Partial<ManualPin> = {}): ManualPin => ({
   containers: [],
   note: null,
   pinnedIn: { repo: 'engine', path: 'nix/stacks/daedalus/build-agent.nix' },
+  updatable: false,
+  ceremony: null,
+  majorCeremony: null,
   ...over,
 })
 
@@ -98,7 +102,43 @@ describe('manualRows', () => {
       pinnedIn: { repo: 'engine', path: 'nix/stacks/daedalus/build-agent.nix' },
       hasNotes: true,
     })
-    expect(r).not.toHaveProperty('updatable')
+    expect(r).toMatchObject({ updatable: false, target: null, candidates: [] })
+  })
+
+  it('a base the configuration pins carries the button, aimed like a container’s', async () => {
+    const major = 'to a new major needs its chores run by hand'
+    h.manual = {
+      'nextcloud-ffmpeg': pin({
+        image: 'docker.io/library/nextcloud:34',
+        repo: 'docker.io/library/nextcloud',
+        tag: '34',
+        version: '34',
+        containers: ['nextcloud-app'],
+        pinnedIn: { repo: 'config', path: 'stacks/nextcloud/nextcloud.nix' },
+        updatable: true,
+        majorCeremony: major,
+      }),
+    }
+    h.freshness = {
+      'nextcloud-ffmpeg': probe({
+        tag: '34',
+        moved: true,
+        newerTag: '35',
+        candidates: ['35', '34'],
+      }),
+    }
+    const [r] = await manualRows()
+    expect(r).toMatchObject({
+      updatable: true,
+      tag: '34',
+      // A moved channel re-pulls its own tag; the major is on the picker.
+      target: '34',
+      candidates: ['35', '34'],
+      lockstep: [],
+      ceremony: null,
+      majorCeremony: major,
+      pinnedIn: { repo: 'config', path: 'stacks/nextcloud/nextcloud.nix' },
+    })
   })
 
   it('a commit pin shows the short commit and claims no registry verdict', async () => {

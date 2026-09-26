@@ -20,7 +20,8 @@ export {
 } from '../../../lib/dashboard/update-rows'
 
 // Every digest-pinned container on the box, and whether it is behind — then
-// every pin no button moves (fleet.manualPins), with the file a bump edits.
+// every pin that is not a container's own image (fleet.manualPins), with the
+// file a bump edits and, for a base the configuration pins, the button.
 //
 // Dozens of containers — the exporters, the redis and postgres sidecars — have
 // no tab and never will: nobody opens scraparr, and a Board about
@@ -42,8 +43,9 @@ export {
 export type UpdatesData = {
   rows: ContainerRow[]
   /**
-   * The pins no button moves (fleet.manualPins): local builds' bases, the
-   * build tools, a source commit — each with the file a bump edits.
+   * The pins that are not a container's own image (fleet.manualPins): local
+   * builds' bases, the build tools, a source commit — each with the file a
+   * bump edits; a configuration base is `updatable`.
    */
   manual: ManualRow[]
   /** Rows whose verdict is `tag-moved` or `newer-tag`, updatable or not. */

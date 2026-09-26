@@ -19,9 +19,11 @@ import { Chip, type Tone } from './viz'
 // disclosure, never on the closed row. Who draws these rows:
 // lib/dashboard/update-rows.ts.
 //
-// A MANUAL row (a pin moved by an ordinary commit) opens the same way, with
-// the file that commit edits where the button would be: there is nothing
-// here to press, and saying where the literal lives is the whole instruction.
+// A MANUAL row (a pin that is not a container's own image) opens the same
+// way and says which file holds the literal. When that file is the
+// configuration's and the pin is a local build's base, the button is there
+// too — the same control, moving the pin by its id; otherwise saying where the
+// literal lives is the whole instruction.
 //
 // Notes load on open, once. `<details>` renders its children whether or not it
 // is open, so a fetch on mount would be every row on the page asking GitHub at
@@ -97,30 +99,34 @@ export function ImageRow({
 
         <div className="flex flex-col gap-[0.7rem] border-(--border-soft) border-t px-3 pt-2 pb-[0.7rem]">
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />
+          {/* A manual row draws the button only when its base is the
+              configuration's to move; a container row always does, even to
+              say that policy pins it. */}
+          {(r.kind === 'container' || (r.updatable && r.tag !== null)) && (
+            <UpdateControl
+              target={{
+                container: r.container,
+                tag: r.tag ?? '',
+                target: r.target,
+                candidates: r.candidates,
+                updatable: r.updatable,
+                lockstep: r.lockstep,
+                ceremony: r.ceremony,
+                majorCeremony: r.majorCeremony,
+              }}
+              initialStatus={status}
+              queue={queue}
+            />
+          )}
           {r.kind === 'manual' ? (
             <ManualFacts r={r} />
           ) : (
-            <>
-              <UpdateControl
-                target={{
-                  container: r.container,
-                  tag: r.tag,
-                  target: r.target,
-                  candidates: r.candidates,
-                  updatable: r.updatable,
-                  lockstep: r.lockstep,
-                  ceremony: r.ceremony,
-                }}
-                initialStatus={status}
-                queue={queue}
-              />
-              {/* The exact ref this row would rewrite, last and quiet — it is what
-              a person copies into a shell to check something by hand, and it
-              is not part of the decision. */}
-              <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
-                {`${r.image}@${r.digest.slice(0, 19)}…`}
-              </p>
-            </>
+            // The exact ref this row would rewrite, last and quiet — it is
+            // what a person copies into a shell to check something by hand,
+            // and it is not part of the decision.
+            <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
+              {`${r.image}@${r.digest.slice(0, 19)}…`}
+            </p>
           )}
         </div>
       </details>
@@ -129,8 +135,8 @@ export function ImageRow({
 }
 
 /**
- * What a hand-moved pin says instead of a button: the versions that move
- * with it, what a bump takes, and where the literal is.
+ * What a hand-moved pin says beside (or instead of) the button: the versions
+ * that move with it, what a bump takes, and where the literal is.
  *
  * An engine file links to the engine's source on GitHub. A configuration
  * file is named, not linked — that repository is the box's own, and nothing

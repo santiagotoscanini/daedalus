@@ -381,8 +381,9 @@ through `/mcp` says `mcp:claude-code`, never "unknown operator". Naming the
 holder at mint time is what makes that trail worth having.
 
 **The ceremony survives.** `fleet.imageUpdates.<c>.ceremony` names what else an
-update takes down, and the Updates panel arms its button only when the operator
-types the container's name. `image.update` enforces the same predicate
+update takes down (`majorCeremony`: what a move to a new major takes), and the
+Updates panel arms its button only when the operator types the pin's name.
+`image.update` enforces the same predicate
 (`lib/image-ceremony.ts`, shared with the panel) on a `confirm` argument — an
 agent is precisely the caller that gate exists for.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ceremonyArmed, ceremonyRefusal } from './image-ceremony'
+import { ceremonyArmed, ceremonyFor, ceremonyRefusal } from './image-ceremony'
 
 // The gate that stands between "update this pin" and a fifteen-tenant postgres
 // bounce. It has two callers now — the Updates panel and the MCP `image.update`
@@ -38,5 +38,29 @@ describe('a pin with a ceremony', () => {
     const said = ceremonyRefusal('pg', CEREMONY)
     expect(said).toContain(CEREMONY)
     expect(said).toContain('confirm: "pg"')
+  })
+})
+
+describe('a pin whose ceremony is for a new major only', () => {
+  const MAJOR = 'needs its upgrade chores run by hand'
+  const pin = { tag: '34', ceremony: null, majorCeremony: MAJOR }
+
+  it('owes it for a move that changes the leading version number', () => {
+    expect(ceremonyFor(pin, '35')).toBe(MAJOR)
+    expect(ceremonyFor({ ...pin, tag: 'v2.9.1' }, 'v3.0.0')).toBe(MAJOR)
+  })
+
+  it('owes nothing for a re-pull or a move on the same major', () => {
+    expect(ceremonyFor(pin, undefined)).toBe(null)
+    expect(ceremonyFor(pin, '34')).toBe(null)
+    expect(ceremonyFor({ ...pin, tag: '2026.7.4' }, '2026.9.3')).toBe(null)
+  })
+
+  it('never reads a channel as a major', () => {
+    expect(ceremonyFor({ ...pin, tag: 'latest' }, 'stable')).toBe(null)
+  })
+
+  it('yields to the pin’s own ceremony, which applies to every move', () => {
+    expect(ceremonyFor({ ...pin, ceremony: 'bounces pg' }, undefined)).toBe('bounces pg')
   })
 })
