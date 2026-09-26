@@ -49,7 +49,7 @@ evaluation with the option's name.
 | `healthchecks` | Dead-man's-switch monitoring of the scheduled jobs. | `envSopsFile`, `fleet.images.healthchecks` |
 | `logging` | Loki and the alloy shipper. Other stacks contribute `fleet.logStacks`, `fleet.logDrops`, `fleet.logFiles`. | `fleet.images.{loki,alloy}` |
 | `monitoring` | Prometheus, Grafana, node-exporter, the per-container liveness sweep, the generic dashboards. | `envSopsFile`, `fleet.images.{prometheus,grafana,node-exporter}`; its own dashboards through `fleet.grafanaDashboardsByFolder` |
-| `pihole` | LAN DNS and DHCP (native), every published hostname's local record. | `dhcpHostsSopsFile` (optional), `localDomain` |
+| `pihole` | LAN DNS and DHCP (native), every published hostname's local record. | `dhcpHostsSopsFile` (optional); the search domain is `fleet.lanDomain` |
 | `pocket-id` | The identity provider and the convergence of every declared client. | `envSopsFile`, `exposeRemotely`, `fleet.images.pocket-id`; `fleet.sso.logoDir` for the host's own stacks' logos |
 | `registry` | zot, the box's own OCI registry: builds push, deploys pull. | `envSopsFile`, `retireRepositories`, `fleet.images.zot` |
 | `grocy` | Household ERP: groceries, chores, recipes. | `authGroups`, `exposeRemotely`, `fleet.images.grocy` |

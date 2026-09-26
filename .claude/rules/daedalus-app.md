@@ -156,15 +156,15 @@ here.
 ## Data-flow rules
 
 - Host facts arrive via **read-only mounts**, every one of them `:ro`:
-  the versioned `/export` domains, the env snapshot at /env-snapshot,
+  the versioned `/export` domains (with the applied registry at
+  /export/applied.json), the env snapshot at /env-snapshot,
   image labels and freshness at /images, SMART/ZFS/generations at
   /system, Remote Control's state at /claude, the DHCP reservations at
   /dhcp, deploy state at /deploy-state, project workspace clones at
   /workspaces, build logs at /builds, the GitHub App's webhook secret at
   /github and its installation token at /github-token, shotter's run
   archive at /shotter (contributed by the shotter stack, not
-  `daedalus.nix`), the nix manifest at /registry/manifest.json, the
-  encrypt-only `sops` binary at /usr/local/bin/sops, and the
+  `daedalus.nix`), the encrypt-only `sops` binary at /usr/local/bin/sops, and the
   CONFIGURATION repository's git facts at /repo — remote, head, dirty
   counts, drift, last Apply commit, plus the site directory's state and
   a digest per managed file, never the tree itself. (The engine clone's
@@ -200,9 +200,8 @@ here.
   `registryHostPattern`; `lib/hostname.ts`'s `hostnameError` and
   `effectiveHostname` take it first too). There is ONE reader,
   `host/site.ts` `readSite()`, over the env rows `BASE_DOMAIN`,
-  `GITHUB_OWNER`, `REGISTRY_HOST`, `GRAFANA_URL` — each falling back to its
-  old `VITE_` spelling, and deliberately not to `/export/site.json` or
-  `/site` (the file header says why). A module loader reads `ctx.site`;
+  `GITHUB_OWNER`, `REGISTRY_HOST`, `GRAFANA_URL` — deliberately not
+  falling back to `/export/site.json` or `/site` (the file header says why). A module loader reads `ctx.site`;
   other server code calls `readSite()` at the entry point and passes the
   value down; a component calls `useSite()` (`lib/site-context.tsx`),
   which the root route fills from its awaited loader (`fetchShell`,

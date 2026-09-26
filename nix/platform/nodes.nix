@@ -25,8 +25,7 @@
 #
 # `fleet.lanDomain` is declared here rather than in the resolver's module
 # because a node's LAN name is composed by consumers that may run on a host
-# whose resolver is something else; the pihole module defaults its own
-# `localDomain` to it.
+# whose resolver is something else; the pihole module serves it.
 
 let
   cfg = config.fleet;

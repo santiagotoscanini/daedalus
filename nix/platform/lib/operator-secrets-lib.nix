@@ -30,7 +30,7 @@
 # nix-engine.md §3). Two consumers:
 #
 #   modules/apps/declarations.nix  builds the sops.secrets entry + environmentFiles
-#   stacks/daedalus/daedalus.nix   reports the derived truth into the UI's nix manifest,
+#   stacks/daedalus/daedalus.nix   reports the derived truth in /export/apps.json,
 #                                  where it is a fact to display, not a control to flip
 #
 # Both read this one directory listing, so neither can describe a different set

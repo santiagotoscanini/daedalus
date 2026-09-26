@@ -200,9 +200,7 @@ requires a dataset mounted at its root.
   run. Publishing the first public image is the operator's decision: bump
   `app/package.json`, add `LICENSE`, tag `v<version>`, push the tag. The
   ghcr package is private until its visibility is changed by hand. amd64
-  only — the run stage holds the build platform's argon2 binary. The config
-  binds the bare identity names now; `host/site.ts` still falls back to the
-  old `VITE_` spellings, and that fallback can go.
+  only — the run stage holds the build platform's argon2 binary.
 
 ### Phase 11 — The engine becomes importable (the leaves remain)
 
@@ -393,7 +391,7 @@ priority; each can be done independently unless noted.
      { "id": "a2272f1b0bdac468", "name": "gaming-pc", "os": "windows",
        "providers": { "lemonade": { "port": 13305 } } } ] }
    ```
-   No MAC, no address: consumers dial `<name>.<localDomain>`. Consumers
+   No MAC, no address: consumers dial `<name>.<lanDomain>`. Consumers
    then derive themselves — gatus probes each provider's health, the log
    bridge scrapes each lemonade node, prometheus keeps file_sd — and
    `fleet.gpuHost`/`gpuHostIp` go: litellm's `@gpuHost@` becomes the
@@ -408,7 +406,7 @@ priority; each can be done independently unless noted.
    13305) and carry `providers: [{ kind, port, version, running }]` in
    the telemetry document, nothing more. The catalog, the labels, what is
    loaded and the health are read by the box from the provider's own API
-   at `<name>.<localDomain>:<port>` — the address LiteLLM dials anyway,
+   at `<name>.<lanDomain>:<port>` — the address LiteLLM dials anyway,
    so a provider is by definition reachable from the box, and a model list
    carried by the agent would be a second copy of the provider's state. A
    provider found by the agent is offered unless the node's switch says
@@ -427,7 +425,7 @@ priority; each can be done independently unless noted.
    reconciles LiteLLM's model table with every offered provider's catalog,
    read from the provider on each telemetry tick and on Apply: for each downloaded
    model, `/model/new` with `model_name` the alias, `litellm_params`
-   `{ model: openai/<id>, api_base: http://<name>.<localDomain>:<port>/api/v1,
+   `{ model: openai/<id>, api_base: http://<name>.<lanDomain>:<port>/api/v1,
    api_key, timeout }`, and `model_info` derived from the labels (mode:
    chat, embedding, rerank, audio_transcription, audio_speech,
    image_generation; `supports_function_calling`, `supports_vision`;

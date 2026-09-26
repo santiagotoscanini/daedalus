@@ -402,7 +402,7 @@ in
     sops.secrets."grafana-env" = mkDotenvSecret cfg.envSopsFile;
 
     # Where the control plane's Grafana links and embeds point
-    # (fleet.dashboard; VITE_ because the client bundle renders them too).
+    # (fleet.dashboard; read at run time and handed to the client bundle too).
     # Absent when this stack is off — the engine then falls back to the
     # conventional name, which is the honest answer for a link to nothing.
     fleet.dashboard.monitoring.env.GRAFANA_URL = "https://${config.fleet.webApps.grafana.hostname}";
