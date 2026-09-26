@@ -65,8 +65,10 @@ ACTION="$(jq -r '.action // ""' <<<"$REQ_JSON")"
 write_status running "restarting $UNIT" ""
 
 # This SIGTERMs every connected session — that is the point. The button
-# exists for a server that is down, wedged, or running a stale build, and
-# sessions stay resumable from claude.ai for ~4 hours.
+# exists for a server that is down, wedged, or running a stale build. The
+# sessions END with it: claude.ai cannot pick them back up, but their
+# transcripts stay on this box and `claude --resume` (Resume on daedalus's
+# Claude page) brings one back — platform/claude-rc.nix's header.
 systemctl restart "$UNIT" || fail "systemctl restart $UNIT was refused"
 
 # Type=simple: "started" only means exec'd. Give the process a moment to

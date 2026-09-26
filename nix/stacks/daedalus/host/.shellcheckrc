@@ -1,0 +1,8 @@
+# For editors only. Each script here is one piece of an agent: mkAgent
+# (../daedalus-lib.nix) assembles the real script from the variables nix
+# renders plus several of these files, so linted alone a file sees names
+# set in another piece as unassigned (SC2154) and names it sets for a later
+# piece as unused (SC2034). The build-time shellcheck (writeShellApplication)
+# checks the assembled script with neither disabled, and is the real gate.
+# Nix never reads this file.
+disable=SC2034,SC2154
