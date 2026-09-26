@@ -145,7 +145,18 @@ let
     lib.replaceStrings [ "." ] [ "\\." ] config.fleet.baseDomain
   }";
 
-  mkApp =
+  # ── one app, in pieces ──────────────────────────────────────────────────
+  #
+  # `mkApp` is what one `fleet.apps.<name>` entry materializes into. It is
+  # assembled from named pieces, each a function of the same context (the
+  # facts derived once from the entry, below) returning the option paths it
+  # owns. Every path comes from exactly one piece — a list-typed one split
+  # across two would concatenate in whatever order the merge happened to
+  # take — and the pieces are joined with `lib.recursiveUpdate`, never `//`,
+  # which would let a later piece's `fleet` replace an earlier one's whole.
+
+  # The facts every piece reads, derived once per app.
+  mkAppCtx =
     name: app:
     let
       cName = "app-${name}";
@@ -319,8 +330,49 @@ let
           ${builtins.readFile ./assets/deploy.sh}
         '';
       };
-
     in
+    {
+      inherit
+        name
+        app
+        cName
+        hostname
+        publicUrl
+        appSecretsFile
+        postgresEnabled
+        appDbEnvFile
+        storageEnabled
+        storageHostPath
+        running
+        exposed
+        dev
+        resourceFlags
+        egressEnabled
+        taskUnits
+        taskUnitName
+        taskExecStart
+        proxyAuth
+        nativeAuth
+        isolatedAuth
+        oidcCallback
+        displayName
+        deployScript
+        ;
+    };
+
+  # What an entry must satisfy — the combinations the options allow but the
+  # platform cannot honour, and the task fields that become unit names.
+  appAssertions =
+    {
+      name,
+      app,
+      egressEnabled,
+      proxyAuth,
+      dev,
+      exposed,
+      running,
+      ...
+    }:
     {
       assertions = [
         {
@@ -430,7 +482,22 @@ let
           message = "fleet.apps.${name}: task \"${t.id}\" uses the systemd shorthand schedule \"${t.schedule}\", which fires on the hour. Write a concrete OnCalendar with a minute that is not :00 (e.g. \"*-*-* 04:23:00\") — daedalus expands its hourly/daily presets to one before writing apps.json, for exactly this reason.";
         }
       ]) app.tasks;
+    };
 
+  appSso =
+    {
+      name,
+      app,
+      cName,
+      publicUrl,
+      proxyAuth,
+      nativeAuth,
+      exposed,
+      oidcCallback,
+      displayName,
+      ...
+    }:
+    {
       # The Pocket ID client.
       #
       # Native mode declares the whole thing — id `<name>`, and a secret
@@ -460,7 +527,21 @@ let
             inherit (app.presentation) description;
           };
         };
+    };
 
+  # The durable things an app owns even before it runs: its database and
+  # its data dir.
+  appData =
+    {
+      name,
+      postgresEnabled,
+      egressEnabled,
+      running,
+      storageEnabled,
+      storageHostPath,
+      ...
+    }:
+    {
       # Delegate per-app Postgres entirely to modules/app-db. The
       # presence of the key triggers role + database creation and the
       # per-app env file. LAN access is the single shared
@@ -483,6 +564,38 @@ let
         // lib.optionalAttrs (!running) { consumers = [ ]; };
       };
 
+      # Persistent data dir — the fleet-standard statePaths convention
+      # (uid 0 default = container root = the operator; state-paths.service
+      # sorts paths so parents are created before children, and every
+      # podman unit orders after it).
+      fleet.statePaths = lib.optionalAttrs storageEnabled (
+        lib.optionalAttrs (lib.hasPrefix "${appsDataRoot}/" storageHostPath) {
+          "${appsDataRoot}" = { };
+          "${appsDataRoot}/${name}" = { };
+        }
+        // {
+          "${storageHostPath}" = { };
+        }
+      );
+    };
+
+  # How the app is reached: its bridges, its webApp (router, DNS, probe,
+  # tunnel route) and, when asked for, its scrape and dashboard.
+  appPublishing =
+    {
+      name,
+      app,
+      cName,
+      hostname,
+      running,
+      exposed,
+      egressEnabled,
+      isolatedAuth,
+      postgresEnabled,
+      proxyAuth,
+      ...
+    }:
+    {
       # Register in bridgeMemberships either way — that's what earns the
       # mandatory Type=oneshot systemd override (rootless podman + Type=notify
       # is broken on this box). "traefik" joins the bridge for DNS routing;
@@ -575,21 +688,25 @@ let
               builtins.readFile app.prometheus.dashboard
             );
           };
+    };
 
-      # Persistent data dir — the fleet-standard statePaths convention
-      # (uid 0 default = container root = the operator; state-paths.service
-      # sorts paths so parents are created before children, and every
-      # podman unit orders after it).
-      fleet.statePaths = lib.optionalAttrs storageEnabled (
-        lib.optionalAttrs (lib.hasPrefix "${appsDataRoot}/" storageHostPath) {
-          "${appsDataRoot}" = { };
-          "${appsDataRoot}/${name}" = { };
-        }
-        // {
-          "${storageHostPath}" = { };
-        }
-      );
-
+  # The systemd side: the secrets bootstrap, the deploy loop, the
+  # container's ordering, and each scheduled task's service, timer and alert.
+  appUnits =
+    {
+      name,
+      app,
+      cName,
+      appSecretsFile,
+      running,
+      egressEnabled,
+      taskUnits,
+      taskUnitName,
+      taskExecStart,
+      deployScript,
+      ...
+    }:
+    {
       # One attrset rather than several `systemd.services."x" = …` statements:
       # a unit that must be ABSENT for some apps (the task units, the deploy
       # unit of a `declared` app) cannot be expressed by mixing
@@ -738,7 +855,29 @@ let
           value = { };
         }) taskUnits
       );
+    };
 
+  appContainer =
+    {
+      name,
+      app,
+      cName,
+      hostname,
+      publicUrl,
+      running,
+      dev,
+      storageEnabled,
+      storageHostPath,
+      appSecretsFile,
+      postgresEnabled,
+      appDbEnvFile,
+      nativeAuth,
+      oidcCallback,
+      egressEnabled,
+      resourceFlags,
+      ...
+    }:
+    {
       # The container itself — pure declarative, identical pattern to
       # every other stack on the box.
       virtualisation.oci-containers.containers = lib.optionalAttrs running {
@@ -841,6 +980,22 @@ let
         );
       };
     };
+
+  mkApp =
+    name: app:
+    let
+      ctx = mkAppCtx name app;
+    in
+    lib.foldl' lib.recursiveUpdate { } (
+      map (piece: piece ctx) [
+        appAssertions
+        appSso
+        appData
+        appPublishing
+        appUnits
+        appContainer
+      ]
+    );
 in
 {
   # `fleet.modules.apps.enable` and the whole `fleet.apps` option tree are
