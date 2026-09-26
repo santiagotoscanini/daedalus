@@ -74,18 +74,12 @@ site_copy() {
 # stacks/daedalus declares it (fleet.statePaths, 0700, re-enforced at every
 # boot); the mkdir only covers a run that beats state-paths.service to it, and
 # is a no-op otherwise.
-#
-# Also clears the pre-$PREV_DIR backups out of $APPLY_DIR, as the operator
-# (unlinking a planted link, never following one). Nothing reads them any
-# more; this only stops stale copies of the site files lingering in the
-# container's directory. Transitional — drop it once no box carries them.
 site_prev_dir() {
   if [ -L "$PREV_DIR" ]; then
     echo "site: refusing $PREV_DIR: it is a symlink, and rollback state is only kept in a real directory" >&2
     return 1
   fi
-  as_operator mkdir -p -m 0700 -- "$PREV_DIR" || return 1
-  as_operator rm -f -- "$APPLY_DIR"/prev-* 2>/dev/null || true
+  as_operator mkdir -p -m 0700 -- "$PREV_DIR"
 }
 
 # Keep what $SITE_DIR/$1 holds now, so site_restore can put it back.

@@ -43,7 +43,8 @@
 # DNS reconciler at the wrong place.
 #
 # `registry.file` is the same idea for the app registry: `site/apps.json`,
-# and nothing else — the unsourced branch is a `throw`.
+# and nothing else — defined only from a source, so an unsourced host that
+# reads it fails naming the option.
 #
 # Source control of that directory is the operator's business, with one
 # exception the agents cannot delegate: a flake sees only git-TRACKED files,
@@ -220,15 +221,10 @@ in
 
     registry.file = lib.mkOption {
       type = lib.types.path;
-      default =
-        if sourced then
-          "${cfg.site.source}/apps.json"
-        else
-          throw "fleet.registry.file: the app registry lives at site/apps.json now — the legacy stacks/apps/apps.json is gone. Set fleet.site.source (configuration.nix does: site.source = ./site).";
       description = ''
         The app registry daedalus exports and `modules/apps/declarations.nix`
         builds from — NOT the container registry (`fleet.webApps.registry`,
-        the zot).
+        the zot). Defined from `fleet.site.source`: `<source>/apps.json`.
       '';
     };
 
@@ -385,6 +381,9 @@ in
 
         # The hostnames and exposure the document moves (`modules.web`).
         webApps = lib.mapAttrs (_: webOverride) siteWeb;
+
+        # The app registry, beside site.json.
+        registry.file = "${cfg.site.source}/apps.json";
 
         # Fields picked by name, for the reason `nodes` gives below.
         site.players = lib.mapAttrs (

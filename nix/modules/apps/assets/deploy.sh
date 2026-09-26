@@ -130,14 +130,6 @@ fi
 new_id=$(podman_ image inspect --format '{{.Id}}' "$IMAGE")
 after=$(podman_ image inspect --format '{{.Digest}}' "$IMAGE")
 
-# One-time migration: a box that deployed before the JSON record existed has
-# only the text state. Synthesise the record from it — timing fields null —
-# so the reader never needs a legacy path; the next real deploy overwrites it
-# with full fields.
-if [ ! -e "$STATE_JSON" ] && [ -n "$last" ]; then
-  publish_state "${last%% *}" "${last##* }" "" "" "" "" ""
-fi
-
 if [ "$new_id" = "$running" ]; then
   # Nothing new upstream. If what we're already serving failed its health
   # check when it was deployed, keep failing: a quiet exit 0 here would clear
