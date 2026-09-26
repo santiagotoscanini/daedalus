@@ -19,19 +19,4 @@ rec {
       suffix = lib.removePrefix bridge spec;
     in
     "--network=${bridge}-net${suffix}";
-
-  # The version a digest-pinned image string carries, or "" when the tag
-  # does not read as one: `docker.io/n8nio/n8n:2.33.2@sha256:d31c…` →
-  # `2.33.2`, `…/mcp-grocy:v2.7.0@sha256:…` → `2.7.0`, and a plain
-  # `:latest@sha256:…` → "". Stacks use it to contribute their own pinned
-  # version to `fleet.dashboard` (platform/export.nix) rather than restate
-  # the number beside the pin, where a second copy goes stale on the next
-  # bump. Empty rather than absent so a consumer renders "unknown" instead
-  # of a wrong number.
-  versionOfImage =
-    image:
-    let
-      m = builtins.match ".*:v?([0-9][^@:]*)@sha256:.*" image;
-    in
-    if m == null then "" else builtins.head m;
 }
