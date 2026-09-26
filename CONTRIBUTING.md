@@ -257,12 +257,12 @@ and `:sha-<short sha>` when a `v*` tag is pushed, and only then; the tag
 must match `app/package.json`'s version. On a pull request that touches the
 image files it builds and pushes nothing.
 
-`scripts/image-walk.sh` is the proof to run before a tag: it builds the
+`release/image-walk.sh` is the proof to run before a tag: it builds the
 image, checks the `sops` it carries, starts it against a throwaway
 `postgres:16-alpine` on a private podman network with an identity given as
 env, drives a real browser over `/`, `/apps`, `/settings`, `/c/system`,
 `/apps/new` and one authenticated write (the forward-auth headers set by the
-driver, `scripts/image-walk.mjs`), refuses on any console error, page error,
+driver, `release/image-walk.mjs`), refuses on any console error, page error,
 failed same-origin request or 5xx the browser recorded, and then runs the
 same image with `DAEDALUS_DEV=1` over a copy of `app/` until Vite answers.
 The browser is `shot`, the author's headless-Chromium CLI (a podman wrapper

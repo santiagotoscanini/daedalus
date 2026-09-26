@@ -194,7 +194,7 @@ requires a dataset mounted at its root.
   `src/modules/*/data/`. What a data file still imports from `host/`
   directly — nix-manifest, hosts, workspaces, the contract domains — is the
   rest of the seam (the test's own comment names them).
-- **10b, the first tag.** The image builds, walks (`scripts/image-walk.sh`
+- **10b, the first tag.** The image builds, walks (`release/image-walk.sh`
   is run before a tag) and runs a box in dev mode as its `runtime` stage;
   `.github/workflows/image.yml` publishes to ghcr on a `v*` tag and has never
   run. Publishing the first public image is the operator's decision: bump

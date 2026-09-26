@@ -1,4 +1,4 @@
-// The browser half of scripts/image-walk.sh: a `shot` driver over the image
+// The browser half of release/image-walk.sh: a `shot` driver over the image
 // it started.
 //
 // Forward-auth headers are the only identity the app has (core/auth.ts), so

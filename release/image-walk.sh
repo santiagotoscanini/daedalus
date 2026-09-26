@@ -4,16 +4,16 @@
 # recorded. Run from the repository root before a tag, and after any change to
 # the Dockerfile, the entrypoint, server.mjs or the build scripts.
 #
-#   scripts/image-walk.sh
+#   release/image-walk.sh
 #
 #   # through a registry mirror the build container reaches by the host gateway
 #   NPM_REGISTRY=https://registry.example.internal/ \
 #   PODMAN_ARGS='--add-host=registry.example.internal:host-gateway' \
-#     scripts/image-walk.sh
+#     release/image-walk.sh
 #
 # In order:
 #   1. the build (the sops stage's checksum included), and the sops it carries
-#   2. production: migrations at start, /api/healthz, then scripts/image-walk.mjs
+#   2. production: migrations at start, /api/healthz, then release/image-walk.mjs
 #      over /, /apps, /settings, /c/system, /apps/new and one authenticated
 #      write, with the identity given at `podman run` — and no console error,
 #      page error, failed same-origin request or 5xx in the run's events.json.
@@ -123,7 +123,7 @@ podman logs "$APP" 2>&1 | grep '^\[daedalus\] serving'
 say "the browser walk"
 # shot prints the run directory last; the driver's exit code is its own verdict.
 walk=0
-shot run scripts/image-walk.mjs image-walk -- "http://127.0.0.1:$PORT" | tee "$WORK/shot.log" || walk=$?
+shot run release/image-walk.mjs image-walk -- "http://127.0.0.1:$PORT" | tee "$WORK/shot.log" || walk=$?
 run_dir="$(sed -n 's/^→ //p' "$WORK/shot.log" | tail -1)"
 [ -d "$run_dir" ] || fail "shot left no run directory"
 [ "$walk" = 0 ] || fail "the driver failed — see $run_dir"
