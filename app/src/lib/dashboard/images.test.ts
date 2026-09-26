@@ -195,17 +195,15 @@ describe('the config version sharpens the pin, never contradicts it', () => {
   })
 })
 
-// ── the pin, in place of a per-service env var ────────────────────────────
+// ── a version that is the image tag ───────────────────────────────────────
 //
-// The config repo used to hand each page its version (`N8N_VERSION`, …),
-// derived in nix from the pin by stripping a `v` and the digest. The cases are
-// the four tags that binding carried on this box, and each expected value is
-// what the env var said — the page must not change by a character.
+// The cases are the four tags the retired per-service env vars (`N8N_VERSION`,
+// …) carried on this box, and each expected value is what that var said — the
+// page must not change by a character.
 
-const pinned = async (
+const tagOf = async (
   tags: Record<string, string> | null,
   container: string,
-  envValue: string | undefined,
 ): Promise<string | null> => {
   if (tags !== null) {
     await writeFile(
@@ -222,7 +220,7 @@ const pinned = async (
   }
   vi.resetModules()
   const mod = await import('./images')
-  return mod.pinnedVersion(container, envValue)
+  return mod.imageTag(container)
 }
 
 describe('a version that is the image tag is read from the export', () => {
@@ -231,24 +229,16 @@ describe('a version that is the image tag is read from the export', () => {
     ['pocket-id', 'v2.14.0', '2.14.0'],
     ['wg-easy', '15.4.0', '15.4.0'],
     ['mcp-grocy', 'v2.7.0', '2.7.0'],
-  ])('%s pinned to %s reads %s, with no env var set', async (container, tag, shown) => {
-    expect(await pinned({ [container]: tag }, container, undefined)).toBe(shown)
+  ])('%s pinned to %s reads %s', async (container, tag, shown) => {
+    expect(await tagOf({ [container]: tag }, container)).toBe(shown)
   })
 
-  it('the tag wins over an env var the config side forgot to delete', async () => {
-    expect(await pinned({ n8n: '2.38.2' }, 'n8n', '2.30.0')).toBe('2.38.2')
+  it('a channel tag is not a version', async () => {
+    expect(await tagOf({ n8n: 'latest' }, 'n8n')).toBeNull()
   })
 
-  it('a box that publishes no export still shows what the env var says', async () => {
-    expect(await pinned(null, 'n8n', '2.38.2')).toBe('2.38.2')
-  })
-
-  it('a channel tag is not a version, so the env var answers', async () => {
-    expect(await pinned({ n8n: 'latest' }, 'n8n', '2.38.2')).toBe('2.38.2')
-  })
-
-  it('an empty env var is unknown, not an empty string', async () => {
-    expect(await pinned(null, 'n8n', '')).toBeNull()
-    expect(await pinned({}, 'n8n', undefined)).toBeNull()
+  it('no export, or no entry, is unknown', async () => {
+    expect(await tagOf(null, 'n8n')).toBeNull()
+    expect(await tagOf({}, 'n8n')).toBeNull()
   })
 })

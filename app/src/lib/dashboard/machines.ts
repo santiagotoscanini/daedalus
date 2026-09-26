@@ -1,4 +1,5 @@
 import type { Ctx } from '../../core/ctx'
+import { siteIdentity } from '../../host/contract/domains/site'
 import { lanDomain } from '../../host/providers/fleet'
 import { type Device, lanDevices } from '../../modules/network/data/dhcp'
 import { AGENT_PORT, type AgentStatus, agentStatus, nodeTelemetry } from '../agent/status'
@@ -18,8 +19,8 @@ import { listNodes, type NodeRow } from '../repo/nodes'
 // and each address seen in the last week is probed in parallel with a
 // short timeout. The two are joined on the address: a node's card shows
 // the live page when it answers, and a page with no node behind it is a
-// machine whose agent has not found the box (an older agent, or one on a
-// LAN whose DNS is not the box's).
+// machine whose agent has not found the box (one on a LAN whose DNS is not
+// the box's).
 //
 // Only the announced kind can be acted on, and only once approved: a
 // status page has no identity, a signed hello does.
@@ -99,7 +100,7 @@ function label(m: Machine): string {
 
 export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   const port = AGENT_PORT
-  const [nodeRows, domain] = await Promise.all([listNodes(), lanDomain()])
+  const [nodeRows, domain, site] = await Promise.all([listNodes(), lanDomain(), siteIdentity()])
 
   let devices: Device[] = []
   let error: string | null = null
@@ -108,7 +109,7 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   } catch (e) {
     error = e instanceof Error ? e.message : 'the LAN device list could not be read'
   }
-  const self = ctx.env('LAN_IP') ?? ''
+  const self = site.data.lanIp
   const recent = devices.filter(
     (d) => d.ip !== '?' && d.ip !== self && d.lastSeenAgo !== null && d.lastSeenAgo < RECENT_SECS,
   )

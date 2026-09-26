@@ -2,7 +2,7 @@ import type { Ctx } from '../../../core/ctx'
 import { publishingFacts } from '../../../host/contract/domains/publishing'
 import { webAppHosts } from '../../../host/nix-manifest'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
-import { pinnedVersion } from '../../../lib/dashboard/images'
+import { imageTag } from '../../../lib/dashboard/images'
 import { localDay, since } from '../../../lib/format'
 import { getJson, getJsonResult, type JsonResult } from '../../../lib/http'
 import { CF_TUNNEL_READ, type CfTunnel, cfReadError, DAYS } from './shared'
@@ -223,7 +223,7 @@ async function cfTunnel(ctx: Ctx): Promise<CfTunnelRead> {
  * can reach reports it, so the tag the image is pinned to IS the version.
  */
 async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
-  const version = await pinnedVersion('wg-easy', ctx.env('WG_EASY_VERSION'))
+  const version = await imageTag('wg-easy')
 
   const [counts, peers, peak, hosts] = await Promise.all([
     ctx.prom.scalars({

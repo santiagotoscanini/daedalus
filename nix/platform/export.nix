@@ -233,10 +233,10 @@ in
                 (`ctx.env('PIHOLE_URL')`, `CF_TUNNEL_ID`). Two kinds live
                 here. Config — an endpoint or an id the app needs to reach
                 the stack — belongs here for good. A pinned version
-                (`*_VERSION`) is only a fallback: the engine prefers the same
-                fact from `/export/images.json` (`pinnedVersion()` in
-                app/src/lib/dashboard/images.ts), so an entry is needed only
-                where the tag is not the version. A key two stacks both set
+                (`*_VERSION`) belongs here only where the image tag is not
+                the version: a tag that IS the version the engine reads from
+                `/export/images.json` (`imageTag()` in
+                app/src/lib/dashboard/images.ts). A key two stacks both set
                 is a conflicting definition, not a silent override.
               '';
             };

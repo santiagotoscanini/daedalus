@@ -29,36 +29,14 @@ describe('readSite', () => {
     })
   })
 
-  it('falls back to the VITE_ names a config bound before the rename', () => {
-    expect(
-      siteOf({
-        VITE_BASE_DOMAIN: 'old.test',
-        VITE_GITHUB_OWNER: 'old-owner',
-        VITE_REGISTRY_HOST: 'registry.old.test',
-        VITE_GRAFANA_URL: 'https://grafana.old.test',
-      }),
-    ).toEqual({
-      baseDomain: 'old.test',
-      owner: 'old-owner',
-      registryHost: 'registry.old.test',
-      grafanaUrl: 'https://grafana.old.test',
-    })
-  })
-
-  it('prefers the bare name when both are bound, fact by fact', () => {
-    const s = siteOf({
-      BASE_DOMAIN: 'new.test',
-      VITE_BASE_DOMAIN: 'old.test',
-      VITE_GITHUB_OWNER: 'old-owner',
-    })
-    expect(s.baseDomain).toBe('new.test')
-    expect(s.owner).toBe('old-owner')
-    // Derived from the domain that won, not from the one that lost.
+  it('derives what is not bound from the domain', () => {
+    const s = siteOf({ BASE_DOMAIN: 'new.test' })
     expect(s.registryHost).toBe('registry.new.test')
+    expect(s.grafanaUrl).toBe('https://grafana.new.test')
   })
 
-  it('reads an empty bare name as absent, so the old one still answers', () => {
-    expect(siteOf({ BASE_DOMAIN: '', VITE_BASE_DOMAIN: 'old.test' }).baseDomain).toBe('old.test')
+  it('reads an empty name as absent', () => {
+    expect(siteOf({ BASE_DOMAIN: '' }).baseDomain).toBe('localhost')
   })
 
   it('reads a malformed Grafana URL as unset rather than linking to it', () => {

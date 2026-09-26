@@ -22,14 +22,10 @@ const meta = (r: SnapshotResult<unknown>): SourceMeta => ({
 
 /**
  * The control plane's label: site.json's when it carries one, else read off
- * the address the box answers at (the export's, or this container's own
- * APP_HOSTNAME before the export carries it).
+ * the address the box answers at.
  */
-function controlPlaneOf(
-  s: SiteIdentity,
-  appHostname: string,
-): BoxSettings['general']['controlPlane'] {
-  const host = s.controlPlane.hostname ?? appHostname
+function controlPlaneOf(s: SiteIdentity): BoxSettings['general']['controlPlane'] {
+  const host = s.controlPlane.hostname ?? ''
   const suffix = `.${s.baseDomain}`
   const derived = s.baseDomain !== '' && host.endsWith(suffix) ? host.slice(0, -suffix.length) : ''
   return { label: s.controlPlane.label ?? derived, previousLabel: s.controlPlane.previousLabel }
@@ -53,18 +49,16 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       hostname: s.hostname,
       baseDomain: s.baseDomain,
       publicUrl: ctx.env('APP_PUBLIC_URL') ?? '',
-      controlPlane: controlPlaneOf(s, ctx.env('APP_HOSTNAME') ?? ''),
-      // TZ is bound to every container; the export states the same value
-      // from the config. Prefer the export, keep env as the pre-export path.
-      timezone: s.timezone || (ctx.env('TZ') ?? ''),
+      controlPlane: controlPlaneOf(s),
+      timezone: s.timezone,
       operator: { user: s.operator.user, group: s.operator.group, email: s.mail.alertTo },
       owner: s.owner,
     },
     network: {
-      lanIp: s.lanIp || (ctx.env('LAN_IP') ?? ''),
+      lanIp: s.lanIp,
       interface: s.network.interface,
-      gateway: s.network.gateway ?? ctx.env('GATEWAY_IP') ?? null,
-      wanHost: s.wanHost || (ctx.env('WAN_HOST') ?? ''),
+      gateway: s.network.gateway,
+      wanHost: s.wanHost,
       ddns: { host: ctx.env('DDNS_HOST') ?? '', interval: ctx.env('DDNS_INTERVAL') ?? '' },
       dhcp: network.data.dhcp,
       dns: { upstreams: network.data.dnsUpstreams, lanHosts: network.data.lanHosts.length },

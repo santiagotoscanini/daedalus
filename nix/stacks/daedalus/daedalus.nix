@@ -106,7 +106,8 @@ let
   # same directory listing declarations.nix reads, not a setting: this is the
   # only thing that decides whether an app gets operator secrets, so the page
   # shows it and offers no switch. The registry (apps.json) carries settings;
-  # the manifest carries what Nix knows — and this belongs on that side.
+  # the `apps` export domain (below) carries what Nix knows — and this belongs
+  # on that side.
   #
   # The site directory is handed in rather than derived from the library's
   # location — same argument as the other consumer, spelled out in the library.
@@ -117,44 +118,23 @@ let
     }
   );
 
-  # What only Nix knows, handed to the container as one read-only store file:
-  # the hand-declared apps (`nixManaged` — only daedalus itself, from `self`
-  # below, and therefore not editable from the UI) and operatorSecretApps.
-  #
-  # ONLY those. The committed registry (apps.json) deliberately does NOT ride
-  # in here: this is a store path bound into the container, so a change to it
-  # changes the unit and systemd restarts the app — which, for apps.json,
-  # meant every Apply killed the page showing its progress at the "switching"
-  # phase. The registry arrives through a stable path instead
-  # (daedalus-registry-snapshot, daedalus-snapshots.nix → NIX_REGISTRY_PATH).
-  nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
-    builtins.toJSON {
-      schemaVersion = 1;
-      nixManaged.daedalus = self;
-      inherit operatorSecretApps;
-    }
-  );
-
   # daedalus's own registry entry — ./self.json, the same entry schema as one
   # apps.json value, mapped through the same platform/lib/registry-lib.nix the
   # committed registry goes through. One schema, one mapper: when the registry
   # grows a field, this entry cannot be the reader that silently drops it.
   #
   # Defined ONCE and consumed twice: by `fleet.apps.daedalus` below, and by the
-  # manifest the container reads. As two literals these drift within the hour —
-  # the app list rendering one description while the detail page reports
-  # another. Restating this is exactly the class of bug daedalus exists to
-  # catch, so it does not get to have it.
+  # `apps` export domain the container reads. As two literals these drift
+  # within the hour — the app list rendering one description while the detail
+  # page reports another. Restating this is exactly the class of bug daedalus
+  # exists to catch, so it does not get to have it.
   #
   # NOT read back out of `config.fleet.apps.daedalus`, which would be the other
-  # way to deduplicate: this value feeds a volume on the container that
-  # apps.nix generates from `fleet.apps`, and threading the read through that
-  # is the loop the apps module's header warns about. A JSON file preserves the
-  # no-config-read property — which is also what registry-lib requires of its
-  # input.
+  # way to deduplicate: that is the mapper's OUTPUT, not the registry-schema
+  # entry the page decodes, and a JSON file preserves the no-config-read
+  # property registry-lib requires of its input.
   # (The one config read below is `fleet.baseDomain`, for the hostname: site.json
-  # defines it and nothing under `fleet.apps` feeds it, so it is not that loop —
-  # `fleet.apps.daedalus.hostname` already reads it for the Settings label.)
+  # defines it and nothing under `fleet.apps` feeds it.)
   #
   # On its values: `stage = "lab"` keeps it LAN-only — a control plane for
   # this box has no business answering on a public CNAME, wildcard cert or
@@ -172,7 +152,7 @@ let
   # One key differs from the registry schema: self.json carries `hostLabel`
   # where an apps.json entry carries a full `hostname`, because this file ships
   # with the engine and a domain is the host's fact (site.json), not the
-  # engine's. It is joined here, BEFORE the mapper and the manifest, so both
+  # engine's. It is joined here, BEFORE the mapper and the export, so both
   # still see the registry's `hostname` and neither learns a second schema.
   self =
     let
@@ -517,14 +497,12 @@ in
             # Reached over the `monitoring` bridge added above.
             PROMETHEUS_URL = "http://prometheus:9090";
             LOKI_URL = "http://loki:3100";
-            # What Nix last built. Two files, because they change at different rates:
-            # the manifest is a store path (hand-written entries, rarely moves), the
-            # snapshot is a stable path refreshed by daedalus-registry-snapshot on
-            # every rebuild — so an Apply updates it WITHOUT restarting this app.
-            NIX_MANIFEST_PATH = "/registry/manifest.json";
+            # The registry nix last built: a stable path refreshed by
+            # daedalus-registry-snapshot on every rebuild — so an Apply updates it
+            # WITHOUT restarting this app.
             NIX_REGISTRY_PATH = "/export/applied.json";
-            # The fleet.export domains (platform/export.nix) — the successor to the
-            # manifest and the env blobs; readers flip domain by domain.
+            # The fleet.export domains (platform/export.nix): the fleet facts the
+            # pages render.
             EXPORT_DIR = "/export";
             # The box's identity, read at RUN time (engine: src/host/site.ts) and
             # handed to the browser by the root loader. Not VITE_-prefixed any
@@ -560,10 +538,6 @@ in
             # account and tunnel ids beside it are the tunnel's business and arrive
             # from modules/cloudflared through fleet.dashboard while it runs.
             CF_ZONE_ID = config.fleet.cloudflare.zoneId;
-            # The default route, which is the router. Bound from the site's gateway
-            # (site.nix, from site.json) — the one place that says where this box
-            # sends everything it cannot deliver itself, so no second copy can drift.
-            GATEWAY_IP = config.fleet.gateway;
             # The product name, and ONLY that. The router serves no API, but its
             # login page carries a build stamp — model, hardware revision, firmware,
             # build date — so all four of those are read off the device and a
@@ -579,15 +553,9 @@ in
             # the same gateway option, so neither can drift from the other.
             ROUTER_URL = "http://${config.fleet.gateway}";
             ROUTER_ADMIN_URL = "https://${config.fleet.gateway}/webpages/index.html#/login";
-            # What nearly every pi-hole hosts entry points at. Bound from the option
-            # that GENERATES those entries, so "this one points somewhere else" stays
-            # a real distinction instead of a comparison against a stale literal.
-            LAN_IP = config.fleet.lanIp;
-            # The one address the game servers are reached by — the same string from
-            # the sofa and from a hotel, because pi-hole answers it with the LAN
-            # address and Cloudflare with the WAN one. Bound rather than typed so
-            # the page cannot print a hostname this box no longer maintains.
-            WAN_HOST = config.fleet.wanHost;
+            # The box's own addresses (LAN IP, gateway, the split-horizon WAN name)
+            # and its timezone are facts the pages render: they ride
+            # /export/site.json, not env.
             # Per-service versions still read by name (FACTORIO_VERSION, …) are
             # each stack's own fleet.dashboard contribution (see its `env`
             # description in platform/export.nix); pinned tags ride
@@ -633,6 +601,15 @@ in
     # own --network=container: flag, which this module already reads.
     fleet.export.domains.publishing.data.vpnEgress = vpnEgress;
 
+    # What only Nix knows about the app registry (app/src/host/contract/domains/
+    # apps.ts): the hand-declared apps — only daedalus itself, from `self`, and
+    # therefore not editable from the UI — and operatorSecretApps. The committed
+    # registry itself arrives beside it as /export/applied.json.
+    fleet.export.domains.apps.data = {
+      nixManaged.daedalus = self;
+      inherit operatorSecretApps;
+    };
+
     # Same list-merge idiom stacks/litellm uses to add its token mount to
     # prometheus: the stack that OWNS the file contributes the mount, rather
     # than the apps platform learning about daedalus.
@@ -641,12 +618,10 @@ in
     # an `app-daedalus` entry with no image.
     virtualisation.oci-containers.containers = lib.mkIf appsOn {
       app-daedalus.volumes = [
-        "${nixManifest}:/registry/manifest.json:ro"
         # The fleet.export domains (platform/export.nix): versioned, stamped JSON
         # per domain at a STABLE path — the publisher re-runs on change, the
-        # container just reads new bytes. This is the successor to both the
-        # manifest above and the per-fact env blobs; readers flip domain by
-        # domain, then the old channels are deleted.
+        # container just reads new bytes, so no fact nix hands the app
+        # restarts it.
         "/run/daedalus-export:/export:ro"
         "${applyDir}:/apply"
         # Last deploy result per app, written by app-<name>-deploy.service

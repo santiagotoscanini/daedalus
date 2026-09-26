@@ -144,7 +144,7 @@ export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
       // tracks this house's WAN address AND is short-circuited to the LAN
       // address by pi-hole, so this one string is what every player types,
       // wherever they are sitting.
-      connect: `${wanHost(ctx)}:${String(PORT)}`,
+      connect: `${await wanHost()}:${String(PORT)}`,
       port: PORT,
       adminUrl: ctx.hosts.base('factorio-admin'),
     },

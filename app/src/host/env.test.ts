@@ -106,7 +106,7 @@ describe('an optional variable', () => {
   it('reads as absent when unset or empty, and says nothing', () => {
     const { env, warnings } = envOf(REQUIRED)
     expect(env.get('LITELLM_BASE_URL')).toBeUndefined()
-    expect(env.text('WAN_HOST')).toBeUndefined()
+    expect(env.text('DDNS_HOST')).toBeUndefined()
     expect(warnings).toEqual([])
     expect(env.check()).toEqual({ fatal: [], warnings: [] })
   })

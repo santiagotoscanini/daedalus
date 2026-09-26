@@ -60,14 +60,12 @@ LiteLLM tab reads "not configured"), and a malformed one is warned about
 once and read as unset.
 
 `/` redirects to `/apps`, and `/apps` is the one page that fails out of the
-box: its loader throws `NIX_MANIFEST_PATH / NIX_REGISTRY_PATH are not set`
-and the section renders a failure panel with a Retry button. Two empty
-files satisfy it:
+box: its loader throws `NIX_REGISTRY_PATH is not set` and the section
+renders a failure panel with a Retry button. An empty registry satisfies it:
 
 ```
-echo '{"schemaVersion":1,"nixManaged":{},"operatorSecretApps":[]}' > /tmp/manifest.json
 echo '{"schemaVersion":2,"apps":{}}' > /tmp/registry.json
-export NIX_MANIFEST_PATH=/tmp/manifest.json NIX_REGISTRY_PATH=/tmp/registry.json
+export NIX_REGISTRY_PATH=/tmp/registry.json
 ```
 
 After which `/apps` renders its empty state — 0 running, and Add an app.

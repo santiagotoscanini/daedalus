@@ -104,9 +104,8 @@ for ((i = 0; i < 30; i++)); do
 done
 
 # /apps is the one page with a hard requirement on the host: its loader wants
-# the nix manifest and the app registry. Two empty ones give it its empty state.
+# the app registry nix last built. An empty one gives it its empty state.
 mkdir -p "$WORK/host"
-echo '{"schemaVersion":1,"nixManaged":{},"operatorSecretApps":[]}' >"$WORK/host/manifest.json"
 echo '{"schemaVersion":2,"apps":{}}' >"$WORK/host/registry.json"
 
 say "the built server"
@@ -114,7 +113,7 @@ podman run -d --init --name "$APP" --network "$NET" -p "127.0.0.1:$PORT:3000" \
   -e DATABASE_URL="$DATABASE_URL" \
   -e BASE_DOMAIN=example.test -e GITHUB_OWNER=example-owner \
   -e REGISTRY_HOST=registry.example.test -e GRAFANA_URL=https://grafana.example.test \
-  -e NIX_MANIFEST_PATH=/host/manifest.json -e NIX_REGISTRY_PATH=/host/registry.json \
+  -e NIX_REGISTRY_PATH=/host/registry.json \
   -v "$WORK/host:/host:ro" \
   "$IMAGE" >/dev/null
 wait_for "http://127.0.0.1:$PORT/api/healthz" "$APP" 30

@@ -68,7 +68,6 @@ type Spec = {
 const DAEDALUS = 'stacks/daedalus/daedalus.nix'
 const APPS = 'stacks/apps/apps.nix (every fleet app)'
 const SERVICE_KEYS = `${DAEDALUS} daedalus-dashboard-keys, from service-keys.sops`
-const LEGACY = 'a config that predates the rename; bind the bare name instead'
 const UNBOUND = 'unbound — an override for tests and a bare checkout'
 
 const dash = (about: string, source = SERVICE_KEYS) =>
@@ -117,11 +116,6 @@ export const SCHEMA = {
     source: DAEDALUS,
     reader: 'vite.config.ts',
   },
-  TZ: {
-    kind: 'string',
-    about: 'The box’s timezone, until site.json names one.',
-    source: 'platform/podman.nix (every container)',
-  },
   // The box's identity — read through host/site.ts, and only there.
   BASE_DOMAIN: {
     kind: 'string',
@@ -145,32 +139,6 @@ export const SCHEMA = {
     kind: 'url',
     about: 'Grafana, for the log and dashboard links.',
     source: 'stacks/monitoring fleet.dashboard.monitoring.env',
-    reader: 'host/site.ts',
-  },
-  // The same four under the names they had while Vite inlined them. Read
-  // second, so a config that has not renamed its bindings keeps working.
-  VITE_BASE_DOMAIN: {
-    kind: 'string',
-    about: 'BASE_DOMAIN, as it was bound.',
-    source: LEGACY,
-    reader: 'host/site.ts',
-  },
-  VITE_GITHUB_OWNER: {
-    kind: 'string',
-    about: 'GITHUB_OWNER, as it was bound.',
-    source: LEGACY,
-    reader: 'host/site.ts',
-  },
-  VITE_REGISTRY_HOST: {
-    kind: 'string',
-    about: 'REGISTRY_HOST, as it was bound.',
-    source: LEGACY,
-    reader: 'host/site.ts',
-  },
-  VITE_GRAFANA_URL: {
-    kind: 'url',
-    about: 'GRAFANA_URL, as it was bound.',
-    source: LEGACY,
     reader: 'host/site.ts',
   },
 
@@ -334,13 +302,6 @@ export const SCHEMA = {
   },
 
   // ── what the box is ──────────────────────────────────────────────────────
-  LAN_IP: { kind: 'string', about: 'The box’s LAN address.', source: DAEDALUS },
-  GATEWAY_IP: { kind: 'string', about: 'The default route: the router.', source: DAEDALUS },
-  WAN_HOST: {
-    kind: 'string',
-    about: 'The split-horizon name the game servers are reached by.',
-    source: DAEDALUS,
-  },
   ROUTER_PRODUCT: {
     kind: 'string',
     about: 'The router’s product name, which its build stamp lacks.',
@@ -382,21 +343,6 @@ export const SCHEMA = {
     about: 'pihole-ftl’s package version.',
     source: 'stacks/pihole fleet.dashboard.pihole.env',
   },
-  POCKET_ID_VERSION: {
-    kind: 'string',
-    about: 'Pocket ID’s image version.',
-    source: 'stacks/pocket-id fleet.dashboard.pocket-id.env',
-  },
-  N8N_VERSION: {
-    kind: 'string',
-    about: 'n8n’s image version.',
-    source: 'stacks/n8n fleet.dashboard.n8n.env',
-  },
-  WG_EASY_VERSION: {
-    kind: 'string',
-    about: 'wg-easy’s image version.',
-    source: 'stacks/wg-easy fleet.dashboard.wg-easy.env',
-  },
   FACTORIO_VERSION: {
     kind: 'string',
     about: 'The Factorio server’s version.',
@@ -411,11 +357,6 @@ export const SCHEMA = {
     kind: 'int',
     about: 'The Paper build number.',
     source: 'stacks/minecraft fleet.dashboard.minecraft.env',
-  },
-  MCP_GROCY_VERSION: {
-    kind: 'string',
-    about: 'mcp-grocy’s image version.',
-    source: 'stacks/grocy-mcp fleet.dashboard.grocy-mcp.env',
   },
   YAZIO_MCP_VERSION: {
     kind: 'string',

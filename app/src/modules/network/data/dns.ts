@@ -176,7 +176,7 @@ export async function loadDns(ctx: Ctx): Promise<DnsData> {
   ])
 
   const published = new Set(zone.names.map((n) => n.fqdn))
-  const box = lanIp(ctx)
+  const box = await lanIp()
 
   return {
     resolver,

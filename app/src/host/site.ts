@@ -11,19 +11,14 @@ import { type Env, env } from './env'
 // altogether: it holds what the operator last saved, which between an edit
 // and an Apply is not what traefik, the registry and DNS are serving.
 //
-// Each fact has two names. The bare one is what the config binds; the VITE_
-// one is what it bound while Vite inlined these, and is read second so a box
-// whose nix config predates the rename keeps its identity. Nothing reads
-// `import.meta.env` for them any more, so the prefix no longer means anything.
-//
 // Read per call, like every other row: nothing here is cached at module scope,
 // which is what a build-time constant was.
 
 export function readSite(e: Env = env): Site {
   return siteFrom({
-    baseDomain: e.get('BASE_DOMAIN') ?? e.get('VITE_BASE_DOMAIN'),
-    owner: e.get('GITHUB_OWNER') ?? e.get('VITE_GITHUB_OWNER'),
-    registryHost: e.get('REGISTRY_HOST') ?? e.get('VITE_REGISTRY_HOST'),
-    grafanaUrl: e.get('GRAFANA_URL') ?? e.get('VITE_GRAFANA_URL'),
+    baseDomain: e.get('BASE_DOMAIN'),
+    owner: e.get('GITHUB_OWNER'),
+    registryHost: e.get('REGISTRY_HOST'),
+    grafanaUrl: e.get('GRAFANA_URL'),
   })
 }

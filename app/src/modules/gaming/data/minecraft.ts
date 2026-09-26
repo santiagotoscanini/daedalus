@@ -145,7 +145,7 @@ export async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
       maxPlayers: live.maxPlayers,
       ping: live.ping,
       online,
-      connect: `${wanHost(ctx)}:${String(MC_PORT)}`,
+      connect: `${await wanHost()}:${String(MC_PORT)}`,
     },
     builds,
     events,

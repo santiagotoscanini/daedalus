@@ -59,7 +59,7 @@ export type BoxSettings = {
     applyStatus: ApplyStatus
     /** The commit the running generation was built from (the site export's envelope), so the tab can say whether HEAD is what runs. */
     runningRevision: string | null
-    /** The git identities the box can commit as; null until the export carries them. */
+    /** The git identities the box can commit as. */
     git: GitIdentities
   }
   developer: {

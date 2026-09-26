@@ -1,4 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
+import { siteIdentity } from '../../../host/contract/domains/site'
 import { webAppHosts } from '../../../host/nix-manifest'
 import { getJson, type JsonResult } from '../../../lib/http'
 
@@ -94,7 +95,15 @@ export async function piholeAdmin(): Promise<string | null> {
  *
  * Nearly every hosts entry points here, so the address is only worth printing
  * when it does NOT — and that comparison needs something to compare against.
- * Bound from `fleet.lanIp`, the same option that generates those entries, so
- * the two cannot drift apart into a page where every row looks interesting.
+ * `fleet.lanIp` from /export/site.json — the same option that generates those
+ * entries, so the two cannot drift apart into a page where every row looks
+ * interesting.
  */
-export const lanIp = (ctx: Ctx) => ctx.env('LAN_IP') ?? ''
+export async function lanIp(): Promise<string> {
+  return (await siteIdentity()).data.lanIp
+}
+
+/** The default route — the router — from /export/site.json. Null when unstated. */
+export async function gatewayIp(): Promise<string | null> {
+  return (await siteIdentity()).data.network.gateway
+}

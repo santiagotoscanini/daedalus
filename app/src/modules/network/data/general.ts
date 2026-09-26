@@ -1,7 +1,15 @@
 import type { Ctx } from '../../../core/ctx'
 import { webAppHosts } from '../../../host/nix-manifest'
 import { getJson, getJsonResult, getText } from '../../../lib/http'
-import { CF_TUNNEL_READ, type CfTunnel, cfReadError, lanIp, PIHOLE, piholeSid } from './shared'
+import {
+  CF_TUNNEL_READ,
+  type CfTunnel,
+  cfReadError,
+  gatewayIp,
+  lanIp,
+  PIHOLE,
+  piholeSid,
+} from './shared'
 
 /**
  * The house network — a different subject from every tab beside it, which are
@@ -178,8 +186,8 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
     hops,
     router: {
       ...router,
-      gateway: ctx.env('GATEWAY_IP') ?? DASH_IP,
-      lan: lanIp(ctx),
+      gateway: (await gatewayIp()) ?? DASH_IP,
+      lan: await lanIp(),
       wan: tunnel.ok ? (tunnel.value.result?.connections?.[0]?.origin_ip ?? null) : null,
       wanError: cfReadError(ctx, tunnel, CF_TUNNEL_READ),
       adminUrl: ctx.env('ROUTER_ADMIN_URL') ?? '',

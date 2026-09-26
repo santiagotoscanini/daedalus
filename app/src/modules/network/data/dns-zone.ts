@@ -89,7 +89,7 @@ export async function loadZone(ctx: Ctx): Promise<ZoneData> {
       lanSet,
       served,
       tunnel,
-      box: lanIp(ctx),
+      box: await lanIp(),
     }),
     note:
       raw !== null

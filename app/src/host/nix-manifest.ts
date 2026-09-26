@@ -23,7 +23,8 @@ import { env } from './env'
 
 // What Nix last built, as handed to this container by
 // nix/stacks/daedalus/daedalus.nix — two files, read by `readNixManifest`:
-// the hand-written entries (NIX_MANIFEST_PATH, a store path) and the applied
+// what only nix knows (/export/apps.json: the hand-declared entries and which
+// apps have operator secrets — host/contract/domains/apps.ts) and the applied
 // registry (NIX_REGISTRY_PATH, /export/applied.json).
 //
 // This is NOT a second source of truth — it is the *comparison* target. The
@@ -111,13 +112,8 @@ export type NixManifest = {
   registry: { schemaVersion: number; apps: Record<string, ManifestApp> }
   nixManaged: Record<string, ManifestApp>
   /**
-   * Apps with a tracked `site/vault/apps/<name>-env.sops`.
-   *
-   * A fact, not a setting — the file existing is the only thing that decides
-   * whether an app gets operator secrets, so there is nothing for the database
-   * to hold an opinion about and nothing to drift. It arrives here rather than
-   * through the registry export for exactly that reason: `apps.json` carries
-   * what daedalus decides, this manifest carries what Nix found.
+   * Apps with a tracked `site/vault/apps/<name>-env.sops` — what Nix found,
+   * never what daedalus decides (host/contract/domains/apps.ts).
    */
   operatorSecretApps: string[]
 }
@@ -142,7 +138,7 @@ export type ManifestEntry = ManifestApp & {
 const ns = optional(nullable(str), null)
 const nn = optional(nullable(num), null)
 
-const manifestApp: Decoder<ManifestApp> = obj({
+export const manifestApp: Decoder<ManifestApp> = obj({
   // From the tuple, so a rung added to the ladder is decodable here without a
   // second edit — and a file Nix accepts can never fail to parse here.
   stage: literal(...APP_STAGES),
@@ -186,12 +182,6 @@ const manifestApp: Decoder<ManifestApp> = obj({
   notes: optional(recordOf(str), {}),
 })
 
-const managedManifestShape = obj({
-  schemaVersion: optional(num, 1),
-  nixManaged: recordOf(manifestApp),
-  operatorSecretApps: optional(arrayOf(str), []),
-})
-
 const registryFileShape = obj({
   schemaVersion: optional(num, 1),
   apps: recordOf(manifestApp),
@@ -216,43 +206,47 @@ export function decodeRegistryFile(raw: unknown): NixManifest['registry'] {
   return registry
 }
 
-let cachedManaged: NixManifest['nixManaged'] | null = null
-let cachedSecretApps: string[] | null = null
+// TEMPORARY (W5): the store-path manifest /export/apps.json replaces, read only
+// while the running generation predates the export. Delete with the
+// NIX_MANIFEST_PATH row once the engine switch has landed.
+async function legacyNixApps(): Promise<Pick<NixManifest, 'nixManaged' | 'operatorSecretApps'>> {
+  const managedPath = env.get('NIX_MANIFEST_PATH')
+  if (!managedPath) return { nixManaged: {}, operatorSecretApps: [] }
+  return decode(
+    obj({ nixManaged: recordOf(manifestApp), operatorSecretApps: optional(arrayOf(str), []) }),
+    JSON.parse(await readFile(managedPath, 'utf8')),
+  )
+}
 
 export async function readNixManifest(): Promise<NixManifest> {
-  const managedPath = env.get('NIX_MANIFEST_PATH')
   const registryPath = env.get('NIX_REGISTRY_PATH')
-  if (!managedPath || !registryPath) {
+  if (!registryPath) {
     throw new Error(
-      'NIX_MANIFEST_PATH / NIX_REGISTRY_PATH are not set. Both are injected by ' +
-        'stacks/daedalus/daedalus.nix — check the container env.',
+      'NIX_REGISTRY_PATH is not set. It is injected by stacks/daedalus/daedalus.nix — check the container env.',
     )
   }
 
-  // The hand-written entries are a /nix/store path: immutable, and a change to
-  // them restarts this container anyway, so caching for the process lifetime
-  // is safe.
-  if (cachedManaged === null || cachedSecretApps === null) {
-    // decode() throws with the failing path. Loud on purpose: this file is
-    // the app's core contract with nix, and a silently-empty manifest would
-    // report every app as "not in the last Nix build".
-    const parsed = decode(managedManifestShape, JSON.parse(await readFile(managedPath, 'utf8')))
-    cachedManaged = parsed.nixManaged
-    cachedSecretApps = parsed.operatorSecretApps
-  }
+  // A malformed export is loud on purpose: this is the app's core contract with
+  // nix, and a silently empty answer would drop daedalus itself from the list.
+  // A missing one is a publisher that has not run (or a bare checkout), and
+  // reads as no nix-declared apps, like every other domain.
+  const { nixApps } = await import('./contract/domains/apps')
+  const apps = await nixApps()
+  if (apps.error !== null) throw new Error(`/export/apps.json: ${apps.error}`)
+  // TEMPORARY (W5): becomes `const nix = apps.data` with the fallback gone.
+  const nix = apps.available ? apps.data : await legacyNixApps()
 
-  // The committed registry is NOT cached. It lives at a fixed path that
-  // daedalus-registry-snapshot rewrites on every rebuild — which is precisely
-  // what lets an Apply update it without restarting this app. Caching it would
-  // reintroduce the restart by another name: the UI would keep reporting drift
-  // against a registry that had already been applied.
+  // Neither file is cached. Both live at fixed paths that a rebuild rewrites —
+  // which is precisely what lets an Apply update them without restarting this
+  // app. Caching would reintroduce the restart by another name: the UI would
+  // keep reporting drift against a registry that had already been applied.
   const registry = decodeRegistryFile(JSON.parse(await readFile(registryPath, 'utf8')))
 
   return {
     schemaVersion: registry.schemaVersion,
     registry,
-    nixManaged: cachedManaged,
-    operatorSecretApps: cachedSecretApps,
+    nixManaged: nix.nixManaged,
+    operatorSecretApps: nix.operatorSecretApps,
   }
 }
 
