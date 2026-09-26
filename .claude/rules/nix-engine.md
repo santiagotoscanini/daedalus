@@ -173,10 +173,13 @@ when the host has not defined it. The host keeps all of them in one file
 view of every pin (`platform/export.nix`) that the Updates page and the
 agent read; `fleet.images` is the host-written input.
 
-Two pins here are NOT `virtualisation.oci-containers` images and are
-bumped by hand, as ordinary engine commits: `nodeImage` in
-`stacks/daedalus/build-agent.nix` and `railpackFrontend` (with the
-Railpack release hashes) in `stacks/daedalus/railpack.nix`.
+Pins here that are NOT `virtualisation.oci-containers` images are bumped
+by hand, as ordinary engine commits, and each is declared as a
+`fleet.manualPins` entry so System › Updates lists it with the file to
+edit: `nodeImage` in `stacks/daedalus/build-agent.nix`, `railpackFrontend`
+(with the Railpack release hashes) in `stacks/daedalus/railpack.nix`, the
+dev image's `ARG NODE_IMAGE` in the root `Dockerfile`, and the bases of
+the images the catalog builds (below).
 
 ## 5. The dev loop
 
@@ -315,7 +318,10 @@ version variable (two containers on one release) is a `let` in that
 file. `fleet.imageUpdates.<container>` policy (lockstep, ceremony,
 updatable) is mechanism knowledge about the image and moves WITH the
 module. An image the module BUILDS (`mkLocalImage` from a Containerfile
-in its assets) keeps its base pin in that Containerfile, bumped by hand.
+in its assets) takes its base as `bases.BASE = "<repo>:<tag>@sha256:…"` in
+the module (the file reads `ARG BASE` + `FROM ${BASE}`), bumped by hand,
+and contributes `fleet.manualPins = <image>.pins` inside its switch — the
+platform asserts every locally built container is in some entry.
 
 **Policy is the host's, mechanism is the module's.** Mechanism: which
 upstream image, ports, mounts and their uids, env that makes the app work

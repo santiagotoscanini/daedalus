@@ -33,7 +33,7 @@ let
 
   # Bridge-membership spec parsing lives in fleet-lib (shared with
   # publishing.nix — one parser, no hand-synced mirror).
-  inherit (import ./lib/fleet-lib.nix { inherit lib; }) bridgeOf networkFlag;
+  inherit (import ./lib/fleet-lib.nix { inherit lib; }) bridgeOf networkFlag parsePin;
 
   # Applied to every podman-<name>.service. Without this override
   # oci-containers ships Type=notify + Restart=always, which doesn't
@@ -414,14 +414,27 @@ in
     # Without that, a rebuilt image sits unused behind an unchanged tag
     # until something else happens to restart the container — a silent
     # partial deploy. Layer cache keeps no-change rebuilds ~instant.
+    #
+    # `bases` names the images the build file starts FROM, as
+    # `{ BASE = "repo:tag@sha256:…"; }`: each one reaches the build as
+    # `--build-arg`, and the file reads it with `ARG BASE` + `FROM ${BASE}`.
+    # So a base pin lives in nix, once, beside the module — where the
+    # Updates page can list it — instead of inside a Containerfile. The refs
+    # are folded into the tag's hash too: they are part of what gets built
+    # even though they are no longer part of the context. `pins` returns
+    # them as `fleet.manualPins` entries (id `<name>` for BASE,
+    # `<name>-<arg>` for any other), each naming the containers its gates
+    # start; the caller contributes them inside its own switch:
+    #   fleet.manualPins = img.pins;
     _module.args.mkLocalImage =
       {
         name, # localhost/<name>
-        tagPrefix, # human-readable tag part (e.g. the app version)
+        tagPrefix ? null, # human-readable tag part; default: the tag of bases.BASE
         contextDir, # store path with the Containerfile + context
         file ? "Containerfile", # the build file, relative to contextDir
         target ? null, # a stage to stop at (`podman build --target`), or the whole file
         gates, # consumer units; build runs before= / wantedBy= them
+        bases ? { }, # build arg → digest-pinned base image
       }:
       let
         # Interpolation imports a literal path into its own
@@ -429,11 +442,42 @@ in
         # /nix/store/<hash32>-…, where the hash IS the fingerprint of
         # exactly this context, not of the whole repo.
         ctx = "${contextDir}";
-        ctxHash = builtins.substring 11 8 ctx;
-        image = "localhost/${name}:${tagPrefix}-${ctxHash}";
+        ctxHash =
+          if bases == { } then
+            builtins.substring 11 8 ctx
+          else
+            builtins.substring 0 8 (builtins.hashString "sha256" (ctx + builtins.toJSON bases));
+        basePin = parsePin (bases.BASE or "");
+        prefix =
+          if tagPrefix != null then
+            tagPrefix
+          else if basePin != null then
+            basePin.tag
+          else
+            throw "mkLocalImage ${name}: give `tagPrefix`, or a digest-pinned `bases.BASE` to take it from";
+        image = "localhost/${name}:${prefix}-${ctxHash}";
+        buildArgs = lib.concatStrings (
+          lib.mapAttrsToList (arg: ref: "\n  --build-arg ${lib.escapeShellArg "${arg}=${ref}"} \\") bases
+        );
+        # The containers this image runs as: the podman-<c>.service gates.
+        # A gate that is not a container (multi-user.target) names none.
+        containers = lib.concatMap (
+          g:
+          let
+            m = builtins.match "podman-(.*)\\.service" g;
+          in
+          if m == null then [ ] else m
+        ) gates;
       in
       {
         inherit image;
+        pins = lib.mapAttrs' (
+          arg: ref:
+          lib.nameValuePair (if arg == "BASE" then name else "${name}-${lib.toLower arg}") {
+            image = ref;
+            inherit containers;
+          }
+        ) bases;
         # A cold cache pulls the FROM base from its registry, so this
         # needs real DNS (needsDns), not just network-online.
         service = mkRootlessOneshot {
@@ -445,7 +489,7 @@ in
             set -eu
             cd ${ctx}
             ${pkgs.podman}/bin/podman build \
-              --tag ${image} \
+              --tag ${image} \${buildArgs}
               --file ${file} \${lib.optionalString (target != null) "\n  --target ${target} \\"}
               .
           '';

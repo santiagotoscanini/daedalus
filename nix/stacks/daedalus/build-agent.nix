@@ -286,6 +286,15 @@ in
 {
   config = lib.mkIf (config.fleet.modules.daedalus.enable && builder.enable) {
 
+    # The checks target's base, listed on System › Updates. Not the control
+    # plane's own node (NODE_IMAGE in the engine's Dockerfile): the two are
+    # bumped apart, on purpose.
+    fleet.manualPins.build-checks-node = {
+      image = nodeImage;
+      upstream = "nodejs/node";
+      note = "Candidate-build a Dockerfile-strategy app before any live one.";
+    };
+
     # ── the build ─────────────────────────────────────────────────────────
 
     systemd.paths.daedalus-build = {

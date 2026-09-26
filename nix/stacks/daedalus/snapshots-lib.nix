@@ -106,10 +106,22 @@ let
   # the probe and the thing that rewrites a pin come to disagree about what a
   # pin is. The shape is `{ image, repo, tag, digest }`; this renames `digest`
   # to the `pinnedDigest` the probe already speaks.
-  pinnedImages = lib.mapAttrs (_: p: {
-    inherit (p) image repo tag;
-    pinnedDigest = p.digest;
-  }) config.fleet.imagePins;
+  #
+  # The hand-moved pins that are images (fleet.manualPins with an `image`: a
+  # local build's base, the build tools' images) are asked about too, keyed by
+  # their id — export.nix asserts no id is also a container's — so their rows
+  # carry the same verdict. The update agent does NOT get them: no button
+  # moves those.
+  pinnedImages =
+    lib.mapAttrs (_: p: {
+      inherit (p) image repo tag;
+      pinnedDigest = p.digest;
+    }) config.fleet.imagePins
+    // lib.mapAttrs (_: p: {
+      image = "${p.repo}:${p.tag}";
+      inherit (p) repo tag;
+      pinnedDigest = p.digest;
+    }) (lib.filterAttrs (_: p: p.digest != null) config.fleet.manualPins);
 
   # Whether each of those tags has moved on from its pin — the one version
   # question only the registry can answer. A snapshot file beside labels.json

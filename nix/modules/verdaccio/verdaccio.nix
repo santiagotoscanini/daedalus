@@ -32,8 +32,8 @@
 #
 # The host brings:
 #   fleet.modules.verdaccio.enable  the switch (default off, as every catalog module)
-# The image is built here from assets/Containerfile (the base pin is bumped
-# by hand, in the engine); no `fleet.images` entry.
+# The image is built here from assets/Containerfile (its two base pins are
+# `bases` below, bumped by hand in the engine); no `fleet.images` entry.
 
 {
   config,
@@ -45,13 +45,19 @@
 }:
 
 let
-  # verdaccio 6.9.0 base + the verdaccio-openid and cached-packages
+  # The verdaccio base + the verdaccio-openid and cached-packages
   # plugins, built locally from assets/Containerfile. The tag carries
-  # the build-context hash, so editing either plugin (or the
-  # Containerfile) produces a new tag and restarts the consumer.
+  # the build-context hash and both bases, so editing either plugin, the
+  # Containerfile or a base produces a new tag and restarts the consumer.
+  # The two bases are the one place each is pinned (the plugins are npm-
+  # installed in the node BUILDER stage), bumped by hand in the engine and
+  # listed on System › Updates.
   verdaccioImage = mkLocalImage {
     name = "verdaccio-openid";
-    tagPrefix = "6.9.0";
+    bases = {
+      BASE = "docker.io/verdaccio/verdaccio:6.9.0@sha256:11e75353c8363650cbf43adf8594b2cd633be6f191056c6e08ba6ff4b1398f62";
+      BUILDER = "docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402";
+    };
     contextDir = ./assets;
     gates = [ "podman-verdaccio.service" ];
   };
@@ -64,6 +70,17 @@ in
   };
 
   config = lib.mkIf config.fleet.modules.verdaccio.enable {
+    fleet.manualPins = lib.mkMerge [
+      verdaccioImage.pins
+      {
+        verdaccio-openid.upstream = "verdaccio/verdaccio";
+        verdaccio-openid-builder = {
+          upstream = "nodejs/node";
+          note = "Build stage only: the node the plugins are npm-installed with.";
+        };
+      }
+    ];
+
     # The box's builds install through this mirror (the build agent pins the
     # name to the LAN address inside BuildKit). Contributed from here — the
     # stack that publishes the mirror — so a host without one builds from

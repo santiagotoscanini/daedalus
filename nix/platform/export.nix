@@ -1,5 +1,6 @@
 {
   config,
+  options,
   lib,
   pkgs,
   ...
@@ -34,6 +35,8 @@
 
 let
   cfg = config.fleet;
+
+  inherit (import ./lib/fleet-lib.nix { inherit lib; }) parsePin;
 
   publishDir = "/run/daedalus-export";
 
@@ -70,15 +73,16 @@ let
       ""
   ) config.virtualisation.oci-containers.containers;
 
-  # Every image pinned as `:tag@sha256:…`, parsed once here because three
-  # consumers need the same answer: the export domain the dashboard reads, the
-  # daily freshness probe, and the update agent that rewrites a pin.
+  # Every image pinned as `:tag@sha256:…`, parsed once (fleet-lib's
+  # `parsePin`) because three consumers need the same answer: the export
+  # domain the dashboard reads, the daily freshness probe, and the update
+  # agent that rewrites a pin.
   #
   # ANY digest-on-a-tag pin qualifies, not just the moving channels — a
   # re-pushed `2.10.1` is the same fact as a moved `latest`, and which tags
   # count as "moving" is a judgement the reader makes with the tag in hand.
   # Local builds (mkLocalImage) and the registry-loop apps carry no digest and
-  # fall out of the match.
+  # fall out of the match; a local build's BASE is a `fleet.manualPins` entry.
   #
   # `digest` is the load-bearing field. It is the one part of a pin that is
   # ALWAYS a literal in the .nix source — two containers on one release may
@@ -87,21 +91,7 @@ let
   # edit on the digest for exactly that reason; see
   # stacks/daedalus/host/image-update.sh.
   imagePins = lib.filterAttrs (_: v: v != null) (
-    lib.mapAttrs (
-      _: c:
-      let
-        m = builtins.match "(.*):([^@:]+)@(sha256:[0-9a-f]+)" c.image;
-      in
-      if m == null then
-        null
-      else
-        {
-          image = "${builtins.elemAt m 0}:${builtins.elemAt m 1}";
-          repo = builtins.elemAt m 0;
-          tag = builtins.elemAt m 1;
-          digest = builtins.elemAt m 2;
-        }
-    ) config.virtualisation.oci-containers.containers
+    lib.mapAttrs (_: c: parsePin c.image) config.virtualisation.oci-containers.containers
   );
 
   # The pin plus what the fleet knows about moving it. Kept separate from
@@ -119,6 +109,56 @@ let
       ceremony = if p == null then null else p.ceremony;
     }
   ) imagePins;
+
+  # ── the hand-moved pins (fleet.manualPins) ──────────────────────────────
+  #
+  # Which file wrote each entry, so its Updates row can say where a bump is
+  # made. The module system already records it: every definition of the
+  # option carries its file. An engine file is named from the engine's root
+  # (`nix/…`), anything else from the root of the flake source it came from
+  # — the configuration checkout. The first file to name an id wins; an entry
+  # whose fields are spread over two files is still one pin, bumped where its
+  # `image` or `version` is.
+  engineRoot = toString ../..;
+  definedIn = lib.foldl' (
+    acc: def:
+    acc // lib.genAttrs (lib.filter (id: !(acc ? ${id})) (lib.attrNames def.value)) (_: def.file)
+  ) { } options.fleet.manualPins.definitionsWithLocations;
+  pinnedIn =
+    id: p:
+    let
+      file = definedIn.${id} or "";
+      inEngine = lib.hasPrefix "${engineRoot}/" file;
+      inStore = builtins.match "/nix/store/[^/]+/(.*)" file;
+    in
+    {
+      repo = if inEngine then "engine" else "config";
+      path =
+        if p.pinnedIn != null then
+          p.pinnedIn
+        else if inEngine then
+          lib.removePrefix "${engineRoot}/" file
+        else if inStore != null then
+          builtins.head inStore
+        else
+          file;
+    };
+
+  manualPins = lib.mapAttrs (id: p: {
+    inherit (p)
+      repo
+      tag
+      digest
+      version
+      upstream
+      branch
+      parts
+      containers
+      note
+      ;
+    image = if p.repo == null then null else "${p.repo}:${p.tag}";
+    pinnedIn = pinnedIn id p;
+  }) cfg.manualPins;
 in
 {
   options.fleet = {
@@ -182,6 +222,125 @@ in
         Per-container policy for updating a digest-pinned image from
         daedalus. Every pinned container is updatable with no entry here;
         this registry exists for the ones where that is not the whole truth.
+      '';
+    };
+
+    manualPins = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { config, ... }:
+          let
+            pin = if config.image == null then null else parsePin config.image;
+          in
+          {
+            options = {
+              image = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "docker.io/library/node:24-slim@sha256:<digest>";
+                description = ''
+                  The pinned image, `repo:tag@sha256:…`, when the pin is one.
+                  Null for a pin that is a source commit or a release
+                  number with no image of its own.
+                '';
+              };
+              repo = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                readOnly = true;
+                internal = true;
+                default = if pin == null then null else pin.repo;
+                description = "`image`'s repository, parsed.";
+              };
+              tag = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                readOnly = true;
+                internal = true;
+                default = if pin == null then null else pin.tag;
+                description = "`image`'s tag, parsed.";
+              };
+              digest = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                readOnly = true;
+                internal = true;
+                default = if pin == null then null else pin.digest;
+                description = "`image`'s digest, parsed.";
+              };
+              version = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = if pin == null then null else pin.tag;
+                defaultText = lib.literalMD "the tag of `image`";
+                description = ''
+                  What the row shows as running. A commit when `branch` is
+                  set; otherwise the release, compared against `upstream`'s.
+                '';
+              };
+              upstream = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "nodejs/node";
+                description = ''
+                  The GitHub `owner/repo` whose releases (or, with `branch`,
+                  commits) are this pin's notes. Null: whatever the control
+                  plane already reads for the first of `containers`.
+                '';
+              };
+              branch = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "main";
+                description = "Compare `version` as a commit on this branch of `upstream`, not as a release.";
+              };
+              parts = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                example = {
+                  cli = "0.39.0";
+                  mise = "2026.8.16";
+                };
+                description = "Versions that move WITH this one, as one set — shown beside it.";
+              };
+              containers = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = "Containers that run on this pin; empty for a pin no container runs.";
+              };
+              note = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "What a bump takes beyond the edit, in one sentence.";
+              };
+              pinnedIn = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "Dockerfile";
+                description = ''
+                  The file the literal lives in, relative to the root of the
+                  repository whose module defines this entry. Null: that
+                  module's own file, which is right unless the module reads
+                  the pin from somewhere else.
+                '';
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = ''
+        A version moved by an ordinary commit, not by the Update button.
+
+        Every digest-pinned container is already listed on System › Updates
+        and moved from there (`fleet.imagePins`). What that leaves out is
+        everything else the box runs on a pin: the base of a locally built
+        image (mkLocalImage's `bases`, whose `pins` land here), a build
+        tool's release, a source commit an image is built from. Each entry
+        is a row that says what runs, whether its registry has something
+        newer, and which file a bump edits — a list, never a button, because
+        the image-update agent only rewrites pins it can find in the
+        configuration checkout, and half of these are in the engine.
+
+        Every container whose image is built on the box must appear in some
+        entry's `containers` (asserted), so a new local image cannot be the
+        one nothing lists.
       '';
     };
 
@@ -387,12 +546,16 @@ in
       # they carry but what ref that tag was frozen from, and whether the
       # dashboard may move it. Together they are what the Updates page renders
       # — every digest-pinned container on the box, including the sidecars
-      # and exporters that have no page of their own.
+      # and exporters that have no page of their own. `manual` is the rest:
+      # the local builds' bases and the other hand-moved pins.
       images = {
         schemaVersion = 2;
         data = {
           tags = imageTags;
           pins = imagePinsWithPolicy;
+          # The pins no button moves, with the file each one is bumped in —
+          # fleet.manualPins. Additive: a reader that predates it ignores it.
+          manual = manualPins;
         };
       };
 
@@ -425,6 +588,36 @@ in
     };
 
     fleet.imagePins = imagePins;
+
+    assertions =
+      let
+        covered = lib.concatMap (p: p.containers) (lib.attrValues cfg.manualPins);
+        localBuilt = lib.attrNames (
+          lib.filterAttrs (
+            _: c: lib.hasPrefix "localhost/" c.image
+          ) config.virtualisation.oci-containers.containers
+        );
+        shared = lib.intersectLists (lib.attrNames cfg.manualPins) (lib.attrNames imagePins);
+        uncovered = lib.subtractLists covered localBuilt;
+      in
+      lib.mapAttrsToList (id: p: {
+        assertion = (p.image == null || p.repo != null) && p.version != null;
+        message = "fleet.manualPins.${id}: `image` must be `repo:tag@sha256:<digest>`, and a pin without one needs a `version`.";
+      }) cfg.manualPins
+      ++ [
+        {
+          # The probe publishes both registries into one freshness file, keyed
+          # by id; a shared key would make one row read the other's verdict.
+          assertion = shared == [ ];
+          message = "fleet.manualPins ids must not name a digest-pinned container: ${toString shared}";
+        }
+        {
+          # "Nothing hidden" stays true for the next local image too: one built
+          # on the box has no digest pin, so without an entry it is on no list.
+          assertion = uncovered == [ ];
+          message = "containers built on the box but in no fleet.manualPins entry's `containers`: ${toString uncovered} (contribute the image's mkLocalImage `pins`, or an entry of your own)";
+        }
+      ];
 
     systemd.services.daedalus-export-publish = {
       description = "Publish fleet export domains for daedalus";

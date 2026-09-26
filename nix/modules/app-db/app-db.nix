@@ -67,7 +67,8 @@
 #   fleet.images.app-db-exporter    the exporter's digest-pinned image (exporter.nix)
 #   fleet.appDatabases.<name>       one entry per tenant, from whichever stack owns it
 # The cluster image itself is built here from assets/pg-image/Containerfile;
-# its base pin is bumped by hand, in the engine (nix-engine.md §4).
+# its base pin (`pgBase` below) is bumped by hand, in the engine
+# (nix-engine.md §4), and listed on System › Updates (fleet.manualPins).
 
 {
   config,
@@ -100,13 +101,19 @@ let
   # assets/pg-image/Containerfile). The base must stay Alpine: its
   # postgres UID is 70, which the data dir's ownership (100069:100069,
   # statePaths below) assumes — a Debian base (UID 105) breaks the cluster.
-  # The tag embeds the build-context hash: editing the Containerfile
-  # rebuilds the image and restarts pg; unchanged contexts are ~instant
-  # (layer cache). Enables `CREATE EXTENSION vector` in any tenant db
-  # that requests it via `extensions` (see the submodule below).
+  # The tag embeds the build-context hash and the base: editing either
+  # rebuilds the image and restarts pg — a fleet event (every tenant
+  # reconnects). Unchanged, the build is ~instant (layer cache). Enables
+  # `CREATE EXTENSION vector` in any tenant db that requests it via
+  # `extensions` (see the submodule below).
+  #
+  # The base pin, bumped by hand in the engine and listed on System ›
+  # Updates. A patch or minor is this edit; a MAJOR is not — the data dir
+  # needs pg_upgrade first.
+  pgBase = "docker.io/library/postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15";
   pgImageBuild = mkLocalImage {
     name = "pg-pgvector";
-    tagPrefix = "18.4";
+    bases.BASE = pgBase;
     contextDir = ./assets/pg-image;
     gates = [ "podman-pg.service" ];
   };
@@ -303,6 +310,13 @@ in
           '';
         }) cfg.${n}.extensions
       ) activeApps);
+
+    fleet.manualPins = lib.mkMerge [
+      pgImageBuild.pins
+      {
+        pg-pgvector.note = "A major needs pg_upgrade of the data dir first; any bump restarts pg, which pocket-id does not survive.";
+      }
+    ];
 
     # app-db-net: pg + every app container. pg-wire-net: private bridge
     # carrying the TCP/SNI postgres wire — traefik and pg are its only

@@ -200,6 +200,14 @@ let
     gates = [ "podman-app-daedalus.service" ];
   };
 
+  # That image's base: the Dockerfile's `ARG NODE_IMAGE=` default, the one
+  # place it is written (the published image is built from the same line).
+  # A plain read of a file in this repo — no import-from-derivation.
+  nodeImageLine =
+    lib.findFirst (lib.hasPrefix "ARG NODE_IMAGE=")
+      (throw "the engine's Dockerfile has no `ARG NODE_IMAGE=` line")
+      (lib.splitString "\n" (builtins.readFile ../../../Dockerfile));
+
   # The app's version, as the engine at this rev ships it: the published image
   # is tagged with it, so pinning the engine pins the control plane's image.
   appVersion = (builtins.fromJSON (builtins.readFile ../../../app/package.json)).version;
@@ -698,6 +706,17 @@ in
     # Dev mode builds the runtime stage on the box before the container starts
     # (mkLocalImage's `gates`); a host on the published image builds nothing.
     systemd.services.app-daedalus-image-build = lib.mkIf (appsOn && daedalusDev) devRuntime.service;
+
+    # Its base on System › Updates. A different node pin from the build
+    # checks' (build-agent.nix), bumped apart.
+    fleet.manualPins = lib.mkIf (appsOn && daedalusDev) {
+      app-daedalus-dev = {
+        image = lib.removePrefix "ARG NODE_IMAGE=" nodeImageLine;
+        containers = [ "app-daedalus" ];
+        upstream = "nodejs/node";
+        pinnedIn = "Dockerfile";
+      };
+    };
 
     # The fleet's per-service read-only API keys — the credentials daedalus reads
     # other services' numbers with.

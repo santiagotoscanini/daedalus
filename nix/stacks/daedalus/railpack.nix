@@ -137,5 +137,18 @@ in
       miseBinary = "${mise}/bin/mise";
       misePath = "/tmp/railpack/mise/mise-${miseVersion}";
     };
+
+    # The set, as one row on System › Updates. No button: it is an engine
+    # commit (the header's "To move it"), then Engine › Update.
+    fleet.manualPins.railpack = {
+      image = config.fleet.builder.railpackFrontend;
+      inherit version;
+      parts = {
+        cli = version;
+        mise = miseVersion;
+      };
+      upstream = "railwayapp/railpack";
+      note = "CLI, frontend and mise move as one set; candidate-build every app before any builds live again.";
+    };
   };
 }
