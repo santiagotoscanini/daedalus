@@ -1,16 +1,15 @@
-import { Link, useRouter } from '@tanstack/react-router'
-import { useState, useTransition } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { agentHasClaude, type NodeClaudeSession } from '../lib/agent/status'
 import type { NodeClaudeData } from '../lib/dashboard/node-claude'
 import { DASH, duration, num, since, text, until } from '../lib/format'
-import { errorText } from '../lib/redact'
 import type { NodeRow } from '../lib/repo/nodes'
 import type { Tone } from '../lib/tone'
 import { requestClaudeRestartFn, requestClaudeUpdateFn } from '../server/nodes'
 import { ServiceHead } from './service-head'
 import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './tokens'
 import { Button } from './ui/button'
+import { useAction } from './use-action'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 
 // The Claude page, for a machine that is not this box.
@@ -489,9 +488,7 @@ function installMethod(path: string | null): string | null {
  * ends every session here.
  */
 function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData['report'] }) {
-  const router = useRouter()
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
   const method = claude === null ? null : methodOf(claude)
   const last = claude?.lastUpdate ?? null
   const running = claude?.server.version ?? null
@@ -508,15 +505,7 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
         variant="outline"
         disabled={busy || node.claudeUpdateRequested}
         onClick={() => {
-          setError(null)
-          start(async () => {
-            try {
-              await requestClaudeUpdateFn({ data: { id: node.id } })
-              await router.invalidate()
-            } catch (e) {
-              setError(errorText(e))
-            }
-          })
+          run(() => requestClaudeUpdateFn({ data: { id: node.id } }))
         }}
       >
         {node.claudeUpdateRequested ? 'Update queued' : 'Update Claude Code'}
@@ -547,9 +536,7 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
 }
 
 function RestartControl({ node }: { node: NodeRow }) {
-  const router = useRouter()
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
   return (
     <div className="mt-[0.7rem] flex flex-wrap items-center gap-3 border-(--border-soft) border-t pt-[0.75rem]">
       <Button
@@ -557,15 +544,7 @@ function RestartControl({ node }: { node: NodeRow }) {
         variant="outline"
         disabled={busy || node.claudeRestartRequested}
         onClick={() => {
-          setError(null)
-          start(async () => {
-            try {
-              await requestClaudeRestartFn({ data: { id: node.id } })
-              await router.invalidate()
-            } catch (e) {
-              setError(errorText(e))
-            }
-          })
+          run(() => requestClaudeRestartFn({ data: { id: node.id } }))
         }}
       >
         {node.claudeRestartRequested ? 'Restart queued' : 'Restart the server'}

@@ -1,10 +1,6 @@
-import { useRouter } from '@tanstack/react-router'
-import { useState, useTransition } from 'react'
-
 import { cn } from '../../../lib/cn'
 import type { Machine } from '../../../lib/dashboard/machines'
 import { since } from '../../../lib/format'
-import { errorText } from '../../../lib/redact'
 import {
   approveNodeFn,
   forgetNodeFn,
@@ -12,6 +8,7 @@ import {
   revokeNodeFn,
 } from '../../../server/nodes'
 import { Button } from '../../ui/button'
+import { useAction } from '../../use-action'
 import { ERROR_NOTE, MONO, NOTE } from '../shared'
 
 // A machine's trust: pending, approved or revoked, and the buttons that move
@@ -20,21 +17,11 @@ import { ERROR_NOTE, MONO, NOTE } from '../shared'
 
 /** The box's decision about the machine, and the buttons that change it. */
 export function Decision({ m }: { m: Machine }) {
-  const router = useRouter()
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
   const node = m.node
   const act = (fn: (opts: { data: { id: string } }) => Promise<unknown>) => {
     if (node === null) return
-    setError(null)
-    start(async () => {
-      try {
-        await fn({ data: { id: node.id } })
-        await router.invalidate()
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+    run(() => fn({ data: { id: node.id } }))
   }
 
   if (node === null) {

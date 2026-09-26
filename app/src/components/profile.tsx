@@ -17,6 +17,7 @@ import { Button, buttonVariants } from './ui/button'
 import { Card, CardContent } from './ui/card'
 import { Field, FieldDescription, FieldError, FieldLabel } from './ui/field'
 import { Input } from './ui/input'
+import { useAction } from './use-action'
 import { Chip } from './viz'
 
 // The Profile page — the person, where Settings is the box.
@@ -334,25 +335,17 @@ function TextInner({
   className,
 }: TextProps) {
   const id = useId()
-  const router = useRouter()
   const [draft, setDraft] = useState(value)
-  const [saving, start] = useTransition()
-  const [refused, setRefused] = useState<string | null>(null)
+  const { run, busy: saving, error: refused } = useAction()
   const local = validate(draft)
   const error = local ?? refused
   const commit = () => {
     if (local !== null) return
     const v = draft.trim()
     if (v === value) return
-    setRefused(null)
-    start(async () => {
-      try {
-        const patch: ProfilePatch = { [field]: v }
-        await saveProfileFn({ data: patch })
-        await router.invalidate()
-      } catch (e) {
-        setRefused(errorText(e))
-      }
+    run(async () => {
+      const patch: ProfilePatch = { [field]: v }
+      await saveProfileFn({ data: patch })
     })
   }
   return (

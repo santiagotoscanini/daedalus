@@ -1,14 +1,13 @@
-import { Link, useRouter } from '@tanstack/react-router'
-import { useState, useTransition } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num, since } from '../../lib/format'
-import { errorText } from '../../lib/redact'
 import type { Tone } from '../../lib/tone'
 import { requestUpdateCheckFn } from '../../server/nodes'
 import { GHOST_BTN } from '../apps/shared'
 import { Button } from '../ui/button'
+import { useAction } from '../use-action'
 import { Board, BoardGrid, Chip, Facts } from '../viz'
 import {
   ago,
@@ -57,9 +56,7 @@ function severityTone(s: string | null): Tone {
  * because this is where you are when you notice the version.
  */
 export function AgentUpdate({ node }: { node: NodeSystemData['node'] }) {
-  const router = useRouter()
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
   return (
     <div className="mt-[0.7rem] flex flex-wrap items-center gap-2 border-(--border-soft) border-t pt-[0.75rem]">
       <Button
@@ -69,15 +66,7 @@ export function AgentUpdate({ node }: { node: NodeSystemData['node'] }) {
         className={GHOST_BTN}
         disabled={busy || node.updateCheckRequested}
         onClick={() => {
-          setError(null)
-          start(async () => {
-            try {
-              await requestUpdateCheckFn({ data: { id: node.id } })
-              await router.invalidate()
-            } catch (e) {
-              setError(errorText(e))
-            }
-          })
+          run(() => requestUpdateCheckFn({ data: { id: node.id } }))
         }}
       >
         {node.updateCheckRequested ? 'Update queued' : 'Update now'}

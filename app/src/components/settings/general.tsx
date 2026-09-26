@@ -1,13 +1,12 @@
-import { useRouter } from '@tanstack/react-router'
 import { IdCardIcon } from 'lucide-react'
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import type { BoxSettings, ZoneList } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
-import { errorText } from '../../lib/redact'
 import { controlPlaneLabelError } from '../../lib/site-fields'
 import { groupZones } from '../../lib/timezones'
 import { saveSiteEditFn } from '../../server/site'
 import { Button } from '../ui/button'
+import { useAction } from '../use-action'
 import { ASIDE, ExtLink, Line, NOTE, Pending, Section, SourceNote, Stack, Value } from './shared'
 import { type SelectGroupSpec, SiteSelect, SiteText, SiteUnwritten } from './site-fields'
 
@@ -185,9 +184,7 @@ function ControlPlane({ edit }: { edit: SiteEdit }) {
 }
 
 function RetireOldAddress({ old }: { old: string }) {
-  const router = useRouter()
-  const [saving, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy: saving, error } = useAction()
   return (
     <Stack>
       <Line>
@@ -197,15 +194,7 @@ function RetireOldAddress({ old }: { old: string }) {
           size="sm"
           disabled={saving}
           onClick={() => {
-            setError(null)
-            start(async () => {
-              try {
-                await saveSiteEditFn({ data: { 'identity.controlPlanePrevious': null } })
-                await router.invalidate()
-              } catch (e) {
-                setError(errorText(e))
-              }
-            })
+            run(() => saveSiteEditFn({ data: { 'identity.controlPlanePrevious': null } }))
           }}
         >
           Confirm this address

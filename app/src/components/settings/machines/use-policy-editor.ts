@@ -1,11 +1,9 @@
-import { useRouter } from '@tanstack/react-router'
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { NodePolicy } from '../../../host/schema'
 import { NODE_NAME_RE } from '../../../lib/nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../../../lib/providers/kinds'
 import type { ModelPolicy } from '../../../lib/providers/policy'
-import { errorText } from '../../../lib/redact'
 import type { NodeRow } from '../../../lib/repo/nodes'
 import { useShown } from '../../../lib/shown'
 import {
@@ -13,6 +11,7 @@ import {
   requestClaudeUpdateFn,
   saveNodePolicyFn,
 } from '../../../server/nodes'
+import { useAction } from '../../use-action'
 
 // The state behind an approved machine's Policy card: the typed fields, the
 // switches shown optimistically, and one save per edit — every save built on
@@ -25,9 +24,7 @@ const DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as const
 export type PolicyEditor = ReturnType<typeof usePolicyEditor>
 
 export function usePolicyEditor(n: NodeRow) {
-  const router = useRouter()
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
   // The name is typed, so it is held here and saved on blur or Enter; the
   // switches save on click.
   const [name, setName] = useState(n.policy.displayName ?? '')
@@ -51,15 +48,7 @@ export function usePolicyEditor(n: NodeRow) {
   }, [n.policy])
   const save = (policy: NodePolicy) => {
     base.current = policy
-    setError(null)
-    start(async () => {
-      try {
-        await saveNodePolicyFn({ data: { id: n.id, policy } })
-        await router.invalidate()
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+    run(() => saveNodePolicyFn({ data: { id: n.id, policy } }))
   }
   const saveName = () => {
     const trimmed = name.trim()
@@ -143,26 +132,10 @@ export function usePolicyEditor(n: NodeRow) {
     save(trimmed === '' ? rest : { ...rest, claudeWorkdir: trimmed })
   }
   const updateClaude = () => {
-    setError(null)
-    start(async () => {
-      try {
-        await requestClaudeUpdateFn({ data: { id: n.id } })
-        await router.invalidate()
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+    run(() => requestClaudeUpdateFn({ data: { id: n.id } }))
   }
   const restartClaude = () => {
-    setError(null)
-    start(async () => {
-      try {
-        await requestClaudeRestartFn({ data: { id: n.id } })
-        await router.invalidate()
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+    run(() => requestClaudeRestartFn({ data: { id: n.id } }))
   }
 
   // Shown as flipped the moment they are, while the save runs (lib/shown.ts).
