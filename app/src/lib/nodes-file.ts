@@ -15,7 +15,7 @@ import { arrayOf, type Decoder, decode, int, obj, optional, recordOf, str } from
 //
 // Rendered by an Apply like apps.json (host/apply-flow.ts), read back by
 // platform/site.nix as `fleet.nodes`, and its schema versions live under
-// `fixtures/nodes/v<N>/`.
+// `site-formats/nodes/v<N>/`.
 
 export const NODES_SCHEMA_VERSION = 1
 

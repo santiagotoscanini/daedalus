@@ -10,13 +10,13 @@ drives.
 | `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
 | `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), the mover for versions a stack pins as plain strings (`version-update.nix`, fed by `fleet.versionPins`), `self.json`, and the privileged host agents (`host/*.sh` — among them apply, deploy, build, the image, engine and version updates, secret writes, snapshots, workspaces, power). |
 | `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
-| `tests/` | `minimal-host/` evaluates the config template (below) as a whole system; `full-catalog/` the same host with every leaf switched on; `fixtures.nix` every schema fixture under `../fixtures/` through `platform/site.nix` and `registry-lib.nix`. All run in `nix flake check`; nothing is built. |
+| `tests/` | `example-host/` evaluates the example host (below) as a whole system; `all-modules/` the same host with every leaf switched on; `site-formats.nix` every sample under `../site-formats/` through `platform/site.nix` and `registry-lib.nix`. All run in `nix flake check`; nothing is built — `tests/README.md` has the table. |
 
 The root `flake.nix` exports:
 
 - `nixosModules.platform`, `nixosModules.daedalus`, `nixosModules.catalog`,
   and `nixosModules.default` (all three);
-- `templates.config` — a host to start from (`nix flake init -t
+- `templates.config` — the example host under `../example-host/`, to start from (`nix flake init -t
   github:santiagotoscanini/daedalus#config`), which is also the host the
   checks evaluate;
 - `lib.path` — this directory as a path, for a host that keeps stacks of
@@ -63,9 +63,9 @@ evaluation with the option's name.
 
 The spine — everything above but the leaves (factorio, grocy,
 intel-gpu-exporter, metube, myspeed, stirling-pdf, verdaccio, wg-easy) — is
-switched on in `templates/config`, with `stirling-pdf` as the one example
-leaf, so a host made from the template is a box with a control plane to log
-in to. `nix/tests/full-catalog` switches on the other leaves.
+switched on in `example-host/`, with `stirling-pdf` as the one example
+leaf, so a host made from it is a box with a control plane to log
+in to. `nix/tests/all-modules` switches on the other leaves.
 
 ## Importing it
 

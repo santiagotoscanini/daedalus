@@ -202,8 +202,8 @@ const registryFileShape = obj({
  * to the one schema version this reader understands: the assertion in
  * nix/modules/apps/declarations.nix guards the rebuild; this guards the drift
  * comparison. Exported for
- * the schema fixtures' test (host/contract/fixtures.test.ts), which is the
- * only other reader — a fixture that decodes but is the wrong version must
+ * the site-format samples' test (host/contract/site-formats.test.ts), which is the
+ * only other reader — a sample that decodes but is the wrong version must
  * fail exactly the way the box's own file would.
  */
 export function decodeRegistryFile(raw: unknown): NixManifest['registry'] {

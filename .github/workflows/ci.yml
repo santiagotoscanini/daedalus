@@ -120,8 +120,9 @@ jobs:
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       # nixfmt, statix and deadnix over every .nix file, nix's own check that
       # each exported nixosModule is a module, and the flake's `checks`:
-      # templates/config evaluated as a host (minimal-host), that host with
-      # every catalog leaf switched on (full-catalog), and the schema fixtures.
+      # example-host/ evaluated as a host (example-host), that host with
+      # every catalog leaf switched on (all-modules), and the site-format
+      # samples (site-formats).
       - run: nix flake check --print-build-logs
 
   workflows:

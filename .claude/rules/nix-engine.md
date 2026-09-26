@@ -2,8 +2,8 @@
 paths:
   - "nix/**"
   - "flake.nix"
-  - "templates/**"
-  - "fixtures/**"
+  - "example-host/**"
+  - "site-formats/**"
 ---
 
 # The engine's nix — `nix/**` and `flake.nix`
@@ -14,9 +14,9 @@ site constants, secrets, ZFS, backup, mail, git, the weekly upgrade),
 `nix/stacks/daedalus/**` (the control plane's own module, `self.json`, the
 host agents in `host/*.sh`),
 `nix/modules/<id>/**` (the catalog: stacks that have migrated here, each
-behind a switch that defaults OFF — §7), `templates/config/` (the host a
+behind a switch that defaults OFF — §7), `example-host/` (the host a
 stranger starts from, and the one `nix flake check` evaluates) and
-`nix/tests/` (that evaluation, and the schema fixtures'). `fixtures/` at the
+`nix/tests/` (that evaluation, and the site-format samples'). `site-formats/` at the
 repository root holds the site and registry documents both halves test.
 `flake.nix` exports it as `nixosModules.{platform,daedalus,catalog,default}`,
 `templates.config`
@@ -280,7 +280,7 @@ A stack leaves the operator's configuration for this tree one at a time.
 `apps`, `pihole`, `cloudflared`, `gatus`, `healthchecks`) moved the same
 way and shows the harder cases. The gate for every move is §5's: the
 reference host's `system` derivation is IDENTICAL before and after, and
-`nix flake check` — which evaluates the config template as a host — stays
+`nix flake check` — which evaluates the example host as a whole system — stays
 green. When a move honestly changes a derivation (a rendered file now
 generated from a registry, a comment inside a script), say exactly what
 in the commit, and prefer a second commit for it so the move itself gates
@@ -400,9 +400,9 @@ script or a rendered asset is not (§1): leave those for a commit that
 states the restart, or batch them with a real change.
 
 **Prove a stranger can enable it.** The spine is switched on in
-`templates/config` (the host a stranger starts from — a leaf does not
-belong there); a leaf goes into `nix/tests/full-catalog/leaves.nix` with a
-placeholder pin and whatever its switch requires, so `checks.full-catalog`
+`example-host/` (the host a stranger starts from — a leaf does not
+belong there); a leaf goes into `nix/tests/all-modules/leaves.nix` with a
+placeholder pin and whatever its switch requires, so `checks.all-modules`
 evaluates the whole catalog on one host. Either way the host it joins must
 stay one a stranger would write: every addition documented like its neighbours.
 Then say what the host brings at the top of the module ("The host

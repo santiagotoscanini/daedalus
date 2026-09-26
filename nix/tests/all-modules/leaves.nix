@@ -1,4 +1,4 @@
-# Every catalog module the template does not switch on, switched on with
+# Every catalog module the example host does not switch on, switched on with
 # placeholder inputs. Documentation values only; a pin of all zeros evaluates
 # and pulls nothing; the `*.sops` files under sops/ are placeholders too
 # (sops-nix takes a path at evaluation and reads it only when it builds).

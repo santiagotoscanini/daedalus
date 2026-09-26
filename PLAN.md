@@ -147,8 +147,8 @@ announces itself over the SRV record and waits for Approve.
   restart pocket-id after).
 - **A catalog move is closure-neutral**: the toplevel derivation is
   byte-identical before and after, per stack. `nix fmt` and `nix flake check`
-  green in the engine before the commit; `checks.full-catalog` is the proof
-  that the template host plus every leaf still evaluates.
+  green in the engine before the commit; `checks.all-modules` is the proof
+  that the example host plus every leaf still evaluates.
 - No nix phase runs on the same day as an image update or the weekly flake
   autoupgrade (check the timer; disable it for the day).
 - An agent release is `agent/gate.sh all` green, a version bump, an annotated
@@ -212,7 +212,7 @@ The spine is in the catalog (19 modules: `app-db`, `apps`, `cloudflared`,
 `intel-gpu-exporter`, `metube`, `myspeed`, `stirling-pdf`, `verdaccio`,
 `wg-easy`); a host made from `templates.config` evaluates to a whole system
 with a control plane to log in to; `developer.engineOverride`, Update
-daedalus and the schema fixtures are in. What remains:
+daedalus and the site-format samples are in. What remains:
 
 1. **The other 23 stacks, one by one**, none of them needed for a box to
    run: `argus-vpn`, `calibre-web`, `cleanuparr`, `downloads`, `grocy-mcp`,
@@ -228,7 +228,7 @@ daedalus and the schema fixtures are in. What remains:
    together (`downloads`, `argus-vpn`, `tv`). Each move: closure-neutral,
    pin to `host/images.nix`, secrets to `host/sops/<id>/` keeping their
    basenames, policy to `host/modules.nix`, a README beside the module,
-   `checks.full-catalog` green.
+   `checks.all-modules` green.
 2. **Adopt `nixosModules.default` on the reference host.** Import ORDER is
    part of the closure (list-typed options concatenate in module order), so
    the host still names the engine's 55 files one by one in their old

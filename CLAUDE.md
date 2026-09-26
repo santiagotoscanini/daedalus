@@ -37,7 +37,7 @@ path-scoped rules load as you touch files.
   check`, commit on `main`, push,
   then `nix flake update daedalus` + a rebuild in the configuration.
   Read `nix/README.md`, and `.claude/rules/nix-engine.md` loads on
-  `nix/**`. `templates/config` evaluates as a whole host in `nix flake
+  `nix/**`. `example-host/` evaluates as a whole host in `nix flake
   check`, but most of the reference host's stacks are still in its private
   configuration — `nix/README.md` "What is NOT done yet" is the list; do
   not describe the engine as finished.

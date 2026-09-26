@@ -1,13 +1,13 @@
-# The template host with EVERY catalog module switched on — the leaves the
-# template leaves off (a stranger's first box is the spine), each with a
+# The example host with EVERY catalog module switched on — the leaves the
+# example host leaves off (a stranger's first box is the spine), each with a
 # placeholder pin and whatever else its switch requires. Evaluated by
-# `checks.full-catalog`, never built: proves every module in the catalog
+# `checks.all-modules`, never built: proves every module in the catalog
 # evaluates, on one host, beside all the others — a registry two modules
 # write the same key of, an assertion one trips on another's default, a
 # container two of them both declare, all fail here rather than on a box.
 #
 # Adding a module to the catalog means adding it to leaves.nix with its
-# placeholder inputs (nix-engine.md §7); the template stays the spine.
+# placeholder inputs (nix-engine.md §7); the example host stays the spine.
 {
   nixpkgs,
   nixpkgs-unstable,
@@ -24,7 +24,7 @@ nixpkgs.lib.nixosSystem {
   modules = [
     sops-nix.nixosModules.sops
     engine.nixosModules.default
-    ../../../templates/config/configuration.nix
+    ../../../example-host/configuration.nix
     ./leaves.nix
   ];
 }

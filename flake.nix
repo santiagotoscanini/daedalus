@@ -148,16 +148,16 @@
       checks.${system} = {
         formatting = treefmtEval.config.build.check self;
 
-        # templates/config — a stranger's smallest host — EVALUATED as written:
+        # example-host/ — a stranger's smallest host — EVALUATED as written:
         # forcing the toplevel drvPath instantiates the whole system, so every
         # option the engine reads must be declared by the engine and every
         # assertion must hold. Nothing is built. See
-        # nix/tests/minimal-host/default.nix. The template's site/site.json
-        # must stay byte-equal to the current site fixture: one document, two
-        # jobs (the fixture's `_why` says so).
-        minimal-host =
+        # nix/tests/example-host/default.nix. The example host's site/site.json
+        # must stay byte-equal to the current site sample: one document, two
+        # jobs (its `_why` says so).
+        example-host =
           let
-            host = import ./nix/tests/minimal-host {
+            host = import ./nix/tests/example-host {
               inherit
                 nixpkgs
                 nixpkgs-unstable
@@ -166,22 +166,22 @@
                 ;
               engine = self;
             };
-            siteIsTheFixture =
-              builtins.readFile ./templates/config/site/site.json
-              == builtins.readFile ./fixtures/site/v1/site.json;
+            siteIsTheSample =
+              builtins.readFile ./example-host/site/site.json
+              == builtins.readFile ./site-formats/site/v1/site.json;
           in
           assert
-            siteIsTheFixture
-            || throw "templates/config/site/site.json and fixtures/site/v1/site.json differ — they are one document; copy the fixture over the template";
-          pkgs.runCommand "minimal-host-evaluates" { } (
+            siteIsTheSample
+            || throw "example-host/site/site.json and site-formats/site/v1/site.json differ — they are one document; copy the sample over the example host's";
+          pkgs.runCommand "example-host-evaluates" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
 
-        # The template with every leaf of the catalog switched on as well:
-        # the whole catalog evaluates on one host (nix/tests/full-catalog).
-        full-catalog =
+        # The example host with every leaf of the catalog switched on as well:
+        # the whole catalog evaluates on one host (nix/tests/all-modules).
+        all-modules =
           let
-            host = import ./nix/tests/full-catalog {
+            host = import ./nix/tests/all-modules {
               inherit
                 nixpkgs
                 nixpkgs-unstable
@@ -191,15 +191,16 @@
               engine = self;
             };
           in
-          pkgs.runCommand "full-catalog-evaluates" { } (
+          pkgs.runCommand "all-modules-evaluate" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
 
-        # The schema fixtures under fixtures/ — every site.json and apps.json
-        # version — through platform/site.nix (a minimal host per site fixture)
-        # and registry-lib.nix. The app's vitest reads the same files; a reader
-        # that drifts from the writer fails both. See nix/tests/fixtures.nix.
-        fixtures = import ./nix/tests/fixtures.nix {
+        # The site-format samples under site-formats/ — every site.json,
+        # apps.json and nodes.json version — through platform/site.nix (a
+        # minimal host per site sample) and registry-lib.nix. The app's vitest
+        # reads the same files; a reader that drifts from the writer fails
+        # both. See nix/tests/site-formats.nix.
+        site-formats = import ./nix/tests/site-formats.nix {
           inherit
             nixpkgs
             nixpkgs-unstable
@@ -210,11 +211,11 @@
         };
       };
 
-      # `nix flake init -t github:santiagotoscanini/daedalus#config`: the host
-      # this flake's checks evaluate, as a starting point — every value in it
-      # is a documentation value to replace (its files say which).
+      # `nix flake init -t github:santiagotoscanini/daedalus#config`: the
+      # example host this flake's checks evaluate, as a starting point — every
+      # value in it is a documentation value to replace (its files say which).
       templates.config = {
-        path = ./templates/config;
+        path = ./example-host;
         description = "A NixOS host run by daedalus: the engine as a flake input, and the definitions a host brings";
       };
 
