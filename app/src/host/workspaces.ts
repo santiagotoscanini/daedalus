@@ -29,7 +29,7 @@ import { env } from './env'
 // and doubles as "pull now" because the host treats a clone of an existing
 // workspace as exactly that.
 
-export type WorkspaceSync = {
+type WorkspaceSync = {
   /** ok | dirty (left alone) | blocked (not fast-forwardable) | failed. */
   result: string
   detail: string
@@ -95,7 +95,7 @@ export function workspaceFor(repo: string, data: WorkspacesData): Workspace | nu
   return data.workspaces.find((w) => w.remote?.toLowerCase() === want) ?? null
 }
 
-export type WorkspaceRequestState = 'idle' | 'running' | 'done' | 'failed'
+type WorkspaceRequestState = 'idle' | 'running' | 'done' | 'failed'
 
 export type WorkspaceRequestStatus = {
   id: string | null

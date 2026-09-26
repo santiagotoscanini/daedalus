@@ -117,7 +117,7 @@ export const EDITABLE_FIELDS = [
   'limitPids',
 ] as const
 
-export type EditableField = (typeof EDITABLE_FIELDS)[number]
+type EditableField = (typeof EDITABLE_FIELDS)[number]
 
 /**
  * An edit to one app.

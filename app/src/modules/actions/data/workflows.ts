@@ -11,7 +11,7 @@ import { cronWords, percentile, type RunnerOs, runSeconds, runsOnOf } from './pa
 // is the tab that says how much of the month runs on GitHub's Linux, Windows
 // and macOS images, which is the question the Runners tab answers.
 
-export type WorkflowRow = {
+type WorkflowRow = {
   id: string
   name: string
   path: string
@@ -32,7 +32,7 @@ export type WorkflowRow = {
   lastRun: { at: string; conclusion: string | null; status: string; url: string } | null
 }
 
-export type RepoWorkflows = {
+type RepoWorkflows = {
   repo: string
   kind: RepoKind
   url: string

@@ -27,7 +27,7 @@ import {
 //   name tzdata renamed) is still shown, in a group of its own, rather
 //   than leaving an empty trigger that reads as "not set".
 
-export type PickerOption = { value: string; label: string }
+type PickerOption = { value: string; label: string }
 export type PickerGroup = { label: string; options: PickerOption[] }
 
 type Props = {

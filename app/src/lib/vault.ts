@@ -26,7 +26,7 @@ export type VaultFile = (typeof VAULT_FILES)[number]
  *
  * Built only by `appSecretFile` in lib/apps/secret-keys.ts.
  */
-export type VaultAppSecretFile = `vault/apps/${string}-env.sops`
+type VaultAppSecretFile = `vault/apps/${string}-env.sops`
 
 /** Anything this container may hand to sops as a destination path. */
 export type VaultPath = VaultFile | VaultAppSecretFile

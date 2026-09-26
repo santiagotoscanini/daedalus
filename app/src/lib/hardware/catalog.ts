@@ -26,7 +26,7 @@ export type PartKind =
   | 'disk'
   | 'machine'
 
-export type Photo = { src: string; width: number; height: number }
+type Photo = { src: string; width: number; height: number }
 
 export type Part = {
   id: string
@@ -54,7 +54,7 @@ export type Part = {
 export const CHOSEN_KINDS = ['case', 'cooler', 'psu'] as const
 export type ChosenKind = (typeof CHOSEN_KINDS)[number]
 
-export const CATALOG: readonly Part[] = [
+const CATALOG: readonly Part[] = [
   // ── cases ──
   {
     id: 'jonsbo-n4',

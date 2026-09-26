@@ -35,7 +35,7 @@ export type NixosFacts = {
 }
 
 /** The control plane's address, as platform/export.nix states it (`site.controlPlane`). */
-export type ControlPlaneFacts = {
+type ControlPlaneFacts = {
   /** The label site.json carries; null before a site.json that has one. */
   label: string | null
   /** The label before a rename, still served until the new one is confirmed. */
@@ -121,7 +121,7 @@ const shape = obj({
   ),
 })
 
-export const NO_SITE: SiteIdentity = {
+const NO_SITE: SiteIdentity = {
   hostname: '',
   baseDomain: '',
   wanHost: '',

@@ -119,7 +119,7 @@ const SUBLOG_SUMMARY = cn(
  * With it gone the frame renders exactly once per mount, which is what makes
  * the first-load cover below sufficient rather than a band-aid.
  */
-export function grafanaLogsEmbed(
+function grafanaLogsEmbed(
   site: Site,
   source: LogSource,
   from = 'now-7d',
@@ -133,7 +133,7 @@ export function grafanaLogsEmbed(
 }
 
 /** The full Drilldown, for when you need search and live tail. */
-export function grafanaLogsFull(site: Site, source: LogSource, from = 'now-7d'): string {
+function grafanaLogsFull(site: Site, source: LogSource, from = 'now-7d'): string {
   return (
     `${site.grafanaUrl}/a/grafana-lokiexplore-app/explore` +
     `?from=${from}&to=now&var-ds=loki-default` +

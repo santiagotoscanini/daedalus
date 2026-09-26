@@ -106,7 +106,7 @@ export type ReplicationPair = {
  * a field that could not be read must render the same way — as a dash, not as
  * a gap in the layout.
  */
-export type MemoryModule = {
+type MemoryModule = {
   locator: string | null
   sizeGb: number | null
   type: string | null
@@ -147,7 +147,7 @@ export type Hardware = {
   }
 }
 
-export const NO_HARDWARE: Hardware = {
+const NO_HARDWARE: Hardware = {
   board: {
     vendor: null,
     model: null,
@@ -160,7 +160,7 @@ export const NO_HARDWARE: Hardware = {
 }
 
 /** A unit systemd reports as failed, named — the count alone sends you hunting. */
-export type FailedUnit = {
+type FailedUnit = {
   unit: string
   description: string | null
   activeState: string | null
@@ -197,7 +197,7 @@ export type HostFacts = {
   jobs: JobRun[]
 }
 
-export const NO_FACTS: HostFacts = {
+const NO_FACTS: HostFacts = {
   disks: [],
   pools: [],
   datasets: [],

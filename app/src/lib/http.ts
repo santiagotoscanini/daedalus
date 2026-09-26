@@ -146,7 +146,7 @@ export function getJson<T>(
  * null exactly when there IS a status, because then the service spoke for
  * itself.
  */
-export type HttpFailure = {
+type HttpFailure = {
   status: number | null
   error: 'timeout' | 'unreachable' | 'malformed' | null
 }

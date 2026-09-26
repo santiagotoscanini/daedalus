@@ -111,7 +111,7 @@ export async function appStatuses(names: string[]): Promise<Record<string, AppSt
 }
 
 /** One resource dimension: what is being used, what it is allowed, history. */
-export type ResourceGauge = {
+type ResourceGauge = {
   used: number | null
   /** The LIVE cgroup limit, not the declared one. null = uncapped. */
   limit: number | null

@@ -18,7 +18,7 @@ import type { ModuleManifest } from './manifest'
 // the data module's path (host/boundary.test.ts holds that line).
 
 /** The tab ids of a manifest declared `as const`. */
-export type TabId<M extends ModuleManifest> = M['tabs'][number]['id']
+type TabId<M extends ModuleManifest> = M['tabs'][number]['id']
 
 /** What a module's tabs answer with: one shape per tab id. */
 export type TabDataMap<M extends ModuleManifest> = { [K in TabId<M>]: object }

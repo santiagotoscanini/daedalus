@@ -37,9 +37,7 @@ function dashed(id: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
 
-export type Lookup =
-  | { ok: true; player: { name: string; uuid: string } }
-  | { ok: false; reason: string }
+type Lookup = { ok: true; player: { name: string; uuid: string } } | { ok: false; reason: string }
 
 /**
  * A name → the account Mojang says it is, with the spelling Mojang keeps.
@@ -62,7 +60,7 @@ async function lookupMojang(name: string): Promise<Lookup> {
   return { ok: true, player: { name: canonical, uuid: dashed(id) } }
 }
 
-export async function lookupPlayer(id: RosterModule, raw: string): Promise<Lookup> {
+async function lookupPlayer(id: RosterModule, raw: string): Promise<Lookup> {
   const name = raw.trim()
   if (!NAME.test(name)) {
     return { ok: false, reason: 'a Java name is 1–16 letters, digits or underscores' }

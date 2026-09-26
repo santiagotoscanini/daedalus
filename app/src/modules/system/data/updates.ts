@@ -101,7 +101,7 @@ function engineVerdict(pinned: EngineLock | null, clone: Workspace | null): Engi
   return 'current'
 }
 
-export async function loadEngine(): Promise<EngineFacts> {
+async function loadEngine(): Promise<EngineFacts> {
   const [repo, workspaces, site, status] = await Promise.all([
     repoFacts(),
     readWorkspaces(),

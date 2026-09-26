@@ -68,7 +68,7 @@ const SHORTHANDS = [
   'annually',
 ] as const
 
-export function isShorthandSchedule(v: string): boolean {
+function isShorthandSchedule(v: string): boolean {
   return (SHORTHANDS as readonly string[]).includes(v.trim().toLowerCase())
 }
 
@@ -127,7 +127,7 @@ export function taskTimeoutError(seconds: number): string | null {
 export const DEFAULT_TASK_TIMEOUT_SEC = 900
 
 /** The presets the UI offers. Anything else is a hand-written OnCalendar. */
-export const SCHEDULE_PRESETS = ['hourly', 'daily'] as const
+const SCHEDULE_PRESETS = ['hourly', 'daily'] as const
 export type SchedulePreset = (typeof SCHEDULE_PRESETS)[number]
 
 /**

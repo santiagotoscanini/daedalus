@@ -229,7 +229,7 @@ async function toProfile(u: PocketUser): Promise<Profile> {
 }
 
 /** What the person is called: the display name, else first and last, else the username. */
-export function nameOf(p: Pick<Profile, 'displayName' | 'firstName' | 'lastName' | 'username'>) {
+function nameOf(p: Pick<Profile, 'displayName' | 'firstName' | 'lastName' | 'username'>) {
   const full = [p.firstName, p.lastName].filter((s) => s !== '').join(' ')
   return p.displayName || full || p.username
 }

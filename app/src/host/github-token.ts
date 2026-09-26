@@ -20,13 +20,13 @@ import { env } from './env'
 // checks/deployments write. Server-only, and the token must never be logged,
 // returned in an error, or sent to the browser (`publicInstallation`).
 
-export const DEFAULT_GITHUB_TOKEN_PATH = '/github-token/installation.json'
+const DEFAULT_GITHUB_TOKEN_PATH = '/github-token/installation.json'
 /** The minter runs every 30 minutes; a 70-minute-old file means it stopped. */
-export const GITHUB_TOKEN_MAX_AGE_MS = 70 * 60_000
+const GITHUB_TOKEN_MAX_AGE_MS = 70 * 60_000
 /** Less than this left and a clone or a check-run PATCH could outlive the token. */
-export const TOKEN_MIN_REMAINING_MS = 5 * 60_000
+const TOKEN_MIN_REMAINING_MS = 5 * 60_000
 
-export type GithubInstallationState = 'ok' | 'not-installed' | 'error'
+type GithubInstallationState = 'ok' | 'not-installed' | 'error'
 
 export type GithubInstallation = {
   version: 1
@@ -84,7 +84,7 @@ function withoutValues<T>(d: Decoder<T>): Decoder<T> {
   }
 }
 
-export const githubInstallationDecoder: Decoder<GithubInstallation> = withoutValues(
+const githubInstallationDecoder: Decoder<GithubInstallation> = withoutValues(
   obj({
     version: versionOne,
     state: literal('ok', 'not-installed', 'error'),

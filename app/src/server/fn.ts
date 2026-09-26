@@ -30,7 +30,7 @@ import type { Ctx } from '../core/ctx'
  * shared after that. Lazy, so a function that never needed one still never
  * builds one — makeCtx reads snapshots and the host inventory.
  */
-export const withCtx = createMiddleware({ type: 'function' }).server(async ({ next }) => {
+const withCtx = createMiddleware({ type: 'function' }).server(async ({ next }) => {
   let made: Promise<Ctx> | undefined
   const ctx = (): Promise<Ctx> => {
     made ??= import('../core/ctx').then((m) => m.makeCtx())
@@ -48,7 +48,7 @@ export const withCtx = createMiddleware({ type: 'function' }).server(async ({ ne
  * gate: it answers a placeholder rather than refusing. A function that must
  * refuse an absent identity still calls `requireActor()` itself.
  */
-export const withActor = createMiddleware({ type: 'function' }).server(async ({ next }) => {
+const withActor = createMiddleware({ type: 'function' }).server(async ({ next }) => {
   const { actorLabel } = await import('../core/auth')
   return next({ context: { actor: (): string => actorLabel() } })
 })

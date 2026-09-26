@@ -143,7 +143,7 @@ export type Workflow = {
   url: string
 }
 
-export const workflowDecoder: Decoder<Workflow> = (v, p) => {
+const workflowDecoder: Decoder<Workflow> = (v, p) => {
   const w = obj({ id: num, name: str, path: str, state: str, html_url: str })(v, p)
   return { id: w.id, name: w.name, path: w.path, state: w.state, url: w.html_url }
 }
@@ -176,7 +176,7 @@ export function runSeconds(run: Run, now: number = Date.now()): number | null {
   return Math.max(0, (end - start) / 1000)
 }
 
-export function jobSeconds(job: Job, now: number = Date.now()): number | null {
+function jobSeconds(job: Job, now: number = Date.now()): number | null {
   if (job.startedAt === null) return null
   const start = Date.parse(job.startedAt)
   const end = job.completedAt === null ? now : Date.parse(job.completedAt)

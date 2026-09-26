@@ -483,8 +483,8 @@ type Parsed<N extends EnvName> = KindValue[SpecOf<N>['kind']]
 type Absent<N extends EnvName> =
   SpecOf<N> extends { required: true } | { fallback: string } ? never : undefined
 
-export type EnvValue<N extends EnvName> = Parsed<N> | Absent<N>
-export type EnvText<N extends EnvName> = string | Absent<N>
+type EnvValue<N extends EnvName> = Parsed<N> | Absent<N>
+type EnvText<N extends EnvName> = string | Absent<N>
 
 /** The schema as rows, for a page or a document that lists it. */
 export const envSchema: readonly (Spec & { name: EnvName })[] = (
@@ -570,7 +570,7 @@ const malformedOptional = (name: EnvName, expected: string, spec: Spec): string 
     spec.fallback === undefined ? 'unset' : 'its default'
   }.`
 
-export type EnvReport = {
+type EnvReport = {
   /** Required rows that are missing or malformed, one sentence each. */
   fatal: string[]
   /** Optional rows that are malformed, one line each. */

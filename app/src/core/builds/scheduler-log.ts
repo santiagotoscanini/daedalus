@@ -7,7 +7,7 @@ import { errorText } from '../../lib/redact'
 import type { SchedulerState } from './scheduler'
 
 /** A failure of one kind is logged at most once per this. */
-export const LOG_EVERY_MS = 60 * 60_000
+const LOG_EVERY_MS = 60 * 60_000
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 

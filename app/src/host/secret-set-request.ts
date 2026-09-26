@@ -33,8 +33,8 @@ import { defineBridge } from './bridge'
 // (SECRET_APPS in stacks/daedalus/daedalus.nix), exactly as deploy-trigger and
 // task-run do it, so a name taken from this request cannot become a path.
 
-export type SecretSetAction = 'set' | 'remove'
-export type SecretSetState = 'idle' | 'running' | 'done' | 'failed'
+type SecretSetAction = 'set' | 'remove'
+type SecretSetState = 'idle' | 'running' | 'done' | 'failed'
 
 export type SecretSetStatus = {
   id: string | null

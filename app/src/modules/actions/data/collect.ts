@@ -36,7 +36,7 @@ export const WINDOW_DAYS = 30
  */
 const FRESH_JOB_READS = 16
 
-export type WorkflowInfo = {
+type WorkflowInfo = {
   /** GitHub's id when the workflows endpoint answered; the file's path otherwise. */
   id: string
   name: string

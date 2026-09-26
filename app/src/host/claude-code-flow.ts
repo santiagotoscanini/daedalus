@@ -1,8 +1,4 @@
-import {
-  type ClaudeCodeUpdateStatus,
-  readClaudeCodeUpdateStatus,
-  requestClaudeCodeUpdate,
-} from './claude-code-update'
+import { readClaudeCodeUpdateStatus, requestClaudeCodeUpdate } from './claude-code-update'
 import { readCommittedSite } from './contract/domains/site-doc'
 import { readEngineUpdateStatus } from './engine-update'
 import { defineFlow, defineGate, type FlowOutcome } from './flow'
@@ -56,5 +52,3 @@ export const runClaudeCodeUpdate: (input: { actor: string }) => Promise<ClaudeCo
       return { ok: true, value: {}, publish: () => requestClaudeCodeUpdate(input) }
     },
   })
-
-export type { ClaudeCodeUpdateStatus }

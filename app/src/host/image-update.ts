@@ -32,7 +32,7 @@ import { defineBridge } from './bridge'
 // failure anywhere reverts all of them together. host/image-update.sh has that
 // argument in full.
 
-export type ImageUpdateState = 'idle' | 'running' | 'done' | 'failed'
+type ImageUpdateState = 'idle' | 'running' | 'done' | 'failed'
 
 /** One container a request names, and where it should go. */
 export type ImageTarget = {
@@ -42,7 +42,7 @@ export type ImageTarget = {
 }
 
 /** One container this run moves — including lockstep members nobody picked. */
-export type ImageMove = {
+type ImageMove = {
   container: string
   repo: string
   fromTag: string

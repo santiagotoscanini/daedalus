@@ -19,7 +19,7 @@ import { type ProviderReading, readProvider } from './read'
  * same default platform/nodes.nix declares. Named rather than inlined so a
  * fallback in a LiteLLM route is greppable when one turns out to be wrong.
  */
-export const LAN_DOMAIN_FALLBACK = 'lan'
+const LAN_DOMAIN_FALLBACK = 'lan'
 
 /**
  * The LAN domain the box publishes, or the default with a note that it was

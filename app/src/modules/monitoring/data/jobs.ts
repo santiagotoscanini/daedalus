@@ -64,7 +64,7 @@ export type JobsData = {
   gap: VersionGap
 }
 
-export type HcCheck = {
+type HcCheck = {
   name?: string
   slug?: string
   status?: string
@@ -127,7 +127,7 @@ function ageOf(iso: string | null | undefined, now: number): number | null {
  * The registry's jobs, each joined to its healthchecks row (by slug) and its
  * last timer run (by unit) — the three views of one job side by side.
  */
-export function joinJobs(
+function joinJobs(
   registry: readonly RegisteredJob[],
   checks: readonly HcCheck[] | undefined,
   runs: readonly JobRun[],
@@ -180,7 +180,7 @@ export function joinJobs(
 }
 
 /** healthchecks' roster as rows, in the order you would read them to decide whether to act. */
-export function rankChecks(checks: readonly HcCheck[], now: number): JobsData['checks'] {
+function rankChecks(checks: readonly HcCheck[], now: number): JobsData['checks'] {
   return (
     checks
       .map((c) => ({

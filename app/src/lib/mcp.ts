@@ -22,7 +22,7 @@
  * rebuild lock, so a token that may start one may start any of them, and
  * pretending otherwise would be a security story the mechanism does not back.
  */
-export const MCP_SCOPES = ['read', 'write'] as const
+const MCP_SCOPES = ['read', 'write'] as const
 export type McpScope = (typeof MCP_SCOPES)[number]
 
 export function isMcpScope(v: unknown): v is McpScope {

@@ -38,7 +38,7 @@ function subscribe(onChange: () => void): () => void {
 }
 
 /** What the server renders for a choice it cannot resolve. */
-export function serverScheme(choice: Scheme): ResolvedScheme {
+function serverScheme(choice: Scheme): ResolvedScheme {
   return choice === 'system' ? 'dark' : choice
 }
 

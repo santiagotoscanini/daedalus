@@ -25,7 +25,7 @@ import { defineBridge } from './bridge'
 // claude-rc-request.ts: the agent outlives its action, so `done` and `failed`
 // are both real terminal states and the ordinary status poll covers the flow.
 
-export type TaskRunState = 'idle' | 'running' | 'done' | 'failed'
+type TaskRunState = 'idle' | 'running' | 'done' | 'failed'
 
 export type TaskRunStatus = {
   id: string | null

@@ -24,7 +24,7 @@ export type Support = {
 }
 
 /** A release this close to its end is `ending`: time to plan the move, not yet overdue. */
-export const ENDING_DAYS = 45
+const ENDING_DAYS = 45
 
 const DAY_MS = 86_400_000
 
@@ -71,7 +71,7 @@ export type NixosNotes = {
  * Items kept per section. Highlights run to about a dozen; the backward
  * incompatibilities run to sixty, and every entry links to all of them.
  */
-export const MAX_NOTES_ITEMS = 12
+const MAX_NOTES_ITEMS = 12
 
 const ITEM_CHARS = 400
 
@@ -152,7 +152,7 @@ function leadOnly(text: string): string {
 }
 
 /** The manual's inline markdown as plain text. */
-export function plain(s: string): string {
+function plain(s: string): string {
   return (
     stripComments(s)
       // `[](#opt-services.foo.enable)` renders as the option's own name.

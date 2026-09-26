@@ -193,7 +193,7 @@ function tagsRow(build: BuildView): { k: string; v: ReactNode } {
   }
 }
 
-export function Outcome({ outcome }: { outcome: DeployOutcome }) {
+function Outcome({ outcome }: { outcome: DeployOutcome }) {
   switch (outcome.kind) {
     case 'none':
       return <span className="text-(--dim)">{DASH}</span>
@@ -249,7 +249,7 @@ const STEP_NOTE: Partial<Record<TimelineStep['status'], string>> = {
   skipped: 'did not run',
 }
 
-export function Step({ step }: { step: TimelineStep }) {
+function Step({ step }: { step: TimelineStep }) {
   return (
     <li className="flex items-center gap-[0.6rem] border-t border-(--border-soft) py-[0.4rem] text-[0.84rem] first:border-t-0 first:pt-0">
       <Pulse on={step.status === 'running'} tone={STEP_TONE[step.status]} />

@@ -364,7 +364,7 @@ export function UpdateProgress({ status }: { status: ImageUpdateStatus }) {
  * unchanged is the honest report that it was already there rather than a
  * container quietly dropped from the commit.
  */
-export function Moves({ status }: { status: ImageUpdateStatus }) {
+function Moves({ status }: { status: ImageUpdateStatus }) {
   if (status.moves.length === 0) return null
 
   return (

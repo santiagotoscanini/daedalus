@@ -62,7 +62,7 @@ export function eventKind(event: string): WebhookEventKind {
 }
 
 /** Repository actions that move a repo away from the name or owner a pinned app expects. */
-export const REPO_MOVE_ACTIONS = ['renamed', 'transferred', 'deleted'] as const
+const REPO_MOVE_ACTIONS = ['renamed', 'transferred', 'deleted'] as const
 export type RepoMove = (typeof REPO_MOVE_ACTIONS)[number]
 
 export function repoMove(event: string, action: string | null): RepoMove | null {
@@ -121,7 +121,7 @@ export type PushApp = {
 
 export type PushSkipReason = 'already-running' | 'already-built'
 
-export type PushIgnore =
+type PushIgnore =
   | PushIgnoreReason
   | 'box-builds-off'
   | 'managed-in-nix'

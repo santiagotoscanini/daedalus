@@ -89,7 +89,7 @@ export function gatewayModelsOf(body: unknown): GatewayModel[] {
   return out
 }
 
-export function litellmClient(gateway: Gateway): GatewayClient {
+function litellmClient(gateway: Gateway): GatewayClient {
   const headers = {
     Authorization: `Bearer ${gateway.apiKey}`,
     'Content-Type': 'application/json',
@@ -226,7 +226,7 @@ export function planRoutes(input: {
 }
 
 /** Whether a held route already says what the desired one says. */
-export function sameRoute(have: GatewayModel, want: LitellmRoute): boolean {
+function sameRoute(have: GatewayModel, want: LitellmRoute): boolean {
   if (have.modelName !== want.model_name) return false
   if (have.upstream !== want.litellm_params.model) return false
   if (have.apiBase !== want.litellm_params.api_base) return false
@@ -334,7 +334,7 @@ const slot = (): Slot => {
   return s
 }
 
-export const SYNC_EVERY_MS = 5 * 60_000
+const SYNC_EVERY_MS = 5 * 60_000
 const DEBOUNCE_MS = 3_000
 
 export function lastGatewaySync(): SyncSummary | null {

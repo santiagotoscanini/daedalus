@@ -21,9 +21,9 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 // target and the new values — which fields exist, what they may look like and
 // where they live is the host's registry, which is also the allowlist.
 
-export type VersionUpdateState = 'idle' | 'running' | 'done' | 'failed'
+type VersionUpdateState = 'idle' | 'running' | 'done' | 'failed'
 
-export type VersionMove = { field: string; binding: string; from: string; to: string }
+type VersionMove = { field: string; binding: string; from: string; to: string }
 
 export type VersionUpdateStatus = {
   id: string | null

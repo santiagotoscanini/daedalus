@@ -423,7 +423,7 @@ async function securityContent(url: string): Promise<{ cves: number | null; note
 
 /* ── the answer ───────────────────────────────────────────────────────── */
 
-export function versionParts(v: string): number[] {
+function versionParts(v: string): number[] {
   return v.split('.').map((x) => Number.parseInt(x, 10) || 0)
 }
 

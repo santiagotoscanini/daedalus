@@ -43,7 +43,7 @@ export function PageHead({
  * leaves the text hugging one edge of a wide panel with empty background
  * beside it, which reads as a layout bug.
  */
-export function Lede({ className, ...props }: ComponentProps<'p'>) {
+function Lede({ className, ...props }: ComponentProps<'p'>) {
   return <p className={cn('mt-1 max-w-[74ch] text-(--text-muted) text-sm', className)} {...props} />
 }
 

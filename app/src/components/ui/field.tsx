@@ -10,16 +10,6 @@ import type { ComponentProps, ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { Label } from './label'
 
-function FieldGroup({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="field-group"
-      className={cn('flex w-full flex-col gap-6', className)}
-      {...props}
-    />
-  )
-}
-
 function Field({
   className,
   orientation = 'vertical',
@@ -100,4 +90,4 @@ function FieldError({
   )
 }
 
-export { Field, FieldDescription, FieldError, FieldGroup, FieldLabel }
+export { Field, FieldDescription, FieldError, FieldLabel }

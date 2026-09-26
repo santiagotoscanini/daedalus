@@ -14,9 +14,9 @@ import { errorText } from '../../lib/redact'
 import type { Ctx } from '../ctx'
 import type { GhCall, GhFailure } from '../github-checks'
 
-export const REPORT_MAX_RETRIES = 3
+const REPORT_MAX_RETRIES = 3
 /** Before retry 1, 2 and 3. */
-export const RETRY_DELAYS_MS = [30_000, 120_000, 600_000] as const
+const RETRY_DELAYS_MS = [30_000, 120_000, 600_000] as const
 const KEEP_FAILURES = 50
 
 /** The preferences-store key holding the failures "Retry report" renders. */

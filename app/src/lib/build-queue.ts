@@ -27,7 +27,7 @@ import {
 export type BuildLane = 'main' | 'pr'
 
 /** Past this since dispatch, a build is failed whatever its status says. */
-export const BUILD_HARD_CAP_MS = 100 * 60_000
+const BUILD_HARD_CAP_MS = 100 * 60_000
 export const INTERRUPTED = 'interrupted'
 export const TIMED_OUT = 'timed out'
 
@@ -256,7 +256,7 @@ export function enqueue(
   return { rows: [...next, row], result: { kind: 'enqueued', row, superseded } }
 }
 
-export type HeldBuild = { row: BuildRow; reason: string }
+type HeldBuild = { row: BuildRow; reason: string }
 
 export type NextBuild = {
   row: BuildRow | null

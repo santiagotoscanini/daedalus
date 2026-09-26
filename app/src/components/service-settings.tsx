@@ -82,7 +82,7 @@ export function ServiceSettingsButton({
  * The dialog itself, fetched when it opens: the switches are a footer's
  * worth of data, and a page must not wait on them.
  */
-export function ServiceSettingsDialog({
+function ServiceSettingsDialog({
   ids,
   open,
   onOpenChange,

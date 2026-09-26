@@ -135,7 +135,7 @@ export async function moduleSwitches(ctx: Ctx): Promise<ModuleSwitch[]> {
     })
 }
 
-export async function moduleSwitch(ctx: Ctx, id: string): Promise<ModuleSwitch | null> {
+async function moduleSwitch(ctx: Ctx, id: string): Promise<ModuleSwitch | null> {
   return (await moduleSwitches(ctx)).find((m) => m.id === id) ?? null
 }
 

@@ -131,10 +131,10 @@ export const COMMIT_AUTHORS = ['box', 'operator'] as const
 export type CommitAuthor = (typeof COMMIT_AUTHORS)[number]
 
 /** One published hostname as the operator moved it (core/site/switches.ts). */
-export type SiteWebOverride = { label: string | null; public: boolean | null }
+type SiteWebOverride = { label: string | null; public: boolean | null }
 
 /** One account on a game server's roster. `uuid` is dashed and lower-case. */
-export type SitePlayer = { name: string; uuid: string; op: boolean }
+type SitePlayer = { name: string; uuid: string; op: boolean }
 
 /**
  * The box as the settings page describes it, as the document.

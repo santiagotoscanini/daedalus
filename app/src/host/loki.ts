@@ -22,7 +22,7 @@ import type { MatrixResult, VectorResult } from './prom'
 
 export const LOKI = () => env.get('LOKI_URL')
 
-export const LOKI_ATTEMPT_MS = [10_000]
+const LOKI_ATTEMPT_MS = [10_000]
 
 /**
  * LogQL instant query as a number. null means Loki could not be reached; an

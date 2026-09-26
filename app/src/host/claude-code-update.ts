@@ -22,7 +22,7 @@ import { defineBridge } from './bridge'
 // No payload and nothing to choose: the release to move to is whatever
 // upstream calls latest, which is the host's answer, published as `to`.
 
-export type ClaudeCodeUpdateState = 'idle' | 'running' | 'done' | 'failed'
+type ClaudeCodeUpdateState = 'idle' | 'running' | 'done' | 'failed'
 
 export type ClaudeCodeUpdateStatus = {
   id: string | null

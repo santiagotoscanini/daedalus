@@ -24,7 +24,7 @@ import { redactSecrets } from './redact'
 // Decoded by hand and tolerantly: Railpack is 0.x with breaking minors, and a
 // renamed field should blank one line of the build page, not the whole card.
 
-export type VersionPin = {
+type VersionPin = {
   /** What was installed: resolvedVersion, else requestedVersion. */
   version: string
   /** What the source asked for — "24", ">=18", "11.5.x", "24.18.1". */
@@ -34,7 +34,7 @@ export type VersionPin = {
 }
 
 /** One line of `resolvedPackages`: a tool mise installed, and who chose its version. */
-export type ResolvedPackage = VersionPin & { name: string }
+type ResolvedPackage = VersionPin & { name: string }
 
 export type DetectionLog = {
   level: string
@@ -211,7 +211,7 @@ export type RepoFacts = {
   scripts?: Record<string, string>
 }
 
-export type DetectionWarningCode =
+type DetectionWarningCode =
   | 'start-bypasses-migrations'
   | 'puppeteer-core-without-chromium'
   | 'puppeteer-build-not-allowed'

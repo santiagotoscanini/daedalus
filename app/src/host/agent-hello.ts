@@ -21,7 +21,7 @@ import { bool, decode, int, nullable, obj, optional, str } from '../lib/contract
 /** How far a hello's clock may be from ours, in seconds, and still count. */
 export const HELLO_MAX_SKEW_SECS = 300
 
-export type HelloPayload = {
+type HelloPayload = {
   hostname: string
   os: string
   arch: string

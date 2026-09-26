@@ -22,9 +22,9 @@ import { isAppName } from './hostname'
 // shared with the request decoder, so a setting that saves is one the host
 // takes.
 
-export const PLACEHOLDER_NAME_RE = BUILD_ENV_PLACEHOLDER_RE
-export const RAILPACK_KEY_RE = BUILD_ENV_RAILPACK_RE
-export const ENV_VALUE_MAX = BUILD_ENV_VALUE_MAX
+const PLACEHOLDER_NAME_RE = BUILD_ENV_PLACEHOLDER_RE
+const RAILPACK_KEY_RE = BUILD_ENV_RAILPACK_RE
+const ENV_VALUE_MAX = BUILD_ENV_VALUE_MAX
 export const ENV_ENTRIES_MAX = BUILD_ENV_ENTRIES_MAX
 // A value reaches the build as one env line; a newline in it would be a second.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point.

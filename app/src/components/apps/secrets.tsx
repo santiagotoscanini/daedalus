@@ -322,7 +322,7 @@ const FIELD = 'h-auto rounded-[6px] bg-(--panel-2) px-[0.5rem] py-[0.25rem] text
 const SMALL_BTN =
   'h-auto flex-none rounded-[6px] bg-(--panel-2) px-[0.45rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-(--raise) dark:bg-(--panel-2)'
 
-export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
+function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
   const router = useRouter()
   const { status, running, refusal, start } = usePolledStatus<SecretSetStatus>({
     initial: SECRET_IDLE,

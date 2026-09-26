@@ -467,7 +467,7 @@ export async function updateFromStatus(
 }
 
 /** The pin, unexecuted: its SQL is what the tests pin. */
-export function pinGithubRepoIdQuery(appId: string, repoId: number, exec: Executor = db) {
+function pinGithubRepoIdQuery(appId: string, repoId: number, exec: Executor = db) {
   return exec
     .update(apps)
     .set({ githubRepoId: repoId })

@@ -80,7 +80,7 @@ export function NotFoundPanel() {
   )
 }
 
-export function AwaitError({ error, reset }: ErrorComponentProps) {
+function AwaitError({ error, reset }: ErrorComponentProps) {
   const retry = useRetry(reset)
   return (
     <Alert

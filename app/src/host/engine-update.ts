@@ -18,7 +18,7 @@ import { defineBridge } from './bridge'
 // request carries only the actor. What "latest" resolves to is the host's
 // answer, published in the status as `to`.
 
-export type EngineUpdateState = 'idle' | 'running' | 'done' | 'failed'
+type EngineUpdateState = 'idle' | 'running' | 'done' | 'failed'
 
 export type EngineUpdateStatus = {
   id: string | null

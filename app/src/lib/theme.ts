@@ -12,7 +12,7 @@
  * a theme its character and inherits the rest.
  */
 
-export const SCHEMES = ['light', 'dark', 'system'] as const
+const SCHEMES = ['light', 'dark', 'system'] as const
 export type Scheme = (typeof SCHEMES)[number]
 
 export function isScheme(v: unknown): v is Scheme {
@@ -20,7 +20,7 @@ export function isScheme(v: unknown): v is Scheme {
 }
 
 /** Token name (without the leading `--`) → CSS colour value. */
-export type ThemeVars = Record<string, string>
+type ThemeVars = Record<string, string>
 
 export type ThemePreset = {
   id: string
@@ -41,7 +41,7 @@ export type ThemePreset = {
  * and an unfiltered key or value is a CSS injection with a `</style>` in
  * it. `themeCss` below filters on both.
  */
-export const THEMEABLE = [
+const THEMEABLE = [
   'background',
   'foreground',
   'card',
@@ -102,7 +102,7 @@ const THEMEABLE_SET: ReadonlySet<string> = new Set(THEMEABLE)
 const SAFE_VALUE = /^[a-zA-Z0-9\s.,%#()/_-]{1,120}$/
 
 /** The one preset that must never fail to load: what the app shipped with. */
-export const DEFAULT_PRESET_ID = 'terracotta'
+const DEFAULT_PRESET_ID = 'terracotta'
 
 export const PRESETS: readonly ThemePreset[] = [
   {

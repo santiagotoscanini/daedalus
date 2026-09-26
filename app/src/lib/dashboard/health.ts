@@ -23,7 +23,7 @@ import { promVector } from '../../host/prom'
 // what keeps one dropped scrape from being reported as an outage.
 const PROBE_WINDOW = '3m'
 
-export type ProbeHealth = {
+type ProbeHealth = {
   /** The gatus endpoint name — the webApp's name, not `<group>_<name>`. */
   name: string
   healthy: boolean

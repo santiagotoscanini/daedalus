@@ -39,7 +39,7 @@ export type Answer<T> = { access: Access; value: T | null; status: number | null
 
 const MINUTE = 60_000
 /** A list of runs or workflows: fresh enough for a page, kind to the budget. */
-export const LIST_TTL = 3 * MINUTE
+const LIST_TTL = 3 * MINUTE
 /** A 403 will not change until someone edits the App; do not ask again soon. */
 const REFUSED_TTL = 30 * MINUTE
 /** A completed run's jobs, or a workflow file at a sha: immutable. */

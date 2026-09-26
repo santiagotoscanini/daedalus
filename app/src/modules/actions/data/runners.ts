@@ -17,7 +17,7 @@ import { assembleWorkflows } from './workflows'
 // defined here, started per job, watched for load — and it waits on the
 // second GitHub App that can register runners (PLAN.md, feature 11).
 
-export type MachineRunner = {
+type MachineRunner = {
   id: string
   name: string
   os: RunnerOs
@@ -35,7 +35,7 @@ export type MachineRunner = {
   minutes: number
 }
 
-export type RegisteredRunners = {
+type RegisteredRunners = {
   repo: string
   url: string
   access: Access

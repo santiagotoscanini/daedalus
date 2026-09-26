@@ -37,7 +37,7 @@ import {
 
 export type ProviderKind = 'lemonade' | 'subgen'
 
-export const PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade', 'subgen']
+const PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade', 'subgen']
 
 export const DEFAULT_PORT: Record<ProviderKind, number> = {
   lemonade: 13305,
@@ -68,7 +68,7 @@ export const NODE_PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade']
  * "have this one ready, I am about to use it". `subgen` is not here because
  * it serves one model and holds it for its lifetime.
  */
-export const MANAGED_RESIDENCY: readonly ProviderKind[] = ['lemonade']
+const MANAGED_RESIDENCY: readonly ProviderKind[] = ['lemonade']
 
 export function managesResidency(kind: ProviderKind): boolean {
   return MANAGED_RESIDENCY.includes(kind)

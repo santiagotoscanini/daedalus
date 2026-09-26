@@ -57,15 +57,15 @@ import { block, clearFailure, failures, logOnce, mayCall, memo, recordFailure } 
 
 export { readReportFailures } from './report-memo'
 
-export const PATCH_MIN_INTERVAL_MS = 10_000
+const PATCH_MIN_INTERVAL_MS = 10_000
 /** A live build whose Deployment sees no deploy this long after it finished gets `error`. */
 export const DEPLOY_WAIT_MS = 30 * 60_000
 /** Older unreported builds are left alone by the tick; retryReport still reaches them. */
-export const REPORT_WINDOW_MS = 24 * 60 * 60_000
+const REPORT_WINDOW_MS = 24 * 60 * 60_000
 /** Unreported builds a tick may work on. */
-export const TICK_BUDGET = 5
+const TICK_BUDGET = 5
 /** Unreported builds a tick reads: newest first, within REPORT_WINDOW_MS. */
-export const UNREPORTED_READ = 20
+const UNREPORTED_READ = 20
 const TICK_MIN_INTERVAL_MS = 5_000
 const INGEST_MIN_INTERVAL_MS = 15_000
 const TITLE_MAX_CHARS = 200

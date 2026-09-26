@@ -17,7 +17,7 @@ import { enqueueChecked } from './dispatch'
 import type { SchedulerState } from './scheduler'
 import { logOnce, quietly } from './scheduler-log'
 
-export const DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60_000
+const DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60_000
 
 export type SweepRecord = {
   at: string

@@ -20,7 +20,7 @@ import { env } from './env'
 
 const DEPLOY_STATE = env.get('DEPLOY_STATE_DIR')
 
-export type DeployState = 'idle' | 'running' | 'done' | 'failed'
+type DeployState = 'idle' | 'running' | 'done' | 'failed'
 
 export type DeployStatus = {
   id: string | null

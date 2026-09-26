@@ -35,7 +35,7 @@ const SITE = (): string => env.get('SITE_PATH')
  * throws, while the write path refuses on its own evidence rather than on
  * this.
  */
-export async function readAppSecretKeys(app: string): Promise<string[]> {
+async function readAppSecretKeys(app: string): Promise<string[]> {
   // The app name reaches a path here, so it is parsed before it is joined —
   // even though every caller has already checked it.
   if (!isAppName(app)) return []

@@ -1,4 +1,5 @@
 import type { NavIconName } from '../../components/nav-icon'
+
 // What a dashboard module declares about itself, and nothing more.
 //
 // A module is a directory under `src/modules/<id>/` holding exactly this
@@ -12,7 +13,7 @@ import type { NavIconName } from '../../components/nav-icon'
 // every page, so a manifest may hold data only. Anything a tab needs from
 // the machine lives in its `data/` module and arrives through a `Ctx`.
 
-export type TabHealth = 'vpn-egress' | 'uplink' | 'log-pipeline' | 'minecraft-ping'
+type TabHealth = 'vpn-egress' | 'uplink' | 'log-pipeline' | 'minecraft-ping'
 
 export type TabSpec = {
   id: string

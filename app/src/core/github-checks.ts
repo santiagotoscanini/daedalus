@@ -118,7 +118,7 @@ export function clampChars(s: string, max: number): string {
 }
 
 /** A deployment status description's documented ceiling. */
-export const DESCRIPTION_MAX_CHARS = 140
+const DESCRIPTION_MAX_CHARS = 140
 
 async function send(ctx: Ctx, method: 'POST' | 'PATCH', path: string, body: unknown) {
   return ghApp(ctx, path, { method, body: JSON.stringify(body) })

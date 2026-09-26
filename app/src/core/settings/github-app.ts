@@ -52,7 +52,7 @@ import type {
 // about it): an App created earlier would lose its key in the Apply. Every
 // mutation also refuses without a signed-in identity (core/auth requireActor).
 
-export const APP_NAME_MAX = 34
+const APP_NAME_MAX = 34
 const CREATION_TTL_MS = 60 * 60_000
 const OWNER_ATTEMPTS = [3_000, 8_000]
 const CONVERSION_TIMEOUT_MS = 8_000
@@ -124,7 +124,7 @@ const isPendingApply = (v: unknown): v is PendingApply =>
 // ── pure checks ────────────────────────────────────────────────────────────
 
 /** Why GitHub would refuse this App name, or null. GitHub caps names at 34 characters. */
-export function appNameError(name: string): string | null {
+function appNameError(name: string): string | null {
   if (name === '') return 'Give the App a name.'
   if ([...name].length > APP_NAME_MAX) {
     return `GitHub allows at most ${String(APP_NAME_MAX)} characters in an App name.`
@@ -136,7 +136,7 @@ export function appNameError(name: string): string | null {
 }
 
 /** `daedalus-<first label of the base domain>`. */
-export function defaultAppName(baseDomain: string): string {
+function defaultAppName(baseDomain: string): string {
   const label = (baseDomain.split('.')[0] ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '')
   const name = label === '' ? 'daedalus' : `daedalus-${label}`
   return name.slice(0, APP_NAME_MAX).replace(/-+$/, '')
@@ -821,7 +821,7 @@ export function callbackLocation(result: GithubAppFinish): string {
   return result.outcome === 'created' ? base : `${base}&reason=${result.code}`
 }
 
-export function callbackResponse(result: GithubAppFinish): Response {
+function callbackResponse(result: GithubAppFinish): Response {
   return new Response(null, {
     status: 302,
     headers: {

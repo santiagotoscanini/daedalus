@@ -44,13 +44,13 @@ export type ManifestEnvVar = { key: string; value: string; note?: string | null 
  * — see the `resources` option in stacks/apps/apps.nix for what each one
  * actually enforces and where the flag names lie about it.
  */
-export type ManifestResources = {
+type ManifestResources = {
   cpus: number | null
   memoryMb: number | null
   pids: number | null
 }
 
-export const NO_RESOURCES: ManifestResources = { cpus: null, memoryMb: null, pids: null }
+const NO_RESOURCES: ManifestResources = { cpus: null, memoryMb: null, pids: null }
 
 /**
  * One scheduled task: a systemd timer + service pair named

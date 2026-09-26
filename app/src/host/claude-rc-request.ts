@@ -25,8 +25,8 @@ import { defineBridge } from './bridge'
 // `claude --resume` continues it. The environment id is minted per start, so
 // the session link changes too.
 
-export type ClaudeRcAction = 'restart'
-export type ClaudeRcState = 'idle' | 'running' | 'done' | 'failed'
+type ClaudeRcAction = 'restart'
+type ClaudeRcState = 'idle' | 'running' | 'done' | 'failed'
 
 export type ClaudeRcStatus = {
   id: string | null

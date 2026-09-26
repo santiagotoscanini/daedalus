@@ -21,7 +21,7 @@ import { readSnapshot } from '../snapshot'
 
 const ns = optional(nullable(str), null)
 
-export type WebAppRecord = {
+type WebAppRecord = {
   hostname: string
   port: number | null
   serviceName: string | null

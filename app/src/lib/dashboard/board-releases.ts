@@ -33,7 +33,7 @@ import { pool } from '../http'
 // forever (a published note does not change). A failure keeps the last
 // good list and says when it was last read.
 
-export type BoardRelease = {
+type BoardRelease = {
   /** As the maker names it: "1.H0" (MSI, matching SMBIOS), "F42c" (Gigabyte). */
   version: string
   /** ISO date, from the package. */
@@ -292,9 +292,9 @@ function dateOnly(httpDate: string): string {
 // `boards/<id>.json`, and this reader draws it. A host without that job
 // leaves the request unanswered, and the tab says so.
 
-export type BoardPageRequest = { version: 1; pages: { id: string; url: string }[] }
+type BoardPageRequest = { version: 1; pages: { id: string; url: string }[] }
 
-export type BoardPageSnapshot = {
+type BoardPageSnapshot = {
   version: 1
   fetchedAt: string
   url: string

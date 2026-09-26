@@ -42,12 +42,12 @@ export const BUILD_CANCEL_FILE = 'build-cancel-request.json'
 export const BUILD_STATUS_MAX_AGE_MS = 90_000
 
 /** Also the log file's stem, so nothing a request carries can name a path. */
-export const BUILD_ID_RE = /^[0-9a-fA-F-]{1,64}$/
+const BUILD_ID_RE = /^[0-9a-fA-F-]{1,64}$/
 export const BUILD_SHA_RE = /^[0-9a-f]{40}$/
 
 export const BUILD_STRATEGIES = ['auto', 'railpack', 'dockerfile'] as const
 export const BUILD_PUBLISH_MODES = ['live', 'candidate'] as const
-export const BUILD_REQUESTERS = ['webhook', 'sweep', 'operator'] as const
+const BUILD_REQUESTERS = ['webhook', 'sweep', 'operator'] as const
 export const BUILD_STATES = [
   'queued',
   'cloning',
@@ -565,7 +565,7 @@ export const buildStatusDecoder: Decoder<BuildStatus> = obj({
   updatedAt: str,
 })
 
-export const buildCancelRequestDecoder: Decoder<BuildCancelRequest> = obj({
+const buildCancelRequestDecoder: Decoder<BuildCancelRequest> = obj({
   version: versionOne,
   id: matching(BUILD_ID_RE, 'a build id'),
   at: str,
@@ -587,7 +587,7 @@ export function buildCancelRequest(id: string, at: Date): BuildCancelRequest {
 
 export type EnvReader = (name: ConfigName) => string | undefined
 
-export const DEFAULT_BUILD_LOGS_PATH = '/builds'
+const DEFAULT_BUILD_LOGS_PATH = '/builds'
 
 /** Where a build's log lives, or null for an id that could name anything else. */
 export function buildLogPath(id: string, env: EnvReader): string | null {

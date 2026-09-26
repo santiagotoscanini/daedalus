@@ -201,9 +201,9 @@ export function recentlyChanged(records: ZoneRecord[]): ZoneRecord[] {
 }
 
 /** A record's identity. Name alone is not one — the apex holds four TXTs. */
-export const recordKey = (r: ZoneRecord): string => `${r.fqdn}|${r.type}|${r.content}`
+const recordKey = (r: ZoneRecord): string => `${r.fqdn}|${r.type}|${r.content}`
 
-export const byShort = (a: ZoneRecord, b: ZoneRecord): number => a.short.localeCompare(b.short)
+const byShort = (a: ZoneRecord, b: ZoneRecord): number => a.short.localeCompare(b.short)
 
 export const age = (iso: string | undefined): number | null => {
   if (iso === undefined) return null
@@ -263,7 +263,7 @@ export function isDebris(r: ZoneRecord, all: ZoneRecord[]): boolean {
 const MAIL_ORDER = ['MX', 'TXT', 'CNAME']
 
 /** Names with an MX record — the apex and any subdomain given its own mail. */
-export function mailDomains(records: ZoneRecord[]): string[] {
+function mailDomains(records: ZoneRecord[]): string[] {
   return [...new Set(records.filter((r) => r.type === 'MX').map((r) => r.fqdn))]
 }
 
@@ -277,7 +277,7 @@ export function mailDomains(records: ZoneRecord[]): string[] {
  * providers' ownership tokens are the only TXT records this zone puts there —
  * and everything else is not.
  */
-export const isMail = (r: ZoneRecord, domains: Set<string>): boolean =>
+const isMail = (r: ZoneRecord, domains: Set<string>): boolean =>
   (domains.has(r.fqdn) && (r.type === 'MX' || r.type === 'TXT')) ||
   [...domains].some((d) => r.fqdn === `_dmarc.${d}` || r.fqdn.endsWith(`._domainkey.${d}`))
 

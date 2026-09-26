@@ -92,7 +92,7 @@ export function hours(h: number | null): string {
  * node chooses the same three on Settings › Machines; the box chooses them
  * in code, because the box is configuration.
  */
-export const BOX_PARTS = {
+const BOX_PARTS = {
   case: 'jonsbo-n4',
   cooler: 'noctua-nh-l9x65',
   psu: 'evga-supernova-650-gm',

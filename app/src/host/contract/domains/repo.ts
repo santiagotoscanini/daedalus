@@ -18,7 +18,7 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 // engine). The container never mounts the repository; this is the
 // whole of what it may know about it.
 
-export type RepoCommit = { rev: string; subject: string; committedAt: string }
+type RepoCommit = { rev: string; subject: string; committedAt: string }
 
 /**
  * What a REBUILD would see. A flake copies the working tree of tracked files,
@@ -45,7 +45,7 @@ export type SiteFile = { status: SiteFileStatus; sha256: string | null }
  * values are unreadable to it by design, so "who set this, and when" is
  * exactly as much as there is to say.
  */
-export type AppSecretHistory = Record<string, Record<string, SecretKeyHistory>>
+type AppSecretHistory = Record<string, Record<string, SecretKeyHistory>>
 
 export type SiteDir = {
   path: string
@@ -117,7 +117,7 @@ const siteFile = obj({
   sha256: optional(nullable(str), null),
 })
 
-export const NO_SITE_DIR: SiteDir = {
+const NO_SITE_DIR: SiteDir = {
   path: '',
   exists: false,
   toplevel: null,

@@ -22,7 +22,7 @@ export const NODES_SCHEMA_VERSION = 1
 /** A DNS label: what a node is called on the network. */
 export const NODE_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/
 
-export type NodesFileNode = {
+type NodesFileNode = {
   id: string
   name: string
   os: string
@@ -82,7 +82,7 @@ const nodeDecoder = obj({
   providers: optional(recordOf(obj({ port: int })), {}),
 })
 
-export const nodesFileDecoder: Decoder<NodesFile> = obj({
+const nodesFileDecoder: Decoder<NodesFile> = obj({
   schemaVersion: int,
   nodes: arrayOf(nodeDecoder),
 })

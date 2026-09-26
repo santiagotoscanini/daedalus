@@ -10,7 +10,7 @@ import { arrayOf, bool, decode, int, nullable, num, obj, optional, str } from '.
 export const AGENT_PORT = 7787
 
 /** What the box asked of the machine, as the agent holds it (agent 0.4.0+). */
-export type AgentPolicy = {
+type AgentPolicy = {
   awakeHold: boolean
   claudeRemoteControl: boolean
 }
@@ -94,7 +94,7 @@ export type NodeClaude = {
  * login's dates — for `/claude`, which only the box's token opens
  * (`nodeClaudeReport` below).
  */
-export type NodeClaudeSummary = {
+type NodeClaudeSummary = {
   state: string
   detail: string | null
   cliVersion: string | null
@@ -471,7 +471,7 @@ export type NodeTelemetry = {
   errors: string[]
 }
 
-export type NodeProvider = {
+type NodeProvider = {
   /** "lemonade" | "ollama" */
   kind: string
   port: number
@@ -496,7 +496,7 @@ export type NodeApp = {
   path: string | null
 }
 
-export type NodeMemoryModule = {
+type NodeMemoryModule = {
   locator: string | null
   sizeBytes: number | null
   speedMts: number | null
@@ -523,7 +523,7 @@ export type NodeDrive = {
   volumes: string[]
 }
 
-export type NodeProcess = {
+type NodeProcess = {
   name: string
   pid: number
   memoryBytes: number | null
@@ -542,14 +542,14 @@ export type NodeBrowser = {
   defaultBrowser: boolean
 }
 
-export type NodeService = {
+type NodeService = {
   name: string
   display: string | null
   state: string
   exitCode: number | null
 }
 
-export type NodeUpdates = {
+type NodeUpdates = {
   checkedAt: string | null
   pending: {
     title: string

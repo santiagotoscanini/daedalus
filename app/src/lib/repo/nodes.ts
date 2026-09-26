@@ -25,7 +25,7 @@ import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../provide
  * payload rather than columns: it is the agent's word, refreshed every
  * minute, and nothing here joins on it.
  */
-export type NodeClaudeSummary = {
+type NodeClaudeSummary = {
   state: string
   detail: string | null
   cliVersion: string | null
@@ -71,10 +71,10 @@ export type NodeRow = {
 }
 
 /** The agent's own defaults, shown for a key the policy does not set. */
-export const POLICY_DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as const
+const POLICY_DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as const
 
 /** The policy the answer to a hello carries: every key resolved; `offer` stays here. */
-export function effectivePolicy(p: NodePolicy): {
+function effectivePolicy(p: NodePolicy): {
   awakeHold: boolean
   claudeRemoteControl: boolean
   claudeWorkdir: string | null
@@ -401,7 +401,7 @@ export async function nodeToken(id: string): Promise<string | null> {
  * Best effort: a failure to write the file is logged and never fails the
  * decision that triggered it — the targets are a consequence, not the act.
  */
-export async function publishNodeTargets(): Promise<void> {
+async function publishNodeTargets(): Promise<void> {
   try {
     const all = await db.select().from(nodes)
     const approved = all.filter((n) => n.state === 'approved')

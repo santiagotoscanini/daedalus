@@ -35,7 +35,7 @@ export type RunRow = {
   failed: { job: string; step: string | null; url: string } | null
 }
 
-export type RepoRunsSummary = {
+type RepoRunsSummary = {
   repo: string
   kind: RepoKind
   url: string
@@ -91,7 +91,7 @@ function failedOf(jobs: Job[] | undefined): RunRow['failed'] {
   return j === undefined ? null : { job: j.name, step: j.failedStep, url: j.url }
 }
 
-export function rowOf(r: Run, repo: RepoActions, now: number): RunRow {
+function rowOf(r: Run, repo: RepoActions, now: number): RunRow {
   const jobs = repo.jobs.get(r.id)
   return {
     id: r.id,
@@ -114,7 +114,7 @@ export function rowOf(r: Run, repo: RepoActions, now: number): RunRow {
 
 const byNewest = (a: Run, b: Run) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
 
-export function assembleRuns(repos: RepoActions[], now: number): RunsData {
+function assembleRuns(repos: RepoActions[], now: number): RunsData {
   const all: { run: Run; repo: RepoActions }[] = repos
     .flatMap((repo) => repo.runs.map((run) => ({ run, repo })))
     .sort((a, b) => byNewest(a.run, b.run))

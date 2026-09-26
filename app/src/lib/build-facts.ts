@@ -33,7 +33,7 @@ const counts = (v: unknown): number[] =>
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : []
 
-export type ImageFacts = {
+type ImageFacts = {
   /** The tags the push actually left on the registry. */
   tags: string[]
   layers: number | null

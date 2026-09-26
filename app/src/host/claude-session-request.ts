@@ -46,8 +46,8 @@ import { defineBridge } from './bridge'
 // `failed` are both real terminal states and the ordinary status poll covers
 // the flow end to end.
 
-export type ClaudeSessionAction = 'resume' | 'stop' | 'remove'
-export type ClaudeSessionState = 'idle' | 'running' | 'done' | 'failed'
+type ClaudeSessionAction = 'resume' | 'stop' | 'remove'
+type ClaudeSessionState = 'idle' | 'running' | 'done' | 'failed'
 
 export type ClaudeSessionStatus = {
   id: string | null

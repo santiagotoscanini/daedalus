@@ -68,7 +68,7 @@ export type Authorization = {
 }
 
 /** Whether refusal is armed. Off unless the preference says otherwise. */
-export async function enforcingAdmins(): Promise<boolean> {
+async function enforcingAdmins(): Promise<boolean> {
   const on = await readSetting(
     SETTING_KEYS.authEnforceAdmins,
     (v): v is boolean => typeof v === 'boolean',
@@ -162,7 +162,7 @@ export function allow(decision: Authorization): Result<string> {
 }
 
 /** The gate most mutations want: the actor, or the refusal, in one call. */
-export async function requireAdmin(): Promise<Result<string>> {
+async function requireAdmin(): Promise<Result<string>> {
   return allow(await authorize())
 }
 

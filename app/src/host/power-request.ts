@@ -16,8 +16,8 @@ import { defineBridge } from './bridge'
 //
 // Bridge mechanics (temp + rename, payload-before-trigger): host/bridge.ts.
 
-export type PowerAction = 'reboot'
-export type PowerRequestState = 'idle' | 'running' | 'failed'
+type PowerAction = 'reboot'
+type PowerRequestState = 'idle' | 'running' | 'failed'
 
 export type PowerRequestStatus = {
   id: string | null

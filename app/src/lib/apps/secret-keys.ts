@@ -35,7 +35,7 @@
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 /** Comfortably past any real variable name, and short enough to be a bound. */
-export const SECRET_KEY_MAX = 64
+const SECRET_KEY_MAX = 64
 
 /**
  * sops's own bookkeeping rows in a dotenv file — `sops_mac`, `sops_version`,

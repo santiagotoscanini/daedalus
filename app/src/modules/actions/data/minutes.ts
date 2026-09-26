@@ -21,11 +21,11 @@ import {
 // page says how many runs it did not read.
 
 /** GitHub Free: 2,000 hosted minutes a month for private repositories. Public ones are free. */
-export const FREE_PLAN_MINUTES = 2_000
+const FREE_PLAN_MINUTES = 2_000
 
-export type OsMinutes = Record<RunnerOs, number>
+type OsMinutes = Record<RunnerOs, number>
 
-export type RepoMinutes = {
+type RepoMinutes = {
   repo: string
   kind: RepoKind
   url: string
@@ -65,7 +65,7 @@ export type MinutesData = {
 
 const zero = (): OsMinutes => ({ linux: 0, windows: 0, macos: 0, unknown: 0 })
 
-export function assembleMinutes(repos: RepoActions[], now: number): MinutesData {
+function assembleMinutes(repos: RepoActions[], now: number): MinutesData {
   const monthStart = new Date(now)
   monthStart.setUTCDate(1)
   monthStart.setUTCHours(0, 0, 0, 0)

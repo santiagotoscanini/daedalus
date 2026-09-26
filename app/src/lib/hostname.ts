@@ -25,7 +25,7 @@ const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
  * `app-<name>` is a container name and the left label of a hostname; 63 is the
  * DNS limit and the shorter of the two ceilings.
  */
-export const APP_NAME_MAX = 59
+const APP_NAME_MAX = 59
 
 /**
  * Is this string, exactly as it arrived, an app name?

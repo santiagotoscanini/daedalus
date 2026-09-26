@@ -69,7 +69,7 @@ export type SiteState = {
     out of the list still typechecks everywhere and the only symptom is a
     settings input that quietly refuses to save. Now there is one declaration,
     so there is nothing to leave out. */
-export const EDITABLE = [
+const EDITABLE = [
   'identity.baseDomain',
   'identity.controlPlane',
   'identity.controlPlanePrevious',
@@ -127,7 +127,7 @@ function sha256(body: string): string {
 
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean'
 
-export async function readSiteCommit(ctx: Ctx): Promise<boolean> {
+async function readSiteCommit(ctx: Ctx): Promise<boolean> {
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
   return (await ctx.store.read(SETTING_KEYS.siteCommit, isBool)) ?? false
 }

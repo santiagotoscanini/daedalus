@@ -44,7 +44,7 @@ export const N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
 /** A folded group: the disclosure triangle, and the summary it sits in. Size
     and colour are left to the caller — a fold inside a board and the fold that
     ends a ranked list are the same mechanism at two weights. */
-export const FOLD =
+const FOLD =
   "[&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:items-center [&>summary]:gap-[0.45rem] [&>summary]:px-[0.1rem] [&>summary]:py-[0.3rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:before:text-[0.7rem] [&>summary]:before:text-(--dim) [&>summary]:before:transition-transform [&>summary]:before:duration-[0.12s] [&>summary]:before:ease-[ease] [&>summary]:before:content-['▸'] [&[open]>summary]:before:rotate-90"
 
 /** The tail of a list, folded. Set apart from the rows above it so the fold

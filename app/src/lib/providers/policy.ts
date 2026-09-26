@@ -37,7 +37,7 @@ export const MODE_WORD: Record<ModelMode, string> = {
 }
 
 /** What the gateway accepts as a model name, kept to what a URL and a config file both take. */
-export const ALIAS_RE = /^[a-z0-9][a-z0-9._-]{0,62}$/
+const ALIAS_RE = /^[a-z0-9][a-z0-9._-]{0,62}$/
 
 export type ResolvedModel = { alias: string; offer: boolean; mode: ModelMode }
 
@@ -58,7 +58,7 @@ export function resolveModel(
   }
 }
 
-export function isModelMode(v: unknown): v is ModelMode {
+function isModelMode(v: unknown): v is ModelMode {
   return typeof v === 'string' && (MODEL_MODES as readonly string[]).includes(v)
 }
 

@@ -31,8 +31,8 @@ export const GITHUB_APP_EVENTS = ['push', 'repository'] as const
 export const CHECK_RUN_NAME = 'daedalus'
 
 /** The one label under the base domain the public webhook router answers on. */
-export const HOOKS_HOST_LABEL = 'hooks'
-export const GITHUB_WEBHOOK_PATH = '/api/github/webhook'
+const HOOKS_HOST_LABEL = 'hooks'
+const GITHUB_WEBHOOK_PATH = '/api/github/webhook'
 
 // ── manifest ───────────────────────────────────────────────────────────────
 

@@ -14,7 +14,7 @@ import { describeSchedule, taskUnitName } from '../tasks'
 // cannot move).
 
 /** One task as the tab renders it: what it is, and how its last run ended. */
-export type TaskRow = {
+type TaskRow = {
   id: string
   /** The raw systemd calendar string, shown as itself next to the sentence. */
   schedule: string

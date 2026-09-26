@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { MCP_TOOLS, type McpScope, type McpToolSpec, scopeRefusal } from '../../lib/mcp'
+import { MCP_TOOLS, type McpToolSpec, scopeRefusal } from '../../lib/mcp'
 import { MCP_DOCS, readMcpDoc } from './docs'
 import type { McpIdentity } from './tokens'
 
@@ -389,6 +389,3 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
 
   return server
 }
-
-/** The scopes, re-exported so the http layer does not import the pure module twice. */
-export type { McpScope }

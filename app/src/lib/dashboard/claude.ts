@@ -302,7 +302,7 @@ export const factsShape = obj({
 
 /* ── the events ───────────────────────────────────────────────────────── */
 
-export type RcEventKind = 'session' | 'drop' | 'reconnect' | 'refresh' | 'other'
+type RcEventKind = 'session' | 'drop' | 'reconnect' | 'refresh' | 'other'
 
 export type RcEvent = { at: number; kind: RcEventKind; text: string }
 

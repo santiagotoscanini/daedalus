@@ -71,7 +71,7 @@ const MODULE_SOURCES: Record<string, ReleaseSource> = Object.assign(
   ),
 )
 
-export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
+const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   // ── the household ──────────────────────────────────────────────────────
   'immich-redis': { repo: 'valkey-io/valkey' },
   'immich-postgres': { repo: 'immich-app/base-images', opts: { notesWhenUnknown: true } },

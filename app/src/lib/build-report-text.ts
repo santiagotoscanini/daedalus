@@ -95,7 +95,7 @@ export function fenceLog(log: string): string {
   return `\`\`\`\n${dropHead(body.replaceAll('`', "'"), 16)}\n\`\`\``
 }
 
-export const phaseOf = (row: BuildRow): string => (row.phase !== '' ? row.phase : row.state)
+const phaseOf = (row: BuildRow): string => (row.phase !== '' ? row.phase : row.state)
 
 // ── the summary, one builder per paragraph of it ────────────────────────────
 
