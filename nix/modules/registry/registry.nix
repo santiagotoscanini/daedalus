@@ -141,6 +141,13 @@ let
   # The host's retirements as zot's FIRST retention policy (it applies the
   # first policy a repository matches — the header explains the order), or
   # nothing. The trailing comma is the template's: its own policies follow.
+  #
+  # keepTags must name a pattern no tag can match, never be empty: zot deletes
+  # a tag only when it matches none of the patterns, and an EMPTY keepTags
+  # switches tag retention off for the repository altogether (v2.1.21,
+  # `HasTagRetention` is `len(KeepTags) > 0`) — every tag is kept. An entry
+  # with no patterns matches every tag, so the pattern is spelled out: a tag
+  # is never the empty string.
   retirePolicy =
     if cfg.retireRepositories == [ ] then
       ""
@@ -149,7 +156,7 @@ let
         repositories = cfg.retireRepositories;
         deleteReferrers = true;
         deleteUntagged = true;
-        keepTags = [ ];
+        keepTags = [ { patterns = [ "^$" ]; } ];
       }
       + ",";
 
