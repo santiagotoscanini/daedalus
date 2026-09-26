@@ -1,0 +1,144 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the check run text > auto with no resolved strategy 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: auto
+- Publish: live",
+  "title": "Building on s2-server — building",
+}
+`;
+
+exports[`the check run text > building, nothing known yet 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: live",
+  "title": "Building on s2-server — building",
+}
+`;
+
+exports[`the check run text > cancelled by the operator 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: live
+- Result: cancelled",
+  "title": "Build cancelled by the operator",
+}
+`;
+
+exports[`the check run text > failed in checks 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: live
+- Result: failed: checking
+- Detected: node · tanstack-start · Node 24.18.1 (.tool-versions) · pnpm 11.1.0 (packageManager) · Railpack 0.39.0
+- Checks: none; failed: \`\`li\`nt\`\`
+- Timings: cloning 1.2 s · checking 5.0 s · total 6.2 s
+
+**Tools**
+
+| tool | version | requested | source |
+| --- | --- | --- | --- |
+| node | 24.18.1 | 24 | .tool-versions |
+| pnpm | 11.1.0 | — | packageManager |
+| python | 3.12 .1 | 3\\|x | mise \\| default |
+
+**Railpack said**
+
+- warn: No lockfile found (/docs/node)",
+  "title": "Build failed on s2-server: checking",
+}
+`;
+
+exports[`the check run text > failed without an error 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: live
+- Result: failed",
+  "title": "Build failed on s2-server",
+}
+`;
+
+exports[`the check run text > succeeded and deploying, every fact 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: live
+- Result: built, deploying
+- Detected: node · tanstack-start · Node 24.18.1 (.tool-versions) · pnpm 11.1.0 (packageManager) · start \`\`node \`start\`.mjs\`\` · Railpack 0.39.0
+- Runtime apt packages: \`libvips\`, \`ffmpeg\`
+- Checks: \`format:check\`, \`lint\`
+- Timings: cloning 1.2 s · building 1m 5s · pushing 800 ms · total 1m 7s
+- Image: \`registry.example.test/iris@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\`
+- Tags: \`main\`, \`sha-abcdef0\`
+- Pull size: 300 MB
+- Builder: runner buildkit · 7/9 steps cached · cache imported · cache exported
+
+**Tools**
+
+| tool | version | requested | source |
+| --- | --- | --- | --- |
+| node | 24.18.1 | 24 | .tool-versions |
+| pnpm | 11.1.0 | — | packageManager |
+| python | 3.12 .1 | 3\\|x | mise \\| default |
+
+**Railpack said**
+
+- warn: No lockfile found (/docs/node)
+
+**Warnings**
+
+- Railpack says pin Node",
+  "title": "Built on s2-server",
+}
+`;
+
+exports[`the check run text > succeeded candidate 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: candidate
+- Result: built, not deployed (candidate)
+- Image: \`sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\`
+- Tags (expected): \`candidate-abcdef0111111111111111111111111111111111\`",
+  "title": "Built on s2-server, not deployed (candidate)",
+}
+`;
+
+exports[`the check run text > succeeded, pinned, digest not in the ref, expected tags 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: dockerfile
+- Publish: live
+- Result: built, not deployed (pinned)
+- Image: \`registry.example.test/iris:main\`
+- Digest: \`sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\`
+- Tags (expected): \`sha-abcdef0111111111111111111111111111111111\`, \`latest\`
+- Builder: 0/4 steps cached · cache cold",
+  "title": "Built on s2-server, not deployed (pinned)",
+}
+`;
+
+exports[`the check run text > superseded 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: live
+- Result: superseded by 1234567",
+  "title": "Superseded by 1234567",
+}
+`;
+
+exports[`the check run text > superseded, no phase 1`] = `
+{
+  "summary": "- Commit \`abcdef0\`, requested by webhook
+- Strategy: railpack (auto)
+- Publish: live
+- Result: superseded",
+  "title": "Build superseded",
+}
+`;
