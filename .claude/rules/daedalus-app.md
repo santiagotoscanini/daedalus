@@ -267,14 +267,11 @@ the remote is still the copy that survives a disk. Commit often.
   A dedicated flow module in `host/` exists for exactly three of them —
   `apply-flow.ts`, `update-flow.ts` and `engine-flow.ts` — because apply,
   image-update and engine-update
-  are the verbs whose button and `api.*` route would otherwise be two
+  are the verbs whose button and MCP tool would otherwise be two
   hand-copied bodies. All three are arrangements of `host/flow.ts`:
   `defineGate` (the lock, the `running` check, the pickup window) and
   `defineFlow` (check input → refuse busy → prepare → publish, in that
-  order). WHO may call stays with each door, and the routes turn the
-  outcome into a response with `lib/http-result.ts` — whose dialect
-  `/api/deploy` and `/api/github/webhook` deliberately do not speak
-  (zot and GitHub are their readers). The rest write their bridge straight from their
+  order). WHO may call stays with each door. The rest write their bridge straight from their
   own module (`deploy.ts`, whose redeploy button and zot push event
   both call its `requestDeploy`; `build-bridge.ts`, `site-request.ts`,
   `workspaces.ts`, `power-request.ts`, `claude-rc-request.ts`,

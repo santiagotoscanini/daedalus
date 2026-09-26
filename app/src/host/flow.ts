@@ -1,5 +1,3 @@
-import type { Refusal } from '../lib/http-result'
-import type { Result } from '../lib/result'
 import type { BridgeStatus } from './bridge'
 
 // What a bridge verb with more than one door has in common.
@@ -167,17 +165,4 @@ export function defineFlow<I, T extends object, C extends string = never>(
       gate.published(id)
       return { ok: true, id, ...plan.value }
     })
-}
-
-/**
- * A flow's outcome as a `Result`, for the helpers that speak that —
- * lib/http-result.ts above all. The code and the sentence travel together as
- * the failure, which is what `Result`'s `E` parameter is for.
- */
-export function flowResult<T extends object, C extends string>(
-  outcome: FlowOutcome<T, C>,
-): Result<{ id: string } & T, Refusal<C | 'busy'>> {
-  if (!outcome.ok) return { ok: false, reason: { code: outcome.code, reason: outcome.reason } }
-  const { ok: _ok, ...value } = outcome
-  return { ok: true, value: value as { id: string } & T }
 }

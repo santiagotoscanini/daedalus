@@ -3,16 +3,14 @@ import type { Result } from '../lib/result'
 import {
   type Actor,
   ADMIN_GROUP,
-  actorOf,
   type GroupsHeader,
   type GroupsRead,
-  groupsHeaderOf,
   isAdmin,
   NOT_ADMIN_REASON,
   requireActor,
   requireGroupsHeader,
 } from './auth'
-import { type LocalIdentity, localIdentity, localIdentityOf } from './local-login'
+import { type LocalIdentity, localIdentity } from './local-login'
 
 // Who may CHANGE this box, as opposed to who is signed in.
 //
@@ -149,11 +147,6 @@ export async function authorize(): Promise<Authorization> {
   return decide(requireActor(), requireGroupsHeader(), () => localIdentity())
 }
 
-/** The decision for a request a route handler is holding. */
-export async function authorizeRequest(request: Request): Promise<Authorization> {
-  return decide(actorOf(request), groupsHeaderOf(request), () => localIdentityOf(request))
-}
-
 /**
  * Turn a decision into the actor a mutation may proceed with, or the sentence
  * it refuses with.
@@ -171,11 +164,6 @@ export function allow(decision: Authorization): Result<string> {
 /** The gate most mutations want: the actor, or the refusal, in one call. */
 export async function requireAdmin(): Promise<Result<string>> {
   return allow(await authorize())
-}
-
-/** The same gate for a route handler holding a Request. */
-export async function requireAdminOf(request: Request): Promise<Result<string>> {
-  return allow(await authorizeRequest(request))
 }
 
 /**
@@ -196,13 +184,6 @@ export async function requireAdminOf(request: Request): Promise<Result<string>> 
  */
 export async function assertAdmin(): Promise<string> {
   const decision = await requireAdmin()
-  if (!decision.ok) throw new Error(decision.reason)
-  return decision.value
-}
-
-/** The assertion for a route handler holding a Request. */
-export async function assertAdminOf(request: Request): Promise<string> {
-  const decision = await requireAdminOf(request)
   if (!decision.ok) throw new Error(decision.reason)
   return decision.value
 }

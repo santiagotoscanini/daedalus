@@ -13,7 +13,6 @@ import { readCommittedSite } from '../host/contract/domains/site-doc'
 import { db } from '../host/db'
 import { safeEqual } from '../host/github-app-crypto'
 import { localAdmins } from '../host/schema'
-import { cookieValue } from '../lib/cookie'
 import { isRecord } from '../lib/is-record'
 import { deleteSetting, readSetting, SETTING_KEYS, writeSetting } from '../lib/repo/settings'
 import type { Result } from '../lib/result'
@@ -155,12 +154,8 @@ const sealConfig = (password: string, secure: boolean): SealConfig => ({
   sessionHeader: false,
 })
 
-/**
- * The real store. `request` is for a route handler holding one — the cookie
- * is read from it rather than from the ambient request; writes still go
- * through the ambient session manager, which only login and logout use.
- */
-export function defaultStore(request?: Request): LocalLoginStore {
+/** The real store, over the request this server function is running inside. */
+export function defaultStore(): LocalLoginStore {
   const settings = { read: readSetting, write: writeSetting, delete: deleteSetting }
   const secure = () => getRequestProtocol({ xForwardedProto: true }) === 'https'
   return {
@@ -193,10 +188,7 @@ export function defaultStore(request?: Request): LocalLoginStore {
     settings,
     session: {
       read: async () => {
-        const sealed =
-          request === undefined
-            ? getCookie(SESSION_NAME)
-            : cookieValue(request.headers.get('cookie'), SESSION_NAME)
+        const sealed = getCookie(SESSION_NAME)
         if (sealed === undefined || sealed === '') return null
         const secret = await sessionSecret(settings, false)
         if (secret === null) return null
@@ -263,11 +255,6 @@ export async function localIdentity(
   const row = await store.admins.find(username)
   if (row === null) return null
   return { actor: LOCAL_ACTOR_PREFIX + row.username, username: row.username }
-}
-
-/** The same, over a request a route handler is holding. */
-export function localIdentityOf(request: Request): Promise<LocalIdentity | null> {
-  return localIdentity(defaultStore(request))
 }
 
 // ── the setup token ────────────────────────────────────────────────────────

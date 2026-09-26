@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { defineFlow, defineGate, type FlowPlan, flowResult, PICKUP_MS } from './flow'
+import { defineFlow, defineGate, type FlowPlan, PICKUP_MS } from './flow'
 
 // host/apply-flow.test.ts and host/update-flow.test.ts prove the lock through
 // a real bridge. What they cannot show is the skeleton's own contract — the
@@ -132,18 +132,5 @@ describe('blocked', () => {
     await run('iris')
     expect(await gate.blocked()).toEqual(NOT_PICKED_UP)
     expect(box.published).toEqual(['id-1'])
-  })
-})
-
-describe('flowResult', () => {
-  it('nests the code beside the reason, and drops `ok` from the value', () => {
-    expect(flowResult({ ok: true, id: 'a', name: 'iris' })).toEqual({
-      ok: true,
-      value: { id: 'a', name: 'iris' },
-    })
-    expect(flowResult({ ok: false, code: 'busy', reason: 'later' })).toEqual({
-      ok: false,
-      reason: { code: 'busy', reason: 'later' },
-    })
   })
 })

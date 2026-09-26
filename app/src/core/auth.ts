@@ -118,12 +118,7 @@ export function requireGroups(): string[] {
   return parseGroups(getRequestHeader(AUTH_HEADERS.GROUPS))
 }
 
-/** The header's arrival state and its groups, over a held request. */
-export function groupsHeaderOf(request: Request): GroupsRead {
-  return describeGroups(request.headers.get(AUTH_HEADERS.GROUPS))
-}
-
-/** The same, over the request this server function is running inside. */
+/** The header's arrival state and its groups, over the request this server function is in. */
 export function requireGroupsHeader(): GroupsRead {
   return describeGroups(getRequestHeader(AUTH_HEADERS.GROUPS))
 }

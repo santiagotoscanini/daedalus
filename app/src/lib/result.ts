@@ -26,8 +26,7 @@
 // `reason.code` would read worse than a flat one:
 //
 //   host/flow.ts `FlowOutcome` (apply-flow,   `code`, which an MCP caller
-//   update-flow)                              branches on; `flowResult` nests
-//                                             it for lib/http-result.ts
+//   update-flow)                              branches on
 //   core/settings/github-app.ts `convert`     the same `code`, for the
 //                                             callback's redirect
 //   core/github-app.ts `InstallationRepos`    `retryAfterMs`, a backoff

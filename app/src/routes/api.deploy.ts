@@ -42,8 +42,7 @@ export const Route = createFileRoute('/api/deploy')({
         const { requestDeploy } = await import('../host/deploy')
         const { getApp } = await import('../lib/repo/apps')
 
-        // The body's wording is zot's contract, not lib/http-result's dialect:
-        // only the read is shared.
+        // The body's wording is zot's contract; only the read is shared.
         const read = await readJsonObject(request)
         if (!read.ok) {
           const error =
