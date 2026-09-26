@@ -63,8 +63,6 @@ export const requestImageUpdateFn = adminFn
   )
   .handler(async ({ data, context }) => {
     const { runImageUpdate } = await import('../host/update-flow')
-    // The forward-auth middleware forwards the Pocket ID claim, so the commit
-    // this produces records a person rather than "daedalus".
     return runImageUpdate({ targets: data.targets, actor: context.actor() })
   })
 

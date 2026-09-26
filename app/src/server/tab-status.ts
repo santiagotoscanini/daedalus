@@ -127,13 +127,12 @@ async function minecraftHealth(): Promise<boolean | null> {
  * is unreadable or prometheus has no answer — "cannot tell", not "down".
  */
 async function vpnEgressHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../host/prom')
+  const { promEscape, promScalar } = await import('../host/prom')
   const { declaredVpnEgress } = await import('../host/vpn-egress')
 
   const declared = await declaredVpnEgress()
   if (declared.length === 0) return null
 
-  const { promEscape } = await import('../host/prom')
   const names = declared.flatMap((d) => [d.container, d.exporter])
   const [tunnels, containers, seen] = await Promise.all([
     // `min` over the set, and `count` beside it: min alone would report

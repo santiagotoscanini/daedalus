@@ -22,10 +22,7 @@ import { adminFn, readFn } from './fn'
  */
 export const requestClaudeRestartFn = adminFn.handler(async ({ context }) => {
   const { requestClaudeRcRestart } = await import('../host/claude-rc-request')
-  // The forward-auth middleware forwards the Pocket ID claim, so the request
-  // records a person rather than "daedalus".
-  const actor = context.actor()
-  return { id: await requestClaudeRcRestart({ actor }) }
+  return { id: await requestClaudeRcRestart({ actor: context.actor() }) }
 })
 
 export const fetchClaudeRcStatusFn = readFn.handler(async () => {
@@ -60,10 +57,9 @@ export const resumeSessionFn = adminFn
   .validator(sessionSelector)
   .handler(async ({ data, context }) => {
     const { requestClaudeSessionResume } = await import('../host/claude-session-request')
-    // The forward-auth middleware forwards the Pocket ID claim, so the request
-    // and the journal record a person rather than "daedalus".
-    const actor = context.actor()
-    return { id: await requestClaudeSessionResume({ actor, session: data.session }) }
+    return {
+      id: await requestClaudeSessionResume({ actor: context.actor(), session: data.session }),
+    }
   })
 
 /**
@@ -76,8 +72,7 @@ export const stopSessionFn = adminFn
   .validator(sessionSelector)
   .handler(async ({ data, context }) => {
     const { requestClaudeSessionStop } = await import('../host/claude-session-request')
-    const actor = context.actor()
-    return { id: await requestClaudeSessionStop({ actor, session: data.session }) }
+    return { id: await requestClaudeSessionStop({ actor: context.actor(), session: data.session }) }
   })
 
 /**
@@ -94,8 +89,9 @@ export const removeSessionFn = adminFn
   .validator(sessionSelector)
   .handler(async ({ data, context }) => {
     const { requestClaudeSessionRemove } = await import('../host/claude-session-request')
-    const actor = context.actor()
-    return { id: await requestClaudeSessionRemove({ actor, session: data.session }) }
+    return {
+      id: await requestClaudeSessionRemove({ actor: context.actor(), session: data.session }),
+    }
   })
 
 export const fetchClaudeSessionStatusFn = readFn.handler(async () => {

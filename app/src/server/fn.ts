@@ -41,7 +41,10 @@ export const withCtx = createMiddleware({ type: 'function' }).server(async ({ ne
 
 /**
  * `context.actor()`: the label a record written by this request carries —
- * exactly `actorLabel()` (core/auth.ts), read when asked. A label, never a
+ * exactly `actorLabel()` (core/auth.ts), read when asked. The forward-auth
+ * middleware forwards the Pocket ID claim as a header, so a commit, request
+ * file or journal line written with it names a person rather than
+ * "daedalus". A label, never a
  * gate: it answers a placeholder rather than refusing. A function that must
  * refuse an absent identity still calls `requireActor()` itself.
  */

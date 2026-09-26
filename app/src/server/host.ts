@@ -23,10 +23,7 @@ import { adminFn, readFn } from './fn'
  */
 export const requestRebootFn = adminFn.handler(async ({ context }) => {
   const { requestReboot } = await import('../host/power-request')
-  // The forward-auth middleware forwards the Pocket ID claim, so the request
-  // records a person rather than "daedalus".
-  const actor = context.actor()
-  return { id: await requestReboot({ actor }) }
+  return { id: await requestReboot({ actor: context.actor() }) }
 })
 
 export const fetchPowerRequestStatus = readFn.handler(async () => {

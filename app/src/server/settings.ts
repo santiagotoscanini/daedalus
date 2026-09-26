@@ -68,8 +68,7 @@ export const replaceCloudflareTokenFn = adminFn
   .validator(asValidator(withMessage(obj({ token: str }), 'expected a token')))
   .handler(async ({ data, context }): Promise<TokenReplaceOutcome> => {
     const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
-    const actor = context.actor()
-    return replaceCloudflareToken(await context.ctx(), actor, data.token)
+    return replaceCloudflareToken(await context.ctx(), context.actor(), data.token)
   })
 
 /**

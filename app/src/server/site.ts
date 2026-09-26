@@ -45,10 +45,7 @@ export const setSiteCommit = adminFn
 
 export const writeSiteFiles = adminFn.handler(async ({ context }) => {
   const { writeSite } = await import('../core/site')
-  // The forward-auth middleware forwards the Pocket ID claim, so the commit
-  // records a person rather than "daedalus".
-  const actor = context.actor()
-  return writeSite(await context.ctx(), actor)
+  return writeSite(await context.ctx(), context.actor())
 })
 
 /** Committed, desired and the difference — the editable tabs render from this. */

@@ -247,7 +247,7 @@ export const buildNowFn = adminFn
     // refusal is a broken gate rather than an answer, so it throws where
     // requireActor returns.
     const gate = requireActor()
-    if (!gate.ok) return { ok: false, reason: gate.reason }
+    if (!gate.ok) return gate
 
     const { buildNow } = await import('../core/builds/actions')
     return buildNow({ app: data.app, actor: gate.value })
@@ -258,7 +258,7 @@ export const cancelBuildFn = adminFn
   .validator(asValidator(buildRequest))
   .handler(async ({ data }): Promise<CancelBuildResult> => {
     const gate = requireActor()
-    if (!gate.ok) return { ok: false, reason: gate.reason }
+    if (!gate.ok) return gate
 
     const { cancelBuild } = await import('../core/builds/actions')
     return cancelBuild({ app: data.app, id: data.id, actor: gate.value })
@@ -275,7 +275,7 @@ export const retryReportFn = adminFn
   .validator(asValidator(buildRequest))
   .handler(async ({ data, context }): Promise<RetryReportResult> => {
     const gate = requireActor()
-    if (!gate.ok) return { ok: false, reason: gate.reason }
+    if (!gate.ok) return gate
     const actor = gate.value
 
     const { getBuild } = await import('../lib/repo/builds')
@@ -310,7 +310,7 @@ export const setBuildSettingsFn = adminFn
   )
   .handler(async ({ data }): Promise<BuildSettingsResult> => {
     const gate = requireActor()
-    if (!gate.ok) return { ok: false, reason: gate.reason }
+    if (!gate.ok) return gate
     const actor = gate.value
 
     const { getApp } = await import('../lib/repo/apps')
