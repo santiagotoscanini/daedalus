@@ -4,10 +4,8 @@ import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit, SiteFileView, SiteState } from '../../core/site'
 import type { RepoFacts, SiteDir } from '../../host/contract/domains/repo'
 import type { GitIdentities, GitIdentity } from '../../host/contract/domains/site'
-import { fetchSiteRequestStatus, setSiteCommit, writeSiteFiles } from '../../server/site'
-import { usePolledStatus } from '../status'
+import { setSiteCommit } from '../../server/site'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
-import { Button } from '../ui/button'
 import { Skeleton } from '../ui/skeleton'
 import { Switch } from '../ui/switch'
 import { Chip } from '../viz'
@@ -299,11 +297,11 @@ function CommitAs({ edit, git }: { edit: SiteEdit; git: GitIdentities }) {
         />
       </div>
       <p className={NOTE}>
-        Every commit daedalus makes — an Apply, a secret, a site write, an image or engine update —
-        is authored as this identity, whoever pressed the button; the person is still named in the
-        commit's body. Both identities are the ones nix configures: the box's own, and the
-        operator's git identity (<Mono>fleet.operator.gitName</Mono>). The choice is applied like
-        any other change, and that Apply already commits as the new identity.
+        Every commit daedalus makes — an Apply, a secret, an image or engine update — is authored as
+        this identity, whoever pressed the button; the person is still named in the commit's body.
+        Both identities are the ones nix configures: the box's own, and the operator's git identity
+        (<Mono>fleet.operator.gitName</Mono>). The choice is applied like any other change, and that
+        Apply already commits as the new identity.
         {git === null &&
           ' The identities appear here once the box publishes them, after its next engine update.'}
       </p>
@@ -339,13 +337,12 @@ function SiteSection({
       <Section
         title="Site"
         icon="/icon-git.svg"
-        description="What this box is, as data. Written by daedalus into the configuration repository; nothing is built from it yet."
+        description="What this box is, as data — nix builds the site constants from it. Written by daedalus into the configuration repository, by an Apply."
         rows={[{ k: 'Path', v: <Value v={dir.path} /> }]}
       >
         <SiteFiles dir={dir} site={site} />
         <SourceControl dir={dir} site={site} />
         {versioned && <CommitAs edit={edit} git={git} />}
-        <WriteControl />
       </Section>
     </>
   )
@@ -403,7 +400,7 @@ function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
               .join(', ')}
           </Mono>{' '}
           is not what this box would write now — the configuration changed since, or it was edited
-          by hand. Writing again brings the two back together; nothing is rebuilt.
+          by hand. The next Apply writes it again.
         </p>
       )}
       {site.files.find((f) => f.name === 'apps.json')?.status === 'absent' && (
@@ -411,52 +408,6 @@ function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
           <Mono>apps.json</Mono> is written only by an Apply, and from here only once nix reads the
           registry from this directory.
         </p>
-      )}
-    </div>
-  )
-}
-
-const IDLE = {
-  id: null,
-  action: null,
-  state: 'idle' as const,
-  phase: '',
-  detail: '',
-  error: '',
-  startedAt: null,
-  finishedAt: null,
-  commit: null,
-}
-
-function WriteControl() {
-  const router = useRouter()
-  const { status, running, refusal, start } = usePolledStatus({
-    initial: IDLE,
-    fetch: fetchSiteRequestStatus,
-    // The host refreshes the repository snapshot BEFORE it reports done, so
-    // the facts this re-reads are already current.
-    onSettle: () => {
-      void router.invalidate()
-    },
-  })
-
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button
-        size="sm"
-        disabled={running}
-        onClick={() => {
-          start(writeSiteFiles)
-        }}
-      >
-        {running ? (status.phase === '' ? 'working…' : `${status.phase}…`) : 'Write site.json'}
-      </Button>
-      {refusal !== null && <span className="text-[0.78rem] text-danger">{refusal}</span>}
-      {refusal === null && status.state === 'failed' && (
-        <span className="text-[0.78rem] text-danger">{status.error}</span>
-      )}
-      {refusal === null && status.state === 'done' && status.detail !== '' && (
-        <span className="text-[0.78rem] text-(--text-muted)">{status.detail}</span>
       )}
     </div>
   )

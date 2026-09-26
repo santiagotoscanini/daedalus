@@ -7,10 +7,8 @@ import { siteIdentity } from '../../host/contract/domains/site'
 import { decodeSiteDocument, readCommittedSite } from '../../host/contract/domains/site-doc'
 import type { SnapshotResult } from '../../host/contract/snapshot'
 import { env } from '../../host/env'
-import { requestSiteWrite, type SiteFileName } from '../../host/site-request'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { ENGINE_REPO } from '../../lib/engine'
-import type { Result } from '../../lib/result'
 import { controlPlaneLabelError, engineOverrideError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
@@ -21,7 +19,6 @@ import {
   renderSiteStamp,
   type SiteDocument,
   type SiteStamp,
-  type SiteStampDoor,
   siteDocument,
 } from './file'
 
@@ -412,8 +409,8 @@ export async function saveSiteEdit(
 // --- the provenance stamp -------------------------------------------------
 //
 // daedalus.json answers "which engine wrote this directory, and when" for
-// somebody reading the repository's history months later. It is written by
-// BOTH doors, so every write into site/ refreshes it, and nix never reads it.
+// somebody reading the repository's history months later. Every Apply writes
+// it, so every write into site/ refreshes it, and nix never reads it.
 //
 // The one rule the gatherers below all obey: a fact this container cannot
 // READ is null. Not a default, not an empty string, not a stale value from a
@@ -459,33 +456,28 @@ async function engineFacts(): Promise<SiteStamp['engine']> {
 }
 
 /**
- * The provenance stamp's bytes.
+ * The two files every Apply carries whatever else it writes: the README,
+ * rendered from `doc` (the document the Apply leaves committed), and the
+ * provenance stamp.
  *
- * `config.revision` is the configuration repository's HEAD as it stands
- * BEFORE this write — the commit these files were rendered against. The
- * commit this write creates cannot be in its own stamp.
+ * The stamp's `config.revision` is the configuration repository's HEAD as it
+ * stands BEFORE this write — the commit these files were rendered against.
+ * The commit this write creates cannot be in its own stamp.
  */
-export async function renderSiteStampFile(door: SiteStampDoor, actor: string): Promise<string> {
-  const [engine, repo, identity] = await Promise.all([engineFacts(), repoFacts(), siteIdentity()])
-  return renderSiteStamp({
-    writtenAt: new Date().toISOString(),
-    writtenBy: { actor, door },
-    engine,
-    config: { revision: nonEmpty(fresh(repo)?.head?.rev) },
-    nixos: { version: nonEmpty(fresh(identity)?.nixos?.version) },
-  })
-}
-
-/** The bytes the Site tab's "Write" action hands to the host. */
-export async function renderSiteFiles(
-  ctx: Ctx,
+export async function renderSiteMeta(
+  doc: SiteDocument,
   actor: string,
-): Promise<Record<SiteFileName, string>> {
-  const { desired } = await siteEdit(ctx)
+): Promise<{ 'README.md': string; 'daedalus.json': string }> {
+  const [engine, repo, identity] = await Promise.all([engineFacts(), repoFacts(), siteIdentity()])
   return {
-    'site.json': renderSiteFile(desired),
-    'README.md': renderSiteReadme(desired),
-    'daedalus.json': await renderSiteStampFile('site-write', actor),
+    'README.md': renderSiteReadme(doc),
+    'daedalus.json': renderSiteStamp({
+      writtenAt: new Date().toISOString(),
+      writtenBy: { actor, door: 'apply' },
+      engine,
+      config: { revision: nonEmpty(fresh(repo)?.head?.rev) },
+      nixos: { version: nonEmpty(fresh(identity)?.nixos?.version) },
+    }),
   }
 }
 
@@ -522,28 +514,4 @@ export async function siteState(ctx: Ctx, facts?: RepoFacts): Promise<SiteState>
     ],
     commit: await readSiteCommit(ctx),
   }
-}
-
-/** The request id the caller polls for, or why the host would not take it. */
-export type WriteOutcome = Result<string>
-
-/**
- * Ask the host to write site.json (with the README and the stamp) as desired.
- * This is the Site tab's door and does NOT rebuild — it exists for the first write, and
- * for a directory that fell out of step. A change to a value nix reads goes
- * through Apply (host/apply-flow.ts), which writes the same bytes and rebuilds.
- */
-export async function writeSite(ctx: Ctx, actor: string): Promise<WriteOutcome> {
-  const { readSiteRequestStatus } = await import('../../host/site-request')
-  const inFlight = await readSiteRequestStatus()
-  if (inFlight.state === 'running') {
-    return { ok: false, reason: `the host is already working on this (${inFlight.phase})` }
-  }
-  const id = await requestSiteWrite({
-    commit: await readSiteCommit(ctx),
-    summary: 'site: what this box is',
-    actor,
-    files: await renderSiteFiles(ctx, actor),
-  })
-  return { ok: true, value: id }
 }

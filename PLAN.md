@@ -386,7 +386,7 @@ priority; each can be done independently unless noted.
 
    **`site/nodes.json` is what nix needs, and only that.** Written by the
    control plane on approve, rename and provider change (the same
-   site-write bridge and Apply as `apps.json`), read by
+   Apply as `apps.json`), read by
    `platform/site.nix` into `fleet.nodes`:
    ```
    { "schemaVersion": 1, "nodes": [

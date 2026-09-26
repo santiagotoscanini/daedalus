@@ -21,7 +21,7 @@ path-scoped rules load as you touch files.
 - **Also is:** the NixOS side. `nix/platform/**` (the OS-level base),
   `nix/stacks/daedalus/**` (`daedalus.nix`, the builder, the engine's own
   updater, the host agents `host/*.sh` — apply, deploy, build, image and
-  engine updates, site bridges, the snapshot scripts) and `nix/modules/<id>/`
+  engine updates, app secrets, the snapshot scripts) and `nix/modules/<id>/`
   (the catalog: the spine every box needs, plus leaves), exported by the
   root `flake.nix` as `nixosModules.{platform,daedalus,catalog,default}` and
   `templates.config` (a host to start from, and the host CI evaluates). The

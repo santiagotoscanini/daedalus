@@ -214,40 +214,6 @@ let
     '';
   };
 
-  # Write the site files — the JSON description of this box — into the site
-  # directory inside the configuration repository, staging (and, on the
-  # operator's switch, committing) as the operator.
-  siteWriteScript = pkgs.writeShellApplication {
-    name = "daedalus-site-write";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.git
-      pkgs.gnugrep
-      pkgs.jq
-      pkgs.openssh # git push over ssh, as the operator
-      pkgs.systemd # refresh the repo snapshot when it is done
-      pkgs.util-linux # setpriv
-    ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      PREV_DIR=${lib.escapeShellArg prevDir}
-      SITE_DIR=${lib.escapeShellArg config.fleet.site.path}
-      SYSTEMCTL=${pkgs.systemd}/bin/systemctl
-      GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
-      GIT_OPERATOR_NAME=${lib.escapeShellArg config.fleet.operator.gitName}
-      GIT_OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.gitEmail}
-      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
-      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
-      OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
-      SETPRIV=${pkgs.util-linux}/bin/setpriv
-      ENV_BIN=${pkgs.coreutils}/bin/env
-      GIT=${pkgs.git}/bin/git
-
-      ${builtins.readFile ./host/lib.sh}
-      ${builtins.readFile ./host/site-lib.sh}
-      ${builtins.readFile ./host/site-write.sh}
-    '';
-  };
   # Restart the box. A bridge with a single verb: see
   # host/power.sh for why poweroff has no branch there at all, and why the
   # replay guard matters more here than in any of its siblings.
@@ -582,7 +548,6 @@ in
     applyScript
     deployTriggerScript
     taskRunScript
-    siteWriteScript
     powerScript
     claudeRcScript
     claudeSessionCwds

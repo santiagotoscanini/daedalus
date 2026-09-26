@@ -1,13 +1,12 @@
 import { getRequestHeader } from '@tanstack/react-start/server'
 import type { SiteEdit, SiteField, SiteState } from '../core/site'
-import type { SiteRequestStatus } from '../host/site-request'
 import { asValidator, bool, is, withMessage } from '../lib/contract/decode'
 import { isRecord } from '../lib/is-record'
 import type { Site } from '../lib/site'
 import { adminFn, readFn } from './fn'
 
 // Server functions behind Settings › Site: the directory's state against what
-// this box would write, the commit switch, and the one action that writes.
+// this box would write, the commit switch, and the edits an Apply carries.
 //
 // The state is deferred and fetched only for the tab that shows it: it
 // renders site.json to hash it, which the page's other tabs do not need.
@@ -27,11 +26,6 @@ export const fetchSiteState = readFn.handler(async ({ context }): Promise<SiteSt
   return siteState(await context.ctx())
 })
 
-export const fetchSiteRequestStatus = readFn.handler(async (): Promise<SiteRequestStatus> => {
-  const { readSiteRequestStatus } = await import('../host/site-request')
-  return readSiteRequestStatus()
-})
-
 /** Whether the host commits after every write. Staging is never optional. */
 export const setSiteCommit = adminFn
   .validator(asValidator(withMessage(bool, 'expected a boolean')))
@@ -40,11 +34,6 @@ export const setSiteCommit = adminFn
     await writeSiteCommit(await context.ctx(), data)
     return data
   })
-
-export const writeSiteFiles = adminFn.handler(async ({ context }) => {
-  const { writeSite } = await import('../core/site')
-  return writeSite(await context.ctx(), context.actor())
-})
 
 /** Committed, desired and the difference — the editable tabs render from this. */
 export const fetchSiteEdit = readFn.handler(async ({ context }): Promise<SiteEdit> => {

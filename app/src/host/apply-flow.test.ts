@@ -44,10 +44,10 @@ vi.mock('../lib/repo/nodes', () => ({ nodesForFile: async () => [] }))
 vi.mock('../core/ctx', () => ({ makeCtx: async () => ({}) }))
 vi.mock('../core/site', () => ({
   siteEdit: async () => ({ changes: h.siteChanges, render: { after: '{"site":true}\n' } }),
-  // The provenance stamp rides every Apply. Fixed bytes here: the real one
+  // The README and the provenance stamp ride every Apply. Fixed bytes here: the real stamp
   // reads three host snapshots and a clock, none of which this file has, and
   // what it says is core/site's business, not the flow's.
-  renderSiteStampFile: async () => '{"stamp":true}\n',
+  renderSiteMeta: async () => ({ 'README.md': '# site\n', 'daedalus.json': '{"stamp":true}\n' }),
 }))
 vi.mock('../lib/repo/settings', () => ({
   readSetting: async () => false,
@@ -80,7 +80,7 @@ async function flow() {
 }
 
 const hostStatus = (status: Record<string, unknown>) =>
-  writeFile(join(dir, 'status.json'), JSON.stringify(status), 'utf8')
+  writeFile(join(dir, 'apply-status.json'), JSON.stringify(status), 'utf8')
 
 /** Id-stamped, so counting these counts requests rather than overwrites. */
 const payloads = async () => (await readdir(dir)).filter((f) => f.startsWith('payload-'))
@@ -106,14 +106,14 @@ describe('an apply the host is already running', () => {
       code: 'busy',
       reason: 'an apply is already running (rebuilding)',
     })
-    // The whole point: no request.json for the path unit to fire on, and no
+    // The whole point: no apply-request.json for the path unit to fire on, and no
     // payload to replace the bytes the running rebuild is reading.
-    expect(await readdir(dir)).toEqual(['status.json'])
+    expect(await readdir(dir)).toEqual(['apply-status.json'])
   })
 })
 
 describe('the pickup window', () => {
-  // Between requestApply returning and apply.sh writing `running`, status.json
+  // Between requestApply returning and apply.sh writing `running`, apply-status.json
   // still shows the PREVIOUS run's terminal state — so the file check alone
   // reads "idle" while a request is very much in flight. PICKUP_MS (120s) is
   // how long `pending` covers that gap; keep these two either side of it.
@@ -141,7 +141,7 @@ describe('the pickup window', () => {
     const firstId = idOf(await runApply('santiago'))
     await hostStatus({ id: firstId, state: 'done', phase: 'done' })
 
-    // status.json now speaks for our request, so the `running` check is the
+    // apply-status.json now speaks for our request, so the `running` check is the
     // guard again and the operator does not wait out two minutes.
     expect(idOf(await runApply('santiago'))).not.toBe(firstId)
   })
@@ -161,9 +161,11 @@ describe('two callers at once', () => {
     if (applied.length !== 1 || !only) throw new Error('both callers published')
 
     expect(await payloads()).toEqual([`payload-${only.id}.json`])
-    // And request.json — the file the host's path unit fires on — points at
+    // And apply-request.json — the file the host's path unit fires on — points at
     // that one payload rather than at a second nobody can see.
-    const request = JSON.parse(await readFile(join(dir, 'request.json'), 'utf8')) as { id: string }
+    const request = JSON.parse(await readFile(join(dir, 'apply-request.json'), 'utf8')) as {
+      id: string
+    }
     expect(request.id).toBe(only.id)
   })
 })

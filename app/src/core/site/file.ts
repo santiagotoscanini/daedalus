@@ -5,7 +5,7 @@ import type { BoxSettings } from '../settings/types'
 //
 // The same division of labour as lib/registry-file.ts, for the same reason:
 // the host agent copies bytes and stages them, and every decision about
-// SHAPE is application logic, where it can be typed and tested. site-write.sh
+// SHAPE is application logic, where it can be typed and tested. apply.sh
 // never builds JSON.
 //
 // What this file is: the box's own description of itself, in the one format
@@ -89,7 +89,7 @@ export type SiteDocument = {
   developer: { engineOverride: string | null }
   /**
    * Which configured git identity the box's own commits are made as: every
-   * Apply, secret, site write and update. `box` is `daedalus <mail sender>`;
+   * Apply, secret and update. `box` is `daedalus <mail sender>`;
    * `operator` is `fleet.operator.gitName` / `gitEmail`. The document names a
    * choice, never a name or an address: the host agents resolve it against
    * values nix baked into them (host/lib.sh `commit_as_operator`), so a planted
@@ -311,20 +311,16 @@ next write and no longer.
 | \`vault/\` | The box's own secrets, sops-encrypted: \`cloudflare-api-token.sops\` and \`github-app.sops\`. |
 | \`.sops.yaml\` | Who can decrypt \`vault/\`. Hand-written, once; daedalus reads it to encrypt and never writes it. |
 
-Which surface writes which file:
-
-- **Settings › Site** writes \`site.json\`, this README and \`daedalus.json\`. It
-  does not rebuild.
-- **Apply** writes \`apps.json\`, \`site.json\` when the document changed, a
-  \`vault/\` entry when a secret was replaced, and \`daedalus.json\` — and then
-  rebuilds.
+Every file here is written by an **Apply**, which then rebuilds: \`apps.json\`,
+\`site.json\` when the document changed, a \`vault/\` entry when a secret was
+replaced, and this README and \`daedalus.json\` every time.
 
 **Do not hand-edit \`apps.json\`.** It is generated from daedalus's \`apps\`
 table, and only an Apply ever writes it — which is what keeps it from holding
 drift that was never applied. Until the Apply lands, daedalus reports the app
 as drifted. Edit it in the UI instead.
 
-\`site.json\` is written by Settings › Site. Editing it by hand is allowed —
+\`site.json\` is edited in daedalus's Settings. Editing it by hand is allowed —
 it is a plain JSON file and git is the audit trail — but daedalus will show
 it as differing from what it would write, which is the honest reading until
 the two agree again.
@@ -345,9 +341,6 @@ the new value, never editing the old one.
 `
 }
 
-/** Which of the two doors into the site directory did the writing. */
-export type SiteStampDoor = 'apply' | 'site-write'
-
 /**
  * The provenance stamp: which engine wrote this directory, and when.
  *
@@ -363,7 +356,8 @@ export type SiteStampDoor = 'apply' | 'site-write'
  */
 export type SiteStamp = {
   writtenAt: string
-  writtenBy: { actor: string; door: SiteStampDoor }
+  /** `door` names what wrote the directory; Apply is the only one. */
+  writtenBy: { actor: string; door: 'apply' }
   engine: {
     version: string | null
     /** 12 characters, as the workspace snapshot publishes it. */

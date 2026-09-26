@@ -22,7 +22,6 @@ let
     applyScript
     deployTriggerScript
     taskRunScript
-    siteWriteScript
     powerScript
     claudeRcScript
     claudeSessionCwds
@@ -47,8 +46,8 @@ in
     # The apply agent. Root, because only root can `nixos-rebuild switch`.
     #
     # Triggered by a path unit rather than a socket or an API: the container
-    # writes request.json into the apply dir (bound in daedalus.nix), systemd notices, and this
-    # runs. The container therefore holds no host privilege at all — the trust
+    # writes apply-request.json into the apply dir (bound in daedalus.nix),
+    # systemd notices, and this runs. The container therefore holds no host privilege at all — the trust
     # boundary is "can write into that directory". The container itself can
     # (its root is the operator's uid), which is why every agent reads and
     # writes files there only as the operator and never through a link — the
@@ -88,7 +87,7 @@ in
         # PathChanged fires on close-after-write and on rename-into-place, which
         # is how the app publishes the file — it writes a temp and renames, so a
         # half-written request is never observable.
-        PathChanged = "${applyDir}/request.json";
+        PathChanged = "${applyDir}/apply-request.json";
       };
     };
 
@@ -206,36 +205,6 @@ in
     # Not monitoredJobs, like power and claude-rc: both outcomes land in the
     # status file the page that asked is polling, and a genuine refusal exits 0.
 
-    # The site repository. Same file-drop bridge.
-    #
-    # `restartIfChanged = false` for the reason on daedalus-image-update above:
-    # an agent that can change its own unit definition must not be SIGTERMed
-    # mid-run by the switch that lands the change. This one does not rebuild,
-    # but it writes the site files the host's configuration is built from, so
-    # it carries the flag rather than rediscover the trap.
-    systemd.services.daedalus-site-write = bridgeAgent // {
-      description = "Write daedalus's site files into the configuration repository";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
-      restartIfChanged = false;
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${siteWriteScript}/bin/daedalus-site-write";
-        # A few file writes and a git add; a push at most. Nothing waits on a build.
-        TimeoutStartSec = "2min";
-      };
-    };
-
-    systemd.paths.daedalus-site-write = {
-      description = "Watch for a daedalus site-write request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/site-request.json";
-    };
-
-    # Not monitoredJobs, for the same reason as the power agent: this only ever runs
-    # because somebody pressed a button and is watching the page, and the
-    # failure is reported there with the host's own message.
-
     # Restart. Same file-drop bridge, and the only verb whose agent does not
     # outlive its own action.
     #
@@ -260,9 +229,9 @@ in
       pathConfig.PathChanged = "${applyDir}/power-request.json";
     };
 
-    # Not monitoredJobs either, and for a sharper version of the site agent's
-    # reason: a refusal is shown on the page that asked for it, and a SUCCESS
-    # takes the mail relay down with the rest of the box before anything could be
+    # Not monitoredJobs: this only ever runs because somebody pressed a button
+    # and is watching the page, a refusal is shown there, and a SUCCESS takes
+    # the mail relay down with the rest of the box before anything could be
     # sent. The only email this unit could ever deliver is a failure to reboot.
 
     # The claude-rc bridge's agent. Unlike daedalus-power it outlives its
@@ -378,7 +347,7 @@ in
     # --failed` and the failed-units alert, which is the only event here that
     # nobody may already be watching.
 
-    # The secret-set bridge's agent. Like site-write and claude-rc it outlives
+    # The secret-set bridge's agent. Like claude-rc it outlives
     # its action, so `done` and `failed` are both real and the ordinary status
     # poll covers the flow end to end.
     #
@@ -404,7 +373,7 @@ in
       pathConfig.PathChanged = "${applyDir}/secret-set-request.json";
     };
 
-    # Not monitoredJobs, for the site agent's reason: both outcomes land in the
+    # Not monitoredJobs, for the claude-rc agent's reason: both outcomes land in the
     # status file the page that asked is polling, and a genuine refusal exits 0.
     # The only mailable event is the agent itself breaking, which `systemctl
     # --failed` and the failed-units alert already carry.

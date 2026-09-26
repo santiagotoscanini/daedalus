@@ -42,9 +42,9 @@
 #
 # ── what this does NOT do ─────────────────────────────────────────────────
 #
-# It does not rebuild. Same reasoning as host/site-write.sh: the write is a
-# committed file, and turning it into running state is the Apply's job, which
-# has its own agent, its own lock and its own rollback. The page says so.
+# It does not rebuild: the write is a committed file, and turning it into
+# running state is the Apply's job, which has its own agent, its own lock and
+# its own rollback. The page says so.
 
 set -euo pipefail
 
@@ -216,7 +216,7 @@ if ! site_put "$FILE" "$WORK"; then
 fi
 
 # --- stage and commit ------------------------------------------------------
-# Not optional here, unlike a site write. This file is read by nix, a flake
+# Not optional here, unlike an Apply. This file is read by nix, a flake
 # sees only tracked files, and the value it holds cannot be typed again from
 # anywhere — an uncommitted rewrite of it is the one change on this box that
 # is unrecoverable. So it is always staged and always committed.

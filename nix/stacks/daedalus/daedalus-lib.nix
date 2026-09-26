@@ -45,7 +45,7 @@ rec {
     startLimitIntervalSec = 0;
   };
 
-  # The previous bytes of every site file an Apply (or a site write) replaces,
+  # The previous bytes of every site file an Apply (or a secret-set) replaces,
   # which a failed Apply's rollback puts back, commits and pushes. A SIBLING of
   # applyDir and deliberately never mounted: rollback state is trusted for a
   # decision, and in the container-writable apply dir the container could plant

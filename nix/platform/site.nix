@@ -16,8 +16,8 @@
 # operator configures the box from the UI, and it is the one directory a web
 # UI can safely write to, because nothing in it is code.
 #
-#   path     the host agents' door — the directory daedalus writes (site-write
-#            and Apply). A runtime string.
+#   path     the host agents' door — the directory daedalus writes (Apply
+#            and secret-set). A runtime string.
 #   source   the MODULE side — the same directory as nix sees it: `./site` in
 #            the operator's flake, a store path at eval. Null fails eval.
 #            Nix must never read `path` directly: it is a runtime string, and

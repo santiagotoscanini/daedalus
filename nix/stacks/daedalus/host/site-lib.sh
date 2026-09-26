@@ -1,6 +1,6 @@
 # Shared helpers for writing into the site directory — the one directory
 # daedalus owns inside the operator's configuration repository. Inlined by the
-# site-write and apply wrappers after lib.sh; expects SITE_DIR, APPLY_DIR,
+# apply and secret-set wrappers after lib.sh; expects SITE_DIR, APPLY_DIR,
 # PREV_DIR, OPERATOR_USER, OPERATOR_GROUP, OPERATOR_HOME, SETPRIV, ENV_BIN,
 # GIT and GIT_EMAIL in the environment, and GIT_OPERATOR_NAME / GIT_OPERATOR_EMAIL
 # for lib.sh's commit_name / commit_email.

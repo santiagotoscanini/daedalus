@@ -4,7 +4,7 @@ import { defineBridge } from './bridge'
 // The app half of Apply. It writes one file and reads another.
 //
 // Everything privileged happens on the host: a systemd.path unit watches
-// request.json and starts daedalus-apply.service, which writes the payload
+// apply-request.json and starts daedalus-apply.service, which writes the payload
 // under site/, stages (and on the operator's switch, commits) it and runs
 // nixos-rebuild (nix/stacks/daedalus/host/apply.sh). This container
 // cannot rebuild anything and holds no credential that would let it — see
@@ -35,8 +35,8 @@ const APPLY_STATUS: Decoder<ApplyStatus> = obj({
 })
 
 const bridge = defineBridge<ApplyStatus>({
-  requestFile: 'request.json',
-  statusFile: 'status.json',
+  requestFile: 'apply-request.json',
+  statusFile: 'apply-status.json',
   status: APPLY_STATUS,
 })
 
@@ -56,6 +56,8 @@ export type ApplyFiles = {
   /** The machines that joined, as nix reads them (lib/nodes-file.ts). Rides every Apply like apps.json. */
   'nodes.json'?: string
   'site.json'?: string
+  /** The directory's README, rendered from the document (core/site/file.ts). Rides every Apply. */
+  'README.md'?: string
   /** The provenance stamp (core/site/file.ts): who wrote this directory, with
       which engine, when. Rides every Apply, and never decides its subject. */
   'daedalus.json'?: string
@@ -64,7 +66,7 @@ export type ApplyFiles = {
   Record<import('../lib/vault').VaultFile, string>
 >
 
-/** Publish an apply request. request.json carries metadata only; the files ride the id-stamped payload. */
+/** Publish an apply request. apply-request.json carries metadata only; the files ride the id-stamped payload. */
 export async function requestApply(input: {
   files: ApplyFiles
   summary: string

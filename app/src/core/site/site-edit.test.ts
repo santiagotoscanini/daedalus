@@ -5,12 +5,12 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { RepoFacts } from '../../host/contract/domains/repo'
 import type { Ctx } from '../ctx'
-import { renderSiteFiles, saveSiteEdit, siteEdit, siteState } from './'
+import { saveSiteEdit, siteEdit, siteState } from './'
 import { renderSiteFile, type SiteDocument } from './file'
 
 // The GitHub block rides every path that renders site.json: the edit the
 // Settings tabs and the Apply bar read (siteEdit, whose render.after is what
-// host/apply-flow.ts sends), a saved edit, the Site tab's Write (renderSiteFiles),
+// host/apply-flow.ts sends), a saved edit,
 // and its in-sync digest (siteState). No settings tab knows the block, so each
 // of these must carry it from the committed file. A path that dropped it would
 // commit a site.json without the App, and the next rebuild would lose it.
@@ -143,7 +143,7 @@ describe('the github block through the site edit paths', () => {
     expect(edit.render.after).toBe(COMMITTED_BYTES)
   })
 
-  it('survives a saved edit, in the Apply render and in the Write', async () => {
+  it('survives a saved edit, in the Apply render', async () => {
     const { ctx } = fakeCtx()
     const edit = await saveSiteEdit(ctx, { 'mail.alertTo': 'b@example.test' })
     const expected = renderSiteFile({
@@ -153,7 +153,6 @@ describe('the github block through the site edit paths', () => {
     expect(edit.changes).toEqual(['mail.alertTo'])
     expect(edit.desired.github).toEqual(committed.github)
     expect(edit.render.after).toBe(expected)
-    expect((await renderSiteFiles(ctx, 'tester'))['site.json']).toBe(expected)
   })
 
   it('comes from the committed file, never from a stored draft', async () => {

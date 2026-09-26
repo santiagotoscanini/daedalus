@@ -28,9 +28,9 @@
 
 set -euo pipefail
 
-REQ="$APPLY_DIR/request.json"
-STATUS="$APPLY_DIR/status.json"
-LOGFILE="$APPLY_DIR/last.log"
+REQ="$APPLY_DIR/apply-request.json"
+STATUS="$APPLY_DIR/apply-status.json"
+LOGFILE="$APPLY_DIR/apply-last.log"
 
 # Status is the ONLY channel back to the UI, so it is written at every exit
 # path including the failure ones. `phase` drives the progress display;
@@ -76,14 +76,14 @@ errtail() {
 [ -f "$REQ" ] || exit 0
 
 # The request is read ONCE, as the operator, and every field below comes from
-# this copy. A symlinked request.json is refused with exit 1: the app never
+# this copy. A symlinked apply-request.json is refused with exit 1: the app never
 # writes one, so it is somebody reaching through the bridge, and a failed unit
 # (mailed — see monitoredJobs) is the right amount of noise for that.
 REQ_JSON="$(read_request "$REQ")" || exit 1
 
 REQ_ID="$(jq -r '.id // ""' <<<"$REQ_JSON")"
 [ -n "$REQ_ID" ] || exit 0
-# The id names a path below, and request.json is written by the container —
+# The id names a path below, and apply-request.json is written by the container —
 # the far side of the trust boundary. Constrain it to UUID characters so a
 # crafted id cannot traverse out of $APPLY_DIR; a request the app didn't
 # write this way is not one worth answering.
@@ -131,7 +131,7 @@ fi
 
 write_status running validating ""
 
-# request.json is written after the payload precisely so this cannot race,
+# apply-request.json is written after the payload precisely so this cannot race,
 # but check rather than assume: a missing payload here would otherwise commit
 # an empty registry and take every app down.
 #
@@ -164,9 +164,9 @@ write_status running writing ""
 jq -e .files "$PAYLOAD_COPY" >/dev/null 2>&1 || fail writing "payload-$REQ_ID.json is not a map of files"
 # The vault entries are ciphertext the app encrypted in its container
 # (Settings › Integrations); this script copies bytes and never sees a value.
-# daedalus.json is the provenance stamp and rides every Apply; it is LAST so
-# the order of WRITTEN still reads site.json-before-vault for the subject
-# below, which drops it anyway.
+# README.md (rendered from site.json) and daedalus.json (the provenance stamp)
+# ride every Apply; they are LAST so the order of WRITTEN still reads
+# site.json-before-vault for the subject below, which drops both anyway.
 #
 # $VAULT_APP_SECRETS is the per-app half: `vault/apps/<name>-env.sops`, the
 # operator-supplied environment of a platform app (modules/apps —
@@ -177,9 +177,9 @@ jq -e .files "$PAYLOAD_COPY" >/dev/null 2>&1 || fail writing "payload-$REQ_ID.js
 # path traversal with extra steps, and `jq -r '.files | keys'` would be exactly
 # that. An app the box does not know about therefore has no writable path at
 # all, and a payload naming one is skipped like any other unmanaged key.
-# It goes after the vault root entries and before daedalus.json, so both
+# It goes after the vault root entries and before README.md, so both
 # orderings the subject below relies on still hold.
-MANAGED=(apps.json nodes.json site.json vault/cloudflare-api-token.sops vault/github-app.sops "${VAULT_APP_SECRETS[@]}" daedalus.json)
+MANAGED=(apps.json nodes.json site.json vault/cloudflare-api-token.sops vault/github-app.sops "${VAULT_APP_SECRETS[@]}" README.md daedalus.json)
 WRITTEN=()
 for f in "${MANAGED[@]}"; do
   [ "$(jq -r --arg f "$f" 'if (.files[$f] | type) == "string" then "yes" else "no" end' "$PAYLOAD_COPY")" = "yes" ] || continue
@@ -262,8 +262,8 @@ WANT_COMMIT="$(jq -r 'if .commit == true then "yes" else "no" end' <<<"$REQ_JSON
 # MANAGED lists site.json before every vault entry, so WRITTEN is always in
 # that order; the count keeps "site.json and two vault files" out of it.
 #
-# daedalus.json is dropped first. The stamp rides EVERY Apply and names
-# nothing that changed, so leaving it in would make every subject read
+# README.md and daedalus.json are dropped first. Both ride EVERY Apply and
+# name nothing that changed, so leaving them in would make every subject read
 # `apply:` — the exact opposite of what these cases are for.
 #
 # `vault/*` is deliberately a bare glob and needs to stay one: it is what makes
@@ -274,7 +274,7 @@ WANT_COMMIT="$(jq -r 'if .commit == true then "yes" else "no" end' <<<"$REQ_JSON
 # subject.
 SUBJECT=()
 for w in "${WRITTEN[@]}"; do
-  [ "$w" = daedalus.json ] || SUBJECT+=("$w")
+  case "$w" in README.md | daedalus.json) ;; *) SUBJECT+=("$w") ;; esac
 done
 case "${SUBJECT[*]}" in
 apps.json) PREFIX=apps ;;

@@ -28,7 +28,7 @@ const full: SiteStamp = {
 /** Everything the container could not read — the honest empty stamp. */
 const unknown: SiteStamp = {
   writtenAt: '2026-09-16T12:00:00.000Z',
-  writtenBy: { actor: 'daedalus', door: 'site-write' },
+  writtenBy: { actor: 'daedalus', door: 'apply' },
   engine: { version: null, head: null, dirty: null, branch: null },
   config: { revision: null },
   nixos: { version: null },

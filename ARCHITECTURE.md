@@ -9,7 +9,7 @@ path unit notices; a root oneshot reads the file and acts.
 That constraint is the whole design. Everything below is a consequence of it:
 the engine decides, the host executes, and the boundary between them is a
 filename allowlist rather than an API. A compromised control plane can ask for
-the sixteen things the host knows how to do, and nothing else.
+the fifteen things the host knows how to do, and nothing else.
 
 The machine is a NixOS box, so "act" mostly means: write a file into a git
 repository, commit it, and run `nixos-rebuild switch`. The system's real source
@@ -118,13 +118,12 @@ the same directory:
 
 | request | agent unit | status |
 |---|---|---|
-| `request.json` | `daedalus-apply` | `status.json` + `last.log` + `payload-<id>.json` |
+| `apply-request.json` | `daedalus-apply` | `apply-status.json` + `apply-last.log` + `payload-<id>.json` |
 | `build-request.json` | `daedalus-build` | `build-status.json` |
 | `build-cancel-request.json` | `daedalus-build-cancel` | — |
 | `deploy-request.json` | `daedalus-deploy-trigger` | `deploy-status.json` |
 | `image-request.json` | `daedalus-image-update` | `image-status.json` + `image-last.log` |
 | `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
-| `site-request.json` | `daedalus-site-write` | `site-status.json` |
 | `workspace-request.json` | `daedalus-workspace-clone` | `workspace-status.json` |
 | `power-request.json` | `daedalus-power` | `power-status.json` |
 | `claude-rc-request.json` | `daedalus-claude-rc` | `claude-rc-status.json` |
@@ -183,10 +182,10 @@ flowchart TB
   UI["Apps or Settings: the operator edits"]
   DBT[("apps table, settings, site fields")]
   Render["render the EXACT bytes"]
-  Req[/"apply/request.json {actor, summary, commit}<br/>+ apply/payload-ID.json"/]
+  Req[/"apply/apply-request.json {actor, summary, commit}<br/>+ apply/payload-ID.json"/]
   PathU["daedalus-apply.path"]
   Sh["daedalus-apply.service, root<br/>restartIfChanged = false"]
-  Allow{"any payload file on the allowlist?<br/>apps.json, nodes.json, site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops<br/>vault/apps/NAME-env.sops, daedalus.json<br/>other names are skipped"}
+  Allow{"any payload file on the allowlist?<br/>apps.json, nodes.json, site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops<br/>vault/apps/NAME-env.sops, README.md, daedalus.json<br/>other names are skipped"}
   Prev["copy the current bytes aside,<br/>outside the bridge directory"]
   Git["write verbatim, git add, commit<br/>as the operator, never as root"]
   Lock["take the shared rebuild lock"]

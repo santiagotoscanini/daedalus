@@ -110,8 +110,8 @@ here.
   tzdata's `zone.tab` from /export, and the release's support window,
   channel and notes).
   `core/site/` is the site repository — the JSON description of this
-  box that daedalus creates and commits (`fleet.site.path`, the
-  `site-request.json` bridge). `file.ts` renders the exact bytes the
+  box that daedalus commits (`fleet.site.path`; site.json reaches it only
+  through an Apply). `file.ts` renders the exact bytes the
   host writes; `index.ts` compares them against the digests
   `/repo/repo.json` publishes, which is what "in sync" means on the
   tab. **apps.json is not rendered here at all**: only an Apply writes
@@ -137,7 +137,7 @@ here.
   points at `src/host/schema.ts`).
 - `src/host/` — everything that needs the machine: the bridge and one
   module per verb (`bridge.ts`, then e.g. `apply.ts`, `build-bridge.ts`,
-  `deploy.ts`, `image-update.ts`, `engine-update.ts`, `site-request.ts`
+  `deploy.ts`, `image-update.ts`, `engine-update.ts`, `secret-set-request.ts`
   — the full set is below), the flows (`*-flow.ts`), the MCP server
   (`mcp/`), the database (`db.ts`, `schema.ts`), the env schema and the snapshot
   readers (`env.ts`, `env-snapshot.ts`, `nix-manifest.ts`,
@@ -220,7 +220,7 @@ here.
   the mechanics (temp + rename, payload written before the request that
   points at it), and each verb's app half is one module under `host/`
   named for it (`apply.ts`, `build-bridge.ts`, `deploy.ts`,
-  `image-update.ts`, `engine-update.ts`, `site-request.ts`,
+  `image-update.ts`, `engine-update.ts`,
   `workspaces.ts`, `power-request.ts`, `claude-rc-request.ts`,
   `claude-session-request.ts`, `secret-set-request.ts`, `task-run.ts`,
   `version-update.ts`, `claude-code-update.ts`) — except
