@@ -1,11 +1,14 @@
-import { createServerFn } from '@tanstack/react-start'
-import { actorLabel } from '../core/auth'
-import { type AccessWindow, isAccessWindow } from '../lib/access-window'
-import { secretKeyError } from '../lib/apps/secret-keys'
-import { appName } from '../lib/hostname'
-import { isRecord } from '../lib/is-record'
+import { isAccessWindow } from '../lib/access-window'
+import { asValidator, is, nullable, obj, optional, str, withMessage } from '../lib/contract/decode'
+import { appNameField } from '../lib/contract/fields'
+import {
+  nonEmptyStringField,
+  recordField,
+  secretKeyField,
+  taskIdField,
+} from '../lib/contract/fields-a'
 import type { Result } from '../lib/result'
-import { taskId } from '../lib/tasks'
+import { adminFn, readFn } from './fn'
 
 // The RPC seam behind the Apps UI: the list page, the detail page, the create
 // form and the apply bar. Nothing here does any work — each function proves
@@ -26,10 +29,10 @@ import { taskId } from '../lib/tasks'
 //
 // ── why the function names and this filename cannot move ──────────────────
 //
-// Every `createServerFn` below is an RPC endpoint whose id the client has
+// Every server function below is an RPC endpoint whose id the client has
 // baked into its bundle, and TanStack Start derives that id from the file
 // path plus the variable name — base64 of `{file, export}` in dev, sha256 of
-// `<relative filename>--<variableName>_createServerFn_handler` in a build
+// the relative filename, the variable name and a fixed suffix in a build
 // (@tanstack/start-plugin-core, start-compiler/compiler.ts). Moving one of
 // these to another module, or renaming this file, silently changes its id:
 // a browser tab still holding the old bundle then calls an id the server no
@@ -39,21 +42,22 @@ import { taskId } from '../lib/tasks'
 // ── what a request has to prove ───────────────────────────────────────────
 //
 // Every validator below is a real check, not a type annotation: `.validator`
-// takes `unknown` and parses, because the browser is what sends this and a
-// `(input: { name: string }) => input` is a cast the request never agreed to.
+// takes `unknown` and decodes it (lib/contract/decode.ts), because the browser
+// is what sends this and a `(input: { name: string }) => input` is a cast the
+// request never agreed to.
 // The deep handlers re-check what they act on — `getApp` answers null for a
 // name it does not know, `validateNewApp` and `validateAppPatch` own the field
 // rules — so what belongs here is the shape, refused with a sentence instead
 // of thrown three frames down.
 //
-// `appName` is lib/hostname's, the same rule the create form applies: a name
+// `appNameField` is lib/hostname's `isAppName`, the same rule the create form applies: a name
 // is a DNS label, a container name and a postgres role, and there is one
 // definition of it.
 
 /** The tab payload union. Re-exported so components name it from the seam. */
 export type { AppTabData } from '../lib/apps/tabs'
 
-export const fetchApps = createServerFn().handler(async () => {
+export const fetchApps = readFn.handler(async () => {
   const { loadAppList } = await import('../lib/apps/list')
   return loadAppList()
 })
@@ -66,113 +70,116 @@ export const fetchApps = createServerFn().handler(async () => {
  * nix manifest rather than being derived from the service name — daedalus
  * sits on a private bridge (auth.isolated) and reaches both through traefik.
  */
-export const fetchImagesTab = createServerFn().handler(async () => {
+export const fetchImagesTab = readFn.handler(async () => {
   const { loadImages } = await import('../lib/apps/registries')
   const { makeHosts } = await import('../host/hosts')
   return loadImages(await makeHosts())
 })
 
 /** The npm registry tab. See above for why it is not folded into that one. */
-export const fetchPackagesTab = createServerFn().handler(async () => {
+export const fetchPackagesTab = readFn.handler(async () => {
   const { loadPackages } = await import('../lib/apps/registries')
   const { makeHosts } = await import('../host/hosts')
   return loadPackages(await makeHosts())
 })
 
-export const fetchApp = createServerFn()
-  .validator((data: unknown): { name: string } => {
-    if (!isRecord(data)) throw new Error('expected an app name')
-    return { name: appName(data.name) }
-  })
+export const fetchApp = readFn
+  .validator(asValidator(withMessage(obj({ name: appNameField }), 'expected an app name')))
   .handler(async ({ data }) => {
     const { loadAppDetail } = await import('../lib/apps/detail')
     return loadAppDetail(data)
   })
 
-export const fetchAppTab = createServerFn()
+export const fetchAppTab = readFn
   // `tab` is only checked to be a string: the switch behind this has a
   // default, and an unknown tab is a page that renders its settings, not a bad
   // request. `accessWindow` is not so forgiving — it indexes WINDOW_SPEC and
   // builds a Loki range — so it is the union it always claimed to be.
-  .validator((data: unknown): { name: string; tab: string; accessWindow: AccessWindow } => {
-    if (!isRecord(data)) throw new Error('expected an app tab request')
-    if (typeof data.tab !== 'string') throw new Error('expected a tab')
-    if (!isAccessWindow(data.accessWindow)) throw new Error('expected an access window')
-    return { name: appName(data.name), tab: data.tab, accessWindow: data.accessWindow }
-  })
+  //
+  // The fields are read in the order the refusals should come: tab, window, name.
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          tab: withMessage(str, 'expected a tab'),
+          accessWindow: withMessage(
+            is(isAccessWindow, 'an access window'),
+            'expected an access window',
+          ),
+          name: appNameField,
+        }),
+        'expected an app tab request',
+      ),
+    ),
+  )
   .handler(async ({ data }) => {
     const { loadAppTab } = await import('../lib/apps/tabs')
     return loadAppTab(data)
   })
 
-export const fetchNewAppOptions = createServerFn().handler(async () => {
+export const fetchNewAppOptions = readFn.handler(async () => {
   const { loadNewAppOptions } = await import('../lib/apps/create')
   return loadNewAppOptions()
 })
 
-export const fetchAppPreflight = createServerFn()
+export const fetchAppPreflight = readFn
   // Both fields are checked for their type and nothing more. This runs on
   // every keystroke in the create form, against a name the operator has not
   // finished choosing and a repository GitHub may well have called `My.Repo`
   // — the form's own `appNameError` is what says so, and refusing here would
   // turn a red input box into a failed request behind it.
-  .validator((data: unknown): { name: string; image: string | null } => {
-    if (!isRecord(data)) throw new Error('expected a name and an image')
-    if (typeof data.name !== 'string') throw new Error('expected a name')
-    const image = data.image ?? null
-    if (image !== null && typeof image !== 'string') {
-      throw new Error('expected an image or null')
-    }
-    return { name: data.name, image }
-  })
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          name: withMessage(str, 'expected a name'),
+          // Absent, undefined and null are all "no image".
+          image: withMessage(optional(nullable(str), null), 'expected an image or null'),
+        }),
+        'expected a name and an image',
+      ),
+    ),
+  )
   .handler(async ({ data }) => {
     const { appPreflight } = await import('../lib/apps/create')
     return appPreflight(data)
   })
 
-export const createAppFn = createServerFn({ method: 'POST' })
+export const createAppFn = adminFn
   // The field rules are validateNewApp's, in lib/repo/apps next to the table
   // it writes — including the name, which it checks with appNameError so a
   // create refuses a reserved or taken label too. All this owes is a record to
   // hand it, which is also what retires the `as unknown as` the handler used
   // to need to pretend the cast above had happened.
-  .validator((data: unknown): { app: Record<string, unknown> } => {
-    if (!isRecord(data) || !isRecord(data.app)) throw new Error('expected an app to create')
-    return { app: data.app }
-  })
+  .validator(asValidator(withMessage(obj({ app: recordField }), 'expected an app to create')))
   .handler(async ({ data }): Promise<{ name: string }> => {
-    // Dynamic like every other value import at this seam: core/authz reads the
-    // preference store, and src/server/** may static-import nothing impure.
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { createApp, validateNewApp } = await import('../lib/repo/apps')
     return createApp(validateNewApp(data.app))
   })
 
-export const deleteAppFn = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { name: string } => {
-    if (!isRecord(data)) throw new Error('expected an app name')
-    return { name: appName(data.name) }
-  })
+export const deleteAppFn = adminFn
+  .validator(asValidator(withMessage(obj({ name: appNameField }), 'expected an app name')))
   .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { deleteApp } = await import('../lib/repo/apps')
     await deleteApp(data.name)
     return { ok: true }
   })
 
-export const saveApp = createServerFn({ method: 'POST' })
+export const saveApp = adminFn
   // The field values are checked in validateAppPatch, where the field list
   // lives; this is the shape around them.
-  .validator((data: unknown): { name: string; patch: Record<string, unknown> } => {
-    if (!isRecord(data)) throw new Error('expected an app edit')
-    if (!isRecord(data.patch)) throw new Error('patch must be an object')
-    return { name: appName(data.name), patch: data.patch }
-  })
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          patch: withMessage(recordField, 'patch must be an object'),
+          name: appNameField,
+        }),
+        'expected an app edit',
+      ),
+    ),
+  )
   .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { updateApp, validateAppPatch } = await import('../lib/repo/apps')
     await updateApp(data.name, validateAppPatch(data.patch))
     return { ok: true }
@@ -185,52 +192,54 @@ export const saveApp = createServerFn({ method: 'POST' })
  * the claim as a header (auth.headers in stacks/daedalus/daedalus.nix), so
  * the commit records a person rather than "daedalus".
  */
-export const applyRegistry = createServerFn({ method: 'POST' }).handler(
+export const applyRegistry = adminFn.handler(
   // The outcome's `code` stops here: it exists for the MCP `apply` tool, whose
   // machine caller branches on it, and the button has nothing to do with it
   // but read the sentence.
-  async (): Promise<Result<{ id: string; changed: { name: string; fields: string[] }[] }>> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+  async ({
+    context,
+  }): Promise<Result<{ id: string; changed: { name: string; fields: string[] }[] }>> => {
     const { runApply } = await import('../host/apply-flow')
-    const outcome = await runApply(actorLabel())
+    const outcome = await runApply(context.actor())
     return outcome.ok
       ? { ok: true, value: { id: outcome.id, changed: outcome.changed } }
       : { ok: false, reason: outcome.reason }
   },
 )
 
-export const fetchApplyStatus = createServerFn().handler(async () => {
+export const fetchApplyStatus = readFn.handler(async () => {
   const { readApplyStatus } = await import('../host/apply')
   return readApplyStatus()
 })
 
 /** Everything the next Apply would do, for the bar every page draws (host/pending-apply.ts). */
-export const fetchPendingApply = createServerFn().handler(async () => {
+export const fetchPendingApply = readFn.handler(async () => {
   const { pendingApply } = await import('../host/pending-apply')
   return pendingApply()
 })
 
-export const triggerDeploy = createServerFn({ method: 'POST' })
+export const triggerDeploy = adminFn
   // The one server function here whose request is the bare name rather than a
   // record around it.
-  .validator((data: unknown): string => appName(data))
+  .validator(asValidator(appNameField))
   .handler(async ({ data: name }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { requestManualDeploy } = await import('../lib/apps/deploy')
     return requestManualDeploy(name)
   })
 
-export const revealEnvVar = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { name: string; key: string } => {
-    if (!isRecord(data)) throw new Error('expected an app and a variable')
-    if (typeof data.key !== 'string' || data.key === '') throw new Error('expected a variable name')
-    return { name: appName(data.name), key: data.key }
-  })
+export const revealEnvVar = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          key: withMessage(nonEmptyStringField, 'expected a variable name'),
+          name: appNameField,
+        }),
+        'expected an app and a variable',
+      ),
+    ),
+  )
   .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { revealAppEnvVar } = await import('../lib/apps/secrets')
     return revealAppEnvVar(data)
   })
@@ -242,64 +251,62 @@ export const revealEnvVar = createServerFn({ method: 'POST' })
 // status poll returns key names, and there is no function anywhere that reads
 // a secret out of the sops file — the container could not answer one.
 
-export const setAppSecretFn = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { name: string; key: string; value: string } => {
-    if (!isRecord(data)) throw new Error('expected an app, a variable and a value')
-    // The key's shape is checked here AND in lib/apps/secrets.ts AND by the
-    // host agent. This one is the parse that lets the rest of the function
-    // treat it as a name; the refusal an operator reads comes from the next.
-    const bad = secretKeyError(data.key)
-    if (bad !== null) throw new Error(bad)
-    if (typeof data.value !== 'string') throw new Error('expected a value')
-    return { name: appName(data.name), key: data.key as string, value: data.value }
-  })
-  .handler(async ({ data }): Promise<Result<string>> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+export const setAppSecretFn = adminFn
+  // The key's shape is checked here AND in lib/apps/secrets.ts AND by the
+  // host agent. This one is the parse that lets the rest of the function
+  // treat it as a name; the refusal an operator reads comes from the next.
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          key: secretKeyField,
+          value: withMessage(str, 'expected a value'),
+          name: appNameField,
+        }),
+        'expected an app, a variable and a value',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<Result<string>> => {
     const { setAppSecret } = await import('../lib/apps/secrets')
-    return setAppSecret({ ...data, actor: actorLabel() })
+    return setAppSecret({ ...data, actor: context.actor() })
   })
 
-export const removeAppSecretFn = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { name: string; key: string } => {
-    if (!isRecord(data)) throw new Error('expected an app and a variable')
-    const bad = secretKeyError(data.key)
-    if (bad !== null) throw new Error(bad)
-    return { name: appName(data.name), key: data.key as string }
-  })
-  .handler(async ({ data }): Promise<Result<string>> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+export const removeAppSecretFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ key: secretKeyField, name: appNameField }),
+        'expected an app and a variable',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<Result<string>> => {
     const { removeAppSecret } = await import('../lib/apps/secrets')
-    return removeAppSecret({ ...data, actor: actorLabel() })
+    return removeAppSecret({ ...data, actor: context.actor() })
   })
 
-export const fetchSecretSetStatus = createServerFn().handler(async () => {
+export const fetchSecretSetStatus = readFn.handler(async () => {
   const { readSecretSetStatus } = await import('../host/secret-set-request')
   return readSecretSetStatus()
 })
 
-export const fetchDeployStatus = createServerFn().handler(async () => {
+export const fetchDeployStatus = readFn.handler(async () => {
   const { readDeployStatus } = await import('../host/deploy')
   return readDeployStatus()
 })
 
-export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
+export const cloneWorkspaceFn = adminFn
   // A string, then the allowlist in lib/apps/workspaces.ts — which is the
   // check that matters and cannot live here, since it is built from the
   // registry.
-  .validator((data: unknown): { repo: string } => {
-    if (!isRecord(data) || typeof data.repo !== 'string') throw new Error('expected a repo')
-    return { repo: data.repo }
-  })
+  .validator(asValidator(withMessage(obj({ repo: str }), 'expected a repo')))
   .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { cloneOfferedWorkspace } = await import('../lib/apps/workspaces')
     return cloneOfferedWorkspace(data)
   })
 
-export const fetchWorkspaceRequestStatus = createServerFn().handler(async () => {
+export const fetchWorkspaceRequestStatus = readFn.handler(async () => {
   const { readWorkspaceRequestStatus } = await import('../host/workspaces')
   return readWorkspaceRequestStatus()
 })
@@ -314,19 +321,18 @@ export const fetchWorkspaceRequestStatus = createServerFn().handler(async () => 
  * list in lib/apps/tasks.ts, and the host agent checks it a third time. None
  * of the three is meant to be the only one.
  */
-export const runTaskNow = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { name: string; task: string } => {
-    if (!isRecord(data)) throw new Error('expected an app and a task')
-    return { name: appName(data.name), task: taskId(data.task) }
-  })
+export const runTaskNow = adminFn
+  .validator(
+    asValidator(
+      withMessage(obj({ name: appNameField, task: taskIdField }), 'expected an app and a task'),
+    ),
+  )
   .handler(async ({ data }) => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const { runAppTaskNow } = await import('../lib/apps/tasks')
     return runAppTaskNow(data)
   })
 
-export const fetchTaskRunStatus = createServerFn().handler(async () => {
+export const fetchTaskRunStatus = readFn.handler(async () => {
   const { readTaskRunStatus } = await import('../host/task-run')
   return readTaskRunStatus()
 })

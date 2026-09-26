@@ -1,5 +1,4 @@
-import { createServerFn } from '@tanstack/react-start'
-import { actorLabel } from '../core/auth'
+import { adminFn, readFn } from './fn'
 
 // Server functions that act on the MACHINE rather than on an app.
 //
@@ -22,17 +21,15 @@ import { actorLabel } from '../core/auth'
  * watching /api/healthz once the box is on its way down, because no completion
  * status will ever be written.
  */
-export const requestRebootFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { assertAdmin } = await import('../core/authz')
-  await assertAdmin()
+export const requestRebootFn = adminFn.handler(async ({ context }) => {
   const { requestReboot } = await import('../host/power-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".
-  const actor = actorLabel()
+  const actor = context.actor()
   return { id: await requestReboot({ actor }) }
 })
 
-export const fetchPowerRequestStatus = createServerFn().handler(async () => {
+export const fetchPowerRequestStatus = readFn.handler(async () => {
   const { readPowerRequestStatus } = await import('../host/power-request')
   return readPowerRequestStatus()
 })

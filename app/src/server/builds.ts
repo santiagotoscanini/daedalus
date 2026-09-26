@@ -1,6 +1,6 @@
-import { createServerFn } from '@tanstack/react-start'
 import { requireActor } from '../core/auth'
 import type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
+import type { Ctx } from '../core/ctx'
 import {
   type BuildCommit,
   type BuildReportFailure,
@@ -15,57 +15,41 @@ import {
   validateBuildSettings,
 } from '../lib/build-settings'
 import { BUILD_SHA_RE } from '../lib/builds'
-import { appName } from '../lib/hostname'
-import { isRecord } from '../lib/is-record'
+import { asValidator, is, obj, str, withMessage } from '../lib/contract/decode'
+import { appNameField } from '../lib/contract/fields'
+import { pageSizeField } from '../lib/contract/fields-a'
 import type { Result } from '../lib/result'
+import { adminFn, readFn } from './fn'
 
 // Server functions behind the build UI: the builds board, the build page, the
 // Build now, Cancel and Retry report buttons and an app's build settings.
 // Value imports of anything that touches the database are dynamic, so it stays
 // out of the client bundle (server/registry.ts does the same). core/auth and
-// lib/hostname are pure and imported statically on purpose: what a request has
-// to prove should be legible from the top of the file.
+// the request decoders are pure and imported statically on purpose: what a
+// request has to prove should be legible from the top of the file.
 
 const LOG_TAIL_BYTES = 64_000
 
-/**
- * `{ app }`, which is what all but two requests here carry.
- *
- * `isRecord` first, and not as ceremony: these validators used to annotate
- * their parameter as `{ app: string }` and read `input.app` off it, so a
- * request body of `null` or `7` was a TypeError inside the validator — a 500
- * for a request that had already been caught, one line earlier, if anyone had
- * asked whether it was an object.
- */
-const appRequest = (data: unknown): { app: string } => {
-  if (!isRecord(data)) throw new Error('expected an app name')
-  return { app: appName(data.app) }
-}
+/** `{ app }`, which is what all but two requests here carry. */
+const appRequest = withMessage(obj({ app: appNameField }), 'expected an app name')
 
 /** `{ app, id }`: a build, named under the app whose page is asking. */
-const buildRequest = (data: unknown): { app: string; id: string } => {
-  if (!isRecord(data)) throw new Error('expected a build')
-  if (typeof data.id !== 'string') throw new Error('expected a build id')
-  return { app: appName(data.app), id: data.id }
-}
+const buildRequest = withMessage(
+  obj({ id: withMessage(str, 'expected a build id'), app: appNameField }),
+  'expected a build',
+)
 
 const summarize = (row: BuildRow): BuildSummary => summarizeBuild(row)
 
 /** The recent builds of one app, newest first; null when there is no such app. */
-export const fetchBuilds = createServerFn()
+export const fetchBuilds = readFn
   // `limit` is clamped rather than refused: it is a page size, and the only
   // wrong answer is one that lets a request ask for the whole table.
-  .validator((data: unknown): { app: string; limit: number } => {
-    const { app } = appRequest(data)
-    const limit = isRecord(data) ? data.limit : undefined
-    return {
-      app,
-      limit:
-        typeof limit === 'number' && Number.isInteger(limit)
-          ? Math.min(50, Math.max(1, limit))
-          : 10,
-    }
-  })
+  .validator(
+    asValidator(
+      withMessage(obj({ app: appNameField, limit: pageSizeField(50, 10) }), 'expected an app name'),
+    ),
+  )
   .handler(async ({ data }): Promise<BuildSummary[] | null> => {
     const { getApp } = await import('../lib/repo/apps')
     const { listBuilds, toBuildRow } = await import('../lib/repo/builds')
@@ -87,8 +71,8 @@ export type BuildPageApp = {
 }
 
 /** The app around a build page: one row, for the rail and the Build again button. */
-export const fetchBuildApp = createServerFn()
-  .validator(appRequest)
+export const fetchBuildApp = readFn
+  .validator(asValidator(appRequest))
   .handler(async ({ data }): Promise<BuildPageApp | null> => {
     const { getApp } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
@@ -107,10 +91,12 @@ export const fetchBuildApp = createServerFn()
   })
 
 /** The reporter's failure record for one build, for the page; null when there is none. */
-async function reportFailureOf(id: string): Promise<BuildReportFailure | null> {
-  const { makeCtx } = await import('../core/ctx')
+async function reportFailureOf(
+  id: string,
+  ctx: () => Promise<Ctx>,
+): Promise<BuildReportFailure | null> {
   const { readReportFailures } = await import('../core/builds/report')
-  const f = (await readReportFailures(await makeCtx()))[id]
+  const f = (await readReportFailures(await ctx()))[id]
   if (f === undefined) return null
   return {
     step: f.step,
@@ -128,9 +114,9 @@ async function reportFailureOf(id: string): Promise<BuildReportFailure | null> {
  * GitHub report while there is one. Null for an unknown id, and for another
  * app's build under this app's URL.
  */
-export const fetchBuild = createServerFn()
-  .validator(buildRequest)
-  .handler(async ({ data }): Promise<BuildView | null> => {
+export const fetchBuild = readFn
+  .validator(asValidator(buildRequest))
+  .handler(async ({ data, context }): Promise<BuildView | null> => {
     const { getBuild, toBuildRow } = await import('../lib/repo/builds')
     // getBuild answers undefined for anything that is not a uuid.
     const record = await getBuild(data.id)
@@ -149,7 +135,7 @@ export const fetchBuild = createServerFn()
       row.state === 'succeeded' && row.digest !== null
         ? deploymentOfDigest(row.appId, row.digest)
         : Promise.resolve(undefined),
-      row.reported ? Promise.resolve(null) : reportFailureOf(row.id),
+      row.reported ? Promise.resolve(null) : reportFailureOf(row.id, context.ctx),
     ])
 
     return {
@@ -195,16 +181,22 @@ const COMMITS_MAX = 200
  * Its own function because fetchBuild is polled every 3 s and this must not
  * be; null when GitHub cannot say.
  */
-export const fetchBuildCommit = createServerFn()
-  .validator((data: unknown): { app: string; sha: string } => {
-    const { app } = appRequest(data)
-    const sha = isRecord(data) ? data.sha : undefined
-    if (typeof sha !== 'string' || !BUILD_SHA_RE.test(sha)) {
-      throw new Error('expected a commit sha')
-    }
-    return { app, sha }
-  })
-  .handler(async ({ data }): Promise<BuildCommit | null> => {
+export const fetchBuildCommit = readFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          app: appNameField,
+          sha: withMessage(
+            is((v: unknown): v is string => typeof v === 'string' && BUILD_SHA_RE.test(v), 'a sha'),
+            'expected a commit sha',
+          ),
+        }),
+        'expected an app name',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<BuildCommit | null> => {
     const key = `${data.app}@${data.sha}`
     const cached = COMMITS.get(key)
     if (cached !== undefined) return cached
@@ -212,9 +204,8 @@ export const fetchBuildCommit = createServerFn()
     const { getApp } = await import('../lib/repo/apps')
     const record = await getApp(data.app)
     if (!record || record.githubRepoId === null) return null
-    const { makeCtx } = await import('../core/ctx')
     const { ghApp, repoById } = await import('../core/github-app')
-    const ctx = await makeCtx()
+    const ctx = await context.ctx()
     // By id: the app's name is a label, and a renamed repo still answers here.
     const found = await repoById(ctx, record.githubRepoId)
     if (!found.ok) return null
@@ -250,13 +241,12 @@ export type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
  * row and the journal line are recorded under. What to build and what to
  * refuse is one implementation, shared with the MCP tool of the same name.
  */
-export const buildNowFn = createServerFn({ method: 'POST' })
-  .validator(appRequest)
+export const buildNowFn = adminFn
+  .validator(asValidator(appRequest))
   .handler(async ({ data }): Promise<BuildNowResult> => {
-    // Above the identity gate, not instead of it: a refusal here is a broken
-    // gate rather than an answer, so it throws where requireActor returns.
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+    // adminFn's check runs before this identity gate, not instead of it: its
+    // refusal is a broken gate rather than an answer, so it throws where
+    // requireActor returns.
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
 
@@ -265,11 +255,9 @@ export const buildNowFn = createServerFn({ method: 'POST' })
   })
 
 /** Cancel, as the button's door onto `core/builds/actions.ts cancelBuild`. */
-export const cancelBuildFn = createServerFn({ method: 'POST' })
-  .validator(buildRequest)
+export const cancelBuildFn = adminFn
+  .validator(asValidator(buildRequest))
   .handler(async ({ data }): Promise<CancelBuildResult> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
 
@@ -284,11 +272,9 @@ export type RetryReportResult = Result<null>
  * many retries it spent (core/builds/report.ts retryReport). Not ok when GitHub
  * refuses again, with what it said.
  */
-export const retryReportFn = createServerFn({ method: 'POST' })
-  .validator(buildRequest)
-  .handler(async ({ data }): Promise<RetryReportResult> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
+export const retryReportFn = adminFn
+  .validator(asValidator(buildRequest))
+  .handler(async ({ data, context }): Promise<RetryReportResult> => {
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
     const actor = gate.value
@@ -298,9 +284,8 @@ export const retryReportFn = createServerFn({ method: 'POST' })
     if (!record || record.app !== data.app) return { ok: false, reason: 'No such build.' }
     if (record.reported) return { ok: true, value: null }
 
-    const { makeCtx } = await import('../core/ctx')
     const { readReportFailures, retryReport } = await import('../core/builds/report')
-    const ctx = await makeCtx()
+    const ctx = await context.ctx()
     await retryReport(ctx, record.id)
     console.info(
       `[builds] ${actor} retried the GitHub report of ${data.app}@${record.sha.slice(0, 7)} (${record.id})`,
@@ -319,14 +304,12 @@ export type BuildSettingsResult = Result<null>
  * Apps › <name> › Settings › Builds. The columns are engine-only, so a save
  * here never reaches the Apply bar or a rebuild.
  */
-export const setBuildSettingsFn = createServerFn({ method: 'POST' })
+export const setBuildSettingsFn = adminFn
   .validator(
     (input: { app: string } & BuildSettingsPatch): { app: string; patch: BuildSettingsPatch } =>
       validateBuildSettings(input),
   )
   .handler(async ({ data }): Promise<BuildSettingsResult> => {
-    const { assertAdmin } = await import('../core/authz')
-    await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
     const actor = gate.value
