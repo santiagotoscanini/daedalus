@@ -25,9 +25,6 @@ const INSTALL_UNIX = "curl -fsSL https://daedalus.toscanini.me/install.sh | sudo
 
 type OsId = "windows" | "macos" | "linux";
 
-/** The Linux note carries the one fact the "early" tag does not: no release
- * has a Linux build yet, and install.sh stops with "no Linux release yet"
- * until one does. Drop its last sentence when the first one ships. */
 const OSES: { id: OsId; label: string; Icon: typeof WindowsLogo; command: string; note: string }[] =
   [
     {
@@ -49,7 +46,7 @@ const OSES: { id: OsId; label: string; Icon: typeof WindowsLogo; command: string
       label: "Linux",
       Icon: LinuxLogo,
       command: INSTALL_UNIX,
-      note: "Any systemd distribution (systemd 240+), x86_64 or aarch64. Tray icon on x86_64 desktops. No Linux build is released yet.",
+      note: "Any systemd distribution (systemd 240+), x86_64 or aarch64. Tray icon on x86_64 desktops.",
     },
   ];
 
