@@ -195,6 +195,20 @@ pins the control plane). The host that develops the engine sets
 and the engine checkout's `app/` is mounted into it, so saving a file is the
 deploy. `CONTRIBUTING.md` has the image's own story.
 
+### The controller
+
+`stacks/daedalus/controller.nix` runs the agent (`agent/`, built from the
+crate's own files, no tray) on the box itself in `mode = "controller"`:
+`daedalus-controller.service`, as the operator, status page on loopback
+only. Its config.toml is generated and linked at
+`/var/lib/daedalus-agent/config.toml`, where the agent reads it; state and
+logs live under `<stateRoot>/apps/daedalus/controller`. Its local API socket
+is `/run/daedalus-controller/api.sock`, and that directory is mounted into
+the control plane's container at `/controller` (`CONTROLLER_SOCKET`). The
+published image's `node` uid is the one uid it serves beyond the operator;
+in dev mode the container already runs as the operator. Claude remote
+control is off in it for now.
+
 ## What is NOT done yet
 
 - **The rest of the reference host's stacks.** The spine — everything a

@@ -1,0 +1,167 @@
+# The controller — the daedalus agent (agent/) on the box itself, in
+# `mode = "controller"`: one process as the operator, the door the app talks to
+# over a unix socket (PLAN feature 13). Today it serves that socket, the
+# machine's facts at the `minimal` telemetry level and its status page on
+# loopback (127.0.0.1:7787, never the LAN); Claude remote control stays with
+# platform/claude-rc.nix until the controller takes it over, so it is OFF here.
+#
+# What nix hands it:
+#
+#   the binary     built from the crate's own files only (Cargo.toml,
+#                  Cargo.lock, build.rs, src/), so a commit that touches
+#                  anything else in the repository does not rebuild it. No
+#                  tray (`--no-default-features`), only `daedalus-agent`.
+#   config.toml    generated below. The agent reads it from a FIXED place —
+#                  `/var/lib/daedalus-agent/config.toml`, the Linux default
+#                  directory (agent/src/config.rs); it takes no path on its
+#                  command line, and `DAEDALUS_AGENT_DATA_DIR` is a development
+#                  knob. So tmpfiles links that path to the store file (root's
+#                  directory: the operator's process cannot rewrite its own
+#                  policy), `data_dir` in it moves state and logs under
+#                  stateRoot, and a shell's `daedalus-agent status` reads the
+#                  same file the service does. The unit restarts when the file
+#                  changes (restartTriggers: its own text would not).
+#   the socket     `<controllerDir>/api.sock`, in a directory tmpfiles makes
+#                  the operator's before any unit starts, so the app's bind
+#                  source always exists. The agent refuses a directory that is
+#                  a symlink, not its user's, or group/other-writable; it
+#                  changes none it did not make. 0700 in dev mode — the dev
+#                  container runs `--user=0:0`, the operator on the host, whom
+#                  the socket always serves. The published image runs as
+#                  `node` (container uid 1000 → a subuid on the host): that uid
+#                  goes in `api_allowed_uids`, the agent then makes the socket
+#                  0666 and lets the peer check (SO_PEERCRED) be the gate, and
+#                  the directory needs 0711 so that uid can reach it.
+#
+# restartIfChanged stays at its default: a switch that moves the agent
+# restarts it, which ends nothing — the app reconnects, and the one long-lived
+# child it will own (Claude remote control) runs in a transient user unit of
+# its own that outlives it. `Restart=always` because the agent is built with
+# `panic = "abort"`.
+{
+  config,
+  lib,
+  pkgs,
+  hostUid,
+  ...
+}:
+
+let
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) controllerDir;
+
+  daedalusDev = config.fleet.daedalus.dev;
+
+  # The crate, by its own files only (see the header).
+  crate = ../../../agent;
+  cargoToml = builtins.fromTOML (builtins.readFile (crate + "/Cargo.toml"));
+
+  # The tests run in the crate's own gate (agent/gate.sh) and in CI; building
+  # the box's binary does not run them again.
+  agent = pkgs.rustPlatform.buildRustPackage {
+    pname = "daedalus-agent";
+    inherit (cargoToml.package) version;
+    src = lib.fileset.toSource {
+      root = crate;
+      fileset = lib.fileset.unions [
+        (crate + "/Cargo.toml")
+        (crate + "/Cargo.lock")
+        (crate + "/build.rs")
+        (crate + "/src")
+      ];
+    };
+    cargoLock.lockFile = crate + "/Cargo.lock";
+    buildNoDefaultFeatures = true;
+    cargoBuildFlags = [
+      "--bin"
+      "daedalus-agent"
+    ];
+    doCheck = false;
+    meta.mainProgram = "daedalus-agent";
+  };
+
+  # Its state (state.json) and logs. Beside the control plane's other host-side
+  # state (apply/, prev/), and only the operator's: nothing else reads it.
+  dataDir = "${config.fleet.stateRoot}/apps/daedalus/controller";
+
+  # Where the agent reads config.toml: its Linux default directory.
+  configDir = "/var/lib/daedalus-agent";
+
+  # The published image's `node` user, as the host sees it. Dev mode runs the
+  # container as the operator, who needs no listing.
+  allowedUids = lib.optional (!daedalusDev) (hostUid 1000);
+
+  configFile = (pkgs.formats.toml { }).generate "daedalus-agent-controller.toml" {
+    mode = "controller";
+    data_dir = dataDir;
+    # The box already has node-exporter and its own snapshots; minimal is the
+    # machine and how it is doing, no drives, services or package lists.
+    telemetry = "minimal";
+    controller = {
+      api_socket = "${controllerDir}/api.sock";
+      api_allowed_uids = allowedUids;
+      # platform/claude-rc.nix runs Claude on this box today; a controller
+      # never starts a second one, and its unit name is one nothing else uses.
+      claude_remote_control = false;
+      claude_unit = "daedalus-claude-rc";
+    };
+  };
+in
+{
+  config = lib.mkIf config.fleet.modules.daedalus.enable {
+    fleet.statePaths.${dataDir}.mode = "0700";
+
+    systemd.tmpfiles.rules = [
+      "d ${configDir} 0755 root root -"
+      "L+ ${configDir}/config.toml - - - - ${configFile}"
+      "d ${controllerDir} ${
+        if allowedUids == [ ] then "0700" else "0711"
+      } ${config.fleet.operator.user} ${config.fleet.operator.group} -"
+    ];
+
+    fleet.monitoredJobs.daedalus-controller = { };
+
+    systemd.services.daedalus-controller = {
+      description = "Daedalus controller: the agent on the box, the app's local API";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "network-online.target"
+        "state-paths.service"
+        config.fleet.operator.userService
+      ];
+      wants = [
+        "network-online.target"
+        "state-paths.service"
+        config.fleet.operator.userService
+      ];
+      # systemctl / systemd-run / loginctl for its user units, ps for the
+      # process count; /run/wrappers as on every operator-run unit.
+      path = [
+        "/run/wrappers"
+        config.systemd.package
+        pkgs.procps
+        pkgs.coreutils
+      ];
+      restartTriggers = [ configFile ];
+      serviceConfig = {
+        Type = "simple";
+        User = config.fleet.operator.user;
+        Group = config.fleet.operator.group;
+        WorkingDirectory = dataDir;
+        Environment = [
+          "HOME=${config.fleet.operator.home}"
+          "XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir}"
+        ];
+        ExecStart = "${lib.getExe agent} run";
+        Restart = "always";
+        RestartSec = "5s";
+        # Each API connection is a few threads and two descriptors, up to 16 at
+        # once, beside telemetry and the session's tools.
+        LimitNOFILE = 4096;
+      };
+      unitConfig = {
+        StartLimitBurst = 20;
+        StartLimitIntervalSec = 600;
+      };
+    };
+  };
+}

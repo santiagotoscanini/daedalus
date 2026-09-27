@@ -69,6 +69,7 @@ let
     claudeDir
     repoDir
     builderDir
+    controllerDir
     ;
 
   # What the stacks show the control plane — `fleet.dashboard` (platform/
@@ -595,6 +596,10 @@ in
             # directory itself, read-only, never the repository root.
             SITE_PATH = "/site";
 
+            # The controller's local API (controller.nix), mounted below. Not
+            # read yet: the app moves its machine reads onto it next.
+            CONTROLLER_SOCKET = "/controller/api.sock";
+
             # The VPN tunnels, the DNS upstreams, the DHCP scope and direct ingress
             # all moved to /export domains (publishing.json, network.json) — fleet
             # facts pages render, which is exactly what env is NOT for. What stays
@@ -688,6 +693,13 @@ in
         # app reads a hard allowlist of two names (host/mcp/docs.ts), there is no
         # path parameter, and this is the public engine repo, not this one.
         "${engineRoot}:/engine:ro"
+        # The controller's socket directory (controller.nix): the DIRECTORY,
+        # which holds the socket alone — the agent removes and remakes the
+        # socket at each start, and a single-file bind would pin the dead one.
+        # Read-write, because connecting to a unix socket is a write. tmpfiles
+        # makes it before any unit starts, so the bind source exists even while
+        # the controller is down; who may connect is the agent's peer check.
+        "${controllerDir}:/controller"
       ]
       # The GitHub App's two read-only mounts, only once the App exists: a bind of
       # a missing source fails the whole container start. The DIRECTORIES, never

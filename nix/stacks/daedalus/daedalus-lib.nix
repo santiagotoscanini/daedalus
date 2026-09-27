@@ -292,4 +292,13 @@ rec {
   # Exit codes, sizes, versions and unit states only; see
   # host/builder-snapshot.sh for what it runs and what it never keeps.
   builderDir = "/run/daedalus-builder";
+
+  # ── the controller ───────────────────────────────────────────────────────
+  #
+  # The directory the controller's local API socket lives in (controller.nix),
+  # mounted into the container as it is (daedalus.nix). It holds the socket
+  # alone. Written by the controller rather than by a snapshot, but made by
+  # tmpfiles at boot and at every switch, so the bind source exists before the
+  # container starts whether or not the controller is up.
+  controllerDir = "/run/daedalus-controller";
 }
