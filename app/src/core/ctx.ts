@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { readSnapshot, type SnapshotResult } from '../host/contract/snapshot'
+import { type ControllerClient, controller } from '../host/controller/client'
 import { type ConfigName, env, type SecretName } from '../host/env'
 import { type Hosts, makeHosts } from '../host/hosts'
 import { key } from '../host/keys'
@@ -128,6 +129,12 @@ export type Ctx = {
   /** The box's identity — domain, owner, registry, Grafana — as this process's env binds it. */
   site: Site
   /**
+   * The controller — the agent on the box — over its local socket, one
+   * connection per process (host/controller/client.ts). A call rejects with
+   * a ControllerError when the controller is not there.
+   */
+  controller: ControllerClient
+  /**
    * The box's nix modules. `enabled` answers true for anything the export
    * does not deny; `state` says which of the three a tab's page draws:
    * `on`, `off` (declared and switched off — the tab stays in the rail,
@@ -196,6 +203,7 @@ export async function makeCtx(): Promise<Ctx> {
     },
     hosts,
     site: readSite(),
+    controller: controller(),
     modules: {
       enabled: (id) => (modules.available ? (modules.data[id] ?? true) : true),
       state: (id) =>

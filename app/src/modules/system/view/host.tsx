@@ -257,6 +257,65 @@ function RestartControl({
   )
 }
 
+/**
+ * The controller: the agent on the box, as it answers the app over its socket.
+ * Its Claude row is the controller's own report and says so — the box's
+ * Claude is still the Claude tab's, from the snapshot and its unit.
+ */
+function ControllerBoard({ c }: { c: Host['controller'] }) {
+  return (
+    <Board
+      title="Controller"
+      icon="⌬"
+      span={12}
+      aside={c.reachable ? <Chip tone="ok">running</Chip> : <Chip tone="bad">not reachable</Chip>}
+    >
+      {c.reachable ? (
+        <Facts
+          rows={[
+            { k: 'Agent', v: <span className={MONO}>{c.version}</span> },
+            { k: 'Mode', v: c.mode },
+            { k: 'API', v: <span className={MONO}>v{c.api}</span> },
+            { k: 'Up', v: duration(c.uptimeSecs) },
+            { k: 'Telemetry', v: c.telemetry },
+            {
+              k: 'Claude, as it reports',
+              v:
+                c.claude === null
+                  ? DASH
+                  : !c.claude.wanted
+                    ? 'off here'
+                    : c.claude.reporting
+                      ? (c.claude.state ?? 'reporting')
+                      : 'not reporting',
+            },
+            {
+              k: 'Capabilities',
+              v:
+                c.capabilities.length === 0 ? (
+                  DASH
+                ) : (
+                  <span className="flex flex-wrap gap-1">
+                    {c.capabilities.map((cap) => (
+                      <Chip key={cap}>{cap}</Chip>
+                    ))}
+                  </span>
+                ),
+            },
+          ]}
+        />
+      ) : (
+        <p className={VIZ_EMPTY}>Controller not reachable: {c.error}</p>
+      )}
+      <p className={BOARD_FOOT}>
+        The agent on this box, answering the app over the socket nix mounts into its container. It
+        answers for itself for now; the other machines move onto it next. Its Claude row is its own
+        report: the box&rsquo;s Claude is still the Claude tab&rsquo;s.
+      </p>
+    </Board>
+  )
+}
+
 export function HostView({ d }: { d: Host }) {
   return (
     <BoardGrid>
@@ -426,6 +485,8 @@ export function HostView({ d }: { d: Host }) {
           until a garbage collection runs, and nothing here schedules one.
         </p>
       </Board>
+
+      <ControllerBoard c={d.controller} />
 
       <LogBoard
         source={{ unit: 'init.scope' }}

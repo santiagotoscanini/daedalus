@@ -238,6 +238,11 @@ export const SCHEMA = {
     about: 'The host builder’s redacted logs.',
     source: `${DAEDALUS}, once the GitHub App exists`,
   },
+  CONTROLLER_SOCKET: {
+    kind: 'path',
+    about: 'The controller’s local API socket (host/controller/client.ts).',
+    source: DAEDALUS,
+  },
   SHOTTER_DIR: {
     kind: 'path',
     fallback: '/shotter',

@@ -54,7 +54,10 @@ here.
   (views, eager). A new module = a new directory; nothing else changes.
 - **Loaders reach the machine only through `Ctx`** (`core/ctx.ts`:
   env, secret, gateway, exportPath, snapshot, store, http, prom, loki,
-  github, hosts, site, modules). `ctx.prom` and `ctx.loki` are the only way a module
+  github, hosts, site, controller, modules). `ctx.controller` is the agent on
+  the box over its unix socket (`host/controller/`: one connection per
+  process, kept on globalThis so a Vite reload cannot leak one — the agent
+  serves 16). `ctx.prom` and `ctx.loki` are the only way a module
   reads PromQL or LogQL, and `ctx.github.app` / `ctx.github.anon` the
   only way it reads GitHub — the boundary test refuses a value import of
   `host/prom`, `host/loki` or `host/keys` under a module's `data/`.

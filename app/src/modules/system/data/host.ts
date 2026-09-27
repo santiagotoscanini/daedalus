@@ -1,5 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
 import { hostFacts } from '../../../lib/dashboard/host-facts'
+import { type ControllerData, loadController } from './controller'
 
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
@@ -36,29 +37,37 @@ export type HostData = {
    * here is usually larger than the menu's.
    */
   generations: { id: number; date: string; current: boolean }[]
+  /** The controller on its socket, or why it did not answer. */
+  controller: ControllerData
 }
 
 export async function loadHost(ctx: Ctx): Promise<HostData> {
-  const [vitals, cpuSpark, temps, pressure, containerUp, failedUnits, facts] = await Promise.all([
-    ctx.prom.scalars({
-      cpu: '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
-      load1: 'node_load1',
-      load5: 'node_load5',
-      load15: 'node_load15',
-      uptime: 'node_time_seconds - node_boot_time_seconds',
-      cores: 'count(count by (cpu) (node_cpu_seconds_total))',
-    }),
-    ctx.prom.series('100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))', 6 * 60, 120),
-    ctx.prom.vector('node_hwmon_temp_celsius'),
-    ctx.prom.scalars({
-      cpu: '100 * rate(node_pressure_cpu_waiting_seconds_total[5m])',
-      io: '100 * rate(node_pressure_io_waiting_seconds_total[5m])',
-      memory: '100 * rate(node_pressure_memory_waiting_seconds_total[5m])',
-    }),
-    ctx.prom.vector('container_up'),
-    ctx.prom.scalar('systemd_failed_units'),
-    hostFacts(),
-  ])
+  const [vitals, cpuSpark, temps, pressure, containerUp, failedUnits, facts, controller] =
+    await Promise.all([
+      ctx.prom.scalars({
+        cpu: '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
+        load1: 'node_load1',
+        load5: 'node_load5',
+        load15: 'node_load15',
+        uptime: 'node_time_seconds - node_boot_time_seconds',
+        cores: 'count(count by (cpu) (node_cpu_seconds_total))',
+      }),
+      ctx.prom.series(
+        '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
+        6 * 60,
+        120,
+      ),
+      ctx.prom.vector('node_hwmon_temp_celsius'),
+      ctx.prom.scalars({
+        cpu: '100 * rate(node_pressure_cpu_waiting_seconds_total[5m])',
+        io: '100 * rate(node_pressure_io_waiting_seconds_total[5m])',
+        memory: '100 * rate(node_pressure_memory_waiting_seconds_total[5m])',
+      }),
+      ctx.prom.vector('container_up'),
+      ctx.prom.scalar('systemd_failed_units'),
+      hostFacts(),
+      loadController(ctx),
+    ])
 
   return {
     cpuPct: vitals.cpu,
@@ -91,5 +100,6 @@ export async function loadHost(ctx: Ctx): Promise<HostData> {
       subState: u.subState,
     })),
     generations: facts.generations,
+    controller,
   }
 }
