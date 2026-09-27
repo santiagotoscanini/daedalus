@@ -246,6 +246,20 @@ html {
   background: var(--color-accent);
 }
 
+/* A one-line command that scrolls inside its box: a thin scrollbar in the
+ * ink of the hairlines, so the overflow shows without shouting. */
+.cmd-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.cmd-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.cmd-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+}
+
 /* Hero text sits ON the labyrinth — a soft dark halo keeps it legible where
  * the ember line passes underneath. */
 .hero-text {
