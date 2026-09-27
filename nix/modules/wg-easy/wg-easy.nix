@@ -94,6 +94,37 @@ in
         Only read while the module is on.
       '';
     };
+
+    tunnelHostPorts = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            port = lib.mkOption {
+              type = lib.types.port;
+              description = "The host port.";
+            };
+            proto = lib.mkOption {
+              type = lib.types.enum [
+                "tcp"
+                "udp"
+              ];
+              default = "tcp";
+              description = "Its protocol.";
+            };
+          };
+        }
+      );
+      default = [ ];
+      example = [ { port = 22; } ];
+      description = ''
+        Host ports a peer on the tunnel reaches at the LAN address although
+        the router does not forward them — the same DNAT the forwarded ports
+        get (see `wg-easy-host-ports` in the module). For a service a peer
+        should find at the one address it uses at home: sshd, the
+        controller's link. Whoever needs the port adds it; empty by default.
+        Only read while the module is on.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -148,7 +179,7 @@ in
 
     networking.firewall.allowedUDPPorts = [ 51820 ];
 
-    # ── the forwarded ports, at the LAN address, over the tunnel ──────────
+    # ── host ports, at the LAN address, over the tunnel ───────────────────
     #
     # A peer at home types the LAN address (the WAN host resolves to it
     # through pi-hole), and so does a peer on the tunnel — but inside this
@@ -156,16 +187,22 @@ in
     # copies the host's address in), so a connection to it reaches only what
     # is published inside the netns: the bridge ports (80/443) answer, and a
     # port published on the host by its own pasta instance (a game server
-    # kept off the bridge for its client addresses) is refused. The host is
-    # 169.254.1.2 here, pasta's alias for it.
+    # kept off the bridge for its client addresses) is refused, as is a
+    # service on the host itself (sshd). The host is `fleet.podman.hostAlias`
+    # here, pasta's alias for it.
     #
     # So every port the router forwards (fleet.directIngress — the ones meant
-    # to be reached from anywhere) that the netns does NOT already serve is
-    # DNATed from the LAN address to that alias, exactly as the DNS hook does
-    # for 10.8.0.1:53. A port a bridge member publishes is served in the
-    # netns by rootlessport and already works; it is left alone rather than
-    # rerouted. Converged after every container start; `-C` first, so a
-    # re-run adds nothing twice.
+    # to be reached from anywhere), and every `tunnelHostPorts` entry (a host
+    # port a peer should find at the LAN address without the router
+    # forwarding it), that the netns does NOT already serve is DNATed from
+    # the LAN address to that alias, exactly as the DNS hook does for
+    # 10.8.0.1:53. A port a bridge member publishes is served in the netns by
+    # rootlessport and already works; it is left alone rather than rerouted.
+    # pasta dials the host from the host itself, so the connection arrives on
+    # loopback: a port the firewall opens on the LAN interface only is
+    # reached all the same. Converged after every container start; `-C`
+    # first, so a re-run adds nothing twice (a port dropped from the set
+    # keeps its rule until the container restarts).
     systemd.services.wg-easy-host-ports =
       let
         bridgePublished = lib.concatLists (
@@ -182,15 +219,20 @@ in
           m != null
           && builtins.elemAt m 1 == toString i.port
           && (if builtins.elemAt m 3 == null then "tcp" else builtins.elemAt m 3) == i.proto;
+        wanted = lib.unique (
+          map (i: { inherit (i) port proto; }) (
+            lib.attrValues config.fleet.directIngress ++ cfg.tunnelHostPorts
+          )
+        );
         ports = lib.filter (
           i: !(i.port == 51820 && i.proto == "udp") && !lib.any (publishes i) bridgePublished
-        ) (lib.attrValues config.fleet.directIngress);
+        ) wanted;
         rule =
           i:
-          "-d ${config.fleet.lanIp}/32 -i wg0 -p ${i.proto} -m ${i.proto} --dport ${toString i.port} -j DNAT --to-destination 169.254.1.2:${toString i.port}";
+          "-d ${config.fleet.lanIp}/32 -i wg0 -p ${i.proto} -m ${i.proto} --dport ${toString i.port} -j DNAT --to-destination ${config.fleet.podman.hostAlias}:${toString i.port}";
       in
       lib.mkIf (ports != [ ]) {
-        description = "Reach the router-forwarded ports at the LAN address from the WireGuard tunnel";
+        description = "Reach host ports at the LAN address from the WireGuard tunnel";
         after = [ "podman-wg-easy.service" ];
         partOf = [ "podman-wg-easy.service" ];
         wantedBy = [

@@ -23,13 +23,6 @@
 #   ...
 #   config = lib.mkMerge [ (mkGluetunInstance { ... }) { ... } ];
 
-let
-  # pasta's host alias, as seen from inside a rootless network namespace.
-  # `host.containers.internal` resolves to this. Stated once here because
-  # both the kill-switch hole below and the app-db `reach = "hostPort"`
-  # tenants are talking about the same address.
-  pastaHostAlias = "169.254.1.2";
-in
 {
   config,
   lib,
@@ -37,6 +30,12 @@ in
   mkRootlessContainer,
 }:
 
+let
+  # pasta's host alias, as seen from inside a rootless network namespace —
+  # what `host.containers.internal` resolves to. Both the kill-switch hole
+  # below and the app-db `reach = "hostPort"` tenants talk to this address.
+  pastaHostAlias = config.fleet.podman.hostAlias;
+in
 rec {
   # The pin itself (and why it is `:latest` by digest) is the host's:
   # `fleet.gluetun.image`, defined beside the first tunnel. An image pin the

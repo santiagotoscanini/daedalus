@@ -676,35 +676,31 @@ priority; each can be done independently unless noted.
          container cannot reach, so the switch brings a way in (a scrape
          listener the container can reach, e.g. on the bridge gateway) with
          it; the nodes' status pages then stop answering the LAN.
-      3. VPN reach: the tunnel ends in wg-easy's netns, so a machine off the
-         LAN cannot dial the link and drops off the pages. Route the
-         tunnel's clients to the controller's port (no public exposure).
-      4. Claude remote control on the box as a unit the controller runs;
+      3. Claude remote control on the box as a unit the controller runs;
          `claude-rc.nix`, the `claude-rc` verb and the Claude snapshot go.
          The gcroot pin on `claude` stays.
-      5. Staged updates, orchestrated by the controller.
-      6. Actions move over one at a time: Claude sessions (which the other
+      4. Staged updates, orchestrated by the controller.
+      5. Actions move over one at a time: Claude sessions (which the other
          machines then gain too), workspace clone and sync, then the root
          verbs onto the socket-activated helper — a low-stakes one first
          (Claude restart, reboot), Apply last — each deleting its
          file-drop path.
-      7. santree: its session host on the box, then relayed to the other
+      6. santree: its session host on the box, then relayed to the other
          machines, which opt in per machine (the price, written down: the
          box can reach every machine that opted in). A first version was
          built and verified as a standalone daemon and parked on 2026-09-27
          (a crate porting santree's `fake.rs` on its `santree-pty` and
          protocol crates, a catalog module, `GET /api/santree/{connection,
          workspaces}`, a System › Santree tab); it returns as a crate in a
-         Cargo workspace shared with `agent/`. Two pieces of that patch stand
-         alone and can land any time: a single read-only option for pasta's
-         host alias, and workspace sync ignoring santree's untracked
-         `.santree/`.
+         Cargo workspace shared with `agent/`. One piece of that patch stands
+         alone and can land any time: workspace sync ignoring santree's
+         untracked `.santree/`.
     - **Decisions open:**
       1. Transport between agents. Decided: TLS 1.3 (rustls, over pure-Rust
          primitives) with each side pinning the other's ed25519 key, and
          newline-delimited JSON with the socket API's envelope — no CA, no
          web server between (agent/src/link/). Stream multiplexing waits for
-         santree's streams (step 7).
+         santree's streams (step 6).
       2. How a machine first trusts the controller. Decided: pinned at
          install (`--pin`), else trust on first use, shown as unconfirmed
          until pinned — both fingerprints on the tray and the status page; a

@@ -59,7 +59,7 @@ evaluation with the option's name.
 | `stirling-pdf` | A PDF toolbox — the first leaf, and the template for one. | `authGroups`, `fleet.images.stirling-pdf` |
 | `traefik` | The reverse proxy: every published hostname, the forward-auth middlewares, the wildcard certificate. | `envSopsFile`, `fleet.images.traefik` |
 | `verdaccio` | A private npm mirror; the box's builds and the control plane's dev container install through it. | `fleet.images.{verdaccio-openid,verdaccio-openid-builder}` — the two bases its image is built on |
-| `wg-easy` | A WireGuard server and its admin UI; the tunnel port is forwarded by the router. | `envSopsFile`, `fleet.images.wg-easy` |
+| `wg-easy` | A WireGuard server and its admin UI; the tunnel port is forwarded by the router, and a peer reaches the forwarded ports and `tunnelHostPorts` at the LAN address. | `envSopsFile`, `fleet.images.wg-easy`; `tunnelHostPorts` (optional) |
 
 The spine — everything above but the leaves (factorio, grocy,
 intel-gpu-exporter, metube, myspeed, stirling-pdf, verdaccio, wg-easy) — is
@@ -211,8 +211,8 @@ control is off in it for now.
 
 The other machines' links reach it on `0.0.0.0:<fleet.daedalus.controllerPort>`
 (default 7788, TLS with both keys pinned), opened in the firewall on
-`fleet.lanInterface` only; a VPN client cannot reach it yet (the tunnel ends
-in wg-easy's netns). It advertises
+`fleet.lanInterface` only, and handed to `fleet.modules.wg-easy.tunnelHostPorts`
+so a WireGuard peer reaches it at the LAN address too. It advertises
 `<fleet.wanHost>:<port>`, which the LAN resolver answers with the LAN address,
 and the resolver publishes the same as `_daedalus-controller._tcp.<lanDomain>`
 (`fleet.dnsSrv`; a change to that list restarts pi-hole at the switch). Its

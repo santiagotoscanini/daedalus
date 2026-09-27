@@ -13,11 +13,14 @@
 #                  ed25519 key, no CA and no web server between.
 #   firewall       the port is open on `fleet.lanInterface` ONLY — the link
 #                  is for machines on the network, and the router forwards
-#                  nothing to it. VPN clients cannot reach it yet: the tunnel
-#                  ends in wg-easy's own netns, so a tunnel packet to the LAN
-#                  address lands there, not on the host, and a machine off
-#                  the LAN has no path to the controller until that is
-#                  solved (PLAN feature 13).
+#                  nothing to it.
+#   tunnel         a WireGuard peer reaches it at the LAN address too: the
+#                  tunnel ends in wg-easy's own netns, where the LAN address
+#                  is the netns itself, so the port is handed to
+#                  `fleet.modules.wg-easy.tunnelHostPorts` and DNATed on to
+#                  the host (read only while that module is on). The peer
+#                  resolves the name below through the tunnel's DNS, which
+#                  is the LAN resolver.
 #   advertise      `<fleet.wanHost>:<port>`, what the app hands a machine to
 #                  dial. The public name, because the LAN resolver answers it
 #                  with the LAN address (platform/ddclient puts it in
@@ -26,9 +29,9 @@
 #                  that: the resolver answers its own host's name itself, and
 #                  not with the LAN address (measured: 0.0.0.0 and ::1), and
 #                  the name exists only where the host's reservations carry
-#                  it. Off the LAN the public name resolves to the WAN
-#                  address, where nothing is forwarded to this port, so a
-#                  machine away from home fails closed.
+#                  it. Off the LAN and off the tunnel the public name
+#                  resolves to the WAN address, where nothing is forwarded
+#                  to this port, so such a machine fails closed.
 #   SRV            `_daedalus-controller._tcp.<lanDomain>` → the same name
 #                  and port, through fleet.dnsSrv: how an agent installed
 #                  without `--controller` finds the listener. modules/pihole
@@ -179,8 +182,10 @@ in
     fleet.statePaths.${dataDir}.mode = "0700";
 
     # LAN only: never `allowedTCPPorts`, which would open it on every
-    # interface (the header says why the tunnel's clients are not here).
+    # interface. The tunnel's peers arrive through wg-easy's DNAT instead,
+    # which reaches the host over loopback (the header's `tunnel`).
     networking.firewall.interfaces.${config.fleet.lanInterface}.allowedTCPPorts = [ port ];
+    fleet.modules.wg-easy.tunnelHostPorts = [ { inherit port; } ];
 
     fleet.dnsSrv = [
       {

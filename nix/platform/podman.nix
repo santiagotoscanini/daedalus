@@ -365,6 +365,21 @@ in
       '';
     };
 
+    podman.hostAlias = lib.mkOption {
+      type = lib.types.str;
+      default = "169.254.1.2";
+      readOnly = true;
+      description = ''
+        The host as seen from inside a rootless network namespace: podman
+        starts pasta with `--map-guest-addr` on this address, and
+        `host.containers.internal` resolves to it. pasta copies the host's
+        own LAN address INTO the namespace, so in there the LAN address is
+        the namespace itself; this is the address that reaches the host.
+        The one copy for everything that must spell it as an address rather
+        than the name: a DNAT target, a kill-switch hole.
+      '';
+    };
+
     # The gluetun family's two image pins. Declared here because
     # platform/lib/gluetun-lib.nix is a by-path library, not a module, and
     # cannot declare options; DEFINED by the host-side stack that owns the
