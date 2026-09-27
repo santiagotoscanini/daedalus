@@ -19,12 +19,21 @@ name = "daedalus-agent"
 path = "src/bin/daedalus-agent.rs"
 
 # The tray: a windowless program in the desktop session that shows what the
-# service reports and supervises Claude Code. Separate binary so it can be a
-# GUI-subsystem executable (no console window at logon) while the verbs keep
-# their console.
+# service reports (and on Windows and macOS supervises Claude Code). Separate
+# binary so it can be a GUI-subsystem executable (no console window at
+# logon) while the verbs keep their console. On Linux it links GTK, so it is
+# built for glibc only; the static musl service is built without the `tray`
+# feature (`--no-default-features --bin daedalus-agent`), which skips it.
 [[bin]]
 name = "daedalus-agent-tray"
 path = "src/bin/daedalus-agent-tray.rs"
+required-features = ["tray"]
+
+[features]
+default = ["tray"]
+# The tray's dependencies: tray-icon everywhere, tao's event loop on macOS,
+# GTK's on Linux.
+tray = ["dep:tray-icon", "dep:tao", "dep:gtk"]
 
 [dependencies]
 anyhow = "1"
@@ -41,14 +50,16 @@ toml = "0.8"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-# The OS's own TLS (SChannel, Security.framework, OpenSSL on Linux) rather
+
+# Windows and macOS: the OS's own TLS (SChannel, Security.framework) rather
 # than rustls: the machine's trust store decides, and no C crypto library
 # has to be cross-compiled to check a target from another OS.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 ureq = { version = "2", default-features = false, features = ["json", "gzip", "native-tls"] }
 native-tls = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-tray-icon = "0.25"
+tray-icon = { version = "0.25", optional = true }
 windows-service = "0.8"
 windows = { version = "0.61", features = [
   "Win32_Foundation",
@@ -84,8 +95,23 @@ libc = "0.2"
 # loop AppKit requires (no window is ever opened; the process is an
 # accessory, so no Dock icon).
 [target.'cfg(target_os = "macos")'.dependencies]
-tray-icon = "0.25"
-tao = "0.37"
+tray-icon = { version = "0.25", optional = true }
+tao = { version = "0.37", optional = true }
+
+# Linux: rustls, so one static musl binary runs on any distribution without
+# its OpenSSL. The trust store is the system's CA bundle
+# (rustls-native-certs); Mozilla's roots (webpki-roots) are the fallback
+# only when the system yields none — a container or a minimal image without
+# ca-certificates (os/linux/mod.rs `tls`). The tray: GTK's main loop, and
+# tray-icon over AppIndicator, which it loads at run time
+# (libayatana-appindicator3); no libxdo, the menu has no accelerators.
+[target.'cfg(target_os = "linux")'.dependencies]
+ureq = { version = "2", default-features = false, features = ["json", "gzip", "tls"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+rustls-native-certs = "0.7"
+webpki-roots = "0.26"
+gtk = { version = "0.18", optional = true }
+tray-icon = { version = "0.25", default-features = false, features = ["libappindicator"], optional = true }
 
 [build-dependencies]
 winresource = "0.1"

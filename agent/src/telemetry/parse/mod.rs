@@ -3,14 +3,19 @@
 //! OS, and a collector on any OS may use any of them.
 //!
 //! - `smbios`: the raw SMBIOS table (chassis type, memory arrays and
-//!   modules), from `GetSystemFirmwareTable` on Windows — and the same
-//!   bytes any OS's firmware interface hands over;
+//!   modules), from `GetSystemFirmwareTable` on Windows and
+//!   `/sys/firmware/dmi/tables/DMI` on Linux;
 //! - `system_profiler`: macOS's `system_profiler -json` documents;
 //! - `macos_tools`: the text of `launchctl`, `vm_stat`, `ps`, `df`,
 //!   `mount`, `diskutil`, `ioreg`, `powermetrics`, `netstat`, `pmset`, and
 //!   the plist helpers;
+//! - `linux_sys`: Linux's `/proc`, `/sys` and `/etc` files and the XDG
+//!   desktop entries; `linux_tools`: `smartctl`, `systemctl`,
+//!   `nvidia-smi` and the package managers;
 //! - here: the string cleanup firmware and cmdlet strings need.
 
+pub mod linux_sys;
+pub mod linux_tools;
 pub mod macos_tools;
 pub mod smbios;
 pub mod system_profiler;

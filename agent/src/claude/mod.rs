@@ -37,18 +37,26 @@
 //! macOS, a wider PATH (supervisor.rs `build_command`, and
 //! `os::prepare_claude_server`).
 //!
+//! On Linux the session is a systemd user unit of its own (no desktop
+//! needed), and the server is not its child but a transient user unit it
+//! starts and watches, so an agent update or restart never ends a Claude
+//! session (`unit`).
+//!
 //! Where each part lives: this file holds the report's types; `cli` finds
 //! the `claude` command and probes its version (exec.rs runs it, as it
 //! runs `claude update`), `profile` reads `~/.claude` (sessions, credential
-//! clock, settings), `workdir` picks the directory the server runs in, and
-//! `supervisor` keeps the server running.
+//! clock, settings), `workdir` picks the directory the server runs in,
+//! `unit` is the server as a systemd user unit, and `supervisor` keeps the
+//! server running either way.
 
 mod cli;
 mod profile;
 mod supervisor;
+mod unit;
 mod workdir;
 
 pub use supervisor::Supervisor;
+pub use unit::Launch;
 
 use serde::{Deserialize, Serialize};
 

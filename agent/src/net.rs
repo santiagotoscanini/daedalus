@@ -3,8 +3,8 @@
 //! last being how the agent finds the box (see discover.rs).
 //!
 //! The reading is per OS (`os::primary_adapter`): Windows reads
-//! `GetAdaptersAddresses`, macOS asks `route`, `ifconfig` and `scutil`;
-//! on Linux everything is empty.
+//! `GetAdaptersAddresses`, macOS asks `route`, `ifconfig` and `scutil`,
+//! Linux reads `/proc/net/route`, sysfs, `getifaddrs` and resolv.conf.
 
 #[derive(Clone, Debug, Default)]
 pub struct Adapter {

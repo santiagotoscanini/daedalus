@@ -10,29 +10,92 @@
 //! are the few things worth a click — the status page, a check for
 //! updates, a Claude restart, the two logs, quit.
 //!
-//! The session is also the Claude supervisor (claude/): this process is
-//! the one in the user's session, with the user's Claude login, so `claude
-//! remote-control` runs as its child, reported to the service every poll.
-//! The tray owns the session, and drops it — stopping the server — before
-//! its own icon.
+//! What the tray stands over is the OS's choice (`os::TRAY_OWNS_SESSION`),
+//! named here as `Backing`:
 //!
-//! It also keeps itself current: when the session sees the page report a
+//! - `Owns` (Windows, macOS): the tray runs the session — the Claude
+//!   supervisor (claude/) — because this process is the one in the user's
+//!   desktop session, with the user's Claude login; `claude remote-control`
+//!   runs as its child, reported to the service every poll. The tray drops
+//!   the session — stopping the server — before its own icon.
+//! - `Watches` (Linux): the session is a systemd user unit that runs with
+//!   or without a desktop, so Claude never waits on a login; the tray only
+//!   shows it, through the service (`session::Watcher`), and its restart
+//!   goes to the session by way of the service. Quitting stops nothing.
+//!
+//! It also keeps itself current: when a poll sees the page report a
 //! version other than its own, an update has swapped the binaries under
 //! it, and the tray restarts itself onto the new one. One instance at a
 //! time, and the loop that drives all this, are the OS's
 //! (os/windows/tray.rs: a named mutex and the Win32 message loop;
-//! os/macos/tray.rs: a file lock and a tao event loop).
+//! os/macos/tray.rs: a file lock and a tao event loop; os/linux/tray.rs: a
+//! file lock and GTK's main loop).
 
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-use crate::claude::Report;
+use crate::claude::{Launch, Report};
 use crate::os::tray::{open, relaunch_self};
-use crate::session::{Page, Session, Tick};
+use crate::session::{Page, Session, Tick, Watcher};
 use crate::{config, DISPLAY_NAME, VERSION};
+
+/// What the tray stands over; the module doc says which OS has which.
+enum Backing {
+    /// It runs the session: the Claude server lives and dies with the tray.
+    Owns(Box<Session>),
+    /// It shows a session another process runs.
+    Watches(Watcher),
+}
+
+impl Backing {
+    fn port(&self) -> u16 {
+        match self {
+            Backing::Owns(s) => s.port(),
+            Backing::Watches(w) => w.port(),
+        }
+    }
+
+    fn claude_wanted(&self) -> bool {
+        match self {
+            Backing::Owns(s) => s.claude_wanted(),
+            Backing::Watches(w) => w.claude_wanted(),
+        }
+    }
+
+    fn check_updates_now(&mut self) {
+        match self {
+            Backing::Owns(s) => s.check_updates_now(),
+            Backing::Watches(w) => w.check_updates_now(),
+        }
+    }
+
+    fn restart_claude(&mut self) {
+        match self {
+            Backing::Owns(s) => s.restart_claude(),
+            Backing::Watches(w) => w.restart_claude(),
+        }
+    }
+
+    fn tick(&mut self) -> Tick {
+        match self {
+            Backing::Owns(s) => s.tick(),
+            Backing::Watches(w) => w.tick(),
+        }
+    }
+}
+
+/// What quitting the tray does to Claude, for the menu: known before the
+/// session is made, since the icon is drawn first.
+fn quit_label(owns_session: bool) -> &'static str {
+    if owns_session {
+        "Quit tray (stops Claude remote control; the service keeps running)"
+    } else {
+        "Quit tray (Claude remote control and the service keep running)"
+    }
+}
 
 const ICON_OK: &[u8] = include_bytes!("../assets/tray-ok.png");
 const ICON_WARN: &[u8] = include_bytes!("../assets/tray-warn.png");
@@ -92,7 +155,7 @@ struct Ui {
 }
 
 impl Ui {
-    fn build() -> Result<Self> {
+    fn build(quit_label: &str) -> Result<Self> {
         let icons = Icons {
             ok: decode(ICON_OK)?,
             warn: decode(ICON_WARN)?,
@@ -108,11 +171,7 @@ impl Ui {
         let restart_claude = MenuItem::new("Restart Claude remote control", true, None);
         let open_logs = MenuItem::new("Open logs folder", true, None);
         let open_claude_log = MenuItem::new("Open Claude remote-control log", true, None);
-        let quit = MenuItem::new(
-            "Quit tray (stops Claude remote control; the service keeps running)",
-            true,
-            None,
-        );
+        let quit = MenuItem::new(quit_label, true, None);
 
         let menu = Menu::new();
         menu.append_items(&[
@@ -272,6 +331,8 @@ fn claude_line(r: &Report) -> String {
         ),
         "off" => "Claude: remote control off (the box's policy)".to_string(),
         "not-installed" => "Claude: Claude Code is not installed for this user".to_string(),
+        // Only a tray that watches a session elsewhere (session::Watcher).
+        "no-session" => "Claude: the session is not reporting".to_string(),
         other => format!("Claude: remote control {other}"),
     }
 }
@@ -283,13 +344,13 @@ pub enum Flow {
     Quit,
 }
 
-/// The tray between ticks: the session, the menu, and the two log paths
-/// the menu opens. The platform loops (os/*/tray.rs) drive it — Win32
-/// messages on Windows, a tao event loop on macOS — and it knows nothing
-/// about either. Fields drop in order: the session (and with it the Claude
-/// server) before the icon.
+/// The tray between ticks: what it stands over, the menu, and the two log
+/// paths the menu opens. The platform loops (os/*/tray.rs) drive it — Win32
+/// messages on Windows, a tao event loop on macOS, GTK's on Linux — and it
+/// knows nothing about any of them. Fields drop in order: an owned session
+/// (and with it the Claude server) before the icon.
 pub struct Tray {
-    session: Session,
+    session: Backing,
     ui: Ui,
     logs: PathBuf,
     claude_log: PathBuf,
@@ -298,10 +359,22 @@ pub struct Tray {
 impl Tray {
     pub fn start() -> Result<Self> {
         let cfg = config::load_or_default()?;
+        if !cfg.role().tray {
+            bail!("no tray in controller mode (config.toml says mode = \"controller\")");
+        }
         let logs: PathBuf = config::user_log_dir();
         let claude_log = logs.join("claude-rc.log");
-        let ui = Ui::build()?;
-        let session = Session::new(cfg.port, claude_log.clone());
+        // The icon first, then the session, as it always was.
+        let ui = Ui::build(quit_label(crate::os::TRAY_OWNS_SESSION))?;
+        let session = if crate::os::TRAY_OWNS_SESSION {
+            Backing::Owns(Box::new(Session::new(
+                cfg.port,
+                claude_log.clone(),
+                Launch::of(cfg.claude_rc()),
+            )?))
+        } else {
+            Backing::Watches(Watcher::new(cfg.port))
+        };
         Ok(Self {
             session,
             ui,
@@ -333,10 +406,11 @@ impl Tray {
 
     /// Advance the session and, when it polled, redraw. Quit means an
     /// update swapped the binary and we are leaving for the new one — on
-    /// Windows by starting it first (`os::tray::relaunch_self`); under
-    /// launchd, leaving is enough, as KeepAlive starts it. The session is
-    /// dropped with us, so the Claude server restarts under the new tray —
-    /// the one interruption an agent update costs a session on this machine.
+    /// Windows and Linux by starting it first (`os::tray::relaunch_self`);
+    /// under launchd, leaving is enough, as KeepAlive starts it. An owned
+    /// session is dropped with us, so the Claude server restarts under the
+    /// new tray — the one interruption an agent update costs a session on
+    /// such a machine; a watched one runs on untouched.
     pub fn tick(&mut self) -> Flow {
         match self.session.tick() {
             Tick::Idle => Flow::Continue,
@@ -358,16 +432,15 @@ impl Tray {
 
 /// Write why the tray could not run where a windowless program can be
 /// read: `tray.err` in the tray's log directory (beside the service's logs
-/// on Windows, ~/Library/Logs on macOS).
+/// on Windows, ~/Library/Logs on macOS, ~/.local/state on Linux).
 pub fn write_failure(e: &anyhow::Error) {
     let dir = config::user_log_dir();
     let _ = std::fs::create_dir_all(&dir);
     let _ = std::fs::write(dir.join("tray.err"), format!("{e:#}\n"));
 }
 
-/// The tray program's `main` (`os::tray_main` on Windows and macOS): the
-/// OS's loop until quit; a failure, with nowhere to print, goes to
-/// `tray.err` and exits 1.
+/// The tray program's `main` (`os::tray_main`): the OS's loop until quit;
+/// a failure, with nowhere to print, goes to `tray.err` and exits 1.
 pub fn main() {
     if let Err(e) = crate::os::tray::run() {
         write_failure(&e);

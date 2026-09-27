@@ -1,6 +1,8 @@
 //! The supervisor: one `claude remote-control` kept running while the box
 //! wants it, restarted with backoff, its output logged and its banner
-//! read, and the report the session (session.rs) sends the service.
+//! read, and the report the session (session.rs) sends the service. The
+//! server is the session's child or a systemd user unit of its own
+//! (`Launch`, unit.rs); the supervision is the same for both.
 
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
@@ -12,9 +14,10 @@ use std::time::{Duration, Instant};
 
 use super::cli::{cli_version, find_cli, install_method, last_meaningful};
 use super::profile::{claude_dir, home_dir, read_credentials, read_sessions, read_settings};
+use super::unit::{self, Launch, LogTail, UnitState};
 use super::workdir::pick_workdir;
 use super::{Banner, Credentials, Report, Settings, UpdateResult};
-use crate::state::now_rfc3339;
+use crate::state::{now_rfc3339, rfc3339_ago};
 
 /// A run shorter than this counts as a failure and grows the backoff.
 const QUICK_EXIT: Duration = Duration::from_secs(60);
@@ -22,12 +25,103 @@ const QUICK_EXIT: Duration = Duration::from_secs(60);
 const MAX_BACKOFF: Duration = Duration::from_secs(5 * 60);
 /// The server log is rotated once when it passes this, at the next start.
 const LOG_ROTATE_BYTES: u64 = 20 * 1024 * 1024;
+/// How often a running unit's state is asked of systemd (its log is read
+/// every tick, which is where a change shows first).
+const UNIT_POLL: Duration = Duration::from_secs(10);
+/// How often while it changes: just started, not yet with a main pid, or
+/// systemd not answering.
+const UNIT_POLL_CHANGING: Duration = Duration::from_secs(2);
 
 struct Running {
-    child: Child,
+    proc: Proc,
     since: Instant,
     started_at: String,
     banner: Arc<Mutex<Banner>>,
+}
+
+/// The server, as this session holds it.
+enum Proc {
+    /// A child: its pipes are read by threads into the log and the banner.
+    Child(Child),
+    /// A transient user unit: systemd writes the log, the tail reads it.
+    Unit(Attached),
+}
+
+/// A unit this session started or found running.
+struct Attached {
+    name: String,
+    pid: Option<u32>,
+    tail: LogTail,
+    next_poll: Instant,
+    /// `show` is failing (logged once per streak): the state is unknown,
+    /// which is never taken for a server gone.
+    unanswered: bool,
+}
+
+impl Proc {
+    fn pid(&self) -> Option<u32> {
+        match self {
+            Proc::Child(c) => Some(c.id()),
+            Proc::Unit(u) => u.pid,
+        }
+    }
+}
+
+/// Note one output line: into the banner, and among the recent lines.
+fn note_line(banner: &Mutex<Banner>, recent: &Mutex<VecDeque<String>>, line: String) {
+    banner.lock().unwrap_or_else(|p| p.into_inner()).note(&line);
+    if let Ok(mut r) = recent.lock() {
+        if r.len() >= 20 {
+            r.pop_front();
+        }
+        r.push_back(line);
+    }
+}
+
+impl Attached {
+    /// Read what the server printed since the last tick, and — every
+    /// `UNIT_POLL`, or `UNIT_POLL_CHANGING` while it settles — ask systemd
+    /// whether it still runs: None while it does (or while systemd cannot
+    /// say), Some(Ok(code)) once it exited, Some(Err(why)) when the unit is
+    /// gone.
+    fn poll(
+        &mut self,
+        banner: &Mutex<Banner>,
+        recent: &Mutex<VecDeque<String>>,
+    ) -> Option<Result<String, String>> {
+        for line in self.tail.read_new() {
+            note_line(banner, recent, line);
+        }
+        if Instant::now() < self.next_poll {
+            return None;
+        }
+        let (next, ended) = match unit::show(&self.name) {
+            Ok(UnitState::Running { pid, .. }) => {
+                self.unanswered = false;
+                self.pid = pid;
+                let settled = if pid.is_some() {
+                    UNIT_POLL
+                } else {
+                    UNIT_POLL_CHANGING
+                };
+                (settled, None)
+            }
+            Ok(UnitState::Exited(code)) => (UNIT_POLL_CHANGING, Some(Ok(code))),
+            Ok(UnitState::Gone) => (
+                UNIT_POLL_CHANGING,
+                Some(Err(format!("the unit {} is gone", self.name))),
+            ),
+            Err(e) => {
+                if !self.unanswered {
+                    tracing::warn!(unit = self.name, error = %e, "the Claude unit's state is unknown; still watching");
+                }
+                self.unanswered = true;
+                (UNIT_POLL_CHANGING, None)
+            }
+        };
+        self.next_poll = Instant::now() + next;
+        ended
+    }
 }
 
 /// Keeps one `claude remote-control` running while it is wanted.
@@ -36,6 +130,7 @@ struct Running {
 /// waits out the backoff, and starts the next one. Nothing blocks — the
 /// tray's message pump is on the same thread.
 pub struct Supervisor {
+    launch: Launch,
     cli: Option<PathBuf>,
     cli_version: Option<String>,
     /// The directory the policy names; None means pick one.
@@ -63,11 +158,20 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
-    pub fn new(named_workdir: Option<String>, log_path: PathBuf, wanted: bool) -> Self {
+    /// A supervisor that starts nothing before its first `tick`. With a
+    /// unit, it first looks for one this session's predecessor left
+    /// running, and takes it over (`attach`).
+    pub fn new(
+        named_workdir: Option<String>,
+        log_path: PathBuf,
+        wanted: bool,
+        launch: Launch,
+    ) -> Self {
         let cli = find_cli();
         let cli_version = cli.as_deref().and_then(cli_version);
         let (workdir, workdir_via) = pick_workdir(named_workdir.as_deref());
-        Self {
+        let mut sup = Self {
+            launch,
             cli,
             cli_version,
             named_workdir,
@@ -85,6 +189,59 @@ impl Supervisor {
             last_update: None,
             updating: false,
             update_slot: Arc::new(Mutex::new(None)),
+        };
+        sup.attach();
+        sup
+    }
+
+    /// A unit that outlived the previous session: running, it is taken
+    /// over where it runs — its banner read back from the log, its start
+    /// time from systemd — so the new session restarts nothing; exited, its
+    /// status is the last exit and the next start is due now.
+    fn attach(&mut self) {
+        let Launch::Unit(name) = &self.launch else {
+            return;
+        };
+        let name = name.clone();
+        match unit::show(&name) {
+            Ok(UnitState::Running {
+                pid,
+                age_secs,
+                workdir,
+            }) => {
+                let age = Duration::from_secs(age_secs.unwrap_or(0));
+                let banner = Arc::new(Mutex::new(Banner::default()));
+                let mut tail = LogTail::at_last_marker(self.log_path.clone());
+                for line in tail.read_new() {
+                    note_line(&banner, &self.recent_lines, line);
+                }
+                if let Some(w) = workdir {
+                    self.workdir = w;
+                    self.workdir_via = "where the running server was found";
+                }
+                tracing::info!(unit = name, pid, "re-attached to Claude remote control");
+                self.running = Some(Running {
+                    proc: Proc::Unit(Attached {
+                        name,
+                        pid,
+                        tail,
+                        next_poll: Instant::now() + UNIT_POLL,
+                        unanswered: false,
+                    }),
+                    since: Instant::now().checked_sub(age).unwrap_or_else(Instant::now),
+                    started_at: rfc3339_ago(age.as_secs()),
+                    banner,
+                });
+            }
+            Ok(UnitState::Exited(code)) => {
+                self.last_exit = Some(format!(
+                    "exit {code} while no session watched, found at {}",
+                    now_rfc3339()
+                ));
+                self.next_start = Some(Instant::now());
+            }
+            Ok(UnitState::Gone) => {}
+            Err(e) => tracing::warn!(unit = name, error = %e, "the Claude unit's state is unknown"),
         }
     }
 
@@ -237,15 +394,23 @@ impl Supervisor {
     pub fn tick(&mut self) {
         self.collect_update();
         if let Some(r) = self.running.as_mut() {
-            match r.child.try_wait() {
-                Ok(Some(status)) => {
+            // Some(Ok(code)): it exited ("N", or "signal"); Some(Err): lost.
+            let ended: Option<Result<String, String>> = match &mut r.proc {
+                Proc::Child(child) => match child.try_wait() {
+                    Ok(Some(status)) => Some(Ok(status
+                        .code()
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "signal".into()))),
+                    Ok(None) => None,
+                    Err(e) => Some(Err(e.to_string())),
+                },
+                Proc::Unit(u) => u.poll(&r.banner, &self.recent_lines),
+            };
+            match ended {
+                Some(Ok(code)) => {
                     let ran = r.since.elapsed();
                     self.last_banner = r.banner.lock().map(|b| b.clone()).unwrap_or_default();
                     self.running = None;
-                    let code = status
-                        .code()
-                        .map(|c| c.to_string())
-                        .unwrap_or_else(|| "signal".into());
                     self.last_exit = Some(format!(
                         "exit {code} after {} at {}",
                         short_duration(ran),
@@ -260,8 +425,8 @@ impl Supervisor {
                         self.next_start = Some(Instant::now() + self.backoff());
                     }
                 }
-                Ok(None) => {}
-                Err(e) => {
+                None => {}
+                Some(Err(e)) => {
                     self.last_exit = Some(format!("lost: {e}"));
                     self.running = None;
                     if self.wanted {
@@ -312,30 +477,86 @@ impl Supervisor {
                 return;
             }
         };
-        let log = Arc::new(Mutex::new(log));
-        {
-            let mut f = log.lock().unwrap_or_else(|p| p.into_inner());
-            let _ = writeln!(
-                f,
-                "── {} daedalus-agent-tray starting `claude remote-control --verbose` in {} ──",
-                now_rfc3339(),
-                self.workdir.display()
-            );
-        }
-        let mut cmd = self.build_command(&cli);
-        let Some(mut child) = self.spawn(&mut cmd) else {
-            return;
+        let proc = match self.launch.clone() {
+            Launch::Child => {
+                let log = Arc::new(Mutex::new(log));
+                {
+                    let mut f = log.lock().unwrap_or_else(|p| p.into_inner());
+                    let _ = writeln!(
+                        f,
+                        "── {} daedalus-agent-tray {} in {} ──",
+                        now_rfc3339(),
+                        unit::MARKER,
+                        self.workdir.display()
+                    );
+                }
+                let mut cmd = self.build_command(&cli);
+                let Some(mut child) = self.spawn(&mut cmd) else {
+                    return;
+                };
+                let banner = self.attach_log_and_banner(&mut child, &log);
+                (Proc::Child(child), banner)
+            }
+            Launch::Unit(name) => {
+                let Some(attached) = self.start_unit(&name, &cli, log) else {
+                    return;
+                };
+                (
+                    Proc::Unit(attached),
+                    Arc::new(Mutex::new(Banner::default())),
+                )
+            }
         };
-        let banner = self.attach_log_and_banner(&mut child, &log);
         if self.last_exit.is_some() || self.restarts > 0 {
             self.restarts = self.restarts.saturating_add(1);
         }
         self.running = Some(Running {
-            child,
+            proc: proc.0,
             since: Instant::now(),
             started_at: now_rfc3339(),
-            banner,
+            banner: proc.1,
         });
+    }
+
+    /// The server as a transient user unit: whatever is left of a previous
+    /// run cleared, the marker line into the log (systemd appends the
+    /// server's output after it), then `systemd-run`. A failure is recorded as
+    /// an exit and backed off like one.
+    fn start_unit(&mut self, name: &str, cli: &Path, mut log: File) -> Option<Attached> {
+        // Whatever is left of the previous run goes first, so nothing it
+        // still prints lands after the marker of this one.
+        unit::clear(name);
+        let _ = writeln!(
+            log,
+            "── {} daedalus-agent session {} in {} (unit {name}) ──",
+            now_rfc3339(),
+            unit::MARKER,
+            self.workdir.display()
+        );
+        let offset = log.metadata().map(|m| m.len()).unwrap_or(0);
+        drop(log);
+        let home = home_dir();
+        let path = std::env::var("PATH").ok();
+        let config_dir = std::env::var("CLAUDE_CONFIG_DIR").ok();
+        let env = unit::unit_env(home.as_deref(), path.as_deref(), config_dir.as_deref());
+        match unit::start(name, cli, &self.workdir, &self.log_path, &env) {
+            Ok(()) => {
+                tracing::info!(unit = name, "Claude remote control started as a user unit");
+                Some(Attached {
+                    name: name.to_string(),
+                    pid: None,
+                    tail: LogTail::at(self.log_path.clone(), offset),
+                    next_poll: Instant::now() + Duration::from_secs(1),
+                    unanswered: false,
+                })
+            }
+            Err(e) => {
+                self.last_exit = Some(format!("not started: {e} at {}", now_rfc3339()));
+                self.failures = self.failures.saturating_add(1);
+                self.next_start = Some(Instant::now() + self.backoff());
+                None
+            }
+        }
     }
 
     /// `claude remote-control --verbose` in the chosen directory, with the
@@ -410,16 +631,10 @@ impl Supervisor {
             let recent = Arc::clone(&self.recent_lines);
             std::thread::spawn(move || {
                 for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-                    banner.lock().unwrap_or_else(|p| p.into_inner()).note(&line);
                     if let Ok(mut f) = log.lock() {
                         let _ = writeln!(f, "{line}");
                     }
-                    if let Ok(mut r) = recent.lock() {
-                        if r.len() >= 20 {
-                            r.pop_front();
-                        }
-                        r.push_back(line);
-                    }
+                    note_line(&banner, &recent, line);
                 }
             });
         }
@@ -428,16 +643,23 @@ impl Supervisor {
 
     /// End the server and every session under it.
     pub fn stop(&mut self, why: &str) {
-        let Some(mut r) = self.running.take() else {
+        let Some(r) = self.running.take() else {
             return;
         };
         self.last_banner = r.banner.lock().map(|b| b.clone()).unwrap_or_default();
-        // The whole tree — the sessions the server spawned, and on Windows a
-        // `.cmd` launcher's node — as the OS reaches it (`taskkill /T`, or
-        // SIGTERM to the group with a moment to leave); then the hard kill.
-        crate::os::stop_process_tree(&mut r.child);
-        let _ = r.child.kill();
-        let _ = r.child.wait();
+        match r.proc {
+            // The whole tree — the sessions the server spawned, and on
+            // Windows a `.cmd` launcher's node — as the OS reaches it
+            // (`taskkill /T`, or SIGTERM to the group with a moment to
+            // leave); then the hard kill.
+            Proc::Child(mut child) => {
+                crate::os::stop_process_tree(&mut child);
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            // systemd ends the unit's whole cgroup, the sessions with it.
+            Proc::Unit(u) => unit::clear(&u.name),
+        }
         self.last_exit = Some(format!("stopped ({why}) at {}", now_rfc3339()));
         self.next_start = None;
     }
@@ -461,7 +683,7 @@ impl Supervisor {
             last_update: self.last_update.clone(),
             state,
             detail,
-            pid: self.running.as_ref().map(|r| r.child.id()),
+            pid: self.running.as_ref().and_then(|r| r.proc.pid()),
             started_at: self.running.as_ref().map(|r| r.started_at.clone()),
             restarts: self.restarts,
             last_exit: self.last_exit.clone(),
@@ -524,8 +746,17 @@ impl Supervisor {
 }
 
 impl Drop for Supervisor {
+    /// A child ends with its session; a unit is left running for the next
+    /// session to re-attach to — that is what it is a unit for.
     fn drop(&mut self) {
-        self.stop("tray leaving");
+        match self.launch {
+            Launch::Child => self.stop("tray leaving"),
+            Launch::Unit(_) => {
+                if self.running.is_some() {
+                    tracing::info!("leaving Claude remote control running in its unit");
+                }
+            }
+        }
     }
 }
 
@@ -562,6 +793,7 @@ mod tests {
             Some(std::env::temp_dir().display().to_string()),
             std::env::temp_dir().join("daedalus-claude-test.log"),
             false,
+            Launch::Child,
         );
         let r = sup.report();
         assert!(r.state == "not-installed" || r.state == "off");

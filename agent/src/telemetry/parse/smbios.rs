@@ -19,7 +19,7 @@ pub struct Smbios {
 }
 
 /// The chassis type (SMBIOS type 3, byte 5, lock bit masked) as a shape.
-fn chassis_form(ty: u8) -> Option<&'static str> {
+pub fn chassis_form(ty: u8) -> Option<&'static str> {
     Some(match ty & 0x7F {
         8..=10 | 14 | 31 | 32 => "laptop",
         30 => "tablet",

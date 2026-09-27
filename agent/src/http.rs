@@ -1,19 +1,19 @@
-//! The one HTTPS client, built on the OS's TLS through native-tls: SChannel
-//! on Windows, Security.framework on macOS, OpenSSL elsewhere. So the
-//! machine's own trust store is what decides whether the box's certificate
-//! (Let's Encrypt, today) and GitHub's are believed — and no C crypto
-//! library has to be built for a target to check the code for it.
+//! The one HTTPS client. On Windows and macOS it is built on the OS's TLS
+//! through native-tls — SChannel, Security.framework — so the machine's own
+//! trust store decides whether the box's certificate (Let's Encrypt, today)
+//! and GitHub's are believed, and no C crypto library has to be built for a
+//! target to check the code for it. On Linux it is rustls with the
+//! system's CA bundle, so one static binary runs on every distribution
+//! without its OpenSSL (`os::tls`).
 
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 /// A shared agent: one connection pool, one TLS configuration.
 pub fn agent() -> ureq::Agent {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     AGENT
         .get_or_init(|| {
-            let tls = native_tls::TlsConnector::new().expect("the OS TLS stack initialises");
-            ureq::AgentBuilder::new()
-                .tls_connector(Arc::new(tls))
+            crate::os::tls(ureq::AgentBuilder::new())
                 .user_agent(concat!("daedalus-agent/", env!("CARGO_PKG_VERSION")))
                 .build()
         })

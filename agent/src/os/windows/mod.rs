@@ -21,6 +21,7 @@ mod net;
 mod power;
 pub mod service;
 mod telemetry;
+#[cfg(feature = "tray")]
 pub mod tray;
 
 pub use dns::srv_lookup;
@@ -65,6 +66,27 @@ pub fn hostname() -> Option<String> {
     None
 }
 
+// ── processes: locks and clocks ───────────────────────────────────────────
+
+/// An exclusive lock on `path` (created if absent): the file opened with no
+/// sharing, held while it is open; None when another process has it open.
+pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .share_mode(0)
+        .open(path)
+        .ok()
+}
+
+/// systemd's monotonic clock has no meaning here (no Claude unit on
+/// Windows).
+pub fn monotonic_usec() -> Option<u64> {
+    None
+}
+
 // ── identity ──────────────────────────────────────────────────────────────
 
 /// No ACL is set: the file inherits ProgramData's, whose default lets the
@@ -90,6 +112,8 @@ pub const ASSETS: &[(&str, &str)] = &[
 ];
 #[cfg(not(target_arch = "x86_64"))]
 pub const ASSETS: &[(&str, &str)] = &[("daedalus-agent-unsupported", "daedalus-agent")];
+/// Both assets are required here.
+pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
 
 /// The extension is what makes a file executable here.
 pub fn mark_executable(path: &Path) -> std::io::Result<()> {
@@ -175,6 +199,23 @@ pub fn claude_keychain_login() -> bool {
     false
 }
 
+/// The server is the tray's child: the tray only restarts when an update
+/// asks it to.
+pub const CLAUDE_RC: crate::config::ClaudeRc = crate::config::ClaudeRc::Child;
+
+// ── HTTPS ─────────────────────────────────────────────────────────────────
+
+/// SChannel, through native-tls: the machine's trust store decides.
+pub fn tls(builder: ureq::AgentBuilder) -> ureq::AgentBuilder {
+    let tls = native_tls::TlsConnector::new().expect("the OS TLS stack initialises");
+    builder.tls_connector(std::sync::Arc::new(tls))
+}
+
 // ── the tray program ──────────────────────────────────────────────────────
 
+/// The tray owns the session: it is the one process in the user's desktop
+/// session, where the Claude login is.
+pub const TRAY_OWNS_SESSION: bool = true;
+
+#[cfg(feature = "tray")]
 pub use crate::tray::main as tray_main;

@@ -16,20 +16,26 @@
 //! control_plane_url = "…"     # the box, when DNS cannot find it; absent = find it
 //! search_domains = []         # more domains to ask for `_daedalus._tcp`
 //! hello_secs = 60             # how often the hello goes out
-//! mode = "node"               # node | hub
+//! mode = "node"               # node | controller
 //! telemetry = "full"          # full | minimal | off
 //! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
+//! claude_rc = "child"         # child | unit; absent = the OS's (`os::CLAUDE_RC`)
 //! ```
 //!
-//! `mode` and `telemetry` are read and carried but change nothing yet: every
-//! agent is a node that reports everything. `updates` decides whether a
+//! `mode` decides which parts of the agent run at all — an ordinary machine
+//! (`node`) or the box's own agent (`controller`); role.rs has the table.
+//! `telemetry` is read and carried but changes nothing yet: every agent
+//! reports everything. `updates` decides whether a
 //! newer release is installed: `self` installs it (today's behaviour);
 //! `staged` and `external` only report it, as `auto_update = false` always
 //! has. When `updates` is absent, `auto_update` decides (true = `self`,
 //! false = report only); when both are present, `updates` wins.
-//! `install` writes none of the four newer keys, so the file it leaves is
-//! the one it has always written.
+//! `claude_rc` is how the session runs `claude remote-control`: as its own
+//! child (Windows, macOS), or as a transient systemd user unit it starts and
+//! watches (Linux), which outlives the session (claude/unit.rs).
+//! `install` writes none of the newer keys, so the file it leaves is the one
+//! it has always written.
 //!
 //! The data directory is `C:\ProgramData\daedalus-agent` on Windows,
 //! `/Library/Application Support/daedalus-agent` on macOS and
@@ -94,8 +100,8 @@ pub struct Config {
     pub search_domains: Vec<String>,
     /// How often the agent announces itself to the box, in seconds.
     pub hello_secs: u64,
-    /// What this agent is to the rest: an ordinary machine, or the hub on
-    /// the box. Carried, not yet acted on.
+    /// What this agent is to the rest: an ordinary machine, or the
+    /// controller on the box. Decides which parts run (role.rs).
     #[serde(skip_serializing_if = "is_default")]
     pub mode: Mode,
     /// How much of the machine the agent reports. Carried, not yet acted on.
@@ -109,14 +115,31 @@ pub struct Config {
     /// environment's `DAEDALUS_AGENT_DATA_DIR` wins over it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_dir: Option<PathBuf>,
+    /// How the session runs Claude remote control; absent means the OS's
+    /// way (`Config::claude_rc`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claude_rc: Option<ClaudeRc>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
+    /// An ordinary machine on the network.
     #[default]
     Node,
-    Hub,
+    /// The box's own agent, which nix builds, configures and updates.
+    Controller,
+}
+
+/// How `claude remote-control` is run by the session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClaudeRc {
+    /// A child of the session process, ended with it.
+    Child,
+    /// A transient systemd user unit the session starts, stops and
+    /// re-attaches to, which outlives the session.
+    Unit,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -159,11 +182,24 @@ impl Default for Config {
             telemetry: TelemetryLevel::default(),
             updates: None,
             data_dir: None,
+            claude_rc: None,
         }
     }
 }
 
 impl Config {
+    /// How the session runs Claude remote control: the config's word, else
+    /// the OS's (`os::CLAUDE_RC`: a child on Windows and macOS, a unit on
+    /// Linux).
+    pub fn claude_rc(&self) -> ClaudeRc {
+        resolve_claude_rc(self.claude_rc, crate::os::CLAUDE_RC)
+    }
+
+    /// Which parts of the agent run on this machine (role.rs).
+    pub fn role(&self) -> crate::role::Role {
+        crate::role::Role::of(self.mode)
+    }
+
     pub fn update_interval(&self) -> Duration {
         Duration::from_secs(self.update_check_secs.max(60))
     }
@@ -191,6 +227,23 @@ impl Config {
             }
         }
         Ok(())
+    }
+}
+
+/// The pure half of `Config::claude_rc`. A unit needs systemd, so where the
+/// OS runs Claude as a child (Windows, macOS) `claude_rc = "unit"` is
+/// ignored with a warning rather than tried and retried; on Linux either
+/// strategy stands.
+fn resolve_claude_rc(configured: Option<ClaudeRc>, os_default: ClaudeRc) -> ClaudeRc {
+    match (configured, os_default) {
+        (Some(ClaudeRc::Unit), ClaudeRc::Child) => {
+            tracing::warn!(
+                "claude_rc = \"unit\" is ignored here: this OS runs Claude remote control as a child"
+            );
+            ClaudeRc::Child
+        }
+        (Some(c), _) => c,
+        (None, d) => d,
     }
 }
 
@@ -279,11 +332,33 @@ pub fn log_dir() -> PathBuf {
     data_dir().join("logs")
 }
 
-/// Where the TRAY writes: the same folder on Windows (ProgramData lets a
-/// user create files there); on macOS the data directory is root's, so the
-/// user's own `~/Library/Logs/daedalus-agent` (`os::user_log_dir`).
+/// Where the TRAY and the session write: the same folder on Windows
+/// (ProgramData lets a user create files there); on macOS and Linux the
+/// data directory is root's, so the user's own — `~/Library/Logs/daedalus-agent`,
+/// `$XDG_STATE_HOME/daedalus-agent` (`os::user_log_dir`).
 pub fn user_log_dir() -> PathBuf {
     crate::os::user_log_dir().unwrap_or_else(log_dir)
+}
+
+/// The transient systemd user unit the session runs Claude remote control
+/// in, when `claude_rc = "unit"` (claude/unit.rs). A process started with
+/// `DAEDALUS_AGENT_DATA_DIR` gets a name of its own, derived from that
+/// directory, so a development `session` never touches the server an
+/// installed agent runs.
+pub fn claude_unit_name() -> String {
+    claude_unit_for(env_data_dir().ok().flatten().as_deref())
+}
+
+/// The pure half of `claude_unit_name`.
+fn claude_unit_for(env_dir: Option<&Path>) -> String {
+    match env_dir {
+        None => "daedalus-claude-rc".into(),
+        Some(d) => {
+            use sha2::Digest;
+            let digest = sha2::Sha256::digest(d.as_os_str().as_encoded_bytes());
+            format!("daedalus-claude-rc-{}", &hex::encode(digest)[..10])
+        }
+    }
 }
 
 /// The config, or the defaults when there is no file. Refuses a relative
@@ -342,11 +417,22 @@ pub fn write_if_absent(cfg: &Config) -> Result<PathBuf> {
 /// The guard flushes the file writer when dropped, so the caller keeps it
 /// for the life of the process.
 pub fn init_logging(cfg: &Config, foreground: bool) -> Result<WorkerGuard> {
+    init_logging_to(cfg, &log_dir(), "agent.log", foreground)
+}
+
+/// The same, into `dir/<name>.<date>`: the headless session logs as its
+/// user, into `user_log_dir`, as `session.log`.
+pub fn init_logging_to(
+    cfg: &Config,
+    dir: &Path,
+    name: &str,
+    foreground: bool,
+) -> Result<WorkerGuard> {
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::{fmt, EnvFilter};
-    std::fs::create_dir_all(log_dir()).context("creating the log directory")?;
-    let file = tracing_appender::rolling::daily(log_dir(), "agent.log");
+    std::fs::create_dir_all(dir).context("creating the log directory")?;
+    let file = tracing_appender::rolling::daily(dir, name);
     let (writer, guard) = tracing_appender::non_blocking(file);
     let filter = EnvFilter::try_new(&cfg.log_level).unwrap_or_else(|_| EnvFilter::new("info"));
     let to_file = fmt::layer()
@@ -424,11 +510,11 @@ mod tests {
     #[test]
     fn the_newer_keys_parse() {
         let cfg: Config = toml::from_str(
-            "mode = \"hub\"\ntelemetry = \"minimal\"\nupdates = \"external\"\n\
+            "mode = \"controller\"\ntelemetry = \"minimal\"\nupdates = \"external\"\n\
              data_dir = \"/srv/agent\"\n",
         )
         .unwrap();
-        assert_eq!(cfg.mode, Mode::Hub);
+        assert_eq!(cfg.mode, Mode::Controller);
         assert_eq!(cfg.telemetry, TelemetryLevel::Minimal);
         assert_eq!(cfg.updates, Some(UpdateMode::External));
         assert_eq!(cfg.data_dir.as_deref(), Some(Path::new("/srv/agent")));
@@ -441,9 +527,38 @@ mod tests {
         assert!(toml::from_str::<Config>("mode = \"box\"").is_err());
         // Written back, a non-default value keeps its key.
         let text = toml::to_string_pretty(&cfg).unwrap();
-        assert!(text.contains("mode = \"hub\""), "{text}");
+        assert!(text.contains("mode = \"controller\""), "{text}");
         assert!(text.contains("updates = \"external\""), "{text}");
         assert!(text.contains("data_dir = \"/srv/agent\""), "{text}");
+    }
+
+    #[test]
+    fn claude_rc_parses_and_defaults_to_the_os() {
+        let cfg: Config = toml::from_str("claude_rc = \"unit\"").unwrap();
+        assert_eq!(cfg.claude_rc, Some(ClaudeRc::Unit));
+        let cfg: Config = toml::from_str("claude_rc = \"child\"").unwrap();
+        assert_eq!(cfg.claude_rc(), ClaudeRc::Child);
+        assert_eq!(Config::default().claude_rc(), crate::os::CLAUDE_RC);
+        // Linux (unit by default) takes either; a child-only OS ignores "unit".
+        use ClaudeRc::{Child, Unit};
+        assert_eq!(resolve_claude_rc(Some(Child), Unit), Child);
+        assert_eq!(resolve_claude_rc(Some(Unit), Unit), Unit);
+        assert_eq!(resolve_claude_rc(None, Unit), Unit);
+        assert_eq!(resolve_claude_rc(Some(Unit), Child), Child);
+        assert_eq!(resolve_claude_rc(None, Child), Child);
+        assert!(toml::from_str::<Config>("claude_rc = \"thread\"").is_err());
+        let cfg: Config = toml::from_str("mode = \"controller\"").unwrap();
+        assert_eq!(cfg.mode, Mode::Controller);
+    }
+
+    #[test]
+    fn a_development_session_names_its_own_claude_unit() {
+        assert_eq!(claude_unit_for(None), "daedalus-claude-rc");
+        let a = claude_unit_for(Some(&abs("a")));
+        let b = claude_unit_for(Some(&abs("b")));
+        assert!(a.starts_with("daedalus-claude-rc-") && a.len() == 29, "{a}");
+        assert_ne!(a, b);
+        assert_eq!(a, claude_unit_for(Some(&abs("a"))));
     }
 
     #[test]

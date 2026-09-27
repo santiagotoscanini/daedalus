@@ -18,9 +18,9 @@
 //!    line here — `pmset` changes are the user's to make, and the assertion
 //!    is what Apple's own tools use.
 //!
-//! The mechanisms are per OS (os/windows/power.rs, os/macos/power.rs). On
-//! Linux, for now, `Hold::acquire` refuses and the rest report nothing, so
-//! the rest of the agent can be run and tested there.
+//! On Linux the request is a logind inhibitor (`sleep:idle`, block mode),
+//! listed by `systemd-inhibit --list`, and there is no second line either.
+//! The mechanisms are per OS (os/*/power.rs).
 //!
 //! - `Hold::acquire(reason)` takes the request — the reason is what
 //!   `powercfg /requests` or `pmset -g assertions` shows — and dropping the

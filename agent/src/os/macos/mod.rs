@@ -20,11 +20,12 @@ pub mod launchd;
 mod net;
 mod power;
 mod telemetry;
+#[cfg(feature = "tray")]
 pub mod tray;
 
 pub use super::unix::{
-    hide_console, mark_executable, on_interrupt, pid_alive, seal, stop_process_tree, unseal,
-    write_private, CLAUDE_CLI_NAMES,
+    hide_console, lock_exclusive, mark_executable, monotonic_usec, on_interrupt, pid_alive, seal,
+    stop_process_tree, unseal, write_private, CLAUDE_CLI_NAMES,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;
@@ -96,6 +97,8 @@ pub const ASSETS: &[(&str, &str)] = &[
         "daedalus-agent-tray",
     ),
 ];
+/// Both assets are required here.
+pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 
@@ -129,6 +132,23 @@ pub fn claude_keychain_login() -> bool {
         .unwrap_or(false)
 }
 
+/// The server is the menu bar app's child (a launchd job of its own is a
+/// later step).
+pub const CLAUDE_RC: crate::config::ClaudeRc = crate::config::ClaudeRc::Child;
+
+// ── HTTPS ─────────────────────────────────────────────────────────────────
+
+/// Security.framework, through native-tls: the machine's trust store decides.
+pub fn tls(builder: ureq::AgentBuilder) -> ureq::AgentBuilder {
+    let tls = native_tls::TlsConnector::new().expect("the OS TLS stack initialises");
+    builder.tls_connector(std::sync::Arc::new(tls))
+}
+
 // ── the tray program ──────────────────────────────────────────────────────
 
+/// The menu bar app owns the session: it is the one process in the user's
+/// Aqua session, where the Claude login (the keychain) is.
+pub const TRAY_OWNS_SESSION: bool = true;
+
+#[cfg(feature = "tray")]
 pub use crate::tray::main as tray_main;

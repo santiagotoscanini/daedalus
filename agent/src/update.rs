@@ -9,8 +9,8 @@
 //! key compiled in below. Only then is the running binary renamed to `.old`
 //! and the new one moved into its place; then the process exits non-zero,
 //! and the Service Control Manager's recovery action (launchd's KeepAlive on
-//! macOS) starts it again on the new binary. The `.old` is deleted on the
-//! next clean start.
+//! macOS, systemd's `Restart=always` on Linux) starts it again on the new
+//! binary. The `.old` is deleted on the next clean start.
 //!
 //! Trust is the key, not the transport: GitHub over TLS says where the file
 //! came from, the signature says who built it. A release missing a `.sig` is
@@ -46,11 +46,13 @@ pub const RELEASE_PUBLIC_KEY_HEX: &str =
 
 /// What a release carries for this target, and what each asset becomes on
 /// disk: the service binary and the tray, named by Rust target in the
-/// release and by their plain names beside this executable. Both must be
-/// present and signed, or the release is skipped — a service without its
-/// tray, or the reverse, is a half-installed version. The table is per OS
-/// (`os::ASSETS`).
-pub use crate::os::ASSETS;
+/// release and by their plain names beside this executable. The required
+/// ones must be present and signed, or the release is skipped — on Windows
+/// and macOS a service without its tray, or the reverse, is a
+/// half-installed version. The optional ones (the Linux tray, x86_64 only)
+/// are updated where installed and never hold an update back. The tables
+/// are per OS (`os::ASSETS`, `os::OPTIONAL_ASSETS`).
+pub use crate::os::{ASSETS, OPTIONAL_ASSETS};
 
 const TAG_PREFIX: &str = "agent-v";
 const USER_AGENT: &str = concat!("daedalus-agent/", env!("CARGO_PKG_VERSION"));
@@ -88,24 +90,37 @@ fn running_version() -> semver::Version {
     semver::Version::parse(crate::VERSION).expect("Cargo.toml version is semver")
 }
 
-/// The assets this target needs from one API release, or None when any is
-/// missing or unsigned.
-fn assets_of(r: &ApiRelease) -> Option<Vec<Asset>> {
-    ASSETS
+/// One asset and its signature in a release, when both are there.
+fn asset_of(r: &ApiRelease, remote: &str, local: &'static str) -> Option<Asset> {
+    let url = r.assets.iter().find(|a| a.name == remote)?;
+    let sig = r
+        .assets
         .iter()
-        .map(|(remote, local)| {
-            let url = r.assets.iter().find(|a| a.name == *remote)?;
-            let sig = r
-                .assets
-                .iter()
-                .find(|a| a.name == format!("{remote}.sig"))?;
-            Some(Asset {
-                local_name: local,
-                url: url.browser_download_url.clone(),
-                sig_url: sig.browser_download_url.clone(),
-            })
-        })
-        .collect()
+        .find(|a| a.name == format!("{remote}.sig"))?;
+    Some(Asset {
+        local_name: local,
+        url: url.browser_download_url.clone(),
+        sig_url: sig.browser_download_url.clone(),
+    })
+}
+
+/// The assets this target needs from one API release, or None when a
+/// required one is missing or unsigned; plus each optional one this
+/// machine has (`installed` says, by local name) and the release carries
+/// signed — the Linux tray, which a desktop-less or aarch64 machine never
+/// has and never gets.
+fn assets_of(r: &ApiRelease, installed: impl Fn(&str) -> bool) -> Option<Vec<Asset>> {
+    let mut out: Vec<Asset> = ASSETS
+        .iter()
+        .map(|(remote, local)| asset_of(r, remote, local))
+        .collect::<Option<_>>()?;
+    out.extend(
+        OPTIONAL_ASSETS
+            .iter()
+            .filter(|(_, local)| installed(local))
+            .filter_map(|(remote, local)| asset_of(r, remote, local)),
+    );
+    Some(out)
 }
 
 /// Ask the feed. `Ok(None)` is "nothing newer"; an error is the feed not
@@ -140,7 +155,9 @@ pub fn check() -> Result<Option<Release>> {
         if version <= running {
             continue;
         }
-        let Some(assets) = assets_of(&r) else {
+        let dir = install_dir().ok();
+        let installed = |local: &str| dir.as_ref().is_some_and(|d| d.join(local).exists());
+        let Some(assets) = assets_of(&r, installed) else {
             tracing::warn!(
                 tag = r.tag_name,
                 "release lacks an asset or a signature for this target; skipped"
@@ -265,7 +282,7 @@ fn undo(moved: &[(PathBuf, PathBuf)]) {
 /// started well enough to reach here.
 pub fn retire_old_binaries() {
     let Ok(dir) = install_dir() else { return };
-    for (_, local) in ASSETS {
+    for (_, local) in ASSETS.iter().chain(OPTIONAL_ASSETS) {
         let old = suffixed(&dir.join(local), "old");
         if old.exists() {
             match std::fs::remove_file(&old) {
@@ -401,9 +418,53 @@ mod tests {
 
     #[test]
     fn every_asset_has_a_local_name() {
-        for (remote, local) in ASSETS {
+        for (remote, local) in ASSETS.iter().chain(OPTIONAL_ASSETS) {
             assert!(!remote.is_empty() && !local.is_empty());
             assert!(!local.contains('/') && !local.contains('\\'));
         }
+    }
+
+    /// A release as the API lists it, carrying `names` (each signed when
+    /// `signed` says so).
+    fn release(names: &[&str], signed: bool) -> ApiRelease {
+        let mut assets = Vec::new();
+        for n in names {
+            assets.push(ApiAsset {
+                name: n.to_string(),
+                browser_download_url: format!("https://x/{n}"),
+            });
+            if signed {
+                assets.push(ApiAsset {
+                    name: format!("{n}.sig"),
+                    browser_download_url: format!("https://x/{n}.sig"),
+                });
+            }
+        }
+        ApiRelease {
+            tag_name: "agent-v9.9.9".into(),
+            draft: false,
+            prerelease: false,
+            assets,
+        }
+    }
+
+    #[test]
+    fn required_assets_decide_and_optional_ones_follow_what_is_installed() {
+        let required: Vec<&str> = ASSETS.iter().map(|(r, _)| *r).collect();
+        let optional: Vec<&str> = OPTIONAL_ASSETS.iter().map(|(r, _)| *r).collect();
+        let all: Vec<&str> = required.iter().chain(&optional).copied().collect();
+        // Everything there and signed, the optional ones installed: all of them.
+        let got = assets_of(&release(&all, true), |_| true).unwrap();
+        assert_eq!(got.len(), ASSETS.len() + OPTIONAL_ASSETS.len());
+        // Not installed here: only the required ones.
+        let got = assets_of(&release(&all, true), |_| false).unwrap();
+        assert_eq!(got.len(), ASSETS.len());
+        // A release without the optional ones still installs.
+        let got = assets_of(&release(&required, true), |_| true).unwrap();
+        assert_eq!(got.len(), ASSETS.len());
+        // Unsigned: skipped.
+        assert!(assets_of(&release(&all, false), |_| true).is_none());
+        // A required one missing: skipped.
+        assert!(assets_of(&release(&optional, true), |_| true).is_none());
     }
 }

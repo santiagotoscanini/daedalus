@@ -11,8 +11,8 @@
 //! The query is per OS (`os::srv_lookup`). On Windows it goes through the
 //! OS resolver (`DnsQuery_W`), with the machine's DNS settings and cache.
 //! On macOS it is `dig`, which reads the resolv.conf macOS generates from
-//! its primary resolver and bypasses the system cache. Linux finds nothing
-//! yet: `control_plane_url` is the way there.
+//! its primary resolver and bypasses the system cache. On Linux it is one
+//! UDP question to resolv.conf's nameservers (dns.rs), no tool needed.
 
 use crate::config::Config;
 use crate::net::Adapter;

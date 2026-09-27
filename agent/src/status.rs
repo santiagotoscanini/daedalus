@@ -7,7 +7,8 @@
 //! refused from any address but loopback:
 //!
 //!   POST /update/check    the updater looks now (the tray's "check for updates")
-//!   POST /claude/report   the tray's picture of Claude Code (its session,
+//!   POST /claude/report   the tray's picture of Claude Code (its session —
+//!                         on Linux the session unit's own —
 //!                         session.rs, and claude/); the
 //!                         answer is a `ReportAnswer`: the policy's part for
 //!                         the tray and, once each, a pending update or restart

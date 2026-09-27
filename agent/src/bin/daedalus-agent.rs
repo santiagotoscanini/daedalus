@@ -1,14 +1,16 @@
 //! The service executable and its verbs; `print_help` below is the list.
-//! `run` is what the Service Control Manager (launchd on macOS) calls;
-//! `serve` is the same work in the foreground, for a terminal. What differs
-//! by OS — the service, install, uninstall, Ctrl-C — is `os`'s.
+//! `run` is what the Service Control Manager (launchd on macOS, systemd on
+//! Linux) calls; `serve` is the same work in the foreground, for a
+//! terminal; `session` is the headless Claude session, what the Linux user
+//! unit runs. What differs by OS — the service, install, uninstall, Ctrl-C
+//! — is `os`'s.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use daedalus_agent::{agent_main, config, os, update, VERSION};
+use daedalus_agent::{agent_main, config, os, role, update, VERSION};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -22,6 +24,7 @@ fn main() {
         "serve" => serve_foreground(),
         "status" => status_cmd(),
         "update" => update_cmd(rest),
+        "session" => daedalus_agent::session::run(),
         "claude" => claude_cmd(rest),
         "version" | "--version" | "-V" => {
             println!("daedalus-agent {VERSION}");
@@ -49,7 +52,8 @@ fn print_help() {
          serve                run in the foreground, in this terminal\n  \
          status               print the running agent's status page\n  \
          update [--apply]     check the release feed now; --apply installs a newer release\n  \
-         claude restart       ask the tray to restart `claude remote-control`\n  \
+         session              the Claude session without a tray; what the Linux user unit runs\n  \
+         claude restart       ask the session to restart `claude remote-control`\n  \
          version              print the version"
     );
 }
@@ -67,8 +71,17 @@ fn serve_foreground() -> Result<()> {
     agent_main(stop, true)
 }
 
+/// The role config.toml gives this machine; a file that does not parse is
+/// no reason to refuse a (re)install, so it reads as a node's.
+fn role() -> role::Role {
+    config::load_or_default()
+        .map(|c| c.role())
+        .unwrap_or(role::Role::of(config::Mode::Node))
+}
+
 fn install(args: &[String]) -> Result<()> {
     config::refuse_env_override("install")?;
+    role().allow_install("install")?;
     let mut cfg = config::Config::default();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -88,6 +101,7 @@ fn install(args: &[String]) -> Result<()> {
 
 fn uninstall() -> Result<()> {
     config::refuse_env_override("uninstall")?;
+    role().allow_install("uninstall")?;
     os::svc::uninstall()
 }
 
@@ -105,6 +119,9 @@ fn status_cmd() -> Result<()> {
 
 fn update_cmd(args: &[String]) -> Result<()> {
     let apply = args.iter().any(|a| a == "--apply");
+    if apply && !role().self_update {
+        bail!("`update --apply` refuses in controller mode: nix moves this agent");
+    }
     match update::check()? {
         None => println!("no newer release than {VERSION}"),
         Some(rel) => {

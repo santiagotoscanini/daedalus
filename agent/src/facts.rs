@@ -3,8 +3,8 @@
 //! while the service runs) and cheap to read again.
 //!
 //! The readers are per OS (`os`): on Windows the registry and one kernel
-//! call, on macOS `sw_vers` and `sysctl`; on Linux they are empty, which
-//! the readers on the box tolerate.
+//! call, on macOS `sw_vers` and `sysctl`, on Linux os-release, cpuinfo and
+//! meminfo.
 
 use serde::Serialize;
 

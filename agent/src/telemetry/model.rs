@@ -129,7 +129,8 @@ pub struct Drive {
     /// "ssd" | "hdd" (Windows also "scm"), when the OS says.
     pub kind: Option<String>,
     /// The OS's own verdict: "healthy" | "warning" | "unhealthy" on Windows,
-    /// "verified" | "failing" | "not supported" from SMART on a Mac.
+    /// "verified" | "failing" | "not supported" from SMART on a Mac;
+    /// "verified" | "failing" | "asleep" (in standby, left unwoken) on Linux.
     pub health: Option<String>,
     pub temperature_c: Option<f64>,
     pub power_on_hours: Option<u64>,

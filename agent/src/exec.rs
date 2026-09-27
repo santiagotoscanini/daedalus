@@ -1,13 +1,14 @@
 //! Running a command with a deadline and capturing its output: the shared
 //! bounded shell-out of the telemetry tiers (PowerShell on Windows, Apple's
-//! tools on macOS) and of Claude Code's version probe and `claude update`.
+//! tools on macOS, systemctl, smartctl and the package managers on Linux)
+//! and of Claude Code's version probe and `claude update`.
 //! One deadline command stays outside it: launchd.rs's `launchctl_timeout`,
 //! which polls the child and reads its output only once it has exited.
 //!
 //! Every command starts with a closed stdin, no console window on Windows
 //! (`os::hide_console`), and its output pipes drained on threads of their
 //! own — a child that fills one pipe while nobody reads the other blocks
-//! forever. At the deadline it is killed and reaped. Three shapes over that
+//! forever. At the deadline it is killed and reaped. Four shapes over that
 //! one core, each what its caller has always had:
 //!
 //! - `stdout_or`: the whole stdout, or why not (`Failed`: not started, no
@@ -19,6 +20,11 @@
 //!   whether it exited 0; `claude update` answers on either stream.
 //! - `first_line`: the first line of stdout, stderr discarded; a version
 //!   probe.
+//! - `stdout_any`: the whole stdout and the exit code, whatever the code —
+//!   for the tools that answer with it (`dnf check-update`, `pacman -Qu`).
+//!
+//! `locate` finds a program on PATH or in the usual unix directories, so a
+//! reader tells "not installed" from "failed".
 
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
@@ -137,7 +143,28 @@ impl Running {
 }
 
 /// A command's whole stdout, or why not; killed at the deadline.
-pub fn stdout_or(mut cmd: Command, deadline: Duration, text: Text) -> Result<String, Failed> {
+pub fn stdout_or(cmd: Command, deadline: Duration, text: Text) -> Result<String, Failed> {
+    match stdout_with_status(cmd, deadline, text)? {
+        (0, stdout, _) => Ok(stdout),
+        (code, _, first) => Err(Failed::Exit(code, first)),
+    }
+}
+
+/// A command's whole stdout and its exit code, whatever the code — for the
+/// tools that answer with it (`dnf check-update` exits 100 when there are
+/// updates, `pacman -Qu` 1 when there are none, `rpm -qf` 1 for a file no
+/// package owns). Err only when it did not start or did not finish.
+pub fn stdout_any(cmd: Command, deadline: Duration, text: Text) -> Result<(i32, String), Failed> {
+    stdout_with_status(cmd, deadline, text).map(|(code, out, _)| (code, out))
+}
+
+/// The one core of `stdout_or` and `stdout_any`: the exit code (-1 for a
+/// signal), stdout, and — on a non-zero exit — the first line of stderr.
+fn stdout_with_status(
+    mut cmd: Command,
+    deadline: Duration,
+    text: Text,
+) -> Result<(i32, String, String), Failed> {
     let started = Instant::now();
     let mut r = Running::start(&mut cmd, true, text).map_err(|e| Failed::Spawn(e.to_string()))?;
     let until = Instant::now() + deadline;
@@ -158,7 +185,7 @@ pub fn stdout_or(mut cmd: Command, deadline: Duration, text: Text) -> Result<Str
         match r.child.try_wait() {
             Ok(Some(status)) => {
                 if status.success() {
-                    return Ok(stdout);
+                    return Ok((0, stdout, String::new()));
                 }
                 let stderr = stderr
                     .or_else(|| {
@@ -171,7 +198,7 @@ pub fn stdout_or(mut cmd: Command, deadline: Duration, text: Text) -> Result<Str
                     .find(|l| !l.trim().is_empty())
                     .unwrap_or("")
                     .trim();
-                return Err(Failed::Exit(status.code().unwrap_or(-1), first.to_string()));
+                return Ok((status.code().unwrap_or(-1), stdout, first.to_string()));
             }
             Ok(None) if started.elapsed() < deadline => {
                 std::thread::sleep(Duration::from_millis(20));
@@ -232,6 +259,31 @@ pub fn first_line(mut cmd: Command, timeout: Duration) -> Option<String> {
         .filter(|l| !l.is_empty())
 }
 
+/// Where the unix tools live besides PATH: a service's PATH is systemd's
+/// or launchd's default, and on NixOS the tools are under the profile, not
+/// /usr.
+const UNIX_TOOL_DIRS: &[&str] = &[
+    "/usr/local/sbin",
+    "/usr/local/bin",
+    "/usr/sbin",
+    "/usr/bin",
+    "/sbin",
+    "/bin",
+    "/run/wrappers/bin",
+    "/run/current-system/sw/bin",
+];
+
+/// A program by name: the first match on PATH, then in the usual unix
+/// directories. None when it is not on this machine — which is how a
+/// reader tells "not installed" from "failed".
+pub fn locate(name: &str) -> Option<std::path::PathBuf> {
+    let mut dirs: Vec<std::path::PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    dirs.extend(UNIX_TOOL_DIRS.iter().map(std::path::PathBuf::from));
+    dirs.into_iter().map(|d| d.join(name)).find(|p| p.is_file())
+}
+
 // The shapes are exercised through `sh`, which the Windows runner lacks.
 #[cfg(all(test, unix))]
 mod tests {
@@ -284,6 +336,28 @@ mod tests {
             Err(Failed::Timeout)
         );
         assert!(t.elapsed() < Duration::from_secs(4));
+    }
+
+    #[test]
+    fn stdout_any_keeps_the_output_of_a_non_zero_exit() {
+        assert_eq!(
+            stdout_any(
+                sh("echo pkg.x86_64 1.2 updates; exit 100"),
+                LONG,
+                Text::Strict
+            ),
+            Ok((100, "pkg.x86_64 1.2 updates\n".to_string()))
+        );
+        assert_eq!(
+            stdout_any(sh("echo ok"), LONG, Text::Strict),
+            Ok((0, "ok\n".to_string()))
+        );
+        assert_eq!(
+            stdout_any(sh("sleep 5"), Duration::from_millis(300), Text::Strict),
+            Err(Failed::Timeout)
+        );
+        assert!(locate("sh").is_some());
+        assert!(locate("daedalus-no-such-tool").is_none());
     }
 
     #[test]

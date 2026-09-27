@@ -119,3 +119,32 @@ pub fn on_interrupt<F: Fn() + Send + Sync + 'static>(f: F) {
 
 /// `claude`, on every unix.
 pub const CLAUDE_CLI_NAMES: &[&str] = &["claude"];
+
+/// CLOCK_MONOTONIC in microseconds: the clock systemd's `…Monotonic`
+/// timestamps are on.
+pub fn monotonic_usec() -> Option<u64> {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: a valid out-struct for a clock every unix has.
+    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) } != 0 {
+        return None;
+    }
+    Some(ts.tv_sec as u64 * 1_000_000 + ts.tv_nsec as u64 / 1_000)
+}
+
+/// An exclusive lock on `path` (created if absent), held while the returned
+/// file is open; None when another process holds it.
+pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
+    use std::os::fd::AsRawFd;
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)
+        .ok()?;
+    // SAFETY: flock on a descriptor this function owns.
+    let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    (rc == 0).then_some(f)
+}

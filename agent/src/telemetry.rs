@@ -14,7 +14,7 @@
 //! a search that can take a minute and touch the network, run hourly on its
 //! own thread and merged in when it lands. Each platform has a `Collector`
 //! and an updates reader, chosen by `os` (os/windows/telemetry.rs,
-//! os/macos/telemetry.rs; on Linux a stub that says so); anything it cannot
+//! os/macos/telemetry.rs, os/linux/telemetry.rs); anything it cannot
 //! read is `None` or an empty list, never a guess, and what went wrong is
 //! in `errors` so the page can say so.
 //!

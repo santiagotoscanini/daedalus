@@ -50,3 +50,25 @@ export function AppleLogo({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+/** Tux, simplified to a silhouette that fills with `currentColor` like the
+ * marks beside it: the body with the belly, eyes and beak cut out, and the
+ * two feet. */
+export function LinuxLogo({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
+      <path
+        fillRule="evenodd"
+        d="M6 13.5a6 8 0 1 0 12 0a6 8 0 1 0-12 0ZM8.6 15.6a3.4 4.9 0 1 0 6.8 0a3.4 4.9 0 1 0-6.8 0ZM9.4 8.4a0.95 1.15 0 1 0 1.9 0a0.95 1.15 0 1 0-1.9 0ZM12.7 8.4a0.95 1.15 0 1 0 1.9 0a0.95 1.15 0 1 0-1.9 0ZM10.9 10.3h2.2L12 11.6Z"
+      />
+      <path d="M4.2 21.6a3 1.3 0 1 0 6 0a3 1.3 0 1 0-6 0ZM13.8 21.6a3 1.3 0 1 0 6 0a3 1.3 0 1 0-6 0Z" />
+    </svg>
+  );
+}

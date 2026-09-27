@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { AppleLogo, GitHubLogo, WindowsLogo } from "~/components/icons";
+import { AppleLogo, GitHubLogo, LinuxLogo, WindowsLogo } from "~/components/icons";
 import { Reveal } from "~/components/reveal";
 import { SectionHeading } from "~/components/ui/section-heading";
 
@@ -9,7 +9,8 @@ const INIT = "nix flake init -t github:santiagotoscanini/daedalus#config";
  * and agent/install.sh at build time), so neither line names a version: the
  * script finds the newest agent release itself. */
 const AGENT_INSTALL_WINDOWS = "irm https://daedalus.toscanini.me/install.ps1 | iex";
-const AGENT_INSTALL_MACOS = "curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh";
+/** One script for macOS and Linux: it branches on `uname`. */
+const AGENT_INSTALL_UNIX = "curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh";
 /** GitHub's release search matches titles, not tags: the releases are titled
  * "daedalus-agent <version>", so that is the word that lists them. */
 const AGENT_RELEASES = `${REPO}/releases?q=daedalus-agent`;
@@ -42,13 +43,17 @@ export function GetIt() {
           </Reveal>
           <Reveal delay={0.08}>
             <Card
-              platform="Windows · macOS"
+              platform="Windows · macOS · Linux"
               state="early"
               title="The agent"
               body="A service for the machines the box does not run. It keeps them awake, shows itself in the tray or the menu bar, runs Claude Code's remote control there, and updates itself from each new release — one install, then never a walk to it again."
               commands={[
                 { label: "Windows", text: AGENT_INSTALL_WINDOWS, note: "In an administrator PowerShell." },
-                { label: "macOS", text: AGENT_INSTALL_MACOS, note: "In a terminal; it asks for your password once." },
+                {
+                  label: "macOS · Linux",
+                  text: AGENT_INSTALL_UNIX,
+                  note: "In a terminal; it asks for your password once. Linux: any systemd distribution on x86_64 or aarch64, with the tray on x86_64 desktops.",
+                },
               ]}
               commandNote={
                 <>
@@ -65,6 +70,7 @@ export function GetIt() {
               actions={[
                 { href: AGENT_RELEASES, label: "Windows", icon: <WindowsLogo size={14} /> },
                 { href: AGENT_RELEASES, label: "macOS", icon: <AppleLogo size={14} /> },
+                { href: AGENT_RELEASES, label: "Linux", icon: <LinuxLogo size={14} /> },
               ]}
             />
           </Reveal>
