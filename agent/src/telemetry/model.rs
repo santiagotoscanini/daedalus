@@ -373,6 +373,25 @@ impl Telemetry {
         t.updates = None;
         t
     }
+
+    /// The document at `telemetry = "minimal"`: the machine and how it is
+    /// doing — make, model, firmware, OS, processor, memory, volumes, GPUs,
+    /// temperatures, network, battery, the process COUNT, providers and
+    /// what could not be read. Nothing of the slow read (drives with their
+    /// serials and SMART, services, browsers, installed applications) and
+    /// no OS updates: the sampler never reads those at this level
+    /// (telemetry.rs `run_loop`). Processes are sampled — the count needs
+    /// them — but their list is dropped here. Without the application list
+    /// a provider shows only while it answers on its port. This is what
+    /// makes the document say so whatever a collector handed back.
+    pub fn minimal(&self) -> Telemetry {
+        let mut t = self.public();
+        t.drives.clear();
+        t.browsers.clear();
+        t.service_count = None;
+        t.app_count = None;
+        t
+    }
 }
 
 /// The static half, read rarely.

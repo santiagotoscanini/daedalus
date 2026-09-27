@@ -17,7 +17,10 @@
 //! (tray.rs), which draws what each poll returns, and `daedalus-agent
 //! session` (`run` below), headless — the Linux user unit, which runs with
 //! nobody logged in. A Linux tray does not own a session: it shows the one
-//! the unit runs, through the service (`Watcher`).
+//! the unit runs, through the service (`Watcher`). On the controller the
+//! session is a thread of the service itself (`run_in_service`), and it
+//! reports straight into the service's shared state instead of over
+//! loopback (`Link::InProcess`).
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
@@ -30,6 +33,7 @@ use serde::Deserialize;
 use crate::claude::{Launch, Report, ReportAnswer, Supervisor};
 use crate::config;
 use crate::hello::Policy;
+use crate::status::Shared;
 use crate::VERSION;
 
 /// How often the page is read and the report sent.
@@ -105,10 +109,46 @@ fn send_report(port: u16, report: &Report) -> Option<ReportAnswer> {
         .ok()
 }
 
+/// How the session reaches the service it reports to.
+pub enum Link {
+    /// The service in another process, through its loopback page (a tray,
+    /// the Linux session unit).
+    Http(u16),
+    /// The service in this process (the controller): the report lands in
+    /// its shared state directly, and there is no page to read.
+    InProcess(Arc<Shared>),
+}
+
+impl Link {
+    fn page(&self) -> Option<Page> {
+        match self {
+            Link::Http(port) => read_page(*port),
+            Link::InProcess(_) => None,
+        }
+    }
+
+    fn report(&self, report: &Report) -> Option<ReportAnswer> {
+        match self {
+            Link::Http(port) => send_report(*port, report),
+            Link::InProcess(shared) => Some(shared.set_claude(report.clone())),
+        }
+    }
+
+    /// An instruction waits that the next report would carry: the
+    /// in-process session reports at once rather than at the next `POLL`.
+    fn instruction_waiting(&self) -> bool {
+        match self {
+            Link::Http(_) => false,
+            Link::InProcess(shared) => shared.claude_instruction_waiting(),
+        }
+    }
+}
+
 /// The supervisor and when to look at the page next. Dropping it stops a
 /// child Claude server (the supervisor's `Drop`) and releases the lock.
 pub struct Session {
     port: u16,
+    link: Link,
     sup: Supervisor,
     next_poll: Instant,
     /// One session per user: two would supervise one server against each
@@ -163,7 +203,41 @@ impl Session {
         let lock = claim_lock(&claude_log)?;
         Ok(Self {
             port,
-            sup: Supervisor::new(None, claude_log, true, launch),
+            link: Link::Http(port),
+            sup: Supervisor::new(
+                None,
+                claude_log,
+                Policy::default().claude_remote_control,
+                launch,
+            ),
+            next_poll: Instant::now(),
+            _lock: lock,
+        })
+    }
+
+    /// The controller's session, inside the service: it reports into
+    /// `shared` and starts from the policy already there (config.toml's
+    /// `[controller]`), so nothing runs that the config did not ask for —
+    /// not even for the moment before the first report.
+    pub fn in_process(
+        shared: Arc<Shared>,
+        port: u16,
+        claude_log: PathBuf,
+        launch: Launch,
+    ) -> anyhow::Result<Self> {
+        let lock = claim_lock(&claude_log)?;
+        let policy = shared.policy();
+        let mut sup = Supervisor::new(
+            policy.claude_workdir,
+            claude_log,
+            policy.claude_remote_control,
+            launch,
+        );
+        sup.set_off_reason("config.toml's [controller] claude_remote_control is off");
+        Ok(Self {
+            port,
+            link: Link::InProcess(shared),
+            sup,
             next_poll: Instant::now(),
             _lock: lock,
         })
@@ -195,10 +269,10 @@ impl Session {
     /// apply the answer. Cheap when not due; call it often.
     pub fn tick(&mut self) -> Tick {
         self.sup.tick();
-        if Instant::now() < self.next_poll {
+        if Instant::now() < self.next_poll && !self.link.instruction_waiting() {
             return Tick::Idle;
         }
-        let page = read_page(self.port);
+        let page = self.link.page();
         if let Some(p) = &page {
             if p.version != VERSION && !p.restart_pending {
                 return Tick::VersionChanged;
@@ -206,7 +280,7 @@ impl Session {
         }
         self.sup.tick();
         let report = self.sup.report();
-        if let Some(answer) = send_report(self.port, &report) {
+        if let Some(answer) = self.link.report(&report) {
             self.sup.set_named_workdir(answer.workdir);
             self.sup.set_wanted(answer.wanted);
             // The update only starts here: it runs on its own thread
@@ -331,9 +405,14 @@ pub fn run() -> anyhow::Result<()> {
     if !cfg.role().session {
         anyhow::bail!("this machine's role runs no session");
     }
+    if cfg.role().session_in_service {
+        anyhow::bail!(
+            "in controller mode the session runs inside the service (`run` or `serve`), not on its own"
+        );
+    }
     let dir = config::user_log_dir();
     let _log = config::init_logging_to(&cfg, &dir, "session.log", std::io::stderr().is_terminal())?;
-    let launch = Launch::of(cfg.claude_rc());
+    let launch = Launch::of(&cfg);
     tracing::info!(version = VERSION, port = cfg.port, launch = ?launch, "session starting");
     let stop = Arc::new(AtomicBool::new(false));
     {
@@ -360,6 +439,40 @@ pub fn run() -> anyhow::Result<()> {
                     );
                     last = Some(now);
                 }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    tracing::info!("session stopping");
+    drop(session);
+    Ok(())
+}
+
+/// The controller's session: a thread of the service (role.rs
+/// `session_in_service`), reporting into `shared` until `stop` is raised.
+/// Its Claude log is `claude-rc.log` beside the service's own (the
+/// controller's data directory is its user's, so there is no second log
+/// directory to keep). A unit-run server is left running when it leaves,
+/// and the next start re-attaches to it, as the session unit's does.
+pub fn run_in_service(
+    cfg: &config::Config,
+    shared: Arc<Shared>,
+    stop: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
+    let launch = Launch::of(cfg);
+    tracing::info!(launch = ?launch, "session starting inside the service");
+    let log = config::log_dir().join("claude-rc.log");
+    let mut session = Session::in_process(shared, cfg.port, log, launch)?;
+    let mut last: Option<String> = None;
+    while !stop.load(Ordering::Relaxed) {
+        if let Tick::Polled(poll) = session.tick() {
+            if last.as_deref() != Some(poll.report.state.as_str()) {
+                tracing::info!(
+                    claude = %poll.report.state,
+                    detail = poll.report.detail.as_deref().unwrap_or(""),
+                    "session state"
+                );
+                last = Some(poll.report.state.clone());
             }
         }
         std::thread::sleep(Duration::from_millis(250));
@@ -397,7 +510,15 @@ mod tests {
             .path();
         assert!(crate::os::lock_exclusive(&held).is_none());
         drop(first);
-        assert!(crate::os::lock_exclusive(&held).is_some());
+        // Other tests spawn processes; a child forked while the lock was
+        // held shares it until it execs, so the release is waited for.
+        let until = Instant::now() + Duration::from_secs(5);
+        let mut again = crate::os::lock_exclusive(&held);
+        while again.is_none() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+            again = crate::os::lock_exclusive(&held);
+        }
+        assert!(again.is_some());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -38,12 +38,13 @@ pub enum Launch {
 }
 
 impl Launch {
-    /// From config.toml's `claude_rc` (already defaulted to the OS's), with
-    /// the unit named by `config::claude_unit_name`.
-    pub fn of(rc: ClaudeRc) -> Self {
-        match rc {
+    /// From config.toml: `claude_rc` (defaulted to the OS's), with the unit
+    /// `Config::claude_unit` names — the controller's own when nix sets
+    /// one, else `config::claude_unit_name`.
+    pub fn of(cfg: &crate::config::Config) -> Self {
+        match cfg.claude_rc() {
             ClaudeRc::Child => Launch::Child,
-            ClaudeRc::Unit => Launch::Unit(crate::config::claude_unit_name()),
+            ClaudeRc::Unit => Launch::Unit(cfg.claude_unit()),
         }
     }
 }
@@ -434,6 +435,10 @@ mod tests {
         std::fs::write(&log, &raw).unwrap();
         assert_eq!(LogTail::at_last_marker(log.clone()).read_new(), ["after"]);
         let _ = std::fs::remove_dir_all(&dir);
-        assert_eq!(Launch::of(ClaudeRc::Child), Launch::Child);
+        let child = crate::config::Config {
+            claude_rc: Some(ClaudeRc::Child),
+            ..Default::default()
+        };
+        assert_eq!(Launch::of(&child), Launch::Child);
     }
 }

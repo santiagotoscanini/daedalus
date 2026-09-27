@@ -25,7 +25,7 @@ pub mod tray;
 
 pub use super::unix::{
     hide_console, lock_exclusive, mark_executable, monotonic_usec, on_interrupt, pid_alive, seal,
-    stop_process_tree, unseal, write_private, CLAUDE_CLI_NAMES,
+    serve_local_socket, stop_process_tree, unseal, write_private, LocalSocket, CLAUDE_CLI_NAMES,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;

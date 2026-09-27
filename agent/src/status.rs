@@ -28,6 +28,11 @@
 //! can already observe, and on Windows the firewall rule `install` adds
 //! scopes it to the local subnet. The tokens in the user's Claude profile never reach
 //! this page — the report copies dates and a plan name, not credentials.
+//!
+//! On the controller the page answers on loopback only (role.rs): the box
+//! adds no LAN listener, and the app's door is the socket (api/), which
+//! reads the same `Shared` this page does. `POST /claude/update` refuses
+//! there — nix pins Claude Code on the box.
 
 use std::io::Read;
 use std::sync::{Arc, Mutex};
@@ -37,9 +42,12 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use tiny_http::{Header, Method, Response, Server};
 
+use crate::api::wire::{event, ClaudeChanged, TelemetryUpdated};
+use crate::api::Events;
 use crate::claude::{Report, ReportAnswer, Summary};
 use crate::facts::Facts;
 use crate::hello::{ControlPlane, Policy};
+use crate::role::Role;
 use crate::state::State;
 use crate::telemetry::Telemetry;
 
@@ -53,7 +61,11 @@ const MAX_BODY: u64 = 1 << 20;
 pub struct Shared {
     started: Instant,
     facts: Facts,
+    role: Role,
     inner: Mutex<Live>,
+    /// The API's subscribers (api/): told when Claude's state or pid moves
+    /// and when a telemetry sample lands.
+    events: Events,
 }
 
 struct Live {
@@ -71,6 +83,9 @@ struct Live {
     policy: Policy,
     /// The tray's last report and when it landed.
     claude: Option<(Report, Instant)>,
+    /// What the API's subscribers were last told: a session reporting or
+    /// not (`claude.changed`).
+    claude_announced: bool,
     /// Raised by the box's answer or `POST /claude/update`; the tray takes
     /// it with its next report. Separate from the restart below (claude/mod.rs
     /// says why).
@@ -128,10 +143,12 @@ struct Document<'a> {
 }
 
 impl Shared {
-    pub fn new(state: State, facts: Facts, started: Instant, policy: Policy) -> Self {
+    pub fn new(state: State, facts: Facts, started: Instant, policy: Policy, role: Role) -> Self {
         Self {
             started,
             facts,
+            role,
+            events: Events::default(),
             inner: Mutex::new(Live {
                 state,
                 awake_hold: false,
@@ -142,6 +159,7 @@ impl Shared {
                 control_plane: ControlPlane::default(),
                 policy,
                 claude: None,
+                claude_announced: false,
                 claude_update_requested: false,
                 claude_restart_requested: false,
                 node_token: None,
@@ -203,7 +221,46 @@ impl Shared {
     }
 
     pub fn set_telemetry(&self, t: Telemetry) {
+        let sampled_at = t.sampled_at.clone();
         self.lock().telemetry = Some(t);
+        self.events
+            .publish(event::TELEMETRY_UPDATED, &TelemetryUpdated { sampled_at });
+    }
+
+    /// The last telemetry document, at the level config.toml sets; None
+    /// before the first sample, or when the level is `off`.
+    pub fn telemetry(&self) -> Option<Telemetry> {
+        self.lock().telemetry.clone()
+    }
+
+    /// The session's last report while it is fresh; None when no session
+    /// has reported within `REPORT_FRESH`.
+    pub fn claude_report(&self) -> Option<Report> {
+        self.lock()
+            .claude
+            .as_ref()
+            .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
+            .map(|(r, _)| r.clone())
+    }
+
+    /// Whether an update or a restart waits for the session's next report.
+    pub fn claude_instruction_waiting(&self) -> bool {
+        let l = self.lock();
+        l.claude_update_requested || l.claude_restart_requested
+    }
+
+    pub fn facts(&self) -> &Facts {
+        &self.facts
+    }
+
+    /// How long this agent has run.
+    pub fn uptime(&self) -> Duration {
+        self.started.elapsed()
+    }
+
+    /// Where the API's connections subscribe (api/).
+    pub fn events(&self) -> &Events {
+        &self.events
     }
 
     /// Prometheus text for `/metrics`; empty before the first sample.
@@ -227,15 +284,62 @@ impl Shared {
     /// instructions. `mem::take` on each, so an instruction is handed out
     /// exactly once — a tray that reports every five seconds must not be
     /// told to update five seconds later all over again.
+    ///
+    /// A report after silence, or whose state or pid differs from the
+    /// previous one, is told to the API's subscribers as `claude.changed`.
     pub fn set_claude(&self, r: Report) -> ReportAnswer {
         let mut l = self.lock();
+        let moved = !l.claude_announced
+            || l.claude
+                .as_ref()
+                .is_none_or(|(prev, _)| prev.state != r.state || prev.pid != r.pid);
+        let changed = moved.then(|| ClaudeChanged {
+            reporting: true,
+            state: Some(r.state.clone()),
+            pid: r.pid,
+        });
+        l.claude_announced = true;
         l.claude = Some((r, Instant::now()));
-        ReportAnswer {
+        let answer = ReportAnswer {
             wanted: l.policy.claude_remote_control,
             update: std::mem::take(&mut l.claude_update_requested),
             restart: std::mem::take(&mut l.claude_restart_requested),
             workdir: l.policy.claude_workdir.clone(),
+        };
+        drop(l);
+        if let Some(c) = changed {
+            self.events.publish(event::CLAUDE_CHANGED, &c);
         }
+        answer
+    }
+
+    /// Tell the API's subscribers when the session has gone quiet: once, as
+    /// `claude.changed` with `reporting: false`, when the last report has
+    /// aged past `REPORT_FRESH`. The service's loop calls it twice a second;
+    /// the next report announces the session again.
+    pub fn check_claude_fresh(&self) {
+        self.announce_silence_after(REPORT_FRESH);
+    }
+
+    fn announce_silence_after(&self, fresh: Duration) {
+        let mut l = self.lock();
+        let stale = l
+            .claude
+            .as_ref()
+            .is_none_or(|(_, at)| at.elapsed() >= fresh);
+        if !(l.claude_announced && stale) {
+            return;
+        }
+        l.claude_announced = false;
+        drop(l);
+        self.events.publish(
+            event::CLAUDE_CHANGED,
+            &ClaudeChanged {
+                reporting: false,
+                state: None,
+                pid: None,
+            },
+        );
     }
 
     /// Whether the tray has reported within the freshness window.
@@ -345,12 +449,14 @@ impl Shared {
     }
 }
 
-/// Answer on `0.0.0.0:port` from a thread until `unblock` is called on the
-/// returned server.
+/// Answer on `port` — every interface on a node, loopback on the
+/// controller (`Role::status_address`) — from a thread until `unblock` is
+/// called on the returned server.
 pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
-    let server = Server::http(("0.0.0.0", port))
+    let address = shared.role.status_address();
+    let server = Server::http((address, port))
         .map_err(|e| anyhow::anyhow!("{e}"))
-        .with_context(|| format!("binding the status page on port {port}"))?;
+        .with_context(|| format!("binding the status page on {address}:{port}"))?;
     // `incoming_requests` takes `&self` and `Server` is `Send + Sync`, so the
     // thread and the caller share one through an Arc; `unblock` from the
     // caller ends the loop in the thread.
@@ -392,6 +498,11 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                         shared.request_check();
                         (202, "checking\n".to_string(), "text/plain")
                     }
+                    (&Method::Post, "/claude/update") if local && !shared.role.claude_update => (
+                        403,
+                        "Claude Code is updated by nix on this machine\n".to_string(),
+                        "text/plain",
+                    ),
                     (&Method::Post, "/claude/update") if local => {
                         shared.request_claude_update();
                         (
@@ -442,7 +553,7 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
             }
         })
         .context("spawning the status server")?;
-    tracing::info!(port, "status page answering");
+    tracing::info!(address, port, "status page answering");
     Ok(server)
 }
 
@@ -452,4 +563,45 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         return false;
     }
     a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Mode;
+
+    #[test]
+    fn claude_changed_covers_reporting_both_ways() {
+        let shared = Shared::new(
+            State::default(),
+            Facts::default(),
+            Instant::now(),
+            Policy::default(),
+            Role::of(Mode::Controller),
+        );
+        let rx = shared.events().subscribe();
+        let report = |pid| Report {
+            state: "running".into(),
+            pid: Some(pid),
+            ..Default::default()
+        };
+        // Nothing reported yet: no silence to announce.
+        shared.announce_silence_after(Duration::ZERO);
+        shared.set_claude(report(1));
+        shared.set_claude(report(1));
+        shared.announce_silence_after(Duration::from_secs(60));
+        shared.announce_silence_after(Duration::ZERO);
+        shared.announce_silence_after(Duration::ZERO);
+        // The same report after silence is news again.
+        shared.set_claude(report(1));
+        let got: Vec<String> = rx.try_iter().map(|l| l.to_string()).collect();
+        assert_eq!(
+            got,
+            [
+                r#"{"e":"claude.changed","p":{"reporting":true,"state":"running","pid":1}}"#,
+                r#"{"e":"claude.changed","p":{"reporting":false,"state":null,"pid":null}}"#,
+                r#"{"e":"claude.changed","p":{"reporting":true,"state":"running","pid":1}}"#,
+            ]
+        );
+    }
 }

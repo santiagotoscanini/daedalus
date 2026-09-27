@@ -370,7 +370,7 @@ impl Tray {
             Backing::Owns(Box::new(Session::new(
                 cfg.port,
                 claude_log.clone(),
-                Launch::of(cfg.claude_rc()),
+                Launch::of(&cfg),
             )?))
         } else {
             Backing::Watches(Watcher::new(cfg.port))

@@ -59,6 +59,145 @@ by definition, the same Linux code built and configured by nix — runs the
 status page, telemetry and the session, and no hello, self-update,
 keep-awake, tray or installer (`install` and `uninstall` refuse there).
 
+## Controller mode
+
+`mode = "controller"` is the agent on the box, as nix will run it: one
+process as the operator (`daedalus-agent run` under systemd; `serve` is the
+same in a terminal), with
+
+- **the status page on loopback only** (`127.0.0.1:7787`): the box adds no
+  LAN listener; a node keeps `0.0.0.0`;
+- **telemetry** at the level `telemetry` sets (below);
+- **the session inside the process**: Claude remote control as its
+  transient user unit, reported straight into the service. `daedalus-agent
+  session` refuses in this mode. Its log is `claude-rc.log` in the data
+  directory's `logs/`. The unit outlives the agent, as on a node: a stop
+  or restart of the agent leaves Claude running and the next start
+  re-attaches to it — but only while `claude_remote_control` is on. With
+  it off the agent adopts nothing: a unit of `claude_unit`'s name that is
+  running anyway is left alone and named in the report (`state: "off"`,
+  its `detail` saying which unit runs, with its pid, unmanaged). For the
+  cut-over, give the controller a `claude_unit` no other unit uses; if
+  it ever does see its own name running while off, stop that unit by hand
+  or turn remote control on, which adopts it;
+- **the local API socket** — the door the Daedalus app uses (below);
+- and nothing else: no hello (so no identity key is made), no
+  self-update, no keep-awake, no tray, no installer, and no `claude
+  update` — nix pins Claude Code on the box (`POST /claude/update` answers
+  403 there).
+
+With no hello there is no policy from the box, so nix writes the
+controller's own in config.toml:
+
+```toml
+mode = "controller"
+telemetry = "full"          # full | minimal | off
+
+[controller]
+claude_remote_control = true            # default false: the box never starts a second Claude by surprise
+claude_workdir = "/home/op/projects/x"  # absent: the most recent trusted project
+claude_unit = "daedalus-claude-rc"      # its user unit; absent: daedalus-claude-rc
+api_socket = "/run/user/1000/daedalus-agent/api.sock"
+api_allowed_uids = [100999]             # host uids served besides the agent's own; default none
+```
+
+The table's values are checked only in controller mode (`api_socket` and
+`claude_workdir` absolute, `claude_unit` a plain unit name, no root in
+`api_allowed_uids`), but a key it does not know is an error in every
+mode, so a typo in what nix writes fails loudly. A controller never holds
+the machine awake.
+
+What the unit nix writes should carry:
+
+- `Restart=always`. The agent is built with `panic = "abort"`, so a panic
+  in any thread — the session's included — ends the whole process;
+  systemd brings it back, and the Claude unit, which outlives it, is
+  re-attached.
+- A `LimitNOFILE` with room: each API connection is a few threads and
+  two descriptors, up to 16 at once, beside the telemetry and the
+  session's tools.
+- A `claude_unit` distinct from any unit the box already runs, and the
+  gcroot pin on the `claude` it runs.
+
+### The local API
+
+A unix socket at `api_socket` — absent, `$XDG_RUNTIME_DIR/daedalus-agent/api.sock`,
+or `<data_dir>/run/api.sock` where no runtime directory is set. The agent
+makes its directory 0700 when it is missing, and never changes one that
+exists — but refuses to start when that directory is a symlink, is not
+the agent's user's, or can be written by group or others. The socket is
+0600. A socket nobody answers on (the connection refused) is stale and
+removed; one that answers, or whose backlog is full, means another
+instance and the start is refused; any other error refuses too, rather
+than remove what it cannot judge. The check never blocks. The socket is
+removed on a clean stop. The directory is meant to hold the socket alone,
+so it can be mounted into the app's container as it is.
+
+Every connection is checked by its peer's credentials (`SO_PEERCRED`):
+the agent's own uid is always served, and so are the host uids
+`api_allowed_uids` lists; anyone else gets one `forbidden` line and a
+closed connection. Under rootless podman a container's uid 0 is the
+operator's uid on the host, but the published app image runs as `node`
+(container uid 1000, host uid 100999 on the box), so its container is
+refused by default. Two ways in, both supported, the nix step's to choose:
+list the uid in `api_allowed_uids`, or run the container with
+`--userns=keep-id`, which maps the operator in as itself. The dev-mode
+container (`--user=0:0`) passes as it is. With uids listed the file modes
+cannot be the gate — the kernel refuses a connect to a 0600 socket before
+any peer check — so the socket is made 0666 and a directory the agent
+creates 0711, and the peer check is what refuses everyone else; with
+none listed they stay 0600 and 0700.
+
+Limits: at most 16 connections at once (one more gets a `busy` line and
+is closed); `hello` must arrive within 10 s or the connection is closed;
+a write that cannot complete in 10 s — a peer that stopped reading —
+closes the connection, so no peer can hold a thread.
+
+The protocol is newline-delimited JSON, one object per line (at most
+1 MiB): a request `{"id":<u64>,"m":"<method>","p":{…}}`, an answer
+`{"id":…,"ok":…}` or `{"id":…,"err":{"code","msg"}}`, an event
+`{"e":"<name>","p":{…}}`. Requests run concurrently, so answers are
+matched by `id`. The first request must be `hello`:
+
+```
+→ {"id":1,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}
+← {"id":1,"ok":{"api":1,"version":"0.13.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","telemetry.full"]}}
+```
+
+Another API version gets `{"code":"version",…,"supported":1}` — the
+version is read before anything else, and fields the agent does not know
+in the envelope and in `hello` are ignored, so a newer client always
+hears which version this agent speaks; any other request first gets
+`bad_request`. A method's own parameters are exact (today, none but
+`hello`'s). The methods — fixed verbs, none taking a command, a path or a
+flag:
+
+| method             | answers                                                              | needs                   |
+|--------------------|----------------------------------------------------------------------|-------------------------|
+| `system.info`      | version, mode, api, hostname, OS facts, uptimes, the role table, capabilities | —              |
+| `claude.status`    | `{reporting, wanted, report}`: the session's last report, or `reporting: false` | `claude.remote_control` |
+| `claude.restart`   | `{queued: true}`; the session restarts the server at once (`unavailable` while remote control is off or no session reports) | `claude.remote_control` |
+| `claude.update`    | `{queued: true}`; never offered on the controller                    | `claude.update`         |
+| `telemetry.get`    | `{level, telemetry}`: the document at the configured level           | —                       |
+| `events.subscribe` | `{}`, then `claude.changed` `{reporting, state, pid}` and `telemetry.updated` `{sampled_at}` | — |
+
+Capabilities come from the role table and the config, never from the OS:
+`claude.remote_control` where a session runs, `claude.update` where the
+agent may update Claude Code (a node's role, not the controller's), and
+`telemetry.full` or `telemetry.minimal`. A method whose capability is
+absent answers `unsupported`. `claude.changed` goes out when a session
+starts reporting, when its state or pid moves, and when it stops
+reporting for 30 s (`reporting: false`, state and pid null);
+`telemetry.updated` with every sample. Events are best effort: a
+subscriber whose queue fills loses events, not its connection (one that
+stops reading altogether is closed by the write timeout). `src/api/wire.rs` has
+every type and golden tests pinning each one's exact JSON; `src/api/mod.rs`
+the rules above.
+
+Nothing here reaches another machine yet: the machines' connections to
+the controller, and the app's side of this socket, come later (PLAN,
+feature 13).
+
 ## Install
 
 From an administrator PowerShell on a Windows machine:
@@ -172,9 +311,9 @@ log in to.
 ```
 daedalus-agent install [--port N]   register and start the service, the session and the tray (administrator / sudo)
 daedalus-agent uninstall            stop and remove them (administrator / sudo)
-daedalus-agent run                  service entry point; what the SCM, launchd or systemd calls
+daedalus-agent run                  service entry point; what the SCM, launchd or systemd calls (and nix, for the controller)
 daedalus-agent serve                the same work in the foreground, in a terminal
-daedalus-agent session              the Claude session without a tray: the Linux user unit (refused where the tray runs it)
+daedalus-agent session              the Claude session without a tray: the Linux user unit (refused where the tray runs it, and on the controller)
 daedalus-agent status               print the running agent's status page
 daedalus-agent update [--apply]     check the release feed now; --apply installs
 daedalus-agent claude restart       ask the session to restart `claude remote-control`
@@ -248,12 +387,23 @@ log_level = "info"        # "debug" for a bug report
 search_domains = []       # more domains to ask for _daedalus._tcp
 hello_secs = 60           # how often the hello goes out
 # control_plane_url = "https://…"   the box, when DNS cannot find it
-# mode = "node"           # node | controller (see "Node and controller")
-# telemetry = "full"      # full | minimal | off — carried, not acted on yet
+# mode = "node"           # node | controller (see "Controller mode")
+# telemetry = "full"      # full | minimal | off
 # updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
 # claude_rc = "unit"      # child | unit; absent: child on Windows and macOS, unit on Linux
 ```
+
+`telemetry = "full"` reads everything above; `minimal` reads the machine
+and how it is doing — make, model, firmware, OS, processor, memory,
+volumes, GPUs, temperatures, network, battery, the process count,
+providers and what could not be read — and never reads the drives
+(serials, SMART), services, browsers, installed applications or pending OS
+updates; processes are sampled for the count, but the list is not
+reported, and a provider such as Lemonade shows only while it answers (an
+installed but stopped one is found through the application list, which
+`minimal` does not read); `off` reads nothing (the page's `telemetry` is
+null, `/metrics` empty).
 
 `updates = "self"` installs a newer release (the default); `staged` and
 `external` only report it, as `auto_update = false` does. With no

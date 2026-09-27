@@ -22,6 +22,9 @@
 //!   making a download executable (update.rs);
 //! - processes: running a child without a console window, whether a pid
 //!   lives, ending a process tree, and relaying Ctrl-C / SIGTERM;
+//! - the local API socket: a unix socket served to this process's own uid
+//!   by its peer credentials, made and cleaned up (api/; unix.rs — Windows
+//!   is never a controller and refuses);
 //! - Claude Code: the command's file names, preparing the server's
 //!   command, whether the login is in the keychain, and how the session
 //!   runs the server by default (`CLAUDE_RC`, claude/);
@@ -71,6 +74,8 @@ pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 pub use imp::{
     hide_console, lock_exclusive, monotonic_usec, on_interrupt, pid_alive, stop_process_tree,
 };
+// the controller's local API socket (api/)
+pub use imp::{serve_local_socket, LocalSocket};
 // Claude Code
 pub use imp::{claude_keychain_login, prepare_claude_server, CLAUDE_CLI_NAMES, CLAUDE_RC};
 // telemetry

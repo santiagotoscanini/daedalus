@@ -21,12 +21,27 @@
 //! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
 //! claude_rc = "child"         # child | unit; absent = the OS's (`os::CLAUDE_RC`)
+//!
+//! [controller]                # read only when mode = "controller"; nix writes it
+//! claude_remote_control = false   # run Claude remote control on the box
+//! claude_workdir = "…"        # where; absent = the most recent trusted project
+//! claude_unit = "…"           # its transient user unit; absent = daedalus-claude-rc
+//! api_socket = "…"            # the local API socket; absent = see below
+//! api_allowed_uids = []       # host uids served besides the agent's own
 //! ```
 //!
 //! `mode` decides which parts of the agent run at all — an ordinary machine
 //! (`node`) or the box's own agent (`controller`); role.rs has the table.
-//! `telemetry` is read and carried but changes nothing yet: every agent
-//! reports everything. `updates` decides whether a
+//! `telemetry` decides how much of the machine is read and reported:
+//! `full` is everything telemetry.rs lists; `minimal` is the machine and
+//! how it is doing — make, model, firmware, OS, processor, memory, volumes,
+//! GPUs, temperatures, network, battery, providers and what could not be
+//! read — and never reads the drives (their serials and SMART), the
+//! services, the browsers, the installed applications or the OS's pending
+//! updates; processes are sampled for the count, but the list is not
+//! reported, and a provider shows only while it answers on its port
+//! (`Telemetry::minimal`); `off` reads nothing, so the page's
+//! `telemetry` is null and `/metrics` is empty. `updates` decides whether a
 //! newer release is installed: `self` installs it (today's behaviour);
 //! `staged` and `external` only report it, as `auto_update = false` always
 //! has. When `updates` is absent, `auto_update` decides (true = `self`,
@@ -36,6 +51,35 @@
 //! watches (Linux), which outlives the session (claude/unit.rs).
 //! `install` writes none of the newer keys, so the file it leaves is the one
 //! it has always written.
+//!
+//! `[controller]` is the box's own policy. A node takes its policy from the
+//! box's answer to its hello; the controller has no hello, so what nix
+//! writes here stands in for it: whether Claude remote control runs (off
+//! unless this says so — the box must never start a second Claude by
+//! surprise) and where (`claude_workdir`, an absolute path). A controller
+//! never holds the machine awake
+//! (role.rs). `claude_unit` names Claude's transient user unit, so nix can
+//! pick one that cannot collide with a unit the box already runs; without
+//! it the controller uses the node's name (`claude_unit_name`).
+//! `api_socket` is where the local API listens (api/); absent, it is
+//! `$XDG_RUNTIME_DIR/daedalus-agent/api.sock`, or `<data_dir>/run/api.sock`
+//! where no runtime directory is set. The directory it sits in is made
+//! 0700 when the agent creates it (0711 with uids listed, below; one that
+//! exists is never changed, and is refused if it is a symlink, not the
+//! agent's user's, or writable by group or others), and is meant to hold
+//! the socket alone, so it can be mounted into the app's container as it
+//! is.
+//! `api_allowed_uids` names the HOST uids the socket serves besides the
+//! agent's own, which is always served: the published app image runs as
+//! `node` (container uid 1000, host uid 100999 under rootless podman), so
+//! nix either lists that uid here or runs the container with
+//! `--userns=keep-id` so it arrives as the operator (api/mod.rs). With uids
+//! listed the socket is 0666 — the peer check, not the file mode, is then
+//! the gate. Root (uid 0) cannot be listed.
+//!
+//! On a node the table is ignored, except that it must parse: a key it
+//! does not know is an error in every mode, so a typo in what nix writes
+//! fails loudly instead of leaving a default in place.
 //!
 //! The data directory is `C:\ProgramData\daedalus-agent` on Windows,
 //! `/Library/Application Support/daedalus-agent` on macOS and
@@ -104,7 +148,7 @@ pub struct Config {
     /// controller on the box. Decides which parts run (role.rs).
     #[serde(skip_serializing_if = "is_default")]
     pub mode: Mode,
-    /// How much of the machine the agent reports. Carried, not yet acted on.
+    /// How much of the machine the agent reads and reports (module doc).
     #[serde(skip_serializing_if = "is_default")]
     pub telemetry: TelemetryLevel,
     /// How a newer release reaches this machine; absent means `auto_update`
@@ -119,6 +163,30 @@ pub struct Config {
     /// way (`Config::claude_rc`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_rc: Option<ClaudeRc>,
+    /// The controller's own policy and its local API; ignored on a node.
+    #[serde(skip_serializing_if = "is_default")]
+    pub controller: ControllerConfig,
+}
+
+/// `[controller]`: what nix decides for the box's agent, which has no hello
+/// to bring it a policy (module doc).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ControllerConfig {
+    /// Run Claude remote control. Off unless nix says so.
+    pub claude_remote_control: bool,
+    /// The directory it runs in; absent = the most recent trusted project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claude_workdir: Option<String>,
+    /// Its transient systemd user unit, without `.service`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claude_unit: Option<String>,
+    /// Where the local API socket is made.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_socket: Option<PathBuf>,
+    /// Host uids the socket serves besides the agent's own (module doc).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub api_allowed_uids: Vec<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,6 +251,7 @@ impl Default for Config {
             updates: None,
             data_dir: None,
             claude_rc: None,
+            controller: ControllerConfig::default(),
         }
     }
 }
@@ -198,6 +267,43 @@ impl Config {
     /// Which parts of the agent run on this machine (role.rs).
     pub fn role(&self) -> crate::role::Role {
         crate::role::Role::of(self.mode)
+    }
+
+    /// The policy that stands at start. A node's is `Policy::default()`
+    /// until the box answers a hello; the controller's is `[controller]`'s
+    /// for good — no awake hold, and Claude only when nix asked for it.
+    pub fn initial_policy(&self) -> crate::hello::Policy {
+        match self.mode {
+            Mode::Node => crate::hello::Policy::default(),
+            Mode::Controller => crate::hello::Policy {
+                awake_hold: false,
+                claude_remote_control: self.controller.claude_remote_control,
+                claude_workdir: self.controller.claude_workdir.clone(),
+                providers: Default::default(),
+            },
+        }
+    }
+
+    /// The transient user unit Claude remote control runs in: the
+    /// controller's `claude_unit` when nix names one, else
+    /// `claude_unit_name` — a node's is never configurable.
+    pub fn claude_unit(&self) -> String {
+        match (
+            self.mode,
+            non_empty_str(self.controller.claude_unit.as_deref()),
+        ) {
+            (Mode::Controller, Some(name)) => name.to_string(),
+            _ => claude_unit_name(),
+        }
+    }
+
+    /// Where the local API socket is made (module doc).
+    pub fn api_socket(&self) -> PathBuf {
+        resolve_api_socket(
+            non_empty(self.controller.api_socket.clone()),
+            std::env::var_os("XDG_RUNTIME_DIR"),
+            data_dir,
+        )
     }
 
     pub fn update_interval(&self) -> Duration {
@@ -226,7 +332,73 @@ impl Config {
                 bail!("data_dir must be an absolute path, not {}", p.display());
             }
         }
+        // `[controller]` is read only in controller mode, so only there can
+        // it stop the agent.
+        if self.mode == Mode::Controller {
+            if let Some(p) = non_empty(self.controller.api_socket.clone()) {
+                if !p.is_absolute() {
+                    bail!(
+                        "controller.api_socket must be an absolute path, not {}",
+                        p.display()
+                    );
+                }
+            }
+            if let Some(w) = non_empty_str(self.controller.claude_workdir.as_deref()) {
+                if !Path::new(w).is_absolute() {
+                    bail!("controller.claude_workdir must be an absolute path, not {w}");
+                }
+            }
+            let uids = &self.controller.api_allowed_uids;
+            if uids.contains(&0) {
+                bail!("controller.api_allowed_uids may not name root (uid 0)");
+            }
+            if uids.contains(&u32::MAX) {
+                bail!("controller.api_allowed_uids may not name uid 4294967295 (no user)");
+            }
+            if let Some(u) = non_empty_str(self.controller.claude_unit.as_deref()) {
+                if !valid_unit_name(u) {
+                    bail!(
+                        "controller.claude_unit must be a plain unit name (letters, digits, \
+                         `-`, `_`, `.`, `:`; not starting with `-`; without `.service`), not {u:?}"
+                    );
+                }
+            }
+        }
         Ok(())
+    }
+}
+
+/// A name `systemd-run --unit=` takes as it is and nothing else: no
+/// template, no suffix, no option-looking first character.
+fn valid_unit_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 200
+        && !name.starts_with('-')
+        && !name.ends_with(".service")
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':'))
+}
+
+/// A string from the file, when it says something.
+fn non_empty_str(s: Option<&str>) -> Option<&str> {
+    s.map(str::trim).filter(|s| !s.is_empty())
+}
+
+/// The pure half of `Config::api_socket`: the configured path; else
+/// `$XDG_RUNTIME_DIR/daedalus-agent/api.sock` when the runtime directory is
+/// an absolute path; else `<data_dir>/run/api.sock`.
+fn resolve_api_socket(
+    configured: Option<PathBuf>,
+    runtime_dir: Option<OsString>,
+    data_dir: impl FnOnce() -> PathBuf,
+) -> PathBuf {
+    if let Some(p) = configured {
+        return p;
+    }
+    match non_empty(runtime_dir.map(PathBuf::from)).filter(|p| p.is_absolute()) {
+        Some(run) => run.join(crate::SERVICE_NAME).join("api.sock"),
+        None => data_dir().join("run").join("api.sock"),
     }
 }
 
@@ -549,6 +721,93 @@ mod tests {
         assert!(toml::from_str::<Config>("claude_rc = \"thread\"").is_err());
         let cfg: Config = toml::from_str("mode = \"controller\"").unwrap();
         assert_eq!(cfg.mode, Mode::Controller);
+    }
+
+    #[test]
+    fn the_controller_table_is_the_boxs_policy_and_a_node_ignores_it() {
+        let text = "mode = \"controller\"\n[controller]\nclaude_remote_control = true\n\
+                    claude_workdir = \"/srv/work\"\nclaude_unit = \"daedalus-claude\"\n\
+                    api_socket = \"/run/daedalus-api/api.sock\"\n";
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert!(cfg.validate().is_ok());
+        let p = cfg.initial_policy();
+        assert!(!p.awake_hold, "a controller never holds the machine awake");
+        assert!(p.claude_remote_control);
+        assert_eq!(p.claude_workdir.as_deref(), Some("/srv/work"));
+        assert_eq!(cfg.claude_unit(), "daedalus-claude");
+        assert_eq!(
+            cfg.api_socket(),
+            PathBuf::from("/run/daedalus-api/api.sock")
+        );
+        // Written back, the table keeps its keys.
+        let back = toml::to_string_pretty(&cfg).unwrap();
+        assert!(
+            back.contains("[controller]") && back.contains("claude_unit"),
+            "{back}"
+        );
+
+        // Absent: Claude stays off on the box — never a second Claude.
+        let bare: Config = toml::from_str("mode = \"controller\"").unwrap();
+        let p = bare.initial_policy();
+        assert!(!p.awake_hold && !p.claude_remote_control && p.claude_workdir.is_none());
+        assert_eq!(bare.claude_unit(), claude_unit_name());
+
+        // The same table on a node changes nothing, and never stops it.
+        let node: Config = toml::from_str(
+            "[controller]\nclaude_remote_control = false\nclaude_unit = \"-x\"\napi_socket = \"rel\"\n",
+        )
+        .unwrap();
+        assert!(node.validate().is_ok());
+        assert_eq!(node.initial_policy(), crate::hello::Policy::default());
+        assert_eq!(node.claude_unit(), claude_unit_name());
+    }
+
+    #[test]
+    fn the_controller_table_is_checked_in_controller_mode() {
+        let check = |table: &str| {
+            toml::from_str::<Config>(&format!("mode = \"controller\"\n[controller]\n{table}"))
+                .unwrap()
+                .validate()
+        };
+        assert!(check("api_socket = \"rel/api.sock\"").is_err());
+        assert!(check("claude_unit = \"-rf\"").is_err());
+        assert!(check("claude_unit = \"x.service\"").is_err());
+        assert!(check("claude_unit = \"a b\"").is_err());
+        assert!(check("claude_unit = \"daedalus-claude-rc@1\"").is_err());
+        assert!(check("claude_unit = \"daedalus-claude_rc.box:1\"").is_ok());
+        assert!(check("claude_unit = \"\"").is_ok());
+        assert!(check("claude_workdir = \"projects/x\"").is_err());
+        assert!(check("claude_workdir = \"/home/op/projects/x\"").is_ok());
+        assert!(check("api_allowed_uids = [100999]").is_ok());
+        assert!(check("api_allowed_uids = [0]").is_err());
+        assert!(check("api_allowed_uids = [4294967295]").is_err());
+        assert!(toml::from_str::<Config>("[controller]\napi_allowed_uids = [-1]").is_err());
+        // A typo fails loudly, in either mode, at parse.
+        for mode in ["controller", "node"] {
+            let typo = format!("mode = \"{mode}\"\n[controller]\nclaude_remote_contrl = true\n");
+            assert!(toml::from_str::<Config>(&typo).is_err(), "{mode}");
+        }
+    }
+
+    #[test]
+    fn the_api_socket_prefers_the_runtime_directory() {
+        let data = || abs("data");
+        assert_eq!(
+            resolve_api_socket(Some(abs("s.sock")), Some(abs("run").into()), data),
+            abs("s.sock")
+        );
+        assert_eq!(
+            resolve_api_socket(None, Some(abs("run").into()), data),
+            abs("run").join("daedalus-agent").join("api.sock")
+        );
+        assert_eq!(
+            resolve_api_socket(None, Some("relative".into()), data),
+            abs("data").join("run").join("api.sock")
+        );
+        assert_eq!(
+            resolve_api_socket(None, None, data),
+            abs("data").join("run").join("api.sock")
+        );
     }
 
     #[test]

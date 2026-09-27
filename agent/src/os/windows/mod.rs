@@ -87,6 +87,35 @@ pub fn monotonic_usec() -> Option<u64> {
     None
 }
 
+// ── the local API socket ──────────────────────────────────────────────────
+
+/// The controller's API socket is a unix socket with peer credentials;
+/// Windows is never a controller (role.rs), so there is none to hold.
+pub enum LocalSocket {}
+
+/// Dropping one stops it where it exists (unix.rs); here none can.
+impl Drop for LocalSocket {
+    fn drop(&mut self) {
+        match *self {}
+    }
+}
+
+/// Refused: controller mode, the only role that serves the socket, runs on
+/// Linux (the box).
+pub fn serve_local_socket<F>(
+    path: &Path,
+    _limits: &crate::api::Limits,
+    _on_conn: F,
+) -> Result<LocalSocket>
+where
+    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+{
+    anyhow::bail!(
+        "no local API socket at {} on Windows: controller mode runs on the box, a Linux machine",
+        path.display()
+    )
+}
+
 // ── identity ──────────────────────────────────────────────────────────────
 
 /// No ACL is set: the file inherits ProgramData's, whose default lets the

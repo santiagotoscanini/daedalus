@@ -576,40 +576,42 @@ priority; each can be done independently unless noted.
     *dependents* — `app-db` is impossible to switch off, while something
     fifteen stacks read from is merely discouraged.
 
-13. **One agent on every machine, a hub on the box.** Today the agent
-    works on Windows and macOS only (on Linux it builds but `run` and
-    `install` refuse, telemetry is a stub and its data directory sits beside
-    the binary); the app dials each machine's `:7787` over the LAN on every
-    page load, sends the node token as a plaintext bearer, and delivers
-    commands only in the next hello answer (up to a minute); and the box
-    does the same jobs through a second pipeline of its own — nix units
+13. **One agent on every machine, a controller on the box.** Today the app
+    dials each machine's `:7787` over the LAN on every page load, sends the
+    node token as a plaintext bearer, and delivers commands only in the
+    next hello answer (up to a minute); and the box does the same jobs
+    through a second pipeline of its own — nix units
     (`platform/claude-rc.nix`, `claude-session@`), root snapshots, the
     file-drop bridge. The target is one codebase on every OS, a star with
-    the box at the centre, and one front door for the app. ("Hub" is a
-    placeholder name.)
+    the box at the centre, and one front door for the app. The box's agent
+    is the **controller** (`mode = "controller"`); every other machine's is
+    a node.
     - **One agent, every OS.** Per-OS code moves behind one fixed interface
       each (`os/{windows,macos,linux}`: paths, facts, network, DNS, power,
       service install/run, session launch, telemetry collector), so a
       missing OS is a compile error rather than an empty string; one shared
       bounded-command helper replaces the four copies; pure parsers (SMBIOS,
       plist) leave the per-OS directories. Linux becomes a machine type
-      you download from the landing page.
-    - **A star.** The box runs the agent as the hub. Every other machine
-      keeps ONE outbound, authenticated, long-lived connection to it:
-      telemetry pushed up, commands down at once, and later multiplexed
-      streams (santree's terminals). Machines stop listening on the LAN; the
-      hub serves one metrics endpoint for Prometheus in their place.
-    - **The app talks only to the hub, over a unix socket** mounted into
-      its container: typed request → progress → result, no LAN dialing, no
-      bearer on the wire, no pasta first-SYN stall, no polled status files.
-      The app owns DESIRED state (approvals, policy, what runs where) and
-      pushes it down; the hub holds OBSERVED state (latest telemetry,
-      sessions, versions) in memory, rebuildable from the app and the
-      machines — no database of its own. The hub↔machine protocol and the
-      socket API come from one Rust protocol crate; the app's TypeScript
-      types are generated from it (ends the telemetry contract being typed
-      twice, Engine polish). The socket API is versioned from day one: the
-      app deploys on save, the hub moves with a lock bump.
+      you download from the landing page: distributions running systemd
+      240 or newer, on x86_64 and aarch64, with a tray on x86_64 desktops.
+    - **A star.** The box runs the agent as the controller. Every other
+      machine keeps ONE outbound, authenticated, long-lived connection to
+      it: telemetry pushed up, commands down at once, and later multiplexed
+      streams (santree's terminals). Machines stop listening on the LAN;
+      the controller serves one metrics endpoint for Prometheus in their
+      place.
+    - **The app talks only to the controller, over a unix socket**
+      mounted into its container: typed request → progress → result, no LAN
+      dialing, no bearer on the wire, no pasta first-SYN stall, no polled
+      status files. The app owns DESIRED state (approvals, policy, what runs
+      where) and pushes it down; the controller holds OBSERVED state (latest
+      telemetry, sessions, versions) in memory, rebuildable from the app and
+      the machines — no database of its own. The controller↔machine
+      protocol and the socket API come from one Rust protocol crate; the
+      app's TypeScript types are generated from it (ends the telemetry
+      contract being typed twice, Engine polish). The socket API is
+      versioned from day one: the app deploys on save, the controller moves
+      with a lock bump.
     - **Capabilities, not a master flag.** What an agent runs comes from
       its config (nix writes the box's; the installer writes the others'):
       telemetry `full | minimal | off`, updates `staged | external`, Claude
@@ -617,15 +619,15 @@ priority; each can be done independently unless noted.
       its capabilities and the app draws tabs from them, never from "is
       this the box". The box is an ordinary machine row, trusted by
       construction (its key provisioned by nix under `fleet.machineState`),
-      not approved; `Policy` defaults become mode-dependent so an
-      unapproved box never starts a second Claude or a sleep inhibitor.
-    - **Roles, not processes.** `service` (connection to the hub, updater,
-      keep-awake, telemetry), `session` (the user's Claude, headless) and an
-      optional tray `ui` over `session`. Windows and macOS: the service plus
-      a tray running session + ui, as today. A Linux machine: a root systemd
-      service plus a `session` user unit with linger — Claude runs with
-      nobody logged in. The box: one process as the operator, hub + service
-      + session, no tray.
+      not approved.
+    - **Roles, not processes.** `service` (connection to the controller,
+      updater, keep-awake, telemetry), `session` (the user's Claude,
+      headless) and an optional tray `ui` over `session`. Windows and macOS:
+      the service plus a tray running session + ui, as today. A Linux
+      machine: a root systemd service plus a `session` user unit with linger
+      — Claude runs with nobody logged in — and on an x86_64 desktop the
+      tray. The box: one process as the operator, controller + service +
+      session, no tray.
     - **Long-lived work is not the agent's child.** Claude remote control
       (and later santree's session host) runs as its own unit the agent
       creates and controls — on Linux and the box a transient systemd user
@@ -637,19 +639,20 @@ priority; each can be done independently unless noted.
       there. Windows keeps Claude as a child of the session process, which
       only restarts when an update is triggered; macOS can move to a
       launchd job for the same property.
-    - **Root stays behind a socket-activated helper.** The hub runs as the
-      operator. Root actions (Apply, deploys, image and engine updates,
-      builds, power) keep their fixed nix units; their front door moves
-      from a dropped file to a systemd-owned socket (`Accept=yes`): each
-      connection spawns a fresh, sandboxed helper that checks the peer is
-      the operator's uid (`SO_PEERCRED` sees container uid 0 as the
+    - **Root stays behind a socket-activated helper.** The controller runs
+      as the operator. Root actions (Apply, deploys, image and engine
+      updates, builds, power) keep their fixed nix units; their front door
+      moves from a dropped file to a systemd-owned socket (`Accept=yes`):
+      each connection spawns a fresh, sandboxed helper that checks the peer
+      is the operator's uid (`SO_PEERCRED` sees container uid 0 as the
       operator), accepts only the fixed verbs with selectors — never paths
       or flags, the bridge's rules unchanged — starts the existing unit so
       the work survives a switch restarting its caller, and streams its
-      progress back. No resident root daemon. The hub forwards to it, so the
-      app has one door and never needs to know which actions are root. The
-      "no shell" invariant holds throughout; santree's generic exec surface
-      is authenticated separately and never reachable from the app.
+      progress back. No resident root daemon. The controller forwards to
+      it, so the app has one door and never needs to know which actions
+      are root. The "no shell" invariant holds throughout; santree's generic
+      exec surface is authenticated separately and never reachable from the
+      app.
     - **Staged updates everywhere.** Every agent fetches and verifies the
       newest signed release in the background and stages it; applying is a
       restart the operator triggers — per machine or all, from System ›
@@ -662,32 +665,27 @@ priority; each can be done independently unless noted.
       release has to carry this behaviour to the machines already enrolled.
     - **Order — each step leaves the box working and deletes what it
       replaces:**
-      1. Refactor the crate, no behaviour change: `os/` modules, the shared
-         command helper, the headless `session` split out of the tray,
-         config for mode / telemetry / updates / data directory. Gated on
-         Windows and macOS.
-      2. Linux as a machine type, over today's hello (no hub needed):
-         systemd install/uninstall, the session user unit, keep-awake via a
-         logind inhibitor, a Linux collector (`/proc`, `/sys`, DMI through
-         the shared SMBIOS parser, hwmon, `systemctl --failed`, package
-         managers), a static musl build with rustls for x86_64 and aarch64
-         in the signed release, a Linux branch in `install.sh`, a Linux
-         button on the landing page. The hub reuses this Linux code.
-      3. The hub on the box: packaged by nix, key under `machineState`,
-         running as the operator, serving the socket and its capabilities.
-         Its first job is Claude remote control as a unit it controls;
-         `claude-rc.nix`, the `claude-rc` verb and the Claude snapshot go.
-      4. Machines connect to the hub: an agent release speaking both the old
-         hello and the new connection; the app moves machine reads and
-         commands to the socket; then the LAN pulls, the node token, the
+      1. The controller on the box: packaged by nix, key under
+         `machineState`, running as the operator on the Linux node's code,
+         serving the socket and its capabilities. Its first job is Claude
+         remote control as a unit it controls; `claude-rc.nix`, the
+         `claude-rc` verb and the Claude snapshot go. The unit nix writes
+         must carry `Restart=always` (the agent aborts on a panic) and a
+         `LimitNOFILE` with room for the API's connections; the config, a
+         `claude_unit` no existing unit uses and either `api_allowed_uids`
+         for the app image's `node` uid or `--userns=keep-id` on the app
+         container; the gcroot pin on `claude` stays.
+      2. Machines connect to the controller: an agent release speaking both
+         the old hello and the new connection; the app moves machine reads
+         and commands to the socket; then the LAN pulls, the node token, the
          hello route and the per-machine file_sd targets go.
-      5. Staged updates, orchestrated by the hub.
-      6. Actions move over one at a time: Claude sessions (which the other
+      3. Staged updates, orchestrated by the controller.
+      4. Actions move over one at a time: Claude sessions (which the other
          machines then gain too), workspace clone and sync, then the root
          verbs onto the socket-activated helper — a low-stakes one first
          (Claude restart, reboot), Apply last — each deleting its
          file-drop path.
-      7. santree: its session host on the box, then relayed to the other
+      5. santree: its session host on the box, then relayed to the other
          machines, which opt in per machine (the price, written down: the
          box can reach every machine that opted in). A first version was
          built and verified as a standalone daemon and parked on 2026-09-27
@@ -703,27 +701,25 @@ priority; each can be done independently unless noted.
          side pinning the other's ed25519 key, plus stream multiplexing
          (yamux) — no CA, no web server between. The alternative is gRPC:
          more standard, heavier.
-      2. How a machine first trusts the hub: trust on first use with the
-         hub's fingerprint shown on the tray and in Settings › Machines, or
-         pinned at install (the one-liner carries it).
+      2. How a machine first trusts the controller: trust on first use with
+         the controller's fingerprint shown on the tray and in Settings ›
+         Machines, or pinned at install (the one-liner carries it).
       3. The box's System page: keep the root snapshots for what only root
-         reads (SMART, ZFS, generations) and let the hub replace the Claude
-         parts (proposed), or converge everything on one collector later.
-      4. The name ("hub", "orchestrator", …).
-      5. Linux scope for v1: systemd distributions, x86_64 + aarch64, no
-         tray (proposed).
-      6. The root helper: one socket reached only through the hub
+         reads (SMART, ZFS, generations) and let the controller replace the
+         Claude parts (proposed), or converge everything on one collector
+         later.
+      4. The root helper: one socket reached only through the controller
          (proposed), or also directly from the app.
-    - **Risks.** The hub is critical (down means no machines on the pages
-      and no Apply): small, restarts cleanly, holds nothing it cannot
-      rebuild. Version skew between the live-on-save app and the lock-bumped
-      hub. The release signing key now covers a third OS and still has no
-      recovery path. Enrolled machines move only through a dual-protocol
-      release and self-update until it lands. Hardening that lands with it:
-      unix-socket IPC with peer credentials between tray/session and
-      service instead of loopback trust, HTTPS-only (or pinned) box
-      identity, an ACL on the Windows identity file, a rollback that keeps
-      the previous binary until the new one proves healthy.
+    - **Risks.** The controller is critical (down means no machines on the
+      pages and no Apply): small, restarts cleanly, holds nothing it cannot
+      rebuild. Version skew between the live-on-save app and the
+      lock-bumped controller. The release signing key now covers a third OS
+      and still has no recovery path. Enrolled machines move only through a
+      dual-protocol release and self-update until it lands. Hardening that
+      lands with it: unix-socket IPC with peer credentials between
+      tray/session and service instead of loopback trust, HTTPS-only (or
+      pinned) box identity, an ACL on the Windows identity file, a rollback
+      that keeps the previous binary until the new one proves healthy.
     - **Costs.** The agent is built small (`opt-level = "s"`,
       `panic = "abort"`, MSRV 1.85); the santree crates bring tokio, a PTY
       layer and a `specta` prerelease needing Rust ≥ 1.93. Windows is a port

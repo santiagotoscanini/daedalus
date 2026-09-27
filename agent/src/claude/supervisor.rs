@@ -155,12 +155,23 @@ pub struct Supervisor {
     updating: bool,
     /// Where that thread leaves its result for `tick` to collect.
     update_slot: Arc<Mutex<Option<UpdateResult>>>,
+    /// Why the server is off when it is not wanted, as the report words it:
+    /// the box's policy on a node, config.toml on the controller.
+    off_reason: &'static str,
+    /// While not wanted: a unit of this supervisor's name that is running
+    /// anyway, which it neither adopted nor stops (`look_for_foreign`).
+    foreign: Option<String>,
+    foreign_checked: Option<Instant>,
 }
 
 impl Supervisor {
     /// A supervisor that starts nothing before its first `tick`. With a
-    /// unit, it first looks for one this session's predecessor left
-    /// running, and takes it over (`attach`).
+    /// unit, and the server wanted, it first looks for one this session's
+    /// predecessor left running, and takes it over (`attach`). Not wanted,
+    /// it adopts nothing: a unit of that name running then is left alone
+    /// and named in the report as unmanaged (`look_for_foreign`), so the
+    /// report never calls a running Claude "off" without saying so. It is
+    /// adopted if the server becomes wanted (`set_wanted`).
     pub fn new(
         named_workdir: Option<String>,
         log_path: PathBuf,
@@ -189,9 +200,43 @@ impl Supervisor {
             last_update: None,
             updating: false,
             update_slot: Arc::new(Mutex::new(None)),
+            off_reason: "the box's policy for this machine",
+            foreign: None,
+            foreign_checked: None,
         };
-        sup.attach();
+        if sup.wanted {
+            sup.attach();
+        } else {
+            sup.look_for_foreign();
+        }
         sup
+    }
+
+    /// How the report words why the server is off (the controller's comes
+    /// from config.toml, not from the box).
+    pub fn set_off_reason(&mut self, why: &'static str) {
+        self.off_reason = why;
+    }
+
+    /// While the server is not wanted: whether a unit of its name runs
+    /// anyway (one left by an earlier configuration, or another process's
+    /// of the same name). It is not adopted and not stopped — stopping a
+    /// Claude this agent did not start could end someone's sessions — but
+    /// the report says it is there.
+    fn look_for_foreign(&mut self) {
+        self.foreign_checked = Some(Instant::now());
+        let Launch::Unit(name) = &self.launch else {
+            self.foreign = None;
+            return;
+        };
+        self.foreign = match unit::show(name) {
+            Ok(UnitState::Running { pid, .. }) => Some(format!(
+                "a unit named {name} is running{} and is not managed by this agent while \
+                 remote control is off",
+                pid.map(|p| format!(" (pid {p})")).unwrap_or_default()
+            )),
+            _ => None,
+        };
     }
 
     /// A unit that outlived the previous session: running, it is taken
@@ -265,9 +310,16 @@ impl Supervisor {
         self.wanted = wanted;
         if !wanted {
             self.stop("not wanted");
+            self.look_for_foreign();
         } else {
             self.failures = 0;
             self.next_start = Some(Instant::now());
+            self.foreign = None;
+            // A unit of this name already running is taken over now it is
+            // wanted, not started a second time over it.
+            if self.running.is_none() {
+                self.attach();
+            }
         }
     }
 
@@ -393,6 +445,13 @@ impl Supervisor {
     /// Advance: reap, wait, start. Cheap; call it often.
     pub fn tick(&mut self) {
         self.collect_update();
+        if !self.wanted
+            && self
+                .foreign_checked
+                .is_none_or(|at| at.elapsed() > UNIT_POLL)
+        {
+            self.look_for_foreign();
+        }
         if let Some(r) = self.running.as_mut() {
             // Some(Ok(code)): it exited ("N", or "signal"); Some(Err): lost.
             let ended: Option<Result<String, String>> = match &mut r.proc {
@@ -703,6 +762,9 @@ impl Supervisor {
     }
 
     fn state(&self) -> (String, Option<String>) {
+        if let (false, Some(f)) = (self.wanted, &self.foreign) {
+            return ("off".into(), Some(format!("{} — but {f}", self.off_reason)));
+        }
         if self.cli.is_none() {
             return (
                 "not-installed".into(),
@@ -710,10 +772,7 @@ impl Supervisor {
             );
         }
         if !self.wanted {
-            return (
-                "off".into(),
-                Some("the box's policy for this machine".into()),
-            );
+            return ("off".into(), Some(self.off_reason.into()));
         }
         if let Some(r) = &self.running {
             let has_banner = r

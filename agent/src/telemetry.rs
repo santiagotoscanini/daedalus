@@ -25,6 +25,16 @@
 //! node token, reads the full document at `GET /telemetry` (status.rs) and
 //! draws the same pages it draws for itself.
 //!
+//! How much is read at all is config.toml's `telemetry`: `full`, all of the
+//! above; `minimal`, the static and sampled facts, and never the slow read
+//! or the updates search — processes are still sampled (for the count) but
+//! the list is not reported, and a provider is found only while it answers
+//! on its port, since the application list that finds an installed but
+//! stopped one is part of the slow read (`Telemetry::minimal` says exactly
+//! what stays); `off`, nothing — this
+//! thread does not start, the page's `telemetry` is null and `/metrics` is
+//! empty.
+//!
 //! The document's types are in model.rs and its Prometheus rendering in
 //! metrics.rs; both are re-exported here. The collectors' pure parsers —
 //! SMBIOS, `system_profiler`, macOS's other tools — are OS-neutral, in
@@ -45,6 +55,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
+use crate::config::TelemetryLevel;
 use crate::state::now_rfc3339;
 use crate::status::Shared;
 
@@ -154,7 +165,11 @@ pub fn assemble(
 /// every ten minutes, samples every `SAMPLE_EVERY`, each published to the
 /// status page. The updates search runs on a thread of its own and is
 /// merged in whenever it answers, so a slow search never stalls a sample.
-pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
+/// At `minimal` the slow facts and the updates are never read and each
+/// document is cut to `Telemetry::minimal`; at `off` this thread does not
+/// run at all (lib.rs).
+pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLevel) {
+    let full = level == TelemetryLevel::Full;
     #[allow(clippy::default_constructed_unit_structs)]
     let mut c = Collector::default();
     let mut stat = c.read_static();
@@ -170,18 +185,25 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     for e in &stat.errors {
         tracing::warn!(error = %e, "telemetry: not readable");
     }
-    let mut slow = c.read_slow();
-    let mut slow_at = std::time::Instant::now();
-    tracing::info!(
-        drives = slow.drives.len(),
-        services_down = slow.services.len(),
-        browsers = slow.browsers.len(),
-        apps = slow.apps.len(),
-        "telemetry: slow facts read"
-    );
-    for e in &slow.errors {
-        tracing::warn!(error = %e, "telemetry: not readable");
+    let mut slow = Slow::default();
+    if full {
+        slow = c.read_slow();
+        tracing::info!(
+            drives = slow.drives.len(),
+            services_down = slow.services.len(),
+            browsers = slow.browsers.len(),
+            apps = slow.apps.len(),
+            "telemetry: slow facts read"
+        );
+        for e in &slow.errors {
+            tracing::warn!(error = %e, "telemetry: not readable");
+        }
+    } else {
+        tracing::info!(
+            "telemetry = minimal: no drives, services, applications or updates are read, and no process list is reported"
+        );
     }
+    let mut slow_at = std::time::Instant::now();
     let mut updates: Option<Updates> = None;
     let mut updates_rx: Option<mpsc::Receiver<Updates>> = None;
     let mut updates_at: Option<std::time::Instant> = None;
@@ -197,7 +219,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
             stat = c.read_static();
             stat_at = std::time::Instant::now();
         }
-        if slow_at.elapsed() > SLOW_EVERY {
+        if full && slow_at.elapsed() > SLOW_EVERY {
             slow = c.read_slow();
             slow_at = std::time::Instant::now();
         }
@@ -216,7 +238,8 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
                 Err(mpsc::TryRecvError::Empty) => {}
             }
         }
-        if updates_rx.is_none() && updates_at.is_none_or(|at| at.elapsed() > UPDATES_EVERY) {
+        if full && updates_rx.is_none() && updates_at.is_none_or(|at| at.elapsed() > UPDATES_EVERY)
+        {
             let (tx, rx) = mpsc::channel();
             updates_rx = Some(rx);
             updates_at = Some(std::time::Instant::now());
@@ -233,7 +256,8 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
         // Presence, every sample: a refused port answers at once, and the
         // page should say "running" within a tick of the server starting.
         let providers = crate::providers::detect(&shared.policy(), &slow.apps);
-        shared.set_telemetry(assemble(&stat, &slow, &sample, updates.as_ref(), providers));
+        let doc = assemble(&stat, &slow, &sample, updates.as_ref(), providers);
+        shared.set_telemetry(if full { doc } else { doc.minimal() });
     }
 }
 
@@ -320,6 +344,24 @@ mod tests {
         assert_eq!(t.gpus[0].vram_total_bytes, Some(16));
         assert_eq!(t.gpus[0].usage_pct, Some(50.0));
         assert_eq!(t.errors, vec!["a".to_string(), "b".to_string()]);
+
+        // Minimal: the machine and how it is doing; nothing of the slow
+        // read, no updates, no process list.
+        let mut with_procs = t.clone();
+        with_procs.processes = vec![Process {
+            name: "x".into(),
+            pid: 1,
+            ..Default::default()
+        }];
+        with_procs.process_count = Some(300);
+        let min = with_procs.minimal();
+        assert!(min.drives.is_empty() && min.services.is_empty() && min.browsers.is_empty());
+        assert!(min.apps.is_empty() && min.processes.is_empty() && min.updates.is_none());
+        assert_eq!((min.app_count, min.service_count), (None, None));
+        assert_eq!(min.process_count, Some(300));
+        assert_eq!(min.cpu, t.cpu);
+        assert_eq!(min.gpus, t.gpus);
+        assert_eq!(min.errors, t.errors);
     }
 
     #[test]

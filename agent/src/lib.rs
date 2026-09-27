@@ -21,11 +21,14 @@
 //! `session` — Claude Code supervised and reported to the service, with no
 //! UI — and the `tray`, a UI over the session. The tray runs the session on
 //! Windows and macOS; on Linux the session is a user unit of its own
-//! (`daedalus-agent session`) and the tray only shows it. Which parts run
-//! at all — a node or the controller — is role.rs's one table. Everything
+//! (`daedalus-agent session`) and the tray only shows it; on the controller
+//! it is a thread of the service. Which parts run at all — a node or the
+//! controller, whose local API socket (api/) is the app's door — is
+//! role.rs's one table. Everything
 //! that differs by OS is behind `os` (os/mod.rs lists the surface); nothing
 //! else in the crate tests the target.
 
+pub mod api;
 pub mod claude;
 pub mod config;
 pub mod discover;
@@ -85,7 +88,8 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         state,
         facts.clone(),
         started,
-        hello::Policy::default(),
+        cfg.initial_policy(),
+        role,
     ));
 
     if role.self_update {
@@ -99,6 +103,16 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let mut hold_wanted: Option<bool> = None;
 
     let server = status::serve(cfg.port, Arc::clone(&shared))?;
+
+    // The controller's door for the app (api/). Opened before the sampler
+    // and the session start, so a second instance that got past the status
+    // page's port (a different `port`) stops here without having started
+    // either — above all, without touching the Claude unit.
+    let api = if role.api_socket {
+        Some(api::serve(&cfg, Arc::clone(&shared))?)
+    } else {
+        None
+    };
 
     // The machine's key, made on the first start. Without it there is no
     // hello, but the hold and the page above do not depend on it.
@@ -125,13 +139,38 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         }
     };
 
-    let sampler = {
+    let sampler = if cfg.telemetry == config::TelemetryLevel::Off {
+        tracing::info!("telemetry = off: nothing is sampled");
+        None
+    } else {
         let shared = Arc::clone(&shared);
         let stop = Arc::clone(&stop);
-        std::thread::Builder::new()
-            .name("telemetry".into())
-            .spawn(move || telemetry::run_loop(shared, stop))
-            .context("spawning the sampler")?
+        let level = cfg.telemetry;
+        Some(
+            std::thread::Builder::new()
+                .name("telemetry".into())
+                .spawn(move || telemetry::run_loop(shared, stop, level))
+                .context("spawning the sampler")?,
+        )
+    };
+
+    // The controller's session runs here, in this process (role.rs).
+    let session = if role.session_in_service {
+        let shared = Arc::clone(&shared);
+        let stop = Arc::clone(&stop);
+        let cfg = cfg.clone();
+        Some(
+            std::thread::Builder::new()
+                .name("session".into())
+                .spawn(move || {
+                    if let Err(e) = session::run_in_service(&cfg, shared, stop) {
+                        tracing::error!(error = format!("{e:#}"), "the session did not start");
+                    }
+                })
+                .context("spawning the session")?,
+        )
+    } else {
+        None
     };
 
     let updater = if role.self_update {
@@ -156,6 +195,8 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     // session is a user unit systemd restarts.
     let mut tray_tried = std::time::Instant::now();
     while !stop.load(Ordering::Relaxed) {
+        // A session that went quiet is news to the API's subscribers.
+        shared.check_claude_fresh();
         let wanted = shared.policy().awake_hold;
         if role.keep_awake && hold_wanted != Some(wanted) {
             hold_wanted = Some(wanted);
@@ -203,11 +244,17 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         std::thread::sleep(Duration::from_millis(500));
     }
     tracing::info!("stopping");
+    drop(api);
     server.unblock();
+    if let Some(s) = session {
+        let _ = s.join();
+    }
     if let Some(u) = updater {
         let _ = u.join();
     }
-    let _ = sampler.join();
+    if let Some(s) = sampler {
+        let _ = s.join();
+    }
     if let Some(a) = announcer {
         let _ = a.join();
     }

@@ -148,3 +148,643 @@ pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
     let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
     (rc == 0).then_some(f)
 }
+
+// ── the local API socket ──────────────────────────────────────────────────
+
+/// The API's socket (api/), served by a thread until this is dropped,
+/// which stops accepting and removes the socket.
+pub struct LocalSocket {
+    path: std::path::PathBuf,
+    /// The socket file this process made, so a drop never removes one a
+    /// later instance put in its place.
+    ino: u64,
+    stop: std::sync::Arc<AtomicBool>,
+    /// Shared with the accept thread; the fd closes when both let go.
+    listener: std::sync::Arc<std::os::unix::net::UnixListener>,
+}
+
+impl Drop for LocalSocket {
+    /// Never waits: the accept thread is woken — `shutdown` on the
+    /// listener (Linux) and a non-blocking connection of our own (where the
+    /// file is still there) — and leaves on its own. A drop that joined it
+    /// would hang the agent's stop whenever neither wake reached it.
+    fn drop(&mut self) {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::MetadataExt;
+        self.stop.store(true, Ordering::Relaxed);
+        // SAFETY: shutdown on a socket this struct keeps open.
+        unsafe {
+            libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR);
+        }
+        if std::fs::symlink_metadata(&self.path).is_ok_and(|m| m.ino() == self.ino) {
+            let _ = probe(&self.path);
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+/// The uid on the other end of a unix socket, as the kernel states it.
+#[cfg(target_os = "linux")]
+fn peer_uid(s: &std::os::unix::net::UnixStream) -> Option<u32> {
+    use std::os::fd::AsRawFd;
+    let mut cred = libc::ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: SO_PEERCRED fills a ucred of the stated size on this socket.
+    let rc = unsafe {
+        libc::getsockopt(
+            s.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut cred as *mut libc::ucred).cast(),
+            &mut len,
+        )
+    };
+    (rc == 0 && len as usize == std::mem::size_of::<libc::ucred>()).then_some(cred.uid)
+}
+
+/// The uid on the other end of a unix socket, as the kernel states it.
+#[cfg(target_os = "macos")]
+fn peer_uid(s: &std::os::unix::net::UnixStream) -> Option<u32> {
+    use std::os::fd::AsRawFd;
+    let (mut uid, mut gid) = (0, 0);
+    // SAFETY: getpeereid writes two ids for a connected unix socket.
+    let rc = unsafe { libc::getpeereid(s.as_raw_fd(), &mut uid, &mut gid) };
+    (rc == 0).then_some(uid)
+}
+
+/// This process's effective uid.
+fn euid() -> u32 {
+    // SAFETY: no arguments; cannot fail.
+    unsafe { libc::geteuid() }
+}
+
+/// The modes the socket and a directory made for it get: private to the
+/// agent's user, unless other uids are listed — then the kernel's file
+/// check must let them reach the socket (the directory traversable, the
+/// socket connectable by all) and the peer check is the gate.
+fn socket_modes(listed: &[u32]) -> (u32, u32) {
+    if listed.is_empty() {
+        (0o700, 0o600)
+    } else {
+        (0o711, 0o666)
+    }
+}
+
+/// Make the socket's directory when it is missing — `mode`, and only what
+/// this creates. One that exists is never changed, and must be a real
+/// directory (not a symlink) owned by this user that neither group nor
+/// others can write — else someone else could swap the socket.
+fn socket_dir(dir: &Path, mode: u32) -> Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    match std::fs::symlink_metadata(dir) {
+        Ok(m) => check_socket_dir(
+            dir,
+            m.file_type().is_symlink(),
+            m.is_dir(),
+            m.uid(),
+            m.mode(),
+            euid(),
+        ),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(mode)
+                .create(dir)
+                .with_context(|| format!("creating {}", dir.display()))?;
+            // Exactly `mode`, whatever the umask took off: this directory
+            // is the one this call made.
+            std::fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(mode))
+                .with_context(|| format!("making {} {mode:o}", dir.display()))
+        }
+        Err(e) => Err(e).with_context(|| format!("reading {}", dir.display())),
+    }
+}
+
+/// The pure half of `socket_dir` for a directory that exists.
+fn check_socket_dir(
+    dir: &Path,
+    symlink: bool,
+    is_dir: bool,
+    owner: u32,
+    mode: u32,
+    me: u32,
+) -> Result<()> {
+    let d = dir.display();
+    if symlink {
+        anyhow::bail!("{d} is a symlink; the API socket's directory must be a real one");
+    }
+    if !is_dir {
+        anyhow::bail!("{d} is not a directory");
+    }
+    if owner != me {
+        anyhow::bail!("{d} belongs to uid {owner}, not to this agent's uid {me}");
+    }
+    if mode & 0o022 != 0 {
+        anyhow::bail!(
+            "{d} is writable by group or others (mode {:o}); the API socket's directory must not be",
+            mode & 0o777
+        );
+    }
+    Ok(())
+}
+
+/// A non-blocking connect to `path`: Ok when something accepted, else the
+/// error as the kernel gives it — ECONNREFUSED for a socket nobody
+/// listens on, EAGAIN for a live one whose backlog is full. It never
+/// waits, so a live socket cannot hang the caller.
+fn probe(path: &Path) -> std::io::Result<()> {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::ffi::OsStrExt;
+    let bytes = path.as_os_str().as_bytes();
+    // SAFETY: an all-zero sockaddr_un is a valid (empty) address.
+    let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    if bytes.len() >= addr.sun_path.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "the path is too long for a unix socket",
+        ));
+    }
+    addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
+    for (d, s) in addr.sun_path.iter_mut().zip(bytes) {
+        *d = *s as libc::c_char;
+    }
+    #[cfg(target_os = "linux")]
+    let kind = libc::SOCK_STREAM | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK;
+    #[cfg(not(target_os = "linux"))]
+    let kind = libc::SOCK_STREAM;
+    // SAFETY: a new socket; the fd is owned below.
+    let raw = unsafe { libc::socket(libc::AF_UNIX, kind, 0) };
+    if raw < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: `raw` is a fresh descriptor nothing else owns.
+    let fd = unsafe { OwnedFd::from_raw_fd(raw) };
+    #[cfg(not(target_os = "linux"))]
+    // SAFETY: flags on a descriptor this function owns.
+    unsafe {
+        let fl = libc::fcntl(fd.as_raw_fd(), libc::F_GETFL);
+        libc::fcntl(fd.as_raw_fd(), libc::F_SETFL, fl | libc::O_NONBLOCK);
+        libc::fcntl(fd.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC);
+    }
+    // SAFETY: a valid address of the stated size.
+    let rc = unsafe {
+        libc::connect(
+            fd.as_raw_fd(),
+            (&addr as *const libc::sockaddr_un).cast(),
+            std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t,
+        )
+    };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+/// What to do about something at the socket's path, from the probe.
+#[derive(Debug, PartialEq, Eq)]
+enum Stale {
+    /// Nothing there (or it went away): bind.
+    Clear,
+    /// A socket nobody listens on: remove it, then bind.
+    Remove,
+}
+
+/// The pure half of `clear_stale`: only a refused connection (or no file)
+/// makes the path free; a live socket — accepting, or with its backlog
+/// full — or any other error stops the start.
+fn judge_probe(path: &Path, probe: std::io::Result<()>) -> Result<Stale> {
+    let p = path.display();
+    let e = match probe {
+        Ok(()) => anyhow::bail!("another agent already answers on {p}; refusing to start a second"),
+        Err(e) => e,
+    };
+    match e.raw_os_error() {
+        Some(libc::ECONNREFUSED) => Ok(Stale::Remove),
+        Some(libc::ENOENT) => Ok(Stale::Clear),
+        Some(libc::EAGAIN) | Some(libc::EINPROGRESS) => anyhow::bail!(
+            "another agent already answers on {p} (its backlog is full); refusing to start a second"
+        ),
+        _ => {
+            anyhow::bail!("cannot tell whether another agent answers on {p} ({e}); not removing it")
+        }
+    }
+}
+
+/// Clear the way for a new socket at `path` (`judge_probe`); anything at
+/// that path that is not a socket is not ours to remove.
+fn clear_stale(path: &Path) -> Result<()> {
+    use std::os::unix::fs::FileTypeExt;
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return Ok(());
+    };
+    if !meta.file_type().is_socket() {
+        anyhow::bail!(
+            "{} exists and is not a socket; not touching it",
+            path.display()
+        );
+    }
+    match judge_probe(path, probe(path))? {
+        Stale::Clear => Ok(()),
+        Stale::Remove => std::fs::remove_file(path)
+            .with_context(|| format!("removing the stale {}", path.display())),
+    }
+}
+
+/// One connection counted against `Limits::max_connections`, for as long
+/// as it lives.
+struct Slot(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// Serve the API's socket at `path`: the directory made if missing (0700)
+/// or checked if not (`socket_dir`), a stale socket removed, another
+/// instance refused, the socket 0600 — or, with other uids listed, 0711
+/// and 0666 (`socket_modes`). Each connection from the agent's own
+/// uid or one `limits` lists (`api::peer_allowed`), while fewer than
+/// `max_connections` are open, is handed to `on_conn` on a thread of its
+/// own with a write timeout and a read deadline until `hello`; any other
+/// peer gets `api::refusal`, one past the limit `api::too_many`, and is
+/// closed.
+pub fn serve_local_socket<F>(
+    path: &Path,
+    limits: &crate::api::Limits,
+    on_conn: F,
+) -> Result<LocalSocket>
+where
+    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+{
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use std::os::unix::net::UnixListener;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    let dir = path
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .with_context(|| format!("{} names no directory", path.display()))?;
+    let (dir_mode, sock_mode) = socket_modes(&limits.allowed_uids);
+    socket_dir(dir, dir_mode)?;
+    clear_stale(path)?;
+    let listener =
+        UnixListener::bind(path).with_context(|| format!("binding {}", path.display()))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(sock_mode))
+        .with_context(|| format!("making {} {sock_mode:o}", path.display()))?;
+    let ino = std::fs::symlink_metadata(path)
+        .with_context(|| format!("reading {}", path.display()))?
+        .ino();
+    let own = euid();
+    let stop = Arc::new(AtomicBool::new(false));
+    let on_conn = Arc::new(on_conn);
+    let listener = Arc::new(listener);
+    let active = Arc::new(AtomicUsize::new(0));
+    let limits = limits.clone();
+    {
+        let stop = Arc::clone(&stop);
+        let listener = Arc::clone(&listener);
+        std::thread::Builder::new()
+            .name("api-accept".into())
+            .spawn(move || {
+                for stream in listener.incoming() {
+                    if stop.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let Ok(mut stream) = stream else {
+                        // Out of descriptors, say: not a reason to spin.
+                        std::thread::sleep(Duration::from_millis(100));
+                        continue;
+                    };
+                    // Every write on this socket, the refusals included,
+                    // gives up after the timeout.
+                    let _ = stream.set_write_timeout(Some(limits.write_timeout));
+                    let peer = peer_uid(&stream);
+                    if !crate::api::peer_allowed(peer, own, &limits.allowed_uids) {
+                        tracing::warn!(
+                            peer_uid = peer,
+                            "api: refused a connection from a uid that may not use the socket"
+                        );
+                        let _ = std::io::Write::write_all(
+                            &mut stream,
+                            crate::api::refusal(peer).as_bytes(),
+                        );
+                        continue;
+                    }
+                    if active.fetch_add(1, Ordering::AcqRel) >= limits.max_connections {
+                        active.fetch_sub(1, Ordering::AcqRel);
+                        tracing::warn!(
+                            max = limits.max_connections,
+                            "api: refused a connection past the limit"
+                        );
+                        let _ = std::io::Write::write_all(
+                            &mut stream,
+                            crate::api::too_many(limits.max_connections).as_bytes(),
+                        );
+                        continue;
+                    }
+                    let slot = Slot(Arc::clone(&active));
+                    let _ = stream.set_read_timeout(Some(limits.hello_deadline));
+                    let (Ok(writer), Ok(ctl)) = (stream.try_clone(), stream.try_clone()) else {
+                        continue;
+                    };
+                    let ctl = Arc::new(ctl);
+                    let conn = crate::api::conn::Conn {
+                        reader: Box::new(stream),
+                        writer: Box::new(writer),
+                        on_hello: {
+                            let ctl = Arc::clone(&ctl);
+                            Box::new(move || {
+                                let _ = ctl.set_read_timeout(None);
+                            })
+                        },
+                        close: Arc::new(move || {
+                            let _ = ctl.shutdown(std::net::Shutdown::Both);
+                        }),
+                    };
+                    let on_conn = Arc::clone(&on_conn);
+                    let _ = std::thread::Builder::new()
+                        .name("api-conn".into())
+                        .spawn(move || {
+                            let _slot = slot;
+                            on_conn(conn);
+                        });
+                }
+            })
+            .context("spawning the API's accept thread")?;
+    }
+    Ok(LocalSocket {
+        path: path.to_path_buf(),
+        ino,
+        stop,
+        listener,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::conn::Conn;
+    use crate::api::Limits;
+    use std::io::{BufRead, BufReader, Read, Write};
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("daedalus-sock-{name}-{}", std::process::id()))
+    }
+
+    fn limits() -> Limits {
+        Limits {
+            allowed_uids: Vec::new(),
+            max_connections: 16,
+            hello_deadline: Duration::from_secs(10),
+            write_timeout: Duration::from_secs(10),
+        }
+    }
+
+    fn echo(c: Conn) {
+        let mut w = c.writer;
+        for line in BufReader::new(c.reader).lines().map_while(|l| l.ok()) {
+            let _ = writeln!(w, "{line}");
+        }
+    }
+
+    fn read_one(c: &std::os::unix::net::UnixStream) -> String {
+        let mut got = String::new();
+        BufReader::new(c).read_line(&mut got).unwrap();
+        got
+    }
+
+    #[test]
+    fn the_socket_is_private_single_and_cleaned_up() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch("life");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("run").join("api.sock");
+        let sock = serve_local_socket(&path, &limits(), echo).unwrap();
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&path), 0o600);
+        assert_eq!(mode(path.parent().unwrap()), 0o700);
+        // This uid is served.
+        let mut c = std::os::unix::net::UnixStream::connect(&path).unwrap();
+        writeln!(c, "ping").unwrap();
+        assert_eq!(read_one(&c), "ping\n");
+        // A second instance is refused while this one answers.
+        let e = serve_local_socket(&path, &limits(), echo)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(e.contains("already answers"), "{e}");
+        drop(sock);
+        assert!(!path.exists(), "the socket leaves with its server");
+
+        // A stale socket (nobody answers) is replaced; a file is not touched.
+        drop(std::os::unix::net::UnixListener::bind(&path).unwrap());
+        assert!(path.exists());
+        // Other tests spawn processes; a child forked while the listener
+        // was open holds it until it execs, and the socket answers until
+        // then — which is exactly a second instance, so wait it out.
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        let sock = loop {
+            match serve_local_socket(&path, &limits(), echo) {
+                Ok(s) => break s,
+                Err(e) if std::time::Instant::now() < until => {
+                    assert!(e.to_string().contains("already answers"), "{e}");
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(e) => panic!("{e}"),
+            }
+        };
+        drop(sock);
+        std::fs::write(&path, "not a socket").unwrap();
+        let e = serve_local_socket(&path, &limits(), echo)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(e.contains("not a socket"), "{e}");
+        assert!(path.exists());
+        std::fs::remove_file(&path).unwrap();
+        // A directory that exists keeps its mode, and is refused when the
+        // group or others can write it, or when it is a symlink.
+        let run = path.parent().unwrap();
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o750)).unwrap();
+        drop(serve_local_socket(&path, &limits(), echo).unwrap());
+        assert_eq!(mode(run), 0o750);
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o770)).unwrap();
+        let e = serve_local_socket(&path, &limits(), echo)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(e.contains("writable by group or others"), "{e}");
+        assert_eq!(mode(run), 0o770, "never chmods a directory it did not make");
+        let link = dir.join("link");
+        std::os::unix::fs::symlink(run, &link).unwrap();
+        let e = serve_local_socket(&link.join("api.sock"), &limits(), echo)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(e.contains("symlink"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn listed_uids_open_the_file_modes_and_leave_the_gate_to_the_peer_check() {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(socket_modes(&[]), (0o700, 0o600));
+        assert_eq!(socket_modes(&[100999]), (0o711, 0o666));
+        let dir = scratch("listed");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("run").join("api.sock");
+        let open = Limits {
+            allowed_uids: vec![100999],
+            ..limits()
+        };
+        let sock = serve_local_socket(&path, &open, echo).unwrap();
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&path), 0o666);
+        assert_eq!(mode(path.parent().unwrap()), 0o711);
+        drop(sock);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_directory_that_is_not_ours_is_refused() {
+        let d = Path::new("/run/x");
+        assert!(check_socket_dir(d, false, true, 1000, 0o40700, 1000).is_ok());
+        assert!(check_socket_dir(d, false, true, 1000, 0o40755, 1000).is_ok());
+        let e = check_socket_dir(d, false, true, 0, 0o40700, 1000).unwrap_err();
+        assert!(e.to_string().contains("belongs to uid 0"), "{e}");
+        assert!(check_socket_dir(d, false, true, 1000, 0o40702, 1000).is_err());
+        assert!(check_socket_dir(d, true, false, 1000, 0o120777, 1000).is_err());
+        assert!(check_socket_dir(d, false, false, 1000, 0o100600, 1000).is_err());
+    }
+
+    #[test]
+    fn only_a_refused_probe_frees_the_path() {
+        let p = Path::new("/run/x/api.sock");
+        let err = |n| Err(std::io::Error::from_raw_os_error(n));
+        assert_eq!(
+            judge_probe(p, err(libc::ECONNREFUSED)).unwrap(),
+            Stale::Remove
+        );
+        assert_eq!(judge_probe(p, err(libc::ENOENT)).unwrap(), Stale::Clear);
+        for live in [Ok(()), err(libc::EAGAIN)] {
+            let e = judge_probe(p, live).unwrap_err().to_string();
+            assert!(e.contains("already answers"), "{e}");
+        }
+        let e = judge_probe(p, err(libc::EACCES)).unwrap_err().to_string();
+        assert!(e.contains("not removing it"), "{e}");
+    }
+
+    #[test]
+    fn past_the_limit_a_connection_is_told_busy_and_closed() {
+        let dir = scratch("busy");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("api.sock");
+        let one = Limits {
+            max_connections: 1,
+            ..limits()
+        };
+        let sock = serve_local_socket(&path, &one, echo).unwrap();
+        let mut first = std::os::unix::net::UnixStream::connect(&path).unwrap();
+        writeln!(first, "held").unwrap();
+        assert_eq!(read_one(&first), "held\n");
+        let second = std::os::unix::net::UnixStream::connect(&path).unwrap();
+        assert_eq!(read_one(&second), crate::api::too_many(1));
+        let mut rest = String::new();
+        (&second).read_to_string(&mut rest).unwrap();
+        assert_eq!(rest, "", "closed after the line");
+        // The slot comes back when the first leaves.
+        drop(first);
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let mut again = std::os::unix::net::UnixStream::connect(&path).unwrap();
+            writeln!(again, "back").unwrap();
+            if read_one(&again) == "back\n" {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < until,
+                "the slot never came back"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        drop(sock);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_silent_connection_is_closed_at_the_hello_deadline() {
+        let dir = scratch("deadline");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("api.sock");
+        let quick = Limits {
+            hello_deadline: Duration::from_millis(200),
+            ..limits()
+        };
+        let sock = serve_local_socket(&path, &quick, echo).unwrap();
+        let c = std::os::unix::net::UnixStream::connect(&path).unwrap();
+        let t = std::time::Instant::now();
+        let mut rest = String::new();
+        (&c).read_to_string(&mut rest).unwrap();
+        assert!(t.elapsed() < Duration::from_secs(3), "{:?}", t.elapsed());
+        drop(sock);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_peer_that_never_reads_does_not_pin_the_connection() {
+        let dir = scratch("stuck");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("api.sock");
+        let quick = Limits {
+            write_timeout: Duration::from_millis(200),
+            ..limits()
+        };
+        let done = std::sync::Arc::new(AtomicBool::new(false));
+        let sock = {
+            let done = std::sync::Arc::clone(&done);
+            serve_local_socket(&path, &quick, move |c: Conn| {
+                // Write until the socket gives up on the reader.
+                let mut w = c.writer;
+                let chunk = vec![b'x'; 64 * 1024];
+                while w.write_all(&chunk).is_ok() {}
+                (c.close)();
+                done.store(true, Ordering::SeqCst);
+            })
+            .unwrap()
+        };
+        let c = std::os::unix::net::UnixStream::connect(&path).unwrap();
+        c.shutdown(std::net::Shutdown::Write).unwrap();
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        while !done.load(Ordering::SeqCst) {
+            assert!(std::time::Instant::now() < until, "the write never gave up");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        drop(c);
+        drop(sock);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_stop_never_waits_even_with_the_file_gone() {
+        let dir = scratch("gone");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("api.sock");
+        let sock = serve_local_socket(&path, &limits(), |_| {}).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        let t = std::time::Instant::now();
+        drop(sock);
+        assert!(t.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn the_kernel_names_the_peer() {
+        let (a, _b) = std::os::unix::net::UnixStream::pair().unwrap();
+        assert_eq!(peer_uid(&a), Some(euid()));
+    }
+}
