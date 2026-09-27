@@ -678,7 +678,11 @@ priority; each can be done independently unless noted.
       2. Machines connect to the controller: an agent release speaking both
          the old hello and the new connection; the app moves machine reads
          and commands to the socket; then the LAN pulls, the node token, the
-         hello route and the per-machine file_sd targets go.
+         hello route and the per-machine file_sd targets go. The file_sd
+         targets need a replacement first: the controller's `/nodes/metrics`
+         is on its loopback status page, which the Prometheus container
+         cannot reach, so the switch brings a way in (a scrape listener the
+         container can reach, e.g. on the bridge gateway) with it.
       3. Staged updates, orchestrated by the controller.
       4. Actions move over one at a time: Claude sessions (which the other
          machines then gain too), workspace clone and sync, then the root

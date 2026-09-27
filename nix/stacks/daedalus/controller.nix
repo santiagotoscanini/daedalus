@@ -1,9 +1,63 @@
 # The controller — the daedalus agent (agent/) on the box itself, in
 # `mode = "controller"`: one process as the operator, the door the app talks to
 # over a unix socket (PLAN feature 13). Today it serves that socket, the
-# machine's facts at the `minimal` telemetry level and its status page on
-# loopback (127.0.0.1:7787, never the LAN); Claude remote control stays with
+# machine's facts at the `minimal` telemetry level, its status page on
+# loopback (127.0.0.1:7787, never the LAN) and the listener the other
+# machines' links reach (below); Claude remote control stays with
 # platform/claude-rc.nix until the controller takes it over, so it is OFF here.
+#
+# The machines' link (agent/README.md, "The link to the controller"):
+#
+#   listen         `0.0.0.0:<fleet.daedalus.controllerPort>` (7788 unless the
+#                  host says otherwise): TLS 1.3, each end pinning the other's
+#                  ed25519 key, no CA and no web server between.
+#   firewall       the port is open on `fleet.lanInterface` ONLY — the link
+#                  is for machines on the network, and the router forwards
+#                  nothing to it. VPN clients cannot reach it yet: the tunnel
+#                  ends in wg-easy's own netns, so a tunnel packet to the LAN
+#                  address lands there, not on the host. A machine off the
+#                  LAN keeps the legacy hello over HTTPS as its fallback; no
+#                  DNAT is added for it.
+#   advertise      `<fleet.wanHost>:<port>`, what the app hands a machine to
+#                  dial. The public name, because the LAN resolver answers it
+#                  with the LAN address (platform/ddclient puts it in
+#                  fleet.dnsHosts, and modules/pihole makes it local-only, so
+#                  A only, no AAAA to race). `<hostName>.<lanDomain>` is NOT
+#                  that: the resolver answers its own host's name itself, and
+#                  not with the LAN address (measured: 0.0.0.0 and ::1), and
+#                  the name exists only where the host's reservations carry
+#                  it. Off the LAN the public name resolves to the WAN
+#                  address, where nothing is forwarded to this port, so a
+#                  machine away from home fails closed onto the legacy hello.
+#   SRV            `_daedalus-controller._tcp.<lanDomain>` → the same name
+#                  and port, through fleet.dnsSrv beside `_daedalus._tcp`
+#                  (daedalus-nodes.nix): how an agent with no
+#                  `controller_address` finds the listener. modules/pihole
+#                  renders each entry as a `srv-host=` line in pihole.toml,
+#                  so ADDING or changing one restarts the resolver at the
+#                  switch (a few seconds without LAN DNS) — this list is not
+#                  a runtime file. A record is only a first use for the
+#                  machine: anyone who answers DNS on the LAN could redirect
+#                  it, which is why the key is pinned, not the address.
+#   identity.key   the controller's key, made on its first start in
+#                  `data_dir` (0600): what every machine pins. `data_dir` is
+#                  under fleet.stateRoot, which a host snapshots and
+#                  replicates with the rest of its container state (the
+#                  reference host: its frequent/hourly/daily snapshots and
+#                  the nightly mirror of that dataset) — so a restore brings
+#                  the same key back and no machine sees "controller key
+#                  changed". A lost key is exactly that: every machine refuses
+#                  the new one until it is re-pinned. `system.info` states its
+#                  fingerprint (`controller.fingerprint`).
+#
+#   What the app must do with it (PLAN feature 13, step 2): read
+#   `controller.{advertise,public_key}` from system.info and name them in the
+#   legacy hello's answer (`controller: {address, public_key}`), which moves
+#   enrolled machines onto the link; push its COMPLETE set of decided keys
+#   (`nodes.set_desired`: approved/revoked, each with its policy) on connect
+#   and on every decision, since the controller keeps nothing across a
+#   restart; read machines through `nodes.*` and send commands with
+#   `nodes.command`.
 #
 # What nix hands it:
 #
@@ -86,6 +140,10 @@ let
   # Where the agent reads config.toml: its Linux default directory.
   configDir = "/var/lib/daedalus-agent";
 
+  # The machines' link: every address, the LAN interface's firewall alone
+  # admitting it (see the header).
+  port = config.fleet.daedalus.controllerPort;
+
   # The published image's `node` user, as the host sees it. Dev mode runs the
   # container as the operator, who needs no listing.
   allowedUids = lib.optional (!daedalusDev) (hostUid 1000);
@@ -103,12 +161,37 @@ let
       # never starts a second one, and its unit name is one nothing else uses.
       claude_remote_control = false;
       claude_unit = "daedalus-claude-rc";
+      listen = "0.0.0.0:${toString port}";
+      advertise = [ "${config.fleet.wanHost}:${toString port}" ];
     };
   };
 in
 {
+  options.fleet.daedalus.controllerPort = lib.mkOption {
+    type = lib.types.port;
+    default = 7788;
+    description = ''
+      The TCP port the controller accepts the other machines' links on
+      (TLS, key-pinned). Opened on the LAN interface only, published to the
+      LAN as the `_daedalus-controller._tcp` SRV record, and what the app
+      tells machines to dial.
+    '';
+  };
+
   config = lib.mkIf config.fleet.modules.daedalus.enable {
     fleet.statePaths.${dataDir}.mode = "0700";
+
+    # LAN only: never `allowedTCPPorts`, which would open it on every
+    # interface (the header says why the tunnel's clients are not here).
+    networking.firewall.interfaces.${config.fleet.lanInterface}.allowedTCPPorts = [ port ];
+
+    fleet.dnsSrv = [
+      {
+        service = "_daedalus-controller._tcp";
+        target = config.fleet.wanHost;
+        inherit port;
+      }
+    ];
 
     systemd.tmpfiles.rules = [
       "d ${configDir} 0755 root root -"
@@ -155,7 +238,8 @@ in
         Restart = "always";
         RestartSec = "5s";
         # Each API connection is a few threads and two descriptors, up to 16 at
-        # once, beside telemetry and the session's tools.
+        # once; each machine's link a thread and a descriptor, up to 64 admitted
+        # and 32 in the handshake; beside telemetry and the session's tools.
         LimitNOFILE = 4096;
       };
       unitConfig = {
