@@ -21,8 +21,9 @@
 //!
 //! Who the session belongs to, and whether `install` turned lingering on,
 //! is kept in the data directory's `session.json`, so `uninstall` undoes
-//! exactly that. The status page's port is not opened in any firewall: on a
-//! machine that runs ufw or firewalld, the README says the one command.
+//! exactly that. The status page's port (`/metrics` for the LAN) is not
+//! opened in any firewall: on a machine that runs ufw or firewalld, the
+//! README says the one command.
 //!
 //! `run` is `agent_main` with SIGTERM as the stop: systemd sends it on
 //! `stop`, `restart` and at shutdown (the relay is unix.rs's
@@ -491,7 +492,7 @@ pub fn install(cfg: &Config) -> Result<()> {
     }
 
     println!(
-        "the status page answers on TCP {port}; no firewall rule was added. With ufw: \
+        "/metrics answers the LAN on TCP {port}; no firewall rule was added. With ufw: \
          `ufw allow from <your LAN>/24 to any port {port} proto tcp`; with firewalld: \
          `firewall-cmd --permanent --add-port={port}/tcp && firewall-cmd --reload`",
         port = cfg.port

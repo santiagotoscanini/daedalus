@@ -6,9 +6,9 @@
   Downloads the newest agent-v* release of the engine repository, places the
   service and the tray under Program Files, and runs `daedalus-agent install`
   (the service, the tray's Run key, the firewall rule, config.toml). From
-  then on the agent keeps this machine awake, answers a status page on TCP
-  7787 for the LAN, announces itself to the box, and updates itself. Run
-  from an administrator PowerShell:
+  then on the agent keeps this machine awake, keeps one connection to the
+  controller (the box's agent), answers /metrics on TCP 7787 for the LAN,
+  and updates itself. Run from an administrator PowerShell:
 
     Set-ExecutionPolicy -Scope Process Bypass -Force
     irm https://daedalus.toscanini.me/install.ps1 | iex
@@ -27,13 +27,17 @@
 .PARAMETER Version
   A specific version (e.g. 0.1.0) instead of the newest.
 .PARAMETER Port
-  The status page's TCP port, written to config.toml on first install.
+  The status page's TCP port (/metrics for the LAN), written to config.toml
+  on first install.
 .PARAMETER Controller
   The controller's link address, host:port (the box's agent), written to
-  config.toml (also on a reinstall). Absent: the agent learns it from the box.
+  config.toml (also on a reinstall). Absent: the agent asks DNS for the
+  controller's SRV record.
 .PARAMETER Pin
-  The controller key's fingerprint to trust, written to config.toml. With
-  either, run the script as a script block so it takes parameters:
+  The controller key's fingerprint to trust, written to config.toml (also on
+  a reinstall). Absent: the first key the controller presents is trusted,
+  and the tray says so until one is pinned. With either, run the script as
+  a script block so it takes parameters:
 
     & ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) `
       -Controller box.lan:7788 -Pin 3f2a:9c01:…

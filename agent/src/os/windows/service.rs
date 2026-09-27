@@ -126,7 +126,7 @@ pub fn install(cfg: &Config) -> Result<()> {
         }
     };
     service
-        .set_description("Keeps this machine awake for the daedalus control plane, answers a status page on the LAN, and updates itself from the engine's releases.")
+        .set_description("Keeps this machine awake for the daedalus controller, reports to it over one connection, and updates itself from the engine's releases.")
         .context("setting the description")?;
 
     // Restart on any exit that is not a clean stop — including the exit
@@ -175,7 +175,10 @@ pub fn install(cfg: &Config) -> Result<()> {
     }
 
     firewall_allow(cfg.port)?;
-    println!("firewall: TCP {} allowed from the local subnet", cfg.port);
+    println!(
+        "firewall: TCP {} allowed from the local subnet (/metrics)",
+        cfg.port
+    );
 
     let state = service
         .query_status()
@@ -196,7 +199,10 @@ pub fn install(cfg: &Config) -> Result<()> {
     } else {
         println!("no {TRAY_EXE} beside the service; the tray is not registered");
     }
-    println!("status page: http://<this machine>:{}/status", cfg.port);
+    println!(
+        "status: daedalus-agent status (http://127.0.0.1:{}/status on this machine)",
+        cfg.port
+    );
     Ok(())
 }
 

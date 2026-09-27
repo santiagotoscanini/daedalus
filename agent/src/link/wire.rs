@@ -28,7 +28,6 @@ use serde_json::Value;
 
 use crate::claude::Report;
 use crate::config::TelemetryLevel;
-use crate::hello::Policy;
 use crate::providers::ProviderReport;
 use crate::telemetry::Telemetry;
 
@@ -209,13 +208,68 @@ pub struct Welcome {
     pub policy: Option<Policy>,
 }
 
+/// What the box wants of a machine: the app's decision, sent by the
+/// controller with `hello`'s answer and as the `policy` event. The defaults
+/// stand until the controller has approved the machine; there is no local
+/// copy.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Policy {
+    /// Hold the machine awake (the agent's first job; off means the box
+    /// decided this machine may sleep).
+    pub awake_hold: bool,
+    /// Run `claude remote-control` in the user's session.
+    pub claude_remote_control: bool,
+    /// The directory the server runs in; empty means the session picks the
+    /// most recently used trusted project.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claude_workdir: Option<String>,
+    /// What the box knows about the providers on this machine — for now,
+    /// the port to look for each on. Absent when it names none.
+    #[serde(default, skip_serializing_if = "ProvidersPolicy::is_empty")]
+    pub providers: ProvidersPolicy,
+}
+
+/// The providers half of the policy, one optional entry per kind.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProvidersPolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lemonade: Option<ProviderPolicy>,
+}
+
+impl ProvidersPolicy {
+    pub fn is_empty(&self) -> bool {
+        self.lemonade.is_none()
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProviderPolicy {
+    /// The port the provider answers on; None means the kind's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Self {
+            awake_hold: true,
+            claude_remote_control: true,
+            claude_workdir: None,
+            providers: ProvidersPolicy::default(),
+        }
+    }
+}
+
 /// The `state` event.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StateEvent {
     pub state: NodeState,
 }
 
-/// The one-shot instructions, the same three the hello answer carries.
+/// The one-shot instructions the controller sends a machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Command {

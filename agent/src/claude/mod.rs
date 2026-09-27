@@ -9,8 +9,8 @@
 //! (session.rs, which the tray runs) supervises the server, in the desktop
 //! session with the user's credentials, and reports to the service over
 //! loopback (`POST /claude/report`, status.rs). The service keeps the full
-//! report for `/claude`, puts a summary on the status page and in every
-//! hello, and hands the session back what the box decided: whether the
+//! report for `/claude` and the link, puts a summary on the status page,
+//! and hands the session back what the box decided: whether the
 //! server should run at all and where (policy), and its two instructions —
 //! update Claude Code, and restart the server.
 //!
@@ -196,10 +196,10 @@ pub struct Report {
     pub reported_at: String,
 }
 
-/// The part of the report the OPEN status page and the hello carry: enough
-/// for a card and a picker, and nothing anyone on the LAN should not see —
-/// no session names, paths or ids, no environment id, no account facts.
-/// The full report is behind the node token (status.rs `/claude`).
+/// The part of the report the status page and the controller's
+/// `nodes.list` carry: enough for a card and a picker — no session names,
+/// paths or ids, no environment id, no account facts. The full report is
+/// `/claude` on loopback and the link's `claude` push.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Summary {

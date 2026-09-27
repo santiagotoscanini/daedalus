@@ -9,20 +9,18 @@
 //! The knobs, with their defaults:
 //!
 //! ```toml
-//! port = 7787                 # the status page's LAN port
+//! port = 7787                 # the status page's port (`/metrics` for the LAN)
 //! update_check_secs = 600     # how often the release feed is asked
 //! auto_update = true          # the older spelling of `updates` (below)
 //! log_level = "info"
-//! control_plane_url = "…"     # the box, when DNS cannot find it; absent = find it
-//! search_domains = []         # more domains to ask for `_daedalus._tcp`
-//! hello_secs = 60             # how often the hello goes out
+//! search_domains = []         # more domains to ask for `_daedalus-controller._tcp`
 //! mode = "node"               # node | controller
 //! telemetry = "full"          # full | minimal | off
 //! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
 //! claude_rc = "child"         # child | unit; absent = the OS's (`os::CLAUDE_RC`)
-//! controller_address = "…"    # the controller, host:port; absent = the box's word, or DNS
-//! controller_pin = "…"        # its key's fingerprint; absent = the box's word, or first use
+//! controller_address = "…"    # the controller, host:port; absent = the first use's, or DNS
+//! controller_pin = "…"        # its key's fingerprint; absent = trust on first use
 //!
 //! [controller]                # read only when mode = "controller"; nix writes it
 //! claude_remote_control = false   # run Claude remote control on the box
@@ -35,9 +33,13 @@
 //! ```
 //!
 //! `controller_address` and `controller_pin` are a machine's way to the
-//! controller (link/node.rs): `install --controller` and `--pin` write them,
-//! into a file that exists too. A pin that is not a fingerprint does not
-//! stop the agent: the link says so on the status page and the hold goes on.
+//! controller (link/node.rs), the only party it talks to: `install
+//! --controller` and `--pin` write them, into a file that exists too.
+//! Without an address the machine asks DNS for the controller's SRV record;
+//! without a pin it trusts the first key the controller presents, never
+//! re-pins, and warns until one is pinned. A pin that is not a fingerprint
+//! does not stop the agent: the link says so on the status page and the
+//! hold goes on.
 //!
 //! `mode` decides which parts of the agent run at all — an ordinary machine
 //! (`node`) or the box's own agent (`controller`); role.rs has the table.
@@ -58,12 +60,12 @@
 //! `claude_rc` is how the session runs `claude remote-control`: as its own
 //! child (Windows, macOS), or as a transient systemd user unit it starts and
 //! watches (Linux), which outlives the session (claude/unit.rs).
-//! `install` writes none of the newer keys, so the file it leaves is the one
-//! it has always written.
+//! `install` writes the first five keys, and the controller's two when it
+//! is given them.
 //!
 //! `[controller]` is the box's own policy. A node takes its policy from the
-//! box's answer to its hello; the controller has no hello, so what nix
-//! writes here stands in for it: whether Claude remote control runs (off
+//! controller over the link; the controller has no one above it, so what
+//! nix writes here stands in for it: whether Claude remote control runs (off
 //! unless this says so — the box must never start a second Claude by
 //! surprise) and where (`claude_workdir`, an absolute path). A controller
 //! never holds the machine awake
@@ -129,12 +131,12 @@ pub const DATA_DIR_ENV: &str = "DAEDALUS_AGENT_DATA_DIR";
 
 /// What the box decides — holding the machine awake, Claude remote control
 /// and its directory, provider ports — is not here: it is the box's policy
-/// (hello.rs), with `Policy::default()` standing until the box has approved
-/// this machine. Keys an older install wrote for those are ignored.
+/// (link/wire.rs `Policy`), with `Policy::default()` standing until the
+/// controller has approved this machine.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    /// The LAN port the status page answers on.
+    /// The port the status page answers on.
     pub port: u16,
     /// How often the feed is asked, in seconds. GitHub allows 60 unauthenticated
     /// requests an hour from one address; the default spends six.
@@ -145,22 +147,17 @@ pub struct Config {
     pub auto_update: bool,
     /// `info` by default; `debug` for a bug report.
     pub log_level: String,
-    /// The box's base URL, when it cannot be found through DNS (a machine
-    /// whose resolver is not the box's). Empty means: find it.
-    pub control_plane_url: Option<String>,
-    /// Search domains to ask for the `_daedalus._tcp` record besides the
-    /// ones DHCP handed the adapters.
+    /// Search domains to ask for the `_daedalus-controller._tcp` record
+    /// besides the ones DHCP handed the adapters.
     pub search_domains: Vec<String>,
-    /// How often the agent announces itself to the box, in seconds.
-    pub hello_secs: u64,
     /// The controller's `host:port`, for the link (link/node.rs); absent
-    /// means: the address the box names, or the `_daedalus-controller._tcp`
-    /// SRV record. `install --controller` writes it.
+    /// means: the address a first use was trusted at, or the
+    /// `_daedalus-controller._tcp` SRV record. `install --controller` writes it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_address: Option<String>,
     /// The controller key's fingerprint to pin (identity.rs
-    /// `fingerprint`); absent means: the key the box names, or the first
-    /// one the controller presents. `install --pin` writes it.
+    /// `fingerprint`); absent means: the first key the controller presents.
+    /// `install --pin` writes it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_pin: Option<String>,
     /// What this agent is to the rest: an ordinary machine, or the
@@ -187,8 +184,8 @@ pub struct Config {
     pub controller: ControllerConfig,
 }
 
-/// `[controller]`: what nix decides for the box's agent, which has no hello
-/// to bring it a policy (module doc).
+/// `[controller]`: what nix decides for the box's agent, which has no
+/// controller above it to bring it a policy (module doc).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ControllerConfig {
@@ -274,9 +271,7 @@ impl Default for Config {
             update_check_secs: 600,
             auto_update: true,
             log_level: "info".into(),
-            control_plane_url: None,
             search_domains: Vec::new(),
-            hello_secs: 60,
             controller_address: None,
             controller_pin: None,
             mode: Mode::default(),
@@ -303,12 +298,12 @@ impl Config {
     }
 
     /// The policy that stands at start. A node's is `Policy::default()`
-    /// until the box answers a hello; the controller's is `[controller]`'s
+    /// until the controller approves it; the controller's is `[controller]`'s
     /// for good — no awake hold, and Claude only when nix asked for it.
-    pub fn initial_policy(&self) -> crate::hello::Policy {
+    pub fn initial_policy(&self) -> crate::link::wire::Policy {
         match self.mode {
-            Mode::Node => crate::hello::Policy::default(),
-            Mode::Controller => crate::hello::Policy {
+            Mode::Node => crate::link::wire::Policy::default(),
+            Mode::Controller => crate::link::wire::Policy {
                 awake_hold: false,
                 claude_remote_control: self.controller.claude_remote_control,
                 claude_workdir: self.controller.claude_workdir.clone(),
@@ -770,43 +765,31 @@ pub fn init_logging_to(
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_config_written_by_an_earlier_install_still_loads() {
-        // `install` wrote every field; the policy knobs and `release_repo`
-        // left, and a file that still names them must parse as before.
-        let text = "port = 7788\nrelease_repo = \"x/y\"\nawake_hold = false\n\
-                    claude_remote_control = false\nclaude_workdir = \"C:/p\"\n";
-        let cfg: Config = toml::from_str(text).unwrap();
-        assert_eq!(cfg.port, 7788);
-        assert_eq!(cfg.hello_secs, 60);
-    }
-
-    /// What `install` wrote before the newer keys existed, byte for byte
-    /// (`toml::to_string_pretty(&Config::default())` from 0.13.0).
-    const WRITTEN_BY_0_13: &str = "port = 7787\nupdate_check_secs = 600\nauto_update = true\n\
-                                   log_level = \"info\"\nsearch_domains = []\nhello_secs = 60\n";
+    /// What `install` writes without `--controller` or `--pin`, byte for byte.
+    const WRITTEN_BY_INSTALL: &str = "port = 7787\nupdate_check_secs = 600\nauto_update = true\n\
+                                      log_level = \"info\"\nsearch_domains = []\n";
 
     #[test]
-    fn install_writes_the_file_it_always_wrote() {
+    fn install_writes_the_defaults_and_they_parse_back() {
         assert_eq!(
             toml::to_string_pretty(&Config::default()).unwrap(),
-            WRITTEN_BY_0_13
+            WRITTEN_BY_INSTALL
         );
-    }
-
-    #[test]
-    fn an_old_file_parses_to_todays_defaults() {
-        let cfg: Config = toml::from_str(WRITTEN_BY_0_13).unwrap();
+        let cfg: Config = toml::from_str(WRITTEN_BY_INSTALL).unwrap();
         assert_eq!(cfg, Config::default());
         assert_eq!(cfg.mode, Mode::Node);
         assert_eq!(cfg.telemetry, TelemetryLevel::Full);
         assert_eq!(cfg.updates, None);
         assert_eq!(cfg.data_dir, None);
         assert_eq!(cfg.self_update_off(), None);
-        // Every knob an operator could have set, and a key no longer known.
+    }
+
+    #[test]
+    fn a_top_level_key_the_agent_does_not_know_is_ignored() {
+        // The file on a machine the updater moved is the one an earlier
+        // install wrote: it must still start the service.
         let edited = "port = 7790\nupdate_check_secs = 1200\nauto_update = false\n\
-                      log_level = \"debug\"\ncontrol_plane_url = \"https://box.lan\"\n\
-                      search_domains = [\"lan\"]\nhello_secs = 30\nrelease_repo = \"x/y\"\n";
+                      log_level = \"debug\"\nsearch_domains = [\"lan\"]\nhello_secs = 30\n";
         let cfg: Config = toml::from_str(edited).unwrap();
         assert_eq!(
             cfg,
@@ -815,9 +798,7 @@ mod tests {
                 update_check_secs: 1200,
                 auto_update: false,
                 log_level: "debug".into(),
-                control_plane_url: Some("https://box.lan".into()),
                 search_domains: vec!["lan".into()],
-                hello_secs: 30,
                 ..Config::default()
             }
         );
@@ -905,7 +886,7 @@ mod tests {
         )
         .unwrap();
         assert!(node.validate().is_ok());
-        assert_eq!(node.initial_policy(), crate::hello::Policy::default());
+        assert_eq!(node.initial_policy(), crate::link::wire::Policy::default());
         assert_eq!(node.claude_unit(), claude_unit_name());
     }
 

@@ -3,47 +3,31 @@
 //! the box's word back.
 //!
 //! **Where to.** config.toml's `controller_address`; else the address the
-//! box named in a legacy hello answer, or the one first trusted (kept in
-//! `controller.json` in the data directory); else the SRV record
-//! `_daedalus-controller._tcp` under the same search domains the box's own
-//! record is looked for in (discover.rs), asked again every
-//! `REDISCOVER`. With none of them the machine stays on the legacy hello
-//! alone and asks again every `IDLE_RETRY`.
+//! first-use key was trusted at (kept in `controller.json` in the data
+//! directory); else the SRV record `_daedalus-controller._tcp` under the
+//! search domains (discover.rs), asked again every `REDISCOVER`. With none
+//! of them the machine reaches nobody and asks again every `IDLE_RETRY`.
 //!
 //! **Whom to trust** (`Target::pin`): config.toml's `controller_pin`, which
-//! nothing overrides; else the key kept in `controller.json` — named by the
-//! box over HTTPS (`via: "box"`), or the first key seen (`via: "tofu"`).
-//! With none, the first connection's key is accepted and kept as `tofu`.
+//! nothing overrides; else the key kept in `controller.json`, the first one
+//! seen. With neither, the first connection's key is accepted and kept.
 //! A connection whose key is not the trusted one is refused: the status
 //! page and the tray say "controller key changed", with the key that came
 //! (unproven: the pin check runs before the handshake signature) and the
 //! one expected, and nothing is re-pinned — the operator clears it (a new
 //! `--pin`, or `controller.json` removed) if the controller really did get
-//! a new key.
+//! a new key. Rotating the controller's key is a later, signed feature.
 //!
-//! **The box's word** (`learn_from_box`) is a hint in the legacy hello's
-//! answer. It counts as AUTHENTICATED only over HTTPS to the box config.toml
-//! names (`control_plane_url`), the final URL HTTPS too — never to a box
-//! found by DNS, which anyone answering DNS on the LAN can impersonate;
-//! a plain-HTTP answer's hint is ignored outright. A hint records a key
-//! only where none is trusted (as `box` when authenticated, else `tofu`),
-//! an authenticated one CONFIRMS a matching first use (`tofu` → `box`), and
-//! no hint ever replaces a trusted key: a different one is a conflict on
-//! the status page for the operator. Rotating the controller's key is a
-//! later, signed feature.
-//!
-//! **Confirmed or not.** A key pinned by config or confirmed by the box is
-//! CONFIRMED. A first-use key is not, and the page and tray say "trusted
-//! on first use, unconfirmed": the link works, but the legacy hello keeps
-//! going beside it — it pauses only for a confirmed controller.
+//! **Pinned or not.** A key from config.toml is pinned. A first-use key is
+//! not, and the page (`controller.unconfirmed`) and the tray warn "trusted
+//! on first use, unconfirmed: pin it"; the link works all the same.
 //!
 //! **The connection.** `hello` first (wire.rs): who the machine is. The
 //! answer says where it stands. PENDING: the machine sends heartbeats only
 //! and waits — the page shows "waiting for approval" with both fingerprints
 //! — until a `state` event upgrades it in place. APPROVED: the policy
-//! applies (the awake hold, Claude, providers — the same `Policy` the
-//! legacy hello answer carries), commands are taken and acknowledged at
-//! once, and the machine pushes:
+//! applies (the awake hold, Claude, providers: wire.rs `Policy`), commands
+//! are taken and acknowledged at once, and the machine pushes:
 //!
 //! - `status` — the status page's document without its telemetry — when it
 //!   changes (uptimes and report clocks aside) and every `PUSH_EVERY`; the
@@ -57,13 +41,6 @@
 //!
 //! REVOKED: the machine says so and leaves; it tries again at the slowest
 //! step, in case the box changes its mind.
-//!
-//! **The migration** (PLAN, feature 13): the legacy hello to the app goes
-//! on alongside all this until the controller has approved the machine
-//! and its key is confirmed (above); from then on it pauses (`Shared::legacy_hello_wanted`) — and resumes
-//! if the link has been down for `LEGACY_FALLBACK`, so a controller that
-//! went away does not take the machine off the box's pages. The LAN status
-//! page and its token-gated reads stay as they are in this step.
 
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
@@ -76,22 +53,18 @@ use serde_json::Value;
 
 use super::tls::{self, Recv, Tls};
 use super::wire::{
-    self, name, Accepted, Command, CommandParams, Hello, HelloFacts, Incoming, NodeState,
+    self, name, Accepted, Command, CommandParams, Hello, HelloFacts, Incoming, NodeState, Policy,
     StateEvent, Welcome, PROTO,
 };
 use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT, WRITE_TIMEOUT};
 use crate::api::wire::{code, ApiError, Response};
 use crate::config::Config;
-use crate::hello::Policy;
 use crate::identity::{digest, format_fingerprint, parse_fingerprint, Identity};
 use crate::state::now_rfc3339;
 use crate::status::Shared;
 
-/// Where the trusted controller key is kept, in the data directory.
+/// Where the first-use controller key is kept, in the data directory.
 pub const STORE_FILE: &str = "controller.json";
-/// How long after the link was last up and approved the legacy hello stays
-/// paused.
-pub const LEGACY_FALLBACK: Duration = Duration::from_secs(5 * 60);
 /// The slowest a push waits when nothing changed.
 pub const PUSH_EVERY: Duration = Duration::from_secs(60);
 /// How often the pushes are looked at.
@@ -101,16 +74,14 @@ const REDISCOVER: Duration = Duration::from_secs(10 * 60);
 /// How long the loop waits when there is no controller to try.
 const IDLE_RETRY: Duration = Duration::from_secs(60);
 
-/// The controller key this machine trusts, and where it is.
+/// The controller key this machine trusted on first use, and where.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Stored {
-    /// Where the controller was reached, or named by the box.
+    /// Where the controller was reached.
     pub address: Option<String>,
     /// Its key's fingerprint (identity.rs).
     pub fingerprint: String,
-    /// "box" or "tofu".
-    pub via: String,
 }
 
 pub fn store_path() -> PathBuf {
@@ -144,117 +115,6 @@ fn save_store(path: &Path, s: &Stored) {
     }
 }
 
-/// How far a hello answer's controller hint can be believed (hello.rs
-/// decides; a plain-HTTP answer's hint is never passed here at all).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HintTrust {
-    /// Over HTTPS to the box config.toml's `control_plane_url` names — an
-    /// address the operator wrote, not one DNS answered — and the answer's
-    /// final URL was HTTPS too.
-    Authenticated,
-    /// Over HTTPS, but to a box found through DNS (the SRV record), which
-    /// anyone who can answer DNS on the LAN can point elsewhere: as good as
-    /// a first use, never more.
-    Unauthenticated,
-}
-
-/// What a hint did.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Learned {
-    /// Nothing was trusted yet: the hint's key is now, as `box` or `tofu`.
-    Recorded,
-    /// The trusted key was the hint's; an authenticated hint confirmed a
-    /// first use (`tofu` → `box`), or moved the address.
-    Confirmed,
-    /// Nothing changed.
-    Unchanged,
-    /// The hint names another key than the one trusted. Nothing is
-    /// replaced: the operator decides (the message says how).
-    Conflict(String),
-    /// Not a key or not an address.
-    Ignored(String),
-}
-
-/// The box named its controller in a legacy hello answer (module doc):
-/// a hint can record a key where none is trusted, and confirm the one that
-/// is, but it NEVER replaces a trusted key — config's, the box's or a first
-/// use's. `config_pin` is config.toml's, which nothing overrides.
-pub fn learn_from_box(
-    store: &Path,
-    config_pin: Option<&str>,
-    address: &str,
-    public_key_hex: &str,
-    trust: HintTrust,
-) -> Learned {
-    let Ok(key) = crate::identity::parse_public_key(public_key_hex) else {
-        return Learned::Ignored(format!(
-            "the box named a controller key that is not one: {:?}",
-            public_key_hex.chars().take(80).collect::<String>()
-        ));
-    };
-    if !crate::config::valid_host_port(address) {
-        return Learned::Ignored(format!(
-            "the box named a controller address that is not host:port: {:?}",
-            address.chars().take(80).collect::<String>()
-        ));
-    }
-    if let Err(e) = store_trusted(store) {
-        return Learned::Ignored(e);
-    }
-    let fp = format_fingerprint(&digest(&key));
-    let conflict = |trusted: &str, via: &str| {
-        Learned::Conflict(format!(
-            "the box names controller key {fp}, but this machine trusts {trusted} ({via}); \
-             nothing was changed. If the controller's key really changed, pin the new one \
-             (`install --pin`){}",
-            if via == "config" {
-                String::new()
-            } else {
-                format!(" or remove {}", store.display())
-            }
-        ))
-    };
-    if let Some(pin) = config_pin.and_then(|p| parse_fingerprint(p).ok()) {
-        return if pin == digest(&key) {
-            Learned::Unchanged
-        } else {
-            conflict(&format_fingerprint(&pin), "config")
-        };
-    }
-    let authenticated = trust == HintTrust::Authenticated;
-    let (next, learned) = match load_store(store) {
-        None => (
-            Stored {
-                address: Some(address.into()),
-                fingerprint: fp,
-                via: if authenticated { "box" } else { "tofu" }.into(),
-            },
-            Learned::Recorded,
-        ),
-        Some(s) if s.fingerprint == fp && authenticated => {
-            let next = Stored {
-                address: Some(address.into()),
-                fingerprint: fp,
-                via: "box".into(),
-            };
-            let learned = if next == s {
-                Learned::Unchanged
-            } else {
-                Learned::Confirmed
-            };
-            (next, learned)
-        }
-        // An unauthenticated hint moves nothing, not even the address.
-        Some(s) if s.fingerprint == fp => (s, Learned::Unchanged),
-        Some(s) => return conflict(&s.fingerprint, &s.via),
-    };
-    if matches!(learned, Learned::Recorded | Learned::Confirmed) {
-        tracing::info!(fingerprint = %next.fingerprint, via = %next.via, "link: the box named its controller");
-        save_store(store, &next);
-    }
-    learned
-}
-
 /// Where the next attempt goes, and what it trusts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
@@ -262,7 +122,15 @@ pub struct Target {
     pub found_via: String,
     /// The SHA-256 of the key to accept; None: trust on first use.
     pub pin: Option<[u8; 32]>,
+    /// "config" or "tofu"; None with no pin.
     pub pinned_via: Option<&'static str>,
+}
+
+impl Target {
+    /// Pinned in config.toml, as opposed to trusted on first use.
+    pub fn pinned(&self) -> bool {
+        self.pinned_via == Some("config")
+    }
 }
 
 /// The pure half of choosing a target (module doc). `dns` is asked only
@@ -281,29 +149,14 @@ pub fn resolve_target(
             Some("config"),
         ),
         None => match stored.and_then(|s| parse_fingerprint(&s.fingerprint).ok()) {
-            Some(d) => (
-                Some(d),
-                Some(if stored.is_some_and(|s| s.via == "box") {
-                    "box"
-                } else {
-                    "tofu"
-                }),
-            ),
+            Some(d) => (Some(d), Some("tofu")),
             None => (None, None),
         },
     };
     let (address, found_via) = match config_address {
         Some(a) => (a.to_string(), "config".to_string()),
         None => match stored.and_then(|s| s.address.clone()) {
-            Some(a) => (
-                a,
-                if stored.is_some_and(|s| s.via == "box") {
-                    "box"
-                } else {
-                    "stored"
-                }
-                .to_string(),
-            ),
+            Some(a) => (a, "stored".to_string()),
             None => match dns() {
                 Some((a, suffix)) => (a, format!("dns {suffix}")),
                 None => return Ok(None),
@@ -460,7 +313,7 @@ pub fn run_loop(
             l.found_via = Some(target.found_via.clone());
             l.controller_fingerprint = target.pin.as_ref().map(format_fingerprint);
             l.pinned_via = target.pinned_via.map(str::to_string);
-            l.unconfirmed = !matches!(target.pinned_via, Some("config" | "box"));
+            l.unconfirmed = !target.pinned();
             l.state = Some("connecting".into());
         });
         let hello = hello_of(&cfg, &id, &facts);
@@ -525,7 +378,6 @@ pub fn run_loop(
             }
             Ended::Revoked => {
                 tracing::warn!("link: the box revoked this machine");
-                shared.link_not_approved();
                 shared.set_link(|l| {
                     l.connected = false;
                     l.since = None;
@@ -626,17 +478,14 @@ pub fn connect_once(
             &Stored {
                 address: Some(target.address.clone()),
                 fingerprint: controller_fp.clone(),
-                via: "tofu".into(),
             },
         );
     }
-    // Pinned by config or confirmed by the box; a first use is not.
-    let confirmed = matches!(target.pinned_via, Some("config" | "box"));
     shared.set_link(|l| {
         l.fingerprint = client.fingerprint().to_string();
         l.controller_fingerprint = Some(controller_fp.clone());
         l.pinned_via = Some(target.pinned_via.unwrap_or("tofu").into());
-        l.unconfirmed = !confirmed;
+        l.unconfirmed = !target.pinned();
     });
 
     // hello, and its answer.
@@ -670,9 +519,6 @@ pub fn connect_once(
             Err(e) => return Ended::Failed(format!("hello: {e}")),
         }
     };
-    if welcome.state != NodeState::Approved {
-        shared.link_not_approved();
-    }
     if welcome.state == NodeState::Revoked {
         tls.close();
         return Ended::Revoked;
@@ -696,7 +542,6 @@ pub fn connect_once(
         stop,
         cadence,
         shared.role().claude_update,
-        confirmed,
     );
     if !matches!(ended, Ended::Stopped | Ended::Revoked) {
         tls.close();
@@ -733,9 +578,6 @@ fn status_digest(v: &Value) -> String {
         }
         if let Some(t) = o.get_mut("tray").and_then(Value::as_object_mut) {
             t.remove("last_report");
-        }
-        if let Some(c) = o.get_mut("control_plane").and_then(Value::as_object_mut) {
-            c.remove("last_hello");
         }
     }
     v.to_string()
@@ -853,7 +695,6 @@ fn converse(
     stop: &AtomicBool,
     cadence: &Cadence,
     claude_update: bool,
-    confirmed: bool,
 ) -> Ended {
     let mut state = welcome.state;
     if let (NodeState::Approved, Some(p)) = (state, welcome.policy) {
@@ -868,10 +709,6 @@ fn converse(
             return Ended::Stopped;
         }
         if state == NodeState::Approved {
-            // Only a confirmed controller stands in for the legacy hello.
-            if confirmed {
-                shared.link_approved_now();
-            }
             if let Err(e) = pushed.run(tls, shared, cadence) {
                 return Ended::Dropped(format!("a write failed: {e}"));
             }
@@ -912,11 +749,10 @@ fn converse(
                     match state {
                         NodeState::Approved => pushed = Pushed::default(),
                         NodeState::Revoked => {
-                            shared.link_not_approved();
                             tls.close();
                             return Ended::Revoked;
                         }
-                        _ => shared.link_not_approved(),
+                        _ => {}
                     }
                 }
                 name::POLICY if state == NodeState::Approved => {
@@ -992,31 +828,29 @@ mod tests {
             (t.found_via.as_str(), t.pin, t.pinned_via),
             ("dns lan", None, None)
         );
+        assert!(!t.pinned());
         // Config address and pin win over everything.
         let stored = Stored {
             address: Some("old.lan:7788".into()),
             fingerprint: fp(2),
-            via: "box".into(),
         };
         let t = resolve_target(Some("box.lan:7788"), Some(&fp(1)), Some(&stored), no_dns)
             .unwrap()
             .unwrap();
         assert_eq!(t.address, "box.lan:7788");
         assert_eq!((t.pin, t.pinned_via), (Some([1; 32]), Some("config")));
-        // The store: the box's word, or a first use.
+        assert!(t.pinned());
+        // The store: the first use, its address and key.
         let t = resolve_target(None, None, Some(&stored), no_dns)
             .unwrap()
             .unwrap();
         assert_eq!(
             (t.address.as_str(), t.found_via.as_str()),
-            ("old.lan:7788", "box")
+            ("old.lan:7788", "stored")
         );
-        assert_eq!((t.pin, t.pinned_via), (Some([2; 32]), Some("box")));
-        let tofu = Stored {
-            via: "tofu".into(),
-            ..stored.clone()
-        };
-        let t = resolve_target(Some("box.lan:7788"), None, Some(&tofu), no_dns)
+        assert_eq!((t.pin, t.pinned_via), (Some([2; 32]), Some("tofu")));
+        assert!(!t.pinned());
+        let t = resolve_target(Some("box.lan:7788"), None, Some(&stored), no_dns)
             .unwrap()
             .unwrap();
         assert_eq!(
@@ -1033,91 +867,10 @@ mod tests {
     }
 
     #[test]
-    fn a_hint_records_or_confirms_but_never_replaces_a_key() {
-        use HintTrust::{Authenticated, Unauthenticated};
-        let dir = std::env::temp_dir().join(format!("daedalus-link-store-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store = dir.join(STORE_FILE);
-        let key_a = hex::encode([1u8; 32]);
-        let key_b = hex::encode([2u8; 32]);
-        let fp_a = format_fingerprint(&digest(&[1; 32]));
-        let fp_b = format_fingerprint(&digest(&[2; 32]));
-        let stored = || load_store(&store).unwrap();
-
-        // A box found by DNS, on an empty store: a first use.
-        assert_eq!(
-            learn_from_box(&store, None, "box.lan:7788", &key_a, Unauthenticated),
-            Learned::Recorded
-        );
-        assert_eq!(
-            (stored().fingerprint, stored().via),
-            (fp_a.clone(), "tofu".into())
-        );
-        // Another key, even authenticated: a conflict, nothing replaced,
-        // not even the address.
-        for trust in [Unauthenticated, Authenticated] {
-            let l = learn_from_box(&store, None, "evil.lan:7788", &key_b, trust);
-            assert!(
-                matches!(&l, Learned::Conflict(m) if m.contains(&fp_b) && m.contains("tofu")),
-                "{l:?}"
-            );
-        }
-        assert_eq!(stored().fingerprint, fp_a);
-        assert_eq!(stored().address.as_deref(), Some("box.lan:7788"));
-        // The same key unauthenticated moves nothing; authenticated, it
-        // confirms the first use and may move the address.
-        assert_eq!(
-            learn_from_box(&store, None, "box2.lan:7788", &key_a, Unauthenticated),
-            Learned::Unchanged
-        );
-        assert_eq!(stored().address.as_deref(), Some("box.lan:7788"));
-        assert_eq!(
-            learn_from_box(&store, None, "box2.lan:7788", &key_a, Authenticated),
-            Learned::Confirmed
-        );
-        assert_eq!(
-            (stored().via, stored().address),
-            ("box".into(), Some("box2.lan:7788".into()))
-        );
-        assert_eq!(
-            learn_from_box(&store, None, "box2.lan:7788", &key_a, Authenticated),
-            Learned::Unchanged
-        );
-        // A confirmed key is not replaced either.
-        assert!(matches!(
-            learn_from_box(&store, None, "box.lan:7788", &key_b, Authenticated),
-            Learned::Conflict(_)
-        ));
-        // Garbage is ignored.
-        assert!(matches!(
-            learn_from_box(&store, None, "box.lan:7788", "zz", Authenticated),
-            Learned::Ignored(_)
-        ));
-        assert!(matches!(
-            learn_from_box(&store, None, "not an address", &key_a, Authenticated),
-            Learned::Ignored(_)
-        ));
-        // A config pin stands over any hint.
-        assert!(matches!(
-            learn_from_box(&store, Some(&fp_b), "box.lan:7788", &key_a, Authenticated),
-            Learned::Conflict(m) if m.contains("config")
-        ));
-        assert_eq!(
-            learn_from_box(&store, Some(&fp_a), "box.lan:7788", &key_a, Authenticated),
-            Learned::Unchanged
-        );
-        let t = resolve_target(None, Some(&fp_b), load_store(&store).as_ref(), || None)
-            .unwrap()
-            .unwrap();
-        assert_eq!(t.pin, Some(digest(&[2; 32])));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
     fn the_status_digest_ignores_what_moves_by_itself() {
-        let a = serde_json::json!({"uptime_secs": 1, "awake_hold": true, "tray": {"reporting": true, "last_report": "t1"}, "control_plane": {"last_hello": "x"}});
-        let b = serde_json::json!({"uptime_secs": 9, "awake_hold": true, "tray": {"reporting": true, "last_report": "t2"}, "control_plane": {"last_hello": "y"}});
-        let c = serde_json::json!({"uptime_secs": 9, "awake_hold": false, "tray": {"reporting": true, "last_report": "t2"}, "control_plane": {"last_hello": "y"}});
+        let a = serde_json::json!({"uptime_secs": 1, "awake_hold": true, "tray": {"reporting": true, "last_report": "t1"}});
+        let b = serde_json::json!({"uptime_secs": 9, "awake_hold": true, "tray": {"reporting": true, "last_report": "t2"}});
+        let c = serde_json::json!({"uptime_secs": 9, "awake_hold": false, "tray": {"reporting": true, "last_report": "t2"}});
         assert_eq!(status_digest(&a), status_digest(&b));
         assert_ne!(status_digest(&b), status_digest(&c));
     }

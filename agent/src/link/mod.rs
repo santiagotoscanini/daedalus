@@ -21,14 +21,10 @@
 //! backoff from `BACKOFF_MIN` to `BACKOFF_MAX`.
 //!
 //! **Trust.** A machine pins the controller's key by its fingerprint
-//! (identity.rs), from, strongest first: config.toml's `controller_pin`
-//! (what `install --pin` writes); the box's answer to the legacy hello over
-//! HTTPS (the app names the controller's address and key — how machines
-//! enrolled before the link move to it without re-enrolling); or, with
-//! only an address (config, or the `_daedalus-controller._tcp` SRV record),
-//! the first key the controller presents — trust on first use — recorded
-//! and never silently replaced: another key afterwards is a loud error on
-//! the status page and in the tray (node.rs).
+//! (identity.rs): config.toml's `controller_pin` (what `install --pin`
+//! writes), else the first key the controller presents — trust on first
+//! use — recorded and never silently replaced: another key afterwards is a
+//! loud error on the status page and in the tray (node.rs).
 //!
 //! **Enrollment.** A key the app has not approved is held PENDING: the
 //! controller lists it for the app (`nodes.list`, the `nodes.pending`
@@ -57,9 +53,9 @@
 //!
 //! Where each part lives: tls.rs (configs, pin checks, the line
 //! connection), cert.rs, crypto.rs, wire.rs (the messages), node.rs (the
-//! machine's side: finding and trusting the controller, the pushes, the
-//! migration from the legacy hello), controller.rs (the listener and the
-//! registry of machines the local API reads).
+//! machine's side: finding and trusting the controller, the pushes),
+//! controller.rs (the listener and the registry of machines the local API
+//! reads).
 
 pub mod cert;
 pub mod controller;
@@ -113,14 +109,9 @@ pub const SRV_SERVICE: &str = "_daedalus-controller._tcp";
 /// it current). Absent on the controller.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct LinkStatus {
-    /// How this machine reaches the box: "legacy" (the hello to the app
-    /// alone), "both" (connected to the controller but not yet approved
-    /// there, so the hello goes on), or "controller".
-    pub path: &'static str,
     /// The controller's host:port, once known.
     pub address: Option<String>,
-    /// Where the address came from: "config", "box", "dns <suffix>" or
-    /// "stored".
+    /// Where the address came from: "config", "stored" or "dns <suffix>".
     pub found_via: Option<String>,
     /// "connecting" | "pending" | "approved" | "revoked" | "refused" |
     /// "key-changed"; null while there is no controller to try.
@@ -132,15 +123,12 @@ pub struct LinkStatus {
     pub fingerprint: String,
     /// The controller's key this machine trusts, once it trusts one.
     pub controller_fingerprint: Option<String>,
-    /// Where that trust came from: "config", "box" or "tofu".
+    /// Where that trust came from: "config" or "tofu".
     pub pinned_via: Option<String>,
-    /// The controller's key was trusted on first use and nothing has
-    /// confirmed it (no config pin, no authenticated word from the box):
-    /// the link works, and the legacy hello keeps going beside it.
+    /// The controller's key was trusted on first use, not pinned in
+    /// config.toml: the link works, and the page and the tray warn until
+    /// the operator pins it.
     pub unconfirmed: bool,
-    /// The box named another controller key than the one trusted; nothing
-    /// was changed, the operator decides (link/node.rs `learn_from_box`).
-    pub conflict: Option<String>,
     /// What went wrong last, when something did — a changed controller key
     /// above all.
     pub error: Option<String>,

@@ -27,8 +27,8 @@ use serde_json::Value;
 
 use crate::claude::{Report, Summary};
 use crate::config::{Mode, TelemetryLevel};
-use crate::hello::{Policy, ProviderPolicy, ProvidersPolicy};
 use crate::link::wire::{Command, Hello, NodeState};
+use crate::link::wire::{Policy, ProviderPolicy, ProvidersPolicy};
 use crate::providers::ProviderReport;
 use crate::role::Role;
 use crate::telemetry::Telemetry;
@@ -247,7 +247,7 @@ pub struct SystemInfo {
 /// as hex and as its fingerprint (identity.rs), the address its listener
 /// is bound to (null when it listens for no machine), and the `host:port`s
 /// config.toml says machines should dial — what the app hands an install
-/// command or a machine's hello answer.
+/// command.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ControllerInfo {
     pub public_key: String,
@@ -354,7 +354,7 @@ pub enum DesiredState {
     Revoked,
 }
 
-/// The policy as the app sends it: hello.rs's `Policy`, field for field,
+/// The policy as the app sends it: link/wire.rs's `Policy`, field for field,
 /// but exact — a field the controller does not know is refused.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -622,7 +622,7 @@ mod tests {
                 r#"{"api":1,"version":"0.13.0","mode":"controller","hostname":"box","#,
                 r#""os":{"os":"linux","name":"NixOS","version":"25.11","arch":"x86_64","cpu":"AMD Ryzen 7","memory_bytes":64},"#,
                 r#""uptime_secs":5,"os_uptime_secs":100,"booted_at":"2026-09-27T10:00:00Z","#,
-                r#""role":{"mode":"controller","hello":false,"self_update":false,"keep_awake":false,"#,
+                r#""role":{"mode":"controller","link":false,"self_update":false,"keep_awake":false,"#,
                 r#""installer":false,"session":true,"session_in_service":true,"claude_update":false,"#,
                 r#""tray":false,"status_on_lan":false,"api_socket":true,"node_listener":true},"#,
                 r#""telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal","nodes"],"#,

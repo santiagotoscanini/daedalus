@@ -15,15 +15,13 @@
 //! it is what the machines pin (link/). Both ends show a key as its
 //! FINGERPRINT — SHA-256 of the public key, lowercase hex in groups of four
 //! (`fingerprint`) — and a machine's node id is the first sixteen hex
-//! characters of the same digest.
-//!
-//! Signing is over bytes the caller hands in; see hello.rs for what is
-//! signed and why it is the serialised string and not the value.
+//! characters of the same digest. The key signs nothing but the link's
+//! certificate and TLS handshake (link/cert.rs, link/crypto.rs).
 
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use ed25519_dalek::{SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 use crate::config::data_dir;
@@ -87,10 +85,6 @@ impl Identity {
         fingerprint(self.public_key().as_bytes())
     }
 
-    pub fn sign_hex(&self, bytes: &[u8]) -> String {
-        hex::encode(self.key.sign(bytes).to_bytes())
-    }
-
     /// The key itself, for the link's certificate and handshake (link/).
     pub(crate) fn signing_key(&self) -> &SigningKey {
         &self.key
@@ -152,15 +146,12 @@ pub fn parse_public_key(text: &str) -> Result<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_dalek::Verifier;
 
     #[test]
-    fn signs_what_the_box_will_verify() {
-        let key = SigningKey::generate(&mut rand_core::OsRng);
-        let id = Identity { key };
-        let sig = id.sign_hex(b"payload");
-        let sig = ed25519_dalek::Signature::from_slice(&hex::decode(sig).unwrap()).unwrap();
-        assert!(id.public_key().verify(b"payload", &sig).is_ok());
+    fn a_new_key_has_an_id_and_a_hex_form() {
+        let id = Identity {
+            key: SigningKey::generate(&mut rand_core::OsRng),
+        };
         assert_eq!(id.node_id().len(), 16);
         assert_eq!(id.public_key_hex().len(), 64);
     }

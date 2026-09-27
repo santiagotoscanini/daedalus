@@ -6,10 +6,11 @@
 # Downloads the newest agent-v* release of the engine repository (the site
 # serves this file from agent/install.sh on main, so the line never names a
 # version) and registers it with the OS's service manager. From then on the
-# agent keeps the machine awake, answers a status page on TCP 7787 for the
-# LAN, announces itself to the box, runs Claude Code's remote control for
-# the user who ran sudo, and updates itself. Re-running on an installed
-# machine replaces the binaries and keeps config.toml.
+# agent keeps the machine awake, keeps one connection to the controller
+# (the box's agent), answers /metrics on TCP 7787 for the LAN, runs Claude
+# Code's remote control for the user who ran sudo, and updates itself.
+# Re-running on an installed machine replaces the binaries and keeps
+# config.toml.
 # `sudo daedalus-agent uninstall` removes what `install` registered.
 #
 #   macOS: the two universal binaries under
@@ -36,7 +37,9 @@
 #   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- \
 #     --controller box.lan:7788 --pin 3f2a:9c01:…
 #
-# Without them the agent learns both from the box, as before.
+# Without --controller the agent asks DNS for the controller's SRV record;
+# without --pin it trusts the first key the controller presents, and says
+# so until one is pinned.
 set -eu
 # Root's umask under `sudo sh` can be 077, which would leave the agent's
 # directories unreadable to the user the menu bar app, the tray and the
@@ -121,9 +124,9 @@ install_macos() {
   # shellcheck disable=SC2086 # LINK_ARGS is flag/value pairs checked above
   "$BIN/daedalus-agent" install --port "$PORT" $LINK_ARGS
   echo
-  echo "installed $tag. Status page: http://$(hostname):$PORT/status"
+  echo "installed $tag. Status: daedalus-agent status (or http://127.0.0.1:$PORT/status on this machine)"
   echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
-  echo "the status page answers the LAN without a login with machine facts and a Claude summary; sessions and paths are only for the box (node token) and this machine"
+  echo "only /metrics and /healthz answer the LAN; the box hears from this machine over its link to the controller"
 }
 
 install_linux() {
@@ -188,9 +191,9 @@ install_linux() {
   # shellcheck disable=SC2086 # LINK_ARGS is flag/value pairs checked above
   "$BIN/daedalus-agent" install --port "$PORT" $LINK_ARGS
   echo
-  echo "installed $tag. Status page: http://$(hostname):$PORT/status"
+  echo "installed $tag. Status: daedalus-agent status (or http://127.0.0.1:$PORT/status on this machine)"
   echo "logs: /var/lib/daedalus-agent/logs (the service), ~/.local/state/daedalus-agent (the session and the tray)"
-  echo "the status page answers the LAN without a login with machine facts and a Claude summary; sessions and paths are only for the box (node token) and this machine"
+  echo "only /metrics and /healthz answer the LAN; the box hears from this machine over its link to the controller"
 }
 
 case "$(uname -s)" in

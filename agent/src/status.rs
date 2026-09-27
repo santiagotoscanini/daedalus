@@ -1,11 +1,14 @@
-//! The status page: one JSON document on a LAN port, so the box can see the
-//! agent is there and awake before there is any channel between them.
+//! The status page: the agent's local door for the tray, the session and
+//! `daedalus-agent status`. What the box learns of a machine travels up the
+//! link (link/node.rs), never through this page.
 //!
-//! Open to the LAN: `GET /status` (and `/`), the document below;
-//! `GET /healthz`, `ok`; `GET /metrics`, the telemetry as Prometheus text
-//! (telemetry/metrics.rs). The writes are few and only from this machine —
-//! refused from any address but loopback:
+//! To any address, two reads: `GET /healthz`, `ok`, and `GET /metrics`,
+//! the telemetry as Prometheus text (telemetry/metrics.rs) — the box's
+//! Prometheus still scrapes each machine's `/metrics` over the LAN. Only
+//! from loopback, and refused (403) from any other address:
 //!
+//!   GET  /status (and /)  the document below
+//!   GET  /claude          the session's full report (session.rs `Watcher`)
 //!   POST /update/check    the updater looks now (the tray's "check for updates")
 //!   POST /claude/report   the tray's picture of Claude Code (its session —
 //!                         on Linux the session unit's own —
@@ -15,35 +18,24 @@
 //!   POST /claude/update   ask the tray to update Claude Code on its next report
 //!   POST /claude/restart  ask the tray to restart the server on its next report
 //!
-//! And two reads that are not for the LAN, answered on loopback or to a
-//! caller holding the NODE TOKEN the box minted at approval and hands down
-//! every hello answer (`Authorization: Bearer <token>`): `GET /claude` is
-//! the tray's full report — session names, working directories, ids, the
-//! login's dates — and `GET /telemetry` is the full telemetry document —
-//! drive serials, the heaviest processes, the services that are down, the
-//! OS's pending updates. The open page carries a summary of the first and
-//! `Telemetry::public` of the second.
+//! Loopback is the whole check: any user or process on the machine may use
+//! these. The tokens in the user's Claude profile never reach this page —
+//! the report copies dates and a plan name, not credentials.
 //!
-//! No auth otherwise: the page states facts about this machine that the LAN
-//! can already observe, and on Windows the firewall rule `install` adds
-//! scopes it to the local subnet. The tokens in the user's Claude profile never reach
-//! this page — the report copies dates and a plan name, not credentials.
-//!
-//! On the controller the page answers on loopback only (role.rs): the box
-//! adds no LAN listener, and the app's door is the socket (api/), which
-//! reads the same `Shared` this page does. `POST /claude/update` refuses
-//! there — nix pins Claude Code on the box. The controller also answers
-//! `GET /nodes/metrics`: the telemetry of every machine connected to it
-//! (link/), as Prometheus text with the series and labels each machine's
-//! own `/metrics` uses plus a `node` label, so Prometheus can scrape the
-//! one controller instead of every machine. The page stays on loopback;
-//! how Prometheus reaches it is nix's to decide (a scrape from the host,
-//! or a proxy it declares). A node answers that path 404.
+//! A node binds every interface, for `/metrics` (role.rs); the controller
+//! binds loopback only, and the app's door there is the socket (api/),
+//! which reads the same `Shared` this page does. `POST /claude/update`
+//! refuses there — nix pins Claude Code on the box. The controller also
+//! answers `GET /nodes/metrics` on loopback: the telemetry of every machine
+//! connected to it (link/), as Prometheus text with the series and labels
+//! each machine's own `/metrics` uses plus a `node` label, so Prometheus
+//! can scrape the one controller instead of every machine; how it reaches
+//! the page is nix's to decide. A node answers that path 404.
 //!
 //! A node's page also carries `controller`: its link to the controller —
-//! which path it uses (the legacy hello, both, or the controller alone),
-//! the address, its own fingerprint and the controller's it trusts, and
-//! the last error, a changed controller key above all (link/node.rs).
+//! the address, its own fingerprint and the controller's it trusts, whether
+//! that key is only trusted on first use, and the last error, a changed
+//! controller key above all (link/node.rs).
 
 use std::io::Read;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -57,7 +49,7 @@ use crate::api::wire::{event, ClaudeChanged, TelemetryUpdated};
 use crate::api::Events;
 use crate::claude::{Report, ReportAnswer, Summary};
 use crate::facts::Facts;
-use crate::hello::{ControlPlane, Policy};
+use crate::link::wire::Policy;
 use crate::link::LinkStatus;
 use crate::role::Role;
 use crate::state::State;
@@ -93,28 +85,24 @@ struct Live {
     hold_error: Option<String>,
     update_available: Option<String>,
     restart_pending: bool,
-    /// Raised by `POST /update/check` or by the box's answer to a hello; the
+    /// Raised by `POST /update/check` or by the controller's command; the
     /// updater clears it when it looks.
     check_requested: bool,
-    control_plane: ControlPlane,
     /// What the box wants of this machine; the config's defaults until the
-    /// box has approved it.
+    /// controller has approved it.
     policy: Policy,
     /// The tray's last report and when it landed.
     claude: Option<(Report, Instant)>,
     /// What the API's subscribers were last told: a session reporting or
     /// not (`claude.changed`).
     claude_announced: bool,
-    /// Raised by the box's answer or `POST /claude/update`; the tray takes
-    /// it with its next report. Separate from the restart below (claude/mod.rs
-    /// says why).
+    /// Raised by the controller's command or `POST /claude/update`; the
+    /// tray takes it with its next report. Separate from the restart below
+    /// (claude/mod.rs says why).
     claude_update_requested: bool,
-    /// Raised by the box's answer or `POST /claude/restart`; the tray takes
-    /// it with its next report.
+    /// Raised by the controller's command or `POST /claude/restart`; the
+    /// tray takes it with its next report.
     claude_restart_requested: bool,
-    /// What the box handed down at approval; a caller with it may read the
-    /// full report. None until then, and then nobody but loopback may.
-    node_token: Option<String>,
     /// The last telemetry document, from the sampling thread.
     telemetry: Option<Telemetry>,
     /// Moves whenever a sample carries newly read static or slow facts or
@@ -124,9 +112,6 @@ struct Live {
     /// This machine's link to the controller, as its loop last saw it;
     /// None on the controller, and until the loop starts.
     link: Option<LinkStatus>,
-    /// Last moment the link was connected AND approved: until
-    /// `LEGACY_FALLBACK` after it, the legacy hello is not sent.
-    link_approved_at: Option<Instant>,
 }
 
 /// The tray, as the page describes it.
@@ -165,11 +150,8 @@ struct Document<'a> {
     /// What the machine is and how it is doing, as `Telemetry::public`
     /// (telemetry.rs); null until the first sample, a few seconds after start.
     telemetry: Option<Telemetry>,
-    /// The box, as this agent last saw it.
-    control_plane: &'a ControlPlane,
-    /// The connection to the controller (link/): which path this machine
-    /// uses, the controller's address, both fingerprints, and what went
-    /// wrong. Null on the controller itself.
+    /// The connection to the controller (link/): its address, both
+    /// fingerprints, and what went wrong. Null on the controller itself.
     controller: Option<LinkStatus>,
     #[serde(flatten)]
     state: &'a State,
@@ -191,17 +173,14 @@ impl Shared {
                 update_available: None,
                 restart_pending: false,
                 check_requested: false,
-                control_plane: ControlPlane::default(),
                 policy,
                 claude: None,
                 claude_announced: false,
                 claude_update_requested: false,
                 claude_restart_requested: false,
-                node_token: None,
                 telemetry: None,
                 telemetry_tier: 0,
                 link: None,
-                link_approved_at: None,
             }),
         }
     }
@@ -215,7 +194,7 @@ impl Shared {
         self.lock().policy.clone()
     }
 
-    /// The box's decision, from a hello's answer. Returns whether it changed.
+    /// The box's decision, from the controller. Returns whether it changed.
     pub fn set_policy(&self, p: Policy) -> bool {
         let mut l = self.lock();
         let changed = l.policy != p;
@@ -223,24 +202,7 @@ impl Shared {
         changed
     }
 
-    /// The token the box minted for this node, from a hello's answer.
-    pub fn set_node_token(&self, t: Option<String>) {
-        self.lock().node_token = t;
-    }
-
-    /// Whether a bearer token matches the node token. Never true without one.
-    fn token_ok(&self, header: Option<&str>) -> bool {
-        let l = self.lock();
-        match (l.node_token.as_deref(), header) {
-            (Some(t), Some(h)) => {
-                let given = h.trim().strip_prefix("Bearer ").unwrap_or("").trim();
-                !t.is_empty() && constant_time_eq(t.as_bytes(), given.as_bytes())
-            }
-            _ => false,
-        }
-    }
-
-    /// The full report as JSON, for loopback and the box.
+    /// The full report as JSON, for loopback.
     fn claude_document(&self) -> String {
         let l = self.lock();
         match l
@@ -249,16 +211,6 @@ impl Shared {
             .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
         {
             Some((r, _)) => serde_json::to_string_pretty(r).unwrap_or_else(|_| "{}".into()),
-            None => "null".into(),
-        }
-    }
-
-    /// The full telemetry document — drive serials, processes, services,
-    /// pending updates — for the box holding the node token, or this machine.
-    fn telemetry_document(&self) -> String {
-        let l = self.lock();
-        match &l.telemetry {
-            Some(t) => serde_json::to_string_pretty(t).unwrap_or_else(|_| "{}".into()),
             None => "null".into(),
         }
     }
@@ -295,49 +247,10 @@ impl Shared {
         f(self.lock().link.get_or_insert_with(LinkStatus::default));
     }
 
-    /// The link as the page shows it, with the path worked out; None on
-    /// the controller and before the link's loop starts.
+    /// The link as the page shows it; None on the controller and before the
+    /// link's loop starts.
     pub fn link(&self) -> Option<LinkStatus> {
-        let l = self.lock();
-        Self::link_of(&l)
-    }
-
-    fn link_of(l: &Live) -> Option<LinkStatus> {
-        let mut s = l.link.clone()?;
-        s.path = if !Self::legacy_wanted(l) {
-            "controller"
-        } else if s.connected {
-            "both"
-        } else {
-            "legacy"
-        };
-        Some(s)
-    }
-
-    /// The link is connected and approved right now (called every tick
-    /// while it is).
-    pub fn link_approved_now(&self) {
-        self.lock().link_approved_at = Some(Instant::now());
-    }
-
-    /// The controller no longer approves this machine (revoked, or back to
-    /// pending): the legacy hello resumes at once.
-    pub fn link_not_approved(&self) {
-        self.lock().link_approved_at = None;
-    }
-
-    /// Whether the legacy hello to the app should go out: always, until the
-    /// controller approved this machine over the link; then not while the
-    /// link stays up, nor for `LEGACY_FALLBACK` after it drops — past that
-    /// the hello resumes, so a controller that went away does not take the
-    /// machine off the box's pages (link/node.rs).
-    pub fn legacy_hello_wanted(&self) -> bool {
-        Self::legacy_wanted(&self.lock())
-    }
-
-    fn legacy_wanted(l: &Live) -> bool {
-        l.link_approved_at
-            .is_none_or(|at| at.elapsed() > crate::link::node::LEGACY_FALLBACK)
+        self.lock().link.clone()
     }
 
     /// The status document as the link pushes it (link/node.rs): the page
@@ -494,15 +407,6 @@ impl Shared {
             .is_some_and(|(_, at)| at.elapsed() < REPORT_FRESH)
     }
 
-    /// The hello's summary of Claude Code: None when the tray is silent.
-    pub fn claude_summary(&self) -> Option<Summary> {
-        let l = self.lock();
-        l.claude
-            .as_ref()
-            .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
-            .map(|(r, _)| r.summary())
-    }
-
     pub fn set_hold(&self, held: bool, error: Option<String>) {
         let mut l = self.lock();
         l.awake_hold = held;
@@ -515,23 +419,6 @@ impl Shared {
 
     pub fn set_restart_pending(&self) {
         self.lock().restart_pending = true;
-    }
-
-    pub fn awake_hold(&self) -> bool {
-        self.lock().awake_hold
-    }
-
-    pub fn set_control_plane(&self, c: ControlPlane) {
-        self.lock().control_plane = c;
-    }
-
-    pub fn update_control_plane(&self, f: impl FnOnce(&mut ControlPlane)) {
-        f(&mut self.lock().control_plane);
-    }
-
-    /// A copy of what the page says about the box, for the tray.
-    pub fn control_plane(&self) -> ControlPlane {
-        self.lock().control_plane.clone()
     }
 
     pub fn request_check(&self) {
@@ -600,12 +487,16 @@ impl Shared {
             } else {
                 None
             },
-            control_plane: &l.control_plane,
-            controller: Self::link_of(&l),
+            controller: l.link.clone(),
             state: &l.state,
         };
         serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null)
     }
+}
+
+/// What any address may ask; everything else is for loopback (module doc).
+fn open_to_any(method: &Method, url: &str) -> bool {
+    *method == Method::Get && matches!(url, "/healthz" | "/metrics")
 }
 
 /// Answer on `port` — every interface on a node, loopback on the
@@ -627,6 +518,11 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
             for mut req in for_thread.incoming_requests() {
                 let local = req.remote_addr().is_some_and(|a| a.ip().is_loopback());
                 let (code, body, ctype) = match (req.method(), req.url()) {
+                    (m, u) if !local && !open_to_any(m, u) => (
+                        403,
+                        "only /metrics and /healthz answer other machines\n".to_string(),
+                        "text/plain",
+                    ),
                     (&Method::Get, "/healthz") => (200, "ok\n".to_string(), "text/plain"),
                     (&Method::Get, "/metrics") => {
                         (200, shared.metrics(), "text/plain; version=0.0.4")
@@ -642,37 +538,19 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                         ),
                     },
                     (&Method::Get, "/" | "/status") => (200, shared.document(), "application/json"),
-                    (&Method::Get, "/claude" | "/telemetry") => {
-                        let auth = req
-                            .headers()
-                            .iter()
-                            .find(|h| h.field.equiv("Authorization"))
-                            .map(|h| h.value.as_str().to_string());
-                        if local || shared.token_ok(auth.as_deref()) {
-                            let body = if req.url() == "/telemetry" {
-                                shared.telemetry_document()
-                            } else {
-                                shared.claude_document()
-                            };
-                            (200, body, "application/json")
-                        } else {
-                            (
-                                403,
-                                "the node token, or this machine\n".to_string(),
-                                "text/plain",
-                            )
-                        }
+                    (&Method::Get, "/claude") => {
+                        (200, shared.claude_document(), "application/json")
                     }
-                    (&Method::Post, "/update/check") if local => {
+                    (&Method::Post, "/update/check") => {
                         shared.request_check();
                         (202, "checking\n".to_string(), "text/plain")
                     }
-                    (&Method::Post, "/claude/update") if local && !shared.role.claude_update => (
+                    (&Method::Post, "/claude/update") if !shared.role.claude_update => (
                         403,
                         "Claude Code is updated by nix on this machine\n".to_string(),
                         "text/plain",
                     ),
-                    (&Method::Post, "/claude/update") if local => {
+                    (&Method::Post, "/claude/update") => {
                         shared.request_claude_update();
                         (
                             202,
@@ -680,7 +558,7 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                             "text/plain",
                         )
                     }
-                    (&Method::Post, "/claude/restart") if local => {
+                    (&Method::Post, "/claude/restart") => {
                         shared.request_claude_restart();
                         (
                             202,
@@ -688,7 +566,7 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                             "text/plain",
                         )
                     }
-                    (&Method::Post, "/claude/report") if local => {
+                    (&Method::Post, "/claude/report") => {
                         let mut body = String::new();
                         let read = req.as_reader().take(MAX_BODY).read_to_string(&mut body);
                         match read
@@ -706,10 +584,6 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                             None => (400, "not a report\n".to_string(), "text/plain"),
                         }
                     }
-                    (
-                        &Method::Post,
-                        "/update/check" | "/claude/update" | "/claude/restart" | "/claude/report",
-                    ) => (403, "only from this machine\n".to_string(), "text/plain"),
                     _ => (404, "not found\n".to_string(), "text/plain"),
                 };
                 let header = Header::from_bytes("Content-Type", ctype)
@@ -726,18 +600,80 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
     Ok(server)
 }
 
-/// Equal length and bytes, without an early exit on the first difference.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::Mode;
+
+    #[test]
+    fn other_machines_get_metrics_and_healthz_alone() {
+        for (m, u) in [(Method::Get, "/metrics"), (Method::Get, "/healthz")] {
+            assert!(open_to_any(&m, u), "{u}");
+        }
+        for (m, u) in [
+            (Method::Get, "/"),
+            (Method::Get, "/status"),
+            (Method::Get, "/claude"),
+            (Method::Get, "/telemetry"),
+            (Method::Get, "/nodes/metrics"),
+            (Method::Post, "/metrics"),
+            (Method::Post, "/update/check"),
+            (Method::Post, "/claude/report"),
+            (Method::Post, "/claude/update"),
+            (Method::Post, "/claude/restart"),
+        ] {
+            assert!(!open_to_any(&m, u), "{m} {u}");
+        }
+    }
+
+    /// The server itself, on a node: bound to every interface, answering
+    /// loopback in full and anything else only `/metrics` and `/healthz`.
+    #[test]
+    fn a_node_page_refuses_other_addresses_but_for_metrics() {
+        let shared = Arc::new(Shared::new(
+            State::default(),
+            Facts::default(),
+            Instant::now(),
+            Policy::default(),
+            Role::of(Mode::Node),
+        ));
+        // A free port: bind, read it, let go.
+        let port = std::net::TcpListener::bind("0.0.0.0:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let server = serve(port, shared).unwrap();
+        let get = |host: std::net::IpAddr, path: &str| -> u16 {
+            match ureq::get(&format!("http://{host}:{port}{path}"))
+                .timeout(Duration::from_secs(3))
+                .call()
+            {
+                Ok(r) => r.status(),
+                Err(ureq::Error::Status(c, _)) => c,
+                Err(e) => panic!("{path}: {e}"),
+            }
+        };
+        let lo: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+        assert_eq!(get(lo, "/status"), 200);
+        assert_eq!(get(lo, "/claude"), 200);
+        assert_eq!(get(lo, "/telemetry"), 404);
+        // Another address of this machine is not loopback to the server.
+        let lan = std::net::UdpSocket::bind("0.0.0.0:0")
+            .and_then(|s| s.connect("192.0.2.1:9").map(|_| s))
+            .and_then(|s| s.local_addr())
+            .map(|a| a.ip())
+            .ok()
+            .filter(|ip| !ip.is_loopback() && !ip.is_unspecified());
+        if let Some(lan) = lan {
+            assert_eq!(get(lan, "/metrics"), 200);
+            assert_eq!(get(lan, "/healthz"), 200);
+            for p in ["/status", "/", "/claude", "/telemetry"] {
+                assert_eq!(get(lan, p), 403, "{p}");
+            }
+        }
+        server.unblock();
+    }
 
     #[test]
     fn claude_changed_covers_reporting_both_ways() {

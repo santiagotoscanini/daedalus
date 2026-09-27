@@ -2,10 +2,10 @@
 //!
 //! A Windows service (a launchd daemon on macOS, a systemd service on
 //! Linux) that holds the machine awake for as long as the box wants it to,
-//! answers a small status page on the LAN, announces itself to the box
-//! with a signed hello once a minute and keeps one connection to the
-//! controller, the box's own agent (link/), following the policy either
-//! carries, samples the machine's telemetry, and updates itself to the
+//! keeps one connection to the controller, the box's own agent (link/),
+//! following the policy it carries, answers a status page for this machine
+//! (and `/metrics` for the LAN), samples the machine's telemetry, and
+//! updates itself to the
 //! newest `agent-v*` release of the engine repository; a session that —
 //! with the user's own login — runs `claude remote-control` the way the box
 //! runs its own (claude/); and a tray that shows what the service reports.
@@ -36,7 +36,6 @@ pub mod discover;
 pub mod dns;
 pub mod exec;
 pub mod facts;
-pub mod hello;
 pub mod http;
 pub mod identity;
 pub mod link;
@@ -69,8 +68,8 @@ pub use os::TRAY_EXE;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The agent's work, shared by `run` (as a service) and `serve` (in a
-/// terminal): hold the machine awake, answer the status page, announce
-/// itself, sample telemetry and check for updates until `stop` is raised —
+/// terminal): hold the machine awake, answer the status page, keep the link
+/// to the controller, sample telemetry and check for updates until `stop` is raised —
 /// each part as far as this machine's role runs it (role.rs).
 pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let cfg = config::load_or_default().context("reading config")?;
@@ -100,8 +99,9 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     }
 
     // The point of the whole thing on a node. Held while the policy says
-    // so — held by default, then the box's word once it has approved this
-    // machine; the guard releases it on a clean stop, the OS on any other.
+    // so — held by default, then the box's word once the controller has
+    // approved this machine; the guard releases it on a clean stop, the OS
+    // on any other.
     let mut hold: Option<power::Hold> = None;
     let mut hold_wanted: Option<bool> = None;
 
@@ -155,37 +155,25 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         None => None,
     };
 
-    // The machine's key, made on the first start. Without it there is no
-    // hello and no link, but the hold and the page above do not depend on
-    // it. The hello (the legacy path) and the link to the controller run
-    // side by side until the controller approves the machine (link/node.rs).
-    let announcer = match role.hello.then(identity::Identity::load_or_create) {
+    // The machine's key, made on the first start, and with it the link to
+    // the controller (link/node.rs). Without the key there is no link, but
+    // the hold and the page above do not depend on it.
+    let uplink = match role.link.then(identity::Identity::load_or_create) {
         None => None,
         Some(Ok(id)) => {
             tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
-            let uplink = {
-                let (shared, stop, cfg, facts, id) = (
-                    Arc::clone(&shared),
-                    Arc::clone(&stop),
-                    cfg.clone(),
-                    facts.clone(),
-                    id.clone(),
-                );
+            let (shared, stop, cfg, facts) = (
+                Arc::clone(&shared),
+                Arc::clone(&stop),
+                cfg.clone(),
+                facts.clone(),
+            );
+            Some(
                 std::thread::Builder::new()
                     .name("link".into())
                     .spawn(move || link::node::run_loop(cfg, id, facts, shared, stop))
-                    .context("spawning the link")?
-            };
-            let shared = Arc::clone(&shared);
-            let stop = Arc::clone(&stop);
-            let cfg = cfg.clone();
-            Some((
-                std::thread::Builder::new()
-                    .name("hello".into())
-                    .spawn(move || hello::run_loop(cfg, id, facts, shared, stop))
-                    .context("spawning the announcer")?,
-                uplink,
-            ))
+                    .context("spawning the link")?,
+            )
         }
         Some(Err(e)) => {
             tracing::error!(
@@ -313,8 +301,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     if let Some(s) = sampler {
         let _ = s.join();
     }
-    if let Some((a, l)) = announcer {
-        let _ = a.join();
+    if let Some(l) = uplink {
         let _ = l.join();
     }
     drop(hold);

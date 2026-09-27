@@ -1,6 +1,6 @@
 //! One DNS SRV question over UDP, asked of the nameservers resolv.conf
-//! names — how Linux finds `_daedalus._tcp` without `dig` or a resolver
-//! library (the static musl build has neither worth trusting). Windows asks
+//! names — how Linux finds `_daedalus-controller._tcp` without `dig` or a
+//! resolver library (the static musl build has neither worth trusting). Windows asks
 //! its own resolver and macOS asks `dig` (os/*/); discover.rs picks the name.
 //!
 //! The wire format is the plain RFC 1035 one: a query with recursion

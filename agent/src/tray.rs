@@ -144,7 +144,6 @@ struct Ui {
     look: Look,
     line_hold: MenuItem,
     line_update: MenuItem,
-    line_box: MenuItem,
     line_link: MenuItem,
     line_key_own: MenuItem,
     line_key_controller: MenuItem,
@@ -167,7 +166,6 @@ impl Ui {
         let title = MenuItem::new(format!("{DISPLAY_NAME} {VERSION}"), false, None);
         let line_hold = MenuItem::new("Awake hold: …", false, None);
         let line_update = MenuItem::new("Updates: …", false, None);
-        let line_box = MenuItem::new("Box: …", false, None);
         let line_link = MenuItem::new("Controller: …", false, None);
         let line_key_own = MenuItem::new("This machine's key: …", false, None);
         let line_key_controller = MenuItem::new("Controller's key: …", false, None);
@@ -184,7 +182,6 @@ impl Ui {
             &title,
             &line_hold,
             &line_update,
-            &line_box,
             &line_link,
             &line_key_own,
             &line_key_controller,
@@ -213,7 +210,6 @@ impl Ui {
             look: Look::Off,
             line_hold,
             line_update,
-            line_box,
             line_link,
             line_key_own,
             line_key_controller,
@@ -249,7 +245,6 @@ impl Ui {
             self.set_look(Look::Off);
             self.line_hold.set_text("Awake hold: service not answering");
             self.line_update.set_text("Updates: unknown");
-            self.line_box.set_text("Box: unknown");
             self.line_link.set_text("Controller: unknown");
             let _ = self.tray.set_tooltip(Some(format!(
                 "{DISPLAY_NAME} {VERSION}\nService not answering\n{claude_line}"
@@ -278,29 +273,15 @@ impl Ui {
         };
         self.line_hold.set_text(&hold);
         self.line_update.set_text(&update);
-        let host = p.control_plane.url.as_deref().map(|u| {
-            u.trim_start_matches("https://")
-                .trim_start_matches("http://")
-                .to_string()
-        });
-        let box_line = match (
-            p.control_plane.state.as_deref(),
-            host,
-            &p.control_plane.error,
-        ) {
-            (Some("approved"), Some(h), _) => format!("Box: approved by {h}"),
-            (Some("pending"), Some(h), _) => format!("Box: {h} — waiting for approval"),
-            (Some("revoked"), Some(h), _) => format!("Box: {h} — revoked"),
-            (_, _, Some(e)) => format!("Box: {e}"),
-            _ => "Box: looking…".to_string(),
-        };
-        self.line_box.set_text(&box_line);
         let (link, own, theirs) = link_lines(p.controller.as_ref());
         self.line_link.set_text(&link);
         self.line_key_own.set_text(&own);
         self.line_key_controller.set_text(&theirs);
         let link_bad = p.controller.as_ref().is_some_and(|l| {
-            l.conflict.is_some() || matches!(l.state.as_deref(), Some("key-changed" | "revoked"))
+            matches!(
+                l.state.as_deref(),
+                Some("key-changed" | "revoked" | "refused")
+            )
         });
         // A first-use key nothing confirmed: prominent, not an alarm.
         let link_unconfirmed = p
@@ -352,22 +333,14 @@ impl Ui {
 fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, String) {
     let Some(l) = link else {
         return (
-            "Controller: not used on this machine".into(),
+            "Controller: not started yet".into(),
             "This machine's key: —".into(),
             "Controller's key: —".into(),
         );
     };
     let at = l.address.as_deref().unwrap_or("not found yet");
     let first = match (l.state.as_deref(), l.error.as_deref()) {
-        _ if l.conflict.is_some() => {
-            format!("Controller: {at} — the box names ANOTHER KEY; see the status page")
-        }
-        (Some("approved"), _) if l.unconfirmed => {
-            format!("Controller: {at} — approved; the hello to the box goes on until its key is confirmed")
-        }
-        (Some("approved"), _) => {
-            format!("Controller: {at} — approved (the hello to the box has stopped)")
-        }
+        (Some("approved"), _) => format!("Controller: {at} — approved"),
         (Some("pending"), _) => {
             format!("Controller: {at} — waiting for approval; compare both keys")
         }
@@ -375,7 +348,9 @@ fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, Strin
         (Some("key-changed"), _) => format!("Controller: {at} — KEY CHANGED, refused"),
         (_, Some(e)) => format!("Controller: {at} — {e}"),
         (Some(s), None) => format!("Controller: {at} — {s}"),
-        (None, None) => "Controller: none found; the hello to the box carries this machine".into(),
+        (None, None) => {
+            "Controller: none found; set controller_address (install --controller)".into()
+        }
     };
     let own = format!("This machine's key: {}", l.fingerprint);
     let theirs = match (&l.controller_fingerprint, &l.pinned_via) {
@@ -534,9 +509,8 @@ mod tests {
 
     #[test]
     fn the_link_lines_show_both_keys_and_what_is_wrong() {
-        assert!(link_lines(None).0.contains("not used"));
+        assert!(link_lines(None).0.contains("not started"));
         let pending = LinkPage {
-            path: "both".into(),
             address: Some("box.lan:7788".into()),
             state: Some("pending".into()),
             connected: true,
@@ -544,7 +518,6 @@ mod tests {
             controller_fingerprint: Some("cccc:dddd".into()),
             pinned_via: Some("config".into()),
             unconfirmed: false,
-            conflict: None,
             error: None,
         };
         let (first, own, theirs) = link_lines(Some(&pending));
@@ -568,12 +541,13 @@ mod tests {
             ..changed.clone()
         };
         let (first, _, theirs) = link_lines(Some(&tofu));
-        assert!(first.contains("until its key is confirmed"), "{first}");
+        assert_eq!(first, "Controller: box.lan:7788 — approved");
         assert!(theirs.contains("UNCONFIRMED"), "{theirs}");
-        let conflict = LinkPage {
-            conflict: Some("the box names …".into()),
+        let nowhere = LinkPage {
+            address: None,
+            state: None,
             ..tofu
         };
-        assert!(link_lines(Some(&conflict)).0.contains("ANOTHER KEY"));
+        assert!(link_lines(Some(&nowhere)).0.contains("controller_address"));
     }
 }

@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::hello::Policy;
+use crate::link::wire::Policy;
 use crate::telemetry::App;
 
 /// One provider as the telemetry document carries it.
@@ -98,7 +98,7 @@ pub fn detect(policy: &Policy, apps: &[App]) -> Vec<ProviderReport> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hello::{ProviderPolicy, ProvidersPolicy};
+    use crate::link::wire::{ProviderPolicy, ProvidersPolicy};
 
     fn app(name: &str) -> App {
         App {

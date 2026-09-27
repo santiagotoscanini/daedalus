@@ -18,12 +18,12 @@
 //! read is `None` or an empty list, never a guess, and what went wrong is
 //! in `errors` so the page can say so.
 //!
-//! Two views of the document. The OPEN status page carries `public()`:
-//! nothing that identifies a person — no serial numbers, no process list, no
-//! service list, no updates, no installed applications, no browser install
-//! paths — because the page answers the whole LAN. The box, holding the
-//! node token, reads the full document at `GET /telemetry` (status.rs) and
-//! draws the same pages it draws for itself.
+//! Two views of the document. The whole of it goes up the link to the
+//! controller (link/node.rs), and the box draws from it the same pages it
+//! draws for itself. The status page and the controller's `nodes.get`
+//! carry `public()`: nothing that identifies a person — no serial numbers,
+//! no process list, no service list, no updates, no installed applications,
+//! no browser install paths.
 //!
 //! How much is read at all is config.toml's `telemetry`: `full`, all of the
 //! above; `minimal`, the static and sampled facts, and never the slow read

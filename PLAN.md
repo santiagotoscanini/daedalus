@@ -675,14 +675,17 @@ priority; each can be done independently unless noted.
          `claude_unit` no existing unit uses and either `api_allowed_uids`
          for the app image's `node` uid or `--userns=keep-id` on the app
          container; the gcroot pin on `claude` stays.
-      2. Machines connect to the controller: an agent release speaking both
-         the old hello and the new connection; the app moves machine reads
-         and commands to the socket; then the LAN pulls, the node token, the
-         hello route and the per-machine file_sd targets go. The file_sd
-         targets need a replacement first: the controller's `/nodes/metrics`
-         is on its loopback status page, which the Prometheus container
-         cannot reach, so the switch brings a way in (a scrape listener the
-         container can reach, e.g. on the bridge gateway) with it.
+      2. Machines connect to the controller: from agent 0.14.0 a machine
+         talks only to it (the link; its address from `--controller` or the
+         `_daedalus-controller._tcp` record, its key pinned by `--pin` or
+         trusted on first use), and its status page answers the LAN only
+         `/metrics` and `/healthz`. The app moves machine reads and commands
+         to the socket; its LAN pulls, the node token and the hello route
+         go. The per-machine file_sd targets go last: the controller's
+         `/nodes/metrics` is on its loopback status page, which the
+         Prometheus container cannot reach, so the switch brings a way in (a
+         scrape listener the container can reach, e.g. on the bridge
+         gateway) with it.
       3. Staged updates, orchestrated by the controller.
       4. Actions move over one at a time: Claude sessions (which the other
          machines then gain too), workspace clone and sync, then the root
@@ -707,9 +710,9 @@ priority; each can be done independently unless noted.
          web server between (agent/src/link/). Stream multiplexing waits for
          santree's streams (step 5).
       2. How a machine first trusts the controller. Decided: pinned at
-         install (`--pin`), else the key the app names in the hello answer,
-         else trust on first use — both fingerprints on the tray and the
-         status page; a changed key is refused loudly, never re-pinned.
+         install (`--pin`), else trust on first use, shown as unconfirmed
+         until pinned — both fingerprints on the tray and the status page; a
+         changed key is refused loudly, never re-pinned.
       3. The box's System page: keep the root snapshots for what only root
          reads (SMART, ZFS, generations) and let the controller replace the
          Claude parts (proposed), or converge everything on one collector
@@ -720,12 +723,13 @@ priority; each can be done independently unless noted.
       pages and no Apply): small, restarts cleanly, holds nothing it cannot
       rebuild. Version skew between the live-on-save app and the
       lock-bumped controller. The release signing key now covers a third OS
-      and still has no recovery path. Enrolled machines move only through a
-      dual-protocol release and self-update until it lands. Hardening that
+      and still has no recovery path. A machine that updates to 0.14.0 and
+      cannot find the controller (no `--controller`, no SRV record) is off
+      the pages until it is given one; there is no fallback. Hardening that
       lands with it: unix-socket IPC with peer credentials between
-      tray/session and service instead of loopback trust, HTTPS-only (or
-      pinned) box identity, an ACL on the Windows identity file, a rollback
-      that keeps the previous binary until the new one proves healthy.
+      tray/session and service instead of loopback trust, an ACL on the
+      Windows identity file, a rollback that keeps the previous binary until
+      the new one proves healthy.
     - **Costs.** The agent is built small (`opt-level = "s"`,
       `panic = "abort"`, MSRV 1.85); the santree crates bring tokio, a PTY
       layer and a `specta` prerelease needing Rust ≥ 1.93. Windows is a port

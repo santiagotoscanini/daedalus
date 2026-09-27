@@ -77,8 +77,8 @@ use crate::api::wire::{
 };
 use crate::api::Events;
 use crate::claude::Report;
-use crate::hello::Policy;
 use crate::identity::{fingerprint, node_id_of, Identity};
+use crate::link::wire::Policy;
 use crate::providers::ProviderReport;
 use crate::state::now_rfc3339;
 use crate::telemetry::Telemetry;

@@ -32,7 +32,7 @@ use serde::Deserialize;
 
 use crate::claude::{Launch, Report, ReportAnswer, Supervisor};
 use crate::config;
-use crate::hello::Policy;
+use crate::link::wire::Policy;
 use crate::status::Shared;
 use crate::VERSION;
 
@@ -51,8 +51,6 @@ pub struct Page {
     pub last_update_check: Option<String>,
     pub last_update_result: Option<String>,
     #[serde(default)]
-    pub control_plane: BoxState,
-    #[serde(default)]
     pub policy: Policy,
     /// The link to the controller (link/), when the page carries one.
     #[serde(default)]
@@ -63,7 +61,6 @@ pub struct Page {
 #[derive(Deserialize, Default, Clone, Debug)]
 #[serde(default)]
 pub struct LinkPage {
-    pub path: String,
     pub address: Option<String>,
     pub state: Option<String>,
     pub connected: bool,
@@ -71,15 +68,6 @@ pub struct LinkPage {
     pub controller_fingerprint: Option<String>,
     pub pinned_via: Option<String>,
     pub unconfirmed: bool,
-    pub conflict: Option<String>,
-    pub error: Option<String>,
-}
-
-/// The box, as the page reports it.
-#[derive(Deserialize, Default)]
-pub struct BoxState {
-    pub url: Option<String>,
-    pub state: Option<String>,
     pub error: Option<String>,
 }
 
@@ -544,17 +532,21 @@ mod tests {
     #[test]
     fn the_page_reads_what_the_status_page_writes() {
         let p: Page = serde_json::from_str(
-            r#"{"agent":"daedalus-agent","version":"0.13.0","awake_hold":true,
-                "hold_error":null,"update_available":"0.14.0","restart_pending":false,
+            r#"{"agent":"daedalus-agent","version":"0.14.0","awake_hold":true,
+                "hold_error":null,"update_available":"0.15.0","restart_pending":false,
                 "last_update_check":"2026-09-27T10:00:00Z","last_update_result":"x",
-                "control_plane":{"url":"https://box","state":"approved","error":null,"node_id":"n"},
                 "policy":{"awake_hold":false,"claude_remote_control":true},
+                "controller":{"address":"box.lan:7788","found_via":"config","state":"approved",
+                  "connected":true,"since":null,"fingerprint":"aa","controller_fingerprint":"bb",
+                  "pinned_via":"tofu","unconfirmed":true,"error":null},
                 "telemetry":null}"#,
         )
         .unwrap();
-        assert_eq!(p.version, "0.13.0");
-        assert_eq!(p.update_available.as_deref(), Some("0.14.0"));
-        assert_eq!(p.control_plane.state.as_deref(), Some("approved"));
+        assert_eq!(p.version, "0.14.0");
+        assert_eq!(p.update_available.as_deref(), Some("0.15.0"));
         assert!(!p.policy.awake_hold);
+        let l = p.controller.unwrap();
+        assert_eq!(l.state.as_deref(), Some("approved"));
+        assert!(l.connected && l.unconfirmed);
     }
 }

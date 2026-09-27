@@ -9,34 +9,26 @@ beside it where there is a desktop. It
   (`pmset -g assertions`) or a logind inhibitor on Linux
   (`systemd-inhibit --list`), plus, on Windows, the power plan's sleep and
   hibernate timers set to never;
-- **answers a status page** on the LAN at `http://<machine>:7787/status`:
-  machine facts, a summary of Claude Code and the public half of the
-  telemetry, nothing that identifies a person. `/metrics` renders the
-  telemetry for Prometheus. The full Claude report (`/claude`) and the full
-  telemetry (`/telemetry` — serials, processes, services, pending updates,
-  installed applications) answer only on loopback or to the node token the
-  box mints at approval. `src/status.rs` has the routes;
+- **keeps one connection to the controller**, the box's own agent, and
+  talks to nothing else: TLS 1.3 with both keys pinned; hello, status,
+  telemetry and the Claude report up; the box's policy and commands down
+  at once (see "The link to the controller");
+- **answers a status page** on port 7787 (`port`): to other machines only
+  `GET /metrics` (the telemetry for Prometheus, which still scrapes each
+  machine) and `GET /healthz`; everything else — `/status`, the full
+  Claude report at `/claude`, and the tray's and session's writes — answers
+  loopback alone and 403 to anyone else. `src/status.rs` has the routes;
 - **reports the machine** — hardware, OS, usage, drives and their health,
   temperatures, network, battery, pending OS updates, installed browsers
   and applications, and the **providers** on it (a model server such as
   Lemonade, as presence only: kind, port, version, answering or not; the
   box may set the port in the policy, `providers.lemonade.port`). What is
-  read, how often, and what stays off the open page: the header of
+  read, how often, and what stays off the status page: the header of
   `src/telemetry.rs`, and each OS's collector (`src/os/*/telemetry.rs`);
-- **announces itself to the box** every minute with a hello signed by an
-  ed25519 key made on first start (`src/identity.rs`). The box is found
-  through the `_daedalus._tcp` SRV record under the DHCP search domain (or
-  `control_plane_url` in the config) and lists the machine on
-  Settings › Machines as "wants to join" until an admin approves it. The
-  answer then carries the box's **policy** — hold it awake or not, run
-  Claude remote control or not and where, provider ports — and one-shot
-  instructions: check for updates now, update Claude Code, restart Claude
-  remote control (`src/hello.rs`);
-- **keeps one connection to the controller**, the box's own agent: TLS 1.3
-  with both keys pinned, hello, status, telemetry and the Claude report up,
-  the box's policy and commands down at once. Until the controller has
-  approved the machine the hello above goes on beside it; then the hello
-  pauses (see "The link to the controller");
+- **follows the box's policy** once an admin approves the machine on
+  Settings › Machines — hold it awake or not, run Claude remote control or
+  not and where, provider ports — and its commands: check for updates now,
+  update Claude Code, restart Claude remote control;
 - **runs Claude Code's remote control** the way the box runs its own: the
   **session** — the process with the user's Claude login — supervises
   `claude remote-control --verbose`, restarts it with backoff, logs its
@@ -62,8 +54,8 @@ one table of what runs for each: a **node** — every machine that joins the
 network — runs all of the above; the **controller** — the box itself, NixOS
 by definition, the same Linux code built and configured by nix — runs the
 status page, telemetry and the session, the local API and the listener the
-machines' links reach, and no hello, self-update, keep-awake, tray or
-installer (`install` and `uninstall` refuse there).
+machines' links reach, and no link of its own, self-update, keep-awake,
+tray or installer (`install` and `uninstall` refuse there).
 
 ## Controller mode
 
@@ -72,7 +64,7 @@ process as the operator (`daedalus-agent run` under systemd; `serve` is the
 same in a terminal), with
 
 - **the status page on loopback only** (`127.0.0.1:7787`): the box adds no
-  LAN listener; a node keeps `0.0.0.0`;
+  LAN listener; a node binds `0.0.0.0` for `/metrics`;
 - **telemetry** at the level `telemetry` sets (below);
 - **the session inside the process**: Claude remote control as its
   transient user unit, reported straight into the service. `daedalus-agent
@@ -100,12 +92,12 @@ same in a terminal), with
   `daedalus_agent_link_up` per approved machine — so Prometheus can scrape
   the controller instead of every machine. The page stays on loopback; how
   Prometheus reaches it is nix's to decide;
-- and nothing else: no hello, no self-update, no keep-awake, no tray, no
-  installer, and no `claude update` — nix pins Claude Code on the box
-  (`POST /claude/update` answers 403 there).
+- and nothing else: no link of its own, no self-update, no keep-awake, no
+  tray, no installer, and no `claude update` — nix pins Claude Code on the
+  box (`POST /claude/update` answers 403 there).
 
-With no hello there is no policy from the box, so nix writes the
-controller's own in config.toml:
+With no controller above it there is no policy from the box, so nix writes
+the controller's own in config.toml:
 
 ```toml
 mode = "controller"
@@ -183,7 +175,7 @@ matched by `id`. The first request must be `hello`:
 
 ```
 → {"id":1,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}
-← {"id":1,"ok":{"api":1,"version":"0.13.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","telemetry.full"]}}
+← {"id":1,"ok":{"api":1,"version":"0.14.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","telemetry.full"]}}
 ```
 
 Another API version gets `{"code":"version",…,"supported":1}` — the
@@ -211,7 +203,7 @@ verbs, none taking a command, a path or a flag:
 `state` is `pending` (connected, not decided), `approved`, `revoked` or
 `unknown` (seen, not decided, gone). `nodes.set_desired` is the app's
 COMPLETE set of decided keys — `state` `approved` or `revoked`, `policy`
-the `Policy` of the hello answer (`awake_hold`, `claude_remote_control`,
+the link's `Policy` (`src/link/wire.rs`: `awake_hold`, `claude_remote_control`,
 `claude_workdir`, `providers.lemonade.port`; absent for an approved key:
 the defaults) — idempotent, applied as a difference to the connections open
 now; a key left out is pending while connected. Every entry is checked
@@ -268,38 +260,26 @@ digest. The machine's status page and tray show its own and the
 controller's; `system.info` shows the controller's.
 
 **Where the machine connects, and whom it trusts.** The address:
-config.toml's `controller_address`; else the one kept in `controller.json`
-in the data directory (the box's word, or the first key trusted); else the
-SRV record `_daedalus-controller._tcp` under the search domains the
-`_daedalus._tcp` record is looked for in. The key, strongest first:
+config.toml's `controller_address` (`install --controller`); else the one a
+first-use key was trusted at, kept in `controller.json` in the data
+directory; else the SRV record `_daedalus-controller._tcp` under the
+search domains DHCP handed out (and `search_domains`). With none, the
+machine reaches nobody, says so, and asks again every minute. The key:
+config.toml's `controller_pin` (`install --pin`), which nothing overrides;
+else the first key the controller presents — trust on first use — kept in
+`controller.json` and never re-pinned. DNS only ever names an address.
 
-1. config.toml's `controller_pin` (`install --pin`), which nothing
-   overrides;
-2. the key the box names in its answer to the legacy hello — but only as
-   far as that answer can be believed. It is AUTHENTICATED only when the
-   box's address is the operator's own (`control_plane_url` in config.toml)
-   and the request and the final answer (redirects followed) are both
-   HTTPS. A box found through the SRV record counts as a first use at best:
-   anyone who can answer DNS on the LAN could point the record at themselves.
-   A plain-HTTP answer's hint is ignored outright;
-3. the first key the controller presents — trust on first use.
+A controller that presents another key than the trusted one is refused,
+and the page and the tray say **controller key changed**, with the key
+trusted and the one that came — labelled unproven, since the pin check
+runs before the handshake signature. If the controller really has a new
+key, pin it (`install --pin`) or remove `controller.json`. (Rotating the
+controller's key through a signed statement is a later feature.)
 
-A hint records a key only where none is trusted; an authenticated hint
-naming the key already trusted on first use CONFIRMS it. No hint ever
-replaces a trusted key: another key is shown on the status page and in the
-tray as a conflict for the operator, and nothing changes. A controller that
-presents another key than the trusted one is refused, and the page and the
-tray say **controller key changed**, with the key trusted and the one that
-came — labelled unproven, since the pin check runs before the handshake
-signature. If the controller really has a new key, pin it (`install --pin`)
-or remove `controller.json`. (Rotating the controller's key through a
-signed statement is a later feature.)
-
-**Confirmed or not.** A key pinned by config or confirmed by an
-authenticated hint is confirmed. A key trusted on first use is not: the
-status page's `controller.unconfirmed` is true, and the tray says "trusted on
-first use, UNCONFIRMED: pin it" with its amber dot. The link works either
-way, but only a confirmed controller stands in for the legacy hello.
+**Pinned or not.** A key trusted on first use works like a pinned one, but
+the status page's `controller.unconfirmed` is true and the tray says
+"trusted on first use, UNCONFIRMED: pin it" with its amber dot, until a
+`controller_pin` names it.
 
 **Files that hold trust.** `identity.key` and `controller.json` are read
 only when their owner is trusted: SYSTEM or Administrators on Windows, root
@@ -350,19 +330,10 @@ app hands the desired set back. Label values in `/nodes/metrics` (and a
 machine's own `/metrics`) are escaped, newlines included, and stripped of
 other control characters.
 
-**Migration.** A machine with the link keeps the legacy hello to the app
-going until the controller approves it AND its key is confirmed; from then
-on the hello pauses, and resumes if the link stays down for five minutes or
-the machine is revoked or sent back to pending, so a controller that went
-away does not take the machine off the box's pages. A machine with no
-controller address and no SRV record stays on the legacy hello exactly as
-before, and learns the controller from the hello's answer once the app
-adds `controller: {address, public_key}` to it — which is how machines
-enrolled before the link move to it without enrolling again (as a first use
-unless their box address is `control_plane_url`, see above). The LAN status
-page and its token-gated reads are unchanged in this step. The status page's
-`controller` block and the tray's menu say which path the machine uses:
-`legacy`, `both`, or `controller`.
+The status page's `controller` block and the tray's menu show the link:
+the address and where it came from, the state (`connecting`, `pending`,
+`approved`, `revoked`, `refused`, `key-changed`), both fingerprints, how
+the controller's key is trusted (`config` or `tofu`) and the last error.
 
 ## Install
 
@@ -377,13 +348,15 @@ irm https://daedalus.toscanini.me/install.ps1 | iex
 `C:\Program Files\daedalus-agent\` and runs `daedalus-agent install`, which
 registers the `daedalus-agent` service (LocalSystem, automatic start,
 restart on failure), registers the tray under the machine's Run key and
-starts it as the desktop user, opens TCP 7787 to the local subnet, writes
+starts it as the desktop user, opens TCP 7787 to the local subnet (for
+`/metrics`), writes
 `config.toml` if there is none, and starts the service. Re-running replaces
 the binaries and keeps the config. `daedalus-agent uninstall` removes the
 service, the tray's Run key and the firewall rule; the data directory stays.
 
-To name the controller and pin its key at install, run the script as a
-script block so it takes parameters:
+Without parameters the machine finds the controller through DNS and trusts
+its key on first use. To name the controller and pin its key at install,
+run the script as a script block so it takes parameters:
 
 ```powershell
 & ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) -Controller s2-server.lan:7788 -Pin 3f2a:9c01:…
@@ -429,7 +402,8 @@ runs `daedalus-agent install`, which
   so every graphical login starts it;
 - writes `config.toml` if there is none, and opens nothing in the firewall.
   On a machine that filters inbound traffic, allow the status page's port
-  to the LAN: `sudo ufw allow from 192.168.0.0/24 to any port 7787 proto tcp`
+  to the LAN, for Prometheus's scrape of `/metrics`:
+  `sudo ufw allow from 192.168.0.0/24 to any port 7787 proto tcp`
   (ufw), or `sudo firewall-cmd --permanent --add-port=7787/tcp && sudo
   firewall-cmd --reload` (firewalld).
 
@@ -509,7 +483,7 @@ C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at l
 C:\ProgramData\daedalus-agent\config.toml                 local knobs, never policy (src/config.rs); edit and restart
 C:\ProgramData\daedalus-agent\state.json                  the last update check and install
 C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPAPI-wrapped
-C:\ProgramData\daedalus-agent\controller.json             the controller key this machine trusts, and its address (the link)
+C:\ProgramData\daedalus-agent\controller.json             the controller key trusted on first use, and its address (the link)
 C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
 C:\ProgramData\daedalus-agent\logs\claude-rc.log          what `claude remote-control` printed
 ```
@@ -555,25 +529,24 @@ relative one stops the agent at start with a message saying so.
 
 ### config.toml
 
-`install` writes the first six keys; every key is optional, and a key the
-agent no longer knows is ignored. The header of
-[`src/config.rs`](src/config.rs) is the reference.
+`install` writes the first five keys, and `controller_address` and
+`controller_pin` when `--controller` and `--pin` name them; every key is
+optional, and a top-level key the agent does not know is ignored. The
+header of [`src/config.rs`](src/config.rs) is the reference.
 
 ```toml
-port = 7787               # the status page's LAN port
+port = 7787               # the status page's port; the LAN gets /metrics and /healthz
 update_check_secs = 600   # how often the release feed is asked
 auto_update = true        # the older spelling of `updates`
 log_level = "info"        # "debug" for a bug report
-search_domains = []       # more domains to ask for _daedalus._tcp
-hello_secs = 60           # how often the hello goes out
-# control_plane_url = "https://…"   the box, when DNS cannot find it
+search_domains = []       # more domains to ask for _daedalus-controller._tcp
 # mode = "node"           # node | controller (see "Controller mode")
 # telemetry = "full"      # full | minimal | off
 # updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
 # claude_rc = "unit"      # child | unit; absent: child on Windows and macOS, unit on Linux
-# controller_address = "…" # the controller's link address, host:port; `install --controller` writes it
-# controller_pin = "…"     # its key's fingerprint; `install --pin` writes it
+# controller_address = "…" # the controller's link address, host:port; absent: DNS
+# controller_pin = "…"     # its key's fingerprint; absent: trust on first use
 ```
 
 `telemetry = "full"` reads everything above; `minimal` reads the machine

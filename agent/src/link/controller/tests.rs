@@ -58,7 +58,7 @@ fn node_shared() -> Arc<Shared> {
         State::default(),
         crate::facts::Facts::default(),
         Instant::now(),
-        crate::hello::Policy::default(),
+        crate::link::wire::Policy::default(),
         Role::of(Mode::Node),
     ))
 }
@@ -135,7 +135,7 @@ fn wait_for(what: &str, secs: u64, mut f: impl FnMut() -> bool) {
     }
 }
 
-fn entry(nid: &Identity, state: DesiredState, policy: crate::hello::Policy) -> DesiredEntry {
+fn entry(nid: &Identity, state: DesiredState, policy: crate::link::wire::Policy) -> DesiredEntry {
     DesiredEntry {
         id: nid.node_id(),
         public_key: *nid.public_key().as_bytes(),
@@ -144,7 +144,7 @@ fn entry(nid: &Identity, state: DesiredState, policy: crate::hello::Policy) -> D
     }
 }
 
-fn approve(registry: &Registry, nid: &Identity, policy: crate::hello::Policy) -> SetDesiredOk {
+fn approve(registry: &Registry, nid: &Identity, policy: crate::link::wire::Policy) -> SetDesiredOk {
     registry.set_desired(vec![entry(nid, DesiredState::Approved, policy)])
 }
 
@@ -155,8 +155,8 @@ fn summary(ctl: &Ctl, nid: &Identity) -> Option<NodeSummary> {
         .find(|n| n.id == nid.node_id())
 }
 
-fn claude_policy() -> crate::hello::Policy {
-    crate::hello::Policy {
+fn claude_policy() -> crate::link::wire::Policy {
+    crate::link::wire::Policy {
         awake_hold: false,
         claude_remote_control: true,
         claude_workdir: Some("/work".into()),
@@ -210,19 +210,21 @@ fn an_approved_machine_connects_and_pushes() {
     assert_eq!(d.public_key, nid.public_key_hex());
     assert_eq!(d.hello.unwrap().node_id, nid.node_id());
     // The status document is the machine's page, without its telemetry,
-    // and it says which path the machine uses.
+    // with its view of the link.
     let status = d.status.unwrap();
     assert!(status.get("awake_hold").is_some() && status.get("telemetry").is_none());
     assert_eq!(status["controller"]["state"], "approved", "{status}");
-    assert_eq!(status["controller"]["path"], "controller");
+    assert_eq!(
+        status["controller"]["unconfirmed"], false,
+        "pinned in config"
+    );
     assert_eq!(status["controller"]["fingerprint"], nid.fingerprint());
     assert_eq!(
         status["controller"]["controller_fingerprint"],
         ctl.id.fingerprint()
     );
-    // The policy from the answer applied; the legacy hello paused.
+    // The policy from the answer applied.
     assert_eq!(node.shared.policy(), claude_policy());
-    assert!(!node.shared.legacy_hello_wanted());
     assert_eq!(
         ctl.registry
             .telemetry(&nid.node_id())
@@ -281,9 +283,8 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
             .is_some_and(|l| l.state.as_deref() == Some("pending"))
     });
     let link = node.shared.link().unwrap();
-    assert_eq!(link.path, "both", "pending: the legacy hello goes on");
+    assert!(link.connected);
     assert_eq!(link.controller_fingerprint, Some(ctl.id.fingerprint()));
-    assert!(node.shared.legacy_hello_wanted());
     // A pending machine pushes nothing, and nothing it sends is kept.
     std::thread::sleep(Duration::from_millis(300));
     assert!(ctl.registry.get(&nid.node_id()).unwrap().status.is_none());
@@ -299,7 +300,10 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     });
     // The same connection, upgraded in place.
     assert_eq!(summary(&ctl, &nid).unwrap().since, since);
-    assert_eq!(node.shared.link().unwrap().path, "controller");
+    assert_eq!(
+        node.shared.link().unwrap().state.as_deref(),
+        Some("approved")
+    );
 
     // A changed policy is pushed; the same set again changes nothing.
     let mut p2 = claude_policy();
@@ -323,7 +327,6 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
             .link()
             .is_some_and(|l| l.state.as_deref() == Some("pending"))
     });
-    assert!(node.shared.legacy_hello_wanted());
     node.stop();
 
     let lines: Vec<String> = rx.try_iter().map(|l| l.to_string()).collect();
@@ -357,9 +360,6 @@ fn a_revoked_machine_is_disconnected_and_refused() {
         .set_desired(vec![entry(&nid, DesiredState::Revoked, Default::default())]);
     assert_eq!(ok.revoked, vec![nid.node_id()]);
     assert_eq!(node.thread.join().unwrap(), Ended::Revoked);
-    // Turned away: the legacy hello resumes at once.
-    assert!(node.shared.legacy_hello_wanted());
-    assert_eq!(node.shared.link().unwrap().path, "legacy");
     wait_for("disconnected", 5, || {
         summary(&ctl, &nid).is_some_and(|s| !s.connected && s.state == NodeState::Revoked)
     });
@@ -403,21 +403,19 @@ fn a_controller_with_another_key_is_refused_pinned_or_first_used() {
         summary(&ctl, &nid).is_some_and(|s| s.connected)
     });
     let stored = crate::link::node::load_store(&node.store).unwrap();
-    assert_eq!(stored.via, "tofu");
     assert_eq!(stored.fingerprint, ctl.id.fingerprint());
     assert_eq!(
         node.shared.link().unwrap().pinned_via.as_deref(),
         Some("tofu")
     );
-    // Trusted on first use: approved, the link works, but nothing confirmed
-    // the key, so the legacy hello goes on beside it.
+    // Trusted on first use: approved, the link works, and the page says the
+    // key is not pinned.
     assert!(node.shared.link().unwrap().unconfirmed);
     approve(&ctl.registry, &nid, claude_policy());
     wait_for("approved over a first-use key", 5, || {
         node.shared.policy() == claude_policy()
     });
-    assert!(node.shared.legacy_hello_wanted());
-    assert_eq!(node.shared.link().unwrap().path, "both");
+    assert!(node.shared.link().unwrap().unconfirmed);
     let store = node.store.clone();
     node.stop.store(true, Ordering::Relaxed);
     node.thread.join().unwrap();
