@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   ControllerError,
   claudeStatus,
+  commandOk,
   helloOk,
+  nodeClaudeAnswer,
+  nodeDetail,
+  nodesList,
+  nodeTelemetryAnswer,
   parseLine,
   queued,
   requestLine,
+  setDesiredOk,
   systemInfo,
   telemetryGet,
 } from './wire'
@@ -84,10 +90,12 @@ describe('the controller wire', () => {
       '{"api":1,"version":"0.13.0","mode":"controller","hostname":"box",',
       '"os":{"os":"linux","name":"NixOS","version":"25.11","arch":"x86_64","cpu":"AMD Ryzen 7","memory_bytes":64},',
       '"uptime_secs":5,"os_uptime_secs":100,"booted_at":"2026-09-27T10:00:00Z",',
-      '"role":{"mode":"controller","hello":false,"self_update":false,"keep_awake":false,',
+      '"role":{"mode":"controller","link":false,"self_update":false,"keep_awake":false,',
       '"installer":false,"session":true,"session_in_service":true,"claude_update":false,',
-      '"tray":false,"status_on_lan":false,"api_socket":true},',
-      '"telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal"]}',
+      '"tray":false,"status_on_lan":false,"api_socket":true,"node_listener":true},',
+      '"telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal","nodes"],',
+      '"controller":{"public_key":"abababababababababababababababababababababababababababababababab",',
+      '"fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"]}}',
       '}',
     ].join('')
     expect(systemInfo(ok(line))).toEqual({
@@ -108,7 +116,7 @@ describe('the controller wire', () => {
       bootedAt: '2026-09-27T10:00:00Z',
       role: {
         mode: 'controller',
-        hello: false,
+        link: false,
         selfUpdate: false,
         keepAwake: false,
         installer: false,
@@ -118,10 +126,21 @@ describe('the controller wire', () => {
         tray: false,
         statusOnLan: false,
         apiSocket: true,
+        nodeListener: true,
       },
       telemetry: 'minimal',
-      capabilities: ['claude.remote_control', 'telemetry.minimal'],
+      capabilities: ['claude.remote_control', 'telemetry.minimal', 'nodes'],
+      controller: {
+        publicKey: 'ab'.repeat(32),
+        fingerprint: '3f2a:9c01',
+        listen: '0.0.0.0:7788',
+        advertise: ['box.lan:7788'],
+      },
     })
+    // Anywhere but the controller the block is absent, not null.
+    const bare = JSON.parse(line.slice('{"id":2,"ok":'.length, -1)) as Record<string, unknown>
+    delete bare.controller
+    expect(systemInfo(bare).controller).toBeNull()
   })
 
   it('ignores fields it does not know', () => {
@@ -202,5 +221,165 @@ describe('the controller wire', () => {
     expect(t.level).toBe('minimal')
     expect(t.telemetry).not.toBeNull()
     expect(t.telemetry?.sampledAt).toBe('2026-09-27T10:00:15Z')
+  })
+
+  // ── the machines ──────────────────────────────────────────────────────────
+
+  const SUMMARY = [
+    '"id":"0123456789abcdef","fingerprint":"0123:4567","state":"approved","connected":true,',
+    '"since":"2026-09-27T10:00:00Z","last_seen":"2026-09-27T10:00:15Z","hostname":"PC",',
+    '"os":"windows","arch":"x86_64","agent_version":"0.14.0","lan_ip":"192.168.0.120",',
+    '"mac":"aa:bb:cc:dd:ee:ff","claude":{"state":"running","detail":null,"cli_version":null,',
+    '"server_version":null,"sessions":2,"started_at":null,"signed_in":true}',
+  ].join('')
+
+  const PC = {
+    id: '0123456789abcdef',
+    fingerprint: '0123:4567',
+    state: 'approved',
+    connected: true,
+    since: '2026-09-27T10:00:00Z',
+    lastSeen: '2026-09-27T10:00:15Z',
+    hostname: 'PC',
+    os: 'windows',
+    arch: 'x86_64',
+    agentVersion: '0.14.0',
+    lanIp: '192.168.0.120',
+    mac: 'aa:bb:cc:dd:ee:ff',
+    claude: {
+      state: 'running',
+      detail: null,
+      cliVersion: null,
+      serverVersion: null,
+      sessions: 2,
+      startedAt: null,
+      signedIn: true,
+    },
+  }
+
+  it('decodes nodes.list, a connected machine and one never seen', () => {
+    expect(nodesList(ok(`{"id":5,"ok":{"nodes":[{${SUMMARY}}]}}`))).toEqual([PC])
+    const unseen = nodesList(
+      JSON.parse(
+        [
+          '{"nodes":[{"id":"0123456789abcdef","fingerprint":"0123:4567","state":"unknown","connected":false,',
+          '"since":null,"last_seen":null,"hostname":null,"os":null,"arch":null,"agent_version":null,',
+          '"lan_ip":null,"mac":null,"claude":null}]}',
+        ].join(''),
+      ),
+    )
+    expect(unseen[0]).toMatchObject({
+      state: 'unknown',
+      connected: false,
+      hostname: null,
+      claude: null,
+    })
+    expect(nodesList(JSON.parse('{"nodes":[]}'))).toEqual([])
+  })
+
+  it('decodes nodes.get, and a status document it cannot read as none', () => {
+    const d = nodeDetail(
+      JSON.parse(
+        `{${SUMMARY},"public_key":"${'ab'.repeat(32)}","hello":null,"status":{"awake_hold":true},"status_at":"2026-09-27T10:00:15Z","telemetry":null,"telemetry_at":null,"providers":[]}`,
+      ),
+    )
+    expect(d).toMatchObject({ ...PC, publicKey: 'ab'.repeat(32), hello: null, telemetry: null })
+    expect(d.statusAt).toBe('2026-09-27T10:00:15Z')
+    // The golden status is a fragment; a real one carries the agent's version.
+    expect(d.status).toBeNull()
+
+    const full = nodeDetail({
+      ...JSON.parse(`{${SUMMARY}}`),
+      public_key: 'ab'.repeat(32),
+      hello: JSON.parse(
+        [
+          '{"proto":1,"node_id":"0123456789abcdef","agent_version":"0.14.0","os":"windows",',
+          '"arch":"x86_64","hostname":"PC","mac":"aa:bb:cc:dd:ee:ff","lan_ip":"192.168.0.120",',
+          '"status_port":7787,"facts":{"os_name":"Windows 11 Pro","os_version":"24H2",',
+          '"cpu":"AMD Ryzen 9","memory_bytes":64},',
+          '"capabilities":["claude.remote_control","telemetry.full"],"telemetry":"full"}',
+        ].join(''),
+      ),
+      status: {
+        version: '0.14.0',
+        hostname: 'PC',
+        awake_hold: true,
+        controller: {
+          path: 'controller',
+          state: 'approved',
+          connected: true,
+          fingerprint: 'aaaa:bbbb',
+          controller_fingerprint: 'f3e5:a403',
+          pinned_via: 'tofu',
+          unconfirmed: true,
+          conflict: null,
+          error: null,
+        },
+      },
+      status_at: null,
+      telemetry: null,
+      telemetry_at: null,
+      providers: [],
+    })
+    expect(full.hello).toEqual({
+      agentVersion: '0.14.0',
+      os: 'windows',
+      arch: 'x86_64',
+      hostname: 'PC',
+      mac: 'aa:bb:cc:dd:ee:ff',
+      lanIp: '192.168.0.120',
+      statusPort: 7787,
+      facts: { osName: 'Windows 11 Pro', osVersion: '24H2', cpu: 'AMD Ryzen 9', memoryBytes: 64 },
+      capabilities: ['claude.remote_control', 'telemetry.full'],
+      telemetry: 'full',
+    })
+    expect(full.status?.version).toBe('0.14.0')
+    expect(full.status?.link).toMatchObject({
+      fingerprint: 'aaaa:bbbb',
+      controllerFingerprint: 'f3e5:a403',
+      pinnedVia: 'tofu',
+      unconfirmed: true,
+    })
+  })
+
+  it('decodes nodes.telemetry and nodes.claude', () => {
+    expect(
+      nodeTelemetryAnswer(
+        JSON.parse('{"id":"0123456789abcdef","telemetry":null,"received_at":null}'),
+      ),
+    ).toEqual({ telemetry: null, receivedAt: null })
+    expect(
+      nodeClaudeAnswer(JSON.parse('{"id":"0123456789abcdef","report":null,"received_at":"t"}')),
+    ).toEqual({ report: null, receivedAt: 't' })
+  })
+
+  it('decodes nodes.set_desired and nodes.command', () => {
+    expect(
+      setDesiredOk(
+        JSON.parse(
+          '{"nodes":2,"approved":["0123456789abcdef"],"revoked":[],"pending":[],"policy":["fedcba9876543210"]}',
+        ),
+      ),
+    ).toEqual({
+      nodes: 2,
+      approved: ['0123456789abcdef'],
+      revoked: [],
+      pending: [],
+      policy: ['fedcba9876543210'],
+    })
+    expect(commandOk(JSON.parse('{"delivered":true,"queued":false}'))).toEqual({
+      delivered: true,
+      queued: false,
+    })
+  })
+
+  it('knows not_found, and the nodes events', () => {
+    const m = parseLine('{"id":9,"err":{"code":"not_found","msg":"no machine 0123456789abcdef"}}')
+    expect(m.kind === 'err' && m.error.code === 'not_found').toBe(true)
+    expect(
+      parseLine(
+        '{"e":"nodes.pending","p":{"id":"0123456789abcdef","fingerprint":"0123:4567","hostname":"PC"}}',
+      ),
+    ).toMatchObject({ kind: 'event', e: 'nodes.pending' })
   })
 })

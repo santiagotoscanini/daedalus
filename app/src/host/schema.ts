@@ -506,26 +506,24 @@ export const localAdmins = pgTable('local_admins', {
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
 })
 
-// The other machines, once they have said hello (lib/repo/nodes.ts; the
-// signature and the id are checked in host/agent-hello.ts).
+// The machines the box has decided about (lib/repo/nodes.ts). A row is born
+// when an admin approves a key the controller holds pending — the agent on
+// the box, which every machine links to (host/controller/nodes.ts).
 //
 // A row is a machine's KEY, not its address: the agent generates an ed25519
-// keypair at install and signs every hello with it, and `id` is the first
-// sixteen hex characters of the public key's SHA-256. Hostnames change and
-// leases move; the key is what the box trusts, and `state` is what the box
-// has decided about it. `pending` is a machine that announced itself and
-// has not been approved; `approved` is a node the box may act on;
-// `revoked` is a key the box will no longer listen to, kept rather than
-// deleted so its history still explains itself.
-//
-// `lastHello` is the whole last payload, as the agent sent it, so a field
-// the agent adds later is visible here before anything reads it by name.
-export type NodeState = 'pending' | 'approved' | 'revoked'
+// keypair at install and presents it on every connection, and `id` is the
+// first sixteen hex characters of the public key's SHA-256. Hostnames change
+// and leases move; the key is what the box trusts, and `state` is what the
+// box has decided about it: `approved` is a machine the box acts on,
+// `revoked` a key it has turned away, kept rather than deleted so its
+// history still explains itself. The facts beside the key are the last the
+// controller observed, kept because the controller forgets on a restart.
+export type NodeState = 'approved' | 'revoked'
 
 export const nodes = pgTable('nodes', {
   id: text('id').primaryKey(),
   publicKey: text('public_key').notNull().unique(),
-  state: text('state').$type<NodeState>().notNull().default('pending'),
+  state: text('state').$type<NodeState>().notNull(),
   hostname: text('hostname').notNull(),
   os: text('os').notNull(),
   arch: text('arch').notNull(),
@@ -533,37 +531,18 @@ export const nodes = pgTable('nodes', {
   mac: text('mac'),
   lanIp: text('lan_ip'),
   statusPort: integer('status_port'),
-  lastHello: jsonb('last_hello').$type<Record<string, unknown>>().notNull(),
   firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   approvedAt: timestamp('approved_at', { withTimezone: true }),
   approvedBy: text('approved_by'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  /// The instructions the box can send a node: "check for AGENT updates
-  /// now", "update Claude Code" and "restart Claude remote control". Set by
-  /// an admin, carried by the next hello's answer, cleared as they go out.
-  ///
-  /// The two Claude ones are deliberately separate flags. Updating installs
-  /// a new CLI and interrupts nothing — a running session keeps the binary
-  /// it started on, which is upstream's own model ("updates take effect the
-  /// next time you start Claude Code"). Restarting is what moves the server
-  /// onto it, and it ENDS every session under it. One flag for both would
-  /// make the harmless act cost the expensive one.
-  updateCheckRequested: boolean('update_check_requested').notNull().default(false),
-  claudeUpdateRequested: boolean('claude_update_requested').notNull().default(false),
-  claudeRestartRequested: boolean('claude_restart_requested').notNull().default(false),
   /// What the box wants of this machine, set on Settings › Machines and
-  /// carried by every hello's answer once the node is approved. A JSON
-  /// object rather than columns because it is the agent's vocabulary
-  /// (agent/src/hello.rs `Policy`) and grows with the agent; absent keys
-  /// mean the agent's own defaults. Postgres, not site/: nothing nix
+  /// handed to the controller in the desired set. A JSON object rather than
+  /// columns because it holds the agent's vocabulary (agent/src/api/wire.rs
+  /// `DesiredPolicy`, cut down by lib/agent/policy.ts) beside the box's own; absent
+  /// keys mean the agent's own defaults. Postgres, not site/: nothing nix
   /// builds reads it, so changing it is an UPDATE and nothing rebuilds.
   policy: jsonb('policy').$type<NodePolicy>().notNull().default({}),
-  /// The secret the box presents to the agent to read its full Claude
-  /// report (`GET /claude` on the status page). Minted at approval, handed
-  /// down every hello answer over HTTPS, cleared on revoke. Never leaves
-  /// the server: NodeRow does not carry it.
-  token: text('token'),
 })
 
 /** One provider on a node: where it listens, whether to offer it, what to call its models. */

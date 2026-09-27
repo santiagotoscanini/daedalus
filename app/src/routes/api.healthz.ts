@@ -26,6 +26,10 @@ export const Route = createFileRoute('/api/healthz')({
         ensureScheduler()
         // And the gateway sync's five-minute run, the same way.
         ensureGatewaySync()
+        // And the controller's minute: re-dial it if it restarted (the dial
+        // hands it the desired set again), keep the machines' last-known
+        // facts. Not awaited — a probe must not wait on the controller.
+        void import('../host/controller/nodes').then((m) => m.ensureControllerLink())
         // And the environment's startup report: malformed optional variables
         // warned about once, a required one that is missing thrown — a 500 here
         // is what fails the deploy unit's health check and gatus alike.

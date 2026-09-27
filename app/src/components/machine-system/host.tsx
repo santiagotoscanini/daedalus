@@ -432,7 +432,12 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
                 ? 'installed, restarting'
                 : (status.updateAvailable ?? status.lastUpdateResult ?? 'not checked yet'),
             },
-            { k: 'Box', v: `approved · last hello ${since(node.lastSeenAgo)}` },
+            {
+              k: 'Box',
+              v: node.connected
+                ? 'approved · connected'
+                : `approved · last heard ${since(node.lastSeenAgo)}`,
+            },
             { k: 'Tray', v: status.trayReporting ? 'reporting' : 'not reporting' },
             {
               k: 'Claude',

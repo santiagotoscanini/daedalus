@@ -1,25 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { NodePolicy } from '../../../host/schema'
+import { POLICY_DEFAULTS } from '../../../lib/agent/policy'
 import { NODE_NAME_RE } from '../../../lib/nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../../../lib/providers/kinds'
 import type { ModelPolicy } from '../../../lib/providers/policy'
 import type { NodeRow } from '../../../lib/repo/nodes'
 import { useShown } from '../../../lib/shown'
-import {
-  requestClaudeRestartFn,
-  requestClaudeUpdateFn,
-  saveNodePolicyFn,
-} from '../../../server/nodes'
+import { saveNodePolicyFn } from '../../../server/nodes'
 import { useAction } from '../../use-action'
 
 // The state behind an approved machine's Policy card: the typed fields, the
 // switches shown optimistically, and one save per edit — every save built on
 // the policy the page last saved, never on the row as it was loaded. The card
 // itself (./policy.tsx) only draws what this holds.
-
-/** The agent's own defaults, which a key the policy leaves unset falls back to. */
-const DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as const
 
 export type PolicyEditor = ReturnType<typeof usePolicyEditor>
 
@@ -130,18 +124,12 @@ export function usePolicyEditor(n: NodeRow) {
     const { claudeWorkdir: _old, ...rest } = base.current
     save(trimmed === '' ? rest : { ...rest, claudeWorkdir: trimmed })
   }
-  const updateClaude = () => {
-    run(() => requestClaudeUpdateFn({ data: { id: n.id } }))
-  }
-  const restartClaude = () => {
-    run(() => requestClaudeRestartFn({ data: { id: n.id } }))
-  }
 
   // Shown as flipped the moment they are, while the save runs (lib/shown.ts).
   const failed = error !== null
-  const [awake, showAwake] = useShown(n.policy.awakeHold ?? DEFAULTS.awakeHold, busy, failed)
+  const [awake, showAwake] = useShown(n.policy.awakeHold ?? POLICY_DEFAULTS.awakeHold, busy, failed)
   const [claude, showClaude] = useShown(
-    n.policy.claudeRemoteControl ?? DEFAULTS.claudeRemoteControl,
+    n.policy.claudeRemoteControl ?? POLICY_DEFAULTS.claudeRemoteControl,
     busy,
     failed,
   )
@@ -179,7 +167,5 @@ export function usePolicyEditor(n: NodeRow) {
     setAwake,
     claude,
     setClaude,
-    updateClaude,
-    restartClaude,
   }
 }

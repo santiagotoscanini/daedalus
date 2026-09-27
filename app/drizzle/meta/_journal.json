@@ -141,6 +141,13 @@
       "when": 1790216566789,
       "tag": "0019_harsh_lake",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790545473478,
+      "tag": "0020_same_northstar",
+      "breakpoints": true
     }
   ]
 }

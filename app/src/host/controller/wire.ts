@@ -1,8 +1,13 @@
+import type { WirePolicy } from '../../lib/agent/policy'
 import {
+  type AgentStatus,
+  agentStatus,
   type NodeClaude,
+  type NodeClaudeSummary,
   type NodeTelemetry,
   nodeClaudeReport,
-  nodeTelemetryFull,
+  nodeClaudeSummary,
+  nodeTelemetry,
 } from '../../lib/agent/status'
 import { arrayOf, bool, decode, int, nullable, obj, optional, str } from '../../lib/contract/decode'
 
@@ -32,6 +37,7 @@ export const AGENT_CODES = [
   'too_large',
   'forbidden',
   'internal',
+  'not_found',
 ] as const
 export type AgentCode = (typeof AGENT_CODES)[number]
 
@@ -138,7 +144,7 @@ export const helloOk = (v: unknown): HelloOk => decode(helloShape, v)
 /** Which parts of the agent run (role.rs `Role`). */
 export type AgentRole = {
   mode: AgentMode
-  hello: boolean
+  link: boolean
   selfUpdate: boolean
   keepAwake: boolean
   installer: boolean
@@ -148,6 +154,21 @@ export type AgentRole = {
   tray: boolean
   statusOnLan: boolean
   apiSocket: boolean
+  nodeListener: boolean
+}
+
+/**
+ * The controller's own key and where machines reach it (wire.rs
+ * `ControllerInfo`): what an install command pins and dials. `advertise` is
+ * the `host:port`s config.toml names, first one first.
+ */
+export type ControllerInfo = {
+  /** 64 hex characters. */
+  publicKey: string
+  /** The key's SHA-256 in four-character groups: what a machine's tray shows. */
+  fingerprint: string
+  listen: string | null
+  advertise: string[]
 }
 
 export type SystemInfo = {
@@ -170,6 +191,8 @@ export type SystemInfo = {
   role: AgentRole
   telemetry: TelemetryLevel
   capabilities: string[]
+  /** Only on the controller. */
+  controller: ControllerInfo | null
 }
 
 const flag = optional(bool, false)
@@ -192,7 +215,7 @@ const systemInfoShape = obj({
   booted_at: nstr,
   role: obj({
     mode: optional(str, ''),
-    hello: flag,
+    link: flag,
     self_update: flag,
     keep_awake: flag,
     installer: flag,
@@ -202,9 +225,21 @@ const systemInfoShape = obj({
     tray: flag,
     status_on_lan: flag,
     api_socket: flag,
+    node_listener: flag,
   }),
   telemetry: optional(str, 'off'),
   capabilities: optional(arrayOf(str), []),
+  controller: optional(
+    nullable(
+      obj({
+        public_key: str,
+        fingerprint: str,
+        listen: nstr,
+        advertise: optional(arrayOf(str), []),
+      }),
+    ),
+    null,
+  ),
 })
 
 export function systemInfo(v: unknown): SystemInfo {
@@ -228,7 +263,7 @@ export function systemInfo(v: unknown): SystemInfo {
     bootedAt: s.booted_at,
     role: {
       mode: r.mode,
-      hello: r.hello,
+      link: r.link,
       selfUpdate: r.self_update,
       keepAwake: r.keep_awake,
       installer: r.installer,
@@ -238,9 +273,19 @@ export function systemInfo(v: unknown): SystemInfo {
       tray: r.tray,
       statusOnLan: r.status_on_lan,
       apiSocket: r.api_socket,
+      nodeListener: r.node_listener,
     },
     telemetry: s.telemetry,
     capabilities: s.capabilities,
+    controller:
+      s.controller === null
+        ? null
+        : {
+            publicKey: s.controller.public_key,
+            fingerprint: s.controller.fingerprint,
+            listen: s.controller.listen,
+            advertise: s.controller.advertise,
+          },
   }
 }
 
@@ -291,5 +336,242 @@ const telemetryGetShape = obj({
 
 export function telemetryGet(v: unknown): TelemetryGet {
   const t = decode(telemetryGetShape, v)
-  return { level: t.level, telemetry: t.telemetry === null ? null : nodeTelemetryFull(t.telemetry) }
+  return { level: t.level, telemetry: t.telemetry === null ? null : nodeTelemetry(t.telemetry) }
 }
+
+// ── the machines (`nodes.*`) ────────────────────────────────────────────────
+
+/**
+ * Where a machine stands at the controller (link/wire.rs `NodeState`):
+ * `pending` (connected, not decided), `approved`, `revoked`, or `unknown`
+ * (seen, not decided, gone).
+ */
+export type LinkState = 'pending' | 'approved' | 'revoked' | 'unknown' | (string & {})
+
+/**
+ * A machine as `nodes.list` lists it. The hello's fields are null for a key
+ * the app named that has not connected since the controller started — the
+ * controller keeps nothing across a restart.
+ */
+export type ControllerNode = {
+  id: string
+  fingerprint: string
+  state: LinkState
+  connected: boolean
+  /** When the current connection opened; null while disconnected. */
+  since: string | null
+  /** The last line heard from it. */
+  lastSeen: string | null
+  hostname: string | null
+  os: string | null
+  arch: string | null
+  agentVersion: string | null
+  lanIp: string | null
+  mac: string | null
+  claude: NodeClaudeSummary | null
+}
+
+const anyJson = optional(
+  nullable((v: unknown) => v),
+  null,
+)
+
+const nodeShape = {
+  id: str,
+  fingerprint: optional(str, ''),
+  state: optional(str, 'unknown'),
+  connected: flag,
+  since: nstr,
+  last_seen: nstr,
+  hostname: nstr,
+  os: nstr,
+  arch: nstr,
+  agent_version: nstr,
+  lan_ip: nstr,
+  mac: nstr,
+  claude: anyJson,
+}
+
+const nodeWire = obj(nodeShape)
+
+function nodeOf(n: ReturnType<typeof nodeWire>): ControllerNode {
+  return {
+    id: n.id,
+    fingerprint: n.fingerprint,
+    state: n.state,
+    connected: n.connected,
+    since: n.since,
+    lastSeen: n.last_seen,
+    hostname: n.hostname,
+    os: n.os,
+    arch: n.arch,
+    agentVersion: n.agent_version,
+    lanIp: n.lan_ip,
+    mac: n.mac,
+    claude: nodeClaudeSummary(n.claude),
+  }
+}
+
+export function nodesList(v: unknown): ControllerNode[] {
+  return decode(obj({ nodes: optional(arrayOf(nodeWire), []) }), v).nodes.map(nodeOf)
+}
+
+/** The machine's `hello` over the link (link/wire.rs `Hello`), as far as the app reads it. */
+export type LinkHello = {
+  agentVersion: string
+  os: string
+  arch: string
+  hostname: string
+  mac: string | null
+  lanIp: string | null
+  statusPort: number | null
+  facts: { osName: string; osVersion: string; cpu: string; memoryBytes: number | null }
+  capabilities: string[]
+  telemetry: TelemetryLevel
+}
+
+const linkHelloShape = obj({
+  agent_version: optional(str, ''),
+  os: optional(str, ''),
+  arch: optional(str, ''),
+  hostname: optional(str, ''),
+  mac: nstr,
+  lan_ip: nstr,
+  status_port: nint,
+  facts: optional(
+    obj({
+      os_name: optional(str, ''),
+      os_version: optional(str, ''),
+      cpu: optional(str, ''),
+      memory_bytes: nint,
+    }),
+    { os_name: '', os_version: '', cpu: '', memory_bytes: null },
+  ),
+  capabilities: optional(arrayOf(str), []),
+  telemetry: optional(str, 'off'),
+})
+
+/**
+ * `nodes.get`: the summary, the key, the whole hello, the status document
+ * (the machine's status page without its telemetry), the telemetry as the
+ * open page shows it, and when each arrived.
+ */
+export type ControllerNodeDetail = ControllerNode & {
+  /** 64 hex characters: the key the app approves. */
+  publicKey: string
+  hello: LinkHello | null
+  status: AgentStatus | null
+  statusAt: string | null
+  telemetry: NodeTelemetry | null
+  telemetryAt: string | null
+}
+
+/**
+ * The status document, or null for one that is not (a machine's agent wrote
+ * something this app cannot read): the page then says it has no status
+ * rather than failing the whole machine.
+ */
+function statusOf(v: unknown): AgentStatus | null {
+  if (v === null) return null
+  try {
+    return agentStatus(v)
+  } catch {
+    return null
+  }
+}
+
+export function nodeDetail(v: unknown): ControllerNodeDetail {
+  const d = decode(
+    obj({
+      ...nodeShape,
+      public_key: str,
+      hello: optional(nullable(linkHelloShape), null),
+      status: anyJson,
+      status_at: nstr,
+      telemetry: anyJson,
+      telemetry_at: nstr,
+    }),
+    v,
+  )
+  const h = d.hello
+  return {
+    ...nodeOf(d),
+    publicKey: d.public_key,
+    hello:
+      h === null
+        ? null
+        : {
+            agentVersion: h.agent_version,
+            os: h.os,
+            arch: h.arch,
+            hostname: h.hostname,
+            mac: h.mac,
+            lanIp: h.lan_ip,
+            statusPort: h.status_port,
+            facts: {
+              osName: h.facts.os_name,
+              osVersion: h.facts.os_version,
+              cpu: h.facts.cpu,
+              memoryBytes: h.facts.memory_bytes,
+            },
+            capabilities: h.capabilities,
+            telemetry: h.telemetry,
+          },
+    status: statusOf(d.status),
+    statusAt: d.status_at,
+    telemetry: nodeTelemetry(d.telemetry),
+    telemetryAt: d.telemetry_at,
+  }
+}
+
+/** `nodes.telemetry`: the full document at the machine's level, and when it arrived. */
+export type NodeTelemetryAnswer = { telemetry: NodeTelemetry | null; receivedAt: string | null }
+
+export function nodeTelemetryAnswer(v: unknown): NodeTelemetryAnswer {
+  const t = decode(obj({ telemetry: anyJson, received_at: nstr }), v)
+  return { telemetry: nodeTelemetry(t.telemetry), receivedAt: t.received_at }
+}
+
+/** `nodes.claude`: the machine's full Claude report, and when it arrived. */
+export type NodeClaudeAnswer = { report: NodeClaude | null; receivedAt: string | null }
+
+export function nodeClaudeAnswer(v: unknown): NodeClaudeAnswer {
+  const c = decode(obj({ report: anyJson, received_at: nstr }), v)
+  return { report: nodeClaudeReport(c.report), receivedAt: c.received_at }
+}
+
+/**
+ * One decided key, as `nodes.set_desired` takes it (wire.rs `DesiredNode`):
+ * the controller refuses the WHOLE set if an `id` is not its key's, so the
+ * builder (./nodes.ts) checks that before sending.
+ */
+export type DesiredNode = {
+  id: string
+  public_key: string
+  state: 'approved' | 'revoked'
+  /** The machine's policy (lib/agent/policy.ts); absent for a revoked key. */
+  policy?: WirePolicy
+}
+
+/** `nodes.set_desired`'s answer: the ids whose open connection changed. */
+export type SetDesiredOk = {
+  nodes: number
+  approved: string[]
+  revoked: string[]
+  pending: string[]
+  policy: string[]
+}
+
+export function setDesiredOk(v: unknown): SetDesiredOk {
+  const ids = optional(arrayOf(str), [])
+  return decode(
+    obj({ nodes: optional(int, 0), approved: ids, revoked: ids, pending: ids, policy: ids }),
+    v,
+  )
+}
+
+/** `nodes.command`'s answer: acknowledged now, or kept for the next connection. */
+export type CommandOk = { delivered: boolean; queued: boolean }
+
+export const commandOk = (v: unknown): CommandOk =>
+  decode(obj({ delivered: flag, queued: flag }), v)

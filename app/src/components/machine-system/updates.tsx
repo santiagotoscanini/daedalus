@@ -4,10 +4,8 @@ import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num, since } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
-import { requestUpdateCheckFn } from '../../server/nodes'
 import { GHOST_BTN } from '../apps/shared'
-import { Button } from '../ui/button'
-import { useAction } from '../use-action'
+import { NodeCommandButton } from '../node-command'
 import { Board, BoardGrid, Chip, Facts } from '../viz'
 import {
   ago,
@@ -43,27 +41,15 @@ function severityTone(s: string | null): Tone {
  * because this is where you are when you notice the version.
  */
 export function AgentUpdate({ node }: { node: NodeSystemData['node'] }) {
-  const { run, busy, error } = useAction()
   return (
     <div className="mt-[0.7rem] flex flex-wrap items-center gap-2 border-(--border-soft) border-t pt-[0.75rem]">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
+      <NodeCommandButton
+        id={node.id}
+        command="check_update"
+        label="Update now"
         className={GHOST_BTN}
-        disabled={busy || node.updateCheckRequested}
-        onClick={() => {
-          run(() => requestUpdateCheckFn({ data: { id: node.id } }))
-        }}
-      >
-        {node.updateCheckRequested ? 'Update queued' : 'Update now'}
-      </Button>
-      <span className={NOTE}>
-        {node.updateCheckRequested
-          ? 'rides the next hello, within a minute; the agent installs and restarts on its own'
-          : 'the agent looks every ten minutes on its own; this makes it look now'}
-      </span>
-      {error !== null && <span className={cn(NOTE, 'text-danger')}>{error}</span>}
+        note="the agent looks every ten minutes on its own; this makes it look now"
+      />
     </div>
   )
 }
@@ -171,7 +157,12 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
               k: 'Last check',
               v: status.lastUpdateResult ?? 'not checked yet',
             },
-            { k: 'Last hello', v: since(node.lastSeenAgo) },
+            {
+              k: 'Link',
+              v: node.connected
+                ? 'connected'
+                : `not connected · last heard ${since(node.lastSeenAgo)}`,
+            },
           ]}
         />
         <AgentUpdate node={node} />

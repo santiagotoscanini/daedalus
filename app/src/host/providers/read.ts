@@ -14,7 +14,7 @@ import {
 // through the Ctx); the pure decoders are in lib/providers/kinds.ts.
 //
 // Remembered for a minute per address: the AI page asks on every visit,
-// the gateway sync (host/gateway-sync.ts) after every node hello and every
+// the gateway sync (host/gateway-sync.ts) after every policy save and every
 // five minutes, and a catalog does not move between them. A provider that does not answer is `reachable:
 // false` with the last catalog it gave, so a machine asleep keeps its
 // rows on the page and loses its routes in the gateway — the two readers

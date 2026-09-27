@@ -5,20 +5,19 @@ import type { NodeClaudeData } from '../lib/dashboard/node-claude'
 import { DASH, duration, num, since, text, until } from '../lib/format'
 import type { NodeRow } from '../lib/repo/nodes'
 import type { Tone } from '../lib/tone'
-import { requestClaudeRestartFn, requestClaudeUpdateFn } from '../server/nodes'
+import { NodeCommandButton } from './node-command'
 import { ServiceHead } from './service-head'
 import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './tokens'
 import { Button } from './ui/button'
-import { useAction } from './use-action'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 
 // The Claude page, for a machine that is not this box.
 //
 // Same page, same questions — can I connect, how many sessions, is it the
 // build it should be, when does the login run out — answered from one
-// source instead of three: the agent's status page on the node, which
-// carries what its tray reports about the `claude remote-control` it
-// supervises (agent/src/claude/). The boards the box's page draws from
+// source instead of three: what the machine's agent reports about the
+// `claude remote-control` it supervises (agent/src/claude/), pushed up its
+// link and held by the controller. The boards the box's page draws from
 // Loki and the release feed are not here: the node's log stays on the node,
 // and which release is current is a question for the box's own page rather
 // than a second copy of the same feed.
@@ -39,8 +38,8 @@ type Verdict = { label: string; tone: Tone }
 
 function verdict(d: NodeClaudeData): Verdict {
   const s = d.status
-  if (s === null) return { label: 'agent not answering', tone: 'bad' }
-  // The report when the box could read it, else the open page's summary.
+  if (s === null) return { label: 'not connected', tone: 'muted' }
+  // The report when there is one, else the status document's summary.
   const c = d.report ?? s.claude
   if (c === null) {
     return s.trayReporting
@@ -91,7 +90,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
             ? "printed at start by the node's remote-control server"
             : c?.cliVersion != null
               ? 'claude --version on the node'
-              : 'from the last hello'
+              : 'from the controller’s summary'
         }
         verdict={v}
         compare={[
@@ -110,7 +109,11 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
           <>
             The Remote Control server on {node.hostname}, run by the agent's tray in the user's own
             session with that user's Claude login — the way this box runs its own. Everything here
-            is what the tray reports through the agent's status page, read just now.
+            is what the agent last reported up its link to the controller
+            {node.connected
+              ? ''
+              : `, ${since(node.lastSeenAgo)} — the machine is not connected now`}
+            .
           </>
         }
         actions={
@@ -132,15 +135,14 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
 
       {status === null ? (
         <p className={EMPTY}>
-          The agent on {node.hostname} did not answer{d.error !== null && `: ${d.error}`}. The
-          machine is asleep, off, or on a network this box cannot reach; the last hello was{' '}
-          {since(node.lastSeenAgo)}.
+          Nothing from {node.hostname}
+          {d.error !== null && `: ${d.error}`}. The machine is asleep, off, or its agent cannot
+          reach the controller; it was last heard {since(node.lastSeenAgo)}.
         </p>
       ) : c === null && status.claude !== null ? (
         <p className={EMPTY}>
-          The agent answers, and its tray reports Claude Code ({status.claude.state}), but the full
-          report was not read: {d.reportError ?? 'no reason given'}. The open page carries only a
-          summary; the rest needs the token the box hands an approved node on its next hello.
+          The machine's session reports Claude Code ({status.claude.state}), but the controller
+          holds no full report for it: {d.reportError ?? 'it has not arrived yet'}.
         </p>
       ) : c === null ? (
         <p className={EMPTY}>
@@ -171,7 +173,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
           value={status?.version ?? node.agentVersion}
           sub={
             status === null
-              ? 'from the last hello'
+              ? 'last known'
               : status.awakeHold
                 ? 'held awake'
                 : status.policy.awakeHold
@@ -281,7 +283,14 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
             menu opens it.
           </p>
           <UpdateControl node={node} claude={c} />
-          <RestartControl node={node} />
+          <div className={CONTROL}>
+            <NodeCommandButton
+              id={node.id}
+              command="claude_restart"
+              label="Restart the server"
+              note="ends every session on the node; a fresh server starts"
+            />
+          </div>
         </Board>
 
         <Board title="Sign-in" span={6}>
@@ -354,8 +363,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
           <p className={FOOT}>
             One file per session process in the user's Claude profile, as on the box. A stale row is
             a file whose process has ended; the CLI clears them in its own time. Resuming or
-            stopping a session on a node is not wired yet — that needs a command channel the hello
-            does not carry.
+            stopping a session on a node is not wired yet.
           </p>
         </Board>
 
@@ -383,7 +391,12 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                         ? `hold OFF${status.holdError !== null ? ` — ${status.holdError}` : ''}`
                         : 'may sleep (policy)',
               },
-              { k: 'Last hello', v: since(node.lastSeenAgo) },
+              {
+                k: 'Link',
+                v: node.connected
+                  ? 'connected'
+                  : `not connected · last heard ${since(node.lastSeenAgo)}`,
+              },
             ]}
           />
           <p className={FOOT}>
@@ -429,21 +442,21 @@ function SessionRow({ s }: { s: NodeClaudeSession }) {
   )
 }
 
+/** The row a control sits on, under a board's facts. */
+const CONTROL =
+  'mt-[0.7rem] flex flex-wrap items-center gap-3 border-(--border-soft) border-t pt-[0.75rem]'
+
 /**
  * Update Claude Code on this machine.
  *
- * The tray runs it, which is the only thing that can: the CLI's login lives
- * in the user's profile and the service — session 0 on Windows, root on
- * macOS — cannot see it. That also fixes the privilege exactly where it
- * should be. `claude update` is the supported verb for a native or npm
- * install and needs no elevation; for one a package manager owns it is a
- * safe no-op that reports "Claude is up to date!", and those upgrade
- * themselves through the env var the tray sets on the server it spawns.
- * A machine-wide install under an administrator's path is the case nothing
- * here can do, and the method beside Command above is what says so.
- *
- * No bridge and no poller: the request rides the next hello, so "queued" is
- * the honest state — the same shape as the restart below.
+ * The session runs it, which is the only thing that can: the CLI's login
+ * lives in the user's profile and the service — session 0 on Windows, root
+ * on macOS — cannot see it. `claude update` is the supported verb for a
+ * native or npm install and needs no elevation; for one a package manager
+ * owns it is a safe no-op that reports "Claude is up to date!", and those
+ * upgrade themselves through the env var the session sets on the server it
+ * spawns. A machine-wide install under an administrator's path is the case
+ * nothing here can do, and the method beside Command above is what says so.
  *
  * Nothing is interrupted. The new CLI installs beside the running one and
  * takes effect the next time it starts, so after this the page shows the
@@ -451,7 +464,6 @@ function SessionRow({ s }: { s: NodeClaudeSession }) {
  * ends every session here.
  */
 function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData['report'] }) {
-  const { run, busy, error } = useAction()
   const method = claude?.installMethod ?? null
   const last = claude?.lastUpdate ?? null
   const running = claude?.server.version ?? null
@@ -462,24 +474,17 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
   const stale = running !== null && installed !== null && running !== installed
 
   return (
-    <div className="mt-[0.7rem] flex flex-wrap items-center gap-3 border-(--border-soft) border-t pt-[0.75rem]">
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy || node.claudeUpdateRequested}
-        onClick={() => {
-          run(() => requestClaudeUpdateFn({ data: { id: node.id } }))
-        }}
-      >
-        {node.claudeUpdateRequested ? 'Update queued' : 'Update Claude Code'}
-      </Button>
-      <span className="text-[0.74rem] text-(--dim)">
-        {node.claudeUpdateRequested
-          ? 'rides the next hello, within a minute; no session is interrupted'
-          : stale
+    <div className={CONTROL}>
+      <NodeCommandButton
+        id={node.id}
+        command="claude_update"
+        label="Update Claude Code"
+        note={
+          stale
             ? `the CLI on disk is ${text(installed)} and the server is still running ${text(running)} — Restart is what closes that`
-            : `runs \`claude update\` on the machine${method === null ? '' : ` (${method})`}; the new version takes effect the next time the CLI starts`}
-      </span>
+            : `runs \`claude update\` on the machine${method === null ? '' : ` (${method})`}; the new version takes effect the next time the CLI starts`
+        }
+      />
       {/* What the last run actually did, in its own words. The outcomes
           worth reading are the quiet ones — "Claude is up to date!" from a
           package-manager install, a refusal from a managed one — and none
@@ -493,37 +498,6 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
           {last.detail}
         </span>
       )}
-      {error !== null && <span className="text-[0.78rem] text-destructive">{error}</span>}
-    </div>
-  )
-}
-
-/**
- * Restart the node's server. Not the box's two-step arming: the cost is the
- * node's sessions, which are named right here, and the request rides the
- * next hello rather than a bridge — so "queued" is the honest state, and
- * the page's next load shows what happened.
- */
-function RestartControl({ node }: { node: NodeRow }) {
-  const { run, busy, error } = useAction()
-  return (
-    <div className="mt-[0.7rem] flex flex-wrap items-center gap-3 border-(--border-soft) border-t pt-[0.75rem]">
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy || node.claudeRestartRequested}
-        onClick={() => {
-          run(() => requestClaudeRestartFn({ data: { id: node.id } }))
-        }}
-      >
-        {node.claudeRestartRequested ? 'Restart queued' : 'Restart the server'}
-      </Button>
-      <span className="text-[0.74rem] text-(--dim)">
-        {node.claudeRestartRequested
-          ? 'rides the next hello, within a minute; every session on the node ends'
-          : 'ends every session on the node; the tray starts a fresh server'}
-      </span>
-      {error !== null && <span className="text-[0.78rem] text-destructive">{error}</span>}
     </div>
   )
 }

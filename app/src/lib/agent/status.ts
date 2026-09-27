@@ -1,13 +1,11 @@
 import { arrayOf, bool, decode, int, nullable, num, obj, optional, str } from '../contract/decode'
 
-// The agent's status page, as the box reads it (agent/src/status.rs is the
-// writer). One JSON document on TCP 7787 of a machine the box does not run;
-// this is the half of it the box acts on. Fields the agent adds later are
-// ignored until a reader here wants them, and a field a document lacks
-// decodes to its fallback rather than failing the page.
-
-/** The port every agent answers on unless its config says otherwise. */
-export const AGENT_PORT = 7787
+// A machine's status document, as the box reads it (agent/src/status.rs is
+// the writer): what the machine pushes up its link and the controller hands
+// back in `nodes.get` (host/controller/), with the telemetry and the Claude
+// report beside it. This is the half of it the box acts on. Fields the agent
+// adds later are ignored until a reader here wants them, and a field a
+// document lacks decodes to its fallback rather than failing the page.
 
 /** What the box asked of the machine, as the agent holds it. */
 type AgentPolicy = {
@@ -88,13 +86,11 @@ export type NodeClaude = {
 }
 
 /**
- * Claude Code on the node as the OPEN status page states it: a state,
- * versions, a count. The agent keeps everything a stranger on the LAN
- * should not read — session names, paths, ids, the environment id, the
- * login's dates — for `/claude`, which only the box's token opens
- * (`nodeClaudeReport` below).
+ * Claude Code on the node in a line (agent/src/claude/mod.rs `Summary`): a
+ * state, versions, a count. The full report — sessions, paths, the login's
+ * dates — is `nodeClaudeReport` below.
  */
-type NodeClaudeSummary = {
+export type NodeClaudeSummary = {
   state: string
   detail: string | null
   cliVersion: string | null
@@ -146,7 +142,38 @@ export type AgentStatus = {
   claude: NodeClaudeSummary | null
   /** Whether the tray — the user's session — is reporting to the service. */
   trayReporting: boolean
+  /** The machine's side of its link to the controller (agent/src/link/mod.rs `LinkStatus`). */
+  link: AgentLink | null
 }
+
+/**
+ * How the machine holds the controller: both fingerprints, and whether the
+ * controller's key is CONFIRMED — pinned at install, or named by the box —
+ * or trusted on first use, which a re-run of the install command with its
+ * `--pin` fixes.
+ */
+export type AgentLink = {
+  state: string | null
+  connected: boolean
+  fingerprint: string
+  controllerFingerprint: string | null
+  /** "config", "box" or "tofu". */
+  pinnedVia: string | null
+  unconfirmed: boolean
+  conflict: string | null
+  error: string | null
+}
+
+const link = obj({
+  state: nstr,
+  connected: optional(bool, false),
+  fingerprint: optional(str, ''),
+  controller_fingerprint: nstr,
+  pinned_via: nstr,
+  unconfirmed: optional(bool, false),
+  conflict: nstr,
+  error: nstr,
+})
 
 const session = obj({
   pid: int,
@@ -249,6 +276,7 @@ const shape = obj({
   ),
   claude: optional(nullable(summary), null),
   tray: optional(obj({ reporting: optional(bool, false) }), { reporting: false }),
+  controller: optional(nullable(link), null),
 })
 
 function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
@@ -325,6 +353,19 @@ export function agentStatus(body: unknown): AgentStatus {
     policy: { awakeHold: s.policy.awake_hold, claudeRemoteControl: s.policy.claude_remote_control },
     claude: s.claude === null ? null : summaryOf(s.claude),
     trayReporting: s.tray.reporting,
+    link:
+      s.controller === null
+        ? null
+        : {
+            state: s.controller.state,
+            connected: s.controller.connected,
+            fingerprint: s.controller.fingerprint,
+            controllerFingerprint: s.controller.controller_fingerprint,
+            pinnedVia: s.controller.pinned_via,
+            unconfirmed: s.controller.unconfirmed,
+            conflict: s.controller.conflict,
+            error: s.controller.error,
+          },
   }
 }
 
@@ -340,10 +381,15 @@ function summaryOf(s: ReturnType<typeof summary>): NodeClaudeSummary {
   }
 }
 
+/** Decode a Claude summary (`nodes.list`'s `claude`); null for a null one. */
+export function nodeClaudeSummary(body: unknown): NodeClaudeSummary | null {
+  if (body === null || body === undefined) return null
+  return summaryOf(decode(summary, body))
+}
+
 /**
- * Decode the agent's `/claude` — the full report, which the agent answers
- * only on loopback or to the box's node token. Null when the tray has not
- * reported lately.
+ * Decode the machine's full Claude report (`nodes.claude`, the controller's
+ * `claude.status`). Null when its session has not reported lately.
  */
 export function nodeClaudeReport(body: unknown): NodeClaude | null {
   if (body === null) return null
@@ -441,19 +487,19 @@ export type NodeTelemetry = {
     /** Apple's word: "Normal", "Service Recommended". */
     condition: string | null
   } | null
-  /** The physical drives; serials only on the token-gated document. */
+  /** The physical drives; serials only in the full document. */
   drives: NodeDrive[]
-  /** The heaviest by memory; empty on the open page. */
+  /** The heaviest by memory; empty in the summary. */
   processes: NodeProcess[]
   processCount: number | null
-  /** Should be running and are not; empty on the open page. */
+  /** Should be running and are not; empty in the summary. */
   services: NodeService[]
   serviceCount: number | null
-  /** The Chromium-based browsers installed; paths only on the token-gated document. */
+  /** The Chromium-based browsers installed; paths only in the full document. */
   browsers: NodeBrowser[]
-  /** Null until the agent's first search, and on the open page. */
+  /** Null until the agent's first search, and in the summary. */
   updates: NodeUpdates | null
-  /** What is installed; empty on the open page. */
+  /** What is installed; empty in the summary. */
   apps: NodeApp[]
   appCount: number | null
   /**
@@ -485,7 +531,7 @@ export type NodeApp = {
   kind: string
   /** "registry" | "store" | "steam" | "epic" | "applications" | "app-store" | "homebrew" | "setapp" | "apple" */
   source: string | null
-  /** Install location; only on the token-gated document. */
+  /** Install location; only in the full document. */
   path: string | null
 }
 
@@ -974,20 +1020,13 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
   }
 }
 
-/** The telemetry block of a status document, when it carries one. */
-export function nodeTelemetry(statusBody: unknown): NodeTelemetry | null {
-  if (typeof statusBody !== 'object' || statusBody === null) return null
-  const t = (statusBody as { telemetry?: unknown }).telemetry
-  if (typeof t !== 'object' || t === null) return null
-  return telemetryOf(decode(telemetryShape, t))
-}
-
 /**
- * The full telemetry document, as `GET /telemetry` answers it to the box's
- * token: the open page's block plus drive serials, the
- * heaviest processes, the services that are down and the OS's updates.
+ * A telemetry document: the full one (`nodes.telemetry`, the controller's
+ * own `telemetry.get`) with drive serials, the heaviest processes, the
+ * services that are down and the OS's updates, or the summary `nodes.get`
+ * carries without them. Null for a null one.
  */
-export function nodeTelemetryFull(body: unknown): NodeTelemetry | null {
+export function nodeTelemetry(body: unknown): NodeTelemetry | null {
   if (typeof body !== 'object' || body === null) return null
   return telemetryOf(decode(telemetryShape, body))
 }

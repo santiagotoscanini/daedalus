@@ -1,43 +1,38 @@
-import { MonitorSmartphoneIcon } from 'lucide-react'
+import { MonitorSmartphoneIcon, NetworkIcon } from 'lucide-react'
 
+import type { AgentLink } from '../../../lib/agent/status'
 import { cn } from '../../../lib/cn'
 import type { Machine, MachinesData } from '../../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
 import { Chip } from '../../viz'
 import { BoxProvider, GatewaySync } from '../provider-models'
-import { ASIDE, Line, MONO, Mono, NOTE, Rows, Section } from '../shared'
+import { ASIDE, ERROR_NOTE, Line, Mono, NOTE, Rows, Section } from '../shared'
 import { Decision } from './decision'
+import { Install } from './install'
 import { Policy } from './policy'
 
-// Settings › Machines — the other computers on this network that run the
-// agent: what each one is, whether the box trusts it, and what the box asks
-// of it. One card per machine, and the whole story on it: the decision about a
-// machine and the policy sent to it are read together, so they sit together.
+// Settings › Machines — the other computers that run the agent: what each
+// one is, whether the box trusts it, and what the box asks of it. One card
+// per machine, and the whole story on it: the decision about a machine and
+// the policy sent to it are read together, so they sit together.
 //
-// Two kinds of machine, told apart by the chip. One that said hello has a
-// node row and a state — pending until approved, approved, or revoked — and
-// the buttons act on that row. One that was merely found (its status page
-// answers, but no hello reached the box) has no identity the box can act on;
-// the card says why and what to do.
+// Every machine keeps one link to the controller — the agent on this box —
+// and the page reads them all from it (lib/dashboard/machines.ts). A key
+// that connected and waits has a card with both fingerprints: the machine's,
+// which its tray shows beside the controller's, and the controller's, so the
+// two can be compared before approving. An approved machine's card carries
+// its policy; a machine that is not connected shows what the box last knew.
 //
-// The second kind of setting on this page: Postgres, not site/. A policy
-// travels to its machine on the answer to the agent's next hello, so a
-// switch here reaches the machine within a minute and nothing rebuilds —
-// which is why each row saves on click, like Appearance, with no Apply bar.
-// The policy rows appear only once a machine is approved: the box does not
-// send a policy to a machine it has not approved, and a switch that appears
-// to do nothing is worse than none.
-//
-// The install line is on the page rather than in a doc: a machine that is
-// not here yet is one shell line away, and this is where the person
-// looking for it is standing.
+// The second kind of setting on this page: Postgres, not site/. A decision
+// or a policy reaches the controller as the desired set the moment it is
+// saved, and a connected machine hears it at once — so each row saves on
+// click, like Appearance, with no Apply bar. The policy rows appear only
+// once a machine is approved: the box sends no policy to a key it has not.
 //
 // This file is the tab and one card per machine; the trust buttons are
-// ./decision.tsx, the policy rows ./policy.tsx over ./use-policy-editor.ts.
-
-const INSTALL_WINDOWS = 'irm https://daedalus.toscanini.me/install.ps1 | iex'
-const INSTALL_MACOS = 'curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh'
+// ./decision.tsx, the policy rows ./policy.tsx over ./use-policy-editor.ts,
+// the install lines ./install.tsx.
 
 /** The OS's mark, by the family the agent reports. */
 function osMark(os: string): { src: string; invert: boolean } | null {
@@ -56,32 +51,27 @@ function osMark(os: string): { src: string; invert: boolean } | null {
 type Verdict = { chip: string; tone: Tone }
 
 function verdict(m: Machine): Verdict {
+  const n = m.node
+  if (n === null) return { chip: 'wants to join', tone: 'warn' }
+  if (n.state === 'revoked') return { chip: 'revoked', tone: 'bad' }
   const s = m.status
-  switch (m.node?.state) {
-    case 'pending':
-      return { chip: 'wants to join', tone: 'warn' }
-    case 'revoked':
-      return { chip: 'revoked', tone: 'bad' }
-    case 'approved':
-      if (s === null) return { chip: 'not answering', tone: 'muted' }
-      // Off because the box said so is a state, not a fault.
-      if (!s.awakeHold && !s.policy.awakeHold) return { chip: 'may sleep', tone: 'muted' }
-      if (!s.awakeHold) return { chip: 'hold OFF', tone: 'bad' }
-      if (s.updateAvailable !== null || s.restartPending) return { chip: 'updating', tone: 'warn' }
-      return { chip: 'held awake', tone: 'ok' }
-    default:
-      return { chip: 'found, not announced', tone: 'muted' }
-  }
+  if (!n.connected) return { chip: 'not connected', tone: 'muted' }
+  if (s === null) return { chip: 'connected', tone: 'muted' }
+  // Off because the box said so is a state, not a fault.
+  if (!s.awakeHold && !s.policy.awakeHold) return { chip: 'may sleep', tone: 'muted' }
+  if (!s.awakeHold) return { chip: 'hold OFF', tone: 'bad' }
+  if (s.updateAvailable !== null || s.restartPending) return { chip: 'updating', tone: 'warn' }
+  return { chip: 'held awake', tone: 'ok' }
 }
 
 /**
- * Claude Code on the machine, in one line: what the tray reports through the
- * status page when it answers, the last hello's summary when it does not.
- * The Claude page's picker is where the rest is.
+ * Claude Code on the machine, in one line: the status document's summary
+ * while connected, the controller's last summary otherwise. The Claude
+ * page's picker is where the rest is.
  */
 function ClaudeCell({ m }: { m: Machine }) {
   const s = m.status
-  const c = s?.claude ?? null
+  const c = s?.claude ?? m.node?.claude ?? null
   if (c !== null) {
     const version = c.serverVersion ?? c.cliVersion
     return c.state === 'running' || c.state === 'starting' ? (
@@ -102,35 +92,45 @@ function ClaudeCell({ m }: { m: Machine }) {
   if (s !== null && !s.trayReporting) {
     return (
       <span className={ASIDE}>
-        {s.policy.claudeRemoteControl ? 'nobody logged on — the tray is not reporting' : '—'}
-      </span>
-    )
-  }
-  const h = m.node?.claude ?? null
-  if (h !== null) {
-    return (
-      <span className={ASIDE}>
-        {h.state}
-        {h.serverVersion !== null && ` ${h.serverVersion}`} · {String(h.sessions)} session
-        {h.sessions === 1 ? '' : 's'} · from the last hello
+        {s.policy.claudeRemoteControl ? 'nobody logged on — the session is not reporting' : '—'}
       </span>
     )
   }
   return <span className={ASIDE}>—</span>
 }
 
-/** One machine: the head, the facts, the decision, and — once approved — the policy. */
-function MachineSection({ m, port, lanDomain }: { m: Machine; port: number; lanDomain: string }) {
+/**
+ * How the machine trusts the controller, from its own side of the link:
+ * a key pinned at install or named by the box is confirmed; one trusted on
+ * first use is not, and re-running the install line pins it.
+ */
+function TrustNote({ link }: { link: AgentLink | null }) {
+  if (link === null) return null
+  if (link.conflict !== null || (link.error !== null && link.state === 'key-changed')) {
+    return <p className={ERROR_NOTE}>{link.conflict ?? link.error}</p>
+  }
+  if (!link.unconfirmed) return null
+  return (
+    <p className={cn(NOTE, 'text-warning')}>
+      This machine trusted the controller's key on first use and nothing has confirmed it. Pin it:
+      run the install line below on the machine again — it keeps everything and writes the pin.
+    </p>
+  )
+}
+
+/** One decided machine: the head, the facts, the decision, and — once approved — the policy. */
+function MachineSection({ m, lanDomain }: { m: Machine; lanDomain: string }) {
+  const n = m.node
+  if (n === null) return null
   const s = m.status
-  const os = s?.os ?? m.node?.os ?? ''
-  const mark = osMark(os)
-  const edition = s?.osName || (os ? os.charAt(0).toUpperCase() + os.slice(1) : 'unknown OS')
+  const mark = osMark(n.os)
+  const edition = s?.osName || (n.os ? n.os.charAt(0).toUpperCase() + n.os.slice(1) : 'unknown OS')
   const version = s?.osVersion ?? ''
-  const arch = s?.arch || m.node?.arch || ''
+  const arch = s?.arch || n.arch
   const v = verdict(m)
 
   const facts = [
-    { k: 'Agent', v: <Mono>{s?.version ?? m.node?.agentVersion ?? '—'}</Mono> },
+    { k: 'Agent', v: <Mono>{s?.version ?? n.agentVersion}</Mono> },
     ...(s?.cpu ? [{ k: 'Processor', v: <Mono>{s.cpu}</Mono> }] : []),
     ...(s?.memoryBytes != null ? [{ k: 'Memory', v: <Mono>{bytes(s.memoryBytes)}</Mono> }] : []),
     {
@@ -157,26 +157,15 @@ function MachineSection({ m, port, lanDomain }: { m: Machine; port: number; lanD
     },
     {
       k: 'Address',
-      v:
-        m.ip === null ? (
-          <span className={ASIDE}>—</span>
-        ) : (
-          <a
-            href={`http://${m.ip}:${String(port)}/status`}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(MONO, 'hover:text-foreground')}
-          >
-            {m.ip}:{port}
-          </a>
-        ),
+      v: n.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{n.lanIp}</Mono>,
     },
-    ...(m.node?.mac != null ? [{ k: 'Hardware address', v: <Mono>{m.node.mac}</Mono> }] : []),
+    ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
+    ...(s?.link != null ? [{ k: 'Its key', v: <Mono>{s.link.fingerprint}</Mono> }] : []),
   ]
 
   return (
     <Section
-      title={m.node?.name || s?.hostname || m.lanName || m.ip || 'Machine'}
+      title={n.name}
       icon={
         mark === null ? (
           <MonitorSmartphoneIcon />
@@ -203,39 +192,156 @@ function MachineSection({ m, port, lanDomain }: { m: Machine; port: number; lanD
       rows={facts}
     >
       {s?.holdError != null && <p className={NOTE}>The hold failed: {s.holdError}</p>}
+      <TrustNote link={s?.link ?? null} />
       <Decision m={m} />
-      {m.node !== null && m.node.state === 'approved' && (
-        <Policy n={m.node} shape={m.shape} lanDomain={lanDomain} />
-      )}
+      {n.state === 'approved' && <Policy n={n} shape={m.shape} lanDomain={lanDomain} />}
+    </Section>
+  )
+}
+
+/** A key waiting at the controller: what it says it is, and the two fingerprints to compare. */
+function PendingSection({
+  m,
+  controllerFingerprint,
+}: {
+  m: Machine
+  controllerFingerprint: string | null
+}) {
+  const p = m.pending
+  if (p === null) return null
+  const mark = osMark(p.os ?? '')
+  return (
+    <Section
+      title={p.hostname ?? p.id}
+      icon={
+        mark === null ? (
+          <MonitorSmartphoneIcon />
+        ) : (
+          <img
+            src={mark.src}
+            alt=""
+            width={20}
+            height={20}
+            className={cn('size-5 flex-none object-contain', mark.invert && 'dark:invert')}
+          />
+        )
+      }
+      description={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <Chip tone="warn">wants to join</Chip>
+          <span>
+            {p.os ?? 'unknown OS'}
+            {p.arch !== null && ` · ${p.arch}`}
+            {p.agentVersion !== null && ` · agent ${p.agentVersion}`}
+          </span>
+        </span>
+      }
+      rows={[
+        { k: 'Its key', v: <Mono>{p.fingerprint}</Mono> },
+        {
+          k: 'Controller key',
+          v:
+            controllerFingerprint === null ? (
+              <span className={ASIDE}>the controller did not say</span>
+            ) : (
+              <Mono>{controllerFingerprint}</Mono>
+            ),
+        },
+        {
+          k: 'Address',
+          v: p.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{p.lanIp}</Mono>,
+        },
+      ]}
+    >
+      <p className={NOTE}>
+        The machine's tray and status page show both keys. Approve only if they match what it shows:
+        its own, and the controller's it trusts.
+      </p>
+      <Decision m={m} />
     </Section>
   )
 }
 
 export function Machines({ d }: { d: MachinesData }) {
+  const c = d.controller
+  const sync = d.sync
   return (
     <div className="flex flex-col gap-6">
       {d.machines.length === 0 ? (
         <Section
           title="Machines"
           icon={<MonitorSmartphoneIcon />}
-          description="No machine has announced itself yet."
+          description="No machine has joined yet."
         >
           <p className={NOTE}>
-            {d.error !== null
-              ? `The LAN device list could not be read: ${d.error}`
-              : `None of the ${String(d.probed)} devices asked answered the agent's status page either. Install the agent on a machine and it appears here.`}
+            {d.listError !== null
+              ? `The controller's list could not be read: ${d.listError}`
+              : 'Install the agent on a machine with a line below and it appears here, waiting for you to approve it.'}
           </p>
         </Section>
       ) : (
-        d.machines.map((m) => (
-          <MachineSection
-            key={m.node?.id ?? m.ip ?? m.lanName ?? ''}
-            m={m}
-            port={d.port}
-            lanDomain={d.lanDomain}
-          />
-        ))
+        d.machines.map((m) =>
+          m.node === null ? (
+            <PendingSection
+              key={m.pending?.id ?? ''}
+              m={m}
+              controllerFingerprint={c.reachable ? c.fingerprint : null}
+            />
+          ) : (
+            <MachineSection key={m.node.id} m={m} lanDomain={d.lanDomain} />
+          ),
+        )
       )}
+
+      <Section
+        title="The controller"
+        icon={<NetworkIcon />}
+        description="The agent on this box: every machine keeps one link to it, and this page reads them all through it."
+        rows={
+          c.reachable
+            ? [
+                {
+                  k: 'Machines dial',
+                  v:
+                    c.address === null ? (
+                      <span className={ASIDE}>no listener</span>
+                    ) : (
+                      <Mono>{c.address}</Mono>
+                    ),
+                },
+                { k: 'Its key', v: <Mono>{c.fingerprint}</Mono> },
+                { k: 'Agent', v: <Mono>{c.version}</Mono> },
+                {
+                  k: 'Decisions',
+                  v:
+                    sync === null ? (
+                      <span className={ASIDE}>not sent since this process started</span>
+                    ) : sync.error !== null ? (
+                      <span className="text-[0.78rem] text-destructive">
+                        not delivered {since((Date.now() - Date.parse(sync.at)) / 1000)}:{' '}
+                        {sync.error}
+                      </span>
+                    ) : (
+                      <span className={ASIDE}>
+                        {String(sync.sent.length)} key{sync.sent.length === 1 ? '' : 's'} handed
+                        over {since((Date.now() - Date.parse(sync.at)) / 1000)}
+                        {sync.skipped.length > 0 && ` · ${String(sync.skipped.length)} left out`}
+                      </span>
+                    ),
+                },
+              ]
+            : [
+                {
+                  k: 'State',
+                  v: (
+                    <span className="text-[0.78rem] text-destructive">
+                      not reachable: {c.error}
+                    </span>
+                  ),
+                },
+              ]
+        }
+      />
 
       <Section
         title="The gateway"
@@ -251,25 +357,8 @@ export function Machines({ d }: { d: MachinesData }) {
       </Section>
 
       <Section title="How a machine joins" icon={<MonitorSmartphoneIcon />}>
-        <p className={NOTE}>Install the agent on it. Windows, from an administrator PowerShell:</p>
-        <p className={cn(MONO, 'm-0 select-all')}>{INSTALL_WINDOWS}</p>
-        <p className={NOTE}>A Mac, from a terminal:</p>
-        <p className={cn(MONO, 'm-0 select-all')}>{INSTALL_MACOS}</p>
-        <p className={NOTE}>
-          The agent keeps the machine awake, shows itself in the tray or the menu bar, updates
-          itself from each release, and announces itself to this box every minute with a key it made
-          at install — the machine then appears above as "wants to join" until you approve it. The
-          page also asks every device pi-hole has seen in the last week for the agent's status page
-          on TCP {String(d.port)} ({String(d.probed)} asked just now
-          {d.skipped > 0 && `, ${String(d.skipped)} too long silent`}), so an agent that cannot find
-          the box is still seen.
-        </p>
+        <Install controller={c} />
       </Section>
-
-      <p className={NOTE}>
-        Each switch reaches its machine on the agent's next hello, within a minute. Approve, revoke
-        and update take effect the same way.
-      </p>
     </div>
   )
 }

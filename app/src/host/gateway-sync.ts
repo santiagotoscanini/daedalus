@@ -18,7 +18,7 @@ import type { ProviderReading } from './providers/read'
 // A model comes and goes with a click in Lemonade's window. A rebuild and a
 // gateway restart per click would be the wrong cost, and the catalog is the
 // provider's state, not the box's — so this reconciles LiteLLM's database
-// with what the providers answer, on every hello, after every policy save
+// with what the providers answer, after every policy save
 // and every five minutes. It owns exactly the routes it made: each carries
 // `model_info.daedalus = { node, kind, id }`, and a route without the tag
 // (config.yaml's, or one an operator typed into LiteLLM's own UI) is never
@@ -405,8 +405,8 @@ export function syncGateway(ctx: Ctx, gw?: GatewayClient): Promise<SyncSummary> 
 }
 
 /**
- * A sync soon: a burst of hellos or saves runs one, a few seconds after the
- * last. Never throws — a hello must not fail because the gateway did.
+ * A sync soon: a burst of saves runs one, a few seconds after the
+ * last. Never throws — a save must not fail because the gateway did.
  */
 export function requestGatewaySync(): void {
   const s = slot()

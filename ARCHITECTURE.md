@@ -240,7 +240,7 @@ flowchart TB
 
   subgraph edge["server only — the doors"]
     Srv["src/server/**  createServerFn via fn.ts<br/>readFn, adminFn, publicFn<br/>registry, builds, settings, site, modules, updates, ..."]
-    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/nodes/hello, and the image servers (icons, shots)"]
+    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>and the image servers (icons, shots)"]
     Mcp["src/routes/mcp.ts → src/host/mcp/**<br/>/mcp — Streamable HTTP, 16 tools, 2 resources<br/>a scoped token, not a session"]
   end
 
@@ -402,8 +402,8 @@ control plane's own UI has.
 Tables and columns are trimmed to the load-bearing ones; the schema
 (`app/src/host/schema.ts`) is the complete answer. Not drawn: `app_tasks` (an
 app's scheduled commands), `local_admins` (the break-glass password login,
-dormant unless site.json turns it on) and `nodes` (the other machines, keyed by
-the agent's public key, `pending` until an admin approves them).
+dormant unless site.json turns it on) and `nodes` (the machines an admin approved
+or revoked, keyed by the agent's public key; the controller holds the rest).
 
 ```mermaid
 erDiagram
@@ -505,7 +505,7 @@ happen in one transaction, so a redelivered webhook collides and is ignored.
 | Operator → engine | Every page and action | Forward-auth in front of the whole host, bar the self-authenticating paths in the rows below and the app's icons; the engine trusts a header it can only receive from the proxy (or a break-glass local login, dormant unless site.json turns it on); mutations are `adminFn`, which requires the `admins` group once enforcement is armed |
 | Agent → engine | The MCP tools at `/mcp`, on the LAN only | A scoped bearer token, matched against a stored SHA-256 digest in constant time before any work; fail-closed with none minted; write tools additionally pass `assertMachineActor` and are recorded under the token's label |
 | Registry → engine | zot's push events at `/api/deploy` | A shared `X-Deploy-Token`; the only thing it can do is start an existing app's deploy unit |
-| Node → engine | A machine's hello at `/api/nodes/hello`, on the LAN | Every hello is signed by the ed25519 key the agent made at install; an unknown key creates a `pending` row and nothing else until an admin approves it |
+| Machine → controller → engine | Each machine's one link to the controller — the agent on the box, TCP 7788 on the LAN — and the controller's unix socket in the app's container | TLS 1.3 with each side pinning the other's ed25519 key (the machine's pin from its install line, else trust on first use); an unknown key waits `pending` at the controller with nothing pushed to it until an admin approves it, which creates its `nodes` row and hands the controller the whole desired set. The socket serves only the uids the controller lists, and takes fixed verbs with a node id |
 | Engine → host | Sixteen request filenames | The rules in [The bridge](#the-bridge) |
 | Engine → GitHub | An installation token, minted by the host, never the private key | The key is root-only on the host and never enters the container; the token carries contents, metadata and actions read, checks and deployments write |
 | Host → repository code | A clone and a build | Repository content only ever runs as an unprivileged user inside an egress fence; the registry push credential exists for the duration of the one publishing call and is deleted after it |

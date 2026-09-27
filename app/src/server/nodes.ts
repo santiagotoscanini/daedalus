@@ -1,5 +1,6 @@
 import type { NodePolicy } from '../host/schema'
-import { asValidator, is, obj, withMessage } from '../lib/contract/decode'
+import { NODE_COMMANDS } from '../lib/agent/policy'
+import { asValidator, is, literal, obj, withMessage } from '../lib/contract/decode'
 import { nodeIdField } from '../lib/contract/fields'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
 import { NODE_NAME_RE } from '../lib/nodes-file'
@@ -8,14 +9,21 @@ import { modelPolicies } from '../lib/providers/policy'
 import { adminFn, readFn } from './fn'
 
 // Server functions behind Settings › Machines: the cards, the decisions about
-// a node — approve (recorded under who made it), revoke, forget, the policy,
-// the update and Claude requests — and the gateway's provider models and sync.
+// a machine — approve (recorded under who made it), revoke, forget, the
+// policy, the one-shot commands — and the gateway's provider models and sync.
 
 const nodeId = asValidator(withMessage(obj({ id: nodeIdField }), 'expected a node id'))
 
+/**
+ * Approve a machine. A revoked row is trusted again; a key the controller
+ * holds pending becomes a row, from its key and its hello. Either way the
+ * desired set follows, and the controller upgrades the open connection.
+ */
 export const approveNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
-  const { approveNode } = await import('../lib/repo/nodes')
-  return { ok: await approveNode(data.id, context.actor()) }
+  const { approveNode, enrollNode } = await import('../lib/repo/nodes')
+  if (await approveNode(data.id, context.actor())) return { ok: true }
+  const ctx = await context.ctx()
+  return { ok: await enrollNode(await ctx.controller.nodesGet(data.id), context.actor()) }
 })
 
 export const revokeNodeFn = adminFn.validator(nodeId).handler(async ({ data }) => {
@@ -28,32 +36,29 @@ export const forgetNodeFn = adminFn.validator(nodeId).handler(async ({ data }) =
   return { ok: await forgetNode(data.id) }
 })
 
-export const requestUpdateCheckFn = adminFn.validator(nodeId).handler(async ({ data }) => {
-  const { requestUpdateCheck } = await import('../lib/repo/nodes')
-  return { ok: await requestUpdateCheck(data.id) }
-})
-
 /**
- * Ask the node to update Claude Code on its next hello.
- *
- * The harmless half of the pair: the new CLI installs beside the running
- * one and the machine keeps working. Its sibling below moves the server
- * onto it and ends every session there.
+ * One instruction to one machine, through the controller: the machine
+ * acknowledges it at once when connected, or the controller keeps it for
+ * the next connection. `claude_update` interrupts nothing; `claude_restart`
+ * ends every session on the machine — the page names which it is.
  */
-export const requestClaudeUpdateFn = adminFn.validator(nodeId).handler(async ({ data }) => {
-  const { requestClaudeUpdate } = await import('../lib/repo/nodes')
-  return { ok: await requestClaudeUpdate(data.id) }
-})
-
-export const requestClaudeRestartFn = adminFn.validator(nodeId).handler(async ({ data }) => {
-  const { requestClaudeRestart } = await import('../lib/repo/nodes')
-  return { ok: await requestClaudeRestart(data.id) }
-})
+export const sendNodeCommandFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ id: nodeIdField, command: literal(...NODE_COMMANDS) }),
+        'expected a node id and a command',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }) => {
+    const ctx = await context.ctx()
+    return ctx.controller.nodesCommand(data.id, data.command)
+  })
 
 /**
- * Settings › Machines' cards: every node with its policy, joined to what the
- * LAN answered just now. Read-only, so no gate beyond the page's. Built on a
- * Ctx the way the module boards are — the reader asks pi-hole for the LAN.
+ * Settings › Machines' cards: every decided machine with its policy, and the
+ * keys waiting at the controller. Read-only, so no gate beyond the page's.
  */
 export const fetchMachinesFn = readFn.handler(async ({ context }) => {
   const { loadMachines } = await import('../lib/dashboard/machines')

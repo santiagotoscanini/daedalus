@@ -1,64 +1,35 @@
 import type { Ctx } from '../../core/ctx'
-import { siteIdentity } from '../../host/contract/domains/site'
+import type { ControllerClient } from '../../host/controller/client'
+import { type DesiredSync, lastDesiredSync, readNode } from '../../host/controller/nodes'
+import type { ControllerNode } from '../../host/controller/wire'
 import { lanDomain } from '../../host/providers/fleet'
-import { type Device, lanDevices } from '../../modules/network/data/dhcp'
-import { AGENT_PORT, type AgentStatus, agentStatus, nodeTelemetry } from '../agent/status'
-import { getJsonResult } from '../http'
+import type { AgentStatus } from '../agent/status'
 import { listNodes, type NodeRow } from '../repo/nodes'
 
-// The other machines: what announced itself, and what was found. The reader
-// behind Settings › Machines — here rather than in a module's data tree
-// because Settings is a route, not a dashboard module, and it reaches the
-// box the way the module loaders do, through a Ctx.
+// The other machines, as Settings › Machines lists them — here rather than
+// in a module's data tree because Settings is a route, not a dashboard
+// module, and it reaches the box the way the module loaders do, through a
+// Ctx.
 //
-// Two sources, one list. A machine that said hello (routes/api.nodes.hello)
-// has a row in the nodes table keyed on its signing key, with a state the
-// admin decides: pending, approved, revoked. A machine that merely answers
-// the agent's status page on TCP 7787 is found by asking — pi-hole's
-// network table knows everything on the LAN that ever asked for a name,
-// and each address seen in the last week is probed in parallel with a
-// short timeout. The two are joined on the address: a node's card shows
-// the live page when it answers, and a page with no node behind it is a
-// machine whose agent has not found the box (one on a LAN whose DNS is not
-// the box's).
-//
-// Only the announced kind can be acted on, and only once approved: a
-// status page has no identity, a signed hello does.
-
-/** How long a device may have been silent and still be asked. */
-const RECENT_SECS = 7 * 86_400
-/** One attempt, short: a machine without the agent refuses at once; one that
- * is asleep or gone times out, and there is nothing to wait for. */
-const PROBE_MS = [1_500]
+// Two sources, one list, joined on the key's id. The nodes table holds the
+// machines the box has decided about — approved or revoked — with their
+// policy; the controller (the agent on the box every machine links to)
+// holds who is connected now, and the keys that connected and wait for a
+// decision. A waiting key has no row until an admin approves it, and its
+// card shows both fingerprints so the machine's tray can be compared first.
 
 export type Machine = {
-  /** The node row, when the machine has said hello. */
+  /** The decided row, once there is one. */
   node: NodeRow | null
-  /** What this house calls it on the LAN, when pi-hole knows it. */
-  lanName: string | null
-  ip: string | null
-  /** Seconds since pi-hole last heard from it; null when unknown. */
-  lastResolvedAgo: number | null
-  /** The status page, when it answered just now. */
+  /** A key the controller holds pending, with no row yet. */
+  pending: ControllerNode | null
+  /** The machine's status document, while the controller holds one. */
   status: AgentStatus | null
-  /** What it is, from the same answer; null when it did not answer. */
+  /** What it is, from its telemetry; null without one. */
   shape: MachineShape | null
 }
 
-export type MachinesData = {
-  port: number
-  /** The domain a node's name sits under, as the box publishes it. */
-  lanDomain: string
-  /** How many addresses were asked. */
-  probed: number
-  /** Devices that were on the table but too old to ask. */
-  skipped: number
-  machines: Machine[]
-  /** Why the LAN list could not be read, when it could not. */
-  error: string | null
-}
-
-/** What the status page says the machine IS, for the settings that depend on it. */
+/** What the telemetry says the machine IS, for the settings that depend on it. */
 export type MachineShape = {
   /** "laptop" | "desktop" | …, from the chassis. */
   form: string | null
@@ -66,100 +37,104 @@ export type MachineShape = {
   model: string | null
 }
 
-async function probe(
-  ip: string,
-  port: number,
-): Promise<{ status: AgentStatus; shape: MachineShape } | null> {
-  const r = await getJsonResult<unknown>(`http://${ip}:${port}/status`, {}, PROBE_MS)
-  if (!r.ok) return null
-  try {
-    const t = nodeTelemetry(r.value)
-    return {
-      status: agentStatus(r.value),
-      shape: {
-        form: t?.machine.form ?? null,
-        model: t?.machine.boardProduct ?? t?.machine.model ?? null,
-      },
+/** The controller as an install command needs it: where to dial, which key to pin. */
+export type ControllerView =
+  | {
+      reachable: true
+      version: string
+      /** The first `host:port` it advertises; null when it listens for no machine. */
+      address: string | null
+      fingerprint: string
     }
-  } catch {
-    // Something answered on the port with JSON that is not a status page.
-    return null
-  }
+  | { reachable: false; error: string }
+
+export type MachinesData = {
+  /** The domain a node's name sits under, as the box publishes it. */
+  lanDomain: string
+  controller: ControllerView
+  /** The last desired-state sync, as the controller answered it. */
+  sync: DesiredSync | null
+  machines: Machine[]
+  /** Why the controller's list of machines could not be read, when it could not. */
+  listError: string | null
 }
 
 /** The order the page reads in: what needs a decision, then what is trusted, then the rest. */
-const RANK: Record<string, number> = { pending: 0, approved: 1, found: 2, revoked: 3 }
+const RANK: Record<string, number> = { pending: 0, approved: 1, revoked: 2 }
 
-function rank(m: Machine): number {
-  return RANK[m.node?.state ?? 'found'] ?? 9
+/**
+ * The decided rows, each with nothing yet, and after them every key the
+ * controller holds pending that has no row — the join, before any machine
+ * is read. A key the controller lists in any other state without a row (one
+ * forgotten while it was connected) is not offered: it is pending again at
+ * its next connection.
+ */
+export function joinMachines(rows: readonly NodeRow[], seen: readonly ControllerNode[]): Machine[] {
+  const decided = new Set(rows.map((n) => n.id))
+  const out: Machine[] = [
+    ...rows.map((node) => ({ node, pending: null, status: null, shape: null })),
+    ...seen
+      .filter((s) => s.state === 'pending' && !decided.has(s.id))
+      .map((pending) => ({ node: null, pending, status: null, shape: null })),
+  ]
+  const label = (m: Machine) => m.node?.name ?? m.pending?.hostname ?? m.pending?.id ?? ''
+  const rank = (m: Machine) => RANK[m.node?.state ?? 'pending'] ?? 9
+  return out.sort((a, b) => rank(a) - rank(b) || label(a).localeCompare(label(b)))
 }
 
-function label(m: Machine): string {
-  return m.status?.hostname || m.node?.hostname || m.lanName || m.ip || ''
+async function controllerView(client: ControllerClient): Promise<ControllerView> {
+  try {
+    const info = await client.systemInfo()
+    if (info.controller === null) {
+      return { reachable: false, error: `the agent on the box runs as ${info.mode}` }
+    }
+    return {
+      reachable: true,
+      version: info.version,
+      address: info.controller.advertise[0] ?? null,
+      fingerprint: info.controller.fingerprint,
+    }
+  } catch (e) {
+    return { reachable: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
-  const port = AGENT_PORT
-  const [nodeRows, domain, site] = await Promise.all([listNodes(), lanDomain(), siteIdentity()])
-
-  let devices: Device[] = []
-  let error: string | null = null
-  try {
-    devices = await lanDevices(ctx)
-  } catch (e) {
-    error = e instanceof Error ? e.message : 'the LAN device list could not be read'
-  }
-  const self = site.data.lanIp
-  const recent = devices.filter(
-    (d) => d.ip !== '?' && d.ip !== self && d.lastSeenAgo !== null && d.lastSeenAgo < RECENT_SECS,
-  )
-
-  // Every address worth asking: the recent LAN, plus wherever a node last
-  // said it was, in case pi-hole has not heard from it.
-  const addresses = new Set<string>(recent.map((d) => d.ip))
-  for (const n of nodeRows) if (n.lanIp !== null && n.lanIp !== self) addresses.add(n.lanIp)
-  const answers = new Map<string, { status: AgentStatus; shape: MachineShape } | null>()
-  await Promise.all(
-    [...addresses].map(async (ip) => {
-      answers.set(ip, await probe(ip, port))
+  const client = ctx.controller
+  const [rows, domain, view, seen] = await Promise.all([
+    listNodes(),
+    lanDomain(),
+    controllerView(client),
+    client.nodesList().then(
+      (list) => ({ list, error: null }),
+      (e: unknown) => ({
+        list: [] as ControllerNode[],
+        error: e instanceof Error ? e.message : String(e),
+      }),
+    ),
+  ])
+  const machines = await Promise.all(
+    joinMachines(rows, seen.list).map(async (m) => {
+      // Only a machine the box acts on is read further: a waiting key has
+      // no status to show until it is approved.
+      if (m.node === null || m.node.state !== 'approved' || !m.node.connected) return m
+      const d = (await readNode(client, m.node.id)).detail
+      const t = d?.telemetry ?? null
+      return {
+        ...m,
+        status: d?.status ?? null,
+        shape:
+          t === null
+            ? null
+            : { form: t.machine.form, model: t.machine.boardProduct ?? t.machine.model },
+      }
     }),
   )
-
-  const byIp = new Map(devices.map((d) => [d.ip, d]))
-  const claimed = new Set<string>()
-  const machines: Machine[] = nodeRows.map((n) => {
-    const ip = n.lanIp
-    if (ip !== null) claimed.add(ip)
-    const dev = ip === null ? undefined : byIp.get(ip)
-    return {
-      node: n,
-      lanName: dev?.name ?? null,
-      ip,
-      lastResolvedAgo: dev?.lastSeenAgo ?? null,
-      status: ip === null ? null : (answers.get(ip)?.status ?? null),
-      shape: ip === null ? null : (answers.get(ip)?.shape ?? null),
-    }
-  })
-  for (const d of recent) {
-    const a = answers.get(d.ip) ?? null
-    if (a === null || claimed.has(d.ip)) continue
-    machines.push({
-      node: null,
-      lanName: d.name,
-      ip: d.ip,
-      lastResolvedAgo: d.lastSeenAgo,
-      status: a.status,
-      shape: a.shape,
-    })
-  }
-  machines.sort((a, b) => rank(a) - rank(b) || label(a).localeCompare(label(b)))
-
   return {
-    port,
     lanDomain: domain.domain,
-    probed: addresses.size,
-    skipped: devices.length - recent.length,
+    controller: view,
+    sync: lastDesiredSync(),
     machines,
-    error,
+    listError: seen.error,
   }
 }

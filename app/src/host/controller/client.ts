@@ -1,20 +1,34 @@
 import { readFileSync } from 'node:fs'
 import { createConnection, type Socket } from 'node:net'
 import { join } from 'node:path'
+import type { NodeCommand } from '../../lib/agent/policy'
 import { env } from '../env'
 import {
   API_VERSION,
   type ClaudeStatus,
+  type CommandOk,
   ControllerError,
+  type ControllerNode,
+  type ControllerNodeDetail,
   claudeStatus,
+  commandOk,
+  type DesiredNode,
   type HelloOk,
   helloOk,
   MAX_LINE,
+  type NodeClaudeAnswer,
+  type NodeTelemetryAnswer,
+  nodeClaudeAnswer,
+  nodeDetail,
+  nodesList,
+  nodeTelemetryAnswer,
   parseLine,
   type Queued,
   queued,
   requestLine,
+  type SetDesiredOk,
   type SystemInfo,
+  setDesiredOk,
   systemInfo,
   type TelemetryGet,
   telemetryGet,
@@ -51,6 +65,14 @@ export type ControllerClient = {
   claudeStatus: () => Promise<ClaudeStatus>
   claudeRestart: () => Promise<Queued>
   telemetryGet: () => Promise<TelemetryGet>
+  nodesList: () => Promise<ControllerNode[]>
+  nodesGet: (id: string) => Promise<ControllerNodeDetail>
+  nodesTelemetry: (id: string) => Promise<NodeTelemetryAnswer>
+  nodesClaude: (id: string) => Promise<NodeClaudeAnswer>
+  /** The app's COMPLETE set of decided keys (./nodes.ts builds it). */
+  nodesSetDesired: (nodes: DesiredNode[]) => Promise<SetDesiredOk>
+  /** A one-shot instruction to one machine: only ever from an admin's click. */
+  nodesCommand: (id: string, command: NodeCommand) => Promise<CommandOk>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
   /** End this client for good: the connection goes, and later calls fail `closed`. */
@@ -65,6 +87,12 @@ type Options = {
   timeoutMs?: number
   backoffMs?: number
   backoffMaxMs?: number
+  /**
+   * Called after every connection's hello, the first and each re-dial: the
+   * controller keeps nothing across its own restart, so this is where the
+   * app hands it the desired set again. Its failure is its own business.
+   */
+  onConnect?: (client: ControllerClient) => void
 }
 
 type Pending = {
@@ -248,6 +276,9 @@ export function createControllerClient(opts: Options): ControllerClient {
         }
         failures = 0
         lastError = null
+        // After the return below has settled `live`, so a call the hook
+        // makes rides this connection rather than dialling another.
+        if (opts.onConnect !== undefined) queueMicrotask(() => opts.onConnect?.(self))
         return l
       })
       .catch((e: unknown) => {
@@ -263,16 +294,26 @@ export function createControllerClient(opts: Options): ControllerClient {
     return dialing
   }
 
-  const call = async <T>(m: string, decodeAnswer: (v: unknown) => T): Promise<T> => {
+  const call = async <T>(
+    m: string,
+    decodeAnswer: (v: unknown) => T,
+    p?: Record<string, unknown>,
+  ): Promise<T> => {
     const l = await connection()
-    return decodeAnswer(await send(l.socket, m))
+    return decodeAnswer(await send(l.socket, m, p))
   }
 
-  return {
+  const self: ControllerClient = {
     systemInfo: () => call('system.info', systemInfo),
     claudeStatus: () => call('claude.status', claudeStatus),
     claudeRestart: () => call('claude.restart', queued),
     telemetryGet: () => call('telemetry.get', telemetryGet),
+    nodesList: () => call('nodes.list', nodesList),
+    nodesGet: (id) => call('nodes.get', nodeDetail, { id }),
+    nodesTelemetry: (id) => call('nodes.telemetry', nodeTelemetryAnswer, { id }),
+    nodesClaude: (id) => call('nodes.claude', nodeClaudeAnswer, { id }),
+    nodesSetDesired: (nodes) => call('nodes.set_desired', setDesiredOk, { nodes }),
+    nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
     close: () => {
       closed = true
@@ -280,6 +321,7 @@ export function createControllerClient(opts: Options): ControllerClient {
       live = null
     },
   }
+  return self
 }
 
 /** A dial that failed, in words a page can print after "Controller not reachable: ". */
@@ -331,7 +373,15 @@ export function controller(): ControllerClient {
   holder[SLOT] = slot
   if (slot.client === null || slot.path !== path) {
     slot.client?.close()
-    slot.client = createControllerClient({ path, client: clientName() })
+    slot.client = createControllerClient({
+      path,
+      client: clientName(),
+      // Every (re)connection hands the controller the desired set again: it
+      // keeps nothing across its own restart (./nodes.ts).
+      onConnect: (c) => {
+        void import('./nodes').then((m) => m.syncDesired({ client: c }))
+      },
+    })
     slot.path = path
   }
   if (!slot.exitHooked) {

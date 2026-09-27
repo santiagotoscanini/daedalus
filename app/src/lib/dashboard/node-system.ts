@@ -1,42 +1,33 @@
+import { type ControllerClient, controller } from '../../host/controller/client'
+import { readNode } from '../../host/controller/nodes'
 import { promQuote, promSeries } from '../../host/prom'
-import {
-  AGENT_PORT,
-  type AgentStatus,
-  agentStatus,
-  type NodeTelemetry,
-  nodeTelemetry,
-  nodeTelemetryFull,
-} from '../agent/status'
-import { getJsonResult } from '../http'
-import { getNode, type NodeRow, nodeToken } from '../repo/nodes'
+import type { AgentStatus, NodeTelemetry } from '../agent/status'
+import { getNode, type NodeRow } from '../repo/nodes'
 import { type BoardReleases, boardReleases } from './board-releases'
 import { type BrowserLatest, browserLatest } from './browser-releases'
 import { type MacReleases, macosReleases } from './macos-releases'
 
 // The System page for a machine that is not this box, the same tabs the
-// box draws for itself (components/machine-system/): one read of the
-// agent's open status page for the agent's own state, one token-gated
-// read of `/telemetry` for the full document (agent/src/telemetry.rs —
-// drive serials, the heaviest processes, the services that are down, the
-// OS's pending updates; the open page carries the machine without the
-// person), and the box's own Prometheus for the six-hour processor
+// box draws for itself (components/machine-system/): what the controller
+// holds for the machine — its status document and the full telemetry
+// document it pushed up its link (agent/src/telemetry.rs: drive serials,
+// the heaviest processes, the services that are down, the OS's pending
+// updates) — and the box's own Prometheus for the six-hour processor
 // history the agent's `/metrics` has been feeding it.
 //
-// One fetch serves every tab. The tabs are a way of reading one document,
-// not five requests, and a machine that answers once has answered for all
-// of them.
-
-const PROBE_MS = [800, 1_500, 2_500]
+// One read serves every tab. The tabs are a way of reading one document,
+// not five requests. A machine that is not connected shows what the
+// controller last heard from it, and nothing once the controller has
+// restarted since.
 
 export type NodeSystemData = {
   node: NodeRow
   status: AgentStatus | null
-  /** Null when the page answered before the agent's first sample, seconds after it starts. */
+  /** Null before the machine's first sample reached the controller. */
   telemetry: NodeTelemetry | null
   /**
-   * Whether `telemetry` is the full document. False when it is the open
-   * page's block — no token yet, or the agent refused it — and
-   * `detailError` says which.
+   * Whether `telemetry` is the full document. False when only the summary
+   * `nodes.get` carries has arrived, and `detailError` says why.
    */
   full: boolean
   detailError: string | null
@@ -56,10 +47,21 @@ export type NodeSystemData = {
 
 export async function loadNodeSystem(
   id: string,
-  opts: { board?: boolean; browsers?: boolean; macos?: boolean } = {},
+  opts: { board?: boolean; browsers?: boolean; macos?: boolean; client?: ControllerClient } = {},
 ): Promise<NodeSystemData | null> {
   const node = await getNode(id)
   if (node === null) return null
+  const client = opts.client ?? controller()
+  // The spark does not need the machine: it is what the box has scraped,
+  // and a machine that is asleep still has a history.
+  const [read, cpuSpark] = await Promise.all([
+    readNode(client, id),
+    promSeries(
+      `daedalus_agent_cpu_usage_percent{host=${promQuote(node.hostname)}}`,
+      6 * 60,
+      120,
+    ).catch(() => []),
+  ])
   const none = {
     node,
     status: null,
@@ -69,121 +71,66 @@ export async function loadNodeSystem(
     releases: null,
     browserLatest: null,
     macos: null,
-    cpuSpark: [] as number[],
+    cpuSpark,
   }
-  if (node.lanIp === null) {
-    return { ...none, error: 'the node has not reported an address' }
+  const d = read.detail
+  if (d === null) return { ...none, error: read.error }
+  if (d.status === null) {
+    return {
+      ...none,
+      error: d.connected ? 'connected, but no status has arrived yet' : 'not connected',
+    }
   }
-  const port = node.statusPort ?? AGENT_PORT
-  const base = `http://${node.lanIp}:${String(port)}`
-  // The spark does not need the machine to answer: it is what the box has
-  // scraped, and a machine that is asleep still has a history.
-  const [r, cpuSpark, token] = await Promise.all([
-    getJsonResult<unknown>(`${base}/status`, {}, PROBE_MS),
-    promSeries(
-      `daedalus_agent_cpu_usage_percent{host=${promQuote(node.hostname)}}`,
-      6 * 60,
-      120,
-    ).catch(() => []),
-    nodeToken(id),
-  ])
-  if (!r.ok) {
-    const why =
-      r.reason.error ?? (r.reason.status === null ? 'no answer' : `HTTP ${String(r.reason.status)}`)
-    return { ...none, cpuSpark, error: `${node.lanIp}:${String(port)} — ${why}` }
-  }
-  let status: AgentStatus
-  let open: NodeTelemetry | null
+  const status = d.status
+
+  let t = d.telemetry
+  let full = false
+  let detailError: string | null = null
   try {
-    status = agentStatus(r.value)
-    open = nodeTelemetry(r.value)
+    const answer = await client.nodesTelemetry(id)
+    if (answer.telemetry !== null) {
+      t = answer.telemetry
+      full = true
+    } else {
+      detailError = 'the full document has not arrived yet'
+    }
   } catch (e) {
-    return { ...none, cpuSpark, error: e instanceof Error ? e.message : 'not a status page' }
+    detailError = e instanceof Error ? e.message : String(e)
   }
-  const withReleases = async (t: NodeTelemetry): Promise<BoardReleases | null> =>
+  if (t === null) return { ...none, status, detailError, error: null }
+
+  const releases =
     opts.board === true
-      ? boardReleases({
+      ? await boardReleases({
           vendor: t.machine.boardManufacturer ?? t.machine.manufacturer,
           product: t.machine.boardProduct ?? t.machine.model,
           biosVersion: t.machine.biosVersion,
           biosDate: t.machine.biosDate,
         })
       : null
-  const withBrowsers = async (t: NodeTelemetry): Promise<BrowserLatest[] | null> =>
+  const browsers =
     opts.browsers === true
-      ? browserLatest(
+      ? await browserLatest(
           t.browsers.map((b) => b.kind),
           node.os,
           node.arch,
         )
       : null
-  // The Mac's own version is on the status page, so Apple's list does not
-  // need the full document either.
-  const withMacos = async (t: NodeTelemetry): Promise<MacReleases | null> =>
+  // The Mac's own version is on the status document, so Apple's list does
+  // not need the full one either.
+  const macos =
     opts.macos === true && node.os === 'macos'
-      ? macosReleases(status.osVersion, t.machine.target)
+      ? await macosReleases(status.osVersion, t.machine.target)
       : null
-  if (open === null) {
-    return { ...none, status, cpuSpark, error: null }
-  }
-  if (token === null) {
-    return {
-      ...none,
-      status,
-      telemetry: open,
-      cpuSpark,
-      releases: await withReleases(open),
-      browserLatest: await withBrowsers(open),
-      macos: await withMacos(open),
-      detailError: 'no node token yet: approve the machine',
-      error: null,
-    }
-  }
-  const fullDoc = await getJsonResult<unknown>(
-    `${base}/telemetry`,
-    { headers: { authorization: `Bearer ${token}` } },
-    PROBE_MS,
-  )
-  if (!fullDoc.ok) {
-    const why =
-      fullDoc.reason.status === 403
-        ? 'the agent refused the box’s token (it may not have heard it yet)'
-        : (fullDoc.reason.error ?? `HTTP ${String(fullDoc.reason.status)}`)
-    return {
-      ...none,
-      status,
-      telemetry: open,
-      releases: await withReleases(open),
-      browserLatest: await withBrowsers(open),
-      macos: await withMacos(open),
-      cpuSpark,
-      detailError: why,
-      error: null,
-    }
-  }
-  try {
-    const t = nodeTelemetryFull(fullDoc.value)
-    return t === null
-      ? { ...none, status, telemetry: open, cpuSpark, detailError: 'empty answer', error: null }
-      : {
-          ...none,
-          status,
-          telemetry: t,
-          full: true,
-          releases: await withReleases(t),
-          browserLatest: await withBrowsers(t),
-          macos: await withMacos(t),
-          cpuSpark,
-          error: null,
-        }
-  } catch (e) {
-    return {
-      ...none,
-      status,
-      telemetry: open,
-      cpuSpark,
-      detailError: e instanceof Error ? e.message : 'not a telemetry document',
-      error: null,
-    }
+  return {
+    ...none,
+    status,
+    telemetry: t,
+    full,
+    detailError,
+    releases,
+    browserLatest: browsers,
+    macos,
+    error: null,
   }
 }

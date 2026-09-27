@@ -13,7 +13,7 @@ import {
 import type { ModelPolicy } from '../../../lib/providers/policy'
 import type { NodeRow } from '../../../lib/repo/nodes'
 import { useShown } from '../../../lib/shown'
-import { Button } from '../../ui/button'
+import { NodeCommandButton } from '../../node-command'
 import { Input } from '../../ui/input'
 import { Picker } from '../../ui/picker'
 import { Switch } from '../../ui/switch'
@@ -260,24 +260,10 @@ function policyClaude(ed: PolicyEditor, n: NodeRow): Row[] {
                 used in, and the cheap one should not be reached past
                 the expensive one. */}
             {ed.claude && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={ed.busy || n.claudeUpdateRequested}
-                onClick={ed.updateClaude}
-              >
-                {n.claudeUpdateRequested ? 'Update queued' : 'Update now'}
-              </Button>
+              <NodeCommandButton id={n.id} command="claude_update" label="Update now" />
             )}
             {ed.claude && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={ed.busy || n.claudeRestartRequested}
-                onClick={ed.restartClaude}
-              >
-                {n.claudeRestartRequested ? 'Restart queued' : 'Restart now'}
-              </Button>
+              <NodeCommandButton id={n.id} command="claude_restart" label="Restart now" />
             )}
           </span>
           <span className={ASIDE}>

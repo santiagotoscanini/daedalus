@@ -17,8 +17,8 @@ import { env } from './env'
 // and a revoke stops it — no rebuild.
 //
 // Rewritten whole on every change that could move a target: approve,
-// revoke, forget, a policy change, and a hello whose address differs from
-// the last (lib/repo/nodes.ts `publishNodeTargets`). The dnsmasq lines below
+// revoke, forget, a policy change, and an address or a MAC the controller
+// saw move (lib/repo/nodes.ts `publishNodeTargets`). The dnsmasq lines below
 // ride the same writes.
 
 export type NodeTarget = {
@@ -53,7 +53,7 @@ export async function writeNodeTargets(nodes: NodeTarget[]): Promise<void> {
   await writeAtomic(join(dir, 'targets.json'), targetsDocument(nodes))
 }
 
-/** Whether the document has ever been written; a hello seeds it when not. */
+/** Whether the document has ever been written; the minute's observation seeds it when not. */
 export function nodeTargetsMissing(): boolean {
   return !existsSync(join(applyDir(), 'nodes', 'targets.json'))
 }

@@ -1,6 +1,7 @@
-import { randomBytes } from 'node:crypto'
 import { asc, eq } from 'drizzle-orm'
-import type { HelloVerdict } from '../../host/agent-hello'
+import { controller } from '../../host/controller/client'
+import { enrollValues, observedFacts, requestDesiredSync } from '../../host/controller/nodes'
+import type { ControllerNode, ControllerNodeDetail } from '../../host/controller/wire'
 import { db } from '../../host/db'
 import { requestGatewaySync } from '../../host/gateway-sync'
 import {
@@ -10,30 +11,22 @@ import {
   writeNodeTargets,
 } from '../../host/node-targets'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
+import type { NodeClaudeSummary } from '../agent/status'
 import type { NodeForFile } from '../nodes-file'
 import { slugOf } from '../nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
 
-// The nodes table: what a verified hello writes, what the Machines tab and
-// the Claude page read, the decisions an admin makes about a row, and the
-// policy Settings › Machines sets on it.
-
-/**
- * Claude Code on the node, as the last hello summarised it (agent/src/
- * claude/mod.rs `Summary`): what the open page also carries — a state, versions
- * and a count, never a session's name, path or id. Read out of the hello
- * payload rather than columns: it is the agent's word, refreshed every
- * minute, and nothing here joins on it.
- */
-type NodeClaudeSummary = {
-  state: string
-  detail: string | null
-  cliVersion: string | null
-  serverVersion: string | null
-  sessions: number
-  startedAt: string | null
-  signedIn: boolean
-}
+// The nodes table: the machines the box has decided about, and what it asks
+// of each. A row is born when an admin approves a key the controller holds
+// pending (`enrollNode`), and carries the decision, the policy Settings ›
+// Machines sets, and the machine's last-known facts — kept from what the
+// controller observed (`recordObserved`), because the controller forgets
+// everything when it restarts and the targets, the DHCP lines and the pages
+// still need an address and a name. Whether a machine is connected, and its
+// Claude summary, are the controller's word, joined in on every read.
+//
+// Every decision and policy save ends in a desired-state sync
+// (host/controller/nodes.ts), which is how it reaches the machine.
 
 export type NodeRow = {
   id: string
@@ -60,37 +53,13 @@ export type NodeRow = {
   approvedAt: string | null
   approvedBy: string | null
   revokedAt: string | null
-  updateCheckRequested: boolean
-  claudeUpdateRequested: boolean
-  claudeRestartRequested: boolean
   policy: NodePolicy
-  /** Present once the node's tray has reported Claude Code. */
+  /** Its link is up at the controller right now. */
+  connected: boolean
+  /** Claude Code there, from the controller's summary; null without one. */
   claude: NodeClaudeSummary | null
-  /** Seconds since the last hello, resolved on the server (the page streams). */
+  /** Seconds since the controller last heard from it (resolved on the server; the page streams). */
   lastSeenAgo: number
-}
-
-/** The agent's own defaults, shown for a key the policy does not set. */
-const POLICY_DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as const
-
-/** The policy the answer to a hello carries: every key resolved; `offer` stays here. */
-function effectivePolicy(p: NodePolicy): {
-  awakeHold: boolean
-  claudeRemoteControl: boolean
-  claudeWorkdir: string | null
-  providers: Record<ProviderKind, { port: number }>
-} {
-  return {
-    awakeHold: p.awakeHold ?? POLICY_DEFAULTS.awakeHold,
-    claudeRemoteControl: p.claudeRemoteControl ?? POLICY_DEFAULTS.claudeRemoteControl,
-    claudeWorkdir: p.claudeWorkdir?.trim() || null,
-    // Every kind a node can offer, with the port it would be probed on: the
-    // agent looks for the ones it implements and ignores the rest, so a kind
-    // added here before the agent knows it is harmless.
-    providers: Object.fromEntries(
-      NODE_PROVIDER_KINDS.map((k) => [k, { port: p.providers?.[k]?.port ?? DEFAULT_PORT[k] }]),
-    ) as Record<ProviderKind, { port: number }>,
-  }
 }
 
 /** The network name a row resolves to: the policy's label, else the hostname's slug. */
@@ -108,24 +77,14 @@ export function providersOf(p: NodePolicy): Record<ProviderKind, { port: number;
   ) as Record<ProviderKind, { port: number; offer: boolean }>
 }
 
-function claudeOf(hello: Record<string, unknown>): NodeClaudeSummary | null {
-  const c = hello.claude
-  if (typeof c !== 'object' || c === null) return null
-  const o = c as Record<string, unknown>
-  const s = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : null)
-  return {
-    state: s('state') ?? 'stopped',
-    detail: s('detail'),
-    cliVersion: s('cli_version'),
-    serverVersion: s('server_version'),
-    sessions: typeof o.sessions === 'number' ? o.sessions : 0,
-    startedAt: s('started_at'),
-    signedIn: o.signed_in === true,
-  }
-}
-
-function row(n: typeof nodes.$inferSelect, household: ReadonlySet<string>): NodeRow {
+function row(
+  n: typeof nodes.$inferSelect,
+  household: ReadonlySet<string>,
+  seen: ControllerNode | undefined,
+): NodeRow {
   const policy = n.policy ?? {}
+  const heard = seen?.lastSeen == null ? Number.NaN : Date.parse(seen.lastSeen)
+  const lastSeen = Math.max(n.lastSeenAt.getTime(), Number.isFinite(heard) ? heard : 0)
   return {
     id: n.id,
     publicKey: n.publicKey,
@@ -136,179 +95,49 @@ function row(n: typeof nodes.$inferSelect, household: ReadonlySet<string>): Node
     namedByHousehold: n.mac !== null && household.has(n.mac.toLowerCase()),
     os: n.os,
     arch: n.arch,
-    agentVersion: n.agentVersion,
+    agentVersion: seen?.agentVersion ?? n.agentVersion,
     mac: n.mac,
-    lanIp: n.lanIp,
+    lanIp: seen?.lanIp ?? n.lanIp,
     statusPort: n.statusPort,
     firstSeenAt: n.firstSeenAt.toISOString(),
-    lastSeenAt: n.lastSeenAt.toISOString(),
+    lastSeenAt: new Date(lastSeen).toISOString(),
     approvedAt: n.approvedAt?.toISOString() ?? null,
     approvedBy: n.approvedBy,
     revokedAt: n.revokedAt?.toISOString() ?? null,
-    updateCheckRequested: n.updateCheckRequested,
-    claudeUpdateRequested: n.claudeUpdateRequested,
-    claudeRestartRequested: n.claudeRestartRequested,
     policy,
-    claude: claudeOf(n.lastHello),
-    lastSeenAgo: (Date.now() - n.lastSeenAt.getTime()) / 1000,
+    connected: seen?.connected === true,
+    claude: seen?.claude ?? null,
+    lastSeenAgo: (Date.now() - lastSeen) / 1000,
   }
+}
+
+/** The controller's list by id; empty when it cannot be read (every row then reads as not connected). */
+async function seenById(): Promise<Map<string, ControllerNode>> {
+  const list = await controller()
+    .nodesList()
+    .catch(() => [] as ControllerNode[])
+  return new Map(list.map((s) => [s.id, s]))
 }
 
 export async function listNodes(): Promise<NodeRow[]> {
   // In the order they joined, and never by when they last spoke: a picker
-  // whose pills swap places between two loads because one machine said
-  // hello a second later reads as a race, not as a list.
-  const all = await db.select().from(nodes).orderBy(asc(nodes.firstSeenAt), asc(nodes.id))
-  const household = await householdMacs()
-  return all.map((n) => row(n, household))
+  // whose pills swap places between two loads because one machine spoke a
+  // second later reads as a race, not as a list.
+  const [all, household, seen] = await Promise.all([
+    db.select().from(nodes).orderBy(asc(nodes.firstSeenAt), asc(nodes.id)),
+    householdMacs(),
+    seenById(),
+  ])
+  return all.map((n) => row(n, household, seen.get(n.id)))
 }
 
 export async function getNode(id: string): Promise<NodeRow | null> {
-  const [n] = await db.select().from(nodes).where(eq(nodes.id, id)).limit(1)
-  return n === undefined ? null : row(n, await householdMacs())
-}
-
-/**
- * What the answer to a hello carries: the decision, the policy (only for an
- * approved node — before that the agent's own defaults stand), and the
- * instructions.
- */
-export type HelloAnswer = {
-  state: NodeState
-  checkUpdate: boolean
-  updateClaude: boolean
-  restartClaude: boolean
-  policy: ReturnType<typeof effectivePolicy> | null
-  /** The node token for an approved node: what opens its full Claude report to the box. */
-  nodeToken: string | null
-}
-
-/**
- * Record a verified hello. A first hello inserts the row as `pending`; every
- * later one refreshes what the machine says about itself and when. The
- * state is never touched here — only an admin moves it — and the answer is
- * what the agent shows: whether it is waiting, trusted, or turned away.
- */
-export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promise<HelloAnswer> {
-  const p = v.payload
-  const now = new Date()
-  const [before] = await db
-    .select({ lanIp: nodes.lanIp })
-    .from(nodes)
-    .where(eq(nodes.id, v.nodeId))
-    .limit(1)
-  const [saved] = await db
-    .insert(nodes)
-    .values({
-      id: v.nodeId,
-      publicKey: v.publicKey,
-      hostname: p.hostname,
-      os: p.os,
-      arch: p.arch,
-      agentVersion: p.agentVersion,
-      mac: p.mac,
-      lanIp: p.lanIp,
-      statusPort: p.statusPort,
-      lastHello: v.raw,
-      firstSeenAt: now,
-      lastSeenAt: now,
-    })
-    .onConflictDoUpdate({
-      target: nodes.id,
-      set: {
-        hostname: p.hostname,
-        os: p.os,
-        arch: p.arch,
-        agentVersion: p.agentVersion,
-        mac: p.mac,
-        lanIp: p.lanIp,
-        statusPort: p.statusPort,
-        lastHello: v.raw,
-        lastSeenAt: now,
-      },
-    })
-    .returning({
-      state: nodes.state,
-      checkUpdate: nodes.updateCheckRequested,
-      updateClaude: nodes.claudeUpdateRequested,
-      restartClaude: nodes.claudeRestartRequested,
-      policy: nodes.policy,
-      token: nodes.token,
-    })
-  const state = saved?.state ?? 'pending'
-  const checkUpdate = saved?.checkUpdate === true
-  const updateClaude = saved?.updateClaude === true
-  const restartClaude = saved?.restartClaude === true
-  // A machine whose address moved since the last hello moves its scrape
-  // target too. Compared on the row before this write; a first hello is
-  // pending and publishes nothing.
-  if (
-    state === 'approved' &&
-    ((before?.lanIp ?? null) !== (p.lanIp ?? null) || nodeTargetsMissing())
-  ) {
-    await publishNodeTargets()
-  }
-  // A provider may have changed what it serves since the last hello: the
-  // gateway sync runs soon, once for a burst of hellos.
-  if (state === 'approved') requestGatewaySync()
-  // An instruction is delivered once: it goes out with this answer and is
-  // cleared in the same breath, so a second hello does not repeat it.
-  if (checkUpdate || updateClaude || restartClaude) {
-    await db
-      .update(nodes)
-      .set({
-        updateCheckRequested: false,
-        claudeUpdateRequested: false,
-        claudeRestartRequested: false,
-      })
-      .where(eq(nodes.id, v.nodeId))
-  }
-  return {
-    state,
-    checkUpdate,
-    updateClaude,
-    restartClaude,
-    policy: state === 'approved' ? effectivePolicy(saved?.policy ?? {}) : null,
-    // Minted at approval (approveNode), cleared at revocation.
-    nodeToken: state === 'approved' ? (saved?.token ?? null) : null,
-  }
-}
-
-/** Ask the node to check for updates on its next hello. */
-export async function requestUpdateCheck(id: string): Promise<boolean> {
-  const updated = await db
-    .update(nodes)
-    .set({ updateCheckRequested: true })
-    .where(eq(nodes.id, id))
-    .returning({ id: nodes.id })
-  return updated.length > 0
-}
-
-/**
- * Ask the node's tray to update Claude Code on its next hello.
- *
- * Interrupts nothing: the new version installs beside the running one and
- * takes effect the next time the CLI starts, which is upstream's own model.
- * Moving the RUNNING server onto it is `requestClaudeRestart`, and that one
- * ends every session on the machine — which is why these are two verbs.
- */
-export async function requestClaudeUpdate(id: string): Promise<boolean> {
-  const updated = await db
-    .update(nodes)
-    .set({ claudeUpdateRequested: true })
-    .where(eq(nodes.id, id))
-    .returning({ id: nodes.id })
-  return updated.length > 0
-}
-
-/** Ask the node's tray to restart `claude remote-control` on its next hello. */
-export async function requestClaudeRestart(id: string): Promise<boolean> {
-  const updated = await db
-    .update(nodes)
-    .set({ claudeRestartRequested: true })
-    .where(eq(nodes.id, id))
-    .returning({ id: nodes.id })
-  return updated.length > 0
+  const [[n], household, seen] = await Promise.all([
+    db.select().from(nodes).where(eq(nodes.id, id)).limit(1),
+    householdMacs(),
+    seenById(),
+  ])
+  return n === undefined ? null : row(n, household, seen.get(id))
 }
 
 /**
@@ -333,61 +162,93 @@ export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boo
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   await publishNodeTargets()
+  // What the machine is told travels with the desired set.
+  requestDesiredSync()
   // An alias, a mode or an offer changed: the gateway follows.
   requestGatewaySync()
   return updated.length > 0
 }
 
+/** Approve a row the table already holds (a revoked key, trusted again). */
 export async function approveNode(id: string, by: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
-    .set({
-      state: 'approved',
-      approvedAt: new Date(),
-      approvedBy: by,
-      revokedAt: null,
-      token: mintToken(),
-    })
+    .set({ state: 'approved', approvedAt: new Date(), approvedBy: by, revokedAt: null })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   await publishNodeTargets()
+  requestDesiredSync()
   return updated.length > 0
+}
+
+/**
+ * Approve a key the controller holds pending: the row is made from its key
+ * and its hello, approved in the same write.
+ */
+export async function enrollNode(detail: ControllerNodeDetail, by: string): Promise<boolean> {
+  const v = enrollValues(detail)
+  const now = new Date()
+  const made = await db
+    .insert(nodes)
+    .values({
+      ...v,
+      state: 'approved',
+      firstSeenAt: now,
+      lastSeenAt: now,
+      approvedAt: now,
+      approvedBy: by,
+    })
+    .onConflictDoNothing()
+    .returning({ id: nodes.id })
+  await publishNodeTargets()
+  requestDesiredSync()
+  return made.length > 0
 }
 
 export async function revokeNode(id: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
-    .set({ state: 'revoked', revokedAt: new Date(), token: null })
+    .set({ state: 'revoked', revokedAt: new Date() })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   await publishNodeTargets()
+  requestDesiredSync()
   return updated.length > 0
 }
 
-/** Forget a row entirely — for a machine that is gone, or a key that was a mistake. */
+/**
+ * Forget a row entirely — for a machine that is gone, or a key that was a
+ * mistake. Left out of the desired set, a key that connects again waits
+ * pending, as a stranger's would.
+ */
 export async function forgetNode(id: string): Promise<boolean> {
   const gone = await db.delete(nodes).where(eq(nodes.id, id)).returning({ id: nodes.id })
   await publishNodeTargets()
+  requestDesiredSync()
   return gone.length > 0
 }
 
-/** 32 random bytes as hex: what the box shows the agent to read its full report. */
-function mintToken(): string {
-  return randomBytes(32).toString('hex')
-}
-
 /**
- * The token for one node, for the server-side loader that reads the
- * agent's `/claude` — never for a page. Null for a node that is not
- * approved or has not said hello since approval.
+ * Keep each decided row's last-known facts from what the controller
+ * observed (host/controller/nodes.ts `observedFacts`), and re-render the
+ * targets and DHCP lines when an address, a MAC or a name moved.
  */
-export async function nodeToken(id: string): Promise<string | null> {
-  const [n] = await db
-    .select({ token: nodes.token, state: nodes.state })
-    .from(nodes)
-    .where(eq(nodes.id, id))
-    .limit(1)
-  return n?.state === 'approved' ? (n.token ?? null) : null
+export async function recordObserved(seen: readonly ControllerNode[]): Promise<void> {
+  if (seen.length === 0) return
+  const byId = new Map(seen.map((s) => [s.id, s]))
+  const all = await db.select().from(nodes)
+  let moved = nodeTargetsMissing()
+  for (const n of all) {
+    const s = byId.get(n.id)
+    if (s === undefined || n.state !== 'approved') continue
+    const facts = observedFacts(n, s)
+    if (facts === null) continue
+    await db.update(nodes).set(facts).where(eq(nodes.id, n.id))
+    if (facts.lanIp !== undefined || facts.mac !== undefined || facts.hostname !== undefined) {
+      moved = true
+    }
+  }
+  if (moved) await publishNodeTargets()
 }
 
 /**
@@ -401,14 +262,14 @@ async function publishNodeTargets(): Promise<void> {
     const approved = all.filter((n) => n.state === 'approved')
     await writeNodeTargets(
       approved
-        .filter((n) => n.lanIp !== null)
+        .filter((n) => n.lanIp !== null && n.statusPort !== null)
         .map((n) => ({
           id: n.id,
           hostname: n.hostname,
-          name: (n.policy ?? {}).displayName?.trim() || n.hostname,
+          name: n.policy?.displayName?.trim() || n.hostname,
           os: n.os,
           lanIp: n.lanIp ?? '',
-          statusPort: n.statusPort ?? 7787,
+          statusPort: n.statusPort ?? 0,
         })),
     )
     // The dnsmasq lines: how each machine gets its name from pi-hole. A MAC

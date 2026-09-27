@@ -93,7 +93,9 @@ function stop(): Promise<void> {
   return new Promise((resolve) => (s === null ? resolve() : s.close(() => resolve())))
 }
 
-function client(opts: { timeoutMs?: number; backoffMs?: number } = {}): ControllerClient {
+function client(
+  opts: { timeoutMs?: number; backoffMs?: number; onConnect?: (c: ControllerClient) => void } = {},
+): ControllerClient {
   const c = createControllerClient({ path, client: 'daedalus/test', ...opts })
   clients.push(c)
   return c
@@ -300,5 +302,70 @@ describe('the controller client', () => {
   it('answers not_configured when the box binds no socket', async () => {
     const c = createControllerClient({ path: undefined, client: 'daedalus/test' })
     expect((await rejection(c.systemInfo())).code).toBe('not_configured')
+  })
+
+  it('asks the nodes methods with their selectors, and decodes the answers', async () => {
+    await serve(
+      agent((req) => {
+        switch (req.m) {
+          case 'nodes.list':
+            return answer(req.id, { nodes: [] })
+          case 'nodes.set_desired':
+            return answer(req.id, { nodes: 1, approved: [], revoked: [], pending: [], policy: [] })
+          case 'nodes.command':
+            return answer(req.id, { delivered: false, queued: true })
+          case 'nodes.telemetry':
+            return answer(req.id, { id: '0123456789abcdef', telemetry: null, received_at: null })
+          default:
+            return fail(req.id, 'not_found', 'no machine')
+        }
+      }),
+    )
+    const c = client()
+    expect(await c.nodesList()).toEqual([])
+    const set = [
+      {
+        id: '0123456789abcdef',
+        public_key: 'ab'.repeat(32),
+        state: 'revoked' as const,
+      },
+    ]
+    expect((await c.nodesSetDesired(set)).nodes).toBe(1)
+    // Only ever against this fake: a command never reaches a real controller in a test.
+    expect(await c.nodesCommand('0123456789abcdef', 'check_update')).toEqual({
+      delivered: false,
+      queued: true,
+    })
+    expect((await c.nodesTelemetry('0123456789abcdef')).telemetry).toBeNull()
+    expect((await rejection(c.nodesGet('0123456789abcdef'))).code).toBe('not_found')
+    expect(seen.slice(1).map((r) => [r.m, r.p])).toEqual([
+      ['nodes.list', undefined],
+      ['nodes.set_desired', { nodes: set }],
+      ['nodes.command', { id: '0123456789abcdef', command: 'check_update' }],
+      ['nodes.telemetry', { id: '0123456789abcdef' }],
+      ['nodes.get', { id: '0123456789abcdef' }],
+    ])
+  })
+
+  it('calls onConnect after every hello, the first and each re-dial, on that connection', async () => {
+    await serve(agent())
+    let connects = 0
+    const c = client({
+      onConnect: (self) => {
+        connects += 1
+        // The hook's own call rides the connection that just opened.
+        void self.systemInfo()
+      },
+    })
+    await c.systemInfo()
+    await tick(30)
+    expect(connects).toBe(1)
+    expect(connections).toBe(1)
+    for (const s of sockets) s.destroy()
+    await tick(30)
+    await c.systemInfo()
+    await tick(30)
+    expect(connects).toBe(2)
+    expect(connections).toBe(2)
   })
 })

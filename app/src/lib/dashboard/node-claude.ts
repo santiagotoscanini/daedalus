@@ -1,82 +1,51 @@
-import {
-  AGENT_PORT,
-  type AgentStatus,
-  agentStatus,
-  type NodeClaude,
-  nodeClaudeReport,
-} from '../agent/status'
-import { getJsonResult } from '../http'
-import { getNode, type NodeRow, nodeToken } from '../repo/nodes'
+import { type ControllerClient, controller } from '../../host/controller/client'
+import { readNode } from '../../host/controller/nodes'
+import type { AgentStatus, NodeClaude } from '../agent/status'
+import { getNode, type NodeRow } from '../repo/nodes'
 
-// The Claude tab (System › Claude) for a machine that is not this box.
-//
-// Two reads of the agent's status page. `/status` is open to the LAN and
-// carries a summary; `/claude` is the tray's full report — session names,
-// working directories, ids, the environment id, the login's dates — and
-// the agent answers it only to the node token the box minted at approval
-// and hands down every hello answer (lib/repo/nodes.ts). The token never
-// reaches a page: this loader runs on the server and sends it as a bearer.
-// No snapshot, no Loki — the node's own log stays on the node.
-
-/** A LAN machine that is up answers within the first step; one asleep does not answer at all. */
-const PROBE_MS = [800, 1_500, 2_500]
+// The Claude tab (System › Claude) for a machine that is not this box: its
+// status document and its session's full Claude report — session names,
+// working directories, ids, the environment id, the login's dates — as the
+// machine pushed them up its link and the controller holds them. No
+// snapshot, no Loki — the machine's own log stays on the machine.
 
 export type NodeClaudeData = {
   node: NodeRow
-  /** The status page, when it answered just now. */
+  /** The status document, when the controller holds one. */
   status: AgentStatus | null
-  /** The full report, when the agent accepted the box's token and the tray is reporting. */
+  /** The full report, when the machine's session has sent one. */
   report: NodeClaude | null
-  /** Why the agent refused the report, when it did (no token yet, a token it has not heard). */
+  /** Why there is no report, when the controller could not say. */
   reportError: string | null
-  /** Why the status page did not answer, when it did not. */
+  /** Why there is no status document, when there is none. */
   error: string | null
 }
 
-export async function loadNodeClaude(id: string): Promise<NodeClaudeData | null> {
+export async function loadNodeClaude(
+  id: string,
+  client: ControllerClient = controller(),
+): Promise<NodeClaudeData | null> {
   const node = await getNode(id)
   if (node === null) return null
   const none = { node, status: null, report: null, reportError: null }
-  if (node.lanIp === null) return { ...none, error: 'the node has not reported an address' }
-  const port = node.statusPort ?? AGENT_PORT
-  const base = `http://${node.lanIp}:${String(port)}`
-  const r = await getJsonResult<unknown>(`${base}/status`, {}, PROBE_MS)
-  if (!r.ok) {
-    const why =
-      r.reason.error ?? (r.reason.status === null ? 'no answer' : `HTTP ${String(r.reason.status)}`)
-    return { ...none, error: `${node.lanIp}:${String(port)} — ${why}` }
-  }
-  let status: AgentStatus
-  try {
-    status = agentStatus(r.value)
-  } catch (e) {
-    return { ...none, error: e instanceof Error ? e.message : 'not a status page' }
-  }
-
-  const token = await nodeToken(id)
-  if (token === null) {
-    return { ...none, status, error: null, reportError: 'no node token yet: approve the machine' }
-  }
-  const full = await getJsonResult<unknown>(
-    `${base}/claude`,
-    { headers: { authorization: `Bearer ${token}` } },
-    PROBE_MS,
-  )
-  if (!full.ok) {
-    const why =
-      full.reason.status === 403
-        ? 'the agent refused the box’s token (it may not have heard it yet)'
-        : (full.reason.error ?? `HTTP ${String(full.reason.status)}`)
-    return { ...none, status, error: null, reportError: why }
+  const read = await readNode(client, id)
+  const d = read.detail
+  if (d === null) return { ...none, error: read.error }
+  if (d.status === null) {
+    return {
+      ...none,
+      error: d.connected ? 'connected, but no status has arrived yet' : 'not connected',
+    }
   }
   try {
-    return { node, status, report: nodeClaudeReport(full.value), reportError: null, error: null }
+    const answer = await client.nodesClaude(id)
+    return { node, status: d.status, report: answer.report, reportError: null, error: null }
   } catch (e) {
     return {
       ...none,
-      status,
+      status: d.status,
       error: null,
-      reportError: e instanceof Error ? e.message : 'not a report',
+      reportError: e instanceof Error ? e.message : String(e),
     }
   }
 }

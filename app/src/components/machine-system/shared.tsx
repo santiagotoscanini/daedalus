@@ -161,7 +161,7 @@ export function BoxHead({ h }: { h: BoxHeadData }) {
   )
 }
 
-/** A node's strip, from its row, its agent's page and its telemetry. */
+/** A node's strip, from its row, its status document and its telemetry. */
 export function MachineHead({
   d,
 }: {
@@ -170,9 +170,10 @@ export function MachineHead({
   const { node, status } = d
   const t = d.telemetry ?? null
   const edition = status?.osName || node.os
-  const awake =
-    status === null
-      ? { label: 'not answering', tone: 'muted' as Tone }
+  const awake = !node.connected
+    ? { label: 'not connected', tone: 'muted' as Tone }
+    : status === null
+      ? { label: 'no status yet', tone: 'muted' as Tone }
       : status.awakeHold
         ? { label: 'held awake', tone: 'ok' as Tone }
         : status.policy.awakeHold
@@ -201,37 +202,37 @@ export function MachineHead({
   )
 }
 /**
- * What the page can say when there is no document to draw: the agent did
- * not answer, or it has not sampled yet. Returned in place of the tabs'
- * boards, so every tab says the same thing rather than each drawing a grid
- * of dashes.
+ * What the page can say when there is no document to draw: the controller
+ * holds nothing from the machine, or no sample yet. Returned in place of the
+ * tabs' boards, so every tab says the same thing rather than each drawing a
+ * grid of dashes.
  */
 export function NoDocument({ d }: { d: NodeSystemData }) {
   const { node, status } = d
   if (status === null) {
     return (
       <p className={EMPTY}>
-        The agent on {node.hostname} did not answer{d.error !== null && `: ${d.error}`}. The machine
-        is asleep, off, or on a network this box cannot reach; the last hello was{' '}
-        {since(node.lastSeenAgo)}.
+        Nothing from {node.hostname}
+        {d.error !== null && `: ${d.error}`}. The machine is asleep, off, or its agent cannot reach
+        the controller; it was last heard {since(node.lastSeenAgo)}.
       </p>
     )
   }
   return (
     <p className={EMPTY}>
-      The agent on {node.hostname} answers but has not sampled the machine yet; its first sample
-      comes a few seconds after it starts.
+      {node.hostname} is connected but has not sent a sample yet; its first comes a few seconds
+      after the agent starts.
     </p>
   )
 }
 
 /**
  * The line under a board that only the full document can fill: why this
- * page is reading the open block, when it is.
+ * page is reading the summary, when it is.
  */
 export function DetailNote({ d }: { d: NodeSystemData }) {
   if (d.full || d.detailError === null) return null
-  return <p className={cn(FOOT, 'text-warning')}>Open page only: {d.detailError}.</p>
+  return <p className={cn(FOOT, 'text-warning')}>Summary only: {d.detailError}.</p>
 }
 
 /** The agent's own list of what this OS would not let it read. */

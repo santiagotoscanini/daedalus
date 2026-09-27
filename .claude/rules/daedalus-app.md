@@ -28,7 +28,7 @@ here.
   where GitHub returns the App manifest's `?code&state`. The `api.*.ts`
   server routes are only what an
   outside caller needs — healthz, the deploy hook (zot's push event),
-  the GitHub push webhook, a node agent's hello, app-icon,
+  the GitHub push webhook, app-icon,
   profile-picture, and the two image servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
   screenshot. No route is a "scriptable twin" of a button: the UI's
@@ -57,7 +57,10 @@ here.
   github, hosts, site, controller, modules). `ctx.controller` is the agent on
   the box over its unix socket (`host/controller/`: one connection per
   process, kept on globalThis so a Vite reload cannot leak one — the agent
-  serves 16). `ctx.prom` and `ctx.loki` are the only way a module
+  serves 16), and the only way the app reaches the other machines:
+  `host/controller/nodes.ts` hands it the desired set (every approved and
+  revoked key with its policy) on each (re)connection and after every
+  decision, and the pages read `nodes.*` from it. `ctx.prom` and `ctx.loki` are the only way a module
   reads PromQL or LogQL, and `ctx.github.app` / `ctx.github.anon` the
   only way it reads GitHub — the boundary test refuses a value import of
   `host/prom`, `host/loki` or `host/keys` under a module's `data/`.

@@ -141,7 +141,7 @@ export async function loadRunners(ctx: Ctx): Promise<RunnersData> {
           os,
           arch: n.arch,
           box: false,
-          online: n.lastSeenAgo < 120,
+          online: n.connected,
           agentVersion: n.agentVersion,
           lastSeenAgo: n.lastSeenAgo,
           labels: [
