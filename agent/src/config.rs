@@ -723,6 +723,8 @@ mod tests {
         assert_eq!(cfg.mode, Mode::Controller);
     }
 
+    // Controller mode exists only on the box (unix): these paths are unix paths.
+    #[cfg(unix)]
     #[test]
     fn the_controller_table_is_the_boxs_policy_and_a_node_ignores_it() {
         let text = "mode = \"controller\"\n[controller]\nclaude_remote_control = true\n\
@@ -762,6 +764,8 @@ mod tests {
         assert_eq!(node.claude_unit(), claude_unit_name());
     }
 
+    // Controller mode exists only on the box (unix): these paths are unix paths.
+    #[cfg(unix)]
     #[test]
     fn the_controller_table_is_checked_in_controller_mode() {
         let check = |table: &str| {
