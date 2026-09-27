@@ -1,4 +1,5 @@
-//! The macOS side of `install`, `uninstall` and `run`: two launchd jobs.
+//! The macOS side of `install`, `uninstall` and `run` — macOS's `os::svc`:
+//! two launchd jobs.
 //!
 //!   /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist
 //!       the service, as root, at boot, kept alive — `daedalus-agent run`
@@ -15,7 +16,7 @@
 //! KeepAlive starts it again too.
 //!
 //! `run` is `agent_main` with SIGTERM as the stop: launchd sends it on
-//! `bootout` and at shutdown.
+//! `bootout` and at shutdown (the relay is unix.rs's `on_interrupt`).
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -39,28 +40,15 @@ fn tray_plist() -> PathBuf {
     PathBuf::from(format!("/Library/LaunchAgents/{TRAY_LABEL}.plist"))
 }
 
-static STOP: AtomicBool = AtomicBool::new(false);
-
-extern "C" fn on_term(_: libc::c_int) {
-    STOP.store(true, Ordering::Relaxed);
-}
+/// launchd's KeepAlive restarts the menu bar app, and `run` kickstarts it
+/// at every start; the service does not watch it besides.
+pub const WATCHES_TRAY: bool = false;
 
 /// `daedalus-agent run` under launchd: the agent until SIGTERM or SIGINT.
-pub fn run() -> Result<()> {
-    // SAFETY: the handler only stores to an atomic.
-    unsafe {
-        libc::signal(libc::SIGTERM, on_term as *const () as libc::sighandler_t);
-        libc::signal(libc::SIGINT, on_term as *const () as libc::sighandler_t);
-    }
+pub fn run_service() -> Result<()> {
     let stop = Arc::new(AtomicBool::new(false));
     let relay = Arc::clone(&stop);
-    std::thread::spawn(move || loop {
-        if STOP.load(Ordering::Relaxed) {
-            relay.store(true, Ordering::Relaxed);
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    });
+    super::on_interrupt(move || relay.store(true, Ordering::Relaxed));
     if is_root() {
         converge_permissions();
         // A moment later, once agent_main has opened the log, so the
@@ -240,11 +228,18 @@ pub fn uninstall() -> Result<()> {
 /// read config.toml, and launchd has to read the plists. Run at install
 /// AND at every service start, because a self-update swaps binaries
 /// without re-running install. The identity key stays root's alone
-/// (0600, identity.rs).
+/// (0600, `os::write_private`).
 pub fn converge_permissions() {
     let exe = std::env::current_exe().unwrap_or_default();
     let bin = exe.parent().map(Path::to_path_buf).unwrap_or_default();
-    let dirs = [config::data_dir(), bin.clone(), config::log_dir()];
+    // config.toml's directory is the data directory unless `data_dir`
+    // moved the rest (config.rs); both are converged.
+    let dirs = [
+        config::config_dir(),
+        config::data_dir(),
+        bin.clone(),
+        config::log_dir(),
+    ];
     let files = [
         config::config_path(),
         config::state_path(),
@@ -295,6 +290,13 @@ fn launchctl_timeout(args: &[&str], secs: u64) -> Result<String> {
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+}
+
+/// `os::svc`'s tray start: `kickstart_tray`, whose outcome is logged, not
+/// returned.
+pub fn launch_tray_or_session() -> Result<()> {
+    kickstart_tray();
+    Ok(())
 }
 
 /// Start the menu bar app in the console user's session if it is not

@@ -1,67 +1,42 @@
 //! The tray icon: the daedalus mark in the taskbar's corner, showing what
-//! the service reports.
+//! the service reports — a UI over the session (session.rs).
 //!
 //! A separate, windowless program in the desktop session, because the
-//! service runs in session 0 where there is no taskbar to draw on. It reads
-//! the status page on loopback every `POLL` and reflects it: the icon
-//! (ember when all is well, an amber dot when something wants attention,
-//! grey when the service does not answer), the tooltip, and a menu whose
-//! first lines are the state and whose rest are the few things worth a
-//! click — the status page, a check for updates, a Claude restart, the two
-//! logs, quit.
+//! service runs in session 0 where there is no taskbar to draw on. The
+//! session reads the status page on loopback every `session::POLL`; the
+//! tray reflects each read: the icon (ember when all is well, an amber dot
+//! when something wants attention, grey when the service does not answer),
+//! the tooltip, and a menu whose first lines are the state and whose rest
+//! are the few things worth a click — the status page, a check for
+//! updates, a Claude restart, the two logs, quit.
 //!
-//! It is also the Claude supervisor (claude/): this process is the one in
-//! the user's session, with the user's Claude login, so `claude
-//! remote-control` runs as its child. Every poll it sends the service a
-//! report of that and reads back a `ReportAnswer` — run it or not, where,
-//! and the one-shot update and restart. The service (session 0 on Windows,
-//! root on macOS) could do neither.
+//! The session is also the Claude supervisor (claude/): this process is
+//! the one in the user's session, with the user's Claude login, so `claude
+//! remote-control` runs as its child, reported to the service every poll.
+//! The tray owns the session, and drops it — stopping the server — before
+//! its own icon.
 //!
-//! It also keeps itself current: when the page reports a version other than
-//! its own, an update has swapped the binaries under it, and it restarts
-//! itself onto the new one. One instance at a time: a named mutex on
-//! Windows, a file lock on macOS.
+//! It also keeps itself current: when the session sees the page report a
+//! version other than its own, an update has swapped the binaries under
+//! it, and the tray restarts itself onto the new one. One instance at a
+//! time, and the loop that drives all this, are the OS's
+//! (os/windows/tray.rs: a named mutex and the Win32 message loop;
+//! os/macos/tray.rs: a file lock and a tao event loop).
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-use crate::claude::{Report, ReportAnswer, Supervisor};
-use crate::hello::Policy;
+use crate::claude::Report;
+use crate::os::tray::{open, relaunch_self};
+use crate::session::{Page, Session, Tick};
 use crate::{config, DISPLAY_NAME, VERSION};
 
-const POLL: Duration = Duration::from_secs(5);
 const ICON_OK: &[u8] = include_bytes!("../assets/tray-ok.png");
 const ICON_WARN: &[u8] = include_bytes!("../assets/tray-warn.png");
 const ICON_OFF: &[u8] = include_bytes!("../assets/tray-off.png");
-
-/// The part of the status page the tray reads. Everything else it ignores.
-#[derive(Deserialize, Default)]
-struct Page {
-    version: String,
-    awake_hold: bool,
-    hold_error: Option<String>,
-    update_available: Option<String>,
-    restart_pending: bool,
-    last_update_check: Option<String>,
-    last_update_result: Option<String>,
-    #[serde(default)]
-    control_plane: Box_,
-    #[serde(default)]
-    policy: Policy,
-}
-
-/// The box, as the page reports it.
-#[derive(Deserialize, Default)]
-struct Box_ {
-    url: Option<String>,
-    state: Option<String>,
-    error: Option<String>,
-}
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum Look {
@@ -91,21 +66,6 @@ fn decode(png: &[u8]) -> Result<Icon> {
         other => anyhow::bail!("tray icon is {other:?}, not RGB(A)"),
     };
     Icon::from_rgba(rgba, info.width, info.height).context("tray icon pixels")
-}
-
-fn read_page(port: u16) -> Option<Page> {
-    ureq::get(&format!("http://127.0.0.1:{port}/status"))
-        .timeout(Duration::from_secs(2))
-        .call()
-        .ok()?
-        .into_json()
-        .ok()
-}
-
-fn request_check(port: u16) {
-    let _ = ureq::post(&format!("http://127.0.0.1:{port}/update/check"))
-        .timeout(Duration::from_secs(2))
-        .call();
 }
 
 /// `HH:MM` of an RFC 3339 stamp, left in UTC: converting to the local clock
@@ -316,83 +276,50 @@ fn claude_line(r: &Report) -> String {
     }
 }
 
-/// Send the supervisor's report to the service; its answer says whether the
-/// box wants the server running, where, and whether to update or restart
-/// it now.
-fn send_report(port: u16, report: &Report) -> Option<ReportAnswer> {
-    ureq::post(&format!("http://127.0.0.1:{port}/claude/report"))
-        .timeout(Duration::from_secs(2))
-        .send_json(serde_json::to_value(report).ok()?)
-        .ok()?
-        .into_json()
-        .ok()
-}
-
-/// Start this same program again from its path and leave. Used when the
-/// service reports a version other than ours: the file under our feet is a
-/// newer one by then. The supervisor is dropped with us, so the Claude
-/// server restarts under the new tray — the one interruption an agent
-/// update costs a session on this machine. Under launchd, leaving is
-/// enough: KeepAlive starts the new binary.
-fn relaunch_self() {
-    #[cfg(windows)]
-    if let Ok(exe) = std::env::current_exe() {
-        let _ = std::process::Command::new(exe).spawn();
-    }
-}
-
 /// What a tick or a menu click decided.
 #[derive(PartialEq, Eq)]
-enum Flow {
+pub enum Flow {
     Continue,
     Quit,
 }
 
-/// The tray's state between ticks: the supervisor, the menu, and when to
-/// look at the page next. The platform loops below drive it — Win32
+/// The tray between ticks: the session, the menu, and the two log paths
+/// the menu opens. The platform loops (os/*/tray.rs) drive it — Win32
 /// messages on Windows, a tao event loop on macOS — and it knows nothing
-/// about either.
-struct Session {
-    port: u16,
+/// about either. Fields drop in order: the session (and with it the Claude
+/// server) before the icon.
+pub struct Tray {
+    session: Session,
+    ui: Ui,
     logs: PathBuf,
     claude_log: PathBuf,
-    sup: Supervisor,
-    ui: Ui,
-    next_poll: Instant,
 }
 
-impl Session {
-    fn start() -> Result<Self> {
+impl Tray {
+    pub fn start() -> Result<Self> {
         let cfg = config::load_or_default()?;
         let logs: PathBuf = config::user_log_dir();
         let claude_log = logs.join("claude-rc.log");
         let ui = Ui::build()?;
-        // The Claude server, in this session with this user's login. Wanted
-        // (as `Policy::default()` has it) until the service relays the box's
-        // policy, in the most recent trusted project until it names one.
-        let sup = Supervisor::new(None, claude_log.clone(), true);
+        let session = Session::new(cfg.port, claude_log.clone());
         Ok(Self {
-            port: cfg.port,
+            session,
+            ui,
             logs,
             claude_log,
-            sup,
-            ui,
-            next_poll: Instant::now(),
         })
     }
 
     /// Every menu click since the last look.
-    fn menu(&mut self) -> Flow {
+    pub fn menu(&mut self) -> Flow {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
             let id = ev.id();
             if *id == self.ui.open_status.id() {
-                open(&format!("http://127.0.0.1:{}/status", self.port));
+                open(&format!("http://127.0.0.1:{}/status", self.session.port()));
             } else if *id == self.ui.check_now.id() {
-                request_check(self.port);
-                self.next_poll = Instant::now() + Duration::from_secs(2);
+                self.session.check_updates_now();
             } else if *id == self.ui.restart_claude.id() {
-                self.sup.restart();
-                self.next_poll = Instant::now() + Duration::from_secs(1);
+                self.session.restart_claude();
             } else if *id == self.ui.open_logs.id() {
                 open(&self.logs.to_string_lossy());
             } else if *id == self.ui.open_claude_log.id() {
@@ -404,218 +331,46 @@ impl Session {
         Flow::Continue
     }
 
-    /// Advance the supervisor and, when due, read the page, report, and
-    /// redraw. Quit means an update swapped the binary and we are leaving
-    /// for the new one.
-    fn tick(&mut self) -> Flow {
-        self.sup.tick();
-        if Instant::now() < self.next_poll {
-            return Flow::Continue;
-        }
-        let page = read_page(self.port);
-        if let Some(p) = &page {
-            if p.version != VERSION && !p.restart_pending {
+    /// Advance the session and, when it polled, redraw. Quit means an
+    /// update swapped the binary and we are leaving for the new one — on
+    /// Windows by starting it first (`os::tray::relaunch_self`); under
+    /// launchd, leaving is enough, as KeepAlive starts it. The session is
+    /// dropped with us, so the Claude server restarts under the new tray —
+    /// the one interruption an agent update costs a session on this machine.
+    pub fn tick(&mut self) -> Flow {
+        match self.session.tick() {
+            Tick::Idle => Flow::Continue,
+            Tick::VersionChanged => {
                 relaunch_self();
-                return Flow::Quit;
+                Flow::Quit
             }
-        }
-        self.sup.tick();
-        let report = self.sup.report();
-        if let Some(answer) = send_report(self.port, &report) {
-            self.sup.set_named_workdir(answer.workdir);
-            self.sup.set_wanted(answer.wanted);
-            // The update only starts here: it runs on its own thread
-            // (`Supervisor::update_claude` says why), so a restart in the
-            // same answer does not wait for it and comes back up on the
-            // binary that was already installed.
-            if answer.update {
-                self.sup.update_claude();
+            Tick::Polled(poll) => {
+                self.ui.show(
+                    poll.page.as_ref(),
+                    &poll.report,
+                    self.session.claude_wanted(),
+                );
+                Flow::Continue
             }
-            if answer.restart {
-                self.sup.restart();
-            }
-        }
-        self.ui.show(page.as_ref(), &report, self.sup.wanted());
-        self.next_poll = Instant::now() + POLL;
-        Flow::Continue
-    }
-}
-
-#[cfg(windows)]
-mod platform {
-    use super::*;
-
-    /// Refuse to be the second tray. The mutex lives as long as the process.
-    ///
-    /// Tried for up to ten seconds: after an update the OLD tray spawns us and
-    /// then leaves, and its leaving first stops the Claude server it
-    /// supervised — a second or two during which its mutex is still held. A
-    /// single check would quit the new tray on that overlap.
-    pub fn claim_single_instance() -> bool {
-        use windows::core::w;
-        use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS};
-        use windows::Win32::System::Threading::CreateMutexW;
-        for _ in 0..40 {
-            // SAFETY: plain Win32 calls; on success the handle is intentionally
-            // leaked so the mutex outlives this function and is released when
-            // the process ends. A losing attempt closes its handle so the
-            // winner's mutex is not kept alive by us.
-            unsafe {
-                let h = CreateMutexW(None, false, w!("Local\\daedalus-agent-tray"));
-                if GetLastError() != ERROR_ALREADY_EXISTS {
-                    return true;
-                }
-                if let Ok(h) = h {
-                    let _ = CloseHandle(h);
-                }
-            }
-            std::thread::sleep(Duration::from_millis(250));
-        }
-        false
-    }
-
-    /// Open a URL or a folder through Explorer, which needs no console and
-    /// hands a URL to the default browser.
-    pub fn open(target: &str) {
-        let _ = std::process::Command::new("explorer.exe")
-            .arg(target)
-            .spawn();
-    }
-
-    /// Pump the Win32 message queue until it is empty; the tray and its menu
-    /// are windows on this thread and need it.
-    fn pump() -> bool {
-        use windows::Win32::UI::WindowsAndMessaging::{
-            DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE, WM_QUIT,
-        };
-        let mut msg = MSG::default();
-        // SAFETY: standard message loop on the thread that owns the windows.
-        unsafe {
-            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
-                if msg.message == WM_QUIT {
-                    return false;
-                }
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
-        true
-    }
-
-    /// Wait up to `timeout` for input on this thread's queue, so the loop
-    /// idles instead of spinning.
-    fn wait_for_input(timeout: Duration) {
-        use windows::Win32::UI::WindowsAndMessaging::{MsgWaitForMultipleObjects, QS_ALLINPUT};
-        // SAFETY: no handles, just the queue with a timeout.
-        unsafe {
-            let _ = MsgWaitForMultipleObjects(None, false, timeout.as_millis() as u32, QS_ALLINPUT);
-        }
-    }
-
-    pub fn run() -> Result<()> {
-        if !claim_single_instance() {
-            return Ok(());
-        }
-        let mut s = Session::start()?;
-        loop {
-            if !pump() {
-                return Ok(());
-            }
-            if s.menu() == Flow::Quit || s.tick() == Flow::Quit {
-                return Ok(());
-            }
-            wait_for_input(Duration::from_millis(250));
         }
     }
 }
 
-#[cfg(target_os = "macos")]
-mod platform {
-    use super::*;
-    use tao::event::{Event, StartCause};
-    use tao::event_loop::{ControlFlow, EventLoop};
-    use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
-
-    /// One tray per user: a lock on a file in the user's log directory,
-    /// held for the life of the process.
-    pub fn claim_single_instance() -> bool {
-        use std::os::fd::AsRawFd;
-        let dir = config::user_log_dir();
-        let _ = std::fs::create_dir_all(&dir);
-        let Ok(f) = std::fs::File::create(dir.join("tray.lock")) else {
-            return true;
-        };
-        // SAFETY: flock on a file we own; the descriptor is leaked on purpose.
-        let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        std::mem::forget(f);
-        rc == 0
-    }
-
-    /// `open` hands a URL to the default browser and a folder to Finder.
-    pub fn open(target: &str) {
-        let _ = std::process::Command::new("open").arg(target).spawn();
-    }
-
-    /// Quit means quit: launchd would otherwise start us again within
-    /// seconds, so the job is booted out of this login session (it returns
-    /// at the next).
-    fn bootout() {
-        // SAFETY: no arguments.
-        let uid = unsafe { libc::getuid() };
-        let _ = std::process::Command::new("launchctl")
-            .args([
-                "bootout",
-                &format!("gui/{uid}/{}", crate::launchd::TRAY_LABEL),
-            ])
-            .spawn();
-    }
-
-    pub fn run() -> Result<()> {
-        if !claim_single_instance() {
-            return Ok(());
-        }
-        // AppKit wants the event loop on the main thread and the tray made
-        // once it runs; as an accessory the process has no Dock icon.
-        let mut event_loop = EventLoop::new();
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
-        let mut session: Option<Session> = None;
-        event_loop.run(move |event, _, control_flow| {
-            if let Event::NewEvents(StartCause::Init) = event {
-                match Session::start() {
-                    Ok(s) => session = Some(s),
-                    Err(e) => {
-                        // `run` never returns, so the reason is written where
-                        // the bin would have written it.
-                        let dir = config::user_log_dir();
-                        let _ = std::fs::create_dir_all(&dir);
-                        let _ = std::fs::write(dir.join("tray.err"), format!("{e:#}\n"));
-                        *control_flow = ControlFlow::Exit;
-                        return;
-                    }
-                }
-            }
-            let Some(s) = session.as_mut() else {
-                *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
-                return;
-            };
-            let menu = s.menu();
-            if menu == Flow::Quit {
-                bootout();
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-            if s.tick() == Flow::Quit {
-                // Leaving on a version change; launchd starts the new binary.
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-            *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
-        });
-    }
+/// Write why the tray could not run where a windowless program can be
+/// read: `tray.err` in the tray's log directory (beside the service's logs
+/// on Windows, ~/Library/Logs on macOS).
+pub fn write_failure(e: &anyhow::Error) {
+    let dir = config::user_log_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(dir.join("tray.err"), format!("{e:#}\n"));
 }
 
-use platform::open;
-
-pub fn run() -> Result<()> {
-    platform::run()
+/// The tray program's `main` (`os::tray_main` on Windows and macOS): the
+/// OS's loop until quit; a failure, with nowhere to print, goes to
+/// `tray.err` and exits 1.
+pub fn main() {
+    if let Err(e) = crate::os::tray::run() {
+        write_failure(&e);
+        std::process::exit(1);
+    }
 }

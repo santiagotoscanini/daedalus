@@ -31,24 +31,24 @@
 //! - UPDATES (hourly, on its own thread): `softwareupdate -l` for what is
 //!   pending and the install-history plist for what was installed.
 //!
-//! The parsers take text and are unit-tested on any OS; the functions that
-//! run commands are thin and untested here. Anything that cannot be read is
-//! `None` with a one-line reason in `errors`. Nothing identifying is copied
-//! beyond what the contract asks for: `system_profiler` prints the serial
-//! number and the hardware UUID and both are left where they are; a drive's
-//! serial is carried, and the open page strips it.
+//! The parsers take text and are OS-neutral, compiled and tested on every
+//! OS; the functions that run commands are thin and untested here. Anything
+//! that cannot be read is `None` with a one-line reason in `errors`.
+//! Nothing identifying is copied beyond what the contract asks for:
+//! `system_profiler` prints the serial number and the hardware UUID and
+//! both are left where they are; a drive's serial is carried, and the open
+//! page strips it.
 //!
-//! Where each part lives: `run` (running a command with a deadline, and
-//! the few direct kernel calls), `profiler` (the `system_profiler`
-//! parsers: hardware, memory, displays, storage, battery health), `parse`
-//! (the parsers for every other tool, and the plist helpers), `updates`,
-//! `browsers` and `apps`. This file keeps the collector, its tiers and
-//! the deadlines every command runs under.
+//! Where each part lives: `run` (Apple's tools through the shared bounded
+//! shell-out, exec.rs, and the few direct kernel calls), `updates`,
+//! `browsers` and `apps` here; the parsers under telemetry/parse/ —
+//! `system_profiler` (hardware, memory, displays, storage, battery health;
+//! imported as `profiler`) and `macos_tools` (every other tool, and the
+//! plist helpers; imported as `parse`). This file keeps the collector, its
+//! tiers and the deadlines every command runs under.
 
 mod apps;
 mod browsers;
-mod parse;
-mod profiler;
 mod run;
 mod updates;
 
@@ -58,7 +58,9 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use super::{
+// The OS-neutral parsers, under the names the tiers here use.
+use crate::telemetry::parse::{macos_tools as parse, system_profiler as profiler};
+use crate::telemetry::{
     Collect, Cpu, GpuSample, Machine, Memory, Network, Os, Sample, Slow, Static, Temperature,
 };
 

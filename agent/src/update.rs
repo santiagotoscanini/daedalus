@@ -18,6 +18,9 @@
 //! never installed. Losing the private key strands every agent on its
 //! version — the recovery copy is the operator's, outside this repository.
 //!
+//! Whether a newer release is installed or only reported is config.toml's
+//! `updates`, or the older `auto_update` (`Config::self_update_off`).
+//!
 //! The box cannot pin an agent version; the newest release is the pin.
 
 use std::path::{Path, PathBuf};
@@ -45,28 +48,9 @@ pub const RELEASE_PUBLIC_KEY_HEX: &str =
 /// disk: the service binary and the tray, named by Rust target in the
 /// release and by their plain names beside this executable. Both must be
 /// present and signed, or the release is skipped — a service without its
-/// tray, or the reverse, is a half-installed version.
-#[cfg(all(windows, target_arch = "x86_64"))]
-pub const ASSETS: &[(&str, &str)] = &[
-    (
-        "daedalus-agent-x86_64-pc-windows-msvc.exe",
-        "daedalus-agent.exe",
-    ),
-    (
-        "daedalus-agent-tray-x86_64-pc-windows-msvc.exe",
-        "daedalus-agent-tray.exe",
-    ),
-];
-#[cfg(target_os = "macos")]
-pub const ASSETS: &[(&str, &str)] = &[
-    ("daedalus-agent-universal-apple-darwin", "daedalus-agent"),
-    (
-        "daedalus-agent-tray-universal-apple-darwin",
-        "daedalus-agent-tray",
-    ),
-];
-#[cfg(not(any(all(windows, target_arch = "x86_64"), target_os = "macos")))]
-pub const ASSETS: &[(&str, &str)] = &[("daedalus-agent-unsupported", "daedalus-agent")];
+/// tray, or the reverse, is a half-installed version. The table is per OS
+/// (`os::ASSETS`).
+pub use crate::os::ASSETS;
 
 const TAG_PREFIX: &str = "agent-v";
 const USER_AGENT: &str = concat!("daedalus-agent/", env!("CARGO_PKG_VERSION"));
@@ -230,13 +214,10 @@ pub fn download_and_verify(rel: &Release) -> Result<Staged> {
         let target = dir.join(a.local_name);
         let new = suffixed(&target, "new");
         std::fs::write(&new, &bytes).with_context(|| format!("writing {}", new.display()))?;
-        #[cfg(unix)]
-        {
-            // A downloaded file is not executable until it is said to be.
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755))
-                .with_context(|| format!("marking {} executable", new.display()))?;
-        }
+        // A downloaded file is not executable until it is said to be (on
+        // Windows the name says it, and this does nothing).
+        crate::os::mark_executable(&new)
+            .with_context(|| format!("marking {} executable", new.display()))?;
         tracing::info!(
             asset = a.local_name,
             bytes = bytes.len(),
@@ -331,11 +312,10 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
             Ok(Some(rel)) => {
                 let label = rel.version.to_string();
                 shared.set_update_available(Some(label.clone()));
-                if !cfg.auto_update {
+                if let Some(why) = cfg.self_update_off() {
                     shared.with_state(|s| {
                         s.last_update_check = Some(now.clone());
-                        s.last_update_result =
-                            Some(format!("{label} available; auto_update is off"));
+                        s.last_update_result = Some(format!("{label} available; {why}"));
                     });
                     continue;
                 }
@@ -373,23 +353,7 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     }
 }
 
-/// Sleep in short steps so a stop request is honoured within half a second.
-/// Returns true when stopped. For threads with nothing else to wake for.
-pub fn sleep_until(stop: &AtomicBool, total: Duration) -> bool {
-    let step = Duration::from_millis(500);
-    let mut left = total;
-    while !left.is_zero() {
-        if stop.load(Ordering::Relaxed) {
-            return true;
-        }
-        let d = left.min(step);
-        std::thread::sleep(d);
-        left -= d;
-    }
-    stop.load(Ordering::Relaxed)
-}
-
-/// The updater's wait: like `sleep_until`, and a "check now" — from the
+/// The updater's wait: like `util::sleep_until`, and a "check now" — from the
 /// status page or from the box — cuts it short. Returns true when stopped.
 fn sleep_until_stop(stop: &AtomicBool, shared: &Shared, total: Duration) -> bool {
     let step = Duration::from_millis(500);

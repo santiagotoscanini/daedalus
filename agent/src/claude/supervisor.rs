@@ -1,6 +1,6 @@
 //! The supervisor: one `claude remote-control` kept running while the box
 //! wants it, restarted with backoff, its output logged and its banner
-//! read, and the report the tray sends the service.
+//! read, and the report the session (session.rs) sends the service.
 
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
@@ -10,10 +10,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use super::cli::{cli_version, find_cli, hidden, install_method, last_meaningful, run};
-#[cfg(target_os = "macos")]
-use super::profile::home_dir;
-use super::profile::{claude_dir, read_credentials, read_sessions, read_settings};
+use super::cli::{cli_version, find_cli, install_method, last_meaningful};
+use super::profile::{claude_dir, home_dir, read_credentials, read_sessions, read_settings};
 use super::workdir::pick_workdir;
 use super::{Banner, Credentials, Report, Settings, UpdateResult};
 use crate::state::now_rfc3339;
@@ -34,9 +32,9 @@ struct Running {
 
 /// Keeps one `claude remote-control` running while it is wanted.
 ///
-/// Driven by `tick` from the tray's loop: it reaps an exit, waits out the
-/// backoff, and starts the next one. Nothing blocks — the tray's message
-/// pump is on the same thread.
+/// Driven by `tick` from the session's loop (session.rs): it reaps an exit,
+/// waits out the backoff, and starts the next one. Nothing blocks — the
+/// tray's message pump is on the same thread.
 pub struct Supervisor {
     cli: Option<PathBuf>,
     cli_version: Option<String>,
@@ -165,8 +163,8 @@ impl Supervisor {
     /// of it and reported as one.
     ///
     /// ON ITS OWN THREAD, and that is not an optimisation. This is called
-    /// from the tray's loop, the only thing that reports to the service,
-    /// restarts the server and drains the menu. Running the download inline
+    /// from the session's loop — which the tray drives — the only thing that
+    /// reports to the service, restarts the server and drains the menu. Running the download inline
     /// would freeze all of it for up to ten minutes — the service would see
     /// the tray stop reporting and the box would say "nobody logged on",
     /// the opposite of what just happened. `tick` collects the result
@@ -192,7 +190,7 @@ impl Supervisor {
         std::thread::spawn(move || {
             let mut cmd = Command::new(&cli);
             cmd.arg("update");
-            let ran = run(cmd, Duration::from_secs(600));
+            let ran = crate::exec::both(cmd, Duration::from_secs(600));
             // Re-probed either way: an update that reported failure may
             // still have moved the binary, and the version on disk is the
             // fact — not the command's account of itself.
@@ -364,34 +362,18 @@ impl Supervisor {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        #[cfg(unix)]
-        {
-            // Its own process group, so a stop can reach the sessions it
-            // spawned and not only the server.
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0);
-        }
-        #[cfg(target_os = "macos")]
-        {
-            // The LaunchAgent's PATH is the system's; the server spawns git
-            // and shells from wherever the user installed them.
-            let path = std::env::var("PATH").unwrap_or_default();
-            let local = home_dir().map(|h| h.join(".local/bin").display().to_string());
-            cmd.env(
-                "PATH",
-                format!(
-                    "{}:/opt/homebrew/bin:/usr/local/bin:{path}",
-                    local.unwrap_or_default()
-                ),
-            );
-        }
+        // What the OS adds: on unix its own process group, so a stop can
+        // reach the sessions it spawned and not only the server; on macOS
+        // also a wider PATH, since the LaunchAgent's is the system's and the
+        // server spawns git and shells from wherever the user installed them.
+        crate::os::prepare_claude_server(&mut cmd, home_dir().as_deref());
         cmd
     }
 
     /// Start the server, hidden; a failure is recorded as an exit and
     /// backed off like one.
     fn spawn(&mut self, cmd: &mut Command) -> Option<Child> {
-        match hidden(cmd).spawn() {
+        match crate::os::hide_console(cmd).spawn() {
             Ok(c) => Some(c),
             Err(e) => {
                 self.last_exit = Some(format!("not started: {e} at {}", now_rfc3339()));
@@ -450,39 +432,14 @@ impl Supervisor {
             return;
         };
         self.last_banner = r.banner.lock().map(|b| b.clone()).unwrap_or_default();
-        let pid = r.child.id();
-        #[cfg(windows)]
-        {
-            // The whole tree: a `.cmd` launcher's node, and the sessions the
-            // server spawned. `kill` alone would orphan them.
-            let mut cmd = Command::new("taskkill");
-            cmd.args(["/PID", &pid.to_string(), "/T", "/F"]);
-            let _ = hidden(&mut cmd)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
-        }
-        #[cfg(unix)]
-        {
-            // SAFETY: a signal to the group the child leads; nothing else is
-            // in it.
-            unsafe {
-                let _ = libc::kill(-(pid as libc::pid_t), libc::SIGTERM);
-            }
-            // A moment to leave on its own before the hard kill below.
-            for _ in 0..20 {
-                if matches!(r.child.try_wait(), Ok(Some(_))) {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-        }
+        // The whole tree — the sessions the server spawned, and on Windows a
+        // `.cmd` launcher's node — as the OS reaches it (`taskkill /T`, or
+        // SIGTERM to the group with a moment to leave); then the hard kill.
+        crate::os::stop_process_tree(&mut r.child);
         let _ = r.child.kill();
         let _ = r.child.wait();
         self.last_exit = Some(format!("stopped ({why}) at {}", now_rfc3339()));
         self.next_start = None;
-        let _ = pid;
     }
 
     /// The current picture, with the profile read fresh.

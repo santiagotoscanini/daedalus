@@ -1,102 +1,21 @@
-//! Running Apple's tools: a closed stdin, a deadline after which the
-//! command is killed, and stdout as text; `plutil` for any plist, binary
-//! or XML. Beside them the few facts read straight from the kernel: an
-//! integer sysctl, the CPU ticks and the load averages.
+//! Running Apple's tools through the shared bounded shell-out (exec.rs): a
+//! closed stdin, a deadline after which the command is killed, and stdout
+//! as text; `plutil` for any plist, binary or XML. Beside them the few
+//! facts read straight from the kernel: an integer sysctl, the CPU ticks
+//! and the load averages.
 
 use std::ffi::CString;
-use std::io::Read;
-use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
 
 use super::QUICK;
+pub(super) use crate::exec::Failed;
+use crate::exec::{stdout_or, Text};
 
-/// Why a command gave nothing, for the error line.
-#[derive(Debug, PartialEq)]
-pub(super) enum Failed {
-    /// It could not be started at all.
-    Spawn(String),
-    /// It did not finish within the deadline and was killed.
-    Timeout,
-    /// It finished with a non-zero status; the first line of stderr, if any.
-    Exit(i32, String),
-}
-
-impl std::fmt::Display for Failed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Failed::Spawn(e) => write!(f, "not started: {e}"),
-            Failed::Timeout => write!(f, "no answer in time"),
-            Failed::Exit(code, line) if line.is_empty() => write!(f, "exit {code}"),
-            Failed::Exit(code, line) => write!(f, "exit {code}: {line}"),
-        }
-    }
-}
-
-/// A command's whole stdout, or why not; killed at the deadline.
-pub(super) fn output_or(mut cmd: Command, deadline: Duration) -> Result<String, Failed> {
-    let started = Instant::now();
-    let mut child = cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| Failed::Spawn(e.to_string()))?;
-    let mut out = child
-        .stdout
-        .take()
-        .ok_or_else(|| Failed::Spawn("no stdout".into()))?;
-    let mut err = child.stderr.take();
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = out.read_to_string(&mut s);
-        let _ = tx.send(s);
-    });
-    let (etx, erx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let mut s = String::new();
-        if let Some(e) = err.as_mut() {
-            let _ = e.read_to_string(&mut s);
-        }
-        let _ = etx.send(s);
-    });
-    let text = match rx.recv_timeout(deadline) {
-        Ok(t) => t,
-        Err(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(Failed::Timeout);
-        }
-    };
-    // stdout is closed; the process is exiting. Give it the rest of the
-    // deadline rather than a blocking wait.
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                if status.success() {
-                    return Ok(text);
-                }
-                let stderr = erx
-                    .recv_timeout(Duration::from_millis(200))
-                    .unwrap_or_default();
-                let first = stderr
-                    .lines()
-                    .find(|l| !l.trim().is_empty())
-                    .unwrap_or("")
-                    .trim();
-                return Err(Failed::Exit(status.code().unwrap_or(-1), first.to_string()));
-            }
-            Ok(None) if started.elapsed() < deadline => {
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(Failed::Timeout);
-            }
-        }
-    }
+/// A command's whole stdout, or why not; killed at the deadline. Text is
+/// read strictly: a tool's output that is not UTF-8 reads as empty.
+pub(super) fn output_or(cmd: Command, deadline: Duration) -> Result<String, Failed> {
+    stdout_or(cmd, deadline, Text::Strict)
 }
 
 /// `output_or` without the reason: `None` when the command fails or is

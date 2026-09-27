@@ -3,7 +3,7 @@
 //! `claude remote-control` refuses the home directory: home-directory trust
 //! is never saved, so it has to run in a project directory the user has
 //! trusted once (the dialog on first `claude` there). The box runs its own in
-//! the configuration checkout; a node has no such fixed place, so the tray
+//! the configuration checkout; a node has no such fixed place, so the session
 //! picks one: the directory the policy names, or else the
 //! trusted project the user ran Claude in most recently — the CLI records
 //! both facts per project in `~/.claude.json`.

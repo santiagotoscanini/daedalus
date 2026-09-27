@@ -31,13 +31,15 @@ macOS launchd daemon, with a tray / menu bar app beside it. It
   instructions: check for updates now, update Claude Code, restart Claude
   remote control (`src/hello.rs`);
 - **runs Claude Code's remote control** the way the box runs its own: the
-  tray, the one process in the user's desktop session where the Claude
-  login lives, supervises `claude remote-control --verbose`, restarts it
-  with backoff, logs its output to `claude-rc.log`, and reports its state,
-  versions, sessions and credential dates (never a token) to the service
-  (`src/claude/mod.rs`). Nobody logged on means no tray and no server, so a
-  machine that reboots unattended wants automatic sign-in;
-- **shows itself in the tray**: the daedalus mark — ember when all is well,
+  session inside the tray — the one process in the user's desktop session,
+  where the Claude login lives — supervises `claude remote-control
+  --verbose`, restarts it with backoff, logs its output to `claude-rc.log`,
+  and reports its state, versions, sessions and credential dates (never a
+  token) to the service (`src/session.rs`, `src/claude/mod.rs`). Nobody
+  logged on means no tray and no server, so a machine that reboots
+  unattended wants automatic sign-in;
+- **shows itself in the tray** (`src/tray.rs`, a UI over the session): the
+  daedalus mark — ember when all is well,
   an amber dot when an update is pending, the hold failed or Claude is not
   running, grey when the service does not answer — with the state in its
   tooltip and menu, and the actions: open the status page, check for
@@ -117,6 +119,43 @@ macOS:
 ~/Library/Logs/daedalus-agent/                                        the menu bar app's logs (claude-rc.log)
 ```
 
+Linux, where the agent builds and `serve` runs but there is no service,
+tray, awake hold or telemetry yet, keeps the same files under
+`/var/lib/daedalus-agent/` (`logs/` inside it). To run `serve` there as an
+ordinary user, set `DAEDALUS_AGENT_DATA_DIR` to a directory that user owns.
+
+`data_dir` in config.toml moves state, identity and logs of an installed
+agent; config.toml stays where it is. `DAEDALUS_AGENT_DATA_DIR` moves the
+whole directory, config.toml included, and wins over `data_dir` — but only
+for the process started with it, so it is a `serve` and development knob:
+the service, the tray and `sudo` never see it, and `install` and
+`uninstall` refuse to run while it is set. Both must be absolute paths; a
+relative one stops the agent at start with a message saying so.
+
+### config.toml
+
+`install` writes the first six keys; every key is optional, and a key the
+agent no longer knows is ignored. The header of
+[`src/config.rs`](src/config.rs) is the reference.
+
+```toml
+port = 7787               # the status page's LAN port
+update_check_secs = 600   # how often the release feed is asked
+auto_update = true        # the older spelling of `updates`
+log_level = "info"        # "debug" for a bug report
+search_domains = []       # more domains to ask for _daedalus._tcp
+hello_secs = 60           # how often the hello goes out
+# control_plane_url = "https://…"   the box, when DNS cannot find it
+# mode = "node"           # node | hub — carried, not acted on yet
+# telemetry = "full"      # full | minimal | off — carried, not acted on yet
+# updates = "self"        # self | staged | external
+# data_dir = "…"          # see above
+```
+
+`updates = "self"` installs a newer release (the default); `staged` and
+`external` only report it, as `auto_update = false` does. With no
+`updates` key, `auto_update` decides; with both, `updates` wins.
+
 Claude Code is looked for in `~/.local/bin`, npm's bin, Homebrew's bin and
 PATH. Its remote control runs in the directory the policy names, else the most recently used trusted project (Claude refuses the home
 directory; `src/claude/workdir.rs`).
@@ -126,8 +165,9 @@ directory; `src/claude/workdir.rs`).
 Every ten minutes (`update_check_secs`), and when the tray or the box asks,
 the agent lists the repository's releases, keeps the `agent-v<semver>` ones
 that are neither drafts nor prereleases, and takes the highest above its own
-version. It downloads that release's two executables and their `.sig`s,
-checks each raw ed25519 signature against `RELEASE_PUBLIC_KEY_HEX` in
+version. Unless config.toml says only to report it (`updates`, or
+`auto_update = false`), it downloads that release's two executables and
+their `.sig`s, checks each raw ed25519 signature against `RELEASE_PUBLIC_KEY_HEX` in
 [`src/update.rs`](src/update.rs), renames the running binaries to `.old`,
 moves the new ones into place and exits with code 3. The service's recovery
 action (launchd's KeepAlive on macOS) starts it on the new binary; the tray
@@ -165,6 +205,16 @@ online fetches the ticket.
 (`x86_64-pc-windows-gnu`) and macOS (`aarch64-apple-darwin`), and the tests
 in a throwaway rust container: `agent/gate.sh [fmt|check|test|all]`. The
 macOS check needs no Apple toolchain because TLS comes from the OS through
-native-tls, not a C crypto library. The tests are platform-neutral; the
-service, the power request, the tray and `install` are exercised on the
-machines themselves.
+native-tls, not a C crypto library. The tests are platform-neutral — the
+parsers of Windows' SMBIOS table and of macOS's tools included, which live
+outside the per-OS code (`src/telemetry/parse/`) — and the service, the
+power request, the tray and `install` are exercised on the machines
+themselves.
+
+Everything that differs by OS is behind `src/os/`: one module per OS
+(`windows/`, `macos/`, `linux.rs`) exporting the same names, selected once
+in `src/os/mod.rs`, so an OS that lacks one is a compile error. Commands
+whose output is captured under a deadline — PowerShell, Apple's tools,
+`claude --version` and `claude update` — go through one helper,
+`src/exec.rs`; macOS's `launchctl_timeout` (`src/os/macos/launchd.rs`) keeps
+its own.

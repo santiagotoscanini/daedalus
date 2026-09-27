@@ -92,8 +92,9 @@ foreach ($name in $assets.Keys) {
 if ($LASTEXITCODE -ne 0) { throw "daedalus-agent install exited $LASTEXITCODE" }
 
 if ($service) {
-  # `install` already starts a service it finds stopped (service.rs), so this
-  # is a no-op in the normal case; kept as a second try on the new binary.
+  # `install` already starts a service it finds stopped
+  # (src/os/windows/service.rs), so this is a no-op in the normal case; kept
+  # as a second try on the new binary.
   Start-Service -Name "daedalus-agent" -ErrorAction SilentlyContinue
 }
 

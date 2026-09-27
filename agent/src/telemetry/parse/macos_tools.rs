@@ -2,7 +2,8 @@
 //! `sysctl vm.swapusage`, `ps`, `df`, `mount`, `diskutil`, `ioreg`,
 //! `powermetrics`, `netstat`, `pmset`; the CPU-tick arithmetic; and the
 //! plist helpers the updates, browsers and apps tiers share. Pure functions
-//! over text, tested on any OS.
+//! over the text macOS's tools print, compiled and tested on every OS; the
+//! macOS collector (os/macos/telemetry.rs) runs the tools.
 
 use std::collections::HashMap;
 
@@ -14,7 +15,7 @@ use crate::telemetry::{Battery, Disk, Process, Service};
 /// status. The jobs not running whose last exit was not 0, Apple's own
 /// excluded (they exit non-zero as a matter of course), and how many rows
 /// there were.
-pub(super) fn parse_launchctl(text: &str) -> (Vec<Service>, u32) {
+pub fn parse_launchctl(text: &str) -> (Vec<Service>, u32) {
     let mut count = 0u32;
     let mut down = Vec::new();
     for l in text.lines() {
@@ -45,7 +46,7 @@ pub(super) fn parse_launchctl(text: &str) -> (Vec<Service>, u32) {
 
 /// Busy share between two tick readings, 0–100; `None` when no time passed.
 /// The tick counters are 32-bit and wrap, hence the wrapping arithmetic.
-pub(super) fn cpu_usage(prev: [u32; 4], now: [u32; 4]) -> Option<f64> {
+pub fn cpu_usage(prev: [u32; 4], now: [u32; 4]) -> Option<f64> {
     let d: Vec<u64> = prev
         .iter()
         .zip(now.iter())
@@ -65,7 +66,7 @@ pub(super) fn cpu_usage(prev: [u32; 4], now: [u32; 4]) -> Option<f64> {
 /// (the cache the OS drops under pressure) and the pages the compressor
 /// holds. In pages, with the page size.
 #[derive(Debug, Default, PartialEq)]
-pub(super) struct VmStat {
+pub struct VmStat {
     page_size: u64,
     free: u64,
     inactive: u64,
@@ -75,20 +76,20 @@ pub(super) struct VmStat {
 }
 
 impl VmStat {
-    pub(super) fn available_bytes(&self) -> u64 {
+    pub fn available_bytes(&self) -> u64 {
         (self.free + self.inactive + self.speculative) * self.page_size
     }
 
-    pub(super) fn cached_bytes(&self) -> u64 {
+    pub fn cached_bytes(&self) -> u64 {
         self.file_backed * self.page_size
     }
 
-    pub(super) fn compressed_bytes(&self) -> u64 {
+    pub fn compressed_bytes(&self) -> u64 {
         self.compressor * self.page_size
     }
 }
 
-pub(super) fn parse_vm_stat(text: &str) -> Option<VmStat> {
+pub fn parse_vm_stat(text: &str) -> Option<VmStat> {
     let mut v = VmStat::default();
     for l in text.lines() {
         let l = l.trim();
@@ -124,7 +125,7 @@ pub(super) fn parse_vm_stat(text: &str) -> Option<VmStat> {
 /// macOS and may hold spaces ("…/Google Chrome"), so it is the rest of the
 /// row and the name is its last component. Sorted here rather than by
 /// `ps -m`, so the flag's exact meaning does not matter.
-pub(super) fn parse_ps(text: &str) -> (Vec<Process>, u32) {
+pub fn parse_ps(text: &str) -> (Vec<Process>, u32) {
     let mut all: Vec<Process> = text
         .lines()
         .filter_map(|l| {
@@ -161,7 +162,7 @@ fn take_word<'a>(rest: &mut &'a str) -> Option<&'a str> {
 
 /// `sysctl -n vm.swapusage`: "total = 2048.00M  used = 1250.00M  free = 798.00M
 /// (encrypted)" → (total, used) in bytes.
-pub(super) fn parse_swapusage(text: &str) -> Option<(u64, u64)> {
+pub fn parse_swapusage(text: &str) -> Option<(u64, u64)> {
     let mut total = None;
     let mut used = None;
     let words: Vec<&str> = text.split_whitespace().collect();
@@ -220,7 +221,7 @@ fn parse_df_row(row: &str) -> Option<(String, String, u64, u64, u64)> {
 /// `/Volumes/` — external drives, images, extra containers. The rest of
 /// an APFS boot container (`/System/Volumes/{Data,VM,Preboot,Update…}`)
 /// shares the root's space and would be the same numbers repeated.
-pub(super) fn parse_df(text: &str) -> Vec<Disk> {
+pub fn parse_df(text: &str) -> Vec<Disk> {
     text.lines()
         .skip(1)
         .filter_map(parse_df_row)
@@ -246,7 +247,7 @@ pub(super) fn parse_df(text: &str) -> Vec<Disk> {
 
 /// `mount` output, "/dev/disk3s1s1 on / (apfs, sealed, local, …)" →
 /// mount point → filesystem type.
-pub(super) fn parse_mount(text: &str) -> HashMap<String, String> {
+pub fn parse_mount(text: &str) -> HashMap<String, String> {
     text.lines()
         .filter_map(|l| {
             let (_, rest) = l.split_once(" on ")?;
@@ -258,7 +259,7 @@ pub(super) fn parse_mount(text: &str) -> HashMap<String, String> {
 }
 
 /// `diskutil info /`: the volume's name and whether the medium is solid state.
-pub(super) fn parse_diskutil(text: &str) -> (Option<String>, Option<String>) {
+pub fn parse_diskutil(text: &str) -> (Option<String>, Option<String>) {
     let mut name = None;
     let mut kind = None;
     for l in text.lines() {
@@ -285,7 +286,7 @@ pub(super) fn parse_diskutil(text: &str) -> (Option<String>, Option<String>) {
 
 /// `ioreg -r -d 1 -c IOAccelerator`: the first accelerator's
 /// `PerformanceStatistics` — utilisation and the memory in use.
-pub(super) fn parse_ioreg_gpu(text: &str) -> (Option<f64>, Option<u64>) {
+pub fn parse_ioreg_gpu(text: &str) -> (Option<f64>, Option<u64>) {
     let stats = text
         .lines()
         .find(|l| l.contains("\"PerformanceStatistics\""))
@@ -307,16 +308,16 @@ fn ioreg_number<'a>(stats: &'a str, key: &str) -> Option<&'a str> {
 
 /// What one `powermetrics` report says.
 #[derive(Debug, Default, PartialEq)]
-pub(super) struct PowerMetrics {
-    pub(super) cpu_die_c: Option<f64>,
-    pub(super) gpu_die_c: Option<f64>,
+pub struct PowerMetrics {
+    pub cpu_die_c: Option<f64>,
+    pub gpu_die_c: Option<f64>,
     cpu_power_w: Option<f64>,
-    pub(super) gpu_power_w: Option<f64>,
+    pub gpu_power_w: Option<f64>,
 }
 
 /// "CPU die temperature: 52.39 C" (Intel's smc sampler), "GPU Power: 56 mW"
 /// (Apple Silicon's gpu_power sampler) and their siblings.
-pub(super) fn parse_powermetrics(text: &str) -> PowerMetrics {
+pub fn parse_powermetrics(text: &str) -> PowerMetrics {
     let mut p = PowerMetrics::default();
     let number = |s: &str| -> Option<f64> { s.split_whitespace().next()?.parse().ok() };
     let watts = |s: &str| -> Option<f64> {
@@ -347,7 +348,7 @@ pub(super) fn parse_powermetrics(text: &str) -> PowerMetrics {
 /// `netstat -ib` rows: name → (rx bytes, tx bytes), first row per
 /// interface (every row of one interface repeats its counters). A name
 /// ending in '*' is an interface that is down.
-pub(super) fn parse_netstat(text: &str) -> Vec<(String, u64, u64)> {
+pub fn parse_netstat(text: &str) -> Vec<(String, u64, u64)> {
     let mut lines = text.lines();
     let Some(header) = lines.next() else {
         return Vec::new();
@@ -381,7 +382,7 @@ pub(super) fn parse_netstat(text: &str) -> Vec<(String, u64, u64)> {
 
 /// `pmset -g batt`: percent and whether it is charging; `None` when the
 /// machine has no battery ("Now drawing from 'AC Power'" and nothing more).
-pub(super) fn parse_pmset(text: &str) -> Option<Battery> {
+pub fn parse_pmset(text: &str) -> Option<Battery> {
     let l = text.lines().find(|l| l.contains("InternalBattery"))?;
     // "…\t85%; discharging; 4:32 remaining present: true"
     let pct_at = l.find('%')?;
@@ -409,7 +410,7 @@ pub(super) fn parse_pmset(text: &str) -> Option<Battery> {
 
 /// The text of the value after `<key>name</key>` in a plist dict, whatever
 /// its tag (`<string>`, `<date>`), the XML entities decoded.
-pub(super) fn plist_string(dict: &str, key: &str) -> Option<String> {
+pub fn plist_string(dict: &str, key: &str) -> Option<String> {
     let tag = format!("<key>{key}</key>");
     let after = &dict[dict.find(&tag)? + tag.len()..];
     let open = after.find('<')?;
@@ -432,7 +433,7 @@ pub(super) fn plist_string(dict: &str, key: &str) -> Option<String> {
 /// text with the dicts nested in it cut out — so a key lookup on one
 /// (`plist_string`) sees that dict's values and not a child's repeat of
 /// the same key. With each, how deep it sits: 0 is the root.
-pub(super) fn plist_dicts(xml: &str) -> Vec<(usize, String)> {
+pub fn plist_dicts(xml: &str) -> Vec<(usize, String)> {
     const OPEN: &str = "<dict>";
     const CLOSE: &str = "</dict>";
     // (where `<dict>` starts, where `</dict>` starts, depth), in closing order.

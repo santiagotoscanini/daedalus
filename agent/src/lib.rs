@@ -13,30 +13,37 @@
 //! Two executables from this crate (no `.exe` on macOS):
 //!
 //!   daedalus-agent.exe        the service and its verbs (src/bin/daedalus-agent.rs)
-//!   daedalus-agent-tray.exe   the tray icon + the Claude supervisor (src/bin/daedalus-agent-tray.rs)
+//!   daedalus-agent-tray.exe   the tray icon over the Claude session (src/bin/daedalus-agent-tray.rs)
 //!
 //! Where each lands on the machine, with its config, state and logs:
 //! agent/README.md, "On the machine".
+//!
+//! Three roles, three modules: the service (`agent_main` below), the
+//! `session` — Claude Code supervised and reported to the service, with no
+//! UI — and the `tray`, a UI over the session. Everything that differs by
+//! OS is behind `os` (os/mod.rs lists the surface); nothing else in the
+//! crate tests the target.
 
 pub mod claude;
 pub mod config;
 pub mod discover;
+pub mod exec;
 pub mod facts;
 pub mod hello;
 pub mod http;
 pub mod identity;
 pub mod net;
+pub mod os;
 pub mod power;
 pub mod providers;
+pub mod session;
 pub mod state;
 pub mod status;
 pub mod telemetry;
 pub mod update;
+pub mod util;
 
-#[cfg(target_os = "macos")]
-pub mod launchd;
-#[cfg(windows)]
-pub mod service;
+// The tray draws with tray-icon, a Windows and macOS dependency only.
 #[cfg(any(windows, target_os = "macos"))]
 pub mod tray;
 
@@ -48,10 +55,7 @@ use anyhow::{Context, Result};
 
 pub const SERVICE_NAME: &str = "daedalus-agent";
 pub const DISPLAY_NAME: &str = "Daedalus Agent";
-#[cfg(windows)]
-pub const TRAY_EXE: &str = "daedalus-agent-tray.exe";
-#[cfg(not(windows))]
-pub const TRAY_EXE: &str = "daedalus-agent-tray";
+pub use os::TRAY_EXE;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The agent's work, shared by `run` (as a service) and `serve` (in a
@@ -130,12 +134,11 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
             .context("spawning the updater")?
     };
 
-    // The tray watchdog (Windows): a tray that has not reported for a
-    // while is started again in the console user's session, at most once a
-    // minute. Nothing starts it otherwise until the next logon — the Run
-    // key fires once. On the Mac, KeepAlive and `launchd::kickstart_tray`
-    // cover it.
-    #[cfg(windows)]
+    // The tray watchdog, where the OS needs one (`os::svc::WATCHES_TRAY`:
+    // Windows): a tray that has not reported for a while is started again
+    // in the console user's session, at most once a minute. Nothing starts
+    // it otherwise until the next logon — the Run key fires once. On the
+    // Mac, KeepAlive and `launchd::kickstart_tray` cover it.
     let mut tray_tried = std::time::Instant::now();
     while !stop.load(Ordering::Relaxed) {
         let wanted = shared.policy().awake_hold;
@@ -170,13 +173,13 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
                 tracing::info!("awake hold released: the policy for this machine is off");
             }
         }
-        #[cfg(windows)]
-        if !shared.tray_reporting()
+        if os::svc::WATCHES_TRAY
+            && !shared.tray_reporting()
             && started.elapsed() > Duration::from_secs(45)
             && tray_tried.elapsed() > Duration::from_secs(60)
         {
             tray_tried = std::time::Instant::now();
-            match service::launch_tray_for_console_user() {
+            match os::svc::launch_tray_or_session() {
                 Ok(()) => {}
                 Err(e) => tracing::info!(error = format!("{e:#}"), "tray not started"),
             }

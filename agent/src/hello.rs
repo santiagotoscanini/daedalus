@@ -225,7 +225,7 @@ pub fn run_loop(
 
     let mut wait = Duration::from_secs(5);
     loop {
-        if crate::update::sleep_until(&stop, wait) {
+        if crate::util::sleep_until(&stop, wait) {
             return;
         }
         wait = interval;

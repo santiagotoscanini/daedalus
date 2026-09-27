@@ -1,7 +1,8 @@
 //! The `system_profiler` documents: the machine, the memory modules and
 //! the GPUs (static), the physical drives with the boot volume's store
 //! from `diskutil` (slow), and the battery's health (every hundredth
-//! sample). Pure functions over JSON text, tested on any OS.
+//! sample). Pure functions over JSON text, compiled and tested on every OS;
+//! the macOS collector (os/macos/telemetry.rs) runs `system_profiler`.
 
 use serde_json::Value;
 
@@ -9,7 +10,7 @@ use crate::telemetry::{Drive, Gpu, Machine, MemoryModule};
 
 /// `system_profiler SPHardwareDataType -json`, without the serial number or
 /// the hardware UUID it also prints.
-pub(super) fn parse_hardware(json: &str) -> Option<Machine> {
+pub fn parse_hardware(json: &str) -> Option<Machine> {
     let v: Value = serde_json::from_str(json).ok()?;
     let hw = v.get("SPHardwareDataType")?.as_array()?.first()?;
     let s = |k: &str| hw.get(k).and_then(Value::as_str).map(str::to_string);
@@ -58,10 +59,10 @@ fn form_of(model: &str) -> Option<&'static str> {
 
 /// What `system_profiler SPMemoryDataType -json` says about the memory.
 #[derive(Debug, Default, PartialEq)]
-pub(super) struct MemoryProfile {
-    pub(super) slots: Option<u32>,
-    pub(super) max_capacity_bytes: Option<u64>,
-    pub(super) modules: Vec<MemoryModule>,
+pub struct MemoryProfile {
+    pub slots: Option<u32>,
+    pub max_capacity_bytes: Option<u64>,
+    pub modules: Vec<MemoryModule>,
 }
 
 /// Apple Silicon answers one entry with no slot list — the memory is on the
@@ -70,7 +71,7 @@ pub(super) struct MemoryProfile {
 /// Intel answers a slot list ("BANK 0/DIMM0"…), one module per fitted
 /// DIMM; an empty slot counts as a slot and no module. The firmware states
 /// no ceiling on either, so it is the fitted total or nothing.
-pub(super) fn parse_memory(json: &str, total: Option<u64>) -> Option<MemoryProfile> {
+pub fn parse_memory(json: &str, total: Option<u64>) -> Option<MemoryProfile> {
     let v: Value = serde_json::from_str(json).ok()?;
     let list = v.get("SPMemoryDataType")?.as_array()?;
     let mut slots = Vec::new();
@@ -155,7 +156,7 @@ fn gpu_vendor(raw: &str) -> String {
 
 /// "16 GB", "1536 MB" → bytes, binary units as Apple counts memory. Anything
 /// else ("shared", a bare word) is `None`.
-pub(super) fn parse_size(s: &str) -> Option<u64> {
+pub fn parse_size(s: &str) -> Option<u64> {
     let mut it = s.split_whitespace();
     let n: f64 = it.next()?.parse().ok()?;
     let unit = it.next()?.to_ascii_uppercase();
@@ -171,7 +172,7 @@ pub(super) fn parse_size(s: &str) -> Option<u64> {
 }
 
 /// `system_profiler SPDisplaysDataType -json`: one `Gpu` per accelerator.
-pub(super) fn parse_displays(json: &str) -> Vec<Gpu> {
+pub fn parse_displays(json: &str) -> Vec<Gpu> {
     let Ok(v) = serde_json::from_str::<Value>(json) else {
         return Vec::new();
     };
@@ -210,7 +211,7 @@ pub(super) fn parse_displays(json: &str) -> Vec<Gpu> {
 /// `diskutil info /`), and the drive that owns it gets "/" first in its
 /// list. SMART counters (temperature, hours, wear, errors) are not readable
 /// without smartmontools and stay `None`; `smart_status` is the verdict.
-pub(super) fn parse_storage(json: &str, boot_store: Option<&str>) -> Vec<Drive> {
+pub fn parse_storage(json: &str, boot_store: Option<&str>) -> Vec<Drive> {
     let Ok(v) = serde_json::from_str::<Value>(json) else {
         return Vec::new();
     };
@@ -348,7 +349,7 @@ fn whole_disk(bsd: &str) -> &str {
 /// `diskutil info /`: the partition the root volume lives on. On APFS that
 /// is "APFS Physical Store" (the volume's own identifier is a synthesised
 /// disk); on HFS+ the volume is the partition, so "Device Identifier".
-pub(super) fn parse_physical_store(text: &str) -> Option<String> {
+pub fn parse_physical_store(text: &str) -> Option<String> {
     let field = |name: &str| {
         text.lines().find_map(|l| {
             let (k, v) = l.split_once(':')?;
@@ -364,21 +365,21 @@ pub(super) fn parse_physical_store(text: &str) -> Option<String> {
 }
 
 /// What `system_profiler` knows about the battery that `pmset` does not:
-/// slow-changing, so re-read every `SLOW_EVERY` samples (mac.rs) and
-/// carried between them.
+/// slow-changing, so re-read every `SLOW_EVERY` samples
+/// (os/macos/telemetry.rs) and carried between them.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(super) struct BatteryHealth {
+pub struct BatteryHealth {
     /// Of the design capacity, 0–100.
-    pub(super) max_capacity_pct: Option<f64>,
-    pub(super) cycles: Option<u64>,
+    pub max_capacity_pct: Option<f64>,
+    pub cycles: Option<u64>,
     /// "Normal", "Service Recommended"…, as macOS words it.
-    pub(super) condition: Option<String>,
+    pub condition: Option<String>,
 }
 
 /// `system_profiler SPPowerDataType -json`, its
 /// `sppower_battery_health_info` dict: `…_maximum_capacity` ("85 %") → 85,
 /// `…_cycle_count` (a number), `sppower_battery_health` (a word).
-pub(super) fn parse_battery_health(json: &str) -> Option<BatteryHealth> {
+pub fn parse_battery_health(json: &str) -> Option<BatteryHealth> {
     let v: Value = serde_json::from_str(json).ok()?;
     let h = v
         .get("SPPowerDataType")?

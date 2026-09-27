@@ -5,14 +5,14 @@
 //! claude.ai/code or a phone at any time. This is the same thing on a node,
 //! with the one difference the OS forces: Claude Code's login lives in the
 //! user's profile (`~/.claude`), and the service is not that user — it is
-//! LocalSystem in session 0 on Windows, root on macOS. So the TRAY
-//! supervises the server, in the desktop session with the user's
-//! credentials, and reports to the service over loopback
-//! (`POST /claude/report`, status.rs). The service keeps the full report for
-//! `/claude`, puts a summary on the status page and in every hello, and
-//! hands the tray back what the box decided: whether the server should run
-//! at all and where (policy), and its two instructions — update Claude
-//! Code, and restart the server.
+//! LocalSystem in session 0 on Windows, root on macOS. So the SESSION
+//! (session.rs, which the tray runs) supervises the server, in the desktop
+//! session with the user's credentials, and reports to the service over
+//! loopback (`POST /claude/report`, status.rs). The service keeps the full
+//! report for `/claude`, puts a summary on the status page and in every
+//! hello, and hands the session back what the box decided: whether the
+//! server should run at all and where (policy), and its two instructions —
+//! update Claude Code, and restart the server.
 //!
 //! Those two are deliberately separate. An update installs a new CLI beside
 //! the running one and interrupts nothing: a session keeps the binary it
@@ -34,13 +34,14 @@
 //! (DISABLE_TELEMETRY, DO_NOT_TRACK, ANTHROPIC_BASE_URL and friends —
 //! nix/platform/claude-rc.nix lists them); the child inherits the user's
 //! environment, plus `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE` and, on
-//! macOS, a wider PATH (supervisor.rs `build_command`).
+//! macOS, a wider PATH (supervisor.rs `build_command`, and
+//! `os::prepare_claude_server`).
 //!
 //! Where each part lives: this file holds the report's types; `cli` finds
-//! the `claude` command and runs it (version probe, `claude update`),
-//! `profile` reads `~/.claude` (sessions, credential clock, settings),
-//! `workdir` picks the directory the server runs in, and `supervisor`
-//! keeps the server running.
+//! the `claude` command and probes its version (exec.rs runs it, as it
+//! runs `claude update`), `profile` reads `~/.claude` (sessions, credential
+//! clock, settings), `workdir` picks the directory the server runs in, and
+//! `supervisor` keeps the server running.
 
 mod cli;
 mod profile;
@@ -148,7 +149,8 @@ pub struct UpdateResult {
     pub detail: String,
 }
 
-/// What the tray tells the service, and what the status page shows.
+/// What the session (the tray, today) tells the service, and what the status
+/// page shows.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Report {
@@ -169,7 +171,7 @@ pub struct Report {
     pub detail: Option<String>,
     pub pid: Option<u32>,
     pub started_at: Option<String>,
-    /// Starts after the first, since the tray came up.
+    /// Starts after the first, since the session came up.
     pub restarts: u32,
     pub last_exit: Option<String>,
     pub server: Banner,
@@ -223,7 +225,7 @@ impl Report {
     }
 }
 
-/// What the service answers a report with: the tray's part of the box's
+/// What the service answers a report with: the session's part of the box's
 /// policy and its two instructions, each cleared as it goes out.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]

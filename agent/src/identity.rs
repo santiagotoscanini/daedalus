@@ -7,8 +7,9 @@
 //! wrapped with DPAPI under the machine's scope before it touches disk, so a
 //! copy is useless on any other computer — but any process on THIS machine
 //! can unwrap it, so keeping local users out rests on the file's ACL (see
-//! `write_private`). Elsewhere the seed is a plain file, mode 0600, which is
-//! the ordinary SSH-key posture.
+//! `write_private`, os/windows/mod.rs). Elsewhere the seed is a plain file,
+//! mode 0600, which is the ordinary SSH-key posture (os/unix.rs). How the
+//! seed is sealed and written is `os::{seal, unseal, write_private}`.
 //!
 //! Signing is over bytes the caller hands in; see hello.rs for what is
 //! signed and why it is the serialised string and not the value.
@@ -18,6 +19,7 @@ use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 use crate::config::data_dir;
+use crate::os::{seal, unseal, write_private};
 
 const FILE: &str = "identity.key";
 
@@ -60,108 +62,6 @@ impl Identity {
 
     pub fn sign_hex(&self, bytes: &[u8]) -> String {
         hex::encode(self.key.sign(bytes).to_bytes())
-    }
-}
-
-fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(path)
-            .with_context(|| format!("writing {}", path.display()))?;
-        std::io::Write::write_all(&mut f, bytes)?;
-        Ok(())
-    }
-    #[cfg(not(unix))]
-    {
-        // No ACL is set: the file inherits ProgramData's, whose default lets
-        // the Users group read. DPAPI only binds it to this machine.
-        std::fs::write(path, bytes).with_context(|| format!("writing {}", path.display()))
-    }
-}
-
-#[cfg(windows)]
-fn seal(seed: &[u8]) -> Result<Vec<u8>> {
-    dpapi::protect(seed)
-}
-#[cfg(windows)]
-fn unseal(sealed: &[u8]) -> Result<Vec<u8>> {
-    dpapi::unprotect(sealed)
-}
-#[cfg(not(windows))]
-fn seal(seed: &[u8]) -> Result<Vec<u8>> {
-    Ok(seed.to_vec())
-}
-#[cfg(not(windows))]
-fn unseal(sealed: &[u8]) -> Result<Vec<u8>> {
-    Ok(sealed.to_vec())
-}
-
-#[cfg(windows)]
-mod dpapi {
-    use anyhow::{Context, Result};
-    use windows::core::w;
-    use windows::Win32::Foundation::LocalFree;
-    use windows::Win32::Security::Cryptography::{
-        CryptProtectData, CryptUnprotectData, CRYPTPROTECT_LOCAL_MACHINE,
-        CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
-    };
-
-    fn blob(bytes: &[u8]) -> CRYPT_INTEGER_BLOB {
-        CRYPT_INTEGER_BLOB {
-            cbData: bytes.len() as u32,
-            pbData: bytes.as_ptr().cast_mut(),
-        }
-    }
-
-    fn take(out: CRYPT_INTEGER_BLOB) -> Vec<u8> {
-        // SAFETY: the blob was allocated by DPAPI and is freed exactly once here.
-        unsafe {
-            let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
-            let _ = LocalFree(Some(windows::Win32::Foundation::HLOCAL(out.pbData.cast())));
-            v
-        }
-    }
-
-    pub fn protect(seed: &[u8]) -> Result<Vec<u8>> {
-        let mut out = CRYPT_INTEGER_BLOB::default();
-        // SAFETY: input blob points at `seed` for the call's duration.
-        unsafe {
-            CryptProtectData(
-                &blob(seed),
-                w!("daedalus-agent identity"),
-                None,
-                None,
-                None,
-                CRYPTPROTECT_LOCAL_MACHINE | CRYPTPROTECT_UI_FORBIDDEN,
-                &mut out,
-            )
-            .context("DPAPI protect")?;
-        }
-        Ok(take(out))
-    }
-
-    pub fn unprotect(sealed: &[u8]) -> Result<Vec<u8>> {
-        let mut out = CRYPT_INTEGER_BLOB::default();
-        // SAFETY: as above.
-        unsafe {
-            CryptUnprotectData(
-                &blob(sealed),
-                None,
-                None,
-                None,
-                None,
-                CRYPTPROTECT_UI_FORBIDDEN,
-                &mut out,
-            )
-            .context("DPAPI unprotect")?;
-        }
-        Ok(take(out))
     }
 }
 

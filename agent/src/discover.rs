@@ -8,10 +8,11 @@
 //! plain http on that port. A `control_plane_url` in config.toml wins over
 //! all of it, for a machine whose DNS is not the box's.
 //!
-//! On Windows the query goes through the OS resolver (`DnsQuery_W`), with
-//! the machine's DNS settings and cache. On macOS it is `dig`, which reads
-//! the resolv.conf macOS generates from its primary resolver and bypasses
-//! the system cache.
+//! The query is per OS (`os::srv_lookup`). On Windows it goes through the
+//! OS resolver (`DnsQuery_W`), with the machine's DNS settings and cache.
+//! On macOS it is `dig`, which reads the resolv.conf macOS generates from
+//! its primary resolver and bypasses the system cache. Linux finds nothing
+//! yet: `control_plane_url` is the way there.
 
 use crate::config::Config;
 use crate::net::Adapter;
@@ -61,89 +62,12 @@ pub fn find(cfg: &Config, adapter: &Adapter) -> Option<Found> {
 
 /// One SRV lookup: the target and port of the first record, if any.
 fn srv(name: &str) -> Option<(String, u16)> {
-    #[cfg(windows)]
-    {
-        win::srv(name)
-    }
-    #[cfg(target_os = "macos")]
-    {
-        mac::srv(name)
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        let _ = name;
-        None
-    }
-}
-
-#[cfg(windows)]
-mod win {
-    use windows::core::PCWSTR;
-    use windows::Win32::NetworkManagement::Dns::{
-        DnsFree, DnsFreeRecordList, DnsQuery_W, DNS_QUERY_STANDARD, DNS_RECORDA, DNS_RECORDW,
-        DNS_TYPE_SRV,
-    };
-
-    pub fn srv(name: &str) -> Option<(String, u16)> {
-        let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
-        // The crate types the out-pointer as the ANSI record even for the wide
-        // query; the W call fills wide records, so it is read as such.
-        let mut list: *mut DNS_RECORDA = std::ptr::null_mut();
-        // SAFETY: the record list the resolver allocates is walked and then
-        // freed with the matching call; nothing is kept past that.
-        unsafe {
-            let rc = DnsQuery_W(
-                PCWSTR(wide.as_ptr()),
-                DNS_TYPE_SRV,
-                DNS_QUERY_STANDARD,
-                None,
-                &mut list,
-                None,
-            );
-            if rc.is_err() || list.is_null() {
-                return None;
-            }
-            let mut found = None;
-            let mut cur = list.cast::<DNS_RECORDW>();
-            while !cur.is_null() {
-                let r = &*cur;
-                if r.wType == DNS_TYPE_SRV.0 {
-                    let srv = &r.Data.SRV;
-                    let target = srv.pNameTarget.to_string().unwrap_or_default();
-                    if !target.is_empty() {
-                        found = Some((target, srv.wPort));
-                        break;
-                    }
-                }
-                cur = r.pNext;
-            }
-            DnsFree(Some(list.cast()), DnsFreeRecordList);
-            found
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-mod mac {
-    /// `dig +short SRV` through the system's resolver settings. macOS ships
-    /// dig, and its short form is one line per record: `prio weight port target.`
-    pub fn srv(name: &str) -> Option<(String, u16)> {
-        let out = std::process::Command::new("dig")
-            .args(["+short", "+time=2", "+tries=1", "SRV", name])
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .find_map(super::parse_short_srv)
-    }
+    crate::os::srv_lookup(name)
 }
 
 /// One line of `dig +short SRV`: `0 0 443 daedalus-app.example.org.` → target and port.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_short_srv(line: &str) -> Option<(String, u16)> {
+/// Pure, so it is tested everywhere; macOS's lookup (`dig`) reads it.
+pub fn parse_short_srv(line: &str) -> Option<(String, u16)> {
     let mut parts = line.split_whitespace();
     let _prio = parts.next()?;
     let _weight = parts.next()?;

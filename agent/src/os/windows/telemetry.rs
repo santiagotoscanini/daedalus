@@ -61,9 +61,11 @@
 //! temperatures do come, from the SMART counters.
 //!
 //! Where each part lives: `hardware` (machine, OS, processor, GPUs,
-//! memory, volumes, battery), `smbios` (the raw firmware table),
-//! `registry` (the value readers everything else uses), `powershell` (the
-//! bounded shell-out and its JSON helpers), `drives` and `updates` (the
+//! memory, volumes, battery), `smbios` (reading the raw firmware table;
+//! its parser is OS-neutral, telemetry/parse/smbios.rs), `registry` (the
+//! value readers everything else uses), `powershell` (the PowerShell
+//! command line over the shared bounded shell-out, exec.rs, and its JSON
+//! helpers), `drives` and `updates` (the
 //! two PowerShell tiers), `pdh` (the GPU counters), `processes`,
 //! `services`, `browsers` and `apps`. This file keeps the collector and
 //! the drives' and updates' deadlines (the Store's is in `apps`).
@@ -92,7 +94,10 @@ use windows::Win32::NetworkManagement::IpHelper::{
 use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows::Win32::System::Threading::GetSystemTimes;
 
-use super::{Collect, GpuSample, Network, Process, Sample, Slow, Static, TOP_PROCESSES};
+use crate::telemetry::parse::smbios::Smbios;
+use crate::telemetry::{Collect, GpuSample, Network, Process, Sample, Slow, Static, TOP_PROCESSES};
+// The string cleanup the submodules share, from the OS-neutral parsers.
+use crate::telemetry::parse::{collapse_ws, meaningful};
 
 use apps::read_apps;
 use browsers::read_browsers;
@@ -105,7 +110,7 @@ use pdh::Pdh;
 use powershell::{powershell_json, script_errors};
 use processes::{process_cpu, process_snapshot, process_usage};
 use services::read_services;
-use smbios::{read_smbios, Smbios};
+use smbios::read_smbios;
 
 /// How long the drives PowerShell may take before it is killed.
 const SLOW_DEADLINE: Duration = Duration::from_secs(60);
@@ -126,34 +131,6 @@ fn from_wide(buf: &[u16]) -> Option<String> {
     let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
     let s = String::from_utf16_lossy(&buf[..end]).trim().to_string();
     (!s.is_empty()).then_some(s)
-}
-
-fn collapse_ws(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// A firmware or cmdlet string worth showing: trimmed, and not one of the
-/// placeholders boards ship with instead of a value.
-fn meaningful(s: &str) -> Option<String> {
-    let t = collapse_ws(s);
-    if t.is_empty() {
-        return None;
-    }
-    let l = t.to_ascii_lowercase();
-    let placeholder = matches!(
-        l.as_str(),
-        "unknown"
-            | "not specified"
-            | "none"
-            | "n/a"
-            | "no dimm"
-            | "undefined"
-            | "not available"
-            | "to be filled by o.e.m."
-            | "default string"
-            | "empty"
-    );
-    (!placeholder).then_some(t)
 }
 
 /// Bytes per second from two counter readings, or None when the counter
@@ -507,12 +484,5 @@ mod tests {
             dwHighDateTime: 2,
         };
         assert_eq!(filetime_u64(t), (2 << 32) | 1);
-    }
-
-    #[test]
-    fn names_and_placeholders() {
-        assert_eq!(meaningful("  To Be Filled By O.E.M. "), None);
-        assert_eq!(meaningful("Unknown"), None);
-        assert_eq!(meaningful(" Kingston  "), Some("Kingston".into()));
     }
 }

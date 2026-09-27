@@ -1,5 +1,6 @@
 //! The Windows service around `agent_main`: what the Service Control
-//! Manager starts at boot, and the two verbs that register and remove it.
+//! Manager starts at boot, and the two verbs that register and remove it —
+//! Windows' side of `os::svc`.
 //!
 //! Runs as LocalSystem: the power request has to outlive any user session,
 //! and the binary swap writes under Program Files. Recovery actions restart
@@ -28,7 +29,7 @@ define_windows_service!(ffi_service_main, service_main);
 
 /// `daedalus-agent run`: hand the process to the dispatcher. Returns when
 /// the service has stopped.
-pub fn run() -> Result<()> {
+pub fn run_service() -> Result<()> {
     service_dispatcher::start(SERVICE_NAME, ffi_service_main)
         .context("the Service Control Manager did not accept this process — `run` is for the SCM; use `serve` in a terminal")?;
     Ok(())
@@ -37,10 +38,10 @@ pub fn run() -> Result<()> {
 fn service_main(_args: Vec<OsString>) {
     // Errors have nowhere to go but the log, which agent_main opens; before
     // that, the SCM's own event ("service terminated") is the record.
-    let _ = run_service();
+    let _ = serve_under_scm();
 }
 
-fn run_service() -> Result<()> {
+fn serve_under_scm() -> Result<()> {
     let stop = Arc::new(AtomicBool::new(false));
     let handler = {
         let stop = Arc::clone(&stop);
@@ -316,12 +317,16 @@ fn tray_start(tray: &std::path::Path) {
 // put it back: it runs as LocalSystem, which may take the console user's
 // token and start a process in that session on the interactive desktop.
 // This is what agent_main calls when the tray has not reported for a while
-// (`Shared::tray_reporting`, status.rs); on macOS launchd's KeepAlive and
-// `launchd::kickstart_tray` do the same.
+// (`Shared::tray_reporting`, status.rs) — `WATCHES_TRAY` below is what
+// turns that watchdog on; on macOS launchd's KeepAlive and
+// `launchd::kickstart_tray` (os/macos/launchd.rs) do the same.
+
+/// The service restarts a tray that stopped reporting.
+pub const WATCHES_TRAY: bool = true;
 
 /// Start the tray as the user at the console, in their session, with their
 /// environment. Err when nobody is logged on, or the token is refused.
-pub fn launch_tray_for_console_user() -> Result<()> {
+pub fn launch_tray_or_session() -> Result<()> {
     use std::ffi::c_void;
     use windows::core::{PCWSTR, PWSTR};
     use windows::Win32::Foundation::{CloseHandle, HANDLE};

@@ -3,8 +3,6 @@
 //! (never a token), and the model settings.
 
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "macos")]
-use std::process::Stdio;
 
 use super::{Credentials, Session, Settings};
 
@@ -23,37 +21,8 @@ pub fn claude_dir() -> Option<PathBuf> {
 }
 
 /// Sessions reported, at most; a profile with hundreds of stale files
-/// would otherwise make every report the tray sends a long one.
+/// would otherwise make every report the session sends a long one.
 const MAX_SESSIONS: usize = 40;
-
-fn pid_alive(pid: u32) -> bool {
-    #[cfg(windows)]
-    {
-        use windows::Win32::Foundation::CloseHandle;
-        use windows::Win32::System::Threading::{
-            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-        };
-        const STILL_ACTIVE: u32 = 259;
-        // SAFETY: a query handle, read once and closed.
-        unsafe {
-            let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
-                return false;
-            };
-            let mut code = 0u32;
-            let ok = GetExitCodeProcess(h, &mut code).is_ok();
-            let _ = CloseHandle(h);
-            ok && code == STILL_ACTIVE
-        }
-    }
-    #[cfg(unix)]
-    {
-        // Signal 0 delivers nothing and says whether the pid exists (EPERM
-        // means it does, owned by someone else).
-        // SAFETY: kill with signal 0 has no effect on the target.
-        let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
-        rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
-    }
-}
 
 /// The session files, alive ones first, newest first within each.
 pub fn read_sessions(dir: &Path) -> Vec<Session> {
@@ -92,7 +61,7 @@ fn session_of(v: &serde_json::Value) -> Option<Session> {
         started_at: n("startedAt"),
         status: s("status"),
         last_activity_at: last,
-        alive: pid_alive(pid),
+        alive: crate::os::pid_alive(pid),
     })
 }
 
@@ -127,27 +96,17 @@ pub fn read_credentials(dir: &Path) -> Credentials {
     }
 }
 
-/// macOS keeps the login in the login keychain under the service name the
-/// CLI uses. Listing the item's attributes needs no access to the secret
-/// and so triggers no prompt; the dates inside it would, so they stay
-/// unread. Absent everywhere else.
+/// Where there is no credentials file: macOS keeps the login in the login
+/// keychain, whose item's presence `os::claude_keychain_login` checks
+/// without reading the secret (so no prompt); its dates stay unread.
+/// Absent everywhere else.
 fn keychain_credentials() -> Credentials {
-    #[cfg(target_os = "macos")]
-    {
-        let found = std::process::Command::new("security")
-            .args(["find-generic-password", "-s", "Claude Code-credentials"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-        if found {
-            return Credentials {
-                present: true,
-                store: Some("keychain".into()),
-                ..Default::default()
-            };
-        }
+    if crate::os::claude_keychain_login() {
+        return Credentials {
+            present: true,
+            store: Some("keychain".into()),
+            ..Default::default()
+        };
     }
     Credentials::default()
 }

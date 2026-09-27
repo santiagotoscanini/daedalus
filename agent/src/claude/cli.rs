@@ -1,26 +1,23 @@
-//! The `claude` command: where it is, how it was installed, and running
-//! it — to completion or killed at a deadline, hidden on Windows — for the
-//! version probe and `claude update`.
+//! The `claude` command: where it is, how it was installed, and its
+//! version — probed through the shared bounded shell-out (exec.rs), which
+//! kills it at a deadline and hides it on Windows, as it does
+//! `claude update` for the supervisor.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
 
 use super::profile::home_dir;
+use crate::exec;
 
 /// The `claude` command: the native install's place first, then npm's, then
 /// Homebrew's two prefixes, then PATH — the fixed places before PATH
 /// because the tray's PATH is the one it was started with (Explorer's at
 /// logon, launchd's system default), which misses them or predates an
-/// install made since.
+/// install made since. The file names are the OS's
+/// (`os::CLAUDE_CLI_NAMES`: `claude.exe`, `.cmd`, `.bat` on Windows).
 pub fn find_cli() -> Option<PathBuf> {
-    let names: &[&str] = if cfg!(windows) {
-        &["claude.exe", "claude.cmd", "claude.bat"]
-    } else {
-        &["claude"]
-    };
+    let names = crate::os::CLAUDE_CLI_NAMES;
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Some(h) = home_dir() {
         dirs.push(h.join(".local").join("bin"));
@@ -39,16 +36,6 @@ pub fn find_cli() -> Option<PathBuf> {
     dirs.into_iter()
         .flat_map(|d| names.iter().map(move |n| d.join(n)))
         .find(|p| p.is_file())
-}
-
-pub(super) fn hidden(cmd: &mut Command) -> &mut Command {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd
 }
 
 /// How Claude Code was installed here, named from where `find_cli` found it.
@@ -73,67 +60,6 @@ pub fn install_method(cli: &Path) -> &'static str {
     }
 }
 
-/// What a command did: its status and everything it printed. A refusal
-/// ("Updates are disabled by your administrator") arrives on one stream or
-/// the other depending on the version, so both are captured and joined.
-pub struct Ran {
-    pub ok: bool,
-    /// stdout and stderr, in the order each thread finished reading them.
-    pub output: String,
-}
-
-/// Run to completion, or kill it and give up after `timeout`.
-pub(super) fn run(mut cmd: Command, timeout: Duration) -> Option<Ran> {
-    let mut child = hidden(&mut cmd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .ok()?;
-    // Both pipes drained on their own threads: a child that fills one while
-    // nobody reads the other blocks forever, and `claude update` is chatty
-    // on both.
-    let mut out = child.stdout.take()?;
-    let mut err = child.stderr.take()?;
-    let (tx, rx) = mpsc::channel();
-    let tx2 = tx.clone();
-    std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = out.read_to_string(&mut s);
-        let _ = tx.send(s);
-    });
-    std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = err.read_to_string(&mut s);
-        let _ = tx2.send(s);
-    });
-    let deadline = Instant::now() + timeout;
-    let mut text = String::new();
-    for _ in 0..2 {
-        let left = deadline.saturating_duration_since(Instant::now());
-        match rx.recv_timeout(left) {
-            Ok(s) => {
-                if !s.trim().is_empty() {
-                    if !text.is_empty() {
-                        text.push('\n');
-                    }
-                    text.push_str(s.trim());
-                }
-            }
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-        }
-    }
-    let status = child.wait().ok()?;
-    Some(Ran {
-        ok: status.success(),
-        output: text,
-    })
-}
-
 /// The last line worth showing of an update run, cut to a status field.
 pub(super) fn last_meaningful(text: &str) -> String {
     text.lines()
@@ -143,38 +69,6 @@ pub(super) fn last_meaningful(text: &str) -> String {
         .chars()
         .take(200)
         .collect()
-}
-
-/// Run a command to completion, or give up after `timeout`; the first line
-/// of its stdout, trimmed. `run` above is this with both streams and the
-/// exit code, which a version probe does not want and an update run does.
-fn first_line(mut cmd: Command, timeout: Duration) -> Option<String> {
-    let mut child = hidden(&mut cmd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let mut out = child.stdout.take()?;
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = out.read_to_string(&mut s);
-        let _ = tx.send(s);
-    });
-    let text = match rx.recv_timeout(timeout) {
-        Ok(t) => t,
-        Err(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return None;
-        }
-    };
-    let _ = child.wait();
-    text.lines()
-        .next()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
 }
 
 /// "2.1.276 (Claude Code)" → "2.1.276".
@@ -187,7 +81,7 @@ pub fn parse_version(line: &str) -> Option<String> {
 pub fn cli_version(cli: &Path) -> Option<String> {
     let mut cmd = Command::new(cli);
     cmd.arg("--version");
-    first_line(cmd, Duration::from_secs(20)).and_then(|l| parse_version(&l))
+    exec::first_line(cmd, Duration::from_secs(20)).and_then(|l| parse_version(&l))
 }
 
 #[cfg(test)]

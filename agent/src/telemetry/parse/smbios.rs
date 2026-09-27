@@ -1,20 +1,21 @@
-//! The raw SMBIOS table (`GetSystemFirmwareTable('RSMB')`): the chassis
-//! type (structure 3) and the memory arrays and devices (16 and 17), which
-//! the registry's BIOS key does not carry. The parser is pure and takes
-//! any byte slice, so a truncated or malformed table keeps what parsed.
-
-use windows::Win32::System::SystemInformation::{GetSystemFirmwareTable, RSMB};
+//! The raw SMBIOS table: the chassis type (structure 3) and the memory
+//! arrays and devices (16 and 17), which Windows' registry BIOS key does
+//! not carry. The parser is pure and takes any byte slice — the table
+//! after `GetSystemFirmwareTable('RSMB')`'s header on Windows
+//! (os/windows/telemetry/smbios.rs reads it), or the same structures any
+//! other firmware interface hands over — so a truncated or malformed table
+//! keeps what parsed.
 
 use super::meaningful;
 use crate::telemetry::MemoryModule;
 
 /// What the raw SMBIOS table says that the registry's BIOS key does not.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(super) struct Smbios {
-    pub(super) form: Option<&'static str>,
-    pub(super) slots: Option<u32>,
-    pub(super) max_capacity_bytes: Option<u64>,
-    pub(super) modules: Vec<MemoryModule>,
+pub struct Smbios {
+    pub form: Option<&'static str>,
+    pub slots: Option<u32>,
+    pub max_capacity_bytes: Option<u64>,
+    pub modules: Vec<MemoryModule>,
 }
 
 /// The chassis type (SMBIOS type 3, byte 5, lock bit masked) as a shape.
@@ -60,7 +61,8 @@ fn u16_at(b: &[u8], off: usize) -> Option<u16> {
     Some(u16::from_le_bytes([*b.get(off)?, *b.get(off + 1)?]))
 }
 
-fn u32_at(b: &[u8], off: usize) -> Option<u32> {
+/// A little-endian u32 at `off`, when the bytes reach that far.
+pub fn u32_at(b: &[u8], off: usize) -> Option<u32> {
     Some(u32::from_le_bytes([
         *b.get(off)?,
         *b.get(off + 1)?,
@@ -174,7 +176,7 @@ fn smbios_structures(table: &[u8]) -> Vec<Structure<'_>> {
 }
 
 /// The chassis type and the memory arrays and devices from the table.
-fn parse_smbios(table: &[u8]) -> Smbios {
+pub fn parse_smbios(table: &[u8]) -> Smbios {
     let mut out = Smbios::default();
     // (use, devices, capacity) per Physical Memory Array; the system
     // memory ones (use 3) are what counts, the rest (flash, cache) only
@@ -236,32 +238,6 @@ fn parse_smbios(table: &[u8]) -> Smbios {
         out.max_capacity_bytes = (cap > 0).then_some(cap);
     }
     out
-}
-
-/// The raw SMBIOS table from the firmware, parsed.
-pub(super) fn read_smbios() -> Result<Smbios, String> {
-    // SAFETY: a size query with no buffer.
-    let size = unsafe { GetSystemFirmwareTable(RSMB, 0, None) };
-    if size == 0 {
-        return Err("GetSystemFirmwareTable gave no SMBIOS table".into());
-    }
-    let mut buf = vec![0u8; size as usize];
-    // SAFETY: the buffer is the size the call asked for; it writes at most
-    // that many bytes and returns how many.
-    let written = unsafe { GetSystemFirmwareTable(RSMB, 0, Some(&mut buf[..])) } as usize;
-    if written == 0 || written > buf.len() {
-        return Err("GetSystemFirmwareTable did not fill the SMBIOS table".into());
-    }
-    // RawSMBIOSData: Used20CallingMethod, major, minor, DmiRevision (four
-    // bytes), Length (u32), then the table.
-    let Some(len) = u32_at(&buf, 4) else {
-        return Err("SMBIOS table is shorter than its header".into());
-    };
-    let end = (8 + len as usize).min(written);
-    if end <= 8 {
-        return Err("SMBIOS table is empty".into());
-    }
-    Ok(parse_smbios(&buf[8..end]))
 }
 
 #[cfg(test)]

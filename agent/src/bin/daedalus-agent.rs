@@ -1,13 +1,14 @@
 //! The service executable and its verbs; `print_help` below is the list.
 //! `run` is what the Service Control Manager (launchd on macOS) calls;
-//! `serve` is the same work in the foreground, for a terminal.
+//! `serve` is the same work in the foreground, for a terminal. What differs
+//! by OS — the service, install, uninstall, Ctrl-C — is `os`'s.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use daedalus_agent::{agent_main, config, update, VERSION};
+use daedalus_agent::{agent_main, config, os, update, VERSION};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -54,80 +55,20 @@ fn print_help() {
 }
 
 fn run_as_service() -> Result<()> {
-    #[cfg(windows)]
-    {
-        daedalus_agent::service::run()
-    }
-    #[cfg(target_os = "macos")]
-    {
-        daedalus_agent::launchd::run()
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        bail!("`run` is the service entry point on Windows and macOS; use `serve` here")
-    }
+    os::svc::run_service()
 }
 
 fn serve_foreground() -> Result<()> {
     let stop = Arc::new(AtomicBool::new(false));
     {
         let stop = Arc::clone(&stop);
-        ctrlc_handler(move || stop.store(true, Ordering::Relaxed));
+        os::on_interrupt(move || stop.store(true, Ordering::Relaxed));
     }
     agent_main(stop, true)
 }
 
-/// A Ctrl-C hook without a crate: on Windows through the console control
-/// handler, on unix through `signal(2)` (SIGINT and SIGTERM); elsewhere by
-/// ignoring it (the foreground mode is a convenience there, not a
-/// deployment).
-fn ctrlc_handler<F: Fn() + Send + Sync + 'static>(f: F) {
-    #[cfg(windows)]
-    {
-        use std::sync::OnceLock;
-        use windows::core::BOOL;
-        use windows::Win32::System::Console::SetConsoleCtrlHandler;
-        static HANDLER: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
-        let _ = HANDLER.set(Box::new(f));
-        unsafe extern "system" fn on_ctrl(_: u32) -> BOOL {
-            if let Some(h) = HANDLER.get() {
-                h();
-            }
-            BOOL(1)
-        }
-        // SAFETY: the callback only touches a OnceLock that outlives it.
-        unsafe {
-            let _ = SetConsoleCtrlHandler(Some(on_ctrl), true);
-        }
-    }
-    #[cfg(unix)]
-    {
-        // A C handler cannot carry a closure; a flag and a relay thread can.
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static HIT: AtomicBool = AtomicBool::new(false);
-        extern "C" fn on_int(_: libc::c_int) {
-            HIT.store(true, Ordering::Relaxed);
-        }
-        // SAFETY: the handler only stores to an atomic.
-        unsafe {
-            libc::signal(libc::SIGINT, on_int as *const () as libc::sighandler_t);
-            libc::signal(libc::SIGTERM, on_int as *const () as libc::sighandler_t);
-        }
-        std::thread::spawn(move || loop {
-            if HIT.load(Ordering::Relaxed) {
-                f();
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(200));
-        });
-    }
-    #[cfg(not(any(windows, unix)))]
-    {
-        let _ = f;
-    }
-}
-
 fn install(args: &[String]) -> Result<()> {
+    config::refuse_env_override("install")?;
     let mut cfg = config::Config::default();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -142,34 +83,12 @@ fn install(args: &[String]) -> Result<()> {
             other => bail!("unknown option {other}"),
         }
     }
-    #[cfg(windows)]
-    {
-        daedalus_agent::service::install(&cfg)
-    }
-    #[cfg(target_os = "macos")]
-    {
-        daedalus_agent::launchd::install(&cfg)
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        let _ = cfg;
-        bail!("install is for Windows and macOS in this version")
-    }
+    os::svc::install(&cfg)
 }
 
 fn uninstall() -> Result<()> {
-    #[cfg(windows)]
-    {
-        daedalus_agent::service::uninstall()
-    }
-    #[cfg(target_os = "macos")]
-    {
-        daedalus_agent::launchd::uninstall()
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        bail!("uninstall is for Windows and macOS in this version")
-    }
+    config::refuse_env_override("uninstall")?;
+    os::svc::uninstall()
 }
 
 fn status_cmd() -> Result<()> {

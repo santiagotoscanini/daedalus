@@ -13,8 +13,10 @@
 //! `SAMPLE_EVERY` on a thread of their own. OS updates are a fourth thing:
 //! a search that can take a minute and touch the network, run hourly on its
 //! own thread and merged in when it lands. Each platform has a `Collector`
-//! (win.rs, mac.rs); anything it cannot read is `None` or an empty list,
-//! never a guess, and what went wrong is in `errors` so the page can say so.
+//! and an updates reader, chosen by `os` (os/windows/telemetry.rs,
+//! os/macos/telemetry.rs; on Linux a stub that says so); anything it cannot
+//! read is `None` or an empty list, never a guess, and what went wrong is
+//! in `errors` so the page can say so.
 //!
 //! Two views of the document. The OPEN status page carries `public()`:
 //! nothing that identifies a person — no serial numbers, no process list, no
@@ -24,10 +26,13 @@
 //! draws the same pages it draws for itself.
 //!
 //! The document's types are in model.rs and its Prometheus rendering in
-//! metrics.rs; both are re-exported here.
+//! metrics.rs; both are re-exported here. The collectors' pure parsers —
+//! SMBIOS, `system_profiler`, macOS's other tools — are OS-neutral, in
+//! parse/.
 
 mod metrics;
 mod model;
+pub mod parse;
 
 pub use metrics::metrics_text;
 pub use model::{
@@ -80,43 +85,8 @@ pub trait Collect {
     fn sample(&mut self) -> Sample;
 }
 
-#[cfg(windows)]
-mod win;
-#[cfg(windows)]
-pub use win::{read_updates, Collector};
-
-#[cfg(target_os = "macos")]
-mod mac;
-#[cfg(target_os = "macos")]
-pub use mac::{read_updates, Collector};
-
-/// Everywhere else: nothing but the errors saying so.
-#[cfg(not(any(windows, target_os = "macos")))]
-#[derive(Default)]
-pub struct Collector;
-#[cfg(not(any(windows, target_os = "macos")))]
-impl Collect for Collector {
-    fn read_static(&mut self) -> Static {
-        Static {
-            errors: vec!["telemetry is Windows- and macOS-only in this version".into()],
-            ..Default::default()
-        }
-    }
-    fn read_slow(&mut self) -> Slow {
-        Slow::default()
-    }
-    fn sample(&mut self) -> Sample {
-        Sample::default()
-    }
-}
-#[cfg(not(any(windows, target_os = "macos")))]
-pub fn read_updates() -> Updates {
-    Updates {
-        checked_at: Some(now_rfc3339()),
-        error: Some("OS updates are read on Windows and macOS only".into()),
-        ..Default::default()
-    }
-}
+/// This OS's collector (`Collect + Default`) and its OS-updates reader.
+pub use crate::os::{read_updates, Collector};
 
 /// Static, slow and sampled halves joined into the document.
 pub fn assemble(
@@ -219,7 +189,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     let _ = c.sample();
     let mut wait = Duration::from_secs(2);
     loop {
-        if crate::update::sleep_until(&stop, wait) {
+        if crate::util::sleep_until(&stop, wait) {
             return;
         }
         wait = SAMPLE_EVERY;
