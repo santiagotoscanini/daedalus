@@ -60,6 +60,22 @@ pub fn find(cfg: &Config, adapter: &Adapter) -> Option<Found> {
     None
 }
 
+/// The controller's `host:port` and the suffix that named it, from the
+/// `_daedalus-controller._tcp` record under the same domains as the box's
+/// own (link/node.rs); None when no domain has one.
+pub fn find_controller(cfg: &Config, adapter: &Adapter) -> Option<(String, String)> {
+    let mut suffixes: Vec<String> = cfg.search_domains.clone();
+    for s in &adapter.dns_suffixes {
+        if !suffixes.contains(s) {
+            suffixes.push(s.clone());
+        }
+    }
+    suffixes.into_iter().find_map(|suffix| {
+        srv(&format!("{}.{suffix}", crate::link::SRV_SERVICE))
+            .map(|(target, port)| (format!("{}:{port}", target.trim_end_matches('.')), suffix))
+    })
+}
+
 /// One SRV lookup: the target and port of the first record, if any.
 fn srv(name: &str) -> Option<(String, u16)> {
     crate::os::srv_lookup(name)

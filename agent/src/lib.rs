@@ -3,7 +3,8 @@
 //! A Windows service (a launchd daemon on macOS, a systemd service on
 //! Linux) that holds the machine awake for as long as the box wants it to,
 //! answers a small status page on the LAN, announces itself to the box
-//! with a signed hello once a minute and follows the policy the answer
+//! with a signed hello once a minute and keeps one connection to the
+//! controller, the box's own agent (link/), following the policy either
 //! carries, samples the machine's telemetry, and updates itself to the
 //! newest `agent-v*` release of the engine repository; a session that —
 //! with the user's own login — runs `claude remote-control` the way the box
@@ -38,9 +39,11 @@ pub mod facts;
 pub mod hello;
 pub mod http;
 pub mod identity;
+pub mod link;
 pub mod net;
 pub mod os;
 pub mod power;
+pub mod private;
 pub mod providers;
 pub mod role;
 pub mod session;
@@ -104,6 +107,38 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
 
     let server = status::serve(cfg.port, Arc::clone(&shared))?;
 
+    // The controller's own key — what every machine pins — and, where
+    // `[controller] listen` names an address, the registry of machines the
+    // API reads (link/). Set before the API opens, so its capabilities
+    // say `nodes` from the first connection.
+    let controller = if role.node_listener {
+        let id = identity::Identity::load_or_create().context("the controller's identity")?;
+        shared.set_controller_info(api::wire::ControllerInfo {
+            public_key: id.public_key_hex(),
+            fingerprint: id.fingerprint(),
+            listen: cfg.controller_listen().map(|a| a.to_string()),
+            advertise: cfg.controller.advertise.clone(),
+        });
+        tracing::info!(fingerprint = %id.fingerprint(), "controller identity loaded");
+        match cfg.controller_listen() {
+            Some(addr) => {
+                let registry = Arc::new(link::controller::Registry::new(
+                    &id,
+                    shared.events_handle(),
+                    link::controller::Limits::default(),
+                ));
+                shared.set_nodes(Arc::clone(&registry));
+                Some((id, addr, registry))
+            }
+            None => {
+                tracing::info!("no [controller] listen: no machine can connect to this controller");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // The controller's door for the app (api/). Opened before the sampler
     // and the session start, so a second instance that got past the status
     // page's port (a different `port`) stops here without having started
@@ -114,21 +149,43 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         None
     };
 
+    // The machines' links, once the API is up (link/controller.rs).
+    let listener = match controller {
+        Some((id, addr, registry)) => Some(link::controller::listen(addr, &id, registry)?),
+        None => None,
+    };
+
     // The machine's key, made on the first start. Without it there is no
-    // hello, but the hold and the page above do not depend on it.
+    // hello and no link, but the hold and the page above do not depend on
+    // it. The hello (the legacy path) and the link to the controller run
+    // side by side until the controller approves the machine (link/node.rs).
     let announcer = match role.hello.then(identity::Identity::load_or_create) {
         None => None,
         Some(Ok(id)) => {
-            tracing::info!(node = id.node_id(), "identity loaded");
+            tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
+            let uplink = {
+                let (shared, stop, cfg, facts, id) = (
+                    Arc::clone(&shared),
+                    Arc::clone(&stop),
+                    cfg.clone(),
+                    facts.clone(),
+                    id.clone(),
+                );
+                std::thread::Builder::new()
+                    .name("link".into())
+                    .spawn(move || link::node::run_loop(cfg, id, facts, shared, stop))
+                    .context("spawning the link")?
+            };
             let shared = Arc::clone(&shared);
             let stop = Arc::clone(&stop);
             let cfg = cfg.clone();
-            Some(
+            Some((
                 std::thread::Builder::new()
                     .name("hello".into())
                     .spawn(move || hello::run_loop(cfg, id, facts, shared, stop))
                     .context("spawning the announcer")?,
-            )
+                uplink,
+            ))
         }
         Some(Err(e)) => {
             tracing::error!(
@@ -244,6 +301,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         std::thread::sleep(Duration::from_millis(500));
     }
     tracing::info!("stopping");
+    drop(listener);
     drop(api);
     server.unblock();
     if let Some(s) = session {
@@ -255,8 +313,9 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     if let Some(s) = sampler {
         let _ = s.join();
     }
-    if let Some(a) = announcer {
+    if let Some((a, l)) = announcer {
         let _ = a.join();
+        let _ = l.join();
     }
     drop(hold);
     Ok(())

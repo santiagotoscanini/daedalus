@@ -8,13 +8,44 @@ use super::Telemetry;
 /// untyped. The OS's own counters (network bytes) carry a counter's
 /// `_total` suffix, and a query `rate()`s them.
 pub fn metrics_text(t: &Telemetry, agent_version: &str, hostname: &str) -> String {
+    metrics_text_for(t, agent_version, hostname, None)
+}
+
+/// A label value, escaped for the exposition format: backslash, quote and
+/// newline as the format spells them, every other control character
+/// dropped — a name a machine chose must not break a line or forge one.
+pub fn escape_label(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// The same, for a machine the controller renders (`/nodes/metrics`,
+/// link/controller.rs): every series also labelled `node="<node id>"`.
+pub fn metrics_text_for(
+    t: &Telemetry,
+    agent_version: &str,
+    hostname: &str,
+    node: Option<&str>,
+) -> String {
     let mut out = String::new();
-    let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
-    let host = esc(hostname);
+    let esc = escape_label;
+    let base = match node {
+        None => format!("host=\"{}\"", esc(hostname)),
+        Some(id) => format!("host=\"{}\",node=\"{}\"", esc(hostname), esc(id)),
+    };
     let mut gauge = |name: &str, labels: &str, v: f64| {
         let sep = if labels.is_empty() { "" } else { "," };
         out.push_str(&format!(
-            "daedalus_agent_{name}{{host=\"{host}\"{sep}{labels}}} {v}\n"
+            "daedalus_agent_{name}{{{base}{sep}{labels}}} {v}\n"
         ));
     };
     gauge(
@@ -201,5 +232,26 @@ mod tests {
         assert!(m.contains("daedalus_agent_disk_total_bytes{host=\"PC\",mount=\"C:\"} 10\n"));
         assert!(m.contains("cpu=\"A \\\"B\\\"\""));
         assert!(m.contains("daedalus_agent_apps{host=\"PC\",kind=\"game\"} 0\n"));
+    }
+}
+
+#[cfg(test)]
+mod escape_tests {
+    use super::*;
+
+    #[test]
+    fn labels_cannot_break_or_forge_a_line() {
+        assert_eq!(escape_label("a\\b\"c"), "a\\\\b\\\"c");
+        assert_eq!(escape_label("x\ny"), "x\\ny");
+        assert_eq!(escape_label("x\r\t\u{7}\u{1b}[31my"), "x[31my");
+        assert_eq!(escape_label("Santiago’s MacBook"), "Santiago’s MacBook");
+        // A hostname that tries to add a series stays inside its label.
+        let evil = "PC\"} 1\ndaedalus_agent_fake{host=\"x";
+        let m = metrics_text_for(&Telemetry::default(), "1", evil, Some("0123456789abcdef"));
+        for line in m.lines() {
+            assert!(line.starts_with("daedalus_agent_"), "{line}");
+            assert!(!line.starts_with("daedalus_agent_fake"), "{line}");
+        }
+        assert!(m.contains("host=\"PC\\\"} 1\\ndaedalus_agent_fake{host=\\\"x\",node="));
     }
 }

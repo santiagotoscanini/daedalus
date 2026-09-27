@@ -217,6 +217,19 @@ fn peer_uid(s: &std::os::unix::net::UnixStream) -> Option<u32> {
 }
 
 /// This process's effective uid.
+/// Who owns `path` (private.rs decides whether that is trusted).
+pub fn file_owner(path: &Path) -> anyhow::Result<crate::private::Owner> {
+    use std::os::unix::fs::MetadataExt;
+    let m = std::fs::metadata(path)
+        .map_err(|e| anyhow::anyhow!("reading the owner of {}: {e}", path.display()))?;
+    Ok(crate::private::Owner::Uid(m.uid()))
+}
+
+/// The uid this agent runs as.
+pub fn own_uid() -> Option<u32> {
+    Some(euid())
+}
+
 fn euid() -> u32 {
     // SAFETY: no arguments; cannot fail.
     unsafe { libc::geteuid() }

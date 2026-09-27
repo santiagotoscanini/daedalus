@@ -46,7 +46,7 @@ fn print_help() {
     println!(
         "daedalus-agent {VERSION}\n\n\
          usage: daedalus-agent <verb>\n\n  \
-         install [--port N]   register and start the service and the tray (administrator)\n  \
+         install [--port N] [--controller HOST:PORT] [--pin FINGERPRINT]\n                       register and start the service and the tray (administrator);\n                       --controller and --pin say where the controller is and which\n                       key to trust (written to config.toml, also on a reinstall)\n  \
          uninstall            stop and remove the service and the tray (administrator)\n  \
          run                  service entry point; used by the Service Control Manager\n  \
          serve                run in the foreground, in this terminal\n  \
@@ -92,6 +92,22 @@ fn install(args: &[String]) -> Result<()> {
                     .context("--port needs a number")?
                     .parse()
                     .context("--port must be a TCP port")?
+            }
+            "--controller" => {
+                let a = it.next().context("--controller needs host:port")?;
+                if !config::valid_host_port(a) {
+                    bail!(
+                        "--controller must be host:port (the controller's link address), not {a:?}"
+                    );
+                }
+                cfg.controller_address = Some(a.clone());
+            }
+            "--pin" => {
+                let p = it
+                    .next()
+                    .context("--pin needs the controller key's fingerprint")?;
+                let d = daedalus_agent::identity::parse_fingerprint(p)?;
+                cfg.controller_pin = Some(daedalus_agent::identity::format_fingerprint(&d));
             }
             other => bail!("unknown option {other}"),
         }

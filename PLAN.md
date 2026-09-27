@@ -697,13 +697,15 @@ priority; each can be done independently unless noted.
          host alias, and workspace sync ignoring santree's untracked
          `.santree/`.
     - **Decisions open:**
-      1. Transport between agents. Proposed: TLS 1.3 (rustls) with each
-         side pinning the other's ed25519 key, plus stream multiplexing
-         (yamux) — no CA, no web server between. The alternative is gRPC:
-         more standard, heavier.
-      2. How a machine first trusts the controller: trust on first use with
-         the controller's fingerprint shown on the tray and in Settings ›
-         Machines, or pinned at install (the one-liner carries it).
+      1. Transport between agents. Decided: TLS 1.3 (rustls, over pure-Rust
+         primitives) with each side pinning the other's ed25519 key, and
+         newline-delimited JSON with the socket API's envelope — no CA, no
+         web server between (agent/src/link/). Stream multiplexing waits for
+         santree's streams (step 5).
+      2. How a machine first trusts the controller. Decided: pinned at
+         install (`--pin`), else the key the app names in the hello answer,
+         else trust on first use — both fingerprints on the tray and the
+         status page; a changed key is refused loudly, never re-pinned.
       3. The box's System page: keep the root snapshots for what only root
          reads (SMART, ZFS, generations) and let the controller replace the
          Claude parts (proposed), or converge everything on one collector

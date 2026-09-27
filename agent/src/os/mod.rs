@@ -67,7 +67,7 @@ pub use imp::tls;
 // power
 pub use imp::{converge_plan, os_uptime_secs, requests_report, Hold};
 // identity
-pub use imp::{seal, unseal, write_private};
+pub use imp::{file_owner, own_uid, seal, unseal, write_private};
 // update
 pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 // processes, a single-instance lock, the monotonic clock

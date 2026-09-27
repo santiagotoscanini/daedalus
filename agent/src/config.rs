@@ -21,6 +21,8 @@
 //! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
 //! claude_rc = "child"         # child | unit; absent = the OS's (`os::CLAUDE_RC`)
+//! controller_address = "…"    # the controller, host:port; absent = the box's word, or DNS
+//! controller_pin = "…"        # its key's fingerprint; absent = the box's word, or first use
 //!
 //! [controller]                # read only when mode = "controller"; nix writes it
 //! claude_remote_control = false   # run Claude remote control on the box
@@ -28,7 +30,14 @@
 //! claude_unit = "…"           # its transient user unit; absent = daedalus-claude-rc
 //! api_socket = "…"            # the local API socket; absent = see below
 //! api_allowed_uids = []       # host uids served besides the agent's own
+//! listen = "0.0.0.0:7788"     # where machines' links are accepted; absent = none are
+//! advertise = ["box.lan:7788"]  # what machines should dial (one or a list), for the app
 //! ```
+//!
+//! `controller_address` and `controller_pin` are a machine's way to the
+//! controller (link/node.rs): `install --controller` and `--pin` write them,
+//! into a file that exists too. A pin that is not a fingerprint does not
+//! stop the agent: the link says so on the status page and the hold goes on.
 //!
 //! `mode` decides which parts of the agent run at all — an ordinary machine
 //! (`node`) or the box's own agent (`controller`); role.rs has the table.
@@ -144,6 +153,16 @@ pub struct Config {
     pub search_domains: Vec<String>,
     /// How often the agent announces itself to the box, in seconds.
     pub hello_secs: u64,
+    /// The controller's `host:port`, for the link (link/node.rs); absent
+    /// means: the address the box names, or the `_daedalus-controller._tcp`
+    /// SRV record. `install --controller` writes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controller_address: Option<String>,
+    /// The controller key's fingerprint to pin (identity.rs
+    /// `fingerprint`); absent means: the key the box names, or the first
+    /// one the controller presents. `install --pin` writes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controller_pin: Option<String>,
     /// What this agent is to the rest: an ordinary machine, or the
     /// controller on the box. Decides which parts run (role.rs).
     #[serde(skip_serializing_if = "is_default")]
@@ -187,6 +206,18 @@ pub struct ControllerConfig {
     /// Host uids the socket serves besides the agent's own (module doc).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub api_allowed_uids: Vec<u32>,
+    /// Where the machines' link is accepted, `address:port`; absent means
+    /// the controller listens for no machine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub listen: Option<String>,
+    /// The `host:port`s machines should dial, as `system.info` names them
+    /// to the app; one, or a list.
+    #[serde(
+        default,
+        deserialize_with = "one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub advertise: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -246,6 +277,8 @@ impl Default for Config {
             control_plane_url: None,
             search_domains: Vec::new(),
             hello_secs: 60,
+            controller_address: None,
+            controller_pin: None,
             mode: Mode::default(),
             telemetry: TelemetryLevel::default(),
             updates: None,
@@ -306,6 +339,15 @@ impl Config {
         )
     }
 
+    /// Where the controller accepts the machines' link; None when
+    /// `[controller] listen` names nothing (or this is not the controller).
+    pub fn controller_listen(&self) -> Option<std::net::SocketAddr> {
+        if self.mode != Mode::Controller {
+            return None;
+        }
+        non_empty_str(self.controller.listen.as_deref()).and_then(|l| l.parse().ok())
+    }
+
     pub fn update_interval(&self) -> Duration {
         Duration::from_secs(self.update_check_secs.max(60))
     }
@@ -355,6 +397,16 @@ impl Config {
             if uids.contains(&u32::MAX) {
                 bail!("controller.api_allowed_uids may not name uid 4294967295 (no user)");
             }
+            if let Some(l) = non_empty_str(self.controller.listen.as_deref()) {
+                if l.parse::<std::net::SocketAddr>().is_err() {
+                    bail!("controller.listen must be an address and port such as 0.0.0.0:7788, not {l:?}");
+                }
+            }
+            for a in &self.controller.advertise {
+                if !valid_host_port(a) {
+                    bail!("controller.advertise names host:port pairs, not {a:?}");
+                }
+            }
             if let Some(u) = non_empty_str(self.controller.claude_unit.as_deref()) {
                 if !valid_unit_name(u) {
                     bail!(
@@ -366,6 +418,38 @@ impl Config {
         }
         Ok(())
     }
+}
+
+/// `host:port`, `a.b.c.d:port` or `[v6]:port`, with a port that is not 0.
+pub fn valid_host_port(s: &str) -> bool {
+    let Some((host, port)) = s.rsplit_once(':') else {
+        return false;
+    };
+    let host_ok = match host.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
+        Some(v6) => v6.parse::<std::net::Ipv6Addr>().is_ok(),
+        None => {
+            !host.is_empty()
+                && host.len() <= 253
+                && host
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
+        }
+    };
+    host_ok && port.parse::<u16>().is_ok_and(|p| p != 0)
+}
+
+/// `advertise` as one string or a list of them.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    Ok(match OneOrMany::deserialize(d)? {
+        OneOrMany::One(s) => vec![s],
+        OneOrMany::Many(v) => v,
+    })
 }
 
 /// A name `systemd-run --unit=` takes as it is and nothing else: no
@@ -571,8 +655,11 @@ pub fn refuse_env_override(verb: &str) -> Result<()> {
 }
 
 /// Writes the config file if there is none, so `install` never overwrites
-/// an operator's edits on a reinstall. Only `install` calls it.
-pub fn write_if_absent(cfg: &Config) -> Result<PathBuf> {
+/// an operator's edits on a reinstall — except the two keys `install
+/// --controller` and `--pin` name, which it sets in a file that exists
+/// (`set_top_level_keys`), leaving the rest as it was. Only `install`
+/// calls it.
+pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
     let path = config_path();
     std::fs::create_dir_all(config_dir()).context("creating the data directory")?;
     if !path.exists() {
@@ -581,8 +668,66 @@ pub fn write_if_absent(cfg: &Config) -> Result<PathBuf> {
             toml::to_string_pretty(cfg)?
         );
         std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+        return Ok(path);
+    }
+    let keys: Vec<(&str, &str)> = [
+        ("controller_address", cfg.controller_address.as_deref()),
+        ("controller_pin", cfg.controller_pin.as_deref()),
+    ]
+    .into_iter()
+    .filter_map(|(k, v)| v.map(|v| (k, v)))
+    .collect();
+    if !keys.is_empty() {
+        let text = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let edited = set_top_level_keys(&text, &keys);
+        toml::from_str::<Config>(&edited)
+            .with_context(|| format!("{} would not parse with the new keys", path.display()))?;
+        std::fs::write(&path, edited).with_context(|| format!("writing {}", path.display()))?;
     }
     Ok(path)
+}
+
+/// `text` with each key set to its string value at the top level: an
+/// existing line for the key (before the first table) is replaced, and a
+/// missing one is added before the first table header, so it stays a
+/// top-level key. Comments and every other line stay as they are.
+fn set_top_level_keys(text: &str, keys: &[(&str, &str)]) -> String {
+    let quoted = |v: &str| toml::Value::String(v.to_string()).to_string();
+    let mut out: Vec<String> = Vec::new();
+    let mut done = vec![false; keys.len()];
+    let mut in_table = false;
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('[') && !in_table {
+            in_table = true;
+            for (i, (k, v)) in keys.iter().enumerate() {
+                if !done[i] {
+                    out.push(format!("{k} = {}", quoted(v)));
+                    done[i] = true;
+                }
+            }
+        }
+        if !in_table {
+            let key = trimmed.split('=').next().unwrap_or("").trim();
+            if let Some(i) = keys.iter().position(|(k, _)| *k == key) {
+                if !done[i] {
+                    out.push(format!("{} = {}", keys[i].0, quoted(keys[i].1)));
+                    done[i] = true;
+                }
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+    for (i, (k, v)) in keys.iter().enumerate() {
+        if !done[i] {
+            out.push(format!("{k} = {}", quoted(v)));
+        }
+    }
+    let mut s = out.join("\n");
+    s.push('\n');
+    s
 }
 
 /// Daily-rotated file log, plus the terminal when running in the foreground.
@@ -927,6 +1072,79 @@ mod tests {
             ..Config::default()
         };
         assert!(ok.validate().is_ok());
+    }
+
+    #[test]
+    fn install_sets_the_controller_keys_and_keeps_the_rest() {
+        let file = "# daedalus-agent — written by `install`\n\nport = 7790\ncontroller_pin = \"old\"\n\n[controller]\nclaude_unit = \"x\"\n";
+        let out = set_top_level_keys(
+            file,
+            &[
+                ("controller_address", "box.lan:7788"),
+                ("controller_pin", "aa:bb"),
+            ],
+        );
+        assert_eq!(
+            out,
+            "# daedalus-agent — written by `install`\n\nport = 7790\ncontroller_pin = \"aa:bb\"\n\n\
+             controller_address = \"box.lan:7788\"\n[controller]\nclaude_unit = \"x\"\n"
+        );
+        let cfg: Config = toml::from_str(&out).unwrap();
+        assert_eq!(cfg.port, 7790);
+        assert_eq!(cfg.controller_address.as_deref(), Some("box.lan:7788"));
+        assert_eq!(cfg.controller_pin.as_deref(), Some("aa:bb"));
+        // No table: appended at the end.
+        let out = set_top_level_keys("port = 1\n", &[("controller_pin", "p")]);
+        assert_eq!(out, "port = 1\ncontroller_pin = \"p\"\n");
+        // What install writes without the flags is unchanged.
+        assert!(!toml::to_string_pretty(&Config::default())
+            .unwrap()
+            .contains("controller"));
+    }
+
+    #[test]
+    fn the_listener_and_its_addresses_are_checked_in_controller_mode() {
+        for ok in [
+            "box.lan:7788",
+            "192.168.0.2:7788",
+            "[fe80::1]:7788",
+            "s2-server:1",
+        ] {
+            assert!(valid_host_port(ok), "{ok}");
+        }
+        for bad in [
+            "box.lan",
+            ":7788",
+            "box.lan:0",
+            "box.lan:99999",
+            "a b:1",
+            "[zz]:1",
+            "box;rm:1",
+        ] {
+            assert!(!valid_host_port(bad), "{bad}");
+        }
+        let check = |table: &str| {
+            toml::from_str::<Config>(&format!("mode = \"controller\"\n[controller]\n{table}"))
+                .unwrap()
+                .validate()
+        };
+        assert!(check("listen = \"0.0.0.0:7788\"").is_ok());
+        assert!(check("listen = \"box.lan:7788\"").is_err());
+        assert!(check("advertise = \"box.lan:7788\"").is_ok());
+        assert!(check("advertise = [\"box.lan:7788\", \"192.168.0.2:7788\"]").is_ok());
+        assert!(check("advertise = [\"box.lan\"]").is_err());
+        let cfg: Config = toml::from_str(
+            "mode = \"controller\"\n[controller]\nlisten = \"127.0.0.1:7788\"\nadvertise = \"box.lan:7788\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            cfg.controller_listen(),
+            Some("127.0.0.1:7788".parse().unwrap())
+        );
+        assert_eq!(cfg.controller.advertise, ["box.lan:7788"]);
+        // A node never listens, whatever the table says.
+        let node: Config = toml::from_str("[controller]\nlisten = \"127.0.0.1:7788\"\n").unwrap();
+        assert_eq!(node.controller_listen(), None);
     }
 
     #[test]

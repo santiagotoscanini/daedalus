@@ -157,8 +157,22 @@ pub fn install(cfg: &Config) -> Result<()> {
         .set_failure_actions_on_non_crash_failures(true)
         .context("counting non-zero exits as failures")?;
 
-    let path = config::write_if_absent(cfg)?;
+    let path = config::write_for_install(cfg)?;
     println!("config at {}", path.display());
+
+    // SYSTEM and Administrators own the data; Users read it (private.rs).
+    let mut dirs = vec![config::config_dir()];
+    if !dirs.contains(&config::data_dir()) {
+        dirs.push(config::data_dir());
+    }
+    for dir in dirs {
+        super::protect_data_dir(&dir)
+            .with_context(|| format!("setting the DACL of {}", dir.display()))?;
+        println!(
+            "{}: SYSTEM and Administrators full control, Users read",
+            dir.display()
+        );
+    }
 
     firewall_allow(cfg.port)?;
     println!("firewall: TCP {} allowed from the local subnet", cfg.port);

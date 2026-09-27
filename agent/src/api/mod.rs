@@ -56,14 +56,33 @@
 //! | `claude.restart`   | `Queued`; the session restarts the server (`unavailable` while off or no session reports) | `claude.remote_control` |
 //! | `claude.update`    | `Queued`; the session runs `claude update`             | `claude.update`         |
 //! | `telemetry.get`    | `TelemetryGet`: the document at the configured level   | —                       |
-//! | `events.subscribe` | `{}`, then `claude.changed` and `telemetry.updated`    | —                       |
+//! | `events.subscribe` | `{}`, then the events below                           | —                       |
+//! | `nodes.list`       | `NodesList`: every machine known, its standing and connection | `nodes`          |
+//! | `nodes.get`        | `NodeDetail`: one machine's hello, status and open telemetry `{id}` | `nodes`     |
+//! | `nodes.telemetry`  | `NodeTelemetry`: its full telemetry `{id}`             | `nodes`                 |
+//! | `nodes.claude`     | `NodeClaude`: its full Claude report `{id}`            | `nodes`                 |
+//! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies `{nodes:[…]}` | `nodes` |
+//! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
+//!
+//! The `nodes.*` methods read and steer the machines connected to the
+//! controller (link/controller.rs). Their selector is a node id — sixteen
+//! lowercase hex characters, checked before anything else — and their
+//! parameters are exact; `command` is one of `check_update`,
+//! `claude_update`, `claude_restart`. `set_desired` checks every entry (an
+//! id that is not its key's, a key twice, a policy field it does not know)
+//! before applying any. A machine the controller has never heard of is
+//! `not_found`; a command for one that is not approved is `unavailable`.
+//! All of it is additive to api 1: no earlier method or event changed.
 //!
 //! **Capabilities** come from the role table and the config, never from
-//! the OS (`capabilities`): `claude.remote_control` where a session runs;
-//! `claude.update` where the role lets the agent update Claude Code —
-//! never on the controller, whose Claude nix pins; `telemetry.full` or
-//! `telemetry.minimal` as `telemetry` says (nothing at `off`). A method
-//! whose capability is absent answers `unsupported`.
+//! the OS (`capabilities`): `claude.remote_control` where a session runs
+//! and may run Claude — on the controller only when `[controller]
+//! claude_remote_control` says so; `claude.update` where the role lets the
+//! agent update Claude Code — never on the controller, whose Claude nix
+//! pins; `telemetry.full` or `telemetry.minimal` as `telemetry` says
+//! (nothing at `off`); `nodes` where the controller listens for machines
+//! (`[controller] listen`). A method whose capability is absent answers
+//! `unsupported`.
 //!
 //! **Events** are best effort: a subscriber that does not read fills its
 //! queue (`EVENT_QUEUE`) and loses the events after that, never the
@@ -71,7 +90,10 @@
 //! whole picture is the source of truth. `claude.changed` goes out when a
 //! session starts reporting, when a report's state or pid differs from the
 //! previous report's, and when the session stops reporting (no report for
-//! 30 s); `telemetry.updated` with every sample.
+//! 30 s); `telemetry.updated` with every sample; `nodes.changed` `{id,
+//! state, connected}` when a machine connects, leaves or changes standing;
+//! `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
+//! connects and waits for approval.
 
 pub mod conn;
 pub mod wire;
@@ -135,18 +157,28 @@ pub fn peer_allowed(peer_uid: Option<u32>, own_uid: u32, listed: &[u32]) -> bool
 }
 
 /// What this agent offers the app, from its role and config (module doc).
-pub fn capabilities(role: &Role, telemetry: TelemetryLevel) -> Vec<&'static str> {
+pub fn capabilities(cfg: &Config, nodes: bool) -> Vec<&'static str> {
+    let role = cfg.role();
     let mut c = Vec::new();
-    if role.session {
+    // A node runs Claude as the box's policy says; the controller only
+    // when nix turned it on — never offered while it cannot run.
+    let claude = match role.mode {
+        crate::config::Mode::Node => true,
+        crate::config::Mode::Controller => cfg.controller.claude_remote_control,
+    };
+    if role.session && claude {
         c.push("claude.remote_control");
         if role.claude_update {
             c.push("claude.update");
         }
     }
-    match telemetry {
+    match cfg.telemetry {
         TelemetryLevel::Full => c.push("telemetry.full"),
         TelemetryLevel::Minimal => c.push("telemetry.minimal"),
         TelemetryLevel::Off => {}
+    }
+    if nodes && role.node_listener {
+        c.push("nodes");
     }
     c
 }
@@ -205,10 +237,10 @@ impl Api {
     pub fn new(shared: Arc<Shared>, cfg: &Config) -> Self {
         let role = cfg.role();
         Self {
+            capabilities: capabilities(cfg, shared.nodes().is_some()),
             shared,
             role,
             telemetry: cfg.telemetry,
-            capabilities: capabilities(&role, cfg.telemetry),
             max_in_flight: MAX_IN_FLIGHT,
         }
     }
@@ -310,10 +342,73 @@ impl Api {
                     },
                 })
             }
+            m if m.starts_with("nodes.") => self.nodes_call(m, params),
             _ => Err(ApiError::new(
                 code::UNKNOWN_METHOD,
                 format!("no method `{method}`"),
             )),
+        }
+    }
+
+    /// The `nodes.*` methods (module doc).
+    fn nodes_call(&self, method: &str, params: &Value) -> Result<Box<RawValue>, ApiError> {
+        let known = [
+            "nodes.list",
+            "nodes.get",
+            "nodes.telemetry",
+            "nodes.claude",
+            "nodes.set_desired",
+            "nodes.command",
+        ];
+        if !known.contains(&method) {
+            return Err(ApiError::new(
+                code::UNKNOWN_METHOD,
+                format!("no method `{method}`"),
+            ));
+        }
+        self.has("nodes")?;
+        let nodes = self
+            .shared
+            .nodes()
+            .ok_or_else(|| ApiError::new(code::UNSUPPORTED, "this agent serves no machines"))?;
+        fn exact<T: serde::de::DeserializeOwned>(method: &str, p: &Value) -> Result<T, ApiError> {
+            serde_json::from_value(p.clone())
+                .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))
+        }
+        let id_of = |p: &Value| -> Result<String, ApiError> {
+            let w: wire::NodeId = exact(method, p)?;
+            checked_id(&w.id)?;
+            Ok(w.id)
+        };
+        match method {
+            "nodes.list" => {
+                match params {
+                    Value::Null => {}
+                    Value::Object(m) if m.is_empty() => {}
+                    _ => {
+                        return Err(ApiError::new(
+                            code::BAD_REQUEST,
+                            "`nodes.list` takes no parameters",
+                        ))
+                    }
+                }
+                to_value(&wire::NodesList {
+                    nodes: nodes.list(),
+                })
+            }
+            "nodes.get" => to_value(&nodes.get(&id_of(params)?)?),
+            "nodes.telemetry" => to_value(&nodes.telemetry(&id_of(params)?)?),
+            "nodes.claude" => to_value(&nodes.claude(&id_of(params)?)?),
+            "nodes.set_desired" => {
+                let set: wire::SetDesired = exact(method, params)?;
+                to_value(&nodes.set_desired(desired_entries(set)?))
+            }
+            "nodes.command" => {
+                let c: wire::NodeCommand = exact(method, params)?;
+                checked_id(&c.id)?;
+                to_value(&nodes.command(&c.id, c.command)?)
+            }
+            _ => unreachable!("listed above"),
         }
     }
 
@@ -339,12 +434,64 @@ impl Api {
             role: self.role,
             telemetry: self.telemetry,
             capabilities: self.capabilities.clone(),
+            controller: self.shared.controller_info().cloned(),
         }
     }
 }
 
 fn to_value<T: Serialize>(v: &T) -> Result<Box<RawValue>, ApiError> {
     serde_json::value::to_raw_value(v).map_err(|e| ApiError::new(code::INTERNAL, e.to_string()))
+}
+
+/// A node id as a selector: sixteen lowercase hex characters.
+fn checked_id(id: &str) -> Result<(), ApiError> {
+    if wire::valid_node_id(id) {
+        Ok(())
+    } else {
+        Err(ApiError::new(
+            code::BAD_REQUEST,
+            format!("a node id is sixteen lowercase hex characters, not {id:?}"),
+        ))
+    }
+}
+
+/// The app's set, every entry checked before any is applied: the id is its
+/// key's node id, and no id is named twice. An approved entry without a
+/// policy gets `Policy::default()`; a revoked one's policy is kept unused.
+fn desired_entries(
+    set: wire::SetDesired,
+) -> Result<Vec<crate::link::controller::DesiredEntry>, ApiError> {
+    let mut seen = std::collections::HashSet::new();
+    set.nodes
+        .into_iter()
+        .map(|n| {
+            checked_id(&n.id)?;
+            let key = crate::identity::parse_public_key(&n.public_key)
+                .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("{}: {e}", n.id)))?;
+            let of_key = crate::identity::node_id_of(&key);
+            if of_key != n.id {
+                return Err(ApiError::new(
+                    code::BAD_REQUEST,
+                    format!(
+                        "{} is not the node id of its public_key ({of_key} is)",
+                        n.id
+                    ),
+                ));
+            }
+            if !seen.insert(n.id.clone()) {
+                return Err(ApiError::new(
+                    code::BAD_REQUEST,
+                    format!("{} is named twice", n.id),
+                ));
+            }
+            Ok(crate::link::controller::DesiredEntry {
+                id: n.id,
+                public_key: key,
+                state: n.state,
+                policy: n.policy.map(Into::into).unwrap_or_default(),
+            })
+        })
+        .collect()
 }
 
 /// Serve the API on the socket config.toml names (`Config::api_socket`)
@@ -397,7 +544,6 @@ pub fn too_many(max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Mode;
 
     #[test]
     fn the_agents_own_uid_and_the_listed_ones_are_served() {
@@ -433,23 +579,33 @@ mod tests {
 
     #[test]
     fn capabilities_come_from_the_role_and_the_config() {
-        let node = Role::of(Mode::Node);
-        let ctl = Role::of(Mode::Controller);
+        let cfg = |text: &str| toml::from_str::<Config>(text).unwrap();
         assert_eq!(
-            capabilities(&node, TelemetryLevel::Full),
+            capabilities(&cfg(""), false),
             ["claude.remote_control", "claude.update", "telemetry.full"]
         );
-        // The controller never offers `claude.update`: nix pins Claude there.
+        // A node never offers `nodes`, whatever it is told.
         assert_eq!(
-            capabilities(&ctl, TelemetryLevel::Full),
+            capabilities(&cfg("telemetry = \"off\""), true),
+            ["claude.remote_control", "claude.update"]
+        );
+        // The controller offers Claude only when nix turned it on, and never
+        // `claude.update`: nix pins Claude there.
+        let on = "mode = \"controller\"\n[controller]\nclaude_remote_control = true\n";
+        assert_eq!(
+            capabilities(&cfg(on), false),
             ["claude.remote_control", "telemetry.full"]
         );
         assert_eq!(
-            capabilities(&ctl, TelemetryLevel::Minimal),
-            ["claude.remote_control", "telemetry.minimal"]
+            capabilities(&cfg("mode = \"controller\""), false),
+            ["telemetry.full"]
         );
         assert_eq!(
-            capabilities(&ctl, TelemetryLevel::Off),
+            capabilities(&cfg("mode = \"controller\"\ntelemetry = \"minimal\""), true),
+            ["telemetry.minimal", "nodes"]
+        );
+        assert_eq!(
+            capabilities(&cfg(&format!("telemetry = \"off\"\n{on}")), false),
             ["claude.remote_control"]
         );
     }

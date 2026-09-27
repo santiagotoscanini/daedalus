@@ -444,7 +444,7 @@ pub fn install(cfg: &Config) -> Result<()> {
     let exe = place_binaries(&std::env::current_exe().context("locating this binary")?)?;
     let bin = Path::new(INSTALL_DIR);
     std::fs::create_dir_all(config::log_dir()).context("creating the log directory")?;
-    let path = config::write_if_absent(cfg)?;
+    let path = config::write_for_install(cfg)?;
     readable_by_the_session();
     println!("config at {}", path.display());
 

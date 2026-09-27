@@ -6,7 +6,8 @@
 //! |-------------------------------------|-------------------------------|---------------------------------|
 //! | status page, telemetry, `/metrics`  | yes, on the LAN               | yes, on loopback only           |
 //! | the local API socket (api/)         | no                            | yes — the app's one door        |
-//! | hello to the box                    | yes                           | no — it is the box              |
+//! | hello to the box, link to the controller | yes (link/node.rs)     | no — it is the box              |
+//! | listener for the machines' links     | no                            | yes, where `listen` names one   |
 //! | self-update (`updates`)             | yes                           | no — nix moves it with the lock |
 //! | keep-awake hold (the box's policy)  | yes                           | no — a server does not sleep    |
 //! | `install` / `uninstall`             | yes                           | refused — nix manages it        |
@@ -20,8 +21,8 @@
 //! NixOS by definition — running the same Linux code as its own user,
 //! built, configured and moved by nix: ONE process (`run`, or `serve` in a
 //! terminal) holding the status page, telemetry, the session and the
-//! socket the app talks to; the machines' connections arrive with it later
-//! (PLAN, feature 13). What it offers the app is derived from this table
+//! socket the app talks to, and the listener the machines' links reach
+//! (link/). What it offers the app is derived from this table
 //! and the config (`api::capabilities`), never from the OS.
 
 use anyhow::{bail, Result};
@@ -33,7 +34,8 @@ use crate::config::Mode;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Role {
     pub mode: Mode,
-    /// Announce this machine to the box every `hello_secs`.
+    /// Announce this machine to the box every `hello_secs`, and keep the
+    /// link to the controller (link/node.rs).
     pub hello: bool,
     /// Look for, and (per `updates`) install, newer releases.
     pub self_update: bool,
@@ -54,6 +56,9 @@ pub struct Role {
     pub status_on_lan: bool,
     /// The local API socket is served (api/).
     pub api_socket: bool,
+    /// The machines' links are accepted (link/controller.rs), where
+    /// `[controller] listen` names an address.
+    pub node_listener: bool,
 }
 
 impl Role {
@@ -71,6 +76,7 @@ impl Role {
                 tray: true,
                 status_on_lan: true,
                 api_socket: false,
+                node_listener: false,
             },
             Mode::Controller => Self {
                 mode,
@@ -84,6 +90,7 @@ impl Role {
                 tray: false,
                 status_on_lan: false,
                 api_socket: true,
+                node_listener: true,
             },
         }
     }
@@ -118,14 +125,14 @@ mod tests {
         let node = Role::of(Mode::Node);
         assert!(node.hello && node.self_update && node.keep_awake && node.installer);
         assert!(node.session && node.tray && node.claude_update && node.status_on_lan);
-        assert!(!node.session_in_service && !node.api_socket);
+        assert!(!node.session_in_service && !node.api_socket && !node.node_listener);
         assert_eq!(node.status_address(), "0.0.0.0");
         assert!(node.allow_install("install").is_ok());
 
         let c = Role::of(Mode::Controller);
         assert!(!c.hello && !c.self_update && !c.keep_awake && !c.installer && !c.tray);
         assert!(!c.claude_update && !c.status_on_lan);
-        assert!(c.session && c.session_in_service && c.api_socket);
+        assert!(c.session && c.session_in_service && c.api_socket && c.node_listener);
         assert_eq!(c.status_address(), "127.0.0.1");
         let e = c.allow_install("uninstall").unwrap_err().to_string();
         assert!(e.contains("controller mode") && e.contains("nix"), "{e}");

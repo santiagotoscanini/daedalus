@@ -140,7 +140,7 @@ pub fn install(cfg: &Config) -> Result<()> {
     let tray = exe.with_file_name(TRAY_EXE);
     let logs = config::log_dir();
     std::fs::create_dir_all(&logs).context("creating the log directory")?;
-    let path = config::write_if_absent(cfg)?;
+    let path = config::write_for_install(cfg)?;
     converge_permissions();
     println!("config at {}", path.display());
 

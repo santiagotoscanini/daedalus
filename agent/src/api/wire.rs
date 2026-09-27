@@ -25,8 +25,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use serde_json::Value;
 
-use crate::claude::Report;
+use crate::claude::{Report, Summary};
 use crate::config::{Mode, TelemetryLevel};
+use crate::hello::{Policy, ProviderPolicy, ProvidersPolicy};
+use crate::link::wire::{Command, Hello, NodeState};
+use crate::providers::ProviderReport;
 use crate::role::Role;
 use crate::telemetry::Telemetry;
 
@@ -113,6 +116,8 @@ pub mod code {
     pub const FORBIDDEN: &str = "forbidden";
     /// The agent could not write its own answer.
     pub const INTERNAL: &str = "internal";
+    /// No machine by that id is known to the controller.
+    pub const NOT_FOUND: &str = "not_found";
 }
 
 impl ApiError {
@@ -165,6 +170,10 @@ pub mod event {
     pub const CLAUDE_CHANGED: &str = "claude.changed";
     /// A new telemetry sample is in (`TelemetryUpdated`).
     pub const TELEMETRY_UPDATED: &str = "telemetry.updated";
+    /// A machine connected, left, or changed standing (`NodeChanged`).
+    pub const NODES_CHANGED: &str = "nodes.changed";
+    /// An unknown key asks to join (`NodePending`).
+    pub const NODES_PENDING: &str = "nodes.pending";
 }
 
 // ── the methods ───────────────────────────────────────────────────────────
@@ -228,6 +237,214 @@ pub struct SystemInfo {
     pub role: Role,
     pub telemetry: TelemetryLevel,
     pub capabilities: Vec<&'static str>,
+    /// The controller's own key and where machines reach it; absent
+    /// anywhere but the controller.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controller: Option<ControllerInfo>,
+}
+
+/// The controller as `system.info` states it: the key every machine pins,
+/// as hex and as its fingerprint (identity.rs), the address its listener
+/// is bound to (null when it listens for no machine), and the `host:port`s
+/// config.toml says machines should dial — what the app hands an install
+/// command or a machine's hello answer.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ControllerInfo {
+    pub public_key: String,
+    pub fingerprint: String,
+    pub listen: Option<String>,
+    pub advertise: Vec<String>,
+}
+
+// ── the machines (link/controller.rs) ─────────────────────────────────────
+
+/// A machine as `nodes.list` lists it: identity, standing, connection,
+/// and what its `hello` said. The hello's fields are null for a key the app
+/// named that has not connected since the controller started.
+#[derive(Clone, Debug, Serialize)]
+pub struct NodeSummary {
+    pub id: String,
+    pub fingerprint: String,
+    pub state: NodeState,
+    pub connected: bool,
+    /// When the current connection opened; null while disconnected.
+    pub since: Option<String>,
+    /// The last line heard from it, RFC 3339 UTC.
+    pub last_seen: Option<String>,
+    pub hostname: Option<String>,
+    pub os: Option<String>,
+    pub arch: Option<String>,
+    pub agent_version: Option<String>,
+    pub lan_ip: Option<String>,
+    pub mac: Option<String>,
+    /// Claude Code there, from its last report; null without one.
+    pub claude: Option<Summary>,
+}
+
+/// `nodes.list`'s answer.
+#[derive(Clone, Debug, Serialize)]
+pub struct NodesList {
+    pub nodes: Vec<NodeSummary>,
+}
+
+/// `nodes.get`'s answer: the summary, the whole hello, the status document
+/// (what the machine's `/status` carries, without its telemetry), the
+/// telemetry as the open page shows it (`Telemetry::public`), and the
+/// providers.
+#[derive(Clone, Debug, Serialize)]
+pub struct NodeDetail {
+    #[serde(flatten)]
+    pub node: NodeSummary,
+    pub public_key: String,
+    pub hello: Option<Hello>,
+    pub status: Option<Value>,
+    pub status_at: Option<String>,
+    pub telemetry: Option<Telemetry>,
+    pub telemetry_at: Option<String>,
+    pub providers: Vec<ProviderReport>,
+}
+
+/// `nodes.telemetry`'s answer: the full document at the machine's level.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct NodeTelemetry {
+    pub id: String,
+    pub telemetry: Option<Telemetry>,
+    pub received_at: Option<String>,
+}
+
+/// `nodes.claude`'s answer: the machine's full Claude report.
+#[derive(Clone, Debug, Serialize)]
+pub struct NodeClaude {
+    pub id: String,
+    pub report: Option<Report>,
+    pub received_at: Option<String>,
+}
+
+/// The parameters of `nodes.get`, `nodes.telemetry` and `nodes.claude`.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeId {
+    pub id: String,
+}
+
+/// `nodes.set_desired`'s parameters: the app's COMPLETE set of decided
+/// keys. A key absent from it is pending (while connected) or unknown.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetDesired {
+    pub nodes: Vec<DesiredNode>,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DesiredNode {
+    pub id: String,
+    /// 64 hex characters; `id` must be its node id.
+    pub public_key: String,
+    pub state: DesiredState,
+    /// The machine's policy; absent for an approved one, `Policy::default()`.
+    #[serde(default)]
+    pub policy: Option<DesiredPolicy>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DesiredState {
+    Approved,
+    Revoked,
+}
+
+/// The policy as the app sends it: hello.rs's `Policy`, field for field,
+/// but exact — a field the controller does not know is refused.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DesiredPolicy {
+    pub awake_hold: bool,
+    pub claude_remote_control: bool,
+    #[serde(default)]
+    pub claude_workdir: Option<String>,
+    #[serde(default)]
+    pub providers: DesiredProviders,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DesiredProviders {
+    #[serde(default)]
+    pub lemonade: Option<DesiredProvider>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DesiredProvider {
+    #[serde(default)]
+    pub port: Option<u16>,
+}
+
+impl From<DesiredPolicy> for Policy {
+    fn from(p: DesiredPolicy) -> Self {
+        Policy {
+            awake_hold: p.awake_hold,
+            claude_remote_control: p.claude_remote_control,
+            claude_workdir: p.claude_workdir.filter(|w| !w.trim().is_empty()),
+            providers: ProvidersPolicy {
+                lemonade: p
+                    .providers
+                    .lemonade
+                    .map(|l| ProviderPolicy { port: l.port }),
+            },
+        }
+    }
+}
+
+/// `nodes.set_desired`'s answer: how many keys the set holds, and what
+/// changed on the connections open now — upgraded to approved (policy
+/// sent, no reconnect), revoked and disconnected, back to pending, or sent
+/// a changed policy.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct SetDesiredOk {
+    pub nodes: usize,
+    pub approved: Vec<String>,
+    pub revoked: Vec<String>,
+    pub pending: Vec<String>,
+    pub policy: Vec<String>,
+}
+
+/// `nodes.command`'s parameters: one of the fixed instructions.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeCommand {
+    pub id: String,
+    pub command: Command,
+}
+
+/// `nodes.command`'s answer: acknowledged by the connected machine
+/// (`delivered`), or kept for it until it next connects (`queued`).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CommandOk {
+    pub delivered: bool,
+    pub queued: bool,
+}
+
+/// `nodes.changed`'s payload.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct NodeChanged {
+    pub id: String,
+    pub state: NodeState,
+    pub connected: bool,
+}
+
+/// `nodes.pending`'s payload: an unknown key connected and waits.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct NodePending {
+    pub id: String,
+    pub fingerprint: String,
+    pub hostname: String,
+}
+
+/// A node id as the API takes it: sixteen lowercase hex characters.
+pub fn valid_node_id(id: &str) -> bool {
+    id.len() == 16 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// `claude.status`'s answer. `reporting` false means no session has
@@ -391,7 +608,13 @@ mod tests {
             booted_at: Some("2026-09-27T10:00:00Z".into()),
             role: Role::of(Mode::Controller),
             telemetry: TelemetryLevel::Minimal,
-            capabilities: vec!["claude.remote_control", "telemetry.minimal"],
+            capabilities: vec!["claude.remote_control", "telemetry.minimal", "nodes"],
+            controller: Some(ControllerInfo {
+                public_key: "ab".repeat(32),
+                fingerprint: "3f2a:9c01".into(),
+                listen: Some("0.0.0.0:7788".into()),
+                advertise: vec!["box.lan:7788".into()],
+            }),
         };
         assert_eq!(
             wire(&info),
@@ -401,9 +624,218 @@ mod tests {
                 r#""uptime_secs":5,"os_uptime_secs":100,"booted_at":"2026-09-27T10:00:00Z","#,
                 r#""role":{"mode":"controller","hello":false,"self_update":false,"keep_awake":false,"#,
                 r#""installer":false,"session":true,"session_in_service":true,"claude_update":false,"#,
-                r#""tray":false,"status_on_lan":false,"api_socket":true},"#,
-                r#""telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal"]}"#
+                r#""tray":false,"status_on_lan":false,"api_socket":true,"node_listener":true},"#,
+                r#""telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal","nodes"],"#,
+                r#""controller":{"public_key":"abababababababababababababababababababababababababababababababab","#,
+                r#""fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"]}}"#
             )
+        );
+        // Anywhere but the controller the block is absent, not null.
+        let bare = SystemInfo {
+            controller: None,
+            ..info
+        };
+        assert!(!wire(&bare).contains("\"controller\":"));
+    }
+
+    fn summary() -> NodeSummary {
+        NodeSummary {
+            id: "0123456789abcdef".into(),
+            fingerprint: "0123:4567".into(),
+            state: NodeState::Approved,
+            connected: true,
+            since: Some("2026-09-27T10:00:00Z".into()),
+            last_seen: Some("2026-09-27T10:00:15Z".into()),
+            hostname: Some("PC".into()),
+            os: Some("windows".into()),
+            arch: Some("x86_64".into()),
+            agent_version: Some("0.14.0".into()),
+            lan_ip: Some("192.168.0.120".into()),
+            mac: Some("aa:bb:cc:dd:ee:ff".into()),
+            claude: Some(Summary {
+                state: "running".into(),
+                sessions: 2,
+                signed_in: true,
+                ..Default::default()
+            }),
+        }
+    }
+
+    const SUMMARY: &str = concat!(
+        r#""id":"0123456789abcdef","fingerprint":"0123:4567","state":"approved","connected":true,"#,
+        r#""since":"2026-09-27T10:00:00Z","last_seen":"2026-09-27T10:00:15Z","hostname":"PC","#,
+        r#""os":"windows","arch":"x86_64","agent_version":"0.14.0","lan_ip":"192.168.0.120","#,
+        r#""mac":"aa:bb:cc:dd:ee:ff","claude":{"state":"running","detail":null,"cli_version":null,"#,
+        r#""server_version":null,"sessions":2,"started_at":null,"signed_in":true}"#
+    );
+
+    #[test]
+    fn nodes_list_and_get_on_the_wire() {
+        assert_eq!(
+            wire(&NodesList {
+                nodes: vec![summary()]
+            }),
+            format!(r#"{{"nodes":[{{{SUMMARY}}}]}}"#)
+        );
+        let unseen = NodeSummary {
+            state: NodeState::Unknown,
+            connected: false,
+            since: None,
+            last_seen: None,
+            hostname: None,
+            os: None,
+            arch: None,
+            agent_version: None,
+            lan_ip: None,
+            mac: None,
+            claude: None,
+            ..summary()
+        };
+        assert_eq!(
+            wire(&unseen),
+            concat!(
+                r#"{"id":"0123456789abcdef","fingerprint":"0123:4567","state":"unknown","connected":false,"#,
+                r#""since":null,"last_seen":null,"hostname":null,"os":null,"arch":null,"agent_version":null,"#,
+                r#""lan_ip":null,"mac":null,"claude":null}"#
+            )
+        );
+        let detail = NodeDetail {
+            node: summary(),
+            public_key: "ab".repeat(32),
+            hello: None,
+            status: Some(serde_json::json!({"awake_hold": true})),
+            status_at: Some("2026-09-27T10:00:15Z".into()),
+            telemetry: None,
+            telemetry_at: None,
+            providers: vec![],
+        };
+        assert_eq!(
+            wire(&detail),
+            format!(
+                "{{{SUMMARY},{}}}",
+                concat!(
+                    r#""public_key":"abababababababababababababababababababababababababababababababab","#,
+                    r#""hello":null,"status":{"awake_hold":true},"status_at":"2026-09-27T10:00:15Z","#,
+                    r#""telemetry":null,"telemetry_at":null,"providers":[]"#
+                )
+            )
+        );
+        assert_eq!(
+            wire(&NodeTelemetry {
+                id: "0123456789abcdef".into(),
+                telemetry: None,
+                received_at: None
+            }),
+            r#"{"id":"0123456789abcdef","telemetry":null,"received_at":null}"#
+        );
+        assert_eq!(
+            wire(&NodeClaude {
+                id: "0123456789abcdef".into(),
+                report: None,
+                received_at: Some("t".into())
+            }),
+            r#"{"id":"0123456789abcdef","report":null,"received_at":"t"}"#
+        );
+    }
+
+    #[test]
+    fn nodes_parameters_are_exact() {
+        let id: NodeId = serde_json::from_value(json!({"id":"0123456789abcdef"})).unwrap();
+        assert_eq!(id.id, "0123456789abcdef");
+        assert!(serde_json::from_value::<NodeId>(json!({"id":"x","path":"/etc"})).is_err());
+        assert!(serde_json::from_value::<NodeId>(json!({})).is_err());
+        assert!(valid_node_id("0123456789abcdef"));
+        for bad in [
+            "0123456789ABCDEF",
+            "0123456789abcde",
+            "0123456789abcdeg",
+            "../../etc/passwd",
+        ] {
+            assert!(!valid_node_id(bad), "{bad}");
+        }
+
+        let set: SetDesired = serde_json::from_value(json!({"nodes":[
+            {"id":"0123456789abcdef","public_key":"ab","state":"approved",
+             "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p",
+                       "providers":{"lemonade":{"port":8000}}}},
+            {"id":"fedcba9876543210","public_key":"cd","state":"revoked"}
+        ]}))
+        .unwrap();
+        assert_eq!(set.nodes[1].state, DesiredState::Revoked);
+        assert_eq!(set.nodes[1].policy, None);
+        let p: Policy = set.nodes[0].policy.clone().unwrap().into();
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            r#"{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p","providers":{"lemonade":{"port":8000}}}"#
+        );
+        for bad in [
+            json!({"nodes":[{"id":"a","public_key":"b","state":"pending"}]}),
+            json!({"nodes":[{"id":"a","public_key":"b","state":"approved","extra":1}]}),
+            json!({"nodes":[{"id":"a","public_key":"b","state":"approved",
+                             "policy":{"awake_hold":true,"claude_remote_control":true,"shell":"x"}}]}),
+            json!({"nodes":[],"more":1}),
+        ] {
+            assert!(
+                serde_json::from_value::<SetDesired>(bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
+
+        let c: NodeCommand =
+            serde_json::from_value(json!({"id":"0123456789abcdef","command":"claude_restart"}))
+                .unwrap();
+        assert_eq!(c.command, Command::ClaudeRestart);
+        for bad in [
+            json!({"id":"0123456789abcdef","command":"reboot"}),
+            json!({"id":"0123456789abcdef","command":"check_update","args":["-rf"]}),
+        ] {
+            assert!(
+                serde_json::from_value::<NodeCommand>(bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn nodes_answers_and_events_on_the_wire() {
+        assert_eq!(
+            wire(&SetDesiredOk {
+                nodes: 2,
+                approved: vec!["0123456789abcdef".into()],
+                revoked: vec![],
+                pending: vec![],
+                policy: vec!["fedcba9876543210".into()],
+            }),
+            r#"{"nodes":2,"approved":["0123456789abcdef"],"revoked":[],"pending":[],"policy":["fedcba9876543210"]}"#
+        );
+        assert_eq!(
+            wire(&CommandOk {
+                delivered: true,
+                queued: false
+            }),
+            r#"{"delivered":true,"queued":false}"#
+        );
+        assert_eq!(
+            wire(&Event {
+                e: event::NODES_CHANGED,
+                p: NodeChanged {
+                    id: "0123456789abcdef".into(),
+                    state: NodeState::Pending,
+                    connected: true
+                }
+            }),
+            r#"{"e":"nodes.changed","p":{"id":"0123456789abcdef","state":"pending","connected":true}}"#
+        );
+        assert_eq!(
+            wire(&Event {
+                e: event::NODES_PENDING,
+                p: NodePending {
+                    id: "0123456789abcdef".into(),
+                    fingerprint: "0123:4567".into(),
+                    hostname: "PC".into()
+                }
+            }),
+            r#"{"e":"nodes.pending","p":{"id":"0123456789abcdef","fingerprint":"0123:4567","hostname":"PC"}}"#
         );
     }
 

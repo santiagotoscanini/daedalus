@@ -25,8 +25,9 @@ mod telemetry;
 pub mod tray;
 
 pub use super::unix::{
-    hide_console, lock_exclusive, mark_executable, monotonic_usec, on_interrupt, pid_alive, seal,
-    serve_local_socket, stop_process_tree, unseal, write_private, LocalSocket, CLAUDE_CLI_NAMES,
+    file_owner, hide_console, lock_exclusive, mark_executable, monotonic_usec, on_interrupt,
+    own_uid, pid_alive, seal, serve_local_socket, stop_process_tree, unseal, write_private,
+    LocalSocket, CLAUDE_CLI_NAMES,
 };
 pub use net::{primary_adapter, srv_lookup};
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};

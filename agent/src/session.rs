@@ -54,6 +54,25 @@ pub struct Page {
     pub control_plane: BoxState,
     #[serde(default)]
     pub policy: Policy,
+    /// The link to the controller (link/), when the page carries one.
+    #[serde(default)]
+    pub controller: Option<LinkPage>,
+}
+
+/// The link, as the page reports it (`link::LinkStatus`).
+#[derive(Deserialize, Default, Clone, Debug)]
+#[serde(default)]
+pub struct LinkPage {
+    pub path: String,
+    pub address: Option<String>,
+    pub state: Option<String>,
+    pub connected: bool,
+    pub fingerprint: String,
+    pub controller_fingerprint: Option<String>,
+    pub pinned_via: Option<String>,
+    pub unconfirmed: bool,
+    pub conflict: Option<String>,
+    pub error: Option<String>,
 }
 
 /// The box, as the page reports it.

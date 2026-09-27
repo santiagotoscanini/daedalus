@@ -414,10 +414,8 @@ mod tests {
         assert_eq!(out[3]["ok"]["api"], 1);
         assert_eq!(out[3]["ok"]["mode"], "controller");
         assert_eq!(out[3]["ok"]["version"], crate::VERSION);
-        assert_eq!(
-            out[3]["ok"]["capabilities"],
-            json!(["claude.remote_control", "telemetry.full"])
-        );
+        // Claude remote control is off in this config: not offered.
+        assert_eq!(out[3]["ok"]["capabilities"], json!(["telemetry.full"]));
         assert_eq!(out[4]["ok"]["mode"], "controller");
         assert_eq!(out[4]["ok"]["role"]["api_socket"], true);
         assert_eq!(out[4]["ok"]["role"]["claude_update"], false);
@@ -682,30 +680,30 @@ mod tests {
     }
 
     #[test]
-    fn a_restart_is_unavailable_while_claude_is_off() {
+    fn a_restart_is_unsupported_while_claude_is_off_in_the_config() {
         let (shared, api) = controller("");
         let out = talk(api, &[HELLO, r#"{"id":2,"m":"claude.restart"}"#].join("\n"));
-        assert_eq!(out[1]["err"]["code"], "unavailable");
+        assert_eq!(out[1]["err"]["code"], "unsupported");
         assert!(!shared.claude_instruction_waiting());
     }
 
     #[test]
     fn telemetry_follows_the_level() {
         let (shared, api) = controller("telemetry = \"minimal\"\n");
-        shared.set_telemetry(crate::telemetry::Telemetry {
-            sampled_at: "t".into(),
-            ..Default::default()
-        });
+        shared.set_telemetry(
+            crate::telemetry::Telemetry {
+                sampled_at: "t".into(),
+                ..Default::default()
+            },
+            false,
+        );
         let out = talk(api, &[HELLO, r#"{"id":2,"m":"telemetry.get"}"#].join("\n"));
         assert_eq!(out[1]["ok"]["level"], "minimal");
         assert_eq!(out[1]["ok"]["telemetry"]["sampled_at"], "t");
-        assert_eq!(
-            out[0]["ok"]["capabilities"],
-            json!(["claude.remote_control", "telemetry.minimal"])
-        );
+        assert_eq!(out[0]["ok"]["capabilities"], json!(["telemetry.minimal"]));
 
         let (shared, api) = controller("telemetry = \"off\"\n");
-        shared.set_telemetry(crate::telemetry::Telemetry::default());
+        shared.set_telemetry(crate::telemetry::Telemetry::default(), false);
         let out = talk(api, &[HELLO, r#"{"id":2,"m":"telemetry.get"}"#].join("\n"));
         assert_eq!(out[1]["ok"], json!({"level":"off","telemetry":null}));
     }

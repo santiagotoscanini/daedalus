@@ -1,0 +1,617 @@
+//! TLS 1.3 for the link, with keys pinned instead of a CA: the two configs,
+//! the verifiers that do the pinning, and `Tls`, one connection carrying
+//! newline-delimited JSON.
+//!
+//! **Both ends present a certificate** made from their identity key
+//! (cert.rs) and prove they hold it by signing the handshake (ed25519, the
+//! only scheme offered). What each accepts:
+//!
+//! - the machine (`PinnedController`) accepts the controller only if the
+//!   SHA-256 of the key it presents equals the pin — or, with no pin yet,
+//!   any key, which it then records (trust on first use, link/node.rs).
+//!   The key a refused controller presented is kept for the message, and
+//!   labelled UNPROVEN: the pin check runs before the handshake signature,
+//!   so nothing proves the peer holds it. A key is taken as the
+//!   controller's only once the handshake has completed (`Tls::peer_key`).
+//!   The machine's side is built ONCE per identity (`Client`) and re-armed
+//!   with each attempt's pin, so the key's DER is not copied per attempt;
+//!   the copy rustls loads is wiped as it is (crypto.rs);
+//! - the controller (`AnyEd25519Machine`) accepts any ed25519 key at the
+//!   TLS layer: whether that key is approved, pending or revoked is decided
+//!   right after, from the key the handshake proved (link/controller.rs),
+//!   so an unknown machine can still reach the pending list.
+//!
+//! No hostname is checked (there is no name to check against: the key is
+//! the identity), no session is resumed (every connection proves its key
+//! afresh), and TLS 1.2 is never offered.
+//!
+//! **`Tls`** is one blocking connection driven from one thread: `recv`
+//! waits at most the socket's read timeout (`TICK` once the handshake is
+//! done) and returns a whole line, `Idle` or `Closed`; `send` writes one
+//! line and flushes it, within the socket's write timeout. The loop that
+//! owns it (node.rs, controller.rs) interleaves the two, so nothing else
+//! ever touches the connection.
+
+use std::io::{self, Read, Write};
+use std::net::{Shutdown, TcpStream};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::{
+    CertificateError, ClientConfig, DigitallySignedStruct, DistinguishedName, Error, ServerConfig,
+    SignatureScheme,
+};
+
+use super::{cert, crypto, MAX_LINE, TICK};
+use crate::identity::{digest, Identity};
+
+/// The name the machine's client asks for; nothing checks it.
+const SERVER_NAME: &str = "daedalus-controller";
+
+fn signature_holds(
+    message: &[u8],
+    cert: &CertificateDer<'_>,
+    dss: &DigitallySignedStruct,
+) -> Result<HandshakeSignatureValid, Error> {
+    if dss.scheme != SignatureScheme::ED25519 {
+        return Err(Error::InvalidCertificate(CertificateError::BadSignature));
+    }
+    let key = cert::public_key_of(cert)
+        .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
+    if crypto::verify_ed25519(&key, message, dss.signature()) {
+        Ok(HandshakeSignatureValid::assertion())
+    } else {
+        Err(Error::InvalidCertificate(CertificateError::BadSignature))
+    }
+}
+
+fn no_tls12() -> Error {
+    Error::General("TLS 1.2 is not offered on the link".into())
+}
+
+/// The machine's check on the controller (module doc), re-armed with the
+/// pin of each attempt.
+#[derive(Debug, Default)]
+struct PinnedController {
+    /// The SHA-256 of the key to accept; None trusts the first key seen.
+    pin: Mutex<Option<[u8; 32]>>,
+    /// The key the controller's certificate carried on the last attempt,
+    /// recorded before the handshake signature is checked: unproven.
+    presented: Mutex<Option<[u8; 32]>>,
+}
+
+impl PinnedController {
+    fn arm(&self, pin: Option<[u8; 32]>) {
+        *self.pin.lock().unwrap_or_else(|p| p.into_inner()) = pin;
+        *self.presented.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
+
+    fn presented(&self) -> Option<[u8; 32]> {
+        *self.presented.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+/// Why `Client::connect` did not give a connection.
+#[derive(Debug)]
+pub enum ConnectError {
+    /// The controller's certificate carries another key than the pin.
+    /// `presented_unproven` is that key, before any signature proved it.
+    KeyMismatch {
+        presented_unproven: [u8; 32],
+        pinned: [u8; 32],
+    },
+    Io(io::Error),
+}
+
+/// The machine's side of the link, built once per identity.
+pub struct Client {
+    fingerprint: String,
+    config: Arc<ClientConfig>,
+    verifier: Arc<PinnedController>,
+    /// One attempt at a time: the verifier is armed per attempt.
+    attempt: Mutex<()>,
+}
+
+impl Client {
+    pub fn new(id: &Identity) -> anyhow::Result<Self> {
+        let verifier = Arc::new(PinnedController::default());
+        let config = client_config(id, Arc::clone(&verifier) as Arc<dyn ServerCertVerifier>)?;
+        Ok(Self {
+            fingerprint: id.fingerprint(),
+            config,
+            verifier,
+            attempt: Mutex::new(()),
+        })
+    }
+
+    /// This machine's fingerprint.
+    pub fn fingerprint(&self) -> &str {
+        &self.fingerprint
+    }
+
+    /// Connect over `sock`, accepting the controller only by `pin` (None:
+    /// the first key, which the caller then records), the handshake done
+    /// within `timeout`.
+    pub fn connect(
+        &self,
+        sock: TcpStream,
+        pin: Option<[u8; 32]>,
+        timeout: Duration,
+    ) -> Result<Tls, ConnectError> {
+        let _one = self.attempt.lock().unwrap_or_else(|p| p.into_inner());
+        self.verifier.arm(pin);
+        match Tls::client(sock, Arc::clone(&self.config), timeout) {
+            Ok(t) => Ok(t),
+            Err(e) => match (self.verifier.presented(), pin) {
+                (Some(key), Some(pinned)) if digest(&key) != pinned => {
+                    Err(ConnectError::KeyMismatch {
+                        presented_unproven: key,
+                        pinned,
+                    })
+                }
+                _ => Err(ConnectError::Io(e)),
+            },
+        }
+    }
+}
+
+impl ServerCertVerifier for PinnedController {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, Error> {
+        let key = cert::public_key_of(end_entity)
+            .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
+        *self.presented.lock().unwrap_or_else(|p| p.into_inner()) = Some(key);
+        let pin = *self.pin.lock().unwrap_or_else(|p| p.into_inner());
+        match pin {
+            Some(pin) if pin != digest(&key) => Err(Error::InvalidCertificate(
+                CertificateError::ApplicationVerificationFailure,
+            )),
+            _ => Ok(ServerCertVerified::assertion()),
+        }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Err(no_tls12())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        signature_holds(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::ED25519]
+    }
+}
+
+/// The controller's check on a machine: any ed25519 key that signs the
+/// handshake; the key's standing is decided after (module doc).
+#[derive(Debug)]
+struct AnyEd25519Machine;
+
+impl ClientCertVerifier for AnyEd25519Machine {
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &[]
+    }
+
+    fn verify_client_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: UnixTime,
+    ) -> Result<ClientCertVerified, Error> {
+        cert::public_key_of(end_entity)
+            .map(|_| ClientCertVerified::assertion())
+            .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Err(no_tls12())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        signature_holds(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::ED25519]
+    }
+}
+
+fn certificate_and_key(id: &Identity) -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
+    let key = id.signing_key();
+    (
+        vec![cert::self_signed(key)],
+        PrivateKeyDer::Pkcs8(crypto::pkcs8(key.as_bytes()).into()),
+    )
+}
+
+/// The machine's config: its own certificate, the controller checked by
+/// `verifier`.
+fn client_config(
+    id: &Identity,
+    verifier: Arc<dyn ServerCertVerifier>,
+) -> anyhow::Result<Arc<ClientConfig>> {
+    let (certs, key) = certificate_and_key(id);
+    let mut config = ClientConfig::builder_with_provider(crypto::provider())
+        .with_protocol_versions(&[&rustls::version::TLS13])?
+        .dangerous()
+        .with_custom_certificate_verifier(verifier)
+        .with_client_auth_cert(certs, key)?;
+    config.resumption = rustls::client::Resumption::disabled();
+    Ok(Arc::new(config))
+}
+
+/// The controller's side: its own certificate, every machine asked for one.
+pub fn server_config(id: &Identity) -> anyhow::Result<Arc<ServerConfig>> {
+    let (certs, key) = certificate_and_key(id);
+    let mut config = ServerConfig::builder_with_provider(crypto::provider())
+        .with_protocol_versions(&[&rustls::version::TLS13])?
+        .with_client_cert_verifier(Arc::new(AnyEd25519Machine))
+        .with_single_cert(certs, key)?;
+    config.send_tls13_tickets = 0;
+    config.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
+    Ok(Arc::new(config))
+}
+
+/// What one `recv` gave.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Recv {
+    Line(Vec<u8>),
+    /// Nothing arrived within the read timeout.
+    Idle,
+    /// The peer closed the connection.
+    Closed,
+}
+
+/// One connection (module doc).
+pub struct Tls {
+    conn: rustls::Connection,
+    sock: TcpStream,
+    inbuf: Vec<u8>,
+    /// The longest line `recv` accepts (`MAX_LINE` unless set lower).
+    max_line: usize,
+}
+
+fn is_timeout(e: &io::Error) -> bool {
+    matches!(
+        e.kind(),
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+    )
+}
+
+fn invalid(e: impl std::fmt::Display) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+}
+
+impl Tls {
+    /// Connect as the machine and finish the handshake within `timeout`.
+    pub fn client(
+        sock: TcpStream,
+        config: Arc<ClientConfig>,
+        timeout: Duration,
+    ) -> io::Result<Self> {
+        let name = ServerName::try_from(SERVER_NAME).expect("a valid DNS name");
+        let conn = rustls::ClientConnection::new(config, name).map_err(invalid)?;
+        Self::handshake(conn.into(), sock, timeout)
+    }
+
+    /// Accept as the controller and finish the handshake within `timeout`.
+    pub fn server(
+        sock: TcpStream,
+        config: Arc<ServerConfig>,
+        timeout: Duration,
+    ) -> io::Result<Self> {
+        let conn = rustls::ServerConnection::new(config).map_err(invalid)?;
+        Self::handshake(conn.into(), sock, timeout)
+    }
+
+    fn handshake(
+        mut conn: rustls::Connection,
+        mut sock: TcpStream,
+        timeout: Duration,
+    ) -> io::Result<Self> {
+        sock.set_nodelay(true)?;
+        sock.set_read_timeout(Some(timeout))?;
+        sock.set_write_timeout(Some(timeout))?;
+        let until = std::time::Instant::now() + timeout;
+        while conn.is_handshaking() {
+            if std::time::Instant::now() > until {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            conn.complete_io(&mut sock)?;
+        }
+        // Lines up to MAX_LINE go out whole; the peer's pace is the
+        // write timeout's to judge.
+        conn.set_buffer_limit(None);
+        sock.set_read_timeout(Some(TICK))?;
+        Ok(Self {
+            conn,
+            sock,
+            inbuf: Vec::new(),
+            max_line: MAX_LINE,
+        })
+    }
+
+    /// The key the peer's certificate carries — the one its handshake
+    /// signature proved.
+    pub fn peer_key(&self) -> Option<[u8; 32]> {
+        let certs = self.conn.peer_certificates()?;
+        cert::public_key_of(certs.first()?).ok()
+    }
+
+    /// Where the peer connects from.
+    pub fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        self.sock.peer_addr().ok()
+    }
+
+    /// Accept lines up to `n` bytes (a connection not yet admitted reads
+    /// less than `MAX_LINE`, link/controller.rs).
+    pub fn set_max_line(&mut self, n: usize) {
+        self.max_line = n.min(MAX_LINE);
+    }
+
+    /// The read timeout `recv` waits at most.
+    pub fn set_read_timeout(&self, d: Duration) -> io::Result<()> {
+        self.sock.set_read_timeout(Some(d))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        while self.conn.wants_write() {
+            self.conn.write_tls(&mut self.sock)?;
+        }
+        Ok(())
+    }
+
+    /// One line, newline added, written and flushed.
+    pub fn send(&mut self, line: &str) -> io::Result<()> {
+        if line.len() > MAX_LINE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("a line is at most {MAX_LINE} bytes"),
+            ));
+        }
+        self.conn.writer().write_all(line.as_bytes())?;
+        self.conn.writer().write_all(b"\n")?;
+        self.flush()
+    }
+
+    fn take_line(&mut self) -> io::Result<Option<Vec<u8>>> {
+        match self.inbuf.iter().position(|b| *b == b'\n') {
+            Some(at) => {
+                let mut line: Vec<u8> = self.inbuf.drain(..=at).collect();
+                line.pop();
+                if line.last() == Some(&b'\r') {
+                    line.pop();
+                }
+                if line.len() > self.max_line {
+                    return Err(invalid(format!("a line past {} bytes", self.max_line)));
+                }
+                Ok(Some(line))
+            }
+            None if self.inbuf.len() > self.max_line => {
+                Err(invalid(format!("a line past {} bytes", self.max_line)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// The next line, waiting at most the read timeout for the network.
+    pub fn recv(&mut self) -> io::Result<Recv> {
+        let mut chunk = [0u8; 16 * 1024];
+        loop {
+            if let Some(line) = self.take_line()? {
+                return Ok(Recv::Line(line));
+            }
+            match self.conn.reader().read(&mut chunk) {
+                Ok(0) => return Ok(Recv::Closed),
+                Ok(n) => {
+                    self.inbuf.extend_from_slice(&chunk[..n]);
+                    continue;
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(Recv::Closed),
+                Err(e) => return Err(e),
+            }
+            match self.conn.read_tls(&mut self.sock) {
+                Ok(0) => return Ok(Recv::Closed),
+                Ok(_) => {}
+                Err(e) if is_timeout(&e) => return Ok(Recv::Idle),
+                Err(e) => return Err(e),
+            }
+            self.conn.process_new_packets().map_err(invalid)?;
+            // Alerts and key updates the packets asked for.
+            self.flush()?;
+        }
+    }
+
+    /// Say goodbye and tear the connection down.
+    pub fn close(&mut self) {
+        self.conn.send_close_notify();
+        let _ = self.flush();
+        let _ = self.sock.shutdown(Shutdown::Both);
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    /// A connected client and server over loopback; `pin` is what the
+    /// client expects of the server's key.
+    fn pair(
+        client: &Client,
+        server_id: &Identity,
+        pin: Option<[u8; 32]>,
+    ) -> (Result<Tls, ConnectError>, io::Result<Tls>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_cfg = server_config(server_id).unwrap();
+        let server = std::thread::spawn(move || {
+            let (sock, _) = listener.accept().unwrap();
+            Tls::server(sock, server_cfg, Duration::from_secs(5))
+        });
+        let c = client.connect(
+            TcpStream::connect(addr).unwrap(),
+            pin,
+            Duration::from_secs(5),
+        );
+        (c, server.join().unwrap())
+    }
+
+    fn id(n: u8) -> Identity {
+        Identity::from_seed([n; 32])
+    }
+
+    fn recv_line(t: &mut Tls) -> Vec<u8> {
+        for _ in 0..100 {
+            match t.recv().unwrap() {
+                Recv::Line(l) => return l,
+                Recv::Idle => continue,
+                Recv::Closed => panic!("closed"),
+            }
+        }
+        panic!("no line")
+    }
+
+    #[test]
+    fn both_keys_are_proved_and_lines_flow_both_ways() {
+        let (node, ctl) = (id(1), id(2));
+        let client = Client::new(&node).unwrap();
+        let pin = digest(ctl.public_key().as_bytes());
+        let (c, s) = pair(&client, &ctl, Some(pin));
+        let (mut c, mut s) = (c.unwrap(), s.unwrap());
+        assert_eq!(s.peer_key(), Some(*node.public_key().as_bytes()));
+        assert_eq!(c.peer_key(), Some(*ctl.public_key().as_bytes()));
+        c.send("hello").unwrap();
+        assert_eq!(recv_line(&mut s), b"hello");
+        // A line far past rustls' default buffer goes out whole.
+        let big = "x".repeat(300_000);
+        s.send(&big).unwrap();
+        assert_eq!(recv_line(&mut c).len(), 300_000);
+        assert!(s.send(&"y".repeat(MAX_LINE + 1)).is_err());
+        // A line past the reader's own limit ends the read.
+        s.send(&"z".repeat(2000)).unwrap();
+        c.set_max_line(1000);
+        assert!(c.recv().is_err() || c.recv().is_err());
+        c.close();
+        let mut end = None;
+        for _ in 0..100 {
+            match s.recv() {
+                Ok(Recv::Idle) => continue,
+                other => {
+                    end = Some(other);
+                    break;
+                }
+            }
+        }
+        assert!(matches!(end, Some(Ok(Recv::Closed))), "{end:?}");
+    }
+
+    #[test]
+    fn a_controller_with_another_key_is_refused_and_named_unproven() {
+        let (node, ctl, other) = (id(1), id(2), id(3));
+        let client = Client::new(&node).unwrap();
+        let pin = digest(other.public_key().as_bytes());
+        match pair(&client, &ctl, Some(pin)).0 {
+            Err(ConnectError::KeyMismatch {
+                presented_unproven,
+                pinned,
+            }) => {
+                assert_eq!(presented_unproven, *ctl.public_key().as_bytes());
+                assert_eq!(pinned, pin);
+            }
+            other => panic!("{:?}", other.map(|_| ())),
+        }
+        // The same client, re-armed with the right pin, gets in.
+        let right = digest(ctl.public_key().as_bytes());
+        assert!(pair(&client, &ctl, Some(right)).0.is_ok());
+    }
+
+    #[test]
+    fn with_no_pin_the_first_key_is_accepted_and_proved() {
+        let (node, ctl) = (id(1), id(2));
+        let client = Client::new(&node).unwrap();
+        let (c, s) = pair(&client, &ctl, None);
+        assert!(s.is_ok());
+        assert_eq!(c.unwrap().peer_key(), Some(*ctl.public_key().as_bytes()));
+    }
+
+    /// The provider against ring's, on Linux where ring is built anyway:
+    /// a handshake and a record each way between the two, so the record
+    /// layer cannot be wrong the same way at both ends.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn this_provider_interoperates_with_rings() {
+        let (node, ctl) = (id(1), id(2));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        // The controller on ring's provider, restricted to the same suite.
+        let (certs, key) = certificate_and_key(&ctl);
+        let ring = rustls::crypto::ring::default_provider();
+        let ring = rustls::crypto::CryptoProvider {
+            cipher_suites: vec![rustls::crypto::ring::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
+            kx_groups: vec![rustls::crypto::ring::kx_group::X25519],
+            ..ring
+        };
+        let server_cfg = Arc::new(
+            ServerConfig::builder_with_provider(Arc::new(ring))
+                .with_protocol_versions(&[&rustls::version::TLS13])
+                .unwrap()
+                .with_client_cert_verifier(Arc::new(AnyEd25519Machine))
+                .with_single_cert(certs, key)
+                .unwrap(),
+        );
+        let server = std::thread::spawn(move || {
+            let (sock, _) = listener.accept().unwrap();
+            let mut s = Tls::server(sock, server_cfg, Duration::from_secs(5)).unwrap();
+            let got = recv_line(&mut s);
+            s.send("from ring").unwrap();
+            (got, s.peer_key())
+        });
+        let pin = digest(ctl.public_key().as_bytes());
+        let client = Client::new(&node).unwrap();
+        let mut c = client
+            .connect(
+                TcpStream::connect(addr).unwrap(),
+                Some(pin),
+                Duration::from_secs(5),
+            )
+            .map_err(|e| format!("{e:?}"))
+            .unwrap();
+        c.send("from this provider").unwrap();
+        assert_eq!(recv_line(&mut c), b"from ring");
+        let (got, peer) = server.join().unwrap();
+        assert_eq!(got, b"from this provider");
+        assert_eq!(peer, Some(*node.public_key().as_bytes()));
+    }
+}

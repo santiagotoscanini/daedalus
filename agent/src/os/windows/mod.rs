@@ -14,6 +14,7 @@
 //!
 //! The small things are here: paths, processes, the Claude command's names.
 
+mod acl;
 mod dns;
 mod dpapi;
 mod facts;
@@ -24,6 +25,7 @@ mod telemetry;
 #[cfg(feature = "tray")]
 pub mod tray;
 
+pub use acl::{file_owner, protect_data_dir};
 pub use dns::srv_lookup;
 pub use dpapi::{seal, unseal};
 pub use facts::{cpu_name, memory_bytes, os_name, os_version};
@@ -118,10 +120,15 @@ where
 
 // ── identity ──────────────────────────────────────────────────────────────
 
-/// No ACL is set: the file inherits ProgramData's, whose default lets the
-/// Users group read. DPAPI only binds it to this machine.
+/// The directory's DACL (`install`, private.rs) lets Users read, not
+/// write; DPAPI binds the seed to this machine.
 pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
     std::fs::write(path, bytes).with_context(|| format!("writing {}", path.display()))
+}
+
+/// Windows has no uid: ownership is judged by SID (acl.rs).
+pub fn own_uid() -> Option<u32> {
+    None
 }
 
 // ── update ────────────────────────────────────────────────────────────────

@@ -32,10 +32,21 @@
 //! On the controller the page answers on loopback only (role.rs): the box
 //! adds no LAN listener, and the app's door is the socket (api/), which
 //! reads the same `Shared` this page does. `POST /claude/update` refuses
-//! there — nix pins Claude Code on the box.
+//! there — nix pins Claude Code on the box. The controller also answers
+//! `GET /nodes/metrics`: the telemetry of every machine connected to it
+//! (link/), as Prometheus text with the series and labels each machine's
+//! own `/metrics` uses plus a `node` label, so Prometheus can scrape the
+//! one controller instead of every machine. The page stays on loopback;
+//! how Prometheus reaches it is nix's to decide (a scrape from the host,
+//! or a proxy it declares). A node answers that path 404.
+//!
+//! A node's page also carries `controller`: its link to the controller —
+//! which path it uses (the legacy hello, both, or the controller alone),
+//! the address, its own fingerprint and the controller's it trusts, and
+//! the last error, a changed controller key above all (link/node.rs).
 
 use std::io::Read;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -47,6 +58,7 @@ use crate::api::Events;
 use crate::claude::{Report, ReportAnswer, Summary};
 use crate::facts::Facts;
 use crate::hello::{ControlPlane, Policy};
+use crate::link::LinkStatus;
 use crate::role::Role;
 use crate::state::State;
 use crate::telemetry::Telemetry;
@@ -63,9 +75,16 @@ pub struct Shared {
     facts: Facts,
     role: Role,
     inner: Mutex<Live>,
-    /// The API's subscribers (api/): told when Claude's state or pid moves
-    /// and when a telemetry sample lands.
-    events: Events,
+    /// The API's subscribers (api/): told when Claude's state or pid moves,
+    /// when a telemetry sample lands, and — on the controller — when a
+    /// machine connects, leaves or changes standing (link/controller.rs).
+    events: Arc<Events>,
+    /// The controller's own key and addresses (link/), set once at start
+    /// in controller mode; `system.info` states it.
+    controller: OnceLock<crate::api::wire::ControllerInfo>,
+    /// The machines connected to this controller, when it listens for
+    /// them; the API's `nodes.*` and `/nodes/metrics` read it.
+    nodes: OnceLock<Arc<crate::link::controller::Registry>>,
 }
 
 struct Live {
@@ -98,6 +117,16 @@ struct Live {
     node_token: Option<String>,
     /// The last telemetry document, from the sampling thread.
     telemetry: Option<Telemetry>,
+    /// Moves whenever a sample carries newly read static or slow facts or
+    /// OS updates — what the link pushes at once rather than on its
+    /// sample cadence (link/node.rs).
+    telemetry_tier: u64,
+    /// This machine's link to the controller, as its loop last saw it;
+    /// None on the controller, and until the loop starts.
+    link: Option<LinkStatus>,
+    /// Last moment the link was connected AND approved: until
+    /// `LEGACY_FALLBACK` after it, the legacy hello is not sent.
+    link_approved_at: Option<Instant>,
 }
 
 /// The tray, as the page describes it.
@@ -138,6 +167,10 @@ struct Document<'a> {
     telemetry: Option<Telemetry>,
     /// The box, as this agent last saw it.
     control_plane: &'a ControlPlane,
+    /// The connection to the controller (link/): which path this machine
+    /// uses, the controller's address, both fingerprints, and what went
+    /// wrong. Null on the controller itself.
+    controller: Option<LinkStatus>,
     #[serde(flatten)]
     state: &'a State,
 }
@@ -148,7 +181,9 @@ impl Shared {
             started,
             facts,
             role,
-            events: Events::default(),
+            events: Arc::new(Events::default()),
+            controller: OnceLock::new(),
+            nodes: OnceLock::new(),
             inner: Mutex::new(Live {
                 state,
                 awake_hold: false,
@@ -164,8 +199,16 @@ impl Shared {
                 claude_restart_requested: false,
                 node_token: None,
                 telemetry: None,
+                telemetry_tier: 0,
+                link: None,
+                link_approved_at: None,
             }),
         }
+    }
+
+    /// Which parts of the agent run here (role.rs).
+    pub fn role(&self) -> Role {
+        self.role
     }
 
     pub fn policy(&self) -> Policy {
@@ -220,9 +263,17 @@ impl Shared {
         }
     }
 
-    pub fn set_telemetry(&self, t: Telemetry) {
+    /// A new sample; `tiers_moved` when it carries static or slow facts or
+    /// OS updates read since the last one (telemetry.rs).
+    pub fn set_telemetry(&self, t: Telemetry, tiers_moved: bool) {
         let sampled_at = t.sampled_at.clone();
-        self.lock().telemetry = Some(t);
+        {
+            let mut l = self.lock();
+            l.telemetry = Some(t);
+            if tiers_moved {
+                l.telemetry_tier += 1;
+            }
+        }
         self.events
             .publish(event::TELEMETRY_UPDATED, &TelemetryUpdated { sampled_at });
     }
@@ -231,6 +282,99 @@ impl Shared {
     /// before the first sample, or when the level is `off`.
     pub fn telemetry(&self) -> Option<Telemetry> {
         self.lock().telemetry.clone()
+    }
+
+    /// The last document with its tier counter (`set_telemetry`).
+    pub fn telemetry_with_tier(&self) -> Option<(Telemetry, u64)> {
+        let l = self.lock();
+        l.telemetry.clone().map(|t| (t, l.telemetry_tier))
+    }
+
+    /// Edit this machine's view of its link to the controller (link/node.rs).
+    pub fn set_link(&self, f: impl FnOnce(&mut LinkStatus)) {
+        f(self.lock().link.get_or_insert_with(LinkStatus::default));
+    }
+
+    /// The link as the page shows it, with the path worked out; None on
+    /// the controller and before the link's loop starts.
+    pub fn link(&self) -> Option<LinkStatus> {
+        let l = self.lock();
+        Self::link_of(&l)
+    }
+
+    fn link_of(l: &Live) -> Option<LinkStatus> {
+        let mut s = l.link.clone()?;
+        s.path = if !Self::legacy_wanted(l) {
+            "controller"
+        } else if s.connected {
+            "both"
+        } else {
+            "legacy"
+        };
+        Some(s)
+    }
+
+    /// The link is connected and approved right now (called every tick
+    /// while it is).
+    pub fn link_approved_now(&self) {
+        self.lock().link_approved_at = Some(Instant::now());
+    }
+
+    /// The controller no longer approves this machine (revoked, or back to
+    /// pending): the legacy hello resumes at once.
+    pub fn link_not_approved(&self) {
+        self.lock().link_approved_at = None;
+    }
+
+    /// Whether the legacy hello to the app should go out: always, until the
+    /// controller approved this machine over the link; then not while the
+    /// link stays up, nor for `LEGACY_FALLBACK` after it drops — past that
+    /// the hello resumes, so a controller that went away does not take the
+    /// machine off the box's pages (link/node.rs).
+    pub fn legacy_hello_wanted(&self) -> bool {
+        Self::legacy_wanted(&self.lock())
+    }
+
+    fn legacy_wanted(l: &Live) -> bool {
+        l.link_approved_at
+            .is_none_or(|at| at.elapsed() > crate::link::node::LEGACY_FALLBACK)
+    }
+
+    /// The status document as the link pushes it (link/node.rs): the page
+    /// without its telemetry block, which travels on its own, and with
+    /// the OS's power requests as `power_requests` hands them in (a
+    /// command the caller runs on its own cadence).
+    pub fn status_value(&self, power_requests: Option<String>) -> serde_json::Value {
+        let mut v = serde_json::to_value(self.document_with(power_requests, false))
+            .unwrap_or(serde_json::Value::Null);
+        if let Some(o) = v.as_object_mut() {
+            o.remove("telemetry");
+        }
+        v
+    }
+
+    /// The controller's key and addresses, set once in controller mode.
+    pub fn set_controller_info(&self, info: crate::api::wire::ControllerInfo) {
+        let _ = self.controller.set(info);
+    }
+
+    pub fn controller_info(&self) -> Option<&crate::api::wire::ControllerInfo> {
+        self.controller.get()
+    }
+
+    /// The machines this controller serves, once it listens for them.
+    pub fn set_nodes(&self, r: Arc<crate::link::controller::Registry>) {
+        let _ = self.nodes.set(r);
+    }
+
+    pub fn nodes(&self) -> Option<&Arc<crate::link::controller::Registry>> {
+        self.nodes.get()
+    }
+
+    /// The events handle, for what publishes beside this struct (the
+    /// controller's registry).
+    pub fn events_handle(&self) -> Arc<Events> {
+        Arc::clone(&self.events)
     }
 
     /// The session's last report while it is fresh; None when no session
@@ -410,7 +554,17 @@ impl Shared {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
+    /// The open page, as served.
     fn document(&self) -> String {
+        let power = crate::power::requests_report();
+        serde_json::to_string_pretty(&self.document_with(power, true))
+            .unwrap_or_else(|_| "{}".into())
+    }
+
+    /// The page as a value: with `Telemetry::public` when `telemetry`,
+    /// with its block null otherwise; `power_requests` is what the OS
+    /// reported, read by the caller outside the lock.
+    fn document_with(&self, power_requests: Option<String>, telemetry: bool) -> serde_json::Value {
         let l = self.lock();
         let os_uptime = crate::power::os_uptime_secs();
         let doc = Document {
@@ -423,7 +577,7 @@ impl Shared {
             booted_at: os_uptime.map(crate::state::rfc3339_ago),
             awake_hold: l.awake_hold,
             hold_error: l.hold_error.as_deref(),
-            power_requests: crate::power::requests_report(),
+            power_requests,
             update_available: l.update_available.as_deref(),
             restart_pending: l.restart_pending,
             policy: &l.policy,
@@ -441,11 +595,16 @@ impl Shared {
             },
             claude_update_requested: l.claude_update_requested,
             claude_restart_requested: l.claude_restart_requested,
-            telemetry: l.telemetry.as_ref().map(Telemetry::public),
+            telemetry: if telemetry {
+                l.telemetry.as_ref().map(Telemetry::public)
+            } else {
+                None
+            },
             control_plane: &l.control_plane,
+            controller: Self::link_of(&l),
             state: &l.state,
         };
-        serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into())
+        serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null)
     }
 }
 
@@ -472,6 +631,16 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                     (&Method::Get, "/metrics") => {
                         (200, shared.metrics(), "text/plain; version=0.0.4")
                     }
+                    // The connected machines' telemetry, on the controller
+                    // (link/controller.rs); this page is loopback-only there.
+                    (&Method::Get, "/nodes/metrics") => match shared.nodes() {
+                        Some(r) => (200, r.metrics(), "text/plain; version=0.0.4"),
+                        None => (
+                            404,
+                            "no machines connect to this agent\n".to_string(),
+                            "text/plain",
+                        ),
+                    },
                     (&Method::Get, "/" | "/status") => (200, shared.document(), "application/json"),
                     (&Method::Get, "/claude" | "/telemetry") => {
                         let auth = req

@@ -145,6 +145,9 @@ struct Ui {
     line_hold: MenuItem,
     line_update: MenuItem,
     line_box: MenuItem,
+    line_link: MenuItem,
+    line_key_own: MenuItem,
+    line_key_controller: MenuItem,
     line_claude: MenuItem,
     open_status: MenuItem,
     check_now: MenuItem,
@@ -165,6 +168,9 @@ impl Ui {
         let line_hold = MenuItem::new("Awake hold: …", false, None);
         let line_update = MenuItem::new("Updates: …", false, None);
         let line_box = MenuItem::new("Box: …", false, None);
+        let line_link = MenuItem::new("Controller: …", false, None);
+        let line_key_own = MenuItem::new("This machine's key: …", false, None);
+        let line_key_controller = MenuItem::new("Controller's key: …", false, None);
         let line_claude = MenuItem::new("Claude: …", false, None);
         let open_status = MenuItem::new("Open status page", true, None);
         let check_now = MenuItem::new("Check for updates now", true, None);
@@ -179,6 +185,9 @@ impl Ui {
             &line_hold,
             &line_update,
             &line_box,
+            &line_link,
+            &line_key_own,
+            &line_key_controller,
             &line_claude,
             &PredefinedMenuItem::separator(),
             &open_status,
@@ -205,6 +214,9 @@ impl Ui {
             line_hold,
             line_update,
             line_box,
+            line_link,
+            line_key_own,
+            line_key_controller,
             line_claude,
             open_status,
             check_now,
@@ -238,6 +250,7 @@ impl Ui {
             self.line_hold.set_text("Awake hold: service not answering");
             self.line_update.set_text("Updates: unknown");
             self.line_box.set_text("Box: unknown");
+            self.line_link.set_text("Controller: unknown");
             let _ = self.tray.set_tooltip(Some(format!(
                 "{DISPLAY_NAME} {VERSION}\nService not answering\n{claude_line}"
             )));
@@ -282,17 +295,33 @@ impl Ui {
             _ => "Box: looking…".to_string(),
         };
         self.line_box.set_text(&box_line);
+        let (link, own, theirs) = link_lines(p.controller.as_ref());
+        self.line_link.set_text(&link);
+        self.line_key_own.set_text(&own);
+        self.line_key_controller.set_text(&theirs);
+        let link_bad = p.controller.as_ref().is_some_and(|l| {
+            l.conflict.is_some() || matches!(l.state.as_deref(), Some("key-changed" | "revoked"))
+        });
+        // A first-use key nothing confirmed: prominent, not an alarm.
+        let link_unconfirmed = p
+            .controller
+            .as_ref()
+            .is_some_and(|l| l.unconfirmed && l.controller_fingerprint.is_some());
 
         // The hold is a fault only when the box wants it; Claude, only when
         // it is wanted and not (yet) running.
         let hold_bad = !p.awake_hold && p.policy.awake_hold;
         let claude_bad = claude_wanted && !matches!(claude.state.as_str(), "running" | "starting");
-        let short = if hold_bad {
+        let short = if link_bad {
+            "controller refused — see the menu"
+        } else if hold_bad {
             "awake hold OFF"
         } else if p.update_available.is_some() || p.restart_pending {
             "update pending"
         } else if claude_bad {
             "Claude remote control not running"
+        } else if link_unconfirmed {
+            "controller trusted on first use, unconfirmed"
         } else {
             "up to date"
         };
@@ -301,13 +330,63 @@ impl Ui {
             p.version
         )));
 
-        let look = if hold_bad || p.update_available.is_some() || p.restart_pending || claude_bad {
+        let look = if link_bad
+            || hold_bad
+            || p.update_available.is_some()
+            || p.restart_pending
+            || claude_bad
+            || link_unconfirmed
+        {
             Look::Warn
         } else {
             Look::Ok
         };
         self.set_look(look);
     }
+}
+
+/// The link's three menu lines: where the machine stands with the
+/// controller, and the two keys — this machine's and the controller's it
+/// trusts, in full, so the operator can compare them with Settings ›
+/// Machines before approving (link/node.rs).
+fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, String) {
+    let Some(l) = link else {
+        return (
+            "Controller: not used on this machine".into(),
+            "This machine's key: —".into(),
+            "Controller's key: —".into(),
+        );
+    };
+    let at = l.address.as_deref().unwrap_or("not found yet");
+    let first = match (l.state.as_deref(), l.error.as_deref()) {
+        _ if l.conflict.is_some() => {
+            format!("Controller: {at} — the box names ANOTHER KEY; see the status page")
+        }
+        (Some("approved"), _) if l.unconfirmed => {
+            format!("Controller: {at} — approved; the hello to the box goes on until its key is confirmed")
+        }
+        (Some("approved"), _) => {
+            format!("Controller: {at} — approved (the hello to the box has stopped)")
+        }
+        (Some("pending"), _) => {
+            format!("Controller: {at} — waiting for approval; compare both keys")
+        }
+        (Some("revoked"), _) => format!("Controller: {at} — revoked by the box"),
+        (Some("key-changed"), _) => format!("Controller: {at} — KEY CHANGED, refused"),
+        (_, Some(e)) => format!("Controller: {at} — {e}"),
+        (Some(s), None) => format!("Controller: {at} — {s}"),
+        (None, None) => "Controller: none found; the hello to the box carries this machine".into(),
+    };
+    let own = format!("This machine's key: {}", l.fingerprint);
+    let theirs = match (&l.controller_fingerprint, &l.pinned_via) {
+        (Some(fp), _) if l.unconfirmed => {
+            format!("Controller's key: {fp} (trusted on first use, UNCONFIRMED: pin it)")
+        }
+        (Some(fp), Some(via)) => format!("Controller's key: {fp} (trusted via {via})"),
+        (Some(fp), None) => format!("Controller's key: {fp}"),
+        (None, _) => "Controller's key: not seen yet".into(),
+    };
+    (first, own, theirs)
 }
 
 /// One line for Claude Code, as the menu and the tooltip show it.
@@ -445,5 +524,56 @@ pub fn main() {
     if let Err(e) = crate::os::tray::run() {
         write_failure(&e);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::LinkPage;
+
+    #[test]
+    fn the_link_lines_show_both_keys_and_what_is_wrong() {
+        assert!(link_lines(None).0.contains("not used"));
+        let pending = LinkPage {
+            path: "both".into(),
+            address: Some("box.lan:7788".into()),
+            state: Some("pending".into()),
+            connected: true,
+            fingerprint: "aaaa:bbbb".into(),
+            controller_fingerprint: Some("cccc:dddd".into()),
+            pinned_via: Some("config".into()),
+            unconfirmed: false,
+            conflict: None,
+            error: None,
+        };
+        let (first, own, theirs) = link_lines(Some(&pending));
+        assert_eq!(
+            first,
+            "Controller: box.lan:7788 — waiting for approval; compare both keys"
+        );
+        assert_eq!(own, "This machine's key: aaaa:bbbb");
+        assert_eq!(theirs, "Controller's key: cccc:dddd (trusted via config)");
+        let changed = LinkPage {
+            state: Some("key-changed".into()),
+            error: Some("controller key changed: …".into()),
+            ..pending
+        };
+        assert!(link_lines(Some(&changed)).0.contains("KEY CHANGED"));
+        let tofu = LinkPage {
+            state: Some("approved".into()),
+            error: None,
+            pinned_via: Some("tofu".into()),
+            unconfirmed: true,
+            ..changed.clone()
+        };
+        let (first, _, theirs) = link_lines(Some(&tofu));
+        assert!(first.contains("until its key is confirmed"), "{first}");
+        assert!(theirs.contains("UNCONFIRMED"), "{theirs}");
+        let conflict = LinkPage {
+            conflict: Some("the box names …".into()),
+            ..tofu
+        };
+        assert!(link_lines(Some(&conflict)).0.contains("ANOTHER KEY"));
     }
 }

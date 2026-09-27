@@ -32,6 +32,11 @@ beside it where there is a desktop. It
   Claude remote control or not and where, provider ports — and one-shot
   instructions: check for updates now, update Claude Code, restart Claude
   remote control (`src/hello.rs`);
+- **keeps one connection to the controller**, the box's own agent: TLS 1.3
+  with both keys pinned, hello, status, telemetry and the Claude report up,
+  the box's policy and commands down at once. Until the controller has
+  approved the machine the hello above goes on beside it; then the hello
+  pauses (see "The link to the controller");
 - **runs Claude Code's remote control** the way the box runs its own: the
   **session** — the process with the user's Claude login — supervises
   `claude remote-control --verbose`, restarts it with backoff, logs its
@@ -56,8 +61,9 @@ beside it where there is a desktop. It
 one table of what runs for each: a **node** — every machine that joins the
 network — runs all of the above; the **controller** — the box itself, NixOS
 by definition, the same Linux code built and configured by nix — runs the
-status page, telemetry and the session, and no hello, self-update,
-keep-awake, tray or installer (`install` and `uninstall` refuse there).
+status page, telemetry and the session, the local API and the listener the
+machines' links reach, and no hello, self-update, keep-awake, tray or
+installer (`install` and `uninstall` refuse there).
 
 ## Controller mode
 
@@ -81,10 +87,22 @@ same in a terminal), with
   it ever does see its own name running while off, stop that unit by hand
   or turn remote control on, which adopts it;
 - **the local API socket** — the door the Daedalus app uses (below);
-- and nothing else: no hello (so no identity key is made), no
-  self-update, no keep-awake, no tray, no installer, and no `claude
-  update` — nix pins Claude Code on the box (`POST /claude/update` answers
-  403 there).
+- **its own identity key**, made on first start as a node's is
+  (`identity.key` in its data directory, 0600): what every machine pins.
+  `system.info` states it (`controller.public_key`, `.fingerprint`);
+- **the listener for the machines' links**, where `[controller] listen`
+  names an address (absent: none — the box opens no port until nix says
+  so), and the registry of machines the API's `nodes.*` methods read
+  (see "The link to the controller");
+- **`GET /nodes/metrics`** on the loopback status page: every connected
+  machine's telemetry as Prometheus text, the series and labels each
+  machine's own `/metrics` writes plus `node="<id>"`, and
+  `daedalus_agent_link_up` per approved machine — so Prometheus can scrape
+  the controller instead of every machine. The page stays on loopback; how
+  Prometheus reaches it is nix's to decide;
+- and nothing else: no hello, no self-update, no keep-awake, no tray, no
+  installer, and no `claude update` — nix pins Claude Code on the box
+  (`POST /claude/update` answers 403 there).
 
 With no hello there is no policy from the box, so nix writes the
 controller's own in config.toml:
@@ -99,13 +117,15 @@ claude_workdir = "/home/op/projects/x"  # absent: the most recent trusted projec
 claude_unit = "daedalus-claude-rc"      # its user unit; absent: daedalus-claude-rc
 api_socket = "/run/user/1000/daedalus-agent/api.sock"
 api_allowed_uids = [100999]             # host uids served besides the agent's own; default none
+listen = "0.0.0.0:7788"                 # the machines' links; absent: no listener
+advertise = ["s2-server.lan:7788"]      # what machines should dial (one or a list), for the app
 ```
 
 The table's values are checked only in controller mode (`api_socket` and
 `claude_workdir` absolute, `claude_unit` a plain unit name, no root in
-`api_allowed_uids`), but a key it does not know is an error in every
-mode, so a typo in what nix writes fails loudly. A controller never holds
-the machine awake.
+`api_allowed_uids`, `listen` an address and port, `advertise` host:port
+pairs), but a key it does not know is an error in every mode, so a typo in
+what nix writes fails loudly. A controller never holds the machine awake.
 
 What the unit nix writes should carry:
 
@@ -114,8 +134,10 @@ What the unit nix writes should carry:
   systemd brings it back, and the Claude unit, which outlives it, is
   re-attached.
 - A `LimitNOFILE` with room: each API connection is a few threads and
-  two descriptors, up to 16 at once, beside the telemetry and the
-  session's tools.
+  two descriptors, up to 16 at once, and each machine's link a thread and
+  a descriptor, up to 64, beside the telemetry and the session's tools.
+- With `listen` set, the port open to the LAN in the firewall (and only
+  there: the link is for machines on the network).
 - A `claude_unit` distinct from any unit the box already runs, and the
   gcroot pin on the `claude` it runs.
 
@@ -168,35 +190,179 @@ Another API version gets `{"code":"version",…,"supported":1}` — the
 version is read before anything else, and fields the agent does not know
 in the envelope and in `hello` are ignored, so a newer client always
 hears which version this agent speaks; any other request first gets
-`bad_request`. A method's own parameters are exact (today, none but
-`hello`'s). The methods — fixed verbs, none taking a command, a path or a
-flag:
+`bad_request`. A method's own parameters are exact. The methods — fixed
+verbs, none taking a command, a path or a flag:
 
 | method             | answers                                                              | needs                   |
 |--------------------|----------------------------------------------------------------------|-------------------------|
-| `system.info`      | version, mode, api, hostname, OS facts, uptimes, the role table, capabilities | —              |
+| `system.info`      | version, mode, api, hostname, OS facts, uptimes, the role table, capabilities, and on the controller `controller: {public_key, fingerprint, listen, advertise}` | — |
 | `claude.status`    | `{reporting, wanted, report}`: the session's last report, or `reporting: false` | `claude.remote_control` |
-| `claude.restart`   | `{queued: true}`; the session restarts the server at once (`unavailable` while remote control is off or no session reports) | `claude.remote_control` |
+| `claude.restart`   | `{queued: true}`; the session restarts the server at once (`unavailable` while no session reports) | `claude.remote_control` |
 | `claude.update`    | `{queued: true}`; never offered on the controller                    | `claude.update`         |
 | `telemetry.get`    | `{level, telemetry}`: the document at the configured level           | —                       |
-| `events.subscribe` | `{}`, then `claude.changed` `{reporting, state, pid}` and `telemetry.updated` `{sampled_at}` | — |
+| `events.subscribe` | `{}`, then the events below                                          | —                       |
+| `nodes.list`       | `{nodes: [{id, fingerprint, state, connected, since, last_seen, hostname, os, arch, agent_version, lan_ip, mac, claude}]}`: every machine known | `nodes` |
+| `nodes.get` `{id}` | the same fields, plus `public_key`, the whole `hello`, `status` (the machine's status page without its telemetry) and `status_at`, `telemetry` (the open page's view) and `telemetry_at`, `providers` | `nodes` |
+| `nodes.telemetry` `{id}` | `{id, telemetry, received_at}`: the full document at the machine's level | `nodes` |
+| `nodes.claude` `{id}` | `{id, report, received_at}`: the machine's full Claude report      | `nodes`                 |
+| `nodes.set_desired` `{nodes: [{id, public_key, state, policy}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
+| `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
+
+`state` is `pending` (connected, not decided), `approved`, `revoked` or
+`unknown` (seen, not decided, gone). `nodes.set_desired` is the app's
+COMPLETE set of decided keys — `state` `approved` or `revoked`, `policy`
+the `Policy` of the hello answer (`awake_hold`, `claude_remote_control`,
+`claude_workdir`, `providers.lemonade.port`; absent for an approved key:
+the defaults) — idempotent, applied as a difference to the connections open
+now; a key left out is pending while connected. Every entry is checked
+before any applies: `id` must be the node id of `public_key`, no id twice,
+no field the controller does not know. `command` is one of `check_update`,
+`claude_update`, `claude_restart`; a machine never heard of is `not_found`,
+one not approved `unavailable`; one that does not acknowledge within 5 s
+is `unavailable` too. Every `id` is sixteen lowercase hex characters,
+checked before anything else. All of this is additive to api 1.
 
 Capabilities come from the role table and the config, never from the OS:
-`claude.remote_control` where a session runs, `claude.update` where the
-agent may update Claude Code (a node's role, not the controller's), and
-`telemetry.full` or `telemetry.minimal`. A method whose capability is
-absent answers `unsupported`. `claude.changed` goes out when a session
-starts reporting, when its state or pid moves, and when it stops
-reporting for 30 s (`reporting: false`, state and pid null);
-`telemetry.updated` with every sample. Events are best effort: a
-subscriber whose queue fills loses events, not its connection (one that
-stops reading altogether is closed by the write timeout). `src/api/wire.rs` has
-every type and golden tests pinning each one's exact JSON; `src/api/mod.rs`
-the rules above.
+`claude.remote_control` where a session runs and may run Claude — on the
+controller only while `[controller] claude_remote_control` is on;
+`claude.update` where the agent may update Claude Code (a node's role, not
+the controller's); `telemetry.full` or `telemetry.minimal`; `nodes` where
+the controller listens for machines. A method whose capability is absent
+answers `unsupported`. The events: `claude.changed` `{reporting, state,
+pid}` when a session starts reporting, when its state or pid moves, and
+when it stops reporting for 30 s (`reporting: false`, state and pid null);
+`telemetry.updated` `{sampled_at}` with every sample; `nodes.changed`
+`{id, state, connected}` when a machine connects, leaves or changes
+standing; `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
+connects and waits. Events are best effort: a subscriber whose queue fills
+loses events, not its connection (one that stops reading altogether is
+closed by the write timeout). `src/api/wire.rs` has every type and golden
+tests pinning each one's exact JSON; `src/api/mod.rs` the rules above.
 
-Nothing here reaches another machine yet: the machines' connections to
-the controller, and the app's side of this socket, come later (PLAN,
-feature 13).
+## The link to the controller
+
+Every machine keeps ONE outbound connection to the controller, and only
+the controller talks to the app (over the socket above): a star with the
+box at the centre. The link carries control messages — who a machine is,
+how it is, what it runs, and the box's word back — never data-plane
+traffic. `src/link/` has it all; its `mod.rs` header is the reference.
+
+**Transport.** TLS 1.3 over TCP on every OS, through rustls with pure-Rust
+primitives the agent plugs in itself (`src/link/crypto.rs`: X25519,
+ChaCha20-Poly1305, SHA-256, ed25519 — so no C crypto library is built for
+any target; a test runs it against rustls' ring provider on Linux). Both
+ends present a self-signed certificate made from their ed25519 identity
+key and sign the handshake with it; there is no CA and no hostname. A
+machine accepts the controller only if the SHA-256 of its key matches the
+pin; the controller accepts any machine's key at the TLS layer and decides
+right after whether it is approved, pending or revoked. Lines are
+newline-delimited JSON with the local API's envelope, at most 1 MiB; the
+link protocol's version rides the first request. Heartbeats both ways
+every 15 s; 45 s of silence ends the connection; a machine reconnects with
+backoff from 1 s to 30 s.
+
+**Fingerprints.** A key is shown as the SHA-256 of its public key in
+lowercase hex, four characters to a group: `3f2a:9c01:…` (sixteen groups).
+A machine's node id is the first sixteen hex characters of the same
+digest. The machine's status page and tray show its own and the
+controller's; `system.info` shows the controller's.
+
+**Where the machine connects, and whom it trusts.** The address:
+config.toml's `controller_address`; else the one kept in `controller.json`
+in the data directory (the box's word, or the first key trusted); else the
+SRV record `_daedalus-controller._tcp` under the search domains the
+`_daedalus._tcp` record is looked for in. The key, strongest first:
+
+1. config.toml's `controller_pin` (`install --pin`), which nothing
+   overrides;
+2. the key the box names in its answer to the legacy hello — but only as
+   far as that answer can be believed. It is AUTHENTICATED only when the
+   box's address is the operator's own (`control_plane_url` in config.toml)
+   and the request and the final answer (redirects followed) are both
+   HTTPS. A box found through the SRV record counts as a first use at best:
+   anyone who can answer DNS on the LAN could point the record at themselves.
+   A plain-HTTP answer's hint is ignored outright;
+3. the first key the controller presents — trust on first use.
+
+A hint records a key only where none is trusted; an authenticated hint
+naming the key already trusted on first use CONFIRMS it. No hint ever
+replaces a trusted key: another key is shown on the status page and in the
+tray as a conflict for the operator, and nothing changes. A controller that
+presents another key than the trusted one is refused, and the page and the
+tray say **controller key changed**, with the key trusted and the one that
+came — labelled unproven, since the pin check runs before the handshake
+signature. If the controller really has a new key, pin it (`install --pin`)
+or remove `controller.json`. (Rotating the controller's key through a
+signed statement is a later feature.)
+
+**Confirmed or not.** A key pinned by config or confirmed by an
+authenticated hint is confirmed. A key trusted on first use is not: the
+status page's `controller.unconfirmed` is true, and the tray says "trusted on
+first use, UNCONFIRMED: pin it" with its amber dot. The link works either
+way, but only a confirmed controller stands in for the legacy hello.
+
+**Files that hold trust.** `identity.key` and `controller.json` are read
+only when their owner is trusted: SYSTEM or Administrators on Windows, root
+or the agent's own user elsewhere; one that is not is refused (the link
+says so and does not fall back to a first use). On Windows `install` gives
+the data directory a protected DACL — SYSTEM and Administrators full
+control, Users read and execute, and Modify on `logs\` alone, where the tray
+writes — and cuts inheritance from ProgramData.
+
+**Enrollment.** A key the app has not approved is held PENDING: the
+controller lists it (`nodes.list`, `nodes.pending`) and keeps nothing it
+pushes; the machine shows "waiting for approval" with both fingerprints so
+the operator can compare them before approving on Settings › Machines.
+When the app's set approves the key, the controller upgrades the open
+connection — no reconnect — and sends the policy. A revoked key is told so
+and disconnected; the machine says "revoked" and tries again at the
+slowest step. A decision is for a key: a connection whose key is not the
+one the app decided for that id is refused.
+
+**Messages.** Machine → controller: `hello` (agent version, OS, arch,
+hostname, MAC, LAN address, the status port, facts, capabilities,
+telemetry level; its key is the certificate's), then, once approved,
+`status` (the status page without its telemetry: the awake hold, updates,
+policy, Claude summary, the link itself) on change and every minute,
+`telemetry` (the whole document at the machine's level) when a sample
+carries newly read static or slow facts or OS updates and otherwise every
+minute, `claude` (the full report) on change and every minute, and
+`providers` on change. Controller → machine: `state`, `policy`, and
+`command` requests (`check_update`, `claude_update`, `claude_restart`),
+each acknowledged at once.
+
+**Limits.** Before a key is admitted a connection holds one of 32 pre-auth
+slots (3 per address; an IPv6 /64 is one address) and has 5 s in all for
+the handshake and a `hello` of at most 16 KiB, whose fields are bounded
+(hostname at most 253 bytes without control characters; OS, arch, version
+and each of at most 32 capabilities short tokens; facts at most 256 bytes;
+MAC and LAN address parsed strictly) — anything else is refused. Admitted,
+it holds one of 64 connections. Unknown keys: at most 10 a minute per
+address, judged after the handshake, so an approved machine is never refused
+for its address; at most 16 pending in all and 2 per address, each
+connection pending for at most an hour (the machine reconnects and waits
+again); when the 64 are taken, an approved key takes the oldest pending
+one's place. Of an unknown key that left only its id, fingerprint, hostname
+and last-seen time are kept, at most 256 such keys, and at most 1024
+addresses are counted. The controller keeps what it observed in memory
+only; after a restart the machines reconnect and fill it again, and the
+app hands the desired set back. Label values in `/nodes/metrics` (and a
+machine's own `/metrics`) are escaped, newlines included, and stripped of
+other control characters.
+
+**Migration.** A machine with the link keeps the legacy hello to the app
+going until the controller approves it AND its key is confirmed; from then
+on the hello pauses, and resumes if the link stays down for five minutes or
+the machine is revoked or sent back to pending, so a controller that went
+away does not take the machine off the box's pages. A machine with no
+controller address and no SRV record stays on the legacy hello exactly as
+before, and learns the controller from the hello's answer once the app
+adds `controller: {address, public_key}` to it — which is how machines
+enrolled before the link move to it without enrolling again (as a first use
+unless their box address is `control_plane_url`, see above). The LAN status
+page and its token-gated reads are unchanged in this step. The status page's
+`controller` block and the tray's menu say which path the machine uses:
+`legacy`, `both`, or `controller`.
 
 ## Install
 
@@ -216,8 +382,17 @@ starts it as the desktop user, opens TCP 7787 to the local subnet, writes
 the binaries and keeps the config. `daedalus-agent uninstall` removes the
 service, the tray's Run key and the firewall rule; the data directory stays.
 
+To name the controller and pin its key at install, run the script as a
+script block so it takes parameters:
+
+```powershell
+& ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) -Controller s2-server.lan:7788 -Pin 3f2a:9c01:…
+```
+
 On a Mac or a Linux machine, from a terminal, as the user whose Claude Code
-should run there:
+should run there (`sh -s -- --controller HOST:PORT --pin FINGERPRINT` to
+name the controller and pin its key; both optional, the one-liner below
+unchanged without them):
 
 ```sh
 curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
@@ -263,7 +438,9 @@ and the tray's entry, stops the Claude server, and turns lingering off
 again if `install` turned it on (`session.json` in the data directory
 records who and whether); the binaries, config and identity stay.
 
-Re-running either script replaces the binaries and keeps the config. The
+Re-running either script replaces the binaries and keeps the config —
+except `controller_address` and `controller_pin`, which `--controller` and
+`--pin` (`-Controller`, `-Pin`) set in a config that exists too. The
 site serves both scripts from `main`, so neither command names a version.
 Trust at install is HTTPS to GitHub; every update after that is verified by
 the agent against the release key it carries.
@@ -309,7 +486,9 @@ log in to.
 ## Verbs
 
 ```
-daedalus-agent install [--port N]   register and start the service, the session and the tray (administrator / sudo)
+daedalus-agent install [--port N] [--controller HOST:PORT] [--pin FINGERPRINT]
+                                    register and start the service, the session and the tray (administrator / sudo);
+                                    --controller and --pin name the controller and pin its key in config.toml
 daedalus-agent uninstall            stop and remove them (administrator / sudo)
 daedalus-agent run                  service entry point; what the SCM, launchd or systemd calls (and nix, for the controller)
 daedalus-agent serve                the same work in the foreground, in a terminal
@@ -330,6 +509,7 @@ C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at l
 C:\ProgramData\daedalus-agent\config.toml                 local knobs, never policy (src/config.rs); edit and restart
 C:\ProgramData\daedalus-agent\state.json                  the last update check and install
 C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPAPI-wrapped
+C:\ProgramData\daedalus-agent\controller.json             the controller key this machine trusts, and its address (the link)
 C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
 C:\ProgramData\daedalus-agent\logs\claude-rc.log          what `claude remote-control` printed
 ```
@@ -339,7 +519,7 @@ macOS:
 ```
 /Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update)
 /Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the menu bar app
-/Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,logs/}
+/Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,controller.json,logs/}
 /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
 /Library/LaunchAgents/me.toscanini.daedalus-agent-tray.plist          the menu bar app's job
 ~/Library/Logs/daedalus-agent/                                        the menu bar app's logs (claude-rc.log)
@@ -350,7 +530,7 @@ Linux:
 ```
 /opt/daedalus-agent/bin/daedalus-agent                the service (.old / .new around an update); /usr/local/bin links to it
 /opt/daedalus-agent/bin/daedalus-agent-tray           the tray, x86_64 desktops only
-/var/lib/daedalus-agent/{config.toml,state.json,identity.key,session.json,logs/}
+/var/lib/daedalus-agent/{config.toml,state.json,identity.key,controller.json,session.json,logs/}
 /etc/systemd/system/daedalus-agent.service            the service's unit
 /etc/systemd/user/daedalus-agent-session.service      the session's unit, enabled for one user, lingering
 /etc/xdg/autostart/daedalus-agent-tray.desktop        the tray, at every graphical login
@@ -392,6 +572,8 @@ hello_secs = 60           # how often the hello goes out
 # updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
 # claude_rc = "unit"      # child | unit; absent: child on Windows and macOS, unit on Linux
+# controller_address = "…" # the controller's link address, host:port; `install --controller` writes it
+# controller_pin = "…"     # its key's fingerprint; `install --pin` writes it
 ```
 
 `telemetry = "full"` reads everything above; `minimal` reads the machine

@@ -44,7 +44,7 @@ mod metrics;
 mod model;
 pub mod parse;
 
-pub use metrics::metrics_text;
+pub use metrics::{escape_label, metrics_text, metrics_text_for};
 pub use model::{
     App, Battery, Browser, Cpu, Disk, Drive, Gpu, GpuSample, Installed, Machine, Memory,
     MemoryModule, Network, Os, Process, Sample, Service, Slow, Static, Telemetry, Temperature,
@@ -210,6 +210,8 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLeve
     // A first sample primes the deltas; the second is the first published.
     let _ = c.sample();
     let mut wait = Duration::from_secs(2);
+    // The first document carries every tier; later ones say when one moved.
+    let mut moved = true;
     loop {
         if crate::util::sleep_until(&stop, wait) {
             return;
@@ -218,10 +220,12 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLeve
         if stat_at.elapsed() > STATIC_EVERY {
             stat = c.read_static();
             stat_at = std::time::Instant::now();
+            moved = true;
         }
         if full && slow_at.elapsed() > SLOW_EVERY {
             slow = c.read_slow();
             slow_at = std::time::Instant::now();
+            moved = true;
         }
         if let Some(rx) = &updates_rx {
             match rx.try_recv() {
@@ -232,6 +236,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLeve
                         "telemetry: OS updates read"
                     );
                     updates = Some(u);
+                    moved = true;
                     updates_rx = None;
                 }
                 Err(mpsc::TryRecvError::Disconnected) => updates_rx = None,
@@ -257,7 +262,8 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLeve
         // page should say "running" within a tick of the server starting.
         let providers = crate::providers::detect(&shared.policy(), &slow.apps);
         let doc = assemble(&stat, &slow, &sample, updates.as_ref(), providers);
-        shared.set_telemetry(if full { doc } else { doc.minimal() });
+        shared.set_telemetry(if full { doc } else { doc.minimal() }, moved);
+        moved = false;
     }
 }
 

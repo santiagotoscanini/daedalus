@@ -29,6 +29,14 @@
 # Environment: DAEDALUS_REPO (owner/name), DAEDALUS_AGENT_VERSION (e.g. 0.5.0
 # instead of the newest), DAEDALUS_AGENT_PORT (the status page's port, on
 # first install only).
+#
+# Arguments, both optional — where the controller (the box's agent) is and
+# which key to trust, written to config.toml (also on a reinstall):
+#
+#   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- \
+#     --controller box.lan:7788 --pin 3f2a:9c01:…
+#
+# Without them the agent learns both from the box, as before.
 set -eu
 # Root's umask under `sudo sh` can be 077, which would leave the agent's
 # directories unreadable to the user the menu bar app, the tray and the
@@ -38,6 +46,20 @@ umask 022
 REPO="${DAEDALUS_REPO:-santiagotoscanini/daedalus}"
 VERSION="${DAEDALUS_AGENT_VERSION:-}"
 PORT="${DAEDALUS_AGENT_PORT:-7787}"
+
+# --controller HOST:PORT and --pin FINGERPRINT, passed on to `install`.
+LINK_ARGS=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --controller | --pin)
+      [ $# -ge 2 ] || { echo "install.sh: $1 needs a value" >&2; exit 1; }
+      case "$2" in *[!A-Za-z0-9.:_\[\]-]*) echo "install.sh: $1 $2: unexpected characters" >&2; exit 1 ;; esac
+      LINK_ARGS="$LINK_ARGS $1 $2"
+      shift 2
+      ;;
+    *) echo "install.sh: unknown argument $1 (known: --controller HOST:PORT, --pin FINGERPRINT)" >&2; exit 1 ;;
+  esac
+done
 
 die() { echo "install.sh: $*" >&2; exit 1; }
 
@@ -96,7 +118,8 @@ install_macos() {
   ln -sf "$BIN/daedalus-agent" /usr/local/bin/daedalus-agent 2>/dev/null || true
   chmod 755 "$ROOT" "$BIN" "$ROOT/logs"
 
-  "$BIN/daedalus-agent" install --port "$PORT"
+  # shellcheck disable=SC2086 # LINK_ARGS is flag/value pairs checked above
+  "$BIN/daedalus-agent" install --port "$PORT" $LINK_ARGS
   echo
   echo "installed $tag. Status page: http://$(hostname):$PORT/status"
   echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
@@ -162,7 +185,8 @@ install_linux() {
   ln -sf "$BIN/daedalus-agent" /usr/local/bin/daedalus-agent
   chmod 755 "$ROOT" "$BIN"
 
-  "$BIN/daedalus-agent" install --port "$PORT"
+  # shellcheck disable=SC2086 # LINK_ARGS is flag/value pairs checked above
+  "$BIN/daedalus-agent" install --port "$PORT" $LINK_ARGS
   echo
   echo "installed $tag. Status page: http://$(hostname):$PORT/status"
   echo "logs: /var/lib/daedalus-agent/logs (the service), ~/.local/state/daedalus-agent (the session and the tray)"

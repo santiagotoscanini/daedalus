@@ -16,7 +16,18 @@
 //! (`Policy` below) and the node token, and any answer may carry three
 //! one-shot instructions: `check_update` (the updater looks now),
 //! `update_claude` and `restart_claude` (relayed to the tray; claude/mod.rs
-//! says why they are two). Nothing else rides it.
+//! says why they are two). The answer may also name the box's CONTROLLER —
+//! `controller: {address, public_key}` — a hint the machine weighs by how
+//! it reached the box (`hint_trust`): ignored over plain HTTP (or when the
+//! answer was redirected to it), authenticated only over HTTPS to the box
+//! config.toml names, a first use otherwise; and it never replaces a key
+//! already trusted (link/node.rs `learn_from_box`). It is how a machine
+//! enrolled before the link moves to it without enrolling again. Nothing
+//! else rides it.
+//!
+//! This hello is the LEGACY path. Once the controller has approved the
+//! machine over the link, it pauses, and resumes only if the link stays
+//! down (`Shared::legacy_hello_wanted`).
 //!
 //! The payload carries a summary of Claude Code on this machine when the
 //! tray has reported one (claude/): its state, versions
@@ -40,6 +51,7 @@ use crate::config::Config;
 use crate::discover::{self, Found};
 use crate::facts::Facts;
 use crate::identity::Identity;
+use crate::link::node::{learn_from_box, HintTrust, Learned};
 use crate::net;
 use crate::state::now_rfc3339;
 use crate::status::Shared;
@@ -140,6 +152,18 @@ struct Answer {
     /// minted at approval, sent with every answer after.
     #[serde(default)]
     node_token: Option<String>,
+    /// The controller this machine should connect to (link/): how a
+    /// machine enrolled before the link learns where it is and which key to
+    /// trust. Absent until the app names one.
+    #[serde(default)]
+    controller: Option<ControllerHint>,
+}
+
+/// The box's word on its controller, in a hello answer.
+#[derive(Deserialize)]
+struct ControllerHint {
+    address: String,
+    public_key: String,
 }
 
 /// What the status page and the tray show about the box.
@@ -165,7 +189,7 @@ fn send(
     cfg: &Config,
     awake: bool,
     claude: Option<Summary>,
-) -> Result<Answer> {
+) -> Result<(Answer, String)> {
     let payload = Payload {
         hostname: &crate::facts::hostname(),
         os: facts.os,
@@ -199,12 +223,67 @@ fn send(
         .timeout(Duration::from_secs(15))
         .send_json(serde_json::to_value(&envelope)?);
     match resp {
-        Ok(r) => r.into_json::<Answer>().context("reading the box's answer"),
+        Ok(r) => {
+            // Where the answer really came from, redirects followed.
+            let final_url = r.get_url().to_string();
+            let a = r
+                .into_json::<Answer>()
+                .context("reading the box's answer")?;
+            Ok((a, final_url))
+        }
         Err(ureq::Error::Status(code, r)) => {
             let body = r.into_string().unwrap_or_default();
             anyhow::bail!("the box answered {code}: {}", body.trim())
         }
         Err(e) => Err(e).context("reaching the box"),
+    }
+}
+
+/// How far the controller hint in an answer can be believed: not at all
+/// unless both the URL asked and the one that answered (redirects followed)
+/// are HTTPS; authenticated only when the box's address is the operator's
+/// own (`control_plane_url`, `found_via == "config"`), never one DNS gave.
+fn hint_trust(found_via: &str, asked: &str, answered: &str) -> Option<HintTrust> {
+    if !(asked.starts_with("https://") && answered.starts_with("https://")) {
+        return None;
+    }
+    Some(if found_via == "config" {
+        HintTrust::Authenticated
+    } else {
+        HintTrust::Unauthenticated
+    })
+}
+
+/// The answer named the controller: keep, confirm, or flag it
+/// (link/node.rs `learn_from_box`); a plain-HTTP answer's hint is ignored.
+fn take_hint(
+    cfg: &Config,
+    shared: &Shared,
+    h: &ControllerHint,
+    found_via: &str,
+    asked: &str,
+    answered: &str,
+) {
+    let Some(trust) = hint_trust(found_via, asked, answered) else {
+        tracing::debug!("the box's controller hint came over plain HTTP; ignored");
+        return;
+    };
+    let learned = learn_from_box(
+        &crate::link::node::store_path(),
+        cfg.controller_pin.as_deref(),
+        &h.address,
+        &h.public_key,
+        trust,
+    );
+    match learned {
+        Learned::Conflict(msg) => {
+            tracing::error!("{msg}");
+            shared.set_link(|l| l.conflict = Some(msg));
+        }
+        Learned::Ignored(msg) => tracing::warn!("{msg}"),
+        Learned::Recorded | Learned::Confirmed | Learned::Unchanged => {
+            shared.set_link(|l| l.conflict = None);
+        }
     }
 }
 
@@ -254,10 +333,18 @@ pub fn run_loop(
             continue;
         };
 
+        // Approved over the link: the controller carries this machine now
+        // (link/node.rs), and the hello waits unless the link stays down.
+        if !shared.legacy_hello_wanted() {
+            shared.update_control_plane(|c| {
+                c.error = None;
+            });
+            continue;
+        }
         let awake = shared.awake_hold();
         let claude = shared.claude_summary();
         match send(&box_.url, &id, &facts, &adapter, &cfg, awake, claude) {
-            Ok(a) => {
+            Ok((a, final_url)) => {
                 shared.update_control_plane(|c| {
                     c.url = Some(box_.url.clone());
                     c.found_via = Some(box_.via.clone());
@@ -265,6 +352,9 @@ pub fn run_loop(
                     c.last_hello = Some(now_rfc3339());
                     c.error = None;
                 });
+                if let Some(h) = &a.controller {
+                    take_hint(&cfg, &shared, h, &box_.via, &box_.url, &final_url);
+                }
                 if a.check_update {
                     tracing::info!("the box asked for an update check");
                     shared.request_check();
@@ -311,5 +401,28 @@ pub fn run_loop(
                 found = None;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_https_to_the_configured_box_authenticates_a_hint() {
+        let h = "https://box.example.org";
+        assert_eq!(hint_trust("config", h, h), Some(HintTrust::Authenticated));
+        // Found by DNS: at best a first use.
+        assert_eq!(hint_trust("lan", h, h), Some(HintTrust::Unauthenticated));
+        // Redirected to plain HTTP, or plain HTTP from the start: ignored.
+        assert_eq!(
+            hint_trust("config", h, "http://box.example.org/api/nodes/hello"),
+            None
+        );
+        assert_eq!(
+            hint_trust("config", "http://box.lan:8080", "http://box.lan:8080"),
+            None
+        );
+        assert_eq!(hint_trust("lan", "http://box.lan:8080", "https://x"), None);
     }
 }

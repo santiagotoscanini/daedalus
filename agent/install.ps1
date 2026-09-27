@@ -28,12 +28,23 @@
   A specific version (e.g. 0.1.0) instead of the newest.
 .PARAMETER Port
   The status page's TCP port, written to config.toml on first install.
+.PARAMETER Controller
+  The controller's link address, host:port (the box's agent), written to
+  config.toml (also on a reinstall). Absent: the agent learns it from the box.
+.PARAMETER Pin
+  The controller key's fingerprint to trust, written to config.toml. With
+  either, run the script as a script block so it takes parameters:
+
+    & ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) `
+      -Controller box.lan:7788 -Pin 3f2a:9c01:…
 #>
 [CmdletBinding()]
 param(
   [string]$Repo = "santiagotoscanini/daedalus",
   [string]$Version = "",
-  [int]$Port = 7787
+  [int]$Port = 7787,
+  [string]$Controller = "",
+  [string]$Pin = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,7 +99,10 @@ foreach ($name in $assets.Keys) {
   Move-Item -Force -Path $tmp -Destination $target
 }
 
-& $exe install --port $Port
+$installArgs = @("install", "--port", $Port)
+if ($Controller) { $installArgs += @("--controller", $Controller) }
+if ($Pin) { $installArgs += @("--pin", $Pin) }
+& $exe @installArgs
 if ($LASTEXITCODE -ne 0) { throw "daedalus-agent install exited $LASTEXITCODE" }
 
 if ($service) {
