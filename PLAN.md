@@ -465,8 +465,8 @@ priority; each can be done independently unless noted.
       secrets; Authenticode when the download button goes live), and the
       small noted items (the EVGA photo, Arc's ProgId, a `powermetrics`
       deadline). Runners on the nodes are feature 11's, and wait.
-   - **Docs.** `ARCHITECTURE.md` has no section on the agent, the hello,
-     the node token, the telemetry document or the provider pattern;
+   - **Docs.** `ARCHITECTURE.md` has no section on the agent, the
+     controller link, the telemetry document or the provider pattern;
      `agent/README.md` is the only doc. One section in the architecture
      that points at it, once step 3 has landed the shape.
 
@@ -576,16 +576,17 @@ priority; each can be done independently unless noted.
     *dependents* — `app-db` is impossible to switch off, while something
     fifteen stacks read from is merely discouraged.
 
-13. **One agent on every machine, a controller on the box.** Today the app
-    dials each machine's `:7787` over the LAN on every page load, sends the
-    node token as a plaintext bearer, and delivers commands only in the
-    next hello answer (up to a minute); and the box does the same jobs
-    through a second pipeline of its own — nix units
+13. **One agent on every machine, a controller on the box.** The box's
+    agent is the **controller** (`mode = "controller"`); every other
+    machine's is a node. Machines already reach the app only through it:
+    each keeps a pinned TLS link to the controller (found by `--controller`
+    or the `_daedalus-controller._tcp` record), and the app reads and
+    commands them over the controller's unix socket. What is left: the box
+    still does its own jobs through a second pipeline — nix units
     (`platform/claude-rc.nix`, `claude-session@`), root snapshots, the
-    file-drop bridge. The target is one codebase on every OS, a star with
-    the box at the centre, and one front door for the app. The box's agent
-    is the **controller** (`mode = "controller"`); every other machine's is
-    a node.
+    file-drop bridge — and Prometheus still scrapes each machine on the
+    LAN. The target is one codebase on every OS, a star with the box at the
+    centre, and one front door for the app.
     - **One agent, every OS.** Per-OS code moves behind one fixed interface
       each (`os/{windows,macos,linux}`: paths, facts, network, DNS, power,
       service install/run, session launch, telemetry collector), so a
@@ -665,34 +666,29 @@ priority; each can be done independently unless noted.
       release has to carry this behaviour to the machines already enrolled.
     - **Order — each step leaves the box working and deletes what it
       replaces:**
-      1. The controller on the box: packaged by nix, key under
-         `machineState`, running as the operator on the Linux node's code,
-         serving the socket and its capabilities. Its first job is Claude
-         remote control as a unit it controls; `claude-rc.nix`, the
-         `claude-rc` verb and the Claude snapshot go. The unit nix writes
-         must carry `Restart=always` (the agent aborts on a panic) and a
-         `LimitNOFILE` with room for the API's connections; the config, a
-         `claude_unit` no existing unit uses and either `api_allowed_uids`
-         for the app image's `node` uid or `--userns=keep-id` on the app
-         container; the gcroot pin on `claude` stays.
-      2. Machines connect to the controller: from agent 0.14.0 a machine
-         talks only to it (the link; its address from `--controller` or the
-         `_daedalus-controller._tcp` record, its key pinned by `--pin` or
-         trusted on first use), and its status page answers the LAN only
-         `/metrics` and `/healthz`. The app moves machine reads and commands
-         to the socket; its LAN pulls, the node token and the hello route
-         go. The per-machine file_sd targets go last: the controller's
-         `/nodes/metrics` is on its loopback status page, which the
-         Prometheus container cannot reach, so the switch brings a way in (a
-         scrape listener the container can reach, e.g. on the bridge
-         gateway) with it.
-      3. Staged updates, orchestrated by the controller.
-      4. Actions move over one at a time: Claude sessions (which the other
+      1. Release agent 0.14.0 (`agent-v0.14.0` tag): the enrolled machines
+         self-update onto the link and find the controller by the SRV
+         record. Until then they run 0.13 against an app that no longer
+         answers it.
+      2. Metrics through the controller: the per-machine file_sd targets go
+         once Prometheus scrapes the controller's `/nodes/metrics` instead.
+         That lives on its loopback status page, which the Prometheus
+         container cannot reach, so the switch brings a way in (a scrape
+         listener the container can reach, e.g. on the bridge gateway) with
+         it; the nodes' status pages then stop answering the LAN.
+      3. VPN reach: the tunnel ends in wg-easy's netns, so a machine off the
+         LAN cannot dial the link and drops off the pages. Route the
+         tunnel's clients to the controller's port (no public exposure).
+      4. Claude remote control on the box as a unit the controller runs;
+         `claude-rc.nix`, the `claude-rc` verb and the Claude snapshot go.
+         The gcroot pin on `claude` stays.
+      5. Staged updates, orchestrated by the controller.
+      6. Actions move over one at a time: Claude sessions (which the other
          machines then gain too), workspace clone and sync, then the root
          verbs onto the socket-activated helper — a low-stakes one first
          (Claude restart, reboot), Apply last — each deleting its
          file-drop path.
-      5. santree: its session host on the box, then relayed to the other
+      7. santree: its session host on the box, then relayed to the other
          machines, which opt in per machine (the price, written down: the
          box can reach every machine that opted in). A first version was
          built and verified as a standalone daemon and parked on 2026-09-27
@@ -708,7 +704,7 @@ priority; each can be done independently unless noted.
          primitives) with each side pinning the other's ed25519 key, and
          newline-delimited JSON with the socket API's envelope — no CA, no
          web server between (agent/src/link/). Stream multiplexing waits for
-         santree's streams (step 5).
+         santree's streams (step 7).
       2. How a machine first trusts the controller. Decided: pinned at
          install (`--pin`), else trust on first use, shown as unconfirmed
          until pinned — both fingerprints on the tray and the status page; a
@@ -869,10 +865,10 @@ Known and accepted, not forgotten:
   hyperlinks still resolve by name).
 - Dataset mount failure alert is silent — `daedalus-builds-mounted` checks
   hourly and mails, but the mount itself is `nofail`.
-- The node token gates `/telemetry` and the Claude report; the public
-  status strips the apps list and keeps the count. A stolen node key is a
-  stolen heartbeat, not a stolen machine, as long as "no shell" holds
-  (feature 6, declared services).
+- A stolen node key is a stolen link: its holder can report as that
+  machine and receive its commands, not run arbitrary ones, as long as "no
+  shell" holds (feature 6, declared services). Revoking the key in Settings ›
+  Machines ends it.
 
 ---
 

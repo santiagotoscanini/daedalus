@@ -212,14 +212,14 @@ control is off in it for now.
 The other machines' links reach it on `0.0.0.0:<fleet.daedalus.controllerPort>`
 (default 7788, TLS with both keys pinned), opened in the firewall on
 `fleet.lanInterface` only; a VPN client cannot reach it yet (the tunnel ends
-in wg-easy's netns) and stays on the legacy hello. It advertises
+in wg-easy's netns). It advertises
 `<fleet.wanHost>:<port>`, which the LAN resolver answers with the LAN address,
 and the resolver publishes the same as `_daedalus-controller._tcp.<lanDomain>`
 (`fleet.dnsSrv`; a change to that list restarts pi-hole at the switch). Its
 `identity.key`, what every machine pins, is made on first start in the data
 directory above, on the state tree the host snapshots and replicates. The app
-names `controller.{advertise,public_key}` from `system.info` in the legacy
-hello's answer and pushes its decided keys with `nodes.set_desired`; the
+puts `controller.{advertise,public_key}` from `system.info` in its install
+lines and pushes its decided keys with `nodes.set_desired`; the
 controller keeps nothing across a restart. `controller.nix`'s header is the
 full story.
 

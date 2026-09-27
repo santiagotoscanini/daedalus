@@ -1,8 +1,7 @@
 # daedalus-nodes — the control plane's side of the machines that run the
 # agent: their metrics targets and LAN names, both written by the app under
-# the apply bridge at approval time (no rebuild), and the SRV record an agent
-# finds this control plane by. Part of the daedalus stack (daedalus.nix holds
-# the switch); never imports its siblings.
+# the apply bridge from what the controller reports (no rebuild). Part of the
+# daedalus stack (daedalus.nix holds the switch); never imports its siblings.
 {
   config,
   lib,
@@ -11,7 +10,7 @@
 }:
 
 let
-  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) appsOn applyDir;
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) applyDir;
 in
 
 {
@@ -105,19 +104,6 @@ in
             refresh_interval = "1m";
           }
         ];
-      }
-    ];
-
-    # How the agent on another machine finds this control plane without
-    # being told: an SRV record under the LAN's search domain, answered by
-    # the resolver this box runs. The target is the control plane's own
-    # hostname, which the same resolver answers with the LAN address; 443 is
-    # traefik, and /api/nodes/hello is on the auth bypass (daedalus.nix).
-    fleet.dnsSrv = lib.mkIf appsOn [
-      {
-        service = "_daedalus._tcp";
-        target = config.fleet.apps.daedalus.hostname;
-        port = 443;
       }
     ];
   };

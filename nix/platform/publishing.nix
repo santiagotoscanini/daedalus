@@ -280,7 +280,7 @@ in
           options = {
             service = lib.mkOption {
               type = lib.types.str;
-              example = "_daedalus._tcp";
+              example = "_daedalus-controller._tcp";
               description = "The service label pair, without the domain.";
             };
             target = lib.mkOption {

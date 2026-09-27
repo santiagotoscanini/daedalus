@@ -15,9 +15,9 @@
 #                  is for machines on the network, and the router forwards
 #                  nothing to it. VPN clients cannot reach it yet: the tunnel
 #                  ends in wg-easy's own netns, so a tunnel packet to the LAN
-#                  address lands there, not on the host. A machine off the
-#                  LAN keeps the legacy hello over HTTPS as its fallback; no
-#                  DNAT is added for it.
+#                  address lands there, not on the host, and a machine off
+#                  the LAN has no path to the controller until that is
+#                  solved (PLAN feature 13).
 #   advertise      `<fleet.wanHost>:<port>`, what the app hands a machine to
 #                  dial. The public name, because the LAN resolver answers it
 #                  with the LAN address (platform/ddclient puts it in
@@ -28,11 +28,10 @@
 #                  the name exists only where the host's reservations carry
 #                  it. Off the LAN the public name resolves to the WAN
 #                  address, where nothing is forwarded to this port, so a
-#                  machine away from home fails closed onto the legacy hello.
+#                  machine away from home fails closed.
 #   SRV            `_daedalus-controller._tcp.<lanDomain>` → the same name
-#                  and port, through fleet.dnsSrv beside `_daedalus._tcp`
-#                  (daedalus-nodes.nix): how an agent with no
-#                  `controller_address` finds the listener. modules/pihole
+#                  and port, through fleet.dnsSrv: how an agent installed
+#                  without `--controller` finds the listener. modules/pihole
 #                  renders each entry as a `srv-host=` line in pihole.toml,
 #                  so ADDING or changing one restarts the resolver at the
 #                  switch (a few seconds without LAN DNS) — this list is not
@@ -50,14 +49,12 @@
 #                  the new one until it is re-pinned. `system.info` states its
 #                  fingerprint (`controller.fingerprint`).
 #
-#   What the app must do with it (PLAN feature 13, step 2): read
-#   `controller.{advertise,public_key}` from system.info and name them in the
-#   legacy hello's answer (`controller: {address, public_key}`), which moves
-#   enrolled machines onto the link; push its COMPLETE set of decided keys
-#   (`nodes.set_desired`: approved/revoked, each with its policy) on connect
-#   and on every decision, since the controller keeps nothing across a
-#   restart; read machines through `nodes.*` and send commands with
-#   `nodes.command`.
+#   What the app does with it: puts `controller.{advertise,public_key}` from
+#   system.info in its install lines (`--controller`, `--pin`); pushes its
+#   COMPLETE set of decided keys (`nodes.set_desired`: approved/revoked, each
+#   with its policy) on connect and on every decision, since the controller
+#   keeps nothing across a restart; reads machines through `nodes.*` and
+#   sends commands with `nodes.command`.
 #
 # What nix hands it:
 #
