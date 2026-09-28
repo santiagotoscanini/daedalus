@@ -1282,6 +1282,52 @@ groups:
         labels:
           severity: warning
         isPaused: false
+      # Every machine's Claude remote control, the box's own included (the
+      # controller reports it in the same series): 0 unless its server is
+      # `running`. state!="off" because off is the machine's policy, not a
+      # fault. 10m rides out a restart, which the agent does by itself.
+      # noDataState OK: a machine with no Claude report has no series.
+      - uid: claude-rc-down-1
+        title: Claude Remote Control Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: daedalus_agent_claude_up{state!="off"}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: '{{ $labels.machine }} ({{ $labels.host }}, {{ $labels.os }}) has had no running Claude remote control for 10 minutes (daedalus_agent_claude_up = 0, state {{ $labels.state }}).'
+          summary: A machine's Claude remote control is not running
+        labels:
+          severity: warning
+        isPaused: false
       # Scoped to job="gluetun" (the TV stack): ProtonVPN port forwarding
       # feeds qBittorrent there. job="gluetun-argus" has no port
       # forwarding configured and permanently reports 0 — including it

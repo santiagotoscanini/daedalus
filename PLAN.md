@@ -583,8 +583,8 @@ priority; each can be done independently unless noted.
     or the `_daedalus-controller._tcp` record), and the app reads and
     commands them over the controller's unix socket, and Prometheus reads
     them all from the controller's `/nodes/metrics`. What is left: the box
-    still does its own jobs through a second pipeline — nix units
-    (`claude-session@`), root snapshots, the file-drop bridge. The target is
+    still does its own jobs through a second pipeline — root snapshots and
+    the file-drop bridge. The target is
     one codebase on every OS, a star with the box at the centre, and one
     front door for the app.
     - **One agent, every OS.** Per-OS code moves behind one fixed interface
@@ -671,14 +671,9 @@ priority; each can be done independently unless noted.
          the machines' status pages stop answering the LAN (the box already
          reads their metrics from the controller).
       2. Staged updates, orchestrated by the controller.
-      3. Actions move over one at a time: Claude sessions (the agent half
-         is agent 0.16.0 — `claude.roster`, `claude.session`,
-         `nodes.claude_roster`, `nodes.claude_session`, resumed sessions as
-         `claude-session-<uuid>` user units; left: the app reads those
-         instead of the snapshot and the bridge, and nix deletes
-         `claude-session@`, the bridge verb and the snapshot's roster;
-         resume on Windows and macOS waits on a unit-like holder there),
-         workspace clone and sync, then the root
+      3. Actions move over one at a time: Claude sessions are the agent's
+         (agent 0.16.0; left: resume on Windows and macOS, which waits on a
+         unit-like holder there), then workspace clone and sync, then the root
          verbs onto the socket-activated helper — a low-stakes one first
          (reboot), Apply last — each deleting its
          file-drop path.

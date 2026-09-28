@@ -640,8 +640,9 @@ in
       # The files outside the journal (fleet.logFiles): each owner names the
       # DIRECTORY to mount — a rotated file's inode would stay pinned by a
       # single-file bind, and alloy would go on reading the old copy. What
-      # keeps a chatty neighbour in the same directory out is the exact path
-      # in the file match and the file's own permissions, not this mount.
+      # keeps a chatty neighbour in the same directory out is the path (or
+      # one-family glob) in the file match and the file's own permissions,
+      # not this mount.
       ++ lib.unique (map (l: "${l.mountDir}:${l.mountDir}:ro") (lib.attrValues config.fleet.logFiles));
 
       extraOptions = [

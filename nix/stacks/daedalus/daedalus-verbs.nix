@@ -1,8 +1,7 @@
 # daedalus-verbs — the file-drop bridge's agents, one verb at a time: each
 # verb's service, the path unit that starts it on `<verb>-request.json`, and
 # whether a failure mails (monitoredJobs) or is shown on the page that asked.
-# Plus the resumed-session template the claude-session verb starts. The
-# scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
+# The scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
 # daedalus stack (daedalus.nix holds the switch); never imports its siblings.
 {
   config,
@@ -23,9 +22,6 @@ let
     deployTriggerScript
     taskRunScript
     powerScript
-    claudeSessionCwds
-    claudeSessionRunner
-    claudeSessionScript
     workspaceCloneScript
     imageUpdateScript
     imageUpdateReaper
@@ -233,98 +229,9 @@ in
     # the mail relay down with the rest of the box before anything could be
     # sent. The only email this unit could ever deliver is a failure to reboot.
 
-    # ── one resumed session, one unit ─────────────────────────────────────────
-    #
-    # `claude-session@<uuid>.service`. Started only by the agent above (or by
-    # hand), never at boot: `wantedBy` is empty on purpose, because a template
-    # that came up with the machine would resume whatever was running when it
-    # went down, silently, with nobody watching.
-    #
-    # The unit IS the handle. Ending the session is `systemctl stop`, which
-    # SIGTERMs the whole cgroup — no pid file to write, no `ps` output to match
-    # on, and no pid-recycling race, which is the entire reason a resumed session
-    # is a unit rather than a `tmux new-session -d` the way the operator has been
-    # doing it by hand.
-    #
-    # `restartIfChanged = false` IS MANDATORY. A `sudo nixos-rebuild` typed inside a resumed
-    # session runs in THIS unit's cgroup — sudo does not migrate cgroups — so an
-    # activation that restarted the unit would SIGTERM the in-flight activation
-    # that ordered the restart, leaving the box half-switched and the session
-    # dead. That is the 2026-08-26 murder-suicide, and it happened to the Remote
-    # Control server, which is a strictly less likely place to be running a
-    # rebuild from than this one. A claude-code bump therefore reaches a resumed
-    # session on its next start, never under it.
-    systemd.services."claude-session@" = {
-      description = "Claude Code session %i, resumed on request";
-      # No wantedBy: instances exist only while something asked for one.
-      after = [
-        "network-online.target"
-        "pihole-ready.service"
-        "user@${toString config.fleet.operator.uid}.service"
-      ];
-      wants = [ "network-online.target" ];
-      path = [ "/run/wrappers" ]; # sudo, for sessions that rebuild
-      serviceConfig = {
-        Type = "simple";
-        User = config.fleet.operator.user;
-        Group = config.fleet.operator.group;
-        WorkingDirectory = lib.throwIf (lib.length claudeSessionCwds != 1) ''
-          claudeSessionCwds has ${toString (lib.length claudeSessionCwds)} entries and this
-          template has one WorkingDirectory. A second trusted directory needs an
-          instance name that carries it (or a second template) — see the comment
-          on claudeSessionCwds.
-        '' (lib.head claudeSessionCwds);
-        Environment = [
-          "HOME=${config.users.users.${config.fleet.operator.user}.home}"
-          "XDG_RUNTIME_DIR=/run/user/${toString config.fleet.operator.uid}"
-          # The CLI renders an ink TUI into the pty `script` allocates; without a
-          # TERM it has nothing to render against.
-          "TERM=xterm-256color"
-        ];
-        ExecStart = "${claudeSessionRunner}/bin/claude-session-run %i";
-        Restart = "no";
-        # A `systemctl stop` is a requested end, not a fault: without this the
-        # SIGTERM exit fires the failed-units alert every time the button works.
-        SuccessExitStatus = [ 143 ];
-      };
-      restartIfChanged = false;
-    };
-
-    # The claude-session bridge's agent. It outlives its action,
-    # so `done` and `failed` are both real and the ordinary status poll covers
-    # the flow end to end.
-    #
-    # bridgeAgent matters more here than anywhere else on this bridge: the board
-    # carries a button PER ROW, which is exactly the burst surface the dropped
-    # start limit exists for — five requests in ten seconds and systemd would
-    # refuse the sixth silently, with the request file already in its final state
-    # so nothing retriggers it.
-    systemd.services.daedalus-claude-session = bridgeAgent // {
-      description = "Resume or end one Claude Code session on daedalus's behalf";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${claudeSessionScript}/bin/daedalus-claude-session";
-        # A directory walk, one `claude agents` (10 s of timeout), a unit start
-        # and a five-second settle check. A minute means wedged.
-        TimeoutStartSec = "1min";
-      };
-    };
-
-    systemd.paths.daedalus-claude-session = {
-      description = "Watch for a daedalus session resume/stop request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/claude-session-request.json";
-    };
-
-    # Not monitoredJobs: both outcomes land in
-    # the status file the page that asked is polling, and a genuine refusal exits
-    # 0. A session that would not come up exits 1 and reaches `systemctl
-    # --failed` and the failed-units alert, which is the only event here that
-    # nobody may already be watching.
-
-    # The secret-set bridge's agent. Like claude-session it outlives
-    # its action, so `done` and `failed` are both real and the ordinary status
-    # poll covers the flow end to end.
+    # The secret-set bridge's agent. It outlives its action, so `done` and
+    # `failed` are both real and the ordinary status poll covers the flow end to
+    # end.
     #
     # It deliberately does NOT rebuild — the write is a committed file, and
     # making it running state is the Apply's job (which holds the rebuild lock
@@ -348,7 +255,7 @@ in
       pathConfig.PathChanged = "${applyDir}/secret-set-request.json";
     };
 
-    # Not monitoredJobs, for the claude-session agent's reason: both outcomes land in the
+    # Not monitoredJobs: both outcomes land in the
     # status file the page that asked is polling, and a genuine refusal exits 0.
     # The only mailable event is the agent itself breaking, which `systemctl
     # --failed` and the failed-units alert already carry.

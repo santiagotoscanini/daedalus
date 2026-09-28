@@ -140,12 +140,12 @@
         # `claude` everyone runs, frozen against the flake forever.
         #
         # Wrapped rather than set in a settings file: this applies to every
-        # invocation of the binary — the operator's shell, the remote-control
-        # unit, each `claude-session@`, and the snapshot's `claude agents`
-        # — without nix writing into `~/.claude`, which is the CLI's own
-        # state directory. `version` is carried across so
-        # `pkgs.claude-code.version` still names the pin; `mainProgram`
-        # because `lib.getExe` is how the session runner reaches it.
+        # invocation of the binary — the operator's shell, the controller's
+        # `daedalus-claude-rc` user unit and each `claude-session-*` user unit
+        # it resumes — without nix writing into `~/.claude`, which is the
+        # CLI's own state directory. `version` is carried across so
+        # `pkgs.claude-code.version` still names the pin; `mainProgram` so
+        # `lib.getExe` still reaches it.
         # Built by `unstable`, not by `prev`: the wrapper belongs to the same
         # package set as the thing it wraps, and that is the instance whose
         # config allows this unfree package. Through `prev` the outer

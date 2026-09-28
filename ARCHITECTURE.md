@@ -86,7 +86,7 @@ does goes through it.
 flowchart TB
   subgraph unpriv["app-daedalus: rootless podman, container root maps to an unprivileged host user"]
     Engine["the engine<br/>TanStack Start + drizzle"]
-    Rd[/"reads, all ro: /export /repo /site /system /images<br/>/claude /workspaces /deploy-state /env-snapshot<br/>/builds /github /github-token /registry /engine<br/>and what stacks contribute: /dhcp /shotter"/]
+    Rd[/"reads, all ro: /export /repo /site /system /images<br/>/workspaces /deploy-state /env-snapshot<br/>/builds /github /github-token /registry /engine<br/>and what stacks contribute: /dhcp /shotter"/]
     Sops["/usr/local/bin/sops: static, holds no age identity<br/>so it can encrypt and never decrypt"]
   end
 
@@ -127,7 +127,6 @@ the same directory:
 | `workspace-request.json` | `daedalus-workspace-clone` | `workspace-status.json` |
 | `power-request.json` | `daedalus-power` | `power-status.json` |
 | `github-token-request.json` | `daedalus-github-token` | `github-token-status.json` |
-| `claude-session-request.json` | `daedalus-claude-session` | `claude-session-status.json` |
 | `secret-set-request.json` | `daedalus-secret-set` | `secret-set-status.json` |
 | `task-run-request.json` | `daedalus-task-run` | `task-run-status.json` |
 | `version-request.json` | `daedalus-version-update` | `version-status.json` + `version-last.log` |

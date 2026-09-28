@@ -267,18 +267,6 @@ rec {
   # See host/system-snapshot.sh for why each of those has no other route in.
   systemDir = "/run/daedalus-system";
 
-  # Claude Code itself — the Remote Control unit, the sessions connected to
-  # it, and the credential clock underneath both. A separate snapshot from
-  # the system snapshot rather than another key in it, for the two reasons that
-  # normally justify splitting: a different cadence (sessions come and go in
-  # minutes; SMART and scrub state move in hours) and a different blast
-  # radius — this one shells into a journal and a 0600 credentials file, and
-  # a failure in that has no business blanking the disk panels.
-  #
-  # See host/claude-snapshot.sh for what each piece is and, more importantly,
-  # for what is deliberately left out of a world-readable file.
-  claudeDir = "/run/daedalus-claude";
-
   # The two repositories as the host sees them — remote, head, dirty state,
   # drift from origin, the last Apply commit — for Settings › Site repository.
   # The configuration repo is the flake a rebuild reads; the site repo is the

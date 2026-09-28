@@ -541,9 +541,10 @@ in
             path = lib.mkOption {
               type = lib.types.str;
               description = ''
-                The file to tail. An exact path, never a glob: a chatty
-                neighbour or a rotated copy in the same directory would be
-                swallowed whole.
+                The file to tail: an exact path, or a glob that names one
+                family of files and none of their rotated copies (`foo-*.log`,
+                never `foo*`). A looser pattern swallows a chatty neighbour or
+                a rotated copy in the same directory whole.
               '';
               example = "/var/log/foo/foo.log";
             };

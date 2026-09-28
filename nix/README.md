@@ -206,8 +206,9 @@ logs live under `<stateRoot>/apps/daedalus/controller`. Its local API socket
 is `/run/daedalus-controller/api.sock`, and that directory is mounted into
 the control plane's container at `/controller` (`CONTROLLER_SOCKET`). The
 published image's `node` uid is the one uid it serves beyond the operator;
-in dev mode the container already runs as the operator. Claude remote
-control is off in it for now.
+in dev mode the container already runs as the operator. It also runs the
+box's Claude remote control and the sessions the app resumes, each a
+transient user unit (the header of `stacks/daedalus/controller.nix`).
 
 The other machines' links reach it on `0.0.0.0:<fleet.daedalus.controllerPort>`
 (default 7788, TLS with both keys pinned), opened in the firewall on

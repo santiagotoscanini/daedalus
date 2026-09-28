@@ -212,127 +212,6 @@ let
     ];
   };
 
-  # ── resuming and ending ONE session ───────────────────────────────────────
-  #
-  # The controller restarts the whole Remote Control server; this one acts on
-  # a single row of the session roster. It is the most powerful verb on this
-  # box — it causes root to start a process as the OPERATOR, in a trusted
-  # directory, with passwordless sudo on PATH and an outbound channel to
-  # claude.ai — so the security model is spelled out at the top of
-  # host/claude-session.sh and the three values below are the whole of what nix
-  # contributes to it.
-
-  # The directories a resumed session may run in.
-  #
-  # Not a convenience list: an interactive `claude` in a directory whose
-  # workspace trust has never been accepted stops on "Is this a project you
-  # created or one you trust?" and starts nothing at all (measured here,
-  # 2026-09-19). From a systemd unit that is a hang with nobody able to answer
-  # the prompt, so the agent refuses such a session up front instead.
-  #
-  # ONE entry today, and the template unit (daedalus-verbs.nix) fixes it as its
-  # WorkingDirectory — %i is the session uuid, so there is nowhere else for a
-  # second directory to go. Adding one means an instance name that carries both
-  # (or a second template), which is why this throws rather than silently
-  # resuming everything in the first directory.
-  claudeSessionCwds = [ config.fleet.config.repo ];
-
-  # `~/.claude/projects/<slug>/<uuid>.jsonl` — the CLI slugs the working
-  # directory by replacing every separator with a dash. Only ever applied to
-  # the list above, whose members have no other character the CLI rewrites, and
-  # the agent still confirms the transcript is really in that directory before
-  # trusting the mapping.
-  claudeSessionSlug = lib.replaceStrings [ "/" ] [ "-" ];
-
-  # The Remote Control label a resumed session announces itself under, which is
-  # what the operator's own `tmux … claude --resume <uuid> --remote-control
-  # <hostname>` recipe passes. Read from the hostname rather than restated.
-  claudeSessionLabel = config.networking.hostName;
-
-  # The argv, fixed here and nowhere else. NOTHING in a request reaches it —
-  # not a flag, not a directory, not a model. A `--permission-mode` the
-  # container could choose would be the whole ballgame.
-  #
-  # Two things it does beyond exec'ing the CLI:
-  #
-  #   - A PTY, and it is NOT optional. `--remote-control` starts an
-  #     INTERACTIVE session; with stdin and stdout as pipes the CLI silently
-  #     falls back to --print mode and dies in about a second with "Input must
-  #     be provided either through stdin or as a prompt argument when using
-  #     --print" (measured here, CLI 2.1.260). A bare `ExecStart=claude
-  #     --resume %i --remote-control …` is therefore the box's signature
-  #     failure: a unit that starts, exits, and says nothing useful. Under
-  #     `script -qfec …` the same argv reaches the full TUI, prints
-  #     "/remote-control is active" and registers a claude.ai session URL.
-  #     `script` also stays in the foreground as the child's parent, so the
-  #     unit's main process lives exactly as long as the session does and
-  #     KillMode=control-group reaches everything.
-  #
-  #     This is also, retrospectively, what the operator's `tmux new-session
-  #     -d … claude --resume <uuid> --remote-control <hostname>` was buying:
-  #     the pty, not the detachment. **Do not "simplify" this back to tmux.**
-  #     Two reasons, both fatal: daedalus could only drive tmux through its
-  #     control socket, and a socket that runs arbitrary commands as the
-  #     operator is strictly worse than this bridge, whose whole value is that
-  #     it constrains what may be started; and a tmux-owned process is
-  #     re-parented to the tmux server, which escapes this unit's cgroup and
-  #     turns `systemctl stop` back into the pid-matching guess the unit
-  #     exists to avoid.
-  #   - A journal filter, for a measured
-  #     reason: the CLI repaints its status box about once a second even when
-  #     idle (~400k lines/day). ANSI is stripped, the box frames dropped, the
-  #     timestamped events and anything unexpected kept.
-  #
-  # The uuid is re-validated here, not only by the agent, because this is also the
-  # entry point for a hand-typed `systemctl start claude-session@<anything>`.
-  claudeSessionRunner = pkgs.writeShellApplication {
-    name = "claude-session-run";
-    runtimeInputs = [
-      pkgs.claude-code
-      pkgs.util-linux
-      pkgs.gnused
-      pkgs.gnugrep
-    ];
-    text = ''
-      id="''${1-}"
-      if [[ ! "$id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
-        echo "refusing to resume '$id': not a canonical lowercase session uuid" >&2
-        exit 64
-      fi
-      script -qfec "claude --resume $id --remote-control ${claudeSessionLabel}" /dev/null \
-        | sed -u -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\]8;;[^\x07]*\x07//g' \
-        | { grep --line-buffered -Ev '^·|^[[:space:]]|^$' || true; }
-    '';
-  };
-
-  # The bridge agent. See host/claude-session.sh for the three layers; the two
-  # lists below are rendered from ONE source, index for index, so the slug the
-  # agent composes a path from and the directory it names in a refusal can
-  # never disagree.
-  claudeSessionScript = mkAgent {
-    name = "daedalus-claude-session";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.gawk
-      pkgs.gnused
-      pkgs.jq
-      pkgs.systemd
-      pkgs.util-linux # setpriv
-    ];
-    vars = operatorVars // {
-      APPLY_DIR = applyDir;
-      OPERATOR_HOME = config.users.users.${config.fleet.operator.user}.home;
-      CLAUDE_HOME = "${config.users.users.${config.fleet.operator.user}.home}/.claude";
-      CLI_STORE = toString pkgs.claude-code;
-      TRUSTED_CWDS = lib.concatStringsSep " " claudeSessionCwds;
-      TRUSTED_SLUGS = lib.concatStringsSep " " (map claudeSessionSlug claudeSessionCwds);
-    };
-    files = [
-      ./host/lib.sh
-      ./host/claude-session.sh
-    ];
-  };
-
   # The clone agent. See host/workspace-clone.sh
   # for why the ssh key never enters the container and what shape the slug
   # is held to.
@@ -475,9 +354,6 @@ in
     deployTriggerScript
     taskRunScript
     powerScript
-    claudeSessionCwds
-    claudeSessionRunner
-    claudeSessionScript
     workspaceCloneScript
     imageUpdateScript
     imageUpdateReaper

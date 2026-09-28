@@ -2,8 +2,9 @@
 # `mode = "controller"`: one process as the operator, the door the app talks to
 # over a unix socket (PLAN feature 13). Today it serves that socket, the
 # machine's facts at the `minimal` telemetry level, its status page and
-# the listener the other machines' links reach (below), and the box's Claude
-# remote control in the configuration checkout (below).
+# the listener the other machines' links reach (below), the box's Claude
+# remote control in the configuration checkout, and the Claude sessions the
+# app asks it to resume (below).
 #
 # Claude remote control:
 #
@@ -32,10 +33,18 @@
 #                  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,
 #                  DISABLE_GROWTHBOOK or ANTHROPIC_BASE_URL to either: each
 #                  silently disables remote control.
-#   gcroot         ExecStartPre pins the claude this start will use, and the
-#                  one the unit is already running when that differs — a
-#                  switch restarts this service, not the unit, so the unit
-#                  can go on running a claude no generation still names.
+#   sessions       a session resumed from the app (agent
+#                  src/claude/sessions.rs) is another transient user unit,
+#                  `claude-session-<uuid>`, running the same claude under
+#                  `script` (a PTY) piped through `sed` and `grep` (the log
+#                  filter), all found on this service's PATH. Its output
+#                  goes to `<dataDir>/logs/claude-session-<uuid>.log`.
+#   gcroot         ExecStartPre pins the claude this start will use, the one
+#                  the Remote Control unit is already running when that
+#                  differs, and the one each running `claude-session-*` unit
+#                  runs — a switch restarts this service, not those units,
+#                  so they can go on running a claude no generation still
+#                  names. A session link whose unit is gone is removed.
 #   logs           `fleet.logFiles.claude_rc` (below) ships claude-rc.log to
 #                  Loki as `unit="daedalus-claude-rc.service"`, with the
 #                  rules the old journal pipeline had: ANSI stripped; the
@@ -48,7 +57,12 @@
 #                  session read included (~1,600 a day). The full
 #                  transcripts are in ~/.claude/projects; Loki loses nothing
 #                  it should keep. The page's Connection board reads the
-#                  `[HH:MM:SS]` event lines from here.#
+#                  `[HH:MM:SS]` event lines from here.
+#                  `fleet.logFiles.claude_session` ships every
+#                  `claude-session-*.log` (not their rotated `.log.1`) as
+#                  `unit="claude-session"`, one `filename` label per session,
+#                  through the same stages.
+#
 # The status page, and the machines' metrics:
 #
 #   bind           `0.0.0.0:<statusPort>` (7787), every interface: the
@@ -150,10 +164,10 @@
 #                  the directory needs 0711 so that uid can reach it.
 #
 # restartIfChanged stays at its default: a switch that moves the agent
-# restarts it, which ends nothing — the app reconnects, and the one long-lived
-# child it owns (Claude remote control) runs in a transient user unit of
-# its own that outlives it. `Restart=always` because the agent is built with
-# `panic = "abort"`.
+# restarts it, which ends nothing — the app reconnects, and the long-lived
+# children it starts (Claude remote control, resumed sessions) each run in a
+# transient user unit of their own that outlives it. `Restart=always`
+# because the agent is built with `panic = "abort"`.
 {
   config,
   lib,
@@ -223,18 +237,71 @@ let
   # The header's `gcroot`. Run as root ("+"): the roots directory is root's.
   # The running claude is read from the transient unit's file, which the
   # user manager keeps while the unit is loaded; its ExecStart names the
-  # store path the agent found on PATH at that start.
+  # store path the agent found on PATH at that start. A session unit's
+  # ExecStart opens with `sh` and `script`, so its claude is matched by name,
+  # not taken as the first store path.
   claudeGcroot = pkgs.writeShellScript "daedalus-claude-rc-gcroot" ''
     roots=/nix/var/nix/gcroots
-    ${pkgs.coreutils}/bin/ln -sfn ${pkgs.claude-code} "$roots/${claudeUnit}"
-    unit=${config.fleet.operator.runtimeDir}/systemd/transient/${claudeUnit}.service
-    running=$(${pkgs.gnugrep}/bin/grep -o '^ExecStart=.*' "$unit" 2>/dev/null \
-      | ${pkgs.gnugrep}/bin/grep -o '/nix/store/[^/" ]*' | ${pkgs.coreutils}/bin/head -n1 || true)
+    transient=${config.fleet.operator.runtimeDir}/systemd/transient
+    grep=${pkgs.gnugrep}/bin/grep
+    ln=${pkgs.coreutils}/bin/ln
+    rm=${pkgs.coreutils}/bin/rm
+    head=${pkgs.coreutils}/bin/head
+    $ln -sfn ${pkgs.claude-code} "$roots/${claudeUnit}"
+    running=$($grep -o '^ExecStart=.*' "$transient/${claudeUnit}.service" 2>/dev/null \
+      | $grep -o '/nix/store/[^/" ]*' | $head -n1 || true)
     if [ -n "$running" ] && [ "$running" != ${pkgs.claude-code} ]; then
-      ${pkgs.coreutils}/bin/ln -sfn "$running" "$roots/${claudeUnit}-running"
+      $ln -sfn "$running" "$roots/${claudeUnit}-running"
     else
-      ${pkgs.coreutils}/bin/rm -f "$roots/${claudeUnit}-running"
+      $rm -f "$roots/${claudeUnit}-running"
     fi
+    for link in "$roots"/claude-session-*; do
+      if [ -L "$link" ] && [ ! -e "$transient/''${link##*/}.service" ]; then
+        $rm -f "$link"
+      fi
+    done
+    for unit in "$transient"/claude-session-*.service; do
+      [ -e "$unit" ] || continue
+      name=''${unit##*/}
+      cli=$($grep '^ExecStart=' "$unit" \
+        | $grep -o '/nix/store/[0-9a-z]\{32\}-claude-code-[^/"\\ ]*' | $head -n1 || true)
+      if [ -n "$cli" ]; then
+        $ln -sfn "$cli" "$roots/''${name%.service}"
+      fi
+    done
+  '';
+
+  # What both Claude log sources (below) do on the way to Loki (the header's
+  # `logs`). The status-box expression is the grep the server's journal
+  # filter ran before it moved here. A file source skips the journal
+  # pipeline, so its "credentials in URLs" redaction (modules/logging) is
+  # repeated here, verbatim: a session's output can carry an OAuth callback
+  # or a manifest code as well as any journal line can.
+  claudeStages = ''
+    stage.replace {
+      expression = "(\\x1b\\[[0-9;?]*[A-Za-z]|\\x1b\\]8;;[^\\x07]*\\x07)"
+      replace    = ""
+    }
+
+    stage.replace {
+      expression = "(?i)(?:[?&#]|\\\\u0026|&amp;|query=\"|%3F|%26)(?:code|state|id_token_hint|id_token|access_token|refresh_token|token|apikey|api_key|client_secret|password|passwd|secret)(?:=|%3D)((?:[^&\"\\s\\\\]|\\\\[^\"u\\s&]|\\\\u(?:[1-9a-f][0-9a-f]{3}|0[1-9a-f][0-9a-f]{2}|00[013-9a-f][0-9a-f]|002[0-57-9a-f]))*)"
+      replace    = "REDACTED"
+    }
+
+    stage.replace {
+      expression = "/app-manifests/([^/?&\"\\s\\\\]+)"
+      replace    = "REDACTED"
+    }
+
+    stage.drop {
+      expression          = "^·|^[[:space:]]|^$|Continue coding in the Claude|space to show QR code"
+      drop_counter_reason = "claude_rc_status_box"
+    }
+
+    stage.drop {
+      expression          = "tool_result"
+      drop_counter_reason = "claude_rc_tool_output"
+    }
   '';
 
   configFile = (pkgs.formats.toml { }).generate "daedalus-agent-controller.toml" {
@@ -274,8 +341,7 @@ in
     fleet.statePaths.${logDir}.mode = "0755";
 
     # Claude remote control's output, filtered on the way to Loki (the
-    # header's `logs`). The status-box expression is the grep the server's
-    # journal filter ran before it moved here.
+    # header's `logs`).
     fleet.logFiles.claude_rc = {
       path = "${logDir}/claude-rc.log";
       mountDir = logDir;
@@ -288,36 +354,23 @@ in
         job = claudeUnit;
         service_name = claudeUnit;
       };
-      # A file source skips the journal pipeline, so its "credentials in URLs"
-      # redaction (modules/logging) is repeated here, verbatim: a session's
-      # output can carry an OAuth callback or a manifest code as well as any
-      # journal line can.
-      stages = ''
-        stage.replace {
-          expression = "(\\x1b\\[[0-9;?]*[A-Za-z]|\\x1b\\]8;;[^\\x07]*\\x07)"
-          replace    = ""
-        }
+      stages = claudeStages;
+    };
 
-        stage.replace {
-          expression = "(?i)(?:[?&#]|\\\\u0026|&amp;|query=\"|%3F|%26)(?:code|state|id_token_hint|id_token|access_token|refresh_token|token|apikey|api_key|client_secret|password|passwd|secret)(?:=|%3D)((?:[^&\"\\s\\\\]|\\\\[^\"u\\s&]|\\\\u(?:[1-9a-f][0-9a-f]{3}|0[1-9a-f][0-9a-f]{2}|00[013-9a-f][0-9a-f]|002[0-57-9a-f]))*)"
-          replace    = "REDACTED"
-        }
-
-        stage.replace {
-          expression = "/app-manifests/([^/?&\"\\s\\\\]+)"
-          replace    = "REDACTED"
-        }
-
-        stage.drop {
-          expression          = "^·|^[[:space:]]|^$|Continue coding in the Claude|space to show QR code"
-          drop_counter_reason = "claude_rc_status_box"
-        }
-
-        stage.drop {
-          expression          = "tool_result"
-          drop_counter_reason = "claude_rc_tool_output"
-        }
-      '';
+    # The resumed sessions' output (the header's `sessions` and `logs`): one
+    # source for the family. The pattern ends in `.log`, so a session's
+    # rotated `.log.1` is not matched; alloy adds a `filename` label per file.
+    fleet.logFiles.claude_session = {
+      path = "${logDir}/claude-session-*.log";
+      mountDir = logDir;
+      labels = {
+        unit = "claude-session";
+        stack = "system";
+        host = config.networking.hostName;
+        job = "claude-session";
+        service_name = "claude-session";
+      };
+      stages = claudeStages;
     };
 
     # LAN only: never `allowedTCPPorts`, which would open it on every
@@ -371,13 +424,18 @@ in
       # systemctl / systemd-run / loginctl for its user units, ps for the
       # process count; /run/wrappers as on every operator-run unit (and on
       # the Claude unit's PATH, which is this one's); claude itself, the
-      # pinned one (the header's `claude`).
+      # pinned one (the header's `claude`); and what a resumed session runs
+      # under (the header's `sessions`): util-linux's `script` for the PTY
+      # the CLI needs, sed and grep for its log filter.
       path = [
         "/run/wrappers"
         config.systemd.package
         pkgs.procps
         pkgs.coreutils
         pkgs.claude-code
+        pkgs.util-linux
+        pkgs.gnused
+        pkgs.gnugrep
       ];
       restartTriggers = [ configFile ];
       serviceConfig = {

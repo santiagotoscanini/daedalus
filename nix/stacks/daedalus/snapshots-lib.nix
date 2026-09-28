@@ -1,7 +1,7 @@
 # snapshots-lib — the scripts that publish what only the host can see into
 # /run directories the container mounts read-only: app environments, image
-# labels and their freshness, SMART/ZFS/generation facts, Claude Code's
-# state, the builder's machinery, the repositories, the project workspaces,
+# labels and their freshness, SMART/ZFS/generation facts, the
+# builder's machinery, the repositories, the project workspaces,
 # the committed registry.
 # The services and timers that run them are daedalus-snapshots.nix. A plain
 # function, imported by path; never a module.
@@ -22,7 +22,6 @@ let
     envDir
     imageDir
     systemDir
-    claudeDir
     repoDir
     builderDir
     ;
@@ -197,45 +196,6 @@ let
     ];
   };
 
-  claudeSnapshotScript = mkAgent {
-    name = "daedalus-claude-snapshot";
-    # Same reason as the system snapshot: every `$name` inside the jq
-    # programs is jq's own variable, bound with --arg. Letting the shell near
-    # them is the bug this check warns about, in reverse.
-    excludeShellChecks = [ "SC2016" ];
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.gnused
-      pkgs.gnugrep
-      pkgs.gawk
-      pkgs.jq
-      pkgs.systemd
-    ];
-    vars = operatorVars // {
-      OUT_DIR = claudeDir;
-      # The CLI's own state directory, and the /tmp dir the Remote Control
-      # bridge writes a per-session debug log into — both keyed off the
-      # operator this unit reads on behalf of, so neither is a literal that
-      # can drift from the operator the controller runs as.
-      CLAUDE_HOME = "${config.users.users.${config.fleet.operator.user}.home}/.claude";
-      BRIDGE_LOG_DIR = "/tmp/claude-${toString config.fleet.operator.uid}";
-      # The claude that answers `claude agents --json` for the roster.
-      CLI_STORE = toString pkgs.claude-code;
-      # The controller's Remote Control unit (controller.nix), whose
-      # accounting the page shows.
-      CLAUDE_UNIT = "daedalus-claude-rc";
-      SED = "${pkgs.gnused}/bin/sed";
-      GREP = "${pkgs.gnugrep}/bin/grep";
-      AWK = "${pkgs.gawk}/bin/awk";
-      JQ = "${pkgs.jq}/bin/jq";
-      SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
-    };
-    files = [
-      ./host/lib.sh
-      ./host/claude-snapshot.sh
-    ];
-  };
-
   # Everything it names comes from `fleet.builder` (builder.nix), so it is only
   # forced where daedalus-snapshots.nix gates it: while the builder exists.
   builderSnapshotScript =
@@ -341,7 +301,6 @@ in
     imageSnapshotScript
     imageFreshnessScript
     systemSnapshotScript
-    claudeSnapshotScript
     builderSnapshotScript
     repoSnapshotScript
     registrySnapshot

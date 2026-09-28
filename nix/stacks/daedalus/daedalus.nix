@@ -66,7 +66,6 @@ let
     envDir
     imageDir
     systemDir
-    claudeDir
     repoDir
     builderDir
     controllerDir
@@ -581,7 +580,6 @@ in
             # into the same read-only mount.
             IMAGE_FRESHNESS_PATH = "/images/freshness.json";
             HOST_FACTS_PATH = "/system/system.json";
-            CLAUDE_FACTS_PATH = "/claude/claude.json";
             REPO_FACTS_PATH = "/repo/repo.json";
             # The committed site.json, for the diff preview and for editing: the
             # directory itself, read-only, never the repository root.
@@ -648,18 +646,6 @@ in
         # daedalus-system-snapshot. Read-only, and no secret in it — the closest
         # thing is a drive serial, which is printed on the drive.
         "${systemDir}:/system:ro"
-        # The Claude session roster, the Remote Control unit's accounting and
-        # the login's scopes, published by daedalus-claude-snapshot (the rest
-        # of Remote Control is the controller's report). Read-only; the scopes
-        # are copied out by name — the tokens beside them in
-        # ~/.claude/.credentials.json never enter this file.
-        #
-        # The directory is 0700 and the file 0600, operator-owned: the one
-        # snapshot here that carries a line of session content (the last prompt,
-        # redacted host-side) is not readable by the build user or by anything
-        # else on the box. This mount still works because the container runs as
-        # container uid 0 = the operator on the host.
-        "${claudeDir}:/claude:ro"
         # The configuration repository's state, published by
         # daedalus-repo-snapshot. Facts about the repo, never the repo: a
         # checkout can hold untracked or gitignored plaintext.

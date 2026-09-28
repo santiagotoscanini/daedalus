@@ -19,7 +19,6 @@ let
     imageSnapshotScript
     imageFreshnessScript
     systemSnapshotScript
-    claudeSnapshotScript
     builderSnapshotScript
     repoSnapshotScript
     registrySnapshot
@@ -189,41 +188,6 @@ in
       };
     };
 
-    # Root for systemd: the operator's user manager (the Remote Control unit's
-    # accounting) and the `claude-session@` units. What it reads out of
-    # ~/.claude it reads as the operator (host/claude-snapshot.sh).
-    systemd.services.daedalus-claude-snapshot = {
-      description = "Publish the Claude session roster and Remote Control accounting for daedalus";
-      before = [ "podman-app-daedalus.service" ];
-      wantedBy = [ "podman-app-daedalus.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${claudeSnapshotScript}/bin/daedalus-claude-snapshot";
-      };
-    };
-
-    # One minute, and it is the shortest timer daedalus runs for a reason: a
-    # session list is the one thing here that is worth nothing when it is old.
-    # Somebody opening this page has usually just started a session from a
-    # phone and wants to see it, and a ten-minute snapshot would answer "no
-    # sessions" to a question asked about one that is running.
-    #
-    # It costs two systemctl calls, a `claude agents` and a handful of /proc
-    # reads, plus the transcript scan (host/claude-snapshot.sh has its cost).
-    systemd.timers.daedalus-claude-snapshot = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "90s";
-        OnUnitActiveSec = "1min";
-      };
-    };
-
-    # Silent from the reader's side like every snapshot here, and with a twist
-    # of its own: the page it feeds is about Remote Control, which is how the
-    # operator would be TALKING to this box when it broke. A mail is the only
-    # channel that does not depend on the thing it reports on.
-    fleet.monitoredJobs.daedalus-claude-snapshot = { };
-
     # The builder's machinery, for Apps › Builder — only while the builder
     # exists (builder.nix), like the /builder mount in daedalus.nix. Root:
     # buildctl's socket, `zfs get`, the fence check's iptables and the push
@@ -241,7 +205,7 @@ in
       };
     };
 
-    # One minute, like the claude snapshot: the unit states are what someone
+    # One minute: the unit states are what someone
     # opening the page after a failed build wants, and a run costs one
     # buildctl call, a zfs get, a du over a few small caches and a handful of
     # systemctl reads — well under a second.
