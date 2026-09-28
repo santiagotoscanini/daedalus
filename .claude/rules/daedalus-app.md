@@ -165,7 +165,7 @@ here.
   the versioned `/export` domains (with the applied registry at
   /export/applied.json), the env snapshot at /env-snapshot,
   image labels and freshness at /images, SMART/ZFS/generations at
-  /system, Remote Control's state at /claude, the DHCP reservations at
+  /system, the DHCP reservations at
   /dhcp, deploy state at /deploy-state, project workspace clones at
   /workspaces, build logs at /builds, the GitHub App's webhook secret at
   /github and its installation token at /github-token, shotter's run
@@ -226,7 +226,7 @@ here.
   points at it), and each verb's app half is one module under `host/`
   named for it (`apply.ts`, `build-bridge.ts`, `deploy.ts`,
   `image-update.ts`, `engine-update.ts`,
-  `workspaces.ts`, `power-request.ts`, `claude-session-request.ts`,
+  `workspaces.ts`, `power-request.ts`,
   `secret-set-request.ts`, `task-run.ts`,
   `version-update.ts`, `claude-code-update.ts`) — except
   `github-token-request.json`, which `core/github-app.ts` writes.

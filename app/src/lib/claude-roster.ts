@@ -1,15 +1,14 @@
-// The session roster: what this box could still be asked about.
+// The session roster: what a machine could still be asked about.
 //
-// Pure, and in `lib/` rather than beside the view, for the reason at the foot
-// of lib/dashboard/claude.ts — that module reads the host snapshot through
-// node:fs, so a component cannot import a value from it. The types below live
-// here for the same reason and are imported BACK by the loader: the dependency
-// points from the host module to the pure one, never the other way.
+// Pure, and in `lib/` rather than beside the view, so a component can import
+// its values; the loaders import the types BACK (lib/agent/roster.ts decodes
+// the agent's roster into them): the dependency points from the host side to
+// the pure one, never the other way.
 //
 // ── the two sources, and why they stay two ────────────────────────────────
 //
-// nix/stacks/daedalus/host/claude-snapshot.sh publishes them separately because
-// they answer different questions and routinely disagree:
+// The agent's roster (agent/src/claude/roster.rs) carries them separately
+// because they answer different questions and routinely disagree:
 //
 //   agents       `claude agents --json`. Authoritative for what is ALIVE, and
 //                the only source at all for background agents — it knows ones
@@ -66,7 +65,7 @@
 // What is NOT read here, ever: the `detail` the agent last printed and the
 // `needs` question it is parked on, both of which sit in
 // `~/.claude/jobs/<id>/state.json`. Those are session CONTENT. The only
-// content the snapshot carries is a row's last prompt (lib/claude-meta.ts
+// content the roster carries is a row's last prompt (lib/claude-meta.ts
 // says why that one line is allowed); these two are not bounded the way one
 // cut prompt is. State and liveness are facts about the machine; the question
 // the agent asked is not.
@@ -76,13 +75,13 @@
 // An interactive `claude` in a directory whose trust has never been accepted
 // blocks on "Is this a project you created or one you trust?" and starts
 // nothing at all. From a systemd unit that is a hang with nobody able to
-// answer the prompt. The configuration checkout is already trusted so the common case is
-// fine, but a row's `cwd` is any directory a session was once opened in and
-// carries no such guarantee — which is why the host runs a resume in
-// the configuration checkout and nowhere else, refusing any other cwd up front rather than
-// leaving a unit started and useless. The guard is in
-// nix/stacks/daedalus/host/claude-session.sh; host/claude-session-request.ts
-// carries the rest of the selector rules.
+// answer the prompt. So the agent resumes a session only in the trusted
+// project directory its transcript's slug names, and refuses anything else up
+// front rather than leaving a unit started and useless — the checks are in
+// agent/src/claude/sessions.rs, and the refusal comes back as the verb's
+// outcome. Where the session is the tray's child (Windows, macOS) there is no
+// unit to hold a resumed session at all, and the roster says why
+// (`resumeUnavailable`).
 
 // Type only, and the dependency points this way on purpose: claude-meta.ts
 // knows nothing about rosters, so it can be tested against a bare meta block.
@@ -92,10 +91,9 @@ import { NO_META } from './claude-meta'
 /**
  * A connected session, as this module needs it.
  *
- * Declared structurally rather than imported from lib/dashboard/claude.ts: the
- * rule at the top of this file is that the dependency points from the host
- * module to the pure one and never back. `ClaudeSession` satisfies this shape,
- * so the loader's array passes straight in.
+ * Declared structurally rather than imported from lib/agent/roster.ts, which
+ * imports this module's types: `ClaudeSession` there satisfies this shape, so
+ * the loader's array passes straight in.
  */
 export type LiveSession = LiveFacts & {
   transcriptId: string | null
@@ -110,7 +108,7 @@ export type LiveSession = LiveFacts & {
   cwd: string | null
 }
 
-/** One `claude agents --json` entry, as the snapshot copies it out. */
+/** One `claude agents --json` entry, as the agent copies it out. */
 export type ClaudeAgent = {
   /** The SHORT id — what `claude attach`/`stop` take. Background agents only. */
   id: string | null
@@ -131,10 +129,9 @@ export type ClaudeAgent = {
  * One transcript on disk.
  *
  * Labels and counts — and exactly one line of content, `meta.lastPrompt`,
- * which the operator asked for and which is redacted and cut host-side before
- * it is written. Nothing else from the conversation is here; the titles are
- * still derived labels. See the "last prompt" section of
- * nix/stacks/daedalus/host/claude-snapshot.sh for the trade and its residual risk.
+ * which the operator asked for and which the agent redacts and cuts before it
+ * leaves the machine. Nothing else from the conversation is here; the titles
+ * are still derived labels.
  */
 export type ClaudeTranscript = {
   id: string
@@ -150,11 +147,9 @@ export type ClaudeTranscript = {
   modifiedAt: number
   sizeBytes: number
   /**
-   * What the host's scan counted in this file — see lib/claude-meta.ts.
-   *
-   * Always an object, never absent: a snapshot written before the scan
-   * existed decodes to `NO_META`, whose every field is null, so a row from
-   * either era is read the same way and neither side invents a zero.
+   * What the agent's scan counted in this file — see lib/claude-meta.ts.
+   * Always an object: a file it could not read is `NO_META`, every field
+   * null, so neither side invents a zero.
    */
   meta: TranscriptMeta
 }
@@ -164,13 +159,13 @@ export type ClaudeRoster = {
   agentsAvailable: boolean
   agents: ClaudeAgent[]
   transcripts: ClaudeTranscript[]
-  /** Non-empty transcripts on disk, before the snapshot's own cap. */
+  /** Non-empty transcripts on disk, before the agent's own cap. */
   transcriptTotal: number
   /** Opened and never spoken to. Counted, not listed: nothing to resume. */
   emptyCount: number
   /**
-   * Session uuids running as `claude-session@<uuid>.service` — the ones this
-   * box started, and the only live ones it can end.
+   * Session uuids the agent resumed, running now as its
+   * `claude-session-<uuid>` user units — the only live ones it can end.
    *
    * A third source, because neither of the two above can answer this: a
    * session the Remote Control server spawned looks identical in
@@ -179,6 +174,8 @@ export type ClaudeRoster = {
    * of them.
    */
   managedIds: string[]
+  /** Why this machine offers no resume (the session is the tray's child), or null. */
+  resumeUnavailable: string | null
 }
 
 export const NO_ROSTER: ClaudeRoster = {
@@ -188,23 +185,43 @@ export const NO_ROSTER: ClaudeRoster = {
   transcriptTotal: 0,
   emptyCount: 0,
   managedIds: [],
+  resumeUnavailable: null,
 }
 
 /**
  * A canonical lowercase session uuid — what `--resume` takes, and what a
- * `claude-session@` instance name is made of.
+ * `claude-session-<uuid>` unit is named for.
  *
- * The same charset the host agent applies as its first layer
- * (nix/stacks/daedalus/host/claude-session.sh), restated here so a malformed
- * selector never becomes a request file at all. This side is not the only
- * guard and must not be the only guard; it is the one that keeps a mistyped
- * id from ever reaching the bridge.
+ * The same charset the agent applies as its first layer (sessions.rs
+ * `check_selector`), restated here so a malformed selector never leaves the
+ * app. This side is not the only guard and must not be the only guard.
  */
 export const isSessionId = (v: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)
 
 /** A background agent's SHORT id — what `claude attach` and `claude stop` take. */
 export const isAgentId = (v: string): boolean => /^[0-9a-f]{8}$/.test(v)
+
+/**
+ * Why a verb's selector is refused before it is sent, or null: `resume` takes
+ * a uuid, `stop` a uuid or a short id, `remove` a short id only — `claude rm`
+ * is the CLI's verb for its own job records, and a uuid arriving there would
+ * mean the board had confused a transcript with a job.
+ */
+export function selectorError(
+  action: 'resume' | 'stop' | 'remove',
+  session: string,
+): string | null {
+  if (action === 'resume') {
+    return isSessionId(session) ? null : 'a resume takes a canonical lowercase session uuid'
+  }
+  if (action === 'stop') {
+    return isSessionId(session) || isAgentId(session)
+      ? null
+      : 'a stop takes a canonical lowercase uuid or an eight-digit agent id'
+  }
+  return isAgentId(session) ? null : 'a remove takes an eight-digit background-agent id'
+}
 
 /**
  * What a row IS, which is the one thing the board must not blur.
@@ -251,7 +268,7 @@ export type RosterEntry = {
   sizeBytes: number | null
   onDisk: boolean
   /**
-   * What the host counted in this row's transcript, or `NO_META` where there
+   * What the agent counted in this row's transcript, or `NO_META` where there
    * is no transcript to count — an agent whose project directory is gone has
    * nothing on disk, and every field saying "not known" is the honest shape
    * for that, not a row of zeroes.
@@ -269,9 +286,9 @@ export type RosterEntry = {
    */
   canResume: boolean
   /**
-   * This row is running as `claude-session@<id>.service` — a session THIS box
-   * started, so `systemctl stop` ends it cleanly. False for every session the
-   * Remote Control server spawned, which has no per-session kill at all.
+   * This row runs as the agent's `claude-session-<id>` unit — a session the
+   * agent resumed, so stopping the unit ends it cleanly. False for every
+   * session the Remote Control server spawned, which has no per-session kill.
    */
   managed: boolean
   /**
@@ -290,7 +307,7 @@ export type RosterEntry = {
  *
  * - `resume`   a transcript with nothing behind it. `claude --resume <uuid>`
  *              continues that very session: same id, same transcript.
- * - `stop-unit` a session this box started, ended by `systemctl stop` — the
+ * - `stop-unit` a session the agent resumed, ended by stopping its unit — the
  *              unit owns the cgroup, so there is no pid to match on.
  * - `stop-agent` a RUNNING `claude --bg` agent, ended by
  *              `claude stop <short id>`, upstream's own verb, which keeps the
@@ -303,9 +320,11 @@ export type RosterEntry = {
  * - `none`     nothing honest to offer. `server` is a session the Remote
  *              Control server spawned (it dies with its server, and the page
  *              says so rather than drawing a button that lies); `orphan` is a
- *              row with no transcript and no handle of any kind.
+ *              row with no transcript and no handle of any kind; `no-resume`
+ *              is a resumable row on a machine that offers no resume
+ *              (`resumeUnavailable`, which the board states once).
  *
- * `session` is the selector the host agent is handed, and it is NOT always the
+ * `session` is the selector the agent is handed, and it is NOT always the
  * uuid: `claude stop` and `claude rm` take the short id.
  */
 export type RowControl =
@@ -313,9 +332,10 @@ export type RowControl =
   | { kind: 'stop-unit'; session: string }
   | { kind: 'stop-agent'; session: string }
   | { kind: 'remove-agent'; session: string }
-  | { kind: 'none'; why: 'server' | 'orphan' }
+  | { kind: 'none'; why: 'server' | 'orphan' | 'no-resume' }
 
-export function rowControl(row: RosterEntry): RowControl {
+/** The verb a row is offered; `resumable` false where the machine offers no resume. */
+export function rowControl(row: RosterEntry, resumable = true): RowControl {
   // The two background populations first, and DORMANT before RUNNING: their
   // ids are not uuids, and the whole point of the split is that a record with
   // no process behind it must never be offered a Stop. `claude stop` on one
@@ -327,7 +347,9 @@ export function rowControl(row: RosterEntry): RowControl {
     return { kind: 'stop-agent', session: row.shortId }
   }
   if (row.managed && row.id !== null) return { kind: 'stop-unit', session: row.id }
-  if (row.canResume && row.id !== null) return { kind: 'resume', session: row.id }
+  if (row.canResume && row.id !== null) {
+    return resumable ? { kind: 'resume', session: row.id } : { kind: 'none', why: 'no-resume' }
+  }
   if (row.state === 'alive') return { kind: 'none', why: 'server' }
   return { kind: 'none', why: 'orphan' }
 }

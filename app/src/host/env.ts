@@ -184,12 +184,6 @@ export const SCHEMA = {
     about: 'SMART, ZFS and generations.',
     source: DAEDALUS,
   },
-  CLAUDE_FACTS_PATH: {
-    kind: 'path',
-    fallback: '/claude/claude.json',
-    about: 'The Claude roster, the Remote Control unit’s accounting and the login’s scopes.',
-    source: DAEDALUS,
-  },
   BUILDER_FACTS_PATH: {
     kind: 'path',
     fallback: '/builder/builder.json',

@@ -38,7 +38,6 @@ const row = (over: Partial<RowShape>): RowShape => ({
 const meta = (over: Partial<TranscriptMeta>): TranscriptMeta => ({
   ...NO_META,
   ...over,
-  scanVersion: 1,
 })
 
 /** The groups this line is made of, as `key -> text`. */

@@ -1,64 +1,106 @@
 /* ── the roster ───────────────────────────────────────────────────────────
 
-   Everything this box could still be asked about, joined from two sources
+   Everything a machine could still be asked about, joined from two sources
    that disagree on purpose (lib/claude-roster.ts), and the page's only list
    of connected sessions: one population in two lists would mean holding both
    to answer "what is running". A connected session's own facts — the
    claude.ai id, the CLI's name, RSS, CPU, its activity clock — are on its
    row. The `StatStrip` above is not a duplicate: `N of <max>` is a fact
-   about the server, not about a session. */
+   about the server, not about a session.
 
-// Types ONLY: the host module behind this type reads node:fs, so its idle
-// shape is restated below rather than imported.
-import type { ClaudeSessionStatus } from '../../../host/claude-session-request'
-import { countByState, type RosterEntry, sessionRows } from '../../../lib/claude-roster'
-import type { ClaudeData } from '../../../lib/dashboard/claude'
-import { num } from '../../../lib/format'
+   The same board on the box (System › Claude) and on every machine's Claude
+   tab: `node` null is the box's controller, an id is that machine. */
+
+import { useRouter } from '@tanstack/react-router'
+import { useRef, useState } from 'react'
+// Pure: lib/agent/roster decodes the agent's roster; only its types are used here.
+import type { ClaudeSession, SessionAction, SessionActionResult } from '../../../lib/agent/roster'
 import {
-  fetchClaudeSessionStatusFn,
-  removeSessionFn,
-  resumeSessionFn,
-  stopSessionFn,
-} from '../../../server/claude'
+  type ClaudeRoster,
+  countByState,
+  type RosterEntry,
+  sessionRows,
+} from '../../../lib/claude-roster'
+import { num } from '../../../lib/format'
+import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { usePolledStatus } from '../../status'
 import { EMPTY, FOOT, LIST, MONO, NOTE } from '../../tokens'
 import { useArmedKey } from '../../use-armed'
 import { Board } from '../../viz'
 import { CycleSessionsControl } from '../controls/cycle-sessions'
 import { RC_ARM_MS } from '../shared'
-import { RosterRow } from './row'
+import { RosterRow, type VerbStatus } from './row'
 
 /** As many rows as read as a list rather than as a log. The rest are counted. */
 const ROSTER_ROWS = 24
 
-const SESSION_IDLE: ClaudeSessionStatus = {
-  id: null,
-  action: null,
-  session: null,
-  state: 'idle',
-  detail: '',
-  error: '',
-  startedAt: null,
-  finishedAt: null,
+const VERB_IDLE: VerbStatus = { id: null, state: 'idle', session: null, detail: '', error: '' }
+
+/** A roster action as the poller reads it: refused and failed carry their sentence as the error. */
+function verbStatus(a: SessionActionResult | null): VerbStatus {
+  if (a === null) return VERB_IDLE
+  const bad = a.state === 'refused' || a.state === 'failed'
+  return {
+    id: a.request,
+    state: a.state,
+    session: a.session,
+    detail: a.detail,
+    error: bad ? a.detail : '',
+  }
 }
 
-export function RosterBoard({ data }: { data: ClaudeData }) {
-  const { roster } = data.facts
-  const rows = sessionRows(roster, data.facts.sessions)
+const VERB: Record<'resume' | 'stop-unit' | 'stop-agent' | 'remove-agent', SessionAction> = {
+  resume: 'resume',
+  'stop-unit': 'stop',
+  'stop-agent': 'stop',
+  'remove-agent': 'remove',
+}
+
+export function RosterBoard({
+  roster,
+  sessions,
+  node,
+  holds,
+  missing,
+  errors,
+}: {
+  roster: ClaudeRoster
+  sessions: ClaudeSession[]
+  /** The machine; null is the box's own controller. */
+  node: string | null
+  /** The CLI version the box's flake holds, for the cycle; null on a machine. */
+  holds: string | null
+  /** Why there is no roster, or null. */
+  missing: string | null
+  errors: string[]
+}) {
+  const router = useRouter()
+  const rows = sessionRows(roster, sessions)
+  const resumable = roster.resumeUnavailable === null
   // Session files with no process behind them. Not rows — there is nothing
   // running to draw — and not an error either, so a count is the whole of
   // what to say.
-  const stale = data.facts.sessions.filter((s) => !s.alive).length
+  const stale = sessions.filter((s) => !s.alive).length
   const shown = rows.slice(0, ROSTER_ROWS)
 
-  // ONE poller and ONE armed row for the whole board: there is one bridge
-  // file behind every button here, so two rows acting at once is not a state
-  // the host can be in, and arming a second row must disarm the first.
+  // ONE poller and ONE armed row for the whole board: the poller follows one
+  // request id at a time, so two rows acting at once would lose one's outcome,
+  // and arming a second row must disarm the first.
   const [armed, arm, disarm] = useArmedKey<string>(RC_ARM_MS)
-  const { status, running, refusal, start } = usePolledStatus<ClaudeSessionStatus>({
-    initial: SESSION_IDLE,
-    fetch: () => fetchClaudeSessionStatusFn(),
+  const request = useRef<string | null>(null)
+  const [acted, setActed] = useState<string | null>(null)
+  const { status, running, refusal, start } = usePolledStatus<VerbStatus>({
+    initial: VERB_IDLE,
+    fetch: async () => {
+      const id = request.current
+      if (id === null) return VERB_IDLE
+      return verbStatus(await fetchClaudeActionFn({ data: { node, request: id } }))
+    },
+    intervalMs: 1_000,
     claimTimeoutMs: 30_000,
+    onSettle: () => {
+      void router.invalidate()
+    },
   })
 
   return (
@@ -66,22 +108,38 @@ export function RosterBoard({ data }: { data: ClaudeData }) {
       title="Session roster"
       icon="panels"
       span={12}
-      aside={<span className={NOTE}>{populationLine(rows)}</span>}
+      aside={
+        <span className={NOTE}>
+          {missing !== null && rows.length === 0 ? 'no roster yet' : populationLine(rows)}
+        </span>
+      }
     >
-      {rows.length === 0 ? (
+      {/* Without a roster the connected sessions (from the report) are still
+          drawn; what is missing is the rest — transcripts, agents, verbs. */}
+      {missing !== null && (
         <p className={EMPTY}>
-          No sessions, no transcripts and no agents. Nothing is connected — the server is still
-          listening, and a session appears here within a minute of being started from claude.ai or
-          the app — and there is nothing on disk to resume either. Failing that, this snapshot
-          predates the roster (the boards above still read correctly without it), or nobody has ever
-          run <span className={MONO}>claude</span> as this user.
+          No roster yet: {missing}. The connected sessions below come from the Remote Control
+          report; the transcripts, the background agents and their verbs appear once the agent
+          reports a roster, within a minute of it starting.
         </p>
+      )}
+      {rows.length === 0 ? (
+        missing === null && (
+          <p className={EMPTY}>
+            No sessions, no transcripts and no agents. Nothing is connected — the server is still
+            listening, and a session appears here within a minute of being started from claude.ai or
+            the app — and there is nothing on disk to resume either, or nobody has ever run{' '}
+            <span className={MONO}>claude</span> as this user.
+          </p>
+        )
       ) : (
         <ul className={LIST}>
           {shown.map((r) => (
             <RosterRow
               key={r.key}
               row={r}
+              resumable={resumable}
+              acting={acted === r.key}
               armed={armed === r.key}
               busy={running}
               status={status}
@@ -92,14 +150,13 @@ export function RosterBoard({ data }: { data: ClaudeData }) {
               onCancel={disarm}
               onConfirm={(control) => {
                 disarm()
+                setActed(r.key)
                 start(async () => {
-                  const fn =
-                    control.kind === 'resume'
-                      ? resumeSessionFn
-                      : control.kind === 'remove-agent'
-                        ? removeSessionFn
-                        : stopSessionFn
-                  return { ok: true, value: (await fn({ data: { session: control.session } })).id }
+                  const sent = await claudeSessionFn({
+                    data: { node, action: VERB[control.kind], session: control.session },
+                  })
+                  request.current = sent.request
+                  return { ok: true, value: sent.request }
                 })
               }}
             />
@@ -122,9 +179,9 @@ export function RosterBoard({ data }: { data: ClaudeData }) {
         </p>
       )}
 
-      {/* Handed the board's own `running`: one request file backs every verb
-          here, so a cycle and a row button must never be pressed at once. */}
-      <CycleSessionsControl rows={rows} holds={data.facts.cli.version} boardBusy={running} />
+      {/* Handed the board's own `running`: the poller follows one request at
+          a time, so a cycle and a row button must never be pressed at once. */}
+      {node === null && <CycleSessionsControl rows={rows} holds={holds} boardBusy={running} />}
 
       {stale > 0 && (
         <p className={FOOT}>
@@ -135,18 +192,31 @@ export function RosterBoard({ data }: { data: ClaudeData }) {
         </p>
       )}
 
+      {/* Said once rather than on every resumable row: the reason is the
+          machine's, not the row's. */}
+      {!resumable && (
+        <p className={FOOT}>
+          <b>No Resume on this machine:</b> {roster.resumeUnavailable}. Stop and Remove still work
+          on its background agents.
+        </p>
+      )}
+
+      {errors.length > 0 && (
+        <p className={FOOT}>The agent could not read everything: {errors.join('; ')}.</p>
+      )}
+
       {/* ONE paragraph, deliberately: the board says the rest by itself (the
           chips and buttons are the populations and their verbs, an armed row
           states its cost), and the reasoning lives where the behaviour is —
           lib/claude-roster.ts (the two sources, the pid rule, the four verbs),
           lib/claude-meta.ts (the counts, the prompt, why a zero never prints),
-          host/claude-session-request.ts (the selector and its guards). What
+          agent/src/claude/sessions.rs (the selector and its guards). What
           stays here is the one thing a reader would otherwise get WRONG, and
           the one limit on what the board is able to claim. */}
       <p className={FOOT}>
         <b>Resume continues the session it names.</b>{' '}
         <span className={MONO}>claude --resume &lt;id&gt;</span> keeps that id and appends to that
-        same transcript — measured here on CLI 2.1.260, at the console and under{' '}
+        same transcript — measured on CLI 2.1.260, at the console and under{' '}
         <span className={MONO}>--remote-control</span>. Branching is the opt-in,{' '}
         <span className={MONO}>--fork-session</span>, and nothing on this page passes it. Nothing
         writes an end-of-session marker either, so a transcript with no process behind it is all

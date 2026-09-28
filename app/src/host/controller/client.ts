@@ -2,14 +2,18 @@ import { readFileSync } from 'node:fs'
 import { createConnection, type Socket } from 'node:net'
 import { join } from 'node:path'
 import type { NodeCommand } from '../../lib/agent/policy'
+import type { SessionAction } from '../../lib/agent/roster'
 import { env } from '../env'
 import {
   API_VERSION,
+  type ClaudeRosterGet,
   type ClaudeStatus,
   type CommandOk,
   ControllerError,
   type ControllerNode,
   type ControllerNodeDetail,
+  claudeRosterGet,
+  claudeSessionSent,
   claudeStatus,
   commandOk,
   type DesiredNode,
@@ -17,8 +21,10 @@ import {
   helloOk,
   MAX_LINE,
   type NodeClaudeAnswer,
+  type NodeClaudeRosterAnswer,
   type NodeTelemetryAnswer,
   nodeClaudeAnswer,
+  nodeClaudeRosterAnswer,
   nodeDetail,
   nodesList,
   nodeTelemetryAnswer,
@@ -26,8 +32,10 @@ import {
   type Queued,
   queued,
   requestLine,
+  type SessionSent,
   type SetDesiredOk,
   type SystemInfo,
+  sessionQueued,
   setDesiredOk,
   systemInfo,
   type TelemetryGet,
@@ -64,11 +72,17 @@ export type ControllerClient = {
   systemInfo: () => Promise<SystemInfo>
   claudeStatus: () => Promise<ClaudeStatus>
   claudeRestart: () => Promise<Queued>
+  claudeRoster: () => Promise<ClaudeRosterGet>
+  /** One verb on one of the controller's sessions; the roster reports how it went. */
+  claudeSession: (action: SessionAction, id: string) => Promise<SessionSent>
   telemetryGet: () => Promise<TelemetryGet>
   nodesList: () => Promise<ControllerNode[]>
   nodesGet: (id: string) => Promise<ControllerNodeDetail>
   nodesTelemetry: (id: string) => Promise<NodeTelemetryAnswer>
   nodesClaude: (id: string) => Promise<NodeClaudeAnswer>
+  nodesClaudeRoster: (id: string) => Promise<NodeClaudeRosterAnswer>
+  /** One verb on one of a machine's sessions: only ever from an admin's click. */
+  nodesClaudeSession: (id: string, action: SessionAction, session: string) => Promise<SessionSent>
   /** The app's COMPLETE set of decided keys (./nodes.ts builds it). */
   nodesSetDesired: (nodes: DesiredNode[]) => Promise<SetDesiredOk>
   /** A one-shot instruction to one machine: only ever from an admin's click. */
@@ -307,11 +321,16 @@ export function createControllerClient(opts: Options): ControllerClient {
     systemInfo: () => call('system.info', systemInfo),
     claudeStatus: () => call('claude.status', claudeStatus),
     claudeRestart: () => call('claude.restart', queued),
+    claudeRoster: () => call('claude.roster', claudeRosterGet),
+    claudeSession: (action, id) => call('claude.session', sessionQueued, { action, id }),
     telemetryGet: () => call('telemetry.get', telemetryGet),
     nodesList: () => call('nodes.list', nodesList),
     nodesGet: (id) => call('nodes.get', nodeDetail, { id }),
     nodesTelemetry: (id) => call('nodes.telemetry', nodeTelemetryAnswer, { id }),
     nodesClaude: (id) => call('nodes.claude', nodeClaudeAnswer, { id }),
+    nodesClaudeRoster: (id) => call('nodes.claude_roster', nodeClaudeRosterAnswer, { id }),
+    nodesClaudeSession: (id, action, session) =>
+      call('nodes.claude_session', claudeSessionSent, { id, action, session }),
     nodesSetDesired: (nodes) => call('nodes.set_desired', setDesiredOk, { nodes }),
     nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),

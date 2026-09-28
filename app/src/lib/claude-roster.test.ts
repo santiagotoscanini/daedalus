@@ -11,6 +11,7 @@ import {
   NO_ROSTER,
   type RosterEntry,
   rowControl,
+  selectorError,
   sessionRows,
 } from './claude-roster'
 
@@ -383,6 +384,17 @@ describe('which verb a row is offered', () => {
     expect(rowControl(row)).toEqual({ kind: 'resume', session: 'abc' })
   })
 
+  it('offers no Resume where the machine offers none, and still offers the rest', () => {
+    const r = roster({
+      agentsAvailable: true,
+      agents: [agent({ id: 'deadbeef', sessionId: 'bg', kind: 'background', pid: 7 })],
+      transcripts: [transcript({ id: 'abc' }), transcript({ id: 'bg' })],
+      resumeUnavailable: 'the session is the tray’s child',
+    })
+    expect(rowControl(rowFor(r, 'abc'), false)).toEqual({ kind: 'none', why: 'no-resume' })
+    expect(rowControl(rowFor(r, 'bg'), false)).toEqual({ kind: 'stop-agent', session: 'deadbeef' })
+  })
+
   // `claude stop` takes the SHORT id. Handing it the uuid is the bug this
   // asserts against: it would refuse, and the row would look broken.
   it('offers Stop to a RUNNING background agent, with the SHORT id as the selector', () => {
@@ -611,5 +623,18 @@ describe('the selector charset, which is the first of the host agent three layer
     expect(isAgentId('DEADBEEF')).toBe(false)
     expect(isAgentId('deadbee')).toBe(false)
     expect(isAgentId('11111111-2222-4333-8444-555555555555')).toBe(false)
+  })
+})
+
+describe('the selector each verb takes', () => {
+  const uuid = '11111111-2222-4333-8444-555555555555'
+  it('resume a uuid, stop either, remove a short id alone', () => {
+    expect(selectorError('resume', uuid)).toBeNull()
+    expect(selectorError('resume', 'deadbeef')).not.toBeNull()
+    expect(selectorError('stop', uuid)).toBeNull()
+    expect(selectorError('stop', 'deadbeef')).toBeNull()
+    expect(selectorError('stop', '../x')).not.toBeNull()
+    expect(selectorError('remove', 'deadbeef')).toBeNull()
+    expect(selectorError('remove', uuid)).not.toBeNull()
   })
 })

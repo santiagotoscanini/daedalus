@@ -1,4 +1,14 @@
-import { asValidator, obj, str, withMessage } from '../lib/contract/decode'
+import type { SessionActionResult } from '../lib/agent/roster'
+import { selectorError } from '../lib/claude-roster'
+import {
+  asValidator,
+  literal,
+  nullable,
+  obj,
+  optional,
+  str,
+  withMessage,
+} from '../lib/contract/decode'
 import { nodeIdField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
@@ -20,73 +30,59 @@ export const restartClaudeFn = adminFn.handler(async ({ context }) => {
 })
 
 /**
- * The selector for a per-session action.
+ * One verb on one Claude Code session — `resume`, `stop` or `remove` — on the
+ * box (`node` null: the controller's `claude.session`) or on a machine
+ * (`nodes.claude_session`). Answers the request id at once; the machine's
+ * roster reports the outcome under it (`fetchClaudeActionFn`).
  *
- * A real check, not a type annotation: this is the one field of the one verb
- * on this box that causes root to start a shell as the operator. The host
- * agent validates it again and enumerates the transcript tree to decide
- * whether anything answers to it — this is the first door, and the one that
- * keeps a malformed value from being written into the bridge at all.
+ * The selector is the whole request: no path, no directory, no flag. Its
+ * shape is checked here so a malformed one never leaves the app, and again by
+ * the controller, the machine and its session, which also decide whether
+ * anything answers to it (agent/src/claude/sessions.rs).
  */
-const sessionSelector = asValidator(withMessage(obj({ session: str }), 'expected a session'))
-
-/**
- * Resume one session — `claude --resume <uuid>`, an argv fixed in nix, under
- * `claude-session@<uuid>.service`.
- *
- * Resume CONTINUES the session it names: same id, same transcript, appended
- * to. Branching is the opt-in (`--fork-session`) and nothing here passes it.
- *
- * Returns as soon as the request file is written; the caller polls the status
- * for its own id. Terminal states are real here — the host agent outlives its
- * action and settles the unit before reporting — so done or failed arrives
- * within about ten seconds.
- */
-export const resumeSessionFn = adminFn
-  .validator(sessionSelector)
+export const claudeSessionFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({
+          node: optional(nullable(nodeIdField), null),
+          action: literal('resume', 'stop', 'remove'),
+          session: str,
+        }),
+        'expected a session verb',
+      ),
+    ),
+  )
   .handler(async ({ data, context }) => {
-    const { requestClaudeSessionResume } = await import('../host/claude-session-request')
-    return {
-      id: await requestClaudeSessionResume({ actor: context.actor(), session: data.session }),
-    }
+    const why = selectorError(data.action, data.session)
+    if (why !== null) throw new Error(`not a session id: ${why}`)
+    const ctx = await context.ctx()
+    return data.node === null
+      ? ctx.controller.claudeSession(data.action, data.session)
+      : ctx.controller.nodesClaudeSession(data.node, data.action, data.session)
   })
 
 /**
- * End one session. The selector's shape says which verb the host uses: a uuid
- * is a session this box started (`systemctl stop`, which SIGTERMs the unit's
- * cgroup), an eight-digit id is a background agent (`claude stop`, which keeps
- * the conversation for `claude attach`).
+ * How one verb request went, from the roster's `actions` — or null while the
+ * roster does not list it yet.
  */
-export const stopSessionFn = adminFn
-  .validator(sessionSelector)
-  .handler(async ({ data, context }) => {
-    const { requestClaudeSessionStop } = await import('../host/claude-session-request')
-    return { id: await requestClaudeSessionStop({ actor: context.actor(), session: data.session }) }
+export const fetchClaudeActionFn = readFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ node: optional(nullable(nodeIdField), null), request: str }),
+        'expected a request id',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<SessionActionResult | null> => {
+    const ctx = await context.ctx()
+    const answer =
+      data.node === null
+        ? await ctx.controller.claudeRoster()
+        : await ctx.controller.nodesClaudeRoster(data.node)
+    return answer.roster?.actions.find((a) => a.request === data.request) ?? null
   })
-
-/**
- * Delete a dormant background agent's record — `claude rm <short id>`.
- *
- * The verb for a row with no process behind it, where Stop has no object:
- * `claude stop` on a record whose process died weeks ago cannot succeed, and
- * offering it is what put a red failure on the board for an agent that had
- * never moved. This one is the destructive half of the pair — `stop` keeps the
- * conversation for `claude attach`, `rm` takes the record and its worktree —
- * so the host refuses anything but an eight-digit id the CLI actually reports.
- */
-export const removeSessionFn = adminFn
-  .validator(sessionSelector)
-  .handler(async ({ data, context }) => {
-    const { requestClaudeSessionRemove } = await import('../host/claude-session-request')
-    return {
-      id: await requestClaudeSessionRemove({ actor: context.actor(), session: data.session }),
-    }
-  })
-
-export const fetchClaudeSessionStatusFn = readFn.handler(async () => {
-  const { readClaudeSessionStatus } = await import('../host/claude-session-request')
-  return readClaudeSessionStatus()
-})
 
 /** The Claude page for one node: its row and its live status page. */
 export const fetchNodeClaudeFn = readFn

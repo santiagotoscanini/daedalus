@@ -1,13 +1,15 @@
 import { Link } from '@tanstack/react-router'
 
-import type { NodeClaudeSession } from '../lib/agent/status'
+import { withStats } from '../lib/agent/roster'
+import { NO_ROSTER } from '../lib/claude-roster'
 import type { NodeClaudeData } from '../lib/dashboard/node-claude'
 import { DASH, duration, num, since, text, until } from '../lib/format'
 import type { NodeRow } from '../lib/repo/nodes'
 import type { Tone } from '../lib/tone'
+import { RosterBoard } from './claude/roster/board'
 import { NodeCommandButton } from './node-command'
 import { ServiceHead } from './service-head'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './tokens'
+import { EMPTY, FOOT, MONO } from './tokens'
 import { Button } from './ui/button'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 
@@ -25,9 +27,9 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 // The two verbs at the foot are a pair and are NOT interchangeable. Update
 // installs a new CLI and interrupts nothing — a session keeps the binary it
 // started on and takes the new one at its next start. Restart is what moves
-// the running server onto it, and it ENDS every session here: unlike the
-// box, this machine has no per-session resume, so those come back only by
-// being started again.
+// the running server onto it, and it ENDS every session the server spawned;
+// the roster below is where a session comes back from, by Resume where the
+// machine offers one (its roster says why not where it does not).
 //
 // The one thing to know about a node, said once at the top when it applies:
 // the server runs in the user's DESKTOP session, because that is where the
@@ -340,32 +342,14 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
           )}
         </Board>
 
-        <Board
-          title="Sessions"
-          span={12}
-          aside={
-            c !== null && (
-              <span className={NOTE}>
-                {num(alive.length)} alive · {num(c.sessions.length - alive.length)} stale
-              </span>
-            )
-          }
-        >
-          {c === null || c.sessions.length === 0 ? (
-            <p className={EMPTY}>No session files on the node.</p>
-          ) : (
-            <ul className={LIST}>
-              {c.sessions.map((s) => (
-                <SessionRow key={`${String(s.pid)}-${s.transcriptId ?? ''}`} s={s} />
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            One file per session process in the user's Claude profile, as on the box. A stale row is
-            a file whose process has ended; the CLI clears them in its own time. Resuming or
-            stopping a session on a node is not wired yet.
-          </p>
-        </Board>
+        <RosterBoard
+          roster={d.roster?.roster ?? NO_ROSTER}
+          sessions={withStats(c?.sessions ?? [], d.roster?.sessionStats ?? [])}
+          node={node.id}
+          holds={null}
+          missing={status === null ? (d.error ?? 'not connected') : d.rosterMissing}
+          errors={d.roster?.errors ?? []}
+        />
 
         <Board title="Machine" span={6}>
           <Facts
@@ -411,34 +395,6 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
         </Board>
       </BoardGrid>
     </>
-  )
-}
-
-function SessionRow({ s }: { s: NodeClaudeSession }) {
-  const started = s.startedAt === null ? null : (Date.now() - s.startedAt) / 1000
-  const last = s.lastActivityAt === null ? null : (Date.now() - s.lastActivityAt) / 1000
-  const facts = [
-    s.kind,
-    s.version,
-    s.remoteId === null ? null : s.remoteId.slice(0, 18),
-    started === null ? null : `started ${since(started)}`,
-    last === null || !s.alive ? null : `active ${since(last)}`,
-  ].filter((x): x is string => x !== null)
-  return (
-    <li className={ROW}>
-      <div className={`${ROW_MAIN} flex items-baseline gap-2`}>
-        <span className={`${MONO} font-medium`}>
-          {s.name ?? s.transcriptId?.slice(0, 8) ?? DASH}
-        </span>
-        <span className={`${NOTE} truncate`}>{s.cwd ?? ''}</span>
-      </div>
-      <div className={`${ROW_SIDE} flex items-center gap-2`}>
-        <Chip tone={s.alive ? (s.status === 'busy' ? 'warn' : 'ok') : 'muted'}>
-          {s.alive ? (s.status ?? 'alive') : 'ended'}
-        </Chip>
-        <span className="truncate">{facts.join(' · ')}</span>
-      </div>
-    </li>
   )
 }
 

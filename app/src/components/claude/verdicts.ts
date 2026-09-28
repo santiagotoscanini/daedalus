@@ -2,9 +2,10 @@
 // session filter, the shot-run issue phrase.
 //
 // Beside the view rather than beside the loader, and not by preference: types
-// ONLY from lib/dashboard, whose modules read the host snapshot through
-// node:fs (the import rule at the top of index.tsx).
-import type { ClaudeData, ClaudeFacts, ClaudeSession } from '../../lib/dashboard/claude'
+// ONLY from lib/dashboard, whose modules reach the host through
+// node (the import rule at the top of index.tsx).
+import type { ClaudeSession } from '../../lib/agent/roster'
+import type { ClaudeData, ClaudeFacts } from '../../lib/dashboard/claude'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { ShotCounts } from '../../lib/dashboard/shotter'
 import { num } from '../../lib/format'

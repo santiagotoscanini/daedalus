@@ -1,69 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ControllerClient } from '../../host/controller/client'
 import { ControllerError } from '../../host/controller/wire'
+import type { AgentRoster } from '../agent/roster'
 import type { NodeClaude } from '../agent/status'
 import { NO_ROSTER } from '../claude-roster'
-import { DecodeError } from '../contract/decode'
-import { factsShape, mergeFacts, readControllerClaude } from './claude'
-
-// The snapshot now carries only what the controller cannot: the roster, the
-// unit's accounting, per-session CPU/RSS/log, the login's scopes. Its decoder
-// must take a file the CURRENT host script did not write — between a rebuild
-// and the next timer tick the file on disk is the previous script's.
-
-describe('a snapshot written by an older script', () => {
-  it('decodes to empty defaults, ignoring the keys it no longer reads', () => {
-    const facts = factsShape(
-      { service: { activeState: 'active' }, sessions: [], cli: { version: '2.1.260' } },
-      '',
-    )
-    expect(facts.roster).toEqual(NO_ROSTER)
-    expect(facts.unit).toEqual({ memoryBytes: null, cpuNsec: null })
-    expect(facts.sessionStats).toEqual([])
-    expect(facts.scopes).toEqual([])
-  })
-})
-
-describe('a roster the current script wrote', () => {
-  it('fills in every field the script may have left out', () => {
-    const facts = factsShape(
-      {
-        roster: {
-          agentsAvailable: true,
-          agents: [{ id: '3ab35c23', kind: 'background' }],
-          transcripts: [{ id: '63a9d108-9cb0-52ce-a893-2100b396d0e6' }],
-        },
-      },
-      '',
-    )
-    expect(facts.roster.agents[0]).toEqual({
-      id: '3ab35c23',
-      sessionId: null,
-      pid: null,
-      kind: 'background',
-      state: null,
-      status: null,
-      name: null,
-      cwd: null,
-      startedAt: null,
-    })
-    expect(facts.roster.transcripts[0]?.sizeBytes).toBe(0)
-    expect(facts.roster.transcripts[0]?.startedAt).toBeNull()
-    expect(facts.roster.transcriptTotal).toBe(0)
-  })
-
-  it('refuses a transcript with no id, which is the one field that is not a label', () => {
-    expect(() => factsShape({ roster: { transcripts: [{ cwd: '/etc/nixos' }] } }, '')).toThrow(
-      DecodeError,
-    )
-  })
-
-  it('names the path of a field of the wrong type', () => {
-    expect(() => factsShape({ roster: { transcripts: [{ id: 5 }] } }, '')).toThrow(
-      /roster\.transcripts\[0\]\.id/,
-    )
-  })
-})
+import { mergeFacts, readControllerClaude, readRoster } from './claude'
 
 /* ── the controller's side ──────────────────────────────────────────────── */
 
@@ -116,6 +57,7 @@ const report: NodeClaude = {
     rateLimitTier: null,
     expiresAt: 5,
     refreshExpiresAt: 6,
+    scopes: ['user:inference'],
   },
   settings: { model: 'opus', effortLevel: null },
   user: 'santiago',
@@ -141,7 +83,7 @@ describe('reading Remote Control from the controller', () => {
     expect(read).toEqual({
       report: null,
       state: 'not-run',
-      detail: 'Remote Control not run by the controller yet',
+      detail: 'Remote Control not run by the controller',
     })
   })
 
@@ -161,19 +103,22 @@ describe('reading Remote Control from the controller', () => {
   })
 })
 
-describe('the controller report and the snapshot, merged', () => {
-  const snap = {
-    unit: { memoryBytes: 1024, cpuNsec: 2e9 },
+describe('the controller report and its roster, merged', () => {
+  const roster: AgentRoster = {
+    reportedAt: '2026-09-28T01:05:00Z',
+    roster: NO_ROSTER,
     sessionStats: [
       { pid: 10, cpuMs: 7, rssBytes: 8, logBytes: 9, bridgeAt: 500 },
       { pid: 11, cpuMs: 1, rssBytes: 1, logBytes: 1, bridgeAt: 900 },
     ],
-    roster: NO_ROSTER,
-    scopes: ['user:inference'],
+    server: { memoryBytes: 1024, cpuNsec: 2e9 },
+    actions: [],
+    truncated: false,
+    errors: [],
   }
 
-  it('takes the server from the report and the accounting from the snapshot', () => {
-    const f = mergeFacts({ report, state: null, detail: null }, snap)
+  it('takes the server from the report and the accounting from the roster', () => {
+    const f = mergeFacts({ report, state: null, detail: null }, roster)
     expect(f.server).toEqual({
       state: 'running',
       detail: null,
@@ -190,23 +135,44 @@ describe('the controller report and the snapshot, merged', () => {
   })
 
   it('joins live sessions to their stats by pid, and the later clock wins', () => {
-    const f = mergeFacts({ report, state: null, detail: null }, snap)
+    const f = mergeFacts({ report, state: null, detail: null }, roster)
     expect(f.sessions[0]).toMatchObject({ pid: 10, cpuMs: 7, rssBytes: 8, logBytes: 9 })
     expect(f.sessions[0]?.lastActivityAt).toBe(500)
     // A dead session takes no stats: its pid may be someone else's now.
     expect(f.sessions[1]).toMatchObject({ pid: 11, cpuMs: null, lastActivityAt: null })
   })
 
+  it('keeps the report whole when there is no roster', () => {
+    const f = mergeFacts({ report, state: null, detail: null }, null)
+    expect(f.server.memoryBytes).toBeNull()
+    expect(f.sessions[0]).toMatchObject({ pid: 10, cpuMs: null, lastActivityAt: 100 })
+    expect(f.roster).toEqual(NO_ROSTER)
+  })
+
   it('draws an honest empty server with no report, and keeps the roster', () => {
-    const roster = { ...NO_ROSTER, transcriptTotal: 3 }
     const f = mergeFacts(
-      { report: null, state: 'not-run', detail: 'Remote Control not run by the controller yet' },
-      { ...snap, roster },
+      { report: null, state: 'not-run', detail: 'Remote Control not run by the controller' },
+      { ...roster, roster: { ...NO_ROSTER, transcriptTotal: 3 } },
     )
     expect(f.server.state).toBe('not-run')
     expect(f.server.memoryBytes).toBeNull()
     expect(f.sessions).toEqual([])
     expect(f.credentials.present).toBe(false)
     expect(f.roster.transcriptTotal).toBe(3)
+  })
+})
+
+describe('reading a roster', () => {
+  it('says why there is none when the session has not reported one', async () => {
+    const r = await readRoster(() => Promise.resolve({ roster: null }), 'not yet')
+    expect(r).toEqual({ roster: null, missing: 'not yet' })
+  })
+
+  it('says what the controller answered when it does not keep one, without throwing', async () => {
+    const r = await readRoster(
+      () => Promise.reject(new ControllerError('unknown_method', 'unknown method claude.roster')),
+      'not yet',
+    )
+    expect(r).toEqual({ roster: null, missing: 'unknown method claude.roster' })
   })
 })

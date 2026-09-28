@@ -7,15 +7,15 @@
 //
 // The import rule every file here follows. Values come from server/claude —
 // server functions, which are the client-safe door to the host. From host/*
-// and lib/dashboard/* it is types ONLY: the modules behind them read the host
-// snapshot and the controller socket through node, and a value import from there
+// and lib/dashboard/* it is types ONLY: the modules behind them reach the
+// controller socket and Loki through node, and a value import from there
 // would put that in the browser bundle — see the warning at the foot of
 // lib/dashboard/claude.ts. That is why the derived helpers live in
 // verdicts.ts beside the view, and why each host status's idle shape is
 // restated beside the control that polls it.
 import type { ClaudeData } from '../../lib/dashboard/claude'
 import type { VersionGap } from '../../lib/dashboard/github'
-import { DASH, duration, num, since, text, until } from '../../lib/format'
+import { DASH, duration, num, text, until } from '../../lib/format'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { ServiceHead } from '../service-head'
@@ -56,7 +56,6 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
     <>
       <ClaudeHead data={data} verdict={verdict} />
       <ControllerNotice data={data} />
-      <SnapshotNotice data={data} />
       <ClaudeStats data={data} live={live} refreshIn={refreshIn} />
 
       <BoardGrid>
@@ -82,7 +81,14 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         {/* The reason to open this page, so it sits where the attention goes
             rather than at the foot. It is the page's only list of sessions:
             the connected ones are its `alive` rows. */}
-        <RosterBoard data={data} />
+        <RosterBoard
+          roster={facts.roster}
+          sessions={facts.sessions}
+          node={null}
+          holds={facts.cli.version}
+          missing={data.rosterMissing}
+          errors={data.rosterErrors}
+        />
 
         <RemoteControlLogs />
       </BoardGrid>
@@ -128,7 +134,7 @@ function ClaudeHead({ data, verdict }: { data: ClaudeData; verdict: Verdict }) {
           The always-on Remote Control server, which the controller runs as the operator's{' '}
           <span className={MONO}>daedalus-claude-rc</span> unit. A session on this box can be
           started from claude.ai/code or a phone at any time. It has no health endpoint of its own,
-          so every number here is the controller's report, the host snapshot or the server's log.
+          so every number here is the controller's report or the server's log.
         </>
       }
       actions={
@@ -153,35 +159,10 @@ function ClaudeHead({ data, verdict }: { data: ClaudeData; verdict: Verdict }) {
 }
 
 /* Said once, at the top: with no report from the controller the boards about
-   the server are empty, and the reason is the one line worth reading. The
-   roster below still comes from the snapshot. */
+   the server are empty, and the reason is the one line worth reading. */
 function ControllerNotice({ data }: { data: ClaudeData }) {
   if (data.reporting) return null
   return <p className={EMPTY}>{data.facts.server.detail}.</p>
-}
-
-/* Said once, at the top, and not repeated on every board below: when the
-   snapshot has stopped the whole page is a photograph, and a reader who has
-   been told that can discount all of it at once. */
-function SnapshotNotice({ data }: { data: ClaudeData }) {
-  if (!data.available) {
-    return (
-      <p className={EMPTY}>
-        The host snapshot has never been written, so the roster below is empty.{' '}
-        <span className={MONO}>daedalus-claude-snapshot.service</span> is what produces it.
-      </p>
-    )
-  }
-  if (data.stale) {
-    return (
-      <p className={EMPTY}>
-        The snapshot is <b>{since((data.ageMs ?? 0) / 1000)}</b> and its timer promises one a
-        minute, so the roster and the server's memory and CPU below are a photograph rather than a
-        reading.
-      </p>
-    )
-  }
-  return null
 }
 
 function ClaudeStats({

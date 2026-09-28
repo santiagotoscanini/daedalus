@@ -1,13 +1,15 @@
 import { type ControllerClient, controller } from '../../host/controller/client'
 import { readNode } from '../../host/controller/nodes'
+import type { AgentRoster } from '../agent/roster'
 import type { AgentStatus, NodeClaude } from '../agent/status'
 import { getNode, type NodeRow } from '../repo/nodes'
+import { readRoster } from './claude'
 
 // The Claude tab (System › Claude) for a machine that is not this box: its
-// status document and its session's full Claude report — session names,
-// working directories, ids, the environment id, the login's dates — as the
-// machine pushed them up its link and the controller holds them. No
-// snapshot, no Loki — the machine's own log stays on the machine.
+// status document, its session's full Claude report — session names,
+// working directories, ids, the environment id, the login's dates — and its
+// roster of Claude sessions, as the machine pushed them up its link and the
+// controller holds them. No Loki — the machine's own log stays on the machine.
 
 export type NodeClaudeData = {
   node: NodeRow
@@ -17,6 +19,10 @@ export type NodeClaudeData = {
   report: NodeClaude | null
   /** Why there is no report, when the controller could not say. */
   reportError: string | null
+  /** The roster, when the machine's session has sent one. */
+  roster: AgentRoster | null
+  /** Why there is no roster, or null. */
+  rosterMissing: string | null
   /** Why there is no status document, when there is none. */
   error: string | null
 }
@@ -27,7 +33,14 @@ export async function loadNodeClaude(
 ): Promise<NodeClaudeData | null> {
   const node = await getNode(id)
   if (node === null) return null
-  const none = { node, status: null, report: null, reportError: null }
+  const none = {
+    node,
+    status: null,
+    report: null,
+    reportError: null,
+    roster: null,
+    rosterMissing: null,
+  }
   const read = await readNode(client, id)
   const d = read.detail
   if (d === null) return { ...none, error: read.error }
@@ -37,15 +50,22 @@ export async function loadNodeClaude(
       error: d.connected ? 'connected, but no status has arrived yet' : 'not connected',
     }
   }
-  try {
-    const answer = await client.nodesClaude(id)
-    return { node, status: d.status, report: answer.report, reportError: null, error: null }
-  } catch (e) {
-    return {
-      ...none,
-      status: d.status,
-      error: null,
-      reportError: e instanceof Error ? e.message : String(e),
-    }
+  const [report, roster] = await Promise.all([
+    client.nodesClaude(id).then(
+      (a) => ({ report: a.report, reportError: null }),
+      (e: unknown) => ({ report: null, reportError: e instanceof Error ? e.message : String(e) }),
+    ),
+    readRoster(
+      () => client.nodesClaudeRoster(id),
+      'the machine has not sent a roster since the controller started',
+    ),
+  ])
+  return {
+    node,
+    status: d.status,
+    ...report,
+    roster: roster.roster,
+    rosterMissing: roster.missing,
+    error: null,
   }
 }

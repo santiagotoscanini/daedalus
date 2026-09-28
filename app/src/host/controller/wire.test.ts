@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
   ControllerError,
+  claudeRosterGet,
+  claudeSessionSent,
   claudeStatus,
   commandOk,
   helloOk,
   nodeClaudeAnswer,
+  nodeClaudeRosterAnswer,
   nodeDetail,
   nodesList,
   nodeTelemetryAnswer,
   parseLine,
   queued,
   requestLine,
+  sessionQueued,
   setDesiredOk,
   systemInfo,
   telemetryGet,
@@ -176,7 +180,7 @@ describe('the controller wire', () => {
           '"server":{"version":null,"environment_id":null,"spawn_mode":null,"max_sessions":null},',
           '"sessions":[],',
           '"credentials":{"present":false,"store":null,"subscription_type":null,',
-          '"rate_limit_tier":null,"expires_at":null,"refresh_expires_at":null},',
+          '"rate_limit_tier":null,"expires_at":null,"refresh_expires_at":null,"scopes":[]},',
           '"settings":{"model":null,"effort_level":null},',
           '"user":null,"home":null,"workdir":null,"workdir_via":null,"log":null,',
           '"reported_at":"2026-09-27T10:00:00Z"}}',
@@ -380,5 +384,107 @@ describe('the controller wire', () => {
         '{"e":"nodes.pending","p":{"id":"0123456789abcdef","fingerprint":"0123:4567","hostname":"PC"}}',
       ),
     ).toMatchObject({ kind: 'event', e: 'nodes.pending' })
+  })
+  // wire.rs `ROSTER`: a roster with one of everything, every field the app reads.
+  const ROSTER = [
+    '{"reported_at":"2026-09-27T10:00:00Z","agents_available":true,',
+    '"agents":[{"id":"0a1b2c3d","session_id":"abdda3a9-0cb2-43f1-b13e-37f25a755fce","pid":null,',
+    '"kind":"background","state":"blocked","status":null,"name":"nixos-7a","cwd":"/etc/nixos","started_at":1}],',
+    '"transcripts":[{"id":"abdda3a9-0cb2-43f1-b13e-37f25a755fce","project":"-etc-nixos","cwd":"/etc/nixos",',
+    '"cwd_exact":true,"title":"Fix the build","title_source":"custom-title","started_at":2,',
+    '"modified_at":3000,"size_bytes":4,"meta":{"exchanges":5,"replies":6,"thinking":7,"images":0,',
+    '"attached":1,"subagents":null,"span_ms":8,"branch":"main","cli_version":"2.1.281",',
+    '"last_prompt":"ship it","cost":{"usd":1.5,"lines_added":9,"lines_removed":null,"duration_ms":null}}}],',
+    '"transcript_total":1,"empty_count":2,"truncated":false,',
+    '"managed":[{"id":"bbdda3a9-0cb2-43f1-b13e-37f25a755fce","unit":"claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce",',
+    '"pid":42,"memory_bytes":10,"cpu_nsec":null,"log":"/l","log_bytes":11}],',
+    '"resume_unavailable":null,',
+    '"session_stats":[{"pid":42,"cpu_ms":12,"rss_bytes":13,"log_bytes":null,"bridge_at":null}],',
+    '"server":{"memory_bytes":14,"cpu_nsec":15},',
+    '"actions":[{"request":"00112233445566ff","action":"stop","id":"0a1b2c3d","state":"done",',
+    '"detail":"stopped","started_at":"t0","finished_at":"t1"}],"errors":[]}',
+  ].join('')
+
+  it('decodes claude.roster into the page’s shapes, and a silent one', () => {
+    expect(claudeRosterGet(JSON.parse('{"reporting":false,"roster":null}'))).toEqual({
+      reporting: false,
+      roster: null,
+    })
+    const r = claudeRosterGet(JSON.parse(`{"reporting":true,"roster":${ROSTER}}`)).roster
+    expect(r?.roster.agents[0]).toEqual({
+      id: '0a1b2c3d',
+      sessionId: 'abdda3a9-0cb2-43f1-b13e-37f25a755fce',
+      pid: null,
+      kind: 'background',
+      state: 'blocked',
+      status: null,
+      name: 'nixos-7a',
+      cwd: '/etc/nixos',
+      startedAt: 1,
+    })
+    expect(r?.roster.transcripts[0]).toMatchObject({
+      id: 'abdda3a9-0cb2-43f1-b13e-37f25a755fce',
+      cwdExact: true,
+      titleSource: 'custom-title',
+      modifiedAt: 3000,
+    })
+    expect(r?.roster.transcripts[0]?.meta).toEqual({
+      exchanges: 5,
+      replies: 6,
+      thinking: 7,
+      images: 0,
+      attached: 1,
+      subagents: null,
+      spanMs: 8,
+      branch: 'main',
+      cliVersion: '2.1.281',
+      lastPrompt: 'ship it',
+      cost: { usd: 1.5, linesAdded: 9, linesRemoved: null, durationMs: null },
+    })
+    expect(r?.roster.managedIds).toEqual(['bbdda3a9-0cb2-43f1-b13e-37f25a755fce'])
+    expect(r?.roster.resumeUnavailable).toBeNull()
+    expect(r?.roster.transcriptTotal).toBe(1)
+    expect(r?.roster.emptyCount).toBe(2)
+    expect(r?.sessionStats).toEqual([
+      { pid: 42, cpuMs: 12, rssBytes: 13, logBytes: null, bridgeAt: null },
+    ])
+    expect(r?.server).toEqual({ memoryBytes: 14, cpuNsec: 15 })
+    expect(r?.actions).toEqual([
+      {
+        request: '00112233445566ff',
+        action: 'stop',
+        session: '0a1b2c3d',
+        state: 'done',
+        detail: 'stopped',
+        startedAt: 't0',
+        finishedAt: 't1',
+      },
+    ])
+  })
+
+  it('decodes nodes.claude_roster, and a machine without resume', () => {
+    const noResume = ROSTER.replace(
+      '"resume_unavailable":null',
+      '"resume_unavailable":"the session is the tray\'s child"',
+    )
+    const a = nodeClaudeRosterAnswer(
+      JSON.parse(`{"id":"0123456789abcdef","roster":${noResume},"received_at":"t"}`),
+    )
+    expect(a.receivedAt).toBe('t')
+    expect(a.roster?.roster.resumeUnavailable).toBe("the session is the tray's child")
+    expect(
+      nodeClaudeRosterAnswer(
+        JSON.parse('{"id":"0123456789abcdef","roster":null,"received_at":null}'),
+      ),
+    ).toEqual({ roster: null, receivedAt: null })
+  })
+
+  it('decodes the two session-verb answers to their request id', () => {
+    expect(sessionQueued(JSON.parse('{"queued":true,"request":"00112233445566ff"}'))).toEqual({
+      request: '00112233445566ff',
+    })
+    expect(
+      claudeSessionSent(JSON.parse('{"delivered":true,"request":"00112233445566ff"}')),
+    ).toEqual({ request: '00112233445566ff' })
   })
 })

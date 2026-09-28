@@ -74,6 +74,8 @@ export type NodeClaude = {
     rateLimitTier: string | null
     expiresAt: number | null
     refreshExpiresAt: number | null
+    /** What the login may do (`user:inference`, …); never the tokens. */
+    scopes: string[]
   }
   settings: { model: string | null; effortLevel: string | null }
   user: string | null
@@ -230,6 +232,7 @@ const claude = obj({
       rate_limit_tier: nstr,
       expires_at: nnum,
       refresh_expires_at: nnum,
+      scopes: optional(arrayOf(str), []),
     }),
     {
       present: false,
@@ -238,6 +241,7 @@ const claude = obj({
       rate_limit_tier: null,
       expires_at: null,
       refresh_expires_at: null,
+      scopes: [],
     },
   ),
   settings: optional(obj({ model: nstr, effort_level: nstr }), { model: null, effort_level: null }),
@@ -318,6 +322,7 @@ function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
       rateLimitTier: c.credentials.rate_limit_tier,
       expiresAt: c.credentials.expires_at,
       refreshExpiresAt: c.credentials.refresh_expires_at,
+      scopes: c.credentials.scopes,
     },
     settings: { model: c.settings.model, effortLevel: c.settings.effort_level },
     user: c.user,

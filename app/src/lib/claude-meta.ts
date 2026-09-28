@@ -1,14 +1,12 @@
 // What a session card says about a transcript, beyond what it is.
 //
-// Pure, and in `lib/` for the same reason claude-roster.ts is: the module
-// that reads the host snapshot reaches node:fs, so a component cannot import
-// a value from it. Everything a row needs derived lives here and is tested
-// here.
+// Pure, and in `lib/` so a component can import its values. Everything a row
+// needs derived lives here and is tested here.
 //
 // ── the source, and what it is honest about ───────────────────────────────
 //
-// `nix/stacks/daedalus/host/claude-snapshot.sh` makes one awk pass over each
-// transcript whose (mtime, size) moved and publishes the counts below. Two
+// The machine's agent (agent/src/claude/roster.rs `scan`) makes one pass over
+// each transcript whose size or mtime moved and reports the counts below. Two
 // of its decisions are load-bearing here and are the reason this file does
 // not simply print what it is given:
 //
@@ -24,37 +22,21 @@
 //
 // ── why the prompt is redacted again here ─────────────────────────────────
 //
-// It is already redacted on the host, before it is written to disk — that is
-// the layer that matters, because the file is the thing an attacker would
-// read. This is the second pass, the same two-layer shape the build log has
-// had since it existed (see lib/redact.ts's own header): the host filters as
-// it writes, and everything leaving this server passes through the patterns
-// again. It costs nothing and it means a snapshot written by an older host
-// script, or by a future one that loses a pattern, still cannot put a
-// recognisable credential on the page.
+// The agent redacts it before it leaves the machine (agent/src/claude/
+// redact.rs) — that is the layer that matters. This is the second pass, the
+// same two-layer shape the build log has (see lib/redact.ts's own header):
+// everything leaving this server passes through the patterns again, so an
+// agent that loses a pattern still cannot put a recognisable credential on
+// the page.
 //
 // Neither layer is a guarantee. Redaction of prose recognises credentials by
-// shape; a password or a passphrase has no shape. The host header says so at
-// length and this comment will not pretend otherwise.
-//
-// What actually pays for carrying a line of conversation at all is the FILE
-// MODE, not the filter. The transcript tree holds pasted keys, tokens and the
-// output of `sops -d`, so the snapshot behind the page was tightened to 0600
-// in an owner-only directory before the first character of it was written:
-// operator and root, no build, no other container, no other user. A secret
-// pasted inside those 160 characters does land in that file — that is the
-// trade, taken deliberately, and the mode is what makes it payable.
+// shape; a password or a passphrase has no shape.
 
 import { bytes, ms } from './format'
 import { redactSecrets } from './redact'
 
-/** Per-transcript facts from the host's scan. `null` = not recorded. */
+/** Per-transcript facts from the agent's scan. `null` = not recorded. */
 export type TranscriptMeta = {
-  /**
-   * Which version of the host scanner produced this. `0` is the block the
-   * host publishes when it has nothing — every field null, no scan behind it.
-   */
-  scanVersion: number
   /** User turns that are not tool results — what the operator actually sent. */
   exchanges: number | null
   replies: number | null
@@ -68,7 +50,7 @@ export type TranscriptMeta = {
   spanMs: number | null
   branch: string | null
   cliVersion: string | null
-  /** One line, redacted and cut to ~160 chars, host-side. Usually absent. */
+  /** One line, redacted and cut to ~160 chars by the agent. Usually absent. */
   lastPrompt: string | null
   /** Present in a small minority of transcripts. Never synthesised. */
   cost: {
@@ -80,7 +62,6 @@ export type TranscriptMeta = {
 }
 
 export const NO_META: TranscriptMeta = {
-  scanVersion: 0,
   exchanges: null,
   replies: null,
   thinking: null,
@@ -114,16 +95,16 @@ const PROMPT_PATTERNS: RegExp[] = [
   /AIza[0-9A-Za-z_-]{35}/g,
 ]
 
-/** How much of a prompt a row shows. The host already cut it; this is the cap
+/** How much of a prompt a row shows. The agent already cut it; this is the cap
     that holds if it ever did not. */
 const PROMPT_MAX = 160
 
 /**
  * The prompt a row may display, or null.
  *
- * Whitespace collapses because the host's own collapse is not something this
+ * Whitespace collapses because the agent's own collapse is not something this
  * side should depend on, and a prompt with a newline in it would break the
- * row's single line. Redaction runs BEFORE the cut for the reason the host
+ * row's single line. Redaction runs BEFORE the cut for the reason the agent
  * gives: cutting first can leave the head of a token standing where the
  * pattern would have taken all of it.
  */
@@ -378,7 +359,7 @@ export function factGroups(row: RowShape, now: number): FactGroup[] {
     counted(meta.thinking, 'thinking'),
     counted(meta.images, meta.images === 1 ? 'image' : 'images'),
     counted(meta.attached, meta.attached === 1 ? 'file' : 'files'),
-    // Only ever positive: the host publishes null where the CLI did not
+    // Only ever positive: the agent reports null where the CLI did not
     // record the marker, and this drops a recorded zero as well.
     counted(meta.subagents, 'subagents'),
   ].filter((p) => p !== null)

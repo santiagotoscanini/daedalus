@@ -1,4 +1,5 @@
 import type { WirePolicy } from '../../lib/agent/policy'
+import { type AgentRoster, agentRoster } from '../../lib/agent/roster'
 import {
   type AgentStatus,
   agentStatus,
@@ -574,3 +575,39 @@ export type CommandOk = { delivered: boolean; queued: boolean }
 
 export const commandOk = (v: unknown): CommandOk =>
   decode(obj({ delivered: flag, queued: flag }), v)
+
+// ── Claude sessions (`claude.roster`, `claude.session`, `nodes.claude_*`) ────
+
+/**
+ * `claude.roster`: the controller's session's roster (lib/agent/roster.ts
+ * decodes it), or `reporting` false and no roster.
+ */
+export type ClaudeRosterGet = { reporting: boolean; roster: AgentRoster | null }
+
+export function claudeRosterGet(v: unknown): ClaudeRosterGet {
+  const r = decode(obj({ reporting: flag, roster: anyJson }), v)
+  return { reporting: r.reporting, roster: agentRoster(r.roster) }
+}
+
+/** `nodes.claude_roster`: the machine's roster as it last pushed it, and when. */
+export type NodeClaudeRosterAnswer = { roster: AgentRoster | null; receivedAt: string | null }
+
+export function nodeClaudeRosterAnswer(v: unknown): NodeClaudeRosterAnswer {
+  const r = decode(obj({ roster: anyJson, received_at: nstr }), v)
+  return { roster: agentRoster(r.roster), receivedAt: r.received_at }
+}
+
+/**
+ * A session verb, taken: `claude.session` queues it for the controller's
+ * session, `nodes.claude_session` hands it to the machine. Either way the
+ * roster's `actions` reports the outcome under `request`.
+ */
+export type SessionSent = { request: string }
+
+export const sessionQueued = (v: unknown): SessionSent => ({
+  request: decode(obj({ queued: flag, request: str }), v).request,
+})
+
+export const claudeSessionSent = (v: unknown): SessionSent => ({
+  request: decode(obj({ delivered: flag, request: str }), v).request,
+})

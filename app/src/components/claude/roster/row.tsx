@@ -3,8 +3,7 @@
 // one — its verb, armed in place.
 import { ClockIcon, FolderGit2Icon, MessagesSquareIcon } from 'lucide-react'
 
-// Types ONLY: the host module behind this type reads node:fs.
-import type { ClaudeSessionStatus } from '../../../host/claude-session-request'
+import type { SessionActionState } from '../../../lib/agent/roster'
 // Pure and client-safe — the whole reason the roster's types, its join and
 // the row's derived facts live in lib/ rather than beside the loader. See the
 // header of claude-roster.ts.
@@ -71,6 +70,19 @@ const CTRL_STATE = 'mt-[0.3rem] text-[0.72rem] leading-[1.5]'
 
 type ActiveControl = Extract<RowControl, { session: string }>
 
+/** The one verb request the board follows, as its poller reads it from the roster. */
+export type VerbStatus = {
+  /** The request id; null while the roster does not list it yet. */
+  id: string | null
+  state: 'idle' | SessionActionState
+  /** The selector it acted on — a uuid, or a short agent id. */
+  session: string | null
+  /** The agent's sentence about it. */
+  detail: string
+  /** The same sentence, when it was refused or failed. */
+  error: string
+}
+
 /**
  * One row, and — where there is an honest one — its verb.
  *
@@ -81,6 +93,8 @@ type ActiveControl = Extract<RowControl, { session: string }>
  */
 export function RosterRow({
   row,
+  resumable,
+  acting,
   armed,
   busy,
   status,
@@ -90,18 +104,22 @@ export function RosterRow({
   onConfirm,
 }: {
   row: RosterEntry
+  /** The machine offers resume (its roster's `resumeUnavailable` is null). */
+  resumable: boolean
+  /** This row sent the request the board is following. */
+  acting: boolean
   armed: boolean
   busy: boolean
-  status: ClaudeSessionStatus
+  status: VerbStatus
   refusal: string | null
   onArm: () => void
   onCancel: () => void
   onConfirm: (control: ActiveControl) => void
 }) {
-  const control = rowControl(row)
-  // The board has one status file, so a row only speaks when the host is
-  // speaking about IT — otherwise every row would echo the same outcome.
-  const mine = control.kind !== 'none' && status.session === control.session
+  const control = rowControl(row, resumable)
+  // The board follows one request, so only the row that sent it speaks —
+  // otherwise every row would echo the same outcome.
+  const mine = acting
   const prompt = promptLine(row.meta)
 
   return (
@@ -280,15 +298,15 @@ function RowMetaLine({ row }: { row: RosterEntry }) {
   )
 }
 
-/** What the host last said about THIS row's verb. */
-function RowOutcome({ status, refusal }: { status: ClaudeSessionStatus; refusal: string | null }) {
+/** What the agent last said about THIS row's verb. */
+function RowOutcome({ status, refusal }: { status: VerbStatus; refusal: string | null }) {
   return (
     <>
       {status.state === 'running' && <p className={CTRL_STATE}>{status.detail || 'Working…'}</p>}
       {status.state === 'done' && (
         <p className={cn(CTRL_STATE, 'text-success')}>{status.detail || 'Done.'}</p>
       )}
-      {status.state === 'failed' && refusal === null && (
+      {(status.state === 'failed' || status.state === 'refused') && refusal === null && (
         <p className={cn(CTRL_STATE, 'text-danger')}>{status.error}</p>
       )}
       {refusal !== null && <p className={cn(CTRL_STATE, 'text-danger')}>{refusal}</p>}
@@ -302,15 +320,16 @@ function ArmedCost({ control }: { control: ActiveControl }) {
     return (
       <>
         This CONTINUES the session — same id, same transcript, appended to. It comes back as a live
-        session on claude.ai, running in the configuration checkout as the operator, with sudo
-        available to it. Nothing is branched and nothing is overwritten.
+        session on claude.ai, in the trusted project directory it ran in, as the machine's user and
+        with sudo on its path, in a unit of its own that outlives the agent. Nothing is branched and
+        nothing is overwritten.
       </>
     )
   }
   if (control.kind === 'stop-unit') {
     return (
       <>
-        <span className={MONO}>systemctl stop</span> on this session's unit: systemd SIGTERMs its
+        <span className={MONO}>systemctl --user stop</span> on this session's unit: systemd ends its
         whole process group, including anything it is running right now. The transcript survives and
         it can be resumed again from this board.
       </>

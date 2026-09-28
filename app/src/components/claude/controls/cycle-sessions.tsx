@@ -1,12 +1,13 @@
 // The roster's one board-wide verb: stop-and-resume every managed session
-// still on an older CLI than the flake holds. Rendered by roster/board.tsx,
-// which hands it the board's `running` flag.
+// still on an older CLI than the flake holds. Rendered by roster/board.tsx on
+// the box's page, which hands it the board's `running` flag.
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
+import type { SessionAction } from '../../../lib/agent/roster'
 import type { RosterEntry } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
 import { num, text } from '../../../lib/format'
-import { resumeSessionFn, stopSessionFn } from '../../../server/claude'
+import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { GHOST_BTN } from '../../apps/shared'
 import { MONO } from '../../tokens'
 import { Button } from '../../ui/button'
@@ -20,6 +21,28 @@ import {
   RESTART_STATE,
 } from '../shared'
 
+/** How long one verb may stay `running` in the roster before the cycle gives up. */
+const VERB_WAIT_MS = 60_000
+
+/**
+ * One verb on one of the box's sessions, awaited to its outcome: the
+ * controller answers at once, and the roster's `actions` says how it ended.
+ * Throws with the agent's sentence unless it is `done`.
+ */
+async function settle(action: SessionAction, session: string): Promise<void> {
+  const { request } = await claudeSessionFn({ data: { node: null, action, session } })
+  const deadline = Date.now() + VERB_WAIT_MS
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 1_000))
+    const a = await fetchClaudeActionFn({ data: { node: null, request } })
+    if (a !== null && a.state !== 'running') {
+      if (a.state === 'done') return
+      throw new Error(a.detail)
+    }
+    if (Date.now() > deadline) throw new Error(`the ${action} did not finish within a minute`)
+  }
+}
+
 /**
  * Put every session this box owns back on the binary the flake holds.
  *
@@ -28,8 +51,8 @@ import {
  * This is the gesture that resolves it, and it is the only one that can: a
  * stopped session cannot be picked back up from claude.ai — the server
  * bridges new sessions rather than re-adopting old ones — so the way back in
- * is the transcript, through `claude --resume`, which is exactly what a
- * `claude-session@<uuid>` unit runs.
+ * is the transcript, through `claude --resume`, which is exactly what the
+ * agent's `claude-session-<uuid>` unit runs.
  *
  * So it acts on the MANAGED rows only, and each one is a stop followed by a
  * resume of the same uuid: same id, same transcript, appended to. Sessions
@@ -38,10 +61,10 @@ import {
  * on the board above; afterwards they appear on this roster as resumable and
  * Resume per row brings each back.
  *
- * Sequential, and that is forced rather than chosen: one request file backs
- * every verb on this board, so two in flight is not a state the host can be
- * in. It is also why this shares the board's `running` — a cycle and a row
- * button must never be pressed at once.
+ * Sequential, each verb awaited to its outcome: a resume of a session whose
+ * stop has not settled would be refused as already running. It shares the
+ * board's `running` for the same reason — a cycle and a row button must never
+ * be pressed at once.
  */
 export function CycleSessionsControl({
   rows,
@@ -78,11 +101,8 @@ export function CycleSessionsControl({
       if (row.id === null) continue
       setAt(i)
       try {
-        // Stop, then resume the same uuid. The host settles the unit before
-        // it reports, so awaiting each verb in turn is enough — there is no
-        // second status to race.
-        await stopSessionFn({ data: { session: row.id } })
-        await resumeSessionFn({ data: { session: row.id } })
+        await settle('stop', row.id)
+        await settle('resume', row.id)
       } catch (e) {
         setError(
           `${row.label}: ${e instanceof Error ? e.message : String(e)}. The rest were left alone.`,
