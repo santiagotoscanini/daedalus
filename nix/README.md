@@ -169,9 +169,11 @@ git add flake.lock
 sudo nixos-rebuild test        # then: switch, commit, push
 ```
 
-To try an engine checkout you are editing, without committing it: set
-`developer.engineOverride` to the clone's path (Settings › Developer).
-While it is set, an Apply builds and **tests** against that tree — never
+To try the engine clone you are editing, without committing it: turn on
+`developer.engineOverride` (Settings › Developer). It is a switch, not a
+path — the clone is the one nix names for the box, since root builds
+whatever it is pointed at. While it is on, an Apply builds and **tests**
+against that tree — never
 switches — and the image and engine updates refuse; a banner says so on
 every page, and a reboot comes up on the last switched generation. By
 hand:

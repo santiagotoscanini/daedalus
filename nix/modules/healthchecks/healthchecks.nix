@@ -61,7 +61,13 @@
       cfg = config.fleet.modules.healthchecks;
     in
     lib.mkIf cfg.enable {
-      fleet.bridgeMemberships.healthchecks = [ "app-db" ]; # iso-healthchecks membership comes from webApps.isolated
+      # Its only bridge is iso-healthchecks (from webApps.isolated below): it
+      # trusts X-Forwarded-Email, so it shares a bridge with nothing that could
+      # forge one. The database comes to it instead — pg joins the private
+      # bridge, where `pg` resolves as it would on app-db-net. pg is a server
+      # that dials nobody; the ~17 app-db tenants that used to be one hop from
+      # a forged login are not.
+      fleet.bridgeMemberships.pg = [ "iso-healthchecks" ];
 
       fleet.statePaths."${config.fleet.stateRoot}/healthchecks/data".uid = 999;
 

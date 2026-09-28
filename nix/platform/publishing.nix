@@ -17,6 +17,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
 
@@ -38,6 +39,44 @@ let
   # "`isolated` needs `serviceName`" assertion could fire.
   isolatedApps = lib.filterAttrs (_: w: w.isolated && w.serviceName != null) cfg.webApps;
   isoBridge = n: "iso-${n}";
+
+  # The routed half of `isolated`. Every bridge lives in ONE rootless network
+  # namespace, and that namespace forwards between them: without this, a
+  # container on traefik-net (or a WireGuard peer, masqueraded onto it) dials
+  # an isolated app's address on its private bridge and the kernel routes the
+  # packet there — traefik's gate never sees it. Netavark's own `isolate`
+  # option does not close that (it only separates isolated networks from each
+  # other; a plain bridge still reaches them, verified 2026-09-28).
+  #
+  # So each isolated container's start installs one rule in the namespace's
+  # FORWARD chain: a NEW connection whose destination is the private subnet
+  # and whose source is not is dropped. Traefik and the app share the bridge,
+  # so their traffic is switched on it and never forwarded; the app's own
+  # outbound connections, and the replies to them, are ESTABLISHED and pass.
+  # Run as the operator (the unit's user), inside the namespace podman keeps;
+  # idempotent (-C before -I), because the namespace outlives any one
+  # container and every isolated app's start re-asserts its own subnet. The
+  # namespace itself only goes away when the last container stops, and the
+  # next start of this container is then what recreates the rule.
+  isoGuard =
+    n:
+    pkgs.writeShellScript "iso-guard-${n}" ''
+      set -eu
+      podman=${pkgs.podman}/bin/podman
+      iptables=${pkgs.iptables}/bin/iptables
+      subnets=$("$podman" network inspect ${isoBridge n}-net --format '{{range .Subnets}}{{.Subnet}} {{end}}')
+      if [ -z "$subnets" ]; then
+        echo "iso guard: ${isoBridge n}-net has no subnet to guard" >&2
+        exit 1
+      fi
+      for s in $subnets; do
+        set -- -d "$s" ! -s "$s" -m conntrack --ctstate NEW \
+          -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP
+        if ! "$podman" unshare --rootless-netns "$iptables" -C FORWARD "$@" 2>/dev/null; then
+          "$podman" unshare --rootless-netns "$iptables" -I FORWARD 1 "$@"
+        fi
+      done
+    '';
 in
 {
   options.fleet = {
@@ -803,11 +842,19 @@ in
                   reverse-proxy identity headers (authHeaders): on the
                   shared bridge any container could dial them directly
                   and forge the header; isolation makes traefik the only
-                  possible caller. Requires `serviceName`. The stack's
-                  own bridgeMemberships entry must NOT also list
-                  "traefik" (that would re-open the shared path). Probes reach it
-                  on the public hostname, since gatus is not on the
-                  private bridge either.
+                  possible caller. Requires `serviceName`.
+
+                  Two halves, both enforced. Switched: the container
+                  shares no other bridge — every peer on a shared bridge
+                  can dial it — unless the app itself verifies
+                  `proxyProof` (assertion). A backend it needs (pg) joins
+                  the private bridge instead. Routed: the container's
+                  start drops, in the rootless namespace, every NEW
+                  connection forwarded into the private subnet from
+                  anywhere else (isoGuard above), so no other bridge and
+                  no VPN peer reaches it by address. Probes reach it on
+                  the public hostname, since gatus is not on the private
+                  bridge either.
                 '';
               };
               authHeaders = lib.mkOption {
@@ -820,6 +867,30 @@ in
                   header is also STRIPPED from incoming requests by a
                   companion middleware so clients can't spoof it on
                   bypassed paths — apps trust these blindly.
+                '';
+              };
+              proxyProof = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Prove to the upstream that a request came through
+                  traefik. Every request on this app's routers carries
+                  `X-Proxy-Proof: <secret>` (set by traefik, overwriting
+                  any copy a client sent), and the container gets the
+                  same secret as `PROXY_PROOF`. An app that checks it —
+                  constant-time, on every request — honours its
+                  `authHeaders` only when the proof matches, so a peer
+                  that can dial the container some other way (a bridge it
+                  shares, a path the network rules miss) cannot forge an
+                  identity. The secret is machine-generated per app under
+                  `fleet.machineState` by modules/traefik and rendered to
+                  both sides at boot; it is never in the store, and the
+                  traefik API that would show it is closed to everything
+                  but `fleet.modules.traefik.apiReaders`.
+
+                  Only for an app that verifies it; a third-party image
+                  does not, and relies on `isolated` alone. Requires
+                  `serviceName`.
                 '';
               };
 
@@ -925,7 +996,8 @@ in
             host = w.hostname;
             extraHosts = w.aliases;
             middlewares =
-              lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
+              lib.optional w.proxyProof "proof-${n}@file"
+              ++ lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
               ++ lib.optional (w.auth == "oidc") "oidc-${n}@file"
               ++ w.extraMiddlewares;
           }
@@ -978,6 +1050,29 @@ in
           "traefik" in bridgeMemberships.${toString w.serviceName} — the
           shared bridge reopens the direct path isolation exists to close.
         '';
+      }) cfg.webApps)
+      ++ (lib.mapAttrsToList (
+        n: w:
+        let
+          others = lib.subtractLists [ (isoBridge n) ] (
+            map bridgeOf (cfg.bridgeMemberships.${w.serviceName} or [ ])
+          );
+        in
+        {
+          assertion = (w.isolated && w.serviceName != null && !w.proxyProof) -> others == [ ];
+          message = ''
+            fleet.webApps.${n}: `isolated` but ${toString w.serviceName} also
+            sits on ${lib.concatStringsSep ", " others} — every peer on a
+            shared bridge can dial it and forge the identity header. Join the
+            backends it needs to iso-${n}-net instead (e.g.
+            `fleet.bridgeMemberships.pg = [ "iso-${n}" ]`), or make the app
+            verify `proxyProof`.
+          '';
+        }
+      ) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
+        assertion = w.proxyProof -> w.serviceName != null;
+        message = "fleet.webApps.${n}: `proxyProof` needs `serviceName` — the proof is rendered into that container's environment.";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
         assertion = (w.authHeaders != { } || w.authBypassRule != null) -> w.auth == "oidc";
@@ -1099,6 +1194,12 @@ in
       // lib.optionalAttrs (isolatedApps != { }) {
         traefik = lib.mapAttrsToList (n: _: isoBridge n) isolatedApps;
       };
+
+    # The routed half of isolation (isoGuard above), on every start.
+    systemd.services = lib.mapAttrs' (
+      n: w:
+      lib.nameValuePair "podman-${w.serviceName}" { serviceConfig.ExecStartPost = [ "${isoGuard n}" ]; }
+    ) isolatedApps;
 
     fleet.cloudflareRoutes =
       let

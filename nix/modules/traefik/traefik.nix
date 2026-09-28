@@ -32,6 +32,7 @@
   pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
+  mkSecretRender,
   pinnedImage,
   ...
 }:
@@ -46,6 +47,36 @@ let
   pgwireEnabled = config.fleet.appDatabases != { };
 
   yamlFormat = pkgs.formats.yaml { };
+
+  # ── the proxy proof (webApps.<n>.proxyProof) ─────────────────────────────
+  #
+  # One secret per app that verifies it, so a proof that leaks from one app
+  # forges nothing at another. Machine-generated, like every credential this
+  # box mints for itself: `<machineState>/traefik/proof-<n>`, 32 random bytes
+  # as hex, born the first time the app is declared and never rewritten.
+  # Rendered twice at boot, from that one file: traefik's copy as
+  # PROXY_PROOF_<N> (the `proof-<n>` middleware's `env` template reads it when
+  # the rules load) and the app's as PROXY_PROOF. Neither copy is in the
+  # store; the rules file carries only the variable's name.
+  #
+  # Rotate: delete the file, then restart traefik-proxy-proofs, both renders
+  # (traefik-proof-env, proxy-proof-<n>-env) and both consumers.
+  #
+  # A value in a middleware is a value the API prints
+  # (/api/http/middlewares), which is why the API is no longer served to
+  # every bridge member (apiReaders below).
+  envName = n: lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
+  proofApps = lib.filterAttrs (_: w: w.proxyProof) cfg.webApps;
+  proofDir = "${cfg.machineState}/traefik";
+  proofFile = n: "${proofDir}/proof-${n}";
+  proofRenderUnit = n: "proxy-proof-${n}-env";
+  proofAppEnv = n: "/run/proxy-proof/${n}/env";
+  traefikProofEnv = "/run/traefik-proof/env";
+  # Each proxyProof app reads its own copy; the container is its own
+  # module's, and environmentFiles merges.
+  proofContainers = lib.mapAttrs' (
+    n: w: lib.nameValuePair w.serviceName { environmentFiles = [ (proofAppEnv n) ]; }
+  ) proofApps;
 
   # OIDC forward-auth plugin — vendored into the nix store so
   # traefik startup never fetches from the network (localPlugins loads
@@ -112,6 +143,22 @@ in
       description = "Traefik — the reverse proxy every published hostname goes through.";
     };
 
+    apiReaders = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "10.89.254.0/24" ];
+      description = ''
+        Source ranges (CIDR) allowed to read traefik's API container-direct on
+        the `traefik` entrypoint (:8080, bridge-only). Everyone else gets a
+        403 there; /metrics on the same port stays open to its scraper. The
+        API prints every middleware's configuration, `proxyProof` secrets
+        included, so it is no longer served to whatever shares a bridge with
+        traefik. Pin the reader's bridge subnet (`fleet.bridgeSubnets`) and
+        name it here. The dashboard's own route (Pocket ID-gated) is
+        unaffected.
+      '';
+    };
+
     envSopsFile = lib.mkOption {
       type = lib.types.path;
       example = lib.literalExpression "./host/sops/traefik/env.sops";
@@ -173,6 +220,101 @@ in
     # its own asset and contributes here (e.g. app-db's TCP/SNI route
     # lives in modules/app-db/).
     fleet.traefikRawRules."tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
+
+    # The API on :8080, for the readers named in apiReaders only. It used to
+    # be `--api.insecure`, which served it to every member of every bridge
+    # traefik sits on — the whole routing table and, with proxyProof, the
+    # secrets that prove a request came through here.
+    fleet.traefikRawRules."traefik-api.yml" =
+      lib.mkIf (config.fleet.modules.traefik.apiReaders != [ ])
+        (
+          builtins.toJSON {
+            http = {
+              routers.traefik-api = {
+                entryPoints = [ "traefik" ];
+                rule = "PathPrefix(`/api`)";
+                service = "api@internal";
+                middlewares = [ "traefik-api-readers" ];
+              };
+              middlewares.traefik-api-readers.ipAllowList.sourceRange = config.fleet.modules.traefik.apiReaders;
+            };
+          }
+        );
+
+    # One `proof-<n>` middleware per proxyProof app, first in its routers'
+    # chains (platform/publishing.nix). customRequestHeaders SETS the header,
+    # so a copy the client sent is replaced, never passed through. The value
+    # is traefik's own file-provider template over its environment — a Go raw
+    # string, whose backticks survive toJSON unescaped — so the rendered rules
+    # in the store name the variable, not the secret.
+    fleet.traefikRawRules."proxy-proof.yml" = lib.mkIf (proofApps != { }) (
+      builtins.toJSON {
+        http.middlewares = lib.mapAttrs' (
+          n: _:
+          lib.nameValuePair "proof-${n}" {
+            headers.customRequestHeaders."X-Proxy-Proof" = "{{ env `PROXY_PROOF_${envName n}` }}";
+          }
+        ) proofApps;
+      }
+    );
+
+    fleet.statePaths.${proofDir} = lib.mkIf (proofApps != { }) { mode = "0700"; };
+
+    # Ensure-exists, never converge: a live proof is never rewritten, so a
+    # rebuild cannot log the operator out mid-session. Runs as the operator,
+    # who owns the state tree; nothing here needs root.
+    systemd.services = lib.mkIf (proofApps != { }) (
+      {
+        traefik-proxy-proofs = {
+          description = "Mint the forward-auth proof secret of each proxyProof app";
+          after = [ "state-paths.service" ];
+          wants = [ "state-paths.service" ];
+          path = [ pkgs.coreutils ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            User = cfg.operator.user;
+            Group = cfg.operator.group;
+            UMask = "0077";
+          };
+          script = ''
+            set -eu
+            for f in ${
+              lib.concatMapStringsSep " " (n: lib.escapeShellArg (proofFile n)) (lib.attrNames proofApps)
+            }; do
+              if [ ! -s "$f" ]; then
+                od -An -N32 -tx1 /dev/urandom | tr -d ' \n' >"$f.new"
+                mv -f "$f.new" "$f"
+              fi
+            done
+          '';
+        };
+
+        traefik-proof-env = mkSecretRender {
+          description = "Render the proxyProof secrets for traefik";
+          gates = [ "podman-traefik.service" ];
+          after = [ "traefik-proxy-proofs.service" ];
+          wants = [ "traefik-proxy-proofs.service" ];
+          dir = dirOf traefikProofEnv;
+          file = traefikProofEnv;
+          content = lib.concatMapStringsSep "\n" (
+            n: "PROXY_PROOF_${envName n}=$(cat ${lib.escapeShellArg (proofFile n)})"
+          ) (lib.attrNames proofApps);
+        };
+      }
+      // lib.mapAttrs' (
+        n: w:
+        lib.nameValuePair (proofRenderUnit n) (mkSecretRender {
+          description = "Render the proxyProof secret for ${n}";
+          gates = [ "podman-${w.serviceName}.service" ];
+          after = [ "traefik-proxy-proofs.service" ];
+          wants = [ "traefik-proxy-proofs.service" ];
+          dir = dirOf (proofAppEnv n);
+          file = proofAppEnv n;
+          content = "PROXY_PROOF=$(cat ${lib.escapeShellArg (proofFile n)})";
+        })
+      ) proofApps
+    );
 
     # Baseline security headers, applied as the websecure entrypoint's
     # default middleware (covers every router on it — generated and
@@ -334,153 +476,156 @@ in
     # rather than like a rebuild rolling back.
     fleet.imageUpdates.traefik.ceremony = "fronts every published hostname, including this page — a bad switch reads as the dashboard going down";
 
-    virtualisation.oci-containers.containers.traefik = mkRootlessContainer {
-      image = pinnedImage "traefik" "docker.io/library/traefik";
+    virtualisation.oci-containers.containers = proofContainers // {
+      traefik = mkRootlessContainer {
+        image = pinnedImage "traefik" "docker.io/library/traefik";
 
-      ports = [
-        # Publishing these is load-bearing beyond LAN ingress: it installs
-        # the DNAT rule inside the rootless network namespace that lets
-        # CONTAINERS reach traefik at the LAN IP. Pi-hole answers every
-        # `*.<baseDomain>` with the LAN address, and under pasta that address is
-        # the namespace's own — so gatus's probes and traefik's own OIDC
-        # discovery call resolve there and depend on this rule. Handing
-        # traefik systemd-bound sockets instead (which would preserve real
-        # client IPs in the access log) removes it and breaks both.
-        "80:80"
-        "443:443"
-        # cfweb (:8888) is deliberately NOT host-published: cloudflared
-        # dials it over traefik-net only, so the plain-HTTP entrypoint
-        # that trusts X-Forwarded-* is unreachable from host processes
-        # and non-bridge containers.
-      ]
-      ++ (lib.optional pgwireEnabled
-        # postgres TCP entrypoint — SNI route for postgres.<baseDomain>.
-        # TLS terminates here with the `*.<baseDomain>` wildcard; the
-        # backend is plaintext postgres (`pg`) dialed over pg-wire-net.
-        "5432:5432"
-      );
-      # Dashboard/metrics on :8080 reached via traefik-net only (no host port).
+        ports = [
+          # Publishing these is load-bearing beyond LAN ingress: it installs
+          # the DNAT rule inside the rootless network namespace that lets
+          # CONTAINERS reach traefik at the LAN IP. Pi-hole answers every
+          # `*.<baseDomain>` with the LAN address, and under pasta that address is
+          # the namespace's own — so gatus's probes and traefik's own OIDC
+          # discovery call resolve there and depend on this rule. Handing
+          # traefik systemd-bound sockets instead (which would preserve real
+          # client IPs in the access log) removes it and breaks both.
+          "80:80"
+          "443:443"
+          # cfweb (:8888) is deliberately NOT host-published: cloudflared
+          # dials it over traefik-net only, so the plain-HTTP entrypoint
+          # that trusts X-Forwarded-* is unreachable from host processes
+          # and non-bridge containers.
+        ]
+        ++ (lib.optional pgwireEnabled
+          # postgres TCP entrypoint — SNI route for postgres.<baseDomain>.
+          # TLS terminates here with the `*.<baseDomain>` wildcard; the
+          # backend is plaintext postgres (`pg`) dialed over pg-wire-net.
+          "5432:5432"
+        );
+        # Dashboard/metrics on :8080 reached via traefik-net only (no host port).
 
-      volumes = [
-        "${traefikRulesDir}:/rules:ro"
-        "${oidcPlugin}:/plugins-local/src/github.com/sevensolutions/traefik-oidc-auth:ro"
-        "${config.fleet.stateRoot}/traefik/acme.json:/acme.json"
-        # No /var/log/traefik mount: both app + access logs go to stdout
-        # (journald -> Loki). File logging is intentionally off so nothing
-        # grows unbounded under <stateRoot>/traefik.
-      ];
+        volumes = [
+          "${traefikRulesDir}:/rules:ro"
+          "${oidcPlugin}:/plugins-local/src/github.com/sevensolutions/traefik-oidc-auth:ro"
+          "${config.fleet.stateRoot}/traefik/acme.json:/acme.json"
+          # No /var/log/traefik mount: both app + access logs go to stdout
+          # (journald -> Loki). File logging is intentionally off so nothing
+          # grows unbounded under <stateRoot>/traefik.
+        ];
 
-      environmentFiles = [
-        config.sops.secrets."traefik-env".path
-        # CF_DNS_API_TOKEN for lego's DNS-01: the box's one Cloudflare API
-        # token, rendered from site/vault by the platform (site.nix).
-        cfg.cloudflare.tokenEnvFile
-      ]
-      # Declarative clients (fleet.ssoClients, modules/pocket-id/clients.nix)
-      # render their POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET} pair here instead
-      # of living in env.sops. Hand-created clients keep theirs in env.sops;
-      # the two sets are disjoint, and --env-file order only matters on a
-      # name collision. null when no declarative client is forward-authed —
-      # podman would fail on a path that was never rendered.
-      ++ lib.optional (cfg.sso.clientEnvFile != null) cfg.sso.clientEnvFile;
+        environmentFiles = [
+          config.sops.secrets."traefik-env".path
+          # CF_DNS_API_TOKEN for lego's DNS-01: the box's one Cloudflare API
+          # token, rendered from site/vault by the platform (site.nix).
+          cfg.cloudflare.tokenEnvFile
+        ]
+        # Declarative clients (fleet.ssoClients, modules/pocket-id/clients.nix)
+        # render their POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET} pair here instead
+        # of living in env.sops. Hand-created clients keep theirs in env.sops;
+        # the two sets are disjoint, and --env-file order only matters on a
+        # name collision. null when no declarative client is forward-authed —
+        # podman would fail on a path that was never rendered.
+        ++ lib.optional (cfg.sso.clientEnvFile != null) cfg.sso.clientEnvFile
+        # PROXY_PROOF_<N>, one per proxyProof app, for the proof-<n> middlewares.
+        ++ lib.optional (proofApps != { }) traefikProofEnv;
 
-      cmd = [
-        "--api=true"
-        "--api.dashboard=true"
-        # Serve /api on the internal :8080 entrypoint too — the public
-        # dashboard route is behind the Pocket ID gate, so daedalus reads it
-        # container-direct. :8080 is traefik-net-only (never host-published),
-        # same trust boundary as /metrics.
-        "--api.insecure=true"
+        cmd = [
+          "--api=true"
+          "--api.dashboard=true"
+          # No `--api.insecure`: that served /api on :8080 to every bridge
+          # member. The API is routed there for `apiReaders` alone
+          # (traefik-api.yml above); the public dashboard route stays behind
+          # the Pocket ID gate.
 
-        # Prometheus metrics. addRoutersLabels=true adds per-router labels
-        # (small cardinality cost; fine at our scale).
-        "--metrics.prometheus=true"
-        "--metrics.prometheus.entryPoint=traefik"
-        "--metrics.prometheus.addRoutersLabels=true"
-        "--metrics.prometheus.addServicesLabels=true"
-        "--metrics.prometheus.addEntryPointsLabels=true"
+          # Prometheus metrics. addRoutersLabels=true adds per-router labels
+          # (small cardinality cost; fine at our scale).
+          "--metrics.prometheus=true"
+          "--metrics.prometheus.entryPoint=traefik"
+          "--metrics.prometheus.addRoutersLabels=true"
+          "--metrics.prometheus.addServicesLabels=true"
+          "--metrics.prometheus.addEntryPointsLabels=true"
 
-        # Entrypoints
-        "--entrypoints.web.address=:80"
-        "--entrypoints.websecure.address=:443"
-        "--entrypoints.traefik.address=:8080"
-        "--entrypoints.cfweb.address=:8888"
+          # Entrypoints
+          "--entrypoints.web.address=:80"
+          "--entrypoints.websecure.address=:443"
+          "--entrypoints.traefik.address=:8080"
+          "--entrypoints.cfweb.address=:8888"
 
-        # cloudflared dials cfweb from traefik-net; trust its
-        # X-Forwarded-* (proto=https from the CF edge) or OIDC
-        # middlewares build http:// redirect URIs and loop. Scoped to the
-        # pinned traefik-net subnet (fleet.bridgeSubnets.traefik) so other
-        # bridge members can't forge client IPs into cfweb routers.
-        "--entrypoints.cfweb.forwardedHeaders.trustedIPs=${config.fleet.bridgeSubnets.traefik}"
+          # cloudflared dials cfweb from traefik-net; trust its
+          # X-Forwarded-* (proto=https from the CF edge) or OIDC
+          # middlewares build http:// redirect URIs and loop. Scoped to the
+          # pinned traefik-net subnet (fleet.bridgeSubnets.traefik) so other
+          # bridge members can't forge client IPs into cfweb routers.
+          "--entrypoints.cfweb.forwardedHeaders.trustedIPs=${config.fleet.bridgeSubnets.traefik}"
 
-        # In-process OIDC forward-auth plugin (vendored — see oidcPlugin).
-        "--experimental.localPlugins.oidc.moduleName=github.com/sevensolutions/traefik-oidc-auth"
-      ]
-      ++ (lib.optional pgwireEnabled "--entrypoints.postgres.address=:5432")
-      ++ [
+          # In-process OIDC forward-auth plugin (vendored — see oidcPlugin).
+          "--experimental.localPlugins.oidc.moduleName=github.com/sevensolutions/traefik-oidc-auth"
+        ]
+        ++ (lib.optional pgwireEnabled "--entrypoints.postgres.address=:5432")
+        ++ [
 
-        # Traefik v3's default readTimeout is 60s for a WHOLE request body, so a
-        # registry push of one large layer slower than that is cut off mid-blob.
-        # Box builds push to zot through this entrypoint (never the bridge); ten
-        # minutes is headroom for the slowest layer, not a measured need — a
-        # 1.5 GB layer took 6s on the LAN.
-        "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s"
+          # Traefik v3's default readTimeout is 60s for a WHOLE request body, so a
+          # registry push of one large layer slower than that is cut off mid-blob.
+          # Box builds push to zot through this entrypoint (never the bridge); ten
+          # minutes is headroom for the slowest layer, not a measured need — a
+          # 1.5 GB layer took 6s on the LAN.
+          "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s"
 
-        "--entrypoints.websecure.http.middlewares=sec-headers@file"
-        "--entrypoints.websecure.http.tls=true"
-        "--entrypoints.websecure.http.tls.options=tls-opts@file"
-        "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-        "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-        "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+          "--entrypoints.websecure.http.middlewares=sec-headers@file"
+          "--entrypoints.websecure.http.tls=true"
+          "--entrypoints.websecure.http.tls.options=tls-opts@file"
+          "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+          "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+          "--entrypoints.web.http.redirections.entrypoint.permanent=true"
 
-        # App log -> container stdout -> journald -> alloy -> Loki. INFO, not
-        # DEBUG: at DEBUG traefik emits a "Service selected by WRR" line for
-        # every single request, swamping journald/Loki with noise.
-        "--log=true"
-        "--log.level=INFO"
+          # App log -> container stdout -> journald -> alloy -> Loki. INFO, not
+          # DEBUG: at DEBUG traefik emits a "Service selected by WRR" line for
+          # every single request, swamping journald/Loki with noise.
+          "--log=true"
+          "--log.level=INFO"
 
-        # Access log -> stdout too (no filePath => stdout, never a file), JSON
-        # so LogQL can filter/aggregate by status, router, duration, host.
-        "--accesslog=true"
-        "--accesslog.format=json"
+          # Access log -> stdout too (no filePath => stdout, never a file), JSON
+          # so LogQL can filter/aggregate by status, router, duration, host.
+          "--accesslog=true"
+          "--accesslog.format=json"
 
-        # Keep four request headers in the access log — traefik drops all
-        # headers by default, so the allowlist below is the whole story.
-        # Cf-Ipcountry is the only source of client geography anywhere on
-        # this box. Cf-Connecting-Ip and X-Forwarded-For are the CF edge's
-        # own assertion of the client IP: cfweb already resolves
-        # ClientHost from them (forwardedHeaders.trustedIPs above), so
-        # they are a cross-check rather than the only copy. User-Agent
-        # fingerprints scanners. These feed the Security dashboard (uid
-        # s2-security); LogQL sees them as request_Cf_Connecting_Ip /
-        # request_Cf_Ipcountry / request_User_Agent (| json rewrites
-        # dashes to underscores).
-        "--accesslog.fields.headers.defaultmode=drop"
-        "--accesslog.fields.headers.names.User-Agent=keep"
-        "--accesslog.fields.headers.names.Cf-Connecting-Ip=keep"
-        "--accesslog.fields.headers.names.Cf-Ipcountry=keep"
-        "--accesslog.fields.headers.names.X-Forwarded-For=keep"
+          # Keep four request headers in the access log — traefik drops all
+          # headers by default, so the allowlist below is the whole story.
+          # Cf-Ipcountry is the only source of client geography anywhere on
+          # this box. Cf-Connecting-Ip and X-Forwarded-For are the CF edge's
+          # own assertion of the client IP: cfweb already resolves
+          # ClientHost from them (forwardedHeaders.trustedIPs above), so
+          # they are a cross-check rather than the only copy. User-Agent
+          # fingerprints scanners. These feed the Security dashboard (uid
+          # s2-security); LogQL sees them as request_Cf_Connecting_Ip /
+          # request_Cf_Ipcountry / request_User_Agent (| json rewrites
+          # dashes to underscores).
+          "--accesslog.fields.headers.defaultmode=drop"
+          "--accesslog.fields.headers.names.User-Agent=keep"
+          "--accesslog.fields.headers.names.Cf-Connecting-Ip=keep"
+          "--accesslog.fields.headers.names.Cf-Ipcountry=keep"
+          "--accesslog.fields.headers.names.X-Forwarded-For=keep"
 
-        # File provider — shallow watch, top-level *.yml only.
-        "--providers.file.directory=/rules"
-        "--providers.file.watch=true"
+          # File provider — shallow watch, top-level *.yml only.
+          "--providers.file.directory=/rules"
+          "--providers.file.watch=true"
 
-        # ACME — Cloudflare DNS challenge. One apex+wildcard pair covers
-        # every published hostname (all one level under the apex).
-        "--entrypoints.websecure.http.tls.certresolver=dns-cloudflare"
-        "--entrypoints.websecure.http.tls.domains[0].main=${config.fleet.baseDomain}"
-        "--entrypoints.websecure.http.tls.domains[0].sans=*.${config.fleet.baseDomain}"
-        "--certificatesResolvers.dns-cloudflare.acme.storage=/acme.json"
-        "--certificatesResolvers.dns-cloudflare.acme.email=acme@account.${cfg.baseDomain}"
-        "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare"
-        # Use CF's own resolvers — the LAN pi-hole can't see the freshly-
-        # published _acme-challenge TXT before propagation.
-        "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53"
-        # 90s settle delay before lego polls — keeps us off LE's rate-limit.
-        "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.propagation.delayBeforeChecks=90"
-      ];
+          # ACME — Cloudflare DNS challenge. One apex+wildcard pair covers
+          # every published hostname (all one level under the apex).
+          "--entrypoints.websecure.http.tls.certresolver=dns-cloudflare"
+          "--entrypoints.websecure.http.tls.domains[0].main=${config.fleet.baseDomain}"
+          "--entrypoints.websecure.http.tls.domains[0].sans=*.${config.fleet.baseDomain}"
+          "--certificatesResolvers.dns-cloudflare.acme.storage=/acme.json"
+          "--certificatesResolvers.dns-cloudflare.acme.email=acme@account.${cfg.baseDomain}"
+          "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare"
+          # Use CF's own resolvers — the LAN pi-hole can't see the freshly-
+          # published _acme-challenge TXT before propagation.
+          "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53"
+          # 90s settle delay before lego polls — keeps us off LE's rate-limit.
+          "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.propagation.delayBeforeChecks=90"
+        ];
 
+      };
     };
   };
 }

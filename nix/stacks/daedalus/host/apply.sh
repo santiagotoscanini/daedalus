@@ -207,7 +207,8 @@ as_operator rm -f -- "$PAYLOAD"
 
 # --- the engine override --------------------------------------------------
 # site.json's `developer.engineOverride` (host/lib.sh site_engine_override):
-# an engine clone on this box to build from instead of the pinned input.
+# build from the engine clone on this box (ENGINE_CLONE, nix's own fact —
+# never a path from the document) instead of the pinned input.
 # Read AFTER the write, so the Apply that sets it is already the first one
 # built from the clone, and the Apply that clears it is the switch back onto
 # the pinned engine — the document governs the rebuild that carries it.
@@ -224,11 +225,11 @@ ENGINE_OVERRIDE="$(site_engine_override)"
 REBUILD_FLAGS=()
 ACTIVATE="switch"
 if [ -n "$ENGINE_OVERRIDE" ]; then
-  if [ ! -f "$ENGINE_OVERRIDE/flake.nix" ]; then
+  if [ ! -f "$ENGINE_CLONE/flake.nix" ] || [ -L "$ENGINE_CLONE" ]; then
     for w in "${WRITTEN[@]}"; do site_restore "$w"; done
-    fail writing "developer.engineOverride names $ENGINE_OVERRIDE, which has no flake.nix — not an engine clone. Nothing was rebuilt; the written files were put back."
+    fail writing "the engine override is on, but $ENGINE_CLONE holds no engine clone (no flake.nix). Nothing was rebuilt; the written files were put back."
   fi
-  REBUILD_FLAGS=(--override-input daedalus "path:$ENGINE_OVERRIDE" --no-write-lock-file)
+  REBUILD_FLAGS=(--override-input daedalus "path:$ENGINE_CLONE" --no-write-lock-file)
   ACTIVATE="test"
 fi
 

@@ -236,24 +236,29 @@ log_errtail() {
 
 # ── the engine override ───────────────────────────────────────────────────
 #
-# site.json's `developer.engineOverride`: an absolute path to an engine clone
-# on this box, or nothing. Nix never reads the key; the agents that rebuild
-# or move a pin do, at run time — apply.sh builds from that tree
-# (`--override-input`, lock untouched) and activates with `test` rather than
-# `switch`; image-update.sh, engine-update.sh, version-update.sh and
-# claude-code-update.sh refuse, because a pin moved under an override would
-# name a rev nothing is running. Read here, once, so they cannot disagree
-# about where the key lives.
+# site.json's `developer.engineOverride`: `true` to build from the engine
+# clone on this box, anything else for the pinned engine. Nix never reads the
+# key; the agents that rebuild or move a pin do, at run time — apply.sh builds
+# from the clone (`--override-input`, lock untouched) and activates with
+# `test` rather than `switch`; image-update.sh, engine-update.sh,
+# version-update.sh and claude-code-update.sh refuse, because a pin moved
+# under an override would name a rev nothing is running. Read here, once, so
+# they cannot disagree about where the key lives.
 #
-# Prints the path, or nothing: no site.json, an unreadable one, or a null
-# key all mean "no override". Read as the operator and never through a link
-# — site.json is in the operator's tree, and its value becomes a path root
-# hands to nixos-rebuild. Expects SITE_DIR (fleet.site.path) in the
-# environment; never fails.
+# A switch, never a path. The document is written by the app, and whatever
+# the app names, root evaluates as nix: a path in it once let an admin session
+# (or anything that could forge one) point root's build at a tree it wrote.
+# Which clone is the engine clone is nix's fact (apply.sh's ENGINE_CLONE), not
+# the document's.
+#
+# Prints `on`, or nothing: no site.json, an unreadable one, a missing key, or
+# any value but the boolean `true` all mean "no override". Read as the
+# operator and never through a link. Expects SITE_DIR (fleet.site.path) in
+# the environment; never fails.
 site_engine_override() {
   [ -f "$SITE_DIR/site.json" ] || return 0
   { read_as_operator "$SITE_DIR/site.json" 2>/dev/null || true; } |
-    jq -r '.developer.engineOverride // empty' 2>/dev/null || true
+    jq -r 'if .developer.engineOverride == true then "on" else empty end' 2>/dev/null || true
 }
 
 # ── who the box's commits are made as ─────────────────────────────────────

@@ -14,6 +14,7 @@ let
     applyDir
     prevDir
     registryApps
+    engineRoot
     mkUpdateReaper
     mkAgent
     operatorVars
@@ -114,6 +115,9 @@ let
         PREV_DIR = prevDir;
         FLAKE = config.fleet.config.repo;
         SITE_DIR = config.fleet.site.path;
+        # The one tree the engine override may build from (host/lib.sh
+        # site_engine_override): nix's fact, never the document's.
+        ENGINE_CLONE = engineRoot;
         VAULT_APP_SECRETS = vaultAppSecrets;
         GIT = "${pkgs.git}/bin/git";
         LOCKFILE = config.fleet.rebuildLock;

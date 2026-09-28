@@ -33,7 +33,7 @@
   },
   "auth": { "localLogin": false },
   "modules": { "web": { "gatus": { "label": "uptime", "public": false } } },
-  "developer": { "engineOverride": null },
+  "developer": { "engineOverride": false },
   "github": {
     "app": {
       "id": 1,

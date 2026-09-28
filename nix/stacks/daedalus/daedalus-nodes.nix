@@ -11,7 +11,33 @@
 }:
 
 let
-  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) applyDir;
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
+    applyDir
+    mkAgent
+    operatorVars
+    ;
+
+  # Root, and reading a file the container writes: host/nodes-dhcp.sh reads it
+  # through host/lib.sh's read_request (no link, the read as the operator) and
+  # validates every line before root writes a byte.
+  agent = mkAgent {
+    name = "daedalus-nodes-dhcp";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.util-linux # setpriv
+      pkgs.systemd
+    ];
+    vars = operatorVars // {
+      SRC = "${applyDir}/nodes/dhcp-hosts";
+      DST = "/run/daedalus-nodes/dhcp-hosts";
+      PIHOLE = if config.fleet.modules.pihole.enable then "1" else "0";
+    };
+    files = [
+      ./host/lib.sh
+      ./host/nodes-dhcp.sh
+    ];
+  };
 in
 
 {
@@ -52,44 +78,16 @@ in
       unitConfig.ConditionPathExists = "${applyDir}/nodes/dhcp-hosts";
       serviceConfig = {
         Type = "oneshot";
+        ExecStart = "${agent}/bin/daedalus-nodes-dhcp";
         RuntimeDirectory = "daedalus-nodes";
         RuntimeDirectoryPreserve = true;
         RuntimeDirectoryMode = "0755";
+        # It writes only its RuntimeDirectory; the read runs as the operator.
+        ProtectSystem = "strict";
+        ProtectHome = "read-only";
+        PrivateTmp = true;
+        NoNewPrivileges = true;
       };
-      script = ''
-        src=${lib.escapeShellArg "${applyDir}/nodes/dhcp-hosts"}
-        dst=/run/daedalus-nodes/dhcp-hosts
-        if [ -f "$src" ]; then
-          install -m 0644 -o root -g root "$src" "$dst.tmp"
-          mv -f "$dst.tmp" "$dst"
-        else
-          rm -f "$dst"
-        fi
-        ${lib.optionalString config.fleet.modules.pihole.enable ''
-          # A HUP is only safe once FTL is up: in its first moments no
-          # handler is installed and the signal's default action ends the
-          # process — which is how the first activation of this unit took
-          # LAN DNS down for four minutes (2026-09-23). A resolver that
-          # started less than half a minute ago has read the directory
-          # itself, and dnsmasq picks up a NEW file there without any
-          # signal; the HUP is for a changed or removed line, and can wait
-          # for the next write if it lands in that window.
-          if systemctl is-active --quiet pihole-ftl.service; then
-            started=$(systemctl show -p ActiveEnterTimestampMonotonic --value pihole-ftl.service)
-            # Microseconds since boot, the unit systemd reports. Whole seconds
-            # are enough for a thirty-second window, so the fraction is simply
-            # dropped: that is right whatever /proc/uptime prints, and it uses
-            # only the shell, which awk here did not — it failed the service.
-            up=$(cut -d' ' -f1 /proc/uptime)
-            now=$(( ''${up%.*} * 1000000 ))
-            if [ -n "$started" ] && [ "$(( now - started ))" -gt 30000000 ]; then
-              systemctl kill --kill-whom=main -s HUP pihole-ftl.service
-            else
-              echo "pihole-ftl started under 30 s ago; leaving the HUP to the next write"
-            fi
-          fi
-        ''}
-      '';
     };
   };
 }

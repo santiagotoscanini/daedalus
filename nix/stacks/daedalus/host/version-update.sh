@@ -82,7 +82,7 @@ write_status running validating ""
 
 override="$(site_engine_override)"
 [ -z "$override" ] ||
-  fail validating "clear the engine override first: the running system is built from $override, not from the pinned engine (Settings › Developer)"
+  fail validating "clear the engine override first: the running system is built from the engine clone, not from the pinned engine (Settings › Developer)"
 
 [[ "$TARGET" =~ ^[a-z0-9-]+$ ]] || fail validating "no well-formed target named in the request"
 PIN="$(jq -c --arg t "$TARGET" '.[$t] // empty' "$PINS")"

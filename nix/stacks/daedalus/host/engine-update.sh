@@ -155,7 +155,7 @@ write_status running validating ""
 
 override="$(site_engine_override)"
 [ -z "$override" ] ||
-  fail validating "clear the engine override first: the running system is built from $override, not from the pinned engine (site.json developer.engineOverride, Settings › Developer)"
+  fail validating "clear the engine override first: the running system is built from the engine clone, not from the pinned engine (site.json developer.engineOverride, Settings › Developer)"
 
 [ -f "$FLAKE/flake.lock" ] || fail validating "$FLAKE has no flake.lock"
 if ! git_ diff --quiet -- flake.lock; then

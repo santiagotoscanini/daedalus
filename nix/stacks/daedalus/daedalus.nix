@@ -284,10 +284,12 @@ in
     # iso bridge from webApps.isolated) — bridgeMemberships is the single source
     # of membership and its lists concatenate across modules.
     #
-    # It does cost some of what `auth.isolated` buys: daedalus can now dial
-    # prometheus and loki. That is a deliberate trade for real status instead of
-    # invented status — the isolation that matters (nothing on traefik-net can
-    # reach daedalus) is unaffected, since this only adds outbound reach.
+    # Bridges are two-way: every member of `monitoring` and `app-db` can dial
+    # daedalus on those bridges, not just be dialled by it. That is why the app
+    # does not rest on `isolated` for who it trusts: it verifies traefik's
+    # proxy proof on every request (proxyProof below) and ignores the identity
+    # headers of any request without it. `isolated` still keeps it off
+    # traefik-net and drops routed connections into its private subnet.
     #
     # Gated on the apps stack's switch, like every definition under another
     # stack's declaration: `fleet.apps.daedalus` is only a declaration, and the
@@ -295,6 +297,20 @@ in
     # that stack off (or not on this host yet) a membership for a container
     # nobody creates would fail evaluation on its missing image.
     fleet.bridgeMemberships."app-daedalus" = lib.mkIf appsOn [ "monitoring" ];
+
+    # The identity headers count only on a request carrying traefik's proof
+    # (platform/publishing.nix proxyProof; the app's side is core/auth.ts). The
+    # webApp itself comes from fleet.apps.daedalus through the apps stack.
+    fleet.webApps.daedalus.proxyProof = lib.mkIf appsOn true;
+
+    # The app reads traefik's API container-direct (the network pages), and
+    # that API is served to named source ranges only — it prints every
+    # middleware, proof secrets included (modules/traefik apiReaders). So the
+    # private bridge gets a pinned subnet, high in podman's 10.89.0.0/16 pool
+    # where the auto-assigned bridges of a fresh box do not reach, and that
+    # subnet is the one reader.
+    fleet.bridgeSubnets.iso-daedalus = "10.89.254.0/24";
+    fleet.modules.traefik.apiReaders = lib.mkIf appsOn [ config.fleet.bridgeSubnets.iso-daedalus ];
 
     # Two labels under baseDomain are not an app's to take, and they fail in
     # opposite ways.
@@ -399,16 +415,17 @@ in
       # mode/isolated/healthPath arrive from self.json via the mapper.
       # Forward-auth, because daedalus has no user model of its own and only
       # ever serves one operator — the Pocket ID gate belongs in front of it
-      # rather than inside it, zero app-side auth code. `isolated` puts it on a
-      # private iso-daedalus-net bridge with traefik as the only other member,
-      # so nothing on traefik-net can dial the dev server directly and skip the
-      # gate. `healthPath` is the one unauthenticated path — it backs the gatus
-      # probe and the forward-auth bypass.
+      # rather than inside it. `isolated` puts it on a private iso-daedalus-net
+      # bridge with traefik, off traefik-net; the proxy proof (above) is what
+      # makes the headers trustworthy, since the app shares two more bridges.
+      # `healthPath` is the one unauthenticated path — it backs the gatus probe
+      # and the forward-auth bypass.
       auth = selfApp.auth // {
         # Who applied. An Apply writes a git commit, so the commit should name a
         # person rather than "daedalus". Trusting a header requires that nothing
-        # else can dial the app and forge one — which is exactly what `isolated`
-        # above guarantees, and why the platform asserts the two go together.
+        # else can forge one: the app reads these only on a request that carries
+        # traefik's proxy proof (core/auth.ts), and the strip middleware blanks
+        # any client-sent copy before the gate.
         headers = {
           "X-Forwarded-Email" = "{{ .claims.email }}";
           # Pocket ID's user id. The Profile page finds the signed-in account
@@ -424,9 +441,9 @@ in
           # earlier: the derived Pocket ID client allows `authGroups`, which
           # defaults to [ "admins" ], so a non-admin never gets a session and
           # the app never sees the request. What the header adds is a second
-          # check at the thing that actually writes, and an audit trail —
-          # `isolated` above is what makes it trustworthy, since only traefik
-          # can reach the app and the strip middleware blanks it inbound.
+          # check at the thing that actually writes, and an audit trail — the
+          # proxy proof is what makes it trustworthy, and the strip middleware
+          # blanks it inbound.
           #
           # NOTE: the plugin only sets headers on gated paths, so every path in
           # authBypassRule below arrives with this blanked. /api/deploy carries
@@ -460,8 +477,8 @@ in
         #                 Why the bypass is acceptable for a WRITE-capable path:
         #                 it is LAN-only — daedalus is `stage = "lab"`, so there
         #                 is no Cloudflare tunnel route and no public name — and
-        #                 `isolated = true` means traefik is the only thing that
-        #                 can dial this container at all. Deliberately NOT
+        #                 the token is checked before any work, whoever dials.
+        #                 Deliberately NOT
         #                 registered in `fleet.mcpServers`: fronting it with the
         #                 LiteLLM gateway would hand a control plane that can
         #                 rebuild this box to Open WebUI, to every virtual key,
