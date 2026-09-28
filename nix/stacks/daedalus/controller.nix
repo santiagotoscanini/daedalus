@@ -38,13 +38,21 @@
 #                  `claude-session-<uuid>`, running the same claude under
 #                  `script` (a PTY) piped through `sed` and `grep` (the log
 #                  filter), all found on this service's PATH. Its output
-#                  goes to `<dataDir>/logs/claude-session-<uuid>.log`.
-#   gcroot         ExecStartPre pins the claude this start will use, the one
-#                  the Remote Control unit is already running when that
-#                  differs, and the one each running `claude-session-*` unit
-#                  runs — a switch restarts this service, not those units,
-#                  so they can go on running a claude no generation still
-#                  names. A session link whose unit is gone is removed.
+#                  goes to `<dataDir>/logs/claude-session-<uuid>.log`. The
+#                  sessions open under the Remote Control are kept in
+#                  `<dataDir>/claude-recovery.json` and resumed with the
+#                  same ids after any fresh start of it (a restart of its
+#                  unit, a reboot); a restart of THIS service is not one —
+#                  the agent re-attaches to both kinds of unit.
+#   gcroot         the agent pins the claude each of its units runs (agent
+#                  src/claude/gcroot.rs): `<dataDir>/gcroots/<unit>` links
+#                  the store path, registered as an indirect root with
+#                  `nix-store --add-root` (so `/nix/var/nix/gcroots/auto/`
+#                  points at it) — something the operator may do, so no
+#                  root step here; the daemon's nix is on `path` below. A
+#                  switch restarts this service, not those units, so they
+#                  can go on running a claude no generation still names; a
+#                  link whose unit is gone is swept within a minute.
 #   logs           `fleet.logFiles.claude_rc` (below) ships claude-rc.log to
 #                  Loki as `unit="daedalus-claude-rc.service"`, with the
 #                  rules the old journal pipeline had: ANSI stripped; the
@@ -234,43 +242,6 @@ let
   # Claude remote control's transient user unit (the header's `the unit`).
   claudeUnit = "daedalus-claude-rc";
 
-  # The header's `gcroot`. Run as root ("+"): the roots directory is root's.
-  # The running claude is read from the transient unit's file, which the
-  # user manager keeps while the unit is loaded; its ExecStart names the
-  # store path the agent found on PATH at that start. A session unit's
-  # ExecStart opens with `sh` and `script`, so its claude is matched by name,
-  # not taken as the first store path.
-  claudeGcroot = pkgs.writeShellScript "daedalus-claude-rc-gcroot" ''
-    roots=/nix/var/nix/gcroots
-    transient=${config.fleet.operator.runtimeDir}/systemd/transient
-    grep=${pkgs.gnugrep}/bin/grep
-    ln=${pkgs.coreutils}/bin/ln
-    rm=${pkgs.coreutils}/bin/rm
-    head=${pkgs.coreutils}/bin/head
-    $ln -sfn ${pkgs.claude-code} "$roots/${claudeUnit}"
-    running=$($grep -o '^ExecStart=.*' "$transient/${claudeUnit}.service" 2>/dev/null \
-      | $grep -o '/nix/store/[^/" ]*' | $head -n1 || true)
-    if [ -n "$running" ] && [ "$running" != ${pkgs.claude-code} ]; then
-      $ln -sfn "$running" "$roots/${claudeUnit}-running"
-    else
-      $rm -f "$roots/${claudeUnit}-running"
-    fi
-    for link in "$roots"/claude-session-*; do
-      if [ -L "$link" ] && [ ! -e "$transient/''${link##*/}.service" ]; then
-        $rm -f "$link"
-      fi
-    done
-    for unit in "$transient"/claude-session-*.service; do
-      [ -e "$unit" ] || continue
-      name=''${unit##*/}
-      cli=$($grep '^ExecStart=' "$unit" \
-        | $grep -o '/nix/store/[0-9a-z]\{32\}-claude-code-[^/"\\ ]*' | $head -n1 || true)
-      if [ -n "$cli" ]; then
-        $ln -sfn "$cli" "$roots/''${name%.service}"
-      fi
-    done
-  '';
-
   # What both Claude log sources (below) do on the way to Loki (the header's
   # `logs`). The status-box expression is the grep the server's journal
   # filter ran before it moved here. A file source skips the journal
@@ -426,7 +397,8 @@ in
       # the Claude unit's PATH, which is this one's); claude itself, the
       # pinned one (the header's `claude`); and what a resumed session runs
       # under (the header's `sessions`): util-linux's `script` for the PTY
-      # the CLI needs, sed and grep for its log filter.
+      # the CLI needs, sed and grep for its log filter; and `nix-store` (the
+      # daemon's own nix), which pins each unit's claude (the header's `gcroot`).
       path = [
         "/run/wrappers"
         config.systemd.package
@@ -436,6 +408,7 @@ in
         pkgs.util-linux
         pkgs.gnused
         pkgs.gnugrep
+        config.nix.package
       ];
       restartTriggers = [ configFile ];
       serviceConfig = {
@@ -447,7 +420,6 @@ in
           "HOME=${config.fleet.operator.home}"
           "XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir}"
         ];
-        ExecStartPre = "+${claudeGcroot}";
         ExecStart = "${lib.getExe agent} run";
         Restart = "always";
         RestartSec = "5s";

@@ -614,7 +614,7 @@ priority; each can be done independently unless noted.
     - **Capabilities, not a master flag.** What an agent runs comes from
       its config (nix writes the box's; the installer writes the others'):
       telemetry `full | minimal | off`, updates `staged | external`, Claude
-      remote control `child | unit`, the data directory. Each agent reports
+      remote control on or off, the data directory. Each agent reports
       its capabilities and the app draws tabs from them, never from "is
       this the box". The box is an ordinary machine row, trusted by
       construction (its key provisioned by nix under `fleet.machineState`),
@@ -627,17 +627,16 @@ priority; each can be done independently unless noted.
       — Claude runs with nobody logged in — and on an x86_64 desktop the
       tray. The box: one process as the operator, controller + service +
       session, no tray.
-    - **Long-lived work is not the agent's child.** Claude remote control
-      (and later santree's session host) runs as its own unit the agent
-      creates and controls — on Linux and the box a transient systemd user
-      unit — so restarting or updating the agent never ends a session; the
-      agent re-attaches when it returns. The agent ships the supervision
-      and the unit, not `claude` itself (nix provides it on the box, the
-      user's install elsewhere); the box keeps the gcroot pin on the
-      running binary and "update Claude" stays the pin-and-rebuild flow
-      there. Windows keeps Claude as a child of the session process, which
-      only restarts when an update is triggered; macOS can move to a
-      launchd job for the same property.
+    - **Claude's jobs on a real Windows and macOS machine.** Agent 0.17.0
+      runs remote control and resumed sessions as jobs of the OS on every
+      machine (launchd in the gui domain on macOS; a detached process, and
+      `claude-holder`'s ConPTY for a resume, on Windows), with recovery of
+      the open sessions after a fresh start. Those two are compile-checked
+      and unit-tested only: once 0.17.0 is released and the machines have
+      it, prove on each that an agent or tray restart and an update leave
+      Claude running and re-attach, that a resume works, and that a reboot
+      brings the recovery set back. santree's session host takes the same
+      shape when it comes (step 4).
     - **Root stays behind a socket-activated helper.** The controller runs
       as the operator. Root actions (Apply, deploys, image and engine
       updates, builds, power) keep their fixed nix units; their front door
@@ -670,11 +669,9 @@ priority; each can be done independently unless noted.
          answers it. Then agent 0.15.0 (`agent-v0.15.0`, not yet tagged):
          the machines' status pages stop answering the LAN (the box already
          reads their metrics from the controller).
-      2. Staged updates, orchestrated by the controller.
-      3. Actions move over one at a time: Claude sessions are the agent's
-         (agent 0.16.0; left: resume on Windows and macOS, which waits on a
-         unit-like holder there), then workspace clone and sync, then the root
-         verbs onto the socket-activated helper — a low-stakes one first
+      2. Staged updates, orchestrated by the controller (deferred).
+      3. Actions move over one at a time: workspace clone and sync, then
+         the root verbs onto the socket-activated helper — a low-stakes one first
          (reboot), Apply last — each deleting its
          file-drop path.
       4. santree: its session host on the box, then relayed to the other
@@ -698,9 +695,8 @@ priority; each can be done independently unless noted.
          until pinned — both fingerprints on the tray and the status page; a
          changed key is refused loudly, never re-pinned.
       3. The box's System page: keep the root snapshots for what only root
-         reads (SMART, ZFS, generations) and let the controller replace the
-         Claude parts (proposed), or converge everything on one collector
-         later.
+         reads (SMART, ZFS, generations) beside the controller (proposed),
+         or converge everything on one collector later.
       4. The root helper: one socket reached only through the controller
          (proposed), or also directly from the app.
     - **Risks.** The controller is critical (down means no machines on the
