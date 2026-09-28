@@ -1,0 +1,3 @@
+# Generated from the agent's Rust types and compared byte for byte by
+# agent/src/ts.rs; a Windows checkout must not rewrite their line endings.
+app/src/host/controller/generated/** text eol=lf
