@@ -736,12 +736,14 @@ mod tests {
         let request = out[2]["ok"]["request"].as_str().unwrap().to_string();
         assert_eq!(request.len(), 16);
         assert!(shared.claude_instruction_waiting());
-        // Handed to the session once, in order, with the next report.
+        // Handed to the session once, with the next report. Requests on one
+        // connection run concurrently, so the two may be queued in either
+        // order (Windows CI queues the stop first): matched by selector.
         let answer = shared.set_claude(Report::default());
         assert_eq!(answer.sessions.len(), 2);
-        assert_eq!(answer.sessions[0].request, request);
-        assert_eq!(answer.sessions[0].id, ID);
-        assert_eq!(answer.sessions[1].id, "0a1b2c3d");
+        let resume = answer.sessions.iter().find(|s| s.id == ID).unwrap();
+        assert_eq!(resume.request, request);
+        assert!(answer.sessions.iter().any(|s| s.id == "0a1b2c3d"));
         assert!(shared.set_claude(Report::default()).sessions.is_empty());
         // A session that is not taking them is not piled on.
         for _ in 0..crate::status::MAX_QUEUED_SESSIONS {
