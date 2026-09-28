@@ -1,6 +1,8 @@
 # daedalus-verbs — the file-drop bridge's agents, one verb at a time: each
 # verb's service, the path unit that starts it on `<verb>-request.json`, and
 # whether a failure mails (monitoredJobs) or is shown on the page that asked.
+# `daedalus-power` is the exception: the root helper starts it (controller.nix,
+# `root`), and it has no path unit.
 # The scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
 # daedalus stack (daedalus.nix holds the switch); never imports its siblings.
 {
@@ -197,31 +199,35 @@ in
       pathConfig.PathChanged = "${applyDir}/workspace-request.json";
     };
 
-    # Not monitoredJobs, like power: both outcomes land in the
-    # status file the page that asked is polling, and a genuine refusal exits 0.
+    # Not monitoredJobs, like the secret-set and task-run agents: both
+    # outcomes land in the status file the page that asked is polling, and a
+    # genuine refusal exits 0.
 
-    # Restart. Same file-drop bridge, and the only verb whose agent does not
-    # outlive its own action.
+    # Restart: the root helper's `reboot` (controller.nix, `root`) — the first
+    # verb off the file-drop bridge, so no path unit and no request file. The
+    # helper starts this unit and relays what it prints; a last line
+    # `refused: …` is a refusal and the unit still exits 0, so a refused
+    # restart is not a failed unit.
     #
-    # No network ordering, unlike the agents above: this reads a local file, asks
-    # systemd three questions and calls `systemctl reboot`. Nothing it does needs
-    # a resolver.
+    # No network ordering: it asks systemd three questions and calls
+    # `systemctl reboot`. Nothing it does needs a resolver.
     systemd.services.daedalus-power = bridgeAgent // {
       description = "Restart the box on daedalus's behalf";
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${powerScript}/bin/daedalus-power";
-        # Everything before the reboot is a file read and three cheap checks; a
-        # minute is already generous, and a hung agent here should surface rather
-        # than sit on the rebuild lock it holds until it exits.
+        # Three cheap checks and a queued reboot; a minute is already generous,
+        # and a hung agent here should surface rather than sit on the rebuild
+        # lock it holds until it exits.
         TimeoutStartSec = "1min";
       };
     };
 
-    systemd.paths.daedalus-power = {
-      description = "Watch for a daedalus restart request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/power-request.json";
+    fleet.daedalus.rootVerbs.reboot = {
+      unit = "daedalus-power.service";
+      description = "Restart the box (never power it off)";
+      # The unit's own minute, and slack for the start job's queueing.
+      timeoutSec = 90;
     };
 
     # Not monitoredJobs: this only ever runs because somebody pressed a button

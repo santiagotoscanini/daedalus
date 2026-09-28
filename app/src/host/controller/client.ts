@@ -35,7 +35,9 @@ import {
   providerModelSent,
   type Queued,
   queued,
+  type RootRun,
   requestLine,
+  rootRunOk,
   type SessionSent,
   type SetDesiredOk,
   type SystemInfo,
@@ -113,6 +115,12 @@ export type ControllerClient = {
    * an admin's confirmed click. `unavailable` while a rotation runs.
    */
   controllerRotate: (p: ControllerRotateParams) => Promise<ControllerInfo>
+  /**
+   * One root verb, run by the root helper through the controller (agent
+   * src/root/): only ever from an admin's click. Answers when the verb's unit
+   * has finished, so it takes its own wait; `status` is the read-only one.
+   */
+  rootRun: (verb: string, selectors?: Record<string, string>, waitMs?: number) => Promise<RootRun>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
   /** End this client for good: the connection goes, and later calls fail `closed`. */
@@ -171,7 +179,12 @@ export function createControllerClient(opts: Options): ControllerClient {
   }
 
   /** Write one request on `socket` and wait for its answer. */
-  const send = (socket: Socket, m: string, p?: Record<string, unknown>): Promise<unknown> =>
+  const send = (
+    socket: Socket,
+    m: string,
+    p?: Record<string, unknown>,
+    waitMs: number = timeoutMs,
+  ): Promise<unknown> =>
     new Promise((resolve, reject) => {
       if (socket.destroyed) {
         reject(new ControllerError('closed', 'the controller connection is gone'))
@@ -181,12 +194,9 @@ export function createControllerClient(opts: Options): ControllerClient {
       const timer = setTimeout(() => {
         pending.delete(id)
         reject(
-          new ControllerError(
-            'timeout',
-            `the controller did not answer ${m} within ${timeoutMs} ms`,
-          ),
+          new ControllerError('timeout', `the controller did not answer ${m} within ${waitMs} ms`),
         )
-      }, timeoutMs)
+      }, waitMs)
       pending.set(id, { resolve, reject, timer })
       socket.write(requestLine(id, m, p))
     })
@@ -338,9 +348,10 @@ export function createControllerClient(opts: Options): ControllerClient {
     m: string,
     decodeAnswer: (v: unknown) => T,
     p?: Record<string, unknown>,
+    waitMs?: number,
   ): Promise<T> => {
     const l = await connection()
-    return decodeAnswer(await send(l.socket, m, p))
+    return decodeAnswer(await send(l.socket, m, p, waitMs))
   }
 
   const self: ControllerClient = {
@@ -363,6 +374,8 @@ export function createControllerClient(opts: Options): ControllerClient {
     nodesSetDesired: (nodes) => call('nodes.set_desired', setDesiredOk, { nodes }),
     nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }),
     controllerRotate: (p) => call('controller.rotate', controllerRotated, p),
+    rootRun: (verb, selectors, waitMs) =>
+      call('root.run', rootRunOk, { verb, selectors: selectors ?? {} }, waitMs),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
     close: () => {
       closed = true

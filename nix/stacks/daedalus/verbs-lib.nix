@@ -186,30 +186,21 @@ let
     ];
   };
 
-  # Restart the box. A bridge with a single verb: see
-  # host/power.sh for why poweroff has no branch there at all, and why the
-  # replay guard matters more here than in any of its siblings.
-  #
-  # No allowlist to carry and no argument from the request reaches a command —
-  # the request body is read for exactly one string, which is compared against
-  # one literal.
+  # Restart the box: the root helper's `reboot` (controller.nix, `root`), not
+  # a file-drop verb. It takes nothing from anyone — host/power.sh has why
+  # poweroff exists nowhere.
   powerScript = mkAgent {
     name = "daedalus-power";
     runtimeInputs = [
-      pkgs.jq
       pkgs.systemd
       pkgs.procps # pgrep
       pkgs.util-linux # flock
       pkgs.coreutils
     ];
-    vars = operatorVars // {
-      APPLY_DIR = applyDir;
+    vars = {
       LOCKFILE = config.fleet.rebuildLock;
     };
-    files = [
-      ./host/lib.sh
-      ./host/power.sh
-    ];
+    files = [ ./host/power.sh ];
   };
 
   # The clone agent. See host/workspace-clone.sh

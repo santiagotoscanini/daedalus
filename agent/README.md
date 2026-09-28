@@ -269,6 +269,7 @@ verbs, none taking a command, a path or a flag:
 | `nodes.provider_model` `{id, kind, action, model, pinned?, replacing?}` | `{delivered: true, request}`: one residency verb (`load` or `unload`; a load may put `replacing` down first) on one model of the machine's provider, acknowledged at once and run on the machine's loopback; its providers document reports the outcome under `request` (`actions`). Needs `providers.residency`; never queued | `nodes` |
 | `nodes.set_desired` `{nodes: [{id, public_key, state, policy, name}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
 | `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
+| `root.run` `{verb, selectors?}` | `{run, verb, outcome, detail, verbs?}`: one of the root helper's verbs run to its end (`done`, `refused` with the unit's reason, `failed`); `status` answers every verb and its unit's state in `verbs`. Answers when the unit has finished, so a client gives it its own timeout; its unit's lines go out as `root.progress` meanwhile ("The root helper", below) | `root` |
 
 `state` is `pending` (connected, not decided), `approved`, `revoked` or
 `unknown` (seen, not decided, gone). `nodes.set_desired` is the app's
@@ -298,19 +299,47 @@ controller only while `[controller] claude_remote_control` is on — and
 `claude.sessions` beside it;
 `claude.update` where the agent may update Claude Code (a node's role, not
 the controller's); `telemetry.full` or `telemetry.minimal`; `nodes` where
-the controller listens for machines. A method whose capability is absent
-answers `unsupported`. The events: `claude.changed` `{reporting, state,
+the controller listens for machines; `root` on the controller while
+`[controller] root_socket` names the root helper. A method whose
+capability is absent answers `unsupported`. The events: `claude.changed` `{reporting, state,
 pid}` when a session starts reporting, when its state or pid moves, and
 when it stops reporting for 30 s (`reporting: false`, state and pid null);
 `telemetry.updated` `{sampled_at}` with every sample; `nodes.changed`
 `{id, state, connected}` when a machine connects, leaves or changes
 standing; `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
-connects and waits. Events are best effort: a subscriber whose queue fills
+connects and waits; `root.progress` `{run, verb, line}` for each line a
+running root verb's unit writes. Events are best effort: a subscriber whose queue fills
 loses events, not its connection (one that stops reading altogether is
 closed by the write timeout). `src/api/wire.rs` has every type and golden
 tests pinning each one's exact JSON; `src/api/mod.rs` the rules above. The
 app's TypeScript types for all of it are generated from these Rust types
 (see "The app's wire types").
+
+### The root helper
+
+The controller runs as the operator and holds no privilege. What only root
+may do on the box reaches it through a systemd-owned socket
+(`daedalus-root.socket`, the operator's and 0600, `Accept=yes`): each
+connection starts a fresh, sandboxed root process, `daedalus-agent
+root-helper --table FILE` (`src/root/`), which checks the peer is the
+table's one uid (`SO_PEERCRED`; root itself is refused), reads one request
+line `{verb, id, selectors}`, and answers. No root process stays resident.
+
+The table is nix's (`fleet.daedalus.rootVerbs` in
+`nix/stacks/daedalus/controller.nix`): each verb an existing oneshot unit
+and its selectors, each a fixed list of values spliced into the unit name
+as `{name}`; nothing from the caller becomes a path, a flag or a unit name.
+A verb runs as `systemctl start <unit>`, so the work is the unit's and
+survives a restart of its caller; the unit's journal lines stream back as
+`{"t":"progress","line":…}`, then one `{"t":"result","outcome":…,
+"detail":…}`: `failed` when the start job failed, else `done` — or
+`refused` when the unit's last line is `refused: <reason>` (it exits 0, so
+no failed unit; systemd forgets a oneshot's exit status once it is
+inactive, so the journal carries the word). A unit
+already running is refused, never joined. A request the table does not
+allow gets `{"t":"error","code":…,"msg":…}`. `status` is the helper's own
+read: every verb and its unit's state. Only the controller connects: the
+app asks `root.run`.
 
 ## The link to the controller
 
@@ -843,6 +872,8 @@ daedalus-agent status               print the running agent's status document (t
 daedalus-agent update [--apply]     check the release feed now; --apply installs
 daedalus-agent claude restart       ask the session to restart `claude remote-control`
 daedalus-agent claude-holder "…"    (Windows) a resumed session's pseudo-console; the tray starts it, never by hand
+daedalus-agent root-helper --table FILE
+                                    (the box) one connection to the root helper; its socket unit starts it, never by hand
 daedalus-agent version
 ```
 

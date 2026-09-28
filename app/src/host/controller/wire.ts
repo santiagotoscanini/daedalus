@@ -20,6 +20,7 @@ import {
   obj,
   optional,
   reads,
+  recordOf,
   str,
 } from '../../lib/contract/decode'
 import {
@@ -46,6 +47,8 @@ import type {
   NodeTelemetryOk,
   ProviderModelSent,
   Queued,
+  RootRunOk,
+  RootVerb,
   SessionQueued,
   SetDesiredOk,
   TelemetryLevel,
@@ -855,3 +858,67 @@ export function nodeProvidersAnswer(v: unknown): NodeProvidersAnswer {
 export const providerModelSent = (v: unknown): { request: string } => ({
   request: decode(reads<ProviderModelSent>()(obj({ delivered: flag, request: str })), v).request,
 })
+
+// ── the root helper (`root.run`) ────────────────────────────────────────────
+
+/** How a root verb ended (agent/src/root/mod.rs `Outcome`). */
+export type RootOutcome = 'done' | 'refused' | 'failed'
+
+/** One verb as the helper's `status` states it. */
+export type RootVerbState = {
+  verb: string
+  unit: string
+  description: string
+  selectors: Record<string, string[]>
+  /** The unit's ActiveState; null for a template, or when systemd did not answer. */
+  activeState: string | null
+  result: string | null
+}
+
+/** `root.run`'s answer: the run's id, how it ended, and for `status` every verb. */
+export type RootRun = {
+  run: string
+  verb: string
+  outcome: RootOutcome
+  detail: string
+  verbs: RootVerbState[]
+}
+
+const rootVerbShape = reads<RootVerb>()(
+  obj({
+    verb: str,
+    unit: str,
+    description: optional(str, ''),
+    selectors: optional(recordOf(arrayOf(str)), {}),
+    active_state: nstr,
+    result: nstr,
+  }),
+)
+
+const rootRunShape = reads<RootRunOk>()(
+  obj({
+    run: str,
+    verb: str,
+    outcome: literal('done', 'refused', 'failed'),
+    detail: optional(str, ''),
+    verbs: optional(arrayOf(rootVerbShape), []),
+  }),
+)
+
+export function rootRunOk(v: unknown): RootRun {
+  const r = decode(rootRunShape, v)
+  return {
+    run: r.run,
+    verb: r.verb,
+    outcome: r.outcome,
+    detail: r.detail,
+    verbs: r.verbs.map((x) => ({
+      verb: x.verb,
+      unit: x.unit,
+      description: x.description,
+      selectors: x.selectors,
+      activeState: x.active_state,
+      result: x.result,
+    })),
+  }
+}

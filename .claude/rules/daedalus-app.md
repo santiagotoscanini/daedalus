@@ -226,10 +226,14 @@ here.
   points at it), and each verb's app half is one module under `host/`
   named for it (`apply.ts`, `build-bridge.ts`, `deploy.ts`,
   `image-update.ts`, `engine-update.ts`,
-  `workspaces.ts`, `power-request.ts`,
+  `workspaces.ts`,
   `secret-set-request.ts`, `task-run.ts`,
   `version-update.ts`, `claude-code-update.ts`) — except
   `github-token-request.json`, which `core/github-app.ts` writes.
+  **The bridge is being retired verb by verb** onto the root helper,
+  reached only as the controller's `root.run` (`ControllerClient.rootRun`;
+  ARCHITECTURE.md "The root helper"): `host/power.ts` (reboot) is the
+  first and the pattern — the app never touches the helper's socket.
   The verbs that take a lock and a busy check before they publish are
   arrangements of `host/flow.ts` — `defineGate` (the lock, the `running`
   check, the pickup window) and `defineFlow` (check input → refuse busy

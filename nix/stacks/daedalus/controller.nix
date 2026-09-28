@@ -153,9 +153,41 @@
 #   keeps nothing across a restart; reads machines through `nodes.*` and
 #   sends commands with `nodes.command`.
 #
+# The root helper (agent src/root/): how root actions reach the box
+# without the controller, which runs as the operator, holding any privilege.
+#
+#   root         `daedalus-root.socket` at /run/daedalus-root/root.sock, the
+#                operator's and 0600, `Accept=yes`: each connection starts a
+#                fresh `daedalus-root@` instance — `daedalus-agent
+#                root-helper`, root's uid with an empty capability set and a
+#                strict sandbox — which checks the peer is the operator's uid
+#                (SO_PEERCRED; root itself is refused), reads ONE request line
+#                `{verb, id, selectors}`, and answers. No resident root daemon.
+#   one door     only the controller connects: the app asks `root.run` on the
+#                API socket, and the controller relays the unit's progress as
+#                `root.progress` events and the outcome as the answer. The
+#                socket is outside controllerDir, so the app's container never
+#                sees it.
+#   verbs        `fleet.daedalus.rootVerbs`, contributed by the module that
+#                owns each unit, rendered into the helper's table (with the
+#                operator's uid and the systemctl/journalctl paths) and
+#                asserted here: a name, an EXISTING oneshot unit with no path
+#                unit left, a timeout, and selectors that are fixed lists spliced in as `{name}` — never
+#                a path, a flag or a free unit name from the caller. `status`
+#                is the helper's own read: the verbs and their units' state.
+#   running      `systemctl start <unit>`, so the work is the unit's and
+#                survives a switch restarting the helper or the controller; its
+#                journal lines stream back; a failed start job is `failed`,
+#                else `done` — or `refused` when the unit's last line is
+#                `refused: <reason>` (it exits 0, so no failed unit). Not an
+#                exit status: systemd forgets a oneshot's once it is inactive.
+#                A unit already running is refused, never joined.
+#   moved so far reboot (daedalus-verbs.nix `daedalus-power`). Each verb that
+#                moves here deletes its request file, path unit and app module.
+#
 # What nix hands it:
 #
-#   the binary     built from the crate's own files only (Cargo.toml,
+#   the binary    built from the crate's own files only (Cargo.toml,
 #                  Cargo.lock, build.rs, src/), so a commit that touches
 #                  anything else in the repository does not rebuild it. No
 #                  tray (`--no-default-features`), only `daedalus-agent`.
@@ -265,6 +297,81 @@ let
   # Claude remote control's transient user unit (the header's `the unit`).
   claudeUnit = "daedalus-claude-rc";
 
+  # The root helper (the header's `root`). NOT under controllerDir: that one
+  # is bind-mounted into the app's container, and this socket is the
+  # controller's alone.
+  rootSocket = "/run/daedalus-root/root.sock";
+  inherit (config.fleet.daedalus) rootVerbs;
+  rootTable = pkgs.writeText "daedalus-root-verbs.json" (
+    builtins.toJSON {
+      allow_uid = config.fleet.operator.uid;
+      systemctl = "${config.systemd.package}/bin/systemctl";
+      journalctl = "${config.systemd.package}/bin/journalctl";
+      verbs = lib.mapAttrs (_: v: {
+        inherit (v) unit description selectors;
+        timeout_secs = v.timeoutSec;
+      }) rootVerbs;
+    }
+  );
+  # An instance outlives its longest verb's wait by a minute, no more.
+  rootRuntimeMax = 60 + lib.foldl' lib.max 60 (lib.mapAttrsToList (_: v: v.timeoutSec) rootVerbs);
+
+  # Every unit a verb can name: its template with each selector's values
+  # spliced in (the helper's `expand`).
+  expansions =
+    v:
+    map (
+      combo:
+      lib.foldl' (u: k: lib.replaceStrings [ "{${k}}" ] [ combo.${k} ] u) v.unit (lib.attrNames combo)
+    ) (lib.cartesianProduct v.selectors);
+  placeholders =
+    unit: map lib.head (builtins.filter builtins.isList (builtins.split "\\{([^}]*)}" unit));
+  nameRe = "[a-z][a-z0-9-]{0,31}";
+  valueRe = "[A-Za-z0-9][A-Za-z0-9._-]{0,63}";
+  # The rules agent/src/root/mod.rs `Table::check` applies at start, so a
+  # table the helper would refuse never builds; and past them what only the
+  # evaluation can see: each unit exists, is a oneshot, and has no path unit
+  # left — the file-drop door a verb
+  # leaves behind when it moves here.
+  rootVerbAssertions = lib.concatLists (
+    lib.mapAttrsToList (
+      verb: v:
+      let
+        svc = lib.removeSuffix ".service";
+        cfgOf = u: config.systemd.services.${svc u} or null;
+        say = msg: "fleet.daedalus.rootVerbs.${verb}: ${msg}";
+      in
+      [
+        {
+          assertion = builtins.match nameRe verb != null && verb != "status";
+          message = say "a verb is ${nameRe}, and `status` is the helper's own";
+        }
+        {
+          assertion = v.timeoutSec <= 86400;
+          message = say "timeoutSec is at most 86400";
+        }
+        {
+          assertion = lib.sort lib.lessThan (placeholders v.unit) == lib.attrNames v.selectors;
+          message = say "the unit's {placeholders} and the selectors must name the same set";
+        }
+        {
+          assertion = lib.all (vals: vals != [ ] && lib.all (x: builtins.match valueRe x != null) vals) (
+            lib.attrValues v.selectors
+          );
+          message = say "every selector lists at least one value, each ${valueRe}";
+        }
+      ]
+      ++ map (u: {
+        assertion =
+          lib.hasSuffix ".service" u
+          && cfgOf u != null
+          && (cfgOf u).serviceConfig.Type or null == "oneshot"
+          && !(config.systemd.paths ? ${svc u});
+        message = say "${u} must be a oneshot service of this system with no path unit";
+      }) (expansions v)
+    ) rootVerbs
+  );
+
   # What both Claude log sources (below) do on the way to Loki (the header's
   # `logs`). The status-box expression is the grep the server's journal
   # filter ran before it moved here. A file source skips the journal
@@ -311,6 +418,7 @@ let
       claude_remote_control = true;
       claude_workdir = config.fleet.config.repo;
       claude_unit = claudeUnit;
+      root_socket = rootSocket;
       listen = "0.0.0.0:${toString port}";
       advertise = [ "${config.fleet.wanHost}:${toString port}" ];
     };
@@ -328,7 +436,43 @@ in
     '';
   };
 
+  options.fleet.daedalus.rootVerbs = lib.mkOption {
+    internal = true;
+    default = { };
+    description = ''
+      The root helper's verbs (the controller's header, `root`): each a
+      name the controller may ask for, the existing oneshot unit it starts,
+      and the selectors it takes — each a fixed list of values, spliced into
+      the unit name where it says `{name}`. Contributed by the module that
+      owns the unit; checked at evaluation and again by the helper.
+    '';
+    type = lib.types.attrsOf (
+      lib.types.submodule {
+        options = {
+          unit = lib.mkOption {
+            type = lib.types.str;
+            description = "The `.service` it starts; `{selector}` marks a template instance.";
+          };
+          description = lib.mkOption {
+            type = lib.types.str;
+            description = "What it does, for `status`.";
+          };
+          timeoutSec = lib.mkOption {
+            type = lib.types.ints.positive;
+            description = "How long the helper waits for the unit's start job before it reports `failed`; the unit's own TimeoutStartSec is what stops the unit.";
+          };
+          selectors = lib.mkOption {
+            type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+            default = { };
+            description = "Selector name → the values it may take.";
+          };
+        };
+      }
+    );
+  };
+
   config = lib.mkIf config.fleet.modules.daedalus.enable {
+    assertions = rootVerbAssertions;
     fleet.statePaths.${dataDir}.mode = "0700";
     # Made by the agent too, but the log shipper bind-mounts it, so it must
     # exist before the shipper's container starts.
@@ -454,6 +598,72 @@ in
       unitConfig = {
         StartLimitBurst = 20;
         StartLimitIntervalSec = 600;
+      };
+    };
+
+    # The root helper's door (the header's `root`): the operator's, 0600, so
+    # the kernel lets nobody else connect, and the helper checks the peer
+    # again. Accept=yes: a fresh process per connection, no resident root.
+    systemd.sockets.daedalus-root = {
+      description = "Daedalus root helper: the controller's one door to root";
+      wantedBy = [ "sockets.target" ];
+      socketConfig = {
+        ListenStream = rootSocket;
+        Accept = true;
+        SocketUser = config.fleet.operator.user;
+        SocketGroup = "root";
+        SocketMode = "0600";
+        DirectoryMode = "0755";
+        # The controller asks one verb at a time in practice; this bounds a
+        # flood from its uid without queueing a real request behind it.
+        MaxConnections = 8;
+      };
+    };
+
+    # One connection's root process. It reads the table, the unit states and
+    # the journal and asks systemd to start a unit — nothing else — so it
+    # keeps root's uid and none of its capabilities: PID 1's private socket
+    # and the journal's files are root-owned, which is all it needs
+    # (measured under this exact sandbox, 2026-09-28). The work runs in the
+    # verb's own unit, which a stop of this instance does not touch.
+    systemd.services."daedalus-root@" = {
+      description = "Daedalus root helper: one request from the controller";
+      restartIfChanged = false;
+      serviceConfig = {
+        ExecStart = "${lib.getExe agent} root-helper --table ${rootTable}";
+        StandardInput = "socket";
+        StandardOutput = "journal";
+        StandardError = "journal";
+        # A refusal exits 0; an instance that crashed is not kept for
+        # `systemctl --failed` — its journal says what happened.
+        CollectMode = "inactive-or-failed";
+        RuntimeMaxSec = rootRuntimeMax;
+        CapabilityBoundingSet = "";
+        AmbientCapabilities = "";
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        PrivateDevices = true;
+        PrivateNetwork = true;
+        IPAddressDeny = "any";
+        RestrictAddressFamilies = "AF_UNIX";
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        ProtectControlGroups = true;
+        ProtectClock = true;
+        ProtectHostname = true;
+        ProtectProc = "invisible";
+        ProcSubset = "pid";
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        SystemCallFilter = "@system-service";
+        UMask = "0077";
       };
     };
   };

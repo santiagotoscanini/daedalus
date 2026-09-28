@@ -24,6 +24,9 @@ fn main() {
         "status" => status_cmd(),
         "update" => update_cmd(rest),
         "session" => daedalus_agent::session::run(),
+        // One connection of the box's root helper (root/): systemd starts
+        // it per connection to its socket, never a person.
+        "root-helper" => root_helper(rest),
         "claude" => claude_cmd(rest),
         // A resumed Claude session's terminal on Windows (os/windows/holder.rs):
         // started by the tray as a detached job, never by hand.
@@ -60,8 +63,19 @@ fn print_help() {
          session              the Claude session without a tray; what the Linux user unit runs\n  \
          claude restart       ask the session to restart `claude remote-control`\n  \
          claude-holder …      (Windows) a resumed session's terminal; the tray starts it\n  \
+         root-helper --table FILE\n                       (the box) one connection to the root helper; systemd starts it\n  \
          version              print the version"
     );
+}
+
+#[cfg(target_os = "linux")]
+fn root_helper(args: &[String]) -> Result<()> {
+    daedalus_agent::root::helper::main(args)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn root_helper(_args: &[String]) -> Result<()> {
+    bail!("`root-helper` runs on the box, under systemd")
 }
 
 fn run_as_service() -> Result<()> {

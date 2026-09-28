@@ -574,20 +574,20 @@ priority; each can be done independently unless noted.
     only by a rotation the trusted key signed). The app reaches every
     machine only through the controller's unix socket; capabilities, not
     "is this the box", draw the tabs. What remains:
-    - **Root behind a socket-activated helper.** The controller runs as the
-      operator. Root actions (Apply, deploys, image and engine updates,
-      builds, power) keep their fixed nix units; their front door moves from
-      a dropped file to a systemd-owned socket (`Accept=yes`): each
-      connection spawns a fresh, sandboxed helper that checks the peer is the
-      operator's uid (`SO_PEERCRED` sees container uid 0 as the operator),
-      accepts only the fixed verbs with selectors — never paths or flags —
-      starts the existing unit so the work survives a switch restarting its
-      caller, and streams progress back. No resident root daemon; the
-      controller forwards to it, so the app has one door. Order: workspace
-      clone and sync onto the agent, then the root verbs one at a time — a
-      low-stakes one first (reboot), Apply last — each deleting its
-      file-drop path. Open: whether the helper is also reachable from the
-      app directly (proposed: only through the controller).
+    - **The rest of the root verbs onto the root helper.** The helper and
+      `root.run` exist (ARCHITECTURE.md "The root helper"; reboot moved
+      first). Each remaining file-drop verb moves the same way — a
+      `fleet.daedalus.rootVerbs` entry, its unit ending on `refused: …` to refuse, its
+      request module, path unit and status file deleted — in this order:
+      task-run and deploy-trigger (a unit that exists, one enumerated
+      selector), build-cancel and github-token (no selector), workspace
+      clone (a slug is not an enumerable value: the table needs a pattern
+      selector first), secret-set (carries a sealed value: the helper needs
+      a payload channel the unit reads, never argv), build, then the
+      rebuilding verbs — claude-code, version, engine and image updates,
+      whose `*-last.log` the progress stream replaces — and Apply last.
+      Workspace sync and the nodes' DHCP bindings are not requests and stay
+      path units until the agent owns them.
     - **Proof of 0.19 and 0.20 on the real machines.** Only the box runs
       them. On the Windows PC and the Mac: the update from 0.17 lands and
       proves itself (probation cleared, trays and sessions restarted onto

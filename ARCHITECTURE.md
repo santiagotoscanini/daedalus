@@ -9,7 +9,7 @@ path unit notices; a root oneshot reads the file and acts.
 That constraint is the whole design. Everything below is a consequence of it:
 the engine decides, the host executes, and the boundary between them is a
 filename allowlist rather than an API. A compromised control plane can ask for
-the fifteen things the host knows how to do, and nothing else.
+the few things the host knows how to do, and nothing else.
 
 The machine is a NixOS box, so "act" mostly means: write a file into a git
 repository, commit it, and run `nixos-rebuild switch`. The system's real source
@@ -90,7 +90,7 @@ flowchart TB
     Sops["/usr/local/bin/sops: static, holds no age identity<br/>so it can encrypt and never decrypt"]
   end
 
-  Wr[/"the ONE writable mount: apply/<br/>16 request files, their status files, payload-ID.json"/]
+  Wr[/"the ONE writable mount: apply/<br/>one request file per verb, their status files, payload-ID.json"/]
 
   subgraph priv["systemd — root"]
     P["one daedalus-VERB.path per request file<br/>and the agent it starts (table below)"]
@@ -125,7 +125,6 @@ the same directory:
 | `image-request.json` | `daedalus-image-update` | `image-status.json` + `image-last.log` |
 | `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
 | `workspace-request.json` | `daedalus-workspace-clone` | `workspace-status.json` |
-| `power-request.json` | `daedalus-power` | `power-status.json` |
 | `github-token-request.json` | `daedalus-github-token` | `github-token-status.json` |
 | `secret-set-request.json` | `daedalus-secret-set` | `secret-set-status.json` |
 | `task-run-request.json` | `daedalus-task-run` | `task-run-status.json` |
@@ -159,6 +158,36 @@ allowlist is `apps.json`, `nodes.json`, `site.json`, the two vault files, one
 list is built host-side, never read from the request), and the `daedalus.json`
 provenance stamp. It cannot run a command, name a path, or choose a unit to
 restart.
+
+### The root helper
+
+The bridge's successor, one verb at a time (PLAN feature 13). The app asks
+the controller — the agent on the box, running as the operator — for
+`root.run {verb, selectors}` over its API socket; the controller connects to
+`daedalus-root.socket`, a systemd socket the operator owns (0600,
+`Accept=yes`, outside every container's mounts); systemd starts a fresh root
+process for that one connection, `daedalus-agent root-helper`, with no
+capabilities and a strict sandbox. The helper checks the peer's uid is the
+operator's (`SO_PEERCRED`), reads one line, looks the verb up in a table nix
+rendered from `fleet.daedalus.rootVerbs`, and runs `systemctl start` on the
+verb's existing oneshot unit — each selector a value from a fixed list,
+spliced into the unit name, never a path or a flag. The unit's journal lines
+stream back as `root.progress` events, and they are the answer too: a start
+job that failed is `failed`; otherwise `done`, or `refused` when the unit's
+last line is `refused: <reason>` (the unit exits 0 — a refusal is not a
+failed unit — and the journal, not an exit status, carries the word, because
+systemd forgets a oneshot's exit status once it is inactive).
+
+The rules the bridge learned hold here without files: nothing is replayed,
+because nothing but a connection starts a verb (no path unit re-fires at
+boot); the work outlives its caller, because it is the unit's; and the host
+still decides what is real, because the answer is the unit's own result.
+The app never reaches the socket — the controller is its one door.
+
+| verb | unit | since |
+|---|---|---|
+| `status` | the helper's own read: every verb and its unit's state | — |
+| `reboot` | `daedalus-power` (refuses mid-rebuild; there is no poweroff) | 2026-09-28 |
 
 ---
 
@@ -504,7 +533,8 @@ happen in one transaction, so a redelivered webhook collides and is ignored.
 | Agent → engine | The MCP tools at `/mcp`, on the LAN only | A scoped bearer token, matched against a stored SHA-256 digest in constant time before any work; fail-closed with none minted; write tools additionally pass `assertMachineActor` and are recorded under the token's label |
 | Registry → engine | zot's push events at `/api/deploy` | A shared `X-Deploy-Token`; the only thing it can do is start an existing app's deploy unit |
 | Machine → controller → engine | Each machine's one link to the controller — the agent on the box, TCP 7788 on the LAN — and the controller's unix socket in the app's container | TLS 1.3 with each side pinning the other's ed25519 key (the machine's pin from its install line, else trust on first use); an unknown key waits `pending` at the controller with nothing pushed to it until an admin approves it, which creates its `nodes` row and hands the controller the whole desired set. The socket serves only the uids the controller lists, and takes fixed verbs with a node id |
-| Engine → host | Sixteen request filenames | The rules in [The bridge](#the-bridge) |
+| Engine → host | The request filenames of the bridge table | The rules in [The bridge](#the-bridge) |
+| Controller → root | One request line per connection to the root helper's socket | The socket is the operator's and 0600, outside every container; the helper checks the peer is the operator's uid (root refused), takes only a verb nix listed with selector values from nix's lists, and starts that verb's existing unit — [The root helper](#the-root-helper) |
 | Engine → GitHub | An installation token, minted by the host, never the private key | The key is root-only on the host and never enters the container; the token carries contents, metadata and actions read, checks and deployments write |
 | Host → repository code | A clone and a build | Repository content only ever runs as an unprivileged user inside an egress fence; the registry push credential exists for the duration of the one publishing call and is deleted after it |
 | Build step → the box | Nothing by design | Rootless BuildKit in its own subuid range; a step that escapes lands as a user that owns nothing of the operator's |

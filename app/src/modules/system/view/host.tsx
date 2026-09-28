@@ -6,7 +6,7 @@ import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../.
 import { cn } from '../../../lib/cn'
 import { DASH, duration, num, pct } from '../../../lib/format'
 import { errorText } from '../../../lib/redact'
-import { fetchPowerRequestStatus, requestRebootFn } from '../../../server/host'
+import { requestRebootFn } from '../../../server/host'
 import type { SystemData } from '../data'
 import {
   BOARD_FOOT,
@@ -44,10 +44,6 @@ const RESTART_NOTE = 'text-[0.7rem] text-muted-foreground leading-[1.5]'
 /** How long an armed restart stays armed. Short enough that a control left
     armed by a distraction cannot be finished by an accidental click later. */
 const ARM_MS = 10_000
-/** No status naming our request within this long means the host agent never
-    came for it — the claim window of components/status.tsx (60 s by default),
-    shorter here because the power bridge answers within a second or two. */
-const PICKUP_MS = 20_000
 const HEALTH_MS = 3_000
 
 type RestartPhase = 'idle' | 'armed' | 'dispatching' | 'refused' | 'down' | 'back'
@@ -60,11 +56,12 @@ type RestartPhase = 'idle' | 'armed' | 'dispatching' | 'refused' | 'down' | 'bac
  * offline, because pi-hole is this machine and every device in it resolves
  * through here.
  *
- * The interesting half is what happens AFTER dispatch. Every other host action
- * settles when its status file says so; this one kills the process that would
- * write that status, so `running` is the last word from the bridge and the box
- * itself becomes the signal — /api/healthz answering again is the completion
- * event. Failed fetches in that phase are the expected path, not an error.
+ * The interesting half is what happens AFTER dispatch. The host's answer is a
+ * refusal (it will not reboot mid-rebuild) or the reboot queued, and then
+ * nothing can report it finished — the answering process goes down with the
+ * box — so the box itself becomes the signal: /api/healthz answering again is
+ * the completion event. Failed fetches in that phase are the expected path,
+ * not an error.
  */
 function RestartControl({
   containers,
@@ -74,7 +71,6 @@ function RestartControl({
   uptimeSeconds: number | null
 }) {
   const [phase, setPhase] = useState<RestartPhase>('idle')
-  const [request, setRequest] = useState<{ id: string; at: number } | null>(null)
   const [refusal, setRefusal] = useState('')
   // "Back" only means something after a "gone": the first health poll is
   // answered by a container that has not been told to stop yet, and without
@@ -94,46 +90,8 @@ function RestartControl({
     }
   }, [phase])
 
-  // The window in which the host is still alive to answer: it either refuses
-  // (bad verb, rebuild in flight) or writes `running` on its way to the
-  // reboot. Both arrive within a second or two.
-  useEffect(() => {
-    if (phase !== 'dispatching' || request === null) return
-    let stopped = false
-    const t = setInterval(() => {
-      void fetchPowerRequestStatus()
-        .then((s) => {
-          if (stopped) return
-          if (s.id !== request.id) {
-            // A status file from the LAST restart says `running` forever —
-            // only our own id is evidence about this request.
-            if (Date.now() - request.at > PICKUP_MS) {
-              setRefusal('the host did not pick this request up. Is its path unit alive?')
-              setPhase('refused')
-            }
-            return
-          }
-          if (s.state === 'failed') {
-            setRefusal(s.error)
-            setPhase('refused')
-            return
-          }
-          if (s.state === 'running') setPhase('down')
-        })
-        .catch(() => {
-          // Not a failure: a server function that stops answering is what a
-          // machine going down looks like from in here.
-          if (!stopped) setPhase('down')
-        })
-    }, 1_000)
-    return () => {
-      stopped = true
-      clearInterval(t)
-    }
-  }, [phase, request])
-
-  // Nothing will ever be written to the status file again, so this phase asks
-  // the box instead. /api/healthz is the one unauthenticated path (it is the
+  // Nothing will report the restart finished, so this phase asks the box
+  // instead. /api/healthz is the one unauthenticated path (it is the
   // forward-auth bypass gatus uses), which is what makes it answerable the
   // moment the app is serving again.
   useEffect(() => {
@@ -189,9 +147,20 @@ function RestartControl({
               setPhase('dispatching')
               void requestRebootFn()
                 .then((r) => {
-                  setRequest({ id: r.id, at: Date.now() })
+                  if (r.state === 'rebooting') {
+                    setPhase('down')
+                  } else {
+                    setRefusal(r.reason)
+                    setPhase('refused')
+                  }
                 })
                 .catch((e: unknown) => {
+                  // A fetch that fails outright is the server going down under
+                  // the answer; an error the server wrote is a refusal.
+                  if (e instanceof TypeError) {
+                    setPhase('down')
+                    return
+                  }
                   setRefusal(errorText(e))
                   setPhase('refused')
                 })

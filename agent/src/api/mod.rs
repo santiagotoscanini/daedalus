@@ -70,6 +70,11 @@
 //! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
 //! | `controller.rotate`| `ControllerInfo` with its `rotation`: a new controller key, the old one retired after `{grace_secs?}` (link/rotation.rs) | the controller |
+//! | `root.run`         | `RootRunOk`: one root verb `{verb, selectors?}` run by the root helper to its end — `done`, `refused` or `failed` with a detail; `status` lists the verbs (root/) | `root` |
+//!
+//! `root.run` answers when the verb's unit has finished, which can be
+//! minutes: a client gives it a timeout of its own. It is the only door to
+//! the root helper — the app never connects to that socket.
 //!
 //! The `nodes.*` methods read and steer the machines connected to the
 //! controller (link/controller.rs). Their selector is a node id — sixteen
@@ -98,8 +103,9 @@
 //! agent update Claude Code — never on the controller, whose Claude nix
 //! pins; `telemetry.full` or `telemetry.minimal` as `telemetry` says
 //! (nothing at `off`); `nodes` where the controller listens for machines
-//! (`[controller] listen`). A method whose capability is absent answers
-//! `unsupported`.
+//! (`[controller] listen`); `root` on the controller where `[controller]
+//! root_socket` names the helper. A method whose capability is absent
+//! answers `unsupported`.
 //!
 //! **Events** are best effort: a subscriber that does not read fills its
 //! queue (`EVENT_QUEUE`) and loses the events after that, never the
@@ -110,7 +116,8 @@
 //! 30 s); `telemetry.updated` with every sample; `nodes.changed` `{id,
 //! state, connected}` when a machine connects, leaves or changes standing;
 //! `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
-//! connects and waits for approval.
+//! connects and waits for approval; `root.progress` `{run, verb, line}` for
+//! each line a running root verb's unit writes.
 
 pub mod conn;
 pub mod wire;
@@ -143,6 +150,9 @@ pub const MAX_CONNECTIONS: usize = 16;
 pub const HELLO_DEADLINE: Duration = Duration::from_secs(10);
 /// How long one write may block before the peer is taken for gone.
 pub const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+/// The longest `root.run` waits for any one line from the root helper: a
+/// backstop only — the helper answers within its verb's own timeout.
+pub const ROOT_SILENCE: Duration = Duration::from_secs(2 * 60 * 60);
 
 /// What the socket enforces before a connection reaches `conn` (the os
 /// layer applies it; `Limits::of` is the service's).
@@ -202,6 +212,11 @@ pub fn capabilities(cfg: &Config, nodes: bool) -> Vec<&'static str> {
     if nodes && role.node_listener {
         c.push("nodes");
     }
+    // The root helper answers only the controller (root/mod.rs), and only
+    // where nix named its socket.
+    if role.api_socket && cfg.controller.root_socket.is_some() {
+        c.push("root");
+    }
     c
 }
 
@@ -251,6 +266,8 @@ pub struct Api {
     role: Role,
     telemetry: TelemetryLevel,
     capabilities: Vec<&'static str>,
+    /// The root helper's socket, where `root` is offered.
+    root_socket: Option<std::path::PathBuf>,
     /// `MAX_IN_FLIGHT`, except in the tests of the `busy` answer.
     max_in_flight: usize,
 }
@@ -263,6 +280,7 @@ impl Api {
             shared,
             role,
             telemetry: cfg.telemetry,
+            root_socket: cfg.controller.root_socket.clone(),
             max_in_flight: MAX_IN_FLIGHT,
         }
     }
@@ -434,6 +452,12 @@ impl Api {
                     .map_err(|e| ApiError::new(code::UNAVAILABLE, e))?;
                 to_value(&self.shared.controller_info())
             }
+            "root.run" => {
+                self.has("root")?;
+                let p: wire::RootRun = serde_json::from_value(params.clone())
+                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+                to_value(&self.root_run(p)?)
+            }
             m if m.starts_with("nodes.") => self.nodes_call(m, params),
             _ => Err(ApiError::new(
                 code::UNKNOWN_METHOD,
@@ -528,6 +552,74 @@ impl Api {
                 to_value(&nodes.command(&c.id, c.command)?)
             }
             _ => unreachable!("listed above"),
+        }
+    }
+
+    /// `root.run`: one verb on the root helper, its unit's lines published
+    /// as `root.progress` while it runs, its outcome the answer. The helper
+    /// is the authority on what exists; the words are checked here only so
+    /// nonsense costs no root process.
+    fn root_run(&self, p: wire::RootRun) -> Result<wire::RootRunOk, ApiError> {
+        use crate::root::{self, relay::RelayError};
+        let socket = self
+            .root_socket
+            .as_ref()
+            .ok_or_else(|| ApiError::new(code::UNSUPPORTED, "no root helper is configured"))?;
+        if !root::valid_name(&p.verb) {
+            return Err(ApiError::new(
+                code::BAD_REQUEST,
+                "`root.run`: a verb is [a-z][a-z0-9-]{0,31}",
+            ));
+        }
+        if p.selectors
+            .iter()
+            .any(|(k, v)| !root::valid_name(k) || !root::valid_value(v))
+        {
+            return Err(ApiError::new(
+                code::BAD_REQUEST,
+                "`root.run`: a selector is a name and a value of [A-Za-z0-9._-]",
+            ));
+        }
+        let run = crate::claude::sessions::mint_request();
+        let request = root::Request {
+            verb: p.verb.clone(),
+            id: run.clone(),
+            selectors: p.selectors,
+        };
+        tracing::info!(verb = %p.verb, run = %run, "root: asking the helper");
+        let events = self.shared.events();
+        let answer = root::relay::run(socket, &request, ROOT_SILENCE, |line| {
+            events.publish(
+                wire::event::ROOT_PROGRESS,
+                &wire::RootProgress {
+                    run: run.clone(),
+                    verb: p.verb.clone(),
+                    line: line.to_string(),
+                },
+            )
+        });
+        match answer {
+            Ok(a) => {
+                tracing::info!(verb = %p.verb, run = %run, outcome = ?a.outcome, detail = %a.detail, "root: answered");
+                Ok(wire::RootRunOk {
+                    run,
+                    verb: p.verb,
+                    outcome: a.outcome,
+                    detail: a.detail,
+                    verbs: a.verbs,
+                })
+            }
+            Err(e) => {
+                tracing::warn!(verb = %p.verb, run = %run, error = %e, "root: no answer");
+                Err(match &e {
+                    RelayError::Refused { code: c, .. }
+                        if c == root::code::BAD_REQUEST || c == root::code::UNKNOWN_VERB =>
+                    {
+                        ApiError::new(code::BAD_REQUEST, e.to_string())
+                    }
+                    _ => ApiError::new(code::UNAVAILABLE, e.to_string()),
+                })
+            }
         }
     }
 
@@ -768,6 +860,114 @@ mod tests {
         assert_eq!(
             capabilities(&cfg(&format!("telemetry = \"off\"\n{on}")), false),
             ["claude.remote_control", "claude.sessions"]
+        );
+        // `root` only on the controller, and only with the helper's socket.
+        let root = "mode = \"controller\"\ntelemetry = \"off\"\n[controller]\nroot_socket = \"/run/r.sock\"\n";
+        assert_eq!(capabilities(&cfg(root), false), ["root"]);
+        let node_root = "telemetry = \"off\"\n[controller]\nroot_socket = \"/run/r.sock\"\n";
+        assert!(!capabilities(&cfg(node_root), false).contains(&"root"));
+    }
+
+    /// `root.run` through a fake helper: the progress goes out as events
+    /// carrying the run's id, the result is the answer, and a helper's
+    /// refusal or absence is an error with the helper's words.
+    #[cfg(unix)]
+    #[test]
+    fn root_run_relays_the_helper() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixListener;
+
+        let dir = std::env::temp_dir().join(format!("daedalus-api-root-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let sock = dir.join("root.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let helper = std::thread::spawn(move || {
+            let mut asked = Vec::new();
+            for answer in [
+                "{\"t\":\"progress\",\"line\":\"rebooting\"}\n{\"t\":\"result\",\"outcome\":\"done\",\"detail\":\"rebooting\"}\n",
+                "{\"t\":\"error\",\"code\":\"unknown_verb\",\"msg\":\"no verb \\\"halt\\\"\"}\n",
+            ] {
+                let (s, _) = listener.accept().unwrap();
+                let mut line = String::new();
+                BufReader::new(s.try_clone().unwrap()).read_line(&mut line).unwrap();
+                asked.push(line);
+                (&s).write_all(answer.as_bytes()).unwrap();
+            }
+            asked
+        });
+
+        let text = format!(
+            "mode = \"controller\"\ntelemetry = \"off\"\n[controller]\nroot_socket = {:?}\n",
+            sock.display().to_string()
+        );
+        let cfg: Config = toml::from_str(&text).unwrap();
+        let shared = Arc::new(Shared::new(
+            crate::state::State::default(),
+            crate::facts::Facts::default(),
+            std::time::Instant::now(),
+            cfg.initial_policy(),
+            cfg.role(),
+        ));
+        let api = Api::new(Arc::clone(&shared), &cfg);
+        let events = api.events().subscribe();
+
+        let ok: Value = serde_json::from_str(
+            api.call("root.run", &serde_json::json!({"verb": "reboot"}))
+                .unwrap()
+                .get(),
+        )
+        .unwrap();
+        assert_eq!(ok["outcome"], "done");
+        assert_eq!(ok["detail"], "rebooting");
+        assert_eq!(ok["verb"], "reboot");
+        let run = ok["run"].as_str().unwrap().to_string();
+        let event: Value = serde_json::from_str(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(event["e"], "root.progress");
+        assert_eq!(event["p"]["run"], run.as_str());
+        assert_eq!(event["p"]["line"], "rebooting");
+
+        let e = api
+            .call("root.run", &serde_json::json!({"verb": "halt"}))
+            .unwrap_err();
+        assert_eq!(e.code, code::BAD_REQUEST);
+        assert!(e.msg.contains("halt"), "{}", e.msg);
+
+        // Nonsense is refused here, before a root process is spent on it.
+        for p in [
+            serde_json::json!({"verb": "Reboot"}),
+            serde_json::json!({"verb": "deploy", "selectors": {"app": "../x"}}),
+            serde_json::json!({"verb": "reboot", "unit": "sshd.service"}),
+        ] {
+            assert_eq!(
+                api.call("root.run", &p).unwrap_err().code,
+                code::BAD_REQUEST,
+                "{p}"
+            );
+        }
+        let asked = helper.join().unwrap();
+        assert!(
+            asked[0].starts_with("{\"verb\":\"reboot\",\"id\":\""),
+            "{}",
+            asked[0]
+        );
+
+        // The helper gone: unavailable, saying so.
+        drop(std::fs::remove_file(&sock));
+        let e = api
+            .call("root.run", &serde_json::json!({"verb": "reboot"}))
+            .unwrap_err();
+        assert_eq!(e.code, code::UNAVAILABLE);
+        let _ = std::fs::remove_dir_all(dir);
+
+        // No socket configured: not offered at all.
+        let plain: Config = toml::from_str("mode = \"controller\"").unwrap();
+        let api = Api::new(shared, &plain);
+        assert_eq!(
+            api.call("root.run", &serde_json::json!({"verb": "status"}))
+                .unwrap_err()
+                .code,
+            code::UNSUPPORTED
         );
     }
 

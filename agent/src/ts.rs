@@ -47,6 +47,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     SetDesiredOk::export_all(cfg)?;
     CommandOk::export_all(cfg)?;
     ControllerInfo::export_all(cfg)?;
+    RootRunOk::export_all(cfg)?;
     ApiError::export_all(cfg)?;
     // The parameters.
     HelloParams::export_all(cfg)?;
@@ -57,11 +58,13 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     SetDesired::export_all(cfg)?;
     NodeCommand::export_all(cfg)?;
     ControllerRotate::export_all(cfg)?;
+    RootRun::export_all(cfg)?;
     // The events.
     ClaudeChanged::export_all(cfg)?;
     TelemetryUpdated::export_all(cfg)?;
     NodeChanged::export_all(cfg)?;
     NodePending::export_all(cfg)?;
+    RootProgress::export_all(cfg)?;
     // A machine's status page, which `nodes.get` carries as it came.
     crate::status::Document::export_all(cfg)?;
     Ok(())

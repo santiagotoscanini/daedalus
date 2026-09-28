@@ -266,8 +266,10 @@ this tree has.)
   strings for units and agents; the module side reads `fleet.site.source`
   (a store path). Never `builtins.readFile` through a run-time path.
 - **`host/*.sh` are the privileged half.** They run as root or as the
-  operator on a file-drop from the app; the app's TypeScript side of each
-  bridge is in `app/src/host/`. Changing a verb's contract is a change in
+  operator on a file-drop from the app, or — the verbs that moved to the
+  root helper (`fleet.daedalus.rootVerbs`, controller.nix) — when the
+  helper starts their unit; the app's TypeScript side of each is in
+  `app/src/host/`. Changing a verb's contract is a change in
   both places, and the app side deploys on save while this side waits for
   a lock bump — land the tolerant reader first.
 - **Every commit moves the whole input.** A host sees this repo as one

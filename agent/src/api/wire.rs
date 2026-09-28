@@ -175,6 +175,8 @@ pub mod event {
     pub const NODES_CHANGED: &str = "nodes.changed";
     /// An unknown key asks to join (`NodePending`).
     pub const NODES_PENDING: &str = "nodes.pending";
+    /// A root verb's unit wrote a line (`RootProgress`).
+    pub const ROOT_PROGRESS: &str = "root.progress";
 }
 
 // ── the methods ───────────────────────────────────────────────────────────
@@ -583,6 +585,42 @@ pub struct NodePending {
     pub id: String,
     pub fingerprint: String,
     pub hostname: String,
+}
+
+/// `root.run`'s parameters: one of the root helper's verbs and its
+/// selectors (root/mod.rs). The helper's table is the authority; this side
+/// checks only the shape of the words before a connection is spent.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "RootRunParams"))]
+pub struct RootRun {
+    pub verb: String,
+    #[serde(default)]
+    pub selectors: std::collections::BTreeMap<String, String>,
+}
+
+/// `root.run`'s answer: how the verb ended, with the run's id (its
+/// `root.progress` events carry it) and, for `status`, every verb.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RootRunOk {
+    pub run: String,
+    pub verb: String,
+    pub outcome: crate::root::Outcome,
+    pub detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub verbs: Option<Vec<crate::root::VerbState>>,
+}
+
+/// `root.progress`'s payload: one line the verb's unit wrote.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RootProgress {
+    pub run: String,
+    pub verb: String,
+    pub line: String,
 }
 
 /// A node id as the API takes it: sixteen lowercase hex characters.

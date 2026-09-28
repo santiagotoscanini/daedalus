@@ -206,6 +206,57 @@
           pkgs.runCommand "all-modules-evaluate" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
+
+        # The root helper's verb table (nix/stacks/daedalus/controller.nix,
+        # `root`): the example host carries `reboot` with every assertion
+        # holding, and a verb that breaks each rule is refused at evaluation,
+        # naming itself.
+        root-verbs =
+          let
+            inherit (nixpkgs) lib;
+            host = import ./nix/tests/example-host {
+              inherit
+                nixpkgs
+                nixpkgs-unstable
+                sops-nix
+                system
+                ;
+              engine = self;
+            };
+            failing =
+              extra:
+              map (a: a.message) (
+                lib.filter (a: !a.assertion) (host.extendModules { modules = [ extra ]; }).config.assertions
+              );
+            refused =
+              name: verb:
+              lib.any (lib.hasInfix "rootVerbs.${name}:") (failing {
+                fleet.daedalus.rootVerbs.${name} = {
+                  description = "a test";
+                  timeoutSec = 5;
+                }
+                // verb;
+              })
+              || throw "fleet.daedalus.rootVerbs.${name} should have been refused";
+          in
+          assert host.config.fleet.daedalus.rootVerbs ? reboot || throw "the example host has no reboot verb";
+          assert failing { } == [ ] || throw "the example host fails: ${toString (failing { })}";
+          # A unit that does not exist, one with its path unit still there,
+          # a name that is not a verb's, the helper's own `status`, a selector
+          # the unit does not splice in, and a value that is a path.
+          assert refused "nope" { unit = "no-such-unit.service"; };
+          assert refused "apply" { unit = "daedalus-apply.service"; };
+          assert refused "Bad" { unit = "daedalus-power.service"; };
+          assert refused "status" { unit = "daedalus-power.service"; };
+          assert refused "sel" {
+            unit = "daedalus-power.service";
+            selectors.app = [ "a" ];
+          };
+          assert refused "val" {
+            unit = "daedalus-power-{app}.service";
+            selectors.app = [ "../x" ];
+          };
+          pkgs.runCommand "root-verbs" { } "touch $out";
       };
 
       # `nix flake init -t github:santiagotoscanini/daedalus#config`: the

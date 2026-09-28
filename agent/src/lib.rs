@@ -47,6 +47,7 @@ pub mod power;
 pub mod private;
 pub mod providers;
 pub mod role;
+pub mod root;
 pub mod session;
 pub mod state;
 pub mod status;

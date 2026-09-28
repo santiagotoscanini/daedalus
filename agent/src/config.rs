@@ -197,6 +197,10 @@ pub struct ControllerConfig {
     /// Host uids the socket serves besides the agent's own (module doc).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub api_allowed_uids: Vec<u32>,
+    /// The root helper's socket (root/): `root.run` is offered while this
+    /// names one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_socket: Option<PathBuf>,
     /// Where the machines' link is accepted, `address:port`; absent means
     /// the controller listens for no machine.
     #[serde(skip_serializing_if = "Option::is_none")]

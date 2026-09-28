@@ -52,6 +52,7 @@ function fake(over: Partial<ControllerClient>): ControllerClient & { calls: stri
     nodesSetDesired: no('nodes.set_desired'),
     nodesCommand: no('nodes.command'),
     controllerRotate: no('controller.rotate'),
+    rootRun: no('root.run'),
     hello: () => null,
     close: () => undefined,
     ...over,

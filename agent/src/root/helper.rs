@@ -1,0 +1,668 @@
+//! `daedalus-agent root-helper --table <file>`: one connection's root
+//! process, started by `daedalus-root@.service` with the connection on its
+//! stdin (root/mod.rs has the design). It answers on that socket and logs
+//! to stderr, the instance's journal. It exits 0 whenever it answered,
+//! whatever the answer, so a refusal never leaves a failed unit.
+
+use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader, Write};
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::net::UnixStream;
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
+
+use anyhow::{bail, Context, Result};
+
+use super::{
+    code, peer_allowed, progress_text, read_line, Line, Outcome, Request, Resolved, Table,
+    VerbState, MAX_REQUEST, REFUSED_PREFIX, REQUEST_DEADLINE,
+};
+
+/// A write the controller does not take within this long ends the run
+/// (the unit goes on).
+const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+/// After the start job ends, how long journald gets to hand over the
+/// unit's last lines.
+const JOURNAL_SETTLE: Duration = Duration::from_millis(400);
+/// A `systemctl show` or a cursor read answers within this long.
+const QUICK: Duration = Duration::from_secs(10);
+
+pub fn main(args: &[String]) -> Result<()> {
+    let path = match args {
+        [flag, p] if flag == "--table" => p,
+        _ => bail!("usage: daedalus-agent root-helper --table FILE (systemd starts it, one per connection)"),
+    };
+    // SAFETY: systemd hands the accepted connection over as fd 0
+    // (StandardInput=socket); nothing else in this process owns it.
+    let sock = unsafe { UnixStream::from_raw_fd(0) };
+    serve(sock, path)
+}
+
+/// One connection, answered, then closed so the peer reads the answer: a
+/// unix socket closed with unread input resets, and the peer's read of the
+/// answer fails — so the write side is shut and what is left of the input
+/// (a request never read, after a refusal) is read away first.
+fn serve(sock: UnixStream, path: &str) -> Result<()> {
+    let end = sock.try_clone().context("the connection")?;
+    let answered = answer(sock, path);
+    let _ = end.shutdown(std::net::Shutdown::Write);
+    let _ = end.set_read_timeout(Some(Duration::from_secs(1)));
+    let _ = std::io::copy(
+        &mut std::io::Read::take(&end, MAX_REQUEST as u64 * 4),
+        &mut std::io::sink(),
+    );
+    answered
+}
+
+fn answer(sock: UnixStream, path: &str) -> Result<()> {
+    let peer = peer_uid(&sock);
+    let mut out = sock.try_clone().context("the connection")?;
+    let _ = out.set_write_timeout(Some(WRITE_TIMEOUT));
+    let _ = sock.set_read_timeout(Some(REQUEST_DEADLINE));
+
+    let table = std::fs::read(path)
+        .map_err(anyhow::Error::from)
+        .and_then(|b| serde_json::from_slice::<Table>(&b).map_err(anyhow::Error::from))
+        .and_then(|t| t.check().map(|()| t).map_err(anyhow::Error::msg));
+    let table = match table {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("root helper: the table {path} is unusable: {e:#}");
+            send(
+                &mut out,
+                &error(
+                    code::INTERNAL,
+                    "the helper's verb table is unusable; see its journal",
+                ),
+            );
+            return Ok(());
+        }
+    };
+
+    if !peer_allowed(peer, table.allow_uid) {
+        let who = peer.map_or("a peer without credentials".into(), |u| format!("uid {u}"));
+        eprintln!("root helper: refused {who}");
+        send(
+            &mut out,
+            &error(
+                code::FORBIDDEN,
+                format!("{who} may not ask the root helper"),
+            ),
+        );
+        return Ok(());
+    }
+
+    let mut reader = BufReader::new(sock);
+    let req = match read_line(&mut reader, MAX_REQUEST) {
+        Ok(Some(l)) => serde_json::from_str::<Request>(&l).map_err(|e| e.to_string()),
+        Ok(None) => Err("no request".into()),
+        Err(e) => Err(e.to_string()),
+    };
+    let req = match req {
+        Ok(r) => r,
+        Err(e) => {
+            send(
+                &mut out,
+                &error(code::BAD_REQUEST, format!("not a request: {e}")),
+            );
+            return Ok(());
+        }
+    };
+    let resolved = match table.resolve(&req) {
+        Ok(r) => r,
+        Err((c, msg)) => {
+            eprintln!(
+                "root helper: refused {:?} (id {:?}): {msg}",
+                req.verb, req.id
+            );
+            send(&mut out, &error(c, msg));
+            return Ok(());
+        }
+    };
+    match resolved {
+        Resolved::Status => {
+            let verbs = status(&table);
+            send(
+                &mut out,
+                &Line::Result {
+                    outcome: Outcome::Done,
+                    detail: format!("{} verbs", verbs.len()),
+                    verbs: Some(verbs),
+                },
+            );
+        }
+        Resolved::Run {
+            verb,
+            unit,
+            timeout,
+        } => {
+            eprintln!("root helper: {verb} (id {}) starts {unit}", req.id);
+            let (outcome, detail) = run(&table, &unit, timeout, &mut out);
+            eprintln!("root helper: {verb} (id {}) {outcome:?}: {detail}", req.id);
+            send(
+                &mut out,
+                &Line::Result {
+                    outcome,
+                    detail,
+                    verbs: None,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+fn error(code: &str, msg: impl Into<String>) -> Line {
+    Line::Error {
+        code: code.into(),
+        msg: msg.into(),
+    }
+}
+
+/// One line to the controller; false once it stopped taking them.
+fn send(out: &mut UnixStream, line: &Line) -> bool {
+    let Ok(mut text) = serde_json::to_string(line) else {
+        return false;
+    };
+    text.push('\n');
+    out.write_all(text.as_bytes())
+        .and_then(|()| out.flush())
+        .is_ok()
+}
+
+/// The uid on the other end, as the kernel states it.
+fn peer_uid(s: &UnixStream) -> Option<u32> {
+    let mut cred = libc::ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: SO_PEERCRED fills a ucred of the stated size on this socket.
+    let rc = unsafe {
+        libc::getsockopt(
+            s.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut cred as *mut libc::ucred).cast(),
+            &mut len,
+        )
+    };
+    (rc == 0 && len as usize == std::mem::size_of::<libc::ucred>()).then_some(cred.uid)
+}
+
+/// `systemctl show` of a few properties, as a map; empty when it failed.
+fn show(table: &Table, unit: &str, props: &[&str]) -> BTreeMap<String, String> {
+    let mut cmd = Command::new(&table.systemctl);
+    cmd.arg("show").arg(unit);
+    for p in props {
+        cmd.arg("-p").arg(p);
+    }
+    crate::exec::stdout_or(cmd, QUICK, crate::exec::Text::Lossy)
+        .map(|s| parse_show(&s))
+        .unwrap_or_default()
+}
+
+/// `Key=value` lines.
+fn parse_show(text: &str) -> BTreeMap<String, String> {
+    text.lines()
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+fn status(table: &Table) -> Vec<VerbState> {
+    table
+        .verbs
+        .iter()
+        .map(|(verb, spec)| {
+            let props = if spec.unit.contains('{') {
+                BTreeMap::new()
+            } else {
+                show(table, &spec.unit, &["ActiveState", "Result"])
+            };
+            VerbState {
+                verb: verb.clone(),
+                unit: spec.unit.clone(),
+                description: spec.description.clone(),
+                selectors: spec.selectors.clone(),
+                active_state: props.get("ActiveState").cloned(),
+                result: props.get("Result").cloned(),
+            }
+        })
+        .collect()
+}
+
+/// A unit that is somewhere between started and stopped.
+fn busy(active_state: &str) -> bool {
+    matches!(
+        active_state,
+        "activating" | "deactivating" | "reloading" | "refreshing"
+    )
+}
+
+/// The journal's tail, as a cursor to follow from.
+fn journal_cursor(table: &Table) -> Option<String> {
+    let mut cmd = Command::new(&table.journalctl);
+    cmd.args(["-q", "-n", "0", "--show-cursor"]);
+    let text = crate::exec::stdout_or(cmd, QUICK, crate::exec::Text::Lossy).ok()?;
+    text.lines()
+        .find_map(|l| l.strip_prefix("-- cursor: "))
+        .map(str::to_string)
+}
+
+/// One journal entry: its cursor, the unit invocation that wrote it, and its
+/// message.
+type Entry = (String, Option<String>, String);
+
+/// One `-o json` line as an `Entry`; a message that is not UTF-8 arrives as
+/// an array of bytes.
+fn entry(line: &str) -> Option<Entry> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    let cursor = v.get("__CURSOR")?.as_str()?.to_string();
+    let invocation = v
+        .get("_SYSTEMD_INVOCATION_ID")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let message = match v.get("MESSAGE")? {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(b) => {
+            let bytes: Vec<u8> = b
+                .iter()
+                .filter_map(|x| x.as_u64().map(|n| n as u8))
+                .collect();
+            String::from_utf8_lossy(&bytes).into_owned()
+        }
+        _ => return None,
+    };
+    Some((cursor, invocation, message))
+}
+
+/// `journalctl` over the unit's own lines after `cursor`, following or not.
+fn journal(table: &Table, unit: &str, cursor: Option<&str>, follow: bool) -> Command {
+    let mut cmd = Command::new(&table.journalctl);
+    cmd.args(["-q", "--no-pager", "-o", "json"]);
+    if follow {
+        cmd.arg("-f");
+    }
+    match cursor {
+        Some(c) => cmd.arg(format!("--after-cursor={c}")),
+        None => cmd.arg("--since=now"),
+    };
+    cmd.arg(format!("_SYSTEMD_UNIT={unit}"));
+    cmd.stdin(Stdio::null()).stderr(Stdio::null());
+    cmd
+}
+
+fn kill(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// The unit's lines on their way out: the last cursor (where a catch-up
+/// read starts), the last non-blank line (a refusal's reason), and the
+/// invocation this run follows: the first entry's. A run of the same unit
+/// that starts right after this one ends writes under another invocation,
+/// and its lines are not this run's.
+struct Relay<'a> {
+    out: &'a mut UnixStream,
+    last_cursor: Option<String>,
+    invocation: Option<String>,
+    last_line: String,
+    /// The controller still takes lines. When it goes, the unit does not
+    /// care and neither does the outcome: they are only no one's to read.
+    listening: bool,
+}
+
+impl Relay<'_> {
+    fn take(&mut self, (cursor, invocation, message): Entry) {
+        self.last_cursor = Some(cursor);
+        match (&self.invocation, invocation) {
+            (Some(mine), Some(theirs)) if *mine != theirs => return,
+            (None, Some(first)) => self.invocation = Some(first),
+            _ => {}
+        }
+        let text = progress_text(&message);
+        if self.listening && !send(self.out, &Line::Progress { line: text.clone() }) {
+            self.listening = false;
+        }
+        if !text.trim().is_empty() {
+            self.last_line = text;
+        }
+    }
+}
+
+/// Start the unit, stream its lines, and say how it ended.
+fn run(table: &Table, unit: &str, timeout: Duration, out: &mut UnixStream) -> (Outcome, String) {
+    let before = show(table, unit, &["ActiveState", "LoadState"]);
+    match before.get("LoadState").map(String::as_str) {
+        Some("loaded") => {}
+        other => {
+            return (
+                Outcome::Failed,
+                format!(
+                    "{unit} is not a loaded unit on this box ({})",
+                    other.unwrap_or("systemd did not answer")
+                ),
+            )
+        }
+    }
+    if let Some(s) = before.get("ActiveState").filter(|s| busy(s)) {
+        return (
+            Outcome::Refused,
+            format!("{unit} is already running ({s}); wait for it to finish"),
+        );
+    }
+
+    let cursor = journal_cursor(table);
+    let (tx, rx) = mpsc::channel::<Entry>();
+    let mut follower = journal(table, unit, cursor.as_deref(), true)
+        .stdout(Stdio::piped())
+        .spawn()
+        .ok();
+    if let Some(stdout) = follower.as_mut().and_then(|f| f.stdout.take()) {
+        std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                let Ok(line) = line else { return };
+                if let Some(e) = entry(&line) {
+                    if tx.send(e).is_err() {
+                        return;
+                    }
+                }
+            }
+        });
+    }
+
+    let mut start = match Command::new(&table.systemctl)
+        .arg("start")
+        .arg(unit)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            if let Some(f) = follower.as_mut() {
+                kill(f);
+            }
+            return (Outcome::Failed, format!("systemctl could not be run: {e}"));
+        }
+    };
+
+    let deadline = Instant::now() + timeout;
+    let mut relay = Relay {
+        out,
+        last_cursor: cursor.clone(),
+        invocation: None,
+        last_line: String::new(),
+        listening: true,
+    };
+    let exit = loop {
+        match rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(e) => {
+                relay.take(e);
+                continue;
+            }
+            Err(mpsc::RecvTimeoutError::Timeout | mpsc::RecvTimeoutError::Disconnected) => {}
+        }
+        match start.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() >= deadline => break None,
+            Ok(None) => {}
+            Err(_) => break None,
+        }
+    };
+    let start_err = if exit.is_none() {
+        // Only the client goes: the job is systemd's and runs on.
+        kill(&mut start);
+        String::new()
+    } else {
+        let mut s = String::new();
+        if let Some(mut e) = start.stderr.take() {
+            let _ = std::io::Read::read_to_string(&mut e, &mut s);
+        }
+        s.lines().next().unwrap_or_default().to_string()
+    };
+
+    std::thread::sleep(JOURNAL_SETTLE);
+    while let Ok(e) = rx.try_recv() {
+        relay.take(e);
+    }
+    if let Some(f) = follower.as_mut() {
+        kill(f);
+    }
+    while let Ok(e) = rx.try_recv() {
+        relay.take(e);
+    }
+    // What the follower had not handed over when it was stopped.
+    let after_cursor = relay.last_cursor.clone();
+    if let Ok(o) = journal(table, unit, after_cursor.as_deref(), false)
+        .stdout(Stdio::piped())
+        .output()
+    {
+        for line in String::from_utf8_lossy(&o.stdout).lines() {
+            if let Some(e) = entry(line) {
+                relay.take(e);
+            }
+        }
+    }
+
+    if exit.is_none() {
+        return (
+            Outcome::Failed,
+            format!(
+                "{unit} gave no result within {} s; it goes on (journalctl -u {unit})",
+                timeout.as_secs()
+            ),
+        );
+    }
+    let job_ok = exit.is_some_and(|s| s.success());
+    let result = if job_ok {
+        String::new()
+    } else {
+        show(table, unit, &["Result"])
+            .remove("Result")
+            .unwrap_or_default()
+    };
+    outcome_of(job_ok, &result, &relay.last_line, &start_err)
+}
+
+/// The outcome from whether the start job succeeded and the unit's last
+/// line (module doc); `result` is the unit's `Result`, read only after a
+/// failure, for a detail when the unit printed nothing.
+fn outcome_of(job_ok: bool, result: &str, last_line: &str, start_err: &str) -> (Outcome, String) {
+    if job_ok {
+        return match last_line.strip_prefix(REFUSED_PREFIX) {
+            Some(reason) if !reason.trim().is_empty() => (Outcome::Refused, reason.to_string()),
+            Some(_) => (Outcome::Refused, "refused, without a reason".into()),
+            None => (Outcome::Done, last_line.to_string()),
+        };
+    }
+    let detail = if !last_line.is_empty() {
+        last_line.to_string()
+    } else if !start_err.is_empty() {
+        start_err.to_string()
+    } else {
+        format!("the unit failed (Result={result})")
+    };
+    (Outcome::Failed, detail)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_job_and_the_last_line_say_how_it_ended() {
+        assert_eq!(
+            outcome_of(true, "", "rebooting", ""),
+            (Outcome::Done, "rebooting".into())
+        );
+        assert_eq!(
+            outcome_of(true, "", "refused: an apply is running", ""),
+            (Outcome::Refused, "an apply is running".into())
+        );
+        assert_eq!(
+            outcome_of(true, "", "refused: ", ""),
+            (Outcome::Refused, "refused, without a reason".into())
+        );
+        // Only the last line counts, and only as a prefix.
+        assert_eq!(
+            outcome_of(true, "", "nothing was refused: all good", "").0,
+            Outcome::Done
+        );
+        assert_eq!(
+            outcome_of(false, "exit-code", "", "Job for x.service failed"),
+            (Outcome::Failed, "Job for x.service failed".into())
+        );
+        assert_eq!(
+            outcome_of(false, "exit-code", "the agent broke", "Job failed"),
+            (Outcome::Failed, "the agent broke".into())
+        );
+        assert_eq!(
+            outcome_of(false, "timeout", "", ""),
+            (Outcome::Failed, "the unit failed (Result=timeout)".into())
+        );
+        assert!(busy("activating") && !busy("inactive") && !busy("failed"));
+    }
+
+    #[test]
+    fn journal_entries_and_show_lines() {
+        assert_eq!(
+            entry(r#"{"__CURSOR":"s=1","MESSAGE":"rebooting","_PID":"2"}"#),
+            Some(("s=1".into(), None, "rebooting".into()))
+        );
+        assert_eq!(
+            entry(r#"{"__CURSOR":"s=2","_SYSTEMD_INVOCATION_ID":"i1","MESSAGE":[104,105,255]}"#),
+            Some(("s=2".into(), Some("i1".into()), "hi\u{fffd}".into()))
+        );
+        assert_eq!(entry(r#"{"MESSAGE":"no cursor"}"#), None);
+        let m = parse_show("ActiveState=inactive\nResult=success\nLoadState=loaded\n");
+        assert_eq!(m["LoadState"], "loaded");
+        assert_eq!(m.len(), 3);
+    }
+
+    /// A table whose tools are shell scripts standing in for systemd: the
+    /// unit is loaded and idle, `start` succeeds, and the journal has one
+    /// line for the run, `message`.
+    fn fake(dir: &std::path::Path, allow_uid: u32, message: &str) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::create_dir_all(dir).unwrap();
+        let script = |name: &str, body: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+            p.display().to_string()
+        };
+        let systemctl = script(
+            "systemctl",
+            "case \"$1\" in\n show) printf 'ActiveState=inactive\\nLoadState=loaded\\nResult=success\\n';;\n start) [ \"$2\" = fake.service ] || exit 5;;\n esac",
+        );
+        let entry = serde_json::json!({"__CURSOR": "c1", "MESSAGE": message}).to_string();
+        let journalctl = script(
+            "journalctl",
+            &format!(
+                "for a in \"$@\"; do case \"$a\" in\n --show-cursor) echo '-- cursor: c0'; exit 0;;\n -f) echo '{entry}'; exec sleep 30;;\n esac; done"
+            ),
+        );
+        let table = serde_json::json!({
+            "allow_uid": allow_uid,
+            "systemctl": systemctl,
+            "journalctl": journalctl,
+            "verbs": {"reboot": {"unit": "fake.service", "description": "a fake", "timeout_secs": 20}}
+        });
+        let path = dir.join("table.json");
+        std::fs::write(&path, table.to_string()).unwrap();
+        path.display().to_string()
+    }
+
+    #[test]
+    fn a_run_keeps_to_its_own_invocation() {
+        let (mut out, peer) = UnixStream::pair().unwrap();
+        let mut r = Relay {
+            out: &mut out,
+            last_cursor: None,
+            invocation: None,
+            last_line: String::new(),
+            listening: true,
+        };
+        r.take(("c1".into(), Some("mine".into()), "rebooting".into()));
+        // The next run of the same unit, caught in the settle window.
+        r.take(("c2".into(), Some("next".into()), "refused: not mine".into()));
+        assert_eq!(r.last_line, "rebooting");
+        assert_eq!(r.last_cursor.as_deref(), Some("c2"));
+        drop(peer);
+    }
+
+    /// One whole connection over a socket pair: the lines the peer reads.
+    fn converse(table: &str, request: &str) -> Vec<Line> {
+        let (mut client, server) = UnixStream::pair().unwrap();
+        client.write_all(request.as_bytes()).unwrap();
+        serve(server, table).unwrap();
+        let mut text = String::new();
+        std::io::Read::read_to_string(&mut client, &mut text).unwrap();
+        text.lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect()
+    }
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("daedalus-root-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn a_peer_the_table_does_not_list_gets_one_refusal() {
+        let me = unsafe { libc::geteuid() };
+        let dir = scratch("peer");
+        let table = fake(&dir, me.wrapping_add(1), "rebooting");
+        let lines = converse(&table, "{\"verb\":\"reboot\",\"id\":\"r1\"}\n");
+        assert!(
+            matches!(&lines[..], [Line::Error { code, .. }] if code == "forbidden"),
+            "{lines:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_run_streams_the_units_lines_then_its_outcome() {
+        let me = unsafe { libc::geteuid() };
+        let dir = scratch("run");
+        let table = fake(&dir, me, "refused: the reason");
+        let lines = converse(&table, "{\"verb\":\"reboot\",\"id\":\"r2\"}\n");
+        assert_eq!(
+            lines,
+            [
+                Line::Progress {
+                    line: "refused: the reason".into()
+                },
+                Line::Result {
+                    outcome: Outcome::Refused,
+                    detail: "the reason".into(),
+                    verbs: None
+                }
+            ]
+        );
+        // An unknown verb and a bad line are answered, never run.
+        let lines = converse(&table, "{\"verb\":\"poweroff\",\"id\":\"r3\"}\n");
+        assert!(matches!(&lines[..], [Line::Error { code, .. }] if code == "unknown_verb"));
+        let lines = converse(&table, "not json\n");
+        assert!(matches!(&lines[..], [Line::Error { code, .. }] if code == "bad_request"));
+        // status: the table's verbs and their units' state.
+        let lines = converse(&table, "{\"verb\":\"status\",\"id\":\"r4\"}\n");
+        match &lines[..] {
+            [Line::Result {
+                outcome: Outcome::Done,
+                verbs: Some(v),
+                ..
+            }] => {
+                assert_eq!(v.len(), 1);
+                assert_eq!(v[0].verb, "reboot");
+                assert_eq!(v[0].active_state.as_deref(), Some("inactive"));
+            }
+            other => panic!("{other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
