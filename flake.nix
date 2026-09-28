@@ -266,6 +266,45 @@
             unit = "daedalus-root@{app}.service";
             selectors.app = [ "a" ];
           };
+          # A run-file verb (patterns, a payload): the example host carries
+          # workspace-clone; one that names no template, a pattern that is
+          # not anchored, one written with a backslash, a cap past 256 and a
+          # payload past 64 KiB are refused.
+          assert
+            host.config.fleet.daedalus.rootVerbs ? workspace-clone
+            || throw "the example host has no workspace-clone verb";
+          assert refused "notpl" {
+            unit = "daedalus-power.service";
+            patterns.x = {
+              regex = "^a$";
+              maxLength = 1;
+            };
+          };
+          assert refused "unanchored" {
+            unit = "daedalus-workspace-clone@.service";
+            patterns.x = {
+              regex = "[a-z]+";
+              maxLength = 8;
+            };
+          };
+          assert refused "escape" {
+            unit = "daedalus-workspace-clone@.service";
+            patterns.x = {
+              regex = "^\\w+$";
+              maxLength = 8;
+            };
+          };
+          assert refused "toolong" {
+            unit = "daedalus-workspace-clone@.service";
+            patterns.x = {
+              regex = "^[a-z]+$";
+              maxLength = 300;
+            };
+          };
+          assert refused "bigpayload" {
+            unit = "daedalus-workspace-clone@.service";
+            payloadMax = 65537;
+          };
           pkgs.runCommand "root-verbs" { } "touch $out";
       };
 

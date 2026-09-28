@@ -3,7 +3,9 @@
 # on `<verb>-request.json`, and whether a failure mails (monitoredJobs) or is
 # shown on the page that asked. And the verbs that have moved to the root
 # helper (controller.nix, `root`): each a `fleet.daedalus.rootVerbs` entry
-# naming a unit with no path unit — reboot, deploy, task-run.
+# naming a unit with no path unit — here reboot, deploy, task-run,
+# workspace-clone and secret-set (build-cancel and github-token are their
+# own modules').
 # The scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
 # daedalus stack (daedalus.nix holds the switch); never imports its siblings.
 {
@@ -21,8 +23,11 @@ let
     deployableApps
     runnableTasks
     longestTaskSec
+    actorPattern
+    dropRunFile
     ;
   inherit (import ./verbs-lib.nix { inherit config lib pkgs; })
+    secretApps
     secretSetScript
     applyScript
     powerScript
@@ -170,31 +175,41 @@ in
       timeoutSec = 600;
     };
 
-    # The workspace clone agent — same file-drop bridge. Root
-    # because a path unit can only start a system unit; every git call inside
-    # drops to the operator (the clones and the SSH identity are theirs).
-    systemd.services.daedalus-workspace-clone = bridgeAgent // {
+    # The workspace clone: the root helper's `workspace-clone` (controller.nix,
+    # `root`). A slug is not a value a list can hold, so it is a pattern
+    # selector and travels in the run file; the unit is a template the run id
+    # instantiates. Root because it runs under the helper; every git call
+    # inside drops to the operator (the clones and the SSH identity are
+    # theirs). Not monitoredJobs: a refusal is shown on the page that asked
+    # and exits 0.
+    systemd.services."daedalus-workspace-clone@" = bridgeAgent // {
       description = "Clone a project repo into the workspace root on daedalus's behalf";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${workspaceCloneScript}/bin/daedalus-workspace-clone";
+        ExecStart = "${workspaceCloneScript}/bin/daedalus-workspace-clone %i";
+        ExecStopPost = dropRunFile;
         # A large repo on a slow evening plus the 10-minute lock wait; the
         # default 90s would SIGTERM a legitimate first clone.
         TimeoutStartSec = "15min";
       };
     };
 
-    systemd.paths.daedalus-workspace-clone = {
-      description = "Watch for a daedalus workspace clone request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/workspace-request.json";
+    fleet.daedalus.rootVerbs.workspace-clone = {
+      unit = "daedalus-workspace-clone@.service";
+      description = "Clone (or fast-forward) a project repo into the workspace root";
+      # owner/name as GitHub has them: an owner of alphanumerics and hyphens
+      # not starting with one, a name that does not start with `.` or `-`
+      # (so never `.` or `..`). host/workspace-clone.sh asks the same again.
+      patterns.repo = {
+        regex = "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$";
+        maxLength = 140;
+      };
+      patterns.actor = actorPattern;
+      # The unit's own 15 minutes, and a minute for the start job.
+      timeoutSec = 960;
     };
-
-    # Not monitoredJobs, like the secret-set agent: both
-    # outcomes land in the status file the page that asked is polling, and a
-    # genuine refusal exits 0.
 
     # Restart: the root helper's `reboot` (controller.nix, `root`) — the first
     # verb off the file-drop bridge, so no path unit and no request file. The
@@ -228,36 +243,57 @@ in
     # the mail relay down with the rest of the box before anything could be
     # sent. The only email this unit could ever deliver is a failure to reboot.
 
-    # The secret-set bridge's agent. It outlives its action, so `done` and
-    # `failed` are both real and the ordinary status poll covers the flow end to
-    # end.
+    # Set or remove one key in an app's operator-secrets file: the root
+    # helper's `secret-set` (controller.nix, `root`). The key is a pattern
+    # selector and the sealed value the payload, so both travel in the run
+    # file (never a unit name, never argv); the unit is a template the run id
+    # instantiates. The app is one of the applied registry's (verbs-lib
+    # `secretApps`), so the verb exists only when some app does.
     #
     # It deliberately does NOT rebuild — the write is a committed file, and
     # making it running state is the Apply's job (which holds the rebuild lock
     # and knows how to roll back). So no rebuild lock is taken here either: the
     # only thing it contends for is the site directory's git index, and
     # site_commit already scopes its commit to site/.
-    systemd.services.daedalus-secret-set = bridgeAgent // {
+    #
+    # Not monitoredJobs: a refusal is shown on the page that asked and exits
+    # 0; the only mailable event is the agent itself breaking, which
+    # `systemctl --failed` and the failed-units alert already carry.
+    systemd.services."daedalus-secret-set@" = bridgeAgent // {
       description = "Set or remove one key in an app's operator-secrets file on daedalus's behalf";
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${secretSetScript}/bin/daedalus-secret-set";
+        ExecStart = "${secretSetScript}/bin/daedalus-secret-set %i";
+        ExecStopPost = dropRunFile;
         # Two sops runs, a git commit and a push. Two minutes is generous; past it
         # something is wedged and the page should say so rather than hang.
         TimeoutStartSec = "2min";
       };
     };
 
-    systemd.paths.daedalus-secret-set = {
-      description = "Watch for a daedalus app-secret write request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/secret-set-request.json";
+    fleet.daedalus.rootVerbs.secret-set = lib.mkIf (secretApps != [ ]) {
+      unit = "daedalus-secret-set@.service";
+      description = "Set or remove one key in an app's operator-secrets file";
+      selectors = {
+        app = secretApps;
+        action = [
+          "set"
+          "remove"
+        ];
+      };
+      # An environment variable's name; host/secret-set.sh also refuses
+      # sops's own `sops_*` rows, which no regex here can say.
+      patterns.key = {
+        regex = "^[A-Za-z_][A-Za-z0-9_]{0,63}$";
+        maxLength = 64;
+      };
+      patterns.actor = actorPattern;
+      # A sops document sealing one value: its recipients and MAC are about
+      # 2 KiB, so a value of up to ~45 KiB fits.
+      payloadMax = 65536;
+      # The unit's own two minutes, and a minute for the start job.
+      timeoutSec = 180;
     };
-
-    # Not monitoredJobs: both outcomes land in the
-    # status file the page that asked is polling, and a genuine refusal exits 0.
-    # The only mailable event is the agent itself breaking, which `systemctl
-    # --failed` and the failed-units alert already carry.
 
     # "Run now" for an app's scheduled task: the root helper's `task-run`
     # starts the task's EXISTING `app-<app>-task-<id>.service` (modules/apps,

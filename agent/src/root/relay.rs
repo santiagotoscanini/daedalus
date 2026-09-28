@@ -153,6 +153,7 @@ mod tests {
             verb: "reboot".into(),
             id: "abc".into(),
             selectors: Default::default(),
+            payload: None,
         }
     }
 

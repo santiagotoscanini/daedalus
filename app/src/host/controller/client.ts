@@ -120,7 +120,12 @@ export type ControllerClient = {
    * src/root/): only ever from an admin's click. Answers when the verb's unit
    * has finished, so it takes its own wait; `status` is the read-only one.
    */
-  rootRun: (verb: string, selectors?: Record<string, string>, waitMs?: number) => Promise<RootRun>
+  rootRun: (
+    verb: string,
+    selectors?: Record<string, string>,
+    waitMs?: number,
+    payload?: string,
+  ) => Promise<RootRun>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
   /** End this client for good: the connection goes, and later calls fail `closed`. */
@@ -374,8 +379,13 @@ export function createControllerClient(opts: Options): ControllerClient {
     nodesSetDesired: (nodes) => call('nodes.set_desired', setDesiredOk, { nodes }),
     nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }),
     controllerRotate: (p) => call('controller.rotate', controllerRotated, p),
-    rootRun: (verb, selectors, waitMs) =>
-      call('root.run', rootRunOk, { verb, selectors: selectors ?? {} }, waitMs),
+    rootRun: (verb, selectors, waitMs, payload) =>
+      call(
+        'root.run',
+        rootRunOk,
+        { verb, selectors: selectors ?? {}, ...(payload === undefined ? {} : { payload }) },
+        waitMs,
+      ),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
     close: () => {
       closed = true

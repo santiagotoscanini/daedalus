@@ -280,3 +280,29 @@ commit_name() {
 commit_email() {
   if commit_as_operator; then printf '%s' "$GIT_OPERATOR_EMAIL"; else printf '%s' "$GIT_EMAIL"; fi
 }
+
+# ── the root helper's run file ────────────────────────────────────────────
+#
+# A root verb whose values no list can hold (a slug, a key name) or that
+# carries a payload (a sealed secret) is a template unit, started by the
+# helper as `<unit>@<run id>` after it wrote the request to
+# $ROOT_RUN_DIR/<run id>.json (stacks/daedalus controller.nix, the header's
+# `run file`). $1 is the instance, `%i`. The file is root's, 0600, in a
+# directory only root can write — the exception the rule above allows — so
+# it is read by name, printed, and removed; the unit's ExecStopPost removes
+# it again whatever this script did. Fails, with a journal line, when $1 is
+# not a run id or there is no file for it.
+take_run_file() {
+  local id="${1-}" f
+  if ! [[ "$id" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+    echo "not a run id: '$id'" >&2
+    return 1
+  fi
+  f="$ROOT_RUN_DIR/$id.json"
+  if [ -L "$f" ] || [ ! -f "$f" ]; then
+    echo "no run file for $id" >&2
+    return 1
+  fi
+  cat -- "$f"
+  rm -f -- "$f"
+}

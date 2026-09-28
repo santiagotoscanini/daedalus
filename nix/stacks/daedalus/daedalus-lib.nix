@@ -309,4 +309,20 @@ rec {
   # tmpfiles at boot and at every switch, so the bind source exists before the
   # container starts whether or not the controller is up.
   controllerDir = "/run/daedalus-controller";
+
+  # Where the root helper writes a verb's run file (controller.nix, the
+  # header's `run file`) and the verb's unit reads it: root's, 0700, never
+  # mounted anywhere. host/lib.sh `take_run_file` is the unit's side.
+  rootRunDir = "/run/daedalus-root-runs";
+
+  # What an actor label is held to on its way to a root verb that records it
+  # (a commit's body, a journal line): the app maps anything else to `_`.
+  actorPattern = {
+    regex = "^[A-Za-z0-9 ._@+-]{1,128}$";
+    maxLength = 128;
+  };
+
+  # The ExecStopPost every run-file verb's template carries: its run file
+  # goes whatever the script did with it.
+  dropRunFile = "${pkgs.coreutils}/bin/rm -f -- ${rootRunDir}/%i.json";
 }

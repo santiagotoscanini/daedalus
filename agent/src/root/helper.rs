@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 
 use super::{
-    code, peer_allowed, progress_text, read_line, Line, Outcome, Request, Resolved, Table,
+    code, peer_allowed, progress_text, read_line, Line, Outcome, Request, Resolved, RunFile, Table,
     VerbState, MAX_REQUEST, REFUSED_PREFIX, REQUEST_DEADLINE,
 };
 
@@ -136,9 +136,10 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
             verb,
             unit,
             timeout,
+            run_file,
         } => {
             eprintln!("root helper: {verb} (id {}) starts {unit}", req.id);
-            let (outcome, detail) = run(&table, &unit, timeout, &mut out);
+            let (outcome, detail) = run(&table, &unit, timeout, run_file.as_ref(), &mut out);
             eprintln!("root helper: {verb} (id {}) {outcome:?}: {detail}", req.id);
             send(
                 &mut out,
@@ -217,7 +218,7 @@ fn status(table: &Table) -> Vec<VerbState> {
         .verbs
         .iter()
         .map(|(verb, spec)| {
-            let props = if spec.unit.contains('{') {
+            let props = if spec.unit.contains('{') || spec.run_file() {
                 BTreeMap::new()
             } else {
                 show(table, &spec.unit, &["ActiveState", "Result"])
@@ -227,6 +228,12 @@ fn status(table: &Table) -> Vec<VerbState> {
                 unit: spec.unit.clone(),
                 description: spec.description.clone(),
                 selectors: spec.selectors.clone(),
+                patterns: spec
+                    .patterns
+                    .iter()
+                    .map(|(k, p)| (k.clone(), p.regex.clone()))
+                    .collect(),
+                payload_max: spec.payload_max,
                 active_state: props.get("ActiveState").cloned(),
                 result: props.get("Result").cloned(),
             }
@@ -333,8 +340,159 @@ impl Relay<'_> {
     }
 }
 
+/// Run a verb: for one with a run file (root/mod.rs, "The run file"), refuse
+/// while another instance of its template runs, write the file, start the
+/// unit, and take away what the unit left of the file once it is done.
+fn run(
+    table: &Table,
+    unit: &str,
+    timeout: Duration,
+    run_file: Option<&RunFile>,
+    out: &mut UnixStream,
+) -> (Outcome, String) {
+    let Some(rf) = run_file else {
+        return run_unit(table, unit, timeout, out);
+    };
+    // Held until this run's answer: two connections at once (each its own
+    // helper process) cannot both find the template idle and both start.
+    let _held = match hold_template(rf) {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return (
+                Outcome::Refused,
+                format!(
+                    "another {}… run is starting; wait for it to finish",
+                    rf.template
+                ),
+            )
+        }
+        Err(e) => {
+            return (
+                Outcome::Failed,
+                format!("the run directory could not be locked: {e}"),
+            )
+        }
+    };
+    match template_busy(table, &rf.template) {
+        Ok(None) => {}
+        Ok(Some(other)) => {
+            return (
+                Outcome::Refused,
+                format!("{other} is still running; wait for it to finish"),
+            )
+        }
+        Err(e) => return (Outcome::Failed, e),
+    }
+    if let Err(e) = write_run_file(rf) {
+        return (
+            Outcome::Failed,
+            format!(
+                "the run file {} could not be written: {e}",
+                rf.path.display()
+            ),
+        );
+    }
+    let answer = run_unit(table, unit, timeout, out);
+    // Still running (the wait ran out): the unit reads and removes its own.
+    let running = show(table, unit, &["ActiveState"])
+        .get("ActiveState")
+        .is_some_and(|s| busy(s));
+    if !running {
+        let _ = std::fs::remove_file(&rf.path);
+    }
+    answer
+}
+
+/// Another instance of `template` (`x@`) between started and stopped: its
+/// name, or None; an error when systemd could not be asked.
+fn template_busy(table: &Table, template: &str) -> Result<Option<String>, String> {
+    let mut cmd = Command::new(&table.systemctl);
+    cmd.args([
+        "list-units",
+        "--all",
+        "--plain",
+        "--no-legend",
+        "--no-pager",
+        "--state=activating,deactivating,reloading,refreshing",
+    ])
+    .arg(format!("{template}*.service"));
+    let text = crate::exec::stdout_or(cmd, QUICK, crate::exec::Text::Lossy)
+        .map_err(|e| format!("systemd could not list {template}*: {e}"))?;
+    Ok(text
+        .lines()
+        .find_map(|l| l.split_whitespace().next())
+        .map(str::to_string))
+}
+
+/// The run directory, when it is this process's own and nobody else's: a
+/// real directory (not a link) of this uid, 0700. Nix makes it (tmpfiles);
+/// the helper never does, since its sandbox can write only inside it.
+fn run_dir(rf: &RunFile) -> std::io::Result<&std::path::Path> {
+    use std::io::{Error, ErrorKind};
+    use std::os::unix::fs::MetadataExt;
+    let dir = rf
+        .path
+        .parent()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "a run file names no directory"))?;
+    let m = std::fs::symlink_metadata(dir)?;
+    // SAFETY: geteuid has no preconditions.
+    let me = unsafe { libc::geteuid() };
+    if !m.file_type().is_dir() || m.uid() != me || m.mode() & 0o077 != 0 {
+        return Err(Error::other(format!(
+            "{} must be a directory of uid {me}'s, 0700",
+            dir.display()
+        )));
+    }
+    Ok(dir)
+}
+
+/// `<run dir>/<template>.lock`, locked without waiting: the open file while
+/// it is held, None while another helper holds it.
+fn hold_template(rf: &RunFile) -> std::io::Result<Option<std::fs::File>> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let path = run_dir(rf)?.join(format!("{}.lock", rf.template));
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)?;
+    // SAFETY: a valid fd, owned by `f`, which outlives the call.
+    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+        return Ok(Some(f));
+    }
+    let e = std::io::Error::last_os_error();
+    if e.kind() == std::io::ErrorKind::WouldBlock {
+        Ok(None)
+    } else {
+        Err(e)
+    }
+}
+
+/// The run file: created exclusively, 0600, never through a link, in the
+/// run directory (`run_dir`).
+fn write_run_file(rf: &RunFile) -> std::io::Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    run_dir(rf)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&rf.path)?;
+    f.write_all(&rf.body)?;
+    f.sync_all()
+}
+
 /// Start the unit, stream its lines, and say how it ended.
-fn run(table: &Table, unit: &str, timeout: Duration, out: &mut UnixStream) -> (Outcome, String) {
+fn run_unit(
+    table: &Table,
+    unit: &str,
+    timeout: Duration,
+    out: &mut UnixStream,
+) -> (Outcome, String) {
     let before = show(table, unit, &["ActiveState", "LoadState"]);
     match before.get("LoadState").map(String::as_str) {
         Some("loaded") => {}
@@ -663,6 +821,127 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A run-file verb over fake tools: `start` keeps a copy of the run file
+    /// the unit would read, so the test sees what reached it; `list-units`
+    /// names a running instance when `busy` exists.
+    fn fake_run(dir: &std::path::Path) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::create_dir_all(dir).unwrap();
+        let runs = dir.join("runs");
+        std::fs::create_dir_all(&runs).unwrap();
+        std::fs::set_permissions(&runs, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let script = |name: &str, body: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+            p.display().to_string()
+        };
+        let systemctl = script(
+            "systemctl",
+            &format!(
+                "case \"$1\" in\n list-units) if [ -e {d}/busy ]; then echo 'ws-clone@other.service loaded activating start x'; fi;;\n show) printf 'ActiveState=inactive\\nLoadState=loaded\\nResult=success\\n';;\n start) id=${{2#ws-clone@}}; id=${{id%.service}}; cp {r}/$id.json {d}/seen.json; stat -c %a {r}/$id.json > {d}/mode;;\n esac",
+                d = dir.display(),
+                r = runs.display()
+            ),
+        );
+        let entry = serde_json::json!({"__CURSOR": "c1", "MESSAGE": "cloned"}).to_string();
+        let journalctl = script(
+            "journalctl",
+            &format!(
+                "for a in \"$@\"; do case \"$a\" in\n --show-cursor) echo '-- cursor: c0'; exit 0;;\n -f) echo '{entry}'; exec sleep 30;;\n esac; done"
+            ),
+        );
+        let table = serde_json::json!({
+            "allow_uid": unsafe { libc::geteuid() },
+            "systemctl": systemctl,
+            "journalctl": journalctl,
+            "run_dir": runs.display().to_string(),
+            "verbs": {"clone": {"unit": "ws-clone@.service", "description": "a fake", "timeout_secs": 20,
+                      "patterns": {"repo": {"regex": "^[a-z]+/[a-z]+$", "max_len": 40}},
+                      "payload_max": 64}}
+        });
+        let path = dir.join("table.json");
+        std::fs::write(&path, table.to_string()).unwrap();
+        path.display().to_string()
+    }
+
+    #[test]
+    fn a_run_file_reaches_the_unit_and_is_gone_after() {
+        let dir = scratch("runfile");
+        let _ = std::fs::remove_dir_all(&dir);
+        let table = fake_run(&dir);
+        let lines = converse(
+            &table,
+            "{\"verb\":\"clone\",\"id\":\"r9\",\"selectors\":{\"repo\":\"octo/hello\"},\"payload\":\"sealed\"}\n",
+        );
+        assert_eq!(
+            lines.last(),
+            Some(&Line::Result {
+                outcome: Outcome::Done,
+                detail: "cloned".into(),
+                verbs: None
+            }),
+            "{lines:?}"
+        );
+        let seen: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("seen.json")).unwrap()).unwrap();
+        assert_eq!(seen["selectors"]["repo"], "octo/hello");
+        assert_eq!(seen["payload"], "sealed");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("mode")).unwrap().trim(),
+            "600"
+        );
+        assert!(
+            !dir.join("runs/r9.json").exists(),
+            "the run file is left behind"
+        );
+
+        // The same id again finds no file in the way, and a stale one is
+        // never written through: a planted link at the next name refuses.
+        std::os::unix::fs::symlink("/etc/passwd", dir.join("runs/r10.json")).unwrap();
+        let lines = converse(
+            &table,
+            "{\"verb\":\"clone\",\"id\":\"r10\",\"selectors\":{\"repo\":\"octo/hello\"}}\n",
+        );
+        assert!(
+            matches!(lines.last(), Some(Line::Result { outcome: Outcome::Failed, detail, .. }) if detail.contains("run file")),
+            "{lines:?}"
+        );
+
+        // Another instance still running refuses the next.
+        std::fs::write(dir.join("busy"), "").unwrap();
+        let lines = converse(
+            &table,
+            "{\"verb\":\"clone\",\"id\":\"r11\",\"selectors\":{\"repo\":\"octo/hello\"}}\n",
+        );
+        assert!(
+            matches!(lines.last(), Some(Line::Result { outcome: Outcome::Refused, detail, .. }) if detail.contains("ws-clone@other")),
+            "{lines:?}"
+        );
+        assert!(!dir.join("runs/r11.json").exists());
+        std::fs::remove_file(dir.join("busy")).unwrap();
+
+        // Another helper between its check and its start holds the
+        // template's lock: this one refuses rather than racing it.
+        let held = std::fs::File::open(dir.join("runs/ws-clone@.lock")).unwrap();
+        // SAFETY: a valid fd, owned by `held`.
+        assert_eq!(
+            unsafe { libc::flock(held.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0
+        );
+        let lines = converse(
+            &table,
+            "{\"verb\":\"clone\",\"id\":\"r12\",\"selectors\":{\"repo\":\"octo/hello\"}}\n",
+        );
+        assert!(
+            matches!(lines.last(), Some(Line::Result { outcome: Outcome::Refused, detail, .. }) if detail.contains("starting")),
+            "{lines:?}"
+        );
+        assert!(!dir.join("runs/r12.json").exists());
+        drop(held);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

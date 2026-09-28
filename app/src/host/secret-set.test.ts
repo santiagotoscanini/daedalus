@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest'
+import type { ControllerClient } from './controller/client'
+import type { RootRun } from './controller/wire'
+import { requestSecretRemove, requestSecretSet, SECRET_PAYLOAD_MAX } from './secret-set'
+
+// What reaches the controller for each action: the verb, its selectors, and
+// the sealed document as the payload — or no payload at all.
+
+function fake() {
+  const asked: unknown[][] = []
+  const client = {
+    rootRun: (...args: unknown[]) => {
+      asked.push(args)
+      return Promise.resolve<RootRun>({
+        run: 'r1',
+        verb: 'secret-set',
+        outcome: 'done',
+        detail: 'sealed K',
+        verbs: [],
+      })
+    },
+  } as unknown as ControllerClient
+  return { client, asked }
+}
+
+describe('requestSecretSet', () => {
+  it('sends the ciphertext as the payload, the names as selectors', async () => {
+    const { client, asked } = fake()
+    const doc = '{"data":"ENC[x]","sops":{}}'
+    const r = await requestSecretSet(
+      { actor: 'op@example.test', app: 'hermes', key: 'K', ciphertext: doc },
+      client,
+    )
+    expect(r).toEqual({ outcome: 'done', detail: 'sealed K' })
+    expect(asked).toEqual([
+      [
+        'secret-set',
+        { app: 'hermes', action: 'set', key: 'K', actor: 'op@example.test' },
+        200_000,
+        doc,
+      ],
+    ])
+  })
+
+  it('refuses a sealed document over the cap without asking', async () => {
+    const { client, asked } = fake()
+    const r = await requestSecretSet(
+      { actor: 'a', app: 'hermes', key: 'K', ciphertext: 'x'.repeat(SECRET_PAYLOAD_MAX + 1) },
+      client,
+    )
+    expect(r.outcome).toBe('refused')
+    expect(asked).toEqual([])
+  })
+})
+
+describe('requestSecretRemove', () => {
+  it('carries no payload, and an actor the pattern takes', async () => {
+    const { client, asked } = fake()
+    await requestSecretRemove({ actor: 'José', app: 'hermes', key: 'K' }, client)
+    expect(asked).toEqual([
+      [
+        'secret-set',
+        { app: 'hermes', action: 'remove', key: 'K', actor: 'Jos_' },
+        200_000,
+        undefined,
+      ],
+    ])
+  })
+})

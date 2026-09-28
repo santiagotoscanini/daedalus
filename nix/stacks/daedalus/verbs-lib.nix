@@ -23,6 +23,7 @@ let
     workspaceRuntimeInputs
     githubAppField
     githubTokenDir
+    rootRunDir
     ;
 
   # The site-vault paths an Apply is allowed to write an operator secret to:
@@ -41,7 +42,7 @@ let
   # note there.
   vaultAppSecrets = map (n: "vault/apps/${n}-env.sops") (lib.attrNames registryApps);
 
-  # The apps whose operator-secrets file the secret-set bridge may write: the
+  # The apps whose operator-secrets file the secret-set verb may write: the
   # same committed registry `vaultAppSecrets` above is built from, as bare
   # NAMES. One list, two shapes, because the two agents want different things
   # from it — apply.sh matches a payload key against a path, secret-set.sh
@@ -71,7 +72,7 @@ let
       operatorHomeVars
       // commitVars
       // {
-        APPLY_DIR = applyDir;
+        ROOT_RUN_DIR = rootRunDir;
         PREV_DIR = prevDir;
         SITE_DIR = config.fleet.site.path;
         SECRET_APPS = lib.concatStringsSep " " secretApps;
@@ -149,7 +150,7 @@ let
     name = "daedalus-workspace-clone";
     runtimeInputs = workspaceRuntimeInputs;
     vars = workspaceVars // {
-      APPLY_DIR = applyDir;
+      ROOT_RUN_DIR = rootRunDir;
     };
     files = [
       ./host/lib.sh
@@ -278,6 +279,7 @@ let
 in
 {
   inherit
+    secretApps
     secretSetScript
     applyScript
     powerScript

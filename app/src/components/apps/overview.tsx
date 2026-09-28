@@ -29,7 +29,6 @@ export function Overview({
   repo,
   workspace,
   workspaceRoot,
-  workspaceStatus,
   d,
 }: {
   app: AppRecord
@@ -40,7 +39,6 @@ export function Overview({
   repo: NonNullable<LoaderData>['repo']
   workspace: NonNullable<LoaderData>['workspace']
   workspaceRoot: NonNullable<LoaderData>['workspaceRoot']
-  workspaceStatus: NonNullable<LoaderData>['workspaceStatus']
   d: Extract<AppTabData, { kind: 'overview' }>
 }) {
   // `notes` is jsonb, so the database can hand back anything — an array, a
@@ -234,7 +232,7 @@ export function Overview({
           title="Workspace"
           icon="⎇"
           span={6}
-          aside={<CloneButton repo={repo} cloned={workspace !== null} initial={workspaceStatus} />}
+          aside={<CloneButton repo={repo} cloned={workspace !== null} />}
         >
           {workspace ? (
             <Facts

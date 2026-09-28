@@ -3,7 +3,7 @@
 // Pure, no node builtins: the Secrets tab imports it, and the rule of this
 // codebase is that a module a route imports VALUES from must be browser-safe
 // (see lib/env-groups.ts). Everything that touches the disk or a subprocess
-// lives in host/app-secrets.ts, host/secret-set-request.ts and core/vault.ts.
+// lives in host/app-secrets.ts, host/secret-set.ts and core/vault.ts.
 //
 // WHY THERE IS NO "READ" HALF ANYWHERE. daedalus holds an encrypt-only sops
 // identity — the container mounts a static sops binary and the PUBLIC

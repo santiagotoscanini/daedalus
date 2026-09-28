@@ -172,9 +172,22 @@
 #                owns each unit, rendered into the helper's table (with the
 #                operator's uid and the systemctl/journalctl paths) and
 #                asserted here: a name, an EXISTING oneshot unit with no path
-#                unit left, a timeout, and selectors that are fixed lists spliced in as `{name}` — never
-#                a path, a flag or a free unit name from the caller. `status`
-#                is the helper's own read: the verbs and their units' state.
+#                unit left, a timeout, and selectors that are fixed lists
+#                spliced in as `{name}` — never a path, a flag or a free unit
+#                name from the caller. `status` is the helper's own read:
+#                the verbs and their units' state.
+#   run file     a value no list can hold is a PATTERN (`patterns.<name>`: an
+#                anchored regex over a small character set, a length cap,
+#                checked here and by the helper), and a sealed secret is a
+#                PAYLOAD (`payloadMax`). Neither goes into a unit name —
+#                escaping would quadruple a slug past systemd's 256-character
+#                limit and leave the unit to unescape `%I` and trust it — nor
+#                onto a command line: such a verb names a template, `x@.service`;
+#                the helper writes every selector and the payload to
+#                `<rootRunDir>/<run id>.json` (root's, 0600, O_EXCL,
+#                O_NOFOLLOW, in a 0700 root directory — the one path its
+#                sandbox may write) and starts `x@<run id>`, which reads the
+#                file and deletes it. One run of such a verb at a time.
 #   running      `systemctl start <unit>`, so the work is the unit's and
 #                survives a switch restarting the helper or the controller; its
 #                journal lines stream back; a failed start job is `failed`,
@@ -242,7 +255,7 @@
 }:
 
 let
-  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) controllerDir;
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) controllerDir rootRunDir;
 
   daedalusDev = config.fleet.daedalus.dev;
 
@@ -306,37 +319,64 @@ let
   # controller's alone.
   rootSocket = "/run/daedalus-root/root.sock";
   inherit (config.fleet.daedalus) rootVerbs;
+  runFileVerb = v: v.patterns != { } || v.payloadMax != null;
   rootTable = pkgs.writeText "daedalus-root-verbs.json" (
     builtins.toJSON {
       allow_uid = config.fleet.operator.uid;
       systemctl = "${config.systemd.package}/bin/systemctl";
       journalctl = "${config.systemd.package}/bin/journalctl";
-      verbs = lib.mapAttrs (_: v: {
-        inherit (v) unit description selectors;
-        timeout_secs = v.timeoutSec;
-      }) rootVerbs;
+      run_dir = rootRunDir;
+      verbs = lib.mapAttrs (
+        _: v:
+        {
+          inherit (v) unit description selectors;
+          timeout_secs = v.timeoutSec;
+          patterns = lib.mapAttrs (_: p: {
+            inherit (p) regex;
+            max_len = p.maxLength;
+          }) v.patterns;
+        }
+        // lib.optionalAttrs (v.payloadMax != null) { payload_max = v.payloadMax; }
+      ) rootVerbs;
     }
   );
   # An instance outlives its longest verb's wait by a minute, no more.
   rootRuntimeMax = 60 + lib.foldl' lib.max 60 (lib.mapAttrsToList (_: v: v.timeoutSec) rootVerbs);
 
   # Every unit a verb can name: its template with each selector's values
-  # spliced in (the helper's `expand`).
+  # spliced in (the helper's `expand`); a run-file verb's is its template.
   expansions =
     v:
-    map (
-      combo:
-      lib.foldl' (u: k: lib.replaceStrings [ "{${k}}" ] [ combo.${k} ] u) v.unit (lib.attrNames combo)
-    ) (lib.cartesianProduct v.selectors);
+    if runFileVerb v then
+      [ v.unit ]
+    else
+      map (
+        combo:
+        lib.foldl' (u: k: lib.replaceStrings [ "{${k}}" ] [ combo.${k} ] u) v.unit (lib.attrNames combo)
+      ) (lib.cartesianProduct v.selectors);
   placeholders =
     unit: map lib.head (builtins.filter builtins.isList (builtins.split "\\{([^}]*)}" unit));
   nameRe = "[a-z][a-z0-9-]{0,31}";
   valueRe = "[A-Za-z0-9][A-Za-z0-9._-]{0,63}";
+  # What a pattern is written with (agent src/root/mod.rs PATTERN_CHARS):
+  # no backslash, so no escape reads one way here and another there.
+  patternCharsRe = "[][A-Za-z0-9^$(){},|*+?._@ /:-]+";
+  # A pattern, as the helper will check it: anchored, those characters, a
+  # cap of 1 to 256 — and it must compile here too, which `builtins.match`
+  # forces through the `seq` (a regex it cannot read stops the evaluation
+  # with nix's own message).
+  patternOk =
+    p:
+    lib.hasPrefix "^" p.regex
+    && lib.hasSuffix "$" p.regex
+    && builtins.match patternCharsRe p.regex != null
+    && builtins.seq (builtins.match p.regex "") true
+    && p.maxLength >= 1
+    && p.maxLength <= 256;
   # The rules agent/src/root/mod.rs `Table::check` applies at start, so a
   # table the helper would refuse never builds; and past them what only the
   # evaluation can see: each unit exists, is a oneshot, and has no path unit
-  # left — the file-drop door a verb
-  # leaves behind when it moves here.
+  # left — the file-drop door a verb leaves behind when it moves here.
   rootVerbAssertions = lib.concatLists (
     lib.mapAttrsToList (
       verb: v:
@@ -362,14 +402,33 @@ let
           message = say "timeoutSec is at most 86400";
         }
         {
-          assertion = lib.sort lib.lessThan (placeholders v.unit) == lib.attrNames v.selectors;
-          message = say "the unit's {placeholders} and the selectors must name the same set";
+          assertion =
+            if runFileVerb v then
+              placeholders v.unit == [ ] && builtins.match "[A-Za-z0-9_.:-]+@\\.service" v.unit != null
+            else
+              lib.sort lib.lessThan (placeholders v.unit) == lib.attrNames v.selectors;
+          message = say (
+            if runFileVerb v then
+              "a verb with patterns or a payload names a template, x@.service, with no {placeholders}"
+            else
+              "the unit's {placeholders} and the selectors must name the same set"
+          );
         }
         {
           assertion = lib.all (vals: vals != [ ] && lib.all (x: builtins.match valueRe x != null) vals) (
             lib.attrValues v.selectors
           );
           message = say "every selector lists at least one value, each ${valueRe}";
+        }
+        {
+          assertion = lib.all (
+            n: builtins.match nameRe n != null && !(v.selectors ? ${n}) && patternOk v.patterns.${n}
+          ) (lib.attrNames v.patterns);
+          message = say "every pattern is named ${nameRe}, is not also a selector, is anchored ^…$, uses only ${patternCharsRe}, and caps its value at 1 to 256";
+        }
+        {
+          assertion = v.payloadMax == null || (v.payloadMax >= 1 && v.payloadMax <= 65536);
+          message = say "payloadMax is 1 to 65536";
         }
       ]
       ++ map (u: {
@@ -478,6 +537,29 @@ in
             default = { };
             description = "Selector name → the values it may take.";
           };
+          patterns = lib.mkOption {
+            type = lib.types.attrsOf (
+              lib.types.submodule {
+                options = {
+                  regex = lib.mkOption {
+                    type = lib.types.str;
+                    description = "Anchored `^…$`, written with letters, digits and `^$[]{}(),|*+?._@ /:-` only (no backslash): read the same by nix and by the helper.";
+                  };
+                  maxLength = lib.mkOption {
+                    type = lib.types.ints.positive;
+                    description = "The longest value, 1 to 256.";
+                  };
+                };
+              }
+            );
+            default = { };
+            description = "Pattern selector name → the shape its value must have. A verb with one names a template, `x@.service`, and gets its values in a run file, never in its unit name.";
+          };
+          payloadMax = lib.mkOption {
+            type = lib.types.nullOr lib.types.ints.positive;
+            default = null;
+            description = "The largest payload the verb takes, in bytes (at most 65536), delivered in its run file; null for none.";
+          };
         };
       }
     );
@@ -539,6 +621,12 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${configDir} 0755 root root -"
+      # The root helper's run files: root's alone. A file a unit never
+      # came for (its start failed before the helper could remove it) goes
+      # within a day. The helper's per-template locks stay: one aged out
+      # under a holder would let a second helper lock a new file beside it.
+      "d ${rootRunDir} 0700 root root 1d"
+      "x ${rootRunDir}/*.lock"
       "L+ ${configDir}/config.toml - - - - ${configFile}"
       "d ${controllerDir} ${
         if allowedUids == [ ] then "0700" else "0711"
@@ -676,6 +764,8 @@ in
         SystemCallArchitectures = "native";
         SystemCallFilter = "@system-service";
         UMask = "0077";
+        # The run files (the header's `run file`), and nothing else.
+        ReadWritePaths = [ rootRunDir ];
       };
     };
   };

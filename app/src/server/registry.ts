@@ -1,3 +1,4 @@
+import type { RootAnswer } from '../host/root'
 import { isAccessWindow } from '../lib/access-window'
 import { asValidator, is, nullable, obj, optional, str, withMessage } from '../lib/contract/decode'
 import {
@@ -240,9 +241,9 @@ export const revealEnvVar = adminFn
 // ── the app-secrets editor ────────────────────────────────────────────────
 //
 // Write-only, and the validator is where that starts. The VALUE is never
-// echoed back by any of these: `setAppSecretFn` returns a request id, the
-// status poll returns key names, and there is no function anywhere that reads
-// a secret out of the sops file — the container could not answer one.
+// echoed back by any of these: each answers with the host's words, which name
+// keys and a commit, and there is no function anywhere that reads a secret out
+// of the sops file — the container could not answer one.
 
 export const setAppSecretFn = adminFn
   // The key's shape is checked here AND in lib/apps/secrets.ts AND by the
@@ -260,7 +261,7 @@ export const setAppSecretFn = adminFn
       ),
     ),
   )
-  .handler(async ({ data, context }): Promise<Result<string>> => {
+  .handler(async ({ data, context }): Promise<RootAnswer> => {
     const { setAppSecret } = await import('../lib/apps/secrets')
     return setAppSecret({ ...data, actor: context.actor() })
   })
@@ -274,15 +275,10 @@ export const removeAppSecretFn = adminFn
       ),
     ),
   )
-  .handler(async ({ data, context }): Promise<Result<string>> => {
+  .handler(async ({ data, context }): Promise<RootAnswer> => {
     const { removeAppSecret } = await import('../lib/apps/secrets')
     return removeAppSecret({ ...data, actor: context.actor() })
   })
-
-export const fetchSecretSetStatus = readFn.handler(async () => {
-  const { readSecretSetStatus } = await import('../host/secret-set-request')
-  return readSecretSetStatus()
-})
 
 export const cloneWorkspaceFn = adminFn
   // A string, then the allowlist in lib/apps/workspaces.ts — which is the
@@ -293,11 +289,6 @@ export const cloneWorkspaceFn = adminFn
     const { cloneOfferedWorkspace } = await import('../lib/apps/workspaces')
     return cloneOfferedWorkspace(data)
   })
-
-export const fetchWorkspaceRequestStatus = readFn.handler(async () => {
-  const { readWorkspaceRequestStatus } = await import('../host/workspaces')
-  return readWorkspaceRequestStatus()
-})
 
 /**
  * Run one of an app's scheduled tasks now, rather than at its next elapse.

@@ -20,6 +20,24 @@
 //! Nothing from the caller ever becomes a path, a flag or a free unit name:
 //! a verb is a table key, a selector value one of its list.
 //!
+//! **The run file.** A value that cannot be listed — a repository slug, a
+//! variable name — is a PATTERN selector: a regex nix declared (anchored,
+//! from a small character set, with a length cap), checked at evaluation and
+//! again here. Such a value never goes into a unit name: escaping one
+//! (`systemd-escape`) would make `-` four characters and `/` a `-`, push a
+//! 200-character slug past systemd's 256-character name limit, and leave the
+//! unit to unescape `%I` and trust it. Instead a verb with a pattern, or one
+//! that carries a payload (a sealed secret), names a template, `x@.service`,
+//! and the helper starts `x@<run id>.service` after writing the request's
+//! selectors and payload to `<run_dir>/<run id>.json` — root's, 0600,
+//! created exclusively (`O_EXCL`) without following a link (`O_NOFOLLOW`),
+//! in a directory that must be root's and 0700. The unit reads that file and
+//! deletes it; the helper deletes what is left when the start job ends. The
+//! value is on no command line and in no unit name; the helper logs neither
+//! it nor the payload. One such run at a time: any instance of the template
+//! still running refuses the next, and a lock on `<run_dir>/<template>.lock`,
+//! held until the answer, closes the gap between that check and the start.
+//!
 //! **Running a verb** is `systemctl start <unit>`: the work is the unit's,
 //! so it survives a switch restarting its caller, this helper or the
 //! controller. While it runs, the unit's own journal lines stream back as
@@ -54,8 +72,17 @@ pub mod relay;
 #[cfg(target_os = "linux")]
 pub mod helper;
 
-/// The longest request line read.
-pub const MAX_REQUEST: usize = 4096;
+/// The longest request line read: the largest payload, JSON-escaped, and
+/// room for the rest.
+pub const MAX_REQUEST: usize = 160 * 1024;
+/// The largest payload any verb may declare (`payload_max`).
+pub const MAX_PAYLOAD: usize = 64 * 1024;
+/// The longest value a pattern selector may declare (`max_len`).
+pub const MAX_PATTERN_LEN: usize = 256;
+/// What a pattern's regex may be written with: anchors, classes, counts,
+/// groups and a few literals — no backslash, so no escape means one thing to
+/// nix's POSIX regex and another to this one.
+pub const PATTERN_CHARS: &str = "^$[]{}(),|*+?._@ /:-";
 /// The longest answer line either side accepts (a `status` is the largest).
 pub const MAX_ANSWER: usize = 1 << 20;
 /// A progress line is cut to this many characters.
@@ -79,6 +106,9 @@ pub struct Table {
     /// Absolute paths, fixed by nix.
     pub systemctl: String,
     pub journalctl: String,
+    /// Where run files go (module doc); required once any verb takes one.
+    #[serde(default)]
+    pub run_dir: Option<String>,
     pub verbs: BTreeMap<String, VerbSpec>,
 }
 
@@ -87,6 +117,7 @@ pub struct Table {
 #[serde(deny_unknown_fields)]
 pub struct VerbSpec {
     /// A `.service` name; `{selector}` marks where a selector's value goes.
+    /// A verb with a run file names a template, `x@.service`, instead.
     pub unit: String,
     pub description: String,
     /// How long the helper waits for the start job before it reports
@@ -95,10 +126,31 @@ pub struct VerbSpec {
     /// Selector → the values it may take.
     #[serde(default)]
     pub selectors: BTreeMap<String, Vec<String>>,
+    /// Pattern selector → the shape its value must have.
+    #[serde(default)]
+    pub patterns: BTreeMap<String, PatternSpec>,
+    /// The largest payload this verb takes, in bytes; none when absent.
+    #[serde(default)]
+    pub payload_max: Option<usize>,
+}
+
+/// A pattern selector: an anchored regex over `PATTERN_CHARS`, and a cap.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatternSpec {
+    pub regex: String,
+    pub max_len: usize,
+}
+
+impl VerbSpec {
+    /// Whether this verb's values travel in a run file (module doc).
+    pub fn run_file(&self) -> bool {
+        !self.patterns.is_empty() || self.payload_max.is_some()
+    }
 }
 
 /// One request.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
     pub verb: String,
@@ -106,6 +158,27 @@ pub struct Request {
     pub id: String,
     #[serde(default)]
     pub selectors: BTreeMap<String, String>,
+    /// For a verb that takes one: bytes the unit reads from its run file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<String>,
+}
+
+/// Never the payload, whatever prints a request.
+impl std::fmt::Debug for Request {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Request")
+            .field("verb", &self.verb)
+            .field("id", &self.id)
+            .field("selectors", &self.selectors)
+            .field(
+                "payload",
+                &self
+                    .payload
+                    .as_ref()
+                    .map(|p| format!("<{} bytes>", p.len())),
+            )
+            .finish()
+    }
 }
 
 /// How a verb ended.
@@ -131,6 +204,10 @@ pub struct VerbState {
     pub unit: String,
     pub description: String,
     pub selectors: BTreeMap<String, Vec<String>>,
+    /// Pattern selector → its regex.
+    pub patterns: BTreeMap<String, String>,
+    /// The largest payload it takes, if it takes one.
+    pub payload_max: Option<usize>,
     /// The unit's `ActiveState`; null for a template (no one instance) or
     /// when systemd could not be asked.
     pub active_state: Option<String>,
@@ -173,7 +250,30 @@ pub enum Resolved {
         verb: String,
         unit: String,
         timeout: Duration,
+        /// For a run-file verb: the file to write before the start, and the
+        /// template whose running instances refuse this run.
+        run_file: Option<RunFile>,
     },
+}
+
+/// A run file, resolved: where it goes and what it holds.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RunFile {
+    pub path: std::path::PathBuf,
+    pub body: Vec<u8>,
+    /// `x@`, the template every instance of this verb is.
+    pub template: String,
+}
+
+/// Its body holds a payload; only the path and the size print.
+impl std::fmt::Debug for RunFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RunFile")
+            .field("path", &self.path)
+            .field("body", &format!("<{} bytes>", self.body.len()))
+            .field("template", &self.template)
+            .finish()
+    }
 }
 
 /// A refusal before anything ran: a code and words.
@@ -202,6 +302,37 @@ pub fn valid_value(s: &str) -> bool {
         && b[0].is_ascii_alphanumeric()
         && b.iter()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+}
+
+/// What any pattern selector's value is before its regex is asked: 1 to
+/// `max` bytes of printable ASCII (space included, no control character),
+/// not starting with `-`. The floor under every pattern, so no regex can let
+/// a newline or a flag through.
+pub fn valid_free_value(s: &str, max: usize) -> bool {
+    let b = s.as_bytes();
+    (1..=max.min(MAX_PATTERN_LEN)).contains(&b.len())
+        && b[0] != b'-'
+        && b.iter().all(|c| (0x20..0x7f).contains(c))
+}
+
+/// A pattern as nix declares it, or why not: anchored at both ends, written
+/// with `PATTERN_CHARS` and ASCII alphanumerics only, a cap of 1 to
+/// `MAX_PATTERN_LEN`, and a regex that compiles.
+pub fn check_pattern(p: &PatternSpec) -> Result<regex_automata::meta::Regex, String> {
+    if !(1..=MAX_PATTERN_LEN).contains(&p.max_len) {
+        return Err(format!("max_len is 1 to {MAX_PATTERN_LEN}"));
+    }
+    if !(p.regex.len() >= 2 && p.regex.starts_with('^') && p.regex.ends_with('$')) {
+        return Err(format!("{:?} is not anchored with ^ and $", p.regex));
+    }
+    if let Some(c) = p
+        .regex
+        .chars()
+        .find(|c| !c.is_ascii_alphanumeric() && !PATTERN_CHARS.contains(*c))
+    {
+        return Err(format!("{:?} uses {c:?}", p.regex));
+    }
+    regex_automata::meta::Regex::new(&p.regex).map_err(|e| format!("{:?}: {e}", p.regex))
 }
 
 /// A run id: `[A-Za-z0-9_-]{1,64}`.
@@ -265,7 +396,37 @@ fn check_verb(verb: &str, spec: &VerbSpec) -> Result<(), String> {
     }
     let named = placeholders(&spec.unit)?;
     let declared: BTreeSet<String> = spec.selectors.keys().cloned().collect();
-    if named != declared {
+    if spec.run_file() {
+        // Every value travels in the run file; the unit is a template the
+        // run id instantiates.
+        if !named.is_empty() {
+            return Err("a verb with a run file splices nothing into its unit".into());
+        }
+        if !spec
+            .unit
+            .strip_suffix("@.service")
+            .is_some_and(|stem| valid_unit(&format!("{stem}@x.service")))
+        {
+            return Err(format!(
+                "{:?}: a verb with a run file names a template, x@.service",
+                spec.unit
+            ));
+        }
+        for (name, p) in &spec.patterns {
+            if !valid_name(name) {
+                return Err(format!("{name:?} is not a selector name"));
+            }
+            if declared.contains(name) {
+                return Err(format!("{name:?} is both a selector and a pattern"));
+            }
+            check_pattern(p).map_err(|why| format!("pattern {name:?}: {why}"))?;
+        }
+        if let Some(max) = spec.payload_max {
+            if !(1..=MAX_PAYLOAD).contains(&max) {
+                return Err(format!("payload_max is 1 to {MAX_PAYLOAD}"));
+            }
+        }
+    } else if named != declared {
         return Err(format!(
             "the unit names selectors {named:?} and the schema declares {declared:?}"
         ));
@@ -304,6 +465,11 @@ impl Table {
         }
         for (verb, spec) in &self.verbs {
             check_verb(verb, spec).map_err(|why| format!("verb {verb:?}: {why}"))?;
+            if spec.run_file() && !self.run_dir.as_deref().is_some_and(|d| d.starts_with('/')) {
+                return Err(format!(
+                    "verb {verb:?} takes a run file, and the table names no absolute run_dir"
+                ));
+            }
         }
         Ok(())
     }
@@ -317,8 +483,11 @@ impl Table {
             ));
         }
         if req.verb == STATUS_VERB {
-            if !req.selectors.is_empty() {
-                return Err((code::BAD_REQUEST, "`status` takes no selectors".into()));
+            if !req.selectors.is_empty() || req.payload.is_some() {
+                return Err((
+                    code::BAD_REQUEST,
+                    "`status` takes no selectors and no payload".into(),
+                ));
             }
             return Ok(Resolved::Status);
         }
@@ -332,38 +501,76 @@ impl Table {
                 ),
             )
         })?;
+        let bad = |msg: String| Err((code::BAD_REQUEST, msg));
         for (k, v) in &req.selectors {
-            let Some(allowed) = spec.selectors.get(k) else {
-                return Err((
-                    code::BAD_REQUEST,
-                    format!(
-                        "`{}` takes no selector {:?}",
-                        req.verb,
-                        k.chars().take(40).collect::<String>()
-                    ),
-                ));
-            };
-            if !allowed.contains(v) {
-                return Err((
-                    code::BAD_REQUEST,
-                    format!("`{}`: {k} is not one of its values", req.verb),
+            if let Some(allowed) = spec.selectors.get(k) {
+                if !allowed.contains(v) {
+                    return bad(format!("`{}`: {k} is not one of its values", req.verb));
+                }
+            } else if let Some(p) = spec.patterns.get(k) {
+                // The floor, then the regex; the table was checked at start,
+                // so a pattern that does not compile is not this caller's.
+                let fits = valid_free_value(v, p.max_len)
+                    && check_pattern(p).is_ok_and(|re| re.is_match(v.as_str()));
+                if !fits {
+                    return bad(format!("`{}`: {k} does not have its shape", req.verb));
+                }
+            } else {
+                return bad(format!(
+                    "`{}` takes no selector {:?}",
+                    req.verb,
+                    k.chars().take(40).collect::<String>()
                 ));
             }
         }
         if let Some(missing) = spec
             .selectors
             .keys()
+            .chain(spec.patterns.keys())
             .find(|k| !req.selectors.contains_key(*k))
         {
-            return Err((
-                code::BAD_REQUEST,
-                format!("`{}` needs the selector {missing}", req.verb),
-            ));
+            return bad(format!("`{}` needs the selector {missing}", req.verb));
         }
+        match (&req.payload, spec.payload_max) {
+            (Some(_), None) => return bad(format!("`{}` takes no payload", req.verb)),
+            (Some(p), Some(max)) if p.len() > max => {
+                return bad(format!(
+                    "`{}`: the payload is {} bytes, and it takes at most {max}",
+                    req.verb,
+                    p.len()
+                ))
+            }
+            _ => {}
+        }
+        let timeout = Duration::from_secs(spec.timeout_secs);
+        if !spec.run_file() {
+            return Ok(Resolved::Run {
+                verb: req.verb.clone(),
+                unit: expand(&spec.unit, &req.selectors),
+                timeout,
+                run_file: None,
+            });
+        }
+        let Some(dir) = self.run_dir.as_deref() else {
+            return Err((code::INTERNAL, "the table names no run_dir".into()));
+        };
+        let template = spec.unit.trim_end_matches(".service").to_string();
+        let body = serde_json::to_vec(&serde_json::json!({
+            "id": req.id,
+            "verb": req.verb,
+            "selectors": req.selectors,
+            "payload": req.payload,
+        }))
+        .map_err(|e| (code::INTERNAL, e.to_string()))?;
         Ok(Resolved::Run {
             verb: req.verb.clone(),
-            unit: expand(&spec.unit, &req.selectors),
-            timeout: Duration::from_secs(spec.timeout_secs),
+            unit: format!("{template}{}.service", req.id),
+            timeout,
+            run_file: Some(RunFile {
+                path: std::path::Path::new(dir).join(format!("{}.json", req.id)),
+                body,
+                template,
+            }),
         })
     }
 
@@ -430,6 +637,7 @@ mod tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
+            payload: None,
         }
     }
 
@@ -450,7 +658,8 @@ mod tests {
             Resolved::Run {
                 verb: "reboot".into(),
                 unit: "daedalus-power.service".into(),
-                timeout: Duration::from_secs(90)
+                timeout: Duration::from_secs(90),
+                run_file: None
             }
         );
         assert_eq!(
@@ -458,7 +667,8 @@ mod tests {
             Resolved::Run {
                 verb: "deploy".into(),
                 unit: "app-blog-deploy.service".into(),
-                timeout: Duration::from_secs(600)
+                timeout: Duration::from_secs(600),
+                run_file: None
             }
         );
         assert_eq!(t.resolve(&req("status", &[])).unwrap(), Resolved::Status);
@@ -512,6 +722,8 @@ mod tests {
             description: String::new(),
             timeout_secs: 60,
             selectors: BTreeMap::new(),
+            patterns: BTreeMap::new(),
+            payload_max: None,
         };
         assert!(with(&|_| {}).is_ok());
         assert!(with(&|t| {
@@ -602,5 +814,168 @@ mod tests {
         assert!(read_line(&mut long, 8).is_err());
         assert_eq!(progress_text("\x1b[31mred\x1b[0m\tok"), "[31mred[0m\tok");
         assert_eq!(progress_text(&"y".repeat(5000)).len(), MAX_PROGRESS);
+    }
+
+    fn run_table() -> Table {
+        serde_json::from_str(
+            r#"{"allow_uid":1000,"systemctl":"/bin/systemctl","journalctl":"/bin/journalctl",
+                "run_dir":"/run/daedalus-root-runs",
+                "verbs":{
+                  "clone":{"unit":"ws-clone@.service","description":"Clone","timeout_secs":60,
+                           "patterns":{"repo":{"regex":"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$","max_len":140}}},
+                  "secret":{"unit":"secret-set@.service","description":"Set","timeout_secs":60,
+                            "selectors":{"app":["blog"]},
+                            "patterns":{"key":{"regex":"^[A-Za-z_][A-Za-z0-9_]{0,63}$","max_len":64}},
+                            "payload_max":100}}}"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_pattern_value_goes_to_the_run_file_never_the_unit() {
+        let t = run_table();
+        t.check().unwrap();
+        let Resolved::Run { unit, run_file, .. } = t
+            .resolve(&req("clone", &[("repo", "octo/hello.world")]))
+            .unwrap()
+        else {
+            panic!("not a run")
+        };
+        assert_eq!(unit, "ws-clone@0123456789abcdef.service");
+        let rf = run_file.unwrap();
+        assert_eq!(
+            rf.path,
+            std::path::Path::new("/run/daedalus-root-runs/0123456789abcdef.json")
+        );
+        assert_eq!(rf.template, "ws-clone@");
+        let body: serde_json::Value = serde_json::from_slice(&rf.body).unwrap();
+        assert_eq!(body["selectors"]["repo"], "octo/hello.world");
+        assert_eq!(body["payload"], serde_json::Value::Null);
+        assert_eq!(body["id"], "0123456789abcdef");
+
+        let code_of = |r: Request| t.resolve(&r).unwrap_err().0;
+        for bad in [
+            "octo",
+            "octo/..",
+            "octo/.hidden",
+            "-octo/x",
+            "octo/x/y",
+            "octo/x\nreboot",
+            "octo/x y",
+            "../../etc",
+        ] {
+            assert_eq!(
+                code_of(req("clone", &[("repo", bad)])),
+                code::BAD_REQUEST,
+                "{bad:?}"
+            );
+        }
+        let long = format!("octo/{}", "x".repeat(150));
+        assert_eq!(code_of(req("clone", &[("repo", &long)])), code::BAD_REQUEST);
+        assert_eq!(code_of(req("clone", &[])), code::BAD_REQUEST);
+    }
+
+    #[test]
+    fn a_payload_is_capped_and_only_for_the_verb_that_takes_one() {
+        let t = run_table();
+        let with = |verb: &str, sel: &[(&str, &str)], payload: Option<&str>| {
+            let mut r = req(verb, sel);
+            r.payload = payload.map(str::to_string);
+            t.resolve(&r)
+        };
+        let sel = [("app", "blog"), ("key", "API_TOKEN")];
+        let Resolved::Run { run_file, .. } = with("secret", &sel, Some("sealed")).unwrap() else {
+            panic!("not a run")
+        };
+        let body: serde_json::Value = serde_json::from_slice(&run_file.unwrap().body).unwrap();
+        assert_eq!(body["payload"], "sealed");
+        assert_eq!(body["selectors"]["key"], "API_TOKEN");
+        // A remove carries none.
+        assert!(with("secret", &sel, None).is_ok());
+        assert_eq!(
+            with("secret", &sel, Some(&"x".repeat(101))).unwrap_err().0,
+            code::BAD_REQUEST
+        );
+        assert_eq!(
+            with("secret", &[("app", "shop"), ("key", "K")], None)
+                .unwrap_err()
+                .0,
+            code::BAD_REQUEST
+        );
+        assert_eq!(
+            with("secret", &[("app", "blog"), ("key", "sops_mac;x")], None)
+                .unwrap_err()
+                .0,
+            code::BAD_REQUEST
+        );
+        assert_eq!(
+            with("clone", &[("repo", "a/b")], Some("x")).unwrap_err().0,
+            code::BAD_REQUEST
+        );
+        assert_eq!(
+            with("status", &[], Some("x")).unwrap_err().0,
+            code::BAD_REQUEST
+        );
+        // The payload never prints.
+        let mut r = req("secret", &sel);
+        r.payload = Some("the-sealed-bytes".into());
+        assert!(!format!("{r:?}").contains("the-sealed-bytes"));
+    }
+
+    #[test]
+    fn a_bad_run_file_verb_is_refused() {
+        let with = |f: &dyn Fn(&mut Table)| {
+            let mut t = run_table();
+            f(&mut t);
+            t.check()
+        };
+        let pat = |regex: &str, max_len: usize| PatternSpec {
+            regex: regex.into(),
+            max_len,
+        };
+        let clone = |t: &mut Table| t.verbs.get_mut("clone").unwrap().clone();
+        assert!(with(&|_| {}).is_ok());
+        assert!(with(&|t| t.run_dir = None).is_err());
+        assert!(with(&|t| t.run_dir = Some("runs".into())).is_err());
+        for (regex, max) in [
+            ("[a-z]+$", 10),
+            ("^[a-z]+", 10),
+            ("^\\w+$", 10),
+            ("^[a-z]+$", 0),
+            ("^[a-z]+$", 1000),
+            ("^[a-z+$", 10),
+        ] {
+            assert!(
+                with(&|t| {
+                    let mut v = clone(t);
+                    v.patterns.insert("repo".into(), pat(regex, max));
+                    t.verbs.insert("clone".into(), v);
+                })
+                .is_err(),
+                "{regex:?} {max}"
+            );
+        }
+        assert!(
+            with(&|t| t.verbs.get_mut("clone").unwrap().unit = "ws-clone.service".into()).is_err()
+        );
+        assert!(with(
+            &|t| t.verbs.get_mut("clone").unwrap().unit = "ws-clone@{repo}.service".into()
+        )
+        .is_err());
+        assert!(with(&|t| t.verbs.get_mut("secret").unwrap().payload_max = Some(0)).is_err());
+        assert!(
+            with(&|t| t.verbs.get_mut("secret").unwrap().payload_max = Some(MAX_PAYLOAD + 1))
+                .is_err()
+        );
+        assert!(with(&|t| {
+            t.verbs
+                .get_mut("secret")
+                .unwrap()
+                .selectors
+                .insert("key".into(), vec!["K".into()]);
+        })
+        .is_err());
+        assert!(valid_free_value("a b", 10) && !valid_free_value("-a", 10));
+        assert!(!valid_free_value("a\tb", 10) && !valid_free_value("é", 10));
     }
 }

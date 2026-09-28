@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { type ReactNode, useState } from 'react'
-import type { SecretSetStatus } from '../../host/secret-set-request'
+import type { RootAnswer } from '../../host/root'
 import { type AppSecretKey, secretKeyError } from '../../lib/apps/secret-keys'
 import { cn } from '../../lib/cn'
 // lib/env-groups, NOT host/env-snapshot: this is client code, and a VALUE
@@ -9,14 +9,8 @@ import { cn } from '../../lib/cn'
 // imports would be erased and safe.
 import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../../lib/env-groups'
 import { when } from '../../lib/format'
-import type { Result } from '../../lib/result'
-import {
-  fetchSecretSetStatus,
-  removeAppSecretFn,
-  revealEnvVar,
-  setAppSecretFn,
-} from '../../server/registry'
-import { usePolledStatus } from '../status'
+import { removeAppSecretFn, revealEnvVar, setAppSecretFn } from '../../server/registry'
+import { useRootAction } from '../root-action'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -304,28 +298,13 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
        submit, so a password manager, a screenshot and view-source all see the
        same nothing. */
 
-const SECRET_IDLE: SecretSetStatus = {
-  id: null,
-  app: null,
-  key: null,
-  action: null,
-  state: 'idle',
-  detail: '',
-  error: '',
-  commit: '',
-  startedAt: null,
-  finishedAt: null,
-}
-
 const FIELD = 'h-auto rounded-[6px] bg-(--panel-2) px-[0.5rem] py-[0.25rem] text-[0.8rem]'
 const SMALL_BTN =
   'h-auto flex-none rounded-[6px] bg-(--panel-2) px-[0.45rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-(--raise) dark:bg-(--panel-2)'
 
 function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
   const router = useRouter()
-  const { status, running, refusal, start } = usePolledStatus<SecretSetStatus>({
-    initial: SECRET_IDLE,
-    fetch: () => fetchSecretSetStatus(),
+  const { running, answer, start } = useRootAction({
     onSettle: () => {
       // The listing is loader data read off the file the host just rewrote.
       void router.invalidate()
@@ -362,22 +341,16 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
         environment, the half that is committed in the clear.
       </p>
 
-      {refusal !== null && (
-        <Alert className="mb-[0.9rem] border-danger/35 bg-danger/7">
-          <AlertDescription>{refusal}</AlertDescription>
-        </Alert>
-      )}
-      {refusal === null && status.state === 'failed' && (
+      {answer !== null && answer.outcome !== 'done' && (
         <Alert className="mb-[0.9rem] border-danger/35 bg-danger/7">
           <AlertDescription>
-            {status.key === null ? '' : `${status.key}: `}
-            {status.error}
+            {answer.detail === '' ? `the write ${answer.outcome}` : answer.detail}
           </AlertDescription>
         </Alert>
       )}
-      {refusal === null && status.state === 'done' && status.detail !== '' && (
+      {answer !== null && answer.outcome === 'done' && answer.detail !== '' && (
         <Alert className="mb-[0.9rem] border-info/35 bg-info/7 text-(--text-muted)">
-          <AlertDescription>{status.detail}</AlertDescription>
+          <AlertDescription>{answer.detail}</AlertDescription>
         </Alert>
       )}
 
@@ -516,7 +489,7 @@ function SecretForm({
   fixedKey: string | null
   busy: boolean
   onCancel: () => void
-  onSubmit: (submit: () => Promise<Result<string>>) => void
+  onSubmit: (submit: () => Promise<RootAnswer>) => void
 }) {
   const [key, setKey] = useState(fixedKey ?? '')
   const [value, setValue] = useState('')

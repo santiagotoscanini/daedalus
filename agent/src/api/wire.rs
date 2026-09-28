@@ -587,17 +587,38 @@ pub struct NodePending {
     pub hostname: String,
 }
 
-/// `root.run`'s parameters: one of the root helper's verbs and its
-/// selectors (root/mod.rs). The helper's table is the authority; this side
-/// checks only the shape of the words before a connection is spent.
+/// `root.run`'s parameters: one of the root helper's verbs, its selectors
+/// and, for a verb that takes one, a payload (root/mod.rs, "The run file").
+/// The helper's table is the authority; this side checks only the shape of
+/// the words before a connection is spent.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, ts(rename = "RootRunParams"))]
 pub struct RootRun {
     pub verb: String,
     #[serde(default)]
     pub selectors: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub payload: Option<String>,
+}
+
+/// Never the payload, whatever prints the parameters.
+impl std::fmt::Debug for RootRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RootRun")
+            .field("verb", &self.verb)
+            .field("selectors", &self.selectors)
+            .field(
+                "payload",
+                &self
+                    .payload
+                    .as_ref()
+                    .map(|p| format!("<{} bytes>", p.len())),
+            )
+            .finish()
+    }
 }
 
 /// `root.run`'s answer: how the verb ended, with the run's id (its

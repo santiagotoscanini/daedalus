@@ -122,8 +122,6 @@ the same directory:
 | `build-request.json` | `daedalus-build` | `build-status.json` |
 | `image-request.json` | `daedalus-image-update` | `image-status.json` + `image-last.log` |
 | `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
-| `workspace-request.json` | `daedalus-workspace-clone` | `workspace-status.json` |
-| `secret-set-request.json` | `daedalus-secret-set` | `secret-set-status.json` |
 | `version-request.json` | `daedalus-version-update` | `version-status.json` + `version-last.log` |
 | `claude-code-request.json` | `daedalus-claude-code-update` | `claude-code-status.json` + `claude-code-last.log` |
 
@@ -180,6 +178,16 @@ boot); the work outlives its caller, because it is the unit's; and the host
 still decides what is real, because the answer is the unit's own result.
 The app never reaches the socket — the controller is its one door.
 
+A value no list can hold (a repository slug, a variable name) is a *pattern*
+selector: an anchored regex nix declares and the helper checks again, over a
+small character set with a length cap. A sealed secret is a *payload*. Neither
+goes into a unit name or onto a command line: such a verb names a template,
+`x@.service`, and the helper writes the selectors and the payload to
+`/run/daedalus-root-runs/<run id>.json` (root's, 0600, created exclusively
+without following a link) and starts `x@<run id>`, which reads the file and
+deletes it. One run of such a verb at a time: a running instance, or another
+helper holding the template's lock, refuses the next.
+
 | verb | unit | since |
 |---|---|---|
 | `status` | the helper's own read: every verb and its unit's state | — |
@@ -188,6 +196,8 @@ The app never reaches the socket — the controller is its one door.
 | `task-run {task}` | the task's own `app-<app>-task-<id>`; the value is `<app>-task-<id>`, one token per unit | 2026-09-28 |
 | `build-cancel {app}` | `daedalus-build-cancel@<app>` (refuses a build in flight that is not that app's) | 2026-09-28 |
 | `github-token` | `daedalus-github-token`, the timer's unit (refuses inside its one-mint-a-minute throttle) | 2026-09-28 |
+| `workspace-clone {repo, actor}` | `daedalus-workspace-clone@<run>` (both patterns): clone, or fast-forward an existing clone, over the operator's SSH identity | 2026-09-28 |
+| `secret-set {app, action, key, actor} + payload` | `daedalus-secret-set@<run>` (`key` and `actor` patterns): merge or drop one key in `vault/apps/<app>-env.sops` and commit; the payload is the value sealed by the container | 2026-09-28 |
 
 ---
 

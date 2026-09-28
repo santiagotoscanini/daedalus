@@ -19,13 +19,29 @@ export async function runRoot(
   selectors: Record<string, string>,
   waitMs: number,
   client: ControllerClient = controller(),
+  payload?: string,
 ): Promise<RootAnswer> {
   try {
-    const r = await client.rootRun(verb, selectors, waitMs)
+    const r = await client.rootRun(verb, selectors, waitMs, payload)
     return { outcome: r.outcome, detail: r.detail }
   } catch (e) {
     return { outcome: 'failed', detail: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/**
+ * An actor label as a root verb records it (a commit's author line, a journal
+ * line). The verbs' `actor` pattern (nix/stacks/daedalus/daedalus-lib.nix
+ * `actorPattern`, over the helper's floor: no leading `-`) takes 1 to 128 of
+ * `[A-Za-z0-9 ._@+-]`, so anything else becomes `_` and a blank label
+ * `unknown`, rather than the helper refusing the click over who made it.
+ */
+export function rootActor(label: string): string {
+  const kept = label
+    .replace(/[^A-Za-z0-9 ._@+-]/g, '_')
+    .replace(/^-/, '_')
+    .slice(0, 128)
+  return kept.trim() === '' ? 'unknown' : kept
 }
 
 /** The answer as one sentence for a page: the unit's words, or what happened when it had none. */

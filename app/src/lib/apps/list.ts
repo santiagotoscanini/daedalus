@@ -4,7 +4,7 @@ import { appIcon, siteIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
 import { appStatuses } from '../../host/metrics'
 import { manifestEntries } from '../../host/nix-manifest'
-import { readWorkspaceRequestStatus, readWorkspaces, workspaceFor } from '../../host/workspaces'
+import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { effectiveHostname } from '../hostname'
 import { driftOf, listApps } from '../repo/apps'
 import { stageExposed } from '../stage'
@@ -26,32 +26,29 @@ export async function loadAppList() {
   const manifest = new Map(entries.map((m) => [m.name, m]))
   const ctx = await makeCtx()
   const EXTERNAL_APPS = await listExternalApps(ctx)
-  const [statuses, applyStatus, icons, externalIcons, workspaces, workspaceStatus] =
-    await Promise.all([
-      // Degrades per-app rather than rejecting, so a prometheus outage costs
-      // the status column, not the page.
-      appStatuses(records.map((r) => r.name)),
-      readApplyStatus(),
-      // Resolved per app, in parallel, and cached for an hour in that module —
-      // so this costs one round of probes after a restart and nothing after.
-      Promise.all(
-        records.map(
-          async (r) =>
-            (await appIcon(
-              r.name,
-              effectiveHostname(ctx.site, r.name, r.hostname),
-              stageExposed(r.stage),
-            )) !== null,
-        ),
+  const [statuses, applyStatus, icons, externalIcons, workspaces] = await Promise.all([
+    // Degrades per-app rather than rejecting, so a prometheus outage costs
+    // the status column, not the page.
+    appStatuses(records.map((r) => r.name)),
+    readApplyStatus(),
+    // Resolved per app, in parallel, and cached for an hour in that module —
+    // so this costs one round of probes after a restart and nothing after.
+    Promise.all(
+      records.map(
+        async (r) =>
+          (await appIcon(
+            r.name,
+            effectiveHostname(ctx.site, r.name, r.hostname),
+            stageExposed(r.stage),
+          )) !== null,
       ),
-      Promise.all(EXTERNAL_APPS.map(async (e) => (await siteIcon(e.id, e.host)) !== null)),
-      readWorkspaces(),
-      readWorkspaceRequestStatus(),
-    ])
+    ),
+    Promise.all(EXTERNAL_APPS.map(async (e) => (await siteIcon(e.id, e.host)) !== null)),
+    readWorkspaces(),
+  ])
 
   return {
     applyStatus,
-    workspaceStatus,
     // The off-box projects (GitHub Pages / Vercel). Static data plus two
     // probed facts — whether the site serves an icon, and whether a
     // workspace on this box already holds the repo — so the row can draw a

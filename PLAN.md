@@ -576,15 +576,15 @@ priority; each can be done independently unless noted.
     "is this the box", draw the tabs. What remains:
     - **The rest of the root verbs onto the root helper.** The helper and
       `root.run` exist (ARCHITECTURE.md "The root helper"): reboot, deploy,
-      task-run, build-cancel and github-token have moved. Each remaining
-      file-drop verb moves the same way — a `fleet.daedalus.rootVerbs`
-      entry, its unit ending on `refused: …` to refuse, its request
-      module, path unit and status file deleted — in this order: workspace
-      clone (a slug is not an enumerable value: the table needs a pattern
-      selector first), secret-set (carries a sealed value: the helper needs
-      a payload channel the unit reads, never argv), build, then the
-      rebuilding verbs — claude-code, version, engine and image updates,
-      whose `*-last.log` the progress stream replaces — and Apply last.
+      task-run, build-cancel, github-token, workspace-clone and secret-set
+      have moved, the last two through pattern selectors and the run file.
+      Each remaining file-drop verb moves the same way — a
+      `fleet.daedalus.rootVerbs` entry, its unit ending on `refused: …` to
+      refuse, its request module, path unit and status file deleted — in
+      this order: build, then the rebuilding verbs — claude-code, version,
+      engine and image updates, whose `*-last.log` the progress stream
+      replaces once a page opened mid-run can reattach to it (the helper
+      follows only its own caller's run today) — and Apply last.
       Workspace sync and the nodes' DHCP bindings are not requests and stay
       path units until the agent owns them.
     - **Proof of 0.19 and 0.20 on the real machines.** Only the box runs

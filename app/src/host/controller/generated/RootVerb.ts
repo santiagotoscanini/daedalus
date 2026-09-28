@@ -5,6 +5,14 @@
  */
 export type RootVerb = { verb: string, unit: string, description: string, selectors: { [key in string]: Array<string> }, 
 /**
+ * Pattern selector → its regex.
+ */
+patterns: { [key in string]: string }, 
+/**
+ * The largest payload it takes, if it takes one.
+ */
+payload_max: number | null, 
+/**
  * The unit's `ActiveState`; null for a template (no one instance) or
  * when systemd could not be asked.
  */

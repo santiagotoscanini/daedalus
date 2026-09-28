@@ -2,9 +2,9 @@ import { sealAppSecret } from '../../core/vault'
 import { readAppSecrets } from '../../host/app-secrets'
 import { readEnvSnapshot } from '../../host/env-snapshot'
 import { readNixManifest } from '../../host/nix-manifest'
-import { requestSecretRemove, requestSecretSet } from '../../host/secret-set-request'
+import type { RootAnswer } from '../../host/root'
+import { requestSecretRemove, requestSecretSet } from '../../host/secret-set'
 import { getApp } from '../repo/apps'
-import type { Result } from '../result'
 import { type AppSecretKey, secretKeyError } from './secret-keys'
 
 // One secret value, on demand.
@@ -45,13 +45,14 @@ export async function revealAppEnvVar(data: { name: string; key: string }) {
 // way — so there are two server functions, not three, and the UI's third
 // button is a label.
 //
-// Three guards stand between a form field and `sops --set`, and each is
+// Four guards stand between a form field and `sops --set`, and each is
 // deliberately not the last one: the browser checks the name to colour the
 // input, `setAppSecret` below refuses it again with the app checked against
-// the registry Nix actually built, and the host agent checks both a third time
-// against a list Nix generated (nix/stacks/daedalus/host/secret-set.sh). The one
-// that matters is the host's — the other two exist so a refusal is a sentence
-// on the page rather than a failed unit.
+// the registry Nix actually built, and the root helper (the verb's app list and
+// key pattern) and the host agent (nix/stacks/daedalus/host/secret-set.sh) check
+// both again against what Nix generated. The ones that matter are the host's —
+// the others exist so a refusal is a sentence on the page rather than a
+// failed unit.
 
 /** Every key in an app's secrets file, with the git facts for each. */
 export async function loadAppSecrets(name: string): Promise<AppSecretKey[]> {
@@ -85,10 +86,9 @@ async function requestError(name: string, key: string): Promise<string | null> {
 /**
  * Seal one value and ask the host to write it under `key`.
  *
- * The value is sealed BEFORE the request exists and only the ciphertext is
- * ever written down: the bridge directory sits on a snapshotted dataset, so a
- * plaintext that lived there "only for a moment" would live in every hourly
- * snapshot after it. If sealing fails, nothing is dropped at all — the reason
+ * The value is sealed BEFORE the request exists and only the ciphertext
+ * leaves this container: the controller, the helper and the unit's run file
+ * only ever hold a sops document. If sealing fails, nothing is asked — the reason
  * comes back as a refusal, which is the honest report, and `Sealed` already
  * guarantees the reason never carries the value.
  */
@@ -97,22 +97,19 @@ export async function setAppSecret(data: {
   key: string
   value: string
   actor: string
-}): Promise<Result<string>> {
+}): Promise<RootAnswer> {
   const bad = await requestError(data.name, data.key)
-  if (bad !== null) return { ok: false, reason: bad }
+  if (bad !== null) return { outcome: 'refused', detail: bad }
 
   const sealed = await sealAppSecret(data.name, data.value)
-  if (!sealed.ok) return sealed
+  if (!sealed.ok) return { outcome: 'refused', detail: sealed.reason }
 
-  return {
-    ok: true,
-    value: await requestSecretSet({
-      actor: data.actor,
-      app: data.name,
-      key: data.key,
-      ciphertext: sealed.value,
-    }),
-  }
+  return requestSecretSet({
+    actor: data.actor,
+    app: data.name,
+    key: data.key,
+    ciphertext: sealed.value,
+  })
 }
 
 /**
@@ -126,12 +123,9 @@ export async function removeAppSecret(data: {
   name: string
   key: string
   actor: string
-}): Promise<Result<string>> {
+}): Promise<RootAnswer> {
   const bad = await requestError(data.name, data.key)
-  if (bad !== null) return { ok: false, reason: bad }
+  if (bad !== null) return { outcome: 'refused', detail: bad }
 
-  return {
-    ok: true,
-    value: await requestSecretRemove({ actor: data.actor, app: data.name, key: data.key }),
-  }
+  return requestSecretRemove({ actor: data.actor, app: data.name, key: data.key })
 }

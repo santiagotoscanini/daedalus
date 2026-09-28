@@ -201,7 +201,7 @@ function AppsPage() {
 }
 
 export function AppsList({ data }: { data: ListData }) {
-  const { apps, applyStatus, external, workspaceStatus } = data
+  const { apps, applyStatus, external } = data
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')
   const [exposure, setExposure] = useState<'all' | AppStage>('all')
@@ -377,7 +377,7 @@ export function AppsList({ data }: { data: ListData }) {
             <SectionHead icon={PLATFORM_ICONS[p.id]} title={p.id} sub={p.description} />
             <ul className={APP_LIST}>
               {entries.map((e) => (
-                <ExternalRow key={e.id} entry={e} workspaceStatus={workspaceStatus} />
+                <ExternalRow key={e.id} entry={e} />
               ))}
             </ul>
           </div>
@@ -420,13 +420,7 @@ const PLATFORM_ICONS: Record<Platform, ReactNode> = {
   ),
 }
 
-function ExternalRow({
-  entry,
-  workspaceStatus,
-}: {
-  entry: ExternalEntry
-  workspaceStatus: ListData['workspaceStatus']
-}) {
+function ExternalRow({ entry }: { entry: ExternalEntry }) {
   // The actions live BESIDE the row's anchor, not inside it — a button in an
   // anchor is one click with two meanings, and invalid HTML besides. The row
   // still links to the site; the trailing cell links to the repo and holds
@@ -461,11 +455,7 @@ function ExternalRow({
           >
             ⎇ {entry.repo}
           </a>
-          <CloneButton
-            repo={entry.repo}
-            cloned={entry.workspace !== null}
-            initial={workspaceStatus}
-          />
+          <CloneButton repo={entry.repo} cloned={entry.workspace !== null} />
         </div>
       )}
     </li>

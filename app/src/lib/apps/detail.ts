@@ -6,7 +6,7 @@ import { env } from '../../host/env'
 import { appStatuses } from '../../host/metrics'
 import { hostnamesTakenBy, manifestEntries, operatorSecretApps } from '../../host/nix-manifest'
 import { readSite } from '../../host/site'
-import { readWorkspaceRequestStatus, readWorkspaces, workspaceFor } from '../../host/workspaces'
+import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
 import { driftOf, getApp } from '../repo/apps'
@@ -47,7 +47,6 @@ export async function loadAppDetail(data: { name: string }) {
     takenHostnames,
     hasIcon,
     workspaces,
-    workspaceStatus,
     deployShot,
     site,
   ] = await Promise.all([
@@ -60,7 +59,6 @@ export async function loadAppDetail(data: { name: string }) {
     hostnamesTakenBy(hostname),
     appIcon(record.name, hostname, stageExposed(record.stage)).then((icon) => icon !== null),
     readWorkspaces(),
-    readWorkspaceRequestStatus(),
     readDeployShot(name),
     siteIdentity(),
   ])
@@ -76,7 +74,6 @@ export async function loadAppDetail(data: { name: string }) {
     // names it (what a removal leaves behind). From the export, so the
     // path is the nix fact rather than a string typed into a component.
     stateRoot: site.data.stateRoot,
-    workspaceStatus,
     takenHostnames,
     // Authoritative record from the app's own deploy unit — a deploy also
     // runs from the timer and from a manual systemctl start, neither of

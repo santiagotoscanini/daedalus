@@ -2,16 +2,16 @@ import {
   arrayOf,
   bool,
   type Decoder,
-  literal,
   nullable,
   num,
   obj,
   optional,
   str,
 } from '../lib/contract/decode'
-import { defineBridge } from './bridge'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
+import type { ControllerClient } from './controller/client'
 import { env } from './env'
+import { type RootAnswer, rootActor, runRoot } from './root'
 
 // Project workspaces: the working clones under ~/projects on the host, where
 // a Claude Code session works on a project directly from this box.
@@ -20,9 +20,9 @@ import { env } from './env'
 // (published by daedalus-workspace-{publish,sync}, nix/stacks/daedalus/
 // daedalus-snapshots.nix — live git state per clone plus its last sync
 // outcome). The one action — "make this repo's workspace
-// exist and make it current" — goes out through the file-drop bridge as a
-// repo slug; the host clones over the operator's SSH identity, which is a
-// push-capable credential this container must never hold.
+// exist and make it current" — goes to the root helper as a repo slug
+// (`workspace-clone`); the host clones over the operator's SSH identity,
+// which is a push-capable credential this container must never hold.
 //
 // Keeping current is the host's job, not a button: hosted apps' workspaces
 // pull right after each deploy lands (a path unit on the deploy state files),
@@ -96,43 +96,28 @@ export function workspaceFor(repo: string, data: WorkspacesData): Workspace | nu
   return data.workspaces.find((w) => w.remote?.toLowerCase() === want) ?? null
 }
 
-type WorkspaceRequestState = 'idle' | 'running' | 'done' | 'failed'
+/**
+ * The helper's word waits for the clone unit's own 15 minutes (a large repo
+ * on a slow evening, plus the workspace lock) and the start job's minute:
+ * the verb's timeoutSec (nix/stacks/daedalus/daedalus-verbs.nix), and a
+ * little more.
+ */
+const CLONE_WAIT_MS = 980_000
 
-export type WorkspaceRequestStatus = {
-  id: string | null
-  repo: string | null
-  state: WorkspaceRequestState
-  /** What happened, in the host's words — shown verbatim on success. */
-  detail: string
-  error: string
-  startedAt: string | null
-  finishedAt: string | null
-}
-
-/** The status file the host agent writes; decoding `{}` is the idle status. */
-const WORKSPACE_STATUS: Decoder<WorkspaceRequestStatus> = obj({
-  id: optional(nullable(str), null),
-  repo: optional(nullable(str), null),
-  state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
-  detail: optional(str, ''),
-  error: optional(str, ''),
-  startedAt: optional(nullable(str), null),
-  finishedAt: optional(nullable(str), null),
-})
-
-const bridge = defineBridge<WorkspaceRequestStatus>({
-  requestFile: 'workspace-request.json',
-  statusFile: 'workspace-status.json',
-  status: WORKSPACE_STATUS,
-})
-
-export async function readWorkspaceRequestStatus(): Promise<WorkspaceRequestStatus> {
-  return bridge.readStatus()
-}
-
-export async function requestWorkspaceClone(input: {
-  repo: string
-  actor: string
-}): Promise<string> {
-  return bridge.request({ repo: input.repo, actor: input.actor })
+/**
+ * Clone `repo` (owner/name) into the workspace root, or fast-forward the
+ * clone that is already there: the root helper's `workspace-clone`, which
+ * holds the slug to its pattern and hands it to the unit in a run file. The
+ * answer is the unit's last line: what it did, or why it refused.
+ */
+export async function requestWorkspaceClone(
+  input: { repo: string; actor: string },
+  client?: ControllerClient,
+): Promise<RootAnswer> {
+  return runRoot(
+    'workspace-clone',
+    { repo: input.repo, actor: rootActor(input.actor) },
+    CLONE_WAIT_MS,
+    client,
+  )
 }

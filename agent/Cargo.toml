@@ -50,6 +50,9 @@ toml = "0.8"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+# The root helper's pattern selectors (root/): the regex engine the
+# log filter already brings, not a second one.
+regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "meta"] }
 
 # The controller link (link/): TLS 1.3 through rustls on every OS, over
 # pure-Rust primitives the crate plugs in itself (link/crypto.rs) — X25519,

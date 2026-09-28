@@ -24,7 +24,8 @@ import {
 // goes through here: the Cloudflare token (core/settings/cloudflare-token.ts)
 // and the GitHub App's key (core/settings/github-app.ts) then go to Apply as
 // their own change (host/apply-flow.ts runSecretApply); an app's secret
-// (lib/apps/secrets.ts) goes to its own bridge verb instead (sealAppSecret).
+// (lib/apps/secrets.ts) goes to the root helper's `secret-set` instead
+// (sealAppSecret).
 
 /** The sops file's bytes, or why nothing was sealed. */
 export type Sealed = Result<string>
@@ -188,7 +189,8 @@ export async function sealJsonForVault<F extends VaultJsonFile>(
  * The whole of what this container can do to an app's secrets. It produces a
  * sops document holding a single value, sealed to the recipients that file's
  * creation rule names — the same two the host decrypts with — and hands it to
- * the bridge; the host opens it in memory and merges the key
+ * the root helper's `secret-set` as its payload; the host opens it in memory
+ * and merges the key
  * (nix/stacks/daedalus/host/secret-set.sh). Reading the file back, re-emitting it,
  * or replacing it whole are all impossible here, because the identity that
  * could is deliberately absent.

@@ -161,7 +161,6 @@ function AppDetail() {
     repo,
     workspace,
     workspaceRoot,
-    workspaceStatus,
     stateRoot,
     tabData,
   } = Route.useLoaderData()
@@ -215,7 +214,6 @@ function AppDetail() {
                   repo={repo}
                   workspace={workspace}
                   workspaceRoot={workspaceRoot}
-                  workspaceStatus={workspaceStatus}
                   d={d}
                 />
               )

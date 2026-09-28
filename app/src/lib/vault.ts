@@ -19,7 +19,7 @@ export type VaultFile = (typeof VAULT_FILES)[number]
  * Not in `VAULT_FILES`, because those are the entries an Apply writes WHOLE
  * and this one is never written whole by this container: it holds keys
  * daedalus cannot read back, so it is only ever merged into, one key at a
- * time, by the host (host/secret-set-request.ts). What it shares with them is
+ * time, by the host (host/secret-set.ts). What it shares with them is
  * the thing this type exists for — it is a path sops must be told about, and
  * site/.sops.yaml's creation rule (`^vault/(apps/)?[a-z0-9-]+\.sops$`) is
  * matched against exactly this string.

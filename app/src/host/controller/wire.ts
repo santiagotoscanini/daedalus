@@ -870,6 +870,10 @@ export type RootVerbState = {
   unit: string
   description: string
   selectors: Record<string, string[]>
+  /** Pattern selector → its regex: a value of that shape, delivered in a run file. */
+  patterns: Record<string, string>
+  /** The largest payload it takes, or null when it takes none. */
+  payloadMax: number | null
   /** The unit's ActiveState; null for a template, or when systemd did not answer. */
   activeState: string | null
   result: string | null
@@ -890,6 +894,8 @@ const rootVerbShape = reads<RootVerb>()(
     unit: str,
     description: optional(str, ''),
     selectors: optional(recordOf(arrayOf(str)), {}),
+    patterns: optional(recordOf(str), {}),
+    payload_max: nnum,
     active_state: nstr,
     result: nstr,
   }),
@@ -917,6 +923,8 @@ export function rootRunOk(v: unknown): RootRun {
       unit: x.unit,
       description: x.description,
       selectors: x.selectors,
+      patterns: x.patterns,
+      payloadMax: x.payload_max,
       activeState: x.active_state,
       result: x.result,
     })),

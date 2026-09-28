@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ControllerClient } from './controller/client'
 import { ControllerError, type RootRun } from './controller/wire'
-import { rootAnswerText, runRoot } from './root'
+import { rootActor, rootAnswerText, runRoot } from './root'
 
 // runRoot against a fake controller: what it asks, and how each answer — and
 // a call that never got one — reads.
@@ -32,7 +32,13 @@ describe('runRoot', () => {
       outcome: 'refused',
       detail: 'already running',
     })
-    expect(asked).toEqual([['deploy', { app: 'blog' }, 1234]])
+    expect(asked).toEqual([['deploy', { app: 'blog' }, 1234, undefined]])
+  })
+
+  it('hands a payload on beside the selectors', async () => {
+    const { client, asked } = fake(() => Promise.resolve(run('done', 'sealed')))
+    await runRoot('secret-set', { app: 'blog' }, 5, client, '{"data":"ENC[x]"}')
+    expect(asked).toEqual([['secret-set', { app: 'blog' }, 5, '{"data":"ENC[x]"}']])
   })
 
   it('reads a call that got no answer as failed, with why', async () => {
@@ -48,5 +54,22 @@ describe('runRoot', () => {
       'the deploy failed',
     )
     expect(rootAnswerText({ outcome: 'done', detail: 'deployed' }, 'the deploy')).toBe('deployed')
+  })
+})
+
+describe('rootActor', () => {
+  it('keeps a label the actor pattern takes', () => {
+    for (const ok of ['op@example.test', 'api', 'first.last+tag@example.org', 'A B']) {
+      expect(rootActor(ok)).toBe(ok)
+    }
+  })
+
+  it('maps what the pattern refuses to `_`, and nothing to unknown', () => {
+    expect(rootActor('op\n@x')).toBe('op_@x')
+    expect(rootActor('José')).toBe('Jos_')
+    expect(rootActor('-rf')).toBe('_rf')
+    expect(rootActor('')).toBe('unknown')
+    expect(rootActor('   ')).toBe('unknown')
+    expect(rootActor('x'.repeat(300))).toHaveLength(128)
   })
 })

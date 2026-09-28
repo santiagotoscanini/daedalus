@@ -1,7 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
-import type { WorkspaceRequestStatus } from '../host/workspaces'
-import { cloneWorkspaceFn, fetchWorkspaceRequestStatus } from '../server/registry'
-import { usePolledStatus } from './status'
+import { cloneWorkspaceFn } from '../server/registry'
+import { useRootAction } from './root-action'
 import { Button } from './ui/button'
 
 // The one workspace action, shared by the app detail page and the off-box
@@ -9,38 +8,24 @@ import { Button } from './ui/button'
 // treats a clone of an existing workspace as a pull — so one button changes
 // its label rather than two buttons pretending to be different verbs.
 //
-// One bridge, one status file: every instance of this button polls the same
-// status, so while a clone runs the others show busy too. That is the truth
-// (the host serialises workspace mutations behind one lock), not a UI
-// shortcut.
+// The click waits for the root helper's word (host/workspaces.ts): the
+// button is busy until the clone has finished, then shows a refusal or a
+// failure in the host's words. The host runs one clone at a time; a click
+// elsewhere while one runs is refused and says so.
 
-export function CloneButton({
-  repo,
-  cloned,
-  initial,
-}: {
-  repo: string
-  cloned: boolean
-  initial: WorkspaceRequestStatus
-}) {
+export function CloneButton({ repo, cloned }: { repo: string; cloned: boolean }) {
   const router = useRouter()
-  const { status, running, refusal, start } = usePolledStatus({
-    initial,
-    fetch: () => fetchWorkspaceRequestStatus(),
+  const { running, answer, start } = useRootAction({
     onSettle: () => {
       void router.invalidate()
     },
   })
 
-  const mine = status.repo === repo
-  const busyLabel = cloned ? '⇣ pulling…' : '⇣ cloning…'
-
   return (
     <span className="inline-flex items-center gap-2">
-      {refusal !== null && <span className="text-danger text-xs">{refusal}</span>}
-      {refusal === null && status.state === 'failed' && mine && (
-        <span className="text-danger text-xs" title={status.error}>
-          failed
+      {answer !== null && answer.outcome !== 'done' && (
+        <span className="text-danger text-xs" title={answer.detail || undefined}>
+          {answer.outcome === 'refused' ? answer.detail : 'failed'}
         </span>
       )}
       <Button
@@ -49,18 +34,10 @@ export function CloneButton({
         size="sm"
         disabled={running}
         onClick={() => {
-          start(async () => ({ ok: true, value: (await cloneWorkspaceFn({ data: { repo } })).id }))
+          start(() => cloneWorkspaceFn({ data: { repo } }))
         }}
       >
-        {running
-          ? // A foreign running status means some other project's clone holds
-            // the lock — busy is honest, but not with this button's verb.
-            mine || status.state !== 'running'
-            ? busyLabel
-            : '⇣ busy…'
-          : cloned
-            ? '⇣ Pull now'
-            : '⇣ Clone'}
+        {running ? (cloned ? '⇣ pulling…' : '⇣ cloning…') : cloned ? '⇣ Pull now' : '⇣ Clone'}
       </Button>
     </span>
   )

@@ -358,6 +358,7 @@ dependencies = [
  "native-tls",
  "png",
  "rand_core",
+ "regex-automata",
  "rustls",
  "rustls-native-certs",
  "semver",

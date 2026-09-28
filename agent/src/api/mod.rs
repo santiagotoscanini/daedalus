@@ -573,11 +573,23 @@ impl Api {
         }
         if p.selectors
             .iter()
-            .any(|(k, v)| !root::valid_name(k) || !root::valid_value(v))
+            .any(|(k, v)| !root::valid_name(k) || !root::valid_free_value(v, root::MAX_PATTERN_LEN))
         {
             return Err(ApiError::new(
                 code::BAD_REQUEST,
-                "`root.run`: a selector is a name and a value of [A-Za-z0-9._-]",
+                "`root.run`: a selector is a name and a value of printable ASCII, at most 256, not starting with -",
+            ));
+        }
+        if p.payload
+            .as_ref()
+            .is_some_and(|x| x.len() > root::MAX_PAYLOAD)
+        {
+            return Err(ApiError::new(
+                code::BAD_REQUEST,
+                format!(
+                    "`root.run`: a payload is at most {} bytes",
+                    root::MAX_PAYLOAD
+                ),
             ));
         }
         let run = crate::claude::sessions::mint_request();
@@ -585,6 +597,7 @@ impl Api {
             verb: p.verb.clone(),
             id: run.clone(),
             selectors: p.selectors,
+            payload: p.payload,
         };
         tracing::info!(verb = %p.verb, run = %run, "root: asking the helper");
         let events = self.shared.events();
@@ -936,7 +949,9 @@ mod tests {
         // Nonsense is refused here, before a root process is spent on it.
         for p in [
             serde_json::json!({"verb": "Reboot"}),
-            serde_json::json!({"verb": "deploy", "selectors": {"app": "../x"}}),
+            serde_json::json!({"verb": "deploy", "selectors": {"app": "a\nb"}}),
+            serde_json::json!({"verb": "deploy", "selectors": {"app": "-rf"}}),
+            serde_json::json!({"verb": "secret", "payload": "x".repeat(crate::root::MAX_PAYLOAD + 1)}),
             serde_json::json!({"verb": "reboot", "unit": "sshd.service"}),
         ] {
             assert_eq!(
