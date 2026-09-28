@@ -1,10 +1,29 @@
 # The controller — the daedalus agent (agent/) on the box itself, in
 # `mode = "controller"`: one process as the operator, the door the app talks to
 # over a unix socket (PLAN feature 13). Today it serves that socket, the
-# machine's facts at the `minimal` telemetry level, its status page on
-# loopback (127.0.0.1:7787, never the LAN) and the listener the other
-# machines' links reach (below); Claude remote control stays with
-# platform/claude-rc.nix until the controller takes it over, so it is OFF here.
+# machine's facts at the `minimal` telemetry level, its status page and
+# the listener the other machines' links reach (below); Claude remote
+# control stays with platform/claude-rc.nix until the controller takes it
+# over, so it is OFF here.
+#
+# The status page, and the machines' metrics:
+#
+#   bind           `0.0.0.0:<statusPort>` (7787), every interface: the
+#                  prometheus container reaches the host through pasta's
+#                  host alias, and its connections arrive at the host's
+#                  own address, not loopback. Other addresses than
+#                  loopback get `/healthz` and `/nodes/metrics` alone.
+#   firewall       CLOSED: the port is in no allowedTCPPorts, so the LAN
+#                  never reaches it; the container's connections are the
+#                  host talking to itself and pass.
+#   scrape         the `nodes` job: `host.containers.internal:<statusPort>`
+#                  at `/nodes/metrics`, every connected machine's telemetry
+#                  in one target, each series labelled `node` (its id),
+#                  `host`, `os` and `machine` (the name the app hands over
+#                  in `nodes.set_desired`). `up` there is the controller;
+#                  each machine is `daedalus_agent_link_up` (the Machine
+#                  Link Down alert, modules/monitoring). The box itself is
+#                  not in it: node-exporter covers the box.
 #
 # The machines' link (agent/README.md, "The link to the controller"):
 #
@@ -144,6 +163,11 @@ let
   # admitting it (see the header).
   port = config.fleet.daedalus.controllerPort;
 
+  # The status page: every interface, the firewall keeping it from the LAN
+  # (see the header). Written into config.toml so the agent and the scrape
+  # below agree.
+  statusPort = 7787;
+
   # The published image's `node` user, as the host sees it. Dev mode runs the
   # container as the operator, who needs no listing.
   allowedUids = lib.optional (!daedalusDev) (hostUid 1000);
@@ -154,6 +178,7 @@ let
     # The box already has node-exporter and its own snapshots; minimal is the
     # machine and how it is doing, no drives, services or package lists.
     telemetry = "minimal";
+    port = statusPort;
     controller = {
       api_socket = "${controllerDir}/api.sock";
       api_allowed_uids = allowedUids;
@@ -204,6 +229,17 @@ in
     ];
 
     fleet.monitoredJobs.daedalus-controller = { };
+
+    # Every machine's metrics, through the controller (the header's `scrape`).
+    # The job keeps the name the per-machine targets had, so a query by
+    # `job="nodes"` still finds them.
+    fleet.prometheusScrapes = [
+      {
+        job_name = "nodes";
+        metrics_path = "/nodes/metrics";
+        static_configs = [ { targets = [ "host.containers.internal:${toString statusPort}" ]; } ];
+      }
+    ];
 
     systemd.services.daedalus-controller = {
       description = "Daedalus controller: the agent on the box, the app's local API";

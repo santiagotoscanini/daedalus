@@ -1229,6 +1229,54 @@ groups:
         labels:
           severity: warning
         isPaused: false
+      # The machines running the daedalus agent. Prometheus scrapes them
+      # all through one target, the controller's /nodes/metrics (job
+      # "nodes"), so `up` there says only that the controller answered;
+      # each approved machine is `daedalus_agent_link_up` (1 while its link
+      # to the controller is open, 0 while not). The controller itself down
+      # is Scrape Target Down above. noDataState OK: a box with no approved
+      # machines has no series.
+      - uid: machine-link-down-1
+        title: Machine Link Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: daedalus_agent_link_up
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: '{{ $labels.machine }} ({{ $labels.host }}, {{ $labels.os }}) has no link to the controller (daedalus_agent_link_up = 0): it is off or asleep, its agent is down, or it cannot reach the box.'
+          summary: A machine's agent is not connected
+        labels:
+          severity: warning
+        isPaused: false
       # Scoped to job="gluetun" (the TV stack): ProtonVPN port forwarding
       # feeds qBittorrent there. job="gluetun-argus" has no port
       # forwarding configured and permanently reports 0 — including it

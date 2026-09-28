@@ -1,7 +1,8 @@
 # daedalus-nodes — the control plane's side of the machines that run the
-# agent: their metrics targets and LAN names, both written by the app under
-# the apply bridge from what the controller reports (no rebuild). Part of the
-# daedalus stack (daedalus.nix holds the switch); never imports its siblings.
+# agent: their LAN names, written by the app under the apply bridge from what
+# the controller reports (no rebuild). Their metrics are the controller's
+# (controller.nix scrapes its /nodes/metrics). Part of the daedalus stack
+# (daedalus.nix holds the switch); never imports its siblings.
 {
   config,
   lib,
@@ -15,16 +16,11 @@ in
 
 {
   config = lib.mkIf config.fleet.modules.daedalus.enable {
-    # The approved nodes as prometheus targets: the control plane writes
-    # `nodes/targets.json` under the apply bridge (app/src/host/node-targets.ts)
-    # whenever a machine is approved, revoked, forgotten or moves address,
-    # and prometheus discovers them from the file — a node joins the fleet's
-    # metrics at approval, with no rebuild. The directory is pre-created so
-    # the read-only mount has something to bind on a fresh box.
+    # Where the app writes the file below, pre-created so the path unit
+    # watches a directory that exists on a fresh box.
     fleet.statePaths."${applyDir}/nodes" = { };
-    fleet.prometheusFileSd.nodes = "${applyDir}/nodes";
 
-    # The nodes' names on the LAN, the same way: the control plane writes
+    # The nodes' names on the LAN: the control plane writes
     # `nodes/dhcp-hosts` — one dnsmasq `dhcp-host` line per approved node,
     # `<MAC>,<name>` — and this unit copies it where the resolver reads it
     # (`dhcp-hostsdir=/run/daedalus-nodes`, modules/pihole) and sends FTL a
@@ -95,16 +91,5 @@ in
         ''}
       '';
     };
-    fleet.prometheusScrapes = [
-      {
-        job_name = "nodes";
-        file_sd_configs = [
-          {
-            files = [ "/etc/prometheus-sd/nodes/*.json" ];
-            refresh_interval = "1m";
-          }
-        ];
-      }
-    ];
   };
 }
