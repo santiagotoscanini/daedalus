@@ -393,7 +393,7 @@ priority; each can be done independently unless noted.
    ```
    No MAC, no address: consumers dial `<name>.<lanDomain>`. Consumers
    then derive themselves — gatus probes each provider's health, the log
-   bridge scrapes each lemonade node, prometheus keeps file_sd — and
+   bridge scrapes each lemonade node, prometheus reads every machine from the controller — and
    `fleet.gpuHost`/`gpuHostIp` go: litellm's `@gpuHost@` becomes the
    first lemonade node's name as a bridge, then nothing once the routes
    move (below). This is the one step that is an Apply, and it happens
@@ -581,11 +581,11 @@ priority; each can be done independently unless noted.
     machine's is a node. Machines already reach the app only through it:
     each keeps a pinned TLS link to the controller (found by `--controller`
     or the `_daedalus-controller._tcp` record), and the app reads and
-    commands them over the controller's unix socket. What is left: the box
+    commands them over the controller's unix socket, and Prometheus reads
+    them all from the controller's `/nodes/metrics`. What is left: the box
     still does its own jobs through a second pipeline — nix units
     (`platform/claude-rc.nix`, `claude-session@`), root snapshots, the
-    file-drop bridge — and Prometheus still scrapes each machine on the
-    LAN. The target is one codebase on every OS, a star with the box at the
+    file-drop bridge. The target is one codebase on every OS, a star with the box at the
     centre, and one front door for the app.
     - **One agent, every OS.** Per-OS code moves behind one fixed interface
       each (`os/{windows,macos,linux}`: paths, facts, network, DNS, power,
@@ -598,9 +598,7 @@ priority; each can be done independently unless noted.
     - **A star.** The box runs the agent as the controller. Every other
       machine keeps ONE outbound, authenticated, long-lived connection to
       it: telemetry pushed up, commands down at once, and later multiplexed
-      streams (santree's terminals). Machines stop listening on the LAN;
-      the controller serves one metrics endpoint for Prometheus in their
-      place.
+      streams (santree's terminals).
     - **The app talks only to the controller, over a unix socket**
       mounted into its container: typed request → progress → result, no LAN
       dialing, no bearer on the wire, no pasta first-SYN stall, no polled
@@ -669,23 +667,19 @@ priority; each can be done independently unless noted.
       1. Release agent 0.14.0 (`agent-v0.14.0` tag): the enrolled machines
          self-update onto the link and find the controller by the SRV
          record. Until then they run 0.13 against an app that no longer
-         answers it.
-      2. Metrics through the controller: the per-machine file_sd targets go
-         once Prometheus scrapes the controller's `/nodes/metrics` instead.
-         That lives on its loopback status page, which the Prometheus
-         container cannot reach, so the switch brings a way in (a scrape
-         listener the container can reach, e.g. on the bridge gateway) with
-         it; the nodes' status pages then stop answering the LAN.
-      3. Claude remote control on the box as a unit the controller runs;
+         answers it. Then agent 0.15.0 (`agent-v0.15.0`, not yet tagged):
+         the machines' status pages stop answering the LAN (the box already
+         reads their metrics from the controller).
+      2. Claude remote control on the box as a unit the controller runs;
          `claude-rc.nix`, the `claude-rc` verb and the Claude snapshot go.
          The gcroot pin on `claude` stays.
-      4. Staged updates, orchestrated by the controller.
-      5. Actions move over one at a time: Claude sessions (which the other
+      3. Staged updates, orchestrated by the controller.
+      4. Actions move over one at a time: Claude sessions (which the other
          machines then gain too), workspace clone and sync, then the root
          verbs onto the socket-activated helper — a low-stakes one first
          (Claude restart, reboot), Apply last — each deleting its
          file-drop path.
-      6. santree: its session host on the box, then relayed to the other
+      5. santree: its session host on the box, then relayed to the other
          machines, which opt in per machine (the price, written down: the
          box can reach every machine that opted in). A first version was
          built and verified as a standalone daemon and parked on 2026-09-27
@@ -700,7 +694,7 @@ priority; each can be done independently unless noted.
          primitives) with each side pinning the other's ed25519 key, and
          newline-delimited JSON with the socket API's envelope — no CA, no
          web server between (agent/src/link/). Stream multiplexing waits for
-         santree's streams (step 6).
+         santree's streams (step 5).
       2. How a machine first trusts the controller. Decided: pinned at
          install (`--pin`), else trust on first use, shown as unconfirmed
          until pinned — both fingerprints on the tray and the status page; a
