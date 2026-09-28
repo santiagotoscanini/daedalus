@@ -1,10 +1,10 @@
 # The controller — the daedalus agent (agent/) on the box itself, in
 # `mode = "controller"`: one process as the operator, the door the app talks to
-# over a unix socket (PLAN feature 13). Today it serves that socket, the
-# machine's facts at the `minimal` telemetry level, its status page and
-# the listener the other machines' links reach (below), the box's Claude
-# remote control in the configuration checkout, and the Claude sessions the
-# app asks it to resume (below).
+# over a unix socket (PLAN feature 13). Today it serves that socket, its
+# local socket (below), the machine's facts at the `minimal` telemetry level,
+# its metrics page and the listener the other machines' links reach (below),
+# the box's Claude remote control in the configuration checkout, and the
+# Claude sessions the app asks it to resume (below).
 #
 # Claude remote control:
 #
@@ -71,13 +71,15 @@
 #                  `unit="claude-session"`, one `filename` label per session,
 #                  through the same stages.
 #
-# The status page, and the machines' metrics:
+# The metrics page, and the machines' metrics:
 #
 #   bind           `0.0.0.0:<statusPort>` (7787), every interface: the
 #                  prometheus container reaches the host through pasta's
 #                  host alias, and its connections arrive at the host's
-#                  own address, not loopback. Other addresses than
-#                  loopback get `/healthz` and `/nodes/metrics` alone.
+#                  own address, not loopback. Every address, loopback
+#                  included, gets `/healthz` and `/nodes/metrics` and a 404
+#                  for anything else (agent 0.20.0): the status document is
+#                  the local socket's (below), never HTTP's.
 #   firewall       CLOSED: the port is in no allowedTCPPorts, so the LAN
 #                  never reaches it; the container's connections are the
 #                  host talking to itself and pass.
@@ -136,6 +138,14 @@
 #                  the new one until it is re-pinned. `system.info` states its
 #                  fingerprint (`controller.fingerprint`).
 #
+#   rotation     `controller.rotate` (Settings › Machines, armed first)
+#                  makes `identity.next.key` and `rotation.json` beside it;
+#                  both keys are served for the grace, the machines on agent
+#                  0.19.0+ re-pin themselves, and at its end the new key
+#                  becomes `identity.key`. A restore from a snapshot taken
+#                  mid-rotation brings both back: the rotation resumes, or
+#                  retires the old key at the first start if its end passed.
+#
 #   What the app does with it: puts `controller.{advertise,public_key}` from
 #   system.info in its install lines (`--controller`, `--pin`); pushes its
 #   COMPLETE set of decided keys (`nodes.set_desired`: approved/revoked, each
@@ -159,6 +169,17 @@
 #                  stateRoot, and a shell's `daedalus-agent status` reads the
 #                  same file the service does. The unit restarts when the file
 #                  changes (restartTriggers: its own text would not).
+#   the local      `<dataDir>/run/agent.sock`: what `daedalus-agent status`
+#   socket         on the box talks to. The agent makes `run/` 0711 and the
+#                  socket 0666, and serves only root and the operator (the
+#                  peer's uid, SO_PEERCRED); nothing here names it.
+#   dataDir        must stay WRITABLE by the service — no ReadOnlyPaths,
+#                  ProtectHome or ProtectSystem=strict without a
+#                  ReadWritePaths for it: besides state.json, the logs and
+#                  the gcroots, the agent writes `run/agent.sock` there at
+#                  every start and `identity.next.key` + `rotation.json` in
+#                  a rotation (each temp + fsync + rename, so the directory
+#                  itself, not only the files).
 #   the socket     `<controllerDir>/api.sock`, in a directory tmpfiles makes
 #                  the operator's before any unit starts, so the app's bind
 #                  source always exists. The agent refuses a directory that is
@@ -217,8 +238,10 @@ let
     meta.mainProgram = "daedalus-agent";
   };
 
-  # Its state (state.json) and logs. Beside the control plane's other host-side
-  # state (apply/, prev/), and only the operator's: nothing else reads it.
+  # Its state (state.json, identity.key, a rotation's files), its local socket
+  # (run/) and logs — writable by the service (the header's `dataDir`). Beside
+  # the control plane's other host-side state (apply/, prev/), and only the
+  # operator's: nothing else reads it.
   dataDir = "${config.fleet.stateRoot}/apps/daedalus/controller";
   # The agent's logs, Claude remote control's among them (the header's `logs`).
   logDir = "${dataDir}/logs";

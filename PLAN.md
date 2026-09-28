@@ -570,14 +570,10 @@ priority; each can be done independently unless noted.
     agent is the controller; every other machine's is a node on one
     outbound, pinned TLS link to it (TLS 1.3 with each side pinning the
     other's ed25519 key; a node pins the controller at install with
-    `--pin`, else on first use, and a changed key is refused, never
-    re-pinned). The app reaches every machine only through the controller's
-    unix socket; capabilities, not "is this the box", draw the tabs. What
-    remains:
-    - **Hardening.** A unix socket with peer credentials between the tray and
-      the service instead of loopback trust; an updater rollback that keeps
-      the previous binary until the new one proves healthy; rotation of the
-      controller's key.
+    `--pin`, else on first use; a changed key is refused, and re-pinned
+    only by a rotation the trusted key signed). The app reaches every
+    machine only through the controller's unix socket; capabilities, not
+    "is this the box", draw the tabs. What remains:
     - **Root behind a socket-activated helper.** The controller runs as the
       operator. Root actions (Apply, deploys, image and engine updates,
       builds, power) keep their fixed nix units; their front door moves from
@@ -592,9 +588,15 @@ priority; each can be done independently unless noted.
       low-stakes one first (reboot), Apply last — each deleting its
       file-drop path. Open: whether the helper is also reachable from the
       app directly (proposed: only through the controller).
-    - **Proof on the Mac.** The PC proved 0.17.0 on 2026-09-28 (Claude
-      survives agent and tray restarts and updates, resume works, a reboot
-      brings the recovery set back); the Mac has not been through it.
+    - **Proof of 0.19 and 0.20 on the real machines.** Only the box runs
+      them. On the Windows PC and the Mac: the update from 0.17 lands and
+      proves itself (probation cleared, trays and sessions restarted onto
+      the new binary), the tray, the session and `status` reach the service
+      over the local socket (the named pipe on Windows) and another user is
+      refused, and a controller key rotation re-pins both without a hand on
+      either. The Mac has not been through 0.17's proof either (Claude
+      surviving agent and tray restarts and updates, resume, the recovery
+      set after a reboot).
     - **Deferred: staged updates.** Every agent fetches, verifies and stages
       the newest signed release; applying is a restart the operator triggers
       per machine or for all (System › Machines or an MCP write tool), naming
