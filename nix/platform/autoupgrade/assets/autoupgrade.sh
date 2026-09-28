@@ -41,9 +41,17 @@ fi
 
 # A tree someone left dirty is not this job's to build on: the lock it
 # restores on failure, and the commit it makes on success, both assume
-# flake.lock was clean when it started.
-if ! as_operator git diff --quiet -- flake.lock; then
-  echo "flake-autoupgrade: flake.lock has uncommitted changes; skipping this run"
+# flake.lock matched HEAD when it started. Compared against HEAD, not the
+# index: a plain `git diff` misses a STAGED lock, which then rode into the
+# upgrade's commit as if the job had chosen it. And nothing may be staged at
+# all — the index is someone's half-made commit, and a job that commits must
+# not share it with them.
+if ! as_operator git diff HEAD --quiet -- flake.lock; then
+  echo "flake-autoupgrade: flake.lock differs from HEAD (staged or not); skipping this run"
+  exit 0
+fi
+if ! as_operator git diff --cached --quiet; then
+  echo "flake-autoupgrade: the index holds staged changes; skipping this run"
   exit 0
 fi
 

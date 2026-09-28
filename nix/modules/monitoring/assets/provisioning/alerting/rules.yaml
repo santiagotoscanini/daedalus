@@ -1284,9 +1284,17 @@ groups:
         isPaused: false
       # Every machine's Claude remote control, the box's own included (the
       # controller reports it in the same series): 0 unless its server is
-      # `running`. state!="off" because off is the machine's policy, not a
-      # fault. 10m rides out a restart, which the agent does by itself.
-      # noDataState OK: a machine with no Claude report has no series.
+      # `running`. Only the supervisor's failure states count: `stopped`
+      # (exited, no retry queued), `waiting` (crashed, retry backing off),
+      # `starting` (never reached running — the agent promotes it after 30s,
+      # so 10m of it is a wedged supervisor). Left out: `off` (the machine's
+      # policy), `none` (connected, but no Claude report — e.g. a controller
+      # whose own supervisor has not reported), and `not-installed`, which
+      # the supervisor reports BEFORE it reads the policy, so the series
+      # cannot tell "wanted but missing" from "not wanted"; the Claude page
+      # shows it. 10m rides out a restart, which the agent does by itself.
+      # noDataState OK: a disconnected machine has no series (Machine Link
+      # Down covers it).
       - uid: claude-rc-down-1
         title: Claude Remote Control Down
         condition: C
@@ -1297,7 +1305,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: daedalus_agent_claude_up{state!="off"}
+              expr: daedalus_agent_claude_up{state=~"stopped|waiting|starting"}
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -1324,7 +1332,7 @@ groups:
         for: 10m
         annotations:
           description: '{{ $labels.machine }} ({{ $labels.host }}, {{ $labels.os }}) has had no running Claude remote control for 10 minutes (daedalus_agent_claude_up = 0, state {{ $labels.state }}).'
-          summary: A machine's Claude remote control is not running
+          summary: 'A machine''s Claude remote control has failed (state stopped, waiting or starting; off, none and not-installed never fire)'
         labels:
           severity: warning
         isPaused: false
