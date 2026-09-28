@@ -67,6 +67,7 @@ pub mod name {
 /// while it has decided nothing. `Unknown` is the controller's word, in its
 /// own API, for a key it has seen but that is neither connected nor in the
 /// app's set (link/controller.rs); a machine is never told it.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NodeState {
@@ -88,6 +89,7 @@ impl NodeState {
 }
 
 /// What a machine is, in `hello`'s facts.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HelloFacts {
@@ -99,6 +101,7 @@ pub struct HelloFacts {
 
 /// `hello`: who the machine is. Its key is the TLS client certificate's;
 /// `node_id` must be that key's, or the controller refuses the connection.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Hello {
@@ -217,6 +220,7 @@ pub struct Welcome {
 /// controller with `hello`'s answer and as the `policy` event. The defaults
 /// stand until the controller has approved the machine; there is no local
 /// copy.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Policy {
@@ -236,6 +240,7 @@ pub struct Policy {
 }
 
 /// The providers half of the policy, one optional entry per kind.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct ProvidersPolicy {
@@ -249,6 +254,7 @@ impl ProvidersPolicy {
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct ProviderPolicy {
@@ -275,6 +281,7 @@ pub struct StateEvent {
 }
 
 /// The one-shot instructions the controller sends a machine.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Command {
@@ -587,7 +594,7 @@ mod tests {
             concat!(
                 r#"{"e":"claude_roster","p":{"reported_at":"t","agents_available":false,"agents":[],"#,
                 r#""transcripts":[],"transcript_total":0,"empty_count":0,"truncated":false,"managed":[],"#,
-                r#""resume_unavailable":null,"session_stats":[],"server":null,"actions":[],"errors":[]}}"#
+                r#""session_stats":[],"server":null,"actions":[],"errors":[]}}"#
             )
         );
         assert!(serde_json::from_value::<CommandParams>(json!({"command":"reboot"})).is_err());

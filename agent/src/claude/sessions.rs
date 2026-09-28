@@ -1,5 +1,6 @@
-//! The three verbs on one Claude Code session — resume, stop, remove — and
-//! the thread that runs them and keeps the roster (roster.rs) fresh.
+//! The three verbs on one Claude Code session — resume, stop, remove — the
+//! automatic recovery that resumes what a server restart ended, and the
+//! thread that runs them and keeps the roster (roster.rs) fresh.
 //!
 //! This replaces the box's `claude-session` bridge verb and its
 //! `claude-session@` template, and keeps their rules. The caller supplies a
@@ -17,41 +18,40 @@
 //!    whose workspace trust was accepted (`~/.claude.json`), and only the one
 //!    the transcript's project slug names. Anywhere else an interactive
 //!    `claude` stops on "Is this a project you created or one you trust?"
-//!    and a unit would sit there started and useless.
+//!    and a job would sit there started and useless.
 //!
 //! **Resume** starts `claude --resume <uuid> --remote-control <hostname>` as
-//! a transient systemd user unit, `claude-session-<uuid>` (a development run
-//! with `DAEDALUS_AGENT_DATA_DIR` names its own, config.rs), in that
-//! directory, with the environment the Remote Control unit gets — HOME, the
-//! session's PATH with `~/.local/bin` first and `/run/wrappers/bin` (sudo,
-//! for a session that rebuilds), CLAUDE_CONFIG_DIR — plus TERM. Under a
-//! PTY, and that is not optional: with pipes the CLI falls back to --print
-//! mode and exits in a second; `script` gives it the terminal, stays its
-//! parent, and its output is filtered on the way to the unit's log (ANSI
-//! stripped, the status box's once-a-second repaint dropped). The unit is
-//! its own cgroup, so the session outlives the agent: a restart or an update
-//! of the agent ends nothing, and the next start finds it (`managed`). It is
-//! refused when anything already runs that session — its unit, the CLI's
-//! agents, a live session file — because `--resume` of a running session
-//! starts a copy and two processes would append to one transcript. Five
-//! seconds after the start the unit must still run, or the resume failed.
+//! a job of its own, `claude-session-<uuid>` (a development run with
+//! `DAEDALUS_AGENT_DATA_DIR` names its own, config.rs), in that directory,
+//! with the environment the server's job gets plus TERM (and on NixOS
+//! `/run/wrappers/bin`, for sudo) — under a terminal, which is not optional:
+//! with pipes the CLI falls back to --print mode and exits in a second. What
+//! the terminal is, is the OS's (job.rs): `script` on Linux and macOS, with
+//! the output filtered on the way to the job's log; a pseudo-console the
+//! agent's own binary holds on Windows. The job outlives the agent: a
+//! restart or an update of the agent ends nothing, and the next start finds
+//! it (`managed`). It is refused when anything already runs that session —
+//! its job, the CLI's agents, a live session file — because `--resume` of a
+//! running session starts a copy and two processes would append to one
+//! transcript. Five seconds after the start the job must still run, or the
+//! resume failed. The `claude` it runs is pinned from the nix garbage
+//! collector while it runs, where it is a store path (gcroot.rs).
 //!
-//! The unit is the handle, which is why resume needs one: on Windows and
-//! macOS the session is the tray's child and a resumed session would end
-//! with it; there `resume` is refused, and the roster says why
-//! (`resume_unavailable`).
-//!
-//! **Stop** of a uuid ends a session this agent resumed: `systemctl --user
-//! stop` of its unit, which ends the whole cgroup — no pid to match. A
-//! session the Remote Control server spawned has no stop of its own; it ends
-//! with its server. Stop of a short id is `claude stop <id>`, the CLI's own
-//! verb for a background agent, which keeps the conversation (`claude
-//! attach` reopens it); what settles it is no process left behind the id,
-//! not the CLI's exit status.
+//! **Stop** of a uuid ends a session this agent resumed: its job, with the
+//! OS ending the whole tree — no pid to match. A session the Remote Control
+//! server spawned has no stop of its own; it ends with its server. Stop of a
+//! short id is `claude stop <id>`, the CLI's own verb for a background
+//! agent, which keeps the conversation (`claude attach` reopens it); what
+//! settles it is no process left behind the id, not the CLI's exit status.
 //!
 //! **Remove** is `claude rm <short id>`: a background agent's record and its
 //! worktree, and settled by the record being gone. Never
 //! `--discard-unpushed` — that throws away commits.
+//!
+//! **Recovery** (recovery.rs says when) is `resume` of each session id the
+//! session hands over, one after the other, with every check above; each is
+//! a row in `actions` like an operator's request, and the whole run is the
+//! report's `recovered`.
 //!
 //! What a verb did is reported in the roster's `actions` (`ActionResult`) in
 //! a sentence of the agent's own; what the CLI printed goes to the agent's
@@ -65,11 +65,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::cli::find_cli;
+use super::job::{self, JobState, SessionJob};
 use super::profile::{claude_dir, home_dir};
 use super::roster::{self, is_short_id, is_uuid, ActionResult, Agent, Managed, Roster, Scanner};
-use super::unit::{self, Launch, UnitState};
 use super::workdir::trusted_projects;
-use super::{ActionState, SessionAction, SessionRequest};
+use super::{gcroot, ActionState, Recovered, SessionAction, SessionRequest};
+use crate::os::jobs;
 use crate::state::now_rfc3339;
 
 /// How often the roster is read when nothing asks.
@@ -80,9 +81,10 @@ const SETTLE: Duration = Duration::from_secs(5);
 const AGENTS_TIMEOUT: Duration = Duration::from_secs(10);
 /// `claude stop` and `claude rm`.
 const VERB_TIMEOUT: Duration = Duration::from_secs(30);
-/// Results kept in the roster.
-const ACTIONS_KEPT: usize = 8;
-/// A resumed session's log, gone this long with its unit, is removed.
+/// Results kept in the roster: room for a whole recovery and the requests
+/// around it.
+const ACTIONS_KEPT: usize = 24;
+/// A resumed session's log, gone this long with its job, is removed.
 const LOG_KEEP: Duration = Duration::from_secs(14 * 24 * 3600);
 
 /// The selector each verb takes (module doc, layer 1).
@@ -112,23 +114,19 @@ pub fn mint_request() -> String {
     hex::encode(b)
 }
 
-/// Why resume is not offered where the server is the session's child.
-pub const NO_UNIT: &str = "resuming a session needs a transient systemd user unit to hold it, \
-     so it outlives the agent; on this machine Claude runs as the session's child \
-     (claude_rc = \"child\"), and a resumed session would end with the tray";
-
 /// What the verbs and the roster need to know about this session.
 #[derive(Clone, Debug)]
 pub struct Context {
-    /// How the Remote Control server runs: its unit's accounting when a unit.
-    pub launch: Launch,
-    /// The resumed sessions' unit names start with this; None where the
-    /// server is a child and no unit is made (`NO_UNIT`).
-    pub unit_prefix: Option<String>,
+    /// The Remote Control server's job, for its accounting and its pin.
+    pub server: String,
+    /// The resumed sessions' job names start with this; the uuid follows.
+    pub prefix: String,
     /// Where each resumed session's log goes (beside claude-rc.log).
     pub log_dir: PathBuf,
     /// `--remote-control <label>`: this machine's name, as a token.
     pub label: String,
+    /// Where the running `claude`s are pinned (gcroot.rs).
+    pub roots: PathBuf,
 }
 
 /// The hostname as a `--remote-control` label: letters, digits, `.`, `_`
@@ -150,129 +148,6 @@ pub fn label_of(hostname: &str) -> String {
     } else {
         l
     }
-}
-
-/// The tools a resumed session's command line runs through.
-#[derive(Clone, Debug)]
-pub struct Tools {
-    pub sh: PathBuf,
-    pub script: PathBuf,
-    pub sed: PathBuf,
-    pub grep: PathBuf,
-}
-
-impl Tools {
-    fn locate() -> Result<Self, String> {
-        let find = |t: &str, why: &str| {
-            crate::exec::locate(t).ok_or_else(|| format!("no `{t}` on this machine ({why})"))
-        };
-        Ok(Self {
-            sh: find("sh", "the session's command line")?,
-            script: find("script", "util-linux: the terminal the session needs")?,
-            sed: find("sed", "the log filter")?,
-            grep: find("grep", "the log filter")?,
-        })
-    }
-}
-
-/// A word for `sh`, single-quoted.
-fn sq(s: &str) -> String {
-    format!("'{}'", s.replace('\'', r"'\''"))
-}
-
-/// The log filter: ANSI escapes and hyperlinks stripped, empty lines and
-/// the status box (lines opening with `·` or whitespace) dropped. No `$` and
-/// no `%` in any of it: systemd expands both in a unit's command line.
-const SED_EXPR: &str = r"s/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\]8;;[^\x07]*\x07//g; /./!d";
-const GREP_EXPR: &str = "^·|^[[:space:]]";
-
-/// `systemd-run`'s arguments for one resume — pure, and the whole of what a
-/// resumed session is started with: the argv fixed here, the selector and
-/// the directory checked before it is called.
-#[allow(clippy::too_many_arguments)]
-pub fn resume_args(
-    unit: &str,
-    id: &str,
-    cli: &Path,
-    label: &str,
-    cwd: &Path,
-    log: &Path,
-    env: &[(String, String)],
-    tools: &Tools,
-) -> Result<Vec<String>, String> {
-    if !is_uuid(id) {
-        return Err(format!("not a session id: {id:?}"));
-    }
-    let cli_s = cli.display().to_string();
-    if cli_s
-        .chars()
-        .any(|c| c.is_control() || matches!(c, '"' | '$' | '`' | '\\' | '%'))
-    {
-        return Err(format!(
-            "the claude path {cli_s:?} has characters a command line cannot carry safely"
-        ));
-    }
-    if label
-        .chars()
-        .any(|c| !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')))
-    {
-        return Err(format!("the label {label:?} is not a token"));
-    }
-    for p in [&tools.sh, &tools.script, &tools.sed, &tools.grep] {
-        if p.display().to_string().contains(['$', '%']) {
-            return Err(format!("the tool path {} cannot be carried", p.display()));
-        }
-    }
-    let inner = format!("\"{cli_s}\" --resume {id} --remote-control {label}");
-    let line = format!(
-        "{} -qfec {} /dev/null | {} -u -E {} | {{ {} --line-buffered -Ev {} || true; }}",
-        sq(&tools.script.display().to_string()),
-        sq(&inner),
-        sq(&tools.sed.display().to_string()),
-        sq(SED_EXPR),
-        sq(&tools.grep.display().to_string()),
-        sq(GREP_EXPR),
-    );
-    let mut a = vec![
-        "--user".to_string(),
-        format!("--unit={unit}"),
-        format!("--description=Claude Code session {id}, resumed by daedalus-agent"),
-        "--property=TimeoutStopSec=15".into(),
-        // A stop is a requested end: SIGTERM's exit is a success.
-        "--property=SuccessExitStatus=143".into(),
-        format!("--property=StandardOutput=append:{}", log.display()),
-        format!("--property=StandardError=append:{}", log.display()),
-        format!("--working-directory={}", cwd.display()),
-    ];
-    a.extend(env.iter().map(|(k, v)| format!("--setenv={k}={v}")));
-    a.push("--".into());
-    a.push(tools.sh.display().to_string());
-    a.push("-c".into());
-    a.push(line);
-    Ok(a)
-}
-
-/// The environment of a resumed session: the Remote Control unit's
-/// (`unit::unit_env`), with `/run/wrappers/bin` on PATH where it exists,
-/// TERM for the TUI, and SHELL for `script`.
-pub fn resume_env(
-    home: Option<&Path>,
-    path: Option<&str>,
-    config_dir: Option<&str>,
-    wrappers: bool,
-    sh: &Path,
-) -> Vec<(String, String)> {
-    let path = match (wrappers, path) {
-        (true, Some(p)) if !p.split(':').any(|d| d == "/run/wrappers/bin") => {
-            Some(format!("/run/wrappers/bin:{p}"))
-        }
-        (true, None) => Some("/run/wrappers/bin".to_string()),
-        (_, p) => p.map(str::to_string),
-    };
-    let mut env = unit::unit_env(home, path.as_deref(), config_dir);
-    env.push(("TERM".into(), "xterm-256color".into()));
-    env.push(("SHELL".into(), sh.display().to_string()));
-    env
 }
 
 // ── the CLI ───────────────────────────────────────────────────────────────
@@ -315,12 +190,19 @@ fn background<'a>(agents: &'a [Agent], id: &str) -> Option<&'a Agent> {
 
 enum Msg {
     Request(SessionRequest, bool),
+    /// The sessions to resume after a server restart, and whether Claude
+    /// may run here at all.
+    Recover(Vec<String>, bool),
 }
 
 #[derive(Default)]
 struct Latest {
     generation: u64,
     roster: Option<Roster>,
+    /// The last recovery's rows.
+    recovered: Vec<Recovered>,
+    /// A recovery is queued or running.
+    recovering: bool,
 }
 
 /// The roster and the verbs, on a thread of their own: a scan or a resume
@@ -357,10 +239,32 @@ impl Sessions {
         let _ = self.tx.send(Msg::Request(req, wanted));
     }
 
+    /// Resume each of `ids`, after a server restart (recovery.rs).
+    pub fn recover(&self, ids: Vec<String>, wanted: bool) {
+        self.lock().recovering = true;
+        if self.tx.send(Msg::Recover(ids, wanted)).is_err() {
+            self.lock().recovering = false;
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Latest> {
+        self.latest.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
     /// The newest roster and its generation, which moves with each one.
     pub fn latest(&self) -> Option<(u64, Roster)> {
-        let l = self.latest.lock().unwrap_or_else(|p| p.into_inner());
+        let l = self.lock();
         l.roster.clone().map(|r| (l.generation, r))
+    }
+
+    /// The last recovery's rows, for the report.
+    pub fn recovered(&self) -> Vec<Recovered> {
+        self.lock().recovered.clone()
+    }
+
+    /// A recovery is queued or running.
+    pub fn recovering(&self) -> bool {
+        self.lock().recovering
     }
 }
 
@@ -396,29 +300,38 @@ impl Worker {
                     self.handle(r, wanted);
                     self.refresh();
                 }
+                Ok(Msg::Recover(ids, wanted)) => {
+                    self.recover(&ids, wanted);
+                    self.refresh();
+                }
                 Err(RecvTimeoutError::Timeout) => self.refresh(),
                 Err(RecvTimeoutError::Disconnected) => return,
             }
         }
     }
 
+    fn latest(&self) -> std::sync::MutexGuard<'_, Latest> {
+        self.latest.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
     fn publish(&mut self, mut r: Roster) {
         r.actions = self.actions.iter().cloned().collect();
         r.fit(roster::MAX_BYTES);
         self.last = Some(r.clone());
-        let mut l = self.latest.lock().unwrap_or_else(|p| p.into_inner());
+        let mut l = self.latest();
         l.generation += 1;
         l.roster = Some(r);
     }
 
-    fn handle(&mut self, req: SessionRequest, wanted: bool) {
-        tracing::info!(request = %req.request, action = req.action.as_str(), id = %req.id, "Claude session request");
+    /// One request: recorded as running at once, carried out, recorded as
+    /// it ended.
+    fn run_one(&mut self, req: &SessionRequest, wanted: bool, what: &str) -> Outcome {
         self.actions.push_front(ActionResult {
             request: req.request.clone(),
             action: req.action,
             id: req.id.clone(),
             state: ActionState::Running,
-            detail: format!("{} {}", req.action.as_str(), req.id),
+            detail: what.to_string(),
             started_at: now_rfc3339(),
             finished_at: None,
         });
@@ -442,19 +355,56 @@ impl Worker {
         tracing::info!(request = %req.request, state = ?state, detail, "Claude session request finished");
         if let Some(a) = self.actions.iter_mut().find(|a| a.request == req.request) {
             a.state = state;
-            a.detail = detail;
+            a.detail = detail.clone();
             a.finished_at = Some(now_rfc3339());
         }
+        Outcome(state, detail)
     }
 
-    fn unit_of(&self, id: &str) -> Option<String> {
-        self.ctx.unit_prefix.as_ref().map(|p| format!("{p}{id}"))
+    fn handle(&mut self, req: SessionRequest, wanted: bool) {
+        tracing::info!(request = %req.request, action = req.action.as_str(), id = %req.id, "Claude session request");
+        let what = format!("{} {}", req.action.as_str(), req.id);
+        self.run_one(&req, wanted, &what);
+    }
+
+    /// Resume each session a server restart ended, one after the other.
+    fn recover(&mut self, ids: &[String], wanted: bool) {
+        tracing::info!(
+            sessions = ids.len(),
+            "recovering the Claude sessions a Remote Control restart ended"
+        );
+        let mut rows = Vec::new();
+        for id in ids {
+            let req = SessionRequest {
+                request: mint_request(),
+                action: SessionAction::Resume,
+                id: id.clone(),
+            };
+            let what = format!("recovering {id} after Remote Control restarted");
+            let Outcome(state, detail) = self.run_one(&req, wanted, &what);
+            // The row says it was the recovery's, not an operator's request.
+            if let Some(a) = self.actions.iter_mut().find(|a| a.request == req.request) {
+                a.detail = format!("recovery after a Remote Control restart: {detail}");
+            }
+            rows.push(Recovered {
+                id: id.clone(),
+                result: state,
+                detail,
+                at: now_rfc3339(),
+            });
+            self.latest().recovered = rows.clone();
+        }
+        let mut l = self.latest();
+        l.recovered = rows;
+        l.recovering = false;
+    }
+
+    fn job_of(&self, id: &str) -> String {
+        format!("{}{id}", self.ctx.prefix)
     }
 
     fn resume(&self, id: &str) -> Outcome {
-        let Some(unit) = self.unit_of(id) else {
-            return refused(NO_UNIT);
-        };
+        let name = self.job_of(id);
         let Some(dir) = claude_dir() else {
             return failed("no Claude profile directory (no HOME)");
         };
@@ -477,9 +427,9 @@ impl Worker {
                 roster::unslug(&project)
             ));
         };
-        if let Ok(UnitState::Running { .. }) = unit::show(&unit) {
+        if let Ok(JobState::Running { .. }) = jobs::show(&name) {
             return refused(format!(
-                "{id} is already running as {unit}: resuming it again would start a second process on the same transcript"
+                "{id} is already running as {name}: resuming it again would start a second process on the same transcript"
             ));
         }
         let cli = find_cli();
@@ -501,11 +451,7 @@ impl Worker {
         let Some(cli) = cli else {
             return failed("no `claude` command on this machine");
         };
-        let tools = match Tools::locate() {
-            Ok(t) => t,
-            Err(e) => return failed(e),
-        };
-        let log = self.ctx.log_dir.join(format!("{unit}.log"));
+        let log = self.ctx.log_dir.join(format!("{name}.log"));
         if let Err(e) = std::fs::create_dir_all(&self.ctx.log_dir).and_then(|()| {
             use std::io::Write;
             let mut f = std::fs::OpenOptions::new()
@@ -514,7 +460,7 @@ impl Worker {
                 .open(&log)?;
             writeln!(
                 f,
-                "── {} daedalus-agent resuming {id} in {} (unit {unit}) ──",
+                "── {} daedalus-agent resuming {id} in {} (job {name}) ──",
                 now_rfc3339(),
                 cwd.display()
             )
@@ -523,68 +469,65 @@ impl Worker {
         }
         let path = std::env::var("PATH").ok();
         let config_dir = std::env::var("CLAUDE_CONFIG_DIR").ok();
-        let env = resume_env(
-            home_dir().as_deref(),
-            path.as_deref(),
-            config_dir.as_deref(),
+        let env = job::session_env(
+            jobs::server_env(
+                home_dir().as_deref(),
+                path.as_deref(),
+                config_dir.as_deref(),
+            ),
             Path::new("/run/wrappers/bin").is_dir(),
-            &tools.sh,
+            jobs::session_shell().as_deref(),
         );
-        let args = match resume_args(&unit, id, &cli, &self.ctx.label, &cwd, &log, &env, &tools) {
-            Ok(a) => a,
-            Err(e) => return failed(e),
-        };
-        // A previous run that failed leaves the name taken.
-        let name = format!("{unit}.service");
-        let _ = unit::systemctl(&["reset-failed", &name]);
-        if let Err(e) = unit::command("systemd-run", &args) {
-            return failed(format!("{unit} was not started: {e}"));
+        let started = jobs::start_session(&SessionJob {
+            name: &name,
+            id,
+            cli: &cli,
+            label: &self.ctx.label,
+            cwd: &cwd,
+            log: &log,
+            env: &env,
+        });
+        if let Err(e) = started {
+            return failed(format!("{name} was not started: {e}"));
         }
+        gcroot::pin(&self.ctx.roots, &name, &cli);
         // "Started" is only "exec'd": the failure worth catching is the CLI
         // leaving at once (a transcript it will not open, a login that
         // expired, a prompt nobody predicted).
         std::thread::sleep(SETTLE);
-        match unit::show(&unit) {
-            Ok(UnitState::Running { .. }) => done(format!(
-                "resumed {id} in {} as {unit}; it appears on claude.ai within a few seconds",
+        match jobs::show(&name) {
+            Ok(JobState::Running { .. }) => done(format!(
+                "resumed {id} in {} as {name}; it appears on claude.ai within a few seconds",
                 cwd.display()
             )),
             Ok(other) => failed(format!(
-                "{unit} is {} five seconds after starting: the session did not come up; see {}",
+                "{name} is {} five seconds after starting: the session did not come up; see {}",
                 match other {
-                    UnitState::Exited(code) => format!("exited ({code})"),
+                    JobState::Exited(code) => format!("exited ({code})"),
                     _ => "gone".into(),
                 },
                 log.display()
             )),
-            Err(e) => failed(format!("{unit}'s state is unknown after starting it: {e}")),
+            Err(e) => failed(format!("{name}'s state is unknown after starting it: {e}")),
         }
     }
 
     fn stop(&self, id: &str) -> Outcome {
         if is_uuid(id) {
-            let Some(unit) = self.unit_of(id) else {
+            let name = self.job_of(id);
+            if !matches!(jobs::show(&name), Ok(JobState::Running { .. })) {
                 return refused(format!(
-                    "{id} was not resumed by this agent (nothing is resumed here: {NO_UNIT}), and a \
-                     Remote Control session has no stop of its own: it ends with its server"
-                ));
-            };
-            if !matches!(unit::show(&unit), Ok(UnitState::Running { .. })) {
-                return refused(format!(
-                    "{id} is not running as {unit}, and a session this agent did not resume has \
+                    "{id} is not running as {name}, and a session this agent did not resume has \
                      no stop of its own: a Remote Control session ends with its server"
                 ));
             }
-            let name = format!("{unit}.service");
-            if let Err(e) = unit::systemctl(&["stop", &name]) {
-                return failed(format!("{unit} was not stopped: {e}"));
+            if let Err(e) = jobs::stop(&name) {
+                return failed(format!("{name} was not stopped: {e}"));
             }
-            return match unit::show(&unit) {
-                Ok(UnitState::Running { .. }) => {
-                    failed(format!("{unit} still runs after the stop"))
-                }
+            return match jobs::show(&name) {
+                Ok(JobState::Running { .. }) => failed(format!("{name} still runs after the stop")),
                 _ => {
-                    let _ = unit::systemctl(&["reset-failed", &name]);
+                    jobs::clear(&name);
                     done(format!(
                         "stopped {id}; its transcript is intact and it can be resumed again"
                     ))
@@ -652,55 +595,46 @@ impl Worker {
 
     /// The sessions this agent resumed that run now, with their costs.
     fn managed(&self, errors: &mut Vec<String>) -> Vec<Managed> {
-        let Some(prefix) = &self.ctx.unit_prefix else {
-            return Vec::new();
-        };
-        let pattern = format!("{prefix}*.service");
-        let text = match unit::systemctl(&[
-            "list-units",
-            "--type=service",
-            "--all",
-            "--no-legend",
-            "--plain",
-            &pattern,
-        ]) {
-            Ok(t) => t,
+        let prefix = &self.ctx.prefix;
+        let names = match jobs::running(prefix) {
+            Ok(n) => n,
             Err(e) => {
                 errors.push(format!(
-                    "the resumed sessions' units could not be listed: {e}"
+                    "the resumed sessions' jobs could not be listed: {e}"
                 ));
                 return Vec::new();
             }
         };
-        roster::parse_managed_units(&text, prefix)
+        names
             .into_iter()
-            .map(|id| {
-                let unit = format!("{prefix}{id}");
-                let cost = unit_cost(&unit);
-                let pid = match unit::show(&unit) {
-                    Ok(UnitState::Running { pid, .. }) => pid,
+            .filter_map(|name| {
+                let id = name.strip_prefix(prefix.as_str())?.to_string();
+                is_uuid(&id).then_some((name, id))
+            })
+            .map(|(name, id)| {
+                let cost = jobs::cost(&name).unwrap_or_default();
+                let pid = match jobs::show(&name) {
+                    Ok(JobState::Running { pid, .. }) => pid,
                     _ => None,
                 };
-                let log = self.ctx.log_dir.join(format!("{unit}.log"));
+                let log = self.ctx.log_dir.join(format!("{name}.log"));
                 Managed {
                     log_bytes: std::fs::metadata(&log).ok().map(|m| m.len()),
                     log: log.display().to_string(),
                     pid,
                     memory_bytes: cost.memory_bytes,
                     cpu_nsec: cost.cpu_nsec,
-                    unit,
+                    job: name,
                     id,
                 }
             })
             .collect()
     }
 
-    /// The resumed sessions' logs: rotated while their unit runs, removed a
+    /// The resumed sessions' logs: rotated while their job runs, removed a
     /// while after it is gone.
     fn tend_logs(&self, managed: &[Managed]) {
-        let Some(prefix) = &self.ctx.unit_prefix else {
-            return;
-        };
+        let prefix = &self.ctx.prefix;
         for m in managed {
             let _ = super::logs::rotate_if_larger(Path::new(&m.log), super::logs::ROTATE_BYTES);
         }
@@ -731,6 +665,22 @@ impl Worker {
         }
     }
 
+    /// The pins of jobs that are gone go (gcroot.rs): the server's while it
+    /// runs, and each resumed session's while it is managed.
+    fn tend_pins(&self, managed: &[Managed]) {
+        let server_runs = || jobs::show(&self.ctx.server).is_ok_and(|s| s.running());
+        gcroot::sweep(&self.ctx.roots, |name| {
+            if name == self.ctx.server {
+                server_runs()
+            } else if name.starts_with(self.ctx.prefix.as_str()) {
+                managed.iter().any(|m| m.job == name)
+            } else {
+                // Not one of this session's names: left alone.
+                true
+            }
+        });
+    }
+
     fn refresh(&mut self) {
         let mut errors = Vec::new();
         let dir = claude_dir();
@@ -749,6 +699,7 @@ impl Worker {
         };
         let managed = self.managed(&mut errors);
         self.tend_logs(&managed);
+        self.tend_pins(&managed);
         let session_stats = match (&dir, crate::os::PROCESS_STATS) {
             (Some(d), true) => roster::session_stats(d, roster::bridge_dir().as_deref()),
             (_, false) => {
@@ -760,10 +711,6 @@ impl Worker {
             }
             (None, true) => Vec::new(),
         };
-        let server = match &self.ctx.launch {
-            Launch::Unit(name) => Some(unit_cost(name)),
-            Launch::Child => None,
-        };
         let r = Roster {
             reported_at: now_rfc3339(),
             agents_available: listed.is_some(),
@@ -773,22 +720,13 @@ impl Worker {
             empty_count: found.empty,
             truncated: false,
             managed,
-            resume_unavailable: self.ctx.unit_prefix.is_none().then(|| NO_UNIT.to_string()),
             session_stats,
-            server,
+            server: jobs::cost(&self.ctx.server),
             actions: Vec::new(),
             errors,
         };
         self.publish(r);
     }
-}
-
-/// A unit's memory and CPU from the user manager.
-fn unit_cost(unit: &str) -> roster::UnitCost {
-    let name = format!("{unit}.service");
-    unit::systemctl(&["show", &name, "-p", "MemoryCurrent", "-p", "CPUUsageNSec"])
-        .map(|t| roster::parse_unit_cost(&t))
-        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -826,104 +764,19 @@ mod tests {
         assert_eq!(label_of(""), "daedalus");
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn a_resume_is_one_fixed_command_line() {
-        let tools = Tools {
-            sh: "/bin/sh".into(),
-            script: "/usr/bin/script".into(),
-            sed: "/usr/bin/sed".into(),
-            grep: "/usr/bin/grep".into(),
-        };
-        let env = resume_env(
-            Some(Path::new("/home/ana")),
-            Some("/usr/bin:/bin"),
-            None,
-            true,
-            &tools.sh,
-        );
-        assert_eq!(
-            env,
-            [
-                ("CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE", "1"),
-                ("HOME", "/home/ana"),
-                (
-                    "PATH",
-                    "/home/ana/.local/bin:/run/wrappers/bin:/usr/bin:/bin"
-                ),
-                ("TERM", "xterm-256color"),
-                ("SHELL", "/bin/sh"),
-            ]
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-        );
-        let a = resume_args(
-            &format!("claude-session-{ID}"),
-            ID,
-            Path::new("/home/ana/.local/bin/claude"),
-            "s2-server",
-            Path::new("/etc/nixos"),
-            Path::new("/logs/claude-session.log"),
-            &env[..1],
-            &tools,
-        )
-        .unwrap();
-        assert_eq!(
-            a,
-            [
-                "--user".to_string(),
-                format!("--unit=claude-session-{ID}"),
-                format!("--description=Claude Code session {ID}, resumed by daedalus-agent"),
-                "--property=TimeoutStopSec=15".into(),
-                "--property=SuccessExitStatus=143".into(),
-                "--property=StandardOutput=append:/logs/claude-session.log".into(),
-                "--property=StandardError=append:/logs/claude-session.log".into(),
-                "--working-directory=/etc/nixos".into(),
-                "--setenv=CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE=1".into(),
-                "--".into(),
-                "/bin/sh".into(),
-                "-c".into(),
-                format!(
-                    "'/usr/bin/script' -qfec '\"/home/ana/.local/bin/claude\" --resume {ID} --remote-control s2-server' /dev/null \
-                     | '/usr/bin/sed' -u -E 's/\\x1b\\[[0-9;]*[A-Za-z]//g; s/\\x1b\\]8;;[^\\x07]*\\x07//g; /./!d' \
-                     | {{ '/usr/bin/grep' --line-buffered -Ev '^·|^[[:space:]]' || true; }}"
-                ),
-            ]
-        );
-        assert!(!a.last().unwrap().contains(['$', '%']));
-        // Nothing from outside the checks reaches it.
-        let bad = |id: &str, cli: &str, label: &str| {
-            resume_args(
-                "u",
-                id,
-                Path::new(cli),
-                label,
-                Path::new("/p"),
-                Path::new("/l"),
-                &[],
-                &tools,
-            )
-            .is_err()
-        };
-        assert!(bad("0a1b2c3d", "/c", "l"));
-        assert!(bad(ID, "/home/$USER/claude", "l"));
-        assert!(bad(ID, "/home/a\"b/claude", "l"));
-        assert!(bad(ID, "/c", "a b"));
-        assert!(bad(ID, "/c", "x;rm"));
-        // PATH already carrying the wrappers is left as it is.
-        let env = resume_env(None, Some("/run/wrappers/bin:/bin"), None, true, &tools.sh);
-        assert_eq!(env[1], ("PATH".into(), "/run/wrappers/bin:/bin".into()));
-    }
-
-    /// The thread, end to end, with no `claude` and no units: a roster
-    /// comes, a verb with the policy off is refused, a malformed selector
-    /// is refused, and a resume where no unit runs says why.
+    /// The thread, end to end, with no `claude` and a HOME of its own: a
+    /// roster comes, a verb with the policy off is refused, a malformed
+    /// selector is refused, a resume with no transcript is refused, and a
+    /// recovery reports each session it tried.
     #[test]
     fn the_thread_reads_a_roster_and_refuses_what_it_must() {
+        let tag = std::process::id();
         let s = Sessions::start(Context {
-            launch: Launch::Child,
-            unit_prefix: None,
+            server: format!("daedalus-agent-test-rc-{tag}"),
+            prefix: format!("daedalus-agent-test-session-{tag}-"),
             log_dir: std::env::temp_dir(),
             label: "test".into(),
+            roots: std::env::temp_dir().join(format!("daedalus-test-roots-{tag}")),
         });
         let wait_for = |pred: &dyn Fn(&Roster) -> bool| {
             let until = std::time::Instant::now() + Duration::from_secs(20);
@@ -937,8 +790,7 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(20));
             }
         };
-        let r = wait_for(&|_| true);
-        assert_eq!(r.resume_unavailable.as_deref(), Some(NO_UNIT));
+        wait_for(&|_| true);
         let req = |request: &str, action, id: &str| SessionRequest {
             request: request.into(),
             action,
@@ -958,8 +810,30 @@ mod tests {
         assert!(by("0000000000000001").detail.contains("policy"));
         assert_eq!(by("0000000000000002").state, ActionState::Refused);
         assert!(by("0000000000000002").detail.contains("eight-digit"));
-        assert_eq!(by("0000000000000003").state, ActionState::Refused);
-        assert_eq!(by("0000000000000003").detail, NO_UNIT);
+        // No transcript (or no profile at all) for this uuid on a test
+        // machine: refused or failed before anything starts, never done.
+        assert_ne!(by("0000000000000003").state, ActionState::Done);
         assert_eq!(r.actions[0].request, "0000000000000003", "newest first");
+        // A recovery: one row per session, in the actions and the report.
+        s.recover(vec![ID.to_string()], false);
+        let until = std::time::Instant::now() + Duration::from_secs(20);
+        while s.recovering() {
+            assert!(
+                std::time::Instant::now() < until,
+                "the recovery never ended"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let rows = s.recovered();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            (rows[0].id.as_str(), rows[0].result),
+            (ID, ActionState::Refused)
+        );
+        let r = wait_for(&|r| {
+            r.actions.len() == 4 && r.actions[0].detail.starts_with("recovery after")
+        });
+        assert!(r.actions[0].detail.contains("policy"));
+        assert_eq!(r.actions[0].action, SessionAction::Resume);
     }
 }

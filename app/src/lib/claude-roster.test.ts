@@ -384,17 +384,6 @@ describe('which verb a row is offered', () => {
     expect(rowControl(row)).toEqual({ kind: 'resume', session: 'abc' })
   })
 
-  it('offers no Resume where the machine offers none, and still offers the rest', () => {
-    const r = roster({
-      agentsAvailable: true,
-      agents: [agent({ id: 'deadbeef', sessionId: 'bg', kind: 'background', pid: 7 })],
-      transcripts: [transcript({ id: 'abc' }), transcript({ id: 'bg' })],
-      resumeUnavailable: 'the session is the tray’s child',
-    })
-    expect(rowControl(rowFor(r, 'abc'), false)).toEqual({ kind: 'none', why: 'no-resume' })
-    expect(rowControl(rowFor(r, 'bg'), false)).toEqual({ kind: 'stop-agent', session: 'deadbeef' })
-  })
-
   // `claude stop` takes the SHORT id. Handing it the uuid is the bug this
   // asserts against: it would refuse, and the row would look broken.
   it('offers Stop to a RUNNING background agent, with the SHORT id as the selector', () => {

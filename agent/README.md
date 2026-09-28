@@ -34,13 +34,21 @@ beside it where there is a desktop. It
   `claude remote-control --verbose`, restarts it with backoff, logs its
   output to `claude-rc.log`, and reports its state, versions, sessions and
   credential dates (never a token) to the service (`src/session.rs`,
-  `src/claude/`). On Windows and macOS the session lives in the tray, so
-  nobody logged on means no server, and a machine that reboots unattended
-  wants automatic sign-in. On Linux the session is a systemd user unit that
-  runs with nobody logged in, and the server is a unit of its own (below);
+  `src/claude/`). The server is never the session's child but a job of the
+  OS — a systemd user unit, a launchd job, a detached process — so
+  restarting, updating or quitting the agent ends no Claude session (see
+  "Claude outside the agent"). On Windows and macOS the session lives in the
+  tray, so nobody logged on means no server, and a machine that reboots
+  unattended wants automatic sign-in. On Linux the session is a systemd user
+  unit that runs with nobody logged in;
 - **keeps the roster of Claude sessions** — every transcript, background
   agent and session it resumed — and runs the three verbs on one of them:
-  resume, stop, remove (see "Claude sessions: the roster and the verbs");
+  resume, stop, remove, on every OS (see "Claude sessions: the roster and
+  the verbs");
+- **brings the sessions back** that a restart of the server ended — the
+  restart verb, a new directory, the server dying, a reboot — by resuming
+  each by itself once the server is up again (see "Automatic session
+  recovery");
 - **shows itself in the tray** (`src/tray.rs`): the daedalus mark — ember
   when all is well, an amber dot when an update is pending, the hold failed
   or Claude is not running, grey when the service does not answer — with
@@ -76,7 +84,9 @@ same in a terminal), with
 - **the session inside the process**: Claude remote control as its
   transient user unit, reported straight into the service. `daedalus-agent
   session` refuses in this mode. Its log is `claude-rc.log` in the data
-  directory's `logs/`. The unit outlives the agent, as on a node: a stop
+  directory's `logs/`; its recovery set (`claude-recovery.json`) and the
+  gcroots of the `claude` its units run (`gcroots/`) are in the data
+  directory itself. The unit outlives the agent, as on a node: a stop
   or restart of the agent leaves Claude running and the next start
   re-attaches to it — but only while `claude_remote_control` is on. With
   it off the agent adopts nothing: a unit of `claude_unit`'s name that is
@@ -102,7 +112,9 @@ same in a terminal), with
   hands over in `nodes.set_desired`, or the hostname when it sends none.
   Each connected machine's Claude series ride beside its telemetry —
   `daedalus_agent_claude_up` (1 while `running`, 0 otherwise, with the
-  report's `state` as a label, `none` without a report),
+  report's `state` as a label, `none` without a report — `off` whenever the
+  policy does not want Claude there, installed or not, and `not-installed`
+  only where it is wanted and there is no `claude`),
   `daedalus_agent_claude_restarts_total` and `daedalus_agent_claude_sessions`
   — and so do the CONTROLLER's own, labelled as a machine of its own
   (`node` its node id, `host` and `machine` its hostname), so one alert
@@ -150,8 +162,10 @@ What the unit nix writes should carry:
 - The status page's `port` kept CLOSED to the LAN: it binds every
   interface so the Prometheus container can reach `/nodes/metrics`, and
   only the firewall stops the LAN from asking the same.
-- A `claude_unit` distinct from any unit the box already runs, and the
-  gcroot pin on the `claude` it runs.
+- A `claude_unit` distinct from any unit the box already runs, and
+  `nix-store` on the service's PATH: the agent pins the `claude` each of
+  its units runs itself (see "The claude a job runs, pinned"), so the unit
+  needs no root `ExecStartPre` for it.
 
 ### The local API
 
@@ -195,7 +209,7 @@ matched by `id`. The first request must be `hello`:
 
 ```
 → {"id":1,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}
-← {"id":1,"ok":{"api":1,"version":"0.16.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","claude.sessions","telemetry.full"]}}
+← {"id":1,"ok":{"api":1,"version":"0.17.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","claude.sessions","telemetry.full"]}}
 ```
 
 Another API version gets `{"code":"version",…,"supported":1}` — the
@@ -262,7 +276,9 @@ standing; `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
 connects and waits. Events are best effort: a subscriber whose queue fills
 loses events, not its connection (one that stops reading altogether is
 closed by the write timeout). `src/api/wire.rs` has every type and golden
-tests pinning each one's exact JSON; `src/api/mod.rs` the rules above.
+tests pinning each one's exact JSON; `src/api/mod.rs` the rules above. The
+app's TypeScript types for all of it are generated from these Rust types
+(see "The app's wire types").
 
 ## The link to the controller
 
@@ -455,28 +471,114 @@ site serves both scripts from `main`, so neither command names a version.
 Trust at install is HTTPS to GitHub; every update after that is verified by
 the agent against the release key it carries.
 
-### Linux: Claude remote control as a unit
+## Claude outside the agent
 
-On Linux the session does not run `claude remote-control` as its child: it
-starts it as a transient systemd user unit, `daedalus-claude-rc.service`
-(`systemd-run --user`), watches it with `systemctl --user show`, stops it
-with `systemctl --user stop`, and when the session itself restarts — an
-agent update, a crash — it finds the unit still running and re-attaches to
-it. So updating or restarting the agent never ends a Claude session. The
-unit keeps its exit status (`RemainAfterExit=yes`) until the session has
-read it; systemd appends its output to the session's `claude-rc.log`,
-which is what the report's `log` names and where the session reads the
-server's banner back from. `src/claude/unit.rs` has the details;
-`claude_rc = "child"` in config.toml goes back to the child.
+Claude remote control and every session the agent resumed run as **jobs of
+the OS**, never as children of the agent: the session starts each one,
+watches it, stops it, and when the session itself restarts — an agent
+update, a crash, the tray quit and started again — it finds the job still
+running by its name and re-attaches. So updating or restarting the agent
+never ends a Claude session, on any OS. Each job's output is appended to a
+log of its own (`claude-rc.log`, `claude-session-<uuid>.log`), which the
+report's `log` names and which the session reads the server's banner back
+from, after the marker line it writes before each start.
+`src/claude/job.rs` has what a job is and the pure command lines;
+`src/os/*/jobs.rs` the calls.
 
-The log is rotated while the server runs, once it passes 20 MiB, and it
-has to be done without a rename: systemd opened it once, `append:`, and a
-renamed file would go on growing under its new name. It is copied to
-`claude-rc.log.1` (one old file, replaced each time) and truncated in
-place, and systemd's next write lands at the new end (`src/claude/logs.rs`;
-a line written between the copy and the truncation is in neither). The
-logs of resumed sessions (below) are rotated the same way, and removed two
-weeks after their session's unit is gone.
+- **Linux and the controller: a transient systemd user unit.** The server
+  is `daedalus-claude-rc.service` (`systemd-run --user`), watched with
+  `systemctl --user show`, stopped with `systemctl --user stop` — the whole
+  cgroup, the sessions it spawned with it — and kept with its exit status
+  (`RemainAfterExit=yes`) until the session has read it. A resumed session
+  is `claude-session-<uuid>.service`, under util-linux's `script -qfec`.
+- **macOS: a launchd job in the user's `gui/<uid>` domain.** The session
+  writes the job's plist into its own state directory —
+  `~/Library/Application Support/daedalus-agent/jobs/me.toscanini.daedalus-agent.<job>.plist`,
+  never `~/Library/LaunchAgents`, so no login starts it by itself — and
+  bootstraps it (`launchctl bootstrap gui/<uid>`): `RunAtLoad`, no
+  `KeepAlive` (the supervisor decides what runs again), its output appended
+  to the log. `launchctl print` watches it; a job that exited stays loaded
+  with its exit code until `launchctl bootout` clears it, which also ends its
+  process group. launchd hands a job the system's PATH, so the session's
+  own goes along with Homebrew's two prefixes after it. A resumed session is
+  the BSD `script -q /dev/null <command…>` (a command as words, no `-c`)
+  piped through `sed -l` and `grep --line-buffered`, the same filter as on
+  Linux. `sudo daedalus-agent uninstall` boots the server's job out of the
+  console user's domain; sessions it resumed run until they end or the user
+  logs out.
+- **Windows: a process detached from the tray.** Started with
+  `CREATE_NO_WINDOW` (a hidden console its children inherit, so the shells
+  it runs flash no window), `CREATE_NEW_PROCESS_GROUP` and
+  `CREATE_BREAKAWAY_FROM_JOB` (outside any job object the tray is in; tried
+  again without where the job forbids it), its stdout and stderr the log
+  file. Windows does not end a process with its parent, so that is all
+  "detached" takes. The session records each job — pid AND creation time —
+  in `%LOCALAPPDATA%\daedalus-agent\jobs\<job>.json`, so a new tray finds it
+  again and never adopts a later process that got the same pid; a stop is
+  `taskkill /PID … /T /F`, the whole tree. A resumed session needs a
+  terminal, and on Windows that is a pseudo-console: its job is this agent's
+  own binary in **holder mode** — `daedalus-agent.exe claude-holder "<command
+  line>"`, never run by hand — which creates a ConPTY
+  (`CreatePseudoConsole`), starts `claude --resume <uuid> --remote-control
+  <hostname>` in it (a `.cmd` shim through `cmd.exe /d /s /c`), drains what
+  it shows into the log with escapes stripped and the status box dropped,
+  and leaves with the CLI's exit code (`src/os/windows/holder.rs`). The
+  holder, not the tray, owns the terminal, so the session survives the tray.
+
+`claude_rc` is gone from config.toml (0.17.0): there is no child strategy
+left to choose, and a config that still names it reads as if it did not.
+
+The logs are rotated while their job runs, once they pass 20 MiB, and it
+has to be done without a rename: the job's output was opened once, to
+append, and a renamed file would go on growing under its new name. It is
+copied to `<log>.1` (one old file, replaced each time) and truncated in
+place, and the next write lands at the new end (`src/claude/logs.rs`; a line
+written between the copy and the truncation is in neither). A resumed
+session's log is removed two weeks after its job is gone.
+
+### Automatic session recovery
+
+A restart of the server ends every session it spawned, and those cannot be
+picked up from claude.ai, only resumed here. So the session keeps the set of
+sessions that are **open** — each live session file whose process descends
+from the server's (the ones it spawned), and each session this agent
+resumed that runs as its own job — on every look, written to
+`claude-recovery.json` in the session's state directory (the data directory
+on the controller). After ANY start of the server the agent performs — the
+restart verb, a new working directory from the policy, the server dying and
+the supervisor starting it again, the machine coming back from a reboot, an
+agent start that found no server running — and once the server has
+registered again (its environment id printed, or 30 s up), it resumes each
+session of the set that is not running, by id, through the ordinary resume
+verb with all its checks (transcript, trusted directory, nothing already
+running it), the most recently opened first, at most 16. A re-attach ends
+nothing and recovers nothing; `claude update` restarts nothing, so it
+recovers nothing either.
+
+Each attempt is a row of the roster's `actions` (`resume`, its detail
+opening "recovery after a Remote Control restart: …"), and the Claude
+report's `recovered` holds the last run: `[{id, result, detail, at}]`,
+`result` one of `done`, `refused`, `failed`. A session leaves the set when
+it has not been open for 30 s while the same server kept running (ended
+from claude.ai, or it left on its own), or at once when the operator stops
+it (the `stop` verb): a session somebody stopped is not brought back.
+Nothing leaves the set while the server is down or a recovery is due or
+running; a session whose resume failed drops out after the grace — one
+attempt per restart.
+
+### The claude a job runs, pinned
+
+Where the `claude` a job runs is a nix store path (the box, and any machine
+whose Claude Code nix installed), the session keeps it from the garbage
+collector while the job runs: a rebuild can leave the server or a resumed
+session running a `claude` no generation names any more. When it starts a
+job it links `gcroots/<job>` in its state directory to that store path and
+registers the link as an indirect root with `nix-store --add-root … --realise`
+— something the operator's own user may do (the daemon records it under
+`/nix/var/nix/gcroots/auto/`; `/nix/var/nix/gcroots/per-user/` is root's and
+need not exist). A link whose job is gone is removed within a minute, and
+the next collection forgets it (`src/claude/gcroot.rs`). Elsewhere nothing
+is pinned.
 
 ## Claude sessions: the roster and the verbs
 
@@ -508,16 +610,18 @@ a verb, pushed to the controller when it changes:
   stays). A scan is kept by size and mtime, so the steady state reads only
   the file being typed into.
 - `managed` — the sessions this agent resumed, running now, with their
-  unit, pid, memory, CPU and log.
+  job, pid, log, and memory and CPU where the OS accounts for them (a
+  systemd unit; null on macOS and Windows).
 - `session_stats` — per live session file whose process is still the one
   that wrote it: CPU, resident memory, the Remote Control bridge's debug
   log size and mtime. Linux reads /proc; on Windows and macOS the list is
   empty and `errors` says so.
-- `server` — the Remote Control unit's memory and CPU, where it is a unit.
-- `actions` — the last eight verb requests and how each ended
-  (`running`, `done`, `refused`, `failed`, with a sentence of the agent's
-  own; what the CLI printed goes to the agent's log alone).
-- `resume_unavailable` — why `resume` is not offered here, or null.
+- `server` — the Remote Control job's memory and CPU, where the OS keeps
+  them (a systemd unit's); null elsewhere.
+- `actions` — the last 24 verb requests, the operator's and the automatic
+  recovery's, and how each ended (`running`, `done`, `refused`, `failed`,
+  with a sentence of the agent's own; what the CLI printed goes to the
+  agent's log alone).
 
 Bounded: 200 transcripts and agents, strings cut, the whole at most
 512 KiB (the oldest transcripts go first, and `truncated` says so).
@@ -526,33 +630,33 @@ Bounded: 200 transcripts and agents, strings cut, the whole at most
 never a path, a flag or a directory:
 
 - `resume <uuid>` runs `claude --resume <uuid> --remote-control <hostname>`
-  as a transient user unit, `claude-session-<uuid>`, under a PTY (`script`
-  from util-linux: with pipes the CLI falls back to `--print` and exits) with
-  its output filtered into `claude-session-<uuid>.log` beside
-  `claude-rc.log` (ANSI stripped, the status box's repaint dropped). Its
-  own cgroup: a restart or an update of the agent ends nothing, and the
-  next start lists it in `managed` again. It needs the transcript as a
-  regular file under `~/.claude/projects`, runs only in the trusted project
-  directory whose slug holds it (anywhere else it would stop on the trust
-  prompt with nobody to answer), with the Remote Control unit's environment
-  plus `/run/wrappers/bin` (sudo) and TERM, and is refused when anything
-  already runs that session — its unit, the CLI's agents, a live session
+  as a job of its own, `claude-session-<uuid>`, under a terminal (with
+  pipes the CLI falls back to `--print` and exits: `script` on Linux and
+  macOS, the holder's pseudo-console on Windows — "Claude outside the
+  agent") with its output filtered into `claude-session-<uuid>.log` beside
+  `claude-rc.log` (ANSI stripped, the status box's repaint dropped). A
+  restart or an update of the agent ends nothing, and the next start lists
+  it in `managed` again. It needs the transcript as a regular file under
+  `~/.claude/projects`, runs only in the trusted project directory whose
+  slug holds it (anywhere else it would stop on the trust prompt with
+  nobody to answer), with the Remote Control job's environment plus TERM
+  (and `/run/wrappers/bin`, sudo, on NixOS), and is refused when anything
+  already runs that session — its job, the CLI's agents, a live session
   file — or when `claude agents` does not answer. Five seconds after the
-  start the unit must still run. Linux and the controller only: on Windows
-  and macOS the session is the tray's child and a resumed session would end
-  with it, so `resume` is refused there and the roster says why.
-- `stop <uuid>` stops a session this agent resumed (`systemctl --user
-  stop`: the whole cgroup); a Remote Control session has no stop of its own.
-  `stop <8 hex>` is `claude stop` for a running background agent, settled
-  by no process being left behind it.
+  start the job must still run.
+- `stop <uuid>` stops a session this agent resumed (its job: the whole
+  tree); a Remote Control session has no stop of its own. A stopped
+  session leaves the recovery set. `stop <8 hex>` is `claude stop` for a
+  running background agent, settled by no process being left behind it.
 - `remove <8 hex>` is `claude rm` for a background agent's record (and its
   worktree), settled by the record being gone; never `--discard-unpushed`.
 
 Every verb is refused while the machine's policy (the controller's
 config.toml) keeps Claude off. A development run with
-`DAEDALUS_AGENT_DATA_DIR` names its resumed sessions' units
+`DAEDALUS_AGENT_DATA_DIR` names its jobs `daedalus-claude-rc-<hash>` and
 `claude-session-<hash>-<uuid>`, so it never lists or stops an installed
 agent's.
+
 
 The tray on Linux is a UI only: it shows the session unit through the
 service, its "Restart Claude remote control" goes to the session by way of
@@ -593,6 +697,7 @@ daedalus-agent session              the Claude session without a tray: the Linux
 daedalus-agent status               print the running agent's status page
 daedalus-agent update [--apply]     check the release feed now; --apply installs
 daedalus-agent claude restart       ask the session to restart `claude remote-control`
+daedalus-agent claude-holder "…"    (Windows) a resumed session's pseudo-console; the tray starts it, never by hand
 daedalus-agent version
 ```
 
@@ -609,6 +714,9 @@ C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPA
 C:\ProgramData\daedalus-agent\controller.json             the controller key trusted on first use, and its address (the link)
 C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
 C:\ProgramData\daedalus-agent\logs\claude-rc.log          what `claude remote-control` printed
+C:\ProgramData\daedalus-agent\logs\claude-session-<uuid>.log  what a resumed session showed (the holder's log)
+%LOCALAPPDATA%\daedalus-agent\jobs\<job>.json             each Claude job's pid and creation time, to re-attach by
+%LOCALAPPDATA%\daedalus-agent\claude-recovery.json        the sessions to resume after a Remote Control restart
 ```
 
 macOS:
@@ -619,7 +727,11 @@ macOS:
 /Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,controller.json,logs/}
 /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
 /Library/LaunchAgents/me.toscanini.daedalus-agent-tray.plist          the menu bar app's job
-~/Library/Logs/daedalus-agent/                                        the menu bar app's logs (claude-rc.log)
+~/Library/Logs/daedalus-agent/                                        the menu bar app's logs (claude-rc.log, claude-session-<uuid>.log)
+~/Library/Application Support/daedalus-agent/jobs/*.plist             the Claude jobs' plists (never in ~/Library/LaunchAgents)
+~/Library/Application Support/daedalus-agent/claude-recovery.json     the sessions to resume after a Remote Control restart
+gui/<uid>/me.toscanini.daedalus-agent.daedalus-claude-rc              Claude remote control's job, while it is loaded
+gui/<uid>/me.toscanini.daedalus-agent.claude-session-<uuid>           a session the agent resumed
 ```
 
 Linux:
@@ -632,7 +744,8 @@ Linux:
 /etc/systemd/user/daedalus-agent-session.service      the session's unit, enabled for one user, lingering
 /etc/xdg/autostart/daedalus-agent-tray.desktop        the tray, at every graphical login
 ~/.local/state/daedalus-agent/                        the session's and the tray's logs: session.log.*, claude-rc.log,
-                                                      claude-session-<uuid>.log (a resumed session's)
+                                                      claude-session-<uuid>.log (a resumed session's); claude-recovery.json
+                                                      (the sessions to resume) and gcroots/ (nix machines)
 daedalus-claude-rc.service (transient, user)          Claude remote control, while it runs
 claude-session-<uuid>.service (transient, user)       a session the agent resumed, while it runs
 ```
@@ -640,9 +753,10 @@ claude-session-<uuid>.service (transient, user)       a session the agent resume
 (`$XDG_STATE_HOME/daedalus-agent` when that is set.) To run `serve` or
 `session` as an ordinary user without installing, set
 `DAEDALUS_AGENT_DATA_DIR` to a directory that user owns: the logs, the
-session's included, go there, and the Claude unit gets a name of its own
-(`daedalus-claude-rc-<hash of the directory>`), so a development run never
-touches an installed agent's server.
+session's included, go there — its state too — and the Claude jobs get
+names of their own (`daedalus-claude-rc-<hash of the directory>`,
+`claude-session-<hash>-<uuid>`), so a development run never touches an
+installed agent's server or sessions.
 
 `data_dir` in config.toml moves state, identity and logs of an installed
 agent; config.toml stays where it is. `DAEDALUS_AGENT_DATA_DIR` moves the
@@ -669,7 +783,6 @@ search_domains = []       # more domains to ask for _daedalus-controller._tcp
 # telemetry = "full"      # full | minimal | off
 # updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
-# claude_rc = "unit"      # child | unit; absent: child on Windows and macOS, unit on Linux
 # controller_address = "…" # the controller's link address, host:port; absent: DNS
 # controller_pin = "…"     # its key's fingerprint; absent: trust on first use
 ```
@@ -708,8 +821,8 @@ renames the running binaries to `.old`, moves the new ones into place and
 exits with code 3. The service's recovery action (launchd's KeepAlive on
 macOS, `Restart=always` on Linux) starts it on the new binary; the tray and
 the session see the page report a version other than their own and restart
-(the Linux session unit by leaving, for systemd to start it again — its
-Claude unit keeps running and is re-attached); the next clean start deletes
+(the Linux session unit by leaving, for systemd to start it again). Claude
+keeps running in its jobs on every OS and is re-attached; the next clean start deletes
 the `.old` files. A release whose signature fails is reported on the status
 page and never installed.
 
@@ -745,7 +858,7 @@ online fetches the ticket.
 without it as the static service is built), Windows
 (`x86_64-pc-windows-gnu`) and macOS (`aarch64-apple-darwin`), the tests,
 and the static x86_64 musl build, in a throwaway rust container with GTK's
-development packages: `agent/gate.sh [fmt|check|test|musl|all]`. The macOS
+development packages: `agent/gate.sh [fmt|check|test|musl|gen|all]`. The macOS
 check needs no Apple toolchain because TLS there comes from the OS through
 native-tls; Linux uses rustls over the system's CA bundle (Mozilla's roots,
 compiled in, only when the system has none), so no OpenSSL is linked
@@ -753,9 +866,34 @@ anywhere. The tests
 are platform-neutral — the parsers of Windows' SMBIOS table, of macOS's
 tools and of Linux's `/proc`, `/sys` and package managers included, which
 live outside the per-OS code (`src/telemetry/parse/`), the DNS SRV codec
-(`src/dns.rs`), the systemd units `install` writes (as golden text) and the
-Claude unit's command line — and the service, the power request, the tray
-and `install` are exercised on the machines themselves.
+(`src/dns.rs`), the systemd units `install` writes (as golden text), and
+every OS's Claude job — the systemd arguments, the launchd plist and its
+BSD `script` line, `launchctl print`/`list` and `ps` parsing, the Windows
+job record, command-line quoting and the holder's terminal filter
+(`src/claude/job.rs`) — and the service, the power request, the tray,
+`install`, and the Claude jobs themselves on macOS (launchd) and Windows
+(the detached process, the ConPTY holder) are exercised on the machines
+themselves: here they are compile-checked by clippy for both targets, not
+run.
+
+### The app's wire types
+
+The app's TypeScript types for everything the controller's API answers,
+takes and pushes — and the documents inside: the Claude report and roster,
+the telemetry, a machine's hello and status page — are generated from the
+Rust types by [ts-rs](https://github.com/Aleph-Alpha/ts-rs) into
+`app/src/host/controller/generated/`, one file per type and an `index.ts`
+(`src/ts.rs`; the serde attributes decide the shape: `rename_all`,
+`flatten`, `skip_serializing_if` for an optional key; a u64 is a `number`).
+It is a test, and ts-rs a dev-dependency, so no release binary carries it.
+The test fails when the files there are not what the Rust generates now —
+in the gate (which mounts that directory into its container) and in CI's
+`cargo test` — and `agent/gate.sh gen` writes them. The app keeps its
+runtime decoders, each held to its generated type at compile time
+(`reads<T>()` in `app/src/lib/contract/decode.ts`): a field the Rust side
+renames, drops or makes nullable, or a word it adds to an enum, fails the
+app's typecheck. So a change to a wire type is: the Rust, `gate.sh gen`, the
+app's typecheck, one commit with all three.
 
 Everything that differs by OS is behind `src/os/`: one module per OS
 (`windows/`, `macos/`, `linux/`) exporting the same names, selected once

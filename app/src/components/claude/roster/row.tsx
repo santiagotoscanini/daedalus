@@ -3,7 +3,7 @@
 // one — its verb, armed in place.
 import { ClockIcon, FolderGit2Icon, MessagesSquareIcon } from 'lucide-react'
 
-import type { SessionActionState } from '../../../lib/agent/roster'
+import type { ActionState } from '../../../host/controller/generated'
 // Pure and client-safe — the whole reason the roster's types, its join and
 // the row's derived facts live in lib/ rather than beside the loader. See the
 // header of claude-roster.ts.
@@ -74,7 +74,7 @@ type ActiveControl = Extract<RowControl, { session: string }>
 export type VerbStatus = {
   /** The request id; null while the roster does not list it yet. */
   id: string | null
-  state: 'idle' | SessionActionState
+  state: 'idle' | ActionState
   /** The selector it acted on — a uuid, or a short agent id. */
   session: string | null
   /** The agent's sentence about it. */
@@ -93,7 +93,6 @@ export type VerbStatus = {
  */
 export function RosterRow({
   row,
-  resumable,
   acting,
   armed,
   busy,
@@ -104,8 +103,6 @@ export function RosterRow({
   onConfirm,
 }: {
   row: RosterEntry
-  /** The machine offers resume (its roster's `resumeUnavailable` is null). */
-  resumable: boolean
   /** This row sent the request the board is following. */
   acting: boolean
   armed: boolean
@@ -116,7 +113,7 @@ export function RosterRow({
   onCancel: () => void
   onConfirm: (control: ActiveControl) => void
 }) {
-  const control = rowControl(row, resumable)
+  const control = rowControl(row)
   // The board follows one request, so only the row that sent it speaks —
   // otherwise every row would echo the same outcome.
   const mine = acting

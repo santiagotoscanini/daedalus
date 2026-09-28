@@ -10,12 +10,15 @@
 //!   kickstart — the `svc` surface;
 //! - `tray`: one instance, the tao event loop that drives `tray::Tray`,
 //!   `open` as the opener;
+//! - `jobs`: Claude's server and resumed sessions as launchd jobs of the
+//!   user's gui domain;
 //! - `telemetry`: the collector and its tiers.
 //!
 //! The rest is here: paths, the SRV lookup, and Claude Code's keychain
-//! login and PATH; unix.rs has what Linux shares.
+//! login; unix.rs has what Linux shares.
 
 mod facts;
+pub mod jobs;
 pub mod launchd;
 mod net;
 mod power;
@@ -24,9 +27,9 @@ mod telemetry;
 pub mod tray;
 
 pub use super::unix::{
-    file_owner, hide_console, lock_exclusive, mark_executable, monotonic_usec, on_interrupt,
-    own_uid, pid_alive, seal, serve_local_socket, stop_process_tree, unseal, write_private,
-    LocalSocket, CLAUDE_CLI_NAMES,
+    claude_holder, file_owner, hide_console, lock_exclusive, mark_executable, monotonic_usec,
+    on_interrupt, own_uid, pid_alive, seal, serve_local_socket, unseal, write_private, LocalSocket,
+    CLAUDE_CLI_NAMES,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;
@@ -34,7 +37,7 @@ pub use net::primary_adapter;
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
 pub use telemetry::{read_updates, Collector};
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 /// One command's stdout, as text; empty when it fails. For the quick
@@ -65,6 +68,21 @@ pub fn user_log_dir() -> Option<PathBuf> {
         PathBuf::from(h)
             .join("Library")
             .join("Logs")
+            .join(crate::SERVICE_NAME)
+    })
+}
+
+/// The menu bar app's own state — its jobs' plists, the sessions to
+/// recover — in `~/Library/Application Support/daedalus-agent`. Under
+/// `DAEDALUS_AGENT_DATA_DIR` (a development run) None: the moved directory.
+pub fn user_state_dir() -> Option<PathBuf> {
+    if std::env::var_os(crate::config::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
+        return None;
+    }
+    std::env::var_os("HOME").map(|h| {
+        PathBuf::from(h)
+            .join("Library")
+            .join("Application Support")
             .join(crate::SERVICE_NAME)
     })
 }
@@ -103,22 +121,6 @@ pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 
-/// Its own process group, so a stop reaches the sessions it spawned; and a
-/// wider PATH, because the LaunchAgent's is the system's and the server
-/// spawns git and shells from wherever the user installed them.
-pub fn prepare_claude_server(cmd: &mut Command, home: Option<&Path>) {
-    super::unix::own_process_group(cmd);
-    let path = std::env::var("PATH").unwrap_or_default();
-    let local = home.map(|h| h.join(".local/bin").display().to_string());
-    cmd.env(
-        "PATH",
-        format!(
-            "{}:/opt/homebrew/bin:/usr/local/bin:{path}",
-            local.unwrap_or_default()
-        ),
-    );
-}
-
 /// macOS keeps the login in the login keychain under the service name the
 /// CLI uses. Listing the item's attributes needs no access to the secret
 /// and so triggers no prompt; the dates inside it would, so they stay
@@ -133,9 +135,20 @@ pub fn claude_keychain_login() -> bool {
         .unwrap_or(false)
 }
 
-/// The server is the menu bar app's child (a launchd job of its own is a
-/// later step).
-pub const CLAUDE_RC: crate::config::ClaudeRc = crate::config::ClaudeRc::Child;
+/// A process's parent: `ps -o ppid=`.
+pub fn parent_pid(pid: u32) -> Option<u32> {
+    let mut cmd = Command::new("/bin/ps");
+    cmd.args(["-o", "ppid=", "-p", &pid.to_string()]);
+    crate::exec::stdout_or(
+        cmd,
+        std::time::Duration::from_secs(5),
+        crate::exec::Text::Lossy,
+    )
+    .ok()?
+    .trim()
+    .parse()
+    .ok()
+}
 
 /// A live session's CPU and memory are not read here yet (it would take
 /// `proc_pidinfo`); the roster says so in its `errors`.

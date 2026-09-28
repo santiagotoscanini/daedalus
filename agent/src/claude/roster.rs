@@ -23,15 +23,16 @@
 //!   into). The one line of conversation that leaves the file is
 //!   `meta.last_prompt`, redacted and cut (redact.rs).
 //! - `managed`: the sessions this agent resumed (sessions.rs), running as
-//!   transient user units `claude-session-<uuid>` — the only live ones it
-//!   can end with a stop of their own.
+//!   jobs of their own, `claude-session-<uuid>` (job.rs) — the only live
+//!   ones it can end with a stop of their own.
 //!
 //! Beside them: `session_stats`, per live session file whose process is
 //! still the one that wrote it, its CPU, resident memory and the Remote
 //! Control bridge's debug log (Linux reads /proc; elsewhere the list is
-//! empty and `errors` says so); `server`, the Remote Control unit's own
-//! accounting where it runs as one; `actions`, the last requests the verbs
-//! took and how each ended.
+//! empty and `errors` says so); `server`, the Remote Control job's own
+//! accounting where the OS keeps one (a systemd unit's; null elsewhere);
+//! `actions`, the last requests the verbs took — the operator's and the
+//! automatic recovery's (recovery.rs) — and how each ended.
 //!
 //! Bounded: `MAX_TRANSCRIPTS` and `MAX_AGENTS` rows, strings cut, and the
 //! whole document at most `MAX_BYTES` once serialised (`fit` drops the
@@ -66,6 +67,7 @@ const RECORD_MAX: usize = 128 * 1024;
 /// Session files looked at, at most.
 const MAX_SESSION_FILES: usize = 400;
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Roster {
@@ -81,10 +83,8 @@ pub struct Roster {
     /// Transcripts were dropped to keep the document within `MAX_BYTES`.
     pub truncated: bool,
     pub managed: Vec<Managed>,
-    /// Why `resume` is not offered here; null where it is.
-    pub resume_unavailable: Option<String>,
     pub session_stats: Vec<SessionStat>,
-    /// The Remote Control unit's accounting, where it runs as a unit.
+    /// The Remote Control job's accounting, where the OS keeps one.
     pub server: Option<UnitCost>,
     /// The verbs' last requests, newest first.
     pub actions: Vec<ActionResult>,
@@ -93,6 +93,7 @@ pub struct Roster {
 }
 
 /// One `claude agents --json` entry, named field by field.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Agent {
@@ -113,6 +114,7 @@ pub struct Agent {
     pub started_at: Option<u64>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Transcript {
@@ -135,6 +137,7 @@ pub struct Transcript {
 }
 
 /// One pass over a transcript (`scan`).
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Meta {
@@ -160,6 +163,7 @@ pub struct Meta {
     pub cost: Option<Cost>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Cost {
@@ -170,6 +174,7 @@ pub struct Cost {
 }
 
 /// A live session's cost, joined to the report's sessions by pid.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionStat {
@@ -182,13 +187,15 @@ pub struct SessionStat {
     pub bridge_at: Option<u64>,
 }
 
-/// A session this agent resumed, running as its own unit.
+/// A session this agent resumed, running as a job of its own.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Managed {
     /// The session uuid.
     pub id: String,
-    pub unit: String,
+    /// Its job's name (a unit's, a launchd label's last part, a record's).
+    pub job: String,
     pub pid: Option<u32>,
     pub memory_bytes: Option<u64>,
     pub cpu_nsec: Option<u64>,
@@ -197,6 +204,7 @@ pub struct Managed {
     pub log_bytes: Option<u64>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UnitCost {
@@ -205,6 +213,7 @@ pub struct UnitCost {
 }
 
 /// How one verb request went (sessions.rs).
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ActionResult {
     pub request: String,
@@ -367,10 +376,11 @@ pub fn parse_agents(text: &str) -> Option<Vec<Agent>> {
     )
 }
 
-/// What `/proc/<pid>/stat` says of a process: its start time in clock
-/// ticks since boot, and its user and system time in ticks.
+/// What `/proc/<pid>/stat` says of a process: its parent, its start time in
+/// clock ticks since boot, and its user and system time in ticks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProcStat {
+    pub ppid: u32,
     pub start_ticks: u64,
     pub utime: u64,
     pub stime: u64,
@@ -378,12 +388,13 @@ pub struct ProcStat {
 
 /// `/proc/<pid>/stat`: `comm` is parenthesised and may hold spaces and
 /// parens, so everything through the LAST `)` goes first; the rest starts
-/// at field 3 (state), which puts utime, stime and starttime at 14, 15 and
-/// 22.
+/// at field 3 (state), which puts ppid at 4 and utime, stime and starttime
+/// at 14, 15 and 22.
 pub fn parse_proc_stat(text: &str) -> Option<ProcStat> {
     let rest = &text[text.rfind(')')? + 1..];
     let f: Vec<&str> = rest.split_whitespace().collect();
     Some(ProcStat {
+        ppid: f.get(1)?.parse().ok()?,
         utime: f.get(11)?.parse().ok()?,
         stime: f.get(12)?.parse().ok()?,
         start_ticks: f.get(19)?.parse().ok()?,
@@ -416,8 +427,9 @@ pub fn parse_unit_cost(text: &str) -> UnitCost {
 }
 
 /// `systemctl --user list-units --type=service --all --no-legend --plain
-/// '<prefix>*.service'`: the uuids whose unit is active or activating.
-pub fn parse_managed_units(text: &str, prefix: &str) -> Vec<String> {
+/// '<prefix>*.service'`: the names (without `.service`) of the units that
+/// are active or activating.
+pub fn parse_running_units(text: &str, prefix: &str) -> Vec<String> {
     text.lines()
         .filter_map(|l| {
             let f: Vec<&str> = l.split_whitespace().collect();
@@ -425,8 +437,8 @@ pub fn parse_managed_units(text: &str, prefix: &str) -> Vec<String> {
             if !matches!(active, "active" | "activating") {
                 return None;
             }
-            let id = unit.strip_prefix(prefix)?.strip_suffix(".service")?;
-            is_uuid(id).then(|| id.to_string())
+            let name = unit.strip_suffix(".service")?;
+            name.starts_with(prefix).then(|| name.to_string())
         })
         .collect()
 }
@@ -1029,6 +1041,7 @@ mod tests {
         assert_eq!(
             parse_proc_stat(stat),
             Some(ProcStat {
+                ppid: 1,
                 utime: 250,
                 stime: 50,
                 start_ticks: 987654
@@ -1051,10 +1064,11 @@ mod tests {
                      claude-session-x.service loaded active running Claude\n\
                      claude-session-cbdda3a9-0cb2-43f1-b13e-37f25a755fce.service loaded activating start Claude\n";
         assert_eq!(
-            parse_managed_units(units, "claude-session-"),
+            parse_running_units(units, "claude-session-"),
             [
-                "abdda3a9-0cb2-43f1-b13e-37f25a755fce",
-                "cbdda3a9-0cb2-43f1-b13e-37f25a755fce"
+                "claude-session-abdda3a9-0cb2-43f1-b13e-37f25a755fce",
+                "claude-session-x",
+                "claude-session-cbdda3a9-0cb2-43f1-b13e-37f25a755fce"
             ]
         );
     }

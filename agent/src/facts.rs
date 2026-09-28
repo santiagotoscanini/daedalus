@@ -10,6 +10,7 @@ use serde::Serialize;
 
 use crate::os;
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Facts {
     /// "windows", "macos", "linux" — `std::env::consts::OS`.

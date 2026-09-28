@@ -11,12 +11,14 @@
 //! - `power`: the logind inhibitor and the uptime;
 //! - `systemd`: `install`, `uninstall` and `run` — the `svc` surface — and
 //!   the unit files they write;
+//! - `jobs`: Claude's server and resumed sessions as transient user units;
 //! - `telemetry`: the collector and its tiers;
 //! - `tray`: GTK's loop driving `tray::Tray` over the session unit.
 //!
 //! The rest is here: paths, facts, the release's assets and Claude Code's
 //! command; unix.rs has what macOS shares.
 
+pub mod jobs;
 mod net;
 mod power;
 pub mod systemd;
@@ -25,9 +27,9 @@ mod telemetry;
 pub mod tray;
 
 pub use super::unix::{
-    file_owner, hide_console, lock_exclusive, mark_executable, monotonic_usec, on_interrupt,
-    own_uid, pid_alive, seal, serve_local_socket, stop_process_tree, unseal, write_private,
-    LocalSocket, CLAUDE_CLI_NAMES,
+    claude_holder, file_owner, hide_console, lock_exclusive, mark_executable, monotonic_usec,
+    on_interrupt, own_uid, pid_alive, seal, serve_local_socket, unseal, write_private, LocalSocket,
+    CLAUDE_CLI_NAMES,
 };
 pub use net::{primary_adapter, srv_lookup};
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
@@ -35,7 +37,6 @@ pub use systemd as svc;
 pub use telemetry::{read_updates, Collector};
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::telemetry::parse::linux_sys;
 
@@ -73,6 +74,12 @@ pub fn user_log_dir() -> Option<PathBuf> {
         .filter(|p| p.is_absolute())
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
     Some(state.join(crate::SERVICE_NAME))
+}
+
+/// The session's own state — its jobs' gcroots, the sessions to recover —
+/// lives where its logs do: the XDG state directory is what that is.
+pub fn user_state_dir() -> Option<PathBuf> {
+    user_log_dir()
 }
 
 // ── facts ─────────────────────────────────────────────────────────────────
@@ -163,22 +170,16 @@ pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 
-/// A child's own process group, so a stop reaches its sessions. Used only
-/// when config.toml asks for `claude_rc = "child"`; the unit is the Linux
-/// way (`CLAUDE_RC`).
-pub fn prepare_claude_server(cmd: &mut Command, home: Option<&Path>) {
-    let _ = home;
-    super::unix::own_process_group(cmd);
-}
-
 /// The login is a file in the profile here, never a keychain item.
 pub fn claude_keychain_login() -> bool {
     false
 }
 
-/// A transient systemd user unit: the server outlives the session, so an
-/// agent update or restart never ends a Claude session (claude/unit.rs).
-pub const CLAUDE_RC: crate::config::ClaudeRc = crate::config::ClaudeRc::Unit;
+/// A process's parent, from /proc.
+pub fn parent_pid(pid: u32) -> Option<u32> {
+    let text = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    crate::claude::roster::parse_proc_stat(&text).map(|s| s.ppid)
+}
 
 /// /proc answers for a live session's process.
 pub const PROCESS_STATS: bool = true;

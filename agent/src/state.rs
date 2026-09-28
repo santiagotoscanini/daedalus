@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::state_path;
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct State {

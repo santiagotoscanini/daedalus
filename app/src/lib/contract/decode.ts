@@ -192,3 +192,32 @@ export function decode<T>(d: Decoder<T>, value: unknown): T {
 export function asValidator<T>(d: Decoder<T>): (value: unknown) => T {
   return (value) => decode(d, value)
 }
+
+// ── checked against a producer's own types ──────────────────────────────────
+//
+// For documents whose writer is Rust that generates its TypeScript types
+// (agent/src/ts.rs → host/controller/generated/): the decoders stay the
+// runtime half, and these make the compiler hold them to the generated type.
+
+/** `W` with every optional key present (a decoder reads an absent key to its fallback). */
+type Present<W> = W extends readonly (infer E)[]
+  ? Present<E>[]
+  : W extends object
+    ? { [K in keyof W]-?: Present<Exclude<W[K], undefined>> }
+    : W
+
+/**
+ * The decoder as it is, held to the producer's type `W`: the argument does
+ * not type-check unless `W` carries every field the decoder reads, with a
+ * type the decoder takes — a field the Rust side renamed, dropped or made
+ * nullable, or a word it added to a union a `literal` reads, is a compile
+ * error here. A decoder may read less than `W` has, never what `W` lacks.
+ *
+ *     const rosterShape = reads<Roster>()(obj({ … }))
+ */
+export function reads<W>() {
+  return <T>(
+    d: Decoder<T> &
+      ([Present<W>] extends [T] ? unknown : 'the agent does not write what this decoder reads'),
+  ): Decoder<T> => d
+}

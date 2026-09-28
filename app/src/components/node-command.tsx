@@ -1,6 +1,6 @@
 import { useState, useTransition } from 'react'
 
-import type { NodeCommand } from '../lib/agent/policy'
+import type { Command } from '../host/controller/generated'
 import { errorText } from '../lib/redact'
 import { sendNodeCommandFn } from '../server/nodes'
 import { Button } from './ui/button'
@@ -24,7 +24,7 @@ export function NodeCommandButton({
   className,
 }: {
   id: string
-  command: NodeCommand
+  command: Command
   label: string
   /** What the instruction does, shown until it is sent. */
   note?: string

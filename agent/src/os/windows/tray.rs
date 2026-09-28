@@ -11,8 +11,8 @@ use crate::tray::{Flow, Tray};
 /// Refuse to be the second tray. The mutex lives as long as the process.
 ///
 /// Tried for up to ten seconds: after an update the OLD tray spawns us and
-/// then leaves, and its leaving first stops the Claude server it
-/// supervised — a second or two during which its mutex is still held. A
+/// then leaves — a moment during which its mutex is still held (Claude runs
+/// on in its own jobs; the new tray re-attaches to them). A
 /// single check would quit the new tray on that overlap.
 fn claim_single_instance() -> bool {
     use windows::core::w;

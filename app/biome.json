@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!src/routeTree.gen.ts",
+      "!src/host/controller/generated/**",
       "!drizzle/**",
       "!public/**",
       "!pnpm-lock.yaml",

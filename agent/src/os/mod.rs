@@ -25,11 +25,13 @@
 //! - the local API socket: a unix socket served to this process's own uid
 //!   by its peer credentials, made and cleaned up (api/; unix.rs — Windows
 //!   is never a controller and refuses);
-//! - Claude Code: the command's file names, preparing the server's
-//!   command, whether the login is in the keychain, a live session's process
-//!   (its start, CPU, memory and command line: Linux reads /proc, the others
-//!   say they do not, `PROCESS_STATS`), and how the session
-//!   runs the server by default (`CLAUDE_RC`, claude/);
+//! - Claude Code: the command's file names, whether the login is in the
+//!   keychain, a live session's process (its start, CPU, memory and command
+//!   line: Linux reads /proc, the others say they do not, `PROCESS_STATS`),
+//!   and `jobs` — the server and the resumed sessions as jobs of the OS,
+//!   never the agent's children (a systemd user unit, a launchd job, a
+//!   detached process; claude/job.rs), with the Windows session's terminal
+//!   holder (`claude_holder`);
 //! - telemetry: the `Collector` and the OS-updates reader (telemetry.rs);
 //! - `svc`: installing, removing and running the service, and starting
 //!   the tray (the verbs in bin/daedalus-agent.rs, the watchdog in lib.rs);
@@ -59,7 +61,7 @@ use self::linux as imp;
 compile_error!("daedalus-agent builds for Windows, macOS and Linux");
 
 // paths
-pub use imp::{default_data_dir, user_log_dir, TRAY_EXE};
+pub use imp::{default_data_dir, user_log_dir, user_state_dir, TRAY_EXE};
 // facts
 pub use imp::{cpu_name, hostname, memory_bytes, os_name, os_version};
 // network
@@ -73,16 +75,22 @@ pub use imp::{file_owner, own_uid, seal, unseal, write_private};
 // update
 pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 // processes, a single-instance lock, the monotonic clock
-pub use imp::{
-    hide_console, lock_exclusive, monotonic_usec, on_interrupt, pid_alive, stop_process_tree,
-};
+pub use imp::{hide_console, lock_exclusive, monotonic_usec, on_interrupt, parent_pid, pid_alive};
 // the controller's local API socket (api/)
 pub use imp::{serve_local_socket, LocalSocket};
 // Claude Code
 pub use imp::{
-    claude_keychain_login, prepare_claude_server, process_stats, CLAUDE_CLI_NAMES, CLAUDE_RC,
-    PROCESS_STATS,
+    claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES, PROCESS_STATS,
 };
+
+/// Claude's jobs: the server and the resumed sessions, outside the agent
+/// (claude/job.rs). The same names on every OS.
+pub mod jobs {
+    pub use super::imp::jobs::{
+        clear, cost, running, server_env, session_shell, show, start_server, start_session, stop,
+        JOB_KIND,
+    };
+}
 // telemetry
 pub use imp::{read_updates, Collector};
 // the tray: its relation to the session, and the tray program's entry point

@@ -52,6 +52,10 @@ pub mod telemetry;
 pub mod update;
 pub mod util;
 
+// The app's TypeScript wire types, generated from the types above (a test).
+#[cfg(test)]
+mod ts;
+
 // The tray draws with tray-icon (and GTK on Linux): the `tray` feature.
 #[cfg(feature = "tray")]
 pub mod tray;

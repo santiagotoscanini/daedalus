@@ -15,13 +15,17 @@
 //!
 //! - `Owns` (Windows, macOS): the tray runs the session — the Claude
 //!   supervisor (claude/) — because this process is the one in the user's
-//!   desktop session, with the user's Claude login; `claude remote-control`
-//!   runs as its child, reported to the service every poll. The tray drops
-//!   the session — stopping the server — before its own icon.
+//!   desktop session, with the user's Claude login. `claude remote-control`
+//!   and the sessions it resumed are not its children but jobs of the OS
+//!   (a launchd job, a detached process; claude/job.rs), reported to the
+//!   service every poll: quitting, updating or crashing the tray ends no
+//!   Claude session, and the next tray re-attaches to them.
 //! - `Watches` (Linux): the session is a systemd user unit that runs with
 //!   or without a desktop, so Claude never waits on a login; the tray only
 //!   shows it, through the service (`session::Watcher`), and its restart
-//!   goes to the session by way of the service. Quitting stops nothing.
+//!   goes to the session by way of the service.
+//!
+//! Either way quitting the tray stops nothing but the tray.
 //!
 //! It also keeps itself current: when a poll sees the page report a
 //! version other than its own, an update has swapped the binaries under
@@ -37,14 +41,15 @@ use anyhow::{bail, Context, Result};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-use crate::claude::{Launch, Report};
+use crate::claude::Report;
 use crate::os::tray::{open, relaunch_self};
-use crate::session::{Page, Session, Tick, Watcher};
+use crate::session::{Page, Places, Session, Tick, Watcher};
 use crate::{config, DISPLAY_NAME, VERSION};
 
 /// What the tray stands over; the module doc says which OS has which.
 enum Backing {
-    /// It runs the session: the Claude server lives and dies with the tray.
+    /// It runs the session: the supervisor of a Claude server that runs as
+    /// a job of its own.
     Owns(Box<Session>),
     /// It shows a session another process runs.
     Watches(Watcher),
@@ -87,15 +92,8 @@ impl Backing {
     }
 }
 
-/// What quitting the tray does to Claude, for the menu: known before the
-/// session is made, since the icon is drawn first.
-fn quit_label(owns_session: bool) -> &'static str {
-    if owns_session {
-        "Quit tray (stops Claude remote control; the service keeps running)"
-    } else {
-        "Quit tray (Claude remote control and the service keep running)"
-    }
-}
+/// What quitting the tray does, for the menu: nothing but the tray.
+const QUIT_LABEL: &str = "Quit tray (Claude remote control and the service keep running)";
 
 const ICON_OK: &[u8] = include_bytes!("../assets/tray-ok.png");
 const ICON_WARN: &[u8] = include_bytes!("../assets/tray-warn.png");
@@ -402,7 +400,7 @@ pub enum Flow {
 /// paths the menu opens. The platform loops (os/*/tray.rs) drive it — Win32
 /// messages on Windows, a tao event loop on macOS, GTK's on Linux — and it
 /// knows nothing about any of them. Fields drop in order: an owned session
-/// (and with it the Claude server) before the icon.
+/// (its supervisor; the Claude jobs run on) before the icon.
 pub struct Tray {
     session: Backing,
     ui: Ui,
@@ -417,15 +415,12 @@ impl Tray {
             bail!("no tray in controller mode (config.toml says mode = \"controller\")");
         }
         let logs: PathBuf = config::user_log_dir();
-        let claude_log = logs.join("claude-rc.log");
+        let places = Places::of_user(&cfg);
+        let claude_log = places.claude_log.clone();
         // The icon first, then the session, as it always was.
-        let ui = Ui::build(quit_label(crate::os::TRAY_OWNS_SESSION))?;
+        let ui = Ui::build(QUIT_LABEL)?;
         let session = if crate::os::TRAY_OWNS_SESSION {
-            Backing::Owns(Box::new(Session::new(
-                cfg.port,
-                claude_log.clone(),
-                Launch::of(&cfg),
-            )?))
+            Backing::Owns(Box::new(Session::new(cfg.port, places)?))
         } else {
             Backing::Watches(Watcher::new(cfg.port))
         };
@@ -461,10 +456,8 @@ impl Tray {
     /// Advance the session and, when it polled, redraw. Quit means an
     /// update swapped the binary and we are leaving for the new one — on
     /// Windows and Linux by starting it first (`os::tray::relaunch_self`);
-    /// under launchd, leaving is enough, as KeepAlive starts it. An owned
-    /// session is dropped with us, so the Claude server restarts under the
-    /// new tray — the one interruption an agent update costs a session on
-    /// such a machine; a watched one runs on untouched.
+    /// under launchd, leaving is enough, as KeepAlive starts it. Claude runs
+    /// on untouched in its jobs, and the new tray re-attaches to them.
     pub fn tick(&mut self) -> Flow {
         match self.session.tick() {
             Tick::Idle => Flow::Continue,

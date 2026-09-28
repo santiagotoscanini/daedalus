@@ -86,6 +86,7 @@ impl Serialize for Response {
 /// Why a request failed. `code` is one of the `code::` constants; `msg` is
 /// for a person. `supported` rides only a `version` error: the API version
 /// this agent speaks.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ApiError {
     pub code: &'static str,
@@ -182,6 +183,7 @@ pub mod event {
 /// the log). Other fields are ignored, and the version is read before
 /// anything else (`hello_api`), so a newer client is always told which
 /// version this agent speaks.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct HelloParams {
     pub api: u32,
@@ -195,6 +197,7 @@ pub fn hello_api(p: &Value) -> Option<u64> {
 }
 
 /// `hello`'s answer.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct HelloOk {
     pub api: u32,
@@ -205,6 +208,7 @@ pub struct HelloOk {
 }
 
 /// The operating system and the machine, as `system.info` states them.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct OsInfo {
     /// "linux", "windows", "macos".
@@ -220,6 +224,7 @@ pub struct OsInfo {
 }
 
 /// `system.info`'s answer: the agent, the machine, and what runs here.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SystemInfo {
     pub api: u32,
@@ -248,6 +253,7 @@ pub struct SystemInfo {
 /// is bound to (null when it listens for no machine), and the `host:port`s
 /// config.toml says machines should dial — what the app hands an install
 /// command.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ControllerInfo {
     pub public_key: String,
@@ -261,6 +267,7 @@ pub struct ControllerInfo {
 /// A machine as `nodes.list` lists it: identity, standing, connection,
 /// and what its `hello` said. The hello's fields are null for a key the app
 /// named that has not connected since the controller started.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
 pub struct NodeSummary {
     pub id: String,
@@ -282,6 +289,7 @@ pub struct NodeSummary {
 }
 
 /// `nodes.list`'s answer.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
 pub struct NodesList {
     pub nodes: Vec<NodeSummary>,
@@ -291,12 +299,15 @@ pub struct NodesList {
 /// (what the machine's `/status` carries, without its telemetry), the
 /// telemetry as the open page shows it (`Telemetry::public`), and the
 /// providers.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
 pub struct NodeDetail {
     #[serde(flatten)]
     pub node: NodeSummary,
     pub public_key: String,
     pub hello: Option<Hello>,
+    /// The status page's document (`StatusPage`), as the machine sent it.
+    #[cfg_attr(test, ts(type = "unknown"))]
     pub status: Option<Value>,
     pub status_at: Option<String>,
     pub telemetry: Option<Telemetry>,
@@ -305,7 +316,9 @@ pub struct NodeDetail {
 }
 
 /// `nodes.telemetry`'s answer: the full document at the machine's level.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(test, ts(rename = "NodeTelemetryOk"))]
 pub struct NodeTelemetry {
     pub id: String,
     pub telemetry: Option<Telemetry>,
@@ -313,7 +326,9 @@ pub struct NodeTelemetry {
 }
 
 /// `nodes.claude`'s answer: the machine's full Claude report.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, ts(rename = "NodeClaudeOk"))]
 pub struct NodeClaude {
     pub id: String,
     pub report: Option<Report>,
@@ -322,7 +337,9 @@ pub struct NodeClaude {
 
 /// `nodes.claude_roster`'s answer: the machine's roster of Claude
 /// sessions, as it last pushed it.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, ts(rename = "NodeClaudeRosterOk"))]
 pub struct NodeClaudeRoster {
     pub id: String,
     pub roster: Option<Roster>,
@@ -331,8 +348,10 @@ pub struct NodeClaudeRoster {
 
 /// `nodes.claude_session`'s parameters: the machine, the verb and its
 /// selector.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "NodeClaudeSessionParams"))]
 pub struct NodeClaudeSession {
     pub id: String,
     pub action: SessionAction,
@@ -342,6 +361,7 @@ pub struct NodeClaudeSession {
 
 /// `nodes.claude_session`'s answer: the machine took the request, and its
 /// roster reports the outcome under `request`.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ClaudeSessionSent {
     pub delivered: bool,
@@ -350,8 +370,10 @@ pub struct ClaudeSessionSent {
 
 /// The parameters of `nodes.get`, `nodes.telemetry`, `nodes.claude` and
 /// `nodes.claude_roster`.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "NodeIdParams"))]
 pub struct NodeId {
     pub id: String,
 }
@@ -361,12 +383,14 @@ pub const MAX_NODE_NAME: usize = 64;
 
 /// `nodes.set_desired`'s parameters: the app's COMPLETE set of decided
 /// keys. A key absent from it is pending (while connected) or unknown.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetDesired {
     pub nodes: Vec<DesiredNode>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesiredNode {
@@ -376,14 +400,17 @@ pub struct DesiredNode {
     pub state: DesiredState,
     /// The machine's policy; absent for an approved one, `Policy::default()`.
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub policy: Option<DesiredPolicy>,
     /// What the pages call the machine, at most `MAX_NODE_NAME` characters
     /// and no control characters; `/nodes/metrics` labels its series
     /// `machine` with it, or with the hostname when absent.
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub name: Option<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DesiredState {
@@ -393,28 +420,35 @@ pub enum DesiredState {
 
 /// The policy as the app sends it: link/wire.rs's `Policy`, field for field,
 /// but exact — a field the controller does not know is refused.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesiredPolicy {
     pub awake_hold: bool,
     pub claude_remote_control: bool,
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub claude_workdir: Option<String>,
     #[serde(default)]
+    #[cfg_attr(test, ts(as = "Option<DesiredProviders>", optional))]
     pub providers: DesiredProviders,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesiredProviders {
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub lemonade: Option<DesiredProvider>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesiredProvider {
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub port: Option<u16>,
 }
 
@@ -438,6 +472,7 @@ impl From<DesiredPolicy> for Policy {
 /// changed on the connections open now — upgraded to approved (policy
 /// sent, no reconnect), revoked and disconnected, back to pending, or sent
 /// a changed policy.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct SetDesiredOk {
     pub nodes: usize,
@@ -448,8 +483,10 @@ pub struct SetDesiredOk {
 }
 
 /// `nodes.command`'s parameters: one of the fixed instructions.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "NodeCommandParams"))]
 pub struct NodeCommand {
     pub id: String,
     pub command: Command,
@@ -457,6 +494,7 @@ pub struct NodeCommand {
 
 /// `nodes.command`'s answer: acknowledged by the connected machine
 /// (`delivered`), or kept for it until it next connects (`queued`).
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CommandOk {
     pub delivered: bool,
@@ -464,6 +502,7 @@ pub struct CommandOk {
 }
 
 /// `nodes.changed`'s payload.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct NodeChanged {
     pub id: String,
@@ -472,6 +511,7 @@ pub struct NodeChanged {
 }
 
 /// `nodes.pending`'s payload: an unknown key connected and waits.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct NodePending {
     pub id: String,
@@ -487,6 +527,7 @@ pub fn valid_node_id(id: &str) -> bool {
 /// `claude.status`'s answer. `reporting` false means no session has
 /// reported within the freshness window (the session thread is gone, or
 /// has not reported yet), and `report` is null.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
 pub struct ClaudeStatus {
     pub reporting: bool,
@@ -497,6 +538,7 @@ pub struct ClaudeStatus {
 
 /// `claude.roster`'s answer: the session's last roster (claude/roster.rs)
 /// while it is fresh; `reporting` false and `roster` null otherwise.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
 pub struct ClaudeRosterGet {
     pub reporting: bool,
@@ -505,8 +547,10 @@ pub struct ClaudeRosterGet {
 
 /// `claude.session`'s parameters: the verb and its selector — a session
 /// uuid, or a background agent's short id. Exact: nothing else.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "ClaudeSessionParams"))]
 pub struct ClaudeSession {
     pub action: SessionAction,
     pub id: String,
@@ -514,6 +558,7 @@ pub struct ClaudeSession {
 
 /// `claude.session`'s answer: queued for the session under `request`, the
 /// id its roster's `actions` reports the outcome by.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SessionQueued {
     pub queued: bool,
@@ -522,6 +567,7 @@ pub struct SessionQueued {
 
 /// `claude.restart`'s and `claude.update`'s answer: the instruction is
 /// queued for the session, which takes it with its next report.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Queued {
     pub queued: bool,
@@ -530,6 +576,7 @@ pub struct Queued {
 /// `telemetry.get`'s answer: the level config.toml sets, and the latest
 /// document at that level — null when the level is `off`, or before the
 /// first sample.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TelemetryGet {
     pub level: TelemetryLevel,
@@ -537,6 +584,7 @@ pub struct TelemetryGet {
 }
 
 /// `events.subscribe`'s answer; the events follow on the same connection.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Subscribed {}
 
@@ -544,6 +592,7 @@ pub struct Subscribed {}
 /// its report's state or pid moves, and when it stops reporting (nothing
 /// within the freshness window) — then `reporting` is false and the state
 /// and pid are null.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ClaudeChanged {
     pub reporting: bool,
@@ -553,6 +602,7 @@ pub struct ClaudeChanged {
 
 /// `telemetry.updated`'s payload: when the new sample was taken; read it
 /// with `telemetry.get`.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TelemetryUpdated {
     pub sampled_at: String,
@@ -919,6 +969,13 @@ mod tests {
         let r = Report {
             state: "running".into(),
             pid: Some(4242),
+            recovered: vec![crate::claude::Recovered {
+                id: "abdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
+                result: crate::claude::ActionState::Done,
+                detail: "resumed".into(),
+                at: "t".into(),
+            }],
+            job: Some("daedalus-claude-rc".into()),
             reported_at: "2026-09-27T10:00:00Z".into(),
             ..Default::default()
         };
@@ -935,11 +992,11 @@ mod tests {
                 r#""state":"running","detail":null,"pid":4242,"started_at":null,"restarts":0,"#,
                 r#""last_exit":null,"#,
                 r#""server":{"version":null,"environment_id":null,"spawn_mode":null,"max_sessions":null},"#,
-                r#""sessions":[],"#,
+                r#""sessions":[],"recovered":[{"id":"abdda3a9-0cb2-43f1-b13e-37f25a755fce","result":"done","detail":"resumed","at":"t"}],"#,
                 r#""credentials":{"present":false,"store":null,"subscription_type":null,"#,
                 r#""rate_limit_tier":null,"expires_at":null,"refresh_expires_at":null,"scopes":[]},"#,
                 r#""settings":{"model":null,"effort_level":null},"#,
-                r#""user":null,"home":null,"workdir":null,"workdir_via":null,"log":null,"#,
+                r#""user":null,"home":null,"workdir":null,"workdir_via":null,"log":null,"job":"daedalus-claude-rc","#,
                 r#""reported_at":"2026-09-27T10:00:00Z"}}"#
             )
         );
@@ -997,14 +1054,13 @@ mod tests {
             truncated: false,
             managed: vec![Managed {
                 id: "bbdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
-                unit: "claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
+                job: "claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
                 pid: Some(42),
                 memory_bytes: Some(10),
                 cpu_nsec: None,
                 log: "/l".into(),
                 log_bytes: Some(11),
             }],
-            resume_unavailable: None,
             session_stats: vec![SessionStat {
                 pid: 42,
                 cpu_ms: Some(12),
@@ -1039,9 +1095,8 @@ mod tests {
         r#""attached":1,"subagents":null,"span_ms":8,"branch":"main","cli_version":"2.1.281","#,
         r#""last_prompt":"ship it","cost":{"usd":1.5,"lines_added":9,"lines_removed":null,"duration_ms":null}}}],"#,
         r#""transcript_total":1,"empty_count":2,"truncated":false,"#,
-        r#""managed":[{"id":"bbdda3a9-0cb2-43f1-b13e-37f25a755fce","unit":"claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce","#,
+        r#""managed":[{"id":"bbdda3a9-0cb2-43f1-b13e-37f25a755fce","job":"claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce","#,
         r#""pid":42,"memory_bytes":10,"cpu_nsec":null,"log":"/l","log_bytes":11}],"#,
-        r#""resume_unavailable":null,"#,
         r#""session_stats":[{"pid":42,"cpu_ms":12,"rss_bytes":13,"log_bytes":null,"bridge_at":null}],"#,
         r#""server":{"memory_bytes":14,"cpu_nsec":15},"#,
         r#""actions":[{"request":"00112233445566ff","action":"stop","id":"0a1b2c3d","state":"done","#,

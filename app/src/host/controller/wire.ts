@@ -1,4 +1,3 @@
-import type { WirePolicy } from '../../lib/agent/policy'
 import { type AgentRoster, agentRoster } from '../../lib/agent/roster'
 import {
   type AgentStatus,
@@ -10,17 +9,65 @@ import {
   nodeClaudeSummary,
   nodeTelemetry,
 } from '../../lib/agent/status'
-import { arrayOf, bool, decode, int, nullable, obj, optional, str } from '../../lib/contract/decode'
+import {
+  arrayOf,
+  bool,
+  decode,
+  int,
+  literal,
+  nullable,
+  obj,
+  optional,
+  reads,
+  str,
+} from '../../lib/contract/decode'
+import type {
+  ApiError,
+  ClaudeSessionSent,
+  CommandOk,
+  Hello,
+  HelloOk,
+  Mode,
+  NodeClaudeOk,
+  NodeClaudeRosterOk,
+  NodeDetail,
+  NodeState,
+  NodeSummary,
+  NodeTelemetryOk,
+  Queued,
+  SessionQueued,
+  SetDesiredOk,
+  TelemetryLevel,
+  ClaudeRosterGet as WireClaudeRosterGet,
+  ClaudeStatus as WireClaudeStatus,
+  SystemInfo as WireSystemInfo,
+  TelemetryGet as WireTelemetryGet,
+} from './generated'
 
 // The controller's local API as this app reads it: agent/src/api/wire.rs is
-// the writer and the contract, and wire.test.ts decodes the golden lines its
-// tests pin. Tolerant like every reader here — a field the agent adds is
-// ignored, one it drops decodes to its fallback — because the app deploys on
-// save and the controller moves with a lock bump, so the two meet at
-// different versions as a matter of course. The API version is what says
-// they cannot talk at all (`API_VERSION`, the `version` error).
+// the writer and the contract. Its types are GENERATED from the Rust
+// (agent/src/ts.rs → ./generated/, kept current by the agent's gate), and
+// every decoder here is held to them (`reads`): a field the agent renames,
+// drops or makes nullable is a compile error, not a page that reads nulls.
+// wire.test.ts decodes the golden lines the agent's tests pin. The decoders
+// stay the runtime half — the app deploys on save and the controller moves
+// with a lock bump, so the two meet at different versions: a field the agent
+// adds is ignored until a reader wants it, one a document lacks decodes to its
+// fallback. The API version is what says they cannot talk at all
+// (`API_VERSION`, the `version` error).
 //
 // Pure: no socket here. host/controller/client.ts is the connection.
+
+export type {
+  CommandOk,
+  DesiredNode,
+  HelloOk,
+  Mode,
+  NodeState,
+  Queued,
+  SetDesiredOk,
+  TelemetryLevel,
+} from './generated'
 
 /** The API version this app speaks (wire.rs `API_VERSION`). */
 export const API_VERSION = 1
@@ -70,6 +117,10 @@ export class ControllerError extends Error {
 
 const nstr = optional(nullable(str), null)
 const nint = optional(nullable(int), null)
+const flag = optional(bool, false)
+const mode = literal('node', 'controller')
+const level = literal('full', 'minimal', 'off')
+const nodeState = literal('pending', 'approved', 'revoked', 'unknown')
 
 // ── one line ────────────────────────────────────────────────────────────────
 
@@ -79,7 +130,7 @@ export type Incoming =
   | { kind: 'err'; id: number | null; error: ControllerError }
   | { kind: 'event'; e: string; p: unknown }
 
-const errShape = obj({ code: str, msg: optional(str, ''), supported: nint })
+const errShape = reads<ApiError>()(obj({ code: str, msg: optional(str, ''), supported: nint }))
 
 /** An `err` body as a ControllerError; a code this app does not know is `protocol`. */
 export function errorOf(body: unknown): ControllerError {
@@ -119,32 +170,22 @@ export function requestLine(id: number, m: string, p?: Record<string, unknown>):
 
 // ── the answers ─────────────────────────────────────────────────────────────
 
-/** `node` or `controller` (config.rs `Mode`); a newer agent's other mode reads as itself. */
-export type AgentMode = 'node' | 'controller' | (string & {})
-/** `full`, `minimal` or `off` (config.rs `TelemetryLevel`). */
-export type TelemetryLevel = 'full' | 'minimal' | 'off' | (string & {})
+const helloShape = reads<HelloOk>()(
+  obj({
+    api: int,
+    version: str,
+    mode,
+    hostname: optional(str, ''),
+    capabilities: optional(arrayOf(str), []),
+  }),
+)
 
-export type HelloOk = {
-  api: number
-  version: string
-  mode: AgentMode
-  hostname: string
-  capabilities: string[]
-}
-
-const helloShape = obj({
-  api: int,
-  version: str,
-  mode: str,
-  hostname: optional(str, ''),
-  capabilities: optional(arrayOf(str), []),
-})
-
+/** `hello`'s answer: the generated type as it is, every field a word or a list. */
 export const helloOk = (v: unknown): HelloOk => decode(helloShape, v)
 
 /** Which parts of the agent run (role.rs `Role`). */
 export type AgentRole = {
-  mode: AgentMode
+  mode: Mode
   link: boolean
   selfUpdate: boolean
   keepAwake: boolean
@@ -175,7 +216,7 @@ export type ControllerInfo = {
 export type SystemInfo = {
   api: number
   version: string
-  mode: AgentMode
+  mode: Mode
   hostname: string
   os: {
     os: string
@@ -196,52 +237,53 @@ export type SystemInfo = {
   controller: ControllerInfo | null
 }
 
-const flag = optional(bool, false)
-
-const systemInfoShape = obj({
-  api: int,
-  version: str,
-  mode: str,
-  hostname: optional(str, ''),
-  os: obj({
-    os: optional(str, ''),
-    name: optional(str, ''),
-    version: optional(str, ''),
-    arch: optional(str, ''),
-    cpu: optional(str, ''),
-    memory_bytes: nint,
-  }),
-  uptime_secs: optional(int, 0),
-  os_uptime_secs: nint,
-  booted_at: nstr,
-  role: obj({
-    mode: optional(str, ''),
-    link: flag,
-    self_update: flag,
-    keep_awake: flag,
-    installer: flag,
-    session: flag,
-    session_in_service: flag,
-    claude_update: flag,
-    tray: flag,
-    status_on_lan: flag,
-    api_socket: flag,
-    node_listener: flag,
-  }),
-  telemetry: optional(str, 'off'),
-  capabilities: optional(arrayOf(str), []),
-  controller: optional(
-    nullable(
-      obj({
-        public_key: str,
-        fingerprint: str,
-        listen: nstr,
-        advertise: optional(arrayOf(str), []),
-      }),
+const systemInfoShape = reads<WireSystemInfo>()(
+  obj({
+    api: int,
+    version: str,
+    mode,
+    hostname: optional(str, ''),
+    os: obj({
+      os: optional(str, ''),
+      name: optional(str, ''),
+      version: optional(str, ''),
+      arch: optional(str, ''),
+      cpu: optional(str, ''),
+      memory_bytes: nint,
+    }),
+    uptime_secs: optional(int, 0),
+    os_uptime_secs: nint,
+    booted_at: nstr,
+    role: obj({
+      // The top-level mode stands in when a role leaves its own out.
+      mode: optional(nullable(mode), null),
+      link: flag,
+      self_update: flag,
+      keep_awake: flag,
+      installer: flag,
+      session: flag,
+      session_in_service: flag,
+      claude_update: flag,
+      tray: flag,
+      status_on_lan: flag,
+      api_socket: flag,
+      node_listener: flag,
+    }),
+    telemetry: optional(level, 'off'),
+    capabilities: optional(arrayOf(str), []),
+    controller: optional(
+      nullable(
+        obj({
+          public_key: str,
+          fingerprint: str,
+          listen: nstr,
+          advertise: optional(arrayOf(str), []),
+        }),
+      ),
+      null,
     ),
-    null,
-  ),
-})
+  }),
+)
 
 export function systemInfo(v: unknown): SystemInfo {
   const s = decode(systemInfoShape, v)
@@ -263,7 +305,7 @@ export function systemInfo(v: unknown): SystemInfo {
     osUptimeSecs: s.os_uptime_secs,
     bootedAt: s.booted_at,
     role: {
-      mode: r.mode,
+      mode: r.mode ?? s.mode,
       link: r.link,
       selfUpdate: r.self_update,
       keepAwake: r.keep_awake,
@@ -297,14 +339,14 @@ export function systemInfo(v: unknown): SystemInfo {
  */
 export type ClaudeStatus = { reporting: boolean; wanted: boolean; report: NodeClaude | null }
 
-const claudeStatusShape = obj({
-  reporting: flag,
-  wanted: flag,
-  report: optional(
-    nullable((v: unknown) => v),
-    null,
-  ),
-})
+const anyJson = optional(
+  nullable((v: unknown) => v),
+  null,
+)
+
+const claudeStatusShape = reads<WireClaudeStatus>()(
+  obj({ reporting: flag, wanted: flag, report: anyJson }),
+)
 
 export function claudeStatus(v: unknown): ClaudeStatus {
   const s = decode(claudeStatusShape, v)
@@ -316,9 +358,7 @@ export function claudeStatus(v: unknown): ClaudeStatus {
 }
 
 /** `claude.restart`: the instruction is queued for the session. */
-export type Queued = { queued: boolean }
-
-export const queued = (v: unknown): Queued => decode(obj({ queued: flag }), v)
+export const queued = (v: unknown): Queued => decode(reads<Queued>()(obj({ queued: flag })), v)
 
 /**
  * `telemetry.get`: the level config.toml sets and the latest document at it
@@ -327,13 +367,9 @@ export const queued = (v: unknown): Queued => decode(obj({ queued: flag }), v)
  */
 export type TelemetryGet = { level: TelemetryLevel; telemetry: NodeTelemetry | null }
 
-const telemetryGetShape = obj({
-  level: optional(str, 'off'),
-  telemetry: optional(
-    nullable((v: unknown) => v),
-    null,
-  ),
-})
+const telemetryGetShape = reads<WireTelemetryGet>()(
+  obj({ level: optional(level, 'off'), telemetry: anyJson }),
+)
 
 export function telemetryGet(v: unknown): TelemetryGet {
   const t = decode(telemetryGetShape, v)
@@ -343,21 +379,16 @@ export function telemetryGet(v: unknown): TelemetryGet {
 // ── the machines (`nodes.*`) ────────────────────────────────────────────────
 
 /**
- * Where a machine stands at the controller (link/wire.rs `NodeState`):
- * `pending` (connected, not decided), `approved`, `revoked`, or `unknown`
- * (seen, not decided, gone).
- */
-export type LinkState = 'pending' | 'approved' | 'revoked' | 'unknown' | (string & {})
-
-/**
  * A machine as `nodes.list` lists it. The hello's fields are null for a key
  * the app named that has not connected since the controller started — the
- * controller keeps nothing across a restart.
+ * controller keeps nothing across a restart. `state` is `pending`
+ * (connected, not decided), `approved`, `revoked`, or `unknown` (seen, not
+ * decided, gone).
  */
 export type ControllerNode = {
   id: string
   fingerprint: string
-  state: LinkState
+  state: NodeState
   connected: boolean
   /** When the current connection opened; null while disconnected. */
   since: string | null
@@ -372,15 +403,10 @@ export type ControllerNode = {
   claude: NodeClaudeSummary | null
 }
 
-const anyJson = optional(
-  nullable((v: unknown) => v),
-  null,
-)
-
 const nodeShape = {
   id: str,
   fingerprint: optional(str, ''),
-  state: optional(str, 'unknown'),
+  state: optional(nodeState, 'unknown'),
   connected: flag,
   since: nstr,
   last_seen: nstr,
@@ -393,7 +419,7 @@ const nodeShape = {
   claude: anyJson,
 }
 
-const nodeWire = obj(nodeShape)
+const nodeWire = reads<NodeSummary>()(obj(nodeShape))
 
 function nodeOf(n: ReturnType<typeof nodeWire>): ControllerNode {
   return {
@@ -430,25 +456,27 @@ export type LinkHello = {
   telemetry: TelemetryLevel
 }
 
-const linkHelloShape = obj({
-  agent_version: optional(str, ''),
-  os: optional(str, ''),
-  arch: optional(str, ''),
-  hostname: optional(str, ''),
-  mac: nstr,
-  lan_ip: nstr,
-  facts: optional(
-    obj({
-      os_name: optional(str, ''),
-      os_version: optional(str, ''),
-      cpu: optional(str, ''),
-      memory_bytes: nint,
-    }),
-    { os_name: '', os_version: '', cpu: '', memory_bytes: null },
-  ),
-  capabilities: optional(arrayOf(str), []),
-  telemetry: optional(str, 'off'),
-})
+const linkHelloShape = reads<Hello>()(
+  obj({
+    agent_version: optional(str, ''),
+    os: optional(str, ''),
+    arch: optional(str, ''),
+    hostname: optional(str, ''),
+    mac: nstr,
+    lan_ip: nstr,
+    facts: optional(
+      obj({
+        os_name: optional(str, ''),
+        os_version: optional(str, ''),
+        cpu: optional(str, ''),
+        memory_bytes: nint,
+      }),
+      { os_name: '', os_version: '', cpu: '', memory_bytes: null },
+    ),
+    capabilities: optional(arrayOf(str), []),
+    telemetry: optional(level, 'off'),
+  }),
+)
 
 /**
  * `nodes.get`: the summary, the key, the whole hello, the status document
@@ -479,19 +507,20 @@ function statusOf(v: unknown): AgentStatus | null {
   }
 }
 
+const nodeDetailShape = reads<NodeDetail>()(
+  obj({
+    ...nodeShape,
+    public_key: str,
+    hello: optional(nullable(linkHelloShape), null),
+    status: anyJson,
+    status_at: nstr,
+    telemetry: anyJson,
+    telemetry_at: nstr,
+  }),
+)
+
 export function nodeDetail(v: unknown): ControllerNodeDetail {
-  const d = decode(
-    obj({
-      ...nodeShape,
-      public_key: str,
-      hello: optional(nullable(linkHelloShape), null),
-      status: anyJson,
-      status_at: nstr,
-      telemetry: anyJson,
-      telemetry_at: nstr,
-    }),
-    v,
-  )
+  const d = decode(nodeDetailShape, v)
   const h = d.hello
   return {
     ...nodeOf(d),
@@ -525,56 +554,42 @@ export function nodeDetail(v: unknown): ControllerNodeDetail {
 /** `nodes.telemetry`: the full document at the machine's level, and when it arrived. */
 export type NodeTelemetryAnswer = { telemetry: NodeTelemetry | null; receivedAt: string | null }
 
+const nodeTelemetryShape = reads<NodeTelemetryOk>()(obj({ telemetry: anyJson, received_at: nstr }))
+
 export function nodeTelemetryAnswer(v: unknown): NodeTelemetryAnswer {
-  const t = decode(obj({ telemetry: anyJson, received_at: nstr }), v)
+  const t = decode(nodeTelemetryShape, v)
   return { telemetry: nodeTelemetry(t.telemetry), receivedAt: t.received_at }
 }
 
 /** `nodes.claude`: the machine's full Claude report, and when it arrived. */
 export type NodeClaudeAnswer = { report: NodeClaude | null; receivedAt: string | null }
 
+const nodeClaudeShape = reads<NodeClaudeOk>()(obj({ report: anyJson, received_at: nstr }))
+
 export function nodeClaudeAnswer(v: unknown): NodeClaudeAnswer {
-  const c = decode(obj({ report: anyJson, received_at: nstr }), v)
+  const c = decode(nodeClaudeShape, v)
   return { report: nodeClaudeReport(c.report), receivedAt: c.received_at }
 }
 
 /**
- * One decided key, as `nodes.set_desired` takes it (wire.rs `DesiredNode`):
- * the controller refuses the WHOLE set if an `id` is not its key's, so the
- * builder (./nodes.ts) checks that before sending.
+ * `nodes.set_desired`'s answer: the ids whose open connection changed. The
+ * set it takes is the generated `DesiredNode[]` — the controller refuses the
+ * WHOLE set if an `id` is not its key's, so the builder (./nodes.ts) checks
+ * that before sending.
  */
-export type DesiredNode = {
-  id: string
-  public_key: string
-  state: 'approved' | 'revoked'
-  /** The machine's policy (lib/agent/policy.ts); absent for a revoked key. */
-  policy?: WirePolicy
-  /** What the pages call it (lib/agent/policy.ts `wireName`); absent: the hostname. */
-  name?: string
-}
-
-/** `nodes.set_desired`'s answer: the ids whose open connection changed. */
-export type SetDesiredOk = {
-  nodes: number
-  approved: string[]
-  revoked: string[]
-  pending: string[]
-  policy: string[]
-}
-
 export function setDesiredOk(v: unknown): SetDesiredOk {
   const ids = optional(arrayOf(str), [])
   return decode(
-    obj({ nodes: optional(int, 0), approved: ids, revoked: ids, pending: ids, policy: ids }),
+    reads<SetDesiredOk>()(
+      obj({ nodes: optional(int, 0), approved: ids, revoked: ids, pending: ids, policy: ids }),
+    ),
     v,
   )
 }
 
 /** `nodes.command`'s answer: acknowledged now, or kept for the next connection. */
-export type CommandOk = { delivered: boolean; queued: boolean }
-
 export const commandOk = (v: unknown): CommandOk =>
-  decode(obj({ delivered: flag, queued: flag }), v)
+  decode(reads<CommandOk>()(obj({ delivered: flag, queued: flag })), v)
 
 // ── Claude sessions (`claude.roster`, `claude.session`, `nodes.claude_*`) ────
 
@@ -584,16 +599,22 @@ export const commandOk = (v: unknown): CommandOk =>
  */
 export type ClaudeRosterGet = { reporting: boolean; roster: AgentRoster | null }
 
+const claudeRosterShape = reads<WireClaudeRosterGet>()(obj({ reporting: flag, roster: anyJson }))
+
 export function claudeRosterGet(v: unknown): ClaudeRosterGet {
-  const r = decode(obj({ reporting: flag, roster: anyJson }), v)
+  const r = decode(claudeRosterShape, v)
   return { reporting: r.reporting, roster: agentRoster(r.roster) }
 }
 
 /** `nodes.claude_roster`: the machine's roster as it last pushed it, and when. */
 export type NodeClaudeRosterAnswer = { roster: AgentRoster | null; receivedAt: string | null }
 
+const nodeClaudeRosterShape = reads<NodeClaudeRosterOk>()(
+  obj({ roster: anyJson, received_at: nstr }),
+)
+
 export function nodeClaudeRosterAnswer(v: unknown): NodeClaudeRosterAnswer {
-  const r = decode(obj({ roster: anyJson, received_at: nstr }), v)
+  const r = decode(nodeClaudeRosterShape, v)
   return { roster: agentRoster(r.roster), receivedAt: r.received_at }
 }
 
@@ -605,9 +626,9 @@ export function nodeClaudeRosterAnswer(v: unknown): NodeClaudeRosterAnswer {
 export type SessionSent = { request: string }
 
 export const sessionQueued = (v: unknown): SessionSent => ({
-  request: decode(obj({ queued: flag, request: str }), v).request,
+  request: decode(reads<SessionQueued>()(obj({ queued: flag, request: str })), v).request,
 })
 
 export const claudeSessionSent = (v: unknown): SessionSent => ({
-  request: decode(obj({ delivered: flag, request: str }), v).request,
+  request: decode(reads<ClaudeSessionSent>()(obj({ delivered: flag, request: str })), v).request,
 })

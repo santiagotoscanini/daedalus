@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
@@ -88,6 +88,7 @@ windows = { version = "0.61", features = [
   "Win32_System_IO",
   "Win32_System_Ioctl",
   "Win32_System_Performance",
+  "Win32_System_Pipes",
   "Win32_System_RemoteDesktop",
   "Win32_System_Services",
   "Win32_System_Power",
@@ -123,6 +124,11 @@ rustls-native-certs = "0.7"
 webpki-roots = "0.26"
 gtk = { version = "0.18", optional = true }
 tray-icon = { version = "0.25", default-features = false, features = ["libappindicator"], optional = true }
+
+# The app's TypeScript wire types are generated from this crate's types by a
+# test (src/ts.rs), so ts-rs is a dev-dependency: no release binary links it.
+[dev-dependencies]
+ts-rs = { version = "12", default-features = false, features = ["serde-compat", "serde-json-impl", "no-serde-warnings"] }
 
 [build-dependencies]
 winresource = "0.1"

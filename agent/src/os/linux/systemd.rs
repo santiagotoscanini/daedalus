@@ -13,7 +13,7 @@
 //!       manager, enabled for the user who ran `sudo` (`$SUDO_USER`), with
 //!       lingering on so it runs from boot with nobody logged in. It runs
 //!       Claude remote control as a transient unit of its own
-//!       (`daedalus-claude-rc.service`, claude/unit.rs), so restarting or
+//!       (`daedalus-claude-rc.service`, claude/job.rs), so restarting or
 //!       updating the agent never ends a Claude session.
 //!   /etc/xdg/autostart/daedalus-agent-tray.desktop
 //!       the tray, at every graphical login, where the release carried one

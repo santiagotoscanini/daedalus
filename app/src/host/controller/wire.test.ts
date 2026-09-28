@@ -316,7 +316,6 @@ describe('the controller wire', () => {
           controller_fingerprint: 'f3e5:a403',
           pinned_via: 'tofu',
           unconfirmed: true,
-          conflict: null,
           error: null,
         },
       },
@@ -396,9 +395,8 @@ describe('the controller wire', () => {
     '"attached":1,"subagents":null,"span_ms":8,"branch":"main","cli_version":"2.1.281",',
     '"last_prompt":"ship it","cost":{"usd":1.5,"lines_added":9,"lines_removed":null,"duration_ms":null}}}],',
     '"transcript_total":1,"empty_count":2,"truncated":false,',
-    '"managed":[{"id":"bbdda3a9-0cb2-43f1-b13e-37f25a755fce","unit":"claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce",',
+    '"managed":[{"id":"bbdda3a9-0cb2-43f1-b13e-37f25a755fce","job":"claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce",',
     '"pid":42,"memory_bytes":10,"cpu_nsec":null,"log":"/l","log_bytes":11}],',
-    '"resume_unavailable":null,',
     '"session_stats":[{"pid":42,"cpu_ms":12,"rss_bytes":13,"log_bytes":null,"bridge_at":null}],',
     '"server":{"memory_bytes":14,"cpu_nsec":15},',
     '"actions":[{"request":"00112233445566ff","action":"stop","id":"0a1b2c3d","state":"done",',
@@ -442,7 +440,6 @@ describe('the controller wire', () => {
       cost: { usd: 1.5, linesAdded: 9, linesRemoved: null, durationMs: null },
     })
     expect(r?.roster.managedIds).toEqual(['bbdda3a9-0cb2-43f1-b13e-37f25a755fce'])
-    expect(r?.roster.resumeUnavailable).toBeNull()
     expect(r?.roster.transcriptTotal).toBe(1)
     expect(r?.roster.emptyCount).toBe(2)
     expect(r?.sessionStats).toEqual([
@@ -462,16 +459,12 @@ describe('the controller wire', () => {
     ])
   })
 
-  it('decodes nodes.claude_roster, and a machine without resume', () => {
-    const noResume = ROSTER.replace(
-      '"resume_unavailable":null',
-      '"resume_unavailable":"the session is the tray\'s child"',
-    )
+  it('decodes nodes.claude_roster', () => {
     const a = nodeClaudeRosterAnswer(
-      JSON.parse(`{"id":"0123456789abcdef","roster":${noResume},"received_at":"t"}`),
+      JSON.parse(`{"id":"0123456789abcdef","roster":${ROSTER},"received_at":"t"}`),
     )
     expect(a.receivedAt).toBe('t')
-    expect(a.roster?.roster.resumeUnavailable).toBe("the session is the tray's child")
+    expect(a.roster?.roster.managedIds).toEqual(['bbdda3a9-0cb2-43f1-b13e-37f25a755fce'])
     expect(
       nodeClaudeRosterAnswer(
         JSON.parse('{"id":"0123456789abcdef","roster":null,"received_at":null}'),

@@ -72,6 +72,7 @@ pub fn pid_alive(pid: u32) -> bool {
 
 /// Run the child in a process group of its own, so `stop_process_tree` can
 /// reach what it spawns and not only the child.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn own_process_group(cmd: &mut Command) {
     use std::os::unix::process::CommandExt;
     cmd.process_group(0);
@@ -80,6 +81,7 @@ pub fn own_process_group(cmd: &mut Command) {
 /// SIGTERM to the group the child leads (`own_process_group`), then a
 /// moment — two seconds — to leave on its own. The caller kills and reaps
 /// whatever is left.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn stop_process_tree(child: &mut Child) {
     let pid = child.id();
     // SAFETY: a signal to the group the child leads; nothing else is in it.
@@ -119,6 +121,15 @@ pub fn on_interrupt<F: Fn() + Send + Sync + 'static>(f: F) {
 
 /// `claude`, on every unix.
 pub const CLAUDE_CLI_NAMES: &[&str] = &["claude"];
+
+/// The resumed session's terminal holder is Windows' (os/windows/holder.rs);
+/// on unix `script` is the terminal, so the verb refuses.
+pub fn claude_holder(args: &[String]) -> anyhow::Result<i32> {
+    let _ = args;
+    anyhow::bail!(
+        "`claude-holder` is the Windows session's terminal; here a resumed session runs under `script`"
+    )
+}
 
 /// CLOCK_MONOTONIC in microseconds: the clock systemd's `…Monotonic`
 /// timestamps are on.

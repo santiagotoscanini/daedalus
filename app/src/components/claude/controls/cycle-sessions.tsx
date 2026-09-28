@@ -3,7 +3,7 @@
 // the box's page, which hands it the board's `running` flag.
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { SessionAction } from '../../../lib/agent/roster'
+import type { SessionAction } from '../../../host/controller/generated'
 import type { RosterEntry } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
 import { num, text } from '../../../lib/format'

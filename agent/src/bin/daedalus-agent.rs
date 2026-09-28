@@ -26,6 +26,12 @@ fn main() {
         "update" => update_cmd(rest),
         "session" => daedalus_agent::session::run(),
         "claude" => claude_cmd(rest),
+        // A resumed Claude session's terminal on Windows (os/windows/holder.rs):
+        // started by the tray as a detached job, never by hand.
+        "claude-holder" => match os::claude_holder(rest) {
+            Ok(code) => std::process::exit(code),
+            Err(e) => Err(e),
+        },
         "version" | "--version" | "-V" => {
             println!("daedalus-agent {VERSION}");
             Ok(())
@@ -54,6 +60,7 @@ fn print_help() {
          update [--apply]     check the release feed now; --apply installs a newer release\n  \
          session              the Claude session without a tray; what the Linux user unit runs\n  \
          claude restart       ask the session to restart `claude remote-control`\n  \
+         claude-holder …      (Windows) a resumed session's terminal; the tray starts it\n  \
          version              print the version"
     );
 }

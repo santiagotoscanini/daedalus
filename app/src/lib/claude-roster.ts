@@ -79,9 +79,9 @@
 // project directory its transcript's slug names, and refuses anything else up
 // front rather than leaving a unit started and useless — the checks are in
 // agent/src/claude/sessions.rs, and the refusal comes back as the verb's
-// outcome. Where the session is the tray's child (Windows, macOS) there is no
-// unit to hold a resumed session at all, and the roster says why
-// (`resumeUnavailable`).
+// outcome. Every machine resumes: the resumed session is a job of the OS of its
+// own (a systemd unit, a launchd job, a detached process under a pseudo-console
+// on Windows), never the agent's child.
 
 // Type only, and the dependency points this way on purpose: claude-meta.ts
 // knows nothing about rosters, so it can be tested against a bare meta block.
@@ -174,8 +174,6 @@ export type ClaudeRoster = {
    * of them.
    */
   managedIds: string[]
-  /** Why this machine offers no resume (the session is the tray's child), or null. */
-  resumeUnavailable: string | null
 }
 
 export const NO_ROSTER: ClaudeRoster = {
@@ -185,7 +183,6 @@ export const NO_ROSTER: ClaudeRoster = {
   transcriptTotal: 0,
   emptyCount: 0,
   managedIds: [],
-  resumeUnavailable: null,
 }
 
 /**
@@ -318,11 +315,10 @@ export type RosterEntry = {
  *              session. Destructive where Stop is not: it takes the record and
  *              its worktree, so after it `claude attach` has nothing to open.
  * - `none`     nothing honest to offer. `server` is a session the Remote
- *              Control server spawned (it dies with its server, and the page
+ *              Control server spawned (it ends with its server, which the agent
+ *              resumes by itself when it restarts the server; the page
  *              says so rather than drawing a button that lies); `orphan` is a
- *              row with no transcript and no handle of any kind; `no-resume`
- *              is a resumable row on a machine that offers no resume
- *              (`resumeUnavailable`, which the board states once).
+ *              row with no transcript and no handle of any kind.
  *
  * `session` is the selector the agent is handed, and it is NOT always the
  * uuid: `claude stop` and `claude rm` take the short id.
@@ -332,10 +328,10 @@ export type RowControl =
   | { kind: 'stop-unit'; session: string }
   | { kind: 'stop-agent'; session: string }
   | { kind: 'remove-agent'; session: string }
-  | { kind: 'none'; why: 'server' | 'orphan' | 'no-resume' }
+  | { kind: 'none'; why: 'server' | 'orphan' }
 
-/** The verb a row is offered; `resumable` false where the machine offers no resume. */
-export function rowControl(row: RosterEntry, resumable = true): RowControl {
+/** The verb a row is offered. */
+export function rowControl(row: RosterEntry): RowControl {
   // The two background populations first, and DORMANT before RUNNING: their
   // ids are not uuids, and the whole point of the split is that a record with
   // no process behind it must never be offered a Stop. `claude stop` on one
@@ -348,7 +344,7 @@ export function rowControl(row: RosterEntry, resumable = true): RowControl {
   }
   if (row.managed && row.id !== null) return { kind: 'stop-unit', session: row.id }
   if (row.canResume && row.id !== null) {
-    return resumable ? { kind: 'resume', session: row.id } : { kind: 'none', why: 'no-resume' }
+    return { kind: 'resume', session: row.id }
   }
   if (row.state === 'alive') return { kind: 'none', why: 'server' }
   return { kind: 'none', why: 'orphan' }

@@ -202,6 +202,11 @@ pub fn uninstall() -> Result<()> {
     }
     if let Some(uid) = console_uid().filter(|u| *u != 0) {
         let _ = launchctl(&["bootout", &format!("gui/{uid}/{TRAY_LABEL}")]);
+        // Claude remote control is a job of the user's own (os/macos/jobs.rs),
+        // which outlives the menu bar app: it goes too. Sessions it resumed
+        // run on until they end or the user logs out.
+        let rc = crate::claude::job::launchd_label(&config::claude_unit_name());
+        let _ = launchctl(&["bootout", &format!("gui/{uid}/{rc}")]);
     }
     let _ = launchctl(&["bootout", &format!("system/{DAEMON_LABEL}")]);
     for p in [daemon_plist(), tray_plist()] {

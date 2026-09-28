@@ -14,7 +14,8 @@
 import { useRouter } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 // Pure: lib/agent/roster decodes the agent's roster; only its types are used here.
-import type { ClaudeSession, SessionAction, SessionActionResult } from '../../../lib/agent/roster'
+import type { SessionAction } from '../../../host/controller/generated'
+import type { ClaudeSession, SessionActionResult } from '../../../lib/agent/roster'
 import {
   type ClaudeRoster,
   countByState,
@@ -76,7 +77,6 @@ export function RosterBoard({
 }) {
   const router = useRouter()
   const rows = sessionRows(roster, sessions)
-  const resumable = roster.resumeUnavailable === null
   // Session files with no process behind them. Not rows — there is nothing
   // running to draw — and not an error either, so a count is the whole of
   // what to say.
@@ -138,7 +138,6 @@ export function RosterBoard({
             <RosterRow
               key={r.key}
               row={r}
-              resumable={resumable}
               acting={acted === r.key}
               armed={armed === r.key}
               busy={running}
@@ -189,15 +188,6 @@ export function RosterBoard({
           <span className={MONO}>~/.claude/sessions</span> with no process behind{' '}
           {stale === 1 ? 'it' : 'them'} — left by a session that exited uncleanly. Not an error;
           worth watching only if it grows.
-        </p>
-      )}
-
-      {/* Said once rather than on every resumable row: the reason is the
-          machine's, not the row's. */}
-      {!resumable && (
-        <p className={FOOT}>
-          <b>No Resume on this machine:</b> {roster.resumeUnavailable}. Stop and Remove still work
-          on its background agents.
         </p>
       )}
 

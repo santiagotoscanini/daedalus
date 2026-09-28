@@ -1,3 +1,4 @@
+import type { ActionState, Roster, SessionAction } from '../../host/controller/generated'
 import type { ClaudeAgent, ClaudeRoster, ClaudeTranscript } from '../claude-roster'
 import {
   arrayOf,
@@ -9,6 +10,7 @@ import {
   num,
   obj,
   optional,
+  reads,
   str,
 } from '../contract/decode'
 import type { NodeClaudeSession } from './status'
@@ -21,17 +23,14 @@ import type { NodeClaudeSession } from './status'
 //
 // Pure: no socket. host/controller/ reads the answers and hands the body here.
 
-export type SessionAction = 'resume' | 'stop' | 'remove'
-/** How a verb request ended (claude/mod.rs `ActionState`), `running` until it does. */
-export type SessionActionState = 'running' | 'done' | 'refused' | 'failed'
-
 /** One verb request and its outcome, under the request id the agent minted. */
 export type SessionActionResult = {
   request: string
   action: SessionAction
   /** The selector it was given: a session uuid or a background agent's short id. */
   session: string
-  state: SessionActionState
+  /** How it ended (claude/mod.rs `ActionState`), `running` until it does. */
+  state: ActionState
   /** What was done, or why not, in the agent's own sentence. */
   detail: string
   startedAt: string
@@ -114,37 +113,38 @@ const transcriptShape = obj({
 
 const unitCost = obj({ memory_bytes: nint, cpu_nsec: nint })
 
-const rosterShape = obj({
-  reported_at: optional(str, ''),
-  agents_available: optional(bool, false),
-  agents: optional(arrayOf(agentShape), []),
-  transcripts: optional(arrayOf(transcriptShape), []),
-  transcript_total: optional(int, 0),
-  empty_count: optional(int, 0),
-  truncated: optional(bool, false),
-  managed: optional(arrayOf(obj({ id: str })), []),
-  resume_unavailable: nstr,
-  session_stats: optional(
-    arrayOf(obj({ pid: int, cpu_ms: nint, rss_bytes: nint, log_bytes: nint, bridge_at: nint })),
-    [],
-  ),
-  server: optional(nullable(unitCost), null),
-  actions: optional(
-    arrayOf(
-      obj({
-        request: str,
-        action: literal('resume', 'stop', 'remove'),
-        id: str,
-        state: literal('running', 'done', 'refused', 'failed'),
-        detail: optional(str, ''),
-        started_at: optional(str, ''),
-        finished_at: nstr,
-      }),
+const rosterShape = reads<Roster>()(
+  obj({
+    reported_at: optional(str, ''),
+    agents_available: optional(bool, false),
+    agents: optional(arrayOf(agentShape), []),
+    transcripts: optional(arrayOf(transcriptShape), []),
+    transcript_total: optional(int, 0),
+    empty_count: optional(int, 0),
+    truncated: optional(bool, false),
+    managed: optional(arrayOf(obj({ id: str })), []),
+    session_stats: optional(
+      arrayOf(obj({ pid: int, cpu_ms: nint, rss_bytes: nint, log_bytes: nint, bridge_at: nint })),
+      [],
     ),
-    [],
-  ),
-  errors: optional(arrayOf(str), []),
-})
+    server: optional(nullable(unitCost), null),
+    actions: optional(
+      arrayOf(
+        obj({
+          request: str,
+          action: literal('resume', 'stop', 'remove'),
+          id: str,
+          state: literal('running', 'done', 'refused', 'failed'),
+          detail: optional(str, ''),
+          started_at: optional(str, ''),
+          finished_at: nstr,
+        }),
+      ),
+      [],
+    ),
+    errors: optional(arrayOf(str), []),
+  }),
+)
 
 type TranscriptWire = ReturnType<typeof transcriptShape>
 
@@ -228,7 +228,6 @@ export function agentRoster(body: unknown): AgentRoster | null {
       transcriptTotal: r.transcript_total,
       emptyCount: r.empty_count,
       managedIds: r.managed.map((m) => m.id),
-      resumeUnavailable: r.resume_unavailable,
     },
     sessionStats: r.session_stats.map((s) => ({
       pid: s.pid,

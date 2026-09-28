@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { createConnection, type Socket } from 'node:net'
 import { join } from 'node:path'
-import type { NodeCommand } from '../../lib/agent/policy'
-import type { SessionAction } from '../../lib/agent/roster'
 import { env } from '../env'
+import type { Command, SessionAction } from './generated'
 import {
   API_VERSION,
   type ClaudeRosterGet,
@@ -86,7 +85,7 @@ export type ControllerClient = {
   /** The app's COMPLETE set of decided keys (./nodes.ts builds it). */
   nodesSetDesired: (nodes: DesiredNode[]) => Promise<SetDesiredOk>
   /** A one-shot instruction to one machine: only ever from an admin's click. */
-  nodesCommand: (id: string, command: NodeCommand) => Promise<CommandOk>
+  nodesCommand: (id: string, command: Command) => Promise<CommandOk>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
   /** End this client for good: the connection goes, and later calls fail `closed`. */

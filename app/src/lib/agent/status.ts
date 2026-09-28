@@ -1,4 +1,23 @@
-import { arrayOf, bool, decode, int, nullable, num, obj, optional, str } from '../contract/decode'
+import type {
+  LinkStatus,
+  Report,
+  Session,
+  StatusPage,
+  Summary,
+  Telemetry,
+} from '../../host/controller/generated'
+import {
+  arrayOf,
+  bool,
+  decode,
+  int,
+  nullable,
+  num,
+  obj,
+  optional,
+  reads,
+  str,
+} from '../contract/decode'
 
 // A machine's status document, as the box reads it (agent/src/status.rs is
 // the writer): what the machine pushes up its link and the controller hands
@@ -106,15 +125,17 @@ const nstr = optional(nullable(str), null)
 const nint = optional(nullable(int), null)
 const nnum = optional(nullable(num), null)
 
-const summary = obj({
-  state: optional(str, 'stopped'),
-  detail: nstr,
-  cli_version: nstr,
-  server_version: nstr,
-  sessions: optional(int, 0),
-  started_at: nstr,
-  signed_in: optional(bool, false),
-})
+const summary = reads<Summary>()(
+  obj({
+    state: optional(str, 'stopped'),
+    detail: nstr,
+    cli_version: nstr,
+    server_version: nstr,
+    sessions: optional(int, 0),
+    started_at: nstr,
+    signed_in: optional(bool, false),
+  }),
+)
 
 export type AgentStatus = {
   version: string
@@ -162,126 +183,135 @@ export type AgentLink = {
   /** "config", "box" or "tofu". */
   pinnedVia: string | null
   unconfirmed: boolean
-  conflict: string | null
   error: string | null
 }
 
-const link = obj({
-  state: nstr,
-  connected: optional(bool, false),
-  fingerprint: optional(str, ''),
-  controller_fingerprint: nstr,
-  pinned_via: nstr,
-  unconfirmed: optional(bool, false),
-  conflict: nstr,
-  error: nstr,
-})
+const link = reads<LinkStatus>()(
+  obj({
+    state: nstr,
+    connected: optional(bool, false),
+    fingerprint: optional(str, ''),
+    controller_fingerprint: nstr,
+    pinned_via: nstr,
+    unconfirmed: optional(bool, false),
+    error: nstr,
+  }),
+)
 
-const session = obj({
-  pid: int,
-  transcript_id: nstr,
-  remote_id: nstr,
-  cwd: nstr,
-  name: nstr,
-  kind: nstr,
-  entrypoint: nstr,
-  version: nstr,
-  started_at: nnum,
-  status: nstr,
-  last_activity_at: nnum,
-  alive: optional(bool, false),
-})
+const session = reads<Session>()(
+  obj({
+    pid: int,
+    transcript_id: nstr,
+    remote_id: nstr,
+    cwd: nstr,
+    name: nstr,
+    kind: nstr,
+    entrypoint: nstr,
+    version: nstr,
+    started_at: nnum,
+    status: nstr,
+    last_activity_at: nnum,
+    alive: optional(bool, false),
+  }),
+)
 
-const claude = obj({
-  path: nstr,
-  install_method: nstr,
-  last_update: optional(
-    nullable(
-      obj({
-        at: optional(str, ''),
-        ok: optional(bool, false),
-        from: nstr,
-        to: nstr,
-        detail: optional(str, ''),
-      }),
+const claude = reads<Report>()(
+  obj({
+    path: nstr,
+    install_method: nstr,
+    last_update: optional(
+      nullable(
+        obj({
+          at: optional(str, ''),
+          ok: optional(bool, false),
+          from: nstr,
+          to: nstr,
+          detail: optional(str, ''),
+        }),
+      ),
+      null,
     ),
-    null,
-  ),
-  cli_version: nstr,
-  state: optional(str, 'stopped'),
-  detail: nstr,
-  pid: nint,
-  started_at: nstr,
-  restarts: optional(int, 0),
-  last_exit: nstr,
-  server: optional(
-    obj({
-      version: nstr,
-      environment_id: nstr,
-      spawn_mode: nstr,
-      max_sessions: nint,
+    cli_version: nstr,
+    state: optional(str, 'stopped'),
+    detail: nstr,
+    pid: nint,
+    started_at: nstr,
+    restarts: optional(int, 0),
+    last_exit: nstr,
+    server: optional(
+      obj({
+        version: nstr,
+        environment_id: nstr,
+        spawn_mode: nstr,
+        max_sessions: nint,
+      }),
+      { version: null, environment_id: null, spawn_mode: null, max_sessions: null },
+    ),
+    sessions: optional(arrayOf(session), []),
+    credentials: optional(
+      obj({
+        present: optional(bool, false),
+        store: nstr,
+        subscription_type: nstr,
+        rate_limit_tier: nstr,
+        expires_at: nnum,
+        refresh_expires_at: nnum,
+        scopes: optional(arrayOf(str), []),
+      }),
+      {
+        present: false,
+        store: null,
+        subscription_type: null,
+        rate_limit_tier: null,
+        expires_at: null,
+        refresh_expires_at: null,
+        scopes: [],
+      },
+    ),
+    settings: optional(obj({ model: nstr, effort_level: nstr }), {
+      model: null,
+      effort_level: null,
     }),
-    { version: null, environment_id: null, spawn_mode: null, max_sessions: null },
-  ),
-  sessions: optional(arrayOf(session), []),
-  credentials: optional(
-    obj({
-      present: optional(bool, false),
-      store: nstr,
-      subscription_type: nstr,
-      rate_limit_tier: nstr,
-      expires_at: nnum,
-      refresh_expires_at: nnum,
-      scopes: optional(arrayOf(str), []),
-    }),
-    {
-      present: false,
-      store: null,
-      subscription_type: null,
-      rate_limit_tier: null,
-      expires_at: null,
-      refresh_expires_at: null,
-      scopes: [],
-    },
-  ),
-  settings: optional(obj({ model: nstr, effort_level: nstr }), { model: null, effort_level: null }),
-  user: nstr,
-  home: nstr,
-  workdir: nstr,
-  workdir_via: nstr,
-  log: nstr,
-  reported_at: optional(str, ''),
-})
+    user: nstr,
+    home: nstr,
+    workdir: nstr,
+    workdir_via: nstr,
+    log: nstr,
+    reported_at: optional(str, ''),
+  }),
+)
 
-const shape = obj({
-  version: str,
-  hostname: optional(str, ''),
-  os: optional(str, ''),
-  os_name: optional(str, ''),
-  os_version: optional(str, ''),
-  arch: optional(str, ''),
-  cpu: optional(str, ''),
-  memory_bytes: nint,
-  uptime_secs: optional(int, 0),
-  os_uptime_secs: nint,
-  booted_at: nstr,
-  awake_hold: optional(bool, false),
-  hold_error: nstr,
-  update_available: nstr,
-  restart_pending: optional(bool, false),
-  last_update_check: nstr,
-  last_update_result: nstr,
-  policy: optional(
-    obj({
-      awake_hold: optional(bool, true),
-      claude_remote_control: optional(bool, false),
-    }),
-    { awake_hold: true, claude_remote_control: false },
-  ),
-  claude: optional(nullable(summary), null),
-  tray: optional(obj({ reporting: optional(bool, false) }), { reporting: false }),
-  controller: optional(nullable(link), null),
-})
+const shape = reads<StatusPage>()(
+  obj({
+    version: str,
+    hostname: optional(str, ''),
+    os: optional(str, ''),
+    os_name: optional(str, ''),
+    os_version: optional(str, ''),
+    arch: optional(str, ''),
+    cpu: optional(str, ''),
+    memory_bytes: nint,
+    uptime_secs: optional(int, 0),
+    os_uptime_secs: nint,
+    booted_at: nstr,
+    awake_hold: optional(bool, false),
+    hold_error: nstr,
+    update_available: nstr,
+    restart_pending: optional(bool, false),
+    last_update_check: nstr,
+    last_update_result: nstr,
+    policy: optional(
+      obj({
+        awake_hold: optional(bool, true),
+        claude_remote_control: optional(bool, false),
+      }),
+      { awake_hold: true, claude_remote_control: false },
+    ),
+    claude: optional(nullable(summary), null),
+    tray: optional(obj({ reporting: optional(bool, false) }), { reporting: false }),
+    controller: optional(nullable(link), null),
+  }),
+)
 
 function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
   return {
@@ -368,7 +398,6 @@ export function agentStatus(body: unknown): AgentStatus {
             controllerFingerprint: s.controller.controller_fingerprint,
             pinnedVia: s.controller.pinned_via,
             unconfirmed: s.controller.unconfirmed,
-            conflict: s.controller.conflict,
             error: s.controller.error,
           },
   }
@@ -609,262 +638,264 @@ type NodeUpdates = {
 
 const nbool = optional(nullable(bool), null)
 
-const telemetryShape = obj({
-  sampled_at: optional(str, ''),
-  machine: optional(
-    obj({
-      manufacturer: nstr,
-      model: nstr,
-      chip: nstr,
-      bios_vendor: nstr,
-      bios_version: nstr,
-      bios_date: nstr,
-      board_manufacturer: nstr,
-      board_product: nstr,
-      form: nstr,
-      target: nstr,
-    }),
-    {
-      manufacturer: null,
-      model: null,
-      chip: null,
-      bios_vendor: null,
-      bios_version: null,
-      bios_date: null,
-      board_manufacturer: null,
-      board_product: null,
-      form: null,
-      target: null,
-    },
-  ),
-  os: optional(obj({ kernel: nstr, build: nstr, installed_at: nstr }), {
-    kernel: null,
-    build: null,
-    installed_at: null,
-  }),
-  cpu: optional(
-    obj({
-      model: nstr,
-      cores: nint,
-      threads: nint,
-      frequency_mhz: nnum,
-      usage_pct: nnum,
-      load: optional(nullable(arrayOf(num)), null),
-      temperature_c: nnum,
-    }),
-    {
-      model: null,
-      cores: null,
-      threads: null,
-      frequency_mhz: null,
-      usage_pct: null,
-      load: null,
-      temperature_c: null,
-    },
-  ),
-  memory: optional(
-    obj({
-      total_bytes: nnum,
-      used_bytes: nnum,
-      available_bytes: nnum,
-      cached_bytes: nnum,
-      compressed_bytes: nnum,
-      committed_bytes: nnum,
-      commit_limit_bytes: nnum,
-      swap_total_bytes: nnum,
-      swap_used_bytes: nnum,
-      slots: nint,
-      max_capacity_bytes: nnum,
-      modules: optional(
-        arrayOf(
-          obj({
-            locator: nstr,
-            size_bytes: nnum,
-            speed_mts: nnum,
-            kind: nstr,
-            manufacturer: nstr,
-            part_number: nstr,
-          }),
-        ),
-        [],
-      ),
-    }),
-    {
-      total_bytes: null,
-      used_bytes: null,
-      available_bytes: null,
-      cached_bytes: null,
-      compressed_bytes: null,
-      committed_bytes: null,
-      commit_limit_bytes: null,
-      swap_total_bytes: null,
-      swap_used_bytes: null,
-      slots: null,
-      max_capacity_bytes: null,
-      modules: [],
-    },
-  ),
-  disks: optional(
-    arrayOf(
+const telemetryShape = reads<Telemetry>()(
+  obj({
+    sampled_at: optional(str, ''),
+    machine: optional(
       obj({
-        mount: optional(str, ''),
-        name: nstr,
-        fs: nstr,
+        manufacturer: nstr,
+        model: nstr,
+        chip: nstr,
+        bios_vendor: nstr,
+        bios_version: nstr,
+        bios_date: nstr,
+        board_manufacturer: nstr,
+        board_product: nstr,
+        form: nstr,
+        target: nstr,
+      }),
+      {
+        manufacturer: null,
+        model: null,
+        chip: null,
+        bios_vendor: null,
+        bios_version: null,
+        bios_date: null,
+        board_manufacturer: null,
+        board_product: null,
+        form: null,
+        target: null,
+      },
+    ),
+    os: optional(obj({ kernel: nstr, build: nstr, installed_at: nstr }), {
+      kernel: null,
+      build: null,
+      installed_at: null,
+    }),
+    cpu: optional(
+      obj({
+        model: nstr,
+        cores: nint,
+        threads: nint,
+        frequency_mhz: nnum,
+        usage_pct: nnum,
+        load: optional(nullable(arrayOf(num)), null),
+        temperature_c: nnum,
+      }),
+      {
+        model: null,
+        cores: null,
+        threads: null,
+        frequency_mhz: null,
+        usage_pct: null,
+        load: null,
+        temperature_c: null,
+      },
+    ),
+    memory: optional(
+      obj({
         total_bytes: nnum,
         used_bytes: nnum,
-        free_bytes: nnum,
-        kind: nstr,
-      }),
-    ),
-    [],
-  ),
-  gpus: optional(
-    arrayOf(
-      obj({
-        name: optional(str, ''),
-        vendor: nstr,
-        driver: nstr,
-        driver_brand: nstr,
-        driver_date: nstr,
-        vram_total_bytes: nnum,
-        vram_used_bytes: nnum,
-        usage_pct: nnum,
-        temperature_c: nnum,
-        power_w: nnum,
-      }),
-    ),
-    [],
-  ),
-  temperatures: optional(arrayOf(obj({ label: optional(str, ''), celsius: num })), []),
-  network: optional(
-    arrayOf(
-      obj({
-        interface: optional(str, ''),
-        rx_bytes: nnum,
-        tx_bytes: nnum,
-        rx_bps: nnum,
-        tx_bps: nnum,
-      }),
-    ),
-    [],
-  ),
-  battery: optional(
-    nullable(
-      obj({ percent: nnum, charging: nbool, health_pct: nnum, cycles: nnum, condition: nstr }),
-    ),
-    null,
-  ),
-  drives: optional(
-    arrayOf(
-      obj({
-        name: optional(str, ''),
-        serial: nstr,
-        firmware: nstr,
-        size_bytes: nnum,
-        bus: nstr,
-        kind: nstr,
-        health: nstr,
-        temperature_c: nnum,
-        power_on_hours: nnum,
-        wear_pct: nnum,
-        read_errors: nnum,
-        write_errors: nnum,
-        removable: nbool,
-        volumes: optional(arrayOf(str), []),
-      }),
-    ),
-    [],
-  ),
-  processes: optional(
-    arrayOf(
-      obj({
-        name: optional(str, ''),
-        pid: optional(int, 0),
-        memory_bytes: nnum,
-        cpu_pct: nnum,
-      }),
-    ),
-    [],
-  ),
-  process_count: nint,
-  services: optional(
-    arrayOf(
-      obj({
-        name: optional(str, ''),
-        display: nstr,
-        state: optional(str, ''),
-        exit_code: nnum,
-      }),
-    ),
-    [],
-  ),
-  service_count: nint,
-  browsers: optional(
-    arrayOf(
-      obj({
-        name: optional(str, ''),
-        kind: optional(str, ''),
-        version: nstr,
-        channel: nstr,
-        path: nstr,
-        running: optional(bool, false),
-        default_browser: optional(bool, false),
-      }),
-    ),
-    [],
-  ),
-  updates: optional(
-    nullable(
-      obj({
-        checked_at: nstr,
-        pending: optional(
+        available_bytes: nnum,
+        cached_bytes: nnum,
+        compressed_bytes: nnum,
+        committed_bytes: nnum,
+        commit_limit_bytes: nnum,
+        swap_total_bytes: nnum,
+        swap_used_bytes: nnum,
+        slots: nint,
+        max_capacity_bytes: nnum,
+        modules: optional(
           arrayOf(
             obj({
-              title: optional(str, ''),
-              id: nstr,
+              locator: nstr,
               size_bytes: nnum,
-              severity: nstr,
-              restart: nbool,
+              speed_mts: nnum,
+              kind: nstr,
+              manufacturer: nstr,
+              part_number: nstr,
             }),
           ),
           [],
         ),
-        installed: optional(arrayOf(obj({ title: optional(str, ''), at: nstr })), []),
-        reboot_pending: nbool,
-        error: nstr,
       }),
+      {
+        total_bytes: null,
+        used_bytes: null,
+        available_bytes: null,
+        cached_bytes: null,
+        compressed_bytes: null,
+        committed_bytes: null,
+        commit_limit_bytes: null,
+        swap_total_bytes: null,
+        swap_used_bytes: null,
+        slots: null,
+        max_capacity_bytes: null,
+        modules: [],
+      },
     ),
-    null,
-  ),
-  apps: optional(
-    arrayOf(
-      obj({
-        name: optional(str, ''),
-        version: nstr,
-        publisher: nstr,
-        installed_at: nstr,
-        size_bytes: nnum,
-        kind: optional(str, 'app'),
-        source: nstr,
-        path: nstr,
-      }),
+    disks: optional(
+      arrayOf(
+        obj({
+          mount: optional(str, ''),
+          name: nstr,
+          fs: nstr,
+          total_bytes: nnum,
+          used_bytes: nnum,
+          free_bytes: nnum,
+          kind: nstr,
+        }),
+      ),
+      [],
     ),
-    [],
-  ),
-  app_count: nnum,
-  providers: optional(
-    arrayOf(
-      obj({
-        kind: optional(str, ''),
-        port: optional(num, 0),
-        version: nstr,
-        running: optional(bool, false),
-      }),
+    gpus: optional(
+      arrayOf(
+        obj({
+          name: optional(str, ''),
+          vendor: nstr,
+          driver: nstr,
+          driver_brand: nstr,
+          driver_date: nstr,
+          vram_total_bytes: nnum,
+          vram_used_bytes: nnum,
+          usage_pct: nnum,
+          temperature_c: nnum,
+          power_w: nnum,
+        }),
+      ),
+      [],
     ),
-    [],
-  ),
-  errors: optional(arrayOf(str), []),
-})
+    temperatures: optional(arrayOf(obj({ label: optional(str, ''), celsius: num })), []),
+    network: optional(
+      arrayOf(
+        obj({
+          interface: optional(str, ''),
+          rx_bytes: nnum,
+          tx_bytes: nnum,
+          rx_bps: nnum,
+          tx_bps: nnum,
+        }),
+      ),
+      [],
+    ),
+    battery: optional(
+      nullable(
+        obj({ percent: nnum, charging: nbool, health_pct: nnum, cycles: nnum, condition: nstr }),
+      ),
+      null,
+    ),
+    drives: optional(
+      arrayOf(
+        obj({
+          name: optional(str, ''),
+          serial: nstr,
+          firmware: nstr,
+          size_bytes: nnum,
+          bus: nstr,
+          kind: nstr,
+          health: nstr,
+          temperature_c: nnum,
+          power_on_hours: nnum,
+          wear_pct: nnum,
+          read_errors: nnum,
+          write_errors: nnum,
+          removable: nbool,
+          volumes: optional(arrayOf(str), []),
+        }),
+      ),
+      [],
+    ),
+    processes: optional(
+      arrayOf(
+        obj({
+          name: optional(str, ''),
+          pid: optional(int, 0),
+          memory_bytes: nnum,
+          cpu_pct: nnum,
+        }),
+      ),
+      [],
+    ),
+    process_count: nint,
+    services: optional(
+      arrayOf(
+        obj({
+          name: optional(str, ''),
+          display: nstr,
+          state: optional(str, ''),
+          exit_code: nnum,
+        }),
+      ),
+      [],
+    ),
+    service_count: nint,
+    browsers: optional(
+      arrayOf(
+        obj({
+          name: optional(str, ''),
+          kind: optional(str, ''),
+          version: nstr,
+          channel: nstr,
+          path: nstr,
+          running: optional(bool, false),
+          default_browser: optional(bool, false),
+        }),
+      ),
+      [],
+    ),
+    updates: optional(
+      nullable(
+        obj({
+          checked_at: nstr,
+          pending: optional(
+            arrayOf(
+              obj({
+                title: optional(str, ''),
+                id: nstr,
+                size_bytes: nnum,
+                severity: nstr,
+                restart: nbool,
+              }),
+            ),
+            [],
+          ),
+          installed: optional(arrayOf(obj({ title: optional(str, ''), at: nstr })), []),
+          reboot_pending: nbool,
+          error: nstr,
+        }),
+      ),
+      null,
+    ),
+    apps: optional(
+      arrayOf(
+        obj({
+          name: optional(str, ''),
+          version: nstr,
+          publisher: nstr,
+          installed_at: nstr,
+          size_bytes: nnum,
+          kind: optional(str, 'app'),
+          source: nstr,
+          path: nstr,
+        }),
+      ),
+      [],
+    ),
+    app_count: nnum,
+    providers: optional(
+      arrayOf(
+        obj({
+          kind: optional(str, ''),
+          port: optional(num, 0),
+          version: nstr,
+          running: optional(bool, false),
+        }),
+      ),
+      [],
+    ),
+    errors: optional(arrayOf(str), []),
+  }),
+)
 
 function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
   const load = t.cpu.load

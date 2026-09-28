@@ -17,6 +17,7 @@ use crate::link::wire::Policy;
 use crate::telemetry::App;
 
 /// One provider as the telemetry document carries it.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProviderReport {
     /// "lemonade", the one kind the agent detects.

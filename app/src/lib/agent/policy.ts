@@ -1,3 +1,4 @@
+import type { Command, DesiredPolicy } from '../../host/controller/generated'
 import type { NodePolicy } from '../../host/schema'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
 
@@ -33,18 +34,11 @@ export function effectivePolicy(p: NodePolicy): EffectivePolicy {
 }
 
 /**
- * The agent's `Policy` on the wire, field for field. The controller
- * takes it exactly (wire.rs `DesiredPolicy`, deny_unknown_fields), so a key
- * it does not know would refuse the whole desired set.
+ * The agent's `Policy` on the wire (`DesiredPolicy`, generated from wire.rs):
+ * the controller takes it exactly (deny_unknown_fields), so a key it does not
+ * know would refuse the whole desired set.
  */
-export type WirePolicy = {
-  awake_hold: boolean
-  claude_remote_control: boolean
-  claude_workdir?: string
-  providers: { lemonade: { port: number } }
-}
-
-export function wirePolicy(p: NodePolicy): WirePolicy {
+export function wirePolicy(p: NodePolicy): DesiredPolicy {
   const e = effectivePolicy(p)
   return {
     awake_hold: e.awakeHold,
@@ -84,9 +78,15 @@ export function wireName(p: NodePolicy): string | undefined {
 
 /**
  * The one-shot instructions an admin can send a machine (link/wire.rs
- * `Command`): its updater looks for a release now; its session updates
- * Claude Code, which interrupts nothing; its session restarts `claude
- * remote-control`, which ends every session there.
+ * `Command`, generated): its updater looks for a release now; its session
+ * updates Claude Code, which interrupts nothing; its session restarts `claude
+ * remote-control`, which ends every session under it — and resumes them by
+ * itself once the server is back. A record over the generated union, so a
+ * command the agent adds is a compile error here until it is listed.
  */
-export const NODE_COMMANDS = ['check_update', 'claude_update', 'claude_restart'] as const
-export type NodeCommand = (typeof NODE_COMMANDS)[number]
+const COMMANDS: Record<Command, true> = {
+  check_update: true,
+  claude_update: true,
+  claude_restart: true,
+}
+export const NODE_COMMANDS = Object.keys(COMMANDS) as Command[]

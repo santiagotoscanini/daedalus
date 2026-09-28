@@ -19,60 +19,68 @@
 //! the running one and interrupts nothing: a session keeps the binary it
 //! started on and picks the new one up whenever it next starts, which is
 //! upstream's own model. A restart is what moves the RUNNING server onto
-//! it, and it ends every session on this machine — they cannot be picked
-//! back up from claude.ai, only resumed from a console here. One
-//! instruction for both would make the free act cost the expensive one.
+//! it, and it ends every session under it — which the agent then resumes by
+//! itself once the server is back (`recovery`), so the cost is a minute's
+//! interruption, not the sessions. One instruction for both would still
+//! make the free act cost the expensive one.
 //!
 //! What is reported: the server's start banner (version, environment id,
 //! spawn mode, session ceiling), the sessions in `~/.claude/sessions/*.json`
-//! and whether each process is alive, the credential CLOCK (the plan and two
-//! dates — never a token), and the model settings. The server's output goes
-//! to `claude-rc.log` in `config::user_log_dir`.
+//! and whether each process is alive, the sessions the last recovery
+//! resumed, the credential CLOCK (the plan and two dates — never a token),
+//! and the model settings. The server's output goes to `claude-rc.log` in
+//! `config::user_log_dir`.
 //!
 //! None of the environment variables that disable Remote Control are set
 //! (DISABLE_TELEMETRY, DO_NOT_TRACK, ANTHROPIC_BASE_URL and friends —
-//! nix/stacks/daedalus/controller.nix lists them); the child inherits the
-//! user's environment, plus `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE` and, on
-//! macOS, a wider PATH (supervisor.rs `build_command`, and
-//! `os::prepare_claude_server`).
+//! nix/stacks/daedalus/controller.nix lists them); a job gets the user's
+//! environment as the OS gives it one, plus
+//! `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE`, HOME, PATH and
+//! CLAUDE_CONFIG_DIR (job.rs `job_env`, `os::jobs::server_env`).
 //!
-//! On Linux the session is a systemd user unit of its own (no desktop
-//! needed), and the server is not its child but a transient user unit it
-//! starts and watches, so an agent update or restart never ends a Claude
-//! session (`unit`).
+//! On every OS the server and each resumed session are jobs of the OS, not
+//! children of the agent (`job`): a systemd user unit on Linux and the
+//! controller, a launchd job on macOS, a detached process on Windows. An
+//! agent update or restart — or quitting the tray — never ends a Claude
+//! session, and the next start re-attaches.
 //!
 //! Where each part lives: this file holds the report's types; `cli` finds
 //! the `claude` command and probes its version (exec.rs runs it, as it
 //! runs `claude update`), `profile` reads `~/.claude` (sessions, credential
 //! clock, settings), `workdir` picks the directory the server runs in,
-//! `unit` is the server as a systemd user unit, and `supervisor` keeps the
-//! server running either way. The sessions beside the server: `roster`
-//! reads every one this machine could still be asked about, `sessions`
-//! holds the three verbs on them (resume, stop, remove) and the thread
-//! that runs both, and `redact` makes the one line of conversation the
-//! roster carries safe to carry. `logs` rotates the logs systemd appends
-//! to while they are open.
+//! `job` is what a job is on each OS (the calls are `os::jobs`), and
+//! `supervisor` keeps the server running. The sessions beside the server:
+//! `roster` reads every one this machine could still be asked about,
+//! `sessions` holds the three verbs on them (resume, stop, remove) and the
+//! thread that runs them, `recovery` keeps the sessions to resume after the
+//! server restarts, `gcroot` keeps a nix-installed `claude` from the
+//! garbage collector while a job runs it, and `redact` makes the one line
+//! of conversation the roster carries safe to carry. `logs` rotates the
+//! logs the jobs append to while they are open.
 
 mod cli;
+pub mod gcroot;
+pub mod job;
 pub mod logs;
 mod profile;
+pub mod recovery;
 pub mod redact;
 pub mod roster;
 pub mod sessions;
 mod supervisor;
-mod unit;
 mod workdir;
 
+pub use recovery::Recovery;
 pub use roster::Roster;
 pub use sessions::Sessions;
 pub use supervisor::Supervisor;
-pub use unit::Launch;
 
 /// The three verbs on one session (sessions.rs).
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionAction {
-    /// `claude --resume <uuid>` in a unit of its own.
+    /// `claude --resume <uuid>` in a job of its own.
     Resume,
     /// End a session this agent resumed, or a running background agent.
     Stop,
@@ -91,6 +99,7 @@ impl SessionAction {
 }
 
 /// How a verb request stands.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ActionState {
@@ -117,6 +126,7 @@ pub struct SessionRequest {
 use serde::{Deserialize, Serialize};
 
 /// What `claude remote-control` prints about itself at start, once.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Banner {
@@ -146,6 +156,7 @@ impl Banner {
 }
 
 /// One session file, as the CLI writes it, plus whether its process lives.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Session {
@@ -170,6 +181,7 @@ pub struct Session {
 
 /// The credential clock: the plan and two dates. The tokens are in the same
 /// file and are the reason this struct names what it copies.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Credentials {
@@ -187,6 +199,7 @@ pub struct Credentials {
     pub scopes: Vec<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -202,6 +215,7 @@ pub struct Settings {
 /// Homebrew install and "Updates are disabled by your administrator" from a
 /// managed one are both successes that changed nothing, and neither shows up
 /// in a version number.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateResult {
@@ -215,8 +229,9 @@ pub struct UpdateResult {
     pub detail: String,
 }
 
-/// What the session (the tray, today) tells the service, and what the status
+/// What the session tells the service, and what the status
 /// page shows.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Report {
@@ -231,7 +246,8 @@ pub struct Report {
     /// What the last `claude update` on this machine did, and when. None
     /// until one has been asked for.
     pub last_update: Option<UpdateResult>,
-    /// not-installed | off | starting | running | waiting | stopped
+    /// off (not wanted, whatever else is true) | not-installed (wanted, no
+    /// `claude`) | starting | running | waiting | stopped
     pub state: String,
     /// One line more, when the state has a reason.
     pub detail: Option<String>,
@@ -242,6 +258,9 @@ pub struct Report {
     pub last_exit: Option<String>,
     pub server: Banner,
     pub sessions: Vec<Session>,
+    /// What the last automatic recovery did, one row per session it tried
+    /// (recovery.rs); empty until one ran.
+    pub recovered: Vec<Recovered>,
     pub credentials: Credentials,
     pub settings: Settings,
     /// The account the server runs as, and the profile it reads.
@@ -251,13 +270,28 @@ pub struct Report {
     /// How the directory was chosen: "named", "most recent trusted project", or the home fallback.
     pub workdir_via: Option<String>,
     pub log: Option<String>,
+    /// The server's job: a unit's name, a launchd label's last part, a
+    /// detached process's record (job.rs).
+    pub job: Option<String>,
     pub reported_at: String,
+}
+
+/// One session the automatic recovery tried to resume, and how it went.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Recovered {
+    pub id: String,
+    pub result: ActionState,
+    /// What was done, or why not, in the agent's sentence.
+    pub detail: String,
+    pub at: String,
 }
 
 /// The part of the report the status page and the controller's
 /// `nodes.list` carry: enough for a card and a picker — no session names,
 /// paths or ids, no environment id, no account facts. The full report is
 /// `/claude` on loopback and the link's `claude` push.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Summary {

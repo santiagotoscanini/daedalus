@@ -31,6 +31,7 @@ use serde::Serialize;
 use crate::config::Mode;
 
 /// The parts that run, per the table above.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Role {
     pub mode: Mode,

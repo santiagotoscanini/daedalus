@@ -132,15 +132,19 @@ struct Live {
 }
 
 /// The tray, as the page describes it.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Serialize)]
+#[cfg_attr(test, ts(rename = "StatusTray"))]
 struct Tray {
     /// A report landed within the freshness window.
     reporting: bool,
     last_report: Option<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Serialize)]
-struct Document<'a> {
+#[cfg_attr(test, ts(rename = "StatusPage"))]
+pub(crate) struct Document<'a> {
     agent: &'static str,
     version: &'static str,
     hostname: String,

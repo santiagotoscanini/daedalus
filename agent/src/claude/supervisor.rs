@@ -1,22 +1,25 @@
 //! The supervisor: one `claude remote-control` kept running while the box
 //! wants it, restarted with backoff, its output logged and its banner
 //! read, and the report the session (session.rs) sends the service. The
-//! server is the session's child or a systemd user unit of its own
-//! (`Launch`, unit.rs); the supervision is the same for both.
+//! server is always a job of the OS (job.rs, `os::jobs`), never the
+//! session's child: the session starts it, watches it, stops it, and when
+//! the session itself restarts — an agent update, a crash, the tray quit —
+//! it finds the job still running and re-attaches (`Supervisor::new`).
 
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::cli::{cli_version, find_cli, install_method, last_meaningful};
+use super::job::{self, JobState, LogTail, ServerJob};
 use super::profile::{claude_dir, home_dir, read_credentials, read_sessions, read_settings};
-use super::unit::{self, Launch, LogTail, UnitState};
 use super::workdir::pick_workdir;
-use super::{Banner, Credentials, Report, Settings, UpdateResult};
+use super::{gcroot, Banner, Credentials, Report, Settings, UpdateResult};
+use crate::os::jobs;
 use crate::state::{now_rfc3339, rfc3339_ago};
 
 /// A run shorter than this counts as a failure and grows the backoff.
@@ -24,53 +27,34 @@ const QUICK_EXIT: Duration = Duration::from_secs(60);
 /// The backoff ladder's ceiling.
 const MAX_BACKOFF: Duration = Duration::from_secs(5 * 60);
 /// How often the server log is looked at for rotation while it runs
-/// (logs.rs: copy, then truncate, so systemd's descriptor keeps working).
+/// (logs.rs: copy, then truncate, so the job's descriptor keeps working).
 const ROTATE_CHECK: Duration = Duration::from_secs(60);
-/// How often a running unit's state is asked of systemd (its log is read
+/// How often a running job's state is asked of the OS (its log is read
 /// every tick, which is where a change shows first).
-const UNIT_POLL: Duration = Duration::from_secs(10);
-/// How often while it changes: just started, not yet with a main pid, or
-/// systemd not answering.
-const UNIT_POLL_CHANGING: Duration = Duration::from_secs(2);
+const JOB_POLL: Duration = Duration::from_secs(10);
+/// How often while it changes: just started, not yet with a pid, or the OS
+/// not answering.
+const JOB_POLL_CHANGING: Duration = Duration::from_secs(2);
+/// A server that printed no environment id counts as registered after this.
+const REGISTER_WAIT: Duration = Duration::from_secs(30);
 
+/// The server, as this session holds it: the job it started or found
+/// running, and what it has read of it.
 struct Running {
-    proc: Proc,
-    since: Instant,
-    started_at: String,
-    banner: Arc<Mutex<Banner>>,
-}
-
-/// The server, as this session holds it.
-enum Proc {
-    /// A child: its pipes are read by threads into the log and the banner.
-    Child(Child),
-    /// A transient user unit: systemd writes the log, the tail reads it.
-    Unit(Attached),
-}
-
-/// A unit this session started or found running.
-struct Attached {
-    name: String,
     pid: Option<u32>,
     tail: LogTail,
     next_poll: Instant,
-    /// `show` is failing (logged once per streak): the state is unknown,
-    /// which is never taken for a server gone.
+    /// The OS is not answering (logged once per streak): the state is
+    /// unknown, which is never taken for a server gone.
     unanswered: bool,
-}
-
-impl Proc {
-    fn pid(&self) -> Option<u32> {
-        match self {
-            Proc::Child(c) => Some(c.id()),
-            Proc::Unit(u) => u.pid,
-        }
-    }
+    since: Instant,
+    started_at: String,
+    banner: Banner,
 }
 
 /// Note one output line: into the banner, and among the recent lines.
-fn note_line(banner: &Mutex<Banner>, recent: &Mutex<VecDeque<String>>, line: String) {
-    banner.lock().unwrap_or_else(|p| p.into_inner()).note(&line);
+fn note_line(banner: &mut Banner, recent: &Mutex<VecDeque<String>>, line: String) {
+    banner.note(&line);
     if let Ok(mut r) = recent.lock() {
         if r.len() >= 20 {
             r.pop_front();
@@ -79,45 +63,45 @@ fn note_line(banner: &Mutex<Banner>, recent: &Mutex<VecDeque<String>>, line: Str
     }
 }
 
-impl Attached {
+impl Running {
     /// Read what the server printed since the last tick, and — every
-    /// `UNIT_POLL`, or `UNIT_POLL_CHANGING` while it settles — ask systemd
-    /// whether it still runs: None while it does (or while systemd cannot
-    /// say), Some(Ok(code)) once it exited, Some(Err(why)) when the unit is
+    /// `JOB_POLL`, or `JOB_POLL_CHANGING` while it settles — ask the OS
+    /// whether it still runs: None while it does (or while the OS cannot
+    /// say), Some(Ok(code)) once it exited, Some(Err(why)) when the job is
     /// gone.
     fn poll(
         &mut self,
-        banner: &Mutex<Banner>,
+        name: &str,
         recent: &Mutex<VecDeque<String>>,
     ) -> Option<Result<String, String>> {
         for line in self.tail.read_new() {
-            note_line(banner, recent, line);
+            note_line(&mut self.banner, recent, line);
         }
         if Instant::now() < self.next_poll {
             return None;
         }
-        let (next, ended) = match unit::show(&self.name) {
-            Ok(UnitState::Running { pid, .. }) => {
+        let (next, ended) = match jobs::show(name) {
+            Ok(JobState::Running { pid, .. }) => {
                 self.unanswered = false;
                 self.pid = pid;
                 let settled = if pid.is_some() {
-                    UNIT_POLL
+                    JOB_POLL
                 } else {
-                    UNIT_POLL_CHANGING
+                    JOB_POLL_CHANGING
                 };
                 (settled, None)
             }
-            Ok(UnitState::Exited(code)) => (UNIT_POLL_CHANGING, Some(Ok(code))),
-            Ok(UnitState::Gone) => (
-                UNIT_POLL_CHANGING,
-                Some(Err(format!("the unit {} is gone", self.name))),
+            Ok(JobState::Exited(code)) => (JOB_POLL_CHANGING, Some(Ok(code))),
+            Ok(JobState::Gone) => (
+                JOB_POLL_CHANGING,
+                Some(Err(format!("the job {name} is gone"))),
             ),
             Err(e) => {
                 if !self.unanswered {
-                    tracing::warn!(unit = self.name, error = %e, "the Claude unit's state is unknown; still watching");
+                    tracing::warn!(job = name, error = %e, "the Claude job's state is unknown; still watching");
                 }
                 self.unanswered = true;
-                (UNIT_POLL_CHANGING, None)
+                (JOB_POLL_CHANGING, None)
             }
         };
         self.next_poll = Instant::now() + next;
@@ -131,7 +115,10 @@ impl Attached {
 /// waits out the backoff, and starts the next one. Nothing blocks — the
 /// tray's message pump is on the same thread.
 pub struct Supervisor {
-    launch: Launch,
+    /// The server's job name (config.rs `Config::claude_unit`).
+    job: String,
+    /// Where the running `claude` is pinned from the garbage collector.
+    roots: PathBuf,
     cli: Option<PathBuf>,
     cli_version: Option<String>,
     /// The directory the policy names; None means pick one.
@@ -146,6 +133,9 @@ pub struct Supervisor {
     /// moment after an exit.
     last_banner: Banner,
     restarts: u32,
+    /// Starts this supervisor performed (never a re-attach): what the
+    /// session's recovery waits on (recovery.rs).
+    starts: u64,
     failures: u32,
     next_start: Option<Instant>,
     last_exit: Option<String>,
@@ -159,7 +149,7 @@ pub struct Supervisor {
     /// Why the server is off when it is not wanted, as the report words it:
     /// the box's policy on a node, config.toml on the controller.
     off_reason: &'static str,
-    /// While not wanted: a unit of this supervisor's name that is running
+    /// While not wanted: a job of this supervisor's name that is running
     /// anyway, which it neither adopted nor stops (`look_for_foreign`).
     foreign: Option<String>,
     foreign_checked: Option<Instant>,
@@ -168,24 +158,26 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
-    /// A supervisor that starts nothing before its first `tick`. With a
-    /// unit, and the server wanted, it first looks for one this session's
-    /// predecessor left running, and takes it over (`attach`). Not wanted,
-    /// it adopts nothing: a unit of that name running then is left alone
-    /// and named in the report as unmanaged (`look_for_foreign`), so the
-    /// report never calls a running Claude "off" without saying so. It is
-    /// adopted if the server becomes wanted (`set_wanted`).
+    /// A supervisor that starts nothing before its first `tick`. Wanted, it
+    /// first looks for a job this session's predecessor left running, and
+    /// takes it over (`attach`). Not wanted, it adopts nothing: a job of
+    /// that name running then is left alone and named in the report as
+    /// unmanaged (`look_for_foreign`), so the report never calls a running
+    /// Claude "off" without saying so. It is adopted if the server becomes
+    /// wanted (`set_wanted`).
     pub fn new(
         named_workdir: Option<String>,
         log_path: PathBuf,
         wanted: bool,
-        launch: Launch,
+        job: String,
+        roots: PathBuf,
     ) -> Self {
         let cli = find_cli();
         let cli_version = cli.as_deref().and_then(cli_version);
         let (workdir, workdir_via) = pick_workdir(named_workdir.as_deref());
         let mut sup = Self {
-            launch,
+            job,
+            roots,
             cli,
             cli_version,
             named_workdir,
@@ -196,6 +188,7 @@ impl Supervisor {
             running: None,
             last_banner: Banner::default(),
             restarts: 0,
+            starts: 0,
             failures: 0,
             next_start: None,
             last_exit: None,
@@ -222,20 +215,42 @@ impl Supervisor {
         self.off_reason = why;
     }
 
-    /// While the server is not wanted: whether a unit of its name runs
+    /// The server's job name.
+    pub fn job(&self) -> &str {
+        &self.job
+    }
+
+    /// The server's pid while its job runs.
+    pub fn server_pid(&self) -> Option<u32> {
+        self.running.as_ref().and_then(|r| r.pid)
+    }
+
+    /// How many times this supervisor started the server (re-attaches do
+    /// not count).
+    pub fn starts(&self) -> u64 {
+        self.starts
+    }
+
+    /// The server runs and has registered with claude.ai: it printed its
+    /// environment id, or has run `REGISTER_WAIT` without dying.
+    pub fn registered(&self) -> bool {
+        self.running.as_ref().is_some_and(|r| {
+            r.pid.is_some()
+                && (r.banner.environment_id.is_some() || r.since.elapsed() > REGISTER_WAIT)
+        })
+    }
+
+    /// While the server is not wanted: whether a job of its name runs
     /// anyway (one left by an earlier configuration, or another process's
     /// of the same name). It is not adopted and not stopped — stopping a
     /// Claude this agent did not start could end someone's sessions — but
     /// the report says it is there.
     fn look_for_foreign(&mut self) {
         self.foreign_checked = Some(Instant::now());
-        let Launch::Unit(name) = &self.launch else {
-            self.foreign = None;
-            return;
-        };
-        self.foreign = match unit::show(name) {
-            Ok(UnitState::Running { pid, .. }) => Some(format!(
-                "a unit named {name} is running{} and is not managed by this agent while \
+        let name = &self.job;
+        self.foreign = match jobs::show(name) {
+            Ok(JobState::Running { pid, .. }) => Some(format!(
+                "a job named {name} is running{} and is not managed by this agent while \
                  remote control is off",
                 pid.map(|p| format!(" (pid {p})")).unwrap_or_default()
             )),
@@ -243,54 +258,48 @@ impl Supervisor {
         };
     }
 
-    /// A unit that outlived the previous session: running, it is taken
-    /// over where it runs — its banner read back from the log, its start
-    /// time from systemd — so the new session restarts nothing; exited, its
-    /// status is the last exit and the next start is due now.
+    /// A job that outlived the previous session: running, it is taken over
+    /// where it runs — its banner read back from the log, its age from the
+    /// OS — so the new session restarts nothing; exited, its status is the
+    /// last exit and the next start is due now.
     fn attach(&mut self) {
-        let Launch::Unit(name) = &self.launch else {
-            return;
-        };
-        let name = name.clone();
-        match unit::show(&name) {
-            Ok(UnitState::Running {
+        let name = self.job.clone();
+        match jobs::show(&name) {
+            Ok(JobState::Running {
                 pid,
                 age_secs,
                 workdir,
             }) => {
                 let age = Duration::from_secs(age_secs.unwrap_or(0));
-                let banner = Arc::new(Mutex::new(Banner::default()));
+                let mut banner = Banner::default();
                 let mut tail = LogTail::at_last_marker(self.log_path.clone());
                 for line in tail.read_new() {
-                    note_line(&banner, &self.recent_lines, line);
+                    note_line(&mut banner, &self.recent_lines, line);
                 }
                 if let Some(w) = workdir {
                     self.workdir = w;
                     self.workdir_via = "where the running server was found";
                 }
-                tracing::info!(unit = name, pid, "re-attached to Claude remote control");
+                tracing::info!(job = name, pid, "re-attached to Claude remote control");
                 self.running = Some(Running {
-                    proc: Proc::Unit(Attached {
-                        name,
-                        pid,
-                        tail,
-                        next_poll: Instant::now() + UNIT_POLL,
-                        unanswered: false,
-                    }),
+                    pid,
+                    tail,
+                    next_poll: Instant::now() + JOB_POLL,
+                    unanswered: false,
                     since: Instant::now().checked_sub(age).unwrap_or_else(Instant::now),
                     started_at: rfc3339_ago(age.as_secs()),
                     banner,
                 });
             }
-            Ok(UnitState::Exited(code)) => {
+            Ok(JobState::Exited(code)) => {
                 self.last_exit = Some(format!(
                     "exit {code} while no session watched, found at {}",
                     now_rfc3339()
                 ));
                 self.next_start = Some(Instant::now());
             }
-            Ok(UnitState::Gone) => {}
-            Err(e) => tracing::warn!(unit = name, error = %e, "the Claude unit's state is unknown"),
+            Ok(JobState::Gone) => {}
+            Err(e) => tracing::warn!(job = name, error = %e, "the Claude job's state is unknown"),
         }
     }
 
@@ -319,7 +328,7 @@ impl Supervisor {
             self.failures = 0;
             self.next_start = Some(Instant::now());
             self.foreign = None;
-            // A unit of this name already running is taken over now it is
+            // A job of this name already running is taken over now it is
             // wanted, not started a second time over it.
             if self.running.is_none() {
                 self.attach();
@@ -327,9 +336,8 @@ impl Supervisor {
         }
     }
 
-    /// The directory the box names. A change restarts the
-    /// server there; None goes back to picking the most recent trusted
-    /// project.
+    /// The directory the box names. A change restarts the server there;
+    /// None goes back to picking the most recent trusted project.
     pub fn set_named_workdir(&mut self, named: Option<String>) {
         let named = named
             .map(|s| s.trim().to_string())
@@ -365,9 +373,14 @@ impl Supervisor {
     /// native or npm one, and for a package-manager one it is a documented
     /// no-op that reports "Claude is up to date!" rather than doing
     /// something surprising. Those upgrade themselves through
-    /// CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE, which `start` sets on the
-    /// server. Run as the tray, i.e. the logged-in user, which is right for
-    /// a per-user install and is all the privilege there is here — a
+    /// CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE, which every job gets
+    /// (job.rs `job_env`): a Homebrew or WinGet install does neither of the
+    /// others, and this is upstream's own mechanism for it — the server runs
+    /// `brew upgrade` / `winget upgrade` in the background when a release
+    /// lands (on WinGet that can fail while Claude Code runs, because
+    /// Windows locks the executable; it then shows the manual command and
+    /// nothing breaks). Run as the session's user, which is right for a
+    /// per-user install and is all the privilege there is here — a
     /// machine-wide install under an administrator's path is the case this
     /// cannot serve, and the report's install_method is what says so.
     ///
@@ -377,11 +390,11 @@ impl Supervisor {
     ///
     /// ON ITS OWN THREAD, and that is not an optimisation. This is called
     /// from the session's loop — which the tray drives — the only thing that
-    /// reports to the service, restarts the server and drains the menu. Running the download inline
-    /// would freeze all of it for up to ten minutes — the service would see
-    /// the tray stop reporting and the box would say "nobody logged on",
-    /// the opposite of what just happened. `tick` collects the result
-    /// through `update_slot`.
+    /// reports to the service, restarts the server and drains the menu.
+    /// Running the download inline would freeze all of it for up to ten
+    /// minutes — the service would see the tray stop reporting and the box
+    /// would say "nobody logged on", the opposite of what just happened.
+    /// `tick` collects the result through `update_slot`.
     pub fn update_claude(&mut self) {
         if self.updating {
             tracing::info!("a claude update is already running; ignoring the request");
@@ -456,27 +469,16 @@ impl Supervisor {
         if !self.wanted
             && self
                 .foreign_checked
-                .is_none_or(|at| at.elapsed() > UNIT_POLL)
+                .is_none_or(|at| at.elapsed() > JOB_POLL)
         {
             self.look_for_foreign();
         }
         if let Some(r) = self.running.as_mut() {
             // Some(Ok(code)): it exited ("N", or "signal"); Some(Err): lost.
-            let ended: Option<Result<String, String>> = match &mut r.proc {
-                Proc::Child(child) => match child.try_wait() {
-                    Ok(Some(status)) => Some(Ok(status
-                        .code()
-                        .map(|c| c.to_string())
-                        .unwrap_or_else(|| "signal".into()))),
-                    Ok(None) => None,
-                    Err(e) => Some(Err(e.to_string())),
-                },
-                Proc::Unit(u) => u.poll(&r.banner, &self.recent_lines),
-            };
-            match ended {
+            match r.poll(&self.job, &self.recent_lines) {
                 Some(Ok(code)) => {
                     let ran = r.since.elapsed();
-                    self.last_banner = r.banner.lock().map(|b| b.clone()).unwrap_or_default();
+                    self.last_banner = r.banner.clone();
                     self.running = None;
                     self.last_exit = Some(format!(
                         "exit {code} after {} at {}",
@@ -494,6 +496,7 @@ impl Supervisor {
                 }
                 None => {}
                 Some(Err(e)) => {
+                    self.last_banner = r.banner.clone();
                     self.last_exit = Some(format!("lost: {e}"));
                     self.running = None;
                     if self.wanted {
@@ -523,6 +526,10 @@ impl Supervisor {
         Duration::from_secs(secs).min(MAX_BACKOFF)
     }
 
+    /// The server as a job: whatever is left of a previous run cleared, the
+    /// marker line into the log (the job's output is appended after it),
+    /// then the OS's start. A failure is recorded as an exit and backed off
+    /// like one.
     fn start(&mut self) {
         if self.cli.is_none() {
             self.rescan();
@@ -536,197 +543,76 @@ impl Supervisor {
         let (dir, via) = pick_workdir(self.named_workdir.as_deref());
         self.workdir = dir;
         self.workdir_via = via;
-        let log = match open_log(&self.log_path) {
-            Ok(f) => f,
+        let name = self.job.clone();
+        // Whatever is left of the previous run goes first, so nothing it
+        // still prints lands after the marker of this one.
+        jobs::clear(&name);
+        let offset = match open_log(&self.log_path).and_then(|mut log| {
+            writeln!(
+                log,
+                "── {} daedalus-agent session {} in {} (job {name}) ──",
+                now_rfc3339(),
+                job::MARKER,
+                self.workdir.display()
+            )?;
+            log.metadata().map(|m| m.len())
+        }) {
+            Ok(o) => o,
             Err(e) => {
                 self.last_exit = Some(format!("log not opened: {e}"));
                 self.next_start = Some(Instant::now() + MAX_BACKOFF);
                 return;
             }
         };
-        let proc = match self.launch.clone() {
-            Launch::Child => {
-                let log = Arc::new(Mutex::new(log));
-                {
-                    let mut f = log.lock().unwrap_or_else(|p| p.into_inner());
-                    let _ = writeln!(
-                        f,
-                        "── {} daedalus-agent-tray {} in {} ──",
-                        now_rfc3339(),
-                        unit::MARKER,
-                        self.workdir.display()
-                    );
-                }
-                let mut cmd = self.build_command(&cli);
-                let Some(mut child) = self.spawn(&mut cmd) else {
-                    return;
-                };
-                let banner = self.attach_log_and_banner(&mut child, &log);
-                (Proc::Child(child), banner)
-            }
-            Launch::Unit(name) => {
-                let Some(attached) = self.start_unit(&name, &cli, log) else {
-                    return;
-                };
-                (
-                    Proc::Unit(attached),
-                    Arc::new(Mutex::new(Banner::default())),
-                )
-            }
-        };
+        let path = std::env::var("PATH").ok();
+        let config_dir = std::env::var("CLAUDE_CONFIG_DIR").ok();
+        let env = jobs::server_env(
+            home_dir().as_deref(),
+            path.as_deref(),
+            config_dir.as_deref(),
+        );
+        let started = jobs::start_server(&ServerJob {
+            name: &name,
+            cli: &cli,
+            workdir: &self.workdir,
+            log: &self.log_path,
+            env: &env,
+        });
+        if let Err(e) = started {
+            self.last_exit = Some(format!("not started: {e} at {}", now_rfc3339()));
+            self.failures = self.failures.saturating_add(1);
+            self.next_start = Some(Instant::now() + self.backoff());
+            return;
+        }
+        tracing::info!(
+            job = name,
+            kind = jobs::JOB_KIND,
+            "Claude remote control started"
+        );
+        gcroot::pin(&self.roots, &name, &cli);
         if self.last_exit.is_some() || self.restarts > 0 {
             self.restarts = self.restarts.saturating_add(1);
         }
+        self.starts += 1;
         self.running = Some(Running {
-            proc: proc.0,
+            pid: None,
+            tail: LogTail::at(self.log_path.clone(), offset),
+            next_poll: Instant::now() + Duration::from_secs(1),
+            unanswered: false,
             since: Instant::now(),
             started_at: now_rfc3339(),
-            banner: proc.1,
+            banner: Banner::default(),
         });
     }
 
-    /// The server as a transient user unit: whatever is left of a previous
-    /// run cleared, the marker line into the log (systemd appends the
-    /// server's output after it), then `systemd-run`. A failure is recorded as
-    /// an exit and backed off like one.
-    fn start_unit(&mut self, name: &str, cli: &Path, mut log: File) -> Option<Attached> {
-        // Whatever is left of the previous run goes first, so nothing it
-        // still prints lands after the marker of this one.
-        unit::clear(name);
-        let _ = writeln!(
-            log,
-            "── {} daedalus-agent session {} in {} (unit {name}) ──",
-            now_rfc3339(),
-            unit::MARKER,
-            self.workdir.display()
-        );
-        let offset = log.metadata().map(|m| m.len()).unwrap_or(0);
-        drop(log);
-        let home = home_dir();
-        let path = std::env::var("PATH").ok();
-        let config_dir = std::env::var("CLAUDE_CONFIG_DIR").ok();
-        let env = unit::unit_env(home.as_deref(), path.as_deref(), config_dir.as_deref());
-        match unit::start(name, cli, &self.workdir, &self.log_path, &env) {
-            Ok(()) => {
-                tracing::info!(unit = name, "Claude remote control started as a user unit");
-                Some(Attached {
-                    name: name.to_string(),
-                    pid: None,
-                    tail: LogTail::at(self.log_path.clone(), offset),
-                    next_poll: Instant::now() + Duration::from_secs(1),
-                    unanswered: false,
-                })
-            }
-            Err(e) => {
-                self.last_exit = Some(format!("not started: {e} at {}", now_rfc3339()));
-                self.failures = self.failures.saturating_add(1);
-                self.next_start = Some(Instant::now() + self.backoff());
-                None
-            }
-        }
-    }
-
-    /// `claude remote-control --verbose` in the chosen directory, with the
-    /// environment the server needs and both output streams piped.
-    fn build_command(&self, cli: &Path) -> Command {
-        let mut cmd = Command::new(cli);
-        cmd.arg("remote-control")
-            .arg("--verbose")
-            .current_dir(&self.workdir)
-            // Let Claude Code upgrade a package-manager install by itself.
-            // A native or npm install auto-updates already and `claude
-            // update` drives it on demand; a Homebrew or WinGet one does
-            // neither, and this is upstream's own mechanism for it — the
-            // server runs `brew upgrade` / `winget upgrade` in the
-            // background when a release lands. Set here rather than
-            // globally because this is the process that acts on it, and
-            // because it must not reach anything else the tray spawns.
-            //
-            // Known limit, stated so a failure is not a mystery: on WinGet
-            // the upgrade can fail while Claude Code is running, because
-            // Windows locks the executable. It then shows the manual
-            // command and nothing breaks.
-            .env("CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE", "1")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        // What the OS adds: on unix its own process group, so a stop can
-        // reach the sessions it spawned and not only the server; on macOS
-        // also a wider PATH, since the LaunchAgent's is the system's and the
-        // server spawns git and shells from wherever the user installed them.
-        crate::os::prepare_claude_server(&mut cmd, home_dir().as_deref());
-        cmd
-    }
-
-    /// Start the server, hidden; a failure is recorded as an exit and
-    /// backed off like one.
-    fn spawn(&mut self, cmd: &mut Command) -> Option<Child> {
-        match crate::os::hide_console(cmd).spawn() {
-            Ok(c) => Some(c),
-            Err(e) => {
-                self.last_exit = Some(format!("not started: {e} at {}", now_rfc3339()));
-                self.failures = self.failures.saturating_add(1);
-                self.next_start = Some(Instant::now() + self.backoff());
-                None
-            }
-        }
-    }
-
-    /// One thread per output stream: every line goes to the log, is read for
-    /// the banner, and is kept among the recent lines the state shows.
-    fn attach_log_and_banner(
-        &self,
-        child: &mut Child,
-        log: &Arc<Mutex<File>>,
-    ) -> Arc<Mutex<Banner>> {
-        let banner = Arc::new(Mutex::new(Banner::default()));
-        for pipe in [
-            child
-                .stdout
-                .take()
-                .map(|p| Box::new(p) as Box<dyn Read + Send>),
-            child
-                .stderr
-                .take()
-                .map(|p| Box::new(p) as Box<dyn Read + Send>),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            let log = Arc::clone(log);
-            let banner = Arc::clone(&banner);
-            let recent = Arc::clone(&self.recent_lines);
-            std::thread::spawn(move || {
-                for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-                    if let Ok(mut f) = log.lock() {
-                        let _ = writeln!(f, "{line}");
-                    }
-                    note_line(&banner, &recent, line);
-                }
-            });
-        }
-        banner
-    }
-
-    /// End the server and every session under it.
+    /// End the server and every session under it (the OS ends the job's
+    /// whole tree), and clear the job.
     pub fn stop(&mut self, why: &str) {
         let Some(r) = self.running.take() else {
             return;
         };
-        self.last_banner = r.banner.lock().map(|b| b.clone()).unwrap_or_default();
-        match r.proc {
-            // The whole tree — the sessions the server spawned, and on
-            // Windows a `.cmd` launcher's node — as the OS reaches it
-            // (`taskkill /T`, or SIGTERM to the group with a moment to
-            // leave); then the hard kill.
-            Proc::Child(mut child) => {
-                crate::os::stop_process_tree(&mut child);
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            // systemd ends the unit's whole cgroup, the sessions with it.
-            Proc::Unit(u) => unit::clear(&u.name),
-        }
+        self.last_banner = r.banner;
+        jobs::clear(&self.job);
         self.last_exit = Some(format!("stopped ({why}) at {}", now_rfc3339()));
         self.next_start = None;
     }
@@ -740,7 +626,7 @@ impl Supervisor {
         };
         let (state, detail) = self.state();
         let server = match &self.running {
-            Some(r) => r.banner.lock().map(|b| b.clone()).unwrap_or_default(),
+            Some(r) => r.banner.clone(),
             None => self.last_banner.clone(),
         };
         Report {
@@ -750,12 +636,13 @@ impl Supervisor {
             last_update: self.last_update.clone(),
             state,
             detail,
-            pid: self.running.as_ref().and_then(|r| r.proc.pid()),
+            pid: self.server_pid(),
             started_at: self.running.as_ref().map(|r| r.started_at.clone()),
             restarts: self.restarts,
             last_exit: self.last_exit.clone(),
             server,
             sessions,
+            recovered: Vec::new(),
             credentials,
             settings,
             user: std::env::var("USERNAME")
@@ -765,30 +652,27 @@ impl Supervisor {
             workdir: Some(self.workdir.display().to_string()),
             workdir_via: Some(self.workdir_via.to_string()),
             log: Some(self.log_path.display().to_string()),
+            job: Some(self.job.clone()),
             reported_at: now_rfc3339(),
         }
     }
 
+    /// The report's state: `off` whenever the server is not wanted (with
+    /// the reason, and any job of its name running unmanaged), then
+    /// `not-installed` when it is wanted and there is no `claude`, then
+    /// how the job stands.
     fn state(&self) -> (String, Option<String>) {
-        if let (false, Some(f)) = (self.wanted, &self.foreign) {
-            return ("off".into(), Some(format!("{} — but {f}", self.off_reason)));
-        }
-        if self.cli.is_none() {
-            return (
-                "not-installed".into(),
-                Some("no `claude` command in ~/.local/bin, npm's bin, Homebrew's or PATH".into()),
-            );
-        }
-        if !self.wanted {
-            return ("off".into(), Some(self.off_reason.into()));
+        let facts = StateFacts {
+            wanted: self.wanted,
+            installed: self.cli.is_some(),
+            foreign: self.foreign.as_deref(),
+            off_reason: self.off_reason,
+        };
+        if let Some(s) = facts.settled() {
+            return s;
         }
         if let Some(r) = &self.running {
-            let has_banner = r
-                .banner
-                .lock()
-                .map(|b| b.environment_id.is_some())
-                .unwrap_or(false);
-            if has_banner || r.since.elapsed() > Duration::from_secs(30) {
+            if r.banner.environment_id.is_some() || r.since.elapsed() > REGISTER_WAIT {
                 return ("running".into(), None);
             }
             return ("starting".into(), None);
@@ -812,17 +696,44 @@ impl Supervisor {
     }
 }
 
+/// The part of the state decided before the job is looked at — pure, so the
+/// order is tested: not wanted is `off` whatever else is true, and only a
+/// wanted server with no `claude` is `not-installed`.
+struct StateFacts<'a> {
+    wanted: bool,
+    installed: bool,
+    foreign: Option<&'a str>,
+    off_reason: &'a str,
+}
+
+impl StateFacts<'_> {
+    fn settled(&self) -> Option<(String, Option<String>)> {
+        if !self.wanted {
+            let detail = match self.foreign {
+                Some(f) => format!("{} — but {f}", self.off_reason),
+                None => self.off_reason.to_string(),
+            };
+            return Some(("off".into(), Some(detail)));
+        }
+        if !self.installed {
+            return Some((
+                "not-installed".into(),
+                Some("no `claude` command in ~/.local/bin, npm's bin, Homebrew's or PATH".into()),
+            ));
+        }
+        None
+    }
+}
+
 impl Drop for Supervisor {
-    /// A child ends with its session; a unit is left running for the next
-    /// session to re-attach to — that is what it is a unit for.
+    /// The job is left running for the next session to re-attach to — that
+    /// is what it is a job for.
     fn drop(&mut self) {
-        match self.launch {
-            Launch::Child => self.stop("tray leaving"),
-            Launch::Unit(_) => {
-                if self.running.is_some() {
-                    tracing::info!("leaving Claude remote control running in its unit");
-                }
-            }
+        if self.running.is_some() {
+            tracing::info!(
+                job = self.job,
+                "leaving Claude remote control running in its job"
+            );
         }
     }
 }
@@ -863,20 +774,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn supervisor_without_a_cli_reports_it() {
-        // No `claude` on the test machine's PATH is the common case; when
-        // there is one, the state is whatever it is and this test says so.
+    fn not_wanted_is_off_and_only_a_wanted_server_without_claude_is_not_installed() {
+        let f = |wanted, installed, foreign| {
+            StateFacts {
+                wanted,
+                installed,
+                foreign,
+                off_reason: "the policy",
+            }
+            .settled()
+        };
+        assert_eq!(
+            f(false, false, None),
+            Some(("off".to_string(), Some("the policy".to_string())))
+        );
+        assert_eq!(f(false, true, None).unwrap().0, "off");
+        assert_eq!(
+            f(false, true, Some("a job runs")).unwrap().1.unwrap(),
+            "the policy — but a job runs"
+        );
+        assert_eq!(f(true, false, None).unwrap().0, "not-installed");
+        assert_eq!(f(true, true, None), None);
+    }
+
+    #[test]
+    fn a_supervisor_that_is_not_wanted_reports_off() {
+        // Whatever this machine has installed, not wanted is off.
+        let dir = std::env::temp_dir().join(format!("daedalus-sup-{}", std::process::id()));
         let sup = Supervisor::new(
-            Some(std::env::temp_dir().display().to_string()),
-            std::env::temp_dir().join("daedalus-claude-test.log"),
+            Some(dir.display().to_string()),
+            dir.join("claude-rc.log"),
             false,
-            Launch::Child,
+            format!("daedalus-agent-test-{}", std::process::id()),
+            dir.join("gcroots"),
         );
         let r = sup.report();
-        assert!(r.state == "not-installed" || r.state == "off");
+        assert_eq!(r.state, "off");
+        assert!(sup.server_pid().is_none() && !sup.registered() && sup.starts() == 0);
         assert_eq!(
             r.summary().sessions,
             r.sessions.iter().filter(|s| s.alive).count()
         );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

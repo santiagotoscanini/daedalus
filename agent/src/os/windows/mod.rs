@@ -10,6 +10,8 @@
 //! - `service`: `install`, `uninstall`, `run` and the tray started as the
 //!   console user — the `svc` surface;
 //! - `tray`: one instance, the Win32 message loop, Explorer as the opener;
+//! - `jobs`: Claude's server and resumed sessions as processes detached from
+//!   the tray, and `holder`: the pseudo-console a resumed session runs in;
 //! - `telemetry`: the collector and its tiers.
 //!
 //! The small things are here: paths, processes, the Claude command's names.
@@ -18,6 +20,8 @@ mod acl;
 mod dns;
 mod dpapi;
 mod facts;
+mod holder;
+pub mod jobs;
 mod net;
 mod power;
 pub mod service;
@@ -29,13 +33,14 @@ pub use acl::{file_owner, protect_data_dir};
 pub use dns::srv_lookup;
 pub use dpapi::{seal, unseal};
 pub use facts::{cpu_name, memory_bytes, os_name, os_version};
+pub use holder::run as claude_holder;
 pub use net::primary_adapter;
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
 pub use service as svc;
 pub use telemetry::{read_updates, Collector};
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 
 use anyhow::{Context, Result};
 
@@ -59,6 +64,16 @@ pub fn default_data_dir() -> PathBuf {
 /// files there.
 pub fn user_log_dir() -> Option<PathBuf> {
     None
+}
+
+/// The tray's own state — its jobs' records, the sessions to recover — is
+/// the user's, not the machine's: `%LOCALAPPDATA%\daedalus-agent`. Under
+/// `DAEDALUS_AGENT_DATA_DIR` (a development run) None: the moved directory.
+pub fn user_state_dir() -> Option<PathBuf> {
+    if std::env::var_os(crate::config::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
+        return None;
+    }
+    std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join(crate::SERVICE_NAME))
 }
 
 // ── facts ─────────────────────────────────────────────────────────────────
@@ -187,17 +202,32 @@ pub fn pid_alive(pid: u32) -> bool {
     }
 }
 
-/// The whole tree: a `.cmd` launcher's node, and the sessions the server
-/// spawned. `kill` alone would orphan them. The caller kills and reaps the
-/// child itself after.
-pub fn stop_process_tree(child: &mut Child) {
-    let mut cmd = Command::new("taskkill");
-    cmd.args(["/PID", &child.id().to_string(), "/T", "/F"]);
-    let _ = hide_console(&mut cmd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+/// A process's parent, from a toolhelp snapshot (None when it is gone).
+pub fn parent_pid(pid: u32) -> Option<u32> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    // SAFETY: a snapshot walked with a sized entry, then closed.
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
+        let mut e = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut found = None;
+        let mut more = Process32FirstW(snap, &mut e).is_ok();
+        while more {
+            if e.th32ProcessID == pid {
+                found = Some(e.th32ParentProcessID);
+                break;
+            }
+            more = Process32NextW(snap, &mut e).is_ok();
+        }
+        let _ = CloseHandle(snap);
+        found
+    }
 }
 
 /// Ctrl-C in `serve`'s console, through the console control handler.
@@ -224,20 +254,10 @@ pub fn on_interrupt<F: Fn() + Send + Sync + 'static>(f: F) {
 /// The native installer's exe, then npm's two shims.
 pub const CLAUDE_CLI_NAMES: &[&str] = &["claude.exe", "claude.cmd", "claude.bat"];
 
-/// Nothing to add: the tree is reached through `taskkill /T`, and the
-/// tray's PATH is the user's.
-pub fn prepare_claude_server(cmd: &mut Command, home: Option<&Path>) {
-    let _ = (cmd, home);
-}
-
 /// The login is a file in the profile here, never a keychain item.
 pub fn claude_keychain_login() -> bool {
     false
 }
-
-/// The server is the tray's child: the tray only restarts when an update
-/// asks it to.
-pub const CLAUDE_RC: crate::config::ClaudeRc = crate::config::ClaudeRc::Child;
 
 /// A live session's CPU and memory are not read here yet; the roster says
 /// so in its `errors`.

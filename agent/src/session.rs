@@ -2,8 +2,9 @@
 //! to the service, with no UI.
 //!
 //! This process is the one with the user's Claude login, so it runs
-//! `claude remote-control` (claude/) — as its child on Windows and macOS,
-//! as a systemd user unit it controls on Linux. Every `POLL` it reads the
+//! `claude remote-control` (claude/) — never as its child: as a job of the
+//! OS it starts and watches (a systemd user unit, a launchd job, a detached
+//! process; claude/job.rs), which outlives it. Every `POLL` it reads the
 //! service's status page on loopback, sends the service a report of the
 //! supervisor (`POST /claude/report`), and applies the `ReportAnswer` —
 //! run it or not, where, and the one-shot update and restart. The service
@@ -13,7 +14,10 @@
 //! three verbs on them (claude/sessions.rs), on a thread of their own: the
 //! requests arrive with the report's answer, and the roster goes to the
 //! service when it changes and every minute (`POST /claude/roster`, or
-//! straight into the shared state on the controller).
+//! straight into the shared state on the controller). And it keeps the set
+//! of sessions that are open, so that after it starts the server again —
+//! the restart verb, a new directory, the server dying, the machine
+//! coming back — it resumes them by itself (claude/recovery.rs; `recover`).
 //!
 //! It also notices an update of its own: when the page reports a version
 //! other than its own, the binaries were swapped under it, and it says so
@@ -36,8 +40,9 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
+use crate::claude::roster::is_uuid;
 use crate::claude::sessions::Context as SessionsContext;
-use crate::claude::{Launch, Report, ReportAnswer, Roster, Sessions, Supervisor};
+use crate::claude::{Recovery, Report, ReportAnswer, Roster, SessionAction, Sessions, Supervisor};
 use crate::config;
 use crate::link::wire::Policy;
 use crate::status::Shared;
@@ -179,14 +184,20 @@ impl Link {
     }
 }
 
-/// The supervisor and when to look at the page next. Dropping it stops a
-/// child Claude server (the supervisor's `Drop`) and releases the lock.
+/// The supervisor, the sessions' thread, the recovery set, and when to look
+/// at the page next. Dropping it leaves Claude running in its jobs and
+/// releases the lock.
 pub struct Session {
     port: u16,
     link: Link,
     sup: Supervisor,
     /// The roster and the session verbs, on a thread of their own.
     sessions: Sessions,
+    /// The sessions open now, to resume after a server restart.
+    recovery: Recovery,
+    /// The supervisor's start count the last recovery answered
+    /// (`Supervisor::starts`): a start past it wants one.
+    recovered_for: u64,
     /// The roster generation last handed to the service, and when.
     roster_sent: Option<(u64, Instant)>,
     next_poll: Instant,
@@ -230,27 +241,51 @@ fn claim_lock(claude_log: &std::path::Path) -> anyhow::Result<std::fs::File> {
     }
 }
 
+/// Where a session keeps what it needs: the server's log (and its
+/// resumed sessions' beside it), its job's name, and its own state
+/// directory (the recovery set, the gcroots, the jobs' records).
+pub struct Places {
+    pub claude_log: PathBuf,
+    pub job: String,
+    pub state_dir: PathBuf,
+}
+
+impl Places {
+    /// A tray's or the Linux session unit's: the user's own directories.
+    pub fn of_user(cfg: &config::Config) -> Self {
+        Self {
+            claude_log: config::user_log_dir().join("claude-rc.log"),
+            job: cfg.claude_unit(),
+            state_dir: config::user_state_dir(),
+        }
+    }
+}
+
 impl Session {
     /// The Claude server, in this session with this user's login, reporting
     /// to the service on `port`. Wanted (as `Policy::default()` has it)
     /// until the service relays the box's policy, in the most recent trusted
-    /// project until it names one; its output goes to `claude_log`; run as
-    /// `launch` says. Nothing starts before the first `tick` (a unit left
-    /// running by a previous session is taken over, not restarted). Err
-    /// when another session of this user holds the lock.
-    pub fn new(port: u16, claude_log: PathBuf, launch: Launch) -> anyhow::Result<Self> {
-        let lock = claim_lock(&claude_log)?;
+    /// project until it names one. Nothing starts before the first `tick` (a
+    /// job left running by a previous session is taken over, not
+    /// restarted). Err when another session of this user holds the lock.
+    pub fn new(port: u16, places: Places) -> anyhow::Result<Self> {
+        let lock = claim_lock(&places.claude_log)?;
+        let sessions = start_sessions(&places);
+        let sup = Supervisor::new(
+            None,
+            places.claude_log,
+            Policy::default().claude_remote_control,
+            places.job,
+            places.state_dir.join("gcroots"),
+        );
         Ok(Self {
             port,
             link: Link::Http(port),
-            sessions: start_sessions(&launch, &claude_log),
+            sessions,
+            recovery: Recovery::load(places.state_dir.join("claude-recovery.json")),
+            recovered_for: 0,
             roster_sent: None,
-            sup: Supervisor::new(
-                None,
-                claude_log,
-                Policy::default().claude_remote_control,
-                launch,
-            ),
+            sup,
             next_poll: Instant::now(),
             _lock: lock,
         })
@@ -260,20 +295,16 @@ impl Session {
     /// `shared` and starts from the policy already there (config.toml's
     /// `[controller]`), so nothing runs that the config did not ask for —
     /// not even for the moment before the first report.
-    pub fn in_process(
-        shared: Arc<Shared>,
-        port: u16,
-        claude_log: PathBuf,
-        launch: Launch,
-    ) -> anyhow::Result<Self> {
-        let lock = claim_lock(&claude_log)?;
+    pub fn in_process(shared: Arc<Shared>, port: u16, places: Places) -> anyhow::Result<Self> {
+        let lock = claim_lock(&places.claude_log)?;
         let policy = shared.policy();
-        let sessions = start_sessions(&launch, &claude_log);
+        let sessions = start_sessions(&places);
         let mut sup = Supervisor::new(
             policy.claude_workdir,
-            claude_log,
+            places.claude_log,
             policy.claude_remote_control,
-            launch,
+            places.job,
+            places.state_dir.join("gcroots"),
         );
         sup.set_off_reason("config.toml's [controller] claude_remote_control is off");
         Ok(Self {
@@ -281,6 +312,8 @@ impl Session {
             link: Link::InProcess(shared),
             sup,
             sessions,
+            recovery: Recovery::load(places.state_dir.join("claude-recovery.json")),
+            recovered_for: 0,
             roster_sent: None,
             next_poll: Instant::now(),
             _lock: lock,
@@ -323,7 +356,9 @@ impl Session {
             }
         }
         self.sup.tick();
-        let report = self.sup.report();
+        let mut report = self.sup.report();
+        self.recover(&report);
+        report.recovered = self.sessions.recovered();
         if let Some(answer) = self.link.report(&report) {
             self.sup.set_named_workdir(answer.workdir);
             self.sup.set_wanted(answer.wanted);
@@ -338,14 +373,45 @@ impl Session {
                 self.sup.restart();
             }
             // Each verb request goes to the sessions' thread, which refuses
-            // them all while Claude is off here.
+            // them all while Claude is off here. A session the operator
+            // stops is not one to bring back.
             for req in answer.sessions {
+                if req.action == SessionAction::Stop && is_uuid(&req.id) {
+                    self.recovery.forget(&req.id);
+                }
                 self.sessions.submit(req, self.sup.wanted());
             }
         }
         self.send_roster();
         self.next_poll = Instant::now() + POLL;
         Tick::Polled(Box::new(Poll { page, report }))
+    }
+
+    /// Keep the set of open sessions, and after a start of the server this
+    /// session performed — once the server has registered — resume the
+    /// ones it ended (claude/recovery.rs).
+    fn recover(&mut self, report: &Report) {
+        let server = self.sup.server_pid();
+        let managed: Vec<String> = self
+            .sessions
+            .latest()
+            .map(|(_, r)| r.managed.into_iter().map(|m| m.id).collect())
+            .unwrap_or_default();
+        let open = open_sessions(report, server, &managed, crate::os::parent_pid);
+        let due = self.sup.starts() != self.recovered_for;
+        self.recovery.freeze(due || self.sessions.recovering());
+        self.recovery.observe(server, &open, Instant::now());
+        if due && self.sup.registered() {
+            self.recovered_for = self.sup.starts();
+            let ids = self.recovery.due(&open);
+            if !ids.is_empty() && self.sup.wanted() {
+                tracing::info!(
+                    sessions = ids.len(),
+                    "Remote Control is back; resuming the sessions it ended"
+                );
+                self.sessions.recover(ids, true);
+            }
+        }
     }
 
     /// Hand the service the roster when the thread has a new one, and at
@@ -366,18 +432,69 @@ impl Session {
 /// How often an unchanged roster is sent again.
 const ROSTER_RESEND: Duration = Duration::from_secs(60);
 
-/// The roster and verbs' thread for this session: resumed sessions get
-/// units of their own only where the server is one (claude/sessions.rs),
-/// and their logs go beside the server's.
-fn start_sessions(launch: &Launch, claude_log: &std::path::Path) -> Sessions {
+/// How far up the process tree a session may be from its server: the CLI
+/// itself, or a `.cmd` shim's node under `cmd.exe` on Windows.
+const SERVER_DEPTH: usize = 4;
+
+/// The sessions open now (claude/recovery.rs): each live session file whose
+/// process descends from the server's `server` (the ones it spawned), and
+/// each session this agent resumed that runs (`managed`). `parent` is the
+/// OS's parent-of-a-pid.
+pub fn open_sessions(
+    report: &Report,
+    server: Option<u32>,
+    managed: &[String],
+    parent: impl Fn(u32) -> Option<u32>,
+) -> Vec<String> {
+    let under = |pid: u32| {
+        let Some(root) = server else {
+            return false;
+        };
+        let mut p = pid;
+        for _ in 0..SERVER_DEPTH {
+            match parent(p) {
+                Some(pp) if pp == root => return true,
+                Some(pp) if pp > 1 && pp != p => p = pp,
+                _ => return false,
+            }
+        }
+        false
+    };
+    let mut open: Vec<String> = report
+        .sessions
+        .iter()
+        .filter(|s| s.alive)
+        .filter_map(|s| {
+            s.transcript_id
+                .clone()
+                .filter(|t| is_uuid(t))
+                .map(|t| (s.pid, t))
+        })
+        .filter(|(pid, _)| under(*pid))
+        .map(|(_, t)| t)
+        .collect();
+    for m in managed {
+        if !open.contains(m) {
+            open.push(m.clone());
+        }
+    }
+    open
+}
+
+/// The roster and verbs' thread for this session: resumed sessions' jobs
+/// get the session prefix's names (config.rs), their logs go beside the
+/// server's, and their pins beside the session's state.
+fn start_sessions(places: &Places) -> Sessions {
     Sessions::start(SessionsContext {
-        launch: launch.clone(),
-        unit_prefix: matches!(launch, Launch::Unit(_)).then(config::claude_session_prefix),
-        log_dir: claude_log
+        server: places.job.clone(),
+        prefix: config::claude_session_prefix(),
+        log_dir: places
+            .claude_log
             .parent()
             .map(std::path::Path::to_path_buf)
             .unwrap_or_default(),
         label: crate::claude::sessions::label_of(&crate::facts::hostname()),
+        roots: places.state_dir.join("gcroots"),
     })
 }
 
@@ -475,7 +592,7 @@ fn newer_than_this(version: &str) -> bool {
 /// Ctrl-C, or until the service runs another version (an update swapped
 /// the binary) — then it leaves, and systemd starts the new one. Its log is
 /// `session.log` in `config::user_log_dir`, beside `claude-rc.log`; in a
-/// terminal it also goes to stderr. A unit-run server is left running when
+/// terminal it also goes to stderr. The server's job is left running when
 /// it leaves, and the next session re-attaches to it.
 pub fn run() -> anyhow::Result<()> {
     if crate::os::TRAY_OWNS_SESSION {
@@ -494,14 +611,19 @@ pub fn run() -> anyhow::Result<()> {
     }
     let dir = config::user_log_dir();
     let _log = config::init_logging_to(&cfg, &dir, "session.log", std::io::stderr().is_terminal())?;
-    let launch = Launch::of(&cfg);
-    tracing::info!(version = VERSION, port = cfg.port, launch = ?launch, "session starting");
+    let places = Places::of_user(&cfg);
+    tracing::info!(
+        version = VERSION,
+        port = cfg.port,
+        job = places.job,
+        "session starting"
+    );
     let stop = Arc::new(AtomicBool::new(false));
     {
         let stop = Arc::clone(&stop);
         crate::os::on_interrupt(move || stop.store(true, Ordering::Relaxed));
     }
-    let mut session = Session::new(cfg.port, dir.join("claude-rc.log"), launch)?;
+    let mut session = Session::new(cfg.port, places)?;
     let mut last: Option<(String, bool)> = None;
     while !stop.load(Ordering::Relaxed) {
         match session.tick() {
@@ -532,19 +654,23 @@ pub fn run() -> anyhow::Result<()> {
 
 /// The controller's session: a thread of the service (role.rs
 /// `session_in_service`), reporting into `shared` until `stop` is raised.
-/// Its Claude log is `claude-rc.log` beside the service's own (the
-/// controller's data directory is its user's, so there is no second log
-/// directory to keep). A unit-run server is left running when it leaves,
-/// and the next start re-attaches to it, as the session unit's does.
+/// Its Claude log is `claude-rc.log` beside the service's own, and its state
+/// (the recovery set, the gcroots) in the data directory (the controller's
+/// data directory is its user's, so there is no second one to keep). The
+/// server's job is left running when it leaves, and the next start
+/// re-attaches to it, as the session unit's does.
 pub fn run_in_service(
     cfg: &config::Config,
     shared: Arc<Shared>,
     stop: Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
-    let launch = Launch::of(cfg);
-    tracing::info!(launch = ?launch, "session starting inside the service");
-    let log = config::log_dir().join("claude-rc.log");
-    let mut session = Session::in_process(shared, cfg.port, log, launch)?;
+    let places = Places {
+        claude_log: config::log_dir().join("claude-rc.log"),
+        job: cfg.claude_unit(),
+        state_dir: config::data_dir(),
+    };
+    tracing::info!(job = places.job, "session starting inside the service");
+    let mut session = Session::in_process(shared, cfg.port, places)?;
     let mut last: Option<String> = None;
     while !stop.load(Ordering::Relaxed) {
         if let Tick::Polled(poll) = session.tick() {
@@ -623,5 +749,48 @@ mod tests {
         let l = p.controller.unwrap();
         assert_eq!(l.state.as_deref(), Some("approved"));
         assert!(l.connected && l.unconfirmed);
+    }
+
+    #[test]
+    fn the_open_sessions_are_the_servers_children_and_the_managed() {
+        use crate::claude::Session as File;
+        let a = "aaaaaaaa-0000-4000-8000-000000000001";
+        let b = "aaaaaaaa-0000-4000-8000-000000000002";
+        let c = "aaaaaaaa-0000-4000-8000-000000000003";
+        let m = "aaaaaaaa-0000-4000-8000-000000000004";
+        let file = |pid, id: &str, alive| File {
+            pid,
+            transcript_id: Some(id.to_string()),
+            alive,
+            ..Default::default()
+        };
+        let report = Report {
+            sessions: vec![
+                // The server's own child.
+                file(11, a, true),
+                // Under a shim: a grandchild.
+                file(12, b, true),
+                // Somebody's terminal, not under the server.
+                file(13, c, true),
+                // Dead.
+                file(14, "aaaaaaaa-0000-4000-8000-000000000005", false),
+            ],
+            ..Default::default()
+        };
+        // 10 is the server; 12's parent is 20, whose parent is 10; 13's is init.
+        let parent = |pid: u32| match pid {
+            11 => Some(10),
+            12 => Some(20),
+            20 => Some(10),
+            13 => Some(1),
+            _ => None,
+        };
+        let managed = vec![m.to_string(), a.to_string()];
+        assert_eq!(
+            open_sessions(&report, Some(10), &managed, parent),
+            [a, b, m]
+        );
+        // No server: only what runs as its own job.
+        assert_eq!(open_sessions(&report, None, &managed, parent), [m, a]);
     }
 }

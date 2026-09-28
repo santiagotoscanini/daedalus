@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The machine as hardware: what it is, who made it, what firmware it runs.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Machine {
@@ -32,6 +33,7 @@ pub struct Machine {
 }
 
 /// The operating system, beyond the name and version facts.rs already carries.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Os {
@@ -44,6 +46,7 @@ pub struct Os {
     pub installed_at: Option<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Cpu {
@@ -62,6 +65,7 @@ pub struct Cpu {
 
 /// One stick, as the firmware describes it (SMBIOS type 17; on Apple
 /// Silicon the memory is on the package and is reported as one module).
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct MemoryModule {
@@ -75,6 +79,7 @@ pub struct MemoryModule {
     pub part_number: Option<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Memory {
@@ -99,6 +104,7 @@ pub struct Memory {
 }
 
 /// A mounted volume: what the OS shows as a drive letter or a mount point.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Disk {
@@ -115,6 +121,7 @@ pub struct Disk {
 }
 
 /// A physical drive, as opposed to a volume: the object you would replace.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Drive {
@@ -143,6 +150,7 @@ pub struct Drive {
     pub volumes: Vec<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Gpu {
@@ -165,6 +173,7 @@ pub struct Gpu {
     pub power_w: Option<f64>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Temperature {
@@ -173,6 +182,7 @@ pub struct Temperature {
     pub celsius: f64,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Network {
@@ -185,6 +195,7 @@ pub struct Network {
     pub tx_bps: Option<f64>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Battery {
@@ -203,6 +214,7 @@ pub struct Battery {
 /// installs: the Uninstall registry keys, the Store and the game launchers
 /// on Windows; the Applications folders on a Mac. Read with the slow facts.
 /// Stripped from the open page: what a person has installed is theirs.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct App {
@@ -223,6 +235,7 @@ pub struct App {
 }
 
 /// One of the heaviest processes. Stripped from the open page.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Process {
@@ -243,6 +256,7 @@ pub struct Process {
 /// process list the slow read takes for itself. Chrome, Edge, Brave, Arc,
 /// Vivaldi, Opera and a bare Chromium are the kinds looked for; Firefox and
 /// Safari are not Chromium and are not here.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Browser {
@@ -269,6 +283,7 @@ pub struct Browser {
 /// other than 0 or 1077 (never started). macOS: a launchd job in the system
 /// domain that is not running and whose last exit status was non-zero,
 /// Apple's own excluded.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Service {
@@ -280,6 +295,7 @@ pub struct Service {
 }
 
 /// One update the OS has pending.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Update {
@@ -294,6 +310,7 @@ pub struct Update {
 }
 
 /// One update the OS installed.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Installed {
@@ -303,6 +320,7 @@ pub struct Installed {
 }
 
 /// What the OS's own updater says. Stripped from the open page.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Updates {
@@ -318,6 +336,7 @@ pub struct Updates {
 }
 
 /// The whole document.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Telemetry {

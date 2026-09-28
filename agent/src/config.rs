@@ -18,7 +18,6 @@
 //! telemetry = "full"          # full | minimal | off
 //! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
-//! claude_rc = "child"         # child | unit; absent = the OS's (`os::CLAUDE_RC`)
 //! controller_address = "…"    # the controller, host:port; absent = the first use's, or DNS
 //! controller_pin = "…"        # its key's fingerprint; absent = trust on first use
 //!
@@ -58,10 +57,8 @@
 //! `staged` and `external` only report it, as `auto_update = false` always
 //! has. When `updates` is absent, `auto_update` decides (true = `self`,
 //! false = report only); when both are present, `updates` wins.
-//! `claude_rc` is how the session runs `claude remote-control`: as its own
-//! child (Windows, macOS), or as a transient systemd user unit it starts and
-//! watches (Linux), which outlives the session (claude/unit.rs).
-//! `install` writes the first five keys, and the controller's two when it
+//! How Claude remote control runs is not a knob: always as a job of the OS
+//! that outlives the agent (claude/job.rs). `install` writes the first five keys, and the controller's two when it
 //! is given them.
 //!
 //! `[controller]` is the box's own policy. A node takes its policy from the
@@ -176,10 +173,6 @@ pub struct Config {
     /// environment's `DAEDALUS_AGENT_DATA_DIR` wins over it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_dir: Option<PathBuf>,
-    /// How the session runs Claude remote control; absent means the OS's
-    /// way (`Config::claude_rc`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub claude_rc: Option<ClaudeRc>,
     /// The controller's own policy and its local API; ignored on a node.
     #[serde(skip_serializing_if = "is_default")]
     pub controller: ControllerConfig,
@@ -195,7 +188,7 @@ pub struct ControllerConfig {
     /// The directory it runs in; absent = the most recent trusted project.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_workdir: Option<String>,
-    /// Its transient systemd user unit, without `.service`.
+    /// Its job's name: the transient systemd user unit, without `.service`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_unit: Option<String>,
     /// Where the local API socket is made.
@@ -218,6 +211,7 @@ pub struct ControllerConfig {
     pub advertise: Vec<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
@@ -228,17 +222,7 @@ pub enum Mode {
     Controller,
 }
 
-/// How `claude remote-control` is run by the session.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ClaudeRc {
-    /// A child of the session process, ended with it.
-    Child,
-    /// A transient systemd user unit the session starts, stops and
-    /// re-attaches to, which outlives the session.
-    Unit,
-}
-
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TelemetryLevel {
@@ -279,20 +263,12 @@ impl Default for Config {
             telemetry: TelemetryLevel::default(),
             updates: None,
             data_dir: None,
-            claude_rc: None,
             controller: ControllerConfig::default(),
         }
     }
 }
 
 impl Config {
-    /// How the session runs Claude remote control: the config's word, else
-    /// the OS's (`os::CLAUDE_RC`: a child on Windows and macOS, a unit on
-    /// Linux).
-    pub fn claude_rc(&self) -> ClaudeRc {
-        resolve_claude_rc(self.claude_rc, crate::os::CLAUDE_RC)
-    }
-
     /// Which parts of the agent run on this machine (role.rs).
     pub fn role(&self) -> crate::role::Role {
         crate::role::Role::of(self.mode)
@@ -482,23 +458,6 @@ fn resolve_api_socket(
     }
 }
 
-/// The pure half of `Config::claude_rc`. A unit needs systemd, so where the
-/// OS runs Claude as a child (Windows, macOS) `claude_rc = "unit"` is
-/// ignored with a warning rather than tried and retried; on Linux either
-/// strategy stands.
-fn resolve_claude_rc(configured: Option<ClaudeRc>, os_default: ClaudeRc) -> ClaudeRc {
-    match (configured, os_default) {
-        (Some(ClaudeRc::Unit), ClaudeRc::Child) => {
-            tracing::warn!(
-                "claude_rc = \"unit\" is ignored here: this OS runs Claude remote control as a child"
-            );
-            ClaudeRc::Child
-        }
-        (Some(c), _) => c,
-        (None, d) => d,
-    }
-}
-
 /// A path from the environment or the file, when it names one.
 fn non_empty(p: Option<PathBuf>) -> Option<PathBuf> {
     p.filter(|p| !p.as_os_str().is_empty())
@@ -592,8 +551,20 @@ pub fn user_log_dir() -> PathBuf {
     crate::os::user_log_dir().unwrap_or_else(log_dir)
 }
 
-/// The transient systemd user unit the session runs Claude remote control
-/// in, when `claude_rc = "unit"` (claude/unit.rs). A process started with
+/// The session's own state, the user's rather than the machine's: its
+/// Claude jobs' records (Windows) and plists (macOS), their gcroots, and the
+/// sessions to recover after a Remote Control restart —
+/// `%LOCALAPPDATA%\daedalus-agent`, `~/Library/Application Support/daedalus-agent`,
+/// `$XDG_STATE_HOME/daedalus-agent` (`os::user_state_dir`); the data
+/// directory under `DAEDALUS_AGENT_DATA_DIR`. The controller's session uses
+/// the data directory itself, which is its user's.
+pub fn user_state_dir() -> PathBuf {
+    crate::os::user_state_dir().unwrap_or_else(data_dir)
+}
+
+/// The name of the job the session runs Claude remote control as
+/// (claude/job.rs): the unit's on Linux, the launchd label's last part on
+/// macOS, the record's on Windows. A process started with
 /// `DAEDALUS_AGENT_DATA_DIR` gets a name of its own, derived from that
 /// directory, so a development `session` never touches the server an
 /// installed agent runs.
@@ -853,20 +824,11 @@ mod tests {
     }
 
     #[test]
-    fn claude_rc_parses_and_defaults_to_the_os() {
-        let cfg: Config = toml::from_str("claude_rc = \"unit\"").unwrap();
-        assert_eq!(cfg.claude_rc, Some(ClaudeRc::Unit));
+    fn the_mode_parses_and_a_retired_key_is_ignored() {
+        // `claude_rc` went in 0.17.0 (Claude is always a job of the OS); a
+        // config.toml that still says it reads as if it did not.
         let cfg: Config = toml::from_str("claude_rc = \"child\"").unwrap();
-        assert_eq!(cfg.claude_rc(), ClaudeRc::Child);
-        assert_eq!(Config::default().claude_rc(), crate::os::CLAUDE_RC);
-        // Linux (unit by default) takes either; a child-only OS ignores "unit".
-        use ClaudeRc::{Child, Unit};
-        assert_eq!(resolve_claude_rc(Some(Child), Unit), Child);
-        assert_eq!(resolve_claude_rc(Some(Unit), Unit), Unit);
-        assert_eq!(resolve_claude_rc(None, Unit), Unit);
-        assert_eq!(resolve_claude_rc(Some(Unit), Child), Child);
-        assert_eq!(resolve_claude_rc(None, Child), Child);
-        assert!(toml::from_str::<Config>("claude_rc = \"thread\"").is_err());
+        assert_eq!(cfg, Config::default());
         let cfg: Config = toml::from_str("mode = \"controller\"").unwrap();
         assert_eq!(cfg.mode, Mode::Controller);
     }

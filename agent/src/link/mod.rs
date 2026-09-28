@@ -107,6 +107,7 @@ pub const SRV_SERVICE: &str = "_daedalus-controller._tcp";
 
 /// The link as the machine's status page and tray show it (node.rs keeps
 /// it current). Absent on the controller.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct LinkStatus {
     /// The controller's host:port, once known.

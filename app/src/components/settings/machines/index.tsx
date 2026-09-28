@@ -106,8 +106,8 @@ function ClaudeCell({ m }: { m: Machine }) {
  */
 function TrustNote({ link }: { link: AgentLink | null }) {
   if (link === null) return null
-  if (link.conflict !== null || (link.error !== null && link.state === 'key-changed')) {
-    return <p className={ERROR_NOTE}>{link.conflict ?? link.error}</p>
+  if (link.error !== null && link.state === 'key-changed') {
+    return <p className={ERROR_NOTE}>{link.error}</p>
   }
   if (!link.unconfirmed) return null
   return (
