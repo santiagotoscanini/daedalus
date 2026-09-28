@@ -39,12 +39,12 @@ export const runEngineUpdate: (input: { actor: string }) => Promise<EngineUpdate
   defineFlow<{ actor: string }, Requested, 'refused'>(gate, {
     prepare: async (input) => {
       const site = await readCommittedSite()
-      const override = site.ok ? site.value.doc.developer.engineOverride : null
-      if (override !== null) {
+      if (site.ok && site.value.doc.developer.engineOverride) {
         return {
           ok: false,
           code: 'refused',
-          reason: `clear the engine override first — the running system is built from ${override}, not from the pinned engine`,
+          reason:
+            'clear the engine override first — the running system is built from the engine clone, not from the pinned engine',
         }
       }
       return { ok: true, value: {}, publish: () => requestEngineUpdate(input) }

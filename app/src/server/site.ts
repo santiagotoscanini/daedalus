@@ -69,13 +69,13 @@ export const saveSiteEditFn = adminFn
   })
 
 /**
- * The engine override as the COMMITTED site.json holds it — the value the
- * host agents read — or null. For the banner the shell draws on every page:
+ * Whether the engine override is on in the COMMITTED site.json — the value
+ * the host agents read. For the banner the shell draws on every page:
  * part of server/shell.ts's answer, so it is in the server's HTML like the theme. A
  * pending edit is not an override yet; the Developer tab shows that one.
  */
-export const fetchEngineOverride = readFn.handler(async (): Promise<string | null> => {
+export const fetchEngineOverride = readFn.handler(async (): Promise<boolean> => {
   const { readCommittedSite } = await import('../host/contract/domains/site-doc')
   const site = await readCommittedSite()
-  return site.ok ? site.value.doc.developer.engineOverride : null
+  return site.ok && site.value.doc.developer.engineOverride
 })

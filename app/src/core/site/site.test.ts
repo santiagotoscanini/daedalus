@@ -36,7 +36,7 @@ const doc: SiteDocument = {
   },
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
-  developer: { engineOverride: null },
+  developer: { engineOverride: false },
   commits: { author: 'box' },
   modules: { enabled: {}, web: {}, players: {} },
 }
@@ -66,21 +66,21 @@ describe('site.json round trip', () => {
   })
 
   it('carries the engine override, and leaves the block out while it is off', () => {
-    // Another field nix does not read — the host agents do. Off (null) and
+    // Another field nix does not read — the host agents do. Off (false) and
     // absent are the same document, so a file from before the block, and one
     // whose override was cleared, both render without it; set, it survives
     // the round trip and sits before the github block.
     expect(renderSiteFile(doc)).not.toContain('developer')
-    const on = renderSiteFile({ ...doc, developer: { engineOverride: '/srv/engine' } })
-    expect(on).toContain('"engineOverride": "/srv/engine"')
-    expect(decodeSiteDocument(JSON.parse(on)).developer).toEqual({ engineOverride: '/srv/engine' })
+    const on = renderSiteFile({ ...doc, developer: { engineOverride: true } })
+    expect(on).toContain('"engineOverride": true')
+    expect(decodeSiteDocument(JSON.parse(on)).developer).toEqual({ engineOverride: true })
     expect(reRender(on)).toBe(on)
     expect(decodeSiteDocument(JSON.parse(renderSiteFile(doc))).developer).toEqual({
-      engineOverride: null,
+      engineOverride: false,
     })
     const withApp = renderSiteFile({
       ...doc,
-      developer: { engineOverride: '/srv/engine' },
+      developer: { engineOverride: true },
       github: { app: APP },
     })
     expect(withApp.indexOf('"developer"')).toBeLessThan(withApp.indexOf('"github"'))
@@ -290,7 +290,7 @@ describe('changesBetween', () => {
 
   it('reports the engine override, which the host agents read at Apply time', () => {
     const edited = structuredClone(doc)
-    edited.developer.engineOverride = '/srv/engine'
+    edited.developer.engineOverride = true
     expect(changesBetween(doc, edited)).toEqual(['developer.engineOverride'])
   })
 

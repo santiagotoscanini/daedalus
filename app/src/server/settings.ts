@@ -1,4 +1,3 @@
-import { actorOrNull, requireActor } from '../core/auth'
 import type { TokenReplaceOutcome } from '../core/settings/cloudflare-token'
 import type {
   BoxSettings,
@@ -94,6 +93,7 @@ export const startGithubAppFn = adminFn
   .handler(async ({ data, context }): Promise<GithubAppStart> => {
     const { startAppCreation } = await import('../core/settings/github-app')
     // No fallback name: a missing identity is null, and every App mutation refuses it.
+    const { actorOrNull, requireActor } = await import('../core/auth')
     const actor = actorOrNull(requireActor())
     return startAppCreation(await context.ctx(), actor, data)
   })
@@ -112,12 +112,14 @@ export const pasteAppKeyFn = adminFn
   .validator(asValidator(githubAppKey))
   .handler(async ({ data, context }): Promise<GithubAppApply> => {
     const { pasteAppKey } = await import('../core/settings/github-app')
+    const { actorOrNull, requireActor } = await import('../core/auth')
     const actor = actorOrNull(requireActor())
     return pasteAppKey(await context.ctx(), actor, data)
   })
 
 export const retryGithubApplyFn = adminFn.handler(async ({ context }): Promise<GithubAppApply> => {
   const { retryPendingApply } = await import('../core/settings/github-app')
+  const { actorOrNull, requireActor } = await import('../core/auth')
   const actor = actorOrNull(requireActor())
   return retryPendingApply(await context.ctx(), actor)
 })
@@ -129,6 +131,7 @@ export const retryGithubApplyFn = adminFn.handler(async ({ context }): Promise<G
 export const discardGithubPendingApplyFn = adminFn.handler(
   async ({ context }): Promise<GithubAppDiscard> => {
     const { discardPendingApply } = await import('../core/settings/github-app')
+    const { actorOrNull, requireActor } = await import('../core/auth')
     const actor = actorOrNull(requireActor())
     return discardPendingApply(await context.ctx(), actor)
   },
@@ -141,6 +144,7 @@ export const discardGithubPendingApplyFn = adminFn.handler(
  * now; the minter finds the installation on its own.
  */
 export const githubInstallLandedFn = adminFn.handler(async (): Promise<Result<null>> => {
+  const { requireActor } = await import('../core/auth')
   const gate = requireActor()
   if (!gate.ok) return gate
   const { requestTokenRefresh } = await import('../core/github-app')

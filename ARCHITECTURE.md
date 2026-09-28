@@ -425,8 +425,8 @@ Updates panel arms its button only when the operator types the pin's name.
 agent is precisely the caller that gate exists for.
 
 **It is LAN-only, on purpose.** daedalus is `stage = "lab"`: no Cloudflare
-tunnel route, no public name, and `isolated = true` means traefik is the only
-thing that can dial the container. It is deliberately NOT registered in the
+tunnel route, no public name, and the token is checked before any work
+whoever dials the container. It is deliberately NOT registered in the
 box's `fleet.mcpServers` gateway registry — fronting a write-capable control
 plane with LiteLLM would hand it to Open WebUI, to every virtual key, and
 potentially to an off-box model key, which is a wider blast radius than the
@@ -539,7 +539,7 @@ happen in one transaction, so a redelivered webhook collides and is ignored.
 | Boundary | What crosses it | What holds |
 |---|---|---|
 | Internet → engine | GitHub webhooks only, over the tunnel, on one hostname and one path | HMAC over the raw body, verified before anything is believed; a body cap enforced while streaming; the delivery id inserted before any work |
-| Operator → engine | Every page and action | Forward-auth in front of the whole host, bar the self-authenticating paths in the rows below and the app's icons; the engine trusts a header it can only receive from the proxy (or a break-glass local login, dormant unless site.json turns it on); mutations are `adminFn`, which requires the `admins` group once enforcement is armed |
+| Operator → engine | Every page and action | Forward-auth in front of the whole host, bar the self-authenticating paths in the rows below and the app's icons; the engine trusts the identity headers only beside traefik's proxy proof (`X-Proxy-Proof`, a per-app secret it compares in constant time — the container shares bridges, so being dialled proves nothing), or a break-glass local login, dormant unless site.json turns it on; mutations are `adminFn`, which requires the `admins` group once enforcement is armed |
 | Agent → engine | The MCP tools at `/mcp`, on the LAN only | A scoped bearer token, matched against a stored SHA-256 digest in constant time before any work; fail-closed with none minted; write tools additionally pass `assertMachineActor` and are recorded under the token's label |
 | Registry → engine | zot's push events at `/api/deploy` | A shared `X-Deploy-Token`; the only thing it can do is start an existing app's deploy unit |
 | Machine → controller → engine | Each machine's one link to the controller — the agent on the box, TCP 7788 on the LAN — and the controller's unix socket in the app's container | TLS 1.3 with each side pinning the other's ed25519 key (the machine's pin from its install line, else trust on first use); an unknown key waits `pending` at the controller with nothing pushed to it until an admin approves it, which creates its `nodes` row and hands the controller the whole desired set. The socket serves only the uids the controller lists, and takes fixed verbs with a node id |

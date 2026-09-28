@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { AUTH_HEADERS } from '../core/auth'
+import { AUTH_HEADERS, forwardedHeaderOf } from '../core/auth'
 import { makeCtx } from '../core/ctx'
 import { profilePicture } from '../core/settings/profile'
 
@@ -9,13 +9,13 @@ import { profilePicture } from '../core/settings/profile'
 // this request's forward-auth headers (core/settings/profile.ts), so the page
 // never needs to know or send a user id, and a picture that was just replaced
 // is revalidated here instead of served from what the browser kept of Pocket
-// ID's origin. Behind the gate — it is not in the forward-auth bypass, so the
-// headers it reads are traefik's.
+// ID's origin. Behind the gate — it is not in the forward-auth bypass — and
+// the headers are read through the proxy proof like every other identity.
 export const Route = createFileRoute('/api/profile-picture')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const header = (name: string) => request.headers.get(name) || null
+        const header = (name: string) => forwardedHeaderOf(request, name) || null
         const picture = await profilePicture(await makeCtx(), {
           sub: header(AUTH_HEADERS.SUBJECT),
           email: header(AUTH_HEADERS.EMAIL),

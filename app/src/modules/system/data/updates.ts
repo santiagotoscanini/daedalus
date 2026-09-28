@@ -96,8 +96,8 @@ export type EngineFacts = {
   /** The engine's workspace clone; null when none is under the workspace root. */
   clone: Workspace | null
   verdict: EngineVerdict
-  /** site.json's `developer.engineOverride` — the update is refused while it is set. */
-  override: string | null
+  /** site.json's `developer.engineOverride` — the update is refused while it is on. */
+  override: boolean
   status: EngineUpdateStatus
 }
 
@@ -126,7 +126,7 @@ async function loadEngine(): Promise<EngineFacts> {
     pinned,
     clone,
     verdict: engineVerdict(pinned, clone),
-    override: site.ok ? site.value.doc.developer.engineOverride : null,
+    override: site.ok && site.value.doc.developer.engineOverride,
     status,
   }
 }

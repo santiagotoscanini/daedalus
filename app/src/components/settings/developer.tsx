@@ -2,13 +2,12 @@ import { FileCodeIcon, GitBranchIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import type { McpTokenRow } from '../../host/mcp/tokens'
-import { engineOverrideError } from '../../lib/site-fields'
 import type { AuthorizationView } from '../../server/settings'
 import { Chip } from '../viz'
 import { Authorization } from './authorization'
 import { McpTokens } from './mcp-tokens'
 import { ASIDE, Line, Mono, NOTE, Section, Value } from './shared'
-import { SiteText, SiteUnwritten } from './site-fields'
+import { SiteSwitch, SiteUnwritten } from './site-fields'
 
 // How this instance runs, and the credentials that let a machine drive it.
 //
@@ -78,37 +77,28 @@ export function Developer({
       <Section
         title="Engine override"
         icon={<GitBranchIcon />}
-        description="Build the box from an engine clone on disk instead of the pinned engine, to test nix work before a commit is pinned."
+        description="Build the box from its engine clone instead of the pinned engine, to test nix work before a commit is pinned."
         rows={[
           {
             k: 'Engine clone',
-            v: (
-              <SiteText
-                edit={edit}
-                field="developer.engineOverride"
-                label="Engine clone"
-                validate={engineOverrideError}
-                nullable
-                className="w-[22rem]"
-              />
-            ),
+            v: <SiteSwitch edit={edit} field="developer.engineOverride" label="Engine override" />,
           },
         ]}
       >
         <p className={NOTE}>
-          An absolute path on the box to a checkout of the engine — its <Mono>flake.nix</Mono> is
-          what the build reads. While it is set, every Apply builds with{' '}
-          <Mono>--override-input daedalus path:&lt;clone&gt;</Mono> and the lock file untouched,
-          then activates the result with <Mono>nixos-rebuild test</Mono> rather than{' '}
+          The clone is the engine checkout nix names for this box — its <Mono>flake.nix</Mono> is
+          what the build reads; this switch cannot point anywhere else. While it is on, every Apply
+          builds with <Mono>--override-input daedalus path:&lt;clone&gt;</Mono> and the lock file
+          untouched, then activates the result with <Mono>nixos-rebuild test</Mono> rather than{' '}
           <Mono>switch</Mono>: the running system follows the clone as it stands, uncommitted files
           included, and the next boot still comes up on the last switched generation. Image updates
           and the engine update refuse to run until it is cleared — a pin moved under an override
           would name a revision nothing is running.
         </p>
         <p className={NOTE}>
-          It is a site.json field like the others: setting it is a pending edit until Apply, and
-          that Apply is already the first one built from the clone. Clearing it and applying is what
-          switches the box back onto the pinned engine.
+          It is a site.json field like the others: turning it on is a pending edit until Apply, and
+          that Apply is already the first one built from the clone. Turning it off and applying is
+          what switches the box back onto the pinned engine.
         </p>
       </Section>
 

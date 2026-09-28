@@ -1,4 +1,3 @@
-import { requireActor } from '../core/auth'
 import type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
 import type { Ctx } from '../core/ctx'
 import type { BuilderData } from '../lib/apps/builder'
@@ -259,6 +258,7 @@ export const buildNowFn = adminFn
     // adminFn's check runs before this identity gate, not instead of it: its
     // refusal is a broken gate rather than an answer, so it throws where
     // requireActor returns.
+    const { requireActor } = await import('../core/auth')
     const gate = requireActor()
     if (!gate.ok) return gate
 
@@ -270,6 +270,7 @@ export const buildNowFn = adminFn
 export const cancelBuildFn = adminFn
   .validator(asValidator(buildRequest))
   .handler(async ({ data }): Promise<CancelBuildResult> => {
+    const { requireActor } = await import('../core/auth')
     const gate = requireActor()
     if (!gate.ok) return gate
 
@@ -287,6 +288,7 @@ export type RetryReportResult = Result<null>
 export const retryReportFn = adminFn
   .validator(asValidator(buildRequest))
   .handler(async ({ data, context }): Promise<RetryReportResult> => {
+    const { requireActor } = await import('../core/auth')
     const gate = requireActor()
     if (!gate.ok) return gate
     const actor = gate.value
@@ -322,6 +324,7 @@ export const setBuildSettingsFn = adminFn
       validateBuildSettings(input),
   )
   .handler(async ({ data }): Promise<BuildSettingsResult> => {
+    const { requireActor } = await import('../core/auth')
     const gate = requireActor()
     if (!gate.ok) return gate
     const actor = gate.value

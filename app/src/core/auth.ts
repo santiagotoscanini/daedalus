@@ -1,4 +1,6 @@
 import { getRequestHeader } from '@tanstack/react-start/server'
+import { env } from '../host/env'
+import { safeEqual } from '../host/github-app-crypto'
 import type { Result } from '../lib/result'
 import { ADMIN_GROUP } from './auth-names'
 
@@ -6,10 +8,20 @@ import { ADMIN_GROUP } from './auth-names'
 //
 // There is exactly one source of identity in this app: `X-Forwarded-Email`,
 // set by traefik's forward-auth middleware after Pocket ID (auth.headers in
-// nix/stacks/daedalus/daedalus.nix). Nothing else authenticates a person —
-// the container itself is not reachable except through that gate, and the
-// break-glass local login (core/local-login.ts) is consulted only by
+// nix/stacks/daedalus/daedalus.nix). Nothing else authenticates a person, and
+// the break-glass local login (core/local-login.ts) is consulted only by
 // core/authz.ts when the header is absent.
+//
+// A header is only as good as who could have sent it, and the container is
+// NOT reachable through traefik alone: it shares the monitoring and app-db
+// bridges, whose every member can dial it. So every forwarded header is read
+// through `forwarded`, which answers only for a request carrying traefik's
+// proof — `X-Proxy-Proof`, a per-app secret traefik sets on every request it
+// forwards here and the container holds as PROXY_PROOF (webApps.<n>.proxyProof
+// in platform/publishing.nix). No proof, a wrong one, or no PROXY_PROOF in the
+// environment: the identity headers read as absent, whatever they say. Fail
+// closed — a box whose proof never arrived has no signed-in operator, which is
+// the refusal to fix, not a gate to open.
 //
 // One header, but two completely different questions asked of it:
 //
@@ -29,8 +41,10 @@ import { ADMIN_GROUP } from './auth-names'
 // one, for the `api.*` route handlers and the GitHub callback, which are handed
 // a Request rather than running inside one.
 //
-// This file deliberately reads no file, opens no connection and knows nothing
-// about roles: forward-auth already decided, and the box has one operator.
+// This file reads no file, opens no connection and knows nothing about roles:
+// forward-auth already decided, and the box has one operator. Its one outside
+// read is PROXY_PROOF, which is why the server functions reach it with
+// `await import` (host/boundary.test.ts).
 
 /**
  * What the forward-auth proxy sets, named here so the strings exist once.
@@ -50,6 +64,54 @@ export const AUTH_HEADERS = {
 
 const HEADER: string = AUTH_HEADERS.EMAIL
 
+/** The header traefik sets on every request it forwards here, and nothing else can. */
+export const PROXY_PROOF_HEADER = 'x-proxy-proof'
+
+type HeaderGet = (name: string) => string | null | undefined
+
+let lastForgeryWarning = 0
+
+/**
+ * Whether this request came through traefik: its `X-Proxy-Proof` equals the
+ * PROXY_PROOF this container was given, compared in constant time. False when
+ * either is missing — there is no configuration in which an unproven request
+ * carries an identity.
+ */
+export function provenByProxy(get: HeaderGet): boolean {
+  const expected = env.get('PROXY_PROOF')
+  if (expected === undefined || expected === '') return false
+  return safeEqual(get(PROXY_PROOF_HEADER) ?? '', expected)
+}
+
+/**
+ * A forward-auth header, as absent unless traefik is proven to have sent it.
+ * An unproven request that names someone is somebody dialling the container
+ * around the gate — or a proof that never reached this process — so it is
+ * said once a minute, without the value.
+ */
+function forwarded(get: HeaderGet, name: string): string | null | undefined {
+  if (provenByProxy(get)) return get(name)
+  const claimed = get(name)
+  if (claimed !== null && claimed !== undefined && claimed.trim() !== '') {
+    const now = Date.now()
+    if (now - lastForgeryWarning > 60_000) {
+      lastForgeryWarning = now
+      console.warn(
+        `[auth] ignored ${name} on a request without traefik's proxy proof — nothing but traefik may name the operator`,
+      )
+    }
+  }
+  return undefined
+}
+
+/** A forward-auth header of the request this server function is running inside, or absent. */
+export const forwardedHeader = (name: string): string | null | undefined =>
+  forwarded(getRequestHeader, name)
+
+/** A forward-auth header of a request a caller is holding, or absent. */
+export const forwardedHeaderOf = (request: Request, name: string): string | null | undefined =>
+  forwarded((n) => request.headers.get(n), name)
+
 // Defined in a module with no server import, so a component can name the group.
 export { ADMIN_GROUP }
 
@@ -62,9 +124,9 @@ export const NOT_ADMIN_REASON = `Only members of the ${ADMIN_GROUP} group can ch
  * failure degrades to, and "the proxy sent nothing" and "the proxy sent a
  * list that does not name admins" call for different fixes.
  *
- *   absent      — no header at all: the header is not configured in nix, or
- *                 the request came in under the gate (shotter dials the
- *                 container directly).
+ *   absent      — no header at all: the header is not configured in nix, the
+ *                 request came in under the gate (shotter dials the
+ *                 container directly), or it carried no proxy proof.
  *   blank       — present and empty: the strip middleware ran and the plugin
  *                 never re-set it, which is what a bypassed path looks like.
  *   unparseable — present, not a JSON array (a non-string entry is dropped,
@@ -104,7 +166,7 @@ export function describeGroups(header: string | null | undefined): GroupsRead {
 
 /** The header's arrival state and its groups, over the request this server function is in. */
 export function requireGroupsHeader(): GroupsRead {
-  return describeGroups(getRequestHeader(AUTH_HEADERS.GROUPS))
+  return describeGroups(forwardedHeader(AUTH_HEADERS.GROUPS))
 }
 
 /** Whether a group list carries the one that may change this box. */
@@ -133,12 +195,12 @@ const gate = (header: string | null | undefined): Actor => {
  * identity must not match each other as the same actor.
  */
 export function actorOf(request: Request): Actor {
-  return gate(request.headers.get(HEADER))
+  return gate(forwardedHeaderOf(request, HEADER))
 }
 
 /** The gate, over the request this server function is running inside. */
 export function requireActor(): Actor {
-  return gate(getRequestHeader(HEADER))
+  return gate(forwardedHeader(HEADER))
 }
 
 /**
@@ -163,7 +225,7 @@ const label = (header: string | null | undefined, fallback: string): string => h
  * is a change to what records say about who wrote them, not to who may act.
  */
 export function actorLabelOf(request: Request, fallback: string = UNKNOWN_ACTOR): string {
-  return label(request.headers.get(HEADER), fallback)
+  return label(forwardedHeaderOf(request, HEADER), fallback)
 }
 
 /**
@@ -174,5 +236,5 @@ export function actorLabelOf(request: Request, fallback: string = UNKNOWN_ACTOR)
  * caller that should refuse wants `requireActor`.
  */
 export function actorLabel(fallback: string = UNKNOWN_ACTOR): string {
-  return label(getRequestHeader(HEADER), fallback)
+  return label(forwardedHeader(HEADER), fallback)
 }

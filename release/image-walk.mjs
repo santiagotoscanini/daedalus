@@ -4,7 +4,8 @@
 // Forward-auth headers are the only identity the app has (core/auth.ts), so
 // this is the one way to reach a write path without a proxy in front: the
 // headers are set on every request the browser makes, exactly as traefik
-// would set them after Pocket ID. The write chosen is Settings › Developer ›
+// would set them after Pocket ID — the proxy proof included, which the script
+// hands the container as PROXY_PROOF and this driver as its second argument. The write chosen is Settings › Developer ›
 // Authorization's switch — a database row behind `assertAdmin`, armed and
 // confirmed like the operator would, then turned off again — because it is
 // the one mutation whose whole effect is inside the throwaway database. The
@@ -37,6 +38,7 @@ export default async ({ page, snap, log, args }) => {
   // What traefik's forward-auth sets; the groups header is a JSON array
   // (core/auth.ts describeGroups).
   await page.setExtraHTTPHeaders({
+    'x-proxy-proof': args[1] ?? '',
     'x-forwarded-email': 'walker@example.test',
     'x-forwarded-user': 'walker',
     'x-forwarded-groups': JSON.stringify(['admins']),

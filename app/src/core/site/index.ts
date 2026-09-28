@@ -9,7 +9,7 @@ import type { SnapshotResult } from '../../host/contract/snapshot'
 import { env } from '../../host/env'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { ENGINE_REPO } from '../../lib/engine'
-import { controlPlaneLabelError, engineOverrideError } from '../../lib/site-fields'
+import { controlPlaneLabelError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
 import {
@@ -280,13 +280,13 @@ async function refuseUnknown(
     }
   }
 
-  // The engine override: an absolute path or nothing. Whether a clone is
-  // there is the host's to find out — the container cannot see the box's
-  // filesystem — and apply.sh refuses a path with no flake.nix in it before
-  // it builds anything.
+  // The engine override: on or off, never a path — which tree is the engine
+  // clone is nix's to say, and apply.sh refuses one with no flake.nix in it
+  // before it builds anything.
   if ('developer.engineOverride' in patch && !unchanged('developer.engineOverride')) {
-    const problem = engineOverrideError(patch['developer.engineOverride'])
-    if (problem !== null) throw new Error(problem)
+    if (typeof patch['developer.engineOverride'] !== 'boolean') {
+      throw new Error('the engine override is on or off.')
+    }
   }
 
   if ('commits.author' in patch && !unchanged('commits.author')) {

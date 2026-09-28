@@ -31,7 +31,7 @@ type ShellProps = {
   theme: ThemeChoice
   account: Promise<Account | null>
   modules: ModuleManifest[]
-  engineOverride: string | null
+  engineOverride: boolean
 }
 
 export function Shell({ children, theme, account, modules, engineOverride }: ShellProps) {
@@ -60,7 +60,7 @@ export function Shell({ children, theme, account, modules, engineOverride }: She
         drawer={drawer}
       />
       <main className="col-start-2 min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
-        <EngineOverrideBanner path={engineOverride} />
+        <EngineOverrideBanner on={engineOverride} />
         {children ?? <Outlet />}
         <PendingApplyBar />
       </main>

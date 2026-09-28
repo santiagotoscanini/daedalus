@@ -58,6 +58,9 @@ APP="$RUN-app"
 DEV="$RUN-dev"
 DATABASE_URL="postgres://daedalus:walk@$PG:5432/daedalus"
 WORK="$(mktemp -d)"
+# What traefik would prove itself with (webApps.<n>.proxyProof): the app names
+# nobody on a request without it, so the walk plays traefik's part.
+PROXY_PROOF="image-walk-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 
 say() { printf '\n== %s\n' "$*"; }
 fail() { printf 'image-walk: %s\n' "$*" >&2; exit 1; }
@@ -114,6 +117,7 @@ podman run -d --init --name "$APP" --network "$NET" -p "127.0.0.1:$PORT:3000" \
   -e BASE_DOMAIN=example.test -e GITHUB_OWNER=example-owner \
   -e REGISTRY_HOST=registry.example.test -e GRAFANA_URL=https://grafana.example.test \
   -e NIX_REGISTRY_PATH=/host/registry.json \
+  -e PROXY_PROOF="$PROXY_PROOF" \
   -v "$WORK/host:/host:ro" \
   "$IMAGE" >/dev/null
 wait_for "http://127.0.0.1:$PORT/api/healthz" "$APP" 30
@@ -122,7 +126,7 @@ podman logs "$APP" 2>&1 | grep '^\[daedalus\] serving'
 say "the browser walk"
 # shot prints the run directory last; the driver's exit code is its own verdict.
 walk=0
-shot run release/image-walk.mjs image-walk -- "http://127.0.0.1:$PORT" | tee "$WORK/shot.log" || walk=$?
+shot run release/image-walk.mjs image-walk -- "http://127.0.0.1:$PORT" "$PROXY_PROOF" | tee "$WORK/shot.log" || walk=$?
 run_dir="$(sed -n 's/^→ //p' "$WORK/shot.log" | tail -1)"
 [ -d "$run_dir" ] || fail "shot left no run directory"
 [ "$walk" = 0 ] || fail "the driver failed — see $run_dir"

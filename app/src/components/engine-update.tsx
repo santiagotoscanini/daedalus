@@ -73,7 +73,7 @@ export function EngineCard({ e }: { e: EngineFacts }) {
 
   const v = VERDICT[e.verdict]
   const diverged = (e.clone?.ahead ?? 0) > 0
-  const blocked = e.override !== null || diverged
+  const blocked = e.override || diverged
   const nothingToDo = e.verdict === 'current'
 
   return (
@@ -120,10 +120,10 @@ export function EngineCard({ e }: { e: EngineFacts }) {
           <Run status={status} />
         ) : (
           <div className="flex flex-col items-start gap-[0.55rem]">
-            {e.override !== null && (
+            {e.override && (
               <p className={NOTE}>
-                Refused while the engine override is set: the running system is built from{' '}
-                <span className={MONO}>{e.override}</span>, not from the pinned engine. Clear it in{' '}
+                Refused while the engine override is on: the running system is built from the engine
+                clone, not from the pinned engine. Turn it off in{' '}
                 <Link to="/settings" search={{ tab: 'developer' }}>
                   Settings › Developer
                 </Link>{' '}

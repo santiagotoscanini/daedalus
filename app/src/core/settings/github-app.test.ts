@@ -117,7 +117,7 @@ const DOC: SiteDocument = {
   },
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
-  developer: { engineOverride: null },
+  developer: { engineOverride: false },
   commits: { author: 'box' },
   modules: { enabled: {}, web: {}, players: {} },
 }
@@ -224,14 +224,18 @@ async function begin(ctx: Ctx, replace = false): Promise<string> {
 
 const leaks = (text: string) => SECRETS.filter((s) => text.includes(s))
 
+// As traefik forwards it: the identity header, and the proof that traefik sent
+// it (core/auth.ts reads no identity without one).
+const PROOF = 'proof-for-the-callback-tests'
 const request = (query: string, email: string | null = ACTOR) =>
   new Request(`http://app-daedalus:3000/settings/github/callback?${query}`, {
-    headers: email === null ? {} : { 'x-forwarded-email': email },
+    headers: email === null ? {} : { 'x-forwarded-email': email, 'x-proxy-proof': PROOF },
   })
 
 const location = (r: Response) => r.headers.get('location') ?? ''
 
 beforeEach(() => {
+  vi.stubEnv('PROXY_PROOF', PROOF)
   h.blocker = null
   h.apply = { ok: true, id: 'apply-1', changed: [] }
   h.applyCalls = []
@@ -253,6 +257,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
   delete (globalThis as { daedalusGithubAppFinishHold?: unknown }).daedalusGithubAppFinishHold
 })

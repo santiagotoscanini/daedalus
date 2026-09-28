@@ -76,17 +76,18 @@ export type SiteDocument = {
    */
   auth?: { localLogin: boolean }
   /**
-   * How this box is developed on, as opposed to run. `engineOverride` is an
-   * absolute path to an engine clone on the box, or null: while set, every
-   * Apply builds against THAT tree (`--override-input daedalus path:<clone>`,
-   * lock untouched) and activates it with `nixos-rebuild test` — never
-   * `switch` — and the image and engine updaters refuse to run, because a
-   * pin moved under an override would name a rev nothing is running. Nix does
-   * not read it; the host agents do (host/lib.sh `site_engine_override`). Absent
-   * and `{ engineOverride: null }` are the same document, and the renderer
-   * drops the block while it holds that.
+   * How this box is developed on, as opposed to run. `engineOverride` on
+   * builds every Apply from the engine clone on this box
+   * (`--override-input daedalus path:<clone>`, lock untouched) and activates
+   * it with `nixos-rebuild test` — never `switch` — and the image and engine
+   * updaters refuse to run, because a pin moved under an override would name
+   * a rev nothing is running. A switch, not a path: the clone is the one nix
+   * names (apply.sh ENGINE_CLONE), because whatever this document named, root
+   * would evaluate. Nix does not read it; the host agents do (host/lib.sh
+   * `site_engine_override`). Absent and `{ engineOverride: false }` are the
+   * same document, and the renderer drops the block while it holds that.
    */
-  developer: { engineOverride: string | null }
+  developer: { engineOverride: boolean }
   /**
    * Which configured git identity the box's own commits are made as: every
    * Apply, secret and update. `box` is `daedalus <mail sender>`;
@@ -178,7 +179,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     // Never read off the running box: the override is a statement about how
     // the NEXT Apply should build, and a system built from an override says
     // nothing about whether the next one should be.
-    developer: { engineOverride: null },
+    developer: { engineOverride: false },
     commits: { author: 'box' },
     // The running box's switches are its own files' word; the document
     // carries only what the operator moved, which a box read back is none.
@@ -242,9 +243,7 @@ export function renderSiteFile(doc: SiteDocument): string {
     // Same rule as the identity labels: the block exists in the file only
     // while it says something, so a document from before it re-renders to
     // its own bytes and clearing the override removes the block again.
-    ...(developer.engineOverride === null
-      ? {}
-      : { developer: { engineOverride: developer.engineOverride } }),
+    ...(developer.engineOverride ? { developer: { engineOverride: true } } : {}),
     ...(commits.author === 'box' ? {} : { commits: { author: commits.author } }),
     // Same rule again, and the ids sorted, so two edits that end in the same
     // set render the same bytes.

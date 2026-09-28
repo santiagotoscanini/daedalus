@@ -1,5 +1,3 @@
-import { getRequestHeader } from '@tanstack/react-start/server'
-import { AUTH_HEADERS } from '../core/auth'
 import type { Account, OperatorAccount, ProfilePatch, ProfileRead } from '../core/settings/types'
 import { asValidator, is, literal, obj, withMessage } from '../lib/contract/decode'
 import { PICTURE_TYPES } from '../lib/profile-fields'
@@ -26,17 +24,18 @@ const PATCH_KEYS = [
  * null. Not `context.actor()` — that is one display label with a
  * placeholder; the profile store keys on the two claims themselves.
  */
-function who() {
+async function who() {
+  const { AUTH_HEADERS, forwardedHeader } = await import('../core/auth')
   const header = (name: string) => {
-    const v = getRequestHeader(name)
-    return v === undefined || v === '' ? null : v
+    const v = forwardedHeader(name)
+    return v === undefined || v === null || v === '' ? null : v
   }
   return { sub: header(AUTH_HEADERS.SUBJECT), email: header(AUTH_HEADERS.EMAIL) }
 }
 
 export const fetchProfile = readFn.handler(async ({ context }): Promise<ProfileRead> => {
   const { readProfile } = await import('../core/settings/profile')
-  return readProfile(await context.ctx(), who())
+  return readProfile(await context.ctx(), await who())
 })
 
 /**
@@ -46,7 +45,7 @@ export const fetchProfile = readFn.handler(async ({ context }): Promise<ProfileR
 export const fetchAccount = readFn.handler(async ({ context }): Promise<Account | null> => {
   try {
     const { readAccount } = await import('../core/settings/profile')
-    return await readAccount(await context.ctx(), who())
+    return await readAccount(await context.ctx(), await who())
   } catch {
     return null
   }
@@ -68,7 +67,7 @@ export const saveProfileFn = adminFn
   })
   .handler(async ({ data, context }): Promise<ProfileRead> => {
     const { updateProfile } = await import('../core/settings/profile')
-    return updateProfile(await context.ctx(), who(), data)
+    return updateProfile(await context.ctx(), await who(), data)
   })
 
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
@@ -88,13 +87,13 @@ export const uploadProfilePictureFn = adminFn
   .validator(asValidator(pictureUpload))
   .handler(async ({ data, context }) => {
     const { uploadPicture } = await import('../core/settings/profile')
-    await uploadPicture(await context.ctx(), who(), data)
+    await uploadPicture(await context.ctx(), await who(), data)
     return { ok: true as const }
   })
 
 export const resetProfilePictureFn = adminFn.handler(async ({ context }) => {
   const { resetPicture } = await import('../core/settings/profile')
-  await resetPicture(await context.ctx(), who())
+  await resetPicture(await context.ctx(), await who())
   return { ok: true as const }
 })
 

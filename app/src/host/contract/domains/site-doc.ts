@@ -55,9 +55,10 @@ const shape = obj({
   // The engine override (core/site/file.ts says what it does). Filled in
   // rather than left absent, unlike `auth`: it is an EDITABLE field, and the
   // editor walks the dotted path `developer.engineOverride` into the document.
-  // The renderer drops the block again while the value is null.
-  developer: optional(obj({ engineOverride: optional(nullable(str), null) }), {
-    engineOverride: null,
+  // The renderer drops the block again while the switch is off. A boolean,
+  // never a path: which tree is the engine clone is nix's fact.
+  developer: optional(obj({ engineOverride: optional(bool, false) }), {
+    engineOverride: false,
   }),
   // Which configured git identity the box commits as (core/site/file.ts).
   // Filled in like `developer`; the renderer drops the block at the default.

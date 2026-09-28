@@ -52,7 +52,7 @@ const hostStatus = (status: Record<string, unknown>) =>
   )
 
 /** The smallest site.json the reader accepts, with the developer block as given. */
-const committedSite = (developer?: { engineOverride: string | null }) =>
+const committedSite = (developer?: { engineOverride: boolean }) =>
   writeFile(
     join(site, 'site.json'),
     JSON.stringify({
@@ -110,20 +110,20 @@ describe('an update with nothing in the way', () => {
 })
 
 describe('an engine override', () => {
-  it('is refused before anything is written, naming the clone', async () => {
-    await committedSite({ engineOverride: '/srv/engine' })
+  it('is refused before anything is written', async () => {
+    await committedSite({ engineOverride: true })
     const { runEngineUpdate } = await flow()
     expect(await runEngineUpdate({ actor: 'op' })).toEqual({
       ok: false,
       code: 'refused',
       reason:
-        'clear the engine override first — the running system is built from /srv/engine, not from the pinned engine',
+        'clear the engine override first — the running system is built from the engine clone, not from the pinned engine',
     })
     expect(await readdir(dir)).toEqual([])
   })
 
-  it('cleared is no override', async () => {
-    await committedSite({ engineOverride: null })
+  it('off is no override', async () => {
+    await committedSite({ engineOverride: false })
     const { runEngineUpdate } = await flow()
     expect((await runEngineUpdate({ actor: 'op' })).ok).toBe(true)
   })

@@ -294,6 +294,13 @@ export const SCHEMA = {
     about: 'The router’s admin UI, as a link for a person.',
     source: DAEDALUS,
   },
+  PROXY_PROOF: {
+    kind: 'string',
+    secret: true,
+    about:
+      'What traefik sends as X-Proxy-Proof on every request it forwards here. Without it no forwarded identity is honoured (core/auth.ts).',
+    source: 'modules/traefik, webApps.daedalus.proxyProof (/run/proxy-proof/daedalus/env)',
+  },
   DEPLOY_HOOK_TOKEN: {
     kind: 'string',
     secret: true,

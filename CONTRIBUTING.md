@@ -92,8 +92,9 @@ together without one.
 The deployed app has no auth of its own beyond a break-glass password
 login that stays off unless site.json turns it on (`core/local-login.ts`).
 Traefik's forward-auth sits in front of it and passes `X-Forwarded-User`
-and `X-Forwarded-Email`; the app trusts them because the bridge it sits on
-has traefik as its only other member. Locally nothing sets those headers
+and `X-Forwarded-Email`; the app trusts them only on a request that also
+carries `X-Proxy-Proof` equal to its `PROXY_PROOF` — a per-app secret only
+traefik holds (`webApps.<n>.proxyProof`, `core/auth.ts`). Locally nothing sets those headers
 and nothing blocks you — every route answers. The one visible difference is the account button at the foot
 of the rail, which reads `Account` with no name: `fetchAccount` catches the
 lookup failure and returns null, because a shell that cannot say who you
@@ -172,8 +173,8 @@ container env per request, and the browser gets the same value in the root
 loader's data (`useSite()`). Unset, they read `localhost` /
 `unknown-owner` — at run time, on that box, not baked into the image. One
 thing is still not right for an image run somewhere without the box's proxy:
-forward-auth headers are the only identity, so without a proxy in front
-every write refuses. Server functions also require a same-origin request: a `curl`
+forward-auth headers are the only identity, and they count only beside the
+proxy proof, so without a proxy in front every write refuses. Server functions also require a same-origin request: a `curl`
 needs `-H 'Sec-Fetch-Site: same-origin'` or it gets a bare 403.
 
 ## The image
