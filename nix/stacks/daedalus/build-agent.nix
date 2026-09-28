@@ -13,8 +13,8 @@
 #                                              `build/`, which editors hide)
 #     ExecStopPost   host/build-reaper.sh      a run that died unannounced
 #                                              reads `failed: interrupted`
-#   daedalus-build-cancel.{path,service}   build-cancel-request.json →
-#                                          host/build-cancel.sh
+#   daedalus-build-cancel@<app>.service    the root helper's `build-cancel` →
+#                                          host/build-cancel.sh (no path unit)
 #   daedalus-build-gc.{timer,service}      nightly sweep → host/build-gc.sh
 #
 # ── how each script is made ───────────────────────────────────────────────
@@ -33,8 +33,8 @@
 #
 # What it reads from elsewhere, and why each is a derivation rather than a copy:
 #   BUILDABLE, DEPLOYABLE  daedalus-lib.nix's `buildableApps` / `deployableApps`,
-#               from the committed site/apps.json — the same lists the deploy
-#               trigger gets, because a name in them becomes part of a unit
+#               from the committed site/apps.json — the same lists the root
+#               helper's `deploy` and `build-cancel` take, because a name in them becomes part of a unit
 #               root starts.
 #   OWNER_ID    fleet.github.expectedOwnerId — the box's constant, never
 #               site.json's copy (platform/site.nix asserts they agree).
@@ -239,8 +239,8 @@ let
     ];
   };
 
-  # daedalus-build-cancel's ExecStart: stops the build in flight, and only
-  # the one the request names.
+  # daedalus-build-cancel@'s ExecStart: stops the build in flight, and only
+  # when it is the named app's.
   cancelScript = mkAgent {
     name = "daedalus-build-cancel";
     runtimeInputs = [
@@ -250,8 +250,8 @@ let
       config.systemd.package # systemctl
     ];
     vars = operatorVars // {
-      REQ = "${applyDir}/build-cancel-request.json";
       STATUS = "${applyDir}/build-status.json";
+      BUILDABLE = lib.concatStringsSep " " buildableApps;
     };
     files = [
       ./host/lib.sh
@@ -379,28 +379,30 @@ in
 
     # ── cancel ────────────────────────────────────────────────────────────
 
-    systemd.paths.daedalus-build-cancel = {
-      description = "Watch for a daedalus build cancel request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/build-cancel-request.json";
-    };
-
-    systemd.services.daedalus-build-cancel = {
-      description = "Stop the build daedalus asked to cancel";
+    # The root helper's `build-cancel` (controller.nix, `root`): one instance
+    # per app, the app its instance name, so the value is a name from
+    # buildableApps and the script refuses a build in flight that is not
+    # that app's. No path unit, no request file.
+    systemd.services."daedalus-build-cancel@" = {
+      description = "Stop %i's build, on daedalus's behalf";
       # Deliberately NOT monitoredJobs: its refusals are the normal case
-      # (a late request, a build that already finished) and they exit 0.
-      #
-      # No start limit, for the reason argued over bridgeAgent in
-      # daedalus-lib.nix: a path unit makes each request a start, and a refused
-      # start is a dropped verb rather than a delayed one. It matters more
-      # here than anywhere — the moment an operator presses Cancel twice is
-      # exactly the moment they most want it to work.
+      # (a late cancel, a build that already finished) and they exit 0.
+      # No start limit: the moment an operator presses Cancel twice is exactly
+      # the moment they most want it to work.
       startLimitIntervalSec = 0;
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${cancelScript}/bin/daedalus-build-cancel";
+        ExecStart = "${cancelScript}/bin/daedalus-build-cancel %i";
         NoNewPrivileges = true;
       };
+    };
+
+    fleet.daedalus.rootVerbs.build-cancel = lib.mkIf (buildableApps != [ ]) {
+      unit = "daedalus-build-cancel@{app}.service";
+      description = "Stop an app's build in flight";
+      selectors.app = buildableApps;
+      # The stop waits for the build's TERM trap and its reaper.
+      timeoutSec = 150;
     };
 
     # ── the nightly sweep ─────────────────────────────────────────────────

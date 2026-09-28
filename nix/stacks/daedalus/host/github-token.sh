@@ -32,9 +32,11 @@
 # token, when that state was published.
 #
 # Three triggers, one unit: a 30-minute timer (a token lives 60, so a reader
-# always holds one with 25+ minutes left), a request from the app through the
-# bridge ($APPLY_DIR/github-token-request.json), and sops-nix restarting the
-# unit when the key rotates.
+# always holds one with 25+ minutes left), the app asking through the root
+# helper (its `github-token` verb, daedalus-github.nix), and sops-nix
+# restarting the unit when the key rotates. The helper reads the last line:
+# `refused: <reason>` when no token was minted and the unit still exits 0
+# (throttled, GitHub down, not installed), anything else a mint.
 #
 # ── failure policy ────────────────────────────────────────────────────────
 #
@@ -57,24 +59,17 @@
 #   local malfunction         key missing or unable to sign: the same keep
 #                             rule as above, then exit 1, so monitoredJobs
 #                             mails it. A publish that fails: exit 1.
-#   refused request           a symlinked or unreadable request file: the run
-#                             still refreshes the token (throttle permitting)
-#                             and exits 1.
 #
 # EVERY run tries GitHub at most once per $MIN_INTERVAL seconds, measured from
-# the later of the published mintedAt and lastError.at — request, timer, key
-# rotation or manual start alike. The trigger cannot be told apart safely:
-# the container writes both the request file and the status file the replay
-# guard reads, so any rule of the form "this run was not asked for" is one it
-# can forge (an answered request rewritten in a loop once minted per write).
-# The 30-minute timer never meets the limit. A key rotation that does keeps
-# the still-valid token, and the next tick or request mints with the new key.
+# the later of the published mintedAt and lastError.at — the app's ask, the
+# timer, a key rotation or a manual start alike: the app can ask as often as
+# it likes, and GitHub hears from this box once a minute at most. The
+# 30-minute timer never meets the limit. A key rotation that does keeps the
+# still-valid token, and the next tick or ask mints with the new key.
 
 set -euo pipefail
 
 OUT="$OUT_DIR/installation.json"
-REQ="$APPLY_DIR/github-token-request.json"
-STATUS="$APPLY_DIR/github-token-status.json"
 # Narrowed on purpose: a token carries only what the box uses, so a
 # permission granted at GitHub still does nothing until it is named here.
 # `actions: read` is the Actions page reading runs, jobs and workflows;
@@ -86,37 +81,11 @@ MIN_INTERVAL=60
 # token with less left than this is one the engine will not use anyway.
 TOKEN_MIN_REMAINING=300
 
-STARTED_AT="$(date -Is)"
 NOW="$(date +%s)"
 # This run's timestamp, in the form every file field uses.
 NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 gh_init
-
-# ── the request, if this run answers one ──────────────────────────────────
-#
-# REQ_ID    the unanswered request this run answers in $STATUS. Bookkeeping
-#           only: whether this run mints never depends on it (see the
-#           throttle below — the container controls both files involved).
-# REFUSED   why the request file was not read; fails the unit at the end.
-REQ_ID=""
-REFUSED=""
-if [ -L "$REQ" ]; then
-  REFUSED="refusing $REQ: it is a symlink, and the bridge only accepts regular files"
-elif [ -e "$REQ" ]; then
-  # Read once, as the operator, never through a link (host/lib.sh).
-  if REQ_JSON="$(read_request "$REQ")"; then
-    req_id="$(jq -r '.id // ""' <<<"$REQ_JSON" 2>/dev/null || true)"
-    if [[ "$req_id" =~ ^[0-9a-fA-F-]+$ ]] && [ "$(published_id "$STATUS")" != "$req_id" ]; then
-      REQ_ID="$req_id"
-    fi
-  else
-    REFUSED="could not read $REQ as $OPERATOR_USER"
-  fi
-fi
-if [ -n "$REFUSED" ]; then
-  echo "$REFUSED" >&2
-fi
 
 # ── helpers over the published file ───────────────────────────────────────
 #
@@ -200,37 +169,23 @@ publish_failure() {
   fi
 }
 
-# Answer the request, if there is one: $1 state (done|failed), $2 result
-# (ok|not-installed|error|throttled), $3 error text (already redacted).
-answer() {
-  [ -n "$REQ_ID" ] || return 0
-  write_json_atomic "$STATUS" <<EOF
-{"id":"$REQ_ID","state":"$1","result":"$2","error":$(jq -Rn --arg e "$3" '$e'),"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)"}
-EOF
-}
-
-# Answer, then exit with $4 (default 0) — or 1 when a request was refused.
-finish() {
-  if ! answer "$1" "$2" "$3"; then
-    echo "could not publish $STATUS" >&2
-    exit 1
-  fi
-  if [ -n "$REFUSED" ]; then
-    exit 1
-  fi
-  exit "${4:-0}"
+# No token minted, and the unit exits 0: the last line is the helper's
+# `refused: <reason>` (the header).
+refuse() {
+  echo "refused: $1"
+  exit 0
 }
 
 github_error() {
   echo "GitHub: $1" >&2
   publish_failure "$1"
-  finish failed error "$1" 0
+  refuse "GitHub did not mint a token: $1"
 }
 
 local_failure() {
   echo "$1" >&2
   publish_failure "$1"
-  finish failed error "$1" 1
+  exit 1
 }
 
 # ── throttle ──────────────────────────────────────────────────────────────
@@ -239,8 +194,7 @@ local_failure() {
 # boot, a first install — means nothing to throttle against.
 if have_prev; then
   if [ $((NOW - $(prev_attempt_epoch))) -lt "$MIN_INTERVAL" ]; then
-    echo "GitHub was last tried less than ${MIN_INTERVAL}s ago; not trying again yet"
-    finish "done" throttled ""
+    refuse "GitHub was last tried less than ${MIN_INTERVAL}s ago; not trying again yet"
   fi
 fi
 
@@ -261,9 +215,8 @@ case "$rc" in
   if prev_token_valid; then
     gh_revoke "$OUT" || echo "could not revoke the previous token (${GH_ERROR:-HTTP $GH_STATUS}); it expires on its own" >&2
   fi
-  echo "$GH_REASON"
   publish_state not-installed "$GH_REASON"
-  finish "done" not-installed ""
+  refuse "$GH_REASON"
   ;;
 *)
   github_error "$GH_ERROR"
@@ -276,16 +229,8 @@ if ! gh_mint "$GH_TMP/permissions.json"; then
 fi
 
 publish_ok
+# The last line, and the helper's `done` detail. Not an exit: when a script's
+# LAST command always exits, ShellCheck 0.11 reports every function it cannot
+# see being called (lib.sh's op_* run through as_operator_fn, gh_cleanup
+# through the trap) as SC2329, and writeShellApplication fails the build on it.
 echo "minted a token for installation $(jq -r '.id' "$GH_TMP/installation.json") on $(jq -r '.account.login' "$GH_TMP/installation.json"), expiring $(jq -r '.expires_at' "$GH_TMP/token.json")"
-
-# finish()'s steps written out rather than called: when a script's LAST
-# command always exits, ShellCheck 0.11 reports every function it cannot see
-# being called (lib.sh's op_* run through as_operator_fn, gh_cleanup through
-# the trap) as SC2329, and writeShellApplication fails the build on it.
-if ! answer "done" ok ""; then
-  echo "could not publish $STATUS" >&2
-  exit 1
-fi
-if [ -n "$REFUSED" ]; then
-  exit 1
-fi

@@ -15,7 +15,6 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     appsOn
-    applyDir
     bridgeAgent
     hooksHost
     githubAppVault
@@ -196,13 +195,15 @@ in
       };
     };
 
-    # The bridge verb: the app asks for a fresh token now (a 401, an install
-    # that just landed) instead of waiting for the tick. Throttled in the
-    # script to one mint a minute.
-    systemd.paths.daedalus-github-token = lib.mkIf haveGithubApp {
-      description = "Watch for a daedalus GitHub token refresh request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/github-token-request.json";
+    # The root helper's `github-token` (controller.nix, `root`): the app asks
+    # for a fresh token now (a 401, an install that just landed) instead of
+    # waiting for the tick. Throttled in the script to one mint a minute, and
+    # a start while the timer's run is going is refused, never joined.
+    fleet.daedalus.rootVerbs.github-token = lib.mkIf haveGithubApp {
+      unit = "daedalus-github-token.service";
+      description = "Mint a fresh GitHub App installation token now";
+      # The unit's own two minutes, and slack for the start job.
+      timeoutSec = 150;
     };
 
     # Silent from the reader's side like every snapshot: a stopped minter leaves

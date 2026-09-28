@@ -433,12 +433,12 @@ let
       ++ lib.concatMap (t: [
         {
           # SECURITY CONTROL, not validation for its own sake: this string is
-          # interpolated into a systemd unit name, and the daedalus bridge
-          # (stacks/daedalus/host/task-run.sh) hands that name to a root
+          # interpolated into a systemd unit name, and the root helper's
+          # `task-run` verb (stacks/daedalus) hands that name to a root
           # `systemctl start`. Anything outside [a-z0-9-] — a slash, a dot, a
           # space, `../` — is an attempt to name a unit other than this task's.
           # The charset is checked here so a bad id can never reach a unit
-          # name at all, in addition to the bridge's allowlist.
+          # name at all, in addition to the verb's value list.
           assertion = builtins.match "[a-z0-9][a-z0-9-]{0,39}" t.id != null;
           message = "fleet.apps.${name}: task id \"${t.id}\" is not allowed — it must match ^[a-z0-9][a-z0-9-]{0,39}$ (lowercase letters, digits and dashes, starting with a letter or digit, at most 40 characters). The id becomes part of the systemd unit name app-${name}-task-${t.id}, which root starts, so the charset is a security boundary. Rename the task in daedalus.";
         }

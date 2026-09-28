@@ -1,57 +1,30 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { type Decoder, literal, nullable, num, obj, optional, str } from '../lib/contract/decode'
-import { defineBridge } from './bridge'
+import { type Decoder, nullable, num, obj, str } from '../lib/contract/decode'
 import { readSnapshot } from './contract/snapshot'
+import type { ControllerClient } from './controller/client'
 import { env } from './env'
+import { type RootAnswer, runRoot } from './root'
 
 // Redeploy: pull the app's image and restart it if the digest moved.
 //
-// daedalus decides; the host executes. It cannot `podman pull` into the operator's
-// rootless store or restart a system unit, so it drops a request in the bind
-// mount and daedalus-deploy-trigger.service starts the app's EXISTING
-// `app-<name>-deploy.service` — the one that already knows how to compare
-// digests, health-check through traefik and mail on failure.
+// daedalus decides; the host executes. It cannot `podman pull` into the
+// operator's rootless store or start a system unit, so it asks the root
+// helper's `deploy` verb (through the controller, host/root.ts), which starts
+// the app's EXISTING `app-<name>-deploy.service` — the one that already knows
+// how to compare digests, health-check through traefik and mail on failure —
+// and answers when it has finished.
 //
 // This is push on top of the poll, not instead of it. The deploy timer
 // (nix/modules/apps/apps.nix, every 2 minutes by default) stays: a
 // notification that arrives while the box is off is lost, whereas the timer's
 // Persistent=true catches up on boot. Push removes latency, the timer keeps
-// the system self-healing.
+// the system self-healing. A deploy the timer is already running is refused.
 
 const DEPLOY_STATE = env.get('DEPLOY_STATE_DIR')
 
-type DeployState = 'idle' | 'running' | 'done' | 'failed'
-
-export type DeployStatus = {
-  id: string | null
-  app: string | null
-  state: DeployState
-  error: string
-  /** When the host agent took the request — null until it has taken one. */
-  startedAt: string | null
-  finishedAt: string | null
-}
-
-/** The status file the host agent writes; decoding `{}` is the idle status. */
-const DEPLOY_STATUS: Decoder<DeployStatus> = obj({
-  id: optional(nullable(str), null),
-  app: optional(nullable(str), null),
-  state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
-  error: optional(str, ''),
-  startedAt: optional(nullable(str), null),
-  finishedAt: optional(nullable(str), null),
-})
-
-const bridge = defineBridge<DeployStatus>({
-  requestFile: 'deploy-request.json',
-  statusFile: 'deploy-status.json',
-  status: DEPLOY_STATUS,
-})
-
-export async function readDeployStatus(): Promise<DeployStatus> {
-  return bridge.readStatus()
-}
+/** The helper waits 600 s for the unit (daedalus-verbs.nix `rootVerbs.deploy`); this is that and slack. */
+export const DEPLOY_WAIT_MS = 620_000
 
 /**
  * The last deploy as the app's own deploy unit published it —
@@ -86,7 +59,7 @@ const deployRecord: Decoder<DeployRecord> = obj({
 })
 
 /**
- * This is the authoritative record, not our request status — a deploy also
+ * This is the authoritative record — a deploy also
  * runs from the timer, and from a manual `systemctl start`, neither of which
  * goes through daedalus. No maxAgeMs: deploys happen when digests move, so an
  * old record is history, not staleness.
@@ -111,10 +84,15 @@ export async function pullFailing(app: string): Promise<boolean> {
   }
 }
 
-export async function requestDeploy(input: {
-  app: string
-  reason: string
-  actor: string
-}): Promise<string> {
-  return bridge.request({ app: input.app, reason: input.reason, actor: input.actor })
+/**
+ * Run the app's deploy unit now, and the helper's word on how it went. The
+ * name must be one of the verb's values (the box's deployable apps); anything
+ * else is refused before a unit is named.
+ */
+export async function requestDeploy(
+  input: { app: string; reason: string; actor: string },
+  client?: ControllerClient,
+): Promise<RootAnswer> {
+  console.info(`[deploy] ${input.app}: ${input.reason}, asked by ${input.actor}`)
+  return runRoot('deploy', { app: input.app }, DEPLOY_WAIT_MS, client)
 }

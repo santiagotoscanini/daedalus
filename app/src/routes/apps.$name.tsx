@@ -154,7 +154,6 @@ function AppDetail() {
     drift,
     status,
     applyStatus,
-    deployStatus,
     lastDeploy,
     pullBroken,
     deployShot,
@@ -210,7 +209,6 @@ function AppDetail() {
                 <Overview
                   app={app}
                   status={status}
-                  deployStatus={deployStatus}
                   lastDeploy={lastDeploy}
                   pullBroken={pullBroken}
                   deployShot={deployShot}

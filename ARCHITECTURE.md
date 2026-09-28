@@ -120,14 +120,10 @@ the same directory:
 |---|---|---|
 | `apply-request.json` | `daedalus-apply` | `apply-status.json` + `apply-last.log` + `payload-<id>.json` |
 | `build-request.json` | `daedalus-build` | `build-status.json` |
-| `build-cancel-request.json` | `daedalus-build-cancel` | — |
-| `deploy-request.json` | `daedalus-deploy-trigger` | `deploy-status.json` |
 | `image-request.json` | `daedalus-image-update` | `image-status.json` + `image-last.log` |
 | `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
 | `workspace-request.json` | `daedalus-workspace-clone` | `workspace-status.json` |
-| `github-token-request.json` | `daedalus-github-token` | `github-token-status.json` |
 | `secret-set-request.json` | `daedalus-secret-set` | `secret-set-status.json` |
-| `task-run-request.json` | `daedalus-task-run` | `task-run-status.json` |
 | `version-request.json` | `daedalus-version-update` | `version-status.json` + `version-last.log` |
 | `claude-code-request.json` | `daedalus-claude-code-update` | `claude-code-status.json` + `claude-code-last.log` |
 
@@ -188,6 +184,10 @@ The app never reaches the socket — the controller is its one door.
 |---|---|---|
 | `status` | the helper's own read: every verb and its unit's state | — |
 | `reboot` | `daedalus-power` (refuses mid-rebuild; there is no poweroff) | 2026-09-28 |
+| `deploy {app}` | the app's own `app-<app>-deploy` (a run the timer started is refused, not joined) | 2026-09-28 |
+| `task-run {task}` | the task's own `app-<app>-task-<id>`; the value is `<app>-task-<id>`, one token per unit | 2026-09-28 |
+| `build-cancel {app}` | `daedalus-build-cancel@<app>` (refuses a build in flight that is not that app's) | 2026-09-28 |
+| `github-token` | `daedalus-github-token`, the timer's unit (refuses inside its one-mint-a-minute throttle) | 2026-09-28 |
 
 ---
 

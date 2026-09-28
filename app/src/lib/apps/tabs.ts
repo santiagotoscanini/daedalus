@@ -15,7 +15,6 @@ import {
 import { operatorSecretApps } from '../../host/nix-manifest'
 import { commitUrl } from '../../host/registry'
 import { readSite } from '../../host/site'
-import { readTaskRunStatus, type TaskRunStatus } from '../../host/task-run'
 import type { AccessWindow } from '../access-window'
 import type { ActivityRow } from '../activity-lines'
 import { logTime } from '../format'
@@ -83,13 +82,6 @@ export type AppTabData =
   | {
       kind: 'tasks'
       tasks: TasksPayload
-      /**
-       * The run bridge's current state, so the Run now button starts from what
-       * the box is actually doing rather than from `idle` — a page opened
-       * while a task is running shows that run instead of offering to start a
-       * second one.
-       */
-      runStatus: TaskRunStatus
     }
   | { kind: 'settings' }
 
@@ -262,8 +254,8 @@ export async function loadAppTab(data: {
     // app having tasks — the answer for an app with none is an empty list,
     // and the rail hides the tab anyway.
     case 'tasks': {
-      const [tasks, runStatus] = await Promise.all([loadTasksTab(name), readTaskRunStatus()])
-      return { kind: 'tasks', tasks, runStatus }
+      const tasks = await loadTasksTab(name)
+      return { kind: 'tasks', tasks }
     }
 
     case 'vpn': {

@@ -227,13 +227,16 @@ here.
   named for it (`apply.ts`, `build-bridge.ts`, `deploy.ts`,
   `image-update.ts`, `engine-update.ts`,
   `workspaces.ts`,
-  `secret-set-request.ts`, `task-run.ts`,
-  `version-update.ts`, `claude-code-update.ts`) — except
-  `github-token-request.json`, which `core/github-app.ts` writes.
+  `secret-set-request.ts`,
+  `version-update.ts`, `claude-code-update.ts`).
   **The bridge is being retired verb by verb** onto the root helper,
   reached only as the controller's `root.run` (`ControllerClient.rootRun`;
-  ARCHITECTURE.md "The root helper"): `host/power.ts` (reboot) is the
-  first and the pattern — the app never touches the helper's socket.
+  ARCHITECTURE.md "The root helper") through `host/root.ts` `runRoot`, and
+  a button waits on it with `components/root-action.tsx` `useRootAction` —
+  the answer is the outcome, no status file: `host/power.ts` (reboot) is the
+  first and the pattern; `deploy.ts`, `task-run.ts`, `build-bridge.ts`'s
+  `requestBuildCancel` and `core/github-app.ts`'s `requestTokenRefresh`
+  followed. The app never touches the helper's socket.
   The verbs that take a lock and a busy check before they publish are
   arrangements of `host/flow.ts` — `defineGate` (the lock, the `running`
   check, the pickup window) and `defineFlow` (check input → refuse busy
@@ -242,7 +245,8 @@ here.
   inside `version-update.ts`. The first three are also what the MCP
   write tools call, so a button and a tool share one body. WHO may call
   stays with each door. `deploy.ts`'s `requestDeploy` is shared the same
-  way by the redeploy button and zot's push event (`api.deploy.ts`).
+  way by the redeploy button, the MCP tool and zot's push event
+  (`api.deploy.ts`, which does not wait for the answer).
   `build-request.json` is the one the box's own builder watches:
   `daedalus-build.service` picks it up, writes progress back to
   `/apply/build-status.json` (heartbeated; stale past 90 s) and its log

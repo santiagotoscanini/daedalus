@@ -1,8 +1,9 @@
-# daedalus-verbs — the file-drop bridge's agents, one verb at a time: each
-# verb's service, the path unit that starts it on `<verb>-request.json`, and
-# whether a failure mails (monitoredJobs) or is shown on the page that asked.
-# `daedalus-power` is the exception: the root helper starts it (controller.nix,
-# `root`), and it has no path unit.
+# daedalus-verbs — the control plane's host verbs. The file-drop bridge's
+# agents, one verb at a time: each verb's service, the path unit that starts it
+# on `<verb>-request.json`, and whether a failure mails (monitoredJobs) or is
+# shown on the page that asked. And the verbs that have moved to the root
+# helper (controller.nix, `root`): each a `fleet.daedalus.rootVerbs` entry
+# naming a unit with no path unit — reboot, deploy, task-run.
 # The scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
 # daedalus stack (daedalus.nix holds the switch); never imports its siblings.
 {
@@ -17,12 +18,13 @@ let
     applyDir
     prevDir
     bridgeAgent
+    deployableApps
+    runnableTasks
+    longestTaskSec
     ;
   inherit (import ./verbs-lib.nix { inherit config lib pkgs; })
     secretSetScript
     applyScript
-    deployTriggerScript
-    taskRunScript
     powerScript
     workspaceCloneScript
     imageUpdateScript
@@ -149,33 +151,24 @@ in
     # watching the page that started it — the same argument as daedalus-apply.
     fleet.monitoredJobs.daedalus-image-update = { };
 
-    # Redeploy trigger. Same file-drop bridge as apply, different verb: this one
-    # starts an app's EXISTING deploy unit rather than rebuilding the system.
+    # Redeploy: the root helper's `deploy` (controller.nix, `root`) starts the
+    # app's EXISTING `app-<name>-deploy.service` (modules/apps) — the unit
+    # that already pulls, compares the digest, restarts only if it moved,
+    # health-checks and mails on failure — and relays its lines. No agent of
+    # its own: the value is one of deployableApps (daedalus-lib.nix), and the
+    # helper's assertions prove each one names a deploy unit this box has.
     #
-    # Push, not a replacement for the poll. `app-<name>-deploy.timer` still runs
-    # (see modules/apps) and is what makes deploys self-healing: a notification
-    # that arrives while the box is off is simply lost, whereas the timer's
-    # Persistent=true catches up on boot. This only removes latency.
-    systemd.services.daedalus-deploy-trigger = bridgeAgent // {
-      description = "Start an app's deploy unit on daedalus's behalf";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${deployTriggerScript}/bin/daedalus-deploy-trigger";
-        # deploy.sh health-checks with a 90s timeout after the restart; give the
-        # whole pull-restart-verify cycle room without hanging forever.
-        TimeoutStartSec = "10min";
-      };
+    # Push, not a replacement for the poll: `app-<name>-deploy.timer` still
+    # runs and is what makes deploys self-healing (a push while the box is off
+    # is lost; the timer's Persistent=true catches up on boot). A deploy the
+    # timer is already running is refused, never joined.
+    fleet.daedalus.rootVerbs.deploy = lib.mkIf (deployableApps != [ ]) {
+      unit = "app-{app}-deploy.service";
+      description = "Redeploy an app: its deploy unit, now";
+      selectors.app = deployableApps;
+      # deploy.sh's pull, restart and 90 s health check, with room.
+      timeoutSec = 600;
     };
-
-    systemd.paths.daedalus-deploy-trigger = {
-      description = "Watch for a daedalus redeploy request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/deploy-request.json";
-    };
-
-    fleet.monitoredJobs.daedalus-deploy-trigger = { };
 
     # The workspace clone agent — same file-drop bridge. Root
     # because a path unit can only start a system unit; every git call inside
@@ -199,7 +192,7 @@ in
       pathConfig.PathChanged = "${applyDir}/workspace-request.json";
     };
 
-    # Not monitoredJobs, like the secret-set and task-run agents: both
+    # Not monitoredJobs, like the secret-set agent: both
     # outcomes land in the status file the page that asked is polling, and a
     # genuine refusal exits 0.
 
@@ -266,39 +259,20 @@ in
     # The only mailable event is the agent itself breaking, which `systemctl
     # --failed` and the failed-units alert already carry.
 
-    # "Run now" for an app's scheduled task. Same file-drop bridge, and the same
-    # relationship to the thing it starts as daedalus-deploy-trigger has to
-    # `app-<name>-deploy.service`: the timer is still what makes the task happen,
-    # this only removes the wait.
-    #
-    # No network ordering: it reads a local file and starts a sibling unit. What
-    # that unit then does may need the network, but its own ordering carries
-    # that, not this one's.
-    systemd.services.daedalus-task-run = bridgeAgent // {
-      description = "Run an app's scheduled task on daedalus's behalf";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${taskRunScript}/bin/daedalus-task-run";
-        # The task unit carries its own TimeoutStartSec (the registry's
-        # timeoutSec, 900s by default, and nothing stops an app asking for more).
-        # `systemctl start --wait` blocks for all of it, so a ceiling here would
-        # SIGTERM this agent while the task it is waiting on was still legitimately
-        # running — and publish a failure for a run that then succeeded. The task
-        # unit's own timeout is the one that fires.
-        TimeoutStartSec = "infinity";
-      };
+    # "Run now" for an app's scheduled task: the root helper's `task-run`
+    # starts the task's EXISTING `app-<app>-task-<id>.service` (modules/apps,
+    # the unit its timer starts), so a manual run has the timer's timeout,
+    # environment and failure mail. The value is the unit's own name between
+    # `app-` and `.service` (daedalus-lib.nix `runnableTasks`): one token, so
+    # an app cannot be paired with another app's task. The task's failure
+    # mails through its own monitoredJobs entry, as a timed run's does.
+    fleet.daedalus.rootVerbs.task-run = lib.mkIf (runnableTasks != [ ]) {
+      unit = "app-{task}.service";
+      description = "Run an app's scheduled task now";
+      selectors.task = runnableTasks;
+      # The longest task's own timeout, and a minute for the start job; the
+      # task unit's TimeoutStartSec is what stops it.
+      timeoutSec = lib.min 86400 (longestTaskSec + 60);
     };
-
-    systemd.paths.daedalus-task-run = {
-      description = "Watch for a daedalus task-run request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/task-run-request.json";
-    };
-
-    # Not monitoredJobs, like power and the workspace clone: both
-    # outcomes land in the status file the page that asked is polling, a genuine
-    # refusal exits 0, and the task's OWN failure already mails through
-    # fleet.monitoredJobs.app-<app>-task-<id> — mailing here as well would send
-    # two emails for one failed run.
   };
 }

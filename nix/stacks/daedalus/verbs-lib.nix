@@ -14,7 +14,6 @@ let
     applyDir
     prevDir
     registryApps
-    deployableApps
     mkUpdateReaper
     mkAgent
     operatorVars
@@ -49,7 +48,7 @@ let
   # builds the path itself from a name it has matched.
   #
   # This is the security control on that verb (host/secret-set.sh), exactly as
-  # `runnableTasks` is on task-run: an app the box has not applied has no
+  # `runnableTasks` is on the `task-run` verb: an app the box has not applied has no
   # writable file at all, and nothing from the request ever becomes a path.
   secretApps = lib.attrNames registryApps;
 
@@ -123,66 +122,6 @@ let
       ./host/lib.sh
       ./host/site-lib.sh
       ./host/apply.sh
-    ];
-  };
-
-  # The `<app>:<taskId>` pairs that actually have an
-  # `app-<app>-task-<taskId>.service` to start. Same gate the platform applies
-  # (modules/apps/apps.nix generates a task's units only while the app is past
-  # `stage = "declared"`, because a podman exec into a container that does not
-  # exist fails every tick) — and the same registry, read from the committed
-  # file rather than `config.fleet.apps`, for the reason on `registryApps`.
-  #
-  # This list is the security control on the Run-now bridge: its contents
-  # become part of a unit name that root starts. It MUST stay in lockstep with
-  # the units apps.nix actually generates — an allowlist wider than those units
-  # would let root start a unit that does not exist, and a pair assembled from
-  # two different entries is exactly what the colon-joined token prevents.
-  #
-  # A local-source app (daedalus itself, declared from ./self.json rather than
-  # the registry) is absent for free, like it is from deployableApps.
-  runnableTasks = lib.concatLists (
-    lib.mapAttrsToList (
-      appName: a:
-      lib.optionals ((a.stage or "lab") != "declared") (map (t: "${appName}:${t.id}") (a.tasks or [ ]))
-    ) registryApps
-  );
-
-  deployTriggerScript = mkAgent {
-    name = "daedalus-deploy-trigger";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.systemd
-      pkgs.coreutils
-    ];
-    vars = operatorVars // {
-      APPLY_DIR = applyDir;
-      DEPLOYABLE = lib.concatStringsSep " " deployableApps;
-    };
-    files = [
-      ./host/lib.sh
-      ./host/deploy-trigger.sh
-    ];
-  };
-
-  # Run one of an app's scheduled tasks now. A sibling of the deploy trigger,
-  # and the same shape: the unit already exists (modules/apps generates it from
-  # the registry's `tasks`), this only starts it out of band and reports the
-  # outcome to the page that asked. See host/task-run.sh.
-  taskRunScript = mkAgent {
-    name = "daedalus-task-run";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.systemd
-      pkgs.coreutils
-    ];
-    vars = operatorVars // {
-      APPLY_DIR = applyDir;
-      RUNNABLE = lib.concatStringsSep " " runnableTasks;
-    };
-    files = [
-      ./host/lib.sh
-      ./host/task-run.sh
     ];
   };
 
@@ -329,7 +268,6 @@ let
       # asserts the two agree).
       OWNER_ID = config.fleet.github.expectedOwnerId;
       OUT_DIR = githubTokenDir;
-      APPLY_DIR = applyDir;
     };
     files = [
       ./host/lib.sh
@@ -342,8 +280,6 @@ in
   inherit
     secretSetScript
     applyScript
-    deployTriggerScript
-    taskRunScript
     powerScript
     workspaceCloneScript
     imageUpdateScript

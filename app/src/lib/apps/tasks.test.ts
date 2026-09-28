@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // The Tasks tab's two jobs, and the part of each that would fail silently.
 //
-// `runAppTaskNow` publishes a request that ROOT acts on: the host derives a
+// `runAppTaskNow` asks for a run that ROOT starts: the host derives a
 // unit name from what this function lets through and starts it. So the
-// assertions here are over what actually reached the bridge — a refusal that
-// still published, or a published request naming a task the app never
+// assertions here are over what actually reached the host — a refusal that
+// still asked, or a request naming a task the app never
 // declared, is the bug this file exists to keep dead. Checking only the thrown
 // message would pass either way.
 //
@@ -19,7 +19,7 @@ type Row = Record<string, unknown>
 const h = vi.hoisted(() => ({
   record: null as Row | null,
   jobs: [] as Record<string, unknown>[],
-  /** Everything that reached the bridge. Empty is the assertion for a refusal. */
+  /** Everything that reached the host. Empty is the assertion for a refusal. */
   requested: [] as Record<string, unknown>[],
 }))
 
@@ -30,7 +30,7 @@ vi.mock('../repo/apps', () => ({
 vi.mock('../../host/task-run', () => ({
   requestTaskRun: async (body: Record<string, unknown>) => {
     h.requested.push(body)
-    return 'request-id'
+    return { outcome: 'done', detail: 'ran' }
   },
 }))
 
@@ -55,8 +55,11 @@ beforeEach(() => {
 })
 
 describe('runAppTaskNow', () => {
-  it('publishes the app, the task and the actor — and returns the request id', async () => {
-    expect(await runAppTaskNow({ name: 'hermes', task: 'digest' })).toEqual({ id: 'request-id' })
+  it('asks for the app, the task and the actor, and returns the host answer', async () => {
+    expect(await runAppTaskNow({ name: 'hermes', task: 'digest' })).toEqual({
+      outcome: 'done',
+      detail: 'ran',
+    })
     expect(h.requested).toEqual([{ app: 'hermes', task: 'digest', actor: 'someone@example.com' }])
   })
 

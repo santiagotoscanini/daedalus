@@ -318,7 +318,12 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
 
   write('deploy.trigger', appArg, async (args, actor) => {
     const { requestManualDeploy } = await import('../../lib/apps/deploy')
-    return ok(await requestManualDeploy(String(args.app), actor))
+    // Answers when the deploy unit has finished: its last line on success,
+    // its reason otherwise (already running, a failed pull).
+    const answer = await requestManualDeploy(String(args.app), actor)
+    return answer.outcome === 'done'
+      ? ok({ deployed: String(args.app), detail: answer.detail })
+      : refuse(`the deploy ${answer.outcome}: ${answer.detail}`)
   })
 
   write(

@@ -148,8 +148,8 @@ rec {
 
   # The two allowlists the bridge agents are handed, both from the registry
   # above. Defined once here because a name in either becomes part of a unit
-  # name root starts: the deploy trigger (verbs-lib.nix) and the build agent
-  # (build-agent.nix) must never disagree about them.
+  # name root starts: the root helper's `deploy` verb (daedalus-verbs.nix) and
+  # the build agent (build-agent.nix) must never disagree about them.
 
   # Apps the box builds: every registry-mode entry, `deploy.enable` ignored (a
   # frozen app still builds; it is just not deployed) and `declared` included
@@ -163,15 +163,15 @@ rec {
   # `deploy.enable`, absent = on — the same default the platform applies) and
   # that are past `declared` (a declared app has no container, so no deploy
   # unit). A frozen app keeps its page and its env snapshot; what it loses is
-  # exactly this — the trigger refuses it, so a freeze holds against the UI's
+  # exactly this — the verb has no such value, so a freeze holds against the UI's
   # Redeploy button too, not just the timer. A local-source app like daedalus
   # is excluded for free, because it has no deploy unit at all.
   #
-  # This list is the security control on the deploy trigger and on the build
+  # This list is the security control on the `deploy` verb and on the build
   # agent's final step. It MUST stay in lockstep with the deploy units
   # modules/apps/apps.nix generates (`deploy.enable && running`) — an
   # allowlist wider than those units would let root start a unit that does
-  # not exist.
+  # not exist, and the root helper's assertions (controller.nix) refuse one.
   deployableApps = lib.attrNames (
     lib.filterAttrs (
       _: a:
@@ -179,6 +179,26 @@ rec {
       && ((a.sourceMode or "registry") == "registry")
       && ((a.stage or "lab") != "declared")
     ) registryApps
+  );
+
+  # The scheduled tasks that have an `app-<app>-task-<id>.service` to run
+  # now, as that unit's name between `app-` and `.service`: the root helper's
+  # `task-run` values (daedalus-verbs.nix). One token per unit, so an app's
+  # name cannot be paired with another app's task id. Same gate the platform
+  # applies (modules/apps generates a task's units only past `declared`); a
+  # local-source app is absent for free, like it is from deployableApps.
+  runnableTasks = lib.concatLists (
+    lib.mapAttrsToList (
+      appName: a:
+      lib.optionals ((a.stage or "lab") != "declared") (
+        map (t: "${appName}-task-${t.id}") (a.tasks or [ ])
+      )
+    ) registryApps
+  );
+  # The longest of those tasks' own timeouts (the registry's `timeoutSec`,
+  # 900 unless it says otherwise).
+  longestTaskSec = lib.foldl' lib.max 900 (
+    lib.concatMap (a: map (t: t.timeoutSec or 900) (a.tasks or [ ])) (lib.attrValues registryApps)
   );
 
   at = label: "${label}.${config.fleet.baseDomain}";

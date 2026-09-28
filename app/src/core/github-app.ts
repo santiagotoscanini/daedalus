@@ -1,8 +1,7 @@
-import { defineBridge } from '../host/bridge'
 import { readCommittedSite } from '../host/contract/domains/site-doc'
 import type { SnapshotResult } from '../host/contract/snapshot'
 import { type GithubInstallation, readGithubInstallation, usableToken } from '../host/github-token'
-import { nullable, obj, optional, str } from '../lib/contract/decode'
+import { runRoot } from '../host/root'
 import type { Result } from '../lib/result'
 import type { Ctx } from './ctx'
 import type { SiteGithubApp } from './site/file'
@@ -35,31 +34,27 @@ export function installationState(ctx: Ctx): Promise<SnapshotResult<GithubInstal
   return readGithubInstallation(ctx.env)
 }
 
-const tokenRequest = defineBridge({
-  requestFile: 'github-token-request.json',
-  statusFile: 'github-token-status.json',
-  // Nothing here reads the status — the minter's file is the answer — so the
-  // shape is the bridge's own minimum rather than a verb's.
-  status: obj({ id: optional(nullable(str), null), state: optional(str, 'idle') }),
-})
-
 // On globalThis so a Vite re-evaluation does not reset the debounce.
 const memo = globalThis as unknown as { daedalusGithubTokenRefreshAt?: number }
 
+/** The helper waits 150 s for the minter (daedalus-github.nix `rootVerbs.github-token`); this is that and slack. */
+const REFRESH_WAIT_MS = 170_000
+
 /**
  * Ask the host to mint a fresh installation token now rather than at its next
- * half-hour tick. Debounced per process; true when a request was written.
+ * half-hour tick: the root helper's `github-token` (host/root.ts). Debounced
+ * per process; true when it was asked. Not awaited — the minter publishes its
+ * file, which is the answer, and the caller that noticed the missing token
+ * has already been told there is none; the helper's word goes to the log.
  */
 export async function requestTokenRefresh(): Promise<boolean> {
   const now = Date.now()
   if (now - (memo.daedalusGithubTokenRefreshAt ?? 0) < REFRESH_DEBOUNCE_MS) return false
   memo.daedalusGithubTokenRefreshAt = now
-  try {
-    await tokenRequest.request({ version: 1 })
-    return true
-  } catch {
-    return false
-  }
+  void runRoot('github-token', {}, REFRESH_WAIT_MS).then((a) => {
+    if (a.outcome !== 'done') console.info(`[github] token refresh ${a.outcome}: ${a.detail}`)
+  })
+  return true
 }
 
 export type GhError = 'no-token' | 'timeout' | 'unreachable' | 'invalid-path'

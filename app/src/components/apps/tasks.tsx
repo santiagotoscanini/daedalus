@@ -13,10 +13,10 @@ import {
   taskScheduleError,
   taskTimeoutError,
 } from '../../lib/tasks'
-import { type AppTabData, fetchTaskRunStatus, runTaskNow, saveApp } from '../../server/registry'
+import { type AppTabData, runTaskNow, saveApp } from '../../server/registry'
 import { Segmented } from '../controls'
 import { GrafanaLogs } from '../logs'
-import { usePolledStatus } from '../status'
+import { useRootAction } from '../root-action'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -156,7 +156,6 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
                 app={app.name}
                 task={t}
                 running={running}
-                initial={td.runStatus}
                 readOnly={readOnly || editor !== null}
                 busy={saving}
                 onEdit={() => {
@@ -296,7 +295,6 @@ function TaskCard({
   app,
   task,
   running,
-  initial,
   readOnly,
   busy,
   onEdit,
@@ -305,7 +303,6 @@ function TaskCard({
   app: string
   task: TaskRow
   running: boolean
-  initial: TasksData['runStatus']
   readOnly: boolean
   busy: boolean
   onEdit: () => void
@@ -323,7 +320,7 @@ function TaskCard({
         <code className="text-[0.95rem] font-semibold">{task.id}</code>
         <Outcome task={task} />
         <span className="ml-auto flex flex-wrap items-center gap-[0.45rem]">
-          <RunNowButton app={app} task={task} running={running} initial={initial} />
+          <RunNowButton app={app} task={task} running={running} />
           {!readOnly && (
             <>
               <Button
@@ -432,47 +429,28 @@ function Outcome({ task }: { task: TaskRow }) {
  * The same unit the timer starts, with the same timeout and the same failure
  * mail — so a manual run is indistinguishable from a scheduled one, and this
  * is not a second code path to keep working. Shaped like the Redeploy button
- * on the Overview: the server function only publishes a request, so the
- * progress comes from polling the host's status file (components/status.tsx
- * explains why the claim matters).
+ * on the Overview: the host answers when the run has finished, refused when
+ * the task is already running.
  */
-function RunNowButton({
-  app,
-  task,
-  running,
-  initial,
-}: {
-  app: string
-  task: TaskRow
-  running: boolean
-  initial: TasksData['runStatus']
-}) {
+function RunNowButton({ app, task, running }: { app: string; task: TaskRow; running: boolean }) {
   const router = useRouter()
   const {
-    status,
     running: inFlight,
-    refusal,
+    answer,
     start,
-  } = usePolledStatus({
-    initial,
-    fetch: () => fetchTaskRunStatus(),
+  } = useRootAction({
     onSettle: () => {
       // The run moves `lastRunAt` and the outcome, and both come from the
-      // loader rather than from the status file.
+      // loader.
       void router.invalidate()
     },
   })
 
-  // `status` is one file for the whole bridge, so a run of a DIFFERENT task
-  // must not light this card up.
-  const mine = status.app === app && status.task === task.id
-
   return (
     <span className="inline-flex items-center gap-[0.6rem] text-[0.76rem]">
-      {refusal !== null && <span className="text-danger">{refusal}</span>}
-      {refusal === null && mine && status.state === 'failed' && (
-        <span className="text-danger" title={status.error || undefined}>
-          last attempt failed
+      {answer !== null && answer.outcome !== 'done' && (
+        <span className="text-danger" title={answer.detail || undefined}>
+          {answer.outcome === 'refused' ? answer.detail : 'the run failed'}
         </span>
       )}
       <Button
@@ -483,13 +461,10 @@ function RunNowButton({
         disabled={inFlight || !running}
         title={running ? undefined : 'the app is declared — there is no container to run this in'}
         onClick={() => {
-          start(async () => ({
-            ok: true,
-            value: (await runTaskNow({ data: { name: app, task: task.id } })).id,
-          }))
+          start(() => runTaskNow({ data: { name: app, task: task.id } }))
         }}
       >
-        {inFlight && mine ? '▷ running…' : inFlight ? '▷ busy…' : '▷ Run now'}
+        {inFlight ? '▷ running…' : '▷ Run now'}
       </Button>
     </span>
   )

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,6 +17,16 @@ import {
 // and nothing throws.
 
 const TOKEN = `ghs${'_'}${'Q9w8E7r6'.repeat(5)}`
+
+// What reached the root helper: each `github-token` ask.
+const asked = vi.hoisted(() => ({ verbs: [] as string[] }))
+vi.mock('../host/root', () => ({
+  runRoot: async (verb: string) => {
+    asked.verbs.push(verb)
+    return { outcome: 'done', detail: 'minted' }
+  },
+}))
+const requested = () => asked.verbs.length
 
 let dir: string
 let fetchMock: ReturnType<typeof vi.fn>
@@ -42,12 +52,6 @@ async function publish(token: string | null) {
   )
 }
 
-const requested = () =>
-  stat(join(dir, 'apply', 'github-token-request.json')).then(
-    () => true,
-    () => false,
-  )
-
 function answer(fn: (url: string, init: RequestInit) => Response | Promise<Response>) {
   fetchMock = vi.fn(async (input: string | URL, init: RequestInit = {}) => fn(String(input), init))
   vi.stubGlobal('fetch', fetchMock)
@@ -55,14 +59,13 @@ function answer(fn: (url: string, init: RequestInit) => Response | Promise<Respo
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'gh-app-'))
-  process.env.APPLY_DIR = join(dir, 'apply')
+  asked.verbs = []
   delete (globalThis as { daedalusGithubTokenRefreshAt?: number }).daedalusGithubTokenRefreshAt
   await publish(TOKEN)
 })
 afterEach(async () => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
-  delete process.env.APPLY_DIR
   await rm(dir, { recursive: true, force: true })
 })
 
@@ -94,24 +97,18 @@ describe('ghApp', () => {
       error: 'no-token',
     })
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(await requested()).toBe(true)
+    expect(requested()).toBe(1)
   })
 
   it('asks for a new token on a 401, at most once a minute, and does not retry', async () => {
     answer(() => new Response('{"message":"Bad credentials"}', { status: 401 }))
     expect((await ghApp(ctx, '/installation/repositories')).status).toBe(401)
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const first = JSON.parse(
-      await readFile(join(dir, 'apply', 'github-token-request.json'), 'utf8'),
-    )
-    expect(first.version).toBe(1)
+    expect(asked.verbs).toEqual(['github-token'])
 
     expect(await requestTokenRefresh()).toBe(false)
     await ghApp(ctx, '/installation/repositories')
-    const second = JSON.parse(
-      await readFile(join(dir, 'apply', 'github-token-request.json'), 'utf8'),
-    )
-    expect(second.id).toBe(first.id)
+    expect(asked.verbs).toEqual(['github-token'])
   })
 
   it('returns a wait on rate limits and nothing on a plain 403', async () => {

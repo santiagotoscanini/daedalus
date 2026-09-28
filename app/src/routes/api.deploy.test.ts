@@ -18,25 +18,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   deploys: [] as { app: string; reason: string; actor: string }[],
-  statusReads: 0,
   app: { name: 'anansi', sourceMode: 'registry' } as { name: string; sourceMode: string } | null,
 }))
 
 vi.mock('../host/deploy', () => ({
   requestDeploy: async (input: { app: string; reason: string; actor: string }) => {
     h.deploys.push(input)
-    return 'deploy-id'
-  },
-  readDeployStatus: async () => {
-    h.statusReads++
-    return { id: null, app: null, state: 'idle', error: '', startedAt: null, finishedAt: null }
+    return { outcome: 'done', detail: 'deployed' }
   },
 }))
 vi.mock('../lib/repo/apps', () => ({ getApp: async () => h.app ?? undefined }))
 vi.mock('../host/app-icon', () => ({ forgetAppIcon: () => undefined }))
 
 type Handler = (ctx: { request: Request }) => Promise<Response>
-type RouteLike = { options?: { server?: { handlers?: { GET?: Handler; POST?: Handler } } } }
+type RouteLike = { options?: { server?: { handlers?: { POST?: Handler } } } }
 
 const TOKEN = 'a-deploy-token-with-some-length'
 const URL_ = 'http://app-daedalus:3000/api/deploy'
@@ -48,7 +43,6 @@ beforeEach(() => {
   previousToken = process.env.DEPLOY_HOOK_TOKEN
   process.env.DEPLOY_HOOK_TOKEN = TOKEN
   h.deploys = []
-  h.statusReads = 0
   h.app = { name: 'anansi', sourceMode: 'registry' }
 })
 
@@ -57,7 +51,7 @@ afterEach(() => {
   else process.env.DEPLOY_HOOK_TOKEN = previousToken
 })
 
-async function call(method: 'GET' | 'POST', token?: string) {
+async function call(method: 'POST', token?: string) {
   const { Route } = (await import('./api.deploy')) as { Route: RouteLike }
   const handler = Route.options?.server?.handlers?.[method]
   if (!handler) throw new Error(`/api/deploy has no ${method} handler`)
@@ -69,7 +63,7 @@ async function call(method: 'GET' | 'POST', token?: string) {
         ...(token === undefined ? {} : { 'x-deploy-token': token }),
         'ce-type': 'zotregistry.image.updated',
       },
-      ...(method === 'POST' ? { body: PUSH } : {}),
+      body: PUSH,
     }),
   })
 }
@@ -85,12 +79,6 @@ describe('a push with a token that does not match', () => {
       expect(await res.json()).toEqual({ status: 'error', error: 'bad or missing token' })
     }
     expect(h.deploys).toEqual([])
-  })
-
-  it('answers 401 on the status door too, without reading the status', async () => {
-    const res = await call('GET', 'wrong')
-    expect(res.status).toBe(401)
-    expect(h.statusReads).toBe(0)
   })
 })
 
@@ -127,7 +115,7 @@ describe('a push carrying the token', () => {
   it('deploys exactly once', async () => {
     const res = await call('POST', TOKEN)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ status: 'queued', id: 'deploy-id', app: 'anansi' })
+    expect(await res.json()).toEqual({ status: 'queued', app: 'anansi' })
     expect(h.deploys).toEqual([
       { app: 'anansi', reason: 'zotregistry.image.updated', actor: 'registry' },
     ])

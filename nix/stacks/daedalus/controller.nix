@@ -182,8 +182,12 @@
 #                `refused: <reason>` (it exits 0, so no failed unit). Not an
 #                exit status: systemd forgets a oneshot's once it is inactive.
 #                A unit already running is refused, never joined.
-#   moved so far reboot (daedalus-verbs.nix `daedalus-power`). Each verb that
-#                moves here deletes its request file, path unit and app module.
+#   moved so far reboot (daedalus-verbs.nix `daedalus-power`); deploy and
+#                task-run (the apps' own deploy and task units, values from the
+#                committed registry); build-cancel (build-agent.nix, a template
+#                instance per app); github-token (daedalus-github.nix). Each
+#                verb that moves here deletes its request file, path unit and
+#                app module.
 #
 # What nix hands it:
 #
@@ -337,7 +341,14 @@ let
     lib.mapAttrsToList (
       verb: v:
       let
-        svc = lib.removeSuffix ".service";
+        # `name@instance.service` is its template's, `name@`.
+        svc =
+          u:
+          let
+            stem = lib.removeSuffix ".service" u;
+            at = builtins.match "([^@]*@).*" stem;
+          in
+          if at == null then stem else lib.head at;
         cfgOf = u: config.systemd.services.${svc u} or null;
         say = msg: "fleet.daedalus.rootVerbs.${verb}: ${msg}";
       in
@@ -365,9 +376,10 @@ let
         assertion =
           lib.hasSuffix ".service" u
           && cfgOf u != null
+          && (cfgOf u).enable
           && (cfgOf u).serviceConfig.Type or null == "oneshot"
           && !(config.systemd.paths ? ${svc u});
-        message = say "${u} must be a oneshot service of this system with no path unit";
+        message = say "${u} must be an enabled oneshot service of this system with no path unit";
       }) (expansions v)
     ) rootVerbs
   );

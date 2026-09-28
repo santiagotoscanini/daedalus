@@ -284,11 +284,6 @@ export const fetchSecretSetStatus = readFn.handler(async () => {
   return readSecretSetStatus()
 })
 
-export const fetchDeployStatus = readFn.handler(async () => {
-  const { readDeployStatus } = await import('../host/deploy')
-  return readDeployStatus()
-})
-
 export const cloneWorkspaceFn = adminFn
   // A string, then the allowlist in lib/apps/workspaces.ts — which is the
   // check that matters and cannot live here, since it is built from the
@@ -324,8 +319,3 @@ export const runTaskNow = adminFn
     const { runAppTaskNow } = await import('../lib/apps/tasks')
     return runAppTaskNow(data)
   })
-
-export const fetchTaskRunStatus = readFn.handler(async () => {
-  const { readTaskRunStatus } = await import('../host/task-run')
-  return readTaskRunStatus()
-})

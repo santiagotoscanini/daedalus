@@ -23,21 +23,13 @@ import { isRecord } from '../lib/is-record'
 //
 // It can do exactly one thing: start an existing app's deploy unit. The app
 // name is validated loosely here (fail fast, useful error) and
-// authoritatively in the host trigger, which checks it against a generated
-// allowlist before it becomes part of a unit name that root starts. This
+// authoritatively by the root helper, which takes only a name from its
+// generated list before it becomes part of a unit name root starts. This
 // route is not the security boundary.
 
 export const Route = createFileRoute('/api/deploy')({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        const denied = authFailure(request)
-        if (denied) return denied
-
-        const { readDeployStatus } = await import('../host/deploy')
-        return Response.json(await readDeployStatus())
-      },
-
       POST: async ({ request }) => {
         const denied = authFailure(request)
         if (denied) return denied
@@ -129,10 +121,15 @@ export const Route = createFileRoute('/api/deploy')({
           })
         }
 
-        const id = await requestDeploy({
+        // Not awaited: the helper answers when the deploy unit has finished
+        // (minutes), and zot only needs to hear it was taken. The outcome
+        // goes to the log; the deploy's own record is deploy.sh's.
+        void requestDeploy({
           app,
           reason: eventType || 'registry push',
           actor: actorLabelOf(request, 'registry'),
+        }).then((a) => {
+          console.info(`[deploy] ${app} from the registry: ${a.outcome} (${a.detail})`)
         })
 
         // The new image may ship a new icon, and the icon cache holds answers
@@ -142,7 +139,7 @@ export const Route = createFileRoute('/api/deploy')({
         const { forgetAppIcon } = await import('../host/app-icon')
         forgetAppIcon(app)
 
-        return Response.json({ status: 'queued', id, app })
+        return Response.json({ status: 'queued', app })
       },
     },
   },

@@ -113,17 +113,19 @@ export async function buildNow(input: { app: string; actor: string }): Promise<B
 /**
  * Stop a running build.
  *
- * Two writes, host first. The bridge file asks the host to stop the unit, whose
- * reaper publishes a terminal status; the row is then marked `cancelled` here,
- * because the host cannot tell a Cancel from a crash — both reach its reaper as
- * `interrupted` (lib/build-queue.ts CANCELLED_BY_OPERATOR).
+ * Two writes, row first. The row is marked `cancelled` here, because the host
+ * cannot tell a Cancel from a crash — both reach its reaper as `interrupted`
+ * (lib/build-queue.ts CANCELLED_BY_OPERATOR); then the root helper's
+ * `build-cancel` stops the unit (host/build-bridge.ts), whose reaper publishes
+ * the terminal status, and answers once it has.
  *
- * Marking the row terminal is also what makes the two writes safe in either
- * order: `updateFromStatus` refuses a row that is already final, so a build
- * that finished on its own mid-request keeps its own ending, and the host's
- * `interrupted` landing a moment later cannot overwrite a `cancelled` row
- * (`applyStatus`). Idempotent: a second call re-asks the host for the same
- * thing and finds the row already terminal.
+ * Row first is what keeps the word: `updateFromStatus` refuses a row that is
+ * already final, so the host's `interrupted`, landing while the stop is still
+ * being answered, cannot overwrite a `cancelled` row (`applyStatus`), and a
+ * build that finished on its own before the click keeps its own ending. A
+ * host that refused (no build of this app in flight) leaves nothing running;
+ * one that could not be asked is reported. Idempotent: a second call finds
+ * the row already terminal.
  */
 export async function cancelBuild(input: {
   app: string
@@ -143,7 +145,6 @@ export async function cancelBuild(input: {
 
   const { requestBuildCancel } = await import('../../host/build-bridge')
   const { CANCELLED_BY_OPERATOR } = await import('../../lib/build-queue')
-  await requestBuildCancel(record.id)
   await updateFromStatus(
     record.id,
     {
@@ -154,10 +155,14 @@ export async function cancelBuild(input: {
     },
     'engine',
   )
+  const answer = await requestBuildCancel(app)
   // The actor is in the journal, never on the row: the row's words reach a
   // GitHub check run, and an email address does not belong there.
   console.info(
-    `[builds] ${actor} cancelled ${app}@${record.sha.slice(0, 7)} (${record.id}) during ${state}`,
+    `[builds] ${actor} cancelled ${app}@${record.sha.slice(0, 7)} (${record.id}) during ${state}: the host ${answer.outcome} (${answer.detail})`,
   )
+  if (answer.outcome === 'failed') {
+    return { ok: false, reason: `The host did not stop the build: ${answer.detail}` }
+  }
   return { ok: true, value: null }
 }

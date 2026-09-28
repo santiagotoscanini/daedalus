@@ -256,6 +256,16 @@
             unit = "daedalus-power-{app}.service";
             selectors.app = [ "../x" ];
           };
+          # A template instance is its template's: one with no template, and
+          # one whose template is not a oneshot.
+          assert refused "tpl" {
+            unit = "no-such-template@{app}.service";
+            selectors.app = [ "a" ];
+          };
+          assert refused "notoneshot" {
+            unit = "daedalus-root@{app}.service";
+            selectors.app = [ "a" ];
+          };
           pkgs.runCommand "root-verbs" { } "touch $out";
       };
 

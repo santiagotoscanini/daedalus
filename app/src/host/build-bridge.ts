@@ -2,13 +2,11 @@ import { constants } from 'node:fs'
 import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
-  BUILD_CANCEL_FILE,
   BUILD_REQUEST_FILE,
   BUILD_STATUS_FILE,
   BUILD_STATUS_MAX_AGE_MS,
   type BuildRequest,
   type BuildStatus,
-  buildCancelRequest,
   buildLogPath,
   buildRequestDecoder,
   buildStatusDecoder,
@@ -20,12 +18,14 @@ import {
 import { redactSecrets } from '../lib/redact'
 import { writeAtomic } from './bridge'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
+import type { ControllerClient } from './controller/client'
 import { env } from './env'
+import { type RootAnswer, runRoot } from './root'
 
 // The file half of the `build` verb (lib/builds.ts is the contract). Server-only.
 //
 //   /apply/build-request.json         written here; daedalus-build.path starts the host builder
-//   /apply/build-cancel-request.json  written here; daedalus-build-cancel.path stops it
+//   root.run build-cancel {app}       asked here; daedalus-build-cancel@<app> stops it
 //   /apply/build-status.json          written by nix/stacks/daedalus/host/build.sh, heartbeated while running
 //   /builds/<id>.log                  the host's already-redacted log, mounted read-only
 
@@ -42,20 +42,21 @@ export async function requestBuild(req: BuildRequest, env: EnvReader = processEn
   await writeAtomic(join(dir, BUILD_REQUEST_FILE), serializeBuildRequest(checked))
 }
 
+/** The helper waits 150 s for the stop (build-agent.nix `rootVerbs.build-cancel`); this is that and slack. */
+const CANCEL_WAIT_MS = 170_000
+
 /**
- * Ask the host to stop the build with this id. Idempotent by construction: the
- * file is rewritten in place, so pressing Cancel twice asks twice for the same
- * thing, and the host's answer to a build that already ended is to do nothing.
+ * Ask the host to stop the build in flight, if it is this app's: the root
+ * helper's `build-cancel` (host/root.ts) starts `daedalus-build-cancel@<app>`,
+ * which refuses a build in flight that is another app's, or none — a cancel
+ * that lost a race to a build finishing cannot kill another app's next one.
+ * Answers once the unit has stopped (the build's reaper has run by then).
  */
 export async function requestBuildCancel(
-  id: string,
-  at: Date = new Date(),
-  env: EnvReader = processEnv,
-): Promise<void> {
-  const checked = buildCancelRequest(id, at)
-  const dir = applyDir(env)
-  await mkdir(dir, { recursive: true })
-  await writeAtomic(join(dir, BUILD_CANCEL_FILE), `${JSON.stringify(checked, null, 2)}\n`)
+  app: string,
+  client?: ControllerClient,
+): Promise<RootAnswer> {
+  return runRoot('build-cancel', { app }, CANCEL_WAIT_MS, client)
 }
 
 /**

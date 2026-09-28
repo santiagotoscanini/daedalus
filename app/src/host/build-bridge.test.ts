@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { BuildRequest } from '../lib/builds'
 import { readBuildLogTail, readBuildStatus, requestBuild, requestBuildCancel } from './build-bridge'
+import type { ControllerClient } from './controller/client'
 
 let dir: string
 let env: (name: string) => string | undefined
@@ -63,32 +64,6 @@ describe('requestBuild', () => {
 
   it('refuses an invalid request before writing', async () => {
     await expect(requestBuild({ ...REQUEST, id: '../x' }, env)).rejects.toThrow(/id/)
-    expect(await readdir(dir)).toEqual([])
-  })
-})
-
-describe('requestBuildCancel', () => {
-  it('names the build to stop, and only that', async () => {
-    await requestBuildCancel(ID, new Date('2026-09-12T21:00:00.000Z'), env)
-    expect(await readdir(dir)).toEqual(['build-cancel-request.json'])
-    expect(JSON.parse(await readFile(join(dir, 'build-cancel-request.json'), 'utf8'))).toEqual({
-      version: 1,
-      id: ID,
-      at: '2026-09-12T21:00:00.000Z',
-    })
-  })
-
-  it('is idempotent: a second press rewrites the same ask', async () => {
-    const at = new Date('2026-09-12T21:00:00.000Z')
-    await requestBuildCancel(ID, at, env)
-    const first = await readFile(join(dir, 'build-cancel-request.json'), 'utf8')
-    await requestBuildCancel(ID, at, env)
-    expect(await readdir(dir)).toEqual(['build-cancel-request.json'])
-    expect(await readFile(join(dir, 'build-cancel-request.json'), 'utf8')).toBe(first)
-  })
-
-  it('refuses a path-shaped id before writing', async () => {
-    await expect(requestBuildCancel('../x', new Date(), env)).rejects.toThrow(/id/)
     expect(await readdir(dir)).toEqual([])
   })
 })
@@ -203,5 +178,28 @@ describe('readBuildLogTail', () => {
     await writeFile(join(dir, 'elsewhere'), 'private\n', 'utf8')
     await symlink(join(dir, 'elsewhere'), join(dir, `${ID}.log`))
     expect((await readBuildLogTail(ID, { env })).available).toBe(false)
+  })
+})
+
+describe('requestBuildCancel', () => {
+  it("asks the root helper's build-cancel for the app, and carries its word", async () => {
+    const asked: unknown[][] = []
+    const client = {
+      rootRun: (...args: unknown[]) => {
+        asked.push(args)
+        return Promise.resolve({
+          run: 'r1',
+          verb: 'build-cancel',
+          outcome: 'refused',
+          detail: 'the build in flight is not blog’s',
+          verbs: [],
+        })
+      },
+    } as unknown as ControllerClient
+    expect(await requestBuildCancel('blog', client)).toEqual({
+      outcome: 'refused',
+      detail: 'the build in flight is not blog’s',
+    })
+    expect(asked[0]?.slice(0, 2)).toEqual(['build-cancel', { app: 'blog' }])
   })
 })

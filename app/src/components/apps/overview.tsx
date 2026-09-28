@@ -1,8 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
-import type { DeployStatus } from '../../host/deploy'
 import { DASH, since } from '../../lib/format'
-import { type AppTabData, fetchDeployStatus, triggerDeploy } from '../../server/registry'
-import { usePolledStatus } from '../status'
+import { type AppTabData, triggerDeploy } from '../../server/registry'
+import { useRootAction } from '../root-action'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
 import { CloneButton } from '../workspace'
@@ -24,7 +23,6 @@ function shortImage(ref: string): string {
 export function Overview({
   app,
   status,
-  deployStatus,
   lastDeploy,
   pullBroken,
   deployShot,
@@ -36,7 +34,6 @@ export function Overview({
 }: {
   app: AppRecord
   status: NonNullable<LoaderData>['status']
-  deployStatus: NonNullable<LoaderData>['deployStatus']
   lastDeploy: NonNullable<LoaderData>['lastDeploy']
   pullBroken: NonNullable<LoaderData>['pullBroken']
   deployShot: NonNullable<LoaderData>['deployShot']
@@ -135,11 +132,7 @@ export function Overview({
           title="Deployment"
           icon="◲"
           span={6}
-          aside={
-            app.sourceMode === 'local' ? null : (
-              <RedeployButton name={app.name} initial={deployStatus} />
-            )
-          }
+          aside={app.sourceMode === 'local' ? null : <RedeployButton name={app.name} />}
         >
           {/* What the app looked like moments after its last deploy — taken
               by shot-deploy-<name> on the host, anonymous-visitor view. Not
@@ -341,13 +334,12 @@ export function Overview({
 /**
  * Runs the app's deploy unit now rather than waiting for its 2-minute timer.
  * Same unit either way, so a redeploy that finds an unchanged digest is a
- * no-op — this is not a "restart" button.
+ * no-op — this is not a "restart" button. The host answers when the unit has
+ * finished; a refusal (the timer's run is going) or a failure is shown here.
  */
-function RedeployButton({ name, initial }: { name: string; initial: DeployStatus }) {
+function RedeployButton({ name }: { name: string }) {
   const router = useRouter()
-  const { status, running, refusal, start } = usePolledStatus({
-    initial,
-    fetch: () => fetchDeployStatus(),
+  const { running, answer, start } = useRootAction({
     onSettle: () => {
       void router.invalidate()
     },
@@ -355,10 +347,9 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
 
   return (
     <span className="inline-flex items-center gap-[0.6rem] text-[0.76rem]">
-      {refusal !== null && <span className="text-danger">{refusal}</span>}
-      {refusal === null && status.state === 'failed' && status.app === name && (
-        <span className="text-danger" title={status.error}>
-          last attempt failed
+      {answer !== null && answer.outcome !== 'done' && (
+        <span className="text-danger" title={answer.detail || undefined}>
+          {answer.outcome === 'refused' ? answer.detail : 'the deploy failed'}
         </span>
       )}
       <Button
@@ -368,7 +359,7 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
         className={GHOST_BTN}
         disabled={running}
         onClick={() => {
-          start(async () => ({ ok: true, value: (await triggerDeploy({ data: name })).id }))
+          start(() => triggerDeploy({ data: name }))
         }}
       >
         {running ? '↻ deploying…' : '↻ Redeploy'}

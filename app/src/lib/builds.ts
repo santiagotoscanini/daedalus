@@ -28,14 +28,6 @@ import { redactSecrets } from './redact'
 export const BUILD_REQUEST_FILE = 'build-request.json'
 export const BUILD_STATUS_FILE = 'build-status.json'
 /**
- * The `cancel` verb: the same bridge, one more file the host watches. It says
- * only WHICH build is to stop — the host's answer is `systemctl stop
- * daedalus-build`, whose reaper publishes the terminal status, and the word
- * "cancelled by whom" is the engine's to write on the row.
- */
-export const BUILD_CANCEL_FILE = 'build-cancel-request.json'
-
-/**
  * A running build's status must be rewritten at least this often. The host
  * heartbeats it during long phases; past this age the run is presumed dead.
  */
@@ -372,18 +364,6 @@ export type BuildRequest = {
   buildEnv?: BuildEnv
 }
 
-/**
- * Stop the build the host is running. `id` is the build the operator was
- * looking at: the host stops only when the status it is about to end still
- * carries that id, so a request that lost a race to a build finishing cannot
- * kill the NEXT one.
- */
-export type BuildCancelRequest = {
-  version: 1
-  id: string
-  at: string
-}
-
 export type BuildChecks = {
   /** The check scripts that ran, in order. */
   ran: string[]
@@ -565,22 +545,11 @@ export const buildStatusDecoder: Decoder<BuildStatus> = obj({
   updatedAt: str,
 })
 
-const buildCancelRequestDecoder: Decoder<BuildCancelRequest> = obj({
-  version: versionOne,
-  id: matching(BUILD_ID_RE, 'a build id'),
-  at: str,
-})
-
 /** Builds and validates a request; throws DecodeError naming the bad field. */
 export function buildRequest(
   input: Omit<BuildRequest, 'version' | 'at'> & { at: Date },
 ): BuildRequest {
   return buildRequestDecoder({ ...input, version: 1, at: input.at.toISOString() }, '')
-}
-
-/** The same, for the cancel verb. */
-export function buildCancelRequest(id: string, at: Date): BuildCancelRequest {
-  return buildCancelRequestDecoder({ version: 1, id, at: at.toISOString() }, '')
 }
 
 // ── logs ────────────────────────────────────────────────────────────────────

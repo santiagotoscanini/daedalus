@@ -1,7 +1,7 @@
 import { appIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
 import { siteIdentity } from '../../host/contract/domains/site'
-import { lastDeploy, pullFailing, readDeployStatus } from '../../host/deploy'
+import { lastDeploy, pullFailing } from '../../host/deploy'
 import { env } from '../../host/env'
 import { appStatuses } from '../../host/metrics'
 import { hostnamesTakenBy, manifestEntries, operatorSecretApps } from '../../host/nix-manifest'
@@ -44,7 +44,6 @@ export async function loadAppDetail(data: { name: string }) {
     applyStatus,
     deploy,
     pullBroken,
-    deployStatus,
     takenHostnames,
     hasIcon,
     workspaces,
@@ -56,7 +55,6 @@ export async function loadAppDetail(data: { name: string }) {
     readApplyStatus(),
     lastDeploy(name),
     pullFailing(name),
-    readDeployStatus(),
     // So the hostname field can reject a collision as it is typed rather
     // than during the rebuild it would otherwise fail.
     hostnamesTakenBy(hostname),
@@ -69,7 +67,6 @@ export async function loadAppDetail(data: { name: string }) {
 
   return {
     applyStatus,
-    deployStatus,
     repo,
     workspace: workspaceFor(repo, workspaces.data),
     // From the snapshot when it has published, from the env binding before

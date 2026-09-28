@@ -575,12 +575,11 @@ priority; each can be done independently unless noted.
     machine only through the controller's unix socket; capabilities, not
     "is this the box", draw the tabs. What remains:
     - **The rest of the root verbs onto the root helper.** The helper and
-      `root.run` exist (ARCHITECTURE.md "The root helper"; reboot moved
-      first). Each remaining file-drop verb moves the same way — a
-      `fleet.daedalus.rootVerbs` entry, its unit ending on `refused: …` to refuse, its
-      request module, path unit and status file deleted — in this order:
-      task-run and deploy-trigger (a unit that exists, one enumerated
-      selector), build-cancel and github-token (no selector), workspace
+      `root.run` exist (ARCHITECTURE.md "The root helper"): reboot, deploy,
+      task-run, build-cancel and github-token have moved. Each remaining
+      file-drop verb moves the same way — a `fleet.daedalus.rootVerbs`
+      entry, its unit ending on `refused: …` to refuse, its request
+      module, path unit and status file deleted — in this order: workspace
       clone (a slug is not an enumerable value: the table needs a pattern
       selector first), secret-set (carries a sealed value: the helper needs
       a payload channel the unit reads, never argv), build, then the
