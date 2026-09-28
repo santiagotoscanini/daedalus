@@ -577,145 +577,57 @@ priority; each can be done independently unless noted.
     fifteen stacks read from is merely discouraged.
 
 13. **One agent on every machine, a controller on the box.** The box's
-    agent is the **controller** (`mode = "controller"`); every other
-    machine's is a node. Machines already reach the app only through it:
-    each keeps a pinned TLS link to the controller (found by `--controller`
-    or the `_daedalus-controller._tcp` record), and the app reads and
-    commands them over the controller's unix socket, and Prometheus reads
-    them all from the controller's `/nodes/metrics`. What is left: the box
-    still does its own jobs through a second pipeline — root snapshots and
-    the file-drop bridge. The target is
-    one codebase on every OS, a star with the box at the centre, and one
-    front door for the app.
-    - **One agent, every OS.** Per-OS code moves behind one fixed interface
-      each (`os/{windows,macos,linux}`: paths, facts, network, DNS, power,
-      service install/run, session launch, telemetry collector), so a
-      missing OS is a compile error rather than an empty string; one shared
-      bounded-command helper replaces the four copies; pure parsers (SMBIOS,
-      plist) leave the per-OS directories. Linux becomes a machine type
-      you download from the landing page: distributions running systemd
-      240 or newer, on x86_64 and aarch64, with a tray on x86_64 desktops.
-    - **A star.** The box runs the agent as the controller. Every other
-      machine keeps ONE outbound, authenticated, long-lived connection to
-      it: telemetry pushed up, commands down at once, and later multiplexed
-      streams (santree's terminals).
-    - **The app talks only to the controller, over a unix socket**
-      mounted into its container: typed request → progress → result, no LAN
-      dialing, no bearer on the wire, no pasta first-SYN stall, no polled
-      status files. The app owns DESIRED state (approvals, policy, what runs
-      where) and pushes it down; the controller holds OBSERVED state (latest
-      telemetry, sessions, versions) in memory, rebuildable from the app and
-      the machines — no database of its own. The controller↔machine
-      protocol and the socket API come from one Rust protocol crate; the
-      app's TypeScript types are generated from it (ends the telemetry
-      contract being typed twice, Engine polish). The socket API is
-      versioned from day one: the app deploys on save, the controller moves
-      with a lock bump.
-    - **Capabilities, not a master flag.** What an agent runs comes from
-      its config (nix writes the box's; the installer writes the others'):
-      telemetry `full | minimal | off`, updates `staged | external`, Claude
-      remote control on or off, the data directory. Each agent reports
-      its capabilities and the app draws tabs from them, never from "is
-      this the box". The box is an ordinary machine row, trusted by
-      construction (its key provisioned by nix under `fleet.machineState`),
-      not approved.
-    - **Roles, not processes.** `service` (connection to the controller,
-      updater, keep-awake, telemetry), `session` (the user's Claude,
-      headless) and an optional tray `ui` over `session`. Windows and macOS:
-      the service plus a tray running session + ui, as today. A Linux
-      machine: a root systemd service plus a `session` user unit with linger
-      — Claude runs with nobody logged in — and on an x86_64 desktop the
-      tray. The box: one process as the operator, controller + service +
-      session, no tray.
-    - **Claude's jobs on a real Windows and macOS machine.** Agent 0.17.0
-      runs remote control and resumed sessions as jobs of the OS on every
-      machine (launchd in the gui domain on macOS; a detached process, and
-      `claude-holder`'s ConPTY for a resume, on Windows), with recovery of
-      the open sessions after a fresh start. Those two are compile-checked
-      and unit-tested only: once 0.17.0 is released and the machines have
-      it, prove on each that an agent or tray restart and an update leave
-      Claude running and re-attach, that a resume works, and that a reboot
-      brings the recovery set back. santree's session host takes the same
-      shape when it comes (step 4).
-    - **Root stays behind a socket-activated helper.** The controller runs
-      as the operator. Root actions (Apply, deploys, image and engine
-      updates, builds, power) keep their fixed nix units; their front door
-      moves from a dropped file to a systemd-owned socket (`Accept=yes`):
-      each connection spawns a fresh, sandboxed helper that checks the peer
-      is the operator's uid (`SO_PEERCRED` sees container uid 0 as the
-      operator), accepts only the fixed verbs with selectors — never paths
-      or flags, the bridge's rules unchanged — starts the existing unit so
-      the work survives a switch restarting its caller, and streams its
-      progress back. No resident root daemon. The controller forwards to
-      it, so the app has one door and never needs to know which actions
-      are root. The "no shell" invariant holds throughout; santree's generic
-      exec surface is authenticated separately and never reachable from the
-      app.
-    - **Staged updates everywhere.** Every agent fetches and verifies the
-      newest signed release in the background and stages it; applying is a
-      restart the operator triggers — per machine or all, from System ›
-      Machines or an MCP write tool. The request names a version, never
-      bytes; the agent checks the signature against its own key and refuses
-      a downgrade; a machine that is off gets it on reconnect; the page
-      shows how far behind each machine is and what a restart would end.
-      On the box the lock bump is the stage step. Replaces "machines
-      self-update within ten minutes" (Rules); the last self-updating
-      release has to carry this behaviour to the machines already enrolled.
-    - **Order — each step leaves the box working and deletes what it
-      replaces:**
-      1. Release agent 0.14.0 (`agent-v0.14.0` tag): the enrolled machines
-         self-update onto the link and find the controller by the SRV
-         record. Until then they run 0.13 against an app that no longer
-         answers it. Then agent 0.15.0 (`agent-v0.15.0`, not yet tagged):
-         the machines' status pages stop answering the LAN (the box already
-         reads their metrics from the controller).
-      2. Staged updates, orchestrated by the controller (deferred).
-      3. Actions move over one at a time: workspace clone and sync, then
-         the root verbs onto the socket-activated helper — a low-stakes one first
-         (reboot), Apply last — each deleting its
-         file-drop path.
-      4. santree: its session host on the box, then relayed to the other
-         machines, which opt in per machine (the price, written down: the
-         box can reach every machine that opted in). A first version was
-         built and verified as a standalone daemon and parked on 2026-09-27
-         (a crate porting santree's `fake.rs` on its `santree-pty` and
-         protocol crates, a catalog module, `GET /api/santree/{connection,
-         workspaces}`, a System › Santree tab); it returns as a crate in a
-         Cargo workspace shared with `agent/`. One piece of that patch stands
-         alone and can land any time: workspace sync ignoring santree's
-         untracked `.santree/`.
-    - **Decisions open:**
-      1. Transport between agents. Decided: TLS 1.3 (rustls, over pure-Rust
-         primitives) with each side pinning the other's ed25519 key, and
-         newline-delimited JSON with the socket API's envelope — no CA, no
-         web server between (agent/src/link/). Stream multiplexing waits for
-         santree's streams (step 4).
-      2. How a machine first trusts the controller. Decided: pinned at
-         install (`--pin`), else trust on first use, shown as unconfirmed
-         until pinned — both fingerprints on the tray and the status page; a
-         changed key is refused loudly, never re-pinned.
-      3. The box's System page: keep the root snapshots for what only root
-         reads (SMART, ZFS, generations) beside the controller (proposed),
-         or converge everything on one collector later.
-      4. The root helper: one socket reached only through the controller
-         (proposed), or also directly from the app.
+    agent is the controller; every other machine's is a node on one
+    outbound, pinned TLS link to it (TLS 1.3 with each side pinning the
+    other's ed25519 key; a node pins the controller at install with
+    `--pin`, else on first use, and a changed key is refused, never
+    re-pinned). The app reaches every machine only through the controller's
+    unix socket; capabilities, not "is this the box", draw the tabs. What
+    remains:
+    - **Providers through the controller.** The app still dials each node's
+      model server over the LAN for its catalog and health; the node's agent
+      reads them locally and pushes them up the link instead (being built).
+    - **Hardening.** A unix socket with peer credentials between the tray and
+      the service instead of loopback trust; an updater rollback that keeps
+      the previous binary until the new one proves healthy; rotation of the
+      controller's key.
+    - **Root behind a socket-activated helper.** The controller runs as the
+      operator. Root actions (Apply, deploys, image and engine updates,
+      builds, power) keep their fixed nix units; their front door moves from
+      a dropped file to a systemd-owned socket (`Accept=yes`): each
+      connection spawns a fresh, sandboxed helper that checks the peer is the
+      operator's uid (`SO_PEERCRED` sees container uid 0 as the operator),
+      accepts only the fixed verbs with selectors — never paths or flags —
+      starts the existing unit so the work survives a switch restarting its
+      caller, and streams progress back. No resident root daemon; the
+      controller forwards to it, so the app has one door. Order: workspace
+      clone and sync onto the agent, then the root verbs one at a time — a
+      low-stakes one first (reboot), Apply last — each deleting its
+      file-drop path. Open: whether the helper is also reachable from the
+      app directly (proposed: only through the controller).
+    - **Proof on the Mac.** The PC proved 0.17.0 on 2026-09-28 (Claude
+      survives agent and tray restarts and updates, resume works, a reboot
+      brings the recovery set back); the Mac has not been through it.
+    - **Deferred: staged updates.** Every agent fetches, verifies and stages
+      the newest signed release; applying is a restart the operator triggers
+      per machine or for all (System › Machines or an MCP write tool), naming
+      a version, never bytes, refusing a downgrade; on the box the lock bump
+      is the stage step. The last self-updating release has to carry it.
+    - **Separate:** santree (its session host on the box, then relayed to
+      machines that opt in; the parked 2026-09-27 daemon returns as a crate in
+      a Cargo workspace shared with `agent/`, and its workspace-sync fix for
+      `.santree/` can land any time), the power verbs (feature 6), and the
+      box's System page drawn from capabilities instead of the root
+      snapshots.
     - **Risks.** The controller is critical (down means no machines on the
       pages and no Apply): small, restarts cleanly, holds nothing it cannot
-      rebuild. Version skew between the live-on-save app and the
-      lock-bumped controller. The release signing key now covers a third OS
-      and still has no recovery path. A machine that updates to 0.14.0 and
-      cannot find the controller (no `--controller`, no SRV record) is off
-      the pages until it is given one; there is no fallback. Hardening that
-      lands with it: unix-socket IPC with peer credentials between
-      tray/session and service instead of loopback trust, an ACL on the
-      Windows identity file, a rollback that keeps the previous binary until
-      the new one proves healthy.
-    - **Costs.** The agent is built small (`opt-level = "s"`,
-      `panic = "abort"`, MSRV 1.85); the santree crates bring tokio, a PTY
-      layer and a `specta` prerelease needing Rust ≥ 1.93. Windows is a port
-      for santree, not a recompile (ConPTY, pwsh, paths, hook callbacks). A
-      generic Linux download needs static TLS (musl + rustls), not the
-      build host's OpenSSL.
+      rebuild. Version skew between the live-on-save app and the lock-bumped
+      controller. The release signing key covers three OSes and has no
+      recovery path.
+    - **Costs.** The santree crates bring tokio, a PTY layer and a `specta`
+      prerelease needing Rust ≥ 1.93 (the agent's MSRV is 1.85); Windows is
+      a port for santree, not a recompile (ConPTY, pwsh, paths, hook
+      callbacks).
 
 ---
 
