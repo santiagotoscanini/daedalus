@@ -9,13 +9,13 @@ import type { Telemetry } from "./Telemetry";
  * `nodes.get`'s answer: the summary, the whole hello, the status document
  * (what the machine's `/status` carries, without its telemetry), the
  * telemetry as the open page shows it (`Telemetry::public`), and the
- * providers.
+ * providers document (null until the machine has pushed one).
  */
 export type NodeDetail = { public_key: string, hello: Hello | null, 
 /**
  * The status page's document (`StatusPage`), as the machine sent it.
  */
-status: unknown, status_at: string | null, telemetry: Telemetry | null, telemetry_at: string | null, providers: Array<ProviderReport>, id: string, fingerprint: string, state: NodeState, connected: boolean, 
+status: unknown, status_at: string | null, telemetry: Telemetry | null, telemetry_at: string | null, providers: Array<ProviderReport> | null, providers_at: string | null, id: string, fingerprint: string, state: NodeState, connected: boolean, 
 /**
  * When the current connection opened; null while disconnected.
  */

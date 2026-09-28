@@ -298,7 +298,7 @@ pub struct NodesList {
 /// `nodes.get`'s answer: the summary, the whole hello, the status document
 /// (what the machine's `/status` carries, without its telemetry), the
 /// telemetry as the open page shows it (`Telemetry::public`), and the
-/// providers.
+/// providers document (null until the machine has pushed one).
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
 pub struct NodeDetail {
@@ -312,7 +312,22 @@ pub struct NodeDetail {
     pub status_at: Option<String>,
     pub telemetry: Option<Telemetry>,
     pub telemetry_at: Option<String>,
-    pub providers: Vec<ProviderReport>,
+    pub providers: Option<Vec<ProviderReport>>,
+    pub providers_at: Option<String>,
+}
+
+/// `nodes.providers`'s answer: the machine's providers as it last pushed
+/// them (providers.rs), null until it has, and when they arrived.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(test, ts(rename = "NodeProvidersOk"))]
+pub struct NodeProviders {
+    pub id: String,
+    /// Whether the machine's link is open now: a report from a machine
+    /// that left is what it said before it went.
+    pub connected: bool,
+    pub providers: Option<Vec<ProviderReport>>,
+    pub received_at: Option<String>,
 }
 
 /// `nodes.telemetry`'s answer: the full document at the machine's level.
@@ -364,6 +379,35 @@ pub struct NodeClaudeSession {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ClaudeSessionSent {
+    pub delivered: bool,
+    pub request: String,
+}
+
+/// `nodes.provider_model`'s parameters: the machine, the provider's kind,
+/// the verb and the model — never an address; the machine finds its
+/// provider by kind and its policy's port.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "NodeProviderModelParams"))]
+pub struct NodeProviderModel {
+    pub id: String,
+    pub kind: String,
+    pub action: crate::providers::ModelAction,
+    pub model: String,
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub pinned: Option<bool>,
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub replacing: Option<String>,
+}
+
+/// `nodes.provider_model`'s answer: the machine took the verb, and its
+/// providers document reports the outcome under `request` (`actions`).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProviderModelSent {
     pub delivered: bool,
     pub request: String,
 }
@@ -450,6 +494,11 @@ pub struct DesiredProvider {
     #[serde(default)]
     #[cfg_attr(test, ts(optional))]
     pub port: Option<u16>,
+    /// The app offers it to the gateway. The controller keeps it for
+    /// `/nodes/metrics` (`offered`); the machine is not told.
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub offer: Option<bool>,
 }
 
 impl From<DesiredPolicy> for Policy {
@@ -819,7 +868,8 @@ mod tests {
             status_at: Some("2026-09-27T10:00:15Z".into()),
             telemetry: None,
             telemetry_at: None,
-            providers: vec![],
+            providers: None,
+            providers_at: None,
         };
         assert_eq!(
             wire(&detail),
@@ -828,7 +878,7 @@ mod tests {
                 concat!(
                     r#""public_key":"abababababababababababababababababababababababababababababababab","#,
                     r#""hello":null,"status":{"awake_hold":true},"status_at":"2026-09-27T10:00:15Z","#,
-                    r#""telemetry":null,"telemetry_at":null,"providers":[]"#
+                    r#""telemetry":null,"telemetry_at":null,"providers":null,"providers_at":null"#
                 )
             )
         );
@@ -847,6 +897,80 @@ mod tests {
                 received_at: Some("t".into())
             }),
             r#"{"id":"0123456789abcdef","report":null,"received_at":"t"}"#
+        );
+        assert_eq!(
+            wire(&NodeProviders {
+                id: "0123456789abcdef".into(),
+                connected: false,
+                providers: None,
+                received_at: None
+            }),
+            r#"{"id":"0123456789abcdef","connected":false,"providers":null,"received_at":null}"#
+        );
+        let report = crate::providers::ProviderReport {
+            kind: "lemonade".into(),
+            port: 13305,
+            version: Some("9.1.2".into()),
+            running: true,
+            healthy: true,
+            loaded: vec![crate::providers::LoadedModel {
+                id: "Gemma-4".into(),
+                device: Some("gpu".into()),
+                max_context: Some(65536),
+                pinned: true,
+            }],
+            models: vec![crate::providers::ProviderModel {
+                id: "Gemma-4".into(),
+                labels: vec!["tool-calling".into()],
+                downloaded: true,
+                size_gb: Some(7.5),
+                recipe: Some("llamacpp".into()),
+            }],
+            downloads: vec![crate::providers::ProviderDownload {
+                model: "Qwen".into(),
+                percent: Some(12.5),
+                status: "downloading".into(),
+            }],
+            backends: vec![crate::providers::ProviderBackend {
+                recipe: "llamacpp".into(),
+                backend: "vulkan".into(),
+                version: Some("b6000".into()),
+                url: None,
+            }],
+            figures: vec![crate::providers::ModelFigures {
+                model: "Gemma-4".into(),
+                requests: Some(3.0),
+                tps: Some(40.0),
+                ..Default::default()
+            }],
+            read_at: "2026-09-28T10:00:00Z".into(),
+            error: None,
+            actions: vec![crate::providers::ProviderAction {
+                request: "00112233445566ff".into(),
+                model: "Gemma-4".into(),
+                ok: true,
+                message: "Loaded".into(),
+                at: "2026-09-28T09:59:00Z".into(),
+            }],
+        };
+        assert_eq!(
+            wire(&NodeProviders {
+                id: "0123456789abcdef".into(),
+                connected: true,
+                providers: Some(vec![report]),
+                received_at: Some("2026-09-28T10:00:01Z".into())
+            }),
+            concat!(
+                r#"{"id":"0123456789abcdef","connected":true,"providers":[{"kind":"lemonade","port":13305,"#,
+                r#""version":"9.1.2","running":true,"healthy":true,"#,
+                r#""loaded":[{"id":"Gemma-4","device":"gpu","max_context":65536,"pinned":true}],"#,
+                r#""models":[{"id":"Gemma-4","labels":["tool-calling"],"downloaded":true,"size_gb":7.5,"recipe":"llamacpp"}],"#,
+                r#""downloads":[{"model":"Qwen","percent":12.5,"status":"downloading"}],"#,
+                r#""backends":[{"recipe":"llamacpp","backend":"vulkan","version":"b6000","url":null}],"#,
+                r#""figures":[{"model":"Gemma-4","requests":3.0,"input_tokens":null,"output_tokens":null,"#,
+                r#""tps":40.0,"ttft_ms":null,"device":null,"checkpoint":null}],"#,
+                r#""read_at":"2026-09-28T10:00:00Z","error":null,"actions":[{"request":"00112233445566ff","model":"Gemma-4","ok":true,"message":"Loaded","at":"2026-09-28T09:59:00Z"}]}],"received_at":"2026-09-28T10:00:01Z"}"#
+            )
         );
     }
 
@@ -869,7 +993,7 @@ mod tests {
         let set: SetDesired = serde_json::from_value(json!({"nodes":[
             {"id":"0123456789abcdef","public_key":"ab","state":"approved",
              "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p",
-                       "providers":{"lemonade":{"port":8000}}},
+                       "providers":{"lemonade":{"port":8000,"offer":true}}},
              "name":"Gaming PC"},
             {"id":"fedcba9876543210","public_key":"cd","state":"revoked"}
         ]}))
@@ -878,6 +1002,15 @@ mod tests {
         assert_eq!(set.nodes[1].name, None);
         assert_eq!(set.nodes[1].state, DesiredState::Revoked);
         assert_eq!(set.nodes[1].policy, None);
+        // `offer` is the controller's (metrics); the machine's policy leaves it out.
+        assert_eq!(
+            set.nodes[0]
+                .policy
+                .as_ref()
+                .and_then(|p| p.providers.lemonade.as_ref())
+                .and_then(|l| l.offer),
+            Some(true)
+        );
         let p: Policy = set.nodes[0].policy.clone().unwrap().into();
         assert_eq!(
             serde_json::to_string(&p).unwrap(),
@@ -1248,7 +1381,7 @@ mod tests {
                 r#""modules":[]},"#,
                 r#""disks":[],"drives":[],"gpus":[],"temperatures":[],"network":[],"battery":null,"#,
                 r#""processes":[],"process_count":null,"services":[],"service_count":null,"#,
-                r#""browsers":[],"apps":[],"app_count":null,"updates":null,"providers":[],"errors":[]}}"#
+                r#""browsers":[],"apps":[],"app_count":null,"updates":null,"errors":[]}}"#
             )
         );
     }

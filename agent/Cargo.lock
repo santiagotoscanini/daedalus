@@ -346,7 +346,7 @@ dependencies = [
 
 [[package]]
 name = "daedalus-agent"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "anyhow",
  "chacha20poly1305",

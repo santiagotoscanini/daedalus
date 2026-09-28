@@ -45,14 +45,14 @@
 //! `telemetry` decides how much of the machine is read and reported:
 //! `full` is everything telemetry.rs lists; `minimal` is the machine and
 //! how it is doing — make, model, firmware, OS, processor, memory, volumes,
-//! GPUs, temperatures, network, battery, providers and what could not be
+//! GPUs, temperatures, network, battery and what could not be
 //! read — and never reads the drives (their serials and SMART), the
 //! services, the browsers, the installed applications or the OS's pending
 //! updates; processes are sampled for the count, but the list is not
-//! reported, and a provider shows only while it answers on its port
-//! (`Telemetry::minimal`); `off` reads nothing, so the page's
-//! `telemetry` is null and the controller has no series for it but
-//! `daedalus_agent_link_up`. `updates` decides whether a
+//! reported (`Telemetry::minimal`); `off` reads nothing, so the page's
+//! `telemetry` is null and the controller has no telemetry series for it. The
+//! providers (providers.rs) are read whatever the level: the gateway needs
+//! them. `updates` decides whether a
 //! newer release is installed: `self` installs it (today's behaviour);
 //! `staged` and `external` only report it, as `auto_update = false` always
 //! has. When `updates` is absent, `auto_update` decides (true = `self`,

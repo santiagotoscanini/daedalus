@@ -365,11 +365,6 @@ pub struct Telemetry {
     pub app_count: Option<usize>,
     /// None until the first search lands.
     pub updates: Option<Updates>,
-    /// What this machine offers the network — a model server — as
-    /// presence only (providers.rs). Kept on the open page: the machine,
-    /// not the person.
-    #[serde(default)]
-    pub providers: Vec<crate::providers::ProviderReport>,
     /// What could not be read, one line each, so the page says "not
     /// readable on this OS" rather than showing a dash without a reason.
     pub errors: Vec<String>,
@@ -395,13 +390,12 @@ impl Telemetry {
 
     /// The document at `telemetry = "minimal"`: the machine and how it is
     /// doing — make, model, firmware, OS, processor, memory, volumes, GPUs,
-    /// temperatures, network, battery, the process COUNT, providers and
+    /// temperatures, network, battery, the process COUNT and
     /// what could not be read. Nothing of the slow read (drives with their
     /// serials and SMART, services, browsers, installed applications) and
     /// no OS updates: the sampler never reads those at this level
     /// (telemetry.rs `run_loop`). Processes are sampled — the count needs
-    /// them — but their list is dropped here. Without the application list
-    /// a provider shows only while it answers on its port. This is what
+    /// them — but their list is dropped here. This is what
     /// makes the document say so whatever a collector handed back.
     pub fn minimal(&self) -> Telemetry {
         let mut t = self.public();

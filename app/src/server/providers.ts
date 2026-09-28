@@ -1,4 +1,5 @@
 import type { Ctx } from '../core/ctx'
+import type { ModelAction } from '../host/controller/generated'
 import { asValidator, bool, is, obj, withMessage } from '../lib/contract/decode'
 import { nonBlankField } from '../lib/contract/fields'
 import { isProviderKind, managesResidency, type ProviderKind } from '../lib/providers/kinds'
@@ -16,6 +17,16 @@ import { adminFn } from './fn'
 // drifts on its own, and the two things anyone ever wants to do about it are
 // "free that card up" and "have this one ready, I am about to use it".
 //
+// ── how a verb travels ───────────────────────────────────────────────────
+//
+// Through the controller, never at the machine: `nodes.provider_model`
+// hands the verb to the machine's agent, which runs it against its provider
+// on its own loopback (agent/src/providers.rs `residency`) and reports the
+// outcome in its next providers document under the request id this call
+// gets back — reading again at once, so the document that carries the
+// outcome also shows the slot as it now is. This call waits for that
+// outcome, as long as a load may take.
+//
 // ── deliberately not here ─────────────────────────────────────────────────
 //
 // Deleting a model from the provider's disk. Several of these are 14 GB
@@ -25,15 +36,12 @@ import { adminFn } from './fn'
 // backend: those mutate the machine's runtimes, and the machine's own pages
 // are where a machine is changed.
 //
-// ── why the browser never talks to the provider ───────────────────────────
+// ── why the browser never names an address ────────────────────────────────
 //
-// A model server has no auth on the LAN. daedalus is behind the identity
-// gate, so routing these through a server function means the operator's
-// passkey is what authorises the call — a fetch straight from the page would
-// work just as well from any other tab on the LAN, gate or no gate. It is
-// also why the page names a MACHINE and a KIND rather than an address: the
-// address is resolved here, from the fleet's own provider list, so no
-// browser can aim one of these at a host of its choosing.
+// The page names a MACHINE and a KIND; the machine's agent finds its
+// provider by kind and its policy's port. Nothing a browser sends can aim a
+// request at a host, and the verb goes through the identity gate like every
+// other admin action.
 
 export type ModelActionResult = Result<string>
 
@@ -46,9 +54,9 @@ const kindField = withMessage(is(isProviderKind, 'a provider kind'), 'expected a
  *
  * A shape check, not a list: the catalog lives at the provider and changes
  * when a model is registered there, so the authority on what may be loaded
- * is the provider, which answers a name it does not know with a 4xx that
- * `call` reports in words. What this refuses is a request that is not a name
- * at all — which would otherwise reach the provider as `{"model_name": null}`.
+ * is the provider, which answers a name it does not know with a refusal the
+ * outcome reports in words. What this refuses is a request that is not a
+ * name at all.
  */
 const modelField = nonBlankField('expected a model')
 
@@ -66,23 +74,59 @@ const replacingField = (v: unknown, p: string): string | null =>
   v === undefined || v === null ? null : nonBlankField('expected the model being replaced')(v, p)
 
 /**
- * Where that provider answers, as the fleet says — never as the caller does.
- *
  * Refuses a machine that offers no such provider, and a kind whose residency
- * the box does not drive, so neither a stale page nor a crafted request can
- * turn these into a POST at an arbitrary address.
+ * the box does not drive, so a stale page cannot send a verb nowhere.
  */
-async function baseOf(t: Target, ctx: () => Promise<Ctx>): Promise<Result<string>> {
+async function checked(t: Target, ctx: Ctx): Promise<Result<null>> {
   const { fleetProviders } = await import('../host/providers/fleet')
   if (!managesResidency(t.kind)) {
     return { ok: false, reason: `a ${t.kind} provider does not load models on request` }
   }
-  const hit = (await fleetProviders(await ctx())).find(
-    (p) => p.machine === t.machine && p.kind === t.kind,
-  )
-  return hit === undefined
+  const hit = (await fleetProviders(ctx)).find((p) => p.machine === t.machine && p.kind === t.kind)
+  return hit === undefined || hit.machine === 'box'
     ? { ok: false, reason: 'that machine offers no such provider' }
-    : { ok: true, value: hit.base }
+    : { ok: true, value: null }
+}
+
+/** How long a verb may take on the machine: a cold 12B model is read off a disk and pushed across PCIe. */
+const OUTCOME_WITHIN_MS = 150_000
+const POLL_MS = 500
+
+/**
+ * Hand the verb to the machine and wait for its outcome in the providers
+ * document. A deliberate action with a spinner on it: waiting is fine,
+ * silently giving up early is not.
+ */
+async function run(
+  ctx: Ctx,
+  t: Target,
+  verb: { action: ModelAction; pinned?: boolean; replacing?: string },
+): Promise<ModelActionResult> {
+  const ok = await checked(t, ctx)
+  if (!ok.ok) return ok
+  let request: string
+  try {
+    ;({ request } = await ctx.controller.nodesProviderModel(t.machine, {
+      kind: t.kind,
+      model: t.model,
+      ...verb,
+    }))
+  } catch (e) {
+    return { ok: false, reason: errorText(e) }
+  }
+  const until = Date.now() + OUTCOME_WITHIN_MS
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, POLL_MS))
+    const answer = await ctx.controller.nodesProviders(t.machine).catch(() => null)
+    const done = answer?.providers?.flatMap((p) => p.actions).find((a) => a.request === request)
+    if (done !== undefined) {
+      return done.ok ? { ok: true, value: done.message } : { ok: false, reason: done.message }
+    }
+  }
+  return {
+    ok: false,
+    reason: `no outcome from the machine within ${String(OUTCOME_WITHIN_MS / 1000)} s`,
+  }
 }
 
 /**
@@ -94,25 +138,20 @@ async function baseOf(t: Target, ctx: () => Promise<Ctx>): Promise<Result<string
  */
 export const unloadProviderModelFn = adminFn
   .validator(asValidator(target))
-  .handler(async ({ data, context }): Promise<ModelActionResult> => {
-    const base = await baseOf(data, context.ctx)
-    if (!base.ok) return base
-    return settled(await call(base.value, '/api/v1/unload', { model_name: data.model }))
-  })
+  .handler(
+    async ({ data, context }): Promise<ModelActionResult> =>
+      run(await context.ctx(), data, { action: 'unload' }),
+  )
 
 /**
  * Put a different model of the same kind into the slot.
  *
- * UNLOAD FIRST, and that is not belt-and-braces. The provider keeps a
- * per-kind pool — one model deep for every kind here — and a pinned model is
- * excluded from the eviction search. So when the pool is full and what is in
- * it is pinned, an explicit load evicts nothing: it fails with 409 and a
- * `slots_pinned_error`. A plain load-the-new-one button would have failed
- * every time it was pressed on a pinned slot.
- *
- * Freeing the slot explicitly is also the honest reading of the gesture: the
- * operator picked a replacement, so evicting the incumbent is what they
- * asked for, not a side effect to be inferred from memory pressure.
+ * The machine UNLOADS FIRST, and that is not belt-and-braces. The provider
+ * keeps a per-kind pool — one model deep for every kind here — and a pinned
+ * model is excluded from the eviction search. So when the pool is full and
+ * what is in it is pinned, an explicit load evicts nothing: it fails with
+ * 409. Freeing the slot is also the honest reading of the gesture: the
+ * operator picked a replacement.
  *
  * `pinned` carries the incumbent's state forward rather than quietly
  * changing whether the slot survives the next squeeze.
@@ -130,65 +169,11 @@ export const loadProviderModelFn = adminFn
       ),
     ),
   )
-  .handler(async ({ data, context }): Promise<ModelActionResult> => {
-    const base = await baseOf(data, context.ctx)
-    if (!base.ok) return base
-    if (data.replacing !== null) {
-      const freed = await call(base.value, '/api/v1/unload', { model_name: data.replacing })
-      // Report the eviction failure rather than pressing on into the 409 it
-      // guarantees — "could not free the slot" is the actionable sentence.
-      if (!freed.ok) {
-        return { ok: false, reason: `could not put ${data.replacing} down: ${freed.reason}` }
-      }
-    }
-    return settled(
-      await call(base.value, '/api/v1/load', { model_name: data.model, pinned: data.pinned }),
-    )
-  })
-
-/**
- * POST, and report what happened in words.
- *
- * A load can take tens of seconds — a cold 12B model is read off a disk and
- * pushed across PCIe — so the budget here is far longer than the dashboard's
- * read timeouts, which exist to keep a dead upstream from stalling a page.
- * This is a deliberate action with a spinner on it; waiting is fine, silently
- * giving up at 2.5 s is not.
- */
-async function call(
-  base: string,
-  path: string,
-  body: Record<string, unknown>,
-): Promise<ModelActionResult> {
-  try {
-    const res = await fetch(`${base.replace(/\/+$/, '')}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000),
-    })
-    const said = await res.text()
-    if (!res.ok) return { ok: false, reason: `the provider answered HTTP ${String(res.status)}` }
-    const parsed = JSON.parse(said) as { message?: string; status?: string }
-    // A 200 whose body says `status: error` is still a failure: a refused
-    // load is reported that way rather than with a status code.
-    const message = parsed.message ?? 'done'
-    return parsed.status === 'error' ? { ok: false, reason: message } : { ok: true, value: message }
-  } catch (e) {
-    return { ok: false, reason: errorText(e) }
-  }
-}
-
-/**
- * Forget the remembered catalog when a model moved.
- *
- * The readings are cached a minute so that a page visit and a sync tick do
- * not both dial the provider — but a load or an unload changes exactly what
- * that cache holds, and the page is about to re-run its loader. Without
- * this, the operator presses Switch, the provider does it, and the page
- * comes back showing the old slot for up to a minute.
- */
-function settled(r: ModelActionResult): ModelActionResult {
-  if (r.ok) void import('../host/providers/read').then((m) => m.forgetProviders())
-  return r
-}
+  .handler(
+    async ({ data, context }): Promise<ModelActionResult> =>
+      run(await context.ctx(), data, {
+        action: 'load',
+        pinned: data.pinned,
+        ...(data.replacing === null ? {} : { replacing: data.replacing }),
+      }),
+  )

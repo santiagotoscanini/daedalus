@@ -6,11 +6,11 @@ describe('the policy a machine hears', () => {
     expect(wirePolicy({})).toEqual({
       awake_hold: true,
       claude_remote_control: true,
-      providers: { lemonade: { port: 13305 } },
+      providers: { lemonade: { port: 13305, offer: false } },
     })
   })
 
-  it('carries the switches, a trimmed workdir and the provider port, and nothing else', () => {
+  it('carries the switches, a trimmed workdir, the provider port and offer, and nothing else', () => {
     const p = wirePolicy({
       displayName: 'PC',
       name: 'gaming-pc',
@@ -24,7 +24,7 @@ describe('the policy a machine hears', () => {
       awake_hold: false,
       claude_remote_control: false,
       claude_workdir: 'C:/work',
-      providers: { lemonade: { port: 9000 } },
+      providers: { lemonade: { port: 9000, offer: true } },
     })
   })
 

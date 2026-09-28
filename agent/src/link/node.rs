@@ -37,7 +37,9 @@
 //!   every `PUSH_EVERY` — not every 15-second sample;
 //! - `claude`, the session's full report, when it changes (its clock
 //!   aside) and every `PUSH_EVERY`;
-//! - `providers` when the list changes;
+//! - `providers`, what the machine's model servers answered on loopback
+//!   (providers.rs), when it changes (its clocks aside) and every
+//!   `PUSH_EVERY`;
 //! - `claude_roster`, the session's roster of Claude sessions
 //!   (claude/roster.rs), when it changes (its clock and ticking costs
 //!   aside) and every `PUSH_EVERY`.
@@ -439,7 +441,7 @@ pub fn connect_once(
     target: &Target,
     client: &tls::Client,
     hello: Hello,
-    shared: &Shared,
+    shared: &Arc<Shared>,
     stop: &AtomicBool,
     store: &Path,
     cadence: &Cadence,
@@ -566,7 +568,7 @@ struct Pushed {
     status: Option<(String, Instant)>,
     power: Option<(Option<String>, Instant)>,
     telemetry: Option<(u64, String, Instant)>,
-    providers: Option<String>,
+    providers: Option<(String, Instant)>,
     claude: Option<(String, Instant)>,
     roster: Option<(String, Instant)>,
 }
@@ -637,10 +639,19 @@ impl Pushed {
                 }
                 self.telemetry = Some((tier, t.sampled_at.clone(), Instant::now()));
             }
-            let p = serde_json::to_string(&t.providers).unwrap_or_default();
-            if self.providers.as_ref() != Some(&p) {
-                tls.send(&wire::event(name::PROVIDERS, &t.providers))?;
-                self.providers = Some(p);
+        }
+
+        // The providers, on the same rule, their clocks aside
+        // (`providers::digest`); read whatever the telemetry level.
+        if let Some(list) = shared.providers() {
+            let d = crate::providers::digest(&list);
+            if self
+                .providers
+                .as_ref()
+                .is_none_or(|(prev, at)| *prev != d || due(at))
+            {
+                tls.send(&wire::event(name::PROVIDERS, &list))?;
+                self.providers = Some((d, Instant::now()));
             }
         }
 
@@ -726,6 +737,71 @@ fn take_claude_session(shared: &Shared, p: Value) -> Result<Accepted, ApiError> 
     Ok(Accepted { accepted: true })
 }
 
+/// Take one residency verb from the controller: checked here, run on a
+/// thread of its own (a load takes tens of seconds, and the link must keep
+/// its heartbeats), acknowledged at once. The outcome rides the next
+/// `providers` document under the controller's request id; the reader
+/// reads again as soon as the verb ends, so the document shows the slot as
+/// it now is.
+fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiError> {
+    let params: crate::providers::ProviderModelParams = serde_json::from_value(p)
+        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("provider_model: {e}")))?;
+    params
+        .check()
+        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("provider_model: {e}")))?;
+    let port = shared
+        .policy()
+        .providers
+        .lemonade
+        .and_then(|l| l.port)
+        .unwrap_or(crate::providers::LEMONADE_DEFAULT_PORT);
+    if !shared.begin_provider_action() {
+        return Err(ApiError::new(
+            code::BUSY,
+            "a residency verb is still running on this machine",
+        ));
+    }
+    tracing::info!(
+        request = %params.request,
+        action = ?params.action,
+        model = %params.model,
+        "the controller asked for a residency verb"
+    );
+    let shared2 = Arc::clone(shared);
+    let (request, model) = (params.request.clone(), params.model.clone());
+    let spawned = std::thread::Builder::new()
+        .name("provider-model".into())
+        .spawn(move || {
+            let result = crate::providers::residency(port, &params);
+            let (ok, message) = match result {
+                Ok(m) => (true, m),
+                Err(m) => (false, m),
+            };
+            tracing::info!(request = %params.request, ok, message = %message, "residency verb ended");
+            shared2.finish_provider_action(crate::providers::ProviderAction {
+                request: params.request,
+                model: crate::providers::clip(&params.model, crate::providers::MAX_TEXT),
+                ok,
+                message: crate::providers::clip(&message, crate::providers::MAX_TEXT),
+                at: crate::state::now_rfc3339(),
+            });
+        });
+    if spawned.is_err() {
+        shared.finish_provider_action(crate::providers::ProviderAction {
+            request,
+            model: crate::providers::clip(&model, crate::providers::MAX_TEXT),
+            ok: false,
+            message: "could not start the residency verb".into(),
+            at: crate::state::now_rfc3339(),
+        });
+        return Err(ApiError::new(
+            code::UNAVAILABLE,
+            "could not start the residency verb",
+        ));
+    }
+    Ok(Accepted { accepted: true })
+}
+
 /// Apply one command from the controller; the answer's body or an error.
 fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accepted, ApiError> {
     let params: CommandParams = serde_json::from_value(p)
@@ -757,7 +833,7 @@ fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accept
 fn converse(
     tls: &mut Tls,
     welcome: Welcome,
-    shared: &Shared,
+    shared: &Arc<Shared>,
     stop: &AtomicBool,
     cadence: &Cadence,
     claude_update: bool,
@@ -842,7 +918,13 @@ fn converse(
                             Err(e) => Response::err(Some(id), e),
                         }
                     }
-                    name::COMMAND | name::CLAUDE_SESSION => Response::err(
+                    name::PROVIDER_MODEL if state == NodeState::Approved => {
+                        match take_provider_model(shared, p) {
+                            Ok(a) => Response::ok(id, &a),
+                            Err(e) => Response::err(Some(id), e),
+                        }
+                    }
+                    name::COMMAND | name::CLAUDE_SESSION | name::PROVIDER_MODEL => Response::err(
                         Some(id),
                         ApiError::new(code::UNAVAILABLE, "this machine is not approved"),
                     ),

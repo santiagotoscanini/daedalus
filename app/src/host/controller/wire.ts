@@ -16,11 +16,20 @@ import {
   int,
   literal,
   nullable,
+  num,
   obj,
   optional,
   reads,
   str,
 } from '../../lib/contract/decode'
+import {
+  type ModelFigures,
+  modelOf,
+  type ProviderBackend,
+  type ProviderDownload,
+  type ProviderHealth,
+  type ProviderModel,
+} from '../../lib/providers/kinds'
 import type {
   ApiError,
   ClaudeSessionSent,
@@ -31,15 +40,18 @@ import type {
   NodeClaudeOk,
   NodeClaudeRosterOk,
   NodeDetail,
+  NodeProvidersOk,
   NodeState,
   NodeSummary,
   NodeTelemetryOk,
+  ProviderModelSent,
   Queued,
   SessionQueued,
   SetDesiredOk,
   TelemetryLevel,
   ClaudeRosterGet as WireClaudeRosterGet,
   ClaudeStatus as WireClaudeStatus,
+  ProviderReport as WireProviderReport,
   SystemInfo as WireSystemInfo,
   TelemetryGet as WireTelemetryGet,
 } from './generated'
@@ -631,4 +643,164 @@ export const sessionQueued = (v: unknown): SessionSent => ({
 
 export const claudeSessionSent = (v: unknown): SessionSent => ({
   request: decode(reads<ClaudeSessionSent>()(obj({ delivered: flag, request: str })), v).request,
+})
+
+// ── Providers (`nodes.providers`, `nodes.provider_model`) ─────────────────
+
+/**
+ * One provider as a node's agent read it on its own loopback
+ * (agent/src/providers.rs), in the app's shapes: the catalog with modes
+ * derived from the labels, the health, and the page's detail.
+ */
+export type NodeProviderReport = {
+  kind: string
+  port: number
+  version: string | null
+  /** The health endpoint answered. */
+  running: boolean
+  /** And called itself healthy. */
+  healthy: boolean
+  loaded: ProviderHealth['loaded']
+  models: ProviderModel[]
+  downloads: ProviderDownload[]
+  backends: ProviderBackend[]
+  /** By the provider's model id. */
+  figures: Record<string, ModelFigures>
+  readAt: string
+  error: string | null
+  /** The residency verbs' outcomes, newest last. */
+  actions: { request: string; model: string; ok: boolean; message: string; at: string }[]
+}
+
+/** `nodes.providers`: null `providers` until the machine has pushed a document. */
+export type NodeProvidersAnswer = {
+  connected: boolean
+  providers: NodeProviderReport[] | null
+  receivedAt: string | null
+}
+
+const nnum = optional(nullable(num), null)
+
+const providerReportShape = reads<WireProviderReport>()(
+  obj({
+    kind: optional(str, ''),
+    port: optional(int, 0),
+    version: nstr,
+    running: flag,
+    healthy: flag,
+    loaded: optional(arrayOf(obj({ id: str, device: nstr, max_context: nint, pinned: flag })), []),
+    models: optional(
+      arrayOf(
+        obj({
+          id: str,
+          labels: optional(arrayOf(str), []),
+          downloaded: flag,
+          size_gb: nnum,
+          recipe: nstr,
+        }),
+      ),
+      [],
+    ),
+    downloads: optional(
+      arrayOf(obj({ model: optional(str, '?'), percent: nnum, status: optional(str, '?') })),
+      [],
+    ),
+    backends: optional(arrayOf(obj({ recipe: str, backend: str, version: nstr, url: nstr })), []),
+    figures: optional(
+      arrayOf(
+        obj({
+          model: str,
+          requests: nnum,
+          input_tokens: nnum,
+          output_tokens: nnum,
+          tps: nnum,
+          ttft_ms: nnum,
+          device: nstr,
+          checkpoint: nstr,
+        }),
+      ),
+      [],
+    ),
+    read_at: optional(str, ''),
+    error: nstr,
+    actions: optional(
+      arrayOf(
+        obj({
+          request: str,
+          model: optional(str, ''),
+          ok: flag,
+          message: optional(str, ''),
+          at: optional(str, ''),
+        }),
+      ),
+      [],
+    ),
+  }),
+)
+
+const nodeProvidersShape = reads<NodeProvidersOk>()(
+  obj({
+    connected: flag,
+    providers: optional(nullable(arrayOf(providerReportShape)), null),
+    received_at: nstr,
+  }),
+)
+
+export function nodeProvidersAnswer(v: unknown): NodeProvidersAnswer {
+  const d = decode(nodeProvidersShape, v)
+  return {
+    connected: d.connected,
+    receivedAt: d.received_at,
+    providers:
+      d.providers === null
+        ? null
+        : d.providers
+            .filter((p) => p.kind !== '' && p.port > 0)
+            .map((p) => ({
+              kind: p.kind,
+              port: p.port,
+              version: p.version,
+              running: p.running,
+              healthy: p.healthy,
+              loaded: p.loaded.map((l) => ({
+                id: l.id,
+                device: l.device,
+                maxContext: l.max_context,
+                pinned: l.pinned,
+              })),
+              models: p.models.map((m) =>
+                modelOf({
+                  id: m.id,
+                  labels: m.labels,
+                  downloaded: m.downloaded,
+                  sizeGb: m.size_gb,
+                  recipe: m.recipe,
+                }),
+              ),
+              downloads: p.downloads,
+              backends: p.backends,
+              figures: Object.fromEntries(
+                p.figures.map((f) => [
+                  f.model,
+                  {
+                    requests: f.requests,
+                    inputTokens: f.input_tokens,
+                    outputTokens: f.output_tokens,
+                    tps: f.tps,
+                    ttftMs: f.ttft_ms,
+                    device: f.device,
+                    checkpoint: f.checkpoint,
+                  },
+                ]),
+              ),
+              readAt: p.read_at,
+              error: p.error,
+              actions: p.actions,
+            })),
+  }
+}
+
+/** `nodes.provider_model`: taken; the providers document reports the outcome under `request`. */
+export const providerModelSent = (v: unknown): { request: string } => ({
+  request: decode(reads<ProviderModelSent>()(obj({ delivered: flag, request: str })), v).request,
 })

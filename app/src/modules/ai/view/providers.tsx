@@ -529,17 +529,22 @@ const LOG_NEIGHBOURS: readonly LogNeighbour[] = [
 function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersData['logs'] }) {
   // A machine nothing offers and no agent has seen is not a fault: it is a
   // provider not installed yet, and the line says what installing it does.
-  const absent = !m.reachable && !m.offered && m.presence === null && m.machine !== 'box'
+  const absent =
+    m.reported && !m.reachable && !m.offered && m.presence === null && m.machine !== 'box'
   const chip = m.reachable
     ? { label: 'answering', tone: 'ok' as const }
-    : absent
-      ? { label: 'not installed', tone: 'muted' as const }
-      : { label: 'not answering', tone: 'bad' as const }
+    : !m.reported
+      ? { label: 'no report yet', tone: 'muted' as const }
+      : absent
+        ? { label: 'not installed', tone: 'muted' as const }
+        : { label: 'not answering', tone: 'bad' as const }
   const presence =
     m.presence === null
       ? m.machine === 'box'
         ? 'a service of the tv stack'
-        : 'the agent has not reported it'
+        : m.reported
+          ? 'the agent finds none'
+          : 'the gateway keeps the routes it has'
       : m.presence.running
         ? `the agent sees it running${m.presence.version === null ? '' : ` · v${m.presence.version}`}`
         : 'the agent sees it installed but not running'

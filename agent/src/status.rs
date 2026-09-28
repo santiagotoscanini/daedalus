@@ -126,6 +126,15 @@ struct Live {
     /// OS updates — what the link pushes at once rather than on its
     /// sample cadence (link/node.rs).
     telemetry_tier: u64,
+    /// The providers on this machine, from their reader (providers.rs);
+    /// None until its first read.
+    providers: Option<Vec<crate::providers::ProviderReport>>,
+    /// The residency verbs' outcomes (providers.rs), newest last.
+    provider_actions: Vec<crate::providers::ProviderAction>,
+    /// A residency verb is running; a second is refused until it ends.
+    provider_busy: bool,
+    /// Raised when a verb ends: the reader reads again at once.
+    providers_read: bool,
     /// This machine's link to the controller, as its loop last saw it;
     /// None on the controller, and until the loop starts.
     link: Option<LinkStatus>,
@@ -203,6 +212,10 @@ impl Shared {
                 claude_roster: None,
                 telemetry: None,
                 telemetry_tier: 0,
+                providers: None,
+                provider_actions: Vec::new(),
+                provider_busy: false,
+                providers_read: false,
                 link: None,
             }),
         }
@@ -257,6 +270,49 @@ impl Shared {
     /// before the first sample, or when the level is `off`.
     pub fn telemetry(&self) -> Option<Telemetry> {
         self.lock().telemetry.clone()
+    }
+
+    /// The providers as their reader last found them (providers.rs).
+    pub fn set_providers(&self, list: Vec<crate::providers::ProviderReport>) {
+        self.lock().providers = Some(list);
+    }
+
+    /// Claim the one residency slot; false while a verb runs.
+    pub fn begin_provider_action(&self) -> bool {
+        let mut l = self.lock();
+        if l.provider_busy {
+            return false;
+        }
+        l.provider_busy = true;
+        true
+    }
+
+    /// A verb ended: its outcome is kept (the last `MAX_ACTIONS`), the
+    /// slot freed, and the reader asked to read again at once.
+    pub fn finish_provider_action(&self, a: crate::providers::ProviderAction) {
+        let mut l = self.lock();
+        l.provider_actions.push(a);
+        let over = l
+            .provider_actions
+            .len()
+            .saturating_sub(crate::providers::MAX_ACTIONS);
+        l.provider_actions.drain(..over);
+        l.provider_busy = false;
+        l.providers_read = true;
+    }
+
+    pub fn provider_actions(&self) -> Vec<crate::providers::ProviderAction> {
+        self.lock().provider_actions.clone()
+    }
+
+    /// Whether a read was asked for since the last call.
+    pub fn take_providers_read(&self) -> bool {
+        std::mem::take(&mut self.lock().providers_read)
+    }
+
+    /// The last read of the providers; None before the first.
+    pub fn providers(&self) -> Option<Vec<crate::providers::ProviderReport>> {
+        self.lock().providers.clone()
     }
 
     /// The last document with its tier counter (`set_telemetry`).

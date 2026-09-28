@@ -3,14 +3,15 @@ import { DEFAULT_PORT, type ProviderKind } from '../../lib/providers/kinds'
 import { BOX_PROVIDERS_KEY, isBoxProviderPolicy } from '../../lib/providers/policy'
 import { listNodes, type NodeRow, netNameOf, providersOf } from '../../lib/repo/nodes'
 import { networkFacts } from '../contract/domains/network'
-import { type ProviderReading, readProvider } from './read'
+import type { NodeProvidersAnswer } from '../controller/wire'
+import { nodeReading, type ProviderReading, readSubgen } from './read'
 
 // Every provider on the network, as one list: this box's own, and each
 // approved node's, offered or not, each with the address the gateway dials.
 // The AI page draws it; the gateway sync reconciles from it.
 //
 // Server-side by nature and so under host/: the node list is a database
-// read and the readings dial the LAN. The pure half — what a kind is, what
+// read and the readings ask the controller. The pure half — what a kind is, what
 // the operator said about a model — stays in lib/providers, where a
 // component may import it.
 
@@ -40,7 +41,7 @@ export type FleetProvider = {
   machineName: string
   os: string
   kind: ProviderKind
-  /** Scheme, host and port; the kind knows the path. */
+  /** Scheme, host and port the gateway's routes dial; the kind knows the path. Nothing else dials it. */
   base: string
   /** Whether the operator offers it to the gateway (Settings › Machines). */
   offered: boolean
@@ -72,9 +73,8 @@ async function boxProviders(ctx: Ctx): Promise<FleetProvider[]> {
 
 /**
  * A node's providers: every kind its policy knows, offered or not, so the
- * page can say "not offered" and "not answering" apart. Presence as the
- * agent reports it lives in the node's telemetry document, read by the
- * page beside this; the reader here asks the provider itself.
+ * page can say "not offered" and "not answering" apart. What the provider
+ * answered is its agent's report, read beside this (./read.ts).
  */
 function nodeProviders(n: NodeRow, domain: string): FleetProvider[] {
   const name = netNameOf(n)
@@ -101,15 +101,34 @@ export async function fleetProviders(ctx: Ctx): Promise<FleetProvider[]> {
   return [...box, ...nodes.flatMap((n) => nodeProviders(n, domain))]
 }
 
-/** The providers with what each answered, read in parallel. */
+/**
+ * The providers with what each answered: this box's own read directly, a
+ * node's from what its agent last reported to the controller — one
+ * `nodes.providers` per machine, in parallel.
+ */
 export async function readFleetProviders(
   ctx: Ctx,
 ): Promise<{ provider: FleetProvider; reading: ProviderReading }[]> {
   const providers = await fleetProviders(ctx)
+  const now = Date.now()
+  const answers = new Map<string, Promise<NodeProvidersAnswer | Error>>()
+  const answerOf = (machine: string) => {
+    let a = answers.get(machine)
+    if (a === undefined) {
+      a = ctx.controller
+        .nodesProviders(machine)
+        .catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+      answers.set(machine, a)
+    }
+    return a
+  }
   return Promise.all(
     providers.map(async (provider) => ({
       provider,
-      reading: await readProvider(ctx, provider.kind, provider.base),
+      reading:
+        provider.machine === 'box'
+          ? await readSubgen(ctx, provider.base, now)
+          : nodeReading(provider.kind, provider.base, await answerOf(provider.machine), now),
     })),
   )
 }

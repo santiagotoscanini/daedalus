@@ -28,10 +28,8 @@
 //! How much is read at all is config.toml's `telemetry`: `full`, all of the
 //! above; `minimal`, the static and sampled facts, and never the slow read
 //! or the updates search — processes are still sampled (for the count) but
-//! the list is not reported, and a provider is found only while it answers
-//! on its port, since the application list that finds an installed but
-//! stopped one is part of the slow read (`Telemetry::minimal` says exactly
-//! what stays); `off`, nothing — this
+//! the list is not reported (`Telemetry::minimal` says exactly what stays);
+//! `off`, nothing — this
 //! thread does not start, the page's `telemetry` is null and the machine has
 //! no series but `daedalus_agent_link_up`.
 //!
@@ -44,7 +42,7 @@ mod metrics;
 mod model;
 pub mod parse;
 
-pub use metrics::{claude_text, escape_label, metrics_text, Labels};
+pub use metrics::{claude_text, escape_label, metrics_text, providers_text, Labels};
 pub use model::{
     App, Battery, Browser, Cpu, Disk, Drive, Gpu, GpuSample, Installed, Machine, Memory,
     MemoryModule, Network, Os, Process, Sample, Service, Slow, Static, Telemetry, Temperature,
@@ -100,13 +98,7 @@ pub trait Collect {
 pub use crate::os::{read_updates, Collector};
 
 /// Static, slow and sampled halves joined into the document.
-pub fn assemble(
-    s: &Static,
-    w: &Slow,
-    p: &Sample,
-    updates: Option<&Updates>,
-    providers: Vec<crate::providers::ProviderReport>,
-) -> Telemetry {
+pub fn assemble(s: &Static, w: &Slow, p: &Sample, updates: Option<&Updates>) -> Telemetry {
     let gpus = s
         .gpus
         .iter()
@@ -156,7 +148,6 @@ pub fn assemble(
         apps: w.apps.clone(),
         app_count: Some(w.apps.len()),
         updates: updates.cloned(),
-        providers,
         errors,
     }
 }
@@ -258,10 +249,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLeve
             }
         }
         let sample = c.sample();
-        // Presence, every sample: a refused port answers at once, and the
-        // page should say "running" within a tick of the server starting.
-        let providers = crate::providers::detect(&shared.policy(), &slow.apps);
-        let doc = assemble(&stat, &slow, &sample, updates.as_ref(), providers);
+        let doc = assemble(&stat, &slow, &sample, updates.as_ref());
         shared.set_telemetry(if full { doc } else { doc.minimal() }, moved);
         moved = false;
     }
@@ -329,7 +317,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let t = assemble(&s, &w, &p, Some(&u), Vec::new());
+        let t = assemble(&s, &w, &p, Some(&u));
         assert_eq!(t.drives[0].serial.as_deref(), Some("S123"));
         assert_eq!(t.services.len(), 1);
         assert_eq!(t.updates.as_ref().map(|u| u.pending.len()), Some(1));

@@ -45,6 +45,7 @@ import { AgentUpdate } from './updates'
 export function NodeHostView({ d }: { d: NodeSystemData }) {
   const { node, status } = d
   const t = d.telemetry
+  const providers = d.providers
   if (t === null || status === null) return null
   const mark = OS_MARK[node.os]
   const busiest = [...t.processes]
@@ -369,28 +370,33 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
         icon="◈"
         span={12}
         aside={
-          t.providers.length === 0 ? (
+          providers === null ? (
+            <span className={NOTE}>no report yet</span>
+          ) : providers.length === 0 ? (
             <span className={NOTE}>none found</span>
-          ) : t.providers.every((p) => p.running) ? (
-            <Chip tone="ok">{num(t.providers.length)} running</Chip>
+          ) : providers.every((p) => p.running) ? (
+            <Chip tone="ok">{num(providers.length)} running</Chip>
           ) : (
             <Chip tone="warn">
-              {num(t.providers.filter((p) => p.running).length)} of {num(t.providers.length)}{' '}
-              running
+              {num(providers.filter((p) => p.running).length)} of {num(providers.length)} running
             </Chip>
           )
         }
       >
-        {t.providers.length === 0 ? (
+        {providers === null ? (
+          <p className={EMPTY}>This machine's agent has not reported its providers yet.</p>
+        ) : providers.length === 0 ? (
           <p className={EMPTY}>No model server found on this machine.</p>
         ) : (
           <ul className={LIST}>
-            {t.providers.map((p) => (
+            {providers.map((p) => (
               <li key={`${p.kind}:${String(p.port)}`} className={ROW}>
-                {p.running ? (
+                {!p.running ? (
+                  <Chip tone="warn">found, not running</Chip>
+                ) : p.healthy ? (
                   <Chip tone="ok">running</Chip>
                 ) : (
-                  <Chip tone="warn">found, not running</Chip>
+                  <Chip tone="bad">unhealthy</Chip>
                 )}
                 <span className={ROW_MAIN}>
                   {providerName(p.kind)}
@@ -398,15 +404,20 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
                     <span className="ml-[0.4rem] text-muted-foreground">v{p.version}</span>
                   )}
                 </span>
-                <span className={cn(ROW_SIDE, MONO)}>port {String(p.port)}</span>
+                <span className={cn(ROW_SIDE, MONO)}>
+                  {p.running
+                    ? `${num(p.models.filter((m) => m.downloaded).length)} on disk · ${num(p.loaded.length)} loaded · `
+                    : ''}
+                  port {String(p.port)}
+                </span>
               </li>
             ))}
           </ul>
         )}
         <p className={FOOT}>
-          What this machine offers the network beyond itself. The agent reports that a server is
-          here and answering; the box reads its catalog from the server directly, at this machine's
-          name, which is the address the gateway dials.
+          What this machine offers the network beyond itself, as its agent reads it on the machine's
+          own loopback and reports it through the controller. The box never dials the server for
+          this; only the gateway's model requests go to it, at this machine's name.
         </p>
       </Board>
 

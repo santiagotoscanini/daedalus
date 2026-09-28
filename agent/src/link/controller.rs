@@ -80,7 +80,8 @@ use super::{
 };
 use crate::api::wire::{
     code, event, ApiError, ClaudeSessionSent, CommandOk, DesiredState, NodeChanged, NodeClaude,
-    NodeClaudeRoster, NodeDetail, NodePending, NodeSummary, NodeTelemetry, Response, SetDesiredOk,
+    NodeClaudeRoster, NodeDetail, NodePending, NodeProviders, NodeSummary, NodeTelemetry,
+    ProviderModelSent, Response, SetDesiredOk,
 };
 use crate::api::Events;
 use crate::claude::{Report, Roster, SessionAction};
@@ -175,7 +176,7 @@ struct Entry {
     telemetry: Option<(Telemetry, String)>,
     claude: Option<(Option<Report>, String)>,
     roster: Option<(Option<Roster>, String)>,
-    providers: Vec<ProviderReport>,
+    providers: Option<(Vec<ProviderReport>, String)>,
     conn: Option<Conn>,
     last_seen: Option<String>,
     last_seen_at: Option<Instant>,
@@ -191,7 +192,7 @@ impl Entry {
             telemetry: None,
             claude: None,
             roster: None,
-            providers: Vec::new(),
+            providers: None,
             conn: None,
             last_seen: None,
             last_seen_at: None,
@@ -223,7 +224,7 @@ impl Entry {
         self.telemetry = None;
         self.claude = None;
         self.roster = None;
-        self.providers.clear();
+        self.providers = None;
     }
 }
 
@@ -235,6 +236,9 @@ struct Desired {
     policy: Policy,
     /// What the pages call the machine; `/nodes/metrics` labels it `machine`.
     name: Option<String>,
+    /// The provider kinds the app offers to the gateway; `/nodes/metrics`
+    /// labels their `provider_up` `offered="1"`.
+    offered: Vec<String>,
 }
 
 /// One entry of the app's set, checked (api/mod.rs parses and validates).
@@ -245,6 +249,7 @@ pub struct DesiredEntry {
     pub state: DesiredState,
     pub policy: Policy,
     pub name: Option<String>,
+    pub offered: Vec<String>,
 }
 
 #[derive(Default)]
@@ -652,8 +657,17 @@ impl Registry {
                 Err(err) => bad("Claude roster", err),
             },
             name::PROVIDERS => match serde_json::from_value::<Vec<ProviderReport>>(p) {
-                Ok(v) => entry.providers = v,
-                Err(err) => bad("providers list", err),
+                Ok(v) => match crate::providers::check(&v) {
+                    Ok(()) => entry.providers = Some((v, at)),
+                    Err(why) => {
+                        tracing::warn!(
+                            node = id,
+                            why,
+                            "link: a providers document past its bounds; dropped"
+                        );
+                    }
+                },
+                Err(err) => bad("providers document", err),
             },
             _ => {}
         }
@@ -719,6 +733,7 @@ impl Registry {
                         state: d.state,
                         policy: d.policy,
                         name: d.name,
+                        offered: d.offered,
                     },
                 )
             })
@@ -926,7 +941,24 @@ impl Registry {
             telemetry_at: e
                 .and_then(|e| e.telemetry.as_ref())
                 .map(|(_, at)| at.clone()),
-            providers: e.map(|e| e.providers.clone()).unwrap_or_default(),
+            providers: e.and_then(|e| e.providers.as_ref()).map(|(p, _)| p.clone()),
+            providers_at: e
+                .and_then(|e| e.providers.as_ref())
+                .map(|(_, at)| at.clone()),
+        })
+    }
+
+    /// The machine's providers as it last pushed them.
+    pub fn providers(&self, id: &str) -> Result<NodeProviders, ApiError> {
+        let reg = self.lock();
+        Self::known(&reg, id)?;
+        let e = reg.nodes.get(id);
+        let p = e.and_then(|e| e.providers.clone());
+        Ok(NodeProviders {
+            id: id.to_string(),
+            connected: e.is_some_and(|e| e.conn.is_some()),
+            received_at: p.as_ref().map(|(_, at)| at.clone()),
+            providers: p.map(|(p, _)| p),
         })
     }
 
@@ -964,6 +996,62 @@ impl Registry {
         action: SessionAction,
         session: &str,
     ) -> Result<ClaudeSessionSent, ApiError> {
+        let request = crate::claude::sessions::mint_request();
+        self.deliver(
+            id,
+            "claude.sessions",
+            "a session verb",
+            "Claude is not run there",
+            name::CLAUDE_SESSION,
+            &ClaudeSessionParams {
+                action,
+                id: session.to_string(),
+                request: request.clone(),
+            },
+        )?;
+        Ok(ClaudeSessionSent {
+            delivered: true,
+            request,
+        })
+    }
+
+    /// One residency verb on one model of one of the machine's providers:
+    /// delivered to a connected, approved machine that offers
+    /// `providers.residency`, acknowledged within `ACK_TIMEOUT`, never
+    /// queued. The outcome rides the machine's providers document under
+    /// `request` (`actions`).
+    pub fn provider_model(
+        &self,
+        id: &str,
+        params: crate::providers::ProviderModelParams,
+    ) -> Result<ProviderModelSent, ApiError> {
+        self.deliver(
+            id,
+            "providers.residency",
+            "a residency verb",
+            "it reads no providers",
+            name::PROVIDER_MODEL,
+            &params,
+        )?;
+        Ok(ProviderModelSent {
+            delivered: true,
+            request: params.request,
+        })
+    }
+
+    /// Send request `m` to a connected, approved machine that offers
+    /// `capability`, and wait for its acknowledgement. `what` names the
+    /// request in the errors, `without` says why a machine may lack the
+    /// capability.
+    fn deliver<P: serde::Serialize>(
+        &self,
+        id: &str,
+        capability: &str,
+        what: &str,
+        without: &str,
+        m: &str,
+        params: &P,
+    ) -> Result<(), ApiError> {
         let mut reg = self.lock();
         match reg.state_of(id) {
             NodeState::Approved => {}
@@ -981,39 +1069,28 @@ impl Registry {
             .nodes
             .get(id)
             .and_then(|e| e.hello.as_ref())
-            .is_some_and(|h| h.capabilities.iter().any(|c| c == "claude.sessions"));
+            .is_some_and(|h| h.capabilities.iter().any(|c| c == capability));
         let Some(conn) = reg.nodes.get_mut(id).and_then(|e| e.conn.as_mut()) else {
             return Err(ApiError::new(
                 code::UNAVAILABLE,
-                format!("machine {id} is not connected; a session verb is never kept for later"),
+                format!("machine {id} is not connected; {what} is never kept for later"),
             ));
         };
         if !offers {
             return Err(ApiError::new(
                 code::UNSUPPORTED,
-                format!("machine {id} does not offer `claude.sessions` (an older agent, or Claude is not run there)"),
+                format!(
+                    "machine {id} does not offer `{capability}` (an older agent, or {without})"
+                ),
             ));
         }
-        let request = crate::claude::sessions::mint_request();
         let req = self.next_request.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::sync_channel(1);
         conn.acks.insert(req, tx);
-        let line = wire::request(
-            req,
-            name::CLAUDE_SESSION,
-            &ClaudeSessionParams {
-                action,
-                id: session.to_string(),
-                request: request.clone(),
-            },
-        );
-        let _ = conn.tx.send(Out::Line(line));
+        let _ = conn.tx.send(Out::Line(wire::request(req, m, params)));
         drop(reg);
         match rx.recv_timeout(self.limits.ack_timeout) {
-            Ok(Ok(())) => Ok(ClaudeSessionSent {
-                delivered: true,
-                request,
-            }),
+            Ok(Ok(())) => Ok(()),
             Ok(Err(msg)) => Err(ApiError::new(
                 code::UNAVAILABLE,
                 format!("machine {id} refused it: {msg}"),
@@ -1091,6 +1168,15 @@ impl Registry {
             if e.conn.is_some() {
                 let report = e.claude.as_ref().and_then(|(r, _)| r.as_ref());
                 out.push_str(&crate::telemetry::claude_text(report, &labels));
+                // Its providers likewise: an asleep machine's model server
+                // is Machine Link Down's business, not Model Server Down's.
+                if let Some((list, _)) = &e.providers {
+                    out.push_str(&crate::telemetry::providers_text(
+                        list,
+                        |k| d.offered.iter().any(|o| o == k),
+                        &labels,
+                    ));
+                }
             }
         }
         out

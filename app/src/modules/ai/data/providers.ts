@@ -1,25 +1,25 @@
 import type { Ctx } from '../../../core/ctx'
-import { NO_DETAIL, type ProviderDetail, readProviderDetail } from '../../../host/providers/detail'
 import { type FleetProvider, readFleetProviders } from '../../../host/providers/fleet'
 import { type GatewayRoute, gatewayRoutes } from '../../../host/providers/gateway'
-import { loadNodeSystem } from '../../../lib/dashboard/node-system'
+import type { ProviderDetail } from '../../../host/providers/read'
 import {
+  type ModelFigures,
   managesResidency,
   PROVIDER_NAME,
   type ProviderKind,
   type ProviderModel,
 } from '../../../lib/providers/kinds'
-import type { ModelFigures } from '../../../lib/providers/metrics'
 import { type ModelPolicies, resolveModel } from '../../../lib/providers/policy'
 import { listApps } from '../../../lib/repo/apps'
 import { listNodes } from '../../../lib/repo/nodes'
 
 // The Providers tab: every machine on the network that offers models, read
-// from the provider itself, with the chain it feeds drawn once at the top.
+// from what each machine's agent reported through the controller (the box's
+// own subgen from itself), with the chain it feeds drawn once at the top.
 //
 // One loader answers for every machine and the view picks by `?machine=`:
-// the whole fleet's catalog is small, the provider reads are remembered a
-// minute, and a switch in the picker is then a re-render, not a round trip.
+// the whole fleet's catalog is small, the reports are the controller's in
+// memory, and a switch in the picker is then a re-render, not a round trip.
 //
 // A row is a machine-and-kind, the shape the fleet has underneath; with
 // Lemonade the only kind a node offers (lib/providers/kinds.ts says why),
@@ -56,7 +56,9 @@ export type ProviderMachine = {
   error: string | null
   /** Whether this box may load and unload models here, or only read them. */
   manageable: boolean
-  /** What the agent said on its last tick, for a node with agent 0.11.0+. */
+  /** The machine has reported its providers (agent 0.18.0+); always true for the box. */
+  reported: boolean
+  /** What the agent found: running, or installed and silent; null with no report of it. */
   presence: { running: boolean; version: string | null } | null
   models: CatalogEntry[]
   /** How many models the gateway would carry from here. */
@@ -106,13 +108,6 @@ function routedBy(routes: GatewayRoute[], p: FleetProvider, id: string): string 
   return hit?.alias ?? null
 }
 
-async function presenceOf(machine: string, kind: ProviderKind) {
-  if (machine === 'box') return null
-  const sys = await loadNodeSystem(machine).catch(() => null)
-  const p = sys?.telemetry?.providers.find((x) => x.kind === kind)
-  return p === undefined ? null : { running: p.running, version: p.version }
-}
-
 export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
   const [read, gateway, apps, nodes] = await Promise.all([
     readFleetProviders(ctx),
@@ -127,51 +122,45 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       ? undefined
       : nodes.find((n) => n.id === p.machine)?.policy.providers?.[p.kind]?.models
 
-  const machines: ProviderMachine[] = await Promise.all(
-    read.map(async ({ provider, reading }) => {
-      const [detail, presence] = await Promise.all([
-        reading.reachable
-          ? readProviderDetail(ctx, provider.kind, provider.base)
-          : Promise.resolve(NO_DETAIL),
-        presenceOf(provider.machine, provider.kind),
-      ])
-      const policies = policiesOf(provider)
-      const models: CatalogEntry[] = reading.models.map((m) => {
-        const r = resolveModel(policies, m)
-        const live = reading.health.loaded.find((l) => l.id === m.id)
-        return {
-          ...m,
-          mode: r.mode,
-          alias: r.alias,
-          offerable: provider.offered && r.offer,
-          routed: routedBy(gateway.routes, provider, m.id),
-          loaded:
-            live === undefined
-              ? null
-              : { device: live.device, maxContext: live.maxContext, pinned: live.pinned },
-          figures: detail.figures[m.id] ?? null,
-        }
-      })
+  const machines: ProviderMachine[] = read.map(({ provider, reading }) => {
+    const { detail } = reading
+    const policies = policiesOf(provider)
+    const models: CatalogEntry[] = reading.models.map((m) => {
+      const r = resolveModel(policies, m)
+      const live = reading.health.loaded.find((l) => l.id === m.id)
       return {
-        machine: provider.machine,
-        id: `${provider.machine}:${provider.kind}`,
-        name: provider.machineName,
-        os: provider.os,
-        kind: provider.kind,
-        kindName: PROVIDER_NAME[provider.kind],
-        base: provider.base,
-        offered: provider.offered,
-        reachable: reading.reachable,
-        version: reading.health.version,
-        error: reading.error,
-        manageable: managesResidency(provider.kind),
-        presence,
-        models,
-        offerableCount: models.filter((m) => m.offerable).length,
-        detail,
+        ...m,
+        mode: r.mode,
+        alias: r.alias,
+        offerable: provider.offered && r.offer,
+        routed: routedBy(gateway.routes, provider, m.id),
+        loaded:
+          live === undefined
+            ? null
+            : { device: live.device, maxContext: live.maxContext, pinned: live.pinned },
+        figures: detail.figures[m.id] ?? null,
       }
-    }),
-  )
+    })
+    return {
+      machine: provider.machine,
+      id: `${provider.machine}:${provider.kind}`,
+      name: provider.machineName,
+      os: provider.os,
+      kind: provider.kind,
+      kindName: PROVIDER_NAME[provider.kind],
+      base: provider.base,
+      offered: provider.offered,
+      reachable: reading.reachable,
+      reported: reading.reported,
+      version: reading.health.version ?? reading.presence?.version ?? null,
+      error: reading.error,
+      manageable: managesResidency(provider.kind),
+      presence: reading.presence,
+      models,
+      offerableCount: models.filter((m) => m.offerable).length,
+      detail,
+    }
+  })
 
   const synced = gateway.routes.filter((r) => r.daedalus !== null).length
   const consumers: Chain['consumers'] = [

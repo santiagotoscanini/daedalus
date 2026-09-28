@@ -60,9 +60,8 @@ export const fetchTabStatus = readFn
         : Promise.resolve(null),
     ])
     // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
-    // means knowing which group an endpoint was declared in. gatus probes the
-    // published web apps AND a couple of off-box services (Lemonade), and a
-    // tab should not have to care which list its subject is on.
+    // means knowing which group an endpoint was declared in, and a tab should
+    // not have to care.
     const health = new Map(probes.map((p) => [p.metric.name ?? '', p.value[1] === '1']))
 
     /** All green, or null the moment one of them cannot be read. */

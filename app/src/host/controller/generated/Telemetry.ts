@@ -11,7 +11,6 @@ import type { Memory } from "./Memory";
 import type { Network } from "./Network";
 import type { Os } from "./Os";
 import type { Process } from "./Process";
-import type { ProviderReport } from "./ProviderReport";
 import type { Service } from "./Service";
 import type { Temperature } from "./Temperature";
 import type { Updates } from "./Updates";
@@ -44,12 +43,6 @@ app_count: number | null,
  * None until the first search lands.
  */
 updates: Updates | null, 
-/**
- * What this machine offers the network — a model server — as
- * presence only (providers.rs). Kept on the open page: the machine,
- * not the person.
- */
-providers: Array<ProviderReport>, 
 /**
  * What could not be read, one line each, so the page says "not
  * readable on this OS" rather than showing a dash without a reason.

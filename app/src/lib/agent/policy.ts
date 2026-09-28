@@ -44,9 +44,15 @@ export function wirePolicy(p: NodePolicy): DesiredPolicy {
     awake_hold: e.awakeHold,
     claude_remote_control: e.claudeRemoteControl,
     ...(e.claudeWorkdir === null ? {} : { claude_workdir: e.claudeWorkdir }),
-    // Where each provider listens, so the agent's presence probe asks the
-    // right port.
-    providers: { lemonade: { port: e.providers.lemonade.port } },
+    // Where each provider listens, so the agent reads the right port; and
+    // whether the gateway is offered it, which the controller keeps for
+    // `/nodes/metrics` (the "Model Server Down" alert fires on offered ones).
+    providers: {
+      lemonade: {
+        port: e.providers.lemonade.port,
+        offer: p.providers?.lemonade?.offer === true,
+      },
+    },
   }
 }
 

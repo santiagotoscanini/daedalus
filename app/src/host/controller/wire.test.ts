@@ -9,9 +9,11 @@ import {
   nodeClaudeAnswer,
   nodeClaudeRosterAnswer,
   nodeDetail,
+  nodeProvidersAnswer,
   nodesList,
   nodeTelemetryAnswer,
   parseLine,
+  providerModelSent,
   queued,
   requestLine,
   sessionQueued,
@@ -478,6 +480,50 @@ describe('the controller wire', () => {
     })
     expect(
       claudeSessionSent(JSON.parse('{"delivered":true,"request":"00112233445566ff"}')),
+    ).toEqual({ request: '00112233445566ff' })
+  })
+
+  it('decodes nodes.providers into the page’s shapes, and no report yet', () => {
+    // agent/src/api/wire.rs `nodes_answers_are_golden`, the NodeProviders lines.
+    expect(
+      nodeProvidersAnswer(
+        JSON.parse(
+          '{"id":"0123456789abcdef","connected":false,"providers":null,"received_at":null}',
+        ),
+      ),
+    ).toEqual({ connected: false, providers: null, receivedAt: null })
+    const a = nodeProvidersAnswer(
+      JSON.parse(
+        [
+          '{"id":"0123456789abcdef","connected":true,"providers":[{"kind":"lemonade","port":13305,',
+          '"version":"9.1.2","running":true,"healthy":true,',
+          '"loaded":[{"id":"Gemma-4","device":"gpu","max_context":65536,"pinned":true}],',
+          '"models":[{"id":"Gemma-4","labels":["tool-calling"],"downloaded":true,"size_gb":7.5,"recipe":"llamacpp"}],',
+          '"downloads":[{"model":"Qwen","percent":12.5,"status":"downloading"}],',
+          '"backends":[{"recipe":"llamacpp","backend":"vulkan","version":"b6000","url":null}],',
+          '"figures":[{"model":"Gemma-4","requests":3.0,"input_tokens":null,"output_tokens":null,',
+          '"tps":40.0,"ttft_ms":null,"device":null,"checkpoint":null}],',
+          '"read_at":"2026-09-28T10:00:00Z","error":null,"actions":[{"request":"00112233445566ff","model":"Gemma-4","ok":true,"message":"Loaded","at":"2026-09-28T09:59:00Z"}]}],"received_at":"2026-09-28T10:00:01Z"}',
+        ].join(''),
+      ),
+    )
+    expect(a.connected).toBe(true)
+    expect(a.receivedAt).toBe('2026-09-28T10:00:01Z')
+    const p = a.providers?.[0]
+    expect(p).toMatchObject({ kind: 'lemonade', port: 13305, version: '9.1.2', healthy: true })
+    expect(p?.loaded).toEqual([{ id: 'Gemma-4', device: 'gpu', maxContext: 65536, pinned: true }])
+    expect(p?.models[0]).toMatchObject({
+      id: 'Gemma-4',
+      mode: 'chat',
+      supportsTools: true,
+      sizeGb: 7.5,
+      recipe: 'llamacpp',
+    })
+    expect(p?.figures['Gemma-4']).toMatchObject({ requests: 3, tps: 40, ttftMs: null })
+    expect(p?.downloads).toEqual([{ model: 'Qwen', percent: 12.5, status: 'downloading' }])
+    expect(p?.actions[0]).toMatchObject({ request: '00112233445566ff', ok: true })
+    expect(
+      providerModelSent(JSON.parse('{"delivered":true,"request":"00112233445566ff"}')),
     ).toEqual({ request: '00112233445566ff' })
   })
 })

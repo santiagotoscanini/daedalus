@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createConnection, type Socket } from 'node:net'
 import { join } from 'node:path'
 import { env } from '../env'
-import type { Command, SessionAction } from './generated'
+import type { Command, ModelAction, SessionAction } from './generated'
 import {
   API_VERSION,
   type ClaudeRosterGet,
@@ -21,13 +21,16 @@ import {
   MAX_LINE,
   type NodeClaudeAnswer,
   type NodeClaudeRosterAnswer,
+  type NodeProvidersAnswer,
   type NodeTelemetryAnswer,
   nodeClaudeAnswer,
   nodeClaudeRosterAnswer,
   nodeDetail,
+  nodeProvidersAnswer,
   nodesList,
   nodeTelemetryAnswer,
   parseLine,
+  providerModelSent,
   type Queued,
   queued,
   requestLine,
@@ -78,6 +81,23 @@ export type ControllerClient = {
   nodesList: () => Promise<ControllerNode[]>
   nodesGet: (id: string) => Promise<ControllerNodeDetail>
   nodesTelemetry: (id: string) => Promise<NodeTelemetryAnswer>
+  /** What the machine's agent read from its providers, as it last pushed it. */
+  nodesProviders: (id: string) => Promise<NodeProvidersAnswer>
+  /**
+   * One residency verb on a machine's provider, run by its agent on its own
+   * loopback: only ever from an admin's click. The outcome rides the next
+   * providers document under the returned `request`.
+   */
+  nodesProviderModel: (
+    id: string,
+    verb: {
+      kind: string
+      action: ModelAction
+      model: string
+      pinned?: boolean
+      replacing?: string
+    },
+  ) => Promise<{ request: string }>
   nodesClaude: (id: string) => Promise<NodeClaudeAnswer>
   nodesClaudeRoster: (id: string) => Promise<NodeClaudeRosterAnswer>
   /** One verb on one of a machine's sessions: only ever from an admin's click. */
@@ -326,6 +346,9 @@ export function createControllerClient(opts: Options): ControllerClient {
     nodesList: () => call('nodes.list', nodesList),
     nodesGet: (id) => call('nodes.get', nodeDetail, { id }),
     nodesTelemetry: (id) => call('nodes.telemetry', nodeTelemetryAnswer, { id }),
+    nodesProviders: (id) => call('nodes.providers', nodeProvidersAnswer, { id }),
+    nodesProviderModel: (id, verb) =>
+      call('nodes.provider_model', providerModelSent, { id, ...verb }),
     nodesClaude: (id) => call('nodes.claude', nodeClaudeAnswer, { id }),
     nodesClaudeRoster: (id) => call('nodes.claude_roster', nodeClaudeRosterAnswer, { id }),
     nodesClaudeSession: (id, action, session) =>

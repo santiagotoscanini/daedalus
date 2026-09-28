@@ -62,9 +62,11 @@
 //! | `nodes.list`       | `NodesList`: every machine known, its standing and connection | `nodes`          |
 //! | `nodes.get`        | `NodeDetail`: one machine's hello, status and open telemetry `{id}` | `nodes`     |
 //! | `nodes.telemetry`  | `NodeTelemetry`: its full telemetry `{id}`             | `nodes`                 |
+//! | `nodes.providers`  | `NodeProviders`: its providers document `{id}`        | `nodes`                 |
 //! | `nodes.claude`     | `NodeClaude`: its full Claude report `{id}`            | `nodes`                 |
 //! | `nodes.claude_roster` | `NodeClaudeRoster`: its roster of Claude sessions `{id}` | `nodes`             |
 //! | `nodes.claude_session` | `ClaudeSessionSent`: one verb `{id, action, session}` delivered and acknowledged | `nodes` |
+//! | `nodes.provider_model` | `ProviderModelSent`: one residency verb `{id, kind, action, model, pinned?, replacing?}` delivered and acknowledged | `nodes` |
 //! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
 //!
@@ -191,6 +193,10 @@ pub fn capabilities(cfg: &Config, nodes: bool) -> Vec<&'static str> {
         TelemetryLevel::Full => c.push("telemetry.full"),
         TelemetryLevel::Minimal => c.push("telemetry.minimal"),
         TelemetryLevel::Off => {}
+    }
+    // A node reads its providers and drives their residency for the box.
+    if role.link {
+        c.push("providers.residency");
     }
     if nodes && role.node_listener {
         c.push("nodes");
@@ -412,9 +418,11 @@ impl Api {
             "nodes.list",
             "nodes.get",
             "nodes.telemetry",
+            "nodes.providers",
             "nodes.claude",
             "nodes.claude_roster",
             "nodes.claude_session",
+            "nodes.provider_model",
             "nodes.set_desired",
             "nodes.command",
         ];
@@ -456,6 +464,7 @@ impl Api {
             }
             "nodes.get" => to_value(&nodes.get(&id_of(params)?)?),
             "nodes.telemetry" => to_value(&nodes.telemetry(&id_of(params)?)?),
+            "nodes.providers" => to_value(&nodes.providers(&id_of(params)?)?),
             "nodes.claude" => to_value(&nodes.claude(&id_of(params)?)?),
             "nodes.claude_roster" => to_value(&nodes.claude_roster(&id_of(params)?)?),
             "nodes.claude_session" => {
@@ -464,6 +473,20 @@ impl Api {
                 crate::claude::sessions::check_selector(c.action, &c.session)
                     .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
                 to_value(&nodes.claude_session(&c.id, c.action, &c.session)?)
+            }
+            "nodes.provider_model" => {
+                let c: wire::NodeProviderModel = exact(method, params)?;
+                checked_id(&c.id)?;
+                let p = crate::providers::ProviderModelParams {
+                    kind: c.kind,
+                    action: c.action,
+                    model: c.model,
+                    pinned: c.pinned.unwrap_or(false),
+                    replacing: c.replacing,
+                    request: crate::claude::sessions::mint_request(),
+                };
+                p.check().map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+                to_value(&nodes.provider_model(&c.id, p)?)
             }
             "nodes.set_desired" => {
                 let set: wire::SetDesired = exact(method, params)?;
@@ -572,12 +595,20 @@ fn desired_entries(
             if let Some(name) = &n.name {
                 checked_name(&n.id, name)?;
             }
+            let offered = n
+                .policy
+                .as_ref()
+                .and_then(|p| p.providers.lemonade.as_ref())
+                .filter(|l| l.offer == Some(true))
+                .map(|_| vec!["lemonade".to_string()])
+                .unwrap_or_default();
             Ok(crate::link::controller::DesiredEntry {
                 id: n.id,
                 public_key: key,
                 state: n.state,
                 policy: n.policy.map(Into::into).unwrap_or_default(),
                 name: n.name,
+                offered,
             })
         })
         .collect()
@@ -675,13 +706,19 @@ mod tests {
                 "claude.remote_control",
                 "claude.update",
                 "claude.sessions",
-                "telemetry.full"
+                "telemetry.full",
+                "providers.residency"
             ]
         );
         // A node never offers `nodes`, whatever it is told.
         assert_eq!(
             capabilities(&cfg("telemetry = \"off\""), true),
-            ["claude.remote_control", "claude.update", "claude.sessions"]
+            [
+                "claude.remote_control",
+                "claude.update",
+                "claude.sessions",
+                "providers.residency"
+            ]
         );
         // The controller offers Claude only when nix turned it on, and never
         // `claude.update`: nix pins Claude there.

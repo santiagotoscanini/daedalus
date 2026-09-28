@@ -1,62 +1,37 @@
 import { describe, expect, it } from 'vitest'
-import { decode } from '../contract/decode'
-import {
-  apiBase,
-  defaultAlias,
-  lemonadeBackendsDecoder,
-  lemonadeCatalogDecoder,
-  lemonadeDownloadsDecoder,
-  lemonadeHealthDecoder,
-  modeOf,
-  routeFor,
-} from './kinds'
+import { apiBase, defaultAlias, modelOf, modeOf, routeFor } from './kinds'
 
-// Shapes as the gaming PC's Lemonade 10.8.1 answered on 2026-09-23.
-const CATALOG = {
-  data: [
-    {
-      id: 'Chroma1-HD',
-      labels: ['custom', 'image'],
-      downloaded: true,
-      recipe: 'sd-cpp',
-      size: 14.1,
-    },
-    {
-      id: 'Gemma-4-12B-it-MTP-GGUF',
-      labels: ['tool-calling', 'llamacpp', 'vision', 'mtp'],
-      downloaded: true,
-      recipe: 'llamacpp',
-    },
-    { id: 'Qwen3-Embedding-0.6B-GGUF', labels: ['embeddings'], downloaded: true },
-    {
-      id: 'Whisper-Large-v3-Turbo',
-      labels: ['transcription', 'realtime-transcription', 'hot'],
-      downloaded: true,
-    },
-    { id: 'bge-reranker-v2-m3-GGUF', labels: ['reranking'], downloaded: false },
-    { id: 'kokoro-v1', labels: ['tts'], downloaded: true },
-    { id: 'Flux-2-Klein-9B-GGUF', labels: ['image', 'edit'], downloaded: true },
-  ],
-}
-
-const HEALTH = {
-  status: 'ok',
-  version: '10.8.1',
-  model_loaded: 'Gemma-4-12B-it-MTP-GGUF',
-  all_models_loaded: [
-    {
-      model_name: 'Gemma-4-12B-it-MTP-GGUF',
-      device: 'gpu',
-      max_context_window: 262144,
-      pinned: false,
-      loaded: true,
-    },
-  ],
-}
+// The gaming PC's Lemonade 10.8.1 catalog of 2026-09-23, as its agent
+// carries it (agent/src/providers.rs: the provider's own words).
+const CATALOG = [
+  {
+    id: 'Chroma1-HD',
+    labels: ['custom', 'image'],
+    downloaded: true,
+    recipe: 'sd-cpp',
+    sizeGb: 14.1,
+  },
+  {
+    id: 'Gemma-4-12B-it-MTP-GGUF',
+    labels: ['tool-calling', 'llamacpp', 'vision', 'mtp'],
+    downloaded: true,
+    recipe: 'llamacpp',
+    sizeGb: null,
+  },
+  { id: 'Qwen3-Embedding-0.6B-GGUF', labels: ['embeddings'], downloaded: true },
+  {
+    id: 'Whisper-Large-v3-Turbo',
+    labels: ['transcription', 'realtime-transcription', 'hot'],
+    downloaded: true,
+  },
+  { id: 'bge-reranker-v2-m3-GGUF', labels: ['reranking'], downloaded: false },
+  { id: 'kokoro-v1', labels: ['tts'], downloaded: true },
+  { id: 'Flux-2-Klein-9B-GGUF', labels: ['image', 'edit'], downloaded: true },
+].map((m) => modelOf({ sizeGb: null, recipe: null, ...m }))
 
 describe('lemonade', () => {
   it('reads the catalog into modes and capabilities', () => {
-    const m = decode(lemonadeCatalogDecoder, CATALOG)
+    const m = CATALOG
     expect(m.map((x) => [x.id, x.mode])).toEqual([
       ['Chroma1-HD', 'image_generation'],
       ['Gemma-4-12B-it-MTP-GGUF', 'chat'],
@@ -71,15 +46,6 @@ describe('lemonade', () => {
     expect(m[0]?.sizeGb).toBe(14.1)
   })
 
-  it('reads health: version and what is loaded', () => {
-    const h = decode(lemonadeHealthDecoder, HEALTH)
-    expect(h.ok).toBe(true)
-    expect(h.version).toBe('10.8.1')
-    expect(h.loaded).toEqual([
-      { id: 'Gemma-4-12B-it-MTP-GGUF', device: 'gpu', maxContext: 262144, pinned: false },
-    ])
-  })
-
   it('maps labels to one mode each', () => {
     expect(modeOf(['image', 'edit'])).toBe('image_generation')
     expect(modeOf(['edit'])).toBe('image_edit')
@@ -89,7 +55,7 @@ describe('lemonade', () => {
 })
 
 describe('the route a model becomes', () => {
-  const gemma = decode(lemonadeCatalogDecoder, CATALOG)[1]
+  const gemma = CATALOG[1]
   if (gemma === undefined) throw new Error('fixture')
 
   it('is the hand-written route, derived', () => {
@@ -135,37 +101,5 @@ describe('the route a model becomes', () => {
     expect(defaultAlias('Whisper-Large-v3-Turbo')).toBe('whisper-large-v3-turbo')
     expect(defaultAlias('kokoro-v1')).toBe('kokoro-v1')
     expect(defaultAlias('Huihui-Gemma-4-12B-uncensored')).toBe('huihui-gemma-4-12b-uncensored')
-  })
-})
-
-describe('the rest of what a provider says', () => {
-  it('reads downloads in progress', () => {
-    expect(
-      decode(lemonadeDownloadsDecoder, [
-        { model_name: 'Flux-2-Klein-9B-GGUF', percent: 41.2, status: 'downloading' },
-        { status: 'queued' },
-      ]),
-    ).toEqual([
-      { model: 'Flux-2-Klein-9B-GGUF', percent: 41.2, status: 'downloading' },
-      { model: '?', percent: null, status: 'queued' },
-    ])
-  })
-
-  it('reads only the runtimes that are installed', () => {
-    expect(
-      decode(lemonadeBackendsDecoder, {
-        recipes: {
-          llamacpp: {
-            backends: {
-              rocm: { state: 'installed', version: 'b7054', release_url: 'https://example/b7054' },
-              vulkan: { state: 'not_installed', version: 'b7054' },
-            },
-          },
-          flm: { backends: { npu: { state: 'unsupported', version: 'v0.9.43' } } },
-        },
-      }),
-    ).toEqual([
-      { recipe: 'llamacpp', backend: 'rocm', version: 'b7054', url: 'https://example/b7054' },
-    ])
   })
 })

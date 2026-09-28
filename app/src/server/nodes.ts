@@ -191,7 +191,7 @@ const nodeProvider = asValidator(
 )
 
 /**
- * What a node's provider serves, read from the provider itself, with each
+ * What a node's provider serves, as its agent last reported it, with each
  * model as the operator's policy leaves it. For the models table on
  * Settings › Machines. Read-only; a node the box does not know answers an
  * empty list.
@@ -200,7 +200,7 @@ export const fetchProviderModelsFn = readFn
   .validator(nodeProvider)
   .handler(async ({ data, context }) => {
     const { fleetProviders } = await import('../host/providers/fleet')
-    const { readProvider } = await import('../host/providers/read')
+    const { nodeReading } = await import('../host/providers/read')
     const { resolveModel } = await import('../lib/providers/policy')
     const { getNode } = await import('../lib/repo/nodes')
     const ctx = await context.ctx()
@@ -211,7 +211,13 @@ export const fetchProviderModelsFn = readFn
     if (provider === undefined || node === null) {
       return { reachable: false, error: 'no provider on this machine', version: null, models: [] }
     }
-    const reading = await readProvider(ctx, provider.kind, provider.base)
+    const reading = nodeReading(
+      provider.kind,
+      provider.base,
+      await ctx.controller
+        .nodesProviders(data.id)
+        .catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))),
+    )
     const policies = node.policy.providers?.[data.kind]?.models
     return {
       reachable: reading.reachable,

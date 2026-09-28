@@ -142,6 +142,7 @@ fn entry(nid: &Identity, state: DesiredState, policy: crate::link::wire::Policy)
         state,
         policy,
         name: None,
+        offered: vec![],
     }
 }
 
@@ -266,6 +267,77 @@ fn an_approved_machine_connects_and_pushes() {
     assert!(!m.contains("daedalus_agent_processes"), "{m}");
 }
 
+#[test]
+fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
+    let ctl = controller(fast());
+    let nid = id(40);
+    let mut e = entry(&nid, DesiredState::Approved, claude_policy());
+    e.offered = vec!["lemonade".into()];
+    ctl.registry.set_desired(vec![e]);
+    // Before any document: known, and null.
+    let none = ctl.registry.providers(&nid.node_id()).unwrap();
+    assert_eq!((none.connected, none.providers.is_none()), (false, true));
+
+    let shared = node_shared();
+    shared.set_providers(vec![crate::providers::ProviderReport {
+        kind: "lemonade".into(),
+        port: 13305,
+        running: true,
+        healthy: true,
+        models: vec![crate::providers::ProviderModel {
+            id: "Gemma-4".into(),
+            downloaded: true,
+            ..Default::default()
+        }],
+        read_at: "2026-09-28T10:00:00Z".into(),
+        ..Default::default()
+    }]);
+    let node = spawn_node(
+        target(&ctl, Some(pin_of(&ctl.id))),
+        nid.clone(),
+        shared,
+        "approved",
+    );
+    wait_for("the providers", 5, || {
+        ctl.registry
+            .providers(&nid.node_id())
+            .is_ok_and(|p| p.providers.is_some())
+    });
+    let p = ctl.registry.providers(&nid.node_id()).unwrap();
+    assert!(p.connected && p.received_at.is_some());
+    assert_eq!(p.providers.as_ref().unwrap()[0].models[0].id, "Gemma-4");
+    let d = ctl.registry.get(&nid.node_id()).unwrap();
+    assert_eq!(d.providers, p.providers);
+    let m = ctl.registry.metrics();
+    assert!(
+        m.contains("kind=\"lemonade\",port=\"13305\",version=\"\",offered=\"1\"} 1\n"),
+        "{m}"
+    );
+    assert!(m.contains("daedalus_agent_provider_models{"), "{m}");
+
+    // A document past its bounds is dropped; the last good one stands.
+    node.shared.set_providers(vec![
+        crate::providers::ProviderReport {
+            kind: "lemonade".into(),
+            ..Default::default()
+        };
+        crate::providers::MAX_PROVIDERS + 1
+    ]);
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    assert_eq!(
+        ctl.registry.providers(&nid.node_id()).unwrap().providers,
+        p.providers
+    );
+
+    assert_eq!(node.stop(), Ended::Stopped);
+    wait_for("the disconnect", 5, || {
+        summary(&ctl, &nid).is_some_and(|s| !s.connected)
+    });
+    // Gone: the document is kept for the pages, its series are not served.
+    let left = ctl.registry.providers(&nid.node_id()).unwrap();
+    assert!(!left.connected && left.providers.is_some());
+    assert!(!ctl.registry.metrics().contains("provider_up"));
+}
 #[test]
 fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     let ctl = controller(fast());
@@ -533,6 +605,105 @@ fn commands_are_delivered_with_an_ack_or_queued() {
     pending.stop();
 }
 
+/// A model server on loopback that answers every POST with `body` and
+/// records what it was asked: the request line and the body.
+fn fake_provider(body: &'static str) -> (u16, Arc<std::sync::Mutex<Vec<String>>>) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = Arc::clone(&seen);
+    std::thread::spawn(move || {
+        for s in listener.incoming().flatten() {
+            let mut r = BufReader::new(s.try_clone().unwrap());
+            let mut line = String::new();
+            let _ = r.read_line(&mut line);
+            let mut len = 0usize;
+            loop {
+                let mut h = String::new();
+                if r.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" {
+                    break;
+                }
+                if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut b = vec![0; len];
+            let _ = r.read_exact(&mut b);
+            log.lock().unwrap().push(format!(
+                "{} {}",
+                line.split_whitespace().nth(1).unwrap_or(""),
+                String::from_utf8_lossy(&b)
+            ));
+            let mut s = s;
+            let _ = write!(
+                s,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    (port, seen)
+}
+
+#[test]
+fn residency_verbs_travel_the_link_and_run_on_the_machine() {
+    use crate::providers::{ModelAction, ProviderModelParams};
+    let (port, seen) = fake_provider(r#"{"status":"success","message":"Loaded Gemma-4"}"#);
+    let ctl = controller(fast());
+    let nid = id(41);
+    let params = |request: &str| ProviderModelParams {
+        kind: "lemonade".into(),
+        action: ModelAction::Load,
+        model: "Gemma-4".into(),
+        pinned: true,
+        replacing: Some("Qwen3".into()),
+        request: request.into(),
+    };
+    let mut policy = claude_policy();
+    policy.providers.lemonade = Some(crate::link::wire::ProviderPolicy { port: Some(port) });
+    approve(&ctl.registry, &nid, policy.clone());
+    // Approved and away: never kept for later.
+    let away = ctl
+        .registry
+        .provider_model(&nid.node_id(), params("00112233445566aa"))
+        .unwrap_err();
+    assert_eq!(away.code, code::UNAVAILABLE);
+    assert!(away.msg.contains("not connected"), "{}", away.msg);
+
+    let shared = node_shared();
+    let node = spawn_node(
+        target(&ctl, Some(pin_of(&ctl.id))),
+        nid.clone(),
+        Arc::clone(&shared),
+        "residency",
+    );
+    wait_for("the policy", 5, || shared.policy() == policy);
+    let sent = ctl
+        .registry
+        .provider_model(&nid.node_id(), params("00112233445566bb"))
+        .unwrap();
+    assert!(sent.delivered);
+    wait_for("the outcome", 10, || !shared.provider_actions().is_empty());
+    let a = &shared.provider_actions()[0];
+    assert_eq!(
+        (a.request.as_str(), a.ok, a.message.as_str()),
+        ("00112233445566bb", true, "Loaded Gemma-4")
+    );
+    // The incumbent went down first, then the load, on the policy's port.
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![
+            r#"/api/v1/unload {"model_name":"Qwen3"}"#.to_string(),
+            r#"/api/v1/load {"model_name":"Gemma-4","pinned":true}"#.to_string(),
+        ]
+    );
+    assert!(
+        shared.take_providers_read(),
+        "the reader is asked to read again"
+    );
+    node.stop();
+}
 #[test]
 fn claude_sessions_travel_the_link() {
     use crate::claude::{Roster, SessionAction};
@@ -907,6 +1078,7 @@ fn a_decision_is_for_a_key_not_an_id() {
         state: DesiredState::Approved,
         policy: claude_policy(),
         name: None,
+        offered: vec![],
     }]);
     let (_t, line) = raw(&ctl, &nid).unwrap();
     assert!(

@@ -203,6 +203,21 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         )
     };
 
+    // The providers' reader (providers.rs), wherever there is a link to
+    // push what it finds up: on every node, whatever the telemetry level.
+    let provider_reader = if role.link {
+        let shared = Arc::clone(&shared);
+        let stop = Arc::clone(&stop);
+        Some(
+            std::thread::Builder::new()
+                .name("providers".into())
+                .spawn(move || providers::run_loop(shared, stop))
+                .context("spawning the providers' reader")?,
+        )
+    } else {
+        None
+    };
+
     // The controller's session runs here, in this process (role.rs).
     let session = if role.session_in_service {
         let shared = Arc::clone(&shared);
@@ -301,6 +316,9 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     }
     if let Some(u) = updater {
         let _ = u.join();
+    }
+    if let Some(p) = provider_reader {
+        let _ = p.join();
     }
     if let Some(s) = sampler {
         let _ = s.join();

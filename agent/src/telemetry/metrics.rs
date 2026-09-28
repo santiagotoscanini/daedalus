@@ -121,20 +121,6 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
         let n = t.apps.iter().filter(|a| a.kind == kind).count();
         gauge("apps", &format!("kind=\"{kind}\""), n as f64);
     }
-    // A provider found on the machine: 1 when it answers, 0 when it is
-    // installed and silent. The version rides as a label, like the agent's.
-    for p in &t.providers {
-        gauge(
-            "provider_up",
-            &format!(
-                "kind=\"{}\",port=\"{}\",version=\"{}\"",
-                esc(&p.kind),
-                p.port,
-                esc(p.version.as_deref().unwrap_or(""))
-            ),
-            if p.running { 1.0 } else { 0.0 },
-        );
-    }
     if let Some(u) = &t.updates {
         gauge("os_updates_pending", "", u.pending.len() as f64);
         if let Some(r) = u.reboot_pending {
@@ -217,6 +203,43 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
         if let Some(v) = b.health_pct {
             gauge("battery_health_percent", "", v);
         }
+    }
+    out
+}
+
+/// One machine's providers, from their last report (providers.rs):
+///
+/// - `daedalus_agent_provider_up{…,kind,port,version,offered}`: 1 while the
+///   provider answers and calls itself healthy, 0 while it is installed and
+///   silent or answers unhealthy. `offered` is "1" when the app offers it to
+///   the gateway (`nodes.set_desired`), which is what "Model Server Down"
+///   alerts on.
+/// - `daedalus_agent_provider_models{…,kind}`: catalog entries on disk.
+/// - `daedalus_agent_provider_loaded{…,kind}`: models resident now.
+pub fn providers_text(
+    list: &[crate::providers::ProviderReport],
+    offered: impl Fn(&str) -> bool,
+    labels: &Labels,
+) -> String {
+    let base = labels.render();
+    let mut out = String::new();
+    for p in list {
+        let kind = escape_label(&p.kind);
+        out.push_str(&format!(
+            "daedalus_agent_provider_up{{{base},kind=\"{kind}\",port=\"{}\",version=\"{}\",offered=\"{}\"}} {}\n",
+            p.port,
+            escape_label(p.version.as_deref().unwrap_or("")),
+            u8::from(offered(&p.kind)),
+            u8::from(p.running && p.healthy)
+        ));
+        out.push_str(&format!(
+            "daedalus_agent_provider_models{{{base},kind=\"{kind}\"}} {}\n",
+            p.models.iter().filter(|m| m.downloaded).count()
+        ));
+        out.push_str(&format!(
+            "daedalus_agent_provider_loaded{{{base},kind=\"{kind}\"}} {}\n",
+            p.loaded.len()
+        ));
     }
     out
 }

@@ -44,6 +44,8 @@ function fake(over: Partial<ControllerClient>): ControllerClient & { calls: stri
     nodesList: no('nodes.list'),
     nodesGet: no('nodes.get'),
     nodesTelemetry: no('nodes.telemetry'),
+    nodesProviders: no('nodes.providers'),
+    nodesProviderModel: no('nodes.provider_model'),
     nodesClaude: no('nodes.claude'),
     nodesClaudeRoster: no('nodes.claude_roster'),
     nodesClaudeSession: no('nodes.claude_session'),
@@ -83,13 +85,14 @@ describe('the desired set', () => {
       state: 'approved',
       // The display name, for the machine label of its series.
       name: 'PC',
-      // Exactly the agent's Policy: nothing of the box's own (names,
-      // offers, models, hardware), the workdir trimmed.
+      // The agent's Policy plus the offer the controller keeps for its
+      // metrics: nothing else of the box's own (names,
+      // models, hardware), the workdir trimmed.
       policy: {
         awake_hold: false,
         claude_remote_control: true,
         claude_workdir: 'C:/p',
-        providers: { lemonade: { port: 8000 } },
+        providers: { lemonade: { port: 8000, offer: true } },
       },
     })
     expect(byId.get(nodeIdOf(KEY_B))).toEqual({
@@ -103,7 +106,7 @@ describe('the desired set', () => {
     expect(byId.get(nodeIdOf(KEY_C))?.policy).toEqual({
       awake_hold: true,
       claude_remote_control: true,
-      providers: { lemonade: { port: 13305 } },
+      providers: { lemonade: { port: 13305, offer: false } },
     })
     // Sorted by id, so the same table sends the same set.
     expect(nodes.map((n) => n.id)).toEqual([...nodes.map((n) => n.id)].sort())

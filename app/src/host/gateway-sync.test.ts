@@ -8,7 +8,7 @@ import {
   reconcile,
 } from './gateway-sync'
 import type { FleetProvider } from './providers/fleet'
-import type { ProviderReading } from './providers/read'
+import { NO_DETAIL, nodeReading, type ProviderReading } from './providers/read'
 
 const pc: FleetProvider = {
   machine: 'pc',
@@ -39,10 +39,14 @@ const reading = (
   kind: 'lemonade',
   base: pc.base,
   reachable,
+  reported: true,
+  presence: { running: reachable, version: '10.8.1' },
   health: { ok: reachable, version: '10.8.1', loaded },
   models,
+  detail: NO_DETAIL,
   error: null,
   readAt: 0,
+  actions: [],
 })
 
 /** A gateway in memory: what /model/info would answer, and what was done to it. */
@@ -292,5 +296,107 @@ describe('two models with one plain name', () => {
       'gemma-4-12b-it-gguf',
     ])
     expect(skipped).toEqual([])
+  })
+})
+
+describe('a node its agent has not reported for', () => {
+  const offered = [{ id: 'r1', tag: { node: 'pc', kind: 'lemonade', id: 'G' } }]
+  const held = (): GatewayModel[] =>
+    offered.map((o) => ({
+      id: o.id,
+      dbModel: true,
+      modelName: 'g',
+      upstream: 'openai/G',
+      apiBase: 'http://gaming-pc.lan:13305/api/v1',
+      timeout: 600,
+      modelInfo: { id: o.id, db_model: true, mode: 'chat', daedalus: o.tag },
+      tag: o.tag,
+    }))
+
+  it('keeps every route: an agent older than 0.18 sends no document', async () => {
+    const gw = fakeGateway(held())
+    const none = nodeReading('lemonade', pc.base, {
+      connected: true,
+      providers: null,
+      receivedAt: null,
+    })
+    expect(none).toMatchObject({ reachable: false, reported: false })
+    const s = await reconcile(gw, [{ provider: pc, reading: none }], () => undefined, 1)
+    expect(s.deleted).toEqual([])
+    expect(s.kept).toEqual(['g'])
+    expect(gw.log).toEqual([])
+  })
+
+  it('keeps every route while the controller cannot be asked, or the machine is away', async () => {
+    const gw = fakeGateway(held())
+    const down = nodeReading('lemonade', pc.base, new Error('connect ENOENT'))
+    const away = nodeReading('lemonade', pc.base, {
+      connected: false,
+      receivedAt: '2026-09-28T10:00:00Z',
+      providers: [
+        {
+          kind: 'lemonade',
+          port: 13305,
+          version: '10.8.1',
+          running: true,
+          healthy: true,
+          loaded: [],
+          models: [model('G')],
+          downloads: [],
+          backends: [],
+          figures: {},
+          readAt: '2026-09-28T10:00:00Z',
+          error: null,
+          actions: [],
+        },
+      ],
+    })
+    expect(away).toMatchObject({ reachable: false, reported: true })
+    expect(away.models.map((m) => m.id)).toEqual(['G'])
+    for (const r of [down, away]) {
+      const s = await reconcile(gw, [{ provider: pc, reading: r }], () => undefined, 1)
+      expect(s.deleted).toEqual([])
+    }
+    expect(gw.log).toEqual([])
+  })
+
+  it('reads a connected, fresh report as the provider answering', () => {
+    const now = Date.parse('2026-09-28T10:01:00Z')
+    const report = {
+      kind: 'lemonade',
+      port: 13305,
+      version: '10.8.1',
+      running: true,
+      healthy: false,
+      loaded: [{ id: 'G', device: 'gpu', maxContext: 65536, pinned: false }],
+      models: [model('G')],
+      downloads: [{ model: 'K', percent: 12, status: 'downloading' }],
+      backends: [],
+      figures: {},
+      readAt: '2026-09-28T10:00:30Z',
+      error: 'did not answer /metrics',
+      actions: [],
+    }
+    const r = nodeReading(
+      'lemonade',
+      pc.base,
+      { connected: true, receivedAt: '2026-09-28T10:00:31Z', providers: [report] },
+      now,
+    )
+    expect(r).toMatchObject({
+      reachable: true,
+      health: { ok: false, version: '10.8.1' },
+      error: 'did not answer /metrics',
+    })
+    expect(r.detail.downloads).toHaveLength(1)
+    // Ten minutes without a report from a connected machine: a stopped reader.
+    const stale = nodeReading(
+      'lemonade',
+      pc.base,
+      { connected: true, receivedAt: '2026-09-28T10:00:31Z', providers: [report] },
+      now + 10 * 60_000,
+    )
+    expect(stale.reachable).toBe(false)
+    expect(stale.error).toMatch(/not reported for 10 minutes/)
   })
 })

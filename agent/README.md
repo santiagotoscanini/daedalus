@@ -20,11 +20,22 @@ beside it where there is a desktop. It
   (`/nodes/metrics`, below). `src/status.rs` has the routes;
 - **reports the machine** — hardware, OS, usage, drives and their health,
   temperatures, network, battery, pending OS updates, installed browsers
-  and applications, and the **providers** on it (a model server such as
-  Lemonade, as presence only: kind, port, version, answering or not; the
-  box may set the port in the policy, `providers.lemonade.port`). What is
-  read, how often, and what stays off the status page: the header of
-  `src/telemetry.rs`, and each OS's collector (`src/os/*/telemetry.rs`);
+  and applications. What is read, how often, and what stays off the status
+  page: the header of `src/telemetry.rs`, and each OS's collector
+  (`src/os/*/telemetry.rs`);
+- **reads its providers and pushes them up** — a model server such as
+  Lemonade, read on loopback every minute (every ten seconds while a
+  download runs, and at once when the policy's port changes): whether it
+  answers and calls itself healthy, its version, catalog (id, labels, on
+  disk, size, recipe), what is loaded, downloads, installed backends and
+  per-model figures from its `/metrics`, bounded, as the `providers`
+  document. The box reads models and health from the controller
+  (`nodes.providers`), never from the machine; only the gateway's model
+  requests go to the machine directly. Read whatever the telemetry level;
+  the box may set the port in the policy, `providers.lemonade.port`
+  (`src/providers.rs`). It also runs the box's two residency verbs —
+  load a model, put one down — on loopback when the controller asks
+  (`provider_model`), and reports each outcome in the next document;
 - **follows the box's policy** once an admin approves the machine on
   Settings › Machines — hold it awake or not, run Claude remote control or
   not and where, provider ports — and its commands: check for updates now,
@@ -123,7 +134,12 @@ same in a terminal), with
   — and so do the CONTROLLER's own, labelled as a machine of its own
   (`node` its node id, `host` and `machine` its hostname), so one alert
   (`daedalus_agent_claude_up == 0` with `state!="off"`) covers the box and
-  every machine. The box's telemetry is not in it: node-exporter covers
+  every machine. A connected machine's providers ride there too:
+  `daedalus_agent_provider_up` (1 while it answers and calls itself
+  healthy; `kind`, `port`, `version` and `offered` — "1" when the app
+  offers it to the gateway — as labels), which the "Model Server Down"
+  alert reads, and `daedalus_agent_provider_{models,loaded}` (on disk,
+  resident). The box's telemetry is not in it: node-exporter covers
   the box;
 - and nothing else: no link of its own, no self-update, no keep-awake, no
   tray, no installer, and no `claude update` — nix pins Claude Code on the
@@ -213,7 +229,7 @@ matched by `id`. The first request must be `hello`:
 
 ```
 → {"id":1,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}
-← {"id":1,"ok":{"api":1,"version":"0.17.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","claude.sessions","telemetry.full"]}}
+← {"id":1,"ok":{"api":1,"version":"0.18.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","claude.sessions","telemetry.full"]}}
 ```
 
 Another API version gets `{"code":"version",…,"supported":1}` — the
@@ -234,11 +250,13 @@ verbs, none taking a command, a path or a flag:
 | `telemetry.get`    | `{level, telemetry}`: the document at the configured level           | —                       |
 | `events.subscribe` | `{}`, then the events below                                          | —                       |
 | `nodes.list`       | `{nodes: [{id, fingerprint, state, connected, since, last_seen, hostname, os, arch, agent_version, lan_ip, mac, claude}]}`: every machine known | `nodes` |
-| `nodes.get` `{id}` | the same fields, plus `public_key`, the whole `hello`, `status` (the machine's status page without its telemetry) and `status_at`, `telemetry` (the open page's view) and `telemetry_at`, `providers` | `nodes` |
+| `nodes.get` `{id}` | the same fields, plus `public_key`, the whole `hello`, `status` (the machine's status page without its telemetry) and `status_at`, `telemetry` (the open page's view) and `telemetry_at`, `providers` and `providers_at` (null until the machine pushed one) | `nodes` |
 | `nodes.telemetry` `{id}` | `{id, telemetry, received_at}`: the full document at the machine's level | `nodes` |
+| `nodes.providers` `{id}` | `{id, connected, providers, received_at}`: the providers document as the machine last pushed it, null until it has (providers.rs) | `nodes` |
 | `nodes.claude` `{id}` | `{id, report, received_at}`: the machine's full Claude report      | `nodes`                 |
 | `nodes.claude_roster` `{id}` | `{id, roster, received_at}`: the machine's roster of Claude sessions | `nodes`      |
 | `nodes.claude_session` `{id, action, session}` | `{delivered: true, request}`: one verb on one of the machine's sessions, acknowledged by it; its roster reports the outcome under `request` | `nodes` |
+| `nodes.provider_model` `{id, kind, action, model, pinned?, replacing?}` | `{delivered: true, request}`: one residency verb (`load` or `unload`; a load may put `replacing` down first) on one model of the machine's provider, acknowledged at once and run on the machine's loopback; its providers document reports the outcome under `request` (`actions`). Needs `providers.residency`; never queued | `nodes` |
 | `nodes.set_desired` `{nodes: [{id, public_key, state, policy, name}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
 | `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
 
@@ -246,7 +264,7 @@ verbs, none taking a command, a path or a flag:
 `unknown` (seen, not decided, gone). `nodes.set_desired` is the app's
 COMPLETE set of decided keys — `state` `approved` or `revoked`, `policy`
 the link's `Policy` (`src/link/wire.rs`: `awake_hold`, `claude_remote_control`,
-`claude_workdir`, `providers.lemonade.port`; absent for an approved key:
+`claude_workdir`, `providers.lemonade.port`, plus `providers.lemonade.offer`, which the controller keeps for `/nodes/metrics` and does not pass on; absent for an approved key:
 the defaults), `name` what the pages call the machine (optional; the
 `machine` label in `/nodes/metrics`, the hostname when absent) — idempotent, applied as a difference to the connections open
 now; a key left out is pending while connected. Every entry is checked
@@ -362,11 +380,13 @@ carries newly read static or slow facts or OS updates and otherwise every
 minute, `claude` (the full report) on change and every minute,
 `claude_roster` (the roster of Claude sessions, at most 512 KiB) on change
 — its clock and its ticking costs aside — and every minute, and
-`providers` on change. Controller → machine: `state`, `policy`, `command`
-requests (`check_update`, `claude_update`, `claude_restart`), and
+`providers` (the providers document, at most 4 providers of 256 models each, refused past its bounds) on change — its clocks aside — and every minute. Controller → machine: `state`, `policy`, `command`
+requests (`check_update`, `claude_update`, `claude_restart`),
 `claude_session` requests (`{action, id, request}`: one verb on one
-session, under the request id the controller minted), each acknowledged
-at once; a session verb's outcome rides the next roster.
+session, under the request id the controller minted) and `provider_model`
+requests (`{kind, action, model, pinned, replacing, request}`), each
+acknowledged at once; a session verb's outcome rides the next roster, a
+residency verb's the next providers document.
 
 **Limits.** Before a key is admitted a connection holds one of 32 pre-auth
 slots (3 per address; an IPv6 /64 is one address) and has 5 s in all for
@@ -812,13 +832,13 @@ search_domains = []       # more domains to ask for _daedalus-controller._tcp
 `telemetry = "full"` reads everything above; `minimal` reads the machine
 and how it is doing — make, model, firmware, OS, processor, memory,
 volumes, GPUs, temperatures, network, battery, the process count,
-providers and what could not be read — and never reads the drives
+and what could not be read — and never reads the drives
 (serials, SMART), services, browsers, installed applications or pending OS
 updates; processes are sampled for the count, but the list is not
-reported, and a provider such as Lemonade shows only while it answers (an
-installed but stopped one is found through the application list, which
-`minimal` does not read); `off` reads nothing (the page's `telemetry` is
-null, and `/nodes/metrics` carries only its `daedalus_agent_link_up`).
+reported; `off` reads nothing (the page's `telemetry` is null, and
+`/nodes/metrics` carries no telemetry series for it). The providers are
+read at every level (an installed but stopped Lemonade is found through
+the application list, which only `full` reads).
 
 `updates = "self"` installs a newer release (the default); `staged` and
 `external` only report it, as `auto_update = false` does. With no

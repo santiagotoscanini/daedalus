@@ -16,6 +16,8 @@
 //! node → {"e":"claude_roster","p":{…}}
 //! ctl  ← {"id":8,"m":"claude_session","p":{"action":"resume","id":"<uuid>","request":"<16 hex>"}}
 //! node → {"id":8,"ok":{"accepted":true}}
+//! ctl  ← {"id":9,"m":"provider_model","p":{"kind":"lemonade","action":"load","model":"…","pinned":false,"replacing":null,"request":"<16 hex>"}}
+//! node → {"id":9,"ok":{"accepted":true}}
 //! both → {"e":"hb"}
 //! ```
 //!
@@ -57,6 +59,9 @@ pub mod name {
     pub const CLAUDE_ROSTER: &str = "claude_roster";
     /// controller → node: one verb on one Claude session, acknowledged.
     pub const CLAUDE_SESSION: &str = "claude_session";
+    /// controller → node: one residency verb on one model, acknowledged;
+    /// the outcome rides the next `providers` document (providers.rs).
+    pub const PROVIDER_MODEL: &str = "provider_model";
     /// controller → node: where the machine stands.
     pub const STATE: &str = "state";
     /// controller → node: the box's policy for it.
@@ -584,6 +589,42 @@ mod tests {
                 serde_json::from_value::<ClaudeSessionParams>(bad.clone()).is_err(),
                 "{bad}"
             );
+        }
+        let load = crate::providers::ProviderModelParams {
+            kind: "lemonade".into(),
+            action: crate::providers::ModelAction::Load,
+            model: "Gemma-4".into(),
+            pinned: true,
+            replacing: Some("Qwen3".into()),
+            request: "00112233445566ff".into(),
+        };
+        assert_eq!(
+            request(9, name::PROVIDER_MODEL, &load),
+            concat!(
+                r#"{"id":9,"m":"provider_model","p":{"kind":"lemonade","action":"load","#,
+                r#""model":"Gemma-4","pinned":true,"replacing":"Qwen3","request":"00112233445566ff"}}"#
+            )
+        );
+        assert!(load.check().is_ok());
+        for bad in [
+            json!({"kind":"lemonade","action":"load","model":"m","request":"00112233445566ff","url":"http://x"}),
+            json!({"kind":"lemonade","action":"delete","model":"m","request":"00112233445566ff"}),
+        ] {
+            assert!(
+                serde_json::from_value::<crate::providers::ProviderModelParams>(bad.clone())
+                    .is_err(),
+                "{bad}"
+            );
+        }
+        for bad in [
+            json!({"kind":"ollama","action":"load","model":"m","request":"00112233445566ff"}),
+            json!({"kind":"lemonade","action":"load","model":" ","request":"00112233445566ff"}),
+            json!({"kind":"lemonade","action":"unload","model":"m","replacing":"n","request":"00112233445566ff"}),
+            json!({"kind":"lemonade","action":"load","model":"m","request":"short"}),
+        ] {
+            let p: crate::providers::ProviderModelParams =
+                serde_json::from_value(bad.clone()).unwrap();
+            assert!(p.check().is_err(), "{bad}");
         }
         let roster = Roster {
             reported_at: "t".into(),

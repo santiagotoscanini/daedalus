@@ -10,8 +10,9 @@ import { promVector } from '../../host/prom'
 // it from one call per module.
 //
 // ONE prometheus query, and deliberately the same one the dots use — gatus
-// probes every published webApp's `healthPath` plus a couple of off-box
-// services, which is exactly the set "is anything down" means here. Nothing is
+// probes every published webApp's `healthPath`, which is exactly the set "is
+// anything down" means here (a machine's model server is an alert of its own,
+// "Model Server Down", read from the controller). Nothing is
 // dialled directly: a health check that itself fans out to sixty services is a
 // health check that times out.
 //

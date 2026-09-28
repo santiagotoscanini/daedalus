@@ -1,5 +1,6 @@
 import { type ControllerClient, controller } from '../../host/controller/client'
 import { readNode } from '../../host/controller/nodes'
+import type { NodeProviderReport } from '../../host/controller/wire'
 import { promQuote, promSeries } from '../../host/prom'
 import type { AgentStatus, NodeTelemetry } from '../agent/status'
 import { getNode, type NodeRow } from '../repo/nodes'
@@ -32,6 +33,11 @@ export type NodeSystemData = {
    */
   full: boolean
   detailError: string | null
+  /**
+   * What the machine's agent read from its providers (agent/src/providers.rs),
+   * as it last reported them; null until it has.
+   */
+  providers: NodeProviderReport[] | null
   /**
    * The maker's BIOS releases, read only for the Motherboard tab (it asks a
    * download host on the internet, which the other tabs have no use for).
@@ -67,6 +73,7 @@ export async function loadNodeSystem(
     telemetry: null,
     full: false,
     detailError: null,
+    providers: null,
     releases: null,
     browserLatest: null,
     macos: null,
@@ -85,6 +92,10 @@ export async function loadNodeSystem(
   let t = d.telemetry
   let full = false
   let detailError: string | null = null
+  const providersRead = client
+    .nodesProviders(id)
+    .then((a) => a.providers)
+    .catch(() => null)
   try {
     const answer = await client.nodesTelemetry(id)
     if (answer.telemetry !== null) {
@@ -96,7 +107,8 @@ export async function loadNodeSystem(
   } catch (e) {
     detailError = e instanceof Error ? e.message : String(e)
   }
-  if (t === null) return { ...none, status, detailError, error: null }
+  const providers = await providersRead
+  if (t === null) return { ...none, status, detailError, providers, error: null }
 
   const releases =
     opts.board === true
@@ -127,6 +139,7 @@ export async function loadNodeSystem(
     telemetry: t,
     full,
     detailError,
+    providers,
     releases,
     browserLatest: browsers,
     macos,

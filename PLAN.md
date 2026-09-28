@@ -392,31 +392,21 @@ priority; each can be done independently unless noted.
        "providers": { "lemonade": { "port": 13305 } } } ] }
    ```
    No MAC, no address: consumers dial `<name>.<lanDomain>`. Consumers
-   then derive themselves — gatus probes each provider's health, the log
+   then derive themselves — the log
    bridge scrapes each lemonade node, prometheus reads every machine from the controller — and
    `fleet.gpuHost`/`gpuHostIp` go: litellm's `@gpuHost@` becomes the
    first lemonade node's name as a bridge, then nothing once the routes
    move (below). This is the one step that is an Apply, and it happens
    when a provider joins or leaves, not when a model does.
 
-   **The agent reports presence; the box reads the rest from the
-   provider.** The agent detects one kind, Lemonade
-   (`agent/src/providers.rs`): probe
-   `127.0.0.1:<port>/api/v1/health` (port from the policy, default
-   13305) and carry `providers: [{ kind, port, version, running }]` in
-   the telemetry document, nothing more. The catalog, the labels, what is
-   loaded and the health are read by the box from the provider's own API
-   at `<name>.<lanDomain>:<port>` — the address LiteLLM dials anyway,
-   so a provider is by definition reachable from the box, and a model list
-   carried by the agent would be a second copy of the provider's state. A
-   provider found by the agent is offered unless the node's switch says
-   otherwise; "found but bound to localhost" is a state the page names.
-   Ollama is deliberately not a kind (`app/src/lib/providers/kinds.ts`:
-   Lemonade's installer brings it along, so it drew every Lemonade machine
-   twice). Future idea, not scheduled: a provider on a machine with no
-   agent, added on Settings › Machines by address and port. The System
-   page's Host tab shows the provider; Settings › Machines › the node
-   shows it with the switch and the model table.
+   **The agent reads the provider; the box reads the controller.** Since
+   agent 0.18.0 the node's agent reads its Lemonade on loopback (catalog,
+   health, downloads, backends, per-model figures) and pushes it up the
+   link; the app reads `nodes.providers` and runs load/unload through
+   `nodes.provider_model`, never dialling the machine. Only LiteLLM's
+   routes go to `<name>.<lanDomain>:<port>`. Ollama is deliberately not a
+   kind (`app/src/lib/providers/kinds.ts`). Future idea, not scheduled: a
+   provider on a machine with no agent, added by address and port.
 
    **Models reach LiteLLM through LiteLLM, not through nix.** A model
    comes and goes with a click in Lemonade's window; a rebuild and a
@@ -445,7 +435,7 @@ priority; each can be done independently unless noted.
 
    **Also landed 2026-09-23**: the AI page is Providers → Gateway →
    Consumers with a machine picker; the box reads each provider's catalog
-   and health from its own API; the gateway sync writes a route per offered
+   and health (from the controller since 0.18.0); the gateway sync writes a route per offered
    model into LiteLLM's table and removes it when the model leaves, so
    every Lemonade route left `config.yaml`; a node's policy can offer any
    `ProviderKind`; `lanDomain` is published in the network export rather
@@ -584,9 +574,6 @@ priority; each can be done independently unless noted.
     re-pinned). The app reaches every machine only through the controller's
     unix socket; capabilities, not "is this the box", draw the tabs. What
     remains:
-    - **Providers through the controller.** The app still dials each node's
-      model server over the LAN for its catalog and health; the node's agent
-      reads them locally and pushes them up the link instead (being built).
     - **Hardening.** A unix socket with peer credentials between the tray and
       the service instead of loopback trust; an updater rollback that keeps
       the previous binary until the new one proves healthy; rotation of the

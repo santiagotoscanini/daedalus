@@ -1,29 +1,17 @@
-import {
-  arrayOf,
-  bool,
-  type Decoder,
-  nullable,
-  num,
-  obj,
-  optional,
-  recordOf,
-  str,
-} from '../contract/decode'
-
 // The provider kinds: what a machine on the network can offer the gateway,
-// as one interface. A kind knows three things — how to read the catalog,
-// how to read health, and how one of its models becomes a LiteLLM route.
-// This file is the pure half: decoders and mappings, no network. The
-// readers live in host/providers/read.ts; the AI page and the gateway sync
-// both use them, and neither knows a provider by anything but its kind and
-// address.
+// as one interface. A kind knows what its models are called, how one of them
+// becomes a LiteLLM route, and where its OpenAI surface hangs. This file is
+// the pure half: types and mappings, no network. The readers live in
+// host/providers/read.ts; the AI page and the gateway sync both use them,
+// and neither knows a provider by anything but its kind and machine.
 //
 // Two kinds cover every provider on this network today:
 // - `lemonade`: Lemonade Server, OpenAI-compatible under /api/v1, a catalog
 //   with labels, a health document with what is loaded. Same API and port on
-//   every OS it runs on.
+//   every OS it runs on. Read by the machine's own agent and reported
+//   through the controller; only the gateway's model requests dial it.
 // - `subgen`: the tv stack's faster-whisper, one STT model behind
-//   /v1/audio/transcriptions — a provider with no catalog to read.
+//   /v1/audio/transcriptions — a container on this box, with no catalog.
 //
 // Ollama is deliberately NOT a kind. Lemonade's installer brings it along,
 // so a kind for it drew every Lemonade machine twice — two rows, two
@@ -122,77 +110,19 @@ export function modeOf(labels: readonly string[]): ModelMode {
   return 'chat'
 }
 
-/* ── lemonade ─────────────────────────────────────────────────────────── */
+/* ── what a node's agent reads from its provider ──────────────────────── */
 
-const lemonadeEntry = obj({
-  id: str,
-  labels: optional(arrayOf(str), []),
-  downloaded: optional(bool, false),
-  size: optional(nullable(num), null),
-  recipe: optional(nullable(str), null),
-})
-
-export const lemonadeCatalogDecoder: Decoder<ProviderModel[]> = (v, p) => {
-  const doc = obj({ data: arrayOf(lemonadeEntry) })(v, p)
-  return doc.data.map((m) => ({
-    id: m.id,
-    labels: m.labels,
-    mode: modeOf(m.labels),
-    supportsTools: m.labels.includes('tool-calling'),
-    supportsVision: m.labels.includes('vision'),
-    downloaded: m.downloaded,
-    sizeGb: m.size,
-    recipe: m.recipe,
-  }))
-}
-
-export const lemonadeHealthDecoder: Decoder<ProviderHealth> = (v, p) => {
-  const doc = obj({
-    status: optional(str, ''),
-    version: optional(nullable(str), null),
-    all_models_loaded: optional(
-      arrayOf(
-        obj({
-          model_name: str,
-          device: optional(nullable(str), null),
-          max_context_window: optional(nullable(num), null),
-          pinned: optional(bool, false),
-          loaded: optional(bool, true),
-        }),
-      ),
-      [],
-    ),
-  })(v, p)
-  return {
-    ok: doc.status === 'ok',
-    version: doc.version,
-    loaded: doc.all_models_loaded
-      .filter((m) => m.loaded)
-      .map((m) => ({
-        id: m.model_name,
-        device: m.device,
-        maxContext: m.max_context_window,
-        pinned: m.pinned,
-      })),
-  }
-}
+// A node's provider is read by the node's own agent, on loopback, and
+// reaches this box as the providers document the controller keeps
+// (agent/src/providers.rs; `nodes.providers`). The agent carries the
+// provider's own words — labels, not modes — and host/controller/wire.ts
+// turns them into the shapes below; nothing here dials a provider.
 
 /**
  * What a Lemonade is busy fetching. Present only while a download runs, so
  * an empty list is the resting state rather than a failed read.
  */
 export type ProviderDownload = { model: string; percent: number | null; status: string }
-
-export const lemonadeDownloadsDecoder: Decoder<ProviderDownload[]> = (v, p) => {
-  const rows = arrayOf(
-    obj({
-      model_name: optional(str, '?'),
-      percent: optional(nullable(num), null),
-      status: optional(str, '?'),
-    }),
-  )(v, p)
-  return rows.map((d) => ({ model: d.model_name, percent: d.percent, status: d.status }))
-}
 
 /**
  * An inference runtime installed at the provider, with the build serving it.
@@ -208,21 +138,46 @@ export type ProviderBackend = {
   url: string | null
 }
 
-const backendState = obj({
-  state: optional(str, ''),
-  version: optional(nullable(str), null),
-  release_url: optional(nullable(str), null),
-})
+/**
+ * What one model has done at its provider, from the provider's own
+ * `/metrics` as the agent read it. These are the running process's gauges,
+ * so a provider restart resets them: nothing here is "today" or "since".
+ *
+ * Null rather than zero for a figure the provider never emitted: zero is a
+ * claim that it ran and produced nothing. `tps` and `ttftMs` are the LAST
+ * generation, not an average — the provider reports them as gauges — which
+ * is exactly the figure that decides between two chat models on disk.
+ */
+export type ModelFigures = {
+  requests: number | null
+  inputTokens: number | null
+  outputTokens: number | null
+  tps: number | null
+  ttftMs: number | null
+  /** The compute backend that served it, when the provider labelled it. */
+  device: string | null
+  /** The weights behind the name: `unsloth/gemma-4-12b-it-GGUF:Q4_K_M`. */
+  checkpoint: string | null
+}
 
-const recipeState = recordOf(obj({ backends: optional(recordOf(backendState), {}) }))
-
-export const lemonadeBackendsDecoder: Decoder<ProviderBackend[]> = (v, p) => {
-  const doc = obj({ recipes: optional(recipeState, {}) })(v, p)
-  return Object.entries(doc.recipes).flatMap(([recipe, r]) =>
-    Object.entries(r.backends)
-      .filter(([, b]) => b.state === 'installed')
-      .map(([backend, b]) => ({ recipe, backend, version: b.version, url: b.release_url })),
-  )
+/** One catalog entry as the agent carries it, made a ProviderModel. */
+export function modelOf(m: {
+  id: string
+  labels: string[]
+  downloaded: boolean
+  sizeGb: number | null
+  recipe: string | null
+}): ProviderModel {
+  return {
+    id: m.id,
+    labels: m.labels,
+    mode: modeOf(m.labels),
+    supportsTools: m.labels.includes('tool-calling'),
+    supportsVision: m.labels.includes('vision'),
+    downloaded: m.downloaded,
+    sizeGb: m.sizeGb,
+    recipe: m.recipe,
+  }
 }
 
 /* ── subgen ───────────────────────────────────────────────────────────── */
