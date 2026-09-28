@@ -577,6 +577,12 @@ pub fn check(list: &[ProviderReport]) -> Result<(), String> {
     for p in list {
         text("kind", &p.kind, MAX_WORD)?;
         opt("version", &p.version, MAX_WORD)?;
+        // Every read is stamped: an entry without the stamp is not a read (an
+        // agent before 0.18.0 pushed presence alone under this event), and
+        // keeping it would be a provider answering with an empty catalog.
+        if p.read_at.is_empty() {
+            return Err(format!("{}: not a read (no read_at)", p.kind));
+        }
         text("read_at", &p.read_at, MAX_WORD)?;
         opt("error", &p.error, MAX_TEXT)?;
         if p.loaded.len() > MAX_LOADED
@@ -885,6 +891,7 @@ mod tests {
     fn check_holds_the_bounds() {
         let ok = vec![ProviderReport {
             kind: "lemonade".into(),
+            read_at: "2026-09-28T10:00:00Z".into(),
             models: vec![ProviderModel {
                 id: "m".into(),
                 ..Default::default()
@@ -899,5 +906,12 @@ mod tests {
         ctl[0].error = Some("a\nb".into());
         assert!(check(&ctl).is_err());
         assert!(check(&vec![ok[0].clone(); MAX_PROVIDERS + 1]).is_err());
+        // What an agent before 0.18.0 pushed under the same event: presence
+        // alone. Not a read, so the controller keeps none.
+        let presence: Vec<ProviderReport> = serde_json::from_str(
+            r#"[{"kind":"lemonade","port":13305,"version":"10.8.1","running":true}]"#,
+        )
+        .unwrap();
+        assert!(check(&presence).is_err());
     }
 }
