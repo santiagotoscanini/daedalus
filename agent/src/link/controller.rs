@@ -663,7 +663,7 @@ impl Registry {
                         tracing::warn!(
                             node = id,
                             why,
-                            "link: a providers document past its bounds; dropped"
+                            "link: a providers document refused; dropped"
                         );
                     }
                 },

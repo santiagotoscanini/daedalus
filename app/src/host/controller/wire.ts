@@ -747,6 +747,9 @@ const nodeProvidersShape = reads<NodeProvidersOk>()(
 )
 
 export function nodeProvidersAnswer(v: unknown): NodeProvidersAnswer {
+  // The controller keeps only real reads (agent/src/providers.rs `check`
+  // refuses an entry without its `read_at`), so a null here is "no report
+  // yet" and an empty list is "the agent finds none".
   const d = decode(nodeProvidersShape, v)
   return {
     connected: d.connected,
