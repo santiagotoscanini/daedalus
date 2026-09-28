@@ -28,8 +28,7 @@
 # agent itself against the release key it carries.
 #
 # Environment: DAEDALUS_REPO (owner/name), DAEDALUS_AGENT_VERSION (e.g. 0.5.0
-# instead of the newest), DAEDALUS_AGENT_PORT (the status page's port on
-# loopback, on first install only).
+# instead of the newest).
 #
 # Arguments, both optional — where the controller (the box's agent) is and
 # which key to trust, written to config.toml (also on a reinstall):
@@ -48,7 +47,6 @@ umask 022
 
 REPO="${DAEDALUS_REPO:-santiagotoscanini/daedalus}"
 VERSION="${DAEDALUS_AGENT_VERSION:-}"
-PORT="${DAEDALUS_AGENT_PORT:-7787}"
 
 # --controller HOST:PORT and --pin FINGERPRINT, passed on to `install`.
 LINK_ARGS=""
@@ -122,9 +120,9 @@ install_macos() {
   chmod 755 "$ROOT" "$BIN" "$ROOT/logs"
 
   # shellcheck disable=SC2086 # LINK_ARGS is flag/value pairs checked above
-  "$BIN/daedalus-agent" install --port "$PORT" $LINK_ARGS
+  "$BIN/daedalus-agent" install $LINK_ARGS
   echo
-  echo "installed $tag. Status: daedalus-agent status (or http://127.0.0.1:$PORT/status on this machine)"
+  echo "installed $tag. Status: daedalus-agent status"
   echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
   echo "nothing listens on the LAN; the box hears from this machine over its link to the controller"
 }
@@ -189,9 +187,9 @@ install_linux() {
   chmod 755 "$ROOT" "$BIN"
 
   # shellcheck disable=SC2086 # LINK_ARGS is flag/value pairs checked above
-  "$BIN/daedalus-agent" install --port "$PORT" $LINK_ARGS
+  "$BIN/daedalus-agent" install $LINK_ARGS
   echo
-  echo "installed $tag. Status: daedalus-agent status (or http://127.0.0.1:$PORT/status on this machine)"
+  echo "installed $tag. Status: daedalus-agent status"
   echo "logs: /var/lib/daedalus-agent/logs (the service), ~/.local/state/daedalus-agent (the session and the tray)"
   echo "nothing listens on the LAN; the box hears from this machine over its link to the controller"
 }

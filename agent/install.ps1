@@ -26,9 +26,6 @@
   The GitHub repository whose agent-v* releases to install from.
 .PARAMETER Version
   A specific version (e.g. 0.1.0) instead of the newest.
-.PARAMETER Port
-  The status page's TCP port on loopback, written to config.toml on
-  first install.
 .PARAMETER Controller
   The controller's link address, host:port (the box's agent), written to
   config.toml (also on a reinstall). Absent: the agent asks DNS for the
@@ -46,7 +43,6 @@
 param(
   [string]$Repo = "santiagotoscanini/daedalus",
   [string]$Version = "",
-  [int]$Port = 7787,
   [string]$Controller = "",
   [string]$Pin = ""
 )
@@ -103,7 +99,7 @@ foreach ($name in $assets.Keys) {
   Move-Item -Force -Path $tmp -Destination $target
 }
 
-$installArgs = @("install", "--port", $Port)
+$installArgs = @("install")
 if ($Controller) { $installArgs += @("--controller", $Controller) }
 if ($Pin) { $installArgs += @("--pin", $Pin) }
 & $exe @installArgs
@@ -118,9 +114,9 @@ if ($service) {
 
 Start-Sleep -Seconds 2
 try {
-  $status = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/status"
+  $status = (& $exe status | Out-String) | ConvertFrom-Json
   Write-Host ("daedalus-agent {0} on {1}: awake hold {2}" -f $status.version, $status.hostname, $status.awake_hold)
 } catch {
-  Write-Warning "the service started but the status page did not answer yet: $_"
+  Write-Warning "the service started but did not answer on its local pipe yet: $_"
 }
 Write-Host "logs: $env:ProgramData\daedalus-agent\logs"

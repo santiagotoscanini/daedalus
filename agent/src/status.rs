@@ -1,50 +1,32 @@
-//! The status page: the agent's local door for the tray, the session and
-//! `daedalus-agent status`. What the box learns of a machine travels up the
-//! link (link/node.rs), never through this page.
+//! What the service's threads share (`Shared`) and the status document
+//! built from it: the agent's picture of this machine, which the tray, the
+//! session and `daedalus-agent status` read through the local socket
+//! (local.rs) and the link pushes to the controller (link/node.rs), without
+//! its telemetry. The tokens in the user's Claude profile never reach it —
+//! the report copies dates and a plan name, not credentials.
 //!
-//! A node binds it to loopback alone (role.rs): a machine listens on
-//! nothing the LAN can reach. The controller binds every interface for one
-//! reader, the box's Prometheus, whose container reaches the host through
-//! pasta's host alias — its connections arrive at the host's LAN address,
-//! not loopback — while the host firewall keeps the port closed to the LAN
-//! (nix). To any address, two reads:
+//! No HTTP answers on a node: a machine listens on nothing, loopback
+//! included. The controller keeps one small page on `port` (role.rs
+//! `status_on_lan`), on every interface, for one reader — the box's
+//! Prometheus, whose container reaches the host through pasta's host alias,
+//! so its connections arrive at the host's LAN address, not loopback —
+//! while the host firewall keeps the port closed to the LAN (nix):
 //!
 //!   GET  /healthz         `ok`
 //!   GET  /nodes/metrics   the telemetry of every machine connected to the
 //!                         controller (link/controller.rs), and the Claude
 //!                         series of each and of the controller itself, as
 //!                         Prometheus text, each series labelled `node`,
-//!                         `host`, `machine` and `os`; 404 on a node
+//!                         `host`, `machine` and `os`
 //!
-//! Only from loopback, and refused (403) from any other address:
+//! and 404 for anything else. The app's door on the controller is the API
+//! socket (api/), which reads the same `Shared`.
 //!
-//!   GET  /status (and /)  the document below
-//!   GET  /claude          the session's full report (session.rs `Watcher`)
-//!   POST /update/check    the updater looks now (the tray's "check for updates")
-//!   POST /claude/report   the tray's picture of Claude Code (its session —
-//!                         on Linux the session unit's own —
-//!                         session.rs, and claude/); the
-//!                         answer is a `ReportAnswer`: the policy's part for
-//!                         the tray and, once each, a pending update or restart
-//!                         and the session verb requests waiting (claude/sessions.rs)
-//!   POST /claude/roster   the session's roster of Claude sessions (claude/roster.rs)
-//!   POST /claude/update   ask the tray to update Claude Code on its next report
-//!   POST /claude/restart  ask the tray to restart the server on its next report
-//!
-//! Loopback is the whole check: any user or process on the machine may use
-//! these. The tokens in the user's Claude profile never reach this page —
-//! the report copies dates and a plan name, not credentials.
-//!
-//! The app's door on the controller is the socket (api/), which reads the
-//! same `Shared` this page does. `POST /claude/update` refuses there — nix
-//! pins Claude Code on the box.
-//!
-//! A node's page also carries `controller`: its link to the controller —
+//! A node's document also carries `controller`: its link to the controller —
 //! the address, its own fingerprint and the controller's it trusts, whether
 //! that key is only trusted on first use, and the last error, a changed
 //! controller key above all (link/node.rs).
 
-use std::io::Read;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -65,8 +47,6 @@ use crate::telemetry::Telemetry;
 /// A report older than this means the tray is gone (logged off, or no
 /// desktop session at all), and the page says so instead of repeating it.
 const REPORT_FRESH: Duration = Duration::from_secs(30);
-/// The largest report body accepted.
-const MAX_BODY: u64 = 1 << 20;
 /// A roster older than this is not served: the session sends one at least
 /// every `sessions::REFRESH`.
 const ROSTER_FRESH: Duration = Duration::from_secs(180);
@@ -96,6 +76,8 @@ pub struct Shared {
     /// The machines connected to this controller, when it listens for
     /// them; the API's `nodes.*` and `/nodes/metrics` read it.
     nodes: OnceLock<Arc<crate::link::controller::Registry>>,
+    /// The OS's power requests as last read (`refresh_power_requests`).
+    power: Mutex<Option<String>>,
 }
 
 struct Live {
@@ -104,7 +86,7 @@ struct Live {
     hold_error: Option<String>,
     update_available: Option<String>,
     restart_pending: bool,
-    /// Raised by `POST /update/check` or by the controller's command; the
+    /// Raised by the local socket's `update.check` or by the controller's command; the
     /// updater clears it when it looks.
     check_requested: bool,
     /// What the box wants of this machine; the config's defaults until the
@@ -115,11 +97,11 @@ struct Live {
     /// What the API's subscribers were last told: a session reporting or
     /// not (`claude.changed`).
     claude_announced: bool,
-    /// Raised by the controller's command or `POST /claude/update`; the
+    /// Raised by the controller's command or the local socket's `claude.update`; the
     /// tray takes it with its next report. Separate from the restart below
     /// (claude/mod.rs says why).
     claude_update_requested: bool,
-    /// Raised by the controller's command or `POST /claude/restart`; the
+    /// Raised by the controller's command or the local socket's `claude.restart`; the
     /// tray takes it with its next report.
     claude_restart_requested: bool,
     /// Verb requests for the sessions (claude/sessions.rs), accepted by the
@@ -203,6 +185,7 @@ impl Shared {
             events: Arc::new(Events::default()),
             controller: OnceLock::new(),
             nodes: OnceLock::new(),
+            power: Mutex::new(None),
             inner: Mutex::new(Live {
                 state,
                 awake_hold: false,
@@ -243,19 +226,6 @@ impl Shared {
         let changed = l.policy != p;
         l.policy = p;
         changed
-    }
-
-    /// The full report as JSON, for loopback.
-    fn claude_document(&self) -> String {
-        let l = self.lock();
-        match l
-            .claude
-            .as_ref()
-            .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
-        {
-            Some((r, _)) => serde_json::to_string_pretty(r).unwrap_or_else(|_| "{}".into()),
-            None => "null".into(),
-        }
     }
 
     /// A new sample; `tiers_moved` when it carries static or slow facts or
@@ -605,11 +575,20 @@ impl Shared {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// The open page, as served.
-    fn document(&self) -> String {
-        let power = crate::power::requests_report();
-        serde_json::to_string_pretty(&self.document_with(power, true))
-            .unwrap_or_else(|_| "{}".into())
+    /// The document as the local socket serves it (local.rs): the open
+    /// telemetry, and the OS's power requests as last read — never read
+    /// here: on Windows that is `powercfg`, far too slow for a request
+    /// (`refresh_power_requests`, on the service's own thread).
+    pub fn document_value(&self) -> serde_json::Value {
+        let power = self.power.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        self.document_with(power, true)
+    }
+
+    /// Read the OS's power requests for the document (a command; call it
+    /// off any request's path).
+    pub fn refresh_power_requests(&self) {
+        let r = crate::power::requests_report();
+        *self.power.lock().unwrap_or_else(|p| p.into_inner()) = r;
     }
 
     /// The page as a value: with `Telemetry::public` when `telemetry`,
@@ -658,15 +637,11 @@ impl Shared {
     }
 }
 
-/// What any address may ask; everything else is for loopback (module doc).
-fn open_to_any(method: &Method, url: &str) -> bool {
-    *method == Method::Get && matches!(url, "/healthz" | "/nodes/metrics")
-}
-
-/// How often a status page that could not bind its port tries again.
+/// How often a metrics page that could not bind its port tries again.
 pub const BIND_RETRY: Duration = Duration::from_secs(15);
 
-/// The status page, bound now or later: a port another process holds does
+/// The controller's metrics page, bound now or later: a port another
+/// process holds does
 /// not stop the service — the link, the telemetry and the awake hold go on
 /// — it is tried again every `BIND_RETRY`, and whoever holds it is logged
 /// where the OS says (`os::port_holder`).
@@ -691,7 +666,7 @@ impl Page {
             Arc::clone(&page.stop),
         );
         let bind = move || -> bool {
-            match serve(port, Arc::clone(&shared)) {
+            match serve_metrics(port, Arc::clone(&shared)) {
                 Ok(s) => {
                     *server.lock().unwrap_or_else(|p| p.into_inner()) = Some(s);
                     *since.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
@@ -702,7 +677,7 @@ impl Page {
                         error = format!("{e:#}"),
                         port,
                         held_by = crate::os::port_holder(port).as_deref().unwrap_or("unknown"),
-                        "the status page could not bind its port; the service runs on and tries again"
+                        "the metrics page could not bind its port; the service runs on and tries again"
                     );
                     false
                 }
@@ -739,34 +714,24 @@ impl Drop for Page {
         }
     }
 }
-
-/// Answer on `port` — loopback on a node, every interface on the controller
-/// (`Role::status_address`) — from a thread until `unblock` is called on
-/// the returned server.
-pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
-    let address = shared.role.status_address();
-    let server = Server::http((address, port))
+/// Answer the controller's metrics page on every interface's `port`
+/// (module doc) from a thread until `unblock` is called on the returned
+/// server.
+pub fn serve_metrics(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
+    let server = Server::http(("0.0.0.0", port))
         .map_err(|e| anyhow::anyhow!("{e}"))
-        .with_context(|| format!("binding the status page on {address}:{port}"))?;
+        .with_context(|| format!("binding the metrics page on 0.0.0.0:{port}"))?;
     // `incoming_requests` takes `&self` and `Server` is `Send + Sync`, so the
     // thread and the caller share one through an Arc; `unblock` from the
     // caller ends the loop in the thread.
     let server = Arc::new(server);
     let for_thread = Arc::clone(&server);
     std::thread::Builder::new()
-        .name("status".into())
+        .name("metrics".into())
         .spawn(move || {
-            for mut req in for_thread.incoming_requests() {
-                let local = req.remote_addr().is_some_and(|a| a.ip().is_loopback());
+            for req in for_thread.incoming_requests() {
                 let (code, body, ctype) = match (req.method(), req.url()) {
-                    (m, u) if !local && !open_to_any(m, u) => (
-                        403,
-                        "only /healthz and /nodes/metrics answer other addresses\n".to_string(),
-                        "text/plain",
-                    ),
                     (&Method::Get, "/healthz") => (200, "ok\n".to_string(), "text/plain"),
-                    // The connected machines' telemetry, on the controller
-                    // (link/controller.rs).
                     (&Method::Get, "/nodes/metrics") => match shared.nodes() {
                         Some(r) => (
                             200,
@@ -779,67 +744,6 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                             "text/plain",
                         ),
                     },
-                    (&Method::Get, "/" | "/status") => (200, shared.document(), "application/json"),
-                    (&Method::Get, "/claude") => {
-                        (200, shared.claude_document(), "application/json")
-                    }
-                    (&Method::Post, "/update/check") => {
-                        shared.request_check();
-                        (202, "checking\n".to_string(), "text/plain")
-                    }
-                    (&Method::Post, "/claude/update") if !shared.role.claude_update => (
-                        403,
-                        "Claude Code is updated by nix on this machine\n".to_string(),
-                        "text/plain",
-                    ),
-                    (&Method::Post, "/claude/update") => {
-                        shared.request_claude_update();
-                        (
-                            202,
-                            "update queued for the tray\n".to_string(),
-                            "text/plain",
-                        )
-                    }
-                    (&Method::Post, "/claude/restart") => {
-                        shared.request_claude_restart();
-                        (
-                            202,
-                            "restart queued for the tray\n".to_string(),
-                            "text/plain",
-                        )
-                    }
-                    (&Method::Post, "/claude/roster") => {
-                        let mut body = String::new();
-                        let read = req.as_reader().take(MAX_BODY).read_to_string(&mut body);
-                        match read
-                            .ok()
-                            .and_then(|_| serde_json::from_str::<Roster>(&body).ok())
-                        {
-                            Some(r) => {
-                                shared.set_claude_roster(r);
-                                (204, String::new(), "text/plain")
-                            }
-                            None => (400, "not a roster\n".to_string(), "text/plain"),
-                        }
-                    }
-                    (&Method::Post, "/claude/report") => {
-                        let mut body = String::new();
-                        let read = req.as_reader().take(MAX_BODY).read_to_string(&mut body);
-                        match read
-                            .ok()
-                            .and_then(|_| serde_json::from_str::<Report>(&body).ok())
-                        {
-                            Some(r) => {
-                                let answer = shared.set_claude(r);
-                                (
-                                    200,
-                                    serde_json::to_string(&answer).unwrap_or_else(|_| "{}".into()),
-                                    "application/json",
-                                )
-                            }
-                            None => (400, "not a report\n".to_string(), "text/plain"),
-                        }
-                    }
                     _ => (404, "not found\n".to_string(), "text/plain"),
                 };
                 let header = Header::from_bytes("Content-Type", ctype)
@@ -851,8 +755,8 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                 );
             }
         })
-        .context("spawning the status server")?;
-    tracing::info!(address, port, "status page answering");
+        .context("spawning the metrics page")?;
+    tracing::info!(port, "metrics page answering");
     Ok(server)
 }
 
@@ -860,61 +764,6 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
 mod tests {
     use super::*;
     use crate::config::Mode;
-
-    #[test]
-    fn other_addresses_get_healthz_and_nodes_metrics_alone() {
-        for (m, u) in [(Method::Get, "/healthz"), (Method::Get, "/nodes/metrics")] {
-            assert!(open_to_any(&m, u), "{u}");
-        }
-        for (m, u) in [
-            (Method::Get, "/"),
-            (Method::Get, "/status"),
-            (Method::Get, "/claude"),
-            (Method::Get, "/metrics"),
-            (Method::Get, "/telemetry"),
-            (Method::Post, "/nodes/metrics"),
-            (Method::Post, "/update/check"),
-            (Method::Post, "/claude/report"),
-            (Method::Post, "/claude/update"),
-            (Method::Post, "/claude/restart"),
-        ] {
-            assert!(!open_to_any(&m, u), "{m} {u}");
-        }
-    }
-
-    /// A page served on a free port, with a GET that returns the status
-    /// code, or None when nothing listens there.
-    fn page(shared: Arc<Shared>) -> (Arc<Server>, impl Fn(std::net::IpAddr, &str) -> Option<u16>) {
-        // A free port: bind, read it, let go.
-        let port = std::net::TcpListener::bind("0.0.0.0:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
-        let server = serve(port, shared).unwrap();
-        let get = move |host: std::net::IpAddr, path: &str| -> Option<u16> {
-            match ureq::get(&format!("http://{host}:{port}{path}"))
-                .timeout(Duration::from_secs(3))
-                .call()
-            {
-                Ok(r) => Some(r.status()),
-                Err(ureq::Error::Status(c, _)) => Some(c),
-                Err(ureq::Error::Transport(_)) => None,
-            }
-        };
-        (server, get)
-    }
-
-    /// Another address of this machine, which is not loopback to the server;
-    /// None where the machine has no route out.
-    fn lan_address() -> Option<std::net::IpAddr> {
-        std::net::UdpSocket::bind("0.0.0.0:0")
-            .and_then(|s| s.connect("192.0.2.1:9").map(|_| s))
-            .and_then(|s| s.local_addr())
-            .map(|a| a.ip())
-            .ok()
-            .filter(|ip| !ip.is_loopback() && !ip.is_unspecified())
-    }
 
     fn shared_as(mode: Mode) -> Arc<Shared> {
         Arc::new(Shared::new(
@@ -926,29 +775,10 @@ mod tests {
         ))
     }
 
-    /// A node listens on loopback alone: in full there, not at all on any
-    /// other address. It has no `/metrics` and no machines of its own.
+    /// The controller's page answers `/healthz` and `/nodes/metrics`, and
+    /// nothing of the machine: the document is the local socket's.
     #[test]
-    fn a_node_page_listens_on_loopback_alone() {
-        let (server, get) = page(shared_as(Mode::Node));
-        let lo: std::net::IpAddr = "127.0.0.1".parse().unwrap();
-        assert_eq!(get(lo, "/status"), Some(200));
-        assert_eq!(get(lo, "/claude"), Some(200));
-        assert_eq!(get(lo, "/healthz"), Some(200));
-        assert_eq!(get(lo, "/metrics"), Some(404));
-        assert_eq!(get(lo, "/nodes/metrics"), Some(404));
-        if let Some(lan) = lan_address() {
-            for p in ["/healthz", "/status", "/nodes/metrics"] {
-                assert_eq!(get(lan, p), None, "{p}");
-            }
-        }
-        server.unblock();
-    }
-
-    /// The controller binds every interface, answering loopback in full and
-    /// anything else only `/healthz` and `/nodes/metrics`.
-    #[test]
-    fn a_controller_page_answers_other_addresses_the_scrape_alone() {
+    fn the_metrics_page_answers_the_scrape_alone() {
         let shared = shared_as(Mode::Controller);
         let cid = crate::identity::Identity::from_seed([200; 32]);
         shared.set_nodes(Arc::new(crate::link::controller::Registry::new(
@@ -956,17 +786,26 @@ mod tests {
             shared.events_handle(),
             Default::default(),
         )));
-        let (server, get) = page(shared);
-        let lo: std::net::IpAddr = "127.0.0.1".parse().unwrap();
-        assert_eq!(get(lo, "/status"), Some(200));
-        assert_eq!(get(lo, "/nodes/metrics"), Some(200));
-        assert_eq!(get(lo, "/metrics"), Some(404));
-        if let Some(lan) = lan_address() {
-            assert_eq!(get(lan, "/healthz"), Some(200));
-            assert_eq!(get(lan, "/nodes/metrics"), Some(200));
-            for p in ["/status", "/", "/claude", "/metrics", "/telemetry"] {
-                assert_eq!(get(lan, p), Some(403), "{p}");
+        let port = std::net::TcpListener::bind("0.0.0.0:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let server = serve_metrics(port, shared).unwrap();
+        let get = |path: &str| -> Option<u16> {
+            match ureq::get(&format!("http://127.0.0.1:{port}{path}"))
+                .timeout(Duration::from_secs(3))
+                .call()
+            {
+                Ok(r) => Some(r.status()),
+                Err(ureq::Error::Status(c, _)) => Some(c),
+                Err(ureq::Error::Transport(_)) => None,
             }
+        };
+        assert_eq!(get("/healthz"), Some(200));
+        assert_eq!(get("/nodes/metrics"), Some(200));
+        for p in ["/", "/status", "/claude", "/metrics"] {
+            assert_eq!(get(p), Some(404), "{p}");
         }
         server.unblock();
     }

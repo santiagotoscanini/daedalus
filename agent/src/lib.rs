@@ -3,8 +3,9 @@
 //! A Windows service (a launchd daemon on macOS, a systemd service on
 //! Linux) that holds the machine awake for as long as the box wants it to,
 //! keeps one connection to the controller, the box's own agent (link/),
-//! following the policy it carries, answers a status page on loopback for
-//! the tray and the session (nothing on the LAN), samples the machine's telemetry, and
+//! following the policy it carries, answers the tray, the session and the
+//! verbs on a local socket that knows its callers (local.rs; nothing on the
+//! network, loopback included), samples the machine's telemetry, and
 //! updates itself to the
 //! newest `agent-v*` release of the engine repository; a session that —
 //! with the user's own login — runs `claude remote-control` the way the box
@@ -39,6 +40,7 @@ pub mod facts;
 pub mod http;
 pub mod identity;
 pub mod link;
+pub mod local;
 pub mod net;
 pub mod os;
 pub mod power;
@@ -89,7 +91,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let role = cfg.role();
     tracing::info!(
         version = VERSION,
-        port = cfg.port,
+        socket = %config::local_socket().display(),
         mode = ?role.mode,
         "daedalus-agent starting"
     );
@@ -144,10 +146,27 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let mut hold: Option<power::Hold> = None;
     let mut hold_wanted: Option<bool> = None;
 
-    // The status page for the tray, the session and the verbs (status.rs).
-    // One another process holds does not stop the service: it is tried
+    // The local socket for the tray, the session and the verbs (local.rs),
+    // and on the controller the metrics page Prometheus scrapes (status.rs).
+    // Either one that cannot be bound does not stop the service: it is tried
     // again in the background while the rest runs.
-    let page = status::Page::start(cfg.port, Arc::clone(&shared));
+    // The OS's power requests for the status document, read here every
+    // minute rather than inside a request (status.rs).
+    {
+        let (shared, stop) = (Arc::clone(&shared), Arc::clone(&stop));
+        let _ = std::thread::Builder::new()
+            .name("power-requests".into())
+            .spawn(move || loop {
+                shared.refresh_power_requests();
+                if util::sleep_until(&stop, Duration::from_secs(60)) {
+                    return;
+                }
+            });
+    }
+    let page = local::Door::start(Arc::clone(&shared));
+    let metrics = role
+        .status_on_lan
+        .then(|| status::Page::start(cfg.port, Arc::clone(&shared)));
     // After an update, the tray or the session started again on the new
     // binary so it matches the service (os `restart_desktop_side`).
     if matches!(start, update::Start::Probation(1)) && role.session && !role.session_in_service {
@@ -397,6 +416,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     drop(listener);
     drop(api);
     drop(page);
+    drop(metrics);
     if let Some(s) = session {
         let _ = s.join();
     }

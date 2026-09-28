@@ -379,7 +379,7 @@ fn retire_in(dir: &Path) {
 // its `.old` binaries kept; each start of that version under the service
 // manager (`run`, never a `serve`) counts itself, as the first thing
 // `agent_main` does (`on_start`), before the config is even read. It has
-// proved itself (`judge_proof`, `prove`) once its status page has answered
+// proved itself (`judge_proof`, `prove`) once its local socket has been served
 // for `PROBATION` and — when someone is logged on who runs a tray or a
 // session — that tray or session has reported to it: then the record is
 // cleared and the `.old` files retired. A run that cannot show that within
@@ -395,7 +395,7 @@ fn retire_in(dir: &Path) {
 // waits for comes from the matching version. A binary that dies before
 // `main` — never one signed for this target — is past what it can count.
 
-/// How long a new version must keep its status page up to have proved
+/// How long a new version must keep its local socket up to have proved
 /// itself.
 pub const PROBATION: Duration = Duration::from_secs(120);
 /// Starts a version on probation gets; the next one rolls it back.
@@ -505,7 +505,7 @@ pub enum Proof {
 /// failed start.
 pub const REPORT_WINDOW: Duration = Duration::from_secs(300);
 
-/// The pure half of the proof (module section above): the status page up
+/// The pure half of the proof (module section above): the local socket served
 /// for `PROBATION`, and — when someone is logged on who runs a tray or a
 /// session (`user_present`, asked only then) — a report from it lately
 /// (`reporting`). Past `REPORT_WINDOW` without that, the run failed.
@@ -517,11 +517,11 @@ pub fn judge_proof(
 ) -> Proof {
     if page_up_for.is_some_and(|u| u >= PROBATION) {
         if reporting {
-            return Proof::Proven("the status page answered 120 s and the tray/session reported");
+            return Proof::Proven("the local socket served 120 s and the tray/session reported");
         }
         if !user_present() {
             return Proof::Proven(
-                "the status page answered 120 s, and nobody is logged on to report",
+                "the local socket served 120 s, and nobody is logged on to report",
             );
         }
     }
@@ -529,7 +529,7 @@ pub fn judge_proof(
         return Proof::Wait;
     }
     Proof::Failed(match page_up_for {
-        None => "the status page never answered",
+        None => "the local socket was never served",
         Some(_) => "someone is logged on and no tray or session reported",
     })
 }

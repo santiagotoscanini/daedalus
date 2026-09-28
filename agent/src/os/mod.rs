@@ -22,7 +22,10 @@
 //!   making a download executable (update.rs);
 //! - processes: running a child without a console window, whether a pid
 //!   lives, ending a process tree, and relaying Ctrl-C / SIGTERM;
-//! - the local API socket: a unix socket served to this process's own uid
+//! - the local sockets: the agent's own door for the tray, the session and
+//!   the verbs — a unix socket, a named pipe on Windows — with the peer the
+//!   kernel names and whom it may serve (local.rs); and the controller's API,
+//!   a unix socket served to this process's own uid
 //!   by its peer credentials, made and cleaned up (api/; unix.rs — Windows
 //!   is never a controller and refuses);
 //! - Claude Code: the command's file names, whether the login is in the
@@ -78,8 +81,10 @@ pub use imp::{file_owner, own_uid, seal, unseal, write_private};
 pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 // processes, a single-instance lock, the monotonic clock
 pub use imp::{hide_console, lock_exclusive, monotonic_usec, on_interrupt, parent_pid, pid_alive};
-// the controller's local API socket (api/)
-pub use imp::{serve_local_socket, LocalSocket};
+// the local sockets: the controller's API (api/) and the agent's own door (local.rs)
+pub use imp::{
+    connect_local, local_allowed, local_socket_path, serve_local, serve_local_socket, LocalSocket,
+};
 // Claude Code
 pub use imp::{
     claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES, PROCESS_STATS,

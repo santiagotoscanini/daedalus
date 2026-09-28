@@ -21,8 +21,8 @@
 //!
 //! Who the session belongs to, and whether `install` turned lingering on,
 //! is kept in the data directory's `session.json`, so `uninstall` undoes
-//! exactly that. The status page answers loopback
-//! alone, so no firewall is touched.
+//! exactly that — and the service's local socket serves that user
+//! (local.rs). Nothing listens on the network, so no firewall is touched.
 //!
 //! `run` is `agent_main` with SIGTERM as the stop: systemd sends it on
 //! `stop`, `restart` and at shutdown (the relay is unix.rs's
@@ -307,6 +307,16 @@ fn session_unit_name() -> String {
         Some(hash) => format!("daedalus-agent-session-{hash}.service"),
         None => SESSION_UNIT.to_string(),
     }
+}
+
+/// The uid `install` enabled the session for, from `session.json`; None
+/// before an install recorded one (and under a development run, whose
+/// service is the user itself).
+pub fn session_uid() -> Option<u32> {
+    let text = std::fs::read_to_string(session_record()).ok()?;
+    serde_json::from_str::<SessionUser>(&text)
+        .ok()
+        .map(|r| r.uid)
 }
 
 /// The user who ran `sudo`, when it is not root.

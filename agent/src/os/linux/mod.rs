@@ -27,9 +27,9 @@ mod telemetry;
 pub mod tray;
 
 pub use super::unix::{
-    claude_holder, file_owner, hide_console, lock_exclusive, mark_executable, monotonic_usec,
-    on_interrupt, own_uid, pid_alive, seal, serve_local_socket, unseal, write_private, LocalSocket,
-    CLAUDE_CLI_NAMES,
+    claude_holder, connect_local, file_owner, hide_console, local_socket_path, lock_exclusive,
+    mark_executable, monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_local,
+    serve_local_socket, unseal, write_private, LocalSocket, CLAUDE_CLI_NAMES,
 };
 pub use net::{primary_adapter, srv_lookup};
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
@@ -90,6 +90,17 @@ pub fn port_holder(port: u16) -> Option<String> {
     let text = read("/proc/net/tcp")?;
     crate::telemetry::parse::linux_sys::tcp_listener_uid(&text, port)
         .map(|uid| format!("uid {uid}"))
+}
+
+// ── the local socket ──────────────────────────────────────────────────────
+
+/// Whom the agent's local socket serves (local.rs): root, the service's own
+/// uid, and the user `install` enabled the session for (`session.json`) —
+/// read at each connection, since `install` records it after the service
+/// is up.
+pub fn local_allowed() -> crate::local::Allowed {
+    let session: Vec<u32> = systemd::session_uid().into_iter().collect();
+    crate::local::unix_allowed(super::unix::own_uid().unwrap_or(0), &session)
 }
 
 // ── facts ─────────────────────────────────────────────────────────────────

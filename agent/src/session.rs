@@ -5,15 +5,16 @@
 //! `claude remote-control` (claude/) — never as its child: as a job of the
 //! OS it starts and watches (a systemd user unit, a launchd job, a detached
 //! process; claude/job.rs), which outlives it. Every `POLL` it reads the
-//! service's status page on loopback, sends the service a report of the
-//! supervisor (`POST /claude/report`), and applies the `ReportAnswer` —
+//! service's status document through the local socket (local.rs), sends
+//! the service a report of the supervisor (`claude.report`), and applies
+//! the `ReportAnswer` —
 //! run it or not, where, and the one-shot update and restart. The service
 //! (session 0 on Windows, root on macOS and Linux) could do neither.
 //!
 //! Beside the server it keeps the roster of Claude sessions and runs the
 //! three verbs on them (claude/sessions.rs), on a thread of their own: the
 //! requests arrive with the report's answer, and the roster goes to the
-//! service when it changes and every minute (`POST /claude/roster`, or
+//! service when it changes and every minute (`claude.roster`, or
 //! straight into the shared state on the controller). And it keeps the set
 //! of sessions that are open, so that after it starts the server again —
 //! the restart verb, a new directory, the server dying, the machine
@@ -29,8 +30,8 @@
 //! nobody logged in. A Linux tray does not own a session: it shows the one
 //! the unit runs, through the service (`Watcher`). On the controller the
 //! session is a thread of the service itself (`run_in_service`), and it
-//! reports straight into the service's shared state instead of over
-//! loopback (`Link::InProcess`).
+//! reports straight into the service's shared state instead of through
+//! the socket (`Link::InProcess`).
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
@@ -101,48 +102,33 @@ pub struct Poll {
     pub report: Report,
 }
 
-fn read_page(port: u16) -> Option<Page> {
-    ureq::get(&format!("http://127.0.0.1:{port}/status"))
-        .timeout(Duration::from_secs(2))
-        .call()
-        .ok()?
-        .into_json()
-        .ok()
+fn read_page() -> Option<Page> {
+    crate::local::call_as("status", serde_json::Value::Null).ok()
 }
 
-fn request_check(port: u16) {
-    let _ = ureq::post(&format!("http://127.0.0.1:{port}/update/check"))
-        .timeout(Duration::from_secs(2))
-        .call();
+fn request_check() {
+    let _ = crate::local::call("update.check", serde_json::Value::Null);
 }
 
 /// Send the supervisor's report to the service; its answer says whether the
 /// box wants the server running, where, and whether to update or restart
 /// it now.
-fn send_report(port: u16, report: &Report) -> Option<ReportAnswer> {
-    ureq::post(&format!("http://127.0.0.1:{port}/claude/report"))
-        .timeout(Duration::from_secs(2))
-        .send_json(serde_json::to_value(report).ok()?)
-        .ok()?
-        .into_json()
-        .ok()
+fn send_report(report: &Report) -> Option<ReportAnswer> {
+    crate::local::call_as("claude.report", serde_json::to_value(report).ok()?).ok()
 }
 
 /// Send the roster of Claude sessions to the service.
-fn send_roster(port: u16, roster: &Roster) -> bool {
-    serde_json::to_value(roster).ok().is_some_and(|v| {
-        ureq::post(&format!("http://127.0.0.1:{port}/claude/roster"))
-            .timeout(Duration::from_secs(2))
-            .send_json(v)
-            .is_ok()
-    })
+fn send_roster(roster: &Roster) -> bool {
+    serde_json::to_value(roster)
+        .ok()
+        .is_some_and(|v| crate::local::call("claude.roster", v).is_ok())
 }
 
 /// How the session reaches the service it reports to.
 pub enum Link {
-    /// The service in another process, through its loopback page (a tray,
-    /// the Linux session unit).
-    Http(u16),
+    /// The service in another process, through its local socket (a tray,
+    /// the Linux session unit; local.rs).
+    Socket,
     /// The service in this process (the controller): the report lands in
     /// its shared state directly, and there is no page to read.
     InProcess(Arc<Shared>),
@@ -151,14 +137,14 @@ pub enum Link {
 impl Link {
     fn page(&self) -> Option<Page> {
         match self {
-            Link::Http(port) => read_page(*port),
+            Link::Socket => read_page(),
             Link::InProcess(_) => None,
         }
     }
 
     fn report(&self, report: &Report) -> Option<ReportAnswer> {
         match self {
-            Link::Http(port) => send_report(*port, report),
+            Link::Socket => send_report(report),
             Link::InProcess(shared) => Some(shared.set_claude(report.clone())),
         }
     }
@@ -166,7 +152,7 @@ impl Link {
     /// Hand the service the roster; whether it took it.
     fn roster(&self, roster: &Roster) -> bool {
         match self {
-            Link::Http(port) => send_roster(*port, roster),
+            Link::Socket => send_roster(roster),
             Link::InProcess(shared) => {
                 shared.set_claude_roster(roster.clone());
                 true
@@ -178,7 +164,7 @@ impl Link {
     /// in-process session reports at once rather than at the next `POLL`.
     fn instruction_waiting(&self) -> bool {
         match self {
-            Link::Http(_) => false,
+            Link::Socket => false,
             Link::InProcess(shared) => shared.claude_instruction_waiting(),
         }
     }
@@ -188,7 +174,6 @@ impl Link {
 /// at the page next. Dropping it leaves Claude running in its jobs and
 /// releases the lock.
 pub struct Session {
-    port: u16,
     link: Link,
     sup: Supervisor,
     /// The roster and the session verbs, on a thread of their own.
@@ -263,13 +248,13 @@ impl Places {
 
 impl Session {
     /// The Claude server, in this session with this user's login, reporting
-    /// to the service on `port`. It starts from the last policy the service
+    /// to the service through its local socket. It starts from the last policy the service
     /// kept (the defaults on a fresh install) until the service relays the
     /// box's, and in the most recent trusted project until one is named.
     /// Nothing starts before the first `tick` (a
     /// job left running by a previous session is taken over, not
     /// restarted). Err when another session of this user holds the lock.
-    pub fn new(port: u16, places: Places) -> anyhow::Result<Self> {
+    pub fn new(places: Places) -> anyhow::Result<Self> {
         let lock = claim_lock(&places.claude_log)?;
         let sessions = start_sessions(&places);
         // The last policy the service kept (config.rs `last_policy`): Claude
@@ -285,8 +270,7 @@ impl Session {
             places.state_dir.join("gcroots"),
         );
         Ok(Self {
-            port,
-            link: Link::Http(port),
+            link: Link::Socket,
             sessions,
             recovery: Recovery::load(places.state_dir.join("claude-recovery.json")),
             recovered_for: 0,
@@ -301,7 +285,7 @@ impl Session {
     /// `shared` and starts from the policy already there (config.toml's
     /// `[controller]`), so nothing runs that the config did not ask for —
     /// not even for the moment before the first report.
-    pub fn in_process(shared: Arc<Shared>, port: u16, places: Places) -> anyhow::Result<Self> {
+    pub fn in_process(shared: Arc<Shared>, places: Places) -> anyhow::Result<Self> {
         let lock = claim_lock(&places.claude_log)?;
         let policy = shared.policy();
         let sessions = start_sessions(&places);
@@ -314,7 +298,6 @@ impl Session {
         );
         sup.set_off_reason("config.toml's [controller] claude_remote_control is off");
         Ok(Self {
-            port,
             link: Link::InProcess(shared),
             sup,
             sessions,
@@ -326,11 +309,6 @@ impl Session {
         })
     }
 
-    /// The service's port, for a UI that links to its page.
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     /// Whether the box wants the server running.
     pub fn claude_wanted(&self) -> bool {
         self.sup.wanted()
@@ -338,7 +316,7 @@ impl Session {
 
     /// Ask the service's updater to look now, and poll soon after.
     pub fn check_updates_now(&mut self) {
-        request_check(self.port);
+        request_check();
         self.next_poll = Instant::now() + Duration::from_secs(2);
     }
 
@@ -504,16 +482,12 @@ fn start_sessions(places: &Places) -> Sessions {
     })
 }
 
-/// The full report the session last sent the service, which the service
-/// answers on loopback (`GET /claude`); None when no session reported
-/// lately.
-fn read_report(port: u16) -> Option<Report> {
-    ureq::get(&format!("http://127.0.0.1:{port}/claude"))
-        .timeout(Duration::from_secs(2))
-        .call()
-        .ok()?
-        .into_json::<Option<Report>>()
-        .ok()?
+/// The full report the session last sent the service, as its local socket
+/// answers it (`claude`); None when no session reported lately.
+fn read_report() -> Option<Report> {
+    crate::local::call_as::<Option<Report>>("claude", serde_json::Value::Null)
+        .ok()
+        .flatten()
 }
 
 /// The running binary's file, as it was: an update renames it to `.old`
@@ -544,29 +518,29 @@ impl BinaryStamp {
 
 /// A session that runs in another process — the Linux session unit —
 /// seen through the service: its page, and the full report the session
-/// last sent. A restart is asked of the service (`POST /claude/restart`),
-/// which hands it to the session with its next report. It supervises
-/// nothing; dropping it stops nothing.
+/// last sent. A restart is asked of the service (`claude.restart`), which
+/// hands it to the session with its next report. It supervises nothing;
+/// dropping it stops nothing.
 pub struct Watcher {
-    port: u16,
     wanted: bool,
     next_poll: Instant,
     /// This binary as it was at start, to tell when an update replaced it.
     binary: Option<BinaryStamp>,
 }
 
+impl Default for Watcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Watcher {
-    pub fn new(port: u16) -> Self {
+    pub fn new() -> Self {
         Self {
-            port,
             wanted: Policy::default().claude_remote_control,
             next_poll: Instant::now(),
             binary: BinaryStamp::now(),
         }
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
     }
 
     /// Whether the box wants the server running, as the page last said.
@@ -575,15 +549,13 @@ impl Watcher {
     }
 
     pub fn check_updates_now(&mut self) {
-        request_check(self.port);
+        request_check();
         self.next_poll = Instant::now() + Duration::from_secs(2);
     }
 
     /// Ask the session, through the service, to restart the server.
     pub fn restart_claude(&mut self) {
-        let _ = ureq::post(&format!("http://127.0.0.1:{}/claude/restart", self.port))
-            .timeout(Duration::from_secs(2))
-            .call();
+        let _ = crate::local::call("claude.restart", serde_json::Value::Null);
         self.next_poll = Instant::now() + POLL;
     }
 
@@ -593,7 +565,7 @@ impl Watcher {
             return Tick::Idle;
         }
         self.next_poll = Instant::now() + POLL;
-        let page = read_page(self.port);
+        let page = read_page();
         if let Some(p) = &page {
             // Only a NEWER service means this binary was replaced; an older
             // one (mid-update, or a service not yet restarted) is shown, not
@@ -608,7 +580,7 @@ impl Watcher {
             // binary, not by this one.
             return Tick::VersionChanged;
         }
-        let report = read_report(self.port).unwrap_or_else(|| Report {
+        let report = read_report().unwrap_or_else(|| Report {
             state: "no-session".into(),
             detail: Some("the session unit is not reporting".into()),
             ..Default::default()
@@ -654,7 +626,7 @@ pub fn run() -> anyhow::Result<()> {
     let places = Places::of_user(&cfg);
     tracing::info!(
         version = VERSION,
-        port = cfg.port,
+        socket = %config::local_socket().display(),
         job = places.job,
         "session starting"
     );
@@ -663,7 +635,7 @@ pub fn run() -> anyhow::Result<()> {
         let stop = Arc::clone(&stop);
         crate::os::on_interrupt(move || stop.store(true, Ordering::Relaxed));
     }
-    let mut session = Session::new(cfg.port, places)?;
+    let mut session = Session::new(places)?;
     let mut last: Option<(String, bool)> = None;
     while !stop.load(Ordering::Relaxed) {
         match session.tick() {
@@ -710,7 +682,7 @@ pub fn run_in_service(
         state_dir: config::data_dir(),
     };
     tracing::info!(job = places.job, "session starting inside the service");
-    let mut session = Session::in_process(shared, cfg.port, places)?;
+    let mut session = Session::in_process(shared, places)?;
     let mut last: Option<String> = None;
     while !stop.load(Ordering::Relaxed) {
         if let Tick::Polled(poll) = session.tick() {

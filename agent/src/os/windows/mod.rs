@@ -12,6 +12,7 @@
 //! - `tray`: one instance, the Win32 message loop, Explorer as the opener;
 //! - `jobs`: Claude's server and resumed sessions as processes detached from
 //!   the tray, and `holder`: the pseudo-console a resumed session runs in;
+//! - `pipe`: the agent's local door, a named pipe that knows its callers;
 //! - `telemetry`: the collector and its tiers.
 //!
 //! The small things are here: paths, processes, the Claude command's names.
@@ -23,6 +24,7 @@ mod facts;
 mod holder;
 pub mod jobs;
 mod net;
+mod pipe;
 mod power;
 pub mod service;
 mod telemetry;
@@ -35,6 +37,7 @@ pub use dpapi::{seal, unseal};
 pub use facts::{cpu_name, memory_bytes, os_name, os_version};
 pub use holder::run as claude_holder;
 pub use net::primary_adapter;
+pub use pipe::{connect_local, local_allowed, local_socket_path, serve_local, LocalSocket};
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
 pub use service as svc;
 pub use telemetry::{read_updates, Collector};
@@ -113,21 +116,11 @@ pub fn monotonic_usec() -> Option<u64> {
     None
 }
 
-// ── the local API socket ──────────────────────────────────────────────────
+// ── the local sockets ─────────────────────────────────────────────────────
 
-/// The controller's API socket is a unix socket with peer credentials;
-/// Windows is never a controller (role.rs), so there is none to hold.
-pub enum LocalSocket {}
-
-/// Dropping one stops it where it exists (unix.rs); here none can.
-impl Drop for LocalSocket {
-    fn drop(&mut self) {
-        match *self {}
-    }
-}
-
-/// Refused: controller mode, the only role that serves the socket, runs on
-/// Linux (the box).
+/// Refused: the controller's API is a unix socket with peer credentials,
+/// and controller mode, the only role that serves it, runs on Linux (the
+/// box). The agent's own local door is the named pipe (pipe.rs).
 pub fn serve_local_socket<F>(
     path: &Path,
     _limits: &crate::api::Limits,

@@ -27,9 +27,9 @@ mod telemetry;
 pub mod tray;
 
 pub use super::unix::{
-    claude_holder, file_owner, hide_console, lock_exclusive, mark_executable, monotonic_usec,
-    on_interrupt, own_uid, pid_alive, seal, serve_local_socket, unseal, write_private, LocalSocket,
-    CLAUDE_CLI_NAMES,
+    claude_holder, connect_local, file_owner, hide_console, local_socket_path, lock_exclusive,
+    mark_executable, monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_local,
+    serve_local_socket, unseal, write_private, LocalSocket, CLAUDE_CLI_NAMES,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;
@@ -94,6 +94,22 @@ pub fn user_state_dir() -> Option<PathBuf> {
 pub fn port_holder(port: u16) -> Option<String> {
     let _ = port;
     None
+}
+
+// ── the local socket ──────────────────────────────────────────────────────
+
+/// Whom the agent's local socket serves (local.rs): root, the service's own
+/// uid, and the user at the console — the owner of `/dev/console`, whose
+/// menu bar app runs Claude — read at each connection, since it changes
+/// with the person logged in.
+pub fn local_allowed() -> crate::local::Allowed {
+    use std::os::unix::fs::MetadataExt;
+    let console: Vec<u32> = std::fs::metadata("/dev/console")
+        .map(|m| m.uid())
+        .into_iter()
+        .filter(|u| *u != 0)
+        .collect();
+    crate::local::unix_allowed(super::unix::own_uid().unwrap_or(0), &console)
 }
 
 // ── network ───────────────────────────────────────────────────────────────

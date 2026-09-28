@@ -7,7 +7,6 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use daedalus_agent::{agent_main, config, os, role, update, VERSION};
@@ -52,7 +51,7 @@ fn print_help() {
     println!(
         "daedalus-agent {VERSION}\n\n\
          usage: daedalus-agent <verb>\n\n  \
-         install [--port N] [--controller HOST:PORT] [--pin FINGERPRINT]\n                       register and start the service and the tray (administrator);\n                       --controller and --pin say where the controller is and which\n                       key to trust (written to config.toml, also on a reinstall)\n  \
+         install [--controller HOST:PORT] [--pin FINGERPRINT]\n                       register and start the service and the tray (administrator);\n                       --controller and --pin say where the controller is and which\n                       key to trust (written to config.toml, also on a reinstall)\n  \
          uninstall            stop and remove the service and the tray (administrator)\n  \
          run                  service entry point; used by the Service Control Manager\n  \
          serve                run in the foreground, in this terminal\n  \
@@ -93,13 +92,6 @@ fn install(args: &[String]) -> Result<()> {
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--port" => {
-                cfg.port = it
-                    .next()
-                    .context("--port needs a number")?
-                    .parse()
-                    .context("--port must be a TCP port")?
-            }
             "--controller" => {
                 let a = it.next().context("--controller needs host:port")?;
                 if !config::valid_host_port(a) {
@@ -129,13 +121,9 @@ fn uninstall() -> Result<()> {
 }
 
 fn status_cmd() -> Result<()> {
-    let cfg = config::load_or_default()?;
-    let url = format!("http://127.0.0.1:{}/status", cfg.port);
-    let body: serde_json::Value = ureq::get(&url)
-        .timeout(Duration::from_secs(3))
-        .call()
-        .with_context(|| format!("the agent did not answer at {url} — is the service running?"))?
-        .into_json()?;
+    config::load_or_default()?;
+    let body = daedalus_agent::local::call("status", serde_json::Value::Null)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     println!("{}", serde_json::to_string_pretty(&body)?);
     Ok(())
 }
@@ -147,12 +135,7 @@ fn update_cmd(args: &[String]) -> Result<()> {
     }
     // The running service keeps the state `--apply` writes (the probation
     // the new binary counts its starts against) and would save over it.
-    let port = config::load_or_default()?.port;
-    let running = ureq::get(&format!("http://127.0.0.1:{port}/healthz"))
-        .timeout(Duration::from_secs(2))
-        .call()
-        .is_ok();
-    if apply && running {
+    if apply && daedalus_agent::local::call("status", serde_json::Value::Null).is_ok() {
         bail!(
             "the service is running: stop it first, or let it install the release itself (`updates = \"self\"`)"
         );
@@ -183,16 +166,12 @@ fn update_cmd(args: &[String]) -> Result<()> {
 }
 
 fn claude_cmd(args: &[String]) -> Result<()> {
-    let cfg = config::load_or_default()?;
+    config::load_or_default()?;
     match args.first().map(String::as_str) {
         Some("restart") => {
-            let url = format!("http://127.0.0.1:{}/claude/restart", cfg.port);
-            let body = ureq::post(&url)
-                .timeout(Duration::from_secs(3))
-                .call()
-                .with_context(|| format!("the agent did not answer at {url}"))?
-                .into_string()?;
-            print!("{body}");
+            let said = daedalus_agent::local::call("claude.restart", serde_json::Value::Null)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            println!("{}", said.as_str().unwrap_or_default());
             Ok(())
         }
         _ => bail!("usage: daedalus-agent claude restart"),

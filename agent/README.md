@@ -13,11 +13,12 @@ beside it where there is a desktop. It
   talks to nothing else: TLS 1.3 with both keys pinned; hello, status,
   telemetry and the Claude report up; the box's policy and commands down
   at once (see "The link to the controller");
-- **listens on nothing the LAN can reach**: its status page on port 7787
-  (`port`) is bound to `127.0.0.1` — `/status`, the full Claude report at
-  `/claude`, `/healthz`, and the tray's and session's writes, for this
-  machine alone. Its metrics reach Prometheus through the controller
-  (`/nodes/metrics`, below). `src/status.rs` has the routes;
+- **listens on nothing, loopback included**: the tray, the session and the
+  verbs reach the service through a local socket that knows who is calling
+  — a unix socket on macOS and Linux, a named pipe on Windows — and serves
+  only root (SYSTEM) and the user the machine runs Claude for (see "The
+  local socket"). Its metrics reach Prometheus through the controller
+  (`/nodes/metrics`, below);
 - **reports the machine** — hardware, OS, usage, drives and their health,
   temperatures, network, battery, pending OS updates, installed browsers
   and applications. What is read, how often, and what stays off the status
@@ -67,7 +68,8 @@ beside it where there is a desktop. It
 - **shows itself in the tray** (`src/tray.rs`): the daedalus mark — ember
   when all is well, an amber dot when an update is pending, the hold failed
   or Claude is not running, grey when the service does not answer — with
-  the state in its tooltip and menu, and the actions: open the status page,
+  the state in its tooltip and menu, and the actions: show the status
+  document (written to `status.json` in its log directory and opened),
   check for updates, restart Claude remote control, open the logs, open
   Claude's log;
 - **updates itself** to the newest `agent-v*` release of this repository,
@@ -81,7 +83,7 @@ beside it where there is a desktop. It
 one table of what runs for each: a **node** — every machine that joins the
 network — runs all of the above; the **controller** — the box itself, NixOS
 by definition, the same Linux code built and configured by nix — runs the
-status page, telemetry and the session, the local API and the listener the
+local socket, the metrics page, telemetry and the session, the local API and the listener the
 machines' links reach, and no link of its own, self-update, keep-awake,
 tray or installer (`install` and `uninstall` refuse there).
 
@@ -91,12 +93,15 @@ tray or installer (`install` and `uninstall` refuse there).
 process as the operator (`daedalus-agent run` under systemd; `serve` is the
 same in a terminal), with
 
-- **the status page on every interface** (`0.0.0.0:7787`), for one reader:
-  the box's Prometheus, whose container reaches the host through pasta's
-  host alias, so its connections arrive at the host's LAN address rather
-  than loopback. Other addresses get `GET /healthz` and
-  `GET /nodes/metrics` alone and 403 for everything else; the host
-  firewall keeps the port closed to the LAN (nix). A node binds loopback;
+- **the metrics page on every interface** (`0.0.0.0:7787`, `port`), for
+  one reader: the box's Prometheus, whose container reaches the host
+  through pasta's host alias, so its connections arrive at the host's LAN
+  address rather than loopback. It answers `GET /healthz` and
+  `GET /nodes/metrics` and 404 for everything else — the status document
+  is the local socket's — and the host firewall keeps the port closed to
+  the LAN (nix). A node has no page at all;
+- **the local socket** (see "The local socket"), serving the operator and
+  root: `daedalus-agent status` on the box;
 - **telemetry** at the level `telemetry` sets (below);
 - **the session inside the process**: Claude remote control as its
   transient user unit, reported straight into the service. `daedalus-agent
@@ -183,7 +188,7 @@ What the unit nix writes should carry:
   a descriptor, up to 64, beside the telemetry and the session's tools.
 - With `listen` set, the port open to the LAN in the firewall (and only
   there: the link is for machines on the network).
-- The status page's `port` kept CLOSED to the LAN: it binds every
+- The metrics page's `port` kept CLOSED to the LAN: it binds every
   interface so the Prometheus container can reach `/nodes/metrics`, and
   only the firewall stops the LAN from asking the same.
 - A `claude_unit` distinct from any unit the box already runs, and
@@ -457,11 +462,68 @@ escaped, newlines included, and stripped of other control characters; the
 name in `nodes.set_desired` is refused when blank, longer than 64
 characters or holding a control character.
 
-The status page's `controller` block and the tray's menu show the link:
+The status document's `controller` block and the tray's menu show the link:
 the address and where it came from, the state (`connecting`, `pending`,
 `approved`, `revoked`, `refused`, `key-changed`), both fingerprints, how
 the controller's key is trusted (`config` or `tofu`), the last rotation
 (`rotated`) and the last error.
+
+## The local socket
+
+The tray, the session and the verbs (`daedalus-agent status`, `claude
+restart`) reach the service through one local socket, and nothing else
+listens on a node — not even on loopback (`src/local.rs`). On macOS and
+Linux it is `run/agent.sock` in the data directory, in a directory the
+service makes 0711 (root's on a node, the operator's on the controller)
+with the socket 0666: every local user may reach it, and the kernel's word
+on the peer (`SO_PEERCRED` on Linux, `getpeereid` on macOS) is the gate. On
+Windows it is the named pipe `\\.\pipe\daedalus-agent`, whose DACL grants
+SYSTEM and the pipe's owner full control and the interactive users read and
+write-data — never the right to create an instance, so nobody can stand a
+second server up beside the service — and which refuses remote clients.
+The service reads the request first, then takes the client's user from its
+own token while impersonating it (`ImpersonateNamedPipeClient`, at the
+identification level the client opens with) — never by opening its
+process, so a reused pid cannot pass for it. A development run
+(`DAEDALUS_AGENT_DATA_DIR`) gets a pipe of its own.
+
+**Who is served**, and nobody else: root (SYSTEM on Windows), the service's
+own user, and the users the machine runs Claude for —
+
+- Linux: the session user `install` recorded (`session.json`);
+- macOS: the user at the console, the owner of `/dev/console` (another
+  user's menu bar app, under fast user switching, is refused);
+- Windows: the user of every session someone is logged on to, at the
+  console or remotely, active or disconnected — each runs a tray.
+
+Anyone else gets one `forbidden` line and a closed connection, and the
+service logs the uid or SID. The client checks the other end too, by what
+it can see without opening the service's process (a user's tray cannot
+open a SYSTEM process): on unix the socket's server is root or the
+client's own user (the controller's operator, a development run) and owns
+the socket file; on Windows the pipe object's owner is SYSTEM or
+Administrators and its server runs in session 0 — or, in a development run
+alone, the pipe is the client's own. So a pipe squatted while the service
+is down cannot give the session orders.
+
+One request per connection, one JSON line each way (at most 1 MiB), 16
+connections at once. The whole exchange has a deadline on both ends, however
+slowly the other end drips its bytes: five seconds on the service's side,
+two on the client's (the tray asks from its UI thread). The status
+document never waits on the OS: its power requests (`powercfg` on Windows)
+are read by the service every minute on a thread of their own.
+`{"m":"<method>","p":…}` → `{"ok":…}` or `{"err":"…"}`. The methods:
+`status` (the status document), `claude` (the session's full report),
+`claude.report` (the session's poll: its report in, the `ReportAnswer`
+out), `claude.roster`, `claude.restart`, `claude.update` (refused on the
+controller, where nix pins Claude Code) and `update.check`. A socket that
+cannot be made does not stop the service: it is tried again every 15 s.
+
+An update from 0.19 to 0.20 changes the channel under a tray or a session
+still running the old binary; the new service restarts them on the new
+binary at its first start (see "How an update happens"), and a Linux tray
+whose service stops answering after its binary was replaced leaves for the
+new one.
 
 ## Install
 
@@ -530,7 +592,7 @@ runs `daedalus-agent install`, which
 - where the tray was installed, writes `/etc/xdg/autostart/daedalus-agent-tray.desktop`,
   so every graphical login starts it;
 - writes `config.toml` if there is none. Nothing needs opening in a
-  firewall: the status page answers loopback alone, and the link is
+  firewall: nothing listens, and the link is
   outbound.
 
 `sudo daedalus-agent uninstall` stops and removes the service, the session
@@ -767,25 +829,17 @@ item, `systemctl suspend`) is refused too, not only the idle one. Turning
 the policy off for the machine on Settings › Machines releases the lock at
 once.
 
-Until the agent's local calls move to a unix socket with peer credentials
-(PLAN, feature 13), the status page trusts loopback: any user or process on
-the machine can read the full Claude report at `127.0.0.1:7787/claude`,
-ask for a Claude restart, post a roster in place of the session's, and — by
-posting a report of its own — take the session verb requests the box sent
-before the session does (it cannot make one: those come only from the
-controller) — worth knowing on a Linux machine several people log in to.
-
 ## Verbs
 
 ```
-daedalus-agent install [--port N] [--controller HOST:PORT] [--pin FINGERPRINT]
+daedalus-agent install [--controller HOST:PORT] [--pin FINGERPRINT]
                                     register and start the service, the session and the tray (administrator / sudo);
                                     --controller and --pin name the controller and pin its key in config.toml
 daedalus-agent uninstall            stop and remove them (administrator / sudo)
 daedalus-agent run                  service entry point; what the SCM, launchd or systemd calls (and nix, for the controller)
 daedalus-agent serve                the same work in the foreground, in a terminal
 daedalus-agent session              the Claude session without a tray: the Linux user unit (refused where the tray runs it, and on the controller)
-daedalus-agent status               print the running agent's status page
+daedalus-agent status               print the running agent's status document (through the local socket)
 daedalus-agent update [--apply]     check the release feed now; --apply installs
 daedalus-agent claude restart       ask the session to restart `claude remote-control`
 daedalus-agent claude-holder "…"    (Windows) a resumed session's pseudo-console; the tray starts it, never by hand
@@ -801,6 +855,7 @@ C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (.old / .n
 C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
 C:\ProgramData\daedalus-agent\config.toml                 local knobs, never policy (src/config.rs); edit and restart
 C:\ProgramData\daedalus-agent\state.json                  the last update check and install, an update on probation, a version rolled back from
+\\.\pipe\daedalus-agent                                   the local socket: the tray, the session and the verbs
 C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPAPI-wrapped
 C:\ProgramData\daedalus-agent\controller.json             the controller key trusted on first use, and its address (the link)
 C:\ProgramData\daedalus-agent\policy.json                 the last policy the controller sent, what a restart starts from
@@ -817,6 +872,7 @@ macOS:
 /Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update, .bad after a rollback)
 /Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the menu bar app
 /Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,controller.json,logs/}
+/Library/Application Support/daedalus-agent/run/agent.sock            the local socket: the menu bar app and the verbs
 /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
 /Library/LaunchAgents/me.toscanini.daedalus-agent-tray.plist          the menu bar app's job
 ~/Library/Logs/daedalus-agent/                                        the menu bar app's logs (claude-rc.log, claude-session-<uuid>.log)
@@ -832,6 +888,7 @@ Linux:
 /opt/daedalus-agent/bin/daedalus-agent                the service (.old / .new around an update, .bad after a rollback); /usr/local/bin links to it
 /opt/daedalus-agent/bin/daedalus-agent-tray           the tray, x86_64 desktops only
 /var/lib/daedalus-agent/{config.toml,state.json,identity.key,controller.json,policy.json,session.json,logs/}
+/var/lib/daedalus-agent/run/agent.sock                the local socket: the session, the tray and the verbs
 /etc/systemd/system/daedalus-agent.service            the service's unit
 /etc/systemd/user/daedalus-agent-session.service      the session's unit, enabled for one user, lingering
 /etc/xdg/autostart/daedalus-agent-tray.desktop        the tray, at every graphical login
@@ -866,7 +923,7 @@ optional, and a top-level key the agent does not know is ignored. The
 header of [`src/config.rs`](src/config.rs) is the reference.
 
 ```toml
-port = 7787               # the status page's port, on loopback (all interfaces on the controller)
+port = 7787               # the controller's metrics page (/healthz, /nodes/metrics); a node listens on none
 update_check_secs = 600   # how often the release feed is asked
 auto_update = true        # the older spelling of `updates`
 log_level = "info"        # "debug" for a bug report
@@ -912,7 +969,7 @@ signature against `RELEASE_PUBLIC_KEY_HEX` in [`src/update.rs`](src/update.rs),
 renames the running binaries to `.old`, moves the new ones into place and
 exits with code 3. The service's recovery action (launchd's KeepAlive on
 macOS, `Restart=always` on Linux) starts it on the new binary; the tray and
-the session see the page report a version other than their own and restart
+the session see the status document report a version other than their own and restart
 (the Linux session unit by leaving, for systemd to start it again), and the
 first start of the new service restarts them itself as well — the Windows
 trays ended (`taskkill`) and the console user's started again, the Mac's
@@ -921,7 +978,7 @@ restarted in its user's manager — so they run the version the service does
 whatever version they were. A Linux tray whose page stops answering after
 its binary was replaced leaves for the new one too. Claude keeps running in
 its jobs on every OS and is re-attached. A release whose signature fails is
-reported on the status page and never installed.
+reported in the status document and never installed.
 
 **Probation, and going back.** A signed binary is not trusted until it has
 run. The update records the new version on probation in `state.json`
@@ -929,7 +986,7 @@ run. The update records the new version on probation in `state.json`
 `.old` binaries stay. Each start of that version under the service manager
 (`run`, never a `serve` in a terminal) counts itself as the first thing the
 service does — before it even reads config.toml. It has proved itself once
-its status page has answered for two minutes and, when someone is logged on
+its local socket has been served for two minutes and, when someone is logged on
 who runs a tray or a session (a console session with a user on Windows, a
 console user on a Mac, the session user's systemd manager running on
 Linux), that tray or session has reported to it; with nobody logged on the
@@ -948,10 +1005,10 @@ nothing newer is installed over it, and `update --apply` refuses while the
 service runs (its state would be saved over). A binary that dies before
 `main` is past what it can count — none signed for this target does.
 
-A status page whose port another process holds does not stop the service:
-the link, the telemetry and the awake hold run on, the port is tried again
-every 15 s, and the log names the port's holder where the OS says (its uid,
-on Linux). One service runs per data directory (`agent.lock` there).
+On the controller, a metrics page whose port another process holds does
+not stop the service: the rest runs on, the port is tried again every 15 s,
+and the log names the port's holder (its uid). One service runs per data
+directory (`agent.lock` there).
 
 ## Releasing
 

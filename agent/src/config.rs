@@ -639,6 +639,19 @@ fn claude_session_prefix_for(env_dir: Option<&Path>) -> String {
     }
 }
 
+/// The agent's local socket (local.rs): `<data_dir>/run/agent.sock` on
+/// macOS and Linux, the pipe `\\.\pipe\daedalus-agent` on Windows. A
+/// process started with `DAEDALUS_AGENT_DATA_DIR` gets a pipe of its own
+/// (its socket moves with the directory anyway), so a development run never
+/// answers or asks for an installed agent.
+pub fn local_socket() -> PathBuf {
+    let dev = env_data_dir().ok().flatten().map(|d| {
+        use sha2::Digest;
+        hex::encode(sha2::Sha256::digest(d.as_os_str().as_encoded_bytes()))[..10].to_string()
+    });
+    crate::os::local_socket_path(&data_dir(), dev.as_deref())
+}
+
 /// The config, or the defaults when there is no file. Refuses a relative
 /// `DAEDALUS_AGENT_DATA_DIR` or `data_dir` — every entry point (the
 /// service, `serve`, the tray, the verbs that read the port) calls this

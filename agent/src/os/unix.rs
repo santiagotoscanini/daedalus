@@ -1,11 +1,14 @@
 //! What macOS and Linux share: the machine's name from `gethostname`, the
 //! identity file's 0600 posture, the executable bit, the Ctrl-C / SIGTERM
-//! relay, and processes in groups of their own. Each OS module re-exports
-//! the parts it uses.
+//! relay, processes in groups of their own, and the two unix sockets — the
+//! controller's API (api/) and the agent's local door (local.rs), one
+//! server core with a gate each. Each OS module re-exports the parts it
+//! uses.
 
 use std::path::Path;
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -160,7 +163,7 @@ pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
     (rc == 0).then_some(f)
 }
 
-// ── the local API socket ──────────────────────────────────────────────────
+// ── the local sockets: the API's and the agent's own ───────────────────────
 
 /// The API's socket (api/), served by a thread until this is dropped,
 /// which stops accepting and removes the socket.
@@ -299,7 +302,7 @@ fn check_socket_dir(
 ) -> Result<()> {
     let d = dir.display();
     if symlink {
-        anyhow::bail!("{d} is a symlink; the API socket's directory must be a real one");
+        anyhow::bail!("{d} is a symlink; a socket's directory must be a real one");
     }
     if !is_dir {
         anyhow::bail!("{d} is not a directory");
@@ -309,7 +312,7 @@ fn check_socket_dir(
     }
     if mode & 0o022 != 0 {
         anyhow::bail!(
-            "{d} is writable by group or others (mode {:o}); the API socket's directory must not be",
+            "{d} is writable by group or others (mode {:o}); a socket's directory must not be",
             mode & 0o777
         );
     }
@@ -429,6 +432,26 @@ impl Drop for Slot {
     }
 }
 
+/// Who may connect to one of this agent's sockets, and what a refused or
+/// surplus peer is told: the API's (`serve_local_socket`) and the agent's
+/// local door (`serve_local`) differ only here.
+struct Gate {
+    dir_mode: u32,
+    sock_mode: u32,
+    allow: Arc<dyn Fn(Option<u32>) -> bool + Send + Sync>,
+    refusal: Arc<dyn Fn(Option<u32>) -> String + Send + Sync>,
+    busy: String,
+    max_connections: usize,
+    /// The read deadline a connection starts with (lifted by `on_hello`).
+    read_deadline: Duration,
+    write_timeout: Duration,
+    /// For the log and the threads' names.
+    what: &'static str,
+    /// The whole exchange's deadline, for a door that answers one request
+    /// per connection (the local socket); None for the API's long ones.
+    whole: Option<Duration>,
+}
+
 /// Serve the API's socket at `path`: the directory made if missing (0700)
 /// or checked if not (`socket_dir`), a stale socket removed, another
 /// instance refused, the socket 0600 — or, with other uids listed, 0711
@@ -446,35 +469,150 @@ pub fn serve_local_socket<F>(
 where
     F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
 {
+    let (dir_mode, sock_mode) = socket_modes(&limits.allowed_uids);
+    let own = euid();
+    let listed = limits.allowed_uids.clone();
+    serve_gated(
+        path,
+        Gate {
+            dir_mode,
+            sock_mode,
+            allow: Arc::new(move |peer| crate::api::peer_allowed(peer, own, &listed)),
+            refusal: Arc::new(crate::api::refusal),
+            busy: crate::api::too_many(limits.max_connections),
+            max_connections: limits.max_connections,
+            read_deadline: limits.hello_deadline,
+            write_timeout: limits.write_timeout,
+            what: "api",
+            whole: None,
+        },
+        on_conn,
+    )
+}
+
+/// Serve the agent's local socket at `path` (local.rs): the directory
+/// made 0711 if missing, the socket 0666 — every local user may reach it,
+/// and `serve.allow`, asked with the peer's uid, is the gate. Each request
+/// has `serve.deadline` to arrive and to be answered.
+pub fn serve_local<F>(path: &Path, serve: &crate::local::Serve, on_conn: F) -> Result<LocalSocket>
+where
+    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+{
+    let allow = Arc::clone(&serve.allow);
+    serve_gated(
+        path,
+        Gate {
+            dir_mode: 0o711,
+            sock_mode: 0o666,
+            allow: Arc::new(move |uid| allow(uid.map(crate::local::Peer::Uid).as_ref())),
+            refusal: Arc::new(|uid| {
+                crate::local::refusal(uid.map(crate::local::Peer::Uid).as_ref())
+            }),
+            busy: crate::local::too_many(serve.max_connections),
+            max_connections: serve.max_connections,
+            read_deadline: serve.deadline,
+            write_timeout: serve.deadline,
+            what: "local",
+            whole: Some(serve.deadline),
+        },
+        on_conn,
+    )
+}
+
+/// Where the agent's local socket is: `run/agent.sock` in the data
+/// directory, which moves with `DAEDALUS_AGENT_DATA_DIR` (`dev` names the
+/// pipe on Windows, and nothing here).
+pub fn local_socket_path(data_dir: &Path, dev: Option<&str>) -> std::path::PathBuf {
+    let _ = dev;
+    data_dir.join("run").join("agent.sock")
+}
+
+/// Shut `stream` down both ways once `after` passes, unless the returned
+/// sender is dropped first: a whole-exchange deadline, however slowly the
+/// other end drips its bytes.
+fn deadline_on(
+    stream: std::os::unix::net::UnixStream,
+    after: Duration,
+) -> std::sync::mpsc::Sender<()> {
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let _ = std::thread::Builder::new()
+        .name("local-deadline".into())
+        .spawn(move || {
+            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(after) {
+                let _ = stream.shutdown(std::net::Shutdown::Both);
+            }
+        });
+    tx
+}
+
+/// Connect to the agent's local socket at `path`, the whole exchange
+/// within `timeout`, and only when the other end is one to trust
+/// (`local::server_trusted`: root or this user, owning the socket file).
+pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::api::conn::Conn> {
+    use crate::local::{server_trusted, Peer, ServerSide};
+    use std::os::unix::fs::MetadataExt;
+    let file_owner = std::fs::metadata(path).ok().map(|m| m.uid());
+    let stream = std::os::unix::net::UnixStream::connect(path)?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
+    let side = ServerSide::Unix {
+        uid: peer_uid(&stream),
+        file_owner,
+    };
+    if !server_trusted(&side, Some(&Peer::Uid(euid())), crate::local::dev_run()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is served by {side:?}, not root or this user owning it; not talking to it",
+                path.display()
+            ),
+        ));
+    }
+    let writer = stream.try_clone()?;
+    let ctl = stream.try_clone()?;
+    let deadline = std::sync::Mutex::new(Some(deadline_on(stream.try_clone()?, timeout)));
+    Ok(crate::api::conn::Conn {
+        reader: Box::new(stream),
+        writer: Box::new(writer),
+        on_hello: Box::new(|| {}),
+        close: Arc::new(move || {
+            drop(deadline.lock().unwrap_or_else(|p| p.into_inner()).take());
+            let _ = ctl.shutdown(std::net::Shutdown::Both);
+        }),
+    })
+}
+
+/// The core of both: bind, check each peer, count, hand over (the doc of
+/// `serve_local_socket`).
+fn serve_gated<F>(path: &Path, gate: Gate, on_conn: F) -> Result<LocalSocket>
+where
+    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+{
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
     use std::sync::atomic::AtomicUsize;
-    use std::sync::Arc;
     let dir = path
         .parent()
         .filter(|d| !d.as_os_str().is_empty())
         .with_context(|| format!("{} names no directory", path.display()))?;
-    let (dir_mode, sock_mode) = socket_modes(&limits.allowed_uids);
-    socket_dir(dir, dir_mode)?;
+    socket_dir(dir, gate.dir_mode)?;
     clear_stale(path)?;
     let listener =
         UnixListener::bind(path).with_context(|| format!("binding {}", path.display()))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(sock_mode))
-        .with_context(|| format!("making {} {sock_mode:o}", path.display()))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(gate.sock_mode))
+        .with_context(|| format!("making {} {:o}", path.display(), gate.sock_mode))?;
     let ino = std::fs::symlink_metadata(path)
         .with_context(|| format!("reading {}", path.display()))?
         .ino();
-    let own = euid();
     let stop = Arc::new(AtomicBool::new(false));
     let on_conn = Arc::new(on_conn);
     let listener = Arc::new(listener);
     let active = Arc::new(AtomicUsize::new(0));
-    let limits = limits.clone();
     {
         let stop = Arc::clone(&stop);
         let listener = Arc::clone(&listener);
         std::thread::Builder::new()
-            .name("api-accept".into())
+            .name(format!("{}-accept", gate.what))
             .spawn(move || {
                 for stream in listener.incoming() {
                     if stop.load(Ordering::Relaxed) {
@@ -487,33 +625,33 @@ where
                     };
                     // Every write on this socket, the refusals included,
                     // gives up after the timeout.
-                    let _ = stream.set_write_timeout(Some(limits.write_timeout));
+                    let _ = stream.set_write_timeout(Some(gate.write_timeout));
                     let peer = peer_uid(&stream);
-                    if !crate::api::peer_allowed(peer, own, &limits.allowed_uids) {
+                    if !(gate.allow)(peer) {
                         tracing::warn!(
                             peer_uid = peer,
-                            "api: refused a connection from a uid that may not use the socket"
+                            socket = gate.what,
+                            "refused a connection from a uid that may not use the socket"
                         );
-                        let _ = std::io::Write::write_all(
-                            &mut stream,
-                            crate::api::refusal(peer).as_bytes(),
-                        );
+                        let _ =
+                            std::io::Write::write_all(&mut stream, (gate.refusal)(peer).as_bytes());
                         continue;
                     }
-                    if active.fetch_add(1, Ordering::AcqRel) >= limits.max_connections {
+                    if active.fetch_add(1, Ordering::AcqRel) >= gate.max_connections {
                         active.fetch_sub(1, Ordering::AcqRel);
                         tracing::warn!(
-                            max = limits.max_connections,
-                            "api: refused a connection past the limit"
+                            max = gate.max_connections,
+                            socket = gate.what,
+                            "refused a connection past the limit"
                         );
-                        let _ = std::io::Write::write_all(
-                            &mut stream,
-                            crate::api::too_many(limits.max_connections).as_bytes(),
-                        );
+                        let _ = std::io::Write::write_all(&mut stream, gate.busy.as_bytes());
                         continue;
                     }
                     let slot = Slot(Arc::clone(&active));
-                    let _ = stream.set_read_timeout(Some(limits.hello_deadline));
+                    let whole = gate
+                        .whole
+                        .and_then(|d| stream.try_clone().ok().map(|s| deadline_on(s, d)));
+                    let _ = stream.set_read_timeout(Some(gate.read_deadline));
                     let (Ok(writer), Ok(ctl)) = (stream.try_clone(), stream.try_clone()) else {
                         continue;
                     };
@@ -533,14 +671,15 @@ where
                     };
                     let on_conn = Arc::clone(&on_conn);
                     let _ = std::thread::Builder::new()
-                        .name("api-conn".into())
+                        .name(format!("{}-conn", gate.what))
                         .spawn(move || {
                             let _slot = slot;
+                            let _whole = whole;
                             on_conn(conn);
                         });
                 }
             })
-            .context("spawning the API's accept thread")?;
+            .context("spawning a socket's accept thread")?;
     }
     Ok(LocalSocket {
         path: path.to_path_buf(),

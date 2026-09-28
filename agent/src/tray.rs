@@ -3,11 +3,12 @@
 //!
 //! A separate, windowless program in the desktop session, because the
 //! service runs in session 0 where there is no taskbar to draw on. The
-//! session reads the status page on loopback every `session::POLL`; the
+//! session reads the status document through the local socket (local.rs)
+//! every `session::POLL`; the
 //! tray reflects each read: the icon (ember when all is well, an amber dot
 //! when something wants attention, grey when the service does not answer),
 //! the tooltip, and a menu whose first lines are the state and whose rest
-//! are the few things worth a click — the status page, a check for
+//! are the few things worth a click — the status document, a check for
 //! updates, a Claude restart, the two logs, quit.
 //!
 //! What the tray stands over is the OS's choice (`os::TRAY_OWNS_SESSION`),
@@ -56,13 +57,6 @@ enum Backing {
 }
 
 impl Backing {
-    fn port(&self) -> u16 {
-        match self {
-            Backing::Owns(s) => s.port(),
-            Backing::Watches(w) => w.port(),
-        }
-    }
-
     fn claude_wanted(&self) -> bool {
         match self {
             Backing::Owns(s) => s.claude_wanted(),
@@ -168,7 +162,7 @@ impl Ui {
         let line_key_own = MenuItem::new("This machine's key: …", false, None);
         let line_key_controller = MenuItem::new("Controller's key: …", false, None);
         let line_claude = MenuItem::new("Claude: …", false, None);
-        let open_status = MenuItem::new("Open status page", true, None);
+        let open_status = MenuItem::new("Show status", true, None);
         let check_now = MenuItem::new("Check for updates now", true, None);
         let restart_claude = MenuItem::new("Restart Claude remote control", true, None);
         let open_logs = MenuItem::new("Open logs folder", true, None);
@@ -420,9 +414,9 @@ impl Tray {
         // The icon first, then the session, as it always was.
         let ui = Ui::build(QUIT_LABEL)?;
         let session = if crate::os::TRAY_OWNS_SESSION {
-            Backing::Owns(Box::new(Session::new(cfg.port, places)?))
+            Backing::Owns(Box::new(Session::new(places)?))
         } else {
-            Backing::Watches(Watcher::new(cfg.port))
+            Backing::Watches(Watcher::new())
         };
         Ok(Self {
             session,
@@ -432,12 +426,29 @@ impl Tray {
         })
     }
 
+    /// "Show status": the service's status document, as its local socket
+    /// answers it, written to `status.json` in the tray's log directory and
+    /// opened — there is no page to point a browser at.
+    fn show_status(&self) {
+        let text = match crate::local::call("status", serde_json::Value::Null) {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("{{\"error\": {}}}", serde_json::Value::String(e)),
+        };
+        let path = self.logs.join("status.json");
+        if std::fs::create_dir_all(&self.logs)
+            .and_then(|()| std::fs::write(&path, text))
+            .is_ok()
+        {
+            open(&path.to_string_lossy());
+        }
+    }
+
     /// Every menu click since the last look.
     pub fn menu(&mut self) -> Flow {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
             let id = ev.id();
             if *id == self.ui.open_status.id() {
-                open(&format!("http://127.0.0.1:{}/status", self.session.port()));
+                self.show_status();
             } else if *id == self.ui.check_now.id() {
                 self.session.check_updates_now();
             } else if *id == self.ui.restart_claude.id() {

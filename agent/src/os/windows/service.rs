@@ -193,10 +193,7 @@ pub fn install(cfg: &Config) -> Result<()> {
     } else {
         println!("no {TRAY_EXE} beside the service; the tray is not registered");
     }
-    println!(
-        "status: daedalus-agent status (http://127.0.0.1:{}/status on this machine)",
-        cfg.port
-    );
+    println!("status: daedalus-agent status");
     Ok(())
 }
 

@@ -39,11 +39,11 @@ claude_update: boolean,
  */
 tray: boolean, 
 /**
- * The status page binds every interface, where other addresses get
- * `/healthz` and `/nodes/metrics` alone (status.rs) — the box's
- * Prometheus container reaches it through pasta's host alias, and the
- * host firewall keeps the port closed to the LAN. Otherwise loopback
- * only: a node listens on nothing the LAN can reach.
+ * The metrics page answers on every interface's `port`: `/healthz`
+ * and `/nodes/metrics` (status.rs) — the box's Prometheus container
+ * reaches it through pasta's host alias, and the host firewall keeps
+ * the port closed to the LAN. A node has no page: it listens on
+ * nothing, loopback included.
  */
 status_on_lan: boolean, 
 /**
