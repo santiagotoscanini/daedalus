@@ -91,8 +91,9 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
           ]}
         />
         <p className={FOOT}>
-          Six hours of processor, from this box&rsquo;s prometheus, which scrapes the agent&rsquo;s{' '}
-          <span className={MONO}>/metrics</span> every minute; the figure beside it is the
+          Six hours of processor, from this box&rsquo;s prometheus, which reads every
+          machine&rsquo;s telemetry from the controller&rsquo;s{' '}
+          <span className={MONO}>/nodes/metrics</span> every minute; the figure beside it is the
           agent&rsquo;s own fifteen-second sample.{' '}
           {t.cpu.load !== null
             ? `On ${num(threads)} threads a load of ${num(threads)} is fully committed, not overloaded.`

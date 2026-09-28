@@ -530,7 +530,6 @@ export const nodes = pgTable('nodes', {
   agentVersion: text('agent_version').notNull(),
   mac: text('mac'),
   lanIp: text('lan_ip'),
-  statusPort: integer('status_port'),
   firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   approvedAt: timestamp('approved_at', { withTimezone: true }),
@@ -563,7 +562,7 @@ export type NodePolicy = {
    * What the machine is called ON THE NETWORK: a DNS label
    * (lib/nodes-file.ts NODE_NAME_RE), unique among approved nodes. Unset,
    * the hostname slugified. pi-hole gives the lease this name (the box
-   * writes the dnsmasq line, host/node-targets.ts), and nix reads it from
+   * writes the dnsmasq line, host/dhcp-hosts.ts), and nix reads it from
    * site/nodes.json.
    */
   name?: string

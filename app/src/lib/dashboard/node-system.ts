@@ -13,7 +13,8 @@ import { type MacReleases, macosReleases } from './macos-releases'
 // document it pushed up its link (agent/src/telemetry.rs: drive serials,
 // the heaviest processes, the services that are down, the OS's pending
 // updates) — and the box's own Prometheus for the six-hour processor
-// history the agent's `/metrics` has been feeding it.
+// history it has scraped from the controller's `/nodes/metrics`, which
+// serves every connected machine's telemetry labelled by node id.
 //
 // One read serves every tab. The tabs are a way of reading one document,
 // not five requests. A machine that is not connected shows what the
@@ -56,11 +57,9 @@ export async function loadNodeSystem(
   // and a machine that is asleep still has a history.
   const [read, cpuSpark] = await Promise.all([
     readNode(client, id),
-    promSeries(
-      `daedalus_agent_cpu_usage_percent{host=${promQuote(node.hostname)}}`,
-      6 * 60,
-      120,
-    ).catch(() => []),
+    promSeries(`daedalus_agent_cpu_usage_percent{node=${promQuote(node.id)}}`, 6 * 60, 120).catch(
+      () => [],
+    ),
   ])
   const none = {
     node,

@@ -3,13 +3,8 @@ import { controller } from '../../host/controller/client'
 import { enrollValues, observedFacts, requestDesiredSync } from '../../host/controller/nodes'
 import type { ControllerNode, ControllerNodeDetail } from '../../host/controller/wire'
 import { db } from '../../host/db'
+import { dhcpHostsMissing, householdMacs, writeDhcpHosts } from '../../host/dhcp-hosts'
 import { requestGatewaySync } from '../../host/gateway-sync'
-import {
-  householdMacs,
-  nodeTargetsMissing,
-  writeDhcpHosts,
-  writeNodeTargets,
-} from '../../host/node-targets'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
 import type { NodeClaudeSummary } from '../agent/status'
 import type { NodeForFile } from '../nodes-file'
@@ -21,7 +16,7 @@ import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../provide
 // pending (`enrollNode`), and carries the decision, the policy Settings ›
 // Machines sets, and the machine's last-known facts — kept from what the
 // controller observed (`recordObserved`), because the controller forgets
-// everything when it restarts and the targets, the DHCP lines and the pages
+// everything when it restarts and the DHCP lines and the pages
 // still need an address and a name. Whether a machine is connected, and its
 // Claude summary, are the controller's word, joined in on every read.
 //
@@ -39,7 +34,7 @@ export type NodeRow = {
   netName: string
   /**
    * The household's encrypted reservations already name this MAC: the box
-   * writes no line for it, and the name in effect is theirs (host/node-targets.ts).
+   * writes no line for it, and the name in effect is theirs (host/dhcp-hosts.ts).
    */
   namedByHousehold: boolean
   os: string
@@ -47,7 +42,6 @@ export type NodeRow = {
   agentVersion: string
   mac: string | null
   lanIp: string | null
-  statusPort: number | null
   firstSeenAt: string
   lastSeenAt: string
   approvedAt: string | null
@@ -98,7 +92,6 @@ function row(
     agentVersion: seen?.agentVersion ?? n.agentVersion,
     mac: n.mac,
     lanIp: seen?.lanIp ?? n.lanIp,
-    statusPort: n.statusPort,
     firstSeenAt: n.firstSeenAt.toISOString(),
     lastSeenAt: new Date(lastSeen).toISOString(),
     approvedAt: n.approvedAt?.toISOString() ?? null,
@@ -161,7 +154,7 @@ export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boo
     .set({ policy })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await publishNodeTargets()
+  await publishDhcpHosts()
   // What the machine is told travels with the desired set.
   requestDesiredSync()
   // An alias, a mode or an offer changed: the gateway follows.
@@ -176,7 +169,7 @@ export async function approveNode(id: string, by: string): Promise<boolean> {
     .set({ state: 'approved', approvedAt: new Date(), approvedBy: by, revokedAt: null })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await publishNodeTargets()
+  await publishDhcpHosts()
   requestDesiredSync()
   return updated.length > 0
 }
@@ -200,7 +193,7 @@ export async function enrollNode(detail: ControllerNodeDetail, by: string): Prom
     })
     .onConflictDoNothing()
     .returning({ id: nodes.id })
-  await publishNodeTargets()
+  await publishDhcpHosts()
   requestDesiredSync()
   return made.length > 0
 }
@@ -211,7 +204,7 @@ export async function revokeNode(id: string): Promise<boolean> {
     .set({ state: 'revoked', revokedAt: new Date() })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await publishNodeTargets()
+  await publishDhcpHosts()
   requestDesiredSync()
   return updated.length > 0
 }
@@ -223,7 +216,7 @@ export async function revokeNode(id: string): Promise<boolean> {
  */
 export async function forgetNode(id: string): Promise<boolean> {
   const gone = await db.delete(nodes).where(eq(nodes.id, id)).returning({ id: nodes.id })
-  await publishNodeTargets()
+  await publishDhcpHosts()
   requestDesiredSync()
   return gone.length > 0
 }
@@ -231,13 +224,13 @@ export async function forgetNode(id: string): Promise<boolean> {
 /**
  * Keep each decided row's last-known facts from what the controller
  * observed (host/controller/nodes.ts `observedFacts`), and re-render the
- * targets and DHCP lines when an address, a MAC or a name moved.
+ * DHCP lines when an address, a MAC or a name moved.
  */
 export async function recordObserved(seen: readonly ControllerNode[]): Promise<void> {
   if (seen.length === 0) return
   const byId = new Map(seen.map((s) => [s.id, s]))
   const all = await db.select().from(nodes)
-  let moved = nodeTargetsMissing()
+  let moved = dhcpHostsMissing()
   for (const n of all) {
     const s = byId.get(n.id)
     if (s === undefined || n.state !== 'approved') continue
@@ -248,35 +241,23 @@ export async function recordObserved(seen: readonly ControllerNode[]): Promise<v
       moved = true
     }
   }
-  if (moved) await publishNodeTargets()
+  if (moved) await publishDhcpHosts()
 }
 
 /**
- * Publish the approved nodes as scrape targets (host/node-targets.ts).
- * Best effort: a failure to write the file is logged and never fails the
- * decision that triggered it — the targets are a consequence, not the act.
+ * Write the approved nodes' dnsmasq lines (host/dhcp-hosts.ts): how each
+ * machine gets its name from pi-hole. A MAC the household file already
+ * names is theirs to name, and skipped. Best effort: a failure to write the
+ * file is logged and never fails the decision that triggered it — the lines
+ * are a consequence, not the act.
  */
-async function publishNodeTargets(): Promise<void> {
+async function publishDhcpHosts(): Promise<void> {
   try {
     const all = await db.select().from(nodes)
-    const approved = all.filter((n) => n.state === 'approved')
-    await writeNodeTargets(
-      approved
-        .filter((n) => n.lanIp !== null && n.statusPort !== null)
-        .map((n) => ({
-          id: n.id,
-          hostname: n.hostname,
-          name: n.policy?.displayName?.trim() || n.hostname,
-          os: n.os,
-          lanIp: n.lanIp ?? '',
-          statusPort: n.statusPort ?? 0,
-        })),
-    )
-    // The dnsmasq lines: how each machine gets its name from pi-hole. A MAC
-    // the household file already names is theirs to name, and skipped.
     const household = await householdMacs()
     await writeDhcpHosts(
-      approved
+      all
+        .filter((n) => n.state === 'approved')
         .filter((n) => n.mac !== null && !household.has(n.mac.toLowerCase()))
         .map((n) => ({
           id: n.id,
@@ -286,7 +267,7 @@ async function publishNodeTargets(): Promise<void> {
         })),
     )
   } catch (e) {
-    console.warn(`node targets not written: ${e instanceof Error ? e.message : String(e)}`)
+    console.warn(`dhcp hosts not written: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 

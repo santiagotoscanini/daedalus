@@ -233,7 +233,6 @@ describe('enrolment', () => {
       hostname: 'PC',
       mac: 'aa:bb:cc:dd:ee:ff',
       lanIp: '192.168.0.120',
-      statusPort: 7787,
       facts: { osName: '', osVersion: '', cpu: '', memoryBytes: null },
       capabilities: [],
       telemetry: 'full',
@@ -255,7 +254,6 @@ describe('enrolment', () => {
       agentVersion: '0.14.0',
       mac: 'aa:bb:cc:dd:ee:ff',
       lanIp: '192.168.0.120',
-      statusPort: 7787,
     })
   })
 

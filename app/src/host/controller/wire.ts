@@ -424,7 +424,6 @@ export type LinkHello = {
   hostname: string
   mac: string | null
   lanIp: string | null
-  statusPort: number | null
   facts: { osName: string; osVersion: string; cpu: string; memoryBytes: number | null }
   capabilities: string[]
   telemetry: TelemetryLevel
@@ -437,7 +436,6 @@ const linkHelloShape = obj({
   hostname: optional(str, ''),
   mac: nstr,
   lan_ip: nstr,
-  status_port: nint,
   facts: optional(
     obj({
       os_name: optional(str, ''),
@@ -507,7 +505,6 @@ export function nodeDetail(v: unknown): ControllerNodeDetail {
             hostname: h.hostname,
             mac: h.mac,
             lanIp: h.lan_ip,
-            statusPort: h.status_port,
             facts: {
               osName: h.facts.os_name,
               osVersion: h.facts.os_version,

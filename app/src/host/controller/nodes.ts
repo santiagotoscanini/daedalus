@@ -27,7 +27,7 @@ import {
 // minute (from /api/healthz, like the build scheduler) to re-dial a
 // controller that restarted while nothing asked, and to keep each approved
 // row's last-known facts (address, versions, last seen) from what the
-// controller observed: the targets and the DHCP lines are rendered from them.
+// controller observed: the DHCP lines are rendered from them.
 
 const HEX32 = /^[0-9a-f]{64}$/
 
@@ -217,7 +217,6 @@ export function enrollValues(d: ControllerNodeDetail): {
   agentVersion: string
   mac: string | null
   lanIp: string | null
-  statusPort: number | null
 } {
   if (d.state !== 'pending') {
     throw new Error(`the controller holds ${d.id} as ${d.state}, not waiting for a decision`)
@@ -239,7 +238,6 @@ export function enrollValues(d: ControllerNodeDetail): {
     agentVersion: h.agentVersion,
     mac: h.mac,
     lanIp: h.lanIp,
-    statusPort: h.statusPort,
   }
 }
 

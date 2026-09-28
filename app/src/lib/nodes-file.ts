@@ -10,7 +10,7 @@ import { arrayOf, type Decoder, decode, int, obj, optional, recordOf, str } from
 // scrapes a lemonade node from it, and LiteLLM's base URL is a node's name.
 // No MAC and no address: the household's device inventory is kept out of
 // every git history on purpose, and the address is the lease's — pi-hole
-// gives the lease the name (host/node-targets.ts writes the line that does),
+// gives the lease the name (host/dhcp-hosts.ts writes the line that does),
 // so `<name>.<lan domain>` follows the machine wherever the pool puts it.
 //
 // Rendered by an Apply like apps.json (host/apply-flow.ts), read back by
