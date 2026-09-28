@@ -88,9 +88,9 @@
 # record AND its worktree, which is why it is a separate verb rather than a
 # fallback `stop` quietly reaches for.
 #
-# Refusals exit 0 (host/claude-rc.sh's split: the agent worked, and the
-# refusal is rendered on the page that asked). Only the agent being unable to
-# do its job exits 1 and leaves a failed unit for `systemctl --failed`.
+# Refusals exit 0 (the agent worked, and the refusal is rendered on the page
+# that asked). Only the agent being unable to do its job exits 1 and leaves a
+# failed unit for `systemctl --failed`.
 
 set -euo pipefail
 

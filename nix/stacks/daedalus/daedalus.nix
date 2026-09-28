@@ -648,10 +648,11 @@ in
         # daedalus-system-snapshot. Read-only, and no secret in it — the closest
         # thing is a drive serial, which is printed on the drive.
         "${systemDir}:/system:ro"
-        # Remote Control's state, its live sessions and the credential clock,
-        # published by daedalus-claude-snapshot. Read-only, and the credential
-        # block in it is four non-secret fields copied out by name — the tokens
-        # beside them in ~/.claude/.credentials.json never enter this file.
+        # The Claude session roster, the Remote Control unit's accounting and
+        # the login's scopes, published by daedalus-claude-snapshot (the rest
+        # of Remote Control is the controller's report). Read-only; the scopes
+        # are copied out by name — the tokens beside them in
+        # ~/.claude/.credentials.json never enter this file.
         #
         # The directory is 0700 and the file 0600, operator-owned: the one
         # snapshot here that carries a line of session content (the last prompt,

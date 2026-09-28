@@ -1,14 +1,15 @@
 //! Claude Code on this machine: found, supervised, reported.
 //!
-//! The box runs `claude remote-control` as a unit under the operator's own
-//! login (nix/platform/claude-rc.nix), so a session on it can be opened from
-//! claude.ai/code or a phone at any time. This is the same thing on a node,
-//! with the one difference the OS forces: Claude Code's login lives in the
-//! user's profile (`~/.claude`), and the service is not that user — it is
-//! LocalSystem in session 0 on Windows, root on macOS. So the SESSION
-//! (session.rs, which the tray runs) supervises the server, in the desktop
-//! session with the user's credentials, and reports to the service over
-//! loopback (`POST /claude/report`, status.rs). The service keeps the full
+//! The box's controller runs `claude remote-control` as a transient user
+//! unit of the operator (`unit`, nix/stacks/daedalus/controller.nix), so a
+//! session on it can be opened from claude.ai/code or a phone at any time.
+//! This is the same thing on a node, with the one difference the OS forces:
+//! Claude Code's login lives in the user's profile (`~/.claude`), and the
+//! service is not that user — it is LocalSystem in session 0 on Windows,
+//! root on macOS. So the SESSION (session.rs, which the tray runs)
+//! supervises the server, in the desktop session with the user's
+//! credentials, and reports to the service over loopback
+//! (`POST /claude/report`, status.rs). The service keeps the full
 //! report for `/claude` and the link, puts a summary on the status page,
 //! and hands the session back what the box decided: whether the
 //! server should run at all and where (policy), and its two instructions —
@@ -22,18 +23,16 @@
 //! back up from claude.ai, only resumed from a console here. One
 //! instruction for both would make the free act cost the expensive one.
 //!
-//! What is reported mirrors what the box's own snapshot reads about itself
-//! (nix/stacks/daedalus/host/claude-snapshot.sh): the server's start banner
-//! (version, environment id, spawn mode, session ceiling), the sessions in
-//! `~/.claude/sessions/*.json` and whether each process is alive, the
-//! credential CLOCK (the plan and two dates — never a token), and the model
-//! settings. The server's output goes to `claude-rc.log` in
-//! `config::user_log_dir`.
+//! What is reported: the server's start banner (version, environment id,
+//! spawn mode, session ceiling), the sessions in `~/.claude/sessions/*.json`
+//! and whether each process is alive, the credential CLOCK (the plan and two
+//! dates — never a token), and the model settings. The server's output goes
+//! to `claude-rc.log` in `config::user_log_dir`.
 //!
 //! None of the environment variables that disable Remote Control are set
 //! (DISABLE_TELEMETRY, DO_NOT_TRACK, ANTHROPIC_BASE_URL and friends —
-//! nix/platform/claude-rc.nix lists them); the child inherits the user's
-//! environment, plus `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE` and, on
+//! nix/stacks/daedalus/controller.nix lists them); the child inherits the
+//! user's environment, plus `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE` and, on
 //! macOS, a wider PATH (supervisor.rs `build_command`, and
 //! `os::prepare_claude_server`).
 //!

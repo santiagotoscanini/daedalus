@@ -216,21 +216,19 @@ let
       # The CLI's own state directory, and the /tmp dir the Remote Control
       # bridge writes a per-session debug log into — both keyed off the
       # operator this unit reads on behalf of, so neither is a literal that
-      # can drift from platform/claude-rc.nix's User=.
+      # can drift from the operator the controller runs as.
       CLAUDE_HOME = "${config.users.users.${config.fleet.operator.user}.home}/.claude";
       BRIDGE_LOG_DIR = "/tmp/claude-${toString config.fleet.operator.uid}";
-      # What the flake built. Read from the package rather than by running
-      # `claude --version`, which is a node start-up to learn a string nix
-      # already knows — and which would report the same number either way,
-      # hiding exactly the drift this is here to show.
-      CLI_VERSION = pkgs.claude-code.version;
+      # The claude that answers `claude agents --json` for the roster.
       CLI_STORE = toString pkgs.claude-code;
+      # The controller's Remote Control unit (controller.nix), whose
+      # accounting the page shows.
+      CLAUDE_UNIT = "daedalus-claude-rc";
       SED = "${pkgs.gnused}/bin/sed";
       GREP = "${pkgs.gnugrep}/bin/grep";
       AWK = "${pkgs.gawk}/bin/awk";
       JQ = "${pkgs.jq}/bin/jq";
       SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
-      JOURNALCTL = "${pkgs.systemd}/bin/journalctl";
     };
     files = [
       ./host/lib.sh
@@ -261,8 +259,7 @@ let
         OUT_DIR = builderDir;
         BUILDCTL = "${b.buildkitPackage}/bin/buildctl";
         BUILDKIT_ADDR = b.socket;
-        # What the flake built, like the claude snapshot's CLI_VERSION: nix
-        # already knows the string.
+        # What the flake built: nix already knows the string.
         BUILDKIT_VERSION = b.buildkitPackage.version;
         FENCE_CHECK = b.fenceCheck;
         CREDENTIAL_READ = b.registryPasswordRead;

@@ -397,9 +397,10 @@ let
     // The second stage takes the GitHub manifest code out of the conversion
     // URL, where it is a path segment rather than a parameter.
     //
-    // Every journal stream, not just traefik's: pocket-id,
-    // claude-remote-control and the *arrs log matching URLs too, and the
-    // next app that logs a callback should not need an entry here.
+    // Every journal stream, not just traefik's: pocket-id and the *arrs log
+    // matching URLs too, and the next app that logs a callback should not
+    // need an entry here. A file source skips this pipeline; Claude remote
+    // control's log repeats these two stages (stacks/daedalus/controller.nix).
     //
     // What this does NOT reach: the journal itself (/var/log/journal,
     // persistent, 2G / one month) keeps the raw lines, and lines already in

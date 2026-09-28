@@ -189,11 +189,11 @@ in
       };
     };
 
-    # Root for the same shape of reason as its sibling, though a narrower one:
-    # the journal read wants the system journal rather than a user one. What it
-    # reads out of ~/.claude it reads as the operator (host/claude-snapshot.sh).
+    # Root for systemd: the operator's user manager (the Remote Control unit's
+    # accounting) and the `claude-session@` units. What it reads out of
+    # ~/.claude it reads as the operator (host/claude-snapshot.sh).
     systemd.services.daedalus-claude-snapshot = {
-      description = "Publish Claude Code remote-control and session facts for daedalus";
+      description = "Publish the Claude session roster and Remote Control accounting for daedalus";
       before = [ "podman-app-daedalus.service" ];
       wantedBy = [ "podman-app-daedalus.service" ];
       serviceConfig = {
@@ -208,8 +208,8 @@ in
     # phone and wants to see it, and a ten-minute snapshot would answer "no
     # sessions" to a question asked about one that is running.
     #
-    # It costs a systemctl call, four bounded journal seeks and a handful of
-    # /proc reads — cheaper than the env snapshot, which already runs at two.
+    # It costs two systemctl calls, a `claude agents` and a handful of /proc
+    # reads, plus the transcript scan (host/claude-snapshot.sh has its cost).
     systemd.timers.daedalus-claude-snapshot = {
       wantedBy = [ "timers.target" ];
       timerConfig = {

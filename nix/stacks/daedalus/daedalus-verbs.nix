@@ -23,7 +23,6 @@ let
     deployTriggerScript
     taskRunScript
     powerScript
-    claudeRcScript
     claudeSessionCwds
     claudeSessionRunner
     claudeSessionScript
@@ -202,7 +201,7 @@ in
       pathConfig.PathChanged = "${applyDir}/workspace-request.json";
     };
 
-    # Not monitoredJobs, like power and claude-rc: both outcomes land in the
+    # Not monitoredJobs, like power: both outcomes land in the
     # status file the page that asked is polling, and a genuine refusal exits 0.
 
     # Restart. Same file-drop bridge, and the only verb whose agent does not
@@ -234,29 +233,6 @@ in
     # the mail relay down with the rest of the box before anything could be
     # sent. The only email this unit could ever deliver is a failure to reboot.
 
-    # The claude-rc bridge's agent. Unlike daedalus-power it outlives its
-    # action, so the ordinary status-file flow covers it end to end.
-    systemd.services.daedalus-claude-rc = bridgeAgent // {
-      description = "Restart the Claude Remote Control server on daedalus's behalf";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${claudeRcScript}/bin/daedalus-claude-rc";
-        # One restart and a five-second settle check; a minute means wedged.
-        TimeoutStartSec = "1min";
-      };
-    };
-
-    systemd.paths.daedalus-claude-rc = {
-      description = "Watch for a daedalus claude-rc restart request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/claude-rc-request.json";
-    };
-
-    # Not monitoredJobs, for the power agent's reason: both outcomes land in the
-    # status file and are shown on the page that asked. The only mailable event
-    # is the agent itself breaking, which `systemctl --failed` and the failed-
-    # units alert already carry.
-
     # ── one resumed session, one unit ─────────────────────────────────────────
     #
     # `claude-session@<uuid>.service`. Started only by the agent above (or by
@@ -270,8 +246,7 @@ in
     # is a unit rather than a `tmux new-session -d` the way the operator has been
     # doing it by hand.
     #
-    # `restartIfChanged = false` IS MANDATORY, for the reason written up in
-    # platform/claude-rc.nix's header. A `sudo nixos-rebuild` typed inside a resumed
+    # `restartIfChanged = false` IS MANDATORY. A `sudo nixos-rebuild` typed inside a resumed
     # session runs in THIS unit's cgroup — sudo does not migrate cgroups — so an
     # activation that restarted the unit would SIGTERM the in-flight activation
     # that ordered the restart, leaving the box half-switched and the session
@@ -315,7 +290,7 @@ in
       restartIfChanged = false;
     };
 
-    # The claude-session bridge's agent. Like claude-rc it outlives its action,
+    # The claude-session bridge's agent. It outlives its action,
     # so `done` and `failed` are both real and the ordinary status poll covers
     # the flow end to end.
     #
@@ -341,13 +316,13 @@ in
       pathConfig.PathChanged = "${applyDir}/claude-session-request.json";
     };
 
-    # Not monitoredJobs, for the claude-rc agent's reason: both outcomes land in
+    # Not monitoredJobs: both outcomes land in
     # the status file the page that asked is polling, and a genuine refusal exits
     # 0. A session that would not come up exits 1 and reaches `systemctl
     # --failed` and the failed-units alert, which is the only event here that
     # nobody may already be watching.
 
-    # The secret-set bridge's agent. Like claude-rc it outlives
+    # The secret-set bridge's agent. Like claude-session it outlives
     # its action, so `done` and `failed` are both real and the ordinary status
     # poll covers the flow end to end.
     #
@@ -373,7 +348,7 @@ in
       pathConfig.PathChanged = "${applyDir}/secret-set-request.json";
     };
 
-    # Not monitoredJobs, for the claude-rc agent's reason: both outcomes land in the
+    # Not monitoredJobs, for the claude-session agent's reason: both outcomes land in the
     # status file the page that asked is polling, and a genuine refusal exits 0.
     # The only mailable event is the agent itself breaking, which `systemctl
     # --failed` and the failed-units alert already carry.
@@ -407,7 +382,7 @@ in
       pathConfig.PathChanged = "${applyDir}/task-run-request.json";
     };
 
-    # Not monitoredJobs, like power, claude-rc and the workspace clone: both
+    # Not monitoredJobs, like power and the workspace clone: both
     # outcomes land in the status file the page that asked is polling, a genuine
     # refusal exits 0, and the task's OWN failure already mails through
     # fleet.monitoredJobs.app-<app>-task-<id> — mailing here as well would send

@@ -126,7 +126,6 @@ the same directory:
 | `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
 | `workspace-request.json` | `daedalus-workspace-clone` | `workspace-status.json` |
 | `power-request.json` | `daedalus-power` | `power-status.json` |
-| `claude-rc-request.json` | `daedalus-claude-rc` | `claude-rc-status.json` |
 | `github-token-request.json` | `daedalus-github-token` | `github-token-status.json` |
 | `claude-session-request.json` | `daedalus-claude-session` | `claude-session-status.json` |
 | `secret-set-request.json` | `daedalus-secret-set` | `secret-set-status.json` |

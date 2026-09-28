@@ -2,35 +2,32 @@
 # `mode = "controller"`: one process as the operator, the door the app talks to
 # over a unix socket (PLAN feature 13). Today it serves that socket, the
 # machine's facts at the `minimal` telemetry level, its status page and
-# the listener the other machines' links reach (below). Claude remote
-# control is wired for the configuration checkout but OFF (below).
+# the listener the other machines' links reach (below), and the box's Claude
+# remote control in the configuration checkout (below).
 #
 # Claude remote control:
 #
-#   off, for now   platform/claude-rc.nix runs the box's server in the
-#                  configuration checkout, and a second one in the same
-#                  directory cannot run: registration answers 409, "This
-#                  folder is already served by a terminal `claude
+#   one server     the box's only one: a second `claude remote-control` in
+#                  the same directory cannot run — registration answers 409,
+#                  "This folder is already served by a terminal `claude
 #                  remote-control` on this device", keyed on the machine and
-#                  the directory (measured 2026-09-28, claude-code 2.1.281).
-#                  The refused server exits a minute later and the agent
-#                  starts it again, forever. So `claude_remote_control`
-#                  turns on in the same change that stops claude-rc.nix's.
-#                  The unit name is one no user unit uses (the SYSTEM unit
-#                  of that name is the old server's restart verb,
-#                  daedalus-verbs.nix: another manager).
+#                  the directory (measured 2026-09-28, claude-code 2.1.281),
+#                  and the refused server exits about a minute later. Never
+#                  start another one in the checkout beside it.
 #   the unit       `systemd-run --user --unit=daedalus-claude-rc` (agent
 #                  src/claude/unit.rs): a transient unit of the operator's
 #                  user manager, so a stop or restart of this service leaves
 #                  it running and the next start re-attaches. Its output
-#                  goes to `<dataDir>/logs/claude-rc.log`, unfiltered.
+#                  goes to `<dataDir>/logs/claude-rc.log`, unfiltered, rotated
+#                  only when the server next starts; Loki gets it filtered
+#                  (`logs`, below).
 #   claude         found on this service's PATH: the pinned pkgs.claude-code
 #                  (platform/claude-code) is on `path` below, the one
 #                  DISABLE_UPDATES wrapper every other `claude` here is.
 #   environment    the unit gets the user manager's environment plus, from
 #                  the agent, HOME and this service's PATH with
 #                  `~/.local/bin` in front — so /run/wrappers/bin (sudo, for
-#                  sessions that rebuild) is on it, as on claude-rc.nix's.
+#                  sessions that rebuild) is on it.
 #                  Never add DISABLE_TELEMETRY, DO_NOT_TRACK,
 #                  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,
 #                  DISABLE_GROWTHBOOK or ANTHROPIC_BASE_URL to either: each
@@ -39,7 +36,19 @@
 #                  one the unit is already running when that differs — a
 #                  switch restarts this service, not the unit, so the unit
 #                  can go on running a claude no generation still names.
-#
+#   logs           `fleet.logFiles.claude_rc` (below) ships claude-rc.log to
+#                  Loki as `unit="daedalus-claude-rc.service"`, with the
+#                  rules the old journal pipeline had: ANSI stripped; the
+#                  status box's repaint dropped (it redraws about once a
+#                  second even when idle, ~400k lines a day measured) — the
+#                  box frames, the indented session rows and the banner
+#                  hints; and every line carrying `tool_result` dropped: with
+#                  `--verbose` each session's transcript is in this output,
+#                  and those lines hold what a tool RETURNED, secrets a
+#                  session read included (~1,600 a day). The full
+#                  transcripts are in ~/.claude/projects; Loki loses nothing
+#                  it should keep. The page's Connection board reads the
+#                  `[HH:MM:SS]` event lines from here.#
 # The status page, and the machines' metrics:
 #
 #   bind           `0.0.0.0:<statusPort>` (7787), every interface: the
@@ -189,6 +198,8 @@ let
   # Its state (state.json) and logs. Beside the control plane's other host-side
   # state (apply/, prev/), and only the operator's: nothing else reads it.
   dataDir = "${config.fleet.stateRoot}/apps/daedalus/controller";
+  # The agent's logs, Claude remote control's among them (the header's `logs`).
+  logDir = "${dataDir}/logs";
 
   # Where the agent reads config.toml: its Linux default directory.
   configDir = "/var/lib/daedalus-agent";
@@ -236,9 +247,7 @@ let
     controller = {
       api_socket = "${controllerDir}/api.sock";
       api_allowed_uids = allowedUids;
-      # Off while platform/claude-rc.nix serves the same checkout (the
-      # header's `off, for now`).
-      claude_remote_control = false;
+      claude_remote_control = true;
       claude_workdir = config.fleet.config.repo;
       claude_unit = claudeUnit;
       listen = "0.0.0.0:${toString port}";
@@ -260,6 +269,56 @@ in
 
   config = lib.mkIf config.fleet.modules.daedalus.enable {
     fleet.statePaths.${dataDir}.mode = "0700";
+    # Made by the agent too, but the log shipper bind-mounts it, so it must
+    # exist before the shipper's container starts.
+    fleet.statePaths.${logDir}.mode = "0755";
+
+    # Claude remote control's output, filtered on the way to Loki (the
+    # header's `logs`). The status-box expression is the grep the server's
+    # journal filter ran before it moved here.
+    fleet.logFiles.claude_rc = {
+      path = "${logDir}/claude-rc.log";
+      mountDir = logDir;
+      # Where the journal put the old unit's lines: `system` is the stack
+      # every host unit without a rule of its own gets.
+      labels = {
+        unit = "${claudeUnit}.service";
+        stack = "system";
+        host = config.networking.hostName;
+        job = claudeUnit;
+        service_name = claudeUnit;
+      };
+      # A file source skips the journal pipeline, so its "credentials in URLs"
+      # redaction (modules/logging) is repeated here, verbatim: a session's
+      # output can carry an OAuth callback or a manifest code as well as any
+      # journal line can.
+      stages = ''
+        stage.replace {
+          expression = "(\\x1b\\[[0-9;?]*[A-Za-z]|\\x1b\\]8;;[^\\x07]*\\x07)"
+          replace    = ""
+        }
+
+        stage.replace {
+          expression = "(?i)(?:[?&#]|\\\\u0026|&amp;|query=\"|%3F|%26)(?:code|state|id_token_hint|id_token|access_token|refresh_token|token|apikey|api_key|client_secret|password|passwd|secret)(?:=|%3D)((?:[^&\"\\s\\\\]|\\\\[^\"u\\s&]|\\\\u(?:[1-9a-f][0-9a-f]{3}|0[1-9a-f][0-9a-f]{2}|00[013-9a-f][0-9a-f]|002[0-57-9a-f]))*)"
+          replace    = "REDACTED"
+        }
+
+        stage.replace {
+          expression = "/app-manifests/([^/?&\"\\s\\\\]+)"
+          replace    = "REDACTED"
+        }
+
+        stage.drop {
+          expression          = "^·|^[[:space:]]|^$|Continue coding in the Claude|space to show QR code"
+          drop_counter_reason = "claude_rc_status_box"
+        }
+
+        stage.drop {
+          expression          = "tool_result"
+          drop_counter_reason = "claude_rc_tool_output"
+        }
+      '';
+    };
 
     # LAN only: never `allowedTCPPorts`, which would open it on every
     # interface. The tunnel's peers arrive through wg-easy's DNAT instead,

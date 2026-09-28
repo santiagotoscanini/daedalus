@@ -59,12 +59,12 @@
 #
 # What a rebuild does NOT do is put the new binary in front of anyone already
 # running the old one. A switch installs it into the operator's profile (new
-# shells get it) and stops there: `claude-remote-control` deliberately carries
-# `restartIfChanged = false` (see ../claude-rc.nix for the murder-suicide that
-# bought that line), so remote sessions keep the version they started on until
-# the next reboot or an explicit restart of that unit — which kills every live
-# session, including the one that typed it. daedalus's Updates page has the
-# button, and is the right place to press it from.
+# shells get it) and stops there: Remote Control is the controller's
+# `daedalus-claude-rc` user unit (stacks/daedalus/controller.nix), which a
+# switch does not restart, so remote sessions keep the version they started
+# on until the next reboot or an explicit restart of the server — which kills
+# every live session, including the one that typed it. daedalus's System ›
+# Claude page has the button, and is the right place to press it from.
 {
   lib,
   nixpkgs-unstable,
@@ -143,10 +143,9 @@
         # invocation of the binary — the operator's shell, the remote-control
         # unit, each `claude-session@`, and the snapshot's `claude agents`
         # — without nix writing into `~/.claude`, which is the CLI's own
-        # state directory. `version` is carried across because
-        # stacks/daedalus bakes `pkgs.claude-code.version` into the snapshot
-        # as "what the flake holds"; `mainProgram` because `lib.getExe` is
-        # how claude-rc.nix and the session runner reach it.
+        # state directory. `version` is carried across so
+        # `pkgs.claude-code.version` still names the pin; `mainProgram`
+        # because `lib.getExe` is how the session runner reaches it.
         # Built by `unstable`, not by `prev`: the wrapper belongs to the same
         # package set as the thing it wraps, and that is the instance whose
         # config allows this unfree package. Through `prev` the outer

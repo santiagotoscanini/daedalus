@@ -30,7 +30,7 @@ write_status() {
 EOF
 }
 
-# Same split as host/claude-rc.sh: a request this agent correctly REFUSES
+# Same split as host/claude-session.sh: a request this agent correctly REFUSES
 # exits 0 — the agent worked, and the refusal is shown on the page that asked.
 # Only the agent being unable to do its job exits 1 and leaves a failed unit
 # for `systemctl --failed`.

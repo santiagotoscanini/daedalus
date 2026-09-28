@@ -212,32 +212,9 @@ let
     ];
   };
 
-  # Restart the Remote Control server. It exists because rebooting the box
-  # (the power bridge) is oversized for its commonest customer: a
-  # wedged or version-stale claude-remote-control is a single unit, and a
-  # remote session cannot restart it without killing itself (the session
-  # lives in that unit's cgroup — see platform/claude-rc.nix, whose
-  # restartIfChanged = false is also why rebuilds no longer land updates
-  # onto it). See host/claude-rc.sh for the verb and its guards.
-  claudeRcScript = mkAgent {
-    name = "daedalus-claude-rc";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.systemd
-      pkgs.coreutils
-    ];
-    vars = operatorVars // {
-      APPLY_DIR = applyDir;
-    };
-    files = [
-      ./host/lib.sh
-      ./host/claude-rc.sh
-    ];
-  };
-
   # ── resuming and ending ONE session ───────────────────────────────────────
   #
-  # The bridge above restarts the whole Remote Control server; this one acts on
+  # The controller restarts the whole Remote Control server; this one acts on
   # a single row of the session roster. It is the most powerful verb on this
   # box — it causes root to start a process as the OPERATOR, in a trusted
   # directory, with passwordless sudo on PATH and an outbound channel to
@@ -301,7 +278,7 @@ let
   #     re-parented to the tmux server, which escapes this unit's cgroup and
   #     turns `systemctl stop` back into the pid-matching guess the unit
   #     exists to avoid.
-  #   - The journal filter from platform/claude-rc.nix, for the same measured
+  #   - A journal filter, for a measured
   #     reason: the CLI repaints its status box about once a second even when
   #     idle (~400k lines/day). ANSI is stripped, the box frames dropped, the
   #     timestamped events and anything unexpected kept.
@@ -498,7 +475,6 @@ in
     deployTriggerScript
     taskRunScript
     powerScript
-    claudeRcScript
     claudeSessionCwds
     claudeSessionRunner
     claudeSessionScript

@@ -64,7 +64,6 @@
         "backup.nix"
         "bluetooth/bluetooth.nix"
         "claude-code/claude-code.nix"
-        "claude-rc.nix"
         "claude.nix"
         "config-bundle.nix"
         "ddclient/ddclient.nix"
