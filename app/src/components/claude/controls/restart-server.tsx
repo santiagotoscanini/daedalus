@@ -1,14 +1,13 @@
 // The Remote control board's second verb: restart the server, armed first
 // because every connected session dies with it.
 
-// Types ONLY (the import rule at the top of ../index.tsx): claude-rc-request
-// reads node:fs through the bridge, so its idle shape is restated below.
-import type { ClaudeRcStatus } from '../../../host/claude-rc-request'
+import { useState, useTransition } from 'react'
+
 import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
-import { fetchClaudeRcStatusFn, requestClaudeRestartFn } from '../../../server/claude'
+import { errorText } from '../../../lib/redact'
+import { restartClaudeFn } from '../../../server/claude'
 import { GHOST_BTN } from '../../apps/shared'
-import { usePolledStatus } from '../../status'
 import { MONO } from '../../tokens'
 import { Button } from '../../ui/button'
 import { useArmed } from '../../use-armed'
@@ -21,42 +20,31 @@ import {
   RESTART_STATE,
 } from '../shared'
 
-const RC_IDLE: ClaudeRcStatus = {
-  id: null,
-  action: null,
-  state: 'idle',
-  detail: '',
-  error: '',
-  startedAt: null,
-  finishedAt: null,
-}
-
 /**
- * Restart the Remote Control server.
+ * Restart the Remote Control server, through the controller's
+ * `claude.restart`.
  *
- * The out-of-band hand for the unit nothing else may touch: rebuilds
- * deliberately never restart it (platform/claude-rc.nix), and a remote
- * session running `systemctl restart` on it kills itself mid-command — so
- * recovering a wedged server, or landing the build a rebuild left pending,
- * is either this button or a reboot of the whole box.
+ * The server is the controller's `daedalus-claude-rc` user unit, which a
+ * rebuild does not restart (it restarts the controller, and the unit outlives
+ * it) — so landing a new build on the running server, or recovering a wedged
+ * one, is this button or a reboot. A remote session running the restart
+ * itself would end with it.
  *
  * Two steps like the box restart on System › Host, but the cost spelled out at
- * arm time is a different one: sessions, not the house. And unlike that one this
- * flow settles normally — the host agent outlives the restart and writes a
- * real done/failed, so the ordinary status poll covers it.
+ * arm time is a different one: sessions, not the house. The controller answers
+ * at once — the instruction is queued for its session, which acts on it with
+ * its next report — so the outcome shown is "queued", and the boards show the
+ * new server on the next load.
  */
-export function RestartServerControl({ live }: { live: number }) {
+export function RestartServerControl({ live, reporting }: { live: number; reporting: boolean }) {
   const [armed, arm, disarm] = useArmed(RC_ARM_MS)
-  const { status, running, refusal, start } = usePolledStatus<ClaudeRcStatus>({
-    initial: RC_IDLE,
-    fetch: () => fetchClaudeRcStatusFn(),
-    claimTimeoutMs: 30_000,
-  })
+  const [busy, start] = useTransition()
+  const [said, setSaid] = useState<{ text: string; failed: boolean } | null>(null)
 
-  if (running) {
+  if (busy) {
     return (
       <div className={RESTART}>
-        <p className={RESTART_STATE}>Restarting the server…</p>
+        <p className={RESTART_STATE}>Asking the controller…</p>
       </div>
     )
   }
@@ -82,7 +70,18 @@ export function RestartServerControl({ live }: { live: number }) {
             size="sm"
             onClick={() => {
               disarm()
-              start(async () => ({ ok: true, value: (await requestClaudeRestartFn()).id }))
+              setSaid(null)
+              start(async () => {
+                try {
+                  await restartClaudeFn()
+                  setSaid({
+                    text: 'Queued: the controller restarts the server with its next report. The boards above show the new one on the next load.',
+                    failed: false,
+                  })
+                } catch (e) {
+                  setSaid({ text: errorText(e), failed: true })
+                }
+              })
             }}
           >
             Confirm restart
@@ -98,17 +97,19 @@ export function RestartServerControl({ live }: { live: number }) {
 
   return (
     <div className={RESTART}>
-      {status.state === 'done' && (
-        <p className={cn(RESTART_STATE, 'text-success')}>
-          {status.detail || 'The server restarted.'} The boards above catch up within a minute — the
-          snapshot is on a timer.
+      {said !== null && (
+        <p className={cn(RESTART_STATE, said.failed ? 'text-danger' : 'text-success')}>
+          {said.text}
         </p>
       )}
-      {refusal !== null && <p className={cn(RESTART_STATE, 'text-danger')}>{refusal}</p>}
-      {refusal === null && status.state === 'failed' && (
-        <p className={cn(RESTART_STATE, 'text-danger')}>{status.error}</p>
-      )}
-      <Button type="button" variant="outline" size="sm" className={GHOST_BTN} onClick={arm}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
+        onClick={arm}
+        disabled={!reporting}
+      >
         Restart the server
       </Button>
     </div>

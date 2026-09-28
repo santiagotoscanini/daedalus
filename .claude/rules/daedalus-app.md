@@ -226,8 +226,8 @@ here.
   points at it), and each verb's app half is one module under `host/`
   named for it (`apply.ts`, `build-bridge.ts`, `deploy.ts`,
   `image-update.ts`, `engine-update.ts`,
-  `workspaces.ts`, `power-request.ts`, `claude-rc-request.ts`,
-  `claude-session-request.ts`, `secret-set-request.ts`, `task-run.ts`,
+  `workspaces.ts`, `power-request.ts`, `claude-session-request.ts`,
+  `secret-set-request.ts`, `task-run.ts`,
   `version-update.ts`, `claude-code-update.ts`) — except
   `github-token-request.json`, which `core/github-app.ts` writes.
   The verbs that take a lock and a busy check before they publish are

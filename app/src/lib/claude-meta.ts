@@ -190,9 +190,9 @@ export type LiveFacts = {
    *
    * Different from `meta.cliVersion`, which is what the transcript recorded
    * and is therefore historical. On a live row the two disagree exactly when
-   * it matters: a rebuild lands a new binary and nothing restarts onto it —
-   * deliberately, nix/platform/claude-rc.nix — so the process keeps the old
-   * one. That gap is what the roster's restart control is for.
+   * it matters: a rebuild lands a new binary and no session restarts onto
+   * it, so the process keeps the old one. That gap is what the roster's
+   * restart control is for.
    */
   version?: string | null
 }

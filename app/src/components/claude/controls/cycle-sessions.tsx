@@ -24,12 +24,12 @@ import {
  * Put every session this box owns back on the binary the flake holds.
  *
  * A session runs the CLI it STARTED on, and a rebuild deliberately does not
- * restart anything (platform/claude-rc.nix), so after an update the roster is
- * a mix of versions. This is the gesture that resolves it, and it is the only
- * one that can: a stopped session cannot be picked back up from claude.ai —
- * the server bridges new sessions rather than re-adopting old ones — so the
- * way back in is the transcript, through `claude --resume`, which is exactly
- * what a `claude-session@<uuid>` unit runs.
+ * restart a session, so after an update the roster is a mix of versions.
+ * This is the gesture that resolves it, and it is the only one that can: a
+ * stopped session cannot be picked back up from claude.ai — the server
+ * bridges new sessions rather than re-adopting old ones — so the way back in
+ * is the transcript, through `claude --resume`, which is exactly what a
+ * `claude-session@<uuid>` unit runs.
  *
  * So it acts on the MANAGED rows only, and each one is a stop followed by a
  * resume of the same uuid: same id, same transcript, appended to. Sessions

@@ -3,40 +3,53 @@
 // CLI underneath. Its subject is not something the box serves to the house —
 // it is the thing that maintains the box.
 //
-// Three sources, and the split between them is the interesting part:
+// Four sources, and the split between them is the interesting part:
 //
-//   the snapshot   Everything that is TRUE NOW: is the unit up, which
-//                  sessions are connected, when does the login expire. None
-//                  of it is scrapeable — `claude remote-control` publishes no
-//                  health endpoint at all (nix/platform/claude-rc.nix), and the
-//                  session roster is a directory of files in the operator's
-//                  home. See nix/stacks/daedalus/host/claude-snapshot.sh.
-//   Loki           Everything that HAPPENED: sessions starting, the
-//                  connection dropping, the reconnect that followed. The unit
-//                  logs those and nothing else records them.
-//   GitHub         Whether the version running is the current one, and what
-//                  is in the releases between.
+//   the controller  Remote Control itself: the controller runs it as the
+//                   operator's `daedalus-claude-rc` user unit
+//                   (nix/stacks/daedalus/controller.nix) and `claude.status`
+//                   answers its state, pid, banner (version, environment id,
+//                   spawn mode, ceiling), the live sessions, the login's
+//                   dates and the model settings. `claude.restart` is the
+//                   restart. A controller that does not offer
+//                   `claude.remote_control` is not running it, and the page
+//                   says so rather than erroring.
+//   the snapshot    What the controller does not carry: the roster (every
+//                   transcript on disk, the background agents, the sessions
+//                   this box started as `claude-session@` units), the unit's
+//                   memory and CPU, each live session's CPU, RSS and bridge
+//                   log, and the login's scopes. See
+//                   nix/stacks/daedalus/host/claude-snapshot.sh.
+//   Loki            Everything that HAPPENED: sessions starting, the
+//                   connection dropping, the reconnect that followed. The
+//                   unit's log file is shipped with those lines and nothing
+//                   else records them.
+//   GitHub          Whether the version running is the current one, and what
+//                   is in the releases between.
 //
 // ── why the Loki query is anchored the way it is ──────────────────────────
 //
-// Every remote session writes its full stream-json transcript to this unit's
-// stdout, so `{unit="claude-remote-control.service"}` is overwhelmingly
-// megabytes of JSON with a few dozen human lines scattered through it. The
-// regex below matches the CLI's own `[HH:MM:SS]` event prefix, which the
-// transcript lines cannot have — a substring filter would have to guess at
-// what a transcript never contains, and be wrong the first time somebody
-// pasted a log into a session.
+// Every remote session writes its stream-json transcript to the server's
+// output, so `{unit="daedalus-claude-rc.service"}` is mostly JSON with a few
+// dozen human lines scattered through it (the shipper drops the tool results
+// and the status-box repaint, controller.nix). The regex below matches the
+// CLI's own `[HH:MM:SS]` event prefix, which the transcript lines cannot have
+// — a substring filter would have to guess at what a transcript never
+// contains, and be wrong the first time somebody pasted a log into a session.
 
 import { readSnapshot } from '../../host/contract/snapshot'
+import type { ControllerClient } from '../../host/controller/client'
+import { ControllerError } from '../../host/controller/wire'
 import { env } from '../../host/env'
 import { lokiStreams } from '../../host/loki'
+import type { NodeClaude } from '../agent/status'
 import { NO_META } from '../claude-meta'
 import { type ClaudeRoster, NO_ROSTER } from '../claude-roster'
 import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
 import { type VersionGap, versionGap } from './github'
 import { loadShotter, playwrightInstalled, type ShotterData } from './shotter'
 
-/* ── the snapshot ─────────────────────────────────────────────────────── */
+/* ── the facts the page draws ──────────────────────────────────────────── */
 
 export type ClaudeSession = {
   pid: number
@@ -53,15 +66,16 @@ export type ClaudeSession = {
   startedAt: number | null
   /** The pid is alive AND is still the process this file was written for. */
   alive: boolean
-  /** `busy` while the session is working. Absent from an older snapshot. */
+  /** `busy` while the session is working. */
   status: string | null
   cpuMs: number | null
   rssBytes: number | null
   /**
    * The later of two clocks: the session file's own `updatedAt` /
-   * `statusUpdatedAt`, and the bridge debug log's mtime. Both, because a
-   * session with no `cse_…` (a console or tmux-resumed one) has no debug log,
-   * and an older CLI wrote the session file only once, at start.
+   * `statusUpdatedAt` (the controller's report), and the bridge debug log's
+   * mtime (the snapshot). Both, because a session with no `cse_…` (a console
+   * or tmux-resumed one) has no debug log, and the bridge log moves on
+   * traffic the session file does not record.
    *
    * On a live row this REPLACES the transcript's own mtime rather than
    * sitting beside it (see the `time` group in lib/claude-meta.ts): it is the
@@ -74,14 +88,25 @@ export type ClaudeSession = {
 }
 
 export type ClaudeFacts = {
-  service: {
-    activeState: string
-    subState: string
-    result: string
+  /** Remote Control as the controller reports it. */
+  server: {
+    /**
+     * The agent's word — not-installed | off | starting | running | waiting |
+     * stopped — or, when there is no report: `not-run` (the controller does
+     * not run Remote Control), `no-report` (it does, and no report is fresh)
+     * or `unreachable` (the controller did not answer).
+     */
+    state: string
+    /** Why, in a line, when the state has a reason. */
+    detail: string | null
+    pid: number | null
+    /** Milliseconds since the epoch. */
+    startedAt: number | null
+    /** Starts after the first, since the controller came up. */
     restarts: number | null
+    /** The unit's own accounting, from the snapshot: every session under it. */
     memoryBytes: number | null
     cpuNsec: number | null
-    activeSince: number | null
   }
   /** What the server printed about itself at start. All-null before it has. */
   remote: {
@@ -91,11 +116,7 @@ export type ClaudeFacts = {
     environmentId: string | null
   }
   sessions: ClaudeSession[]
-  /**
-   * Every session this box could still be asked about, as against `sessions`
-   * above, which is only what is connected right now. Decoded as optional,
-   * for the reason `factsShape` gives.
-   */
+  /** Every session this box could still be asked about (the snapshot). */
   roster: ClaudeRoster
   credentials: {
     present: boolean
@@ -105,35 +126,36 @@ export type ClaudeFacts = {
     expiresAt: number | null
     /** The one that ends in a re-login. */
     refreshExpiresAt: number | null
+    /** From the snapshot, which reads the credentials file's scopes alone. */
     scopes: string[]
   }
   settings: { model: string | null; effortLevel: string | null }
-  cli: { version: string | null; storePath: string | null }
+  /** The `claude` the controller would start: the flake's pin. */
+  cli: { version: string | null }
 }
 
-const NO_FACTS: ClaudeFacts = {
-  service: {
-    activeState: 'unknown',
-    subState: '',
-    result: '',
-    restarts: null,
-    memoryBytes: null,
-    cpuNsec: null,
-    activeSince: null,
-  },
-  remote: { version: null, spawnMode: null, maxSessions: null, environmentId: null },
-  sessions: [],
+/* ── the snapshot ─────────────────────────────────────────────────────── */
+
+type SessionStat = {
+  pid: number
+  cpuMs: number | null
+  rssBytes: number | null
+  logBytes: number | null
+  bridgeAt: number | null
+}
+
+type SnapshotFacts = {
+  unit: { memoryBytes: number | null; cpuNsec: number | null }
+  sessionStats: SessionStat[]
+  roster: ClaudeRoster
+  scopes: string[]
+}
+
+const NO_SNAPSHOT: SnapshotFacts = {
+  unit: { memoryBytes: null, cpuNsec: null },
+  sessionStats: [],
   roster: NO_ROSTER,
-  credentials: {
-    present: false,
-    subscriptionType: null,
-    rateLimitTier: null,
-    expiresAt: null,
-    refreshExpiresAt: null,
-    scopes: [],
-  },
-  settings: { model: null, effortLevel: null },
-  cli: { version: null, storePath: null },
+  scopes: [],
 }
 
 const ns: Decoder<string | null> = nullable(str)
@@ -142,58 +164,28 @@ const nn: Decoder<number | null> = nullable(num)
 /**
  * Exported for its test, which is the only other caller.
  *
- * Worth a test of its own rather than one through `loadClaude`: the property
- * that matters is tolerance of a snapshot the CURRENT host script did not
- * write — every rollout of a new key has a window where the file on disk is
- * the previous script's — and reaching that through the loader would mean
- * standing up GitHub, Loki and the shotter archive to assert one default.
+ * Every key optional, with a real empty fallback: between the rebuild that
+ * installs a new host script and its next timer tick the file on disk is the
+ * previous script's, and a decoder that required the new keys would blank the
+ * roster for that minute.
  */
 export const factsShape = obj({
-  service: optional(
-    obj({
-      activeState: optional(str, 'unknown'),
-      subState: optional(str, ''),
-      result: optional(str, ''),
-      restarts: optional(nn, null),
-      memoryBytes: optional(nn, null),
-      cpuNsec: optional(nn, null),
-      activeSince: optional(nn, null),
-    }),
-    NO_FACTS.service,
+  unit: optional(
+    obj({ memoryBytes: optional(nn, null), cpuNsec: optional(nn, null) }),
+    NO_SNAPSHOT.unit,
   ),
-  remote: optional(
-    obj({
-      version: optional(ns, null),
-      spawnMode: optional(ns, null),
-      maxSessions: optional(nn, null),
-      environmentId: optional(ns, null),
-    }),
-    NO_FACTS.remote,
-  ),
-  sessions: optional(
+  sessionStats: optional(
     arrayOf(
       obj({
         pid: num,
-        transcriptId: optional(ns, null),
-        remoteId: optional(ns, null),
-        cwd: optional(ns, null),
-        name: optional(ns, null),
-        kind: optional(ns, null),
-        entrypoint: optional(ns, null),
-        version: optional(ns, null),
-        startedAt: optional(nn, null),
-        alive: optional(bool, false),
-        status: optional(ns, null),
         cpuMs: optional(nn, null),
         rssBytes: optional(nn, null),
-        lastActivityAt: optional(nn, null),
         logBytes: optional(nn, null),
+        bridgeAt: optional(nn, null),
       }),
     ),
     [],
   ),
-  // Every field optional, the whole block optional, and the fallback a real
-  // empty roster, for the rollout window the doc above describes.
   roster: optional(
     obj({
       agentsAvailable: optional(bool, false),
@@ -272,22 +264,7 @@ export const factsShape = obj({
     }),
     NO_ROSTER,
   ),
-  credentials: optional(
-    obj({
-      present: optional(bool, false),
-      subscriptionType: optional(ns, null),
-      rateLimitTier: optional(ns, null),
-      expiresAt: optional(nn, null),
-      refreshExpiresAt: optional(nn, null),
-      scopes: optional(arrayOf(str), []),
-    }),
-    NO_FACTS.credentials,
-  ),
-  settings: optional(
-    obj({ model: optional(ns, null), effortLevel: optional(ns, null) }),
-    NO_FACTS.settings,
-  ),
-  cli: optional(obj({ version: optional(ns, null), storePath: optional(ns, null) }), NO_FACTS.cli),
+  scopes: optional(arrayOf(str), []),
 })
 
 /* ── the events ───────────────────────────────────────────────────────── */
@@ -301,7 +278,7 @@ export type RcEvent = { at: number; kind: RcEventKind; text: string }
  * See the header: the alternative is reading every remote session's
  * transcript back out of Loki to find a dozen lines.
  */
-const EVENT_LINE = '{unit="claude-remote-control.service"} |~ `^\\[[0-9]{2}:[0-9]{2}:[0-9]{2}\\] `'
+const EVENT_LINE = '{unit="daedalus-claude-rc.service"} |~ `^\\[[0-9]{2}:[0-9]{2}:[0-9]{2}\\] `'
 
 const EVENT_DAYS = 14
 
@@ -337,11 +314,13 @@ async function events(): Promise<RcEvent[]> {
 
 export type ClaudeData = {
   facts: ClaudeFacts
-  /** False = the snapshot has never been written. Nothing below is real. */
+  /** False = the snapshot has never been written: no roster, no accounting. */
   available: boolean
   /** The producing timer has stopped keeping its one-minute promise. */
   stale: boolean
   ageMs: number | null
+  /** Whether the controller answered with a report; `facts.server` says why not. */
+  reporting: boolean
   events: RcEvent[]
   /** Drops in the window, which is the honest measure of "is it reachable". */
   drops: number
@@ -352,23 +331,126 @@ export type ClaudeData = {
   shotterGap: VersionGap
 }
 
-export async function loadClaude(): Promise<ClaudeData> {
-  const snapshot = await readSnapshot({
-    path: env.get('CLAUDE_FACTS_PATH'),
-    decoder: factsShape,
-    fallback: NO_FACTS,
-    acceptVersions: [1],
-    // Written every minute; the convention here is three intervals, so one
-    // missed run is jitter and three is a producer that has stopped.
-    maxAgeMs: 3 * 60_000,
-  })
+type ControllerRead =
+  | { report: NodeClaude; state: null; detail: null }
+  | { report: null; state: 'not-run' | 'no-report' | 'unreachable'; detail: string }
 
-  const facts = snapshot.data
+/** Exported for its test. */
+export async function readControllerClaude(client: ControllerClient): Promise<ControllerRead> {
+  try {
+    const s = await client.claudeStatus()
+    if (s.report !== null) return { report: s.report, state: null, detail: null }
+    return {
+      report: null,
+      state: s.wanted ? 'no-report' : 'not-run',
+      detail: s.wanted
+        ? 'the controller runs Remote Control, and no report from it is fresh'
+        : 'Remote Control is off in the controller’s policy',
+    }
+  } catch (e) {
+    if (e instanceof ControllerError && e.code === 'unsupported') {
+      return {
+        report: null,
+        state: 'not-run',
+        detail: 'Remote Control not run by the controller yet',
+      }
+    }
+    return {
+      report: null,
+      state: 'unreachable',
+      detail: `the controller did not answer: ${e instanceof Error ? e.message : String(e)}`,
+    }
+  }
+}
+
+function epochMs(iso: string | null): number | null {
+  if (iso === null) return null
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? null : t
+}
+
+/** Exported for its test: the controller's report and the snapshot, as one. */
+export function mergeFacts(read: ControllerRead, snap: SnapshotFacts): ClaudeFacts {
+  const r = read.report
+  const stats = new Map(snap.sessionStats.map((s) => [s.pid, s]))
+  const sessions: ClaudeSession[] = (r?.sessions ?? []).map((s) => {
+    const st = s.alive ? stats.get(s.pid) : undefined
+    const clocks = [s.lastActivityAt, st?.bridgeAt ?? null].filter((c) => c !== null)
+    return {
+      pid: s.pid,
+      transcriptId: s.transcriptId,
+      remoteId: s.remoteId,
+      cwd: s.cwd,
+      name: s.name,
+      kind: s.kind,
+      entrypoint: s.entrypoint,
+      version: s.version,
+      startedAt: s.startedAt,
+      alive: s.alive,
+      status: s.status,
+      cpuMs: st?.cpuMs ?? null,
+      rssBytes: st?.rssBytes ?? null,
+      lastActivityAt: clocks.length === 0 ? null : Math.max(...clocks),
+      logBytes: st?.logBytes ?? null,
+    }
+  })
+  return {
+    server:
+      r === null
+        ? {
+            state: read.state ?? 'unreachable',
+            detail: read.detail,
+            pid: null,
+            startedAt: null,
+            restarts: null,
+            memoryBytes: null,
+            cpuNsec: null,
+          }
+        : {
+            state: r.state,
+            detail: r.detail,
+            pid: r.pid,
+            startedAt: epochMs(r.startedAt),
+            restarts: r.restarts,
+            memoryBytes: snap.unit.memoryBytes,
+            cpuNsec: snap.unit.cpuNsec,
+          },
+    remote: r?.server ?? { version: null, spawnMode: null, maxSessions: null, environmentId: null },
+    sessions,
+    roster: snap.roster,
+    credentials: {
+      present: r?.credentials.present ?? false,
+      subscriptionType: r?.credentials.subscriptionType ?? null,
+      rateLimitTier: r?.credentials.rateLimitTier ?? null,
+      expiresAt: r?.credentials.expiresAt ?? null,
+      refreshExpiresAt: r?.credentials.refreshExpiresAt ?? null,
+      scopes: snap.scopes,
+    },
+    settings: r?.settings ?? { model: null, effortLevel: null },
+    cli: { version: r?.cliVersion ?? null },
+  }
+}
+
+export async function loadClaude(ctx: { controller: ControllerClient }): Promise<ClaudeData> {
+  const [snapshot, read] = await Promise.all([
+    readSnapshot({
+      path: env.get('CLAUDE_FACTS_PATH'),
+      decoder: factsShape,
+      fallback: NO_SNAPSHOT,
+      acceptVersions: [1],
+      // Written every minute; the convention here is three intervals, so one
+      // missed run is jitter and three is a producer that has stopped.
+      maxAgeMs: 3 * 60_000,
+    }),
+    readControllerClaude(ctx.controller),
+  ])
+
+  const facts = mergeFacts(read, snapshot.data)
 
   // What the RUNNING server said it is, in preference to what the flake
-  // built. The two differ for exactly as long as it takes to restart the unit
-  // after a flake update, and during that window the flake's number is a
-  // claim about a process that is not running.
+  // built. The two differ for exactly as long as it takes to restart the
+  // server after a flake update, and during that window the flake's number
+  // is a claim about a process that is not running.
   const installed = facts.remote.version ?? facts.cli.version
 
   // No cache of its own: `versionGap` already holds one, for the rate limit.
@@ -384,6 +466,7 @@ export async function loadClaude(): Promise<ClaudeData> {
     available: snapshot.available,
     stale: snapshot.stale,
     ageMs: snapshot.ageMs,
+    reporting: read.report !== null,
     events: log,
     drops: log.filter((e) => e.kind === 'drop').length,
     gap,

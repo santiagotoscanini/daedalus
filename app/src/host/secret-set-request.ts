@@ -4,10 +4,9 @@ import { defineBridge } from './bridge'
 // Asking the host to set or remove ONE key in an app's operator-secrets file
 // (site/vault/apps/<app>-env.sops).
 //
-// Modelled on claude-rc-request.ts, which is the smallest complete bridge
-// here: one request file, one status file, an agent that OUTLIVES its action,
-// so `done` and `failed` are both real terminal states and the ordinary status
-// poll covers the whole flow.
+// The smallest complete bridge shape here: one request file, one status
+// file, an agent that OUTLIVES its action, so `done` and `failed` are both
+// real terminal states and the ordinary status poll covers the whole flow.
 //
 // WHAT CROSSES, AND WHAT CANNOT. The container seals the value first
 // (lib/apps/secrets.ts → core/vault.ts's encrypt-only sops) and sends the

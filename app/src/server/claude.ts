@@ -7,21 +7,16 @@ import { adminFn, readFn } from './fn'
 // own report is a System tab, loaded by fetchModuleBoards like the others.
 
 /**
- * Ask the host to restart the Remote Control server.
+ * Restart the Remote Control server, through the controller (`claude.restart`).
  *
- * Returns as soon as the request file is written; the caller polls the
- * status for its own id. Terminal states are real here (host/claude-rc.sh
- * outlives its action), so no healthz dance — done or failed arrives within
- * ~ten seconds.
+ * Answers as soon as the controller has queued it for its session, which
+ * restarts the `daedalus-claude-rc` unit with its next report. `unavailable`
+ * when the controller runs no Remote Control or no session reports — the
+ * page says so beside the button.
  */
-export const requestClaudeRestartFn = adminFn.handler(async ({ context }) => {
-  const { requestClaudeRcRestart } = await import('../host/claude-rc-request')
-  return { id: await requestClaudeRcRestart({ actor: context.actor() }) }
-})
-
-export const fetchClaudeRcStatusFn = readFn.handler(async () => {
-  const { readClaudeRcStatus } = await import('../host/claude-rc-request')
-  return readClaudeRcStatus()
+export const restartClaudeFn = adminFn.handler(async ({ context }) => {
+  const ctx = await context.ctx()
+  return ctx.controller.claudeRestart()
 })
 
 /**

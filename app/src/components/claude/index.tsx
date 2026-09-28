@@ -8,7 +8,7 @@
 // The import rule every file here follows. Values come from server/claude —
 // server functions, which are the client-safe door to the host. From host/*
 // and lib/dashboard/* it is types ONLY: the modules behind them read the host
-// snapshot (and the bridge) through node:fs, and a value import from there
+// snapshot and the controller socket through node, and a value import from there
 // would put that in the browser bundle — see the warning at the foot of
 // lib/dashboard/claude.ts. That is why the derived helpers live in
 // verdicts.ts beside the view, and why each host status's idle shape is
@@ -55,6 +55,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
   return (
     <>
       <ClaudeHead data={data} verdict={verdict} />
+      <ControllerNotice data={data} />
       <SnapshotNotice data={data} />
       <ClaudeStats data={data} live={live} refreshIn={refreshIn} />
 
@@ -64,7 +65,11 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         {/* Sign-in comes up beside Remote control. The two are one subject —
             what this server is, and whether it can still reach Anthropic —
             and row 1 is where the page's standing facts belong. */}
-        <SignInBoard credentials={facts.credentials} refreshIn={refreshIn} />
+        <SignInBoard
+          credentials={facts.credentials}
+          refreshIn={refreshIn}
+          reporting={data.reporting}
+        />
 
         <ConnectionBoard events={data.events} />
 
@@ -87,7 +92,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
 
 function ClaudeHead({ data, verdict }: { data: ClaudeData; verdict: Verdict }) {
   const { facts } = data
-  const up = facts.service.activeState === 'active'
+  const up = facts.server.state === 'running'
   const envId = facts.remote.environmentId
   return (
     <ServiceHead
@@ -120,14 +125,17 @@ function ClaudeHead({ data, verdict }: { data: ClaudeData; verdict: Verdict }) {
       ]}
       lede={
         <>
-          The always-on Remote Control server. A session on this box can be started from
-          claude.ai/code or a phone at any time. It has no health endpoint of its own, so every
-          number here is read from the unit, the session files and this unit's journal.
+          The always-on Remote Control server, which the controller runs as the operator's{' '}
+          <span className={MONO}>daedalus-claude-rc</span> unit. A session on this box can be
+          started from claude.ai/code or a phone at any time. It has no health endpoint of its own,
+          so every number here is the controller's report, the host snapshot or the server's log.
         </>
       }
       actions={
         envId === null ? (
-          <Chip tone={up ? 'muted' : 'bad'}>{up ? 'no environment yet' : 'not running'}</Chip>
+          <Chip tone={up || !data.reporting ? 'muted' : 'bad'}>
+            {up ? 'no environment yet' : data.reporting ? 'not running' : 'no report'}
+          </Chip>
         ) : (
           <Button asChild variant="outline" size="sm">
             <a
@@ -144,6 +152,14 @@ function ClaudeHead({ data, verdict }: { data: ClaudeData; verdict: Verdict }) {
   )
 }
 
+/* Said once, at the top: with no report from the controller the boards about
+   the server are empty, and the reason is the one line worth reading. The
+   roster below still comes from the snapshot. */
+function ControllerNotice({ data }: { data: ClaudeData }) {
+  if (data.reporting) return null
+  return <p className={EMPTY}>{data.facts.server.detail}.</p>
+}
+
 /* Said once, at the top, and not repeated on every board below: when the
    snapshot has stopped the whole page is a photograph, and a reader who has
    been told that can discount all of it at once. */
@@ -151,7 +167,7 @@ function SnapshotNotice({ data }: { data: ClaudeData }) {
   if (!data.available) {
     return (
       <p className={EMPTY}>
-        The host snapshot has never been written, so nothing below is a reading.{' '}
+        The host snapshot has never been written, so the roster below is empty.{' '}
         <span className={MONO}>daedalus-claude-snapshot.service</span> is what produces it.
       </p>
     )
@@ -160,7 +176,8 @@ function SnapshotNotice({ data }: { data: ClaudeData }) {
     return (
       <p className={EMPTY}>
         The snapshot is <b>{since((data.ageMs ?? 0) / 1000)}</b> and its timer promises one a
-        minute, so the sessions and the unit state below are a photograph rather than a reading.
+        minute, so the roster and the server's memory and CPU below are a photograph rather than a
+        reading.
       </p>
     )
   }
@@ -177,19 +194,19 @@ function ClaudeStats({
   refreshIn: number | null
 }) {
   const { facts } = data
-  const up = facts.service.activeState === 'active'
+  const up = facts.server.state === 'running'
   return (
     <StatStrip>
       <Stat
         label="Server"
-        value={up ? 'up' : text(facts.service.activeState)}
-        tone={up ? undefined : 'bad'}
+        value={up ? 'up' : text(facts.server.state)}
+        tone={up ? undefined : data.reporting ? 'bad' : 'muted'}
         sub={
-          facts.service.activeSince === null
+          facts.server.startedAt === null
             ? undefined
-            : `${duration((Date.now() - facts.service.activeSince) / 1000)} without a restart`
+            : `${duration((Date.now() - facts.server.startedAt) / 1000)} without a restart`
         }
-        title="systemd's view of claude-remote-control.service."
+        title="The controller's report on its daedalus-claude-rc unit."
       />
       <Stat
         label="Sessions"
@@ -216,7 +233,13 @@ function ClaudeStats({
         // Six days out is the point at which the fix (SSH in, `/login`,
         // restart the unit) stops being a thing you can do at leisure.
         tone={refreshIn !== null && refreshIn < 6 * 86400 ? 'warn' : undefined}
-        sub={refreshIn === null ? 'no credentials found' : 'until re-login'}
+        sub={
+          refreshIn !== null
+            ? 'until re-login'
+            : data.reporting
+              ? 'no credentials found'
+              : 'no report'
+        }
       />
     </StatStrip>
   )
@@ -236,9 +259,9 @@ function ClaudeReleases({ gap, note }: { gap: VersionGap; note: string }) {
           native install nothing reverts. <b>Update Claude Code</b> above is the supported move: it
           pins the release manifest in the engine, signature-checked, and rebuilds onto it. The
           weekly <span className={MONO}>flake-autoupgrade.timer</span> gets there on its own
-          whenever nixpkgs does. A rebuild deliberately does NOT restart this unit onto the new
-          build — it once killed its own activation doing so — so the server keeps running the old
-          binary until a reboot or the controls above. {note}
+          whenever nixpkgs does. A rebuild restarts the controller, not the server: the server is a
+          user unit of its own, so a switch never ends a session — and so it keeps running the old
+          binary until a reboot or the restart above. {note}
         </p>
       }
     />
@@ -248,15 +271,16 @@ function ClaudeReleases({ gap, note }: { gap: VersionGap; note: string }) {
 function RemoteControlLogs() {
   return (
     <LogBoard
-      source={{ unit: 'claude-remote-control.service' }}
+      source={{ unit: 'daedalus-claude-rc.service' }}
       title="Remote Control logs"
       foot={
         <p className={FOOT}>
-          The unit's whole journal, which is mostly not events: every remote session writes its full
-          stream-json transcript to this same stdout, so a search here is searching transcripts as
-          well as the server's own lines. The Connection board above is the filtered view: the
-          server's lines are the ones prefixed <span className={MONO}>[HH:MM:SS]</span>, which a
-          transcript line cannot be.
+          The server's log file, which is mostly not events: every remote session writes its
+          stream-json transcript to the same output, so a search here is searching transcripts as
+          well as the server's own lines. The shipper drops what tools returned and the status box's
+          repaint; the file on the box keeps everything. The Connection board above is the filtered
+          view: the server's lines are the ones prefixed <span className={MONO}>[HH:MM:SS]</span>,
+          which a transcript line cannot be.
         </p>
       }
     />

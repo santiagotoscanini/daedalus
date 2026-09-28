@@ -187,7 +187,7 @@ export const SCHEMA = {
   CLAUDE_FACTS_PATH: {
     kind: 'path',
     fallback: '/claude/claude.json',
-    about: 'Remote Control’s state.',
+    about: 'The Claude roster, the Remote Control unit’s accounting and the login’s scopes.',
     source: DAEDALUS,
   },
   BUILDER_FACTS_PATH: {

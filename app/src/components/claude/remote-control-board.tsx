@@ -34,7 +34,7 @@ export function RemoteControlBoard({
       <Facts
         list
         rows={[
-          { k: 'Unit', v: <UnitState data={data} /> },
+          { k: 'Server', v: <ServerState data={data} /> },
           {
             k: 'Environment',
             v: <span className={MONO}>{text(envId)}</span>,
@@ -52,11 +52,11 @@ export function RemoteControlBoard({
           },
           {
             k: 'Memory',
-            v: bytes(facts.service.memoryBytes),
+            v: bytes(facts.server.memoryBytes),
           },
           {
             k: 'CPU',
-            v: facts.service.cpuNsec === null ? DASH : duration(facts.service.cpuNsec / 1e9),
+            v: facts.server.cpuNsec === null ? DASH : duration(facts.server.cpuNsec / 1e9),
           },
         ]}
       />
@@ -78,17 +78,27 @@ export function RemoteControlBoard({
         latest={data.gap.latest}
         behind={data.gap.behind.length}
       />
-      <RestartServerControl live={live} />
+      <RestartServerControl live={live} reporting={data.reporting} />
     </Board>
   )
 }
 
-function UnitState({ data }: { data: ClaudeData }) {
-  const { activeState, subState, restarts } = data.facts.service
-  const tone: Tone = activeState === 'active' ? 'ok' : activeState === 'unknown' ? 'muted' : 'bad'
+const STATE_TONE: Record<string, Tone> = {
+  running: 'ok',
+  starting: 'warn',
+  waiting: 'warn',
+  'not-run': 'muted',
+  'no-report': 'muted',
+  off: 'muted',
+}
+
+function ServerState({ data }: { data: ClaudeData }) {
+  const { state, detail, restarts } = data.facts.server
   return (
     <>
-      <Chip tone={tone}>{subState === '' ? activeState : `${activeState} (${subState})`}</Chip>
+      <Chip tone={STATE_TONE[state] ?? 'bad'}>{state}</Chip>
+      {/* With no report the notice at the top already says why. */}
+      {data.reporting && detail !== null && <span className={ROW_SIDE}>{detail}</span>}
       {restarts !== null && restarts > 0 && (
         <span className={ROW_SIDE}>
           {num(restarts)} restart{restarts === 1 ? '' : 's'}
