@@ -23,8 +23,9 @@ use crate::state::{now_rfc3339, rfc3339_ago};
 const QUICK_EXIT: Duration = Duration::from_secs(60);
 /// The backoff ladder's ceiling.
 const MAX_BACKOFF: Duration = Duration::from_secs(5 * 60);
-/// The server log is rotated once when it passes this, at the next start.
-const LOG_ROTATE_BYTES: u64 = 20 * 1024 * 1024;
+/// How often the server log is looked at for rotation while it runs
+/// (logs.rs: copy, then truncate, so systemd's descriptor keeps working).
+const ROTATE_CHECK: Duration = Duration::from_secs(60);
 /// How often a running unit's state is asked of systemd (its log is read
 /// every tick, which is where a change shows first).
 const UNIT_POLL: Duration = Duration::from_secs(10);
@@ -162,6 +163,8 @@ pub struct Supervisor {
     /// anyway, which it neither adopted nor stops (`look_for_foreign`).
     foreign: Option<String>,
     foreign_checked: Option<Instant>,
+    /// When the log was last looked at for rotation.
+    rotate_checked: Instant,
 }
 
 impl Supervisor {
@@ -203,6 +206,7 @@ impl Supervisor {
             off_reason: "the box's policy for this machine",
             foreign: None,
             foreign_checked: None,
+            rotate_checked: Instant::now(),
         };
         if sup.wanted {
             sup.attach();
@@ -445,6 +449,10 @@ impl Supervisor {
     /// Advance: reap, wait, start. Cheap; call it often.
     pub fn tick(&mut self) {
         self.collect_update();
+        if self.rotate_checked.elapsed() >= ROTATE_CHECK {
+            self.rotate_checked = Instant::now();
+            rotate(&self.log_path);
+        }
         if !self.wanted
             && self
                 .foreign_checked
@@ -823,10 +831,20 @@ fn open_log(path: &Path) -> std::io::Result<File> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    if std::fs::metadata(path).is_ok_and(|m| m.len() > LOG_ROTATE_BYTES) {
-        let _ = std::fs::rename(path, path.with_extension("log.1"));
-    }
+    rotate(path);
     OpenOptions::new().create(true).append(true).open(path)
+}
+
+/// Rotate the log when it is past `logs::ROTATE_BYTES`, whoever holds it
+/// open (logs.rs).
+fn rotate(path: &Path) {
+    match super::logs::rotate_if_larger(path, super::logs::ROTATE_BYTES) {
+        Ok(true) => tracing::info!(log = %path.display(), "rotated the Claude log"),
+        Ok(false) => {}
+        Err(e) => {
+            tracing::warn!(log = %path.display(), error = %e, "the Claude log was not rotated")
+        }
+    }
 }
 
 fn short_duration(d: Duration) -> String {

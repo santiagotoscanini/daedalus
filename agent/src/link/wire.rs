@@ -13,6 +13,9 @@
 //! node → {"e":"status","p":{…}}   {"e":"telemetry","p":{…}}   {"e":"claude","p":{…}}
 //! ctl  ← {"id":7,"m":"command","p":{"command":"claude_restart"}}
 //! node → {"id":7,"ok":{"accepted":true}}
+//! node → {"e":"claude_roster","p":{…}}
+//! ctl  ← {"id":8,"m":"claude_session","p":{"action":"resume","id":"<uuid>","request":"<16 hex>"}}
+//! node → {"id":8,"ok":{"accepted":true}}
 //! both → {"e":"hb"}
 //! ```
 //!
@@ -26,7 +29,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::claude::Report;
+use crate::claude::{Report, Roster, SessionAction};
 use crate::config::TelemetryLevel;
 use crate::providers::ProviderReport;
 use crate::telemetry::Telemetry;
@@ -50,6 +53,10 @@ pub mod name {
     pub const CLAUDE: &str = "claude";
     /// node → controller: the providers on the machine.
     pub const PROVIDERS: &str = "providers";
+    /// node → controller: the session's roster of Claude sessions, or null.
+    pub const CLAUDE_ROSTER: &str = "claude_roster";
+    /// controller → node: one verb on one Claude session, acknowledged.
+    pub const CLAUDE_SESSION: &str = "claude_session";
     /// controller → node: where the machine stands.
     pub const STATE: &str = "state";
     /// controller → node: the box's policy for it.
@@ -286,6 +293,18 @@ pub struct CommandParams {
     pub command: Command,
 }
 
+/// `claude_session`'s parameters: the verb, its selector (`id`: a session
+/// uuid or a background agent's short id) and the request id the
+/// controller minted, under which the machine's roster reports the outcome
+/// (`actions`). Exact: nothing else rides it, least of all a path or a flag.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClaudeSessionParams {
+    pub action: SessionAction,
+    pub id: String,
+    pub request: String,
+}
+
 /// `command`'s answer: the machine took the instruction.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Accepted {
@@ -386,6 +405,7 @@ pub const HB_LINE: &str = r#"{"e":"hb"}"#;
 pub type StatusPayload = Value;
 pub type TelemetryPayload = Telemetry;
 pub type ClaudePayload = Option<Report>;
+pub type ClaudeRosterPayload = Option<Roster>;
 pub type ProvidersPayload = Vec<ProviderReport>;
 
 #[cfg(test)]
@@ -535,6 +555,40 @@ mod tests {
         assert_eq!(
             HB_LINE,
             event(name::HB, &json!(null)).replace(r#","p":null"#, "")
+        );
+        let session = ClaudeSessionParams {
+            action: SessionAction::Resume,
+            id: "abdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
+            request: "00112233445566ff".into(),
+        };
+        assert_eq!(
+            request(8, name::CLAUDE_SESSION, &session),
+            concat!(
+                r#"{"id":8,"m":"claude_session","p":{"action":"resume","#,
+                r#""id":"abdda3a9-0cb2-43f1-b13e-37f25a755fce","request":"00112233445566ff"}}"#
+            )
+        );
+        for bad in [
+            json!({"action":"resume","id":"x","request":"r","flags":["--dangerously-skip-permissions"]}),
+            json!({"action":"attach","id":"x","request":"r"}),
+            json!({"action":"stop","id":"x"}),
+        ] {
+            assert!(
+                serde_json::from_value::<ClaudeSessionParams>(bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
+        let roster = Roster {
+            reported_at: "t".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            event(name::CLAUDE_ROSTER, &Some(roster)),
+            concat!(
+                r#"{"e":"claude_roster","p":{"reported_at":"t","agents_available":false,"agents":[],"#,
+                r#""transcripts":[],"transcript_total":0,"empty_count":0,"truncated":false,"managed":[],"#,
+                r#""resume_unavailable":null,"session_stats":[],"server":null,"actions":[],"errors":[]}}"#
+            )
         );
         assert!(serde_json::from_value::<CommandParams>(json!({"command":"reboot"})).is_err());
         assert!(

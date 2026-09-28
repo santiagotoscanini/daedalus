@@ -46,16 +46,73 @@
 //! runs `claude update`), `profile` reads `~/.claude` (sessions, credential
 //! clock, settings), `workdir` picks the directory the server runs in,
 //! `unit` is the server as a systemd user unit, and `supervisor` keeps the
-//! server running either way.
+//! server running either way. The sessions beside the server: `roster`
+//! reads every one this machine could still be asked about, `sessions`
+//! holds the three verbs on them (resume, stop, remove) and the thread
+//! that runs both, and `redact` makes the one line of conversation the
+//! roster carries safe to carry. `logs` rotates the logs systemd appends
+//! to while they are open.
 
 mod cli;
+pub mod logs;
 mod profile;
+pub mod redact;
+pub mod roster;
+pub mod sessions;
 mod supervisor;
 mod unit;
 mod workdir;
 
+pub use roster::Roster;
+pub use sessions::Sessions;
 pub use supervisor::Supervisor;
 pub use unit::Launch;
+
+/// The three verbs on one session (sessions.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionAction {
+    /// `claude --resume <uuid>` in a unit of its own.
+    Resume,
+    /// End a session this agent resumed, or a running background agent.
+    Stop,
+    /// `claude rm <short id>`: a background agent's record.
+    Remove,
+}
+
+impl SessionAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SessionAction::Resume => "resume",
+            SessionAction::Stop => "stop",
+            SessionAction::Remove => "remove",
+        }
+    }
+}
+
+/// How a verb request stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ActionState {
+    Running,
+    Done,
+    /// Not done, and nothing changed: the request was not one to carry out.
+    Refused,
+    /// Tried, and it did not work.
+    Failed,
+}
+
+/// One verb request, as the service hands it to the session: minted where
+/// it was accepted (`request`, sixteen hex characters), checked there and
+/// again by the session before anything runs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionRequest {
+    pub request: String,
+    pub action: SessionAction,
+    /// The selector: a session uuid, or a background agent's short id.
+    pub id: String,
+}
 
 use serde::{Deserialize, Serialize};
 
@@ -126,6 +183,8 @@ pub struct Credentials {
     /// Milliseconds since the epoch, both.
     pub expires_at: Option<u64>,
     pub refresh_expires_at: Option<u64>,
+    /// What the login may do (`user:inference`, …), from the same file.
+    pub scopes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -245,6 +304,8 @@ pub struct ReportAnswer {
     pub restart: bool,
     /// The directory the policy names for the server, if any.
     pub workdir: Option<String>,
+    /// Verb requests for the sessions, each handed out once (sessions.rs).
+    pub sessions: Vec<SessionRequest>,
 }
 
 #[cfg(test)]

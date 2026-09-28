@@ -668,6 +668,99 @@ mod tests {
     }
 
     #[test]
+    fn the_roster_and_the_session_verbs() {
+        const ID: &str = "abdda3a9-0cb2-43f1-b13e-37f25a755fce";
+        // Off in the config: neither is offered.
+        let (_, off) = controller("");
+        let out = talk(
+            off,
+            &[
+                HELLO,
+                r#"{"id":2,"m":"claude.roster"}"#,
+                &format!(
+                    r#"{{"id":3,"m":"claude.session","p":{{"action":"resume","id":"{ID}"}}}}"#
+                ),
+            ]
+            .join("\n"),
+        );
+        assert_eq!(out[1]["err"]["code"], "unsupported");
+        assert_eq!(out[2]["err"]["code"], "unsupported");
+
+        let (shared, api) = controller("[controller]\nclaude_remote_control = true\n");
+        let out = talk(
+            Arc::clone(&api),
+            &[
+                HELLO,
+                r#"{"id":2,"m":"claude.roster"}"#,
+                // No session reports yet: nobody to run it.
+                &format!(r#"{{"id":3,"m":"claude.session","p":{{"action":"resume","id":"{ID}"}}}}"#),
+                // Selectors and parameters are checked before anything.
+                r#"{"id":4,"m":"claude.session","p":{"action":"resume","id":"0a1b2c3d"}}"#,
+                r#"{"id":5,"m":"claude.session","p":{"action":"remove","id":"../x"}}"#,
+                &format!(r#"{{"id":6,"m":"claude.session","p":{{"action":"resume","id":"{ID}","cwd":"/"}}}}"#),
+                r#"{"id":7,"m":"claude.roster","p":{"x":1}}"#,
+            ]
+            .join("\n"),
+        );
+        assert_eq!(out[0]["ok"]["capabilities"][1], "claude.sessions");
+        assert_eq!(out[1]["ok"], json!({"reporting":false,"roster":null}));
+        assert_eq!(out[2]["err"]["code"], "unavailable");
+        for bad in &out[3..=6] {
+            assert_eq!(bad["err"]["code"], "bad_request", "{bad}");
+        }
+
+        shared.set_claude(Report {
+            state: "running".into(),
+            ..Default::default()
+        });
+        shared.set_claude_roster(crate::claude::Roster {
+            reported_at: "t".into(),
+            transcript_total: 4,
+            ..Default::default()
+        });
+        let out = talk(
+            Arc::clone(&api),
+            &[
+                HELLO,
+                r#"{"id":2,"m":"claude.roster"}"#,
+                &format!(
+                    r#"{{"id":3,"m":"claude.session","p":{{"action":"resume","id":"{ID}"}}}}"#
+                ),
+                r#"{"id":4,"m":"claude.session","p":{"action":"stop","id":"0a1b2c3d"}}"#,
+            ]
+            .join("\n"),
+        );
+        assert_eq!(out[1]["ok"]["reporting"], true);
+        assert_eq!(out[1]["ok"]["roster"]["transcript_total"], 4);
+        assert_eq!(out[2]["ok"]["queued"], true);
+        let request = out[2]["ok"]["request"].as_str().unwrap().to_string();
+        assert_eq!(request.len(), 16);
+        assert!(shared.claude_instruction_waiting());
+        // Handed to the session once, in order, with the next report.
+        let answer = shared.set_claude(Report::default());
+        assert_eq!(answer.sessions.len(), 2);
+        assert_eq!(answer.sessions[0].request, request);
+        assert_eq!(answer.sessions[0].id, ID);
+        assert_eq!(answer.sessions[1].id, "0a1b2c3d");
+        assert!(shared.set_claude(Report::default()).sessions.is_empty());
+        // A session that is not taking them is not piled on.
+        for _ in 0..crate::status::MAX_QUEUED_SESSIONS {
+            assert!(shared
+                .queue_claude_session(crate::claude::SessionAction::Stop, "0a1b2c3d".into())
+                .is_some());
+        }
+        let out = talk(
+            api,
+            &[
+                HELLO,
+                r#"{"id":2,"m":"claude.session","p":{"action":"stop","id":"0a1b2c3d"}}"#,
+            ]
+            .join("\n"),
+        );
+        assert_eq!(out[1]["err"]["code"], "busy");
+    }
+
+    #[test]
     fn a_restart_is_unavailable_while_no_session_reports() {
         let (shared, api) = controller("[controller]\nclaude_remote_control = true\n");
         let out = talk(api, &[HELLO, r#"{"id":2,"m":"claude.restart"}"#].join("\n"));

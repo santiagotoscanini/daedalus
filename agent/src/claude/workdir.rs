@@ -51,6 +51,36 @@ fn trusted_project_in(
         .map(|(dir, _)| dir)
 }
 
+/// Every trusted project directory that exists, never the home directory —
+/// where a resumed session may run (sessions.rs), since anywhere else it
+/// would stop on the trust prompt with nobody to answer it.
+pub fn trusted_projects() -> Vec<PathBuf> {
+    let Some(text) = cli_config_path().and_then(|p| std::fs::read_to_string(p).ok()) else {
+        return Vec::new();
+    };
+    trusted_projects_in(&text, home_dir().as_deref(), Path::is_dir)
+}
+
+/// The pure half of `trusted_projects`.
+fn trusted_projects_in(
+    config: &str,
+    home: Option<&Path>,
+    exists: impl Fn(&Path) -> bool,
+) -> Vec<PathBuf> {
+    let Some(projects) = serde_json::from_str::<serde_json::Value>(config)
+        .ok()
+        .and_then(|v| v.get("projects")?.as_object().cloned())
+    else {
+        return Vec::new();
+    };
+    projects
+        .iter()
+        .filter(|(_, p)| p.get("hasTrustDialogAccepted").and_then(|t| t.as_bool()) == Some(true))
+        .map(|(dir, _)| PathBuf::from(dir))
+        .filter(|dir| home != Some(dir.as_path()) && exists(dir))
+        .collect()
+}
+
 /// Where the server should run: the named directory when it exists, else the
 /// most recent trusted project, else the home directory (which will not
 /// work, and the server's own message says why).
@@ -90,5 +120,12 @@ mod tests {
         );
         assert_eq!(trusted_project_in("{}", None, |_| true), None);
         assert_eq!(trusted_project_in("not json", None, |_| true), None);
+        let mut all = trusted_projects_in(cfg, Some(Path::new("/home/u")), exists);
+        all.sort();
+        assert_eq!(
+            all,
+            [PathBuf::from("/home/u/new"), PathBuf::from("/home/u/old")]
+        );
+        assert!(trusted_projects_in("[]", None, |_| true).is_empty());
     }
 }

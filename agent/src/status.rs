@@ -11,9 +11,10 @@
 //!
 //!   GET  /healthz         `ok`
 //!   GET  /nodes/metrics   the telemetry of every machine connected to the
-//!                         controller (link/controller.rs), as Prometheus
-//!                         text, each series labelled `node`, `host`,
-//!                         `machine` and `os`; 404 on a node
+//!                         controller (link/controller.rs), and the Claude
+//!                         series of each and of the controller itself, as
+//!                         Prometheus text, each series labelled `node`,
+//!                         `host`, `machine` and `os`; 404 on a node
 //!
 //! Only from loopback, and refused (403) from any other address:
 //!
@@ -25,6 +26,8 @@
 //!                         session.rs, and claude/); the
 //!                         answer is a `ReportAnswer`: the policy's part for
 //!                         the tray and, once each, a pending update or restart
+//!                         and the session verb requests waiting (claude/sessions.rs)
+//!   POST /claude/roster   the session's roster of Claude sessions (claude/roster.rs)
 //!   POST /claude/update   ask the tray to update Claude Code on its next report
 //!   POST /claude/restart  ask the tray to restart the server on its next report
 //!
@@ -51,7 +54,7 @@ use tiny_http::{Header, Method, Response, Server};
 
 use crate::api::wire::{event, ClaudeChanged, TelemetryUpdated};
 use crate::api::Events;
-use crate::claude::{Report, ReportAnswer, Summary};
+use crate::claude::{Report, ReportAnswer, Roster, SessionAction, SessionRequest, Summary};
 use crate::facts::Facts;
 use crate::link::wire::Policy;
 use crate::link::LinkStatus;
@@ -64,6 +67,11 @@ use crate::telemetry::Telemetry;
 const REPORT_FRESH: Duration = Duration::from_secs(30);
 /// The largest report body accepted.
 const MAX_BODY: u64 = 1 << 20;
+/// A roster older than this is not served: the session sends one at least
+/// every `sessions::REFRESH`.
+const ROSTER_FRESH: Duration = Duration::from_secs(180);
+/// Session verb requests waiting for the session, at most.
+pub const MAX_QUEUED_SESSIONS: usize = 8;
 
 /// What the threads share: the persisted state plus the live facts.
 pub struct Shared {
@@ -107,6 +115,11 @@ struct Live {
     /// Raised by the controller's command or `POST /claude/restart`; the
     /// tray takes it with its next report.
     claude_restart_requested: bool,
+    /// Verb requests for the sessions (claude/sessions.rs), accepted by the
+    /// API or the link and handed to the session with its next report.
+    claude_sessions: Vec<SessionRequest>,
+    /// The session's last roster (claude/roster.rs) and when it landed.
+    claude_roster: Option<(Roster, Instant)>,
     /// The last telemetry document, from the sampling thread.
     telemetry: Option<Telemetry>,
     /// Moves whenever a sample carries newly read static or slow facts or
@@ -182,6 +195,8 @@ impl Shared {
                 claude_announced: false,
                 claude_update_requested: false,
                 claude_restart_requested: false,
+                claude_sessions: Vec::new(),
+                claude_roster: None,
                 telemetry: None,
                 telemetry_tier: 0,
                 link: None,
@@ -279,6 +294,29 @@ impl Shared {
         self.controller.get()
     }
 
+    /// This machine's own Claude series for `/nodes/metrics` — the
+    /// controller's Remote Control beside the machines', labelled with the
+    /// controller's node id and hostname, so one alert covers both
+    /// (telemetry/metrics.rs `claude_text`). Empty before the controller's
+    /// key is known.
+    pub fn own_claude_metrics(&self) -> String {
+        let Some(node) = self
+            .controller_info()
+            .and_then(|c| crate::identity::parse_public_key(&c.public_key).ok())
+            .map(|k| crate::identity::node_id_of(&k))
+        else {
+            return String::new();
+        };
+        let host = crate::facts::hostname();
+        let labels = crate::telemetry::Labels {
+            node: &node,
+            host: &host,
+            machine: &host,
+            os: self.facts.os,
+        };
+        crate::telemetry::claude_text(self.claude_report().as_ref(), &labels)
+    }
+
     /// The machines this controller serves, once it listens for them.
     pub fn set_nodes(&self, r: Arc<crate::link::controller::Registry>) {
         let _ = self.nodes.set(r);
@@ -307,7 +345,50 @@ impl Shared {
     /// Whether an update or a restart waits for the session's next report.
     pub fn claude_instruction_waiting(&self) -> bool {
         let l = self.lock();
-        l.claude_update_requested || l.claude_restart_requested
+        l.claude_update_requested || l.claude_restart_requested || !l.claude_sessions.is_empty()
+    }
+
+    /// A verb request for the session, taken with its next report. None
+    /// when `MAX_QUEUED_SESSIONS` already wait: a session that is not
+    /// taking them is not one to pile more on.
+    pub fn queue_claude_session(&self, action: SessionAction, id: String) -> Option<String> {
+        let request = crate::claude::sessions::mint_request();
+        self.queue_claude_session_as(request.clone(), action, id)
+            .then_some(request)
+    }
+
+    /// The same, under a request id minted elsewhere (the controller's, for
+    /// a verb it forwards over the link); false when the queue is full.
+    pub fn queue_claude_session_as(
+        &self,
+        request: String,
+        action: SessionAction,
+        id: String,
+    ) -> bool {
+        let mut l = self.lock();
+        if l.claude_sessions.len() >= MAX_QUEUED_SESSIONS {
+            return false;
+        }
+        l.claude_sessions.push(SessionRequest {
+            request,
+            action,
+            id,
+        });
+        true
+    }
+
+    /// The session's roster.
+    pub fn set_claude_roster(&self, r: Roster) {
+        self.lock().claude_roster = Some((r, Instant::now()));
+    }
+
+    /// The session's last roster, while it is fresh.
+    pub fn claude_roster(&self) -> Option<Roster> {
+        self.lock()
+            .claude_roster
+            .as_ref()
+            .filter(|(_, at)| at.elapsed() < ROSTER_FRESH)
+            .map(|(r, _)| r.clone())
     }
 
     pub fn facts(&self) -> &Facts {
@@ -357,6 +438,7 @@ impl Shared {
             update: std::mem::take(&mut l.claude_update_requested),
             restart: std::mem::take(&mut l.claude_restart_requested),
             workdir: l.policy.claude_workdir.clone(),
+            sessions: std::mem::take(&mut l.claude_sessions),
         };
         drop(l);
         if let Some(c) = changed {
@@ -522,7 +604,11 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                     // The connected machines' telemetry, on the controller
                     // (link/controller.rs).
                     (&Method::Get, "/nodes/metrics") => match shared.nodes() {
-                        Some(r) => (200, r.metrics(), "text/plain; version=0.0.4"),
+                        Some(r) => (
+                            200,
+                            format!("{}{}", shared.own_claude_metrics(), r.metrics()),
+                            "text/plain; version=0.0.4",
+                        ),
                         None => (
                             404,
                             "no machines connect to this agent\n".to_string(),
@@ -557,6 +643,20 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                             "restart queued for the tray\n".to_string(),
                             "text/plain",
                         )
+                    }
+                    (&Method::Post, "/claude/roster") => {
+                        let mut body = String::new();
+                        let read = req.as_reader().take(MAX_BODY).read_to_string(&mut body);
+                        match read
+                            .ok()
+                            .and_then(|_| serde_json::from_str::<Roster>(&body).ok())
+                        {
+                            Some(r) => {
+                                shared.set_claude_roster(r);
+                                (204, String::new(), "text/plain")
+                            }
+                            None => (400, "not a roster\n".to_string(), "text/plain"),
+                        }
                     }
                     (&Method::Post, "/claude/report") => {
                         let mut body = String::new();

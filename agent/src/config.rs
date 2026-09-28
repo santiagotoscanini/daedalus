@@ -613,6 +613,27 @@ fn claude_unit_for(env_dir: Option<&Path>) -> String {
     }
 }
 
+/// The start of every resumed session's unit name (claude/sessions.rs):
+/// `claude-session-`, then the session uuid. A process started with
+/// `DAEDALUS_AGENT_DATA_DIR` gets a prefix of its own, as its Claude unit
+/// does, so a development run never lists or stops an installed agent's
+/// sessions.
+pub fn claude_session_prefix() -> String {
+    claude_session_prefix_for(env_data_dir().ok().flatten().as_deref())
+}
+
+/// The pure half of `claude_session_prefix`.
+fn claude_session_prefix_for(env_dir: Option<&Path>) -> String {
+    match env_dir {
+        None => "claude-session-".into(),
+        Some(d) => {
+            use sha2::Digest;
+            let digest = sha2::Sha256::digest(d.as_os_str().as_encoded_bytes());
+            format!("claude-session-{}-", &hex::encode(digest)[..10])
+        }
+    }
+}
+
 /// The config, or the defaults when there is no file. Refuses a relative
 /// `DAEDALUS_AGENT_DATA_DIR` or `data_dir` — every entry point (the
 /// service, `serve`, the tray, the verbs that read the port) calls this
@@ -949,6 +970,13 @@ mod tests {
         assert!(a.starts_with("daedalus-claude-rc-") && a.len() == 29, "{a}");
         assert_ne!(a, b);
         assert_eq!(a, claude_unit_for(Some(&abs("a"))));
+        assert_eq!(claude_session_prefix_for(None), "claude-session-");
+        let p = claude_session_prefix_for(Some(&abs("a")));
+        assert!(
+            p.starts_with("claude-session-") && p.ends_with('-') && p.len() == 26,
+            "{p}"
+        );
+        assert_ne!(p, claude_session_prefix_for(Some(&abs("b"))));
     }
 
     #[test]

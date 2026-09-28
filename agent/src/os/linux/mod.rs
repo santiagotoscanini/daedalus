@@ -180,6 +180,46 @@ pub fn claude_keychain_login() -> bool {
 /// agent update or restart never ends a Claude session (claude/unit.rs).
 pub const CLAUDE_RC: crate::config::ClaudeRc = crate::config::ClaudeRc::Unit;
 
+/// /proc answers for a live session's process.
+pub const PROCESS_STATS: bool = true;
+
+/// A process from /proc: its start (clock ticks since boot, what a session
+/// file's `procStart` records), CPU time, resident memory and command line.
+/// None when it is gone or unreadable.
+pub fn process_stats(pid: u32) -> Option<crate::claude::roster::ProcStats> {
+    let dir = PathBuf::from(format!("/proc/{pid}"));
+    let stat =
+        crate::claude::roster::parse_proc_stat(&std::fs::read_to_string(dir.join("stat")).ok()?)?;
+    // SAFETY: sysconf reads a constant.
+    let (hz, page) = unsafe {
+        (
+            libc::sysconf(libc::_SC_CLK_TCK),
+            libc::sysconf(libc::_SC_PAGESIZE),
+        )
+    };
+    let hz = u64::try_from(hz).ok().filter(|h| *h > 0).unwrap_or(100);
+    let page = u64::try_from(page).ok().filter(|p| *p > 0).unwrap_or(4096);
+    let resident = std::fs::read_to_string(dir.join("statm"))
+        .ok()
+        .and_then(|t| t.split_whitespace().nth(1)?.parse::<u64>().ok())
+        .unwrap_or(0);
+    let args = std::fs::read(dir.join("cmdline"))
+        .map(|b| {
+            b.split(|c| *c == 0)
+                .filter(|a| !a.is_empty())
+                .take(64)
+                .map(|a| String::from_utf8_lossy(a).into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(crate::claude::roster::ProcStats {
+        start_ticks: stat.start_ticks,
+        cpu_ms: (stat.utime + stat.stime) * 1000 / hz,
+        rss_bytes: resident * page,
+        args,
+    })
+}
+
 // ── the tray ──────────────────────────────────────────────────────────────
 
 /// The tray shows the session unit — which runs with or without a

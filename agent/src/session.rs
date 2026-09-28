@@ -9,6 +9,12 @@
 //! run it or not, where, and the one-shot update and restart. The service
 //! (session 0 on Windows, root on macOS and Linux) could do neither.
 //!
+//! Beside the server it keeps the roster of Claude sessions and runs the
+//! three verbs on them (claude/sessions.rs), on a thread of their own: the
+//! requests arrive with the report's answer, and the roster goes to the
+//! service when it changes and every minute (`POST /claude/roster`, or
+//! straight into the shared state on the controller).
+//!
 //! It also notices an update of its own: when the page reports a version
 //! other than its own, the binaries were swapped under it, and it says so
 //! (`Tick::VersionChanged`) so its runner can leave for the new one.
@@ -30,7 +36,8 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
-use crate::claude::{Launch, Report, ReportAnswer, Supervisor};
+use crate::claude::sessions::Context as SessionsContext;
+use crate::claude::{Launch, Report, ReportAnswer, Roster, Sessions, Supervisor};
 use crate::config;
 use crate::link::wire::Policy;
 use crate::status::Shared;
@@ -116,6 +123,16 @@ fn send_report(port: u16, report: &Report) -> Option<ReportAnswer> {
         .ok()
 }
 
+/// Send the roster of Claude sessions to the service.
+fn send_roster(port: u16, roster: &Roster) -> bool {
+    serde_json::to_value(roster).ok().is_some_and(|v| {
+        ureq::post(&format!("http://127.0.0.1:{port}/claude/roster"))
+            .timeout(Duration::from_secs(2))
+            .send_json(v)
+            .is_ok()
+    })
+}
+
 /// How the session reaches the service it reports to.
 pub enum Link {
     /// The service in another process, through its loopback page (a tray,
@@ -141,6 +158,17 @@ impl Link {
         }
     }
 
+    /// Hand the service the roster; whether it took it.
+    fn roster(&self, roster: &Roster) -> bool {
+        match self {
+            Link::Http(port) => send_roster(*port, roster),
+            Link::InProcess(shared) => {
+                shared.set_claude_roster(roster.clone());
+                true
+            }
+        }
+    }
+
     /// An instruction waits that the next report would carry: the
     /// in-process session reports at once rather than at the next `POLL`.
     fn instruction_waiting(&self) -> bool {
@@ -157,6 +185,10 @@ pub struct Session {
     port: u16,
     link: Link,
     sup: Supervisor,
+    /// The roster and the session verbs, on a thread of their own.
+    sessions: Sessions,
+    /// The roster generation last handed to the service, and when.
+    roster_sent: Option<(u64, Instant)>,
     next_poll: Instant,
     /// One session per user: two would supervise one server against each
     /// other. Held for the session's life.
@@ -211,6 +243,8 @@ impl Session {
         Ok(Self {
             port,
             link: Link::Http(port),
+            sessions: start_sessions(&launch, &claude_log),
+            roster_sent: None,
             sup: Supervisor::new(
                 None,
                 claude_log,
@@ -234,6 +268,7 @@ impl Session {
     ) -> anyhow::Result<Self> {
         let lock = claim_lock(&claude_log)?;
         let policy = shared.policy();
+        let sessions = start_sessions(&launch, &claude_log);
         let mut sup = Supervisor::new(
             policy.claude_workdir,
             claude_log,
@@ -245,6 +280,8 @@ impl Session {
             port,
             link: Link::InProcess(shared),
             sup,
+            sessions,
+            roster_sent: None,
             next_poll: Instant::now(),
             _lock: lock,
         })
@@ -300,10 +337,48 @@ impl Session {
             if answer.restart {
                 self.sup.restart();
             }
+            // Each verb request goes to the sessions' thread, which refuses
+            // them all while Claude is off here.
+            for req in answer.sessions {
+                self.sessions.submit(req, self.sup.wanted());
+            }
         }
+        self.send_roster();
         self.next_poll = Instant::now() + POLL;
         Tick::Polled(Box::new(Poll { page, report }))
     }
+
+    /// Hand the service the roster when the thread has a new one, and at
+    /// least every `ROSTER_RESEND` so the service knows it is fresh.
+    fn send_roster(&mut self) {
+        let Some((generation, roster)) = self.sessions.latest() else {
+            return;
+        };
+        let due = self
+            .roster_sent
+            .is_none_or(|(g, at)| g != generation || at.elapsed() >= ROSTER_RESEND);
+        if due && self.link.roster(&roster) {
+            self.roster_sent = Some((generation, Instant::now()));
+        }
+    }
+}
+
+/// How often an unchanged roster is sent again.
+const ROSTER_RESEND: Duration = Duration::from_secs(60);
+
+/// The roster and verbs' thread for this session: resumed sessions get
+/// units of their own only where the server is one (claude/sessions.rs),
+/// and their logs go beside the server's.
+fn start_sessions(launch: &Launch, claude_log: &std::path::Path) -> Sessions {
+    Sessions::start(SessionsContext {
+        launch: launch.clone(),
+        unit_prefix: matches!(launch, Launch::Unit(_)).then(config::claude_session_prefix),
+        log_dir: claude_log
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_default(),
+        label: crate::claude::sessions::label_of(&crate::facts::hostname()),
+    })
 }
 
 /// The full report the session last sent the service, which the service

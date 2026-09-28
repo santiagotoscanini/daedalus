@@ -55,12 +55,16 @@
 //! | `claude.status`    | `ClaudeStatus`: the session's last report              | `claude.remote_control` |
 //! | `claude.restart`   | `Queued`; the session restarts the server (`unavailable` while off or no session reports) | `claude.remote_control` |
 //! | `claude.update`    | `Queued`; the session runs `claude update`             | `claude.update`         |
+//! | `claude.roster`    | `ClaudeRosterGet`: the session's roster of Claude sessions (claude/roster.rs) | `claude.sessions` |
+//! | `claude.session`   | `SessionQueued`: one verb `{action, id}` queued for the session; its roster's `actions` reports it under `request` | `claude.sessions` |
 //! | `telemetry.get`    | `TelemetryGet`: the document at the configured level   | —                       |
 //! | `events.subscribe` | `{}`, then the events below                           | —                       |
 //! | `nodes.list`       | `NodesList`: every machine known, its standing and connection | `nodes`          |
 //! | `nodes.get`        | `NodeDetail`: one machine's hello, status and open telemetry `{id}` | `nodes`     |
 //! | `nodes.telemetry`  | `NodeTelemetry`: its full telemetry `{id}`             | `nodes`                 |
 //! | `nodes.claude`     | `NodeClaude`: its full Claude report `{id}`            | `nodes`                 |
+//! | `nodes.claude_roster` | `NodeClaudeRoster`: its roster of Claude sessions `{id}` | `nodes`             |
+//! | `nodes.claude_session` | `ClaudeSessionSent`: one verb `{id, action, session}` delivered and acknowledged | `nodes` |
 //! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
 //!
@@ -68,7 +72,15 @@
 //! controller (link/controller.rs). Their selector is a node id — sixteen
 //! lowercase hex characters, checked before anything else — and their
 //! parameters are exact; `command` is one of `check_update`,
-//! `claude_update`, `claude_restart`. `set_desired` checks every entry (an
+//! `claude_update`, `claude_restart`. A session verb (`claude.session`
+//! and `nodes.claude_session`) is `resume`, `stop` or `remove` with the
+//! selector each takes — a canonical lowercase uuid for `resume`, that or a
+//! background agent's eight hex digits for `stop`, the eight digits for
+//! `remove` (claude/sessions.rs `check_selector`) — checked here, again by
+//! the machine that takes it, and again by its session, which refuses
+//! every verb while its policy keeps Claude off. `nodes.claude_session`
+//! reaches only a connected, approved machine that offers
+//! `claude.sessions`, and is never queued for later. `set_desired` checks every entry (an
 //! id that is not its key's, a key twice, a policy field it does not know,
 //! a `name` longer than `MAX_NODE_NAME` characters or with a control
 //! character) before applying any. A machine the controller has never heard of is
@@ -78,7 +90,8 @@
 //! **Capabilities** come from the role table and the config, never from
 //! the OS (`capabilities`): `claude.remote_control` where a session runs
 //! and may run Claude — on the controller only when `[controller]
-//! claude_remote_control` says so; `claude.update` where the role lets the
+//! claude_remote_control` says so, and `claude.sessions` beside it (the
+//! roster and the session verbs); `claude.update` where the role lets the
 //! agent update Claude Code — never on the controller, whose Claude nix
 //! pins; `telemetry.full` or `telemetry.minimal` as `telemetry` says
 //! (nothing at `off`); `nodes` where the controller listens for machines
@@ -172,6 +185,7 @@ pub fn capabilities(cfg: &Config, nodes: bool) -> Vec<&'static str> {
         if role.claude_update {
             c.push("claude.update");
         }
+        c.push("claude.sessions");
     }
     match cfg.telemetry {
         TelemetryLevel::Full => c.push("telemetry.full"),
@@ -333,6 +347,47 @@ impl Api {
                 self.shared.request_claude_update();
                 to_value(&Queued { queued: true })
             }
+            "claude.roster" => {
+                no_params()?;
+                self.has("claude.sessions")?;
+                let roster = self.shared.claude_roster();
+                to_value(&wire::ClaudeRosterGet {
+                    reporting: roster.is_some(),
+                    roster,
+                })
+            }
+            "claude.session" => {
+                self.has("claude.sessions")?;
+                let s: wire::ClaudeSession = serde_json::from_value(params.clone())
+                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+                crate::claude::sessions::check_selector(s.action, &s.id)
+                    .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+                if !self.shared.policy().claude_remote_control {
+                    return Err(ApiError::new(
+                        code::UNAVAILABLE,
+                        "Claude is off on this machine; no session verb runs",
+                    ));
+                }
+                if self.shared.claude_report().is_none() {
+                    return Err(ApiError::new(
+                        code::UNAVAILABLE,
+                        "no session is reporting on this machine; there is nobody to run it",
+                    ));
+                }
+                let request = self
+                    .shared
+                    .queue_claude_session(s.action, s.id)
+                    .ok_or_else(|| {
+                        ApiError::new(
+                            code::BUSY,
+                            "the session has requests waiting that it has not taken",
+                        )
+                    })?;
+                to_value(&wire::SessionQueued {
+                    queued: true,
+                    request,
+                })
+            }
             "telemetry.get" => {
                 no_params()?;
                 to_value(&TelemetryGet {
@@ -358,6 +413,8 @@ impl Api {
             "nodes.get",
             "nodes.telemetry",
             "nodes.claude",
+            "nodes.claude_roster",
+            "nodes.claude_session",
             "nodes.set_desired",
             "nodes.command",
         ];
@@ -400,6 +457,14 @@ impl Api {
             "nodes.get" => to_value(&nodes.get(&id_of(params)?)?),
             "nodes.telemetry" => to_value(&nodes.telemetry(&id_of(params)?)?),
             "nodes.claude" => to_value(&nodes.claude(&id_of(params)?)?),
+            "nodes.claude_roster" => to_value(&nodes.claude_roster(&id_of(params)?)?),
+            "nodes.claude_session" => {
+                let c: wire::NodeClaudeSession = exact(method, params)?;
+                checked_id(&c.id)?;
+                crate::claude::sessions::check_selector(c.action, &c.session)
+                    .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+                to_value(&nodes.claude_session(&c.id, c.action, &c.session)?)
+            }
             "nodes.set_desired" => {
                 let set: wire::SetDesired = exact(method, params)?;
                 to_value(&nodes.set_desired(desired_entries(set)?))
@@ -606,19 +671,24 @@ mod tests {
         let cfg = |text: &str| toml::from_str::<Config>(text).unwrap();
         assert_eq!(
             capabilities(&cfg(""), false),
-            ["claude.remote_control", "claude.update", "telemetry.full"]
+            [
+                "claude.remote_control",
+                "claude.update",
+                "claude.sessions",
+                "telemetry.full"
+            ]
         );
         // A node never offers `nodes`, whatever it is told.
         assert_eq!(
             capabilities(&cfg("telemetry = \"off\""), true),
-            ["claude.remote_control", "claude.update"]
+            ["claude.remote_control", "claude.update", "claude.sessions"]
         );
         // The controller offers Claude only when nix turned it on, and never
         // `claude.update`: nix pins Claude there.
         let on = "mode = \"controller\"\n[controller]\nclaude_remote_control = true\n";
         assert_eq!(
             capabilities(&cfg(on), false),
-            ["claude.remote_control", "telemetry.full"]
+            ["claude.remote_control", "claude.sessions", "telemetry.full"]
         );
         assert_eq!(
             capabilities(&cfg("mode = \"controller\""), false),
@@ -630,7 +700,7 @@ mod tests {
         );
         assert_eq!(
             capabilities(&cfg(&format!("telemetry = \"off\"\n{on}")), false),
-            ["claude.remote_control"]
+            ["claude.remote_control", "claude.sessions"]
         );
     }
 

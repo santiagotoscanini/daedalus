@@ -86,6 +86,17 @@ pub fn read_credentials(dir: &Path) -> Credentials {
             .map(str::to_string)
     };
     let n = |k: &str| o.and_then(|o| o.get(k)).and_then(|x| x.as_u64());
+    let scopes = o
+        .and_then(|o| o.get("scopes"))
+        .and_then(|x| x.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|s| s.as_str())
+                .take(32)
+                .map(|s| s.chars().take(64).collect())
+                .collect()
+        })
+        .unwrap_or_default();
     Credentials {
         present: true,
         store: Some("file".into()),
@@ -93,6 +104,7 @@ pub fn read_credentials(dir: &Path) -> Credentials {
         rate_limit_tier: s("rateLimitTier"),
         expires_at: n("expiresAt"),
         refresh_expires_at: n("refreshTokenExpiresAt"),
+        scopes,
     }
 }
 
@@ -139,13 +151,14 @@ mod tests {
 
         std::fs::write(
             dir.join(".credentials.json"),
-            r#"{"claudeAiOauth":{"accessToken":"secret","refreshToken":"secret","subscriptionType":"max","rateLimitTier":"t","expiresAt":1,"refreshTokenExpiresAt":2}}"#,
+            r#"{"claudeAiOauth":{"accessToken":"secret","refreshToken":"secret","subscriptionType":"max","rateLimitTier":"t","expiresAt":1,"refreshTokenExpiresAt":2,"scopes":["user:inference","user:profile"]}}"#,
         )
         .unwrap();
         let c = read_credentials(&dir);
         assert!(c.present);
         assert_eq!(c.subscription_type.as_deref(), Some("max"));
         assert_eq!(c.refresh_expires_at, Some(2));
+        assert_eq!(c.scopes, ["user:inference", "user:profile"]);
         let json = serde_json::to_string(&c).unwrap();
         assert!(!json.contains("secret"));
 

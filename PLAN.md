@@ -671,9 +671,14 @@ priority; each can be done independently unless noted.
          the machines' status pages stop answering the LAN (the box already
          reads their metrics from the controller).
       2. Staged updates, orchestrated by the controller.
-      3. Actions move over one at a time: Claude sessions (which the other
-         machines then gain too, and which takes the Claude snapshot's
-         roster with it), workspace clone and sync, then the root
+      3. Actions move over one at a time: Claude sessions (the agent half
+         is agent 0.16.0 — `claude.roster`, `claude.session`,
+         `nodes.claude_roster`, `nodes.claude_session`, resumed sessions as
+         `claude-session-<uuid>` user units; left: the app reads those
+         instead of the snapshot and the bridge, and nix deletes
+         `claude-session@`, the bridge verb and the snapshot's roster;
+         resume on Windows and macOS waits on a unit-like holder there),
+         workspace clone and sync, then the root
          verbs onto the socket-activated helper — a low-stakes one first
          (reboot), Apply last — each deleting its
          file-drop path.

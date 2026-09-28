@@ -38,6 +38,9 @@ beside it where there is a desktop. It
   nobody logged on means no server, and a machine that reboots unattended
   wants automatic sign-in. On Linux the session is a systemd user unit that
   runs with nobody logged in, and the server is a unit of its own (below);
+- **keeps the roster of Claude sessions** — every transcript, background
+  agent and session it resumed — and runs the three verbs on one of them:
+  resume, stop, remove (see "Claude sessions: the roster and the verbs");
 - **shows itself in the tray** (`src/tray.rs`): the daedalus mark — ember
   when all is well, an amber dot when an update is pending, the hold failed
   or Claude is not running, grey when the service does not answer — with
@@ -97,7 +100,15 @@ same in a terminal), with
   `node` (the node id), `host` (its hostname) and `os` (`windows`,
   `macos`, `linux`) from its hello, and `machine` — the name the app
   hands over in `nodes.set_desired`, or the hostname when it sends none.
-  The box itself is not in it: node-exporter covers the box;
+  Each connected machine's Claude series ride beside its telemetry —
+  `daedalus_agent_claude_up` (1 while `running`, 0 otherwise, with the
+  report's `state` as a label, `none` without a report),
+  `daedalus_agent_claude_restarts_total` and `daedalus_agent_claude_sessions`
+  — and so do the CONTROLLER's own, labelled as a machine of its own
+  (`node` its node id, `host` and `machine` its hostname), so one alert
+  (`daedalus_agent_claude_up == 0` with `state!="off"`) covers the box and
+  every machine. The box's telemetry is not in it: node-exporter covers
+  the box;
 - and nothing else: no link of its own, no self-update, no keep-awake, no
   tray, no installer, and no `claude update` — nix pins Claude Code on the
   box (`POST /claude/update` answers 403 there).
@@ -184,7 +195,7 @@ matched by `id`. The first request must be `hello`:
 
 ```
 → {"id":1,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}
-← {"id":1,"ok":{"api":1,"version":"0.15.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","telemetry.full"]}}
+← {"id":1,"ok":{"api":1,"version":"0.16.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","claude.sessions","telemetry.full"]}}
 ```
 
 Another API version gets `{"code":"version",…,"supported":1}` — the
@@ -200,12 +211,16 @@ verbs, none taking a command, a path or a flag:
 | `claude.status`    | `{reporting, wanted, report}`: the session's last report, or `reporting: false` | `claude.remote_control` |
 | `claude.restart`   | `{queued: true}`; the session restarts the server at once (`unavailable` while no session reports) | `claude.remote_control` |
 | `claude.update`    | `{queued: true}`; never offered on the controller                    | `claude.update`         |
+| `claude.roster`    | `{reporting, roster}`: the session's roster of Claude sessions, or `reporting: false` | `claude.sessions` |
+| `claude.session` `{action, id}` | `{queued: true, request}`: one verb — `resume`, `stop`, `remove` — for the session; its roster's `actions` reports the outcome under `request` | `claude.sessions` |
 | `telemetry.get`    | `{level, telemetry}`: the document at the configured level           | —                       |
 | `events.subscribe` | `{}`, then the events below                                          | —                       |
 | `nodes.list`       | `{nodes: [{id, fingerprint, state, connected, since, last_seen, hostname, os, arch, agent_version, lan_ip, mac, claude}]}`: every machine known | `nodes` |
 | `nodes.get` `{id}` | the same fields, plus `public_key`, the whole `hello`, `status` (the machine's status page without its telemetry) and `status_at`, `telemetry` (the open page's view) and `telemetry_at`, `providers` | `nodes` |
 | `nodes.telemetry` `{id}` | `{id, telemetry, received_at}`: the full document at the machine's level | `nodes` |
 | `nodes.claude` `{id}` | `{id, report, received_at}`: the machine's full Claude report      | `nodes`                 |
+| `nodes.claude_roster` `{id}` | `{id, roster, received_at}`: the machine's roster of Claude sessions | `nodes`      |
+| `nodes.claude_session` `{id, action, session}` | `{delivered: true, request}`: one verb on one of the machine's sessions, acknowledged by it; its roster reports the outcome under `request` | `nodes` |
 | `nodes.set_desired` `{nodes: [{id, public_key, state, policy, name}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
 | `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
 
@@ -223,11 +238,18 @@ characters, without control characters. `command` is one of `check_update`,
 `claude_update`, `claude_restart`; a machine never heard of is `not_found`,
 one not approved `unavailable`; one that does not acknowledge within 5 s
 is `unavailable` too. Every `id` is sixteen lowercase hex characters,
-checked before anything else. All of this is additive to api 1.
+checked before anything else. A session verb's selector is checked as
+strictly — a canonical lowercase uuid for `resume`, that or a background
+agent's eight hex digits for `stop`, the eight digits for `remove` — here,
+again by the machine, and again by its session; `nodes.claude_session`
+reaches only a connected, approved machine that offers `claude.sessions`
+(`unsupported` otherwise), is refused by one whose policy keeps Claude off,
+and is never queued for later. All of this is additive to api 1.
 
 Capabilities come from the role table and the config, never from the OS:
 `claude.remote_control` where a session runs and may run Claude — on the
-controller only while `[controller] claude_remote_control` is on;
+controller only while `[controller] claude_remote_control` is on — and
+`claude.sessions` beside it;
 `claude.update` where the agent may update Claude Code (a node's role, not
 the controller's); `telemetry.full` or `telemetry.minimal`; `nodes` where
 the controller listens for machines. A method whose capability is absent
@@ -317,10 +339,14 @@ telemetry level; its key is the certificate's), then, once approved,
 policy, Claude summary, the link itself) on change and every minute,
 `telemetry` (the whole document at the machine's level) when a sample
 carries newly read static or slow facts or OS updates and otherwise every
-minute, `claude` (the full report) on change and every minute, and
-`providers` on change. Controller → machine: `state`, `policy`, and
-`command` requests (`check_update`, `claude_update`, `claude_restart`),
-each acknowledged at once.
+minute, `claude` (the full report) on change and every minute,
+`claude_roster` (the roster of Claude sessions, at most 512 KiB) on change
+— its clock and its ticking costs aside — and every minute, and
+`providers` on change. Controller → machine: `state`, `policy`, `command`
+requests (`check_update`, `claude_update`, `claude_restart`), and
+`claude_session` requests (`{action, id, request}`: one verb on one
+session, under the request id the controller minted), each acknowledged
+at once; a session verb's outcome rides the next roster.
 
 **Limits.** Before a key is admitted a connection holds one of 32 pre-auth
 slots (3 per address; an IPv6 /64 is one address) and has 5 s in all for
@@ -443,6 +469,91 @@ which is what the report's `log` names and where the session reads the
 server's banner back from. `src/claude/unit.rs` has the details;
 `claude_rc = "child"` in config.toml goes back to the child.
 
+The log is rotated while the server runs, once it passes 20 MiB, and it
+has to be done without a rename: systemd opened it once, `append:`, and a
+renamed file would go on growing under its new name. It is copied to
+`claude-rc.log.1` (one old file, replaced each time) and truncated in
+place, and systemd's next write lands at the new end (`src/claude/logs.rs`;
+a line written between the copy and the truncation is in neither). The
+logs of resumed sessions (below) are rotated the same way, and removed two
+weeks after their session's unit is gone.
+
+## Claude sessions: the roster and the verbs
+
+The session (the process with the user's Claude login) keeps a **roster**
+of every Claude Code session on the machine and runs **three verbs** on
+one of them, on every OS, on a thread of its own so a scan or a resume
+never holds up the tray. The API has them as `claude.roster` and
+`claude.session` on the controller, `nodes.claude_roster` and
+`nodes.claude_session` for the other machines, all behind the
+`claude.sessions` capability, offered wherever Claude may run.
+
+**The roster** (`src/claude/roster.rs`), read every minute and right after
+a verb, pushed to the controller when it changes:
+
+- `agents` — `claude agents --json`, the CLI's own view, field by field:
+  authoritative for what is alive, the only source for background agents;
+  `agents_available` false when the CLI did not answer. An agent's
+  `detail` and `needs` are session content and never read.
+- `transcripts` — the `<uuid>.jsonl` files under `~/.claude/projects/<slug>/`
+  (regular files in real directories, never a link), the newest 200 that
+  are not empty, with `transcript_total` and `empty_count`: each with its
+  project, cwd (exact from its head, or un-slugged), title (the operator's,
+  the sidecar's, the model's; 160 characters), start and last write, size,
+  and `meta` — what one pass over the file counted (exchanges typed,
+  replies, thinking blocks, images, attachments, sidechain records, the span
+  it was open across, branch, CLI version, the CLI's cost totals) and the
+  last prompt typed: one line, credential shapes redacted, cut to 160
+  characters (`src/claude/redact.rs`; best effort — a secret with no shape
+  stays). A scan is kept by size and mtime, so the steady state reads only
+  the file being typed into.
+- `managed` — the sessions this agent resumed, running now, with their
+  unit, pid, memory, CPU and log.
+- `session_stats` — per live session file whose process is still the one
+  that wrote it: CPU, resident memory, the Remote Control bridge's debug
+  log size and mtime. Linux reads /proc; on Windows and macOS the list is
+  empty and `errors` says so.
+- `server` — the Remote Control unit's memory and CPU, where it is a unit.
+- `actions` — the last eight verb requests and how each ended
+  (`running`, `done`, `refused`, `failed`, with a sentence of the agent's
+  own; what the CLI printed goes to the agent's log alone).
+- `resume_unavailable` — why `resume` is not offered here, or null.
+
+Bounded: 200 transcripts and agents, strings cut, the whole at most
+512 KiB (the oldest transcripts go first, and `truncated` says so).
+
+**The verbs** (`src/claude/sessions.rs`) take a selector and nothing else —
+never a path, a flag or a directory:
+
+- `resume <uuid>` runs `claude --resume <uuid> --remote-control <hostname>`
+  as a transient user unit, `claude-session-<uuid>`, under a PTY (`script`
+  from util-linux: with pipes the CLI falls back to `--print` and exits) with
+  its output filtered into `claude-session-<uuid>.log` beside
+  `claude-rc.log` (ANSI stripped, the status box's repaint dropped). Its
+  own cgroup: a restart or an update of the agent ends nothing, and the
+  next start lists it in `managed` again. It needs the transcript as a
+  regular file under `~/.claude/projects`, runs only in the trusted project
+  directory whose slug holds it (anywhere else it would stop on the trust
+  prompt with nobody to answer), with the Remote Control unit's environment
+  plus `/run/wrappers/bin` (sudo) and TERM, and is refused when anything
+  already runs that session — its unit, the CLI's agents, a live session
+  file — or when `claude agents` does not answer. Five seconds after the
+  start the unit must still run. Linux and the controller only: on Windows
+  and macOS the session is the tray's child and a resumed session would end
+  with it, so `resume` is refused there and the roster says why.
+- `stop <uuid>` stops a session this agent resumed (`systemctl --user
+  stop`: the whole cgroup); a Remote Control session has no stop of its own.
+  `stop <8 hex>` is `claude stop` for a running background agent, settled
+  by no process being left behind it.
+- `remove <8 hex>` is `claude rm` for a background agent's record (and its
+  worktree), settled by the record being gone; never `--discard-unpushed`.
+
+Every verb is refused while the machine's policy (the controller's
+config.toml) keeps Claude off. A development run with
+`DAEDALUS_AGENT_DATA_DIR` names its resumed sessions' units
+`claude-session-<hash>-<uuid>`, so it never lists or stops an installed
+agent's.
+
 The tray on Linux is a UI only: it shows the session unit through the
 service, its "Restart Claude remote control" goes to the session by way of
 the service, and quitting it stops nothing. It needs GTK 3 and an
@@ -463,9 +574,11 @@ once.
 
 Until the agent's local calls move to a unix socket with peer credentials
 (PLAN, feature 13), the status page trusts loopback: any user or process on
-the machine can read the full Claude report at `127.0.0.1:7787/claude` and
-ask for a Claude restart — worth knowing on a Linux machine several people
-log in to.
+the machine can read the full Claude report at `127.0.0.1:7787/claude`,
+ask for a Claude restart, post a roster in place of the session's, and — by
+posting a report of its own — take the session verb requests the box sent
+before the session does (it cannot make one: those come only from the
+controller) — worth knowing on a Linux machine several people log in to.
 
 ## Verbs
 
@@ -518,8 +631,10 @@ Linux:
 /etc/systemd/system/daedalus-agent.service            the service's unit
 /etc/systemd/user/daedalus-agent-session.service      the session's unit, enabled for one user, lingering
 /etc/xdg/autostart/daedalus-agent-tray.desktop        the tray, at every graphical login
-~/.local/state/daedalus-agent/                        the session's and the tray's logs: session.log.*, claude-rc.log
+~/.local/state/daedalus-agent/                        the session's and the tray's logs: session.log.*, claude-rc.log,
+                                                      claude-session-<uuid>.log (a resumed session's)
 daedalus-claude-rc.service (transient, user)          Claude remote control, while it runs
+claude-session-<uuid>.service (transient, user)       a session the agent resumed, while it runs
 ```
 
 (`$XDG_STATE_HOME/daedalus-agent` when that is set.) To run `serve` or

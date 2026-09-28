@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use serde_json::Value;
 
-use crate::claude::{Report, Summary};
+use crate::claude::{Report, Roster, SessionAction, Summary};
 use crate::config::{Mode, TelemetryLevel};
 use crate::link::wire::{Command, Hello, NodeState};
 use crate::link::wire::{Policy, ProviderPolicy, ProvidersPolicy};
@@ -320,7 +320,36 @@ pub struct NodeClaude {
     pub received_at: Option<String>,
 }
 
-/// The parameters of `nodes.get`, `nodes.telemetry` and `nodes.claude`.
+/// `nodes.claude_roster`'s answer: the machine's roster of Claude
+/// sessions, as it last pushed it.
+#[derive(Clone, Debug, Serialize)]
+pub struct NodeClaudeRoster {
+    pub id: String,
+    pub roster: Option<Roster>,
+    pub received_at: Option<String>,
+}
+
+/// `nodes.claude_session`'s parameters: the machine, the verb and its
+/// selector.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeClaudeSession {
+    pub id: String,
+    pub action: SessionAction,
+    /// A session uuid or a background agent's short id.
+    pub session: String,
+}
+
+/// `nodes.claude_session`'s answer: the machine took the request, and its
+/// roster reports the outcome under `request`.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ClaudeSessionSent {
+    pub delivered: bool,
+    pub request: String,
+}
+
+/// The parameters of `nodes.get`, `nodes.telemetry`, `nodes.claude` and
+/// `nodes.claude_roster`.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NodeId {
@@ -464,6 +493,31 @@ pub struct ClaudeStatus {
     /// Whether this machine's policy wants the server running.
     pub wanted: bool,
     pub report: Option<Report>,
+}
+
+/// `claude.roster`'s answer: the session's last roster (claude/roster.rs)
+/// while it is fresh; `reporting` false and `roster` null otherwise.
+#[derive(Clone, Debug, Serialize)]
+pub struct ClaudeRosterGet {
+    pub reporting: bool,
+    pub roster: Option<Roster>,
+}
+
+/// `claude.session`'s parameters: the verb and its selector — a session
+/// uuid, or a background agent's short id. Exact: nothing else.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClaudeSession {
+    pub action: SessionAction,
+    pub id: String,
+}
+
+/// `claude.session`'s answer: queued for the session under `request`, the
+/// id its roster's `actions` reports the outcome by.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SessionQueued {
+    pub queued: bool,
+    pub request: String,
 }
 
 /// `claude.restart`'s and `claude.update`'s answer: the instruction is
@@ -883,11 +937,187 @@ mod tests {
                 r#""server":{"version":null,"environment_id":null,"spawn_mode":null,"max_sessions":null},"#,
                 r#""sessions":[],"#,
                 r#""credentials":{"present":false,"store":null,"subscription_type":null,"#,
-                r#""rate_limit_tier":null,"expires_at":null,"refresh_expires_at":null},"#,
+                r#""rate_limit_tier":null,"expires_at":null,"refresh_expires_at":null,"scopes":[]},"#,
                 r#""settings":{"model":null,"effort_level":null},"#,
                 r#""user":null,"home":null,"workdir":null,"workdir_via":null,"log":null,"#,
                 r#""reported_at":"2026-09-27T10:00:00Z"}}"#
             )
+        );
+    }
+
+    /// A roster with one of everything: every field the app reads, pinned.
+    pub fn roster() -> Roster {
+        use crate::claude::roster::*;
+        use crate::claude::ActionState;
+        Roster {
+            reported_at: "2026-09-27T10:00:00Z".into(),
+            agents_available: true,
+            agents: vec![Agent {
+                id: Some("0a1b2c3d".into()),
+                session_id: Some("abdda3a9-0cb2-43f1-b13e-37f25a755fce".into()),
+                pid: None,
+                kind: Some("background".into()),
+                state: Some("blocked".into()),
+                status: None,
+                name: Some("nixos-7a".into()),
+                cwd: Some("/etc/nixos".into()),
+                started_at: Some(1),
+            }],
+            transcripts: vec![Transcript {
+                id: "abdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
+                project: "-etc-nixos".into(),
+                cwd: "/etc/nixos".into(),
+                cwd_exact: true,
+                title: Some("Fix the build".into()),
+                title_source: Some("custom-title".into()),
+                started_at: Some(2),
+                modified_at: 3000,
+                size_bytes: 4,
+                meta: Some(Meta {
+                    exchanges: 5,
+                    replies: 6,
+                    thinking: 7,
+                    images: 0,
+                    attached: 1,
+                    subagents: None,
+                    span_ms: Some(8),
+                    branch: Some("main".into()),
+                    cli_version: Some("2.1.281".into()),
+                    last_prompt: Some("ship it".into()),
+                    cost: Some(Cost {
+                        usd: serde_json::Number::from_f64(1.5),
+                        lines_added: Some(9.into()),
+                        lines_removed: None,
+                        duration_ms: None,
+                    }),
+                }),
+            }],
+            transcript_total: 1,
+            empty_count: 2,
+            truncated: false,
+            managed: vec![Managed {
+                id: "bbdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
+                unit: "claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
+                pid: Some(42),
+                memory_bytes: Some(10),
+                cpu_nsec: None,
+                log: "/l".into(),
+                log_bytes: Some(11),
+            }],
+            resume_unavailable: None,
+            session_stats: vec![SessionStat {
+                pid: 42,
+                cpu_ms: Some(12),
+                rss_bytes: Some(13),
+                log_bytes: None,
+                bridge_at: None,
+            }],
+            server: Some(UnitCost {
+                memory_bytes: Some(14),
+                cpu_nsec: Some(15),
+            }),
+            actions: vec![ActionResult {
+                request: "00112233445566ff".into(),
+                action: SessionAction::Stop,
+                id: "0a1b2c3d".into(),
+                state: ActionState::Done,
+                detail: "stopped".into(),
+                started_at: "t0".into(),
+                finished_at: Some("t1".into()),
+            }],
+            errors: vec![],
+        }
+    }
+
+    pub const ROSTER: &str = concat!(
+        r#"{"reported_at":"2026-09-27T10:00:00Z","agents_available":true,"#,
+        r#""agents":[{"id":"0a1b2c3d","session_id":"abdda3a9-0cb2-43f1-b13e-37f25a755fce","pid":null,"#,
+        r#""kind":"background","state":"blocked","status":null,"name":"nixos-7a","cwd":"/etc/nixos","started_at":1}],"#,
+        r#""transcripts":[{"id":"abdda3a9-0cb2-43f1-b13e-37f25a755fce","project":"-etc-nixos","cwd":"/etc/nixos","#,
+        r#""cwd_exact":true,"title":"Fix the build","title_source":"custom-title","started_at":2,"#,
+        r#""modified_at":3000,"size_bytes":4,"meta":{"exchanges":5,"replies":6,"thinking":7,"images":0,"#,
+        r#""attached":1,"subagents":null,"span_ms":8,"branch":"main","cli_version":"2.1.281","#,
+        r#""last_prompt":"ship it","cost":{"usd":1.5,"lines_added":9,"lines_removed":null,"duration_ms":null}}}],"#,
+        r#""transcript_total":1,"empty_count":2,"truncated":false,"#,
+        r#""managed":[{"id":"bbdda3a9-0cb2-43f1-b13e-37f25a755fce","unit":"claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce","#,
+        r#""pid":42,"memory_bytes":10,"cpu_nsec":null,"log":"/l","log_bytes":11}],"#,
+        r#""resume_unavailable":null,"#,
+        r#""session_stats":[{"pid":42,"cpu_ms":12,"rss_bytes":13,"log_bytes":null,"bridge_at":null}],"#,
+        r#""server":{"memory_bytes":14,"cpu_nsec":15},"#,
+        r#""actions":[{"request":"00112233445566ff","action":"stop","id":"0a1b2c3d","state":"done","#,
+        r#""detail":"stopped","started_at":"t0","finished_at":"t1"}],"errors":[]}"#
+    );
+
+    #[test]
+    fn claude_roster_and_session_on_the_wire() {
+        assert_eq!(
+            wire(&ClaudeRosterGet {
+                reporting: true,
+                roster: Some(roster())
+            }),
+            format!(r#"{{"reporting":true,"roster":{ROSTER}}}"#)
+        );
+        assert_eq!(
+            wire(&ClaudeRosterGet {
+                reporting: false,
+                roster: None
+            }),
+            r#"{"reporting":false,"roster":null}"#
+        );
+        // What travels comes back as it went (the link's push, the POST).
+        let back: Roster = serde_json::from_str(ROSTER).unwrap();
+        assert_eq!(back, roster());
+
+        let s: ClaudeSession = serde_json::from_value(
+            json!({"action":"resume","id":"abdda3a9-0cb2-43f1-b13e-37f25a755fce"}),
+        )
+        .unwrap();
+        assert_eq!(s.action, SessionAction::Resume);
+        for bad in [
+            json!({"action":"resume"}),
+            json!({"action":"fork","id":"x"}),
+            json!({"action":"resume","id":"x","cwd":"/"}),
+            json!({"action":"remove","id":"x","discard_unpushed":true}),
+        ] {
+            assert!(
+                serde_json::from_value::<ClaudeSession>(bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            wire(&SessionQueued {
+                queued: true,
+                request: "00112233445566ff".into()
+            }),
+            r#"{"queued":true,"request":"00112233445566ff"}"#
+        );
+
+        assert_eq!(
+            wire(&NodeClaudeRoster {
+                id: "0123456789abcdef".into(),
+                roster: Some(roster()),
+                received_at: Some("t".into())
+            }),
+            format!(r#"{{"id":"0123456789abcdef","roster":{ROSTER},"received_at":"t"}}"#)
+        );
+        let n: NodeClaudeSession = serde_json::from_value(
+            json!({"id":"0123456789abcdef","action":"stop","session":"0a1b2c3d"}),
+        )
+        .unwrap();
+        assert_eq!(
+            (n.action, n.session.as_str()),
+            (SessionAction::Stop, "0a1b2c3d")
+        );
+        assert!(serde_json::from_value::<NodeClaudeSession>(
+            json!({"id":"0123456789abcdef","action":"stop","session":"0a1b2c3d","args":[]})
+        )
+        .is_err());
+        assert_eq!(
+            wire(&ClaudeSessionSent {
+                delivered: true,
+                request: "00112233445566ff".into()
+            }),
+            r#"{"delivered":true,"request":"00112233445566ff"}"#
         );
     }
 

@@ -137,6 +137,15 @@ pub fn claude_keychain_login() -> bool {
 /// later step).
 pub const CLAUDE_RC: crate::config::ClaudeRc = crate::config::ClaudeRc::Child;
 
+/// A live session's CPU and memory are not read here yet (it would take
+/// `proc_pidinfo`); the roster says so in its `errors`.
+pub const PROCESS_STATS: bool = false;
+
+pub fn process_stats(pid: u32) -> Option<crate::claude::roster::ProcStats> {
+    let _ = pid;
+    None
+}
+
 // ── HTTPS ─────────────────────────────────────────────────────────────────
 
 /// Security.framework, through native-tls: the machine's trust store decides.

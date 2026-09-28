@@ -37,7 +37,14 @@
 //!   every `PUSH_EVERY` — not every 15-second sample;
 //! - `claude`, the session's full report, when it changes (its clock
 //!   aside) and every `PUSH_EVERY`;
-//! - `providers` when the list changes.
+//! - `providers` when the list changes;
+//! - `claude_roster`, the session's roster of Claude sessions
+//!   (claude/roster.rs), when it changes (its clock and ticking costs
+//!   aside) and every `PUSH_EVERY`.
+//!
+//! and takes the controller's `claude_session` requests — one verb on one
+//! session, checked, handed to the session, acknowledged at once; the
+//! outcome rides the next roster (`actions`).
 //!
 //! REVOKED: the machine says so and leaves; it tries again at the slowest
 //! step, in case the box changes its mind.
@@ -53,8 +60,8 @@ use serde_json::Value;
 
 use super::tls::{self, Recv, Tls};
 use super::wire::{
-    self, name, Accepted, Command, CommandParams, Hello, HelloFacts, Incoming, NodeState, Policy,
-    StateEvent, Welcome, PROTO,
+    self, name, Accepted, ClaudeSessionParams, Command, CommandParams, Hello, HelloFacts, Incoming,
+    NodeState, Policy, StateEvent, Welcome, PROTO,
 };
 use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT, WRITE_TIMEOUT};
 use crate::api::wire::{code, ApiError, Response};
@@ -561,6 +568,7 @@ struct Pushed {
     telemetry: Option<(u64, String, Instant)>,
     providers: Option<String>,
     claude: Option<(String, Instant)>,
+    roster: Option<(String, Instant)>,
 }
 
 /// The status document without what moves by itself.
@@ -655,8 +663,67 @@ impl Pushed {
             tls.send(&wire::event(name::CLAUDE, &report))?;
             self.claude = Some((d, Instant::now()));
         }
+
+        // The roster, on the same rule: its clock and the costs that tick
+        // by themselves aside (`Roster::digest`). The session keeps it
+        // within `roster::MAX_BYTES`, well inside a line.
+        let roster = shared.claude_roster();
+        let d = roster
+            .as_ref()
+            .map(crate::claude::Roster::digest)
+            .unwrap_or_else(|| "null".into());
+        if self
+            .roster
+            .as_ref()
+            .is_none_or(|(prev, at)| *prev != d || due(at))
+        {
+            tls.send(&wire::event(name::CLAUDE_ROSTER, &roster))?;
+            self.roster = Some((d, Instant::now()));
+        }
         Ok(())
     }
+}
+
+/// Take one verb on a Claude session from the controller: checked here
+/// (the selector, the policy, a session to hand it to) and again by the
+/// session, which runs it and reports the outcome in its roster under the
+/// controller's request id.
+fn take_claude_session(shared: &Shared, p: Value) -> Result<Accepted, ApiError> {
+    let params: ClaudeSessionParams = serde_json::from_value(p)
+        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("claude_session: {e}")))?;
+    crate::claude::sessions::check_selector(params.action, &params.id)
+        .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+    if params.request.len() != 16 || !params.request.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(ApiError::new(
+            code::BAD_REQUEST,
+            "claude_session: the request id is sixteen hex characters",
+        ));
+    }
+    if !shared.policy().claude_remote_control {
+        return Err(ApiError::new(
+            code::UNAVAILABLE,
+            "Claude is off on this machine (the box's policy)",
+        ));
+    }
+    if shared.claude_report().is_none() {
+        return Err(ApiError::new(
+            code::UNAVAILABLE,
+            "no session is reporting on this machine",
+        ));
+    }
+    if !shared.queue_claude_session_as(params.request.clone(), params.action, params.id.clone()) {
+        return Err(ApiError::new(
+            code::BUSY,
+            "the session has requests waiting that it has not taken",
+        ));
+    }
+    tracing::info!(
+        request = %params.request,
+        action = params.action.as_str(),
+        id = %params.id,
+        "the controller asked for a Claude session verb"
+    );
+    Ok(Accepted { accepted: true })
 }
 
 /// Apply one command from the controller; the answer's body or an error.
@@ -769,7 +836,13 @@ fn converse(
                             Err(e) => Response::err(Some(id), e),
                         }
                     }
-                    name::COMMAND => Response::err(
+                    name::CLAUDE_SESSION if state == NodeState::Approved => {
+                        match take_claude_session(shared, p) {
+                            Ok(a) => Response::ok(id, &a),
+                            Err(e) => Response::err(Some(id), e),
+                        }
+                    }
+                    name::COMMAND | name::CLAUDE_SESSION => Response::err(
                         Some(id),
                         ApiError::new(code::UNAVAILABLE, "this machine is not approved"),
                     ),

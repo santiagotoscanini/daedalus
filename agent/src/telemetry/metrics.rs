@@ -221,6 +221,38 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
     out
 }
 
+/// One machine's Claude remote control, from its session's last report —
+/// the same series for every machine and for the controller itself, so one
+/// alert covers them all:
+///
+/// - `daedalus_agent_claude_up{…,state="<state>"}`: 1 while the server is
+///   `running`, 0 otherwise; the state is the report's (`off`, `waiting`,
+///   `not-installed`…), or `none` when no session reports. An alert on
+///   `== 0` wants `state!="off"` beside it: off is the policy's word.
+/// - `daedalus_agent_claude_restarts_total`: starts after the first, since
+///   the session came up (it resets when the session does).
+/// - `daedalus_agent_claude_sessions`: sessions alive under it.
+pub fn claude_text(report: Option<&crate::claude::Report>, labels: &Labels) -> String {
+    let base = labels.render();
+    let state = report.map(|r| r.state.as_str()).unwrap_or("none");
+    let mut out = format!(
+        "daedalus_agent_claude_up{{{base},state=\"{}\"}} {}\n",
+        escape_label(state),
+        u8::from(state == "running")
+    );
+    if let Some(r) = report {
+        out.push_str(&format!(
+            "daedalus_agent_claude_restarts_total{{{base}}} {}\n",
+            r.restarts
+        ));
+        out.push_str(&format!(
+            "daedalus_agent_claude_sessions{{{base}}} {}\n",
+            r.sessions.iter().filter(|s| s.alive).count()
+        ));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,6 +292,42 @@ mod tests {
         for line in m.lines() {
             assert!(line.contains(&format!("{{{BASE}")), "{line}");
         }
+    }
+
+    #[test]
+    fn claude_series_carry_the_state_and_the_four_labels() {
+        use crate::claude::{Report, Session};
+        let r = Report {
+            state: "running".into(),
+            restarts: 3,
+            sessions: vec![
+                Session {
+                    alive: true,
+                    ..Default::default()
+                },
+                Session::default(),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            claude_text(Some(&r), &PC),
+            format!(
+                "daedalus_agent_claude_up{{{BASE},state=\"running\"}} 1\n\
+                 daedalus_agent_claude_restarts_total{{{BASE}}} 3\n\
+                 daedalus_agent_claude_sessions{{{BASE}}} 1\n"
+            )
+        );
+        let off = Report {
+            state: "off".into(),
+            ..Default::default()
+        };
+        assert!(claude_text(Some(&off), &PC).starts_with(&format!(
+            "daedalus_agent_claude_up{{{BASE},state=\"off\"}} 0\n"
+        )));
+        assert_eq!(
+            claude_text(None, &PC),
+            format!("daedalus_agent_claude_up{{{BASE},state=\"none\"}} 0\n")
+        );
     }
 
     #[test]

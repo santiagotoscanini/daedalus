@@ -26,7 +26,9 @@
 //!   by its peer credentials, made and cleaned up (api/; unix.rs — Windows
 //!   is never a controller and refuses);
 //! - Claude Code: the command's file names, preparing the server's
-//!   command, whether the login is in the keychain, and how the session
+//!   command, whether the login is in the keychain, a live session's process
+//!   (its start, CPU, memory and command line: Linux reads /proc, the others
+//!   say they do not, `PROCESS_STATS`), and how the session
 //!   runs the server by default (`CLAUDE_RC`, claude/);
 //! - telemetry: the `Collector` and the OS-updates reader (telemetry.rs);
 //! - `svc`: installing, removing and running the service, and starting
@@ -77,7 +79,10 @@ pub use imp::{
 // the controller's local API socket (api/)
 pub use imp::{serve_local_socket, LocalSocket};
 // Claude Code
-pub use imp::{claude_keychain_login, prepare_claude_server, CLAUDE_CLI_NAMES, CLAUDE_RC};
+pub use imp::{
+    claude_keychain_login, prepare_claude_server, process_stats, CLAUDE_CLI_NAMES, CLAUDE_RC,
+    PROCESS_STATS,
+};
 // telemetry
 pub use imp::{read_updates, Collector};
 // the tray: its relation to the session, and the tray program's entry point

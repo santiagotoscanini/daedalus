@@ -533,6 +533,115 @@ fn commands_are_delivered_with_an_ack_or_queued() {
     pending.stop();
 }
 
+#[test]
+fn claude_sessions_travel_the_link() {
+    use crate::claude::{Roster, SessionAction};
+    const ID: &str = "abdda3a9-0cb2-43f1-b13e-37f25a755fce";
+    let ctl = controller(fast());
+    let nid = id(7);
+    assert_eq!(
+        ctl.registry
+            .claude_session(&nid.node_id(), SessionAction::Resume, ID)
+            .unwrap_err()
+            .code,
+        code::NOT_FOUND
+    );
+    approve(&ctl.registry, &nid, claude_policy());
+    // Approved and away: a session verb is never kept for later.
+    let away = ctl
+        .registry
+        .claude_session(&nid.node_id(), SessionAction::Resume, ID)
+        .unwrap_err();
+    assert_eq!(away.code, code::UNAVAILABLE);
+    assert!(away.msg.contains("not connected"), "{}", away.msg);
+
+    let shared = node_shared();
+    shared.set_claude(Report {
+        state: "running".into(),
+        restarts: 2,
+        ..Default::default()
+    });
+    let roster = Roster {
+        reported_at: "t".into(),
+        transcript_total: 3,
+        ..Default::default()
+    };
+    shared.set_claude_roster(roster.clone());
+    let node = spawn_node(
+        target(&ctl, Some(pin_of(&ctl.id))),
+        nid.clone(),
+        Arc::clone(&shared),
+        "sessions",
+    );
+    wait_for("the roster", 5, || {
+        ctl.registry
+            .claude_roster(&nid.node_id())
+            .is_ok_and(|r| r.roster.is_some() && r.received_at.is_some())
+    });
+    assert_eq!(
+        ctl.registry.claude_roster(&nid.node_id()).unwrap().roster,
+        Some(roster)
+    );
+
+    // Delivered, acknowledged, and handed to the session with its next
+    // report, under the controller's request id.
+    let sent = ctl
+        .registry
+        .claude_session(&nid.node_id(), SessionAction::Stop, "0a1b2c3d")
+        .unwrap();
+    assert!(sent.delivered && sent.request.len() == 16);
+    let answer = shared.set_claude(Report {
+        state: "running".into(),
+        ..Default::default()
+    });
+    assert_eq!(answer.sessions.len(), 1);
+    assert_eq!(answer.sessions[0].request, sent.request);
+    assert_eq!(
+        (answer.sessions[0].action, answer.sessions[0].id.as_str()),
+        (SessionAction::Stop, "0a1b2c3d")
+    );
+    assert!(
+        shared.set_claude(Report::default()).sessions.is_empty(),
+        "once"
+    );
+
+    // The machine's own check: its policy turns Claude off, and it refuses.
+    let off = crate::link::wire::Policy {
+        claude_remote_control: false,
+        ..claude_policy()
+    };
+    approve(&ctl.registry, &nid, off.clone());
+    wait_for("the policy", 5, || shared.policy() == off);
+    let refused = ctl
+        .registry
+        .claude_session(&nid.node_id(), SessionAction::Resume, ID)
+        .unwrap_err();
+    assert_eq!(refused.code, code::UNAVAILABLE);
+    assert!(refused.msg.contains("off"), "{}", refused.msg);
+
+    // The machine's Claude in /nodes/metrics, with the four labels.
+    let m = ctl.registry.metrics();
+    let os = ctl.registry.get(&nid.node_id()).unwrap().hello.unwrap().os;
+    let host = crate::telemetry::escape_label(&crate::facts::hostname());
+    let labels = format!(
+        "host=\"{host}\",machine=\"{host}\",node=\"{}\",os=\"{os}\"",
+        nid.node_id()
+    );
+    wait_for("the report", 5, || {
+        ctl.registry.metrics().contains("daedalus_agent_claude_up")
+    });
+    let m = format!("{m}{}", ctl.registry.metrics());
+    assert!(
+        m.contains(&format!("daedalus_agent_claude_up{{{labels},state=")),
+        "{m}"
+    );
+    node.stop();
+    wait_for("the disconnect", 5, || {
+        summary(&ctl, &nid).is_some_and(|s| !s.connected)
+    });
+    assert!(!ctl.registry.metrics().contains("daedalus_agent_claude_up"));
+}
+
 /// A raw machine: TLS with its key, `hello`, and the first line back.
 fn raw(ctl: &Ctl, nid: &Identity) -> std::io::Result<(ltls::Tls, String)> {
     raw_hello(ctl, nid, |_| {})
@@ -975,6 +1084,52 @@ fn the_api_steers_the_machines_through_the_socket() {
         r#"{{"id":12,"m":"nodes.claude","p":{{"id":"{n}"}}}}"#
     ));
     assert!(cl["ok"].get("report").is_some(), "{cl}");
+
+    // The machine's Claude sessions: its roster, and one verb delivered.
+    shared.set_claude(Report {
+        state: "running".into(),
+        ..Default::default()
+    });
+    shared.set_claude_roster(crate::claude::Roster {
+        reported_at: "r".into(),
+        empty_count: 5,
+        ..Default::default()
+    });
+    wait_for("the roster", 5, || {
+        registry.claude_roster(&n).is_ok_and(|r| r.roster.is_some())
+    });
+    let r = call(format!(
+        r#"{{"id":15,"m":"nodes.claude_roster","p":{{"id":"{n}"}}}}"#
+    ));
+    assert_eq!(r["ok"]["roster"]["empty_count"], 5, "{r}");
+    let s = call(format!(
+        r#"{{"id":16,"m":"nodes.claude_session","p":{{"id":"{n}","action":"remove","session":"0a1b2c3d"}}}}"#
+    ));
+    assert_eq!(s["ok"]["delivered"], true, "{s}");
+    let answer = shared.set_claude(Report::default());
+    assert_eq!(answer.sessions.len(), 1);
+    assert_eq!(
+        answer.sessions[0].request,
+        s["ok"]["request"].as_str().unwrap()
+    );
+    for bad in [
+        format!(r#"{{"id":17,"m":"nodes.claude_session","p":{{"id":"{n}","action":"remove","session":"abdda3a9-0cb2-43f1-b13e-37f25a755fce"}}}}"#),
+        format!(r#"{{"id":17,"m":"nodes.claude_session","p":{{"id":"{n}","action":"resume","session":"0a1b2c3d","flags":"x"}}}}"#),
+        r#"{"id":17,"m":"nodes.claude_session","p":{"id":"../x","action":"stop","session":"0a1b2c3d"}}"#.to_string(),
+    ] {
+        assert_eq!(call(bad.clone())["err"]["code"], "bad_request", "{bad}");
+    }
+    // The controller's own Claude beside the machine's, labelled as a
+    // machine of its own: the controller's node id and hostname.
+    let own = cshared.own_claude_metrics();
+    let chost = crate::telemetry::escape_label(&crate::facts::hostname());
+    assert!(
+        own.starts_with(&format!(
+            "daedalus_agent_claude_up{{host=\"{chost}\",machine=\"{chost}\",node=\"{}\",os=\"\",state=\"none\"}} 0\n",
+            cid.node_id()
+        )),
+        "{own}"
+    );
 
     node.stop();
     drop(listener);

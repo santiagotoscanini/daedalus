@@ -185,14 +185,14 @@ pub fn run_args(
     a
 }
 
-fn command(tool: &str, args: &[String]) -> Result<String, String> {
+pub(super) fn command(tool: &str, args: &[String]) -> Result<String, String> {
     let path = exec::locate(tool).ok_or_else(|| format!("no `{tool}` on this machine"))?;
     let mut cmd = Command::new(path);
     cmd.args(args).env("SYSTEMD_PAGER", "");
     exec::stdout_or(cmd, SYSTEMCTL, exec::Text::Lossy).map_err(|e| format!("{tool}: {e}"))
 }
 
-fn systemctl(args: &[&str]) -> Result<String, String> {
+pub(super) fn systemctl(args: &[&str]) -> Result<String, String> {
     let mut a = vec!["--user".to_string()];
     a.extend(args.iter().map(|s| s.to_string()));
     command("systemctl", &a)

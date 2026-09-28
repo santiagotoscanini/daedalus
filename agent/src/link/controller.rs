@@ -50,6 +50,13 @@
 //! machine and acknowledged by it within `ACK_TIMEOUT`; queued, one of each
 //! kind, for an approved machine that is not connected, and delivered when
 //! it next connects.
+//!
+//! **Session verbs** (`claude_session`): one verb on one of a machine's
+//! Claude sessions, delivered only to a connected, approved machine that
+//! offers `claude.sessions` and acknowledged within `ACK_TIMEOUT` — never
+//! queued, since a resume that fires whenever the machine next connects is
+//! one nobody asked for then. The outcome rides the machine's next
+//! `claude_roster` push, under the request id minted here.
 
 use std::collections::{HashMap, VecDeque};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
@@ -63,8 +70,8 @@ use serde_json::Value;
 
 use super::tls::{Recv, Tls};
 use super::wire::{
-    self, name, Command, CommandParams, ControllerId, Hello, Incoming, NodeState, StateEvent,
-    Welcome, MAX_HELLO_LINE, PROTO,
+    self, name, ClaudeSessionParams, Command, CommandParams, ControllerId, Hello, Incoming,
+    NodeState, StateEvent, Welcome, MAX_HELLO_LINE, PROTO,
 };
 use super::{
     DEAD_AFTER, HEARTBEAT, MAX_CONNECTIONS, MAX_LINE, MAX_PENDING, MAX_PREAUTH, PENDING_PER_IP,
@@ -72,11 +79,11 @@ use super::{
     WRITE_TIMEOUT,
 };
 use crate::api::wire::{
-    code, event, ApiError, CommandOk, DesiredState, NodeChanged, NodeClaude, NodeDetail,
-    NodePending, NodeSummary, NodeTelemetry, Response, SetDesiredOk,
+    code, event, ApiError, ClaudeSessionSent, CommandOk, DesiredState, NodeChanged, NodeClaude,
+    NodeClaudeRoster, NodeDetail, NodePending, NodeSummary, NodeTelemetry, Response, SetDesiredOk,
 };
 use crate::api::Events;
-use crate::claude::Report;
+use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of, Identity};
 use crate::link::wire::Policy;
 use crate::providers::ProviderReport;
@@ -167,6 +174,7 @@ struct Entry {
     status: Option<(Value, String)>,
     telemetry: Option<(Telemetry, String)>,
     claude: Option<(Option<Report>, String)>,
+    roster: Option<(Option<Roster>, String)>,
     providers: Vec<ProviderReport>,
     conn: Option<Conn>,
     last_seen: Option<String>,
@@ -182,6 +190,7 @@ impl Entry {
             status: None,
             telemetry: None,
             claude: None,
+            roster: None,
             providers: Vec::new(),
             conn: None,
             last_seen: None,
@@ -213,6 +222,7 @@ impl Entry {
         self.status = None;
         self.telemetry = None;
         self.claude = None;
+        self.roster = None;
         self.providers.clear();
     }
 }
@@ -637,6 +647,10 @@ impl Registry {
                 Ok(r) => entry.claude = Some((r, at)),
                 Err(err) => bad("Claude report", err),
             },
+            name::CLAUDE_ROSTER => match serde_json::from_value::<Option<Roster>>(p) {
+                Ok(r) => entry.roster = Some((r, at)),
+                Err(err) => bad("Claude roster", err),
+            },
             name::PROVIDERS => match serde_json::from_value::<Vec<ProviderReport>>(p) {
                 Ok(v) => entry.providers = v,
                 Err(err) => bad("providers list", err),
@@ -927,6 +941,103 @@ impl Registry {
         })
     }
 
+    /// The machine's roster of Claude sessions, as it last pushed it.
+    pub fn claude_roster(&self, id: &str) -> Result<NodeClaudeRoster, ApiError> {
+        let reg = self.lock();
+        Self::known(&reg, id)?;
+        let r = reg.nodes.get(id).and_then(|e| e.roster.clone());
+        Ok(NodeClaudeRoster {
+            id: id.to_string(),
+            received_at: r.as_ref().map(|(_, at)| at.clone()),
+            roster: r.and_then(|(r, _)| r),
+        })
+    }
+
+    /// One verb on one of the machine's Claude sessions: delivered to a
+    /// connected, approved machine that offers `claude.sessions`, and
+    /// acknowledged within `ACK_TIMEOUT` — never queued for later, since a
+    /// resume that fires when the machine next connects is one nobody is
+    /// watching. The outcome rides the machine's roster under `request`.
+    pub fn claude_session(
+        &self,
+        id: &str,
+        action: SessionAction,
+        session: &str,
+    ) -> Result<ClaudeSessionSent, ApiError> {
+        let mut reg = self.lock();
+        match reg.state_of(id) {
+            NodeState::Approved => {}
+            NodeState::Unknown if !reg.desired.contains_key(id) && !reg.nodes.contains_key(id) => {
+                return Err(ApiError::new(code::NOT_FOUND, format!("no machine {id}")))
+            }
+            other => {
+                return Err(ApiError::new(
+                    code::UNAVAILABLE,
+                    format!("machine {id} is {}, not approved", other.as_str()),
+                ))
+            }
+        }
+        let offers = reg
+            .nodes
+            .get(id)
+            .and_then(|e| e.hello.as_ref())
+            .is_some_and(|h| h.capabilities.iter().any(|c| c == "claude.sessions"));
+        let Some(conn) = reg.nodes.get_mut(id).and_then(|e| e.conn.as_mut()) else {
+            return Err(ApiError::new(
+                code::UNAVAILABLE,
+                format!("machine {id} is not connected; a session verb is never kept for later"),
+            ));
+        };
+        if !offers {
+            return Err(ApiError::new(
+                code::UNSUPPORTED,
+                format!("machine {id} does not offer `claude.sessions` (an older agent, or Claude is not run there)"),
+            ));
+        }
+        let request = crate::claude::sessions::mint_request();
+        let req = self.next_request.fetch_add(1, Ordering::Relaxed);
+        let (tx, rx) = mpsc::sync_channel(1);
+        conn.acks.insert(req, tx);
+        let line = wire::request(
+            req,
+            name::CLAUDE_SESSION,
+            &ClaudeSessionParams {
+                action,
+                id: session.to_string(),
+                request: request.clone(),
+            },
+        );
+        let _ = conn.tx.send(Out::Line(line));
+        drop(reg);
+        match rx.recv_timeout(self.limits.ack_timeout) {
+            Ok(Ok(())) => Ok(ClaudeSessionSent {
+                delivered: true,
+                request,
+            }),
+            Ok(Err(msg)) => Err(ApiError::new(
+                code::UNAVAILABLE,
+                format!("machine {id} refused it: {msg}"),
+            )),
+            Err(RecvTimeoutError::Disconnected) => Err(ApiError::new(
+                code::UNAVAILABLE,
+                format!("machine {id} left before acknowledging it"),
+            )),
+            Err(RecvTimeoutError::Timeout) => {
+                let mut reg = self.lock();
+                if let Some(c) = reg.nodes.get_mut(id).and_then(|e| e.conn.as_mut()) {
+                    c.acks.remove(&req);
+                }
+                Err(ApiError::new(
+                    code::UNAVAILABLE,
+                    format!(
+                        "machine {id} did not acknowledge within {} s",
+                        self.limits.ack_timeout.as_secs()
+                    ),
+                ))
+            }
+        }
+    }
+
     pub fn claude(&self, id: &str) -> Result<NodeClaude, ApiError> {
         let reg = self.lock();
         Self::known(&reg, id)?;
@@ -940,7 +1051,8 @@ impl Registry {
 
     /// Prometheus text for `/nodes/metrics`: every approved machine's
     /// `daedalus_agent_link_up` (1 while connected), and the connected
-    /// ones' telemetry (telemetry/metrics.rs). Every series carries the
+    /// ones' telemetry and Claude series (telemetry/metrics.rs; the
+    /// controller's own Claude is added by status.rs). Every series carries the
     /// machine's `node` id, `host` and `os` from its hello, and `machine`:
     /// the name the app gave it in `nodes.set_desired`, else its hostname.
     pub fn metrics(&self) -> String {
@@ -972,6 +1084,13 @@ impl Registry {
                     &h.agent_version,
                     &labels,
                 ));
+            }
+            // A connected machine's Claude, from its last report; a machine
+            // that left says nothing (its `link_up` is 0), rather than a
+            // state it may no longer be in.
+            if e.conn.is_some() {
+                let report = e.claude.as_ref().and_then(|(r, _)| r.as_ref());
+                out.push_str(&crate::telemetry::claude_text(report, &labels));
             }
         }
         out
