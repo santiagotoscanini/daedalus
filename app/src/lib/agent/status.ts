@@ -1,6 +1,8 @@
 import type {
   LinkStatus,
+  Probation,
   Report,
+  RolledBack,
   Session,
   StatusPage,
   Summary,
@@ -167,6 +169,13 @@ export type AgentStatus = {
   trayReporting: boolean
   /** The machine's side of its link to the controller (agent/src/link/mod.rs `LinkStatus`). */
   link: AgentLink | null
+  /**
+   * A version just installed that has not proved itself yet (agent/src/update.rs):
+   * its `.old` binaries wait until it does, and nothing newer is installed over it.
+   */
+  probation: { version: string; from: string; starts: number; installedAt: string } | null
+  /** The last version the machine rolled back from; it is never installed again. */
+  rolledBack: { version: string; to: string; starts: number; at: string } | null
 }
 
 /**
@@ -183,6 +192,8 @@ export type AgentLink = {
   /** "config", "box" or "tofu". */
   pinnedVia: string | null
   unconfirmed: boolean
+  /** The last signed rotation that moved the trusted controller key, in the agent's words. */
+  rotated: string | null
   error: string | null
 }
 
@@ -194,8 +205,22 @@ const link = reads<LinkStatus>()(
     controller_fingerprint: nstr,
     pinned_via: nstr,
     unconfirmed: optional(bool, false),
+    rotated: nstr,
     error: nstr,
   }),
+)
+
+const probation = reads<Probation>()(
+  obj({
+    version: str,
+    from: optional(str, ''),
+    starts: optional(int, 0),
+    installed_at: optional(str, ''),
+  }),
+)
+
+const rolledBack = reads<RolledBack>()(
+  obj({ version: str, to: optional(str, ''), starts: optional(int, 0), at: optional(str, '') }),
 )
 
 const session = reads<Session>()(
@@ -310,6 +335,8 @@ const shape = reads<StatusPage>()(
     claude: optional(nullable(summary), null),
     tray: optional(obj({ reporting: optional(bool, false) }), { reporting: false }),
     controller: optional(nullable(link), null),
+    probation: optional(nullable(probation), null),
+    rolled_back: optional(nullable(rolledBack), null),
   }),
 )
 
@@ -398,8 +425,19 @@ export function agentStatus(body: unknown): AgentStatus {
             controllerFingerprint: s.controller.controller_fingerprint,
             pinnedVia: s.controller.pinned_via,
             unconfirmed: s.controller.unconfirmed,
+            rotated: s.controller.rotated,
             error: s.controller.error,
           },
+    probation:
+      s.probation === null
+        ? null
+        : {
+            version: s.probation.version,
+            from: s.probation.from,
+            starts: s.probation.starts,
+            installedAt: s.probation.installed_at,
+          },
+    rolledBack: s.rolled_back,
   }
 }
 

@@ -2,19 +2,21 @@ import { readFileSync } from 'node:fs'
 import { createConnection, type Socket } from 'node:net'
 import { join } from 'node:path'
 import { env } from '../env'
-import type { Command, ModelAction, SessionAction } from './generated'
+import type { Command, ControllerRotateParams, ModelAction, SessionAction } from './generated'
 import {
   API_VERSION,
   type ClaudeRosterGet,
   type ClaudeStatus,
   type CommandOk,
   ControllerError,
+  type ControllerInfo,
   type ControllerNode,
   type ControllerNodeDetail,
   claudeRosterGet,
   claudeSessionSent,
   claudeStatus,
   commandOk,
+  controllerRotated,
   type DesiredNode,
   type HelloOk,
   helloOk,
@@ -106,6 +108,11 @@ export type ControllerClient = {
   nodesSetDesired: (nodes: DesiredNode[]) => Promise<SetDesiredOk>
   /** A one-shot instruction to one machine: only ever from an admin's click. */
   nodesCommand: (id: string, command: Command) => Promise<CommandOk>
+  /**
+   * A new controller key, the old one retired after the grace: only ever from
+   * an admin's confirmed click. `unavailable` while a rotation runs.
+   */
+  controllerRotate: (p: ControllerRotateParams) => Promise<ControllerInfo>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
   /** End this client for good: the connection goes, and later calls fail `closed`. */
@@ -355,6 +362,7 @@ export function createControllerClient(opts: Options): ControllerClient {
       call('nodes.claude_session', claudeSessionSent, { id, action, session }),
     nodesSetDesired: (nodes) => call('nodes.set_desired', setDesiredOk, { nodes }),
     nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }),
+    controllerRotate: (p) => call('controller.rotate', controllerRotated, p),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
     close: () => {
       closed = true

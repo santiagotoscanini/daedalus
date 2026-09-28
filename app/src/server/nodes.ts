@@ -1,5 +1,5 @@
 import type { NodePolicy } from '../host/schema'
-import { hasControlChar, NODE_COMMANDS } from '../lib/agent/policy'
+import { hasControlChar, NODE_COMMANDS, ROTATION_GRACE, ROTATION_GRACES } from '../lib/agent/policy'
 import { asValidator, is, literal, obj, withMessage } from '../lib/contract/decode'
 import { nodeIdField } from '../lib/contract/fields'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
@@ -54,6 +54,24 @@ export const sendNodeCommandFn = adminFn
   .handler(async ({ data, context }) => {
     const ctx = await context.ctx()
     return ctx.controller.nodesCommand(data.id, data.command)
+  })
+
+/**
+ * Rotate the controller's key (`controller.rotate`): a new key at once, both
+ * served for the grace, the old one retired after it. Machines on agent
+ * 0.19.0 or newer re-pin themselves when they next connect; an older one is
+ * re-pinned by hand. The controller refuses while a rotation runs.
+ */
+export const rotateControllerKeyFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(obj({ grace: literal(...ROTATION_GRACES) }), 'expected a grace period'),
+    ),
+  )
+  .handler(async ({ data, context }) => {
+    const ctx = await context.ctx()
+    const c = await ctx.controller.controllerRotate({ grace_secs: ROTATION_GRACE[data.grace].secs })
+    return { fingerprint: c.fingerprint, retiresAt: c.rotation?.retiresAt ?? null }
   })
 
 /**

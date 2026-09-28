@@ -5,6 +5,7 @@ import {
   claudeSessionSent,
   claudeStatus,
   commandOk,
+  controllerRotated,
   helloOk,
   nodeClaudeAnswer,
   nodeClaudeRosterAnswer,
@@ -101,7 +102,7 @@ describe('the controller wire', () => {
       '"tray":false,"status_on_lan":true,"api_socket":true,"node_listener":true},',
       '"telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal","nodes"],',
       '"controller":{"public_key":"abababababababababababababababababababababababababababababababab",',
-      '"fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"]}}',
+      '"fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"],"rotation":null}}',
       '}',
     ].join('')
     expect(systemInfo(ok(line))).toEqual({
@@ -141,12 +142,34 @@ describe('the controller wire', () => {
         fingerprint: '3f2a:9c01',
         listen: '0.0.0.0:7788',
         advertise: ['box.lan:7788'],
+        rotation: null,
       },
     })
     // Anywhere but the controller the block is absent, not null.
     const bare = JSON.parse(line.slice('{"id":2,"ok":'.length, -1)) as Record<string, unknown>
     delete bare.controller
     expect(systemInfo(bare).controller).toBeNull()
+  })
+
+  it('decodes a rotation under way (system.info, controller.rotate)', () => {
+    const line = [
+      `{"public_key":"${'cd'.repeat(32)}","fingerprint":"77aa:0102","listen":null,"advertise":[],`,
+      `"rotation":{"from_public_key":"${'ab'.repeat(32)}","from_fingerprint":"3f2a:9c01",`,
+      '"started_at":"2026-09-28T10:00:00Z","retires_at":"2026-10-05T10:00:00Z","old_key_connections":2}}',
+    ].join('')
+    expect(controllerRotated(JSON.parse(line))).toEqual({
+      publicKey: 'cd'.repeat(32),
+      fingerprint: '77aa:0102',
+      listen: null,
+      advertise: [],
+      rotation: {
+        fromPublicKey: 'ab'.repeat(32),
+        fromFingerprint: '3f2a:9c01',
+        startedAt: '2026-09-28T10:00:00Z',
+        retiresAt: '2026-10-05T10:00:00Z',
+        oldKeyConnections: 2,
+      },
+    })
   })
 
   it('ignores fields it does not know', () => {

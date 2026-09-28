@@ -1,7 +1,7 @@
 import type { Ctx } from '../../core/ctx'
 import type { ControllerClient } from '../../host/controller/client'
 import { type DesiredSync, lastDesiredSync, readNode } from '../../host/controller/nodes'
-import type { ControllerNode } from '../../host/controller/wire'
+import type { ControllerNode, ControllerRotation } from '../../host/controller/wire'
 import { lanDomain } from '../../host/providers/fleet'
 import type { AgentStatus } from '../agent/status'
 import { listNodes, type NodeRow } from '../repo/nodes'
@@ -44,7 +44,10 @@ export type ControllerView =
       version: string
       /** The first `host:port` it advertises; null when it listens for no machine. */
       address: string | null
+      /** The key to pin: during a rotation, already the new one. */
       fingerprint: string
+      /** The rotation under way, or null. */
+      rotation: ControllerRotation | null
     }
   | { reachable: false; error: string }
 
@@ -93,6 +96,7 @@ async function controllerView(client: ControllerClient): Promise<ControllerView>
       version: info.version,
       address: info.controller.advertise[0] ?? null,
       fingerprint: info.controller.fingerprint,
+      rotation: info.controller.rotation,
     }
   } catch (e) {
     return { reachable: false, error: e instanceof Error ? e.message : String(e) }

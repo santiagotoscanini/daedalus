@@ -11,6 +11,7 @@ import { ASIDE, ERROR_NOTE, Line, Mono, NOTE, Rows, Section } from '../shared'
 import { Decision } from './decision'
 import { Install } from './install'
 import { Policy } from './policy'
+import { RotateKey, RotationState } from './rotate'
 
 // Settings › Machines — the other computers that run the agent: what each
 // one is, whether the box trusts it, and what the box asks of it. One card
@@ -32,7 +33,7 @@ import { Policy } from './policy'
 //
 // This file is the tab and one card per machine; the trust buttons are
 // ./decision.tsx, the policy rows ./policy.tsx over ./use-policy-editor.ts,
-// the install lines ./install.tsx.
+// the install lines ./install.tsx, the controller's key rotation ./rotate.tsx.
 
 /** The OS's mark, by the family the agent reports. */
 function osMark(os: string): { src: string; invert: boolean } | null {
@@ -49,6 +50,31 @@ function osMark(os: string): { src: string; invert: boolean } | null {
 }
 
 type Verdict = { chip: string; tone: Tone }
+
+/**
+ * What the machine's updater is doing beyond the verdict: a version on
+ * probation (its `.old` binaries kept until it proves itself), or the last
+ * one it rolled back from, which it never installs again.
+ */
+function updateBadges(s: Machine['status']): { chip: string; tone: Tone; title: string }[] {
+  if (s === null) return []
+  const out: { chip: string; tone: Tone; title: string }[] = []
+  if (s.probation !== null) {
+    out.push({
+      chip: 'updating (on probation)',
+      tone: 'warn',
+      title: `${s.probation.version} replaced ${s.probation.from}; started ${String(s.probation.starts)} time${s.probation.starts === 1 ? '' : 's'} since, and kept on probation until it proves itself`,
+    })
+  }
+  if (s.rolledBack !== null) {
+    out.push({
+      chip: `rolled back from ${s.rolledBack.version}`,
+      tone: 'bad',
+      title: `${s.rolledBack.version} started ${String(s.rolledBack.starts)} times without lasting; ${s.rolledBack.to} was put back at ${s.rolledBack.at}`,
+    })
+  }
+  return out
+}
 
 function verdict(m: Machine): Verdict {
   const n = m.node
@@ -161,6 +187,9 @@ function MachineSection({ m, lanDomain }: { m: Machine; lanDomain: string }) {
     },
     ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
     ...(s?.link != null ? [{ k: 'Its key', v: <Mono>{s.link.fingerprint}</Mono> }] : []),
+    ...(s?.link?.rotated != null
+      ? [{ k: 'Controller key', v: <span className={ASIDE}>{s.link.rotated}</span> }]
+      : []),
   ]
 
   return (
@@ -182,6 +211,11 @@ function MachineSection({ m, lanDomain }: { m: Machine; lanDomain: string }) {
       description={
         <span className="inline-flex flex-wrap items-center gap-2">
           <Chip tone={v.tone}>{v.chip}</Chip>
+          {updateBadges(s).map((b) => (
+            <span key={b.chip} title={b.title}>
+              <Chip tone={b.tone}>{b.chip}</Chip>
+            </span>
+          ))}
           <span>
             {edition}
             {version !== '' && ` · ${version}`}
@@ -310,6 +344,9 @@ export function Machines({ d }: { d: MachinesData }) {
                     ),
                 },
                 { k: 'Its key', v: <Mono>{c.fingerprint}</Mono> },
+                ...(c.rotation !== null
+                  ? [{ k: 'Rotating', v: <RotationState r={c.rotation} /> }]
+                  : []),
                 { k: 'Agent', v: <Mono>{c.version}</Mono> },
                 {
                   k: 'Decisions',
@@ -341,7 +378,9 @@ export function Machines({ d }: { d: MachinesData }) {
                 },
               ]
         }
-      />
+      >
+        {c.reachable && <RotateKey rotating={c.rotation !== null} />}
+      </Section>
 
       <Section
         title="The gateway"

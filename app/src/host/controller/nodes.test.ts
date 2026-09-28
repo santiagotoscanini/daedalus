@@ -51,6 +51,7 @@ function fake(over: Partial<ControllerClient>): ControllerClient & { calls: stri
     nodesClaudeSession: no('nodes.claude_session'),
     nodesSetDesired: no('nodes.set_desired'),
     nodesCommand: no('nodes.command'),
+    controllerRotate: no('controller.rotate'),
     hello: () => null,
     close: () => undefined,
     ...over,

@@ -96,3 +96,17 @@ const COMMANDS: Record<Command, true> = {
   claude_restart: true,
 }
 export const NODE_COMMANDS = Object.keys(COMMANDS) as Command[]
+
+/**
+ * How long a controller key rotation serves both keys before the old one
+ * retires, as Settings › Machines offers it (link/rotation.rs takes 60 s to
+ * 90 days). A week is the agent's own default: long enough for a machine
+ * that is off for a few days to connect once and re-pin itself.
+ */
+export const ROTATION_GRACE = {
+  '1d': { label: '1 day', secs: 86_400 },
+  '7d': { label: '7 days', secs: 7 * 86_400 },
+  '30d': { label: '30 days', secs: 30 * 86_400 },
+} as const
+export type RotationGrace = keyof typeof ROTATION_GRACE
+export const ROTATION_GRACES = Object.keys(ROTATION_GRACE) as RotationGrace[]

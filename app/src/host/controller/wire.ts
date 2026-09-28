@@ -51,6 +51,7 @@ import type {
   TelemetryLevel,
   ClaudeRosterGet as WireClaudeRosterGet,
   ClaudeStatus as WireClaudeStatus,
+  ControllerInfo as WireControllerInfo,
   ProviderReport as WireProviderReport,
   SystemInfo as WireSystemInfo,
   TelemetryGet as WireTelemetryGet,
@@ -223,6 +224,22 @@ export type ControllerInfo = {
   fingerprint: string
   listen: string | null
   advertise: string[]
+  /** The rotation under way — `publicKey` is then already the new key — or null. */
+  rotation: ControllerRotation | null
+}
+
+/**
+ * A key rotation under way (agent/src/link/rotation.rs): the key being
+ * retired, when it retires (wall-clock), and how many machines still
+ * connect under it — each has been sent the signed statement, so one that
+ * stays runs an agent older than 0.19.0.
+ */
+export type ControllerRotation = {
+  fromPublicKey: string
+  fromFingerprint: string
+  startedAt: string
+  retiresAt: string
+  oldKeyConnections: number
 }
 
 export type SystemInfo = {
@@ -248,6 +265,55 @@ export type SystemInfo = {
   /** Only on the controller. */
   controller: ControllerInfo | null
 }
+
+const controllerShape = reads<WireControllerInfo>()(
+  obj({
+    public_key: str,
+    fingerprint: str,
+    listen: nstr,
+    advertise: optional(arrayOf(str), []),
+    rotation: optional(
+      nullable(
+        obj({
+          from_public_key: str,
+          from_fingerprint: str,
+          started_at: optional(str, ''),
+          retires_at: str,
+          old_key_connections: optional(int, 0),
+        }),
+      ),
+      null,
+    ),
+  }),
+)
+
+function controllerOf(c: ReturnType<typeof controllerShape>): ControllerInfo {
+  const r = c.rotation
+  return {
+    publicKey: c.public_key,
+    fingerprint: c.fingerprint,
+    listen: c.listen,
+    advertise: c.advertise,
+    rotation:
+      r === null
+        ? null
+        : {
+            fromPublicKey: r.from_public_key,
+            fromFingerprint: r.from_fingerprint,
+            startedAt: r.started_at,
+            retiresAt: r.retires_at,
+            oldKeyConnections: r.old_key_connections,
+          },
+  }
+}
+
+/**
+ * `controller.rotate`'s answer: the controller as `system.info` then states
+ * it, its `rotation` set. The agent answers `unavailable` while a rotation
+ * already runs.
+ */
+export const controllerRotated = (v: unknown): ControllerInfo =>
+  controllerOf(decode(controllerShape, v))
 
 const systemInfoShape = reads<WireSystemInfo>()(
   obj({
@@ -283,17 +349,7 @@ const systemInfoShape = reads<WireSystemInfo>()(
     }),
     telemetry: optional(level, 'off'),
     capabilities: optional(arrayOf(str), []),
-    controller: optional(
-      nullable(
-        obj({
-          public_key: str,
-          fingerprint: str,
-          listen: nstr,
-          advertise: optional(arrayOf(str), []),
-        }),
-      ),
-      null,
-    ),
+    controller: optional(nullable(controllerShape), null),
   }),
 )
 
@@ -332,15 +388,7 @@ export function systemInfo(v: unknown): SystemInfo {
     },
     telemetry: s.telemetry,
     capabilities: s.capabilities,
-    controller:
-      s.controller === null
-        ? null
-        : {
-            publicKey: s.controller.public_key,
-            fingerprint: s.controller.fingerprint,
-            listen: s.controller.listen,
-            advertise: s.controller.advertise,
-          },
+    controller: s.controller === null ? null : controllerOf(s.controller),
   }
 }
 

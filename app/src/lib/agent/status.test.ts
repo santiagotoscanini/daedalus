@@ -46,6 +46,41 @@ describe('agentStatus', () => {
     expect(s.trayReporting).toBe(false)
   })
 
+  it('reads an update on probation, a rollback and a rotation', () => {
+    const s = agentStatus({
+      version: '0.20.0',
+      hostname: 'PC',
+      probation: {
+        version: '0.20.0',
+        from: '0.19.0',
+        starts: 1,
+        installed_at: '2026-09-28T17:00:00Z',
+      },
+      rolled_back: { version: '0.19.1', to: '0.19.0', starts: 4, at: '2026-09-28T16:00:00Z' },
+      controller: {
+        state: 'approved',
+        connected: true,
+        fingerprint: 'aaaa:bbbb',
+        rotated: '3f2a:9c01 -> 77aa:0102 at 2026-09-28T10:00:00Z',
+      },
+    })
+    expect(s.probation).toEqual({
+      version: '0.20.0',
+      from: '0.19.0',
+      starts: 1,
+      installedAt: '2026-09-28T17:00:00Z',
+    })
+    expect(s.rolledBack).toEqual({
+      version: '0.19.1',
+      to: '0.19.0',
+      starts: 4,
+      at: '2026-09-28T16:00:00Z',
+    })
+    expect(s.link?.rotated).toContain('77aa:0102')
+    const bare = agentStatus({ version: '0.17.0' })
+    expect([bare.probation, bare.rolledBack]).toEqual([null, null])
+  })
+
   it('refuses a body without a version', () => {
     expect(() => agentStatus({ hostname: 'X' })).toThrow()
   })
