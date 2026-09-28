@@ -1233,9 +1233,14 @@ groups:
       # all through one target, the controller's /nodes/metrics (job
       # "nodes"), so `up` there says only that the controller answered;
       # each approved machine is `daedalus_agent_link_up` (1 while its link
-      # to the controller is open, 0 while not). The controller itself down
-      # is Scrape Target Down above. noDataState OK: a box with no approved
-      # machines has no series.
+      # to the controller is open, 0 while not). The controller keeps what
+      # it observed in memory only, so after it restarts a machine that has
+      # not connected since has no series at all: the `or` counts a node
+      # seen in the last day and absent now as down too (on(node), so a
+      # rename is not a second machine). The price: a machine revoked or
+      # forgotten reads as down until its day of history runs out. The
+      # controller itself down is Scrape Target Down above. noDataState OK:
+      # a box with no approved machines has no series.
       - uid: machine-link-down-1
         title: Machine Link Down
         condition: C
@@ -1246,7 +1251,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: daedalus_agent_link_up
+              expr: daedalus_agent_link_up or on(node) (last_over_time(daedalus_agent_link_up[1d]) * 0)
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
