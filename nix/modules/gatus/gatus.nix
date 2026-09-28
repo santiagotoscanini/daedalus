@@ -79,36 +79,12 @@ let
     // lib.optionalAttrs (w.healthHeaders != { }) { headers = w.healthHeaders; }
   ) config.fleet.webApps;
 
-  # Services this box DEPENDS on that are not published by it, so there is no
-  # webApps entry to derive a probe from. Hand-written, and short on purpose:
-  # the generated list above is the rule and this is the documented exception.
-  #
-  # No CERTIFICATE_EXPIRATION condition — these are plain HTTP on the LAN, and
-  # gatus reports a failed condition rather than skipping an inapplicable one.
-  #
-  # One per node that offers a model server (platform/nodes.nix, from
-  # site/nodes.json): a host with none has an empty list rather than a probe
-  # of nowhere. The first keeps the plain name `lemonade`, so its series
-  # (and the per-name alert rule's history) carries on; a second node's
-  # probe is named after the node.
-  offBoxEndpoints = lib.imap0 (i: node: {
-    # The model server on a node. A gateway in front of it stays green while
-    # returning errors, so without this probe an outage surfaces as "the chat
-    # is broken" rather than as an alert. Feeds the same
-    # gatus_results_endpoint_success rule as everything else.
-    name = if i == 0 then "lemonade" else "lemonade-${node.name}";
-    group = "off-box";
-    url = "http://${config.fleet.nodeHost node}:${toString node.providers.lemonade.port}/api/v1/health";
-    interval = "60s";
-    conditions = [
-      "[STATUS] == 200"
-      # Not just "it answered": the health document reports per-model backend
-      # state, and a server whose backends have all died still returns 200.
-      "[BODY].status == ok"
-    ];
-  }) config.fleet.lemonadeNodes;
-
-  endpoints = webAppEndpoints ++ offBoxEndpoints;
+  # A model server on another machine is NOT probed from here: its agent
+  # reads it on that machine's loopback and the controller serves the
+  # result as `daedalus_agent_provider_up` (modules/monitoring's "Model
+  # Server Down" alert), so the box never dials the provider but for the
+  # gateway's model requests.
+  endpoints = webAppEndpoints;
 
   # gatus reads YAML; JSON is a valid subset, so toJSON avoids quoting pain.
   gatusConfig = pkgs.writeText "gatus.yaml" (

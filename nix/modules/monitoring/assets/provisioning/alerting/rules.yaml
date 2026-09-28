@@ -1282,6 +1282,59 @@ groups:
         labels:
           severity: warning
         isPaused: false
+      # A model server a machine offers the gateway, as that machine's agent
+      # reads it on its own loopback (agent/src/providers.rs) and the
+      # controller serves it: `daedalus_agent_provider_up` is 1 while it
+      # answers and calls itself healthy — its health document reports
+      # per-backend state, so a server whose backends all died answers 200
+      # and still reads 0 here. `offered="1"` limits it to what the app
+      # offers (Settings › Machines); a Lemonade installed and not offered
+      # never fires. A gateway in front stays green while returning errors,
+      # so without this an outage surfaces as "the chat is broken". Replaces
+      # the gatus probe that dialled the machine from the box. noDataState
+      # OK: a disconnected machine has no series (Machine Link Down covers
+      # it), and neither does one whose agent predates 0.18.
+      - uid: model-server-down-1
+        title: Model Server Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: daedalus_agent_provider_up{offered="1"}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: '{{ $labels.kind }} on {{ $labels.machine }} ({{ $labels.host }}, port {{ $labels.port }}) has not answered healthy for 10 minutes (daedalus_agent_provider_up = 0): it is stopped, crashed, or its backends died. The gateway''s routes to it fail meanwhile.'
+          summary: A model server offered to the gateway is down
+        labels:
+          severity: warning
+        isPaused: false
       # Every machine's Claude remote control, the box's own included (the
       # controller reports it in the same series): 0 unless its server is
       # `running`. Only the supervisor's failure states count: `stopped`
