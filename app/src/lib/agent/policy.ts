@@ -56,6 +56,32 @@ export function wirePolicy(p: NodePolicy): WirePolicy {
   }
 }
 
+/** The longest `name` the controller takes in `nodes.set_desired` (wire.rs `MAX_NODE_NAME`). */
+export const WIRE_NAME_MAX = 64
+
+/** A Unicode control character (Cc), which the controller refuses in a name. */
+export function hasControlChar(s: string): boolean {
+  for (const ch of s) {
+    const c = ch.codePointAt(0) ?? 0
+    if (c <= 0x1f || (c >= 0x7f && c <= 0x9f)) return true
+  }
+  return false
+}
+
+/**
+ * What the pages call the machine, as `nodes.set_desired` takes it: the
+ * policy's display name, which the controller labels the machine's series
+ * in `/nodes/metrics` with (`machine`). Absent when there is none — the
+ * controller then uses the hostname, as the pages do — or when it is not a
+ * name the controller would take (blank, longer than 64 characters, a
+ * control character), since one bad entry refuses the whole set.
+ */
+export function wireName(p: NodePolicy): string | undefined {
+  const name = p.displayName?.trim() ?? ''
+  if (name === '' || [...name].length > WIRE_NAME_MAX || hasControlChar(name)) return undefined
+  return name
+}
+
 /**
  * The one-shot instructions an admin can send a machine (link/wire.rs
  * `Command`): its updater looks for a release now; its session updates

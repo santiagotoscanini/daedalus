@@ -59,7 +59,7 @@ describe('the desired set', () => {
     expect(nodeIdOf(KEY_A)).not.toBe(nodeIdOf(KEY_B))
   })
 
-  it('carries every approved key with its policy and every revoked key without one', () => {
+  it('carries every approved key with its policy and name, and every revoked key without either', () => {
     const { nodes, skipped } = desiredSet([
       row(KEY_A, 'approved', {
         displayName: 'PC',
@@ -77,6 +77,8 @@ describe('the desired set', () => {
       id: nodeIdOf(KEY_A),
       public_key: KEY_A,
       state: 'approved',
+      // The display name, for the machine label of its series.
+      name: 'PC',
       // Exactly the agent's Policy: nothing of the box's own (names,
       // offers, models, hardware), the workdir trimmed.
       policy: {
@@ -91,6 +93,8 @@ describe('the desired set', () => {
       public_key: KEY_B,
       state: 'revoked',
     })
+    // No display name, no name: the controller labels it by its hostname.
+    expect(byId.get(nodeIdOf(KEY_C))).not.toHaveProperty('name')
     // The agent's defaults for an empty policy; no workdir key at all.
     expect(byId.get(nodeIdOf(KEY_C))?.policy).toEqual({
       awake_hold: true,

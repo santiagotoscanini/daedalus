@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { effectivePolicy, wirePolicy } from './policy'
+import { effectivePolicy, wireName, wirePolicy } from './policy'
 
 describe('the policy a machine hears', () => {
   it('is the agent’s defaults for an empty policy', () => {
@@ -31,5 +31,21 @@ describe('the policy a machine hears', () => {
   it('treats a blank workdir as none', () => {
     expect(effectivePolicy({ claudeWorkdir: '   ' }).claudeWorkdir).toBeNull()
     expect('claude_workdir' in wirePolicy({ claudeWorkdir: '   ' })).toBe(false)
+  })
+})
+
+describe('the name a machine is labelled with', () => {
+  it('is the trimmed display name', () => {
+    expect(wireName({ displayName: '  Windows PC ' })).toBe('Windows PC')
+  })
+
+  it('is absent when the controller would refuse it or has the hostname to use', () => {
+    expect(wireName({})).toBeUndefined()
+    expect(wireName({ displayName: '   ' })).toBeUndefined()
+    expect(wireName({ displayName: 'x'.repeat(65) })).toBeUndefined()
+    expect(wireName({ displayName: 'a\u0007b' })).toBeUndefined()
+    expect(wireName({ displayName: 'a\u0085b' })).toBeUndefined()
+    // Characters, not UTF-16 units: 64 astral characters are 64.
+    expect(wireName({ displayName: '😀'.repeat(64) })).toBe('😀'.repeat(64))
   })
 })

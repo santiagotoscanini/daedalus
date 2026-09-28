@@ -1,5 +1,5 @@
 import type { NodePolicy } from '../host/schema'
-import { NODE_COMMANDS } from '../lib/agent/policy'
+import { hasControlChar, NODE_COMMANDS } from '../lib/agent/policy'
 import { asValidator, is, literal, obj, withMessage } from '../lib/contract/decode'
 import { nodeIdField } from '../lib/contract/fields'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
@@ -85,6 +85,9 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
     if (typeof o.displayName !== 'string') throw new Error('displayName must be text')
     const name = o.displayName.trim().replace(/\s+/g, ' ')
     if (name.length > NAME_MAX) throw new Error(`displayName is longer than ${String(NAME_MAX)}`)
+    // The controller labels the machine's metrics with it and refuses a
+    // control character (lib/agent/policy.ts `wireName`).
+    if (hasControlChar(name)) throw new Error('displayName has a control character')
     if (name !== '') policy.displayName = name
   }
   if (o.name !== undefined) {

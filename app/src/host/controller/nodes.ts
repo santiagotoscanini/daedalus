@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { wirePolicy } from '../../lib/agent/policy'
+import { wireName, wirePolicy } from '../../lib/agent/policy'
 import type { NodePolicy, NodeState } from '../schema'
 import { type ControllerClient, controller } from './client'
 import {
@@ -44,9 +44,23 @@ export type DecidedRow = {
   policy: NodePolicy | null
 }
 
+/** An approved key's entry: its policy and, when it has one, the name the pages show. */
+function approvedEntry(id: string, key: string, policy: NodePolicy): DesiredNode {
+  const name = wireName(policy)
+  return {
+    id,
+    public_key: key,
+    state: 'approved',
+    policy: wirePolicy(policy),
+    ...(name === undefined ? {} : { name }),
+  }
+}
+
 /**
  * The complete set `nodes.set_desired` takes: every approved key with its
- * policy, every revoked key without one, sorted by id. A row whose id is not
+ * policy and display name, every revoked key without either, sorted by id.
+ * The name is the `machine` label of the machine's series in the
+ * controller's `/nodes/metrics`. A row whose id is not
  * its key's is left out and named — the controller checks every entry before
  * applying any, so one bad row would refuse the lot.
  */
@@ -68,7 +82,7 @@ export function desiredSet(rows: readonly DecidedRow[]): {
     }
     nodes.push(
       r.state === 'approved'
-        ? { id: r.id, public_key: key, state: 'approved', policy: wirePolicy(r.policy ?? {}) }
+        ? approvedEntry(r.id, key, r.policy ?? {})
         : { id: r.id, public_key: key, state: 'revoked' },
     )
   }

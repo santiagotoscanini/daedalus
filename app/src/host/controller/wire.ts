@@ -548,6 +548,8 @@ export type DesiredNode = {
   state: 'approved' | 'revoked'
   /** The machine's policy (lib/agent/policy.ts); absent for a revoked key. */
   policy?: WirePolicy
+  /** What the pages call it (lib/agent/policy.ts `wireName`); absent: the hostname. */
+  name?: string
 }
 
 /** `nodes.set_desired`'s answer: the ids whose open connection changed. */
