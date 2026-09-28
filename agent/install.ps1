@@ -5,10 +5,10 @@
 .DESCRIPTION
   Downloads the newest agent-v* release of the engine repository, places the
   service and the tray under Program Files, and runs `daedalus-agent install`
-  (the service, the tray's Run key, the firewall rule, config.toml). From
-  then on the agent keeps this machine awake, keeps one connection to the
-  controller (the box's agent), answers /metrics on TCP 7787 for the LAN,
-  and updates itself. Run from an administrator PowerShell:
+  (the service, the tray's Run key, config.toml). From then on the agent
+  keeps this machine awake, keeps one connection to the controller (the
+  box's agent) — it listens on nothing the LAN can reach — and updates
+  itself. Run from an administrator PowerShell:
 
     Set-ExecutionPolicy -Scope Process Bypass -Force
     irm https://daedalus.toscanini.me/install.ps1 | iex
@@ -16,8 +16,8 @@
   (the site serves this file from agent/install.ps1 on main, so the line never
   names a version; the script finds the newest agent-v* release itself).
   Re-running on an installed machine replaces the binaries and keeps
-  config.toml. `daedalus-agent uninstall` removes the service, the tray's
-  Run key and the firewall rule.
+  config.toml. `daedalus-agent uninstall` removes the service and the
+  tray's Run key.
 
   Trust at install is HTTPS to GitHub. Every later update is verified by
   the agent itself against the release key it carries.
@@ -27,8 +27,8 @@
 .PARAMETER Version
   A specific version (e.g. 0.1.0) instead of the newest.
 .PARAMETER Port
-  The status page's TCP port (/metrics for the LAN), written to config.toml
-  on first install.
+  The status page's TCP port on loopback, written to config.toml on
+  first install.
 .PARAMETER Controller
   The controller's link address, host:port (the box's agent), written to
   config.toml (also on a reinstall). Absent: the agent asks DNS for the
@@ -56,7 +56,7 @@ $ErrorActionPreference = "Stop"
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  throw "run this from an administrator PowerShell (the service and the firewall rule need it)"
+  throw "run this from an administrator PowerShell (the service needs it)"
 }
 
 # Release asset name -> file name beside the service. Both are required.

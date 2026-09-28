@@ -80,8 +80,8 @@ fn serve_under_scm() -> Result<()> {
     outcome
 }
 
-/// `daedalus-agent install`: the service, its recovery, the firewall rule,
-/// the config file, and a start. Idempotent: a second run on an installed
+/// `daedalus-agent install`: the service, its recovery, the config file, and
+/// a start. Idempotent: a second run on an installed
 /// machine updates the binary path (the installer copies a new exe to the
 /// same place), leaves config.toml alone, and makes sure the service runs.
 pub fn install(cfg: &Config) -> Result<()> {
@@ -174,12 +174,6 @@ pub fn install(cfg: &Config) -> Result<()> {
         );
     }
 
-    firewall_allow(cfg.port)?;
-    println!(
-        "firewall: TCP {} allowed from the local subnet (/metrics)",
-        cfg.port
-    );
-
     let state = service
         .query_status()
         .context("querying the service")?
@@ -207,7 +201,7 @@ pub fn install(cfg: &Config) -> Result<()> {
 }
 
 /// `daedalus-agent uninstall`: stop, delete, drop the tray's Run key (and
-/// the running tray) and the firewall rule. The data directory (config,
+/// the running tray). The data directory (config,
 /// state, identity, logs) is left for the operator.
 pub fn uninstall() -> Result<()> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
@@ -219,7 +213,6 @@ pub fn uninstall() -> Result<()> {
         Ok(s) => s,
         Err(_) => {
             println!("service {SERVICE_NAME} is not registered");
-            firewall_remove()?;
             return Ok(());
         }
     };
@@ -235,52 +228,7 @@ pub fn uninstall() -> Result<()> {
     service.delete().context("deleting the service")?;
     println!("service {SERVICE_NAME} removed");
     tray_unregister();
-    firewall_remove()?;
     println!("data left in {}", config::data_dir().display());
-    Ok(())
-}
-
-const FIREWALL_RULE: &str = "daedalus-agent status page";
-
-fn firewall_allow(port: u16) -> Result<()> {
-    firewall_remove()?;
-    let out = std::process::Command::new("netsh")
-        .args([
-            "advfirewall",
-            "firewall",
-            "add",
-            "rule",
-            &format!("name={FIREWALL_RULE}"),
-            "dir=in",
-            "action=allow",
-            "protocol=TCP",
-            &format!("localport={port}"),
-            "remoteip=LocalSubnet",
-            "profile=any",
-        ])
-        .output()
-        .context("running netsh")?;
-    if !out.status.success() {
-        bail!(
-            "netsh add rule: {}",
-            String::from_utf8_lossy(&out.stdout).trim()
-        );
-    }
-    Ok(())
-}
-
-fn firewall_remove() -> Result<()> {
-    // "No rules match" is a non-zero exit and fine.
-    let _ = std::process::Command::new("netsh")
-        .args([
-            "advfirewall",
-            "firewall",
-            "delete",
-            "rule",
-            &format!("name={FIREWALL_RULE}"),
-        ])
-        .output()
-        .context("running netsh")?;
     Ok(())
 }
 

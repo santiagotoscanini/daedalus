@@ -13,11 +13,11 @@ beside it where there is a desktop. It
   talks to nothing else: TLS 1.3 with both keys pinned; hello, status,
   telemetry and the Claude report up; the box's policy and commands down
   at once (see "The link to the controller");
-- **answers a status page** on port 7787 (`port`): to other machines only
-  `GET /metrics` (the telemetry for Prometheus, which still scrapes each
-  machine) and `GET /healthz`; everything else — `/status`, the full
-  Claude report at `/claude`, and the tray's and session's writes — answers
-  loopback alone and 403 to anyone else. `src/status.rs` has the routes;
+- **listens on nothing the LAN can reach**: its status page on port 7787
+  (`port`) is bound to `127.0.0.1` — `/status`, the full Claude report at
+  `/claude`, `/healthz`, and the tray's and session's writes, for this
+  machine alone. Its metrics reach Prometheus through the controller
+  (`/nodes/metrics`, below). `src/status.rs` has the routes;
 - **reports the machine** — hardware, OS, usage, drives and their health,
   temperatures, network, battery, pending OS updates, installed browsers
   and applications, and the **providers** on it (a model server such as
@@ -63,8 +63,12 @@ tray or installer (`install` and `uninstall` refuse there).
 process as the operator (`daedalus-agent run` under systemd; `serve` is the
 same in a terminal), with
 
-- **the status page on loopback only** (`127.0.0.1:7787`): the box adds no
-  LAN listener; a node binds `0.0.0.0` for `/metrics`;
+- **the status page on every interface** (`0.0.0.0:7787`), for one reader:
+  the box's Prometheus, whose container reaches the host through pasta's
+  host alias, so its connections arrive at the host's LAN address rather
+  than loopback. Other addresses get `GET /healthz` and
+  `GET /nodes/metrics` alone and 403 for everything else; the host
+  firewall keeps the port closed to the LAN (nix). A node binds loopback;
 - **telemetry** at the level `telemetry` sets (below);
 - **the session inside the process**: Claude remote control as its
   transient user unit, reported straight into the service. `daedalus-agent
@@ -86,12 +90,14 @@ same in a terminal), with
   names an address (absent: none — the box opens no port until nix says
   so), and the registry of machines the API's `nodes.*` methods read
   (see "The link to the controller");
-- **`GET /nodes/metrics`** on the loopback status page: every connected
-  machine's telemetry as Prometheus text, the series and labels each
-  machine's own `/metrics` writes plus `node="<id>"`, and
-  `daedalus_agent_link_up` per approved machine — so Prometheus can scrape
-  the controller instead of every machine. The page stays on loopback; how
-  Prometheus reaches it is nix's to decide;
+- **`GET /nodes/metrics`**, the one endpoint Prometheus scrapes for every
+  machine: each connected, approved machine's telemetry as Prometheus text
+  (`src/telemetry/metrics.rs`), and `daedalus_agent_link_up` (1 while
+  connected) per approved machine. Every series carries four labels:
+  `node` (the node id), `host` (its hostname) and `os` (`windows`,
+  `macos`, `linux`) from its hello, and `machine` — the name the app
+  hands over in `nodes.set_desired`, or the hostname when it sends none.
+  The box itself is not in it: node-exporter covers the box;
 - and nothing else: no link of its own, no self-update, no keep-awake, no
   tray, no installer, and no `claude update` — nix pins Claude Code on the
   box (`POST /claude/update` answers 403 there).
@@ -130,6 +136,9 @@ What the unit nix writes should carry:
   a descriptor, up to 64, beside the telemetry and the session's tools.
 - With `listen` set, the port open to the LAN in the firewall (and only
   there: the link is for machines on the network).
+- The status page's `port` kept CLOSED to the LAN: it binds every
+  interface so the Prometheus container can reach `/nodes/metrics`, and
+  only the firewall stops the LAN from asking the same.
 - A `claude_unit` distinct from any unit the box already runs, and the
   gcroot pin on the `claude` it runs.
 
@@ -175,7 +184,7 @@ matched by `id`. The first request must be `hello`:
 
 ```
 → {"id":1,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}
-← {"id":1,"ok":{"api":1,"version":"0.14.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","telemetry.full"]}}
+← {"id":1,"ok":{"api":1,"version":"0.15.0","mode":"controller","hostname":"s2-server","capabilities":["claude.remote_control","telemetry.full"]}}
 ```
 
 Another API version gets `{"code":"version",…,"supported":1}` — the
@@ -197,7 +206,7 @@ verbs, none taking a command, a path or a flag:
 | `nodes.get` `{id}` | the same fields, plus `public_key`, the whole `hello`, `status` (the machine's status page without its telemetry) and `status_at`, `telemetry` (the open page's view) and `telemetry_at`, `providers` | `nodes` |
 | `nodes.telemetry` `{id}` | `{id, telemetry, received_at}`: the full document at the machine's level | `nodes` |
 | `nodes.claude` `{id}` | `{id, report, received_at}`: the machine's full Claude report      | `nodes`                 |
-| `nodes.set_desired` `{nodes: [{id, public_key, state, policy}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
+| `nodes.set_desired` `{nodes: [{id, public_key, state, policy, name}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
 | `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
 
 `state` is `pending` (connected, not decided), `approved`, `revoked` or
@@ -205,10 +214,12 @@ verbs, none taking a command, a path or a flag:
 COMPLETE set of decided keys — `state` `approved` or `revoked`, `policy`
 the link's `Policy` (`src/link/wire.rs`: `awake_hold`, `claude_remote_control`,
 `claude_workdir`, `providers.lemonade.port`; absent for an approved key:
-the defaults) — idempotent, applied as a difference to the connections open
+the defaults), `name` what the pages call the machine (optional; the
+`machine` label in `/nodes/metrics`, the hostname when absent) — idempotent, applied as a difference to the connections open
 now; a key left out is pending while connected. Every entry is checked
 before any applies: `id` must be the node id of `public_key`, no id twice,
-no field the controller does not know. `command` is one of `check_update`,
+no field the controller does not know, a `name` not blank, at most 64
+characters, without control characters. `command` is one of `check_update`,
 `claude_update`, `claude_restart`; a machine never heard of is `not_found`,
 one not approved `unavailable`; one that does not acknowledge within 5 s
 is `unavailable` too. Every `id` is sixteen lowercase hex characters,
@@ -300,7 +311,7 @@ slowest step. A decision is for a key: a connection whose key is not the
 one the app decided for that id is refused.
 
 **Messages.** Machine → controller: `hello` (agent version, OS, arch,
-hostname, MAC, LAN address, the status port, facts, capabilities,
+hostname, MAC, LAN address, facts, capabilities,
 telemetry level; its key is the certificate's), then, once approved,
 `status` (the status page without its telemetry: the awake hold, updates,
 policy, Claude summary, the link itself) on change and every minute,
@@ -326,9 +337,10 @@ one's place. Of an unknown key that left only its id, fingerprint, hostname
 and last-seen time are kept, at most 256 such keys, and at most 1024
 addresses are counted. The controller keeps what it observed in memory
 only; after a restart the machines reconnect and fill it again, and the
-app hands the desired set back. Label values in `/nodes/metrics` (and a
-machine's own `/metrics`) are escaped, newlines included, and stripped of
-other control characters.
+app hands the desired set back. Label values in `/nodes/metrics` are
+escaped, newlines included, and stripped of other control characters; the
+name in `nodes.set_desired` is refused when blank, longer than 64
+characters or holding a control character.
 
 The status page's `controller` block and the tray's menu show the link:
 the address and where it came from, the state (`connecting`, `pending`,
@@ -348,11 +360,11 @@ irm https://daedalus.toscanini.me/install.ps1 | iex
 `C:\Program Files\daedalus-agent\` and runs `daedalus-agent install`, which
 registers the `daedalus-agent` service (LocalSystem, automatic start,
 restart on failure), registers the tray under the machine's Run key and
-starts it as the desktop user, opens TCP 7787 to the local subnet (for
-`/metrics`), writes
-`config.toml` if there is none, and starts the service. Re-running replaces
-the binaries and keeps the config. `daedalus-agent uninstall` removes the
-service, the tray's Run key and the firewall rule; the data directory stays.
+starts it as the desktop user, writes `config.toml` if there is none, and
+starts the service. It opens nothing in the firewall: the agent listens on
+nothing the LAN can reach. Re-running replaces the binaries and keeps the
+config. `daedalus-agent uninstall` removes the service and the tray's Run
+key; the data directory stays.
 
 Without parameters the machine finds the controller through DNS and trusts
 its key on first use. To name the controller and pin its key at install,
@@ -374,8 +386,9 @@ curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
 [`install.sh`](install.sh) on a Mac downloads the two universal binaries,
 registers the service as a LaunchDaemon (root, at boot, kept alive) and the
 menu bar app as a LaunchAgent for every user, starts both, and links
-`daedalus-agent` into `/usr/local/bin`. `sudo daedalus-agent uninstall`
-removes both jobs.
+`daedalus-agent` into `/usr/local/bin`. Nothing is registered with the
+application firewall: the agent listens on nothing the LAN can reach.
+`sudo daedalus-agent uninstall` removes both jobs.
 
 On Linux — a distribution running systemd 240 or newer (2018 onwards;
 `install` refuses an older one), on x86_64 or aarch64 (NixOS is configured
@@ -400,12 +413,9 @@ runs `daedalus-agent install`, which
   (dbus-user-session) is needed;
 - where the tray was installed, writes `/etc/xdg/autostart/daedalus-agent-tray.desktop`,
   so every graphical login starts it;
-- writes `config.toml` if there is none, and opens nothing in the firewall.
-  On a machine that filters inbound traffic, allow the status page's port
-  to the LAN, for Prometheus's scrape of `/metrics`:
-  `sudo ufw allow from 192.168.0.0/24 to any port 7787 proto tcp`
-  (ufw), or `sudo firewall-cmd --permanent --add-port=7787/tcp && sudo
-  firewall-cmd --reload` (firewalld).
+- writes `config.toml` if there is none. Nothing needs opening in a
+  firewall: the status page answers loopback alone, and the link is
+  outbound.
 
 `sudo daedalus-agent uninstall` stops and removes the service, the session
 and the tray's entry, stops the Claude server, and turns lingering off
@@ -535,7 +545,7 @@ optional, and a top-level key the agent does not know is ignored. The
 header of [`src/config.rs`](src/config.rs) is the reference.
 
 ```toml
-port = 7787               # the status page's port; the LAN gets /metrics and /healthz
+port = 7787               # the status page's port, on loopback (all interfaces on the controller)
 update_check_secs = 600   # how often the release feed is asked
 auto_update = true        # the older spelling of `updates`
 log_level = "info"        # "debug" for a bug report
@@ -558,7 +568,7 @@ updates; processes are sampled for the count, but the list is not
 reported, and a provider such as Lemonade shows only while it answers (an
 installed but stopped one is found through the application list, which
 `minimal` does not read); `off` reads nothing (the page's `telemetry` is
-null, `/metrics` empty).
+null, and `/nodes/metrics` carries only its `daedalus_agent_link_up`).
 
 `updates = "self"` installs a newer release (the default); `staged` and
 `external` only report it, as `auto_update = false` does. With no

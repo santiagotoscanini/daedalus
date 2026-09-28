@@ -1,5 +1,5 @@
 //! The telemetry document's types: the machine and its parts as the status
-//! page and `/metrics` carry them (`Telemetry` and everything in it, and
+//! page, the link and `/nodes/metrics` carry them (`Telemetry` and everything in it, and
 //! `public()`, the open page's view of it), and the three halves a
 //! collector hands back (`Static`, `Slow`, `Sample`) before `assemble`
 //! joins them.

@@ -160,15 +160,6 @@ pub fn install(cfg: &Config) -> Result<()> {
     launchctl(&["bootstrap", "system", &daemon_plist().to_string_lossy()])?;
     println!("service {DAEMON_LABEL} registered and started");
 
-    // The application firewall, when it is on, would otherwise ask (and a
-    // daemon cannot answer). Best effort: absent on some systems.
-    let fw = "/usr/libexec/ApplicationFirewall/socketfilterfw";
-    if Path::new(fw).exists() {
-        let exe_s = exe.to_string_lossy().to_string();
-        let _ = Command::new(fw).args(["--add", &exe_s]).output();
-        let _ = Command::new(fw).args(["--unblockapp", &exe_s]).output();
-    }
-
     // The tray, for every user at login, and for the console user now.
     if tray.exists() {
         std::fs::write(

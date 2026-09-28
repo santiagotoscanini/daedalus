@@ -2,10 +2,20 @@
 //! `daedalus-agent status`. What the box learns of a machine travels up the
 //! link (link/node.rs), never through this page.
 //!
-//! To any address, two reads: `GET /healthz`, `ok`, and `GET /metrics`,
-//! the telemetry as Prometheus text (telemetry/metrics.rs) — the box's
-//! Prometheus still scrapes each machine's `/metrics` over the LAN. Only
-//! from loopback, and refused (403) from any other address:
+//! A node binds it to loopback alone (role.rs): a machine listens on
+//! nothing the LAN can reach. The controller binds every interface for one
+//! reader, the box's Prometheus, whose container reaches the host through
+//! pasta's host alias — its connections arrive at the host's LAN address,
+//! not loopback — while the host firewall keeps the port closed to the LAN
+//! (nix). To any address, two reads:
+//!
+//!   GET  /healthz         `ok`
+//!   GET  /nodes/metrics   the telemetry of every machine connected to the
+//!                         controller (link/controller.rs), as Prometheus
+//!                         text, each series labelled `node`, `host`,
+//!                         `machine` and `os`; 404 on a node
+//!
+//! Only from loopback, and refused (403) from any other address:
 //!
 //!   GET  /status (and /)  the document below
 //!   GET  /claude          the session's full report (session.rs `Watcher`)
@@ -22,15 +32,9 @@
 //! these. The tokens in the user's Claude profile never reach this page —
 //! the report copies dates and a plan name, not credentials.
 //!
-//! A node binds every interface, for `/metrics` (role.rs); the controller
-//! binds loopback only, and the app's door there is the socket (api/),
-//! which reads the same `Shared` this page does. `POST /claude/update`
-//! refuses there — nix pins Claude Code on the box. The controller also
-//! answers `GET /nodes/metrics` on loopback: the telemetry of every machine
-//! connected to it (link/), as Prometheus text with the series and labels
-//! each machine's own `/metrics` uses plus a `node` label, so Prometheus
-//! can scrape the one controller instead of every machine; how it reaches
-//! the page is nix's to decide. A node answers that path 404.
+//! The app's door on the controller is the socket (api/), which reads the
+//! same `Shared` this page does. `POST /claude/update` refuses there — nix
+//! pins Claude Code on the box.
 //!
 //! A node's page also carries `controller`: its link to the controller —
 //! the address, its own fingerprint and the controller's it trusts, whether
@@ -320,15 +324,6 @@ impl Shared {
         &self.events
     }
 
-    /// Prometheus text for `/metrics`; empty before the first sample.
-    fn metrics(&self) -> String {
-        let l = self.lock();
-        match &l.telemetry {
-            Some(t) => crate::telemetry::metrics_text(t, crate::VERSION, &crate::facts::hostname()),
-            None => String::new(),
-        }
-    }
-
     pub fn request_claude_update(&self) {
         self.lock().claude_update_requested = true;
     }
@@ -496,12 +491,12 @@ impl Shared {
 
 /// What any address may ask; everything else is for loopback (module doc).
 fn open_to_any(method: &Method, url: &str) -> bool {
-    *method == Method::Get && matches!(url, "/healthz" | "/metrics")
+    *method == Method::Get && matches!(url, "/healthz" | "/nodes/metrics")
 }
 
-/// Answer on `port` — every interface on a node, loopback on the
-/// controller (`Role::status_address`) — from a thread until `unblock` is
-/// called on the returned server.
+/// Answer on `port` — loopback on a node, every interface on the controller
+/// (`Role::status_address`) — from a thread until `unblock` is called on
+/// the returned server.
 pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
     let address = shared.role.status_address();
     let server = Server::http((address, port))
@@ -520,15 +515,12 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                 let (code, body, ctype) = match (req.method(), req.url()) {
                     (m, u) if !local && !open_to_any(m, u) => (
                         403,
-                        "only /metrics and /healthz answer other machines\n".to_string(),
+                        "only /healthz and /nodes/metrics answer other addresses\n".to_string(),
                         "text/plain",
                     ),
                     (&Method::Get, "/healthz") => (200, "ok\n".to_string(), "text/plain"),
-                    (&Method::Get, "/metrics") => {
-                        (200, shared.metrics(), "text/plain; version=0.0.4")
-                    }
                     // The connected machines' telemetry, on the controller
-                    // (link/controller.rs); this page is loopback-only there.
+                    // (link/controller.rs).
                     (&Method::Get, "/nodes/metrics") => match shared.nodes() {
                         Some(r) => (200, r.metrics(), "text/plain; version=0.0.4"),
                         None => (
@@ -606,17 +598,17 @@ mod tests {
     use crate::config::Mode;
 
     #[test]
-    fn other_machines_get_metrics_and_healthz_alone() {
-        for (m, u) in [(Method::Get, "/metrics"), (Method::Get, "/healthz")] {
+    fn other_addresses_get_healthz_and_nodes_metrics_alone() {
+        for (m, u) in [(Method::Get, "/healthz"), (Method::Get, "/nodes/metrics")] {
             assert!(open_to_any(&m, u), "{u}");
         }
         for (m, u) in [
             (Method::Get, "/"),
             (Method::Get, "/status"),
             (Method::Get, "/claude"),
+            (Method::Get, "/metrics"),
             (Method::Get, "/telemetry"),
-            (Method::Get, "/nodes/metrics"),
-            (Method::Post, "/metrics"),
+            (Method::Post, "/nodes/metrics"),
             (Method::Post, "/update/check"),
             (Method::Post, "/claude/report"),
             (Method::Post, "/claude/update"),
@@ -626,17 +618,9 @@ mod tests {
         }
     }
 
-    /// The server itself, on a node: bound to every interface, answering
-    /// loopback in full and anything else only `/metrics` and `/healthz`.
-    #[test]
-    fn a_node_page_refuses_other_addresses_but_for_metrics() {
-        let shared = Arc::new(Shared::new(
-            State::default(),
-            Facts::default(),
-            Instant::now(),
-            Policy::default(),
-            Role::of(Mode::Node),
-        ));
+    /// A page served on a free port, with a GET that returns the status
+    /// code, or None when nothing listens there.
+    fn page(shared: Arc<Shared>) -> (Arc<Server>, impl Fn(std::net::IpAddr, &str) -> Option<u16>) {
         // A free port: bind, read it, let go.
         let port = std::net::TcpListener::bind("0.0.0.0:0")
             .unwrap()
@@ -644,32 +628,80 @@ mod tests {
             .unwrap()
             .port();
         let server = serve(port, shared).unwrap();
-        let get = |host: std::net::IpAddr, path: &str| -> u16 {
+        let get = move |host: std::net::IpAddr, path: &str| -> Option<u16> {
             match ureq::get(&format!("http://{host}:{port}{path}"))
                 .timeout(Duration::from_secs(3))
                 .call()
             {
-                Ok(r) => r.status(),
-                Err(ureq::Error::Status(c, _)) => c,
-                Err(e) => panic!("{path}: {e}"),
+                Ok(r) => Some(r.status()),
+                Err(ureq::Error::Status(c, _)) => Some(c),
+                Err(ureq::Error::Transport(_)) => None,
             }
         };
-        let lo: std::net::IpAddr = "127.0.0.1".parse().unwrap();
-        assert_eq!(get(lo, "/status"), 200);
-        assert_eq!(get(lo, "/claude"), 200);
-        assert_eq!(get(lo, "/telemetry"), 404);
-        // Another address of this machine is not loopback to the server.
-        let lan = std::net::UdpSocket::bind("0.0.0.0:0")
+        (server, get)
+    }
+
+    /// Another address of this machine, which is not loopback to the server;
+    /// None where the machine has no route out.
+    fn lan_address() -> Option<std::net::IpAddr> {
+        std::net::UdpSocket::bind("0.0.0.0:0")
             .and_then(|s| s.connect("192.0.2.1:9").map(|_| s))
             .and_then(|s| s.local_addr())
             .map(|a| a.ip())
             .ok()
-            .filter(|ip| !ip.is_loopback() && !ip.is_unspecified());
-        if let Some(lan) = lan {
-            assert_eq!(get(lan, "/metrics"), 200);
-            assert_eq!(get(lan, "/healthz"), 200);
-            for p in ["/status", "/", "/claude", "/telemetry"] {
-                assert_eq!(get(lan, p), 403, "{p}");
+            .filter(|ip| !ip.is_loopback() && !ip.is_unspecified())
+    }
+
+    fn shared_as(mode: Mode) -> Arc<Shared> {
+        Arc::new(Shared::new(
+            State::default(),
+            Facts::default(),
+            Instant::now(),
+            Policy::default(),
+            Role::of(mode),
+        ))
+    }
+
+    /// A node listens on loopback alone: in full there, not at all on any
+    /// other address. It has no `/metrics` and no machines of its own.
+    #[test]
+    fn a_node_page_listens_on_loopback_alone() {
+        let (server, get) = page(shared_as(Mode::Node));
+        let lo: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+        assert_eq!(get(lo, "/status"), Some(200));
+        assert_eq!(get(lo, "/claude"), Some(200));
+        assert_eq!(get(lo, "/healthz"), Some(200));
+        assert_eq!(get(lo, "/metrics"), Some(404));
+        assert_eq!(get(lo, "/nodes/metrics"), Some(404));
+        if let Some(lan) = lan_address() {
+            for p in ["/healthz", "/status", "/nodes/metrics"] {
+                assert_eq!(get(lan, p), None, "{p}");
+            }
+        }
+        server.unblock();
+    }
+
+    /// The controller binds every interface, answering loopback in full and
+    /// anything else only `/healthz` and `/nodes/metrics`.
+    #[test]
+    fn a_controller_page_answers_other_addresses_the_scrape_alone() {
+        let shared = shared_as(Mode::Controller);
+        let cid = crate::identity::Identity::from_seed([200; 32]);
+        shared.set_nodes(Arc::new(crate::link::controller::Registry::new(
+            &cid,
+            shared.events_handle(),
+            Default::default(),
+        )));
+        let (server, get) = page(shared);
+        let lo: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+        assert_eq!(get(lo, "/status"), Some(200));
+        assert_eq!(get(lo, "/nodes/metrics"), Some(200));
+        assert_eq!(get(lo, "/metrics"), Some(404));
+        if let Some(lan) = lan_address() {
+            assert_eq!(get(lan, "/healthz"), Some(200));
+            assert_eq!(get(lan, "/nodes/metrics"), Some(200));
+            for p in ["/status", "/", "/claude", "/metrics", "/telemetry"] {
+                assert_eq!(get(lan, p), Some(403), "{p}");
             }
         }
         server.unblock();

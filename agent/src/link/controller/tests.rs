@@ -141,6 +141,7 @@ fn entry(nid: &Identity, state: DesiredState, policy: crate::link::wire::Policy)
         public_key: *nid.public_key().as_bytes(),
         state,
         policy,
+        name: None,
     }
 }
 
@@ -234,11 +235,13 @@ fn an_approved_machine_connects_and_pushes() {
             .process_count,
         Some(300)
     );
-    // /nodes/metrics: the machine's series, labelled by node.
+    // /nodes/metrics: the machine's series, with the four labels; no
+    // name from the app, so `machine` is the hostname.
     let m = ctl.registry.metrics();
+    let os = ctl.registry.get(&nid.node_id()).unwrap().hello.unwrap().os;
+    let host = crate::telemetry::escape_label(&crate::facts::hostname());
     let labels = format!(
-        "host=\"{}\",node=\"{}\"",
-        crate::telemetry::escape_label(&crate::facts::hostname()),
+        "host=\"{host}\",machine=\"{host}\",node=\"{}\",os=\"{os}\"",
         nid.node_id()
     );
     assert!(
@@ -794,6 +797,7 @@ fn a_decision_is_for_a_key_not_an_id() {
         public_key: *id(28).public_key().as_bytes(),
         state: DesiredState::Approved,
         policy: claude_policy(),
+        name: None,
     }]);
     let (_t, line) = raw(&ctl, &nid).unwrap();
     assert!(
@@ -906,9 +910,21 @@ fn the_api_steers_the_machines_through_the_socket() {
     let bad = call(r#"{"id":13,"m":"nodes.reboot","p":{}}"#.into());
     assert_eq!(bad["err"]["code"], "unknown_method");
 
+    // A name that would not make a clean label is refused, whole set and all.
+    for name in [" ".to_string(), "a".repeat(65), "PC\n".to_string()] {
+        let set = serde_json::json!({"id":14,"m":"nodes.set_desired","p":{"nodes":[
+            {"id": n, "public_key": nid.public_key_hex(), "state":"approved", "name": name}]}});
+        assert_eq!(
+            call(set.to_string())["err"]["code"],
+            "bad_request",
+            "{name:?}"
+        );
+    }
+    assert_eq!(registry.list()[0].state, NodeState::Pending);
+
     // Approved: the policy reaches the machine without a reconnect.
     let set = serde_json::json!({"id":7,"m":"nodes.set_desired","p":{"nodes":[
-        {"id": n, "public_key": nid.public_key_hex(), "state":"approved",
+        {"id": n, "public_key": nid.public_key_hex(), "state":"approved", "name":"Gaming PC",
          "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"/work"}}]}});
     let ok = call(set.to_string());
     assert_eq!(ok["ok"]["approved"], serde_json::json!([n]));
@@ -930,6 +946,16 @@ fn the_api_steers_the_machines_through_the_socket() {
         r#"{{"id":8,"m":"nodes.telemetry","p":{{"id":"{n}"}}}}"#
     ));
     assert_eq!(t["ok"]["telemetry"]["sampled_at"], "t9");
+    // /nodes/metrics names the machine as the app does.
+    let m = registry.metrics();
+    assert!(
+        m.contains(&format!(
+            "daedalus_agent_link_up{{host=\"{}\",machine=\"Gaming PC\",node=\"{n}\",os=\"{}\"}} 1\n",
+            crate::telemetry::escape_label(&crate::facts::hostname()),
+            registry.get(&n).unwrap().hello.unwrap().os
+        )),
+        "{m}"
+    );
     let d = call(format!(r#"{{"id":9,"m":"nodes.get","p":{{"id":"{n}"}}}}"#));
     assert_eq!(d["ok"]["state"], "approved");
     assert_eq!(d["ok"]["connected"], true);

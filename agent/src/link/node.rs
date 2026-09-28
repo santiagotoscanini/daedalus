@@ -210,7 +210,6 @@ pub fn hello_of(cfg: &Config, id: &Identity, facts: &crate::facts::Facts) -> Hel
         hostname: crate::facts::hostname(),
         mac: adapter.mac,
         lan_ip: adapter.ipv4,
-        status_port: cfg.port,
         facts: HelloFacts {
             os_name: facts.os_name.clone(),
             os_version: facts.os_version.clone(),

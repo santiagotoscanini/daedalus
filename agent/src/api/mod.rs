@@ -61,7 +61,7 @@
 //! | `nodes.get`        | `NodeDetail`: one machine's hello, status and open telemetry `{id}` | `nodes`     |
 //! | `nodes.telemetry`  | `NodeTelemetry`: its full telemetry `{id}`             | `nodes`                 |
 //! | `nodes.claude`     | `NodeClaude`: its full Claude report `{id}`            | `nodes`                 |
-//! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies `{nodes:[…]}` | `nodes` |
+//! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
 //!
 //! The `nodes.*` methods read and steer the machines connected to the
@@ -69,8 +69,9 @@
 //! lowercase hex characters, checked before anything else — and their
 //! parameters are exact; `command` is one of `check_update`,
 //! `claude_update`, `claude_restart`. `set_desired` checks every entry (an
-//! id that is not its key's, a key twice, a policy field it does not know)
-//! before applying any. A machine the controller has never heard of is
+//! id that is not its key's, a key twice, a policy field it does not know,
+//! a `name` longer than `MAX_NODE_NAME` characters or with a control
+//! character) before applying any. A machine the controller has never heard of is
 //! `not_found`; a command for one that is not approved is `unavailable`.
 //! All of it is additive to api 1: no earlier method or event changed.
 //!
@@ -455,6 +456,25 @@ fn checked_id(id: &str) -> Result<(), ApiError> {
     }
 }
 
+/// A machine's name as `nodes.set_desired` hands it: not blank, at most
+/// `MAX_NODE_NAME` characters, no control character — it becomes a label
+/// value in `/nodes/metrics`.
+fn checked_name(id: &str, name: &str) -> Result<(), ApiError> {
+    let bad = if name.trim().is_empty() {
+        "is blank".to_string()
+    } else if name.chars().count() > wire::MAX_NODE_NAME {
+        format!("is longer than {} characters", wire::MAX_NODE_NAME)
+    } else if name.chars().any(char::is_control) {
+        "has a control character".to_string()
+    } else {
+        return Ok(());
+    };
+    Err(ApiError::new(
+        code::BAD_REQUEST,
+        format!("{id}: the name {bad}"),
+    ))
+}
+
 /// The app's set, every entry checked before any is applied: the id is its
 /// key's node id, and no id is named twice. An approved entry without a
 /// policy gets `Policy::default()`; a revoked one's policy is kept unused.
@@ -484,11 +504,15 @@ fn desired_entries(
                     format!("{} is named twice", n.id),
                 ));
             }
+            if let Some(name) = &n.name {
+                checked_name(&n.id, name)?;
+            }
             Ok(crate::link::controller::DesiredEntry {
                 id: n.id,
                 public_key: key,
                 state: n.state,
                 policy: n.policy.map(Into::into).unwrap_or_default(),
+                name: n.name,
             })
         })
         .collect()

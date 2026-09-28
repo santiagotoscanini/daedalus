@@ -7,8 +7,8 @@
 # serves this file from agent/install.sh on main, so the line never names a
 # version) and registers it with the OS's service manager. From then on the
 # agent keeps the machine awake, keeps one connection to the controller
-# (the box's agent), answers /metrics on TCP 7787 for the LAN, runs Claude
-# Code's remote control for the user who ran sudo, and updates itself.
+# (the box's agent) — it listens on nothing the LAN can reach — runs
+# Claude Code's remote control for the user who ran sudo, and updates itself.
 # Re-running on an installed machine replaces the binaries and keeps
 # config.toml.
 # `sudo daedalus-agent uninstall` removes what `install` registered.
@@ -28,8 +28,8 @@
 # agent itself against the release key it carries.
 #
 # Environment: DAEDALUS_REPO (owner/name), DAEDALUS_AGENT_VERSION (e.g. 0.5.0
-# instead of the newest), DAEDALUS_AGENT_PORT (the status page's port, on
-# first install only).
+# instead of the newest), DAEDALUS_AGENT_PORT (the status page's port on
+# loopback, on first install only).
 #
 # Arguments, both optional — where the controller (the box's agent) is and
 # which key to trust, written to config.toml (also on a reinstall):
@@ -126,7 +126,7 @@ install_macos() {
   echo
   echo "installed $tag. Status: daedalus-agent status (or http://127.0.0.1:$PORT/status on this machine)"
   echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
-  echo "only /metrics and /healthz answer the LAN; the box hears from this machine over its link to the controller"
+  echo "nothing listens on the LAN; the box hears from this machine over its link to the controller"
 }
 
 install_linux() {
@@ -193,7 +193,7 @@ install_linux() {
   echo
   echo "installed $tag. Status: daedalus-agent status (or http://127.0.0.1:$PORT/status on this machine)"
   echo "logs: /var/lib/daedalus-agent/logs (the service), ~/.local/state/daedalus-agent (the session and the tray)"
-  echo "only /metrics and /healthz answer the LAN; the box hears from this machine over its link to the controller"
+  echo "nothing listens on the LAN; the box hears from this machine over its link to the controller"
 }
 
 case "$(uname -s)" in

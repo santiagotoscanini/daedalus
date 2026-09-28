@@ -1,6 +1,6 @@
 //! What the machine is and how it is doing: the telemetry the status page
-//! carries (`telemetry` block of `/status`) and `/metrics` renders for
-//! Prometheus.
+//! carries (`telemetry` block of `/status`) and, on the controller,
+//! `/nodes/metrics` renders for Prometheus (metrics.rs).
 //!
 //! Three cadences, one document. The STATIC facts — make and model,
 //! firmware, board, processor model, core counts, kernel, the memory
@@ -32,8 +32,8 @@
 //! on its port, since the application list that finds an installed but
 //! stopped one is part of the slow read (`Telemetry::minimal` says exactly
 //! what stays); `off`, nothing — this
-//! thread does not start, the page's `telemetry` is null and `/metrics` is
-//! empty.
+//! thread does not start, the page's `telemetry` is null and the machine has
+//! no series but `daedalus_agent_link_up`.
 //!
 //! The document's types are in model.rs and its Prometheus rendering in
 //! metrics.rs; both are re-exported here. The collectors' pure parsers —
@@ -44,7 +44,7 @@ mod metrics;
 mod model;
 pub mod parse;
 
-pub use metrics::{escape_label, metrics_text, metrics_text_for};
+pub use metrics::{escape_label, metrics_text, Labels};
 pub use model::{
     App, Battery, Browser, Cpu, Disk, Drive, Gpu, GpuSample, Installed, Machine, Memory,
     MemoryModule, Network, Os, Process, Sample, Service, Slow, Static, Telemetry, Temperature,
@@ -398,8 +398,15 @@ mod tests {
                 ..Default::default()
             },
             "0.10.0",
-            "PC",
+            &Labels {
+                node: "0123456789abcdef",
+                host: "PC",
+                machine: "PC",
+                os: "windows",
+            },
         );
-        assert!(m.contains("daedalus_agent_apps{host=\"PC\",kind=\"app\"} 3\n"));
+        assert!(m.contains(
+            "daedalus_agent_apps{host=\"PC\",machine=\"PC\",node=\"0123456789abcdef\",os=\"windows\",kind=\"app\"} 3\n"
+        ));
     }
 }

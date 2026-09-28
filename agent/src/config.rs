@@ -9,7 +9,7 @@
 //! The knobs, with their defaults:
 //!
 //! ```toml
-//! port = 7787                 # the status page's port (`/metrics` for the LAN)
+//! port = 7787                 # the status page's port (loopback on a node)
 //! update_check_secs = 600     # how often the release feed is asked
 //! auto_update = true          # the older spelling of `updates` (below)
 //! log_level = "info"
@@ -52,7 +52,8 @@
 //! updates; processes are sampled for the count, but the list is not
 //! reported, and a provider shows only while it answers on its port
 //! (`Telemetry::minimal`); `off` reads nothing, so the page's
-//! `telemetry` is null and `/metrics` is empty. `updates` decides whether a
+//! `telemetry` is null and the controller has no series for it but
+//! `daedalus_agent_link_up`. `updates` decides whether a
 //! newer release is installed: `self` installs it (today's behaviour);
 //! `staged` and `external` only report it, as `auto_update = false` always
 //! has. When `updates` is absent, `auto_update` decides (true = `self`,

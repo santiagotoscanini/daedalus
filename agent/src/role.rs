@@ -4,7 +4,7 @@
 //!
 //! | part                                | node                          | controller                      |
 //! |-------------------------------------|-------------------------------|---------------------------------|
-//! | status page, telemetry, `/metrics`  | yes; the LAN gets `/metrics` and `/healthz` alone | yes, on loopback only |
+//! | status page, telemetry              | yes, on loopback only         | yes; other addresses get `/healthz` and `/nodes/metrics` alone |
 //! | the local API socket (api/)         | no                            | yes — the app's one door        |
 //! | link to the controller (link/node.rs) | yes                         | no — it is the controller       |
 //! | listener for the machines' links    | no                            | yes, where `listen` names one   |
@@ -51,8 +51,11 @@ pub struct Role {
     pub claude_update: bool,
     /// A tray may run (where the OS has one and a desktop is present).
     pub tray: bool,
-    /// The status page binds every interface, where other machines get
-    /// `/metrics` and `/healthz` alone (status.rs); otherwise loopback only.
+    /// The status page binds every interface, where other addresses get
+    /// `/healthz` and `/nodes/metrics` alone (status.rs) — the box's
+    /// Prometheus container reaches it through pasta's host alias, and the
+    /// host firewall keeps the port closed to the LAN. Otherwise loopback
+    /// only: a node listens on nothing the LAN can reach.
     pub status_on_lan: bool,
     /// The local API socket is served (api/).
     pub api_socket: bool,
@@ -74,7 +77,7 @@ impl Role {
                 session_in_service: false,
                 claude_update: true,
                 tray: true,
-                status_on_lan: true,
+                status_on_lan: false,
                 api_socket: false,
                 node_listener: false,
             },
@@ -88,7 +91,7 @@ impl Role {
                 session_in_service: true,
                 claude_update: false,
                 tray: false,
-                status_on_lan: false,
+                status_on_lan: true,
                 api_socket: true,
                 node_listener: true,
             },
@@ -105,8 +108,8 @@ impl Role {
         Ok(())
     }
 
-    /// Where the status page listens: every interface on a node, loopback
-    /// on the controller, whose door is the socket.
+    /// Where the status page listens: loopback on a node, every interface on
+    /// the controller, for Prometheus's scrape of `/nodes/metrics`.
     pub fn status_address(&self) -> &'static str {
         if self.status_on_lan {
             "0.0.0.0"
@@ -124,16 +127,17 @@ mod tests {
     fn a_node_runs_everything_and_the_controller_leaves_nix_its_part() {
         let node = Role::of(Mode::Node);
         assert!(node.link && node.self_update && node.keep_awake && node.installer);
-        assert!(node.session && node.tray && node.claude_update && node.status_on_lan);
+        assert!(node.session && node.tray && node.claude_update);
         assert!(!node.session_in_service && !node.api_socket && !node.node_listener);
-        assert_eq!(node.status_address(), "0.0.0.0");
+        assert!(!node.status_on_lan);
+        assert_eq!(node.status_address(), "127.0.0.1");
         assert!(node.allow_install("install").is_ok());
 
         let c = Role::of(Mode::Controller);
         assert!(!c.link && !c.self_update && !c.keep_awake && !c.installer && !c.tray);
-        assert!(!c.claude_update && !c.status_on_lan);
+        assert!(!c.claude_update && c.status_on_lan);
         assert!(c.session && c.session_in_service && c.api_socket && c.node_listener);
-        assert_eq!(c.status_address(), "127.0.0.1");
+        assert_eq!(c.status_address(), "0.0.0.0");
         let e = c.allow_install("uninstall").unwrap_err().to_string();
         assert!(e.contains("controller mode") && e.contains("nix"), "{e}");
     }

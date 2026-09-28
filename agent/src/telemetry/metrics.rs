@@ -1,14 +1,33 @@
-//! `/metrics`: the telemetry document as Prometheus text, for the box to
-//! scrape.
+//! The telemetry document as Prometheus text: what the controller serves
+//! at `/nodes/metrics` for every connected machine (link/controller.rs).
 
 use super::Telemetry;
 
-/// Prometheus text exposition of the document. No `# TYPE` lines: every
-/// series goes through the one `gauge` writer, so Prometheus stores them
-/// untyped. The OS's own counters (network bytes) carry a counter's
-/// `_total` suffix, and a query `rate()`s them.
-pub fn metrics_text(t: &Telemetry, agent_version: &str, hostname: &str) -> String {
-    metrics_text_for(t, agent_version, hostname, None)
+/// Who a series is about: the four labels every series of a machine
+/// carries — the dashboards group and name machines by them.
+#[derive(Clone, Copy, Debug)]
+pub struct Labels<'a> {
+    /// The machine's node id.
+    pub node: &'a str,
+    /// Its hostname, as its hello gave it.
+    pub host: &'a str,
+    /// What the pages call it: the operator's name, or the hostname.
+    pub machine: &'a str,
+    /// Its OS, as its hello gave it.
+    pub os: &'a str,
+}
+
+impl Labels<'_> {
+    /// `host="…",machine="…",node="…",os="…"`, each value escaped.
+    pub fn render(&self) -> String {
+        format!(
+            "host=\"{}\",machine=\"{}\",node=\"{}\",os=\"{}\"",
+            escape_label(self.host),
+            escape_label(self.machine),
+            escape_label(self.node),
+            escape_label(self.os)
+        )
+    }
 }
 
 /// A label value, escaped for the exposition format: backslash, quote and
@@ -28,20 +47,15 @@ pub fn escape_label(s: &str) -> String {
     out
 }
 
-/// The same, for a machine the controller renders (`/nodes/metrics`,
-/// link/controller.rs): every series also labelled `node="<node id>"`.
-pub fn metrics_text_for(
-    t: &Telemetry,
-    agent_version: &str,
-    hostname: &str,
-    node: Option<&str>,
-) -> String {
+/// Prometheus text exposition of one machine's document, every series
+/// labelled with `labels`. No `# TYPE` lines: every series goes through
+/// the one `gauge` writer, so Prometheus stores them untyped. The OS's own
+/// counters (network bytes) carry a counter's `_total` suffix, and a query
+/// `rate()`s them.
+pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> String {
     let mut out = String::new();
     let esc = escape_label;
-    let base = match node {
-        None => format!("host=\"{}\"", esc(hostname)),
-        Some(id) => format!("host=\"{}\",node=\"{}\"", esc(hostname), esc(id)),
-    };
+    let base = labels.render();
     let mut gauge = |name: &str, labels: &str, v: f64| {
         let sep = if labels.is_empty() { "" } else { "," };
         out.push_str(&format!(
@@ -212,6 +226,14 @@ mod tests {
     use super::*;
     use crate::telemetry::{Cpu, Disk};
 
+    const PC: Labels<'static> = Labels {
+        node: "0123456789abcdef",
+        host: "PC",
+        machine: "Gaming PC",
+        os: "windows",
+    };
+    const BASE: &str = "host=\"PC\",machine=\"Gaming PC\",node=\"0123456789abcdef\",os=\"windows\"";
+
     #[test]
     fn metrics_render_with_labels_escaped() {
         let t = Telemetry {
@@ -227,17 +249,18 @@ mod tests {
             }],
             ..Default::default()
         };
-        let m = metrics_text(&t, "0.7.0", "PC");
-        assert!(m.contains("daedalus_agent_cpu_usage_percent{host=\"PC\"} 3\n"));
-        assert!(m.contains("daedalus_agent_disk_total_bytes{host=\"PC\",mount=\"C:\"} 10\n"));
+        let m = metrics_text(&t, "0.7.0", &PC);
+        assert!(m.contains(&format!("daedalus_agent_cpu_usage_percent{{{BASE}}} 3\n")));
+        assert!(m.contains(&format!(
+            "daedalus_agent_disk_total_bytes{{{BASE},mount=\"C:\"}} 10\n"
+        )));
         assert!(m.contains("cpu=\"A \\\"B\\\"\""));
-        assert!(m.contains("daedalus_agent_apps{host=\"PC\",kind=\"game\"} 0\n"));
+        assert!(m.contains(&format!("daedalus_agent_apps{{{BASE},kind=\"game\"}} 0\n")));
+        // Every series carries the four labels.
+        for line in m.lines() {
+            assert!(line.contains(&format!("{{{BASE}")), "{line}");
+        }
     }
-}
-
-#[cfg(test)]
-mod escape_tests {
-    use super::*;
 
     #[test]
     fn labels_cannot_break_or_forge_a_line() {
@@ -245,13 +268,18 @@ mod escape_tests {
         assert_eq!(escape_label("x\ny"), "x\\ny");
         assert_eq!(escape_label("x\r\t\u{7}\u{1b}[31my"), "x[31my");
         assert_eq!(escape_label("Santiago’s MacBook"), "Santiago’s MacBook");
-        // A hostname that tries to add a series stays inside its label.
+        // A hostname or name that tries to add a series stays inside its label.
         let evil = "PC\"} 1\ndaedalus_agent_fake{host=\"x";
-        let m = metrics_text_for(&Telemetry::default(), "1", evil, Some("0123456789abcdef"));
+        let labels = Labels {
+            host: evil,
+            machine: evil,
+            ..PC
+        };
+        let m = metrics_text(&Telemetry::default(), "1", &labels);
         for line in m.lines() {
             assert!(line.starts_with("daedalus_agent_"), "{line}");
             assert!(!line.starts_with("daedalus_agent_fake"), "{line}");
         }
-        assert!(m.contains("host=\"PC\\\"} 1\\ndaedalus_agent_fake{host=\\\"x\",node="));
+        assert!(m.contains("host=\"PC\\\"} 1\\ndaedalus_agent_fake{host=\\\"x\",machine="));
     }
 }

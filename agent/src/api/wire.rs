@@ -327,6 +327,9 @@ pub struct NodeId {
     pub id: String,
 }
 
+/// The longest `DesiredNode::name`, in characters.
+pub const MAX_NODE_NAME: usize = 64;
+
 /// `nodes.set_desired`'s parameters: the app's COMPLETE set of decided
 /// keys. A key absent from it is pending (while connected) or unknown.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -345,6 +348,11 @@ pub struct DesiredNode {
     /// The machine's policy; absent for an approved one, `Policy::default()`.
     #[serde(default)]
     pub policy: Option<DesiredPolicy>,
+    /// What the pages call the machine, at most `MAX_NODE_NAME` characters
+    /// and no control characters; `/nodes/metrics` labels its series
+    /// `machine` with it, or with the hostname when absent.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
@@ -624,7 +632,7 @@ mod tests {
                 r#""uptime_secs":5,"os_uptime_secs":100,"booted_at":"2026-09-27T10:00:00Z","#,
                 r#""role":{"mode":"controller","link":false,"self_update":false,"keep_awake":false,"#,
                 r#""installer":false,"session":true,"session_in_service":true,"claude_update":false,"#,
-                r#""tray":false,"status_on_lan":false,"api_socket":true,"node_listener":true},"#,
+                r#""tray":false,"status_on_lan":true,"api_socket":true,"node_listener":true},"#,
                 r#""telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal","nodes"],"#,
                 r#""controller":{"public_key":"abababababababababababababababababababababababababababababababab","#,
                 r#""fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"]}}"#
@@ -757,10 +765,13 @@ mod tests {
         let set: SetDesired = serde_json::from_value(json!({"nodes":[
             {"id":"0123456789abcdef","public_key":"ab","state":"approved",
              "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p",
-                       "providers":{"lemonade":{"port":8000}}}},
+                       "providers":{"lemonade":{"port":8000}}},
+             "name":"Gaming PC"},
             {"id":"fedcba9876543210","public_key":"cd","state":"revoked"}
         ]}))
         .unwrap();
+        assert_eq!(set.nodes[0].name.as_deref(), Some("Gaming PC"));
+        assert_eq!(set.nodes[1].name, None);
         assert_eq!(set.nodes[1].state, DesiredState::Revoked);
         assert_eq!(set.nodes[1].policy, None);
         let p: Policy = set.nodes[0].policy.clone().unwrap().into();
@@ -770,6 +781,7 @@ mod tests {
         );
         for bad in [
             json!({"nodes":[{"id":"a","public_key":"b","state":"pending"}]}),
+            json!({"nodes":[{"id":"a","public_key":"b","state":"approved","name":7}]}),
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved","extra":1}]}),
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved",
                              "policy":{"awake_hold":true,"claude_remote_control":true,"shell":"x"}}]}),

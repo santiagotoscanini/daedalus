@@ -3,8 +3,8 @@
 //! A Windows service (a launchd daemon on macOS, a systemd service on
 //! Linux) that holds the machine awake for as long as the box wants it to,
 //! keeps one connection to the controller, the box's own agent (link/),
-//! following the policy it carries, answers a status page for this machine
-//! (and `/metrics` for the LAN), samples the machine's telemetry, and
+//! following the policy it carries, answers a status page on loopback for
+//! the tray and the session (nothing on the LAN), samples the machine's telemetry, and
 //! updates itself to the
 //! newest `agent-v*` release of the engine repository; a session that —
 //! with the user's own login — runs `claude remote-control` the way the box

@@ -223,6 +223,8 @@ struct Desired {
     public_key: [u8; 32],
     state: DesiredState,
     policy: Policy,
+    /// What the pages call the machine; `/nodes/metrics` labels it `machine`.
+    name: Option<String>,
 }
 
 /// One entry of the app's set, checked (api/mod.rs parses and validates).
@@ -232,6 +234,7 @@ pub struct DesiredEntry {
     pub public_key: [u8; 32],
     pub state: DesiredState,
     pub policy: Policy,
+    pub name: Option<String>,
 }
 
 #[derive(Default)]
@@ -701,6 +704,7 @@ impl Registry {
                         public_key: d.public_key,
                         state: d.state,
                         policy: d.policy,
+                        name: d.name,
                     },
                 )
             })
@@ -936,30 +940,37 @@ impl Registry {
 
     /// Prometheus text for `/nodes/metrics`: every approved machine's
     /// `daedalus_agent_link_up` (1 while connected), and the connected
-    /// ones' telemetry with the series their own `/metrics` writes, each
-    /// labelled with its `node` id.
+    /// ones' telemetry (telemetry/metrics.rs). Every series carries the
+    /// machine's `node` id, `host` and `os` from its hello, and `machine`:
+    /// the name the app gave it in `nodes.set_desired`, else its hostname.
     pub fn metrics(&self) -> String {
         let reg = self.lock();
         let mut ids: Vec<&String> = reg.nodes.keys().collect();
         ids.sort();
         let mut out = String::new();
         for id in ids {
-            if reg.state_of(id) != NodeState::Approved {
+            let Some(d) = reg.decided(id) else { continue };
+            if d.state != DesiredState::Approved {
                 continue;
             }
             let e = &reg.nodes[id];
             let Some(h) = &e.hello else { continue };
-            let host = crate::telemetry::escape_label(&h.hostname);
+            let labels = crate::telemetry::Labels {
+                node: id,
+                host: &h.hostname,
+                machine: d.name.as_deref().unwrap_or(&h.hostname),
+                os: &h.os,
+            };
             out.push_str(&format!(
-                "daedalus_agent_link_up{{host=\"{host}\",node=\"{id}\"}} {}\n",
+                "daedalus_agent_link_up{{{}}} {}\n",
+                labels.render(),
                 u8::from(e.conn.is_some())
             ));
             if let (Some((t, _)), Some(_)) = (&e.telemetry, &e.conn) {
-                out.push_str(&crate::telemetry::metrics_text_for(
+                out.push_str(&crate::telemetry::metrics_text(
                     t,
                     &h.agent_version,
-                    &h.hostname,
-                    Some(id),
+                    &labels,
                 ));
             }
         }

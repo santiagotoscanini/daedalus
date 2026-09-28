@@ -104,8 +104,6 @@ pub struct Hello {
     pub hostname: String,
     pub mac: Option<String>,
     pub lan_ip: Option<String>,
-    /// The status page's port, which the machine still serves.
-    pub status_port: u16,
     pub facts: HelloFacts,
     /// What the agent offers (`api::capabilities` for its role).
     pub capabilities: Vec<String>,
@@ -410,7 +408,6 @@ mod tests {
             hostname: "PC".into(),
             mac: Some("aa:bb:cc:dd:ee:ff".into()),
             lan_ip: Some("192.168.0.120".into()),
-            status_port: 7787,
             facts: HelloFacts {
                 os_name: "Windows 11 Pro".into(),
                 os_version: "24H2".into(),
@@ -463,7 +460,7 @@ mod tests {
             concat!(
                 r#"{"id":1,"m":"hello","p":{"proto":1,"node_id":"0123456789abcdef","#,
                 r#""agent_version":"0.14.0","os":"windows","arch":"x86_64","hostname":"PC","#,
-                r#""mac":"aa:bb:cc:dd:ee:ff","lan_ip":"192.168.0.120","status_port":7787,"#,
+                r#""mac":"aa:bb:cc:dd:ee:ff","lan_ip":"192.168.0.120","#,
                 r#""facts":{"os_name":"Windows 11 Pro","os_version":"24H2","cpu":"AMD Ryzen 9","memory_bytes":64},"#,
                 r#""capabilities":["claude.remote_control","telemetry.full"],"telemetry":"full"}}"#
             )
