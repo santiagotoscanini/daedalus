@@ -53,6 +53,14 @@ let
   # and whose source is not is dropped. Traefik and the app share the bridge,
   # so their traffic is switched on it and never forwarded; the app's own
   # outbound connections, and the replies to them, are ESTABLISHED and pass.
+  #
+  # Except a connection that was DNATed there, i.e. addressed to a published
+  # port: netavark points traefik's 80/443 at whichever of its addresses it
+  # likes, an iso bridge's included, and every container reaching a published
+  # hostname (LAN IP → DNAT → traefik) crosses this chain to get there.
+  # Dropping those broke hairpin ingress for the whole box on 2026-09-28. An
+  # isolated app publishes no port of its own, so a DNATed connection into
+  # its subnet can only be one to traefik — the gate itself.
   # Run as the operator (the unit's user), inside the namespace podman keeps;
   # idempotent (-C before -I), because the namespace outlives any one
   # container and every isolated app's start re-asserts its own subnet. The
@@ -70,7 +78,7 @@ let
         exit 1
       fi
       for s in $subnets; do
-        set -- -d "$s" ! -s "$s" -m conntrack --ctstate NEW \
+        set -- -d "$s" ! -s "$s" -m conntrack --ctstate NEW -m conntrack ! --ctstate DNAT \
           -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP
         if ! "$podman" unshare --rootless-netns "$iptables" -C FORWARD "$@" 2>/dev/null; then
           "$podman" unshare --rootless-netns "$iptables" -I FORWARD 1 "$@"
