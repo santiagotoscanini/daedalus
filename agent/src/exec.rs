@@ -160,7 +160,7 @@ pub fn stdout_any(cmd: Command, deadline: Duration, text: Text) -> Result<(i32, 
 
 /// The one core of `stdout_or` and `stdout_any`: the exit code (-1 for a
 /// signal), stdout, and — on a non-zero exit — the first line of stderr.
-fn stdout_with_status(
+pub fn stdout_with_status(
     mut cmd: Command,
     deadline: Duration,
     text: Text,

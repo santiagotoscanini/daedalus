@@ -36,10 +36,14 @@ fn target(name: &str) -> String {
     format!("{}/{}", domain(), job::launchd_label(name))
 }
 
+/// launchctl's exit code, its stdout, and the first line of its stderr
+/// (where "Could not find service" is said).
 fn launchctl(args: &[&str]) -> Result<(i32, String), String> {
     let mut cmd = Command::new("/bin/launchctl");
     cmd.args(args);
-    exec::stdout_any(cmd, LAUNCHCTL, exec::Text::Lossy).map_err(|e| format!("launchctl: {e}"))
+    exec::stdout_with_status(cmd, LAUNCHCTL, exec::Text::Lossy)
+        .map(|(code, out, err)| (code, format!("{out}\n{err}")))
+        .map_err(|e| format!("launchctl: {e}"))
 }
 
 fn plist_path(name: &str) -> PathBuf {
@@ -78,6 +82,9 @@ fn bootstrap(
     }
     std::fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
     clear(name);
+    // bootout returns before launchd has let the label go; a bootstrap
+    // under it meanwhile fails ("service already loaded").
+    wait_gone(name)?;
     let p = path.display().to_string();
     match launchctl(&["bootstrap", &domain(), &p])? {
         (0, _) => Ok(()),
@@ -121,35 +128,60 @@ fn age_of(pid: u32) -> Option<u64> {
 pub fn show(name: &str) -> Result<JobState, String> {
     let (code, text) = launchctl(&["print", &target(name)])?;
     if code != 0 {
-        // "Could not find service … in domain": not loaded.
-        return Ok(JobState::Gone);
+        // Only launchd's "no such service" is gone; any other failure is
+        // not knowing, which the supervisor never takes for gone.
+        if job::launchctl_says_gone(code, &text) {
+            return Ok(JobState::Gone);
+        }
+        return Err(format!(
+            "launchctl print {} exited {code}: {}",
+            target(name),
+            text.trim()
+        ));
     }
-    Ok(match job::parse_launchctl_print(&text) {
-        JobState::Running {
-            pid,
-            age_secs: _,
-            workdir,
-        } => JobState::Running {
+    match job::parse_launchctl_print(&text) {
+        Some(JobState::Running { pid, workdir, .. }) => Ok(JobState::Running {
             pid,
             age_secs: pid.and_then(age_of),
             workdir,
-        },
-        other => other,
-    })
+        }),
+        Some(other) => Ok(other),
+        None => Err(format!(
+            "launchctl print {} answered in a form this agent does not read",
+            target(name)
+        )),
+    }
+}
+
+/// Until launchd says the label is gone, at most five seconds.
+fn wait_gone(name: &str) -> Result<(), String> {
+    let until = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if matches!(show(name), Ok(JobState::Gone)) {
+            return Ok(());
+        }
+        if std::time::Instant::now() > until {
+            return Err(format!(
+                "{} is still loaded five seconds after its bootout",
+                target(name)
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 }
 
 /// `bootout`: SIGTERM to the job, its process group with it, then unloaded.
 pub fn stop(name: &str) -> Result<(), String> {
     match launchctl(&["bootout", &target(name)])? {
-        (0, _) => Ok(()),
+        (0, _) => wait_gone(name),
         // Not loaded: nothing to stop.
-        (_, _) if show(name) == Ok(JobState::Gone) => Ok(()),
+        (code, out) if job::launchctl_says_gone(code, &out) => Ok(()),
         (code, out) => Err(format!("launchctl bootout exited {code}: {}", out.trim())),
     }
 }
 
 pub fn clear(name: &str) {
-    let _ = launchctl(&["bootout", &target(name)]);
+    let _ = stop(name);
 }
 
 /// The jobs starting with `prefix` that have a process now (`launchctl
@@ -187,4 +219,15 @@ pub fn server_env(
         config_dir,
         &["/opt/homebrew/bin", "/usr/local/bin"],
     )
+}
+
+/// The `claude` a job runs, from the plist it was bootstrapped from.
+pub fn running_cli(name: &str) -> Option<PathBuf> {
+    job::claude_in_command(&std::fs::read_to_string(plist_path(name)).ok()?)
+}
+
+/// Nothing to add about a launchd job beyond its state.
+pub fn caveat(name: &str) -> Option<String> {
+    let _ = name;
+    None
 }

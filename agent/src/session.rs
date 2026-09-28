@@ -263,18 +263,24 @@ impl Places {
 
 impl Session {
     /// The Claude server, in this session with this user's login, reporting
-    /// to the service on `port`. Wanted (as `Policy::default()` has it)
-    /// until the service relays the box's policy, in the most recent trusted
-    /// project until it names one. Nothing starts before the first `tick` (a
+    /// to the service on `port`. It starts from the last policy the service
+    /// kept (the defaults on a fresh install) until the service relays the
+    /// box's, and in the most recent trusted project until one is named.
+    /// Nothing starts before the first `tick` (a
     /// job left running by a previous session is taken over, not
     /// restarted). Err when another session of this user holds the lock.
     pub fn new(port: u16, places: Places) -> anyhow::Result<Self> {
         let lock = claim_lock(&places.claude_log)?;
         let sessions = start_sessions(&places);
+        // The last policy the service kept (config.rs `last_policy`): Claude
+        // starts where and as the box last said, rather than once with the
+        // defaults and again when the service relays the link's answer.
+        // None on a fresh install, which starts with the defaults.
+        let policy = config::last_policy().unwrap_or_default();
         let sup = Supervisor::new(
-            None,
+            policy.claude_workdir,
             places.claude_log,
-            Policy::default().claude_remote_control,
+            policy.claude_remote_control,
             places.job,
             places.state_dir.join("gcroots"),
         );

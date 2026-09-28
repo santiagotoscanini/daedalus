@@ -110,3 +110,16 @@ pub fn server_env(
 ) -> Vec<(String, String)> {
     job::job_env(home, path, config_dir, &[])
 }
+
+/// The `claude` a running unit runs, from its ExecStart (what the session
+/// pins when it re-attaches to a unit an earlier agent started).
+pub fn running_cli(name: &str) -> Option<std::path::PathBuf> {
+    let text = systemctl(&["show", "-p", "ExecStart", &service(name)]).ok()?;
+    job::claude_in_command(&text)
+}
+
+/// Nothing to add about a unit beyond its state.
+pub fn caveat(name: &str) -> Option<String> {
+    let _ = name;
+    None
+}

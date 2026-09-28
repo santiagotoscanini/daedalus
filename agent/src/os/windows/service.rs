@@ -228,6 +228,9 @@ pub fn uninstall() -> Result<()> {
     service.delete().context("deleting the service")?;
     println!("service {SERVICE_NAME} removed");
     tray_unregister();
+    // Claude runs detached from the tray (jobs.rs), so it outlives both: its
+    // Remote Control and the sessions' holders are ended by their records.
+    super::jobs::stop_every_users_jobs();
     println!("data left in {}", config::data_dir().display());
     Ok(())
 }

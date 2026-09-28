@@ -28,7 +28,11 @@ beside it where there is a desktop. It
 - **follows the box's policy** once an admin approves the machine on
   Settings › Machines — hold it awake or not, run Claude remote control or
   not and where, provider ports — and its commands: check for updates now,
-  update Claude Code, restart Claude remote control;
+  update Claude Code, restart Claude remote control. The last policy is
+  kept in `policy.json` in the data directory, and the service and the
+  session start from it, so a restart neither reverts Claude's directory
+  or switch until the link answers nor restarts Claude twice (a fresh
+  install starts from the defaults);
 - **runs Claude Code's remote control** the way the box runs its own: the
   **session** — the process with the user's Claude login — supervises
   `claude remote-control --verbose`, restarts it with backoff, logs its
@@ -497,9 +501,14 @@ from, after the marker line it writes before each start.
   never `~/Library/LaunchAgents`, so no login starts it by itself — and
   bootstraps it (`launchctl bootstrap gui/<uid>`): `RunAtLoad`, no
   `KeepAlive` (the supervisor decides what runs again), its output appended
-  to the log. `launchctl print` watches it; a job that exited stays loaded
-  with its exit code until `launchctl bootout` clears it, which also ends its
-  process group. launchd hands a job the system's PATH, so the session's
+  to the log. `launchctl print` watches it, read by its braces rather than
+  its indentation; a print the agent cannot read is "unknown", never
+  "gone" — only launchctl's "Could not find service" (exit 113) is — and an
+  unknown state is asked again, never answered by a new start that would
+  boot out a live server. A job that exited stays loaded with its exit code
+  until `launchctl bootout` clears it, which also ends its process group; a
+  start waits (up to 5 s) for launchd to let the label go before it
+  bootstraps it again. launchd hands a job the system's PATH, so the session's
   own goes along with Homebrew's two prefixes after it. A resumed session is
   the BSD `script -q /dev/null <command…>` (a command as words, no `-c`)
   piped through `sed -l` and `grep --line-buffered`, the same filter as on
@@ -510,20 +519,31 @@ from, after the marker line it writes before each start.
   `CREATE_NO_WINDOW` (a hidden console its children inherit, so the shells
   it runs flash no window), `CREATE_NEW_PROCESS_GROUP` and
   `CREATE_BREAKAWAY_FROM_JOB` (outside any job object the tray is in; tried
-  again without where the job forbids it), its stdout and stderr the log
-  file. Windows does not end a process with its parent, so that is all
-  "detached" takes. The session records each job — pid AND creation time —
-  in `%LOCALAPPDATA%\daedalus-agent\jobs\<job>.json`, so a new tray finds it
-  again and never adopts a later process that got the same pid; a stop is
-  `taskkill /PID … /T /F`, the whole tree. A resumed session needs a
-  terminal, and on Windows that is a pseudo-console: its job is this agent's
-  own binary in **holder mode** — `daedalus-agent.exe claude-holder "<command
+  again without where the job forbids it — then the log warns and the
+  report's `detail` says "not broken away from the tray's job"), its stdout
+  and stderr the log file. Windows does not end a process with its parent,
+  so that is all "detached" takes. The session records each job — pid AND
+  creation time — in `%LOCALAPPDATA%\daedalus-agent\jobs\<job>.json`, so a
+  new tray finds it again and never adopts a later process that got the
+  same pid; a process whose record cannot be written is ended at once and
+  the start reported failed, so no unrecorded Remote Control runs beside the
+  next. A stop is `taskkill /PID … /T /F`, the whole tree, and
+  `daedalus-agent uninstall` stops every user's recorded jobs. A resumed
+  session needs a terminal, and on Windows that is a pseudo-console: its job
+  is this agent's own binary in **holder mode** — `claude-holder "<command
   line>"`, never run by hand — which creates a ConPTY
   (`CreatePseudoConsole`), starts `claude --resume <uuid> --remote-control
-  <hostname>` in it (a `.cmd` shim through `cmd.exe /d /s /c`), drains what
-  it shows into the log with escapes stripped and the status box dropped,
-  and leaves with the CLI's exit code (`src/os/windows/holder.rs`). The
-  holder, not the tray, owns the terminal, so the session survives the tray.
+  <hostname>` in it with the console, not the holder's own handles, as its
+  standard handles (`STARTF_USESTDHANDLES` with none), a `.cmd` shim through
+  `cmd.exe /d /s /c`, drains what it shows into the log with escapes
+  stripped and the status box dropped, and leaves with the CLI's exit code
+  (`src/os/windows/holder.rs`). The holder, not the tray, owns the terminal,
+  so the session survives the tray. It runs from a per-version copy,
+  `%LOCALAPPDATA%\daedalus-agent\holder\daedalus-agent-<version>.exe` (older
+  versions' copies deleted once nothing runs them), never from the installed
+  binary, so a long session never stops an update from replacing it; an
+  `.old` binary still in use is moved aside to `.old.<n>` and retired at a
+  later start.
 
 `claude_rc` is gone from config.toml (0.17.0): there is no child strategy
 left to choose, and a config that still names it reads as if it did not.
@@ -572,7 +592,8 @@ Where the `claude` a job runs is a nix store path (the box, and any machine
 whose Claude Code nix installed), the session keeps it from the garbage
 collector while the job runs: a rebuild can leave the server or a resumed
 session running a `claude` no generation names any more. When it starts a
-job it links `gcroots/<job>` in its state directory to that store path and
+job — and when it re-attaches to one, read off the unit's ExecStart or the
+plist, so a job an earlier agent started is protected too — it links `gcroots/<job>` in its state directory to that store path and
 registers the link as an indirect root with `nix-store --add-root … --realise`
 — something the operator's own user may do (the daemon records it under
 `/nix/var/nix/gcroots/auto/`; `/nix/var/nix/gcroots/per-user/` is root's and
@@ -712,6 +733,7 @@ C:\ProgramData\daedalus-agent\config.toml                 local knobs, never pol
 C:\ProgramData\daedalus-agent\state.json                  the last update check and install
 C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPAPI-wrapped
 C:\ProgramData\daedalus-agent\controller.json             the controller key trusted on first use, and its address (the link)
+C:\ProgramData\daedalus-agent\policy.json                 the last policy the controller sent, what a restart starts from
 C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
 C:\ProgramData\daedalus-agent\logs\claude-rc.log          what `claude remote-control` printed
 C:\ProgramData\daedalus-agent\logs\claude-session-<uuid>.log  what a resumed session showed (the holder's log)
@@ -739,7 +761,7 @@ Linux:
 ```
 /opt/daedalus-agent/bin/daedalus-agent                the service (.old / .new around an update); /usr/local/bin links to it
 /opt/daedalus-agent/bin/daedalus-agent-tray           the tray, x86_64 desktops only
-/var/lib/daedalus-agent/{config.toml,state.json,identity.key,controller.json,session.json,logs/}
+/var/lib/daedalus-agent/{config.toml,state.json,identity.key,controller.json,policy.json,session.json,logs/}
 /etc/systemd/system/daedalus-agent.service            the service's unit
 /etc/systemd/user/daedalus-agent-session.service      the session's unit, enabled for one user, lingering
 /etc/xdg/autostart/daedalus-agent-tray.desktop        the tray, at every graphical login

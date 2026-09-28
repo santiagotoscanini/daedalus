@@ -87,8 +87,8 @@ pub use imp::{
 /// (claude/job.rs). The same names on every OS.
 pub mod jobs {
     pub use super::imp::jobs::{
-        clear, cost, running, server_env, session_shell, show, start_server, start_session, stop,
-        JOB_KIND,
+        caveat, clear, cost, running, running_cli, server_env, session_shell, show, start_server,
+        start_session, stop, JOB_KIND,
     };
 }
 // telemetry

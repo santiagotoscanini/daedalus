@@ -19,7 +19,7 @@ use std::io::Write;
 
 use anyhow::{bail, Context, Result};
 use windows::core::{PCWSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows::Win32::Storage::FileSystem::ReadFile;
 use windows::Win32::System::Console::{ClosePseudoConsole, CreatePseudoConsole, COORD, HPCON};
 use windows::Win32::System::Pipes::CreatePipe;
@@ -27,7 +27,7 @@ use windows::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
     InitializeProcThreadAttributeList, UpdateProcThreadAttribute, WaitForSingleObject,
     EXTENDED_STARTUPINFO_PRESENT, INFINITE, LPPROC_THREAD_ATTRIBUTE_LIST, PROCESS_INFORMATION,
-    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, STARTUPINFOEXW,
+    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, STARTF_USESTDHANDLES, STARTUPINFOEXW,
 };
 
 use crate::claude::job::LineFilter;
@@ -75,9 +75,7 @@ pub fn run(args: &[String]) -> Result<i32> {
             None,
         )
         .context("UpdateProcThreadAttribute")?;
-        let mut si = STARTUPINFOEXW::default();
-        si.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
-        si.lpAttributeList = list;
+        let si = startup_info(list);
         let mut wide: Vec<u16> = line.encode_utf16().chain(std::iter::once(0)).collect();
         let mut pi = PROCESS_INFORMATION::default();
         let started = CreateProcessW(
@@ -136,5 +134,47 @@ pub fn run(args: &[String]) -> Result<i32> {
         drop(buf);
         println!("── claude-holder: the session left with exit code {code} ──");
         Ok(code as i32)
+    }
+}
+
+/// The start of the session's process: the pseudo-console as its terminal
+/// through the attribute list, and its standard handles explicitly
+/// INVALID — `STARTF_USESTDHANDLES` with nothing in them — so it does not
+/// inherit the holder's own (the log file, NUL) and ConPTY's are what the
+/// CLI sees; without that it finds no TTY and exits (portable-pty's
+/// psuedocon.rs does the same).
+fn startup_info(list: LPPROC_THREAD_ATTRIBUTE_LIST) -> STARTUPINFOEXW {
+    let mut si = STARTUPINFOEXW::default();
+    si.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
+    si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
+    si.StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
+    si.StartupInfo.hStdError = INVALID_HANDLE_VALUE;
+    si.lpAttributeList = list;
+    si
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_session_gets_the_console_not_the_holders_handles() {
+        let mut buf = [0u8; 64];
+        let list = LPPROC_THREAD_ATTRIBUTE_LIST(buf.as_mut_ptr().cast());
+        let si = startup_info(list);
+        assert_eq!(
+            si.StartupInfo.cb as usize,
+            std::mem::size_of::<STARTUPINFOEXW>()
+        );
+        assert!(si.StartupInfo.dwFlags.contains(STARTF_USESTDHANDLES));
+        for h in [
+            si.StartupInfo.hStdInput,
+            si.StartupInfo.hStdOutput,
+            si.StartupInfo.hStdError,
+        ] {
+            assert_eq!(h, INVALID_HANDLE_VALUE);
+        }
+        assert_eq!(si.lpAttributeList.0, list.0);
     }
 }

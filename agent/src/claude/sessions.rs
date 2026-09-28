@@ -665,20 +665,36 @@ impl Worker {
         }
     }
 
-    /// The pins of jobs that are gone go (gcroot.rs): the server's while it
+    /// The pins (gcroot.rs): each managed session's made where missing, and
+    /// those of jobs that are gone removed — the server's while it
     /// runs, and each resumed session's while it is managed.
-    fn tend_pins(&self, managed: &[Managed]) {
-        let server_runs = || jobs::show(&self.ctx.server).is_ok_and(|s| s.running());
+    fn tend_pins(&self, managed: &[Managed], listed: bool) {
+        // Only a job known to be gone loses its pin: not knowing keeps it.
+        let server_runs = || {
+            !matches!(
+                jobs::show(&self.ctx.server),
+                Ok(JobState::Gone | JobState::Exited(_))
+            )
+        };
         gcroot::sweep(&self.ctx.roots, |name| {
             if name == self.ctx.server {
                 server_runs()
             } else if name.starts_with(self.ctx.prefix.as_str()) {
-                managed.iter().any(|m| m.job == name)
+                !listed || managed.iter().any(|m| m.job == name)
             } else {
                 // Not one of this session's names: left alone.
                 true
             }
         });
+        // A session resumed by an earlier agent (or before its pin was
+        // made) is pinned now, from the claude its job runs.
+        for m in managed {
+            if std::fs::symlink_metadata(self.ctx.roots.join(&m.job)).is_err() {
+                if let Some(cli) = jobs::running_cli(&m.job) {
+                    gcroot::pin(&self.ctx.roots, &m.job, &cli);
+                }
+            }
+        }
     }
 
     fn refresh(&mut self) {
@@ -697,9 +713,12 @@ impl Worker {
                 }
             }
         };
+        let before = errors.len();
         let managed = self.managed(&mut errors);
+        // The listing failed when it added an error: nothing is unpinned then.
+        let jobs_listed = errors.len() == before;
         self.tend_logs(&managed);
-        self.tend_pins(&managed);
+        self.tend_pins(&managed, jobs_listed);
         let session_stats = match (&dir, crate::os::PROCESS_STATS) {
             (Some(d), true) => roster::session_stats(d, roster::bridge_dir().as_deref()),
             (_, false) => {

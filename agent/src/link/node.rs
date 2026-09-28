@@ -866,8 +866,14 @@ fn converse(
     }
 }
 
+/// The box's decision: into the shared state, and — when it moved — kept on
+/// disk, so the next start begins from it (config.rs `last_policy`).
 fn apply_policy(shared: &Shared, p: Policy) {
-    if shared.set_policy(p.clone()) {
+    let changed = shared.set_policy(p.clone());
+    if changed || !crate::config::policy_path().exists() {
+        crate::config::save_policy(&p);
+    }
+    if changed {
         tracing::info!(
             awake_hold = p.awake_hold,
             claude_remote_control = p.claude_remote_control,

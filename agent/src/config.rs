@@ -274,12 +274,15 @@ impl Config {
         crate::role::Role::of(self.mode)
     }
 
-    /// The policy that stands at start. A node's is `Policy::default()`
-    /// until the controller approves it; the controller's is `[controller]`'s
+    /// The policy that stands at start. A node's is the last one the
+    /// controller sent (`last_policy`, kept across restarts so a restart
+    /// never briefly reverts Claude's directory or switch), else
+    /// `Policy::default()` until the controller approves it; the controller's
+    /// is `[controller]`'s
     /// for good — no awake hold, and Claude only when nix asked for it.
     pub fn initial_policy(&self) -> crate::link::wire::Policy {
         match self.mode {
-            Mode::Node => crate::link::wire::Policy::default(),
+            Mode::Node => last_policy().unwrap_or_default(),
             Mode::Controller => crate::link::wire::Policy {
                 awake_hold: false,
                 claude_remote_control: self.controller.claude_remote_control,
@@ -533,6 +536,46 @@ pub fn data_dir() -> PathBuf {
         )
     })
     .clone()
+}
+
+/// Where the last policy from the controller is kept (`save_policy`).
+pub fn policy_path() -> PathBuf {
+    data_dir().join("policy.json")
+}
+
+/// The last policy the controller sent this machine, as the service kept
+/// it; None before the first, or when the file is unreadable. The service
+/// starts from it, and so does the session (session.rs), so Claude comes up
+/// where and as the box last said, not once with the defaults and again
+/// when the link answers.
+pub fn last_policy() -> Option<crate::link::wire::Policy> {
+    let text = std::fs::read_to_string(policy_path()).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// Keep the policy the controller sent (not a secret: readable by the
+/// session, which runs as the user).
+pub fn save_policy(p: &crate::link::wire::Policy) {
+    // Tests run links against a real data directory's path: never write it.
+    if cfg!(test) {
+        return;
+    }
+    let path = policy_path();
+    let tmp = path.with_extension("json.new");
+    let wrote = serde_json::to_string_pretty(p)
+        .map_err(std::io::Error::other)
+        .and_then(|t| std::fs::write(&tmp, t))
+        .and_then(|()| {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644))?;
+            }
+            std::fs::rename(&tmp, &path)
+        });
+    if let Err(e) = wrote {
+        tracing::warn!(path = %path.display(), error = %e, "the policy was not kept");
+    }
 }
 
 pub fn state_path() -> PathBuf {

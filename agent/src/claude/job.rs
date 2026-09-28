@@ -452,50 +452,77 @@ pub fn macos_session_line(job: &SessionJob, tools: &Tools) -> Result<String, Str
     ))
 }
 
-/// `launchctl print gui/<uid>/<label>`: its top-level `key = value` lines
-/// (one tab deep; nested blocks are deeper). The pid's age comes from `ps`
-/// (`parse_etime`), since launchd does not print a start time.
-pub fn parse_launchctl_print(text: &str) -> JobState {
-    let get = |k: &str| {
-        text.lines().find_map(|l| {
-            let rest = l.strip_prefix('\t')?;
-            if rest.starts_with('\t') {
-                return None;
+/// `launchctl print gui/<uid>/<label>`, read tolerantly: the `key = value`
+/// lines at the service's own level — one `{` deep, whatever the
+/// indentation — with nested blocks (`arguments = {`, `environment = {`, …)
+/// skipped by their depth. None when the text is not a service's print at
+/// all: the service is there but unreadable, which the caller takes as
+/// unknown — never as gone (only launchctl's "no such service" is that). The
+/// pid's age comes from `ps` (`parse_etime`), since launchd does not print a
+/// start time.
+pub fn parse_launchctl_print(text: &str) -> Option<JobState> {
+    let mut depth = 0usize;
+    let mut top: Vec<(&str, &str)> = Vec::new();
+    let mut opened = false;
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('}') {
+            depth = depth.saturating_sub(1);
+            continue;
+        }
+        let opens = line.ends_with('{');
+        if depth == 1 && !opens {
+            if let Some((k, v)) = line.split_once(" = ") {
+                top.push((k.trim(), v.trim()));
             }
-            rest.strip_prefix(k)?.strip_prefix(" = ").map(str::trim)
-        })
-    };
+        }
+        if opens {
+            depth += 1;
+            opened = true;
+        }
+    }
+    if !opened {
+        return None;
+    }
+    let get = |k: &str| top.iter().find(|(key, _)| *key == k).map(|(_, v)| *v);
     let workdir = get("working directory")
         .filter(|w| w.starts_with('/'))
         .map(PathBuf::from);
     let pid = get("pid")
         .and_then(|p| p.parse::<u32>().ok())
         .filter(|p| *p > 0);
-    match get("state") {
-        Some("running") | Some("spawn scheduled") | Some("spawning") => JobState::Running {
+    let state = get("state")?;
+    if matches!(state, "running" | "spawn scheduled" | "spawning") || pid.is_some() {
+        return Some(JobState::Running {
             pid,
             age_secs: None,
             workdir,
-        },
-        Some(_) => {
-            if get("last terminating signal").is_some() {
-                return JobState::Exited("signal".into());
-            }
-            match get("last exit code") {
-                Some(c) => {
-                    let code = c.split(':').next().unwrap_or(c).trim();
-                    if code.parse::<i64>().is_ok() {
-                        JobState::Exited(code.to_string())
-                    } else {
-                        // "(never exited)" with no process: loaded, not run.
-                        JobState::Exited("never ran".into())
-                    }
-                }
-                None => JobState::Exited("unknown".into()),
+        });
+    }
+    if get("last terminating signal").is_some() {
+        return Some(JobState::Exited("signal".into()));
+    }
+    Some(match get("last exit code") {
+        Some(c) => {
+            let code = c.split(':').next().unwrap_or(c).trim();
+            if code.parse::<i64>().is_ok() {
+                JobState::Exited(code.to_string())
+            } else {
+                // "(never exited)" with no process: loaded, not run.
+                JobState::Exited("never ran".into())
             }
         }
-        None => JobState::Gone,
-    }
+        None => JobState::Exited("unknown".into()),
+    })
+}
+
+/// Whether a failed `launchctl print` says the service does not exist:
+/// exit 113 ("Could not find service …"), the one answer that means gone.
+pub fn launchctl_says_gone(code: i32, output: &str) -> bool {
+    code == 113 || output.contains("Could not find service")
 }
 
 /// `launchctl list`: `PID\tStatus\tLabel` lines; the labels that start with
@@ -674,6 +701,42 @@ impl LineFilter {
             out.push(line);
         }
     }
+}
+
+/// The holder's per-version copy (os/windows/jobs.rs `holder_exe`).
+pub fn holder_file(version: &str) -> String {
+    format!("daedalus-agent-{version}.exe")
+}
+
+/// The holder copies in `names` of other versions than `version`: what a
+/// sweep tries to delete (one still running a session stays).
+pub fn stale_holders<'a>(names: &'a [String], version: &str) -> Vec<&'a str> {
+    let current = holder_file(version);
+    names
+        .iter()
+        .map(String::as_str)
+        .filter(|n| *n != current)
+        .filter(|n| {
+            n.starts_with("daedalus-agent-") && (n.ends_with(".exe") || n.ends_with(".exe.new"))
+        })
+        .collect()
+}
+
+// ── what a job runs ───────────────────────────────────────────────────────
+
+/// The `claude` a job's command line names: the first word, once quotes
+/// and the separators systemd and launchd print (`=`, `;`, braces, pipes)
+/// are taken off, that is an absolute path whose file is `claude`. What the
+/// session pins from the garbage collector when it re-attaches to a job an
+/// earlier agent started (gcroot.rs).
+pub fn claude_in_command(text: &str) -> Option<PathBuf> {
+    text.split(|c: char| {
+        c.is_whitespace() || matches!(c, '"' | '\'' | '=' | ';' | '{' | '}' | '|' | '<' | '>')
+    })
+    .filter(|w| w.starts_with('/'))
+    .map(Path::new)
+    .find(|p| p.file_name().is_some_and(|n| n == "claude"))
+    .map(Path::to_path_buf)
 }
 
 // ── the log ───────────────────────────────────────────────────────────────
@@ -1031,26 +1094,52 @@ mod tests {
     fn launchctl_print_and_list_read_as_job_states() {
         let running = "gui/501/me.toscanini.daedalus-agent.daedalus-claude-rc = {\n\
                        \tactive count = 1\n\tpath = /x.plist\n\tstate = running\n\n\
-                       \tprogram = /bin/sh\n\targuments = {\n\t\tstate = nested\n\t}\n\n\
+                       \tprogram = /bin/sh\n\targuments = {\n\t\tstate = nested\n\t\tpid = 1\n\t}\n\n\
                        \tworking directory = /Users/ana/p\n\tpid = 4242\n\
                        \tlast exit code = (never exited)\n}\n";
-        assert_eq!(
-            parse_launchctl_print(running),
-            JobState::Running {
-                pid: Some(4242),
-                age_secs: None,
-                workdir: Some("/Users/ana/p".into())
-            }
-        );
+        let want = Some(JobState::Running {
+            pid: Some(4242),
+            age_secs: None,
+            workdir: Some("/Users/ana/p".into()),
+        });
+        assert_eq!(parse_launchctl_print(running), want);
+        // Another indentation (spaces, none at all) reads the same: the
+        // service's level is found by its braces.
+        let spaces = running.replace('\t', "    ");
+        assert_eq!(parse_launchctl_print(&spaces), want);
+        let flat = running.replace('\t', "");
+        assert_eq!(parse_launchctl_print(&flat), want);
+        // A pid alone says it runs, whatever `state` says.
+        let pid_only = "x = {\n  state = waiting\n  pid = 77\n}\n";
+        assert!(matches!(
+            parse_launchctl_print(pid_only),
+            Some(JobState::Running { pid: Some(77), .. })
+        ));
         let exited = "x = {\n\tstate = not running\n\tlast exit code = 78: EX_CONFIG\n}\n";
-        assert_eq!(parse_launchctl_print(exited), JobState::Exited("78".into()));
+        assert_eq!(
+            parse_launchctl_print(exited),
+            Some(JobState::Exited("78".into()))
+        );
         let killed =
             "x = {\n\tstate = not running\n\tlast terminating signal = Terminated: 15\n}\n";
         assert_eq!(
             parse_launchctl_print(killed),
-            JobState::Exited("signal".into())
+            Some(JobState::Exited("signal".into()))
         );
-        assert_eq!(parse_launchctl_print(""), JobState::Gone);
+        // Unreadable is unknown (None), never gone: a nested `state` does
+        // not count, and neither does text that is no service at all.
+        assert_eq!(parse_launchctl_print(""), None);
+        assert_eq!(parse_launchctl_print("some new format\n"), None);
+        assert_eq!(
+            parse_launchctl_print("x = {\n  arguments = {\n    state = running\n  }\n}\n"),
+            None
+        );
+        assert!(launchctl_says_gone(113, ""));
+        assert!(launchctl_says_gone(
+            1,
+            "Could not find service \"x\" in domain for user gui: 501"
+        ));
+        assert!(!launchctl_says_gone(5, "Input/output error"));
         let list = "PID\tStatus\tLabel\n4242\t0\tme.toscanini.daedalus-agent.claude-session-a\n\
                     -\t0\tme.toscanini.daedalus-agent.claude-session-b\n\
                     17\t0\tcom.apple.x\n";
@@ -1062,6 +1151,47 @@ mod tests {
         assert_eq!(parse_etime(" 1:00:00"), Some(3600));
         assert_eq!(parse_etime("2-00:00:01"), Some(172_801));
         assert_eq!(parse_etime("x"), None);
+    }
+
+    #[test]
+    fn the_claude_a_job_runs_is_read_off_its_command_line() {
+        let h = "/nix/store/406b184jzwfcj0gwscggw3p72l65qdyp-claude-code-2.1.281";
+        // systemd's ExecStart, the server's and a resumed session's.
+        let server = format!(
+            "ExecStart={{ path={h}/bin/claude ; argv[]={h}/bin/claude remote-control --verbose ; ignore_errors=no }}"
+        );
+        assert_eq!(
+            claude_in_command(&server),
+            Some(PathBuf::from(format!("{h}/bin/claude")))
+        );
+        let session = format!(
+            "ExecStart={{ path=/bin/sh ; argv[]=/bin/sh -c '/usr/bin/script' -qfec '\"{h}/bin/claude\" --resume x' /dev/null | '/usr/bin/sed' ; }}"
+        );
+        assert_eq!(
+            claude_in_command(&session),
+            Some(PathBuf::from(format!("{h}/bin/claude")))
+        );
+        // A launchd plist's arguments.
+        let plist = "<string>/bin/sh</string>\n<string>'/usr/bin/script' -q /dev/null '/Users/a/.local/bin/claude' --resume x</string>";
+        assert_eq!(
+            claude_in_command(plist),
+            Some(PathBuf::from("/Users/a/.local/bin/claude"))
+        );
+        assert_eq!(claude_in_command("/usr/bin/claudette run"), None);
+        // The holder's copies: this version's is kept, the others swept.
+        let names: Vec<String> = [
+            "daedalus-agent-0.17.0.exe",
+            "daedalus-agent-0.16.0.exe",
+            "daedalus-agent-0.17.1.exe.new",
+            "notes.txt",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert_eq!(holder_file("0.17.0"), "daedalus-agent-0.17.0.exe");
+        assert_eq!(
+            stale_holders(&names, "0.17.0"),
+            ["daedalus-agent-0.16.0.exe", "daedalus-agent-0.17.1.exe.new"]
+        );
     }
 
     #[test]

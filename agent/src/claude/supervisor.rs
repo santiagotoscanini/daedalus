@@ -37,6 +37,8 @@ const JOB_POLL: Duration = Duration::from_secs(10);
 const JOB_POLL_CHANGING: Duration = Duration::from_secs(2);
 /// A server that printed no environment id counts as registered after this.
 const REGISTER_WAIT: Duration = Duration::from_secs(30);
+/// How soon an attach whose job state could not be read is tried again.
+const ATTACH_RETRY: Duration = Duration::from_secs(3);
 
 /// The server, as this session holds it: the job it started or found
 /// running, and what it has read of it.
@@ -155,6 +157,9 @@ pub struct Supervisor {
     foreign_checked: Option<Instant>,
     /// When the log was last looked at for rotation.
     rotate_checked: Instant,
+    /// The job's state could not be read at attach: when to ask again
+    /// (never a start meanwhile — `attach`).
+    attach_retry: Option<Instant>,
 }
 
 impl Supervisor {
@@ -200,6 +205,7 @@ impl Supervisor {
             foreign: None,
             foreign_checked: None,
             rotate_checked: Instant::now(),
+            attach_retry: None,
         };
         if sup.wanted {
             sup.attach();
@@ -281,6 +287,11 @@ impl Supervisor {
                     self.workdir_via = "where the running server was found";
                 }
                 tracing::info!(job = name, pid, "re-attached to Claude remote control");
+                // An earlier agent may have started it: its claude is pinned
+                // now, not only at a start this agent performs.
+                if let Some(cli) = jobs::running_cli(&name) {
+                    gcroot::pin(&self.roots, &name, &cli);
+                }
                 self.running = Some(Running {
                     pid,
                     tail,
@@ -299,7 +310,17 @@ impl Supervisor {
                 self.next_start = Some(Instant::now());
             }
             Ok(JobState::Gone) => {}
-            Err(e) => tracing::warn!(job = name, error = %e, "the Claude job's state is unknown"),
+            Err(e) => {
+                // Not knowing is never taken for gone: a start would clear
+                // the job first, and that could end a live server. Look
+                // again shortly instead.
+                tracing::warn!(job = name, error = %e, "the Claude job's state is unknown; asking again");
+                self.last_exit = Some(format!(
+                    "the state of {name} could not be read ({e}); asking again"
+                ));
+                self.attach_retry = Some(Instant::now() + ATTACH_RETRY);
+                self.next_start = None;
+            }
         }
     }
 
@@ -323,6 +344,7 @@ impl Supervisor {
         self.wanted = wanted;
         if !wanted {
             self.stop("not wanted");
+            self.attach_retry = None;
             self.look_for_foreign();
         } else {
             self.failures = 0;
@@ -505,6 +527,22 @@ impl Supervisor {
                 }
             }
         }
+        if let Some(at) = self.attach_retry {
+            if self.running.is_none() && self.wanted && Instant::now() >= at {
+                self.attach_retry = None;
+                self.attach();
+                // Read at last, and nothing runs: start as a first start would.
+                if self.running.is_none()
+                    && self.attach_retry.is_none()
+                    && self.next_start.is_none()
+                {
+                    self.next_start = Some(Instant::now());
+                }
+            }
+            if self.attach_retry.is_some() {
+                return;
+            }
+        }
         if self.running.is_none() && self.wanted {
             if let Some(at) = self.next_start {
                 if Instant::now() >= at {
@@ -673,7 +711,8 @@ impl Supervisor {
         }
         if let Some(r) = &self.running {
             if r.banner.environment_id.is_some() || r.since.elapsed() > REGISTER_WAIT {
-                return ("running".into(), None);
+                // Windows: a job the tray's job object kept (os/windows/jobs.rs).
+                return ("running".into(), jobs::caveat(&self.job));
             }
             return ("starting".into(), None);
         }

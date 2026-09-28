@@ -108,6 +108,32 @@ fn probe(r: &JobRecord) -> Option<u32> {
     }
 }
 
+/// What the report should say about a job beyond its state: one started
+/// inside the tray's job object after all (`caveat`).
+fn caveats() -> &'static Mutex<HashMap<String, String>> {
+    static M: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Why a job that runs may not outlive the tray, when that is so.
+pub fn caveat(name: &str) -> Option<String> {
+    caveats().lock().ok()?.get(name).cloned()
+}
+
+/// End a process this tray just started and could not account for, so an
+/// unrecorded job never runs on beside the next start.
+fn abandon(mut child: Child, name: &str, why: String) -> String {
+    let _ = child.kill();
+    let _ = child.wait();
+    tracing::error!(
+        job = name,
+        pid = child.id(),
+        why,
+        "a Claude job was ended: it could not be recorded"
+    );
+    format!("{name} was started and ended again: {why}")
+}
+
 fn spawn(
     name: &str,
     program: &Path,
@@ -132,26 +158,53 @@ fn spawn(
         .stderr(err);
     let detached = CREATE_NO_WINDOW.0 | CREATE_NEW_PROCESS_GROUP.0;
     cmd.creation_flags(detached | CREATE_BREAKAWAY_FROM_JOB.0);
+    let mut in_tray_job = false;
     let child = match cmd.spawn() {
         Err(e) if e.raw_os_error() == Some(ERROR_ACCESS_DENIED) => {
-            // In a job that forbids breaking away: detached all the same.
+            // In a job that forbids breaking away: started all the same,
+            // and said, since it then ends if that job is closed.
+            in_tray_job = true;
             cmd.creation_flags(detached);
             cmd.spawn()
         }
         other => other,
     }
     .map_err(|e| format!("{} was not started: {e}", program.display()))?;
-    let created = created_of(HANDLE(child.as_raw_handle()))
-        .ok_or("the new process's creation time could not be read")?;
-    write_record(
-        name,
-        &JobRecord {
-            pid: child.id(),
-            created,
-            workdir: workdir.display().to_string(),
-            started_at: now_rfc3339(),
-        },
-    )?;
+    let Some(created) = created_of(HANDLE(child.as_raw_handle())) else {
+        return Err(abandon(
+            child,
+            name,
+            "its creation time could not be read, so no later tray could tell it from a reused pid"
+                .into(),
+        ));
+    };
+    let record = JobRecord {
+        pid: child.id(),
+        created,
+        workdir: workdir.display().to_string(),
+        started_at: now_rfc3339(),
+    };
+    if let Err(e) = write_record(name, &record) {
+        return Err(abandon(
+            child,
+            name,
+            format!(
+                "its record {} was not written ({e}), so no later tray could find it",
+                record_path(name).display()
+            ),
+        ));
+    }
+    if let Ok(mut c) = caveats().lock() {
+        if in_tray_job {
+            let note = "not broken away from the tray's job: the tray's job object forbids it, \
+                        so this ends if that job is closed"
+                .to_string();
+            tracing::warn!(job = name, "{note}");
+            c.insert(name.to_string(), note);
+        } else {
+            c.remove(name);
+        }
+    }
     if let Ok(mut m) = spawned().lock() {
         m.insert(name.to_string(), child);
     }
@@ -169,19 +222,46 @@ pub fn start_server(j: &ServerJob) -> Result<(), String> {
     )
 }
 
-/// The holder: `daedalus-agent.exe` beside the tray (or this very binary).
+/// The holder: a copy of `daedalus-agent.exe` of this version in
+/// `%LOCALAPPDATA%\daedalus-agent\holder\` (made on demand), never the
+/// installed binary — a holder runs for as long as its session, and a
+/// running exe cannot be deleted, so holding the installed one would stop
+/// the next update from retiring it. Copies of other versions go when
+/// nothing runs them any more (the delete fails while one does).
 fn holder_exe() -> Result<PathBuf, String> {
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let dir = me.parent().map(Path::to_path_buf).unwrap_or_default();
-    let exe = dir.join("daedalus-agent.exe");
-    if exe.is_file() {
-        Ok(exe)
-    } else {
-        Err(format!(
+    let installed = dir.join("daedalus-agent.exe");
+    if !installed.is_file() {
+        return Err(format!(
             "no {} to hold the session's terminal",
-            exe.display()
-        ))
+            installed.display()
+        ));
     }
+    let holders = crate::config::user_state_dir().join("holder");
+    std::fs::create_dir_all(&holders).map_err(|e| format!("{}: {e}", holders.display()))?;
+    let copy = holders.join(job::holder_file(crate::VERSION));
+    let same = |a: &Path, b: &Path| {
+        let len = |p: &Path| std::fs::metadata(p).map(|m| m.len()).ok();
+        len(a).is_some() && len(a) == len(b)
+    };
+    if !same(&copy, &installed) {
+        let tmp = copy.with_extension("exe.new");
+        std::fs::copy(&installed, &tmp)
+            .and_then(|_| std::fs::rename(&tmp, &copy))
+            .map_err(|e| format!("the holder {} was not made: {e}", copy.display()))?;
+    }
+    if let Ok(entries) = std::fs::read_dir(&holders) {
+        let names: Vec<String> = entries
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        for stale in job::stale_holders(&names, crate::VERSION) {
+            // In use by a session from before the update: it stays.
+            let _ = std::fs::remove_file(holders.join(stale));
+        }
+    }
+    Ok(copy)
 }
 
 pub fn start_session(j: &SessionJob) -> Result<(), String> {
@@ -196,6 +276,48 @@ pub fn start_session(j: &SessionJob) -> Result<(), String> {
         j.log,
         j.env,
     )
+}
+
+/// `uninstall`: end every Claude job recorded under each user profile —
+/// Remote Control and the sessions' holders — while it is still the
+/// recorded process. Run as an administrator, which may read and end
+/// them.
+pub fn stop_every_users_jobs() {
+    let Some(users) = std::env::var_os("SystemDrive")
+        .map(|d| PathBuf::from(format!("{}\\Users", d.to_string_lossy())))
+    else {
+        return;
+    };
+    let Ok(profiles) = std::fs::read_dir(users) else {
+        return;
+    };
+    for p in profiles.flatten() {
+        let jobs = p
+            .path()
+            .join("AppData")
+            .join("Local")
+            .join(crate::SERVICE_NAME)
+            .join("jobs");
+        let Ok(entries) = std::fs::read_dir(&jobs) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let Some(r) = std::fs::read_to_string(e.path())
+                .ok()
+                .and_then(|t| serde_json::from_str::<JobRecord>(&t).ok())
+            else {
+                continue;
+            };
+            if kill_recorded(&r) {
+                println!(
+                    "stopped Claude job {} (pid {})",
+                    e.file_name().to_string_lossy(),
+                    r.pid
+                );
+            }
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
 }
 
 /// `script` has no counterpart here; the holder is the terminal.
@@ -237,12 +359,11 @@ pub fn show(name: &str) -> Result<JobState, String> {
 
 /// `taskkill /T /F` on the recorded process — only while it is still that
 /// process — then a moment for it to leave.
-pub fn stop(name: &str) -> Result<(), String> {
-    let Some(r) = read_record(name) else {
-        return Ok(());
-    };
-    if probe(&r) != Some(STILL_ACTIVE) {
-        return Ok(());
+/// `taskkill /T /F` on a recorded process — only while it is still that
+/// process — then a moment for it to leave; whether it is gone.
+fn kill_recorded(r: &JobRecord) -> bool {
+    if probe(r) != Some(STILL_ACTIVE) {
+        return true;
     }
     let mut cmd = Command::new("taskkill");
     cmd.args(["/PID", &r.pid.to_string(), "/T", "/F"]);
@@ -252,17 +373,31 @@ pub fn stop(name: &str) -> Result<(), String> {
         .stderr(Stdio::null())
         .status();
     for _ in 0..50 {
-        if probe(&r) != Some(STILL_ACTIVE) {
-            return Ok(());
+        if probe(r) != Some(STILL_ACTIVE) {
+            return true;
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    Err(format!("pid {} still runs after taskkill", r.pid))
+    false
+}
+
+pub fn stop(name: &str) -> Result<(), String> {
+    let Some(r) = read_record(name) else {
+        return Ok(());
+    };
+    if kill_recorded(&r) {
+        Ok(())
+    } else {
+        Err(format!("pid {} still runs after taskkill", r.pid))
+    }
 }
 
 pub fn clear(name: &str) {
     let _ = stop(name);
     let _ = std::fs::remove_file(record_path(name));
+    if let Ok(mut c) = caveats().lock() {
+        c.remove(name);
+    }
     if let Ok(mut m) = spawned().lock() {
         if let Some(mut c) = m.remove(name) {
             let _ = c.try_wait();
@@ -304,4 +439,10 @@ pub fn server_env(
         .into_iter()
         .filter(|(k, _)| k != "HOME")
         .collect()
+}
+
+/// A `claude` on Windows is never a nix store path: nothing to pin.
+pub fn running_cli(name: &str) -> Option<PathBuf> {
+    let _ = name;
+    None
 }

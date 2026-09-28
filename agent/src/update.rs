@@ -248,12 +248,28 @@ pub fn download_and_verify(rel: &Release) -> Result<Staged> {
 /// Put the verified binaries in place of the current ones. Windows lets a
 /// running executable be renamed but not overwritten, hence the two moves
 /// per file; a failure part-way puts back what was moved.
+///
+/// An `.old` from the previous update that cannot be removed — on Windows a
+/// binary something still runs, such as a resumed session's terminal holder
+/// from before the holder ran from its own copy — is moved aside to
+/// `.old.<n>` instead, which a later start retires (`retire_old_binaries`).
 pub fn swap_in(staged: &Staged) -> Result<()> {
     let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
     for (target, new) in &staged.files {
         let old = suffixed(target, "old");
         if old.exists() {
-            std::fs::remove_file(&old).with_context(|| format!("removing {}", old.display()))?;
+            if let Err(e) = std::fs::remove_file(&old) {
+                let aside = free_aside(&old, |p| p.exists());
+                tracing::warn!(file = %old.display(), error = %e, to = %aside.display(),
+                    "the previous binary is in use; moving it aside");
+                std::fs::rename(&old, &aside).with_context(|| {
+                    format!(
+                        "{} could not be removed ({e}) nor moved to {}",
+                        old.display(),
+                        aside.display()
+                    )
+                })?;
+            }
         }
         if target.exists() {
             if let Err(e) = std::fs::rename(target, &old) {
@@ -271,6 +287,30 @@ pub fn swap_in(staged: &Staged) -> Result<()> {
     Ok(())
 }
 
+/// The first `<old>.<n>` that does not exist: where an `.old` still in use
+/// goes.
+fn free_aside(old: &Path, exists: impl Fn(&Path) -> bool) -> PathBuf {
+    (1u32..)
+        .map(|n| suffixed(old, &n.to_string()))
+        .find(|p| !exists(p))
+        .expect("an unused name")
+}
+
+/// Whether `name` is one of `local`'s retired copies: `<local>.old` or
+/// `<local>.old.<n>`.
+fn is_retired(local: &str, name: &str) -> bool {
+    match name
+        .strip_prefix(local)
+        .and_then(|r| r.strip_prefix(".old"))
+    {
+        Some("") => true,
+        Some(rest) => rest
+            .strip_prefix('.')
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())),
+        None => false,
+    }
+}
+
 fn undo(moved: &[(PathBuf, PathBuf)]) {
     for (old, target) in moved.iter().rev() {
         let _ = std::fs::remove_file(target);
@@ -278,16 +318,25 @@ fn undo(moved: &[(PathBuf, PathBuf)]) {
     }
 }
 
-/// Delete the `.old` files an earlier update left, once this binary has
-/// started well enough to reach here.
+/// Delete the `.old` (and `.old.<n>`) files earlier updates left, once this
+/// binary has started well enough to reach here. One still in use stays for
+/// a later start.
 pub fn retire_old_binaries() {
     let Ok(dir) = install_dir() else { return };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    let names: Vec<String> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
     for (_, local) in ASSETS.iter().chain(OPTIONAL_ASSETS) {
-        let old = suffixed(&dir.join(local), "old");
-        if old.exists() {
-            match std::fs::remove_file(&old) {
-                Ok(()) => tracing::info!(file = local, "retired the previous binary"),
-                Err(e) => tracing::warn!(file = local, error = %e, "previous binary not removed"),
+        for name in names.iter().filter(|n| is_retired(local, n)) {
+            match std::fs::remove_file(dir.join(name)) {
+                Ok(()) => tracing::info!(file = name, "retired a previous binary"),
+                Err(e) => {
+                    tracing::warn!(file = name, error = %e, "previous binary not removed yet")
+                }
             }
         }
     }
@@ -408,6 +457,34 @@ mod tests {
     #[test]
     fn rejects_a_short_signature() {
         assert!(verify(b"asset", &[0u8; 10]).is_err());
+    }
+
+    #[test]
+    fn an_old_binary_in_use_is_moved_aside_and_retired_later() {
+        let old = Path::new("C:/x/daedalus-agent.exe.old");
+        let taken = [
+            "C:/x/daedalus-agent.exe.old.1",
+            "C:/x/daedalus-agent.exe.old.2",
+        ];
+        let aside = free_aside(old, |p| taken.iter().any(|t| Path::new(t) == p));
+        assert!(aside.ends_with("daedalus-agent.exe.old.3"));
+        for yes in [
+            "daedalus-agent.exe.old",
+            "daedalus-agent.exe.old.1",
+            "daedalus-agent.exe.old.12",
+        ] {
+            assert!(is_retired("daedalus-agent.exe", yes), "{yes}");
+        }
+        for no in [
+            "daedalus-agent.exe",
+            "daedalus-agent.exe.new",
+            "daedalus-agent.exe.old.",
+            "daedalus-agent.exe.old.x",
+            "daedalus-agent.exe.older",
+            "daedalus-agent-tray.exe.old",
+        ] {
+            assert!(!is_retired("daedalus-agent.exe", no), "{no}");
+        }
     }
 
     #[test]
