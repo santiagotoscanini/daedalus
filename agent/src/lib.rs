@@ -72,10 +72,18 @@ pub use os::TRAY_EXE;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The agent's work, shared by `run` (as a service) and `serve` (in a
-/// terminal): hold the machine awake, answer the status page, keep the link
+/// terminal): hold the machine awake, answer the local socket, keep the link
 /// to the controller, sample telemetry and check for updates until `stop` is raised —
 /// each part as far as this machine's role runs it (role.rs).
 pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
+    // Before anything that could fail: an update on probation counts this
+    // start, and one that started too often is rolled back here (update.rs)
+    // — the service's starts only: a `serve` in a terminal is not one.
+    let start = if foreground {
+        update::Start::Normal
+    } else {
+        update::on_start()
+    };
     let cfg = config::load_or_default().context("reading config")?;
     let _log = config::init_logging(&cfg, foreground)?;
     let role = cfg.role();
@@ -85,6 +93,18 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         mode = ?role.mode,
         "daedalus-agent starting"
     );
+
+    // One service per data directory: its port no longer decides that (a
+    // port another process holds is waited out, status.rs `Page`).
+    let lock_path = config::data_dir().join("agent.lock");
+    let _ = std::fs::create_dir_all(config::data_dir());
+    let Some(_instance) = os::lock_exclusive(&lock_path) else {
+        anyhow::bail!(
+            "another agent already runs on {} ({} is held)",
+            config::data_dir().display(),
+            lock_path.display()
+        );
+    };
 
     let started = std::time::Instant::now();
     let state = state::State::load();
@@ -98,8 +118,23 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         role,
     ));
 
-    if role.self_update {
-        update::retire_old_binaries();
+    match &start {
+        update::Start::Probation(n) => tracing::info!(
+            starts = n,
+            max = update::MAX_STARTS,
+            "this version is on probation; the previous binaries stay until it has run {} s",
+            update::PROBATION.as_secs()
+        ),
+        // Only when the binaries could not be put back (update.rs).
+        update::Start::RollBack(r) => tracing::error!(
+            version = r.version,
+            "this version did not last, and could not be rolled back"
+        ),
+        // No update waits for its proof (a `serve` does not count one).
+        _ if role.self_update && shared.state().probation.is_none() => {
+            update::retire_old_binaries()
+        }
+        _ => {}
     }
 
     // The point of the whole thing on a node. Held while the policy says
@@ -109,30 +144,49 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let mut hold: Option<power::Hold> = None;
     let mut hold_wanted: Option<bool> = None;
 
-    let server = status::serve(cfg.port, Arc::clone(&shared))?;
+    // The status page for the tray, the session and the verbs (status.rs).
+    // One another process holds does not stop the service: it is tried
+    // again in the background while the rest runs.
+    let page = status::Page::start(cfg.port, Arc::clone(&shared));
+    // After an update, the tray or the session started again on the new
+    // binary so it matches the service (os `restart_desktop_side`).
+    if matches!(start, update::Start::Probation(1)) && role.session && !role.session_in_service {
+        let _ = std::thread::Builder::new()
+            .name("desktop-restart".into())
+            .spawn(|| {
+                std::thread::sleep(Duration::from_secs(3));
+                os::svc::restart_desktop_side();
+            });
+    }
 
     // The controller's own key — what every machine pins — and, where
     // `[controller] listen` names an address, the registry of machines the
     // API reads (link/). Set before the API opens, so its capabilities
     // say `nodes` from the first connection.
     let controller = if role.node_listener {
-        let id = identity::Identity::load_or_create().context("the controller's identity")?;
-        shared.set_controller_info(api::wire::ControllerInfo {
-            public_key: id.public_key_hex(),
-            fingerprint: id.fingerprint(),
+        // The keys, and a rotation under way (link/rotation.rs).
+        let keys = Arc::new(
+            link::rotation::Keys::load(&config::data_dir()).context("the controller's identity")?,
+        );
+        shared.set_controller(status::Controller {
+            keys: Arc::clone(&keys),
             listen: cfg.controller_listen().map(|a| a.to_string()),
             advertise: cfg.controller.advertise.clone(),
         });
-        tracing::info!(fingerprint = %id.fingerprint(), "controller identity loaded");
+        tracing::info!(
+            fingerprint = %keys.forward().fingerprint(),
+            rotating = keys.info().is_some(),
+            "controller identity loaded"
+        );
         match cfg.controller_listen() {
             Some(addr) => {
                 let registry = Arc::new(link::controller::Registry::new(
-                    &id,
+                    &keys.forward(),
                     shared.events_handle(),
                     link::controller::Limits::default(),
                 ));
                 shared.set_nodes(Arc::clone(&registry));
-                Some((id, addr, registry))
+                Some((keys, addr, registry))
             }
             None => {
                 tracing::info!("no [controller] listen: no machine can connect to this controller");
@@ -144,8 +198,8 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     };
 
     // The controller's door for the app (api/). Opened before the sampler
-    // and the session start, so a second instance that got past the status
-    // page's port (a different `port`) stops here without having started
+    // and the session start, so a second instance that got past the local
+    // socket (another data directory) stops here without having started
     // either — above all, without touching the Claude unit.
     let api = if role.api_socket {
         Some(api::serve(&cfg, Arc::clone(&shared))?)
@@ -155,7 +209,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
 
     // The machines' links, once the API is up (link/controller.rs).
     let listener = match controller {
-        Some((id, addr, registry)) => Some(link::controller::listen(addr, &id, registry)?),
+        Some((keys, addr, registry)) => Some(link::controller::listen_with(addr, keys, registry)?),
         None => None,
     };
 
@@ -258,7 +312,39 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     // Mac, KeepAlive and `launchd::kickstart_tray` cover it; on Linux the
     // session is a user unit systemd restarts.
     let mut tray_tried = std::time::Instant::now();
+    let mut on_probation = matches!(start, update::Start::Probation(_));
+    let mut probation_looked = started;
+    let mut failed_probation = false;
     while !stop.load(Ordering::Relaxed) {
+        // An update on probation proves itself, or fails its run (update.rs).
+        if on_probation && probation_looked.elapsed() >= Duration::from_secs(5) {
+            probation_looked = std::time::Instant::now();
+            let up_for = page.up_for();
+            let proof = update::judge_proof(
+                up_for,
+                started.elapsed(),
+                || role.session && !role.session_in_service && os::svc::interactive_user(),
+                shared.tray_reporting(),
+            );
+            match proof {
+                update::Proof::Wait => {}
+                update::Proof::Proven(rule) => {
+                    on_probation = false;
+                    update::prove(&shared, rule);
+                }
+                update::Proof::Failed(why) => {
+                    tracing::error!(why, "this version failed its probation run; stopping so the service manager starts it again (a counted start)");
+                    failed_probation = true;
+                    stop.store(true, Ordering::Relaxed);
+                    break;
+                }
+            }
+        }
+        // A controller key rotation whose grace period is over retires the
+        // old key (link/rotation.rs).
+        if let Some(k) = shared.controller_keys() {
+            k.tick();
+        }
         // A session that went quiet is news to the API's subscribers.
         shared.check_claude_fresh();
         let wanted = shared.policy().awake_hold;
@@ -310,7 +396,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     tracing::info!("stopping");
     drop(listener);
     drop(api);
-    server.unblock();
+    drop(page);
     if let Some(s) = session {
         let _ = s.join();
     }
@@ -327,5 +413,10 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         let _ = l.join();
     }
     drop(hold);
+    // A failed probation run leaves as a failure, once the log is flushed.
+    if failed_probation {
+        drop(_log);
+        std::process::exit(3);
+    }
     Ok(())
 }

@@ -71,7 +71,9 @@ beside it where there is a desktop. It
   check for updates, restart Claude remote control, open the logs, open
   Claude's log;
 - **updates itself** to the newest `agent-v*` release of this repository,
-  verifying every asset against the ed25519 key compiled into it.
+  verifying every asset against the ed25519 key compiled into it, and goes
+  back to the previous binaries when a new one does not prove itself (see
+  "How an update happens").
 
 ## Node and controller
 
@@ -113,7 +115,9 @@ same in a terminal), with
 - **the local API socket** — the door the Daedalus app uses (below);
 - **its own identity key**, made on first start as a node's is
   (`identity.key` in its data directory, 0600): what every machine pins.
-  `system.info` states it (`controller.public_key`, `.fingerprint`);
+  `system.info` states it (`controller.public_key`, `.fingerprint`), and
+  `controller.rotate` hands its trust to a new one (see "Rotating the
+  controller's key");
 - **the listener for the machines' links**, where `[controller] listen`
   names an address (absent: none — the box opens no port until nix says
   so), and the registry of machines the API's `nodes.*` methods read
@@ -241,7 +245,8 @@ verbs, none taking a command, a path or a flag:
 
 | method             | answers                                                              | needs                   |
 |--------------------|----------------------------------------------------------------------|-------------------------|
-| `system.info`      | version, mode, api, hostname, OS facts, uptimes, the role table, capabilities, and on the controller `controller: {public_key, fingerprint, listen, advertise}` | — |
+| `system.info`      | version, mode, api, hostname, OS facts, uptimes, the role table, capabilities, and on the controller `controller: {public_key, fingerprint, listen, advertise, rotation}` — `rotation` null, or the rotation under way: `{from_public_key, from_fingerprint, started_at, retires_at, old_key_connections}` | — |
+| `controller.rotate` `{grace_secs?}` | the same `controller` block: a new controller key made, the old one retired after `grace_secs` (60 s to 90 days; absent, 7 days); `unavailable` while one runs | the controller |
 | `claude.status`    | `{reporting, wanted, report}`: the session's last report, or `reporting: false` | `claude.remote_control` |
 | `claude.restart`   | `{queued: true}`; the session restarts the server at once (`unavailable` while no session reports) | `claude.remote_control` |
 | `claude.update`    | `{queued: true}`; never offered on the controller                    | `claude.update`         |
@@ -338,14 +343,58 @@ search domains DHCP handed out (and `search_domains`). With none, the
 machine reaches nobody, says so, and asks again every minute. The key:
 config.toml's `controller_pin` (`install --pin`), which nothing overrides;
 else the first key the controller presents — trust on first use — kept in
-`controller.json` and never re-pinned. DNS only ever names an address.
+`controller.json`, re-pinned only by a rotation the trusted key signed
+(below). DNS only ever names an address.
 
 A controller that presents another key than the trusted one is refused,
 and the page and the tray say **controller key changed**, with the key
 trusted and the one that came — labelled unproven, since the pin check
 runs before the handshake signature. If the controller really has a new
-key, pin it (`install --pin`) or remove `controller.json`. (Rotating the
-controller's key through a signed statement is a later feature.)
+key outside a rotation, pin it (`install --pin`) or remove
+`controller.json`.
+
+**Rotating the controller's key** (`src/link/rotation.rs`).
+`controller.rotate` makes a new identity beside the old one
+(`identity.next.key`), signs with the OLD key the statement that the new
+key succeeds it — ed25519 over a context of its own, the old key and the
+new — and records both with the end of a grace period in `rotation.json`
+(both 0600 in the controller's data directory, each written whole or not
+at all). While both exist the listener presents each machine the key it
+pins: a machine names that key in the TLS server name (`k<its node
+id>.daedalus-controller`; the bare name on a first use), so one that
+re-pinned is served the new key and every other the old one — chosen once,
+in the connection's handshake, from the keys as they stood when it was
+accepted, so a retirement mid-handshake cannot mislabel it. Every
+connection under the old key is sent the statement once (`rotate
+{new_public_key, signature}`); the machine checks it against the key its
+handshake just proved — never against anything the request carries —
+re-pins where its pin was (config.toml's `controller_pin`, rewritten in
+place with every other line kept, or `controller.json`; both written
+atomically), acknowledges, and reconnects under the new key; its page's
+`controller.rotated` says from which key to which, and when. A statement
+another key signed is refused and nothing moves; an impostor, which cannot
+finish the handshake with the pinned key, never gets as far as sending
+one. `system.info`'s `controller` names the new key from the start (what
+an install should pin) and, under `rotation`, the old one, when it retires
+and how many machines still connect under it.
+
+When the grace period ends — wall-clock time: a clock set ahead retires
+early, one set back late, a controller down past it retires at its next
+start — the new key becomes `identity.key` and the old one is gone. A
+machine that did not connect in the meantime, or an agent older than
+0.19.0 (which ignores the statement), is left pinning a key the controller
+no longer has, and is pinned again by hand. A half-done rotation heals and
+never stops the controller: a next key whose record is missing, torn or
+does not verify is signed again (the same deterministic signature); a
+record whose key is already `identity.key` was a retirement that stopped
+half-way and goes; anything unreadable is logged and the current key
+served alone.
+
+What rotation is not: a way out of a compromised key. The old key's holder
+signs the statement, so whoever holds a leaked controller key can sign one
+for a key of their own, and every machine that meets them first follows
+it. A leaked key is recovered from by pinning a new one by hand
+(`install --pin`) on every machine.
 
 **Pinned or not.** A key trusted on first use works like a pinned one, but
 the status page's `controller.unconfirmed` is true and the tray says
@@ -411,7 +460,8 @@ characters or holding a control character.
 The status page's `controller` block and the tray's menu show the link:
 the address and where it came from, the state (`connecting`, `pending`,
 `approved`, `revoked`, `refused`, `key-changed`), both fingerprints, how
-the controller's key is trusted (`config` or `tofu`) and the last error.
+the controller's key is trusted (`config` or `tofu`), the last rotation
+(`rotated`) and the last error.
 
 ## Install
 
@@ -747,10 +797,10 @@ daedalus-agent version
 Windows:
 
 ```
-C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (.old / .new around an update)
+C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (.old / .new around an update, .bad after a rollback)
 C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
 C:\ProgramData\daedalus-agent\config.toml                 local knobs, never policy (src/config.rs); edit and restart
-C:\ProgramData\daedalus-agent\state.json                  the last update check and install
+C:\ProgramData\daedalus-agent\state.json                  the last update check and install, an update on probation, a version rolled back from
 C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPAPI-wrapped
 C:\ProgramData\daedalus-agent\controller.json             the controller key trusted on first use, and its address (the link)
 C:\ProgramData\daedalus-agent\policy.json                 the last policy the controller sent, what a restart starts from
@@ -764,7 +814,7 @@ C:\ProgramData\daedalus-agent\logs\claude-session-<uuid>.log  what a resumed ses
 macOS:
 
 ```
-/Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update)
+/Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update, .bad after a rollback)
 /Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the menu bar app
 /Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,controller.json,logs/}
 /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
@@ -779,7 +829,7 @@ gui/<uid>/me.toscanini.daedalus-agent.claude-session-<uuid>           a session 
 Linux:
 
 ```
-/opt/daedalus-agent/bin/daedalus-agent                the service (.old / .new around an update); /usr/local/bin links to it
+/opt/daedalus-agent/bin/daedalus-agent                the service (.old / .new around an update, .bad after a rollback); /usr/local/bin links to it
 /opt/daedalus-agent/bin/daedalus-agent-tray           the tray, x86_64 desktops only
 /var/lib/daedalus-agent/{config.toml,state.json,identity.key,controller.json,policy.json,session.json,logs/}
 /etc/systemd/system/daedalus-agent.service            the service's unit
@@ -863,10 +913,45 @@ renames the running binaries to `.old`, moves the new ones into place and
 exits with code 3. The service's recovery action (launchd's KeepAlive on
 macOS, `Restart=always` on Linux) starts it on the new binary; the tray and
 the session see the page report a version other than their own and restart
-(the Linux session unit by leaving, for systemd to start it again). Claude
-keeps running in its jobs on every OS and is re-attached; the next clean start deletes
-the `.old` files. A release whose signature fails is reported on the status
-page and never installed.
+(the Linux session unit by leaving, for systemd to start it again), and the
+first start of the new service restarts them itself as well — the Windows
+trays ended (`taskkill`) and the console user's started again, the Mac's
+menu bar app kickstarted (`launchctl kickstart -k`), the Linux session unit
+restarted in its user's manager — so they run the version the service does
+whatever version they were. A Linux tray whose page stops answering after
+its binary was replaced leaves for the new one too. Claude keeps running in
+its jobs on every OS and is re-attached. A release whose signature fails is
+reported on the status page and never installed.
+
+**Probation, and going back.** A signed binary is not trusted until it has
+run. The update records the new version on probation in `state.json`
+(`probation`: the version, the one it replaced, its starts), and its
+`.old` binaries stay. Each start of that version under the service manager
+(`run`, never a `serve` in a terminal) counts itself as the first thing the
+service does — before it even reads config.toml. It has proved itself once
+its status page has answered for two minutes and, when someone is logged on
+who runs a tray or a session (a console session with a user on Windows, a
+console user on a Mac, the session user's systemd manager running on
+Linux), that tray or session has reported to it; with nobody logged on the
+two minutes are enough. The log names the rule that proved it; then the
+record is cleared and the `.old` files retired. A run that has not proved
+itself within five minutes exits, which counts as a failed start. A
+version that starts more than three times without proving itself — the
+service manager starting it again after each crash or exit (systemd after
+3 s, launchd after 5 s, the SCM after 3, 10 and 60 s) — is rolled back at
+its next start: the `.old` binaries go back in place, the failed ones
+become `.bad` (retired later), `state.json`'s `rolled_back` names the
+version and `last_update_result` says why, and the service exits for the
+service manager to start the version put back. That version is never
+installed again; a newer release is. While a version is on probation
+nothing newer is installed over it, and `update --apply` refuses while the
+service runs (its state would be saved over). A binary that dies before
+`main` is past what it can count — none signed for this target does.
+
+A status page whose port another process holds does not stop the service:
+the link, the telemetry and the awake hold run on, the port is tried again
+every 15 s, and the log names the port's holder where the OS says (its uid,
+on Linux). One service runs per data directory (`agent.lock` there).
 
 ## Releasing
 

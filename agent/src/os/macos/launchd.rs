@@ -295,6 +295,26 @@ pub fn launch_tray_or_session() -> Result<()> {
     Ok(())
 }
 
+/// Someone is at the console: a menu bar app should be reporting
+/// (update.rs, probation).
+pub fn interactive_user() -> bool {
+    console_uid().is_some_and(|u| u != 0)
+}
+
+/// After an update: the console user's menu bar app started again on the
+/// new binary (`kickstart -k` kills and restarts the job; Claude runs on in
+/// its own jobs). Nothing without a console user.
+pub fn restart_desktop_side() {
+    let Some(uid) = console_uid().filter(|u| *u != 0) else {
+        return;
+    };
+    let target = format!("gui/{uid}/{TRAY_LABEL}");
+    match launchctl_timeout(&["kickstart", "-k", &target], 10) {
+        Ok(_) => tracing::info!(uid, "menu bar app restarted on the new version"),
+        Err(e) => tracing::warn!(uid, error = %e, "menu bar app not restarted"),
+    }
+}
+
 /// Start the menu bar app in the console user's session if it is not
 /// running. launchd gives up on a job whose spawn failed (a root-only tree
 /// did that to every 0.5.0 install) and a self-update replaces binaries

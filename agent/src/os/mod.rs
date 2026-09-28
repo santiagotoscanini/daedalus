@@ -70,6 +70,8 @@ pub use imp::{primary_adapter, srv_lookup};
 pub use imp::tls;
 // power
 pub use imp::{converge_plan, os_uptime_secs, requests_report, Hold};
+// the status page's port
+pub use imp::port_holder;
 // identity
 pub use imp::{file_owner, own_uid, seal, unseal, write_private};
 // update
@@ -101,7 +103,8 @@ pub use imp::TRAY_OWNS_SESSION;
 /// The service: registered, removed, run, and the tray started from it.
 pub mod svc {
     pub use super::imp::svc::{
-        install, launch_tray_or_session, run_service, uninstall, WATCHES_TRAY,
+        install, interactive_user, launch_tray_or_session, restart_desktop_side, run_service,
+        uninstall, WATCHES_TRAY,
     };
 }
 

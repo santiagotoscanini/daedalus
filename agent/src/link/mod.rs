@@ -61,6 +61,7 @@ pub mod cert;
 pub mod controller;
 pub mod crypto;
 pub mod node;
+pub mod rotation;
 pub mod tls;
 pub mod wire;
 
@@ -130,6 +131,9 @@ pub struct LinkStatus {
     /// config.toml: the link works, and the page and the tray warn until
     /// the operator pins it.
     pub unconfirmed: bool,
+    /// The last time a signed rotation moved the trusted controller key:
+    /// from which to which, and when (rotation.rs). Null until one does.
+    pub rotated: Option<String>,
     /// What went wrong last, when something did — a changed controller key
     /// above all.
     pub error: Option<String>,

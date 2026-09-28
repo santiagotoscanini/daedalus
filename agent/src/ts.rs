@@ -46,6 +46,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     ProviderModelSent::export_all(cfg)?;
     SetDesiredOk::export_all(cfg)?;
     CommandOk::export_all(cfg)?;
+    ControllerInfo::export_all(cfg)?;
     ApiError::export_all(cfg)?;
     // The parameters.
     HelloParams::export_all(cfg)?;
@@ -55,6 +56,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     NodeProviderModel::export_all(cfg)?;
     SetDesired::export_all(cfg)?;
     NodeCommand::export_all(cfg)?;
+    ControllerRotate::export_all(cfg)?;
     // The events.
     ClaudeChanged::export_all(cfg)?;
     TelemetryUpdated::export_all(cfg)?;

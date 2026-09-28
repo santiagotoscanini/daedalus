@@ -18,6 +18,8 @@
 //! node → {"id":8,"ok":{"accepted":true}}
 //! ctl  ← {"id":9,"m":"provider_model","p":{"kind":"lemonade","action":"load","model":"…","pinned":false,"replacing":null,"request":"<16 hex>"}}
 //! node → {"id":9,"ok":{"accepted":true}}
+//! ctl  ← {"id":10,"m":"rotate","p":{"new_public_key":"<64 hex>","signature":"<128 hex>"}}
+//! node → {"id":10,"ok":{"accepted":true}}      (re-pinned; it reconnects under the new key)
 //! both → {"e":"hb"}
 //! ```
 //!
@@ -64,6 +66,10 @@ pub mod name {
     pub const PROVIDER_MODEL: &str = "provider_model";
     /// controller → node: where the machine stands.
     pub const STATE: &str = "state";
+    /// controller → node: its key hands over to a new one — the statement
+    /// signed by the key the node trusts (rotation.rs), acknowledged once
+    /// the node has re-pinned.
+    pub const ROTATE: &str = "rotate";
     /// controller → node: the box's policy for it.
     pub const POLICY: &str = "policy";
 }
@@ -315,6 +321,15 @@ pub struct ClaudeSessionParams {
     pub action: SessionAction,
     pub id: String,
     pub request: String,
+}
+
+/// `rotate`'s parameters: the controller's new key, and the key the node
+/// trusts vouching for it (identity.rs `sign_rotation`), both hex. Exact.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RotateParams {
+    pub new_public_key: String,
+    pub signature: String,
 }
 
 /// `command`'s answer: the machine took the instruction.
@@ -645,6 +660,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_rotation_on_the_wire() {
+        let p = RotateParams {
+            new_public_key: "ab".repeat(32),
+            signature: "cd".repeat(64),
+        };
+        assert_eq!(
+            request(10, name::ROTATE, &p),
+            format!(
+                r#"{{"id":10,"m":"rotate","p":{{"new_public_key":"{}","signature":"{}"}}}}"#,
+                "ab".repeat(32),
+                "cd".repeat(64)
+            )
+        );
+        // Exact: nothing else rides it.
+        assert!(serde_json::from_value::<RotateParams>(
+            json!({"new_public_key":"x","signature":"y","grace":1})
+        )
+        .is_err());
+        assert!(serde_json::from_value::<RotateParams>(json!({"new_public_key":"x"})).is_err());
+    }
     #[test]
     fn incoming_lines_are_told_apart() {
         assert_eq!(

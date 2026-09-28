@@ -48,7 +48,8 @@ use rustls::{
 use super::{cert, crypto, MAX_LINE, TICK};
 use crate::identity::{digest, Identity};
 
-/// The name the machine's client asks for; nothing checks it.
+/// The name the machine's client asks for, under which it names the key it
+/// pins (`server_name_for`); nothing checks it as a name.
 const SERVER_NAME: &str = "daedalus-controller";
 
 fn signature_holds(
@@ -143,7 +144,12 @@ impl Client {
     ) -> Result<Tls, ConnectError> {
         let _one = self.attempt.lock().unwrap_or_else(|p| p.into_inner());
         self.verifier.arm(pin);
-        match Tls::client(sock, Arc::clone(&self.config), timeout) {
+        match Tls::client(
+            sock,
+            Arc::clone(&self.config),
+            &server_name_for(pin),
+            timeout,
+        ) {
             Ok(t) => Ok(t),
             Err(e) => match (self.verifier.presented(), pin) {
                 (Some(key), Some(pinned)) if digest(&key) != pinned => {
@@ -282,6 +288,48 @@ pub fn server_config(id: &Identity) -> anyhow::Result<Arc<ServerConfig>> {
     Ok(Arc::new(config))
 }
 
+/// The name a machine asks for (SNI): the node id of the key it pins, under
+/// `SERVER_NAME`, so a controller holding two keys during a rotation
+/// presents the one this machine trusts (rotation.rs); the bare name on a
+/// first use, which has no pin.
+pub fn server_name_for(pin: Option<[u8; 32]>) -> String {
+    match pin {
+        Some(d) => format!("k{}.{SERVER_NAME}", &hex::encode(d)[..16]),
+        None => SERVER_NAME.to_string(),
+    }
+}
+
+/// The node id of the key a machine pins, from the name it asked for; None
+/// for the bare name or anything else.
+pub fn pinned_id_of(sni: Option<&str>) -> Option<&str> {
+    let id = sni?
+        .strip_prefix('k')?
+        .strip_suffix(SERVER_NAME)?
+        .strip_suffix('.')?;
+    (id.len() == 16 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))).then_some(id)
+}
+
+/// An identity as rustls presents it: its certificate and signing key.
+pub(crate) fn certified(id: &Identity) -> anyhow::Result<Arc<rustls::sign::CertifiedKey>> {
+    let (certs, key) = certificate_and_key(id);
+    let signing = crypto::provider().key_provider.load_private_key(key)?;
+    Ok(Arc::new(rustls::sign::CertifiedKey::new(certs, signing)))
+}
+
+/// The controller's side with its keys chosen per connection by `resolver`
+/// (rotation.rs), every machine asked for a certificate.
+pub fn server_config_resolving(
+    resolver: Arc<dyn rustls::server::ResolvesServerCert>,
+) -> anyhow::Result<Arc<ServerConfig>> {
+    let mut config = ServerConfig::builder_with_provider(crypto::provider())
+        .with_protocol_versions(&[&rustls::version::TLS13])?
+        .with_client_cert_verifier(Arc::new(AnyEd25519Machine))
+        .with_cert_resolver(resolver);
+    config.send_tls13_tickets = 0;
+    config.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
+    Ok(Arc::new(config))
+}
+
 /// What one `recv` gave.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Recv {
@@ -317,9 +365,10 @@ impl Tls {
     pub fn client(
         sock: TcpStream,
         config: Arc<ClientConfig>,
+        name: &str,
         timeout: Duration,
     ) -> io::Result<Self> {
-        let name = ServerName::try_from(SERVER_NAME).expect("a valid DNS name");
+        let name = ServerName::try_from(name.to_string()).map_err(invalid)?;
         let conn = rustls::ClientConnection::new(config, name).map_err(invalid)?;
         Self::handshake(conn.into(), sock, timeout)
     }
@@ -359,6 +408,15 @@ impl Tls {
             inbuf: Vec::new(),
             max_line: MAX_LINE,
         })
+    }
+
+    /// The name the machine asked for, on the controller's side (SNI;
+    /// `pinned_id_of` reads the key it pins from it).
+    pub fn sni(&self) -> Option<&str> {
+        match &self.conn {
+            rustls::Connection::Server(s) => s.server_name(),
+            rustls::Connection::Client(_) => None,
+        }
     }
 
     /// The key the peer's certificate carries — the one its handshake
@@ -501,6 +559,24 @@ pub(crate) mod tests {
             }
         }
         panic!("no line")
+    }
+
+    #[test]
+    fn a_machine_names_the_key_it_pins() {
+        let d = [0xabu8; 32];
+        let name = server_name_for(Some(d));
+        assert_eq!(name, "kabababababababab.daedalus-controller");
+        assert_eq!(pinned_id_of(Some(&name)), Some("abababababababab"));
+        assert_eq!(server_name_for(None), SERVER_NAME);
+        for other in [
+            SERVER_NAME,
+            "kABABABABABABABAB.daedalus-controller",
+            "kabab.daedalus-controller",
+            "kabababababababab.elsewhere",
+        ] {
+            assert_eq!(pinned_id_of(Some(other)), None, "{other}");
+        }
+        assert_eq!(pinned_id_of(None), None);
     }
 
     #[test]

@@ -41,6 +41,11 @@ pinned_via: string | null,
  */
 unconfirmed: boolean, 
 /**
+ * The last time a signed rotation moved the trusted controller key:
+ * from which to which, and when (rotation.rs). Null until one does.
+ */
+rotated: string | null, 
+/**
  * What went wrong last, when something did — a changed controller key
  * above all.
  */

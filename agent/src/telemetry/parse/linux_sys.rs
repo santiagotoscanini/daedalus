@@ -7,6 +7,20 @@ use std::collections::HashMap;
 
 use super::meaningful;
 
+/// The uid owning the IPv4 socket that LISTENs on `port` on loopback or on
+/// every interface, from /proc/net/tcp (`sl local rem st … uid …`, the
+/// addresses as hex `ADDR:PORT`, state `0A` listening).
+pub fn tcp_listener_uid(text: &str, port: u16) -> Option<u32> {
+    let want = format!("{port:04X}");
+    text.lines().skip(1).find_map(|l| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        let (addr, p) = f.get(1)?.split_once(':')?;
+        (p == want && f.get(3) == Some(&"0A") && matches!(addr, "0100007F" | "00000000"))
+            .then(|| f.get(7)?.parse().ok())
+            .flatten()
+    })
+}
+
 /// `/etc/os-release` (os-release(5)): `KEY=value`, the value optionally
 /// quoted, with backslash escapes inside double quotes.
 pub fn os_release(text: &str) -> HashMap<String, String> {
@@ -514,6 +528,18 @@ pub fn nix_store_name_version(path: &str) -> Option<(String, Option<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_listener_of_a_port_is_found_by_its_owner() {
+        let t = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n   0: 0100007F:1E6B 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 12345 1\n   1: 0100007F:1E6C 0100007F:9C40 01 00000000:00000000 00:00000000 00000000  1000        0 2 1\n";
+        assert_eq!(tcp_listener_uid(t, 7787), Some(1001));
+        assert_eq!(
+            tcp_listener_uid(t, 7788),
+            None,
+            "established, not listening"
+        );
+        assert_eq!(tcp_listener_uid(t, 80), None);
+    }
 
     #[test]
     fn os_release_quotes_and_the_fallbacks() {

@@ -561,18 +561,9 @@ pub fn save_policy(p: &crate::link::wire::Policy) {
         return;
     }
     let path = policy_path();
-    let tmp = path.with_extension("json.new");
     let wrote = serde_json::to_string_pretty(p)
         .map_err(std::io::Error::other)
-        .and_then(|t| std::fs::write(&tmp, t))
-        .and_then(|()| {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644))?;
-            }
-            std::fs::rename(&tmp, &path)
-        });
+        .and_then(|t| crate::util::write_atomic(&path, t.as_bytes(), Some(0o644)));
     if let Err(e) = wrote {
         tracing::warn!(path = %path.display(), error = %e, "the policy was not kept");
     }
@@ -717,6 +708,23 @@ pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
         std::fs::write(&path, edited).with_context(|| format!("writing {}", path.display()))?;
     }
     Ok(path)
+}
+
+/// Set `controller_pin` in the config.toml at `path` to `fingerprint`,
+/// every other line as it was: what a signed controller key rotation does
+/// where config.toml held the pin (link/node.rs). Refused, and nothing
+/// written, when the result would not parse.
+pub fn set_controller_pin_at(path: &Path, fingerprint: &str) -> Result<()> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+    };
+    let edited = set_top_level_keys(&text, &[("controller_pin", fingerprint)]);
+    toml::from_str::<Config>(&edited)
+        .with_context(|| format!("{} would not parse with the new pin", path.display()))?;
+    crate::util::write_atomic(path, edited.as_bytes(), None)
+        .with_context(|| format!("writing {}", path.display()))
 }
 
 /// `text` with each key set to its string value at the top level: an

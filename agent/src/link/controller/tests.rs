@@ -12,7 +12,7 @@ use super::*;
 use crate::claude::Report;
 use crate::config::{Config, Mode};
 use crate::identity::{digest, Identity};
-use crate::link::node::{connect_once, hello_of, Cadence, Ended, Target};
+use crate::link::node::{connect_once, hello_of, Cadence, Ended, Target, Trust};
 use crate::link::tls as ltls;
 use crate::role::Role;
 use crate::state::State;
@@ -116,7 +116,12 @@ fn spawn_node(t: Target, nid: Identity, shared: Arc<Shared>, name: &str) -> Node
         std::thread::spawn(move || {
             let hello = hello_of(&Config::default(), &nid, &facts());
             let client = ltls::Client::new(&nid).unwrap();
-            connect_once(&t, &client, hello, &shared, &stop, &store, &cadence())
+            let config = store.with_file_name("config.toml");
+            let trust = Trust {
+                store: &store,
+                config: &config,
+            };
+            connect_once(&t, &client, hello, &shared, &stop, trust, &cadence())
         })
     };
     Node {
@@ -517,7 +522,10 @@ fn a_controller_with_another_key_is_refused_pinned_or_first_used() {
         hello,
         &node_shared(),
         &stop,
-        &store,
+        Trust {
+            store: &store,
+            config: &store.with_file_name("config.toml"),
+        },
         &cadence(),
     );
     assert!(matches!(ended, Ended::KeyChanged { .. }), "{ended:?}");
@@ -1128,9 +1136,8 @@ fn the_api_steers_the_machines_through_the_socket() {
     let cid = id(210);
     let registry = Arc::new(Registry::new(&cid, cshared.events_handle(), fast()));
     cshared.set_nodes(Arc::clone(&registry));
-    cshared.set_controller_info(crate::api::wire::ControllerInfo {
-        public_key: cid.public_key_hex(),
-        fingerprint: cid.fingerprint(),
+    cshared.set_controller(crate::status::Controller {
+        keys: Arc::new(Keys::fixed(&cid).unwrap()),
         listen: Some("127.0.0.1:0".into()),
         advertise: vec![],
     });
@@ -1159,6 +1166,17 @@ fn the_api_steers_the_machines_through_the_socket() {
     let info = call(r#"{"id":2,"m":"system.info"}"#.into());
     assert_eq!(info["ok"]["controller"]["fingerprint"], cid.fingerprint());
     assert_eq!(info["ok"]["role"]["node_listener"], true);
+    assert_eq!(
+        info["ok"]["controller"]["rotation"],
+        serde_json::Value::Null
+    );
+    // A grace period out of bounds, and a key handed in fixed: refused.
+    let rot = call(r#"{"id":90,"m":"controller.rotate","p":{"grace_secs":5}}"#.into());
+    assert_eq!(rot["err"]["code"], "bad_request", "{rot}");
+    let rot = call(r#"{"id":91,"m":"controller.rotate","p":{"grace":60}}"#.into());
+    assert_eq!(rot["err"]["code"], "bad_request", "{rot}");
+    let rot = call(r#"{"id":92,"m":"controller.rotate"}"#.into());
+    assert_eq!(rot["err"]["code"], "unavailable", "{rot}");
 
     // A machine connects and waits.
     let nid = id(40);
@@ -1316,5 +1334,290 @@ fn facts() -> crate::facts::Facts {
         arch: "x86_64",
         os_name: "Test OS".into(),
         ..Default::default()
+    }
+}
+
+/// A machine's attempt with its trust in `dir` (`controller.json` and
+/// `config.toml` there), on a thread; the dir is left as it is.
+fn attempt_in(
+    t: Target,
+    nid: &Identity,
+    dir: &std::path::Path,
+) -> (Arc<Shared>, Arc<AtomicBool>, std::thread::JoinHandle<Ended>) {
+    let (shared, stop) = (node_shared(), Arc::new(AtomicBool::new(false)));
+    let (s, st, nid, dir) = (
+        Arc::clone(&shared),
+        Arc::clone(&stop),
+        nid.clone(),
+        dir.to_path_buf(),
+    );
+    let thread = std::thread::spawn(move || {
+        let hello = hello_of(&Config::default(), &nid, &facts());
+        let client = ltls::Client::new(&nid).unwrap();
+        let (store, config) = (
+            dir.join(crate::link::node::STORE_FILE),
+            dir.join("config.toml"),
+        );
+        let trust = Trust {
+            store: &store,
+            config: &config,
+        };
+        connect_once(&t, &client, hello, &s, &st, trust, &cadence())
+    });
+    (shared, stop, thread)
+}
+
+/// Where a machine with its trust in `dir` connects now: what its
+/// config.toml and store say.
+fn target_in(addr: &str, dir: &std::path::Path) -> Target {
+    let cfg: Config = std::fs::read_to_string(dir.join("config.toml"))
+        .ok()
+        .map(|t| toml::from_str(&t).unwrap())
+        .unwrap_or_default();
+    crate::link::node::resolve_target(
+        Some(addr),
+        cfg.controller_pin.as_deref(),
+        crate::link::node::load_store(&dir.join(crate::link::node::STORE_FILE)).as_ref(),
+        || None,
+    )
+    .unwrap()
+    .unwrap()
+}
+
+#[test]
+fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
+    let cdir = scratch("rot-ctl");
+    let keys = Arc::new(Keys::load(&cdir).unwrap());
+    let old = keys.forward();
+    let registry = Arc::new(Registry::new(
+        &old,
+        events(),
+        Limits {
+            pending_per_ip: 8,
+            ..fast()
+        },
+    ));
+    let listener = listen_with(
+        "127.0.0.1:0".parse().unwrap(),
+        Arc::clone(&keys),
+        Arc::clone(&registry),
+    )
+    .unwrap();
+    let addr = listener.local_addr.to_string();
+
+    // A machine pinned in config.toml (comments and other keys kept), and
+    // one that trusted the controller on first use.
+    let (pinned_dir, tofu_dir) = (scratch("rot-pinned"), scratch("rot-tofu"));
+    std::fs::write(
+        pinned_dir.join("config.toml"),
+        format!(
+            "# written by install\nport = 7787\ncontroller_pin = \"{}\"\n",
+            old.fingerprint()
+        ),
+    )
+    .unwrap();
+    let (pinned_id, tofu_id) = (id(60), id(61));
+    let t = target_in(&addr, &pinned_dir);
+    assert_eq!(t.pinned_via, Some("config"));
+    let (_, _, pinned) = attempt_in(t, &pinned_id, &pinned_dir);
+    let (_, _, tofu) = attempt_in(target_in(&addr, &tofu_dir), &tofu_id, &tofu_dir);
+    wait_for("both connected", 5, || {
+        [&pinned_id, &tofu_id].iter().all(|n| {
+            registry
+                .list()
+                .iter()
+                .any(|s| s.id == n.node_id() && s.connected)
+        })
+    });
+    assert_eq!(keys.info(), None);
+
+    // The rotation: both are told, both re-pin where their pin was.
+    let info = keys.start(Duration::from_secs(3600)).unwrap();
+    assert_eq!(info.from_fingerprint, old.fingerprint());
+    let new = keys.forward();
+    let new_pin = pin_of(&new);
+    assert_eq!(
+        pinned.join().unwrap(),
+        Ended::Rotated {
+            from: pin_of(&old),
+            new: new_pin
+        }
+    );
+    assert_eq!(
+        tofu.join().unwrap(),
+        Ended::Rotated {
+            from: pin_of(&old),
+            new: new_pin
+        }
+    );
+    let config = std::fs::read_to_string(pinned_dir.join("config.toml")).unwrap();
+    assert_eq!(
+        config,
+        format!(
+            "# written by install\nport = 7787\ncontroller_pin = \"{}\"\n",
+            new.fingerprint()
+        )
+    );
+    let stored =
+        crate::link::node::load_store(&tofu_dir.join(crate::link::node::STORE_FILE)).unwrap();
+    assert_eq!(stored.fingerprint, new.fingerprint());
+
+    // They come back under the new key, asked for by name, and are not
+    // told again.
+    let t = target_in(&addr, &pinned_dir);
+    assert_eq!((t.pin, t.pinned_via), (Some(new_pin), Some("config")));
+    let (pshared, pstop, pinned) = attempt_in(t, &pinned_id, &pinned_dir);
+    let (tshared, tstop, tofu) = attempt_in(target_in(&addr, &tofu_dir), &tofu_id, &tofu_dir);
+    wait_for("both back under the new key", 5, || {
+        [&pshared, &tshared].iter().all(|s| {
+            s.link().is_some_and(|l| {
+                l.connected && l.controller_fingerprint.as_deref() == Some(&new.fingerprint())
+            })
+        })
+    });
+    assert_eq!(keys.info().unwrap().old_key_connections, 0);
+    // A machine that knows nothing of it (a first use) meets the old key,
+    // and is told in turn.
+    let (_, _, late) = attempt_in(
+        Target {
+            address: addr.clone(),
+            found_via: "dns lan".into(),
+            pin: None,
+            pinned_via: None,
+        },
+        &id(62),
+        &scratch("rot-late"),
+    );
+    assert_eq!(
+        late.join().unwrap(),
+        Ended::Rotated {
+            from: pin_of(&old),
+            new: new_pin
+        }
+    );
+
+    // Retired: the old key is gone; a machine that still pins it is refused.
+    assert!(keys.retire_now());
+    let stale = attempt_in(
+        Target {
+            address: addr.clone(),
+            found_via: "config".into(),
+            pin: Some(pin_of(&old)),
+            pinned_via: Some("config"),
+        },
+        &id(63),
+        &scratch("rot-stale"),
+    );
+    assert!(
+        matches!(stale.2.join().unwrap(), Ended::KeyChanged { presented_unproven, .. } if presented_unproven == *new.public_key().as_bytes())
+    );
+    for stop in [pstop, tstop] {
+        stop.store(true, Ordering::Relaxed);
+    }
+    assert_eq!(pinned.join().unwrap(), Ended::Stopped);
+    assert_eq!(tofu.join().unwrap(), Ended::Stopped);
+    drop(listener);
+    for d in [cdir, pinned_dir, tofu_dir] {
+        let _ = std::fs::remove_dir_all(d);
+    }
+}
+
+#[test]
+fn a_rotation_the_trusted_key_did_not_sign_is_refused() {
+    use std::net::TcpListener;
+    let ctl = id(70);
+    let (other, successor) = (id(71), id(72));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let config = ltls::server_config(&ctl).unwrap();
+    // A controller that holds the pinned key, sending statements: one
+    // signed by another key, one by the successor itself, one for a
+    // key it vouches for over nothing it holds — and each answer read.
+    let fake = std::thread::spawn(move || {
+        let (sock, _) = listener.accept().unwrap();
+        let mut t = ltls::Tls::server(sock, config, Duration::from_secs(5)).unwrap();
+        let line = |t: &mut ltls::Tls| loop {
+            if let ltls::Recv::Line(l) = t.recv().unwrap() {
+                let l = String::from_utf8(l).unwrap();
+                if !l.contains(r#""e":"hb""#) {
+                    return l;
+                }
+            }
+        };
+        let _hello = line(&mut t);
+        let welcome = Welcome {
+            proto: PROTO,
+            node_id: id(73).node_id(),
+            state: NodeState::Pending,
+            controller: ControllerId::default(),
+            policy: None,
+        };
+        t.send(&serde_json::to_string(&Response::ok(1, &welcome)).unwrap())
+            .unwrap();
+        let new = *successor.public_key().as_bytes();
+        let forged = [
+            other.sign_rotation(&new),
+            successor.sign_rotation(&new),
+            [0u8; 64],
+        ];
+        let mut answers = Vec::new();
+        for (i, sig) in forged.iter().enumerate() {
+            let p = wire::RotateParams {
+                new_public_key: hex::encode(new),
+                signature: hex::encode(sig),
+            };
+            t.send(&wire::request(100 + i as u64, name::ROTATE, &p))
+                .unwrap();
+            answers.push(line(&mut t));
+        }
+        t.close();
+        answers
+    });
+    let dir = scratch("rot-forged");
+    let pin = pin_of(&ctl);
+    let (_, _, node) = attempt_in(
+        Target {
+            address: addr,
+            found_via: "config".into(),
+            pin: Some(pin),
+            pinned_via: None,
+        },
+        &id(73),
+        &dir,
+    );
+    let answers = fake.join().unwrap();
+    for a in &answers {
+        assert!(a.contains(r#""code":"forbidden""#), "{a}");
+    }
+    assert!(matches!(node.join().unwrap(), Ended::Dropped(_)));
+    // Nothing re-pinned.
+    assert!(crate::link::node::load_store(&dir.join(crate::link::node::STORE_FILE)).is_none());
+
+    // An impostor that rotates its own key never gets as far as a
+    // statement: the handshake with the pinned key fails first.
+    let idir = scratch("rot-impostor-ctl");
+    let ikeys = Arc::new(Keys::load(&idir).unwrap());
+    ikeys.start(Duration::from_secs(3600)).unwrap();
+    let impostor = listen_with(
+        "127.0.0.1:0".parse().unwrap(),
+        ikeys,
+        Arc::new(Registry::new(&id(74), events(), fast())),
+    )
+    .unwrap();
+    let (_, _, node) = attempt_in(
+        Target {
+            address: impostor.local_addr.to_string(),
+            found_via: "config".into(),
+            pin: Some(pin),
+            pinned_via: Some("config"),
+        },
+        &id(73),
+        &dir,
+    );
+    assert!(matches!(node.join().unwrap(), Ended::KeyChanged { .. }));
+    assert!(!dir.join("config.toml").exists());
+    drop(impostor);
+    for d in [dir, idir] {
+        let _ = std::fs::remove_dir_all(d);
     }
 }

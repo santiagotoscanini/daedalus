@@ -17,6 +17,42 @@ pub struct State {
     pub updated_from: Option<String>,
     /// When that update happened.
     pub updated_at: Option<String>,
+    /// A version just installed that has not yet proved itself (update.rs
+    /// `judge_start`): its `.old` binaries stay until it does.
+    pub probation: Option<Probation>,
+    /// The last version this machine rolled back from; never installed
+    /// again — a newer release is.
+    pub rolled_back: Option<RolledBack>,
+}
+
+/// An update on probation.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Probation {
+    /// The version installed.
+    pub version: String,
+    /// The version it replaced, whose binaries wait as `.old`.
+    pub from: String,
+    /// How often the new version has started since it was installed.
+    pub starts: u32,
+    /// When it was installed, RFC 3339.
+    pub installed_at: String,
+}
+
+/// An update that did not survive its probation.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RolledBack {
+    /// The version that failed.
+    pub version: String,
+    /// The version put back.
+    pub to: String,
+    /// How often it started without lasting.
+    pub starts: u32,
+    /// When it was rolled back, RFC 3339.
+    pub at: String,
 }
 
 impl State {
@@ -34,7 +70,7 @@ impl State {
         }
         match serde_json::to_string_pretty(self) {
             Ok(text) => {
-                if let Err(e) = std::fs::write(&path, text) {
+                if let Err(e) = crate::util::write_atomic(&path, text.as_bytes(), Some(0o644)) {
                     tracing::warn!(error = %e, "state not saved");
                 }
             }
@@ -50,11 +86,15 @@ pub fn now_rfc3339() -> String {
 
 /// `ago` seconds before now, as RFC 3339 in UTC.
 pub fn rfc3339_ago(ago: u64) -> String {
-    let secs = std::time::SystemTime::now()
+    let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0)
-        .saturating_sub(ago);
+        .unwrap_or(0);
+    rfc3339_of(now.saturating_sub(ago))
+}
+
+/// A unix time, as RFC 3339 in UTC.
+pub fn rfc3339_of(secs: u64) -> String {
     // Civil-from-days (Howard Hinnant's algorithm), enough for a timestamp.
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;

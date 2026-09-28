@@ -73,6 +73,13 @@ const ROSTER_FRESH: Duration = Duration::from_secs(180);
 /// Session verb requests waiting for the session, at most.
 pub const MAX_QUEUED_SESSIONS: usize = 8;
 
+/// The controller's keys (link/rotation.rs) and where machines reach it.
+pub struct Controller {
+    pub keys: Arc<crate::link::rotation::Keys>,
+    pub listen: Option<String>,
+    pub advertise: Vec<String>,
+}
+
 /// What the threads share: the persisted state plus the live facts.
 pub struct Shared {
     started: Instant,
@@ -83,9 +90,9 @@ pub struct Shared {
     /// when a telemetry sample lands, and — on the controller — when a
     /// machine connects, leaves or changes standing (link/controller.rs).
     events: Arc<Events>,
-    /// The controller's own key and addresses (link/), set once at start
-    /// in controller mode; `system.info` states it.
-    controller: OnceLock<crate::api::wire::ControllerInfo>,
+    /// The controller's keys and addresses (link/), set once at start in
+    /// controller mode; `system.info` states them.
+    controller: OnceLock<Controller>,
     /// The machines connected to this controller, when it listens for
     /// them; the API's `nodes.*` and `/nodes/metrics` read it.
     nodes: OnceLock<Arc<crate::link::controller::Registry>>,
@@ -346,12 +353,27 @@ impl Shared {
     }
 
     /// The controller's key and addresses, set once in controller mode.
-    pub fn set_controller_info(&self, info: crate::api::wire::ControllerInfo) {
-        let _ = self.controller.set(info);
+    pub fn set_controller(&self, c: Controller) {
+        let _ = self.controller.set(c);
     }
 
-    pub fn controller_info(&self) -> Option<&crate::api::wire::ControllerInfo> {
-        self.controller.get()
+    /// The controller's keys, where this is the controller.
+    pub fn controller_keys(&self) -> Option<&Arc<crate::link::rotation::Keys>> {
+        self.controller.get().map(|c| &c.keys)
+    }
+
+    /// The controller as `system.info` states it: the key going forward,
+    /// the addresses, and a rotation under way (link/rotation.rs).
+    pub fn controller_info(&self) -> Option<crate::api::wire::ControllerInfo> {
+        let c = self.controller.get()?;
+        let id = c.keys.forward();
+        Some(crate::api::wire::ControllerInfo {
+            public_key: id.public_key_hex(),
+            fingerprint: id.fingerprint(),
+            listen: c.listen.clone(),
+            advertise: c.advertise.clone(),
+            rotation: c.keys.info(),
+        })
     }
 
     /// This machine's own Claude series for `/nodes/metrics` — the
@@ -567,6 +589,11 @@ impl Shared {
         std::mem::take(&mut self.lock().check_requested)
     }
 
+    /// The persisted state as it stands.
+    pub fn state(&self) -> State {
+        self.lock().state.clone()
+    }
+
     /// Edit and persist the state in one step.
     pub fn with_state(&self, f: impl FnOnce(&mut State)) {
         let mut l = self.lock();
@@ -634,6 +661,83 @@ impl Shared {
 /// What any address may ask; everything else is for loopback (module doc).
 fn open_to_any(method: &Method, url: &str) -> bool {
     *method == Method::Get && matches!(url, "/healthz" | "/nodes/metrics")
+}
+
+/// How often a status page that could not bind its port tries again.
+pub const BIND_RETRY: Duration = Duration::from_secs(15);
+
+/// The status page, bound now or later: a port another process holds does
+/// not stop the service — the link, the telemetry and the awake hold go on
+/// — it is tried again every `BIND_RETRY`, and whoever holds it is logged
+/// where the OS says (`os::port_holder`).
+pub struct Page {
+    server: Arc<Mutex<Option<Arc<Server>>>>,
+    /// When it started answering.
+    since: Arc<Mutex<Option<Instant>>>,
+    stop: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Page {
+    pub fn start(port: u16, shared: Arc<Shared>) -> Self {
+        use std::sync::atomic::AtomicBool;
+        let page = Self {
+            server: Arc::new(Mutex::new(None)),
+            since: Arc::new(Mutex::new(None)),
+            stop: Arc::new(AtomicBool::new(false)),
+        };
+        let (server, since, stop) = (
+            Arc::clone(&page.server),
+            Arc::clone(&page.since),
+            Arc::clone(&page.stop),
+        );
+        let bind = move || -> bool {
+            match serve(port, Arc::clone(&shared)) {
+                Ok(s) => {
+                    *server.lock().unwrap_or_else(|p| p.into_inner()) = Some(s);
+                    *since.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+                    true
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = format!("{e:#}"),
+                        port,
+                        held_by = crate::os::port_holder(port).as_deref().unwrap_or("unknown"),
+                        "the status page could not bind its port; the service runs on and tries again"
+                    );
+                    false
+                }
+            }
+        };
+        if !bind() {
+            let _ = std::thread::Builder::new()
+                .name("status-bind".into())
+                .spawn(move || {
+                    while !crate::util::sleep_until(&stop, BIND_RETRY) {
+                        if bind() {
+                            return;
+                        }
+                    }
+                });
+        }
+        page
+    }
+
+    /// How long the page has answered; None while it is not bound.
+    pub fn up_for(&self) -> Option<Duration> {
+        self.since
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .map(|t| t.elapsed())
+    }
+}
+
+impl Drop for Page {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(s) = self.server.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            s.unblock();
+        }
+    }
 }
 
 /// Answer on `port` — loopback on a node, every interface on the controller

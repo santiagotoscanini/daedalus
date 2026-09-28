@@ -255,6 +255,60 @@ fn session_record() -> PathBuf {
     config::data_dir().join("session.json")
 }
 
+/// The user the session unit runs for, and whether their systemd manager
+/// is up (lingering starts it at boot): then a session should be reporting
+/// (update.rs, probation). None without an install's record.
+fn session_user() -> Option<SessionUser> {
+    let text = std::fs::read_to_string(session_record()).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// Someone the machine runs Claude for is there to report: the session
+/// user's manager runs, so its session unit should.
+pub fn interactive_user() -> bool {
+    session_user().is_some_and(|u| manager_socket(u.uid).exists())
+}
+
+/// After an update: the session unit restarted on the new binary, in its
+/// user's manager (Claude runs on in its own units). The tray, a UI only,
+/// follows by itself when it sees a newer service. A development run
+/// (`DAEDALUS_AGENT_DATA_DIR`, the service as the user itself) restarts its
+/// own `daedalus-agent-session-<hash>.service`, never the installed one.
+pub fn restart_desktop_side() {
+    let Some(u) = session_user().filter(|u| manager_socket(u.uid).exists()) else {
+        return;
+    };
+    let unit = session_unit_name();
+    let done = if crate::os::own_uid() == Some(u.uid) {
+        systemctl(&["--user", "restart", &unit])
+    } else {
+        user_systemctl(&u.user, u.uid, &["restart", &unit])
+    };
+    match done {
+        Ok(_) => tracing::info!(
+            user = u.user,
+            unit,
+            "session unit restarted on the new version"
+        ),
+        Err(e) => tracing::warn!(
+            user = u.user,
+            unit,
+            error = format!("{e:#}"),
+            "session unit not restarted"
+        ),
+    }
+}
+
+/// The session unit's name: `SESSION_UNIT`, or under
+/// `DAEDALUS_AGENT_DATA_DIR` one of its own, as the Claude unit gets.
+fn session_unit_name() -> String {
+    let claude = config::claude_unit_name();
+    match claude.strip_prefix("daedalus-claude-rc-") {
+        Some(hash) => format!("daedalus-agent-session-{hash}.service"),
+        None => SESSION_UNIT.to_string(),
+    }
+}
+
 /// The user who ran `sudo`, when it is not root.
 fn sudo_user() -> Option<String> {
     std::env::var("SUDO_USER")

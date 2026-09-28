@@ -76,6 +76,15 @@ pub fn user_state_dir() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join(crate::SERVICE_NAME))
 }
 
+// ── the status page's port ────────────────────────────────────────────────
+
+/// Who holds the status page's port when it cannot be bound: not read
+/// here (Linux reads /proc/net/tcp).
+pub fn port_holder(port: u16) -> Option<String> {
+    let _ = port;
+    None
+}
+
 // ── facts ─────────────────────────────────────────────────────────────────
 
 /// Nothing beyond `COMPUTERNAME`, which facts.rs reads first.

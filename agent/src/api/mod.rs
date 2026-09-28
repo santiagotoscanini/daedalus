@@ -69,6 +69,7 @@
 //! | `nodes.provider_model` | `ProviderModelSent`: one residency verb `{id, kind, action, model, pinned?, replacing?}` delivered and acknowledged | `nodes` |
 //! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
+//! | `controller.rotate`| `ControllerInfo` with its `rotation`: a new controller key, the old one retired after `{grace_secs?}` (link/rotation.rs) | the controller |
 //!
 //! The `nodes.*` methods read and steer the machines connected to the
 //! controller (link/controller.rs). Their selector is a node id — sixteen
@@ -404,6 +405,35 @@ impl Api {
                     },
                 })
             }
+            "controller.rotate" => {
+                use crate::link::rotation::{GRACE_DEFAULT, GRACE_MAX, GRACE_MIN};
+                let keys = self.shared.controller_keys().ok_or_else(|| {
+                    ApiError::new(
+                        code::UNSUPPORTED,
+                        "this agent is not the controller; it has no key to rotate",
+                    )
+                })?;
+                let p: wire::ControllerRotate = match params {
+                    Value::Null => wire::ControllerRotate::default(),
+                    p => serde_json::from_value(p.clone()).map_err(|e| {
+                        ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}"))
+                    })?,
+                };
+                let grace = p.grace_secs.map_or(GRACE_DEFAULT, Duration::from_secs);
+                if !(GRACE_MIN..=GRACE_MAX).contains(&grace) {
+                    return Err(ApiError::new(
+                        code::BAD_REQUEST,
+                        format!(
+                            "`{method}`: grace_secs is {} to {}",
+                            GRACE_MIN.as_secs(),
+                            GRACE_MAX.as_secs()
+                        ),
+                    ));
+                }
+                keys.start(grace)
+                    .map_err(|e| ApiError::new(code::UNAVAILABLE, e))?;
+                to_value(&self.shared.controller_info())
+            }
             m if m.starts_with("nodes.") => self.nodes_call(m, params),
             _ => Err(ApiError::new(
                 code::UNKNOWN_METHOD,
@@ -523,7 +553,7 @@ impl Api {
             role: self.role,
             telemetry: self.telemetry,
             capabilities: self.capabilities.clone(),
-            controller: self.shared.controller_info().cloned(),
+            controller: self.shared.controller_info(),
         }
     }
 }

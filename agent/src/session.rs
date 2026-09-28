@@ -516,6 +516,32 @@ fn read_report(port: u16) -> Option<Report> {
         .ok()?
 }
 
+/// The running binary's file, as it was: an update renames it to `.old`
+/// and puts a new file at its path.
+struct BinaryStamp {
+    path: PathBuf,
+    modified: Option<std::time::SystemTime>,
+    len: u64,
+}
+
+impl BinaryStamp {
+    fn now() -> Option<Self> {
+        let path = std::env::current_exe().ok()?;
+        let m = std::fs::metadata(&path).ok()?;
+        Some(Self {
+            modified: m.modified().ok(),
+            len: m.len(),
+            path,
+        })
+    }
+
+    /// Another file stands at the path now.
+    fn replaced(&self) -> bool {
+        std::fs::metadata(&self.path)
+            .is_ok_and(|m| m.modified().ok() != self.modified || m.len() != self.len)
+    }
+}
+
 /// A session that runs in another process — the Linux session unit —
 /// seen through the service: its page, and the full report the session
 /// last sent. A restart is asked of the service (`POST /claude/restart`),
@@ -525,6 +551,8 @@ pub struct Watcher {
     port: u16,
     wanted: bool,
     next_poll: Instant,
+    /// This binary as it was at start, to tell when an update replaced it.
+    binary: Option<BinaryStamp>,
 }
 
 impl Watcher {
@@ -533,6 +561,7 @@ impl Watcher {
             port,
             wanted: Policy::default().claude_remote_control,
             next_poll: Instant::now(),
+            binary: BinaryStamp::now(),
         }
     }
 
@@ -573,6 +602,11 @@ impl Watcher {
                 return Tick::VersionChanged;
             }
             self.wanted = p.policy.claude_remote_control;
+        } else if self.binary.as_ref().is_some_and(BinaryStamp::replaced) {
+            // No page, and an update swapped this binary: a service that no
+            // longer answers here (a later transport) is found by the new
+            // binary, not by this one.
+            return Tick::VersionChanged;
         }
         let report = read_report(self.port).unwrap_or_else(|| Report {
             state: "no-session".into(),

@@ -82,6 +82,16 @@ pub fn user_state_dir() -> Option<PathBuf> {
     user_log_dir()
 }
 
+// ── the status page's port ────────────────────────────────────────────────
+
+/// Who listens on 127.0.0.1:`port` (or every interface) when the status
+/// page cannot bind it: the socket's owner uid, from /proc/net/tcp.
+pub fn port_holder(port: u16) -> Option<String> {
+    let text = read("/proc/net/tcp")?;
+    crate::telemetry::parse::linux_sys::tcp_listener_uid(&text, port)
+        .map(|uid| format!("uid {uid}"))
+}
+
 // ── facts ─────────────────────────────────────────────────────────────────
 
 fn os_release() -> std::collections::HashMap<String, String> {

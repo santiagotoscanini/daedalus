@@ -16,7 +16,9 @@
 //! FINGERPRINT — SHA-256 of the public key, lowercase hex in groups of four
 //! (`fingerprint`) — and a machine's node id is the first sixteen hex
 //! characters of the same digest. The key signs nothing but the link's
-//! certificate and TLS handshake (link/cert.rs, link/crypto.rs).
+//! certificate and TLS handshake (link/cert.rs, link/crypto.rs) — and, for
+//! the controller's, the one statement that hands its trust to a new key
+//! (`sign_rotation`, under a context of its own; link/rotation.rs).
 
 use std::path::Path;
 
@@ -89,6 +91,44 @@ impl Identity {
     pub(crate) fn signing_key(&self) -> &SigningKey {
         &self.key
     }
+
+    /// Load the key at `path`, which must exist and be trusted.
+    pub fn load_at(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            bail!("{} does not exist", path.display());
+        }
+        Self::load_or_create_at(path)
+    }
+
+    /// The controller's rotation statement (link/rotation.rs): this key
+    /// vouching for `new`, over `rotation_message`.
+    pub fn sign_rotation(&self, new: &[u8; 32]) -> [u8; 64] {
+        use ed25519_dalek::Signer;
+        self.key
+            .sign(&rotation_message(self.public_key().as_bytes(), new))
+            .to_bytes()
+    }
+}
+
+/// What a rotation statement signs: a context of its own, so no signature
+/// the key makes for anything else can pass for one, then the old key and
+/// the new.
+pub fn rotation_message(old: &[u8; 32], new: &[u8; 32]) -> Vec<u8> {
+    let mut m = b"daedalus-agent controller key rotation v1\0".to_vec();
+    m.extend_from_slice(old);
+    m.extend_from_slice(new);
+    m
+}
+
+/// Whether `signature` is `old`'s statement that `new` succeeds it.
+pub fn verify_rotation(old: &[u8; 32], new: &[u8; 32], signature: &[u8]) -> bool {
+    let (Ok(key), Ok(sig)) = (
+        VerifyingKey::from_bytes(old),
+        ed25519_dalek::Signature::from_slice(signature),
+    ) else {
+        return false;
+    };
+    old != new && key.verify_strict(&rotation_message(old, new), &sig).is_ok()
 }
 
 /// SHA-256 of a public key.
@@ -177,5 +217,27 @@ mod tests {
             *id.public_key().as_bytes()
         );
         assert!(parse_public_key("00").is_err());
+    }
+
+    #[test]
+    fn only_the_old_key_can_vouch_for_the_new_one() {
+        let old = Identity::from_seed([1; 32]);
+        let new = Identity::from_seed([2; 32]);
+        let other = Identity::from_seed([3; 32]);
+        let (o, n) = (*old.public_key().as_bytes(), *new.public_key().as_bytes());
+        let sig = old.sign_rotation(&n);
+        assert!(verify_rotation(&o, &n, &sig));
+        // Another key's statement, the new key's own, a statement for
+        // another key, a key rotated to itself, a torn signature: no.
+        assert!(!verify_rotation(&o, &n, &other.sign_rotation(&n)));
+        assert!(!verify_rotation(&o, &n, &new.sign_rotation(&n)));
+        assert!(!verify_rotation(&o, other.public_key().as_bytes(), &sig));
+        assert!(!verify_rotation(&o, &o, &old.sign_rotation(&o)));
+        assert!(!verify_rotation(&o, &n, &sig[..63]));
+        // A signature over the bare keys, without the context, is not one.
+        use ed25519_dalek::Signer;
+        let mut bare = o.to_vec();
+        bare.extend_from_slice(&n);
+        assert!(!verify_rotation(&o, &n, &old.key.sign(&bare).to_bytes()));
     }
 }

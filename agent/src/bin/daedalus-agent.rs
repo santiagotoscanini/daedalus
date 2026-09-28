@@ -145,14 +145,37 @@ fn update_cmd(args: &[String]) -> Result<()> {
     if apply && !role().self_update {
         bail!("`update --apply` refuses in controller mode: nix moves this agent");
     }
-    match update::check()? {
+    // The running service keeps the state `--apply` writes (the probation
+    // the new binary counts its starts against) and would save over it.
+    let port = config::load_or_default()?.port;
+    let running = ureq::get(&format!("http://127.0.0.1:{port}/healthz"))
+        .timeout(Duration::from_secs(2))
+        .call()
+        .is_ok();
+    if apply && running {
+        bail!(
+            "the service is running: stop it first, or let it install the release itself (`updates = \"self\"`)"
+        );
+    }
+    let mut state = daedalus_agent::state::State::load();
+    let refused = state.rolled_back.as_ref().map(|r| r.version.clone());
+    match update::check(refused.as_deref())? {
         None => println!("no newer release than {VERSION}"),
         Some(rel) => {
             println!("newer release: {} ({})", rel.version, rel.tag);
             if apply {
                 let staged = update::download_and_verify(&rel)?;
                 update::swap_in(&staged)?;
-                println!("installed {}; restart the service to run it", rel.version);
+                update::begin_probation(
+                    &mut state,
+                    &rel.version.to_string(),
+                    &daedalus_agent::state::now_rfc3339(),
+                );
+                state.save();
+                println!(
+                    "installed {}; start the service to run it (on probation: the previous binaries stay until it proves itself)",
+                    rel.version
+                );
             }
         }
     }

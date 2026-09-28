@@ -252,7 +252,8 @@ pub struct SystemInfo {
 /// as hex and as its fingerprint (identity.rs), the address its listener
 /// is bound to (null when it listens for no machine), and the `host:port`s
 /// config.toml says machines should dial — what the app hands an install
-/// command.
+/// command — and, while its key is rotated, where the key came from
+/// (link/rotation.rs; `public_key` is then the new key, the one to pin).
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ControllerInfo {
@@ -260,6 +261,8 @@ pub struct ControllerInfo {
     pub fingerprint: String,
     pub listen: Option<String>,
     pub advertise: Vec<String>,
+    /// The rotation under way; null when none is.
+    pub rotation: Option<crate::link::rotation::RotationInfo>,
 }
 
 // ── the machines (link/controller.rs) ─────────────────────────────────────
@@ -531,6 +534,20 @@ pub struct SetDesiredOk {
     pub policy: Vec<String>,
 }
 
+/// `controller.rotate`'s parameters: how long both keys are served before
+/// the old one retires, in seconds (link/rotation.rs `GRACE_MIN` to
+/// `GRACE_MAX`; absent, `GRACE_DEFAULT`). Its answer is the controller as
+/// `system.info` then states it (`ControllerInfo`, with its `rotation`).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "ControllerRotateParams"))]
+pub struct ControllerRotate {
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub grace_secs: Option<u64>,
+}
+
 /// `nodes.command`'s parameters: one of the fixed instructions.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -771,6 +788,7 @@ mod tests {
             telemetry: TelemetryLevel::Minimal,
             capabilities: vec!["claude.remote_control", "telemetry.minimal", "nodes"],
             controller: Some(ControllerInfo {
+                rotation: None,
                 public_key: "ab".repeat(32),
                 fingerprint: "3f2a:9c01".into(),
                 listen: Some("0.0.0.0:7788".into()),
@@ -788,7 +806,7 @@ mod tests {
                 r#""tray":false,"status_on_lan":true,"api_socket":true,"node_listener":true},"#,
                 r#""telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal","nodes"],"#,
                 r#""controller":{"public_key":"abababababababababababababababababababababababababababababababab","#,
-                r#""fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"]}}"#
+                r#""fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"],"rotation":null}}"#
             )
         );
         // Anywhere but the controller the block is absent, not null.
@@ -797,6 +815,32 @@ mod tests {
             ..info
         };
         assert!(!wire(&bare).contains("\"controller\":"));
+        // A rotation under way: the key going forward, and where it came from.
+        let rotating = ControllerInfo {
+            public_key: "cd".repeat(32),
+            fingerprint: "77aa:0102".into(),
+            listen: None,
+            advertise: vec![],
+            rotation: Some(crate::link::rotation::RotationInfo {
+                from_public_key: "ab".repeat(32),
+                from_fingerprint: "3f2a:9c01".into(),
+                started_at: "2026-09-28T10:00:00Z".into(),
+                retires_at: "2026-10-05T10:00:00Z".into(),
+                old_key_connections: 2,
+            }),
+        };
+        assert_eq!(
+            wire(&rotating),
+            format!(
+                concat!(
+                    r#"{{"public_key":"{cd}","fingerprint":"77aa:0102","listen":null,"advertise":[],"#,
+                    r#""rotation":{{"from_public_key":"{ab}","from_fingerprint":"3f2a:9c01","#,
+                    r#""started_at":"2026-09-28T10:00:00Z","retires_at":"2026-10-05T10:00:00Z","old_key_connections":2}}}}"#
+                ),
+                cd = "cd".repeat(32),
+                ab = "ab".repeat(32)
+            )
+        );
     }
 
     fn summary() -> NodeSummary {

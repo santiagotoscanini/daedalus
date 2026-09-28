@@ -87,6 +87,15 @@ pub fn user_state_dir() -> Option<PathBuf> {
     })
 }
 
+// ── the status page's port ────────────────────────────────────────────────
+
+/// Who holds the status page's port when it cannot be bound: not read
+/// here (Linux reads /proc/net/tcp).
+pub fn port_holder(port: u16) -> Option<String> {
+    let _ = port;
+    None
+}
+
 // ── network ───────────────────────────────────────────────────────────────
 
 /// `dig +short SRV` through the system's resolver settings: dig reads the

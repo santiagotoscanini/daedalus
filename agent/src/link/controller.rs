@@ -86,6 +86,7 @@ use crate::api::wire::{
 use crate::api::Events;
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of, Identity};
+use crate::link::rotation::{ConnResolver, Keys, Served};
 use crate::link::wire::Policy;
 use crate::providers::ProviderReport;
 use crate::state::now_rfc3339;
@@ -1210,10 +1211,16 @@ impl Drop for Listener {
 }
 
 /// Accept the machines' links on `addr` for `registry`, presenting
-/// `identity`, until the returned listener is dropped (which also closes
-/// every connection within a `TICK`).
+/// `identity` alone, until the returned listener is dropped.
 pub fn listen(addr: SocketAddr, identity: &Identity, registry: Arc<Registry>) -> Result<Listener> {
-    let config = super::tls::server_config(identity)?;
+    listen_with(addr, Arc::new(Keys::fixed(identity)?), registry)
+}
+
+/// Accept the machines' links on `addr` for `registry`, presenting each the
+/// controller key it pins (`keys`, rotation.rs), until the returned
+/// listener is dropped (which also closes every connection within a
+/// `TICK`).
+pub fn listen_with(addr: SocketAddr, keys: Arc<Keys>, registry: Arc<Registry>) -> Result<Listener> {
     let listener =
         TcpListener::bind(addr).with_context(|| format!("binding the link listener on {addr}"))?;
     listener
@@ -1221,6 +1228,7 @@ pub fn listen(addr: SocketAddr, identity: &Identity, registry: Arc<Registry>) ->
         .context("making the link listener non-blocking")?;
     let local_addr = listener.local_addr()?;
     let stop = Arc::new(AtomicBool::new(false));
+    let fingerprint = keys.forward().fingerprint();
     let thread = {
         let stop = Arc::clone(&stop);
         std::thread::Builder::new()
@@ -1229,14 +1237,11 @@ pub fn listen(addr: SocketAddr, identity: &Identity, registry: Arc<Registry>) ->
                 while !stop.load(Ordering::Relaxed) {
                     match listener.accept() {
                         Ok((sock, peer)) => {
-                            let (config, registry, stop) = (
-                                Arc::clone(&config),
-                                Arc::clone(&registry),
-                                Arc::clone(&stop),
-                            );
+                            let (registry, keys, stop) =
+                                (Arc::clone(&registry), Arc::clone(&keys), Arc::clone(&stop));
                             let spawned =
                                 std::thread::Builder::new().name("link-conn".into()).spawn(
-                                    move || serve_connection(sock, peer, config, &registry, &stop),
+                                    move || serve_connection(sock, peer, &registry, &keys, &stop),
                                 );
                             if let Err(e) = spawned {
                                 tracing::warn!(error = %e, "link: no thread for a connection");
@@ -1254,7 +1259,7 @@ pub fn listen(addr: SocketAddr, identity: &Identity, registry: Arc<Registry>) ->
             })
             .context("spawning the link listener")?
     };
-    tracing::info!(address = %local_addr, fingerprint = %identity.fingerprint(), "link: listening for machines");
+    tracing::info!(address = %local_addr, %fingerprint, "link: listening for machines");
     Ok(Listener {
         stop,
         thread: Some(thread),
@@ -1342,8 +1347,8 @@ fn pre_admission(tls: &mut Tls, deadline: Instant) -> Option<(u64, Hello)> {
 fn serve_connection(
     sock: TcpStream,
     peer: SocketAddr,
-    config: Arc<rustls::ServerConfig>,
     registry: &Registry,
+    keys: &Arc<Keys>,
     stop: &AtomicBool,
 ) {
     let bucket = ip_bucket(peer.ip());
@@ -1357,6 +1362,17 @@ fn serve_connection(
     {
         return;
     }
+    // The keys as this connection is served them, fixed now: its handshake
+    // chooses among them, and what it chose is its key for good
+    // (rotation.rs).
+    let resolver = Arc::new(ConnResolver::new(keys.snapshot()));
+    let config = match super::tls::server_config_resolving(Arc::clone(&resolver) as _) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "link: no TLS config for a connection");
+            return;
+        }
+    };
     let mut tls = match Tls::server(sock, config, limits.preauth_budget) {
         Ok(t) => t,
         Err(e) => {
@@ -1367,6 +1383,10 @@ fn serve_connection(
     let Some(key) = tls.peer_key() else {
         return;
     };
+    let Some(served) = resolver.served() else {
+        return;
+    };
+
     let Some((req_id, hello)) = pre_admission(&mut tls, deadline) else {
         return;
     };
@@ -1390,10 +1410,11 @@ fn serve_connection(
             id,
             conn_id,
             rx,
-            welcome,
+            mut welcome,
             queued,
         } => {
             tracing::info!(%peer, node = %id, state = welcome.state.as_str(), "link: machine connected");
+            welcome.controller.fingerprint = served.fingerprint.clone();
             if tls
                 .send(&serde_json::to_string(&Response::ok(req_id, &welcome)).unwrap_or_default())
                 .is_err()
@@ -1405,13 +1426,21 @@ fn serve_connection(
         }
     };
     tls.set_max_line(MAX_LINE);
-    let why = converse(&mut tls, registry, &id, conn_id, &rx, queued, stop);
+    // Counted while it lives, by the key it was served (rotation.rs).
+    let _counted = keys.connection(&served);
+
+    let why = converse(
+        &mut tls, registry, &id, conn_id, &rx, queued, keys, &served, stop,
+    );
     tls.close();
     registry.detach(&id, conn_id);
     tracing::info!(%peer, node = %id, why, "link: machine left");
 }
 
-/// The connection after `hello`, until it ends; says why it ended.
+/// The connection after `hello`, until it ends; says why it ended. While a
+/// rotation runs that retires the key it was `served`, it is sent the
+/// rotation's statement once (rotation.rs).
+#[allow(clippy::too_many_arguments)]
 fn converse(
     tls: &mut Tls,
     registry: &Registry,
@@ -1419,6 +1448,8 @@ fn converse(
     conn_id: u64,
     rx: &Receiver<Out>,
     queued: Vec<Command>,
+    keys: &Keys,
+    served: &Served,
     stop: &AtomicBool,
 ) -> &'static str {
     for c in queued {
@@ -1438,6 +1469,7 @@ fn converse(
     let opened = Instant::now();
     let mut heard = Instant::now();
     let mut said = Instant::now();
+    let mut rotation_sent: Option<u64> = None;
     loop {
         if stop.load(Ordering::Relaxed) {
             return "the controller is stopping";
@@ -1458,6 +1490,22 @@ fn converse(
         if opened.elapsed() > limits.pending_ttl && registry.is_pending(id) {
             return "pending past its time; it may connect again";
         }
+        // A rotation under way reaches a machine under the old key once.
+        if let (None, Some(st)) = (
+            rotation_sent,
+            served
+                .statement
+                .clone()
+                .or_else(|| keys.statement_for(&served.fingerprint)),
+        ) {
+            let rid = registry.next_request.fetch_add(1, Ordering::Relaxed);
+            if tls.send(&wire::request(rid, name::ROTATE, &st)).is_err() {
+                return "a write failed";
+            }
+            tracing::info!(node = id, "link: sent the controller key rotation");
+            rotation_sent = Some(rid);
+            said = Instant::now();
+        }
         if said.elapsed() >= limits.heartbeat {
             if tls.send(wire::HB_LINE).is_err() {
                 return "a write failed";
@@ -1474,6 +1522,17 @@ fn converse(
                         result,
                     }) => {
                         registry.record(id, conn_id, name::HB, Value::Null);
+                        if rotation_sent == Some(req) {
+                            match &result {
+                                Ok(_) => tracing::info!(
+                                    node = id,
+                                    "link: the machine re-pinned to the new controller key"
+                                ),
+                                Err(e) => {
+                                    tracing::warn!(node = id, error = %e.msg, "link: the machine refused the key rotation")
+                                }
+                            }
+                        }
                         registry.ack(id, conn_id, req, result.map(|_| ()).map_err(|e| e.msg));
                     }
                     Ok(Incoming::Request { id: rid, m, .. }) => {

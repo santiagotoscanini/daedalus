@@ -292,6 +292,40 @@ fn tray_start(tray: &std::path::Path) {
 // turns that watchdog on; on macOS launchd's KeepAlive and
 // `launchd::kickstart_tray` (os/macos/launchd.rs) do the same.
 
+/// Someone is logged on at the console: a tray should be reporting
+/// (update.rs, probation).
+pub fn interactive_user() -> bool {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::System::RemoteDesktop::{WTSGetActiveConsoleSessionId, WTSQueryUserToken};
+    // SAFETY: the token, when one is taken, is closed.
+    unsafe {
+        let session = WTSGetActiveConsoleSessionId();
+        if session == 0xFFFF_FFFF {
+            return false;
+        }
+        let mut token = HANDLE::default();
+        if WTSQueryUserToken(session, &mut token).is_err() {
+            return false;
+        }
+        let _ = CloseHandle(token);
+        true
+    }
+}
+
+/// After an update: every tray ended and the console user's started again
+/// on the new binary (Claude runs on in its detached jobs). A tray in
+/// another session comes back at its user's next logon.
+pub fn restart_desktop_side() {
+    let mut kill = std::process::Command::new("taskkill");
+    kill.args(["/IM", TRAY_EXE, "/F"]);
+    crate::os::hide_console(&mut kill);
+    let _ = kill.output();
+    std::thread::sleep(Duration::from_secs(1));
+    match launch_tray_or_session() {
+        Ok(()) => tracing::info!("tray restarted on the new version"),
+        Err(e) => tracing::info!(error = format!("{e:#}"), "tray not restarted"),
+    }
+}
 /// The service restarts a tray that stopped reporting.
 pub const WATCHES_TRAY: bool = true;
 

@@ -16,7 +16,18 @@
 //! (unproven: the pin check runs before the handshake signature) and the
 //! one expected, and nothing is re-pinned — the operator clears it (a new
 //! `--pin`, or `controller.json` removed) if the controller really did get
-//! a new key. Rotating the controller's key is a later, signed feature.
+//! a new key outside a rotation.
+//!
+//! **Rotation** (rotation.rs). A controller handing its trust to a new key
+//! sends, over a connection the pinned key's handshake just proved, a
+//! `rotate` request: the new key and the pinned key's signature over it
+//! (identity.rs `verify_rotation`). The machine checks it against THAT key
+//! — never against anything the request carries — re-pins where the pin
+//! was (config.toml's `controller_pin`, else `controller.json`), then
+//! acknowledges and reconnects, asking for the new key by name
+//! (tls.rs `server_name_for`). A statement that does not verify is
+//! refused and nothing moves; only the holder of the pinned key can make
+//! one, so an impostor, which cannot finish the handshake, cannot either.
 //!
 //! **Pinned or not.** A key from config.toml is pinned. A first-use key is
 //! not, and the page (`controller.unconfirmed`) and the tray warn "trusted
@@ -63,7 +74,7 @@ use serde_json::Value;
 use super::tls::{self, Recv, Tls};
 use super::wire::{
     self, name, Accepted, ClaudeSessionParams, Command, CommandParams, Hello, HelloFacts, Incoming,
-    NodeState, Policy, StateEvent, Welcome, PROTO,
+    NodeState, Policy, RotateParams, StateEvent, Welcome, PROTO,
 };
 use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT, WRITE_TIMEOUT};
 use crate::api::wire::{code, ApiError, Response};
@@ -114,14 +125,24 @@ pub fn load_store(path: &Path) -> Option<Stored> {
         .filter(|s| parse_fingerprint(&s.fingerprint).is_ok())
 }
 
-fn save_store(path: &Path, s: &Stored) {
+fn save_store(path: &Path, s: &Stored) -> Result<(), String> {
     let text = serde_json::to_string_pretty(s).unwrap_or_default();
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    if let Err(e) = std::fs::write(path, text) {
+    crate::util::write_atomic(path, text.as_bytes(), Some(0o644)).map_err(|e| {
         tracing::warn!(path = %path.display(), error = %e, "link: the trusted controller key was not saved");
-    }
+        format!("{}: {e}", path.display())
+    })
+}
+
+/// Where this machine keeps whom it trusts: the first-use store, and the
+/// config.toml whose `controller_pin` a rotation rewrites where that is
+/// the pin.
+#[derive(Clone, Copy, Debug)]
+pub struct Trust<'a> {
+    pub store: &'a Path,
+    pub config: &'a Path,
 }
 
 /// Where the next attempt goes, and what it trusts.
@@ -205,6 +226,10 @@ pub enum Ended {
     Revoked,
     /// The controller speaks another protocol.
     Version(String),
+    /// The controller handed its trust to a new key, and this machine
+    /// re-pinned from `from` to `new` (the keys's digests): connect again
+    /// under it.
+    Rotated { from: [u8; 32], new: [u8; 32] },
 }
 
 /// What the machine is, for `hello`.
@@ -235,13 +260,14 @@ pub fn hello_of(cfg: &Config, id: &Identity, facts: &crate::facts::Facts) -> Hel
 
 /// The service's link thread (module doc).
 pub fn run_loop(
-    cfg: Config,
+    mut cfg: Config,
     id: Identity,
     facts: crate::facts::Facts,
     shared: Arc<Shared>,
     stop: Arc<AtomicBool>,
 ) {
     let store = store_path();
+    let config_path = crate::config::config_path();
     // The TLS side, once: the key's DER is made and loaded one time.
     let client = match tls::Client::new(&id) {
         Ok(c) => c,
@@ -331,11 +357,38 @@ pub fn run_loop(
             hello,
             &shared,
             &stop,
-            &store,
+            Trust {
+                store: &store,
+                config: &config_path,
+            },
             &Cadence::default(),
         );
         let wait = match &ended {
             Ended::Stopped => return,
+            Ended::Rotated { from, new } => {
+                let fp = format_fingerprint(new);
+                tracing::warn!(
+                    fingerprint = %fp,
+                    via = target.pinned_via.unwrap_or("tofu"),
+                    "link: re-pinned to the controller's new key (a signed rotation); connecting under it"
+                );
+                // config.toml was rewritten; this process read it at start.
+                if target.pinned() {
+                    cfg.controller_pin = Some(fp.clone());
+                }
+                backoff = BACKOFF_MIN;
+                shared.set_link(|l| {
+                    l.connected = false;
+                    l.since = None;
+                    l.error = None;
+                    l.rotated = Some(format!(
+                        "re-pinned from {} to {fp} at {} (the controller's signed rotation)",
+                        format_fingerprint(from),
+                        now_rfc3339()
+                    ));
+                });
+                Duration::ZERO
+            }
             Ended::Dropped(why) => {
                 tracing::info!(why, "link: the connection to the controller ended");
                 // It was up: the machine is quick to come back.
@@ -443,7 +496,7 @@ pub fn connect_once(
     hello: Hello,
     shared: &Arc<Shared>,
     stop: &AtomicBool,
-    store: &Path,
+    trust: Trust<'_>,
     cadence: &Cadence,
 ) -> Ended {
     let addrs: Vec<_> = match target.address.to_socket_addrs() {
@@ -481,8 +534,8 @@ pub fn connect_once(
             fingerprint = %controller_fp,
             "link: trusting the controller's key on first use"
         );
-        save_store(
-            store,
+        let _ = save_store(
+            trust.store,
             &Stored {
                 address: Some(target.address.clone()),
                 fingerprint: controller_fp.clone(),
@@ -543,6 +596,21 @@ pub fn connect_once(
         l.state = Some(welcome.state.as_str().into());
         l.error = None;
     });
+    // Where a rotation re-pins: where the pin is (module doc).
+    let repin = |new: &[u8; 32]| -> Result<(), String> {
+        let fp = format_fingerprint(&digest(new));
+        if target.pinned() {
+            crate::config::set_controller_pin_at(trust.config, &fp).map_err(|e| format!("{e:#}"))
+        } else {
+            save_store(
+                trust.store,
+                &Stored {
+                    address: Some(target.address.clone()),
+                    fingerprint: fp,
+                },
+            )
+        }
+    };
     let ended = converse(
         &mut tls,
         welcome,
@@ -550,6 +618,7 @@ pub fn connect_once(
         stop,
         cadence,
         shared.role().claude_update,
+        (controller_key, &repin),
     );
     if !matches!(ended, Ended::Stopped | Ended::Revoked) {
         tls.close();
@@ -802,6 +871,24 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
     Ok(Accepted { accepted: true })
 }
 
+/// Check a rotation statement against `pinned`, the key this connection's
+/// handshake proved (module doc): the new key, when `pinned` signed it.
+pub fn take_rotate(pinned: &[u8; 32], p: Value) -> Result<[u8; 32], ApiError> {
+    let params: RotateParams = serde_json::from_value(p)
+        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("rotate: {e}")))?;
+    let new = crate::identity::parse_public_key(&params.new_public_key)
+        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("rotate: {e}")))?;
+    let sig = hex::decode(&params.signature)
+        .map_err(|_| ApiError::new(code::BAD_REQUEST, "rotate: the signature is not hex"))?;
+    if !crate::identity::verify_rotation(pinned, &new, &sig) {
+        return Err(ApiError::new(
+            code::FORBIDDEN,
+            "rotate: the statement is not the trusted controller key's; nothing re-pinned",
+        ));
+    }
+    Ok(new)
+}
+
 /// Apply one command from the controller; the answer's body or an error.
 fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accepted, ApiError> {
     let params: CommandParams = serde_json::from_value(p)
@@ -829,6 +916,9 @@ fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accept
     Ok(Accepted { accepted: true })
 }
 
+/// How a connection re-pins to the key a rotation hands over to.
+type Repin<'a> = &'a dyn Fn(&[u8; 32]) -> Result<(), String>;
+
 /// The conversation after `hello` (module doc).
 fn converse(
     tls: &mut Tls,
@@ -837,6 +927,8 @@ fn converse(
     stop: &AtomicBool,
     cadence: &Cadence,
     claude_update: bool,
+    // The key the handshake proved, and how to re-pin to its successor.
+    peer: ([u8; 32], Repin<'_>),
 ) -> Ended {
     let mut state = welcome.state;
     if let (NodeState::Approved, Some(p)) = (state, welcome.policy) {
@@ -905,7 +997,24 @@ fn converse(
                 _ => {}
             },
             Ok(Incoming::Request { id, m, p }) => {
+                let mut rotated = None;
                 let answer = match m.as_str() {
+                    // Whatever the machine's standing: the key it trusts
+                    // hands over to another (module doc).
+                    name::ROTATE => match take_rotate(&peer.0, p).and_then(|new| {
+                        (peer.1)(&new)
+                            .map(|()| new)
+                            .map_err(|e| ApiError::new(code::INTERNAL, format!("re-pinning: {e}")))
+                    }) {
+                        Ok(new) => {
+                            rotated = Some((digest(&peer.0), digest(&new)));
+                            Response::ok(id, &Accepted { accepted: true })
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e.msg, "link: refused a controller key rotation");
+                            Response::err(Some(id), e)
+                        }
+                    },
                     name::COMMAND if state == NodeState::Approved => {
                         match take_command(shared, p, claude_update) {
                             Ok(a) => Response::ok(id, &a),
@@ -941,6 +1050,10 @@ fn converse(
                     return Ended::Dropped(format!("a write failed: {e}"));
                 }
                 said = Instant::now();
+                if let Some((from, new)) = rotated {
+                    tls.close();
+                    return Ended::Rotated { from, new };
+                }
             }
             Ok(Incoming::Answer { .. }) => {}
             Err(e) => tracing::debug!(error = %e, "link: a line that is not a message"),
