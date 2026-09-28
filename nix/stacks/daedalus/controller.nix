@@ -2,9 +2,42 @@
 # `mode = "controller"`: one process as the operator, the door the app talks to
 # over a unix socket (PLAN feature 13). Today it serves that socket, the
 # machine's facts at the `minimal` telemetry level, its status page and
-# the listener the other machines' links reach (below); Claude remote
-# control stays with platform/claude-rc.nix until the controller takes it
-# over, so it is OFF here.
+# the listener the other machines' links reach (below), and it runs Claude
+# remote control in the configuration checkout (below).
+#
+# Claude remote control:
+#
+#   parallel       platform/claude-rc.nix still runs the box's first server,
+#                  in the same directory. This one is a second, beside it,
+#                  under a user-unit name nothing else uses (the system
+#                  unit of the same name is the old server's restart verb,
+#                  daedalus-verbs.nix: another manager). Two servers in one
+#                  directory do not collide: the second finds the first's
+#                  bridge pointer (the project's `bridge-pointer.json`, a
+#                  live pid in it), registers an environment of its own and
+#                  leaves the pointer alone. So each has its own environment
+#                  id, the banner's, which is how the Claude app tells them
+#                  apart.
+#   the unit       `systemd-run --user --unit=daedalus-claude-rc` (agent
+#                  src/claude/unit.rs): a transient unit of the operator's
+#                  user manager, so a stop or restart of this service leaves
+#                  it running and the next start re-attaches. Its output
+#                  goes to `<dataDir>/logs/claude-rc.log`, unfiltered.
+#   claude         found on this service's PATH: the pinned pkgs.claude-code
+#                  (platform/claude-code) is on `path` below, the one
+#                  DISABLE_UPDATES wrapper every other `claude` here is.
+#   environment    the unit gets the user manager's environment plus, from
+#                  the agent, HOME and this service's PATH with
+#                  `~/.local/bin` in front — so /run/wrappers/bin (sudo, for
+#                  sessions that rebuild) is on it, as on claude-rc.nix's.
+#                  Never add DISABLE_TELEMETRY, DO_NOT_TRACK,
+#                  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,
+#                  DISABLE_GROWTHBOOK or ANTHROPIC_BASE_URL to either: each
+#                  silently disables remote control.
+#   gcroot         ExecStartPre pins the claude this start will use, and the
+#                  one the unit is already running when that differs — a
+#                  switch restarts this service, not the unit, so the unit
+#                  can go on running a claude no generation still names.
 #
 # The status page, and the machines' metrics:
 #
@@ -108,7 +141,7 @@
 #
 # restartIfChanged stays at its default: a switch that moves the agent
 # restarts it, which ends nothing — the app reconnects, and the one long-lived
-# child it will own (Claude remote control) runs in a transient user unit of
+# child it owns (Claude remote control) runs in a transient user unit of
 # its own that outlives it. `Restart=always` because the agent is built with
 # `panic = "abort"`.
 {
@@ -172,6 +205,26 @@ let
   # container as the operator, who needs no listing.
   allowedUids = lib.optional (!daedalusDev) (hostUid 1000);
 
+  # Claude remote control's transient user unit (the header's `the unit`).
+  claudeUnit = "daedalus-claude-rc";
+
+  # The header's `gcroot`. Run as root ("+"): the roots directory is root's.
+  # The running claude is read from the transient unit's file, which the
+  # user manager keeps while the unit is loaded; its ExecStart names the
+  # store path the agent found on PATH at that start.
+  claudeGcroot = pkgs.writeShellScript "daedalus-claude-rc-gcroot" ''
+    roots=/nix/var/nix/gcroots
+    ${pkgs.coreutils}/bin/ln -sfn ${pkgs.claude-code} "$roots/${claudeUnit}"
+    unit=${config.fleet.operator.runtimeDir}/systemd/transient/${claudeUnit}.service
+    running=$(${pkgs.gnugrep}/bin/grep -o '^ExecStart=.*' "$unit" 2>/dev/null \
+      | ${pkgs.gnugrep}/bin/grep -o '/nix/store/[^/" ]*' | ${pkgs.coreutils}/bin/head -n1 || true)
+    if [ -n "$running" ] && [ "$running" != ${pkgs.claude-code} ]; then
+      ${pkgs.coreutils}/bin/ln -sfn "$running" "$roots/${claudeUnit}-running"
+    else
+      ${pkgs.coreutils}/bin/rm -f "$roots/${claudeUnit}-running"
+    fi
+  '';
+
   configFile = (pkgs.formats.toml { }).generate "daedalus-agent-controller.toml" {
     mode = "controller";
     data_dir = dataDir;
@@ -182,10 +235,11 @@ let
     controller = {
       api_socket = "${controllerDir}/api.sock";
       api_allowed_uids = allowedUids;
-      # platform/claude-rc.nix runs Claude on this box today; a controller
-      # never starts a second one, and its unit name is one nothing else uses.
-      claude_remote_control = false;
-      claude_unit = "daedalus-claude-rc";
+      # Beside platform/claude-rc.nix's server, in the same checkout, under a
+      # unit name nothing else uses (the header's `parallel`).
+      claude_remote_control = true;
+      claude_workdir = config.fleet.config.repo;
+      claude_unit = claudeUnit;
       listen = "0.0.0.0:${toString port}";
       advertise = [ "${config.fleet.wanHost}:${toString port}" ];
     };
@@ -255,12 +309,15 @@ in
         config.fleet.operator.userService
       ];
       # systemctl / systemd-run / loginctl for its user units, ps for the
-      # process count; /run/wrappers as on every operator-run unit.
+      # process count; /run/wrappers as on every operator-run unit (and on
+      # the Claude unit's PATH, which is this one's); claude itself, the
+      # pinned one (the header's `claude`).
       path = [
         "/run/wrappers"
         config.systemd.package
         pkgs.procps
         pkgs.coreutils
+        pkgs.claude-code
       ];
       restartTriggers = [ configFile ];
       serviceConfig = {
@@ -272,6 +329,7 @@ in
           "HOME=${config.fleet.operator.home}"
           "XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir}"
         ];
+        ExecStartPre = "+${claudeGcroot}";
         ExecStart = "${lib.getExe agent} run";
         Restart = "always";
         RestartSec = "5s";
