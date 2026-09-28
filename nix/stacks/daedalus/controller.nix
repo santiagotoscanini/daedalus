@@ -2,22 +2,23 @@
 # `mode = "controller"`: one process as the operator, the door the app talks to
 # over a unix socket (PLAN feature 13). Today it serves that socket, the
 # machine's facts at the `minimal` telemetry level, its status page and
-# the listener the other machines' links reach (below), and it runs Claude
-# remote control in the configuration checkout (below).
+# the listener the other machines' links reach (below). Claude remote
+# control is wired for the configuration checkout but OFF (below).
 #
 # Claude remote control:
 #
-#   parallel       platform/claude-rc.nix still runs the box's first server,
-#                  in the same directory. This one is a second, beside it,
-#                  under a user-unit name nothing else uses (the system
-#                  unit of the same name is the old server's restart verb,
-#                  daedalus-verbs.nix: another manager). Two servers in one
-#                  directory do not collide: the second finds the first's
-#                  bridge pointer (the project's `bridge-pointer.json`, a
-#                  live pid in it), registers an environment of its own and
-#                  leaves the pointer alone. So each has its own environment
-#                  id, the banner's, which is how the Claude app tells them
-#                  apart.
+#   off, for now   platform/claude-rc.nix runs the box's server in the
+#                  configuration checkout, and a second one in the same
+#                  directory cannot run: registration answers 409, "This
+#                  folder is already served by a terminal `claude
+#                  remote-control` on this device", keyed on the machine and
+#                  the directory (measured 2026-09-28, claude-code 2.1.281).
+#                  The refused server exits a minute later and the agent
+#                  starts it again, forever. So `claude_remote_control`
+#                  turns on in the same change that stops claude-rc.nix's.
+#                  The unit name is one no user unit uses (the SYSTEM unit
+#                  of that name is the old server's restart verb,
+#                  daedalus-verbs.nix: another manager).
 #   the unit       `systemd-run --user --unit=daedalus-claude-rc` (agent
 #                  src/claude/unit.rs): a transient unit of the operator's
 #                  user manager, so a stop or restart of this service leaves
@@ -235,9 +236,9 @@ let
     controller = {
       api_socket = "${controllerDir}/api.sock";
       api_allowed_uids = allowedUids;
-      # Beside platform/claude-rc.nix's server, in the same checkout, under a
-      # unit name nothing else uses (the header's `parallel`).
-      claude_remote_control = true;
+      # Off while platform/claude-rc.nix serves the same checkout (the
+      # header's `off, for now`).
+      claude_remote_control = false;
       claude_workdir = config.fleet.config.repo;
       claude_unit = claudeUnit;
       listen = "0.0.0.0:${toString port}";
