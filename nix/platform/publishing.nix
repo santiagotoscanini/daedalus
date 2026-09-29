@@ -103,6 +103,10 @@ let
     iptables=${pkgs.iptables}/bin/iptables
     self=$1
     in_ns() { "$podman" unshare --rootless-netns "$@"; }
+    # One guard at a time: the isolated apps start together (a switch, a
+    # boot), and two of them deleting the same old rule by number race.
+    exec 9>"${cfg.operator.runtimeDir}/fleet-iso-guard.lock"
+    ${pkgs.util-linux}/bin/flock -w 60 9
     ${lib.concatMapStrings (n: ''
       have=$("$podman" network inspect ${isoBridge n}-net --format '{{range .Subnets}}{{.Subnet}} {{end}}' || true)
       if [ "$have" != "${isoPin n} " ]; then
@@ -111,13 +115,23 @@ let
       fi
     '') (lib.attrNames isolatedApps)}
     in_ns ${pkgs.iptables}/bin/iptables-restore --noflush ${isoRules}
-    if ! in_ns "$iptables" -C FORWARD -j FLEET_ISO 2>/dev/null; then
+    # The jump must come FIRST: netavark's own jump (NETAVARK_FORWARD)
+    # accepts every bridge's traffic, and a guard behind it guards nothing.
+    # netavark inserts its jump at the top whenever it finds it missing, so
+    # the position is checked, not only the presence.
+    if [ "$(in_ns "$iptables" -S FORWARD | ${pkgs.gnused}/bin/sed -n 2p)" != "-A FORWARD -j FLEET_ISO" ]; then
+      while in_ns "$iptables" -D FORWARD -j FLEET_ISO 2>/dev/null; do :; done
       in_ns "$iptables" -I FORWARD 1 -j FLEET_ISO
     fi
-    # The one-rule-per-app form earlier generations put in FORWARD itself.
-    while n=$(in_ns "$iptables" -L FORWARD --line-numbers -n | ${pkgs.gnugrep}/bin/grep -m1 'fleet isolated:' | ${pkgs.coreutils}/bin/cut -d' ' -f1) && [ -n "$n" ]; do
-      in_ns "$iptables" -D FORWARD "$n"
-    done
+    # The one-rule-per-app form earlier generations put in FORWARD itself,
+    # removed by its exact spec (never by number: a number read before
+    # another process changes the chain deletes someone else's rule).
+    ${lib.concatMapStrings (n: ''
+      while in_ns "$iptables" -D FORWARD -d ${isoPin n} ! -s ${isoPin n} -m conntrack --ctstate NEW \
+        -m conntrack ! --ctstate DNAT -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP 2>/dev/null; do :; done
+      while in_ns "$iptables" -D FORWARD -d ${isoPin n} ! -s ${isoPin n} -m conntrack --ctstate NEW \
+        -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP 2>/dev/null; do :; done
+    '') (lib.attrNames isolatedApps)}
   '';
 in
 {
