@@ -141,6 +141,11 @@ struct Ui {
     line_key_own: MenuItem,
     line_key_controller: MenuItem,
     line_claude: MenuItem,
+    /// The menu, kept to add and take away `pair`.
+    menu: Menu,
+    /// "Pair with the box…": in the menu only while the machine is unpaired.
+    pair: MenuItem,
+    pair_shown: bool,
     open_status: MenuItem,
     check_now: MenuItem,
     restart_claude: MenuItem,
@@ -163,6 +168,7 @@ impl Ui {
         let line_key_own = MenuItem::new("This machine's key: …", false, None);
         let line_key_controller = MenuItem::new("Controller's key: …", false, None);
         let line_claude = MenuItem::new("Claude: …", false, None);
+        let pair = MenuItem::new(PAIR_LABEL, true, None);
         let open_status = MenuItem::new("Show status", true, None);
         let check_now = MenuItem::new("Check for updates now", true, None);
         let restart_claude = MenuItem::new("Restart Claude remote control", true, None);
@@ -191,7 +197,7 @@ impl Ui {
         .context("building the menu")?;
 
         let tray = TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
+            .with_menu(Box::new(menu.clone()))
             .with_tooltip(format!("{DISPLAY_NAME} {VERSION}"))
             .with_icon(icons.off.clone())
             .build()
@@ -207,6 +213,9 @@ impl Ui {
             line_key_own,
             line_key_controller,
             line_claude,
+            menu,
+            pair,
+            pair_shown: false,
             open_status,
             check_now,
             restart_claude,
@@ -276,6 +285,11 @@ impl Ui {
                 Some("key-changed" | "revoked" | "refused")
             )
         });
+        let unpaired = p
+            .controller
+            .as_ref()
+            .is_some_and(|l| l.state.as_deref() == Some("unpaired"));
+        self.show_pair(unpaired);
 
         // The hold is a fault only when the box wants it; Claude, only when
         // it is wanted and not (yet) running.
@@ -283,6 +297,8 @@ impl Ui {
         let claude_bad = claude_wanted && !matches!(claude.state.as_str(), "running" | "starting");
         let short = if link_bad {
             "controller refused — see the menu"
+        } else if unpaired {
+            "not paired — Pair with the box… in the menu"
         } else if hold_bad {
             "awake hold OFF"
         } else if p.update_available.is_some() || p.restart_pending {
@@ -298,6 +314,7 @@ impl Ui {
         )));
 
         let look = if link_bad
+            || unpaired
             || hold_bad
             || p.update_available.is_some()
             || p.restart_pending
@@ -308,6 +325,67 @@ impl Ui {
             Look::Ok
         };
         self.set_look(look);
+    }
+
+    /// The pairing entry, just above "Show status", while unpaired.
+    fn show_pair(&mut self, unpaired: bool) {
+        if unpaired == self.pair_shown {
+            return;
+        }
+        let done = if unpaired {
+            // The title, six lines and the separator come first.
+            self.menu.insert(&self.pair, 8)
+        } else {
+            self.menu.remove(&self.pair)
+        };
+        if done.is_ok() {
+            self.pair_shown = unpaired;
+        }
+    }
+}
+
+/// The pairing entry's label, and its dialog's title and prompt
+/// (os/*/tray.rs `ask_pairing`).
+pub const PAIR_LABEL: &str = "Pair with the box…";
+pub const PAIR_TITLE: &str = "Pair with the box";
+pub const PAIR_PROMPT: &str = "Paste the controller key from Settings › Machines on the box. \
+     The whole pair or install line from that page works too.";
+
+/// What the dialog's text becomes: the service pairs the machine
+/// (local.rs `link.pair`), or the reason it did not, as one sentence for
+/// the answer's dialog. The tray never writes config.toml itself.
+pub fn pair_pasted(text: &str) -> std::result::Result<String, String> {
+    let p = crate::pair::parse_pasted(text).map_err(|e| format!("{e:#}"))?;
+    let answer = crate::local::call(
+        "link.pair",
+        serde_json::json!({ "pin": p.pin, "controller": p.controller }),
+    )?;
+    Ok(answer.as_str().unwrap_or("paired").to_string())
+}
+
+/// For the OSes whose dialogs are other programs (osascript, PowerShell):
+/// ask on a thread of its own so the tray's loop never waits on a person,
+/// pair with what came back, and show the outcome. One at a time.
+#[cfg(any(windows, target_os = "macos"))]
+pub fn pair_on_a_thread(ask: fn() -> Option<String>, tell: fn(&str, bool)) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static OPEN: AtomicBool = AtomicBool::new(false);
+    if OPEN.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let spawned = std::thread::Builder::new()
+        .name("pair".into())
+        .spawn(move || {
+            if let Some(text) = ask().filter(|t| !t.trim().is_empty()) {
+                match pair_pasted(&text) {
+                    Ok(said) => tell(&said, true),
+                    Err(e) => tell(&format!("Not paired: {e}"), false),
+                }
+            }
+            OPEN.store(false, Ordering::SeqCst);
+        });
+    if spawned.is_err() {
+        OPEN.store(false, Ordering::SeqCst);
     }
 }
 
@@ -325,6 +403,7 @@ fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, Strin
     };
     let at = l.address.as_deref().unwrap_or("not found yet");
     let first = match (l.state.as_deref(), l.error.as_deref()) {
+        (Some("unpaired"), _) => "Controller: not paired — connects to nothing until paired".into(),
         (Some("approved"), _) => format!("Controller: {at} — approved"),
         (Some("pending"), _) => {
             format!("Controller: {at} — waiting for approval; compare both keys")
@@ -339,9 +418,10 @@ fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, Strin
     };
     let own = format!("This machine's key: {}", l.fingerprint);
     // The one it trusts is config.toml's pin (link/node.rs).
-    let theirs = match &l.controller_fingerprint {
-        Some(fp) => format!("Controller's key: {fp} (pinned)"),
-        None => "Controller's key: not seen yet".into(),
+    let theirs = match (&l.controller_fingerprint, l.state.as_deref()) {
+        (Some(fp), _) => format!("Controller's key: {fp} (pinned)"),
+        (None, Some("unpaired")) => "Controller's key: none trusted yet".into(),
+        (None, _) => "Controller's key: not seen yet".into(),
     };
     (first, own, theirs)
 }
@@ -439,7 +519,9 @@ impl Tray {
     pub fn menu(&mut self) -> Flow {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
             let id = ev.id();
-            if *id == self.ui.open_status.id() {
+            if *id == self.ui.pair.id() {
+                crate::os::tray::ask_pairing();
+            } else if *id == self.ui.open_status.id() {
                 self.show_status();
             } else if *id == self.ui.check_now.id() {
                 self.session.check_updates_now();
@@ -544,5 +626,14 @@ mod tests {
             ..approved
         };
         assert!(link_lines(Some(&nowhere)).0.contains("controller_address"));
+        let unpaired = LinkPage {
+            state: Some("unpaired".into()),
+            controller_fingerprint: None,
+            connected: false,
+            ..nowhere
+        };
+        let (first, _, theirs) = link_lines(Some(&unpaired));
+        assert!(first.contains("not paired"), "{first}");
+        assert_eq!(theirs, "Controller's key: none trusted yet");
     }
 }

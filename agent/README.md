@@ -374,17 +374,18 @@ config.toml's `controller_address` (`install --controller`); else the SRV
 record `_daedalus-controller._tcp` under the search domains DHCP handed out
 (and `search_domains`), the record chosen by priority then weight on every
 OS. With neither, the machine reaches nobody, says so, and asks again
-every minute. The key: config.toml's `controller_pin`, which `install`
-requires (`--pin`) and nothing else supplies — no key is trusted on first
-use, and a machine without a pin connects nowhere and says why. It is
-re-pinned only by a rotation the trusted key signed (below). DNS only ever
+every minute. The key: config.toml's `controller_pin`, which `install
+--pin` or `pair` writes and nothing else supplies — no key is trusted on
+first use. A machine without a pin is **unpaired**: it resolves no address
+and dials nobody, and its page and tray say `unpaired` until it is paired
+(see "Install"). It is re-pinned only by a rotation the trusted key signed (below). DNS only ever
 names an address.
 
 A controller that presents another key than the trusted one is refused,
 and the page and the tray say **controller key changed**, with the key
 trusted and the one that came — labelled unproven, since the pin check
 runs before the handshake signature. If the controller really has a new
-key outside a rotation, pin it (`install --pin`).
+key outside a rotation, pin it (`pair --pin`).
 
 **Rotating the controller's key** (`src/link/rotation.rs`).
 `controller.rotate` makes a new identity beside the old one
@@ -426,7 +427,7 @@ What rotation is not: a way out of a compromised key. The old key's holder
 signs the statement, so whoever holds a leaked controller key can sign one
 for a key of their own, and every machine that meets them first follows
 it. A leaked key is recovered from by pinning a new one by hand
-(`install --pin`) on every machine.
+(`pair --pin`) on every machine.
 
 **Files that hold trust.** `identity.key`, `config.toml` (which names the
 controller) and `policy.json` are read only when their owner is trusted:
@@ -551,8 +552,10 @@ are read by the service every minute on a thread of their own.
 `status` (the status document), `claude` (the session's full report),
 `claude.report` (the session's poll: its report in, the `ReportAnswer`
 out), `claude.roster`, `claude.restart`, `claude.update` (refused on the
-controller, where nix pins Claude Code) and `update.check`. A socket that
-cannot be made does not stop the service: it is tried again every 15 s.
+controller, where nix pins Claude Code), `update.check`, `link.pair` (the
+tray's pairing, refused on a paired machine) and `link.reload` ("Pairing"
+below). A socket that cannot be made does not stop the service: it is
+tried again every 15 s.
 
 The tray, the session and the service are one binary, so the envelope
 moves with a release: the new service restarts the others on the new
@@ -566,7 +569,7 @@ From an administrator PowerShell on a Windows machine:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-& ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) -Pin 3f2a:9c01:… -Controller s2-server.lan:7788
+irm https://daedalus.toscanini.me/install.ps1 | iex
 ```
 
 [`install.ps1`](install.ps1) downloads the release into
@@ -579,19 +582,16 @@ nothing the LAN can reach. Re-running replaces the binaries and keeps the
 config. `daedalus-agent uninstall` removes the service and the tray's Run
 key; the data directory stays.
 
-`-Pin` is required: the machine trusts no controller it was not told of.
-Without `-Controller` it finds the controller through DNS. Settings ›
-Machines gives the whole line with both. Every file is checked against the
-release's manifest (`release.json`) by SHA-256; the manifest's signature is
-the agent's to check on every later update (PowerShell has no ed25519), so
-at install the trust is HTTPS to GitHub.
+Every file is checked against the release's manifest (`release.json`) by
+SHA-256; the manifest's signature is the agent's to check on every later
+update (PowerShell has no ed25519), so at install the trust is HTTPS to
+GitHub.
 
 On a Mac or a Linux machine, from a terminal, as the user whose Claude Code
-should run there (`--pin` required, `--controller` else DNS; the Machines
-page gives the line):
+should run there:
 
 ```sh
-curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- --pin 3f2a:9c01:… --controller s2-server.lan:7788
+curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
 ```
 
 It checks every file against the release's manifest by SHA-256, and the
@@ -644,6 +644,35 @@ except `controller_address` and `controller_pin`, which `--controller` and
 site serves both scripts from `main`, so neither command names a version.
 Trust at install is HTTPS to GitHub; every update after that is verified by
 the agent against the release key it carries.
+
+### Pairing
+
+Install first, pair after. A machine installed without a pin is
+**unpaired**: the service, session and tray run, but it trusts no
+controller and dials nobody — nothing is trusted on first use
+([`src/pair.rs`](src/pair.rs)). Three ways to pair it, each with the key
+Settings › Machines shows:
+
+- **The installer asks.** At the end of either script, on an unpaired
+  machine with a terminal to ask on (`/dev/tty` under `curl | sh`; an
+  interactive PowerShell), it asks for the key and runs `pair`. Enter, or a
+  run without a terminal, skips it and prints the command.
+- **`daedalus-agent pair --pin KEY [--controller HOST:PORT]`**, as root or
+  an administrator. It writes config.toml through the same writer as
+  `install` (every other line kept) and asks the running service to read it
+  again (`link.reload`); the link starts over under the new keys at once.
+  It re-pins a paired machine too. Without `--controller` the address stays
+  config.toml's, else DNS's. `pair --check` exits 0 when paired.
+- **The tray's "Pair with the box…"**, shown only while unpaired: a native
+  text box (a GTK dialog on Linux, AppleScript's `display dialog` on macOS,
+  PowerShell's `InputBox` on Windows) takes the key, or a whole pair or
+  install line from the Machines page. The service does the write
+  (`link.pair` on the local socket), since config.toml is the service's —
+  and only while the machine is unpaired, so a user the socket serves can
+  pair a fresh machine but never move a paired one.
+
+Settings › Machines also gives lines that pair as they install (`--pin`,
+`--controller`), and the `pair` line for each system.
 
 ## Claude outside the agent
 
@@ -872,7 +901,11 @@ once.
 ```
 daedalus-agent install [--controller HOST:PORT] [--pin FINGERPRINT]
                                     register and start the service, the session and the tray (administrator / sudo);
-                                    --controller and --pin name the controller and pin its key in config.toml
+                                    --controller and --pin name the controller and pin its key in config.toml;
+                                    without --pin the machine runs unpaired
+daedalus-agent pair --pin FINGERPRINT [--controller HOST:PORT]
+                                    pair it: trust that controller key (administrator / sudo); the running
+                                    service connects at once. pair --check exits 0 when paired
 daedalus-agent uninstall            stop and remove them (administrator / sudo)
 daedalus-agent run                  service entry point; what the SCM, launchd or systemd calls (and nix, for the controller)
 daedalus-agent serve                the same work in the foreground, in a terminal
@@ -956,7 +989,7 @@ relative one stops the agent at start with a message saying so.
 ### config.toml
 
 `install` writes the first five keys, and `controller_address` and
-`controller_pin` when `--controller` and `--pin` name them; every key is
+`controller_pin` when `--controller` and `--pin` name them (as `pair` does later); every key is
 optional, and a top-level key the agent does not know is ignored. The
 header of [`src/config.rs`](src/config.rs) is the reference.
 
@@ -971,7 +1004,7 @@ search_domains = []       # more domains to ask for _daedalus-controller._tcp
 # updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
 # controller_address = "…" # the controller's link address, host:port; absent: DNS
-# controller_pin = "…"     # its key's fingerprint; required (install --pin)
+# controller_pin = "…"     # its key's fingerprint; absent: unpaired (install --pin, pair --pin)
 ```
 
 `telemetry = "full"` reads everything above; `minimal` reads the machine

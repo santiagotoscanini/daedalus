@@ -120,8 +120,9 @@ pub mod svc {
 }
 
 /// The tray's platform side: the loop that drives `tray::Tray`, opening a
-/// URL or folder, and leaving for a new binary.
+/// URL or folder, asking for the key to pair with, and leaving for a new
+/// binary.
 #[cfg(feature = "tray")]
 pub mod tray {
-    pub use super::imp::tray::{open, relaunch_self, run};
+    pub use super::imp::tray::{ask_pairing, open, relaunch_self, run};
 }

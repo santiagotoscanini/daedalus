@@ -124,3 +124,57 @@ fn run_gtk() -> Result<()> {
     gtk::main();
     Ok(())
 }
+
+/// "Pair with the box…": a GTK dialog with one text field — GTK is linked
+/// and its loop is the tray's, so no other program is needed. Not modal:
+/// its answer comes through `connect_response` on the loop the tray already
+/// runs, so the tray's tick (which holds the tray while it runs) is never
+/// re-entered. The service's answer is a message dialog.
+pub fn ask_pairing() {
+    use gtk::prelude::*;
+    let dialog = gtk::Dialog::with_buttons(
+        Some(crate::tray::PAIR_TITLE),
+        None::<&gtk::Window>,
+        gtk::DialogFlags::empty(),
+        &[
+            ("Cancel", gtk::ResponseType::Cancel),
+            ("Pair", gtk::ResponseType::Accept),
+        ],
+    );
+    dialog.set_default_response(gtk::ResponseType::Accept);
+    dialog.set_keep_above(true);
+    let label = gtk::Label::new(Some(crate::tray::PAIR_PROMPT));
+    label.set_line_wrap(true);
+    label.set_xalign(0.0);
+    let entry = gtk::Entry::new();
+    entry.set_activates_default(true);
+    entry.set_width_chars(64);
+    let area = dialog.content_area();
+    area.set_spacing(10);
+    area.set_border_width(12);
+    area.add(&label);
+    area.add(&entry);
+    dialog.connect_response(move |d, response| {
+        if response == gtk::ResponseType::Accept {
+            let (kind, said) = match crate::tray::pair_pasted(&entry.text()) {
+                Ok(said) => (gtk::MessageType::Info, said),
+                Err(e) => (gtk::MessageType::Warning, format!("Not paired: {e}")),
+            };
+            let answer = gtk::MessageDialog::new(
+                None::<&gtk::Window>,
+                gtk::DialogFlags::empty(),
+                kind,
+                gtk::ButtonsType::Ok,
+                &said,
+            );
+            answer.set_title(crate::tray::PAIR_TITLE);
+            answer.set_keep_above(true);
+            // SAFETY: the dialog is ours and nothing else holds it.
+            answer.connect_response(|m, _| unsafe { m.destroy() });
+            answer.show_all();
+        }
+        // SAFETY: the dialog is ours; this is its last use.
+        unsafe { d.destroy() };
+    });
+    dialog.show_all();
+}

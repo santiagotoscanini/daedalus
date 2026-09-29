@@ -89,3 +89,44 @@ pub fn run() -> Result<()> {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
     });
 }
+
+/// "Pair with the box…": AppleScript's `display dialog` with a text field,
+/// through osascript on a thread of its own (the tray is an accessory app
+/// with no window to own a sheet); the answer is a second dialog (tray.rs
+/// `pair_on_a_thread`). The words are passed as arguments, never spliced
+/// into the script.
+pub fn ask_pairing() {
+    crate::tray::pair_on_a_thread(ask, tell);
+}
+
+fn osascript(script: &str, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("/usr/bin/osascript")
+        .args(["-e", "on run argv", "-e", script, "-e", "end run"])
+        .args(args)
+        .output()
+        .ok()?;
+    // Cancel is an error (-128) and a non-zero exit.
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+fn ask() -> Option<String> {
+    osascript(
+        "text returned of (display dialog (item 1 of argv) with title (item 2 of argv) \
+         default answer \"\" buttons {\"Cancel\", \"Pair\"} default button \"Pair\" \
+         cancel button \"Cancel\")",
+        &[crate::tray::PAIR_PROMPT, crate::tray::PAIR_TITLE],
+    )
+}
+
+fn tell(text: &str, ok: bool) {
+    let icon = if ok { "note" } else { "caution" };
+    let _ = osascript(
+        &format!(
+            "display dialog (item 1 of argv) with title (item 2 of argv) buttons {{\"OK\"}} \
+             default button \"OK\" with icon {icon}"
+        ),
+        &[text, crate::tray::PAIR_TITLE],
+    );
+}

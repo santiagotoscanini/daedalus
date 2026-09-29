@@ -8,14 +8,18 @@
 //! and asks again every `IDLE_RETRY`.
 //!
 //! **Whom to trust** (`Target::pin`): config.toml's `controller_pin`, set
-//! by `install --pin`, and nothing else — no key is trusted on first use
-//! (trust T1). Without a pin the machine connects nowhere and the status
-//! page and the tray say so (`NO_PIN`). A connection whose key is not the
-//! pinned one is refused: the page and the tray say "controller key
-//! changed", with the key that came (unproven: the pin check runs before
-//! the handshake signature) and the one expected, and nothing is re-pinned
-//! — a new `--pin` is the operator's, if the controller really did get a
-//! new key outside a rotation.
+//! by `install --pin` or `pair` (pair.rs), and nothing else — no key is
+//! trusted on first use (trust T1). Without a pin the machine is
+//! **unpaired**: it resolves nothing and dials nobody, and the status page
+//! and the tray say `unpaired` until it is paired, which the service hands
+//! this loop at once (shared.rs `set_link_keys`) — a pairing, or any change
+//! of the two keys, ends the connection in hand and starts over under them.
+//! A connection whose key is not the pinned one is refused: the page and
+//! the tray say "controller key changed", with the key that came
+//! (unproven: the pin check runs before the handshake signature) and the
+//! one expected, and nothing is re-pinned — a new `pair --pin` is the
+//! operator's, if the controller really did get a new key outside a
+//! rotation.
 //!
 //! **Rotation** (rotation.rs). A controller handing its trust to a new key
 //! sends, over a connection the pinned key's handshake just proved, a
@@ -94,9 +98,10 @@ pub struct Target {
     pub pin: [u8; 32],
 }
 
-/// What a machine without a pin is told (module doc).
-pub const NO_PIN: &str = "no controller_pin in config.toml: this machine trusts no controller \
-     until it is installed with --pin <fingerprint> (the Machines page gives the line)";
+/// Why a machine without a pin has no target (module doc); the loop never
+/// asks, it shows `unpaired` instead.
+pub const NO_PIN: &str = "no controller_pin in config.toml: this machine is unpaired and trusts \
+     no controller until it is paired (`daedalus-agent pair --pin <fingerprint>`)";
 
 /// The pure half of choosing a target (module doc). The pin is config.toml's
 /// and nothing else: without one, or with one that does not parse, there is
@@ -186,13 +191,46 @@ pub fn hello_of(cfg: &Config, id: &Identity, facts: &crate::facts::Facts) -> Hel
 
 /// The service's link thread (module doc).
 pub fn run_loop(
-    mut cfg: Config,
+    cfg: Config,
     id: Identity,
     facts: crate::facts::Facts,
     shared: Arc<Shared>,
     stop: Shutdown,
 ) {
-    let config_path = crate::paths::config_path();
+    run_loop_at(cfg, id, facts, shared, stop, &crate::paths::config_path())
+}
+
+/// Wait `total`, cut short by a stop (true) or by the link's keys moving
+/// past `seen` (shared.rs `set_link_keys`); other nudges are slept through.
+fn wait_keys(stop: &Shutdown, shared: &Shared, seen: u64, total: Duration) -> bool {
+    let until = Instant::now() + total;
+    loop {
+        let nudges = stop.nudges();
+        if shared.link_keys().1 != seen {
+            return false;
+        }
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return stop.is_stopped();
+        }
+        if stop.wait_nudged(nudges, left) {
+            return true;
+        }
+    }
+}
+
+/// `run_loop` with its config.toml at `config_path` (where a rotation
+/// re-pins); the keys it follows are the service's (`Shared::link_keys`),
+/// set here from `cfg` and moved by a pairing.
+pub fn run_loop_at(
+    cfg: Config,
+    id: Identity,
+    facts: crate::facts::Facts,
+    shared: Arc<Shared>,
+    stop: Shutdown,
+    config_path: &Path,
+) {
+    shared.set_link_keys(super::LinkKeys::of(&cfg));
     // The TLS side, once: the key's DER is made and loaded one time.
     let client = match tls::Client::new(&id) {
         Ok(c) => c,
@@ -206,25 +244,46 @@ pub fn run_loop(
     };
     let mut dns_found: Option<((String, String), Instant)> = None;
     let mut backoff = BACKOFF_MIN;
+    let mut last_keys = u64::MAX;
     shared.set_link(|l| l.fingerprint = id.fingerprint());
     loop {
         if stop.is_stopped() {
             return;
         }
-        let target = resolve_target(
-            cfg.controller_address.as_deref(),
-            cfg.controller_pin.as_deref(),
-            || {
-                if let Some((f, at)) = &dns_found {
-                    if at.elapsed() < REDISCOVER {
-                        return Some(f.clone());
-                    }
+        let (keys, keys_at) = shared.link_keys();
+        if keys_at != last_keys {
+            // Paired, or pointed elsewhere: start afresh.
+            last_keys = keys_at;
+            dns_found = None;
+            backoff = BACKOFF_MIN;
+        }
+        if !keys.paired() {
+            // Unpaired: no address is resolved and nothing is dialled
+            // until a pin arrives (module doc).
+            shared.set_link(|l| {
+                l.address = keys.address.clone();
+                l.found_via = keys.address.as_ref().map(|_| "config".into());
+                l.state = Some("unpaired".into());
+                l.connected = false;
+                l.since = None;
+                l.controller_fingerprint = None;
+                l.error = None;
+            });
+            if wait_keys(&stop, &shared, keys_at, IDLE_RETRY) {
+                return;
+            }
+            continue;
+        }
+        let target = resolve_target(keys.address.as_deref(), keys.pin.as_deref(), || {
+            if let Some((f, at)) = &dns_found {
+                if at.elapsed() < REDISCOVER {
+                    return Some(f.clone());
                 }
-                let found = crate::discover::find_controller(&cfg, &crate::net::primary());
-                dns_found = found.clone().map(|f| (f, Instant::now()));
-                found
-            },
-        );
+            }
+            let found = crate::discover::find_controller(&cfg, &crate::net::primary());
+            dns_found = found.clone().map(|f| (f, Instant::now()));
+            found
+        });
         let target = match target {
             Ok(Some(t)) => t,
             Ok(None) => {
@@ -235,7 +294,7 @@ pub fn run_loop(
                     l.connected = false;
                     l.error = None;
                 });
-                if stop.wait(IDLE_RETRY) {
+                if wait_keys(&stop, &shared, keys_at, IDLE_RETRY) {
                     return;
                 }
                 continue;
@@ -247,7 +306,7 @@ pub fn run_loop(
                     l.connected = false;
                     l.error = Some(e);
                 });
-                if stop.wait(IDLE_RETRY) {
+                if wait_keys(&stop, &shared, keys_at, IDLE_RETRY) {
                     return;
                 }
                 continue;
@@ -266,7 +325,7 @@ pub fn run_loop(
             hello,
             &shared,
             &stop,
-            &config_path,
+            config_path,
             &Cadence::default(),
         );
         let wait = match &ended {
@@ -277,8 +336,11 @@ pub fn run_loop(
                     fingerprint = %fp,
                     "link: re-pinned to the controller's new key (a signed rotation); connecting under it"
                 );
-                // config.toml was rewritten; this process read it at start.
-                cfg.controller_pin = Some(fp.clone());
+                // config.toml was rewritten; the keys held follow it.
+                shared.set_link_keys(super::LinkKeys {
+                    pin: Some(fp.clone()),
+                    address: keys.address.clone(),
+                });
                 backoff = BACKOFF_MIN;
                 shared.set_link(|l| {
                     l.connected = false;
@@ -324,7 +386,7 @@ pub fn run_loop(
             } => {
                 let e = format!(
                     "controller key changed: {} presented {} (unproven), but this machine trusts {} (config.toml); \
-                     refusing it. If the controller really has a new key, pin it (`install --pin`)",
+                     refusing it. If the controller really has a new key, pin it (`daedalus-agent pair --pin`)",
                     target.address,
                     format_fingerprint(&digest(presented_unproven)),
                     format_fingerprint(pinned),
@@ -357,7 +419,7 @@ pub fn run_loop(
                 BACKOFF_MAX
             }
         };
-        if stop.wait(wait) {
+        if wait_keys(&stop, &shared, keys_at, wait) {
             return;
         }
     }
@@ -399,6 +461,9 @@ pub fn connect_once(
     config: &Path,
     cadence: &Cadence,
 ) -> Ended {
+    // The keys this attempt was made under: a pairing that moves them ends
+    // it (module doc).
+    let keys_at = shared.link_keys().1;
     let addrs: Vec<_> = match target.address.to_socket_addrs() {
         Ok(a) => a.collect(),
         Err(e) => return Ended::Failed(format!("{}: {e}", target.address)),
@@ -492,6 +557,7 @@ pub fn connect_once(
         cadence,
         shared.role().claude_update,
         (controller_key, &repin),
+        keys_at,
     );
     if !matches!(ended, Ended::Stopped | Ended::Revoked) {
         tls.close();
@@ -793,6 +859,7 @@ fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accept
 type Repin<'a> = &'a dyn Fn(&[u8; 32]) -> Result<(), String>;
 
 /// The conversation after `hello` (module doc).
+#[allow(clippy::too_many_arguments)]
 fn converse(
     tls: &mut Tls,
     welcome: Welcome,
@@ -802,6 +869,8 @@ fn converse(
     claude_update: bool,
     // The key the handshake proved, and how to re-pin to its successor.
     peer: ([u8; 32], Repin<'_>),
+    // The link keys' count when the attempt began (`Shared::link_keys`).
+    keys_at: u64,
 ) -> Ended {
     let mut state = welcome.state;
     if let (NodeState::Approved, Some(p)) = (state, welcome.policy) {
@@ -814,6 +883,11 @@ fn converse(
         if stop.is_stopped() {
             tls.close();
             return Ended::Stopped;
+        }
+        if shared.link_keys().1 != keys_at {
+            return Ended::Dropped(
+                "config.toml names another controller or key now; connecting under it".into(),
+            );
         }
         if state == NodeState::Approved {
             if let Err(e) = pushed.run(tls, shared, cadence) {

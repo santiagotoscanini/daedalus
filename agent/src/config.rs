@@ -19,7 +19,7 @@
 //! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
 //! controller_address = "…"    # the controller, host:port; absent = its DNS SRV record
-//! controller_pin = "…"        # its key's fingerprint; required: no pin, no controller
+//! controller_pin = "…"        # its key's fingerprint; absent = unpaired, no controller
 //!
 //! [controller]                # read only when mode = "controller"; nix writes it
 //! claude_remote_control = false   # run Claude remote control on the box
@@ -33,10 +33,10 @@
 //!
 //! `controller_address` and `controller_pin` are a machine's way to the
 //! controller (link/node.rs), the only party it talks to: `install
-//! --controller` and `--pin` write them, into a file that exists too.
-//! Without an address the machine asks DNS for the controller's SRV record;
-//! without a pin it connects nowhere, and the status page and the tray say
-//! so (link/node.rs, `NO_PIN`). A pin that is not a fingerprint
+//! --controller` and `--pin` write them, into a file that exists too, and
+//! so does `pair` (pair.rs). Without an address the machine asks DNS for
+//! the controller's SRV record; without a pin it is unpaired and connects
+//! nowhere, and the status page and the tray say so (link/node.rs). A pin that is not a fingerprint
 //! does not stop the agent: the link says so on the status page and the
 //! hold goes on.
 //!
@@ -115,8 +115,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::paths::{
-    claude_unit_name, config_dir, config_path, data_dir, env_data_dir, last_policy, non_empty,
-    DATA_DIR_ENV,
+    claude_unit_name, config_path, data_dir, env_data_dir, last_policy, non_empty, DATA_DIR_ENV,
 };
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -152,8 +151,8 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_address: Option<String>,
     /// The controller key's fingerprint to pin (identity.rs
-    /// `fingerprint`); required — without it the machine trusts no
-    /// controller (link/node.rs). `install --pin` writes it.
+    /// `fingerprint`); without it the machine is unpaired and trusts no
+    /// controller (link/node.rs). `install --pin` and `pair` write it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_pin: Option<String>,
     /// What this agent is to the rest: an ordinary machine, or the
@@ -481,8 +480,17 @@ pub fn load_for_user() -> Result<Config> {
 
 fn load(user: bool) -> Result<Config> {
     env_data_dir()?;
-    let path = config_path();
-    let text = match std::fs::read_to_string(&path) {
+    load_from(&config_path(), user)
+}
+
+/// config.toml at `path`, as the service reads it: what the link reads
+/// again when it is paired while running (pair.rs `reload`).
+pub fn load_at(path: &Path) -> Result<Config> {
+    load_from(path, false)
+}
+
+fn load_from(path: &Path, user: bool) -> Result<Config> {
+    let text = match std::fs::read_to_string(path) {
         Ok(text) => Some(text),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) if user && e.kind() == std::io::ErrorKind::PermissionDenied => None,
@@ -491,7 +499,7 @@ fn load(user: bool) -> Result<Config> {
     let cfg: Config = match text {
         Some(text) => {
             // It names the controller this machine trusts (T4).
-            crate::private::check_owner(&path)?;
+            crate::private::check_owner(path)?;
             toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?
         }
         None => Config::default(),
@@ -521,31 +529,40 @@ pub fn refuse_env_override(verb: &str) -> Result<()> {
     refuse_env_for(verb, std::env::var_os(DATA_DIR_ENV))
 }
 
-/// Writes the config file if there is none, so `install` never overwrites
-/// an operator's edits on a reinstall — except the two keys `install
-/// --controller` and `--pin` name, which it sets in a file that exists
-/// (`set_top_level_keys`), leaving the rest as it was. Only `install`
-/// calls it.
+/// `write_link_config_at` at the OS's config.toml: what `install` writes.
 pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
     let path = config_path();
+    write_link_config_at(&path, cfg)?;
+    Ok(path)
+}
+
+/// Writes the config file at `path` if there is none, so `install` never
+/// overwrites an operator's edits on a reinstall — except the two keys
+/// `--controller` and `--pin` name, which it sets in a file that exists
+/// (`set_top_level_keys`), leaving the rest as it was. The one writer of
+/// both keys: `install` and pairing (pair.rs) — the verb and the service's
+/// `link.pair` — call it; a signed rotation re-pins through
+/// `set_controller_pin_at`.
+pub fn write_link_config_at(path: &Path, cfg: &Config) -> Result<()> {
+    let dir = path.parent().context("config.toml has no directory")?;
     // A directory or a config.toml someone else made before the install is
     // not ours to adopt: it could name the controller this machine trusts
     // (audit D7). SYSTEM, Administrators, root or this user only.
-    if config_dir().exists() {
-        crate::private::check_owner(&config_dir())?;
+    if dir.exists() {
+        crate::private::check_owner(dir)?;
     }
     if path.exists() {
-        crate::private::check_owner(&path)?;
+        crate::private::check_owner(path)?;
     }
-    std::fs::create_dir_all(config_dir()).context("creating the data directory")?;
+    std::fs::create_dir_all(dir).context("creating the data directory")?;
     if !path.exists() {
         let text = format!(
             "# daedalus-agent — written by `install`; edit and restart the service.\n\n{}",
             toml::to_string_pretty(cfg)?
         );
-        crate::util::write_atomic(&path, text.as_bytes(), crate::os::CONFIG_ACCESS)
+        crate::util::write_atomic(path, text.as_bytes(), crate::os::CONFIG_ACCESS)
             .with_context(|| format!("writing {}", path.display()))?;
-        return Ok(path);
+        return Ok(());
     }
     let keys: Vec<(&str, &str)> = [
         ("controller_address", cfg.controller_address.as_deref()),
@@ -555,16 +572,16 @@ pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
     .filter_map(|(k, v)| v.map(|v| (k, v)))
     .collect();
     if !keys.is_empty() {
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let edited = set_top_level_keys(&text, &keys)
             .with_context(|| format!("editing {}", path.display()))?;
         toml::from_str::<Config>(&edited)
             .with_context(|| format!("{} would not parse with the new keys", path.display()))?;
-        crate::util::write_atomic(&path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
+        crate::util::write_atomic(path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
             .with_context(|| format!("writing {}", path.display()))?;
     }
-    Ok(path)
+    Ok(())
 }
 
 /// Set `controller_pin` in the config.toml at `path` to `fingerprint`,

@@ -1612,3 +1612,58 @@ fn a_rotation_the_trusted_key_did_not_sign_is_refused() {
         let _ = std::fs::remove_dir_all(d);
     }
 }
+
+#[test]
+fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
+    // An address it could dial, in config.toml, but no pin.
+    let bait = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    bait.set_nonblocking(true).unwrap();
+    let dialled = |bait: &std::net::TcpListener| !matches!(bait.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock);
+    let dir = scratch("unpaired");
+    let path = dir.join("config.toml");
+    let cfg = Config {
+        controller_address: Some(bait.local_addr().unwrap().to_string()),
+        ..Config::default()
+    };
+    std::fs::write(&path, toml::to_string(&cfg).unwrap()).unwrap();
+    let (shared, stop, nid) = (node_shared(), Shutdown::new(), id(90));
+    shared.set_shutdown(stop.clone());
+    let thread = {
+        let (shared, stop, nid, path) =
+            (Arc::clone(&shared), stop.clone(), nid.clone(), path.clone());
+        std::thread::spawn(move || {
+            crate::link::node::run_loop_at(cfg, nid, facts(), shared, stop, &path)
+        })
+    };
+    wait_for("unpaired", 5, || {
+        shared
+            .link()
+            .is_some_and(|l| l.state.as_deref() == Some("unpaired"))
+    });
+    std::thread::sleep(Duration::from_millis(1500));
+    assert!(!dialled(&bait), "an unpaired machine dialled its address");
+    let l = shared.link().unwrap();
+    assert!(!l.connected && l.controller_fingerprint.is_none() && l.error.is_none());
+
+    // Paired while it runs (the tray's door): it dials the controller named
+    // at once, under that key, and waits there for approval.
+    let ctl = controller(fast());
+    let p = crate::pair::Pairing::new(
+        &crate::identity::format_fingerprint(&pin_of(&ctl.id)),
+        Some(&ctl.listener.local_addr.to_string()),
+    )
+    .unwrap();
+    crate::pair::pair_unpaired(&shared, &path, &p).unwrap();
+    wait_for("seen by the controller", 5, || {
+        summary(&ctl, &nid).is_some()
+    });
+    wait_for("pending", 5, || {
+        shared
+            .link()
+            .is_some_and(|l| l.state.as_deref() == Some("pending"))
+    });
+    assert!(!dialled(&bait), "the old address was dialled");
+    stop.stop();
+    thread.join().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}

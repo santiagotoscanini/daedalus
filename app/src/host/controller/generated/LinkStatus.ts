@@ -14,6 +14,7 @@ address: string | null,
  */
 found_via: string | null, 
 /**
+ * "unpaired" (no pin: nothing is dialled until `pair`) |
  * "connecting" | "pending" | "approved" | "revoked" | "refused" |
  * "key-changed"; null while there is no controller to try.
  */

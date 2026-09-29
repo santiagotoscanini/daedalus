@@ -99,3 +99,51 @@ pub fn run() -> Result<()> {
         wait_for_input(Duration::from_millis(250));
     }
 }
+
+/// "Pair with the box…": Windows has no text-input dialog one call away,
+/// so PowerShell's (Visual Basic's `InputBox`, part of .NET on every
+/// Windows) asks, on a thread of its own, with no console; the answer is a
+/// plain message box (tray.rs `pair_on_a_thread`).
+pub fn ask_pairing() {
+    crate::tray::pair_on_a_thread(input_box, message_box);
+}
+
+fn input_box() -> Option<String> {
+    let mut cmd = std::process::Command::new("powershell.exe");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Add-Type -AssemblyName Microsoft.VisualBasic; \
+         [Microsoft.VisualBasic.Interaction]::InputBox($env:DAEDALUS_PROMPT, $env:DAEDALUS_TITLE, '')",
+    ])
+    // The words ride the environment, so nothing in them is PowerShell.
+    .env("DAEDALUS_PROMPT", crate::tray::PAIR_PROMPT)
+    .env("DAEDALUS_TITLE", crate::tray::PAIR_TITLE);
+    super::hide_console(&mut cmd);
+    let out = cmd.output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    // Cancel answers an empty string.
+    (out.status.success() && !text.is_empty()).then_some(text)
+}
+
+fn message_box(text: &str, ok: bool) {
+    use windows::core::HSTRING;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, MB_ICONINFORMATION, MB_ICONWARNING, MB_OK, MB_SETFOREGROUND,
+    };
+    let icon = if ok {
+        MB_ICONINFORMATION
+    } else {
+        MB_ICONWARNING
+    };
+    // SAFETY: two valid wide strings that outlive the call; no owner window.
+    unsafe {
+        MessageBoxW(
+            None,
+            &HSTRING::from(text),
+            &HSTRING::from(crate::tray::PAIR_TITLE),
+            MB_OK | MB_SETFOREGROUND | icon,
+        );
+    }
+}

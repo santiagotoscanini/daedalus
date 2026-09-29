@@ -49,6 +49,7 @@ pub mod logging;
 pub mod metrics_page;
 pub mod net;
 pub mod os;
+pub mod pair;
 pub mod paths;
 pub mod power;
 pub mod private;

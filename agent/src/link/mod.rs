@@ -21,10 +21,10 @@
 //! backoff from `BACKOFF_MIN` to `BACKOFF_MAX`.
 //!
 //! **Trust.** A machine pins the controller's key by its fingerprint
-//! (identity.rs): config.toml's `controller_pin` (what `install --pin`
-//! writes) and nothing else, never silently replaced: another key is a loud
-//! error on the status page and in the tray, and no pin is no link
-//! (node.rs).
+//! (identity.rs): config.toml's `controller_pin` (what `install --pin` and
+//! `pair` write, pair.rs) and nothing else, never silently replaced:
+//! another key is a loud error on the status page and in the tray, and a
+//! machine with no pin is `unpaired` and dials nobody (node.rs).
 //!
 //! **Enrollment.** A key the app has not approved is held PENDING: the
 //! controller lists it for the app (`nodes.list`, the `nodes.pending`
@@ -106,6 +106,30 @@ pub const UNKNOWN_ADDRESSES: usize = 1024;
 /// The SRV record a machine asks for when it has no address.
 pub const SRV_SERVICE: &str = "_daedalus-controller._tcp";
 
+/// config.toml's two link keys as the service holds them (shared.rs
+/// `link_keys`): read at start, read again when the machine is paired
+/// while running (pair.rs `reload`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LinkKeys {
+    pub pin: Option<String>,
+    pub address: Option<String>,
+}
+
+impl LinkKeys {
+    pub fn of(cfg: &crate::config::Config) -> Self {
+        Self {
+            pin: cfg.controller_pin.clone(),
+            address: cfg.controller_address.clone(),
+        }
+    }
+
+    /// Whether a pin is set at all (a pin that does not parse is still one:
+    /// the link says what is wrong with it).
+    pub fn paired(&self) -> bool {
+        self.pin.as_deref().is_some_and(|p| !p.trim().is_empty())
+    }
+}
+
 /// The link as the machine's status page and tray show it (node.rs keeps
 /// it current). Absent on the controller.
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -115,6 +139,7 @@ pub struct LinkStatus {
     pub address: Option<String>,
     /// Where the address came from: "config", "stored" or "dns <suffix>".
     pub found_via: Option<String>,
+    /// "unpaired" (no pin: nothing is dialled until `pair`) |
     /// "connecting" | "pending" | "approved" | "revoked" | "refused" |
     /// "key-changed"; null while there is no controller to try.
     pub state: Option<String>,

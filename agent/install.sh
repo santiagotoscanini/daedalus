@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install or update the daedalus agent on this Mac or Linux machine.
 #
-#   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- --pin FINGERPRINT
+#   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
 #
 # Downloads the newest agent-v* release of the engine repository (the site
 # serves this file from agent/install.sh on main, so the line never names a
@@ -33,9 +33,14 @@
 # Environment: DAEDALUS_REPO (owner/name), DAEDALUS_AGENT_VERSION (e.g. 0.5.0
 # instead of the newest).
 #
-# Arguments — which key to trust (required: the machine trusts no controller
-# it was not told of) and where the controller (the box's agent) is, written
-# to config.toml (also on a reinstall); Settings › Machines gives the line:
+# Pairing — which controller key to trust. The machine trusts none it was
+# not told of: installed without --pin it runs unpaired and connects to
+# nothing. At the end, with a terminal to ask on (/dev/tty, even under
+# `curl | sh`), the script asks for the key from Settings › Machines and
+# runs `daedalus-agent pair`; Enter, or no terminal, skips it and prints the
+# command for later (the tray's "Pair with the box…" does it too). Never
+# waits without a terminal. Settings › Machines also gives a line that pairs
+# at once, written to config.toml (also on a reinstall):
 #
 #   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- \
 #     --pin 3f2a:9c01:… --controller box.lan:7788
@@ -63,12 +68,31 @@ while [ $# -gt 0 ]; do
     *) echo "install.sh: unknown argument $1 (known: --controller HOST:PORT, --pin FINGERPRINT)" >&2; exit 1 ;;
   esac
 done
-case " $LINK_ARGS " in
-  *" --pin "*) ;;
-  *) echo "install.sh: --pin FINGERPRINT is required: the controller key this machine trusts (Settings › Machines gives the install line)" >&2; exit 1 ;;
-esac
-
 die() { echo "install.sh: $*" >&2; exit 1; }
+
+# offer_pairing AGENT: on an unpaired machine, ask for the controller key on
+# the terminal when there is one and pair with it; otherwise, or on Enter,
+# say how to pair later. `pair --check` exits 0 when the machine is paired.
+offer_pairing() {
+  "$1" pair --check >/dev/null 2>&1 && return 0
+  echo
+  key=""
+  # Opening /dev/tty fails without a controlling terminal: no question then.
+  # (In a subshell: a failed redirection on a special builtin ends dash.)
+  if (true </dev/tty) 2>/dev/null; then
+    printf 'Paste the controller key from Settings › Machines (Enter to skip): ' >/dev/tty
+    IFS= read -r key </dev/tty || key=""
+    key="$(printf '%s' "$key" | tr -d ' \t\r')"
+  fi
+  case "$key" in
+    "") ;;
+    *[!A-Fa-f0-9:-]*) echo "install.sh: that is not a controller key" >&2 ;;
+    *) "$1" pair --pin "$key" && return 0 ;;
+  esac
+  echo "pair it with the controller key from Settings › Machines on the box:"
+  echo "  sudo daedalus-agent pair --pin <key>"
+  echo "or with \"Pair with the box…\" in the tray or menu bar, where there is one"
+}
 
 command -v curl >/dev/null || die "curl is needed"
 
@@ -189,6 +213,7 @@ install_macos() {
   echo "installed $tag. Status: daedalus-agent status"
   echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
   echo "nothing listens on the LAN; the box hears from this machine over its link to the controller"
+  offer_pairing "$BIN/daedalus-agent"
 }
 
 install_linux() {
@@ -259,6 +284,7 @@ install_linux() {
   echo "installed $tag. Status: daedalus-agent status"
   echo "logs: /var/lib/daedalus-agent/logs (the service), ~/.local/state/daedalus-agent (the session and the tray)"
   echo "nothing listens on the LAN; the box hears from this machine over its link to the controller"
+  offer_pairing "$BIN/daedalus-agent"
 }
 
 case "$(uname -s)" in

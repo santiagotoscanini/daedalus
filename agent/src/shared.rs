@@ -113,6 +113,11 @@ struct Live {
     /// This machine's link to the controller, as its loop last saw it;
     /// None on the controller, and until the loop starts.
     link: Option<LinkStatus>,
+    /// Where the link goes and whom it trusts — config.toml's two keys as
+    /// the service last read them — and a count that moves when they change
+    /// (`set_link_keys`): pairing a running service moves it, and the link
+    /// drops what it was doing and starts over under the new keys.
+    link_keys: (crate::link::LinkKeys, u64),
 }
 
 /// The tray, as the page describes it.
@@ -194,6 +199,7 @@ impl Shared {
                 provider_busy: false,
                 providers_read: false,
                 link: None,
+                link_keys: Default::default(),
             }),
         }
     }
@@ -294,6 +300,32 @@ impl Shared {
     /// link's loop starts.
     pub fn link(&self) -> Option<LinkStatus> {
         self.lock().link.clone()
+    }
+
+    /// The link's keys and their count (`Live::link_keys`).
+    pub fn link_keys(&self) -> (crate::link::LinkKeys, u64) {
+        self.lock().link_keys.clone()
+    }
+
+    /// Set the link's keys; when they differ from the ones held, the count
+    /// moves and the waiting link is woken (the stop's nudge). True when
+    /// they moved.
+    pub fn set_link_keys(&self, keys: crate::link::LinkKeys) -> bool {
+        let moved = {
+            let mut l = self.lock();
+            if l.link_keys.0 == keys {
+                false
+            } else {
+                l.link_keys = (keys, l.link_keys.1 + 1);
+                true
+            }
+        };
+        if moved {
+            if let Some(s) = self.stop.get() {
+                s.nudge();
+            }
+        }
+        moved
     }
 
     /// The status document as the link pushes it (link/node.rs): the page

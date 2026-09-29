@@ -11,7 +11,7 @@
   itself. Run from an administrator PowerShell:
 
     Set-ExecutionPolicy -Scope Process Bypass -Force
-    & ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) -Pin 3f2a:9c01:…
+    irm https://daedalus.toscanini.me/install.ps1 | iex
 
   (the site serves this file from agent/install.ps1 on main, so the line never
   names a version; the script finds the newest agent-v* release itself).
@@ -32,9 +32,14 @@
   config.toml (also on a reinstall). Absent: the agent asks DNS for the
   controller's SRV record.
 .PARAMETER Pin
-  Required: the controller key's fingerprint to trust, written to
-  config.toml (also on a reinstall). The machine trusts no controller it was
-  not told of; Settings › Machines gives the whole line:
+  The controller key's fingerprint to trust, written to config.toml (also on
+  a reinstall). The machine trusts no controller it was not told of: without
+  -Pin it installs unpaired and connects to nothing. At the end, in an
+  interactive PowerShell, the script asks for the key from Settings ›
+  Machines and runs `daedalus-agent pair`; Enter, or a non-interactive run,
+  skips it and prints the command for later (the tray's "Pair with the
+  box…" does it too). Settings › Machines also gives a line that pairs at
+  once:
 
     & ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) `
       -Pin 3f2a:9c01:… -Controller box.lan:7788
@@ -46,10 +51,6 @@ param(
   [string]$Controller = "",
   [string]$Pin = ""
 )
-
-if (-not $Pin) {
-  throw "-Pin is required: the controller key this machine trusts (Settings › Machines gives the install line)"
-}
 
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -143,3 +144,28 @@ try {
   Write-Warning "the service started but did not answer on its local pipe yet: $_"
 }
 Write-Host "service logs: $env:ProgramData\daedalus-agent\logs (Administrators); tray and session: %LOCALAPPDATA%\daedalus-agent\logs"
+
+# Installed without -Pin, the machine is unpaired and connects to nothing.
+# In an interactive PowerShell, ask for the key and pair; otherwise, or on
+# Enter, say how to pair later. Never waits in a non-interactive run.
+# `pair --check` exits 0 when the machine is paired.
+& $exe pair --check > $null
+if ($LASTEXITCODE -ne 0) {
+  $nonInteractive = [Environment]::GetCommandLineArgs() | Where-Object { $_ -like "-NonI*" }
+  $key = ""
+  if ([Environment]::UserInteractive -and -not $nonInteractive) {
+    try { $key = "$(Read-Host 'Paste the controller key from Settings › Machines (Enter to skip)')".Trim() } catch { $key = "" }
+  }
+  $paired = $false
+  if ($key -match '^[0-9A-Fa-f:\- ]+$') {
+    & $exe pair --pin $key
+    $paired = ($LASTEXITCODE -eq 0)
+  } elseif ($key) {
+    Write-Warning "that is not a controller key"
+  }
+  if (-not $paired) {
+    Write-Host "pair it with the controller key from Settings › Machines on the box, from an administrator PowerShell:"
+    Write-Host "  & `"$exe`" pair --pin <key>"
+    Write-Host "or with `"Pair with the box…`" in the tray"
+  }
+}

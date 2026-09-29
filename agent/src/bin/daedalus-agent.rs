@@ -18,6 +18,7 @@ fn main() {
     let outcome = match verb {
         "install" => install(rest),
         "uninstall" => uninstall(),
+        "pair" => pair(rest),
         "run" => run_as_service(),
         "serve" => serve_foreground(),
         "status" => status_cmd(),
@@ -53,7 +54,8 @@ fn print_help() {
     println!(
         "daedalus-agent {VERSION}\n\n\
          usage: daedalus-agent <verb>\n\n  \
-         install --pin FINGERPRINT [--controller HOST:PORT]\n                       register and start the service and the tray (administrator);\n                       --pin is the controller key to trust (required), --controller\n                       where it is (else DNS); both written to config.toml\n  \
+         install [--pin FINGERPRINT] [--controller HOST:PORT]\n                       register and start the service and the tray (administrator);\n                       with --pin it is paired at once, without it it runs unpaired\n  \
+         pair --pin FINGERPRINT [--controller HOST:PORT]\n                       trust the controller with that key (administrator), written\n                       to config.toml; the running service connects to it at once;\n                       --controller where it is (else DNS). pair --check: exit 0 if paired\n  \
          uninstall            stop and remove the service and the tray (administrator)\n  \
          run                  service entry point; used by the Service Control Manager\n  \
          serve                run in the foreground, in this terminal\n  \
@@ -101,38 +103,60 @@ fn role() -> role::Role {
 fn install(args: &[String]) -> Result<()> {
     config::refuse_env_override("install")?;
     role().allow_install("install")?;
-    let mut cfg = config::Config::default();
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        match a.as_str() {
-            "--controller" => {
-                let a = it.next().context("--controller needs host:port")?;
-                if !config::valid_host_port(a) {
-                    bail!(
-                        "--controller must be host:port (the controller's link address), not {a:?}"
-                    );
-                }
-                cfg.controller_address = Some(a.clone());
-            }
-            "--pin" => {
-                let p = it
-                    .next()
-                    .context("--pin needs the controller key's fingerprint")?;
-                let d = daedalus_agent::identity::parse_fingerprint(p)?;
-                cfg.controller_pin = Some(daedalus_agent::identity::format_fingerprint(&d));
-            }
-            other => bail!("unknown option {other}"),
+    // Without --pin the machine installs unpaired: it runs and dials nobody
+    // until `pair` names the controller (pair.rs).
+    let (pairing, controller) = daedalus_agent::pair::parse_args(args)?;
+    let cfg = config::Config {
+        controller_pin: pairing.map(|p| p.pin),
+        controller_address: controller,
+        ..config::Config::default()
+    };
+    os::svc::install(&cfg)?;
+    if !daedalus_agent::pair::paired_at(&daedalus_agent::paths::config_path())? {
+        println!("\n{}", daedalus_agent::pair::unpaired_hint());
+    }
+    Ok(())
+}
+
+/// `pair --pin KEY [--controller HOST:PORT]`: name the controller this
+/// machine trusts (pair.rs), as an administrator, and have the running
+/// service follow it. `pair --check` exits 0 when paired, 1 when not, for
+/// the install scripts.
+fn pair(args: &[String]) -> Result<()> {
+    config::refuse_env_override("pair")?;
+    role().allow_install("pair")?;
+    let path = daedalus_agent::paths::config_path();
+    if args.len() == 1 && args[0] == "--check" {
+        if daedalus_agent::pair::paired_at(&path)? {
+            println!("paired");
+            return Ok(());
         }
+        println!("not paired");
+        std::process::exit(1);
     }
-    // The controller this machine trusts is named at install, never
-    // learned from whoever answers first (link/node.rs).
-    if cfg.controller_pin.is_none() {
+    let (pairing, _) = daedalus_agent::pair::parse_args(args)?;
+    let Some(p) = pairing else {
         bail!(
-            "--pin is required: the controller key's fingerprint this machine trusts \
-             (Settings › Machines shows the install line with it)"
+            "--pin is required: the controller key from Settings › Machines, as in\n  {}",
+            daedalus_agent::pair::command_line("<key>", None)
         );
+    };
+    p.write_at(&path).with_context(|| {
+        format!(
+            "config.toml is the service's: run `pair` as {}",
+            if cfg!(windows) {
+                "an administrator"
+            } else {
+                "root (sudo)"
+            }
+        )
+    })?;
+    println!("paired: this machine trusts the controller key {}", p.pin);
+    match daedalus_agent::local::call("link.reload", serde_json::Value::Null) {
+        Ok(_) => println!("the service connects now; `daedalus-agent status` shows the link"),
+        Err(e) => println!("the service did not answer ({e}); it reads config.toml when it starts"),
     }
-    os::svc::install(&cfg)
+    Ok(())
 }
 
 fn uninstall() -> Result<()> {
@@ -146,6 +170,9 @@ fn status_cmd() -> Result<()> {
     let body = daedalus_agent::local::call("status", serde_json::Value::Null)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     println!("{}", serde_json::to_string_pretty(&body)?);
+    if body["controller"]["state"] == "unpaired" {
+        eprintln!("\n{}", daedalus_agent::pair::unpaired_hint());
+    }
     Ok(())
 }
 
