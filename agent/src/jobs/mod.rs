@@ -176,6 +176,37 @@ pub fn session_env(
     env
 }
 
+/// One variable of `systemctl --user show-environment`: the user manager's
+/// environment, which carries the login's SHELL and profile PATH that the
+/// agent's own (a unit's, sandboxed, on the controller) does not. An empty
+/// value is none.
+pub fn manager_env_value(text: &str, key: &str) -> Option<String> {
+    text.lines()
+        .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+        .map(|v| v.trim().trim_matches('\'').to_string())
+        .filter(|v| !v.is_empty())
+}
+
+/// The login shell `/etc/passwd` gives the account whose home is `home`.
+pub fn login_shell(passwd: &str, home: &Path) -> Option<PathBuf> {
+    let home = home.to_str()?;
+    passwd.lines().find_map(|l| {
+        let f: Vec<&str> = l.split(':').collect();
+        (f.len() == 7 && f[5] == home && !f[6].is_empty()).then(|| PathBuf::from(f[6]))
+    })
+}
+
+/// What a session's SHELL may be: Claude Code runs its commands through bash
+/// or zsh only, and with any other SHELL it looks for one on PATH — which on
+/// NixOS has neither in /bin. So a shell that is not one of the two is no
+/// answer, and the caller goes on to the next candidate.
+pub fn runs_commands(shell: &Path) -> bool {
+    matches!(
+        shell.file_name().and_then(|n| n.to_str()),
+        Some("bash" | "zsh")
+    )
+}
+
 // ── what a command line may carry ─────────────────────────────────────────
 
 /// The `claude` path, as a command line carries it: refused when it holds a

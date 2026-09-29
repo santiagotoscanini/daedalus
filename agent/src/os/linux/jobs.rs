@@ -50,9 +50,29 @@ pub fn start_session(j: &SessionJob) -> Result<(), String> {
     command("systemd-run", &args).map(|_| ())
 }
 
-/// The shell `script` hands the session, for its SHELL.
+/// The user manager's environment (`jobs::manager_env_value` reads it).
+fn manager_env() -> String {
+    systemctl(&["show-environment"]).unwrap_or_default()
+}
+
+/// The shell `script` hands the session, for its SHELL: the user manager's,
+/// then the login shell passwd names, then any bash or zsh on this machine —
+/// one Claude Code runs commands with (`jobs::runs_commands`). Never `sh`: on
+/// NixOS that left every resumed session with "No suitable shell found".
 pub fn session_shell() -> Option<std::path::PathBuf> {
-    exec::locate("sh")
+    let manager = jobs::manager_env_value(&manager_env(), "SHELL").map(Into::into);
+    let passwd = std::env::var_os("HOME").and_then(|h| {
+        jobs::login_shell(
+            &std::fs::read_to_string("/etc/passwd").ok()?,
+            std::path::Path::new(&h),
+        )
+    });
+    manager
+        .into_iter()
+        .chain(passwd)
+        .filter(|s: &std::path::PathBuf| jobs::runs_commands(s) && s.is_file())
+        .chain(["bash", "zsh"].into_iter().filter_map(exec::locate))
+        .next()
 }
 
 /// The unit's state now.
@@ -102,13 +122,19 @@ pub fn cost(name: &str) -> Option<UnitCost> {
 }
 
 /// The environment a job gets besides the user manager's own (jobs/
-/// `job_env`).
+/// `job_env`). The PATH a job's `--setenv` sets replaces the manager's, so
+/// the manager's goes after the agent's: on the controller the agent's is
+/// its unit's few store paths, and without the login's profile (NixOS's
+/// `/run/current-system/sw/bin`, the per-user profile) a session has no
+/// bash, git or ssh.
 pub fn server_env(
     home: Option<&std::path::Path>,
     path: Option<&str>,
     config_dir: Option<&str>,
 ) -> Vec<(String, String)> {
-    jobs::job_env(home, path, config_dir, &[])
+    let manager = jobs::manager_env_value(&manager_env(), "PATH").unwrap_or_default();
+    let extra: Vec<&str> = manager.split(':').filter(|d| !d.is_empty()).collect();
+    jobs::job_env(home, path, config_dir, &extra)
 }
 
 /// The `claude` a running unit runs, from its ExecStart (what the session

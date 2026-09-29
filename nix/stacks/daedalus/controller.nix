@@ -28,7 +28,12 @@
 #   environment    the unit gets the user manager's environment plus, from
 #                  the agent, HOME and this service's PATH with
 #                  `~/.local/bin` in front — so /run/wrappers/bin (sudo, for
-#                  sessions that rebuild) is on it.
+#                  sessions that rebuild) is on it — and the user manager's
+#                  own PATH after it (the login's profile: bash, git, ssh;
+#                  this service's PATH has none of them). A resumed session's
+#                  SHELL is the user manager's (else passwd's login shell),
+#                  never `sh`: Claude Code runs commands only through bash
+#                  or zsh.
 #                  Never add DISABLE_TELEMETRY, DO_NOT_TRACK,
 #                  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,
 #                  DISABLE_GROWTHBOOK or ANTHROPIC_BASE_URL to either: each

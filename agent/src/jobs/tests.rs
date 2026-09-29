@@ -469,3 +469,66 @@ fn the_tail_reads_whole_lines_from_the_last_marker() {
     assert_eq!(LogTail::at_last_marker(log.clone()).read_new(), ["after"]);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_session_shell_is_the_logins_never_sh() {
+    // `systemctl --user show-environment`, as the controller's user manager
+    // printed it on 2026-09-29.
+    let manager = "HOME=/home/ana\nPATH=/run/wrappers/bin:/etc/profiles/per-user/ana/bin:/run/current-system/sw/bin\n\
+                   SHELL=/run/current-system/sw/bin/bash\nXDG_RUNTIME_DIR=/run/user/1000\n";
+    assert_eq!(
+        manager_env_value(manager, "SHELL").as_deref(),
+        Some("/run/current-system/sw/bin/bash")
+    );
+    assert_eq!(
+        manager_env_value(manager, "PATH").as_deref(),
+        Some("/run/wrappers/bin:/etc/profiles/per-user/ana/bin:/run/current-system/sw/bin")
+    );
+    assert_eq!(
+        manager_env_value("SHELLX=/bin/zsh\nSHELL=\n", "SHELL"),
+        None
+    );
+    assert_eq!(manager_env_value("", "PATH"), None);
+
+    let passwd = "root:x:0:0:System administrator:/root:/run/current-system/sw/bin/bash\n\
+                  ana:x:1000:100::/home/ana:/run/current-system/sw/bin/zsh\n";
+    assert_eq!(
+        login_shell(passwd, Path::new("/home/ana")),
+        Some(PathBuf::from("/run/current-system/sw/bin/zsh"))
+    );
+    assert_eq!(login_shell(passwd, Path::new("/home/bo")), None);
+
+    // What broke every resumed session after the 26.05 reboot: SHELL=/bin/sh.
+    assert!(!runs_commands(Path::new("/bin/sh")));
+    assert!(!runs_commands(Path::new("/usr/bin/fish")));
+    assert!(runs_commands(Path::new("/run/current-system/sw/bin/bash")));
+    assert!(runs_commands(Path::new("/bin/zsh")));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_session_path_keeps_the_agents_tools_first_and_the_logins_profile_after() {
+    let env = session_env(
+        job_env(
+            Some(Path::new("/home/ana")),
+            Some("/nix/store/x-claude-code/bin:/nix/store/y-util-linux/bin"),
+            None,
+            &[
+                "/run/wrappers/bin",
+                "/etc/profiles/per-user/ana/bin",
+                "/run/current-system/sw/bin",
+            ],
+        ),
+        true,
+        Some(Path::new("/run/current-system/sw/bin/bash")),
+    );
+    let get = |k: &str| env.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
+    assert_eq!(
+        get("PATH"),
+        Some(
+            "/home/ana/.local/bin:/nix/store/x-claude-code/bin:/nix/store/y-util-linux/bin:\
+             /run/wrappers/bin:/etc/profiles/per-user/ana/bin:/run/current-system/sw/bin"
+        )
+    );
+    assert_eq!(get("SHELL"), Some("/run/current-system/sw/bin/bash"));
+}
