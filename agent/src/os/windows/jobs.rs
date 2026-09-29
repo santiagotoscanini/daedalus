@@ -71,10 +71,9 @@ fn write_record(name: &str, r: &JobRecord) -> Result<(), String> {
     let dir = jobs_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = record_path(name);
-    let tmp = path.with_extension("json.new");
     let text = serde_json::to_string(r).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))
+    crate::util::write_atomic(&path, text.as_bytes(), crate::util::Access::Inherit)
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn filetime(f: FILETIME) -> u64 {
@@ -264,9 +263,22 @@ fn holder_exe() -> Result<PathBuf, String> {
     Ok(copy)
 }
 
+/// `C:\Windows\system32`, as the OS names it (never `%PATH%` or the
+/// working directory): where the `cmd.exe` that runs a `.cmd` shim is.
+fn system_dir() -> Result<String, String> {
+    use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
+    let mut buf = [0u16; 260];
+    // SAFETY: the buffer and its length.
+    let n = unsafe { GetSystemDirectoryW(Some(&mut buf)) } as usize;
+    if n == 0 || n >= buf.len() {
+        return Err("the system directory could not be read".into());
+    }
+    Ok(String::from_utf16_lossy(&buf[..n]))
+}
+
 pub fn start_session(j: &SessionJob) -> Result<(), String> {
     let cli = jobs::check_cli(j.cli)?;
-    let line = jobs::windows_session_command(&cli, j.id, j.label)?;
+    let line = jobs::windows_session_command(&system_dir()?, &cli, j.id, j.label)?;
     let holder = holder_exe()?;
     spawn(
         j.name,

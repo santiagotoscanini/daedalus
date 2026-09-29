@@ -614,7 +614,7 @@ pub fn run() -> anyhow::Result<()> {
             "on this OS the tray runs the session; `session` is the Linux user unit's entry point"
         );
     }
-    let cfg = config::load_or_default()?;
+    let cfg = config::load_for_user()?;
     if !cfg.role().session {
         anyhow::bail!("this machine's role runs no session");
     }

@@ -7,9 +7,9 @@
 //! wrapped with DPAPI under the machine's scope before it touches disk, so a
 //! copy is useless on any other computer — but any process on THIS machine
 //! can unwrap it, so keeping local users out rests on the file's ACL (see
-//! `write_private`, os/windows/mod.rs). Elsewhere the seed is a plain file,
+//! `os::create_private`, util.rs `write_atomic`). Elsewhere the seed is a plain file,
 //! mode 0600, which is the ordinary SSH-key posture (os/unix.rs). How the
-//! seed is sealed and written is `os::{seal, unseal, write_private}`.
+//! seed is sealed and written is `os::{seal, unseal}` and `util::write_atomic`.
 //!
 //! The controller has one too, made the same way in its own data directory:
 //! it is what the machines pin (link/). Both ends show a key as its
@@ -26,7 +26,7 @@ use anyhow::{bail, Context, Result};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 
-use crate::os::{seal, unseal, write_private};
+use crate::os::{seal, unseal};
 use crate::paths::data_dir;
 
 pub const FILE: &str = "identity.key";
@@ -47,6 +47,10 @@ impl Identity {
         if path.exists() {
             // A key someone else could have planted is not this machine's.
             crate::private::check_owner(path)?;
+            // And one others could read is not a secret (T4): refused on
+            // unix; on Windows, where an older agent left it under the data
+            // directory's inherited grants, made private first.
+            crate::os::ensure_private(path)?;
             let sealed =
                 std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
             let seed = unseal(&sealed).context("the identity file could not be opened")?;
@@ -57,7 +61,8 @@ impl Identity {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).context("creating the data directory")?;
         }
-        write_private(path, &seal(key.as_bytes())?)?;
+        crate::util::write_atomic(path, &seal(key.as_bytes())?, crate::util::Access::Private)
+            .with_context(|| format!("writing {}", path.display()))?;
         tracing::info!(path = %path.display(), "made this machine's identity key");
         Ok(Self { key })
     }

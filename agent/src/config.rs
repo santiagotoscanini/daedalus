@@ -469,12 +469,33 @@ fn resolve_api_socket(
     }
 }
 pub fn load_or_default() -> Result<Config> {
+    load(false)
+}
+
+/// The same for a process that runs as the user (the tray, the session,
+/// the verbs): where config.toml is the service's alone (Windows,
+/// `os::CONFIG_ACCESS`) it reads the defaults, which is all a node's user
+/// side needs of it.
+pub fn load_for_user() -> Result<Config> {
+    load(true)
+}
+
+fn load(user: bool) -> Result<Config> {
     env_data_dir()?;
     let path = config_path();
-    let cfg: Config = match std::fs::read_to_string(&path) {
-        Ok(text) => toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::default(),
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => Some(text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) if user && e.kind() == std::io::ErrorKind::PermissionDenied => None,
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+    };
+    let cfg: Config = match text {
+        Some(text) => {
+            // It names the controller this machine trusts (T4).
+            crate::private::check_owner(&path)?;
+            toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?
+        }
+        None => Config::default(),
     };
     cfg.validate()
         .with_context(|| format!("checking {}", path.display()))?;
@@ -508,13 +529,23 @@ pub fn refuse_env_override(verb: &str) -> Result<()> {
 /// calls it.
 pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
     let path = config_path();
+    // A directory or a config.toml someone else made before the install is
+    // not ours to adopt: it could name the controller this machine trusts
+    // (audit D7). SYSTEM, Administrators, root or this user only.
+    if config_dir().exists() {
+        crate::private::check_owner(&config_dir())?;
+    }
+    if path.exists() {
+        crate::private::check_owner(&path)?;
+    }
     std::fs::create_dir_all(config_dir()).context("creating the data directory")?;
     if !path.exists() {
         let text = format!(
             "# daedalus-agent — written by `install`; edit and restart the service.\n\n{}",
             toml::to_string_pretty(cfg)?
         );
-        std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+        crate::util::write_atomic(&path, text.as_bytes(), crate::os::CONFIG_ACCESS)
+            .with_context(|| format!("writing {}", path.display()))?;
         return Ok(path);
     }
     let keys: Vec<(&str, &str)> = [
@@ -530,7 +561,8 @@ pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
         let edited = set_top_level_keys(&text, &keys);
         toml::from_str::<Config>(&edited)
             .with_context(|| format!("{} would not parse with the new keys", path.display()))?;
-        std::fs::write(&path, edited).with_context(|| format!("writing {}", path.display()))?;
+        crate::util::write_atomic(&path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
+            .with_context(|| format!("writing {}", path.display()))?;
     }
     Ok(path)
 }
@@ -548,7 +580,7 @@ pub fn set_controller_pin_at(path: &Path, fingerprint: &str) -> Result<()> {
     let edited = set_top_level_keys(&text, &[("controller_pin", fingerprint)]);
     toml::from_str::<Config>(&edited)
         .with_context(|| format!("{} would not parse with the new pin", path.display()))?;
-    crate::util::write_atomic(path, edited.as_bytes(), None)
+    crate::util::write_atomic(path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
         .with_context(|| format!("writing {}", path.display()))
 }
 

@@ -388,16 +388,23 @@ fn linger(user: &str, uid: u32) -> Result<bool> {
 
 fn write_record(record: &SessionUser) -> Result<()> {
     std::fs::create_dir_all(paths::data_dir()).context("creating the data directory")?;
-    std::fs::write(session_record(), serde_json::to_string_pretty(record)?)
-        .context("writing session.json")
+    let text = serde_json::to_string_pretty(record)?;
+    crate::util::write_atomic(
+        &session_record(),
+        text.as_bytes(),
+        crate::util::Access::Mode(0o644),
+    )
+    .context("writing session.json")
 }
 
 /// A unit or autostart file, mode 0644 whatever the umask: the user's
 /// systemd manager and desktop session read them.
 fn write_public(path: &str, text: &str) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::write(path, text)?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644))?;
+    crate::util::write_atomic(
+        Path::new(path),
+        text.as_bytes(),
+        crate::util::Access::Mode(0o644),
+    )?;
     Ok(())
 }
 
@@ -477,7 +484,7 @@ fn place_binaries(exe: &Path) -> Result<PathBuf> {
 /// What the session and the tray, running as the user, must reach: the
 /// data directory to traverse and config.toml to read (the port). `sudo`
 /// can carry a 077 umask, under which root would have made both root's
-/// alone; the identity key stays 0600 (`os::write_private`). Both are the
+/// alone; the identity key stays 0600 (`util::write_atomic`, private). Both are the
 /// agent's own directory and file.
 fn readable_by_the_session() {
     use std::os::unix::fs::PermissionsExt;

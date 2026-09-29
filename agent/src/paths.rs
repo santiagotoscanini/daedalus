@@ -101,7 +101,14 @@ pub fn policy_path() -> PathBuf {
 /// where and as the box last said, not once with the defaults and again
 /// when the link answers.
 pub fn last_policy() -> Option<crate::link::wire::Policy> {
-    let text = std::fs::read_to_string(policy_path()).ok()?;
+    let path = policy_path();
+    let text = std::fs::read_to_string(&path).ok()?;
+    // It says where Claude runs and in which directory: only one the OS or
+    // the agent wrote counts.
+    if let Err(e) = crate::private::check_owner(&path) {
+        tracing::warn!(error = %e, "the kept policy is not trusted; starting from the defaults");
+        return None;
+    }
     serde_json::from_str(&text).ok()
 }
 
@@ -115,7 +122,9 @@ pub fn save_policy(p: &crate::link::wire::Policy) {
     let path = policy_path();
     let wrote = serde_json::to_string_pretty(p)
         .map_err(std::io::Error::other)
-        .and_then(|t| crate::util::write_atomic(&path, t.as_bytes(), Some(0o644)));
+        .and_then(|t| {
+            crate::util::write_atomic(&path, t.as_bytes(), crate::util::Access::Mode(0o644))
+        });
     if let Err(e) = wrote {
         tracing::warn!(path = %path.display(), error = %e, "the policy was not kept");
     }

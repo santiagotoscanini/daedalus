@@ -381,18 +381,30 @@ fn windows_words_are_quoted_and_shims_go_through_cmd() {
     assert_eq!(windows_quote("trail\\"), "trail\\");
     assert_eq!(windows_quote("sp trail\\"), "\"sp trail\\\\\"");
     assert_eq!(windows_quote(""), "\"\"");
+    let sys = "C:\\Windows\\system32";
     assert_eq!(
-        windows_session_command("C:\\Users\\ana\\.local\\bin\\claude.exe", ID, "pc").unwrap(),
-        format!("C:\\Users\\ana\\.local\\bin\\claude.exe --resume {ID} --remote-control pc")
+        windows_session_command(sys, "C:\\Users\\ana\\.local\\bin\\claude.exe", ID, "pc").unwrap(),
+        format!("\"C:\\Users\\ana\\.local\\bin\\claude.exe\" --resume {ID} --remote-control pc")
     );
     assert_eq!(
-            windows_session_command("C:\\Users\\a b\\npm\\claude.cmd", ID, "pc").unwrap(),
-            format!(
-                "cmd.exe /d /s /c \"\"C:\\Users\\a b\\npm\\claude.cmd\" --resume {ID} --remote-control pc\""
-            )
-        );
-    assert!(windows_session_command("c.exe", "0a1b2c3d", "pc").is_err());
-    assert!(windows_session_command("c.exe", ID, "a&b").is_err());
+        windows_session_command(sys, "C:\\Users\\a b\\npm\\claude.cmd", ID, "pc").unwrap(),
+        format!(
+            "\"C:\\Windows\\system32\\cmd.exe\" /d /s /c \"\"C:\\Users\\a b\\npm\\claude.cmd\" --resume {ID} --remote-control pc\""
+        )
+    );
+    // cmd's separators in the path stay inside its quotes.
+    assert_eq!(
+        windows_session_command(sys, "C:\\Tom&Jerry\\claude.cmd", ID, "pc").unwrap(),
+        format!(
+            "\"C:\\Windows\\system32\\cmd.exe\" /d /s /c \"\"C:\\Tom&Jerry\\claude.cmd\" --resume {ID} --remote-control pc\""
+        )
+    );
+    // A bare name would be searched for, the working directory first.
+    assert!(windows_session_command(sys, "claude.cmd", ID, "pc").is_err());
+    assert!(windows_session_command("system32", "C:\\c.cmd", ID, "pc").is_err());
+    assert!(windows_session_command(sys, "C:\\c.exe", "0a1b2c3d", "pc").is_err());
+    assert!(windows_session_command(sys, "C:\\c.exe", ID, "a&b").is_err());
+    assert!(windows_absolute("\\\\server\\share\\c.exe") && !windows_absolute("C:c.exe"));
     let r = JobRecord {
         pid: 42,
         created: 133_000_000_000_000_000,

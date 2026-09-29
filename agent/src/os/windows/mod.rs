@@ -31,7 +31,7 @@ mod telemetry;
 #[cfg(feature = "tray")]
 pub mod tray;
 
-pub use acl::{file_owner, protect_data_dir};
+pub use acl::{create_private, ensure_private, file_owner, protect_data_dir, secure_data_dir};
 pub use dns::srv_lookup;
 pub use dpapi::{seal, unseal};
 pub use facts::{cpu_name, memory_bytes, os_name, os_version};
@@ -45,7 +45,7 @@ pub use telemetry::{read_updates, Collector};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 // ── paths ─────────────────────────────────────────────────────────────────
 
@@ -63,10 +63,13 @@ pub fn default_data_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("data"))
 }
 
-/// The tray writes beside the service: ProgramData lets a user create
-/// files there.
+/// The tray and the session write their own logs where the user's own
+/// files are, `%LOCALAPPDATA%\daedalus-agent\logs`: the service's `logs\`
+/// is SYSTEM's and Administrators' alone (audit D2), so no user can plant
+/// what the service opens by name. Under `DAEDALUS_AGENT_DATA_DIR` None: the
+/// moved directory.
 pub fn user_log_dir() -> Option<PathBuf> {
-    None
+    user_state_dir().map(|d| d.join("logs"))
 }
 
 /// The tray's own state — its jobs' records, the sessions to recover — is
@@ -137,11 +140,10 @@ where
 
 // ── identity ──────────────────────────────────────────────────────────────
 
-/// The directory's DACL (`install`, private.rs) lets Users read, not
-/// write; DPAPI binds the seed to this machine.
-pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
-    std::fs::write(path, bytes).with_context(|| format!("writing {}", path.display()))
-}
+/// How config.toml is written: SYSTEM and Administrators only — it names
+/// the controller this machine trusts (T4); the tray, which runs as the
+/// user, reads the defaults instead (`config::load_for_user`).
+pub const CONFIG_ACCESS: crate::util::Access = crate::util::Access::Private;
 
 /// Windows has no uid: ownership is judged by SID (acl.rs).
 pub fn own_uid() -> Option<u32> {

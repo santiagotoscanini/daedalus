@@ -40,17 +40,51 @@ pub fn unseal(sealed: &[u8]) -> Result<Vec<u8>> {
     Ok(sealed.to_vec())
 }
 
-/// Write a file only its owner can read: created 0600.
-pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
-    use std::os::unix::fs::OpenOptionsExt;
-    let mut f = std::fs::OpenOptions::new()
+/// A new file only its owner can read or write: created 0600 (whatever the
+/// umask), never through a symlink, never over anything already there
+/// (util.rs `write_atomic`).
+pub fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let f = std::fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .mode(0o600)
-        .open(path)
-        .with_context(|| format!("writing {}", path.display()))?;
-    std::io::Write::write_all(&mut f, bytes)?;
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)?;
+    f.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    Ok(f)
+}
+
+/// A secret file is its owner's alone: refused when group or others may
+/// read or write it (a key that was readable is no longer a secret), and
+/// when it is not a regular file.
+pub fn ensure_private(path: &Path) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    let m =
+        std::fs::symlink_metadata(path).with_context(|| format!("reading {}", path.display()))?;
+    if !m.file_type().is_file() {
+        anyhow::bail!("{} is not a regular file; refusing it", path.display());
+    }
+    if m.mode() & 0o077 != 0 {
+        anyhow::bail!(
+            "{} is readable or writable beyond its owner (mode {:o}); a key others could read is \
+             not a secret — refusing it (make it 0600 if it never left this machine, or delete it \
+             for a new identity)",
+            path.display(),
+            m.mode() & 0o777
+        );
+    }
+    Ok(())
+}
+
+/// How config.toml is written: readable by the session, which runs as the
+/// user; it holds no secret.
+pub const CONFIG_ACCESS: crate::util::Access = crate::util::Access::Mode(0o644);
+
+/// The data directory's modes are the installer's (0755, root's; the
+/// secrets 0600 by `create_private`): nothing to bring up to date at start.
+pub fn secure_data_dir(dir: &Path) -> Result<()> {
+    let _ = dir;
     Ok(())
 }
 
@@ -149,14 +183,23 @@ pub fn monotonic_usec() -> Option<u64> {
 }
 
 /// An exclusive lock on `path` (created if absent), held while the returned
-/// file is open; None when another process holds it.
+/// file is open; None when another process holds it. The file is the
+/// owner's alone (0600, never through a symlink): `flock` works on a
+/// read-only descriptor, so a lock file others can open is one any local
+/// user can hold to keep the agent from starting (audit D6).
 pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
     use std::os::fd::AsRawFd;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     let f = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
         .open(path)
+        .ok()?;
+    // One an older agent made 0644.
+    f.set_permissions(std::fs::Permissions::from_mode(0o600))
         .ok()?;
     // SAFETY: flock on a descriptor this function owns.
     let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };

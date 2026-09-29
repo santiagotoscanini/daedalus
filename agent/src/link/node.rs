@@ -130,7 +130,7 @@ fn save_store(path: &Path, s: &Stored) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    crate::util::write_atomic(path, text.as_bytes(), Some(0o644)).map_err(|e| {
+    crate::util::write_atomic(path, text.as_bytes(), crate::util::Access::Mode(0o644)).map_err(|e| {
         tracing::warn!(path = %path.display(), error = %e, "link: the trusted controller key was not saved");
         format!("{}: {e}", path.display())
     })

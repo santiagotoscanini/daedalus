@@ -61,26 +61,14 @@ fn bootstrap(
     log: &Path,
     env: &[(String, String)],
 ) -> Result<(), String> {
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::os::unix::fs::PermissionsExt;
     let path = plist_path(name);
     let dir = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
     let text = jobs::launchd_plist(&jobs::launchd_label(name), program, workdir, log, env);
-    let tmp = path.with_extension("plist.new");
-    {
-        use std::io::Write;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&tmp)
-            .map_err(|e| format!("{}: {e}", tmp.display()))?;
-        f.write_all(text.as_bytes())
-            .map_err(|e| format!("{}: {e}", tmp.display()))?;
-    }
-    std::fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+    crate::util::write_atomic(&path, text.as_bytes(), crate::util::Access::Mode(0o600))
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     clear(name);
     // bootout returns before launchd has let the label go; a bootstrap
     // under it meanwhile fails ("service already loaded").

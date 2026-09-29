@@ -70,7 +70,11 @@ impl State {
         }
         match serde_json::to_string_pretty(self) {
             Ok(text) => {
-                if let Err(e) = crate::util::write_atomic(&path, text.as_bytes(), Some(0o644)) {
+                if let Err(e) = crate::util::write_atomic(
+                    &path,
+                    text.as_bytes(),
+                    crate::util::Access::Mode(0o644),
+                ) {
                     tracing::warn!(error = %e, "state not saved");
                 }
             }

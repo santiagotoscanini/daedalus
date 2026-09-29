@@ -94,7 +94,7 @@ fn serve_foreground() -> Result<()> {
 /// The role config.toml gives this machine; a file that does not parse is
 /// no reason to refuse a (re)install, so it reads as a node's.
 fn role() -> role::Role {
-    config::load_or_default()
+    config::load_for_user()
         .map(|c| c.role())
         .unwrap_or(role::Role::of(config::Mode::Node))
 }
@@ -135,7 +135,7 @@ fn uninstall() -> Result<()> {
 }
 
 fn status_cmd() -> Result<()> {
-    config::load_or_default()?;
+    config::load_for_user()?;
     let body = daedalus_agent::local::call("status", serde_json::Value::Null)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     println!("{}", serde_json::to_string_pretty(&body)?);
@@ -180,7 +180,7 @@ fn update_cmd(args: &[String]) -> Result<()> {
 }
 
 fn claude_cmd(args: &[String]) -> Result<()> {
-    config::load_or_default()?;
+    config::load_for_user()?;
     match args.first().map(String::as_str) {
         Some("restart") => {
             let said = daedalus_agent::local::call("claude.restart", serde_json::Value::Null)

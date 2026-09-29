@@ -119,4 +119,4 @@ try {
 } catch {
   Write-Warning "the service started but did not answer on its local pipe yet: $_"
 }
-Write-Host "logs: $env:ProgramData\daedalus-agent\logs"
+Write-Host "service logs: $env:ProgramData\daedalus-agent\logs (Administrators); tray and session: %LOCALAPPDATA%\daedalus-agent\logs"

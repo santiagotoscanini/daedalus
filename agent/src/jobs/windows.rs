@@ -46,22 +46,45 @@ pub fn windows_quote(arg: &str) -> String {
     out
 }
 
+/// A Windows path that names its drive or share: never searched for, so a
+/// file of the same name in the working directory cannot stand in for it.
+pub fn windows_absolute(p: &str) -> bool {
+    let b = p.as_bytes();
+    (b.len() > 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/'))
+        || p.starts_with("\\\\")
+}
+
 /// The holder's command line for the CLI: `claude.exe …` as it is, and a
 /// `.cmd` or `.bat` shim (npm's) through `cmd.exe /d /s /c`, which is the
-/// only way such a file runs. The words were checked (`check_cli`,
-/// `check_label`, a uuid), so none carries a quote or a `%`.
-pub fn windows_session_command(cli: &str, id: &str, label: &str) -> Result<String, String> {
+/// only way such a file runs — the `cmd.exe` in `system_dir`
+/// (`GetSystemDirectoryW`), named whole, since a bare `cmd.exe` is looked
+/// for in the session's working directory first. The CLI's path is always
+/// quoted, so `&`, `|`, `<`, `>`, `^` and parentheses in it stay part of
+/// the path; the words were checked (`check_cli`, `check_label`, a uuid),
+/// so none carries a quote or a `%`.
+pub fn windows_session_command(
+    system_dir: &str,
+    cli: &str,
+    id: &str,
+    label: &str,
+) -> Result<String, String> {
     if !is_uuid(id) {
         return Err(format!("not a session id: {id:?}"));
     }
     check_label(label)?;
+    for (what, p) in [
+        ("the claude path", cli),
+        ("the system directory", system_dir),
+    ] {
+        if !windows_absolute(p) || p.contains('"') {
+            return Err(format!("{what} {p:?} is not an absolute path"));
+        }
+    }
     let lower = cli.to_ascii_lowercase();
-    let words = format!(
-        "{} --resume {id} --remote-control {label}",
-        windows_quote(cli)
-    );
+    let words = format!("\"{cli}\" --resume {id} --remote-control {label}");
     if lower.ends_with(".cmd") || lower.ends_with(".bat") {
-        Ok(format!("cmd.exe /d /s /c \"{words}\""))
+        let cmd = format!("{}\\cmd.exe", system_dir.trim_end_matches(['\\', '/']));
+        Ok(format!("\"{cmd}\" /d /s /c \"{words}\""))
     } else {
         Ok(words)
     }

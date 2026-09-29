@@ -54,21 +54,179 @@ pub fn file_owner(path: &Path) -> Result<Owner> {
     Ok(who)
 }
 
-/// Give the data directory its DACL (`private::windows_data_dir_acl`).
+fn icacls(runs: Vec<Vec<std::ffi::OsString>>) -> Result<()> {
+    for args in runs {
+        let mut cmd = std::process::Command::new(system32("icacls.exe"));
+        cmd.args(&args);
+        match crate::exec::both(cmd, std::time::Duration::from_secs(60)) {
+            Some(r) if r.ok => {}
+            Some(r) => bail!("icacls {:?}: {}", args, r.output.trim()),
+            None => bail!("icacls {:?}: not run, or no answer in time", args),
+        }
+    }
+    Ok(())
+}
+
+/// A program in the system directory, named whole (never searched for).
+fn system32(exe: &str) -> std::path::PathBuf {
+    std::env::var_os("SystemRoot")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| "C:\\Windows".into())
+        .join("System32")
+        .join(exe)
+}
+
+/// Give the data directory its DACL at install (`private::windows_data_dir_acl`).
 pub fn protect_data_dir(dir: &Path) -> Result<()> {
     std::fs::create_dir_all(dir.join("logs")).context("creating the logs directory")?;
-    for args in crate::private::windows_data_dir_acl(dir) {
-        let out = std::process::Command::new("icacls")
-            .args(&args)
-            .output()
-            .context("running icacls")?;
-        if !out.status.success() {
-            bail!(
-                "icacls {:?}: {}",
-                args,
-                String::from_utf8_lossy(&out.stdout).trim()
-            );
+    icacls(crate::private::windows_data_dir_acl(dir))?;
+    clear_planted(&dir.join("logs"));
+    Ok(())
+}
+
+/// At every start of the service: the secrets and `logs\` SYSTEM's and
+/// Administrators' alone (`private::windows_private_acl`), and whatever a
+/// user left in `logs\` while it was theirs removed — a link or a file
+/// planted where the service opens a log by name (audit D2).
+pub fn secure_data_dir(dir: &Path) -> Result<()> {
+    std::fs::create_dir_all(dir.join("logs")).context("creating the logs directory")?;
+    icacls(crate::private::windows_private_acl(dir))?;
+    clear_planted(&dir.join("logs"));
+    Ok(())
+}
+
+/// Remove every entry of `dir` that neither SYSTEM nor Administrators own,
+/// without following it (a junction or a symlink goes, not its target).
+fn clear_planted(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if file_owner(&p).is_ok_and(|o| matches!(o, Owner::System | Owner::Administrators)) {
+            continue;
         }
+        let gone = match std::fs::symlink_metadata(&p) {
+            Ok(m) if m.is_dir() => std::fs::remove_dir(&p),
+            _ => std::fs::remove_file(&p),
+        };
+        tracing::warn!(path = %p.display(), removed = gone.is_ok(), "a file in the service's logs that it did not make");
+    }
+}
+
+/// SYSTEM and Administrators full control, nothing else and nothing
+/// inherited: a secret's ACL.
+const PRIVATE_SDDL: &str = "D:P(A;;FA;;;SY)(A;;FA;;;BA)";
+
+/// A security descriptor from SDDL, freed when dropped.
+struct Descriptor(PSECURITY_DESCRIPTOR);
+
+impl Descriptor {
+    fn of(sddl: &str) -> std::io::Result<Self> {
+        use windows::Win32::Security::Authorization::{
+            ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+        };
+        let text: Vec<u16> = sddl.encode_utf16().chain(Some(0)).collect();
+        let mut sd = PSECURITY_DESCRIPTOR::default();
+        // SAFETY: a NUL-terminated SDDL string; freed on drop.
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                PCWSTR(text.as_ptr()),
+                SDDL_REVISION_1,
+                &mut sd,
+                None,
+            )
+        }
+        .map_err(|e| std::io::Error::other(e.message()))?;
+        Ok(Self(sd))
+    }
+}
+
+impl Drop for Descriptor {
+    fn drop(&mut self) {
+        // SAFETY: allocated by the conversion above.
+        unsafe {
+            let _ = LocalFree(Some(HLOCAL(self.0 .0)));
+        }
+    }
+}
+
+fn wide(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    path.as_os_str().encode_wide().chain(Some(0)).collect()
+}
+
+/// A new file with the private ACL from its first moment (no window in
+/// which the directory's inherited grants apply), never over anything
+/// already there (util.rs `write_atomic`).
+pub fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::windows::io::{FromRawHandle, RawHandle};
+    use windows::Win32::Security::SECURITY_ATTRIBUTES;
+    use windows::Win32::Storage::FileSystem::{
+        CreateFileW, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+        FILE_SHARE_NONE,
+    };
+    let sd = Descriptor::of(PRIVATE_SDDL)?;
+    let attrs = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: sd.0 .0,
+        bInheritHandle: false.into(),
+    };
+    let name = wide(path);
+    // SAFETY: a NUL-terminated name and attributes that outlive the call;
+    // the handle is owned by the File from here.
+    let h = unsafe {
+        CreateFileW(
+            PCWSTR(name.as_ptr()),
+            (FILE_GENERIC_READ | FILE_GENERIC_WRITE).0,
+            FILE_SHARE_NONE,
+            Some(&attrs),
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            None,
+        )
+    }
+    .map_err(|e| std::io::Error::other(format!("{}: {}", path.display(), e.message())))?;
+    // SAFETY: a fresh handle nothing else owns.
+    Ok(unsafe { std::fs::File::from_raw_handle(h.0 as RawHandle) })
+}
+
+/// Give an existing file the private ACL (SYSTEM and Administrators only,
+/// inheritance cut): what a secret an earlier agent wrote under the data
+/// directory's inherited grants needs before it is trusted again.
+pub fn ensure_private(path: &Path) -> Result<()> {
+    use windows::core::BOOL;
+    use windows::Win32::Security::Authorization::SetNamedSecurityInfoW;
+    use windows::Win32::Security::{
+        GetSecurityDescriptorDacl, ACL, DACL_SECURITY_INFORMATION,
+        PROTECTED_DACL_SECURITY_INFORMATION,
+    };
+    let sd = Descriptor::of(PRIVATE_SDDL)?;
+    let (mut present, mut defaulted) = (BOOL(0), BOOL(0));
+    let mut dacl: *mut ACL = std::ptr::null_mut();
+    // SAFETY: `sd` is a valid descriptor; `dacl` points into it and is
+    // used while `sd` lives.
+    unsafe { GetSecurityDescriptorDacl(sd.0, &mut present, &mut dacl, &mut defaulted) }
+        .context("reading the private ACL")?;
+    let name = wide(path);
+    // SAFETY: a NUL-terminated name; the ACL outlives the call.
+    let err = unsafe {
+        SetNamedSecurityInfoW(
+            PCWSTR(name.as_ptr()),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            None,
+            None,
+            Some(dacl),
+            None,
+        )
+    };
+    if err != ERROR_SUCCESS {
+        bail!(
+            "making {} private (SYSTEM and Administrators only): error {}",
+            path.display(),
+            err.0
+        );
     }
     Ok(())
 }

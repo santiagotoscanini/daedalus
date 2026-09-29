@@ -156,7 +156,11 @@ fn record_for(current: &Identity, next: &Identity, grace: Duration) -> Record {
 
 fn write_record(dir: &Path, r: &Record) -> std::io::Result<()> {
     let text = serde_json::to_string_pretty(r).map_err(std::io::Error::other)?;
-    crate::util::write_atomic(&dir.join(ROTATION_FILE), text.as_bytes(), Some(0o600))
+    crate::util::write_atomic(
+        &dir.join(ROTATION_FILE),
+        text.as_bytes(),
+        crate::util::Access::Private,
+    )
 }
 
 /// The keys as one connection is served them: taken when it is accepted,

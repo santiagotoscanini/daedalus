@@ -147,15 +147,17 @@ pub fn install(cfg: &Config) -> Result<()> {
 
     // The daemon. bootout first so a re-install lands on the new binary.
     let _ = launchctl(&["bootout", &format!("system/{DAEMON_LABEL}")]);
-    std::fs::write(
-        daemon_plist(),
+    crate::util::write_atomic(
+        &daemon_plist(),
         plist(
             DAEMON_LABEL,
             &exe,
             &["run"],
             &logs.join("launchd.log"),
             false,
-        ),
+        )
+        .as_bytes(),
+        crate::util::Access::Mode(0o644),
     )
     .context("writing the daemon's plist")?;
     launchctl(&["bootstrap", "system", &daemon_plist().to_string_lossy()])?;
@@ -163,15 +165,17 @@ pub fn install(cfg: &Config) -> Result<()> {
 
     // The tray, for every user at login, and for the console user now.
     if tray.exists() {
-        std::fs::write(
-            tray_plist(),
+        crate::util::write_atomic(
+            &tray_plist(),
             plist(
                 TRAY_LABEL,
                 &tray,
                 &[],
                 Path::new("/tmp/daedalus-agent-tray.log"),
                 true,
-            ),
+            )
+            .as_bytes(),
+            crate::util::Access::Mode(0o644),
         )
         .context("writing the tray's plist")?;
         if let Some(uid) = console_uid().filter(|u| *u != 0) {
@@ -225,7 +229,7 @@ pub fn uninstall() -> Result<()> {
 /// read config.toml, and launchd has to read the plists. Run at install
 /// AND at every service start, because a self-update swaps binaries
 /// without re-running install. The identity key stays root's alone
-/// (0600, `os::write_private`).
+/// (0600, `util::write_atomic`, private).
 pub fn converge_permissions() {
     let exe = std::env::current_exe().unwrap_or_default();
     let bin = exe.parent().map(Path::to_path_buf).unwrap_or_default();

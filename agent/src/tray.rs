@@ -405,7 +405,7 @@ pub struct Tray {
 
 impl Tray {
     pub fn start() -> Result<Self> {
-        let cfg = config::load_or_default()?;
+        let cfg = config::load_for_user()?;
         if !cfg.role().tray {
             bail!("no tray in controller mode (config.toml says mode = \"controller\")");
         }
@@ -437,7 +437,9 @@ impl Tray {
         };
         let path = self.logs.join("status.json");
         if std::fs::create_dir_all(&self.logs)
-            .and_then(|()| std::fs::write(&path, text))
+            .and_then(|()| {
+                crate::util::write_atomic(&path, text.as_bytes(), crate::util::Access::Inherit)
+            })
             .is_ok()
         {
             open(&path.to_string_lossy());
@@ -495,7 +497,11 @@ impl Tray {
 pub fn write_failure(e: &anyhow::Error) {
     let dir = paths::user_log_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let _ = std::fs::write(dir.join("tray.err"), format!("{e:#}\n"));
+    let _ = crate::util::write_atomic(
+        &dir.join("tray.err"),
+        format!("{e:#}\n").as_bytes(),
+        crate::util::Access::Inherit,
+    );
 }
 
 /// The tray program's `main` (`os::tray_main`): the OS's loop until quit;

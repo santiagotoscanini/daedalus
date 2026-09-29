@@ -199,9 +199,7 @@ fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let tmp = path.with_extension("json.new");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path)
+    crate::util::write_atomic(path, text.as_bytes(), crate::util::Access::Inherit)
 }
 
 #[cfg(test)]

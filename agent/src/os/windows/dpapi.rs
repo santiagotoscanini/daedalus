@@ -1,7 +1,7 @@
 //! The identity key's seed wrapped with DPAPI under the machine's scope
 //! before it touches disk, so a copy is useless on any other computer —
 //! but any process on THIS machine can unwrap it, so keeping local users
-//! out rests on the file's ACL (`write_private`).
+//! out rests on the file's ACL (`os::create_private`).
 
 use anyhow::{Context, Result};
 use windows::core::w;

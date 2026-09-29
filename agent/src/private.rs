@@ -1,4 +1,6 @@
-//! The files that hold trust — the machine's key (`identity.key`) and the
+//! The files that hold trust — the machine's key (`identity.key`), the
+//! config (`config.toml`, which names the controller), the kept policy
+//! (`policy.json`) and the
 //! controller key it trusts (`controller.json`, link/node.rs) — are read
 //! only when their OWNER is one this agent trusts, so a user who could
 //! plant one cannot choose the key a machine proves itself with or the
@@ -12,10 +14,13 @@
 //!
 //! On Windows `install` also gives the data directory an explicit,
 //! protected DACL (`windows_data_dir_acl`): SYSTEM and Administrators full
-//! control, Users read and execute — and Modify on `logs\` alone, where the
-//! tray, which runs as the user, writes. Inheritance from ProgramData
-//! (which lets Users create files) is cut, and the grants are applied to
-//! everything already inside.
+//! control, Users read and execute (the tray reads the kept policy);
+//! inheritance from ProgramData (which lets Users create files) is cut, and
+//! the grants are applied to everything already inside. The key, the config
+//! and the instance lock are then SYSTEM's and Administrators' alone, and so
+//! is `logs\`, the service's — the tray and the session log under the
+//! user's own `%LOCALAPPDATA%` (`windows_private_acl`, re-applied at every
+//! start of the service, audit D1, D2, D6).
 
 use std::ffi::OsString;
 use std::path::Path;
@@ -64,14 +69,54 @@ pub fn check_owner(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The `icacls` runs that give the Windows data directory its DACL
-/// (module doc), in order. Well-known SIDs, so a localized Windows names
-/// the same groups: S-1-5-18 SYSTEM, S-1-5-32-544 Administrators,
-/// S-1-5-32-545 Users.
+/// The files in the Windows data directory that are SYSTEM's and
+/// Administrators' alone: the key, the config that names the controller,
+/// and the instance lock (which a user could otherwise hold open).
+pub const WINDOWS_PRIVATE_FILES: &[&str] = &["identity.key", "config.toml", "agent.lock"];
+
+/// The `icacls` runs that keep the Windows data directory's secrets and
+/// the service's logs to SYSTEM and Administrators (module doc): `logs\`
+/// protected, inheritance cut, and each file of `WINDOWS_PRIVATE_FILES`
+/// that exists the same. Run at install, after `windows_data_dir_acl`, and
+/// at every start of the service, so an install an older agent made is
+/// brought to it. Well-known SIDs, so a localized Windows names the same
+/// groups: S-1-5-18 SYSTEM, S-1-5-32-544 Administrators.
+pub fn windows_private_acl(dir: &Path) -> Vec<Vec<OsString>> {
+    let arg = |s: &str| OsString::from(s);
+    let only_system = |target: &Path, inherit: &str| {
+        vec![
+            target.as_os_str().to_owned(),
+            arg("/inheritance:r"),
+            arg("/grant:r"),
+            arg(&format!("*S-1-5-18:{inherit}F")),
+            arg("/grant:r"),
+            arg(&format!("*S-1-5-32-544:{inherit}F")),
+            // Whatever else an older install granted by name.
+            arg("/remove:g"),
+            arg("*S-1-5-32-545"),
+            arg("*S-1-5-11"),
+            arg("*S-1-1-0"),
+        ]
+    };
+    let mut runs = vec![only_system(&dir.join("logs"), "(OI)(CI)")];
+    runs.extend(
+        WINDOWS_PRIVATE_FILES
+            .iter()
+            .map(|f| dir.join(f))
+            .filter(|p| p.exists())
+            .map(|p| only_system(&p, "")),
+    );
+    runs
+}
+
+/// The `icacls` runs that give the Windows data directory its DACL at
+/// install (module doc), in order: SYSTEM and Administrators full control,
+/// Users read and execute (the tray reads the kept policy), inheritance
+/// from ProgramData cut and everything already inside reset to it — then
+/// `windows_private_acl`.
 pub fn windows_data_dir_acl(dir: &Path) -> Vec<Vec<OsString>> {
     let arg = |s: &str| OsString::from(s);
-    let logs = dir.join("logs");
-    vec![
+    let mut runs = vec![
         vec![
             dir.as_os_str().to_owned(),
             arg("/inheritance:r"),
@@ -89,13 +134,9 @@ pub fn windows_data_dir_acl(dir: &Path) -> Vec<Vec<OsString>> {
             arg("/T"),
             arg("/C"),
         ],
-        // The tray, running as the user, writes its logs here.
-        vec![
-            logs.into_os_string(),
-            arg("/grant"),
-            arg("*S-1-5-32-545:(OI)(CI)M"),
-        ],
-    ]
+    ];
+    runs.extend(windows_private_acl(dir));
+    runs
 }
 
 #[cfg(test)]
@@ -114,8 +155,13 @@ mod tests {
     }
 
     #[test]
-    fn the_windows_acl_cuts_inheritance_and_opens_only_the_logs() {
-        let runs = windows_data_dir_acl(Path::new("C:/ProgramData/daedalus-agent"));
+    fn the_windows_acl_cuts_inheritance_and_keeps_secrets_and_logs_to_the_system() {
+        let dir = std::env::temp_dir().join(format!("daedalus-acl-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("identity.key"), b"k").unwrap();
+        let runs = windows_data_dir_acl(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
         let text: Vec<String> = runs
             .iter()
             .map(|r| {
@@ -125,19 +171,37 @@ mod tests {
                     .join(" ")
             })
             .collect();
+        let d = dir.display().to_string();
         assert_eq!(
             text[0],
-            "C:/ProgramData/daedalus-agent /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F \
-             /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX"
+            format!(
+                "{d} /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F \
+                 /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX"
+            )
         );
         assert!(text[1].ends_with("* /reset /T /C"), "{}", text[1]);
+        let only_system = " /inheritance:r /grant:r *S-1-5-18:";
         assert!(
-            text[2].ends_with("logs /grant *S-1-5-32-545:(OI)(CI)M"),
+            text[2].contains("logs") && text[2].contains(&format!("{only_system}(OI)(CI)F")),
             "{}",
             text[2]
         );
-        // Users never get more than read anywhere but logs.
-        assert!(!text[0].contains("545:(OI)(CI)M") && !text[0].contains("545:(OI)(CI)F"));
+        // The key that exists is made private; the config and lock that do
+        // not are left for their writers.
+        assert_eq!(text.len(), 4, "{text:?}");
+        assert!(
+            text[3].contains("identity.key") && text[3].contains(&format!("{only_system}F")),
+            "{}",
+            text[3]
+        );
+        // Users never get more than read, and nothing but the directory.
+        for t in &text[2..] {
+            assert!(!t.contains("545:"), "{t}");
+            assert!(
+                t.ends_with("/remove:g *S-1-5-32-545 *S-1-5-11 *S-1-1-0"),
+                "{t}"
+            );
+        }
     }
 
     #[test]
