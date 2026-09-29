@@ -3,13 +3,13 @@
 // one — its verb, armed in place.
 import { ClockIcon, FolderGit2Icon, MessagesSquareIcon } from 'lucide-react'
 
-import type { ActionState } from '../../../host/controller/generated'
 // Pure and client-safe — the whole reason the roster's types, its join and
 // the row's derived facts live in lib/ rather than beside the loader. See the
 // header of claude-roster.ts.
 import { type FactIcon, factGroups, promptLine } from '../../../lib/claude-meta'
 import { type RosterEntry, type RowControl, rowControl } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
+import type { VerbOutcome } from '../../../lib/follow-request'
 import { DASH } from '../../../lib/format'
 import { toneStyle } from '../../../lib/tone'
 import { GHOST_BTN } from '../../apps/shared'
@@ -70,19 +70,6 @@ const CTRL_STATE = 'mt-[0.3rem] text-[0.72rem] leading-[1.5]'
 
 type ActiveControl = Extract<RowControl, { session: string }>
 
-/** The one verb request the board follows, as its poller reads it from the roster. */
-export type VerbStatus = {
-  /** The request id; null while the roster does not list it yet. */
-  id: string | null
-  state: 'idle' | ActionState
-  /** The selector it acted on — a uuid, or a short agent id. */
-  session: string | null
-  /** The agent's sentence about it. */
-  detail: string
-  /** The same sentence, when it was refused or failed. */
-  error: string
-}
-
 /**
  * One row, and — where there is an honest one — its verb.
  *
@@ -96,8 +83,7 @@ export function RosterRow({
   acting,
   armed,
   busy,
-  status,
-  refusal,
+  outcome,
   onArm,
   onCancel,
   onConfirm,
@@ -107,8 +93,8 @@ export function RosterRow({
   acting: boolean
   armed: boolean
   busy: boolean
-  status: VerbStatus
-  refusal: string | null
+  /** The board's one followed request: how it stands, null before the first. */
+  outcome: VerbOutcome | null
   onArm: () => void
   onCancel: () => void
   onConfirm: (control: ActiveControl) => void
@@ -163,7 +149,7 @@ export function RosterRow({
 
       <RowMetaLine row={row} />
 
-      {mine && <RowOutcome status={status} refusal={refusal} />}
+      {mine && outcome !== null && <RowOutcome outcome={outcome} />}
 
       {control.kind !== 'none' && !busy && armed && (
         <>
@@ -296,19 +282,13 @@ function RowMetaLine({ row }: { row: RosterEntry }) {
 }
 
 /** What the agent last said about THIS row's verb. */
-function RowOutcome({ status, refusal }: { status: VerbStatus; refusal: string | null }) {
-  return (
-    <>
-      {status.state === 'running' && <p className={CTRL_STATE}>{status.detail || 'Working…'}</p>}
-      {status.state === 'done' && (
-        <p className={cn(CTRL_STATE, 'text-success')}>{status.detail || 'Done.'}</p>
-      )}
-      {(status.state === 'failed' || status.state === 'refused') && refusal === null && (
-        <p className={cn(CTRL_STATE, 'text-danger')}>{status.error}</p>
-      )}
-      {refusal !== null && <p className={cn(CTRL_STATE, 'text-danger')}>{refusal}</p>}
-    </>
-  )
+function RowOutcome({ outcome }: { outcome: VerbOutcome }) {
+  if (outcome.state === 'running')
+    return <p className={CTRL_STATE}>{outcome.detail || 'Working…'}</p>
+  if (outcome.state === 'done') {
+    return <p className={cn(CTRL_STATE, 'text-success')}>{outcome.detail || 'Done.'}</p>
+  }
+  return <p className={cn(CTRL_STATE, 'text-danger')}>{outcome.detail}</p>
 }
 
 /** The sentence an armed row shows: what this press costs, per verb. */

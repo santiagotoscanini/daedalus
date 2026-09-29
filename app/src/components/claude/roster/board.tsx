@@ -30,7 +30,7 @@ import { useVerbRequest } from '../../verb-request'
 import { Board } from '../../viz'
 import { CycleSessionsControl } from '../controls/cycle-sessions'
 import { RC_ARM_MS } from '../shared'
-import { RosterRow, type VerbStatus } from './row'
+import { RosterRow } from './row'
 
 /** As many rows as read as a list rather than as a log. The rest are counted. */
 const ROSTER_ROWS = 24
@@ -87,16 +87,6 @@ export function RosterBoard({
       void router.invalidate()
     },
   })
-  const status: VerbStatus =
-    outcome === null
-      ? { id: null, state: 'idle', session: null, detail: '', error: '' }
-      : {
-          id: null,
-          state: outcome.state,
-          session: null,
-          detail: outcome.detail,
-          error: outcome.state === 'refused' || outcome.state === 'failed' ? outcome.detail : '',
-        }
 
   return (
     <Board
@@ -136,8 +126,7 @@ export function RosterBoard({
               acting={acted === r.key}
               armed={armed === r.key}
               busy={running}
-              status={status}
-              refusal={null}
+              outcome={outcome}
               onArm={() => {
                 arm(r.key)
               }}
