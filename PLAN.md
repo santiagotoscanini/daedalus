@@ -681,6 +681,9 @@ Hand edits the UI cannot make for itself:
    `AGENT_SIGNING_KEY` there, then delete the repository-level secret; and
    a tag ruleset so only the operator creates `agent-v*` tags. Until it is
    moved the job still reads the repository secret.
+6. **Delete the one-time pin adoption after SANTI-PC pairs on 0.21.1**:
+   `pair.rs` `adopt_first_use_pin`, its test, and its call and log in
+   `lib.rs` `agent_main`, in the next agent release.
 
 ## Engine polish
 

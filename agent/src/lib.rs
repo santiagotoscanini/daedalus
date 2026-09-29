@@ -98,6 +98,13 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     } else {
         update::on_start()
     };
+    // ONE-TIME, 0.21.1 only (pair.rs `adopt_first_use_pin`): before the
+    // config is read, so the link starts under the adopted pin.
+    let adopted = if foreground {
+        Ok(None)
+    } else {
+        pair::adopt_first_use_pin(&paths::config_path(), &paths::data_dir())
+    };
     let cfg = config::load_or_default().context("reading config")?;
     // The service's own files — the key, the config, the lock and its
     // logs — to the OS alone where an older install left them open (T4), and
@@ -121,6 +128,14 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         mode = ?role.mode,
         "daedalus-agent starting"
     );
+    match adopted {
+        Ok(Some(pin)) => tracing::info!(pin, "paired: adopted 0.20's first-use controller key"),
+        Ok(None) => {}
+        Err(e) => tracing::warn!(
+            error = format!("{e:#}"),
+            "0.20's first-use key was not adopted"
+        ),
+    }
     if let Err(e) = secured {
         tracing::warn!(
             error = format!("{e:#}"),
