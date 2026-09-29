@@ -5,12 +5,14 @@ import { EngineCard } from '../../../components/engine-update'
 import { ImageRow } from '../../../components/image-row'
 import { UpdateProgress } from '../../../components/image-update'
 import { NixosCard } from '../../../components/nixos-card'
+import { RebootRequired } from '../../../components/reboot-required'
 import { usePolledStatus } from '../../../components/status'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { ImageUpdateStatus } from '../../../host/image-update'
 import { cn } from '../../../lib/cn'
 import { ceremonyFor } from '../../../lib/image-ceremony'
+import { REBOOT_REQUIRED } from '../../../lib/reboot-required'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../../../server/updates'
 import type { UpdateRow, UpdatesData } from '../data/updates'
 import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
@@ -298,7 +300,11 @@ function QueuePanel({
             </div>
           )}
 
-          {mine && status.state === 'done' && (
+          {mine && status.state === 'done' && status.phase === REBOOT_REQUIRED && (
+            <RebootRequired note={status.error} />
+          )}
+
+          {mine && status.state === 'done' && status.phase !== REBOOT_REQUIRED && (
             <div className="flex flex-wrap items-center gap-[0.6rem]">
               <Chip tone="ok">{status.phase === 'no-change' ? 'already there' : 'updated'}</Chip>
               {status.commit !== null && status.commit !== '' && (

@@ -1,4 +1,5 @@
 import { type Decoder, literal, nullable, obj, optional, str } from '../lib/contract/decode'
+import { REBOOT_REQUIRED } from '../lib/reboot-required'
 import { defineBridge } from './bridge'
 
 // The app half of Apply. It writes one file and reads another.
@@ -21,6 +22,8 @@ export type ApplyStatus = {
   startedAt: string | null
   finishedAt: string | null
   commit: string | null
+  /** A `reboot-required` Apply the box has not booted since (readApplyStatus). Never in the file. */
+  rebootPending?: boolean
 }
 
 /** The status file the host agent writes; decoding `{}` is the idle status. */
@@ -60,6 +63,9 @@ const RUNNING_MAX_MS = 35 * 60_000
  */
 export async function readApplyStatus(): Promise<ApplyStatus> {
   const s = await bridge.readStatus()
+  if (s.state === 'done' && s.phase === REBOOT_REQUIRED) {
+    return { ...s, rebootPending: await notBootedSince(s.finishedAt) }
+  }
   if (s.state !== 'running') return s
 
   const last = Date.parse(s.finishedAt ?? '')
@@ -72,6 +78,24 @@ export async function readApplyStatus(): Promise<ApplyStatus> {
       `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
       'The rebuild may or may not have completed — check `journalctl -u daedalus-apply` ' +
       'and `git log` in the configuration checkout before applying again.',
+  }
+}
+
+/**
+ * Whether the box has not booted since `iso`: what keeps a `reboot-required`
+ * Apply on the bar until the reboot it asked for. The container shares the
+ * host's kernel, so /proc/uptime is the box's. Unreadable reads as pending —
+ * a note too many beats a reboot nobody was told about.
+ */
+async function notBootedSince(iso: string | null): Promise<boolean> {
+  const finished = Date.parse(iso ?? '')
+  if (!Number.isFinite(finished)) return true
+  try {
+    const { readFile } = await import('node:fs/promises')
+    const up = Number.parseFloat((await readFile('/proc/uptime', 'utf8')).split(' ')[0] ?? '')
+    return !Number.isFinite(up) || Date.now() - up * 1000 < finished
+  } catch {
+    return true
   }
 }
 

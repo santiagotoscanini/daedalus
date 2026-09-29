@@ -1,5 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useId, useState } from 'react'
+import { RebootRequired } from '../../../components/reboot-required'
 import { usePolledStatus } from '../../../components/status'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert'
@@ -8,6 +9,7 @@ import { Input } from '../../../components/ui/input'
 import { Board, Chip, type Tone } from '../../../components/viz'
 import type { VersionUpdateStatus } from '../../../host/version-update'
 import { cn } from '../../../lib/cn'
+import { REBOOT_REQUIRED } from '../../../lib/reboot-required'
 import { fetchVersionUpdateStatus, requestVersionUpdateFn } from '../../../server/versions'
 import type { MinecraftUpdate, VersionOption } from '../data/minecraft-update'
 
@@ -237,6 +239,13 @@ function Progress({
       <p className={cn(NOTE, 'mt-[0.4rem]')}>
         {PHASE[s.phase] ?? s.phase}…{moved === '' ? '' : ` (${moved})`}
       </p>
+    )
+  }
+  if (s.state === 'done' && s.phase === REBOOT_REQUIRED) {
+    return (
+      <div className="mt-[0.4rem]">
+        <RebootRequired note={s.error} />
+      </div>
     )
   }
   if (s.state === 'done') {

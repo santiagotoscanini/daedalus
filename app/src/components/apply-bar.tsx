@@ -1,7 +1,9 @@
 import { useRouter } from '@tanstack/react-router'
 import type { ApplyStatus } from '../host/apply'
 import { cn } from '../lib/cn'
+import { REBOOT_REQUIRED } from '../lib/reboot-required'
 import { applyRegistry, fetchApplyStatus } from '../server/registry'
+import { RebootRequired } from './reboot-required'
 import { usePolledStatus } from './status'
 import { Button } from './ui/button'
 
@@ -65,7 +67,16 @@ export function ApplyBar({
     },
   })
 
-  if (changed.length === 0 && !running && status.state !== 'failed') return null
+  // An Apply whose build needs a reboot (lib/reboot-required.ts) committed and
+  // built the change but activated nothing; the bar keeps saying so until the
+  // box has booted since (host/apply.ts readApplyStatus).
+  const rebootPending =
+    !running &&
+    status.state === 'done' &&
+    status.phase === REBOOT_REQUIRED &&
+    status.rebootPending === true
+
+  if (changed.length === 0 && !running && status.state !== 'failed' && !rebootPending) return null
 
   // The phase vocabulary lives in nix/stacks/daedalus/host/apply.sh; a phase this list has not
   // heard of must still render as progress, not blank the tracker.
@@ -122,6 +133,13 @@ export function ApplyBar({
             <pre className="mt-1.5 mb-0 max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
               {status.error}
             </pre>
+          </>
+        ) : rebootPending ? (
+          <>
+            <strong>The last Apply takes effect at the next boot.</strong>
+            <div className="mt-1.5">
+              <RebootRequired note={status.error} />
+            </div>
           </>
         ) : (
           <>

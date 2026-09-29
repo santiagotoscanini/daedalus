@@ -3,7 +3,9 @@ import { useState } from 'react'
 import type { ImageUpdateStatus } from '../host/image-update'
 import { cn } from '../lib/cn'
 import { ceremonyArmed, ceremonyFor } from '../lib/image-ceremony'
+import { REBOOT_REQUIRED } from '../lib/reboot-required'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../server/updates'
+import { RebootRequired } from './reboot-required'
 import { usePolledStatus } from './status'
 import { MONO, MONO_FACE } from './tokens'
 import { Button } from './ui/button'
@@ -175,6 +177,10 @@ export function UpdateControl({
         </Button>
       </div>
     )
+  }
+
+  if (mine && status.state === 'done' && status.phase === REBOOT_REQUIRED) {
+    return <RebootRequired note={status.error} />
   }
 
   if (mine && status.state === 'done') {

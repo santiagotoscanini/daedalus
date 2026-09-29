@@ -4,8 +4,10 @@ import type { EngineUpdateStatus } from '../host/engine-update'
 import { cn } from '../lib/cn'
 import { ENGINE_REPO } from '../lib/engine'
 import { DASH } from '../lib/format'
+import { REBOOT_REQUIRED } from '../lib/reboot-required'
 import type { EngineFacts, EngineVerdict } from '../modules/system/data/updates'
 import { fetchEngineUpdateStatus, requestEngineUpdateFn } from '../server/updates'
+import { RebootRequired } from './reboot-required'
 import { usePolledStatus } from './status'
 import { FOOT, MONO, MONO_FACE, NOTE } from './tokens'
 import { Button } from './ui/button'
@@ -189,6 +191,15 @@ function Run({ status }: { status: EngineUpdateStatus }) {
         <pre className="mt-[0.4rem] max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
           {status.error}
         </pre>
+      </div>
+    )
+  }
+
+  if (status.state === 'done' && status.phase === REBOOT_REQUIRED) {
+    return (
+      <div>
+        {revs}
+        <RebootRequired note={status.error} />
       </div>
     )
   }
