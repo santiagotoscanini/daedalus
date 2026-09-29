@@ -9,14 +9,25 @@
 #
 # Caps + sysctls:
 #   - NET_ADMIN: lets wg-easy create wg0 inside the container's netns.
-#   - NET_RAW: iptables-legacy raw sockets for netfilter state queries
-#     (NET_ADMIN alone returns "Permission denied").
+#   - NET_RAW: kept from the iptables-legacy days (its raw sockets for
+#     netfilter state queries; NET_ADMIN alone returned "Permission denied").
 #   - net.ipv4.ip_forward: routing between wg0 and the container's eth0.
 #   - net.ipv4.conf.all.src_valid_mark: WireGuard mark-based routing.
 #
 # `SYS_MODULE` is NOT needed — the wireguard kernel module is loaded
 # on the host (boot.kernelModules below); container just needs
 # /lib/modules read-only to find it.
+#
+# iptables is nf_tables, never legacy. The image's `iptables` is an
+# alternatives link to iptables-legacy, and every rule wg-easy writes goes
+# through it: the PostUp/PostDown hooks (stored in wg-easy.db, run by
+# wg-quick) and the per-client firewall. A kernel without the legacy
+# ip_tables (6.18 as NixOS 26.05 builds it) has no `nat` table for it, and
+# `wg-quick up wg0` fails with "Table does not exist". So the container gets
+# a read-only /etc/alternatives whose links name the image's own
+# iptables-nft binaries: the hooks in the database keep saying `iptables`
+# and run on nf_tables, with nothing to edit in the app. The host-ports
+# oneshot below names iptables-nft outright.
 #
 # ── auth: native OIDC against Pocket ID (v15.4.0+) ─────────────────────
 #
@@ -75,6 +86,18 @@
 let
   cfg = config.fleet.modules.wg-easy;
   inherit (config.fleet.webApps.wg-easy) hostname;
+
+  # The container's /etc/alternatives (see the header): each iptables name
+  # points at the image's own nf_tables binary. Links into the container's
+  # filesystem, resolved there.
+  nftAlternatives = pkgs.runCommand "wg-easy-iptables-nft" { } ''
+    mkdir $out
+    for t in iptables ip6tables; do
+      ln -s /usr/sbin/$t-nft $out/$t
+      ln -s /usr/sbin/$t-nft-restore $out/$t-restore
+      ln -s /usr/sbin/$t-nft-save $out/$t-save
+    done
+  '';
 in
 {
   options.fleet.modules.wg-easy = {
@@ -164,10 +187,16 @@ in
 
     # A gluetun tunnel (platform/lib/gluetun-lib.nix) adds the same modules;
     # NixOS merges the lists.
+    # nf_tables and the iptables-nft pieces the hooks use (nat chains,
+    # MASQUERADE, DNAT): loaded up front rather than left to autoload from
+    # inside a user namespace. Never the legacy iptable_*: 6.18 has none.
     boot.kernelModules = [
       "wireguard"
-      "iptable_nat"
-      "iptable_filter"
+      "nf_tables"
+      "nft_compat"
+      "nft_chain_nat"
+      "xt_MASQUERADE"
+      "xt_nat"
     ];
 
     # The router forwards this port to the box — see fleet.directIngress. The
@@ -253,7 +282,7 @@ in
           wg() {
             setpriv --reuid=${config.fleet.operator.user} --regid=${config.fleet.operator.group} --init-groups --inh-caps=-all \
               env HOME=${config.fleet.operator.home} XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir} \
-              podman exec wg-easy iptables -t nat "$@"
+              podman exec wg-easy iptables-nft -t nat "$@"
           }
           for _ in $(seq 1 30); do
             wg -S PREROUTING > /dev/null 2>&1 && break
@@ -297,6 +326,8 @@ in
         # NixOS keeps kernel modules under /run/booted-system, not
         # /lib/modules. Belt-and-suspenders bind (the module is loaded).
         "/run/booted-system/kernel-modules/lib/modules:/lib/modules:ro"
+        # iptables = iptables-nft inside the container (the header).
+        "${nftAlternatives}:/etc/alternatives:ro"
       ];
 
       environment = {

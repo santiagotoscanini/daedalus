@@ -210,11 +210,13 @@ rec {
       fleet.bridgeMemberships.${exporterName} = [ ];
 
       # Host-loaded kernel modules gluetun needs (rootless can't load
-      # them). Instances merge to the same set.
+      # them). Instances merge to the same set. gluetun writes its firewall
+      # with iptables-nft; the legacy iptable_* modules are gone from 6.18.
       boot.kernelModules = [
         "wireguard"
-        "iptable_nat"
-        "iptable_filter"
+        "nf_tables"
+        "nft_compat"
+        "nft_chain_nat"
         "tun"
       ];
 
