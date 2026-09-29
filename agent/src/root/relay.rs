@@ -70,7 +70,14 @@ pub fn run(
     loop {
         // `silence` for each line, however it trickles in.
         let by = crate::deadline::Deadline::after(silence);
-        let text = match super::read_line(&mut reader, by, |s, d| s.set_read_timeout(Some(d))) {
+        // macOS refuses the timeout (EINVAL) once the helper has closed its
+        // end; what it sent is still buffered and the read then ends at EOF
+        // without blocking, so that refusal is not a broken relay.
+        let set = |s: &UnixStream, d| match s.set_read_timeout(Some(d)) {
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => Ok(()),
+            r => r,
+        };
+        let text = match super::read_line(&mut reader, by, set) {
             Ok(Some(t)) => t,
             Ok(None) => {
                 return Err(RelayError::Broken(
