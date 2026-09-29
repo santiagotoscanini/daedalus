@@ -34,8 +34,12 @@ const gate = defineGate({
   readStatus: async () => (await import('./apply')).readApplyStatus(),
   running: (inFlight) => `an apply is already running (${inFlight.phase})`,
 })
-/** What an Apply would carry right now: app drift and site-document edits. */
-async function currentChanges() {
+/**
+ * What an Apply would carry right now: app drift, site-document edits and the
+ * machines. The one definition — the Apply bar (host/pending-apply.ts), the
+ * preview and both flows below all read it.
+ */
+export async function currentChanges() {
   const { listApps, driftOf } = await import('../lib/repo/apps')
   const { manifestEntries } = await import('./nix-manifest')
 
