@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install or update the daedalus agent on this Mac or Linux machine.
 #
-#   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
+#   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- --pin FINGERPRINT
 #
 # Downloads the newest agent-v* release of the engine repository (the site
 # serves this file from agent/install.sh on main, so the line never names a
@@ -33,15 +33,14 @@
 # Environment: DAEDALUS_REPO (owner/name), DAEDALUS_AGENT_VERSION (e.g. 0.5.0
 # instead of the newest).
 #
-# Arguments, both optional — where the controller (the box's agent) is and
-# which key to trust, written to config.toml (also on a reinstall):
+# Arguments — which key to trust (required: the machine trusts no controller
+# it was not told of) and where the controller (the box's agent) is, written
+# to config.toml (also on a reinstall); Settings › Machines gives the line:
 #
 #   curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- \
-#     --controller box.lan:7788 --pin 3f2a:9c01:…
+#     --pin 3f2a:9c01:… --controller box.lan:7788
 #
-# Without --controller the agent asks DNS for the controller's SRV record;
-# without --pin it trusts the first key the controller presents, and says
-# so until one is pinned.
+# Without --controller the agent asks DNS for the controller's SRV record.
 set -eu
 # Root's umask under `sudo sh` can be 077, which would leave the agent's
 # directories unreadable to the user the menu bar app, the tray and the
@@ -64,6 +63,10 @@ while [ $# -gt 0 ]; do
     *) echo "install.sh: unknown argument $1 (known: --controller HOST:PORT, --pin FINGERPRINT)" >&2; exit 1 ;;
   esac
 done
+case " $LINK_ARGS " in
+  *" --pin "*) ;;
+  *) echo "install.sh: --pin FINGERPRINT is required: the controller key this machine trusts (Settings › Machines gives the install line)" >&2; exit 1 ;;
+esac
 
 die() { echo "install.sh: $*" >&2; exit 1; }
 

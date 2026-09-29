@@ -13,7 +13,7 @@ use crate::api::wire::{CommandOk, DesiredState, NodeSummary, SetDesiredOk};
 use crate::claude::Report;
 use crate::config::{Config, Mode};
 use crate::identity::{digest, Identity};
-use crate::link::node::{connect_once, hello_of, Cadence, Ended, Target, Trust};
+use crate::link::node::{connect_once, hello_of, Cadence, Ended, Target};
 use crate::link::rotation::Keys;
 use crate::link::tls as ltls;
 use crate::link::wire::{self, name, Command, ControllerId, Hello, NodeState, Welcome, PROTO};
@@ -90,24 +90,23 @@ struct Node {
     shared: Arc<Shared>,
     stop: Shutdown,
     thread: std::thread::JoinHandle<Ended>,
-    store: PathBuf,
+    config: PathBuf,
 }
 
 impl Node {
     fn stop(self) -> Ended {
         self.stop.stop();
         let e = self.thread.join().unwrap();
-        let _ = std::fs::remove_dir_all(self.store.parent().unwrap());
+        let _ = std::fs::remove_dir_all(self.config.parent().unwrap());
         e
     }
 }
 
-fn target(ctl: &Ctl, pin: Option<[u8; 32]>) -> Target {
+fn target(ctl: &Ctl, pin: [u8; 32]) -> Target {
     Target {
         address: ctl.listener.local_addr.to_string(),
         found_via: "config".into(),
         pin,
-        pinned_via: pin.map(|_| "config"),
     }
 }
 
@@ -117,25 +116,20 @@ fn pin_of(i: &Identity) -> [u8; 32] {
 
 fn spawn_node(t: Target, nid: Identity, shared: Arc<Shared>, name: &str) -> Node {
     let stop = Shutdown::new();
-    let store = scratch(name).join(crate::link::node::STORE_FILE);
+    let config = scratch(name).join("config.toml");
     let thread = {
-        let (stop, shared, store) = (stop.clone(), Arc::clone(&shared), store.clone());
+        let (stop, shared, config) = (stop.clone(), Arc::clone(&shared), config.clone());
         std::thread::spawn(move || {
             let hello = hello_of(&Config::default(), &nid, &facts());
             let client = ltls::Client::new(&nid).unwrap();
-            let config = store.with_file_name("config.toml");
-            let trust = Trust {
-                store: &store,
-                config: &config,
-            };
-            connect_once(&t, &client, hello, &shared, &stop, trust, &cadence())
+            connect_once(&t, &client, hello, &shared, &stop, &config, &cadence())
         })
     };
     Node {
         shared,
         stop,
         thread,
-        store,
+        config,
     }
 }
 
@@ -198,7 +192,7 @@ fn an_approved_machine_connects_and_pushes() {
         ..Default::default()
     });
     let node = spawn_node(
-        target(&ctl, Some(pin_of(&ctl.id))),
+        target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
         shared,
         "approved",
@@ -305,7 +299,7 @@ fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
         ..Default::default()
     }]);
     let node = spawn_node(
-        target(&ctl, Some(pin_of(&ctl.id))),
+        target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
         shared,
         "approved",
@@ -356,7 +350,7 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     let rx = ctl.events.subscribe();
     let nid = id(2);
     let node = spawn_node(
-        target(&ctl, Some(pin_of(&ctl.id))),
+        target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
         node_shared(),
         "pending",
@@ -437,7 +431,7 @@ fn a_revoked_machine_is_disconnected_and_refused() {
     let ctl = controller(fast());
     let nid = id(3);
     approve(&ctl.registry, &nid, claude_policy());
-    let t = target(&ctl, Some(pin_of(&ctl.id)));
+    let t = target(&ctl, pin_of(&ctl.id));
     let node = spawn_node(t.clone(), nid.clone(), node_shared(), "revoked");
     wait_for("connected", 5, || {
         summary(&ctl, &nid).is_some_and(|s| s.connected)
@@ -457,17 +451,12 @@ fn a_revoked_machine_is_disconnected_and_refused() {
 }
 
 #[test]
-fn a_controller_with_another_key_is_refused_pinned_or_first_used() {
+fn a_controller_with_another_key_is_refused() {
     let ctl = controller(fast());
     let nid = id(4);
     // Pinned to another key: refused, and the key that came is named.
     let wrong = pin_of(&id(99));
-    let node = spawn_node(
-        target(&ctl, Some(wrong)),
-        nid.clone(),
-        node_shared(),
-        "wrong-pin",
-    );
+    let node = spawn_node(target(&ctl, wrong), nid.clone(), node_shared(), "wrong-pin");
     match node.thread.join().unwrap() {
         Ended::KeyChanged {
             presented_unproven,
@@ -482,66 +471,6 @@ fn a_controller_with_another_key_is_refused_pinned_or_first_used() {
         summary(&ctl, &nid).is_none(),
         "the machine never reached hello"
     );
-
-    // Trust on first use: the key is kept, and a controller with another
-    // key is refused afterwards.
-    let node = spawn_node(target(&ctl, None), nid.clone(), node_shared(), "tofu");
-    wait_for("connected", 5, || {
-        summary(&ctl, &nid).is_some_and(|s| s.connected)
-    });
-    let stored = crate::link::node::load_store(&node.store).unwrap();
-    assert_eq!(stored.fingerprint, ctl.id.fingerprint());
-    assert_eq!(
-        node.shared.link().unwrap().pinned_via.as_deref(),
-        Some("tofu")
-    );
-    // Trusted on first use: approved, the link works, and the page says the
-    // key is not pinned.
-    assert!(node.shared.link().unwrap().unconfirmed);
-    approve(&ctl.registry, &nid, claude_policy());
-    wait_for("approved over a first-use key", 5, || {
-        node.shared.policy() == claude_policy()
-    });
-    assert!(node.shared.link().unwrap().unconfirmed);
-    let store = node.store.clone();
-    node.stop.stop();
-    node.thread.join().unwrap();
-
-    let impostor = {
-        let cid = id(201);
-        let registry = Arc::new(Registry::new(&cid, events(), fast()));
-        listen("127.0.0.1:0".parse().unwrap(), &cid, registry).unwrap()
-    };
-    let resolved = crate::link::node::resolve_target(
-        Some(&impostor.local_addr.to_string()),
-        None,
-        crate::link::node::load_store(&store).as_ref(),
-        || None,
-    )
-    .unwrap()
-    .unwrap();
-    assert_eq!(resolved.pinned_via, Some("tofu"));
-    let stop = Shutdown::new();
-    let hello = hello_of(&Config::default(), &nid, &facts());
-    let ended = connect_once(
-        &resolved,
-        &ltls::Client::new(&nid).unwrap(),
-        hello,
-        &node_shared(),
-        &stop,
-        Trust {
-            store: &store,
-            config: &store.with_file_name("config.toml"),
-        },
-        &cadence(),
-    );
-    assert!(matches!(ended, Ended::KeyChanged { .. }), "{ended:?}");
-    // Never re-pinned.
-    assert_eq!(
-        crate::link::node::load_store(&store).unwrap().fingerprint,
-        ctl.id.fingerprint()
-    );
-    let _ = std::fs::remove_dir_all(store.parent().unwrap());
 }
 
 #[test]
@@ -571,7 +500,7 @@ fn commands_are_delivered_with_an_ack_or_queued() {
     }
     let shared = node_shared();
     let node = spawn_node(
-        target(&ctl, Some(pin_of(&ctl.id))),
+        target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
         Arc::clone(&shared),
         "commands",
@@ -602,7 +531,7 @@ fn commands_are_delivered_with_an_ack_or_queued() {
     // A pending machine is not approved: nothing to deliver to.
     let other = id(6);
     let pending = spawn_node(
-        target(&ctl, Some(pin_of(&ctl.id))),
+        target(&ctl, pin_of(&ctl.id)),
         other.clone(),
         node_shared(),
         "commands-pending",
@@ -688,7 +617,7 @@ fn residency_verbs_travel_the_link_and_run_on_the_machine() {
 
     let shared = node_shared();
     let node = spawn_node(
-        target(&ctl, Some(pin_of(&ctl.id))),
+        target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
         Arc::clone(&shared),
         "residency",
@@ -754,7 +683,7 @@ fn claude_sessions_travel_the_link() {
     };
     shared.set_claude_roster(roster.clone());
     let node = spawn_node(
-        target(&ctl, Some(pin_of(&ctl.id))),
+        target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
         Arc::clone(&shared),
         "sessions",
@@ -841,7 +770,7 @@ fn raw_hello(
     let client = ltls::Client::new(nid).unwrap();
     let sock = TcpStream::connect(ctl.listener.local_addr)?;
     let mut t = client
-        .connect(sock, Some(pin_of(&ctl.id)), Duration::from_secs(5))
+        .connect(sock, pin_of(&ctl.id), Duration::from_secs(5))
         .map_err(|e| std::io::Error::other(format!("{e:?}")))?;
     let mut hello = hello_of(&Config::default(), nid, &facts());
     edit(&mut hello);
@@ -880,7 +809,7 @@ fn a_silent_machine_is_dropped_and_a_silent_controller_too() {
         ..fast()
     });
     let node = spawn_node(
-        target(&quiet, Some(pin_of(&quiet.id))),
+        target(&quiet, pin_of(&quiet.id)),
         id(8),
         node_shared(),
         "quiet",
@@ -1111,7 +1040,7 @@ fn a_trickled_hello_is_cut_off_at_the_budget() {
     let client = ltls::Client::new(&nid).unwrap();
     let sock = TcpStream::connect(ctl.listener.local_addr).unwrap();
     let mut t = client
-        .connect(sock, Some(pin_of(&ctl.id)), Duration::from_secs(5))
+        .connect(sock, pin_of(&ctl.id), Duration::from_secs(5))
         .unwrap();
     let start = Instant::now();
     let mut cut = false;
@@ -1261,8 +1190,7 @@ fn the_api_steers_the_machines_through_the_socket() {
         Target {
             address: listener.local_addr.to_string(),
             found_via: "config".into(),
-            pin: Some(pin_of(&cid)),
-            pinned_via: Some("config"),
+            pin: pin_of(&cid),
         },
         nid.clone(),
         Arc::clone(&shared),
@@ -1413,8 +1341,8 @@ fn facts() -> crate::facts::Facts {
     }
 }
 
-/// A machine's attempt with its trust in `dir` (`controller.json` and
-/// `config.toml` there), on a thread; the dir is left as it is.
+/// A machine's attempt with its trust in `dir` (its `config.toml`), on a
+/// thread; the dir is left as it is.
 fn attempt_in(
     t: Target,
     nid: &Identity,
@@ -1430,38 +1358,26 @@ fn attempt_in(
     let thread = std::thread::spawn(move || {
         let hello = hello_of(&Config::default(), &nid, &facts());
         let client = ltls::Client::new(&nid).unwrap();
-        let (store, config) = (
-            dir.join(crate::link::node::STORE_FILE),
-            dir.join("config.toml"),
-        );
-        let trust = Trust {
-            store: &store,
-            config: &config,
-        };
-        connect_once(&t, &client, hello, &s, &st, trust, &cadence())
+        let config = dir.join("config.toml");
+        connect_once(&t, &client, hello, &s, &st, &config, &cadence())
     });
     (shared, stop, thread)
 }
 
 /// Where a machine with its trust in `dir` connects now: what its
-/// config.toml and store say.
+/// config.toml says.
 fn target_in(addr: &str, dir: &std::path::Path) -> Target {
     let cfg: Config = std::fs::read_to_string(dir.join("config.toml"))
         .ok()
         .map(|t| toml::from_str(&t).unwrap())
         .unwrap_or_default();
-    crate::link::node::resolve_target(
-        Some(addr),
-        cfg.controller_pin.as_deref(),
-        crate::link::node::load_store(&dir.join(crate::link::node::STORE_FILE)).as_ref(),
-        || None,
-    )
-    .unwrap()
-    .unwrap()
+    crate::link::node::resolve_target(Some(addr), cfg.controller_pin.as_deref(), || None)
+        .unwrap()
+        .unwrap()
 }
 
 #[test]
-fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
+fn a_signed_rotation_re_pins_every_machine_in_its_config() {
     let cdir = scratch("rot-ctl");
     let keys = Arc::new(Keys::load(&cdir).unwrap());
     let old = keys.forward();
@@ -1481,9 +1397,9 @@ fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
     .unwrap();
     let addr = listener.local_addr.to_string();
 
-    // A machine pinned in config.toml (comments and other keys kept), and
-    // one that trusted the controller on first use.
-    let (pinned_dir, tofu_dir) = (scratch("rot-pinned"), scratch("rot-tofu"));
+    // Two machines pinned in config.toml (comments and other keys kept, and
+    // the other with nothing but the pin).
+    let (pinned_dir, tofu_dir) = (scratch("rot-pinned"), scratch("rot-bare"));
     std::fs::write(
         pinned_dir.join("config.toml"),
         format!(
@@ -1492,9 +1408,13 @@ fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
         ),
     )
     .unwrap();
+    std::fs::write(
+        tofu_dir.join("config.toml"),
+        format!("controller_pin = \"{}\"\n", old.fingerprint()),
+    )
+    .unwrap();
     let (pinned_id, tofu_id) = (id(60), id(61));
     let t = target_in(&addr, &pinned_dir);
-    assert_eq!(t.pinned_via, Some("config"));
     let (_, _, pinned) = attempt_in(t, &pinned_id, &pinned_dir);
     let (_, _, tofu) = attempt_in(target_in(&addr, &tofu_dir), &tofu_id, &tofu_dir);
     wait_for("both connected", 5, || {
@@ -1534,14 +1454,16 @@ fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
             new.fingerprint()
         )
     );
-    let stored =
-        crate::link::node::load_store(&tofu_dir.join(crate::link::node::STORE_FILE)).unwrap();
-    assert_eq!(stored.fingerprint, new.fingerprint());
+    let bare = std::fs::read_to_string(tofu_dir.join("config.toml")).unwrap();
+    assert_eq!(
+        bare,
+        format!("controller_pin = \"{}\"\n", new.fingerprint())
+    );
 
     // They come back under the new key, asked for by name, and are not
     // told again.
     let t = target_in(&addr, &pinned_dir);
-    assert_eq!((t.pin, t.pinned_via), (Some(new_pin), Some("config")));
+    assert_eq!(t.pin, new_pin);
     let (pshared, pstop, pinned) = attempt_in(t, &pinned_id, &pinned_dir);
     let (tshared, tstop, tofu) = attempt_in(target_in(&addr, &tofu_dir), &tofu_id, &tofu_dir);
     wait_for("both back under the new key", 5, || {
@@ -1552,17 +1474,17 @@ fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
         })
     });
     assert_eq!(keys.info().unwrap().old_key_connections, 0);
-    // A machine that knows nothing of it (a first use) meets the old key,
-    // and is told in turn.
+    // A machine that was away still pins the old key: it meets it, and is
+    // told in turn.
+    let late_dir = scratch("rot-late");
     let (_, _, late) = attempt_in(
         Target {
             address: addr.clone(),
             found_via: "dns lan".into(),
-            pin: None,
-            pinned_via: None,
+            pin: pin_of(&old),
         },
         &id(62),
-        &scratch("rot-late"),
+        &late_dir,
     );
     assert_eq!(
         late.join().unwrap(),
@@ -1578,8 +1500,7 @@ fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
         Target {
             address: addr.clone(),
             found_via: "config".into(),
-            pin: Some(pin_of(&old)),
-            pinned_via: Some("config"),
+            pin: pin_of(&old),
         },
         &id(63),
         &scratch("rot-stale"),
@@ -1593,7 +1514,7 @@ fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
     assert_eq!(pinned.join().unwrap(), Ended::Stopped);
     assert_eq!(tofu.join().unwrap(), Ended::Stopped);
     drop(listener);
-    for d in [cdir, pinned_dir, tofu_dir] {
+    for d in [cdir, pinned_dir, tofu_dir, late_dir] {
         let _ = std::fs::remove_dir_all(d);
     }
 }
@@ -1655,8 +1576,7 @@ fn a_rotation_the_trusted_key_did_not_sign_is_refused() {
         Target {
             address: addr,
             found_via: "config".into(),
-            pin: Some(pin),
-            pinned_via: None,
+            pin,
         },
         &id(73),
         &dir,
@@ -1667,7 +1587,7 @@ fn a_rotation_the_trusted_key_did_not_sign_is_refused() {
     }
     assert!(matches!(node.join().unwrap(), Ended::Dropped(_)));
     // Nothing re-pinned.
-    assert!(crate::link::node::load_store(&dir.join(crate::link::node::STORE_FILE)).is_none());
+    assert!(!dir.join("config.toml").exists());
 
     // An impostor that rotates its own key never gets as far as a
     // statement: the handshake with the pinned key fails first.
@@ -1684,8 +1604,7 @@ fn a_rotation_the_trusted_key_did_not_sign_is_refused() {
         Target {
             address: impostor.local_addr.to_string(),
             found_via: "config".into(),
-            pin: Some(pin),
-            pinned_via: Some("config"),
+            pin,
         },
         &id(73),
         &dir,

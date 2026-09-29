@@ -16,12 +16,8 @@ describe('the install lines', () => {
     expect(installLines(box).map((l) => l.os)).toEqual(['windows', 'macos', 'linux'])
   })
 
-  it('are the bare lines when the controller is not known', () => {
-    const [windows, macos] = installLines(null)
-    expect(windows?.command).toBe(
-      'Set-ExecutionPolicy -Scope Process Bypass -Force; irm https://daedalus.toscanini.me/install.ps1 | iex',
-    )
-    expect(macos?.command).toBe('curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh')
+  it('are none when the controller is not known: the agent installs only pinned', () => {
+    expect(installLines(null)).toEqual([])
   })
 
   it('quote what they carry, so nothing in it runs', () => {

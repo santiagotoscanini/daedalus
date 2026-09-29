@@ -276,11 +276,6 @@ impl Ui {
                 Some("key-changed" | "revoked" | "refused")
             )
         });
-        // A first-use key nothing confirmed: prominent, not an alarm.
-        let link_unconfirmed = p
-            .controller
-            .as_ref()
-            .is_some_and(|l| l.unconfirmed && l.controller_fingerprint.is_some());
 
         // The hold is a fault only when the box wants it; Claude, only when
         // it is wanted and not (yet) running.
@@ -294,8 +289,6 @@ impl Ui {
             "update pending"
         } else if claude_bad {
             "Claude remote control not running"
-        } else if link_unconfirmed {
-            "controller trusted on first use, unconfirmed"
         } else {
             "up to date"
         };
@@ -309,7 +302,6 @@ impl Ui {
             || p.update_available.is_some()
             || p.restart_pending
             || claude_bad
-            || link_unconfirmed
         {
             Look::Warn
         } else {
@@ -346,13 +338,10 @@ fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, Strin
         }
     };
     let own = format!("This machine's key: {}", l.fingerprint);
-    let theirs = match (&l.controller_fingerprint, &l.pinned_via) {
-        (Some(fp), _) if l.unconfirmed => {
-            format!("Controller's key: {fp} (trusted on first use, UNCONFIRMED: pin it)")
-        }
-        (Some(fp), Some(via)) => format!("Controller's key: {fp} (trusted via {via})"),
-        (Some(fp), None) => format!("Controller's key: {fp}"),
-        (None, _) => "Controller's key: not seen yet".into(),
+    // The one it trusts is config.toml's pin (link/node.rs).
+    let theirs = match &l.controller_fingerprint {
+        Some(fp) => format!("Controller's key: {fp} (pinned)"),
+        None => "Controller's key: not seen yet".into(),
     };
     (first, own, theirs)
 }
@@ -537,27 +526,24 @@ mod tests {
             "Controller: box.lan:7788 — waiting for approval; compare both keys"
         );
         assert_eq!(own, "This machine's key: aaaa:bbbb");
-        assert_eq!(theirs, "Controller's key: cccc:dddd (trusted via config)");
+        assert_eq!(theirs, "Controller's key: cccc:dddd (pinned)");
         let changed = LinkPage {
             state: Some("key-changed".into()),
             error: Some("controller key changed: …".into()),
             ..pending
         };
         assert!(link_lines(Some(&changed)).0.contains("KEY CHANGED"));
-        let tofu = LinkPage {
+        let approved = LinkPage {
             state: Some("approved".into()),
             error: None,
-            pinned_via: Some("tofu".into()),
-            unconfirmed: true,
             ..changed.clone()
         };
-        let (first, _, theirs) = link_lines(Some(&tofu));
+        let (first, _, _) = link_lines(Some(&approved));
         assert_eq!(first, "Controller: box.lan:7788 — approved");
-        assert!(theirs.contains("UNCONFIRMED"), "{theirs}");
         let nowhere = LinkPage {
             address: None,
             state: None,
-            ..tofu
+            ..approved
         };
         assert!(link_lines(Some(&nowhere)).0.contains("controller_address"));
     }

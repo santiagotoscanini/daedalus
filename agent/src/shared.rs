@@ -4,14 +4,12 @@
 //! (local.rs) and the link pushes to the controller (link/node.rs), without
 //! its telemetry. The tokens in the user's Claude profile never reach it —
 //! the report copies dates and a plan name, not credentials. The
-//! controller's metrics page reads it too (metrics_page.rs).
-//!
-//! socket (api/), which reads the same `Shared`.
+//! controller's metrics page and API socket read it too (metrics_page.rs,
+//! api/).
 //!
 //! A node's document also carries `controller`: its link to the controller —
-//! the address, its own fingerprint and the controller's it trusts, whether
-//! that key is only trusted on first use, and the last error, a changed
-//! controller key above all (link/node.rs).
+//! the address, its own fingerprint and the pinned key of the controller,
+//! and the last error, a changed controller key above all (link/node.rs).
 
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};

@@ -11,7 +11,7 @@
   itself. Run from an administrator PowerShell:
 
     Set-ExecutionPolicy -Scope Process Bypass -Force
-    irm https://daedalus.toscanini.me/install.ps1 | iex
+    & ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) -Pin 3f2a:9c01:…
 
   (the site serves this file from agent/install.ps1 on main, so the line never
   names a version; the script finds the newest agent-v* release itself).
@@ -32,13 +32,12 @@
   config.toml (also on a reinstall). Absent: the agent asks DNS for the
   controller's SRV record.
 .PARAMETER Pin
-  The controller key's fingerprint to trust, written to config.toml (also on
-  a reinstall). Absent: the first key the controller presents is trusted,
-  and the tray says so until one is pinned. With either, run the script as
-  a script block so it takes parameters:
+  Required: the controller key's fingerprint to trust, written to
+  config.toml (also on a reinstall). The machine trusts no controller it was
+  not told of; Settings › Machines gives the whole line:
 
     & ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) `
-      -Controller box.lan:7788 -Pin 3f2a:9c01:…
+      -Pin 3f2a:9c01:… -Controller box.lan:7788
 #>
 [CmdletBinding()]
 param(
@@ -47,6 +46,10 @@ param(
   [string]$Controller = "",
   [string]$Pin = ""
 )
+
+if (-not $Pin) {
+  throw "-Pin is required: the controller key this machine trusts (Settings › Machines gives the install line)"
+}
 
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

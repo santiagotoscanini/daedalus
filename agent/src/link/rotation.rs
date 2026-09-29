@@ -10,15 +10,14 @@
 //! **While both exist** the listener presents, per connection, the key the
 //! machine pins: a machine names it in the TLS server name
 //! (tls.rs `server_name_for`), so one that re-pinned gets the new key and
-//! every other — an older agent, a first use — the old one. Which key a
+//! every other — an older agent, a machine that was away — the old one. Which key a
 //! connection got is decided ONCE, in its handshake, from a snapshot of
 //! the keys taken as it was accepted (`Snapshot`, `ConnResolver`), so a
 //! retirement mid-handshake can neither mislabel nor strand it. Every
 //! connection under the key being retired is sent the statement once
 //! (`rotate`, link/wire.rs), which the machine checks against the key its
 //! handshake just proved, re-pins to the new key (config.toml's
-//! `controller_pin` where that was the pin, else `controller.json`),
-//! acknowledges, and reconnects under the new key (link/node.rs).
+//! `controller_pin`), acknowledges, and reconnects under the new key (link/node.rs).
 //!
 //! **Retire**: once the grace period is over (`tick`), the new key becomes
 //! `identity.key` — the rename is the commit — `rotation.json` goes, and

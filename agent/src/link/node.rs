@@ -2,36 +2,30 @@
 //! to trust it, and keeping one connection to it — the hello, the pushes,
 //! the box's word back.
 //!
-//! **Where to.** config.toml's `controller_address`; else the address the
-//! first-use key was trusted at (kept in `controller.json` in the data
-//! directory); else the SRV record `_daedalus-controller._tcp` under the
-//! search domains (discover.rs), asked again every `REDISCOVER`. With none
-//! of them the machine reaches nobody and asks again every `IDLE_RETRY`.
+//! **Where to.** config.toml's `controller_address`; else the SRV record
+//! `_daedalus-controller._tcp` under the search domains (discover.rs),
+//! asked again every `REDISCOVER`. With neither the machine reaches nobody
+//! and asks again every `IDLE_RETRY`.
 //!
-//! **Whom to trust** (`Target::pin`): config.toml's `controller_pin`, which
-//! nothing overrides; else the key kept in `controller.json`, the first one
-//! seen. With neither, the first connection's key is accepted and kept.
-//! A connection whose key is not the trusted one is refused: the status
-//! page and the tray say "controller key changed", with the key that came
-//! (unproven: the pin check runs before the handshake signature) and the
-//! one expected, and nothing is re-pinned — the operator clears it (a new
-//! `--pin`, or `controller.json` removed) if the controller really did get
-//! a new key outside a rotation.
+//! **Whom to trust** (`Target::pin`): config.toml's `controller_pin`, set
+//! by `install --pin`, and nothing else — no key is trusted on first use
+//! (trust T1). Without a pin the machine connects nowhere and the status
+//! page and the tray say so (`NO_PIN`). A connection whose key is not the
+//! pinned one is refused: the page and the tray say "controller key
+//! changed", with the key that came (unproven: the pin check runs before
+//! the handshake signature) and the one expected, and nothing is re-pinned
+//! — a new `--pin` is the operator's, if the controller really did get a
+//! new key outside a rotation.
 //!
 //! **Rotation** (rotation.rs). A controller handing its trust to a new key
 //! sends, over a connection the pinned key's handshake just proved, a
 //! `rotate` request: the new key and the pinned key's signature over it
 //! (identity.rs `verify_rotation`). The machine checks it against THAT key
-//! — never against anything the request carries — re-pins where the pin
-//! was (config.toml's `controller_pin`, else `controller.json`), then
-//! acknowledges and reconnects, asking for the new key by name
-//! (tls.rs `server_name_for`). A statement that does not verify is
-//! refused and nothing moves; only the holder of the pinned key can make
+//! — never against anything the request carries — rewrites config.toml's
+//! `controller_pin`, then acknowledges and reconnects, asking for the new
+//! key by name (tls.rs `server_name_for`). A statement that does not verify
+//! is refused and nothing moves; only the holder of the pinned key can make
 //! one, so an impostor, which cannot finish the handshake, cannot either.
-//!
-//! **Pinned or not.** A key from config.toml is pinned. A first-use key is
-//! not, and the page (`controller.unconfirmed`) and the tray warn "trusted
-//! on first use, unconfirmed: pin it"; the link works all the same.
 //!
 //! **The connection.** `hello` first (wire.rs): who the machine is. The
 //! answer says where it stands. PENDING: the machine sends heartbeats only
@@ -64,11 +58,10 @@
 
 use crate::util::Shutdown;
 use std::net::{TcpStream, ToSocketAddrs};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::tls::{self, Recv, Tls};
@@ -83,8 +76,6 @@ use crate::rpc::{code, ApiError, Response};
 use crate::shared::Shared;
 use crate::state::now_rfc3339;
 
-/// Where the first-use controller key is kept, in the data directory.
-pub const STORE_FILE: &str = "controller.json";
 /// The slowest a push waits when nothing changed.
 pub const PUSH_EVERY: Duration = Duration::from_secs(60);
 /// How often the pushes are looked at.
@@ -94,103 +85,39 @@ const REDISCOVER: Duration = Duration::from_secs(10 * 60);
 /// How long the loop waits when there is no controller to try.
 const IDLE_RETRY: Duration = Duration::from_secs(60);
 
-/// The controller key this machine trusted on first use, and where.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Stored {
-    /// Where the controller was reached.
-    pub address: Option<String>,
-    /// Its key's fingerprint (identity.rs).
-    pub fingerprint: String,
-}
-
-pub fn store_path() -> PathBuf {
-    crate::paths::data_dir().join(STORE_FILE)
-}
-
-/// Whether the store may be read: absent, or owned by whom private.rs
-/// trusts. One that is not is never read — nor replaced by a first use.
-pub fn store_trusted(path: &Path) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-    crate::private::check_owner(path).map_err(|e| format!("{e:#}"))
-}
-
-pub fn load_store(path: &Path) -> Option<Stored> {
-    store_trusted(path).ok()?;
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str::<Stored>(&text)
-        .ok()
-        .filter(|s| parse_fingerprint(&s.fingerprint).is_ok())
-}
-
-fn save_store(path: &Path, s: &Stored) -> Result<(), String> {
-    let text = serde_json::to_string_pretty(s).unwrap_or_default();
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    crate::util::write_atomic(path, text.as_bytes(), crate::util::Access::Mode(0o644)).map_err(|e| {
-        tracing::warn!(path = %path.display(), error = %e, "link: the trusted controller key was not saved");
-        format!("{}: {e}", path.display())
-    })
-}
-
-/// Where this machine keeps whom it trusts: the first-use store, and the
-/// config.toml whose `controller_pin` a rotation rewrites where that is
-/// the pin.
-#[derive(Clone, Copy, Debug)]
-pub struct Trust<'a> {
-    pub store: &'a Path,
-    pub config: &'a Path,
-}
-
-/// Where the next attempt goes, and what it trusts.
+/// Where the next attempt goes, and the key it accepts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
     pub address: String,
     pub found_via: String,
-    /// The SHA-256 of the key to accept; None: trust on first use.
-    pub pin: Option<[u8; 32]>,
-    /// "config" or "tofu"; None with no pin.
-    pub pinned_via: Option<&'static str>,
+    /// The SHA-256 of the key to accept: config.toml's `controller_pin`.
+    pub pin: [u8; 32],
 }
 
-impl Target {
-    /// Pinned in config.toml, as opposed to trusted on first use.
-    pub fn pinned(&self) -> bool {
-        self.pinned_via == Some("config")
-    }
-}
+/// What a machine without a pin is told (module doc).
+pub const NO_PIN: &str = "no controller_pin in config.toml: this machine trusts no controller \
+     until it is installed with --pin <fingerprint> (the Machines page gives the line)";
 
-/// The pure half of choosing a target (module doc). `dns` is asked only
-/// when nothing else names an address. An unreadable config pin is an
-/// error, so the loop can say so rather than trust on first use.
+/// The pure half of choosing a target (module doc). The pin is config.toml's
+/// and nothing else: without one, or with one that does not parse, there is
+/// no target and the error says why. `dns` is asked only when config.toml
+/// names no address.
 pub fn resolve_target(
     config_address: Option<&str>,
     config_pin: Option<&str>,
-    stored: Option<&Stored>,
     dns: impl FnOnce() -> Option<(String, String)>,
 ) -> Result<Option<Target>, String> {
-    let config_address = config_address.map(str::trim).filter(|a| !a.is_empty());
-    let (pin, pinned_via) = match config_pin.map(str::trim).filter(|p| !p.is_empty()) {
-        Some(p) => (
-            Some(parse_fingerprint(p).map_err(|e| format!("controller_pin in config.toml: {e}"))?),
-            Some("config"),
-        ),
-        None => match stored.and_then(|s| parse_fingerprint(&s.fingerprint).ok()) {
-            Some(d) => (Some(d), Some("tofu")),
-            None => (None, None),
-        },
+    let pin = match config_pin.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(p) => {
+            parse_fingerprint(p).map_err(|e| format!("controller_pin in config.toml: {e}"))?
+        }
+        None => return Err(NO_PIN.into()),
     };
-    let (address, found_via) = match config_address {
+    let (address, found_via) = match config_address.map(str::trim).filter(|a| !a.is_empty()) {
         Some(a) => (a.to_string(), "config".to_string()),
-        None => match stored.and_then(|s| s.address.clone()) {
-            Some(a) => (a, "stored".to_string()),
-            None => match dns() {
-                Some((a, suffix)) => (a, format!("dns {suffix}")),
-                None => return Ok(None),
-            },
+        None => match dns() {
+            Some((a, suffix)) => (a, format!("dns {suffix}")),
+            None => return Ok(None),
         },
     };
     if !crate::config::valid_host_port(&address) {
@@ -202,7 +129,6 @@ pub fn resolve_target(
         address,
         found_via,
         pin,
-        pinned_via,
     }))
 }
 
@@ -266,7 +192,6 @@ pub fn run_loop(
     shared: Arc<Shared>,
     stop: Shutdown,
 ) {
-    let store = store_path();
     let config_path = crate::paths::config_path();
     // The TLS side, once: the key's DER is made and loaded one time.
     let client = match tls::Client::new(&id) {
@@ -286,23 +211,9 @@ pub fn run_loop(
         if stop.is_stopped() {
             return;
         }
-        if let Err(e) = store_trusted(&store) {
-            tracing::error!(error = %e, "link: the trusted controller key cannot be read");
-            shared.set_link(|l| {
-                l.state = Some("refused".into());
-                l.connected = false;
-                l.error = Some(e);
-            });
-            if stop.wait(IDLE_RETRY) {
-                return;
-            }
-            continue;
-        }
-        let stored = load_store(&store);
         let target = resolve_target(
             cfg.controller_address.as_deref(),
             cfg.controller_pin.as_deref(),
-            stored.as_ref(),
             || {
                 if let Some((f, at)) = &dns_found {
                     if at.elapsed() < REDISCOVER {
@@ -345,9 +256,9 @@ pub fn run_loop(
         shared.set_link(|l| {
             l.address = Some(target.address.clone());
             l.found_via = Some(target.found_via.clone());
-            l.controller_fingerprint = target.pin.as_ref().map(format_fingerprint);
-            l.pinned_via = target.pinned_via.map(str::to_string);
-            l.unconfirmed = !target.pinned();
+            l.controller_fingerprint = Some(format_fingerprint(&target.pin));
+            l.pinned_via = Some("config".into());
+            l.unconfirmed = false;
             l.state = Some("connecting".into());
         });
         let hello = hello_of(&cfg, &id, &facts);
@@ -357,10 +268,7 @@ pub fn run_loop(
             hello,
             &shared,
             &stop,
-            Trust {
-                store: &store,
-                config: &config_path,
-            },
+            &config_path,
             &Cadence::default(),
         );
         let wait = match &ended {
@@ -369,13 +277,10 @@ pub fn run_loop(
                 let fp = format_fingerprint(new);
                 tracing::warn!(
                     fingerprint = %fp,
-                    via = target.pinned_via.unwrap_or("tofu"),
                     "link: re-pinned to the controller's new key (a signed rotation); connecting under it"
                 );
                 // config.toml was rewritten; this process read it at start.
-                if target.pinned() {
-                    cfg.controller_pin = Some(fp.clone());
-                }
+                cfg.controller_pin = Some(fp.clone());
                 backoff = BACKOFF_MIN;
                 shared.set_link(|l| {
                     l.connected = false;
@@ -420,14 +325,11 @@ pub fn run_loop(
                 pinned,
             } => {
                 let e = format!(
-                    "controller key changed: {} presented {} (unproven), but this machine trusts {} ({}); \
-                     refusing it. If the controller really has a new key, pin it (`install --pin`) \
-                     or remove {}",
+                    "controller key changed: {} presented {} (unproven), but this machine trusts {} (config.toml); \
+                     refusing it. If the controller really has a new key, pin it (`install --pin`)",
                     target.address,
                     format_fingerprint(&digest(presented_unproven)),
                     format_fingerprint(pinned),
-                    target.pinned_via.unwrap_or("config"),
-                    store.display()
                 );
                 tracing::error!("{e}");
                 shared.set_link(|l| {
@@ -496,7 +398,7 @@ pub fn connect_once(
     hello: Hello,
     shared: &Arc<Shared>,
     stop: &Shutdown,
-    trust: Trust<'_>,
+    config: &Path,
     cadence: &Cadence,
 ) -> Ended {
     let addrs: Vec<_> = match target.address.to_socket_addrs() {
@@ -527,26 +429,11 @@ pub fn connect_once(
         return Ended::Failed("the controller presented no key".into());
     };
     let controller_fp = format_fingerprint(&digest(&controller_key));
-    if target.pin.is_none() {
-        // Trust on first use: this key, from now on.
-        tracing::warn!(
-            address = %target.address,
-            fingerprint = %controller_fp,
-            "link: trusting the controller's key on first use"
-        );
-        let _ = save_store(
-            trust.store,
-            &Stored {
-                address: Some(target.address.clone()),
-                fingerprint: controller_fp.clone(),
-            },
-        );
-    }
     shared.set_link(|l| {
         l.fingerprint = client.fingerprint().to_string();
         l.controller_fingerprint = Some(controller_fp.clone());
-        l.pinned_via = Some(target.pinned_via.unwrap_or("tofu").into());
-        l.unconfirmed = !target.pinned();
+        l.pinned_via = Some("config".into());
+        l.unconfirmed = false;
     });
 
     // hello, and its answer.
@@ -596,20 +483,10 @@ pub fn connect_once(
         l.state = Some(welcome.state.as_str().into());
         l.error = None;
     });
-    // Where a rotation re-pins: where the pin is (module doc).
+    // Where a rotation re-pins: config.toml, where the pin is (module doc).
     let repin = |new: &[u8; 32]| -> Result<(), String> {
         let fp = format_fingerprint(&digest(new));
-        if target.pinned() {
-            crate::config::set_controller_pin_at(trust.config, &fp).map_err(|e| format!("{e:#}"))
-        } else {
-            save_store(
-                trust.store,
-                &Stored {
-                    address: Some(target.address.clone()),
-                    fingerprint: fp,
-                },
-            )
-        }
+        crate::config::set_controller_pin_at(config, &fp).map_err(|e| format!("{e:#}"))
     };
     let ended = converse(
         &mut tls,
@@ -1087,56 +964,33 @@ mod tests {
     }
 
     #[test]
-    fn the_target_follows_config_then_the_store_then_dns() {
+    fn the_target_is_config_s_pin_at_config_s_address_or_dns() {
         let no_dns = || -> Option<(String, String)> { panic!("DNS asked") };
-        // Nothing: DNS is asked, and nothing found is no target.
-        assert_eq!(resolve_target(None, None, None, || None), Ok(None));
-        // DNS alone: trust on first use.
-        let t = resolve_target(None, None, None, || {
+        // No pin: no controller is trusted, whatever answers where (T1).
+        assert_eq!(
+            resolve_target(Some("box.lan:7788"), None, no_dns),
+            Err(NO_PIN.to_string())
+        );
+        assert!(resolve_target(None, Some(" "), || None).is_err());
+        // A pin, and nothing names an address: DNS is asked; nothing found
+        // is no target.
+        assert_eq!(resolve_target(None, Some(&fp(1)), || None), Ok(None));
+        let t = resolve_target(None, Some(&fp(1)), || {
             Some(("box.lan:7788".into(), "lan".into()))
         })
         .unwrap()
         .unwrap();
-        assert_eq!(
-            (t.found_via.as_str(), t.pin, t.pinned_via),
-            ("dns lan", None, None)
-        );
-        assert!(!t.pinned());
-        // Config address and pin win over everything.
-        let stored = Stored {
-            address: Some("old.lan:7788".into()),
-            fingerprint: fp(2),
-        };
-        let t = resolve_target(Some("box.lan:7788"), Some(&fp(1)), Some(&stored), no_dns)
+        assert_eq!((t.found_via.as_str(), t.pin), ("dns lan", [1; 32]));
+        // Config address and pin: DNS is never asked.
+        let t = resolve_target(Some("box.lan:7788"), Some(&fp(1)), no_dns)
             .unwrap()
             .unwrap();
-        assert_eq!(t.address, "box.lan:7788");
-        assert_eq!((t.pin, t.pinned_via), (Some([1; 32]), Some("config")));
-        assert!(t.pinned());
-        // The store: the first use, its address and key.
-        let t = resolve_target(None, None, Some(&stored), no_dns)
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            (t.address.as_str(), t.found_via.as_str()),
-            ("old.lan:7788", "stored")
-        );
-        assert_eq!((t.pin, t.pinned_via), (Some([2; 32]), Some("tofu")));
-        assert!(!t.pinned());
-        let t = resolve_target(Some("box.lan:7788"), None, Some(&stored), no_dns)
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            (t.pin, t.pinned_via, t.found_via.as_str()),
-            (Some([2; 32]), Some("tofu"), "config")
-        );
+        assert_eq!((t.address.as_str(), t.pin), ("box.lan:7788", [1; 32]));
         // A config pin that is not a fingerprint is said, never trusted past.
-        assert!(
-            resolve_target(Some("box.lan:7788"), Some("nope"), None, no_dns)
-                .unwrap_err()
-                .contains("controller_pin")
-        );
-        assert!(resolve_target(Some("box.lan"), None, None, no_dns).is_err());
+        assert!(resolve_target(Some("box.lan:7788"), Some("nope"), no_dns)
+            .unwrap_err()
+            .contains("controller_pin"));
+        assert!(resolve_target(Some("box.lan"), Some(&fp(1)), no_dns).is_err());
     }
 
     #[test]

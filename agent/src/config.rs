@@ -18,8 +18,8 @@
 //! telemetry = "full"          # full | minimal | off
 //! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
-//! controller_address = "…"    # the controller, host:port; absent = the first use's, or DNS
-//! controller_pin = "…"        # its key's fingerprint; absent = trust on first use
+//! controller_address = "…"    # the controller, host:port; absent = its DNS SRV record
+//! controller_pin = "…"        # its key's fingerprint; required: no pin, no controller
 //!
 //! [controller]                # read only when mode = "controller"; nix writes it
 //! claude_remote_control = false   # run Claude remote control on the box
@@ -148,13 +148,12 @@ pub struct Config {
     /// besides the ones DHCP handed the adapters.
     pub search_domains: Vec<String>,
     /// The controller's `host:port`, for the link (link/node.rs); absent
-    /// means: the address a first use was trusted at, or the
-    /// `_daedalus-controller._tcp` SRV record. `install --controller` writes it.
+    /// means the `_daedalus-controller._tcp` SRV record. `install --controller` writes it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_address: Option<String>,
     /// The controller key's fingerprint to pin (identity.rs
-    /// `fingerprint`); absent means: the first key the controller presents.
-    /// `install --pin` writes it.
+    /// `fingerprint`); required — without it the machine trusts no
+    /// controller (link/node.rs). `install --pin` writes it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_pin: Option<String>,
     /// What this agent is to the rest: an ordinary machine, or the

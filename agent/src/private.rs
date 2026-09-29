@@ -1,7 +1,6 @@
 //! The files that hold trust — the machine's key (`identity.key`), the
 //! config (`config.toml`, which names the controller), the kept policy
-//! (`policy.json`) and the
-//! controller key it trusts (`controller.json`, link/node.rs) — are read
+//! (`policy.json`) — are read
 //! only when their OWNER is one this agent trusts, so a user who could
 //! plant one cannot choose the key a machine proves itself with or the
 //! controller it believes.

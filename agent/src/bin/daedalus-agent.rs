@@ -53,7 +53,7 @@ fn print_help() {
     println!(
         "daedalus-agent {VERSION}\n\n\
          usage: daedalus-agent <verb>\n\n  \
-         install [--controller HOST:PORT] [--pin FINGERPRINT]\n                       register and start the service and the tray (administrator);\n                       --controller and --pin say where the controller is and which\n                       key to trust (written to config.toml, also on a reinstall)\n  \
+         install --pin FINGERPRINT [--controller HOST:PORT]\n                       register and start the service and the tray (administrator);\n                       --pin is the controller key to trust (required), --controller\n                       where it is (else DNS); both written to config.toml\n  \
          uninstall            stop and remove the service and the tray (administrator)\n  \
          run                  service entry point; used by the Service Control Manager\n  \
          serve                run in the foreground, in this terminal\n  \
@@ -123,6 +123,14 @@ fn install(args: &[String]) -> Result<()> {
             }
             other => bail!("unknown option {other}"),
         }
+    }
+    // The controller this machine trusts is named at install, never
+    // learned from whoever answers first (link/node.rs).
+    if cfg.controller_pin.is_none() {
+        bail!(
+            "--pin is required: the controller key's fingerprint this machine trusts \
+             (Settings › Machines shows the install line with it)"
+        );
     }
     os::svc::install(&cfg)
 }

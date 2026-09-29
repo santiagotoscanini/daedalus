@@ -7,8 +7,8 @@
 //! only scheme offered). What each accepts:
 //!
 //! - the machine (`PinnedController`) accepts the controller only if the
-//!   SHA-256 of the key it presents equals the pin — or, with no pin yet,
-//!   any key, which it then records (trust on first use, link/node.rs).
+//!   SHA-256 of the key it presents equals the pin, config.toml's and
+//!   nothing else (link/node.rs): there is no first use.
 //!   The key a refused controller presented is kept for the message, and
 //!   labelled UNPROVEN: the pin check runs before the handshake signature,
 //!   so nothing proves the peer holds it. A key is taken as the
@@ -142,9 +142,10 @@ impl Client {
     pub fn connect(
         &self,
         sock: TcpStream,
-        pin: Option<[u8; 32]>,
+        pinned: [u8; 32],
         timeout: Duration,
     ) -> Result<Tls, ConnectError> {
+        let pin = Some(pinned);
         let _one = self.attempt.lock_ok();
         self.verifier.arm(pin);
         match Tls::client(
@@ -180,11 +181,12 @@ impl ServerCertVerifier for PinnedController {
             .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
         *self.presented.lock_ok() = Some(key);
         let pin = *self.pin.lock_ok();
+        // A machine trusts its pin alone (trust T1): no pin, no controller.
         match pin {
-            Some(pin) if pin != digest(&key) => Err(Error::InvalidCertificate(
+            Some(pin) if pin == digest(&key) => Ok(ServerCertVerified::assertion()),
+            _ => Err(Error::InvalidCertificate(
                 CertificateError::ApplicationVerificationFailure,
             )),
-            _ => Ok(ServerCertVerified::assertion()),
         }
     }
 
@@ -293,8 +295,8 @@ pub fn server_config(id: &Identity) -> anyhow::Result<Arc<ServerConfig>> {
 
 /// The name a machine asks for (SNI): the node id of the key it pins, under
 /// `SERVER_NAME`, so a controller holding two keys during a rotation
-/// presents the one this machine trusts (rotation.rs); the bare name on a
-/// first use, which has no pin.
+/// presents the one this machine trusts (rotation.rs); the bare name
+/// without one (the tests' raw clients).
 pub fn server_name_for(pin: Option<[u8; 32]>) -> String {
     match pin {
         Some(d) => format!("k{}.{SERVER_NAME}", &hex::encode(d)[..16]),
@@ -568,7 +570,7 @@ pub(crate) mod tests {
     fn pair(
         client: &Client,
         server_id: &Identity,
-        pin: Option<[u8; 32]>,
+        pin: [u8; 32],
     ) -> (Result<Tls, ConnectError>, io::Result<Tls>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -623,7 +625,7 @@ pub(crate) mod tests {
         let (node, ctl) = (id(1), id(2));
         let client = Client::new(&node).unwrap();
         let pin = digest(ctl.public_key().as_bytes());
-        let (c, s) = pair(&client, &ctl, Some(pin));
+        let (c, s) = pair(&client, &ctl, pin);
         let (mut c, mut s) = (c.unwrap(), s.unwrap());
         assert_eq!(s.peer_key(), Some(*node.public_key().as_bytes()));
         assert_eq!(c.peer_key(), Some(*ctl.public_key().as_bytes()));
@@ -657,7 +659,7 @@ pub(crate) mod tests {
         let (node, ctl, other) = (id(1), id(2), id(3));
         let client = Client::new(&node).unwrap();
         let pin = digest(other.public_key().as_bytes());
-        match pair(&client, &ctl, Some(pin)).0 {
+        match pair(&client, &ctl, pin).0 {
             Err(ConnectError::KeyMismatch {
                 presented_unproven,
                 pinned,
@@ -669,16 +671,7 @@ pub(crate) mod tests {
         }
         // The same client, re-armed with the right pin, gets in.
         let right = digest(ctl.public_key().as_bytes());
-        assert!(pair(&client, &ctl, Some(right)).0.is_ok());
-    }
-
-    #[test]
-    fn with_no_pin_the_first_key_is_accepted_and_proved() {
-        let (node, ctl) = (id(1), id(2));
-        let client = Client::new(&node).unwrap();
-        let (c, s) = pair(&client, &ctl, None);
-        assert!(s.is_ok());
-        assert_eq!(c.unwrap().peer_key(), Some(*ctl.public_key().as_bytes()));
+        assert!(pair(&client, &ctl, right).0.is_ok());
     }
 
     /// The provider against ring's, on Linux where ring is built anyway:
@@ -718,7 +711,7 @@ pub(crate) mod tests {
         let mut c = client
             .connect(
                 TcpStream::connect(addr).unwrap(),
-                Some(pin),
+                pin,
                 Duration::from_secs(5),
             )
             .map_err(|e| format!("{e:?}"))

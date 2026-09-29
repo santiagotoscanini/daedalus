@@ -30,26 +30,20 @@ export function psQuote(s: string): string {
 }
 
 /**
- * The three lines. With the controller known, each carries `--controller`
- * and `--pin` (`-Controller`, `-Pin`): the machine dials that address and
- * trusts only that key, confirmed from its first connection. Without one
- * (the controller did not answer), the bare lines — a machine then finds
- * the controller through DNS and trusts it on first use.
+ * The three lines, each carrying `--controller` and `--pin` (`-Controller`,
+ * `-Pin`): the machine dials that address and trusts only that key. The
+ * agent refuses to install without a pin — it trusts no controller it was
+ * not told of — so without the controller's answer there is no line to
+ * give, and none is returned.
  */
 export function installLines(
   controller: { address: string; fingerprint: string } | null,
 ): InstallLine[] {
-  const unixArgs =
-    controller === null
-      ? ''
-      : ` -s -- --controller ${shQuote(controller.address)} --pin ${shQuote(controller.fingerprint)}`
-  const unix = `curl -fsSL ${INSTALL_SITE}/install.sh | sudo sh${unixArgs}`
+  if (controller === null) return []
+  const unix = `curl -fsSL ${INSTALL_SITE}/install.sh | sudo sh -s -- --controller ${shQuote(controller.address)} --pin ${shQuote(controller.fingerprint)}`
   // A script block takes parameters where `irm … | iex` cannot; the
   // execution policy line is the README's, joined so it pastes as one.
-  const windows =
-    controller === null
-      ? `Set-ExecutionPolicy -Scope Process Bypass -Force; irm ${INSTALL_SITE}/install.ps1 | iex`
-      : `Set-ExecutionPolicy -Scope Process Bypass -Force; & ([scriptblock]::Create((irm ${INSTALL_SITE}/install.ps1))) -Controller ${psQuote(controller.address)} -Pin ${psQuote(controller.fingerprint)}`
+  const windows = `Set-ExecutionPolicy -Scope Process Bypass -Force; & ([scriptblock]::Create((irm ${INSTALL_SITE}/install.ps1))) -Controller ${psQuote(controller.address)} -Pin ${psQuote(controller.fingerprint)}`
   return [
     { os: 'windows', label: 'Windows', where: 'an administrator PowerShell', command: windows },
     {
