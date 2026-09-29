@@ -288,6 +288,8 @@ let
     };
     cargoLock.lockFile = crate + "/Cargo.lock";
     buildNoDefaultFeatures = true;
+    # The build's identity in its version (agent/build.rs): not a release.
+    env.DAEDALUS_BUILD_REV = toString config.fleet.daedalus.engineRev;
     cargoBuildFlags = [
       "--bin"
       "daedalus-agent"
@@ -454,6 +456,18 @@ let
   };
 in
 {
+  options.fleet.daedalus.engineRev = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = null;
+    internal = true;
+    description = ''
+      The engine commit this system was built from (the flake sets it from
+      its own `shortRev`, `dirtyShortRev` for a dirty tree): the controller's
+      agent reports its version as `<crate version>+g<rev>`, so two builds
+      never report the same one (agent/README.md "Versions").
+    '';
+  };
+
   options.fleet.daedalus.statusPort = lib.mkOption {
     type = lib.types.port;
     default = 7787;

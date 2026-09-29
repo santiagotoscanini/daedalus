@@ -1041,10 +1041,23 @@ not stop the service: the rest runs on, the port is tried again every 15 s,
 and the log names the port's holder (its uid). One service runs per data
 directory (`agent.lock` there).
 
+## Versions
+
+The version an agent reports names the build exactly. A release is the
+crate's version alone (`0.21.0`), built by CI from the tag, whose name the
+`guard` job holds to `Cargo.toml`. Every other build carries the commit it
+was made from as semver build metadata: nix builds the controller with the
+engine's locked revision (`fleet.daedalus.engineRev`, from the flake's
+`shortRev`), and `build.rs` reports `0.21.0+g1a2b3c4`
+(`DAEDALUS_BUILD_REV`); a dirty tree says so (`-dirty`). Build metadata
+does not order versions, so the updater compares releases alone. Bump
+`Cargo.toml` with every change under `agent/src` that is meant to ship: the
+next release's number, which the box's build carries until it is tagged.
+
 ## Releasing
 
-Bump `version` in `Cargo.toml`, commit, tag `agent-v<version>`, push the
-tag. [`.github/workflows/agent.yml`](../.github/workflows/agent.yml) builds
+Bump `version` in `Cargo.toml`, commit, tag `agent-v<version>` on a commit
+on `main`, push the tag. [`.github/workflows/agent.yml`](../.github/workflows/agent.yml) builds
 the Windows binaries, the macOS universal binaries, the static Linux
 service for x86_64 and aarch64 (musl, rustls; each on a runner of its own
 architecture) and the Linux tray for x86_64 (glibc, GTK), signs every one

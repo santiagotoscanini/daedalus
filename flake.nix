@@ -282,7 +282,10 @@
 
         # The control plane itself, behind `fleet.modules.daedalus.enable`.
         daedalus = {
-          imports = map (m: root + "/stacks/daedalus/${m}") daedalusModules;
+          imports = map (m: root + "/stacks/daedalus/${m}") daedalusModules ++ [
+            # Which engine commit this is, for the agent's version (controller.nix).
+            { fleet.daedalus.engineRev = self.shortRev or self.dirtyShortRev or null; }
+          ];
         };
 
         # The catalog of stacks, all switched off until the host says otherwise.
