@@ -379,6 +379,41 @@ in
       '';
     };
 
+    # gravity.db's schema follows the Pi-hole core, and only gravity.sh
+    # migrates it — FTL never does, and simply fails to use an old one
+    # ("no such table: vw_allowlist": blocking off, resolution still up).
+    # Nothing here ran gravity.sh: the NixOS module's pihole-ftl-setup exists
+    # only with `services.pihole-ftl.lists`, and even then its migration step
+    # reads the SQL from /etc/.pihole (the one path the package leaves
+    # unpatched: gravity-db.sh's `scriptPath`), which NixOS does not have.
+    # So /etc/.pihole is the package's own tree (read-only, as upstream's
+    # checkout would be; it also makes the UI's "Update gravity" migrate),
+    # and every FTL start is preceded by the schema upgrade alone —
+    # `gravity.sh --upgrade`: no download, a no-op when the schema is
+    # current. Wanted, not required: a failed migration must not take LAN
+    # DNS down with it.
+    environment.etc.".pihole".source = "${config.services.pihole-ftl.piholePackage}/share/pihole";
+    systemd.services.pihole-gravity-upgrade = {
+      description = "Pi-hole: migrate gravity.db to the core's schema";
+      before = [ "pihole-ftl.service" ];
+      wantedBy = [ "pihole-ftl.service" ];
+      unitConfig.ConditionPathExists = config.services.pihole-ftl.settings.files.gravity;
+      serviceConfig = {
+        Type = "oneshot";
+        User = config.services.pihole-ftl.user;
+        Group = config.services.pihole-ftl.group;
+        ExecStart = "${config.services.pihole-ftl.piholePackage}/share/pihole/advanced/Scripts/gravity.sh --upgrade";
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ReadWritePaths = with config.services.pihole-ftl; [
+          configDirectory
+          stateDirectory
+          logDirectory
+        ];
+      };
+    };
+
     # pihole-ftl is Type=simple — it declares "active" the instant the FTL
     # process starts, well before it's loaded gravity.db and bound :53. So
     # `After=pihole-ftl.service` only orders, it doesn't wait for readiness.
