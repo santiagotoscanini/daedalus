@@ -32,7 +32,6 @@
   pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
-  mkSecretRender,
   pinnedImage,
   ...
 }:
@@ -51,27 +50,63 @@ let
   # ── the proxy proof (webApps.<n>.proxyProof) ─────────────────────────────
   #
   # One secret per app that verifies it, so a proof that leaks from one app
-  # forges nothing at another. Machine-generated, like every credential this
-  # box mints for itself: `<machineState>/traefik/proof-<n>`, 32 random bytes
-  # as hex, born the first time the app is declared and never rewritten.
-  # Rendered twice at boot, from that one file: traefik's copy as
-  # PROXY_PROOF_<N> (the `proof-<n>` middleware's `env` template reads it when
-  # the rules load) and the app's as PROXY_PROOF. Neither copy is in the
-  # store; the rules file carries only the variable's name.
+  # forges nothing at another: 32 random bytes as hex, minted per boot by ONE
+  # oneshot, `traefik-proxy-proof`, into its own tmpfs runtime directory
+  # (`/run/proxy-proof`, the operator's, 0700). The same unit writes both
+  # copies: traefik's as PROXY_PROOF_<N> in `traefik.env` (the `proof-<n>`
+  # middleware's `env` template reads it when the rules load) and the app's
+  # as PROXY_PROOF in `app-<n>.env`. Nothing is in the store (the rules file
+  # carries only the variable's name) and nothing is on a disk a snapshot
+  # takes: the proof authenticates traefik to the app per request, it is not
+  # a session, so a value that lives one boot loses nothing.
   #
-  # Rotate: delete the file, then restart traefik-proxy-proofs, both renders
-  # (traefik-proof-env, proxy-proof-<n>-env) and both consumers.
+  # Rotate: `systemctl restart traefik-proxy-proof`. A start mints fresh
+  # values; traefik and every proxyProof container are PartOf the unit, so
+  # the restart reaches both sides in the same job and they come back
+  # agreeing. A rebuild that changes the unit RELOADS it instead
+  # (reloadIfChanged): a reload mints only what is missing (an app newly
+  # declared) and rewrites the env files, so a rebuild never rotates.
   #
   # A value in a middleware is a value the API prints
   # (/api/http/middlewares), which is why the API is no longer served to
   # every bridge member (apiReaders below).
   envName = n: lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
   proofApps = lib.filterAttrs (_: w: w.proxyProof) cfg.webApps;
-  proofDir = "${cfg.machineState}/traefik";
-  proofFile = n: "${proofDir}/proof-${n}";
-  proofRenderUnit = n: "proxy-proof-${n}-env";
-  proofAppEnv = n: "/run/proxy-proof/${n}/env";
-  traefikProofEnv = "/run/traefik-proof/env";
+  proofUnit = "traefik-proxy-proof";
+  proofDir = "/run/proxy-proof";
+  proofAppEnv = n: "${proofDir}/app-${n}.env";
+  traefikProofEnv = "${proofDir}/traefik.env";
+  proofConsumers = [
+    "podman-traefik.service"
+  ]
+  ++ lib.mapAttrsToList (_: w: "podman-${w.serviceName}.service") proofApps;
+  # `rotate` (a start) mints every value; `keep` (a reload) mints only the
+  # missing ones. Either way both env files are rewritten from the values.
+  proofScript = pkgs.writeShellScript "traefik-proxy-proof" ''
+    set -eu
+    mode=$1
+    cd ${proofDir}
+    # What the per-file renders of an earlier generation left here.
+    for d in ./*/; do
+      [ -d "$d" ] && rm -rf -- "$d"
+    done
+    : >traefik.env.new
+    ${lib.concatMapStrings (n: ''
+      if [ "$mode" = rotate ] || [ ! -s app-${n}.proof ]; then
+        od -An -N32 -tx1 /dev/urandom | tr -d ' \n' >app-${n}.proof.new
+        mv -f app-${n}.proof.new app-${n}.proof
+      fi
+      v=$(cat app-${n}.proof)
+      if [ "''${#v}" -ne 64 ]; then
+        echo "app-${n}.proof is not 64 hex characters" >&2
+        exit 1
+      fi
+      printf 'PROXY_PROOF=%s\n' "$v" >app-${n}.env.new
+      mv -f app-${n}.env.new app-${n}.env
+      printf 'PROXY_PROOF_${envName n}=%s\n' "$v" >>traefik.env.new
+    '') (lib.attrNames proofApps)}
+    mv -f traefik.env.new traefik.env
+  '';
   # Each proxyProof app reads its own copy; the container is its own
   # module's, and environmentFiles merges.
   proofContainers = lib.mapAttrs' (
@@ -258,17 +293,16 @@ in
       }
     );
 
-    fleet.statePaths.${proofDir} = lib.mkIf (proofApps != { }) { mode = "0700"; };
-
-    # Ensure-exists, never converge: a live proof is never rewritten, so a
-    # rebuild cannot log the operator out mid-session. Runs as the operator,
-    # who owns the state tree; nothing here needs root.
+    # The one unit behind the proof (the let-block's header): minted at its
+    # start, per boot; both sides are PartOf it. Runs as the operator — the
+    # env files are read by rootless podman — and needs nothing else.
     systemd.services = lib.mkIf (proofApps != { }) (
       {
-        traefik-proxy-proofs = {
-          description = "Mint the forward-auth proof secret of each proxyProof app";
-          after = [ "state-paths.service" ];
-          wants = [ "state-paths.service" ];
+        ${proofUnit} = {
+          description = "Mint the forward-auth proof of each proxyProof app for traefik and the app";
+          before = proofConsumers;
+          wantedBy = proofConsumers;
+          reloadIfChanged = true;
           path = [ pkgs.coreutils ];
           serviceConfig = {
             Type = "oneshot";
@@ -276,44 +310,20 @@ in
             User = cfg.operator.user;
             Group = cfg.operator.group;
             UMask = "0077";
+            RuntimeDirectory = baseNameOf proofDir;
+            RuntimeDirectoryMode = "0700";
+            # A stop never takes the files from under a running consumer.
+            RuntimeDirectoryPreserve = "yes";
+            ExecStart = "${proofScript} rotate";
+            ExecReload = "${proofScript} keep";
           };
-          script = ''
-            set -eu
-            for f in ${
-              lib.concatMapStringsSep " " (n: lib.escapeShellArg (proofFile n)) (lib.attrNames proofApps)
-            }; do
-              if [ ! -s "$f" ]; then
-                od -An -N32 -tx1 /dev/urandom | tr -d ' \n' >"$f.new"
-                mv -f "$f.new" "$f"
-              fi
-            done
-          '';
-        };
-
-        traefik-proof-env = mkSecretRender {
-          description = "Render the proxyProof secrets for traefik";
-          gates = [ "podman-traefik.service" ];
-          after = [ "traefik-proxy-proofs.service" ];
-          wants = [ "traefik-proxy-proofs.service" ];
-          dir = dirOf traefikProofEnv;
-          file = traefikProofEnv;
-          content = lib.concatMapStringsSep "\n" (
-            n: "PROXY_PROOF_${envName n}=$(cat ${lib.escapeShellArg (proofFile n)})"
-          ) (lib.attrNames proofApps);
         };
       }
-      // lib.mapAttrs' (
-        n: w:
-        lib.nameValuePair (proofRenderUnit n) (mkSecretRender {
-          description = "Render the proxyProof secret for ${n}";
-          gates = [ "podman-${w.serviceName}.service" ];
-          after = [ "traefik-proxy-proofs.service" ];
-          wants = [ "traefik-proxy-proofs.service" ];
-          dir = dirOf (proofAppEnv n);
-          file = proofAppEnv n;
-          content = "PROXY_PROOF=$(cat ${lib.escapeShellArg (proofFile n)})";
-        })
-      ) proofApps
+      // lib.genAttrs (map (lib.removeSuffix ".service") proofConsumers) (_: {
+        after = [ "${proofUnit}.service" ];
+        wants = [ "${proofUnit}.service" ];
+        partOf = [ "${proofUnit}.service" ];
+      })
     );
 
     # Baseline security headers, applied as the websecure entrypoint's
