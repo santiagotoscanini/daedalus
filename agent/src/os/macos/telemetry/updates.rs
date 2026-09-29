@@ -3,10 +3,9 @@
 
 use std::process::Command;
 
-use super::parse::plist_string;
 use super::profiler::parse_size;
-use super::run::{output_or, plist_xml};
-use super::{QUICK, SOFTWAREUPDATE};
+use super::run::{dict_str, output_or, read_plist};
+use super::SOFTWAREUPDATE;
 use crate::telemetry::{Installed, Update, Updates};
 
 /// Where macOS logs every install, its own updates included.
@@ -102,25 +101,27 @@ fn parse_update_size(s: &str) -> Option<u64> {
     parse_size(&format!("{num} {}", unit.trim()))
 }
 
-/// `/Library/Receipts/InstallHistory.plist` as XML: an array of dicts with
+/// `/Library/Receipts/InstallHistory.plist`: an array of dicts with
 /// `date`, `displayName`, `displayVersion` and `processName`, oldest first.
 /// The OS's own installs are the ones `softwareupdated` or the OS Installer
 /// wrote, or whose name starts with "macOS"; the last `keep` of them,
 /// newest first. The version is appended when the name does not carry it.
-fn parse_install_history(xml: &str, keep: usize) -> Vec<Installed> {
-    let mut out: Vec<Installed> = xml
-        .split("<dict>")
-        .skip(1)
+fn parse_install_history(plist: &plist::Value, keep: usize) -> Vec<Installed> {
+    let Some(entries) = plist.as_array() else {
+        return Vec::new();
+    };
+    let mut out: Vec<Installed> = entries
+        .iter()
+        .filter_map(plist::Value::as_dictionary)
         .filter_map(|d| {
-            let d = d.split("</dict>").next().unwrap_or(d);
-            let name = plist_string(d, "displayName")?;
-            let process = plist_string(d, "processName").unwrap_or_default();
+            let name = dict_str(d, "displayName")?;
+            let process = dict_str(d, "processName").unwrap_or_default();
             let ours = matches!(process.as_str(), "softwareupdated" | "OS Installer")
                 || name.starts_with("macOS");
             if !ours || name.is_empty() {
                 return None;
             }
-            let version = plist_string(d, "displayVersion").unwrap_or_default();
+            let version = dict_str(d, "displayVersion").unwrap_or_default();
             let title = if version.is_empty() || name.contains(&version) {
                 name
             } else {
@@ -128,7 +129,7 @@ fn parse_install_history(xml: &str, keep: usize) -> Vec<Installed> {
             };
             Some(Installed {
                 title,
-                at: plist_string(d, "date").filter(|s| !s.is_empty()),
+                at: dict_str(d, "date").filter(|s| !s.is_empty()),
             })
         })
         .collect();
@@ -141,10 +142,8 @@ fn parse_install_history(xml: &str, keep: usize) -> Vec<Installed> {
 /// is `softwareupdate -l --no-scan` — the OS's own last scan, so no
 /// network and a second; when that is refused, one real scan, which asks
 /// Apple's servers and can take a minute. The installed list is the
-/// receipts history, read through `plutil -convert xml1` (its `json`
-/// output refuses the `<date>` values this file is full of) or straight
-/// from the file, which is XML on disk anyway. macOS keeps no "restart
-/// pending" flag a tool can read, so that stays `None`.
+/// receipts history, read in process (`read_plist`). macOS keeps no
+/// "restart pending" flag a tool can read, so that stays `None`.
 pub fn read_updates() -> Updates {
     let mut u = Updates {
         checked_at: Some(crate::state::now_rfc3339()),
@@ -161,8 +160,8 @@ pub fn read_updates() -> Updates {
         Ok(text) => u.pending = parse_softwareupdate(&text),
         Err(e) => u.error = Some(format!("softwareupdate -l failed ({e})")),
     }
-    match plist_xml(INSTALL_HISTORY, QUICK) {
-        Ok(xml) => u.installed = parse_install_history(&xml, INSTALLED_KEPT),
+    match read_plist(INSTALL_HISTORY) {
+        Ok(p) => u.installed = parse_install_history(&p, INSTALLED_KEPT),
         Err(e) => {
             let line = format!("install history not readable ({e})");
             u.error = Some(match u.error.take() {
@@ -251,7 +250,7 @@ mod tests {
             "softwareupdated",
         );
         xml += "</array>\n</plist>\n";
-        let h = parse_install_history(&xml, 8);
+        let h = parse_install_history(&super::super::run::xml(&xml), 8);
         assert_eq!(h.len(), 8);
         assert_eq!(h[0].title, "Rosetta & Friends");
         assert_eq!(h[0].at.as_deref(), Some("2025-11-01T00:00:00Z"));
@@ -259,10 +258,6 @@ mod tests {
         assert_eq!(h[2].title, "macOS Sonoma 14.9");
         assert_eq!(h[7].title, "macOS Sonoma 14.4");
         assert!(h.iter().all(|i| !i.title.contains("Chrome")));
-        assert!(parse_install_history("<plist/>", 8).is_empty());
-        assert_eq!(
-            plist_string("<key>a</key><string/>", "a").as_deref(),
-            Some("")
-        );
+        assert!(parse_install_history(&plist::Value::Array(Vec::new()), 8).is_empty());
     }
 }

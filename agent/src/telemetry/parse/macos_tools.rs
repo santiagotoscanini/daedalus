@@ -408,77 +408,6 @@ pub fn parse_pmset(text: &str) -> Option<Battery> {
     })
 }
 
-/// The text of the value after `<key>name</key>` in a plist dict, whatever
-/// its tag (`<string>`, `<date>`), the XML entities decoded.
-pub fn plist_string(dict: &str, key: &str) -> Option<String> {
-    let tag = format!("<key>{key}</key>");
-    let after = &dict[dict.find(&tag)? + tag.len()..];
-    let open = after.find('<')?;
-    let close = open + after[open..].find('>')? + 1;
-    if after[open..close].ends_with("/>") {
-        return Some(String::new());
-    }
-    let end = close + after[close..].find('<')?;
-    Some(
-        after[close..end]
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'")
-            .replace("&amp;", "&"),
-    )
-}
-
-/// Every `<dict>…</dict>` of a plist, outermost first, each as its own
-/// text with the dicts nested in it cut out — so a key lookup on one
-/// (`plist_string`) sees that dict's values and not a child's repeat of
-/// the same key. With each, how deep it sits: 0 is the root.
-pub fn plist_dicts(xml: &str) -> Vec<(usize, String)> {
-    const OPEN: &str = "<dict>";
-    const CLOSE: &str = "</dict>";
-    // (where `<dict>` starts, where `</dict>` starts, depth), in closing order.
-    let mut spans: Vec<(usize, usize, usize)> = Vec::new();
-    let mut stack: Vec<usize> = Vec::new();
-    let mut i = 0;
-    loop {
-        let open = xml[i..].find(OPEN).map(|o| i + o);
-        let close = xml[i..].find(CLOSE).map(|c| i + c);
-        match (open, close) {
-            (Some(o), Some(c)) if o < c => {
-                stack.push(o);
-                i = o + OPEN.len();
-            }
-            (Some(o), None) => {
-                stack.push(o);
-                i = o + OPEN.len();
-            }
-            (_, Some(c)) => {
-                if let Some(o) = stack.pop() {
-                    spans.push((o, c, stack.len()));
-                }
-                i = c + CLOSE.len();
-            }
-            (None, None) => break,
-        }
-    }
-    spans.sort_unstable();
-    spans
-        .iter()
-        .map(|&(open, close, depth)| {
-            let mut own = String::new();
-            let mut cursor = open + OPEN.len();
-            for &(o, c, d) in &spans {
-                if d == depth + 1 && o > open && c < close {
-                    own.push_str(&xml[cursor..o]);
-                    cursor = c + CLOSE.len();
-                }
-            }
-            own.push_str(&xml[cursor..close]);
-            (depth, own)
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -695,25 +624,5 @@ mod tests {
                     -InternalBattery-0 (id=1)\t100%; charged; 0:00 remaining present: true\n";
         assert_eq!(parse_pmset(full).and_then(|b| b.charging), Some(false));
         assert!(parse_pmset("Now drawing from 'AC Power'\n").is_none());
-    }
-
-    #[test]
-    fn plist_dicts_cut_nested_ones_out() {
-        let xml = "<plist><dict>\n<key>a</key><string>1</string>\n\
-                   <key>inner</key><dict><key>a</key><string>2</string>\
-                   <dict><key>a</key><string>3</string></dict></dict>\n\
-                   <key>b</key><string>4</string>\n</dict></plist>";
-        let d = plist_dicts(xml);
-        assert_eq!(d.len(), 3);
-        assert_eq!(d[0].0, 0);
-        assert_eq!(plist_string(&d[0].1, "a").as_deref(), Some("1"));
-        assert_eq!(plist_string(&d[0].1, "b").as_deref(), Some("4"));
-        assert_eq!(d[1].0, 1);
-        assert_eq!(plist_string(&d[1].1, "a").as_deref(), Some("2"));
-        assert_eq!(d[2].0, 2);
-        assert_eq!(plist_string(&d[2].1, "a").as_deref(), Some("3"));
-        assert!(plist_dicts("<plist><array/></plist>").is_empty());
-        // An unclosed dict is not a dict.
-        assert!(plist_dicts("<dict><key>a</key>").is_empty());
     }
 }

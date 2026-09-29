@@ -94,9 +94,6 @@ const PS: Duration = Duration::from_secs(5);
 const SOFTWAREUPDATE: Duration = Duration::from_secs(90);
 /// `powermetrics -n 1 -i 500` returns in about half a second.
 const POWERMETRICS: Duration = Duration::from_secs(4);
-/// `plutil` over one plist — a bundle's Info.plist, the LaunchServices
-/// handler list — is milliseconds; the deadline is for a wedged one.
-const PLIST: Duration = Duration::from_secs(5);
 /// `stat` on /dev/console and `dscl` for a home directory: instant.
 const CONSOLE_USER: Duration = Duration::from_secs(3);
 

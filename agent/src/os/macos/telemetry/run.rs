@@ -1,6 +1,6 @@
 //! Running Apple's tools through the shared bounded shell-out (exec.rs): a
 //! closed stdin, a deadline after which the command is killed, and stdout
-//! as text; `plutil` for any plist, binary or XML. Beside them the few
+//! as text; plists read in process (`read_plist`). Beside them the few
 //! facts read straight from the kernel: an integer sysctl, the CPU ticks
 //! and the load averages.
 
@@ -115,12 +115,50 @@ pub(super) fn load_avg() -> Option<[f64; 3]> {
     (n == 3).then_some(l)
 }
 
-/// A plist as XML, whatever it is on disk: `plutil -convert xml1 -o -`
-/// reads binary and XML alike (and `-o -` leaves the file alone); when that
-/// fails the file itself is read, which serves an XML one.
-pub(super) fn plist_xml(path: &str, deadline: Duration) -> Result<String, Failed> {
-    let mut plutil = Command::new("plutil");
-    plutil.args(["-convert", "xml1", "-o", "-", path]);
-    output_or(plutil, deadline)
-        .or_else(|_| std::fs::read_to_string(path).map_err(|e| Failed::Spawn(e.to_string())))
+/// The most of a plist read: an Info.plist is a few KiB, the install
+/// history a few hundred.
+const MAX_PLIST: u64 = 4 << 20;
+
+/// A plist, binary or XML, read in process: opened without blocking and
+/// without following a symlink, refused unless it is a regular file, read
+/// through a cap. A user's `~/Applications` is theirs to fill, and the
+/// daemon that reads it is root: a fifo there cannot hang it, nor a link
+/// to `/dev/zero` fill its memory (audit D12).
+pub(super) fn read_plist(path: &str) -> Result<plist::Value, Failed> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|e| Failed::Spawn(e.to_string()))?;
+    let meta = f.metadata().map_err(|e| Failed::Spawn(e.to_string()))?;
+    if !meta.is_file() {
+        return Err(Failed::Spawn("not a regular file".into()));
+    }
+    let mut bytes = Vec::new();
+    f.take(MAX_PLIST + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| Failed::Spawn(e.to_string()))?;
+    if bytes.len() as u64 > MAX_PLIST {
+        return Err(Failed::Spawn(format!("larger than {MAX_PLIST} bytes")));
+    }
+    plist::Value::from_reader(std::io::Cursor::new(bytes))
+        .map_err(|e| Failed::Spawn(format!("not a plist ({e})")))
+}
+
+/// A dict's value for `key` as text: a string, or a date in its XML form
+/// (`2025-11-01T00:00:00Z`).
+pub(super) fn dict_str(d: &plist::Dictionary, key: &str) -> Option<String> {
+    match d.get(key)? {
+        plist::Value::String(s) => Some(s.clone()),
+        plist::Value::Date(t) => Some(t.to_xml_format()),
+        _ => None,
+    }
+}
+
+/// An XML plist as a value (the tests' fixtures).
+#[cfg(test)]
+pub(super) fn xml(text: &str) -> plist::Value {
+    plist::Value::from_reader_xml(text.as_bytes()).expect("a plist")
 }

@@ -6,9 +6,8 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use super::parse::{plist_dicts, plist_string};
-use super::run::{plist_xml, Failed};
-use super::{APPLICATIONS, PLIST};
+use super::run::{dict_str, read_plist};
+use super::APPLICATIONS;
 use crate::telemetry::App;
 
 /// How long the whole inventory may take: a hundred bundles, each an
@@ -61,12 +60,10 @@ struct AppInfo {
     id: Option<String>,
 }
 
-fn parse_app_info(xml: &str) -> Option<AppInfo> {
-    let (_, root) = plist_dicts(xml)
-        .into_iter()
-        .find(|(depth, _)| *depth == 0)?;
+fn parse_app_info(plist: &plist::Value) -> Option<AppInfo> {
+    let root = plist.as_dictionary()?;
     let s = |k: &str| {
-        plist_string(&root, k)
+        dict_str(root, k)
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
     };
@@ -75,18 +72,6 @@ fn parse_app_info(xml: &str) -> Option<AppInfo> {
         version: s("CFBundleShortVersionString").or_else(|| s("CFBundleVersion")),
         id: s("CFBundleIdentifier"),
     })
-}
-
-/// A bundle's `Info.plist` as XML: most are XML on disk and are read as a
-/// file; a binary one goes through `plutil`.
-fn app_plist_xml(path: &str) -> Result<String, Failed> {
-    if let Ok(text) = std::fs::read_to_string(path) {
-        let head = text.trim_start_matches('\u{feff}').trim_start();
-        if head.starts_with("<?xml") || head.starts_with("<plist") {
-            return Ok(text);
-        }
-    }
-    plist_xml(path, PLIST)
 }
 
 /// The `.app` names Homebrew's caskrooms hold, so a bundle copied (not
@@ -182,8 +167,8 @@ pub(super) fn read_apps(home: Option<&str>) -> (Vec<App>, Vec<String>) {
                 break 'dirs;
             }
             let file = path.rsplit('/').next().unwrap_or(&path).to_string();
-            let info = match app_plist_xml(&format!("{path}/Contents/Info.plist")) {
-                Ok(xml) => parse_app_info(&xml).unwrap_or_default(),
+            let info = match read_plist(&format!("{path}/Contents/Info.plist")) {
+                Ok(p) => parse_app_info(&p).unwrap_or_default(),
                 Err(e) => {
                     errors.push(format!("apps: {file}: Info.plist not readable ({e})"));
                     AppInfo::default()
@@ -226,7 +211,7 @@ mod tests {
             \t<key>CFBundleVersion</key>\n\t<string>21619</string>\n\
             </dict>\n</plist>\n";
         assert_eq!(
-            parse_app_info(xml),
+            parse_app_info(&super::super::run::xml(xml)),
             Some(AppInfo {
                 name: Some("Safari".into()),
                 version: Some("26.0".into()),
@@ -241,14 +226,14 @@ mod tests {
             <key>CFBundleVersion</key><string>1.8.10</string>\
             </dict></plist>";
         assert_eq!(
-            parse_app_info(xml),
+            parse_app_info(&super::super::run::xml(xml)),
             Some(AppInfo {
                 name: Some("Obsidian".into()),
                 version: Some("1.8.10".into()),
                 id: None,
             })
         );
-        assert_eq!(parse_app_info("bplist00\u{0}garbage"), None);
+        assert_eq!(parse_app_info(&plist::Value::Array(Vec::new())), None);
 
         let casks: HashSet<String> = ["Obsidian.app".to_string()].into_iter().collect();
         assert_eq!(

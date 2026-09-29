@@ -8,9 +8,8 @@
 use std::path::Path;
 use std::process::Command;
 
-use super::parse::{plist_dicts, plist_string};
-use super::run::{output, output_or, plist_xml};
-use super::{APPLICATIONS, CONSOLE_USER, PLIST, PS};
+use super::run::{dict_str, output, output_or, read_plist};
+use super::{APPLICATIONS, CONSOLE_USER, PS};
 use crate::telemetry::Browser;
 
 /// LaunchServices' handler list, under the user's home: which app opens
@@ -67,15 +66,10 @@ struct BundleInfo {
     id: Option<String>,
 }
 
-/// A bundle's `Info.plist` as XML: the version and bundle id from its root
-/// dict — the dicts nested in it (document types, URL types) do not get a
-/// say. `None` when there is no dict at all, which is not a plist.
-fn parse_bundle_info(xml: &str) -> Option<BundleInfo> {
-    let (_, root) = plist_dicts(xml)
-        .into_iter()
-        .find(|(depth, _)| *depth == 0)?;
+fn parse_bundle_info(plist: &plist::Value) -> Option<BundleInfo> {
+    let root = plist.as_dictionary()?;
     let s = |k: &str| {
-        plist_string(&root, k)
+        dict_str(root, k)
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
     };
@@ -85,25 +79,29 @@ fn parse_bundle_info(xml: &str) -> Option<BundleInfo> {
     })
 }
 
-/// LaunchServices' handler list as XML: the bundle id the console user
-/// opens `http` with, lowercased. Each `LSHandlers` entry is a dict naming
-/// a URL scheme or a content type and the handler per role; the
+/// LaunchServices' handler list: the bundle id the console user opens
+/// `http` with, lowercased. Each `LSHandlers` entry is a dict naming a URL
+/// scheme or a content type and the handler per role; the
 /// `LSHandlerPreferredVersions` dict newer entries nest repeats the role
-/// keys with "-", which is why the lookup sees each dict's own values only.
-/// No entry for http means nobody chose — Safari stands in, and it is not
+/// keys with "-", and is a value of its own, never read as the entry. No
+/// entry for http means nobody chose — Safari stands in, and it is not
 /// Chromium — so `None`.
-fn parse_http_handler(xml: &str) -> Option<String> {
-    plist_dicts(xml).iter().find_map(|(_, d)| {
-        let scheme = plist_string(d, "LSHandlerURLScheme")?;
-        if !scheme.trim().eq_ignore_ascii_case("http") {
-            return None;
-        }
-        ["LSHandlerRoleAll", "LSHandlerRoleViewer"]
-            .iter()
-            .find_map(|role| plist_string(d, role))
-            .map(|id| id.trim().to_ascii_lowercase())
-            .filter(|id| !id.is_empty() && id != "-")
-    })
+fn parse_http_handler(plist: &plist::Value) -> Option<String> {
+    let handlers = plist.as_dictionary()?.get("LSHandlers")?.as_array()?;
+    handlers
+        .iter()
+        .filter_map(plist::Value::as_dictionary)
+        .find_map(|d| {
+            let scheme = dict_str(d, "LSHandlerURLScheme")?;
+            if !scheme.trim().eq_ignore_ascii_case("http") {
+                return None;
+            }
+            ["LSHandlerRoleAll", "LSHandlerRoleViewer"]
+                .iter()
+                .find_map(|role| dict_str(d, role))
+                .map(|id| id.trim().to_ascii_lowercase())
+                .filter(|id| !id.is_empty() && id != "-")
+        })
 }
 
 /// Whether `ps -axo comm=` lists a process inside the bundle. `comm` is
@@ -224,8 +222,8 @@ pub(super) fn read_browsers(home: Option<&str>) -> (Vec<Browser>, Vec<String>) {
             }
         };
         for b in bundles {
-            let info = match plist_xml(&format!("{}/Contents/Info.plist", b.path), PLIST) {
-                Ok(xml) => parse_bundle_info(&xml).unwrap_or_else(|| {
+            let info = match read_plist(&format!("{}/Contents/Info.plist", b.path)) {
+                Ok(p) => parse_bundle_info(&p).unwrap_or_else(|| {
                     errors.push(format!("{}: Info.plist holds no dict", b.file));
                     BundleInfo::default()
                 }),
@@ -264,9 +262,9 @@ pub(super) fn read_browsers(home: Option<&str>) -> (Vec<Browser>, Vec<String>) {
     }
 
     match home {
-        Some(home) => match plist_xml(&format!("{home}/{LS_HANDLERS}"), PLIST) {
-            Ok(xml) => {
-                if let Some(handler) = parse_http_handler(&xml) {
+        Some(home) => match read_plist(&format!("{home}/{LS_HANDLERS}")) {
+            Ok(p) => {
+                if let Some(handler) = parse_http_handler(&p) {
                     for (b, id) in &mut found {
                         b.default_browser = id
                             .as_deref()
@@ -287,6 +285,7 @@ pub(super) fn read_browsers(home: Option<&str>) -> (Vec<Browser>, Vec<String>) {
 
 #[cfg(test)]
 mod tests {
+    use super::super::run::xml as xml_of;
     use super::*;
 
     #[test]
@@ -345,17 +344,19 @@ mod tests {
             \t<key>CFBundleVersion</key>\n\t<string>6613.120</string>\n\
             </dict>\n</plist>\n";
         assert_eq!(
-            parse_bundle_info(xml),
+            parse_bundle_info(&xml_of(xml)),
             Some(BundleInfo {
                 version: Some("128.0.6613.120".into()),
                 id: Some("com.google.Chrome".into()),
             })
         );
         assert_eq!(
-            parse_bundle_info("<plist><dict><key>x</key><string>y</string></dict></plist>"),
+            parse_bundle_info(&xml_of(
+                "<plist><dict><key>x</key><string>y</string></dict></plist>"
+            )),
             Some(BundleInfo::default())
         );
-        assert_eq!(parse_bundle_info("bplist00\u{0}garbage"), None);
+        assert_eq!(parse_bundle_info(&plist::Value::Array(Vec::new())), None);
     }
 
     #[test]
@@ -380,7 +381,7 @@ mod tests {
         xml += &entry("https", "LSHandlerRoleAll", "com.microsoft.edgemac");
         xml += "\t</array>\n</dict>\n</plist>\n";
         assert_eq!(
-            parse_http_handler(&xml).as_deref(),
+            parse_http_handler(&xml_of(&xml)).as_deref(),
             Some("com.microsoft.edgemac")
         );
         // The viewer role stands in when there is no all-roles handler.
@@ -389,7 +390,7 @@ mod tests {
             entry("HTTP", "LSHandlerRoleViewer", "company.thebrowser.Browser")
         );
         assert_eq!(
-            parse_http_handler(&viewer).as_deref(),
+            parse_http_handler(&xml_of(&viewer)).as_deref(),
             Some("company.thebrowser.browser")
         );
         // No http entry: nobody chose, and Safari is not Chromium.
@@ -397,8 +398,8 @@ mod tests {
             "<plist><dict><key>LSHandlers</key><array>{}</array></dict></plist>",
             entry("mailto", "LSHandlerRoleAll", "com.apple.mail")
         );
-        assert_eq!(parse_http_handler(&none), None);
-        assert_eq!(parse_http_handler(""), None);
+        assert_eq!(parse_http_handler(&xml_of(&none)), None);
+        assert_eq!(parse_http_handler(&plist::Value::Array(Vec::new())), None);
     }
 
     #[test]
