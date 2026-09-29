@@ -45,14 +45,17 @@ let
   # container on traefik-net (or a WireGuard peer, masqueraded onto it) dials
   # an isolated app's address on its private bridge and the kernel routes the
   # packet there — traefik's gate never sees it. Netavark's own `isolate`
-  # option does not close that (it only separates isolated networks from each
-  # other; a plain bridge still reaches them, verified 2026-09-28).
+  # option does not close that, `isolate=strict` included: both only drop
+  # what LEAVES an isolated bridge (`-i <bridge> ! -o <bridge>`), so a plain
+  # bridge still reaches it (probed with a throwaway pair of networks,
+  # 2026-09-28: plain → strict-isolated connected).
   #
-  # So each isolated container's start installs one rule in the namespace's
-  # FORWARD chain: a NEW connection whose destination is the private subnet
-  # and whose source is not is dropped. Traefik and the app share the bridge,
-  # so their traffic is switched on it and never forwarded; the app's own
-  # outbound connections, and the replies to them, are ESTABLISHED and pass.
+  # So one chain, FLEET_ISO, jumped to from the namespace's FORWARD chain,
+  # holds one rule per isolated app: a NEW connection whose destination is the
+  # private subnet and whose source is not is dropped. Traefik and the app
+  # share the bridge, so their traffic is switched on it and never forwarded;
+  # the app's own outbound connections, and the replies to them, are
+  # ESTABLISHED and pass.
   #
   # Except a connection that was DNATed there, i.e. addressed to a published
   # port: netavark points traefik's 80/443 at whichever of its addresses it
@@ -61,30 +64,61 @@ let
   # Dropping those broke hairpin ingress for the whole box on 2026-09-28. An
   # isolated app publishes no port of its own, so a DNATed connection into
   # its subnet can only be one to traefik — the gate itself.
-  # Run as the operator (the unit's user), inside the namespace podman keeps;
-  # idempotent (-C before -I), because the namespace outlives any one
-  # container and every isolated app's start re-asserts its own subnet. The
-  # namespace itself only goes away when the last container stops, and the
-  # next start of this container is then what recreates the rule.
-  isoGuard =
-    n:
-    pkgs.writeShellScript "iso-guard-${n}" ''
-      set -eu
-      podman=${pkgs.podman}/bin/podman
-      iptables=${pkgs.iptables}/bin/iptables
-      subnets=$("$podman" network inspect ${isoBridge n}-net --format '{{range .Subnets}}{{.Subnet}} {{end}}')
-      if [ -z "$subnets" ]; then
-        echo "iso guard: ${isoBridge n}-net has no subnet to guard" >&2
-        exit 1
+  #
+  # The subnets are PINNED (`fleet.bridgeSubnets.iso-<name>`, asserted), so
+  # the rules are the store file below, whole: loaded with `iptables-restore
+  # --noflush`, which replaces the chain's contents in one transaction —
+  # idempotent, and an app no longer isolated leaves no rule behind. The guard
+  # checks each bridge really has its pin first (an existing bridge keeps the
+  # subnet it was made with: `podman network create --ignore`) and fails the
+  # container's start if not. Every isolated container loads it before it
+  # starts (ExecStartPre: no window in which it serves unguarded) and again
+  # once it runs (ExecStartPost): the namespace goes when its last container
+  # stops, and one created by the start itself only exists after it.
+  # (`or`: an unpinned bridge is the assertion's to report, by name.)
+  isoPin = n: cfg.bridgeSubnets.${isoBridge n} or "unpinned";
+  isoRules = pkgs.writeText "fleet-iso.rules" ''
+    *filter
+    :FLEET_ISO - [0:0]
+    ${
+      lib.concatMapStrings (
+        n:
+        let
+          s = isoPin n;
+        in
+        ''
+          -A FLEET_ISO -d ${s} ! -s ${s} -m conntrack --ctstate NEW -m conntrack ! --ctstate DNAT -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP
+        ''
+      ) (lib.attrNames isolatedApps)
+    }COMMIT
+  '';
+
+  # $1 is the app whose container is starting: a bridge off its pin fails
+  # that app's start (its guard would be guarding the wrong addresses) and is
+  # only reported for the others, so one renumbered bridge takes down no
+  # other app.
+  isoGuard = pkgs.writeShellScript "fleet-iso-guard" ''
+    set -eu
+    podman=${pkgs.podman}/bin/podman
+    iptables=${pkgs.iptables}/bin/iptables
+    self=$1
+    in_ns() { "$podman" unshare --rootless-netns "$@"; }
+    ${lib.concatMapStrings (n: ''
+      have=$("$podman" network inspect ${isoBridge n}-net --format '{{range .Subnets}}{{.Subnet}} {{end}}' || true)
+      if [ "$have" != "${isoPin n} " ]; then
+        echo "iso guard: ${isoBridge n}-net is on '$have', not its pin ${isoPin n}" >&2
+        [ "$self" != ${n} ] || exit 1
       fi
-      for s in $subnets; do
-        set -- -d "$s" ! -s "$s" -m conntrack --ctstate NEW -m conntrack ! --ctstate DNAT \
-          -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP
-        if ! "$podman" unshare --rootless-netns "$iptables" -C FORWARD "$@" 2>/dev/null; then
-          "$podman" unshare --rootless-netns "$iptables" -I FORWARD 1 "$@"
-        fi
-      done
-    '';
+    '') (lib.attrNames isolatedApps)}
+    in_ns ${pkgs.iptables}/bin/iptables-restore --noflush ${isoRules}
+    if ! in_ns "$iptables" -C FORWARD -j FLEET_ISO 2>/dev/null; then
+      in_ns "$iptables" -I FORWARD 1 -j FLEET_ISO
+    fi
+    # The one-rule-per-app form earlier generations put in FORWARD itself.
+    while n=$(in_ns "$iptables" -L FORWARD --line-numbers -n | ${pkgs.gnugrep}/bin/grep -m1 'fleet isolated:' | ${pkgs.coreutils}/bin/cut -d' ' -f1) && [ -n "$n" ]; do
+      in_ns "$iptables" -D FORWARD "$n"
+    done
+  '';
 in
 {
   options.fleet = {
@@ -856,13 +890,21 @@ in
                   shares no other bridge — every peer on a shared bridge
                   can dial it — unless the app itself verifies
                   `proxyProof` (assertion). A backend it needs (pg) joins
-                  the private bridge instead. Routed: the container's
-                  start drops, in the rootless namespace, every NEW
-                  connection forwarded into the private subnet from
-                  anywhere else (isoGuard above), so no other bridge and
-                  no VPN peer reaches it by address. Probes reach it on
+                  the private bridge instead. Routed: the FLEET_ISO chain
+                  in the rootless namespace drops every NEW connection
+                  forwarded into the private subnet from anywhere else
+                  (isoGuard above, loaded before the container starts), so
+                  no other bridge and no VPN peer reaches it by address.
+                  The private bridge's subnet must be pinned
+                  (`fleet.bridgeSubnets.iso-<name>`). Probes reach it on
                   the public hostname, since gatus is not on the private
                   bridge either.
+
+                  Which layer is the control: for a header-trusting app
+                  that cannot verify `proxyProof`, the bridge and the guard
+                  are, and nothing behind them checks again. For an app
+                  that verifies the proof, the proof is, and these two are
+                  defence in depth.
                 '';
               };
               authHeaders = lib.mkOption {
@@ -890,15 +932,22 @@ in
                   `authHeaders` only when the proof matches, so a peer
                   that can dial the container some other way (a bridge it
                   shares, a path the network rules miss) cannot forge an
-                  identity. The secret is machine-generated per app under
-                  `fleet.machineState` by modules/traefik and rendered to
-                  both sides at boot; it is never in the store, and the
-                  traefik API that would show it is closed to everything
-                  but `fleet.modules.traefik.apiReaders`.
+                  identity. The secret is minted per app and per boot by
+                  modules/traefik (one unit, `traefik-proxy-proof`, on
+                  tmpfs), which writes both sides' env files; it is never
+                  in the store or on a disk, and the traefik API that would
+                  show it is closed to everything but
+                  `fleet.modules.traefik.apiReaders`.
 
                   Only for an app that verifies it; a third-party image
                   does not, and relies on `isolated` alone. Requires
                   `serviceName`.
+
+                  Which layer is the control: for an app that verifies the
+                  proof, the proof is, and `isolated`'s bridge and routed
+                  guard are defence in depth. For a header-trusting app
+                  that cannot verify it, the bridge and the guard are the
+                  control, and nothing behind them checks again.
                 '';
               };
 
@@ -1027,7 +1076,17 @@ in
     # Every route declares its upstream shape explicitly — no implicit
     # `host.containers.internal` fallback.
     assertions =
-      (lib.mapAttrsToList (n: w: {
+      (lib.mapAttrsToList (n: _: {
+        assertion = cfg.bridgeSubnets ? ${isoBridge n};
+        message = ''
+          fleet.webApps.${n}: an `isolated` app's private bridge must be pinned —
+          fleet.bridgeSubnets.${isoBridge n} = "<a /24 no other bridge uses>"; — so
+          its routed guard is a fixed rule set (isoRules). A bridge that
+          already exists keeps its subnet, so pin the one it has
+          (`podman network inspect ${isoBridge n}-net`).
+        '';
+      }) isolatedApps)
+      ++ (lib.mapAttrsToList (n: w: {
         assertion =
           lib.count (x: x) [
             (w.serviceName != null)
@@ -1203,10 +1262,14 @@ in
         traefik = lib.mapAttrsToList (n: _: isoBridge n) isolatedApps;
       };
 
-    # The routed half of isolation (isoGuard above), on every start.
+    # The routed half of isolation (isoGuard above), before every start and
+    # once the container runs.
     systemd.services = lib.mapAttrs' (
       n: w:
-      lib.nameValuePair "podman-${w.serviceName}" { serviceConfig.ExecStartPost = [ "${isoGuard n}" ]; }
+      lib.nameValuePair "podman-${w.serviceName}" {
+        serviceConfig.ExecStartPre = [ "${isoGuard} ${n}" ];
+        serviceConfig.ExecStartPost = [ "${isoGuard} ${n}" ];
+      }
     ) isolatedApps;
 
     fleet.cloudflareRoutes =

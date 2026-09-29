@@ -77,6 +77,9 @@ in
       # (over env + config.php); the bind-mounted .txt files below land here.
       "${config.fleet.stateRoot}/grocy/config/data/settingoverrides".uid = 911;
     };
+    # The private bridge's pin (webApps.isolated): a default a host whose
+    # bridge already exists overrides with the subnet it has.
+    fleet.bridgeSubnets.iso-grocy = lib.mkDefault "10.89.252.0/24";
     fleet.webApps.grocy = {
       serviceName = "grocy";
       port = 80;
