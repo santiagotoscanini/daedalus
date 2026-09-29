@@ -299,7 +299,7 @@ export const SCHEMA = {
     secret: true,
     about:
       'What traefik sends as X-Proxy-Proof on every request it forwards here. Without it no forwarded identity is honoured (core/auth.ts).',
-    source: 'modules/traefik, webApps.daedalus.proxyProof (/run/proxy-proof/daedalus/env)',
+    source: 'modules/traefik, webApps.daedalus.proxyProof (/run/proxy-proof/app-daedalus.env)',
   },
   DEPLOY_HOOK_TOKEN: {
     kind: 'string',
