@@ -1,12 +1,13 @@
 //! One DNS SRV question over UDP, asked of the nameservers resolv.conf
-//! names — how Linux finds `_daedalus-controller._tcp` without `dig` or a
-//! resolver library (the static musl build has neither worth trusting). Windows asks
-//! its own resolver and macOS asks `dig` (os/*/); discover.rs picks the name.
+//! names — how macOS and Linux find `_daedalus-controller._tcp` without
+//! `dig` or a resolver library (the static musl build has neither worth
+//! trusting); Windows asks its own resolver (os/windows/dns.rs). Every OS
+//! hands back the records and `pick` chooses among them (discover.rs).
 //!
 //! The wire format is the plain RFC 1035 one: a query with recursion
 //! desired, and an answer whose SRV records are read with name compression
 //! followed. The text and byte handling is pure and tested on every OS; only
-//! `lookup` touches the network.
+//! `query` touches the network.
 
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::time::Duration;
@@ -166,18 +167,24 @@ pub fn pick(records: &[Srv]) -> Option<(String, u16)> {
         .map(|r| (r.target.clone(), r.port))
 }
 
-/// Ask each server in turn, `timeout` each, and pick from the first that
-/// answers with records.
-pub fn lookup(name: &str, servers: &[IpAddr], timeout: Duration) -> Option<(String, u16)> {
+/// Ask each server in turn, `timeout` each: the records of the first that
+/// answers with any (empty when none does).
+pub fn query(name: &str, servers: &[IpAddr], timeout: Duration) -> Vec<Srv> {
     let mut idb = [0u8; 2];
-    rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut idb);
+    // An id the OS could not randomise is still an id: the answer is
+    // matched on it and on the question alike.
+    if rand_core::RngCore::try_fill_bytes(&mut rand_core::OsRng, &mut idb).is_err() {
+        idb = (std::process::id() as u16).to_be_bytes();
+    }
     let id = u16::from_be_bytes(idb);
-    let query = srv_query(id, name)?;
+    let Some(query) = srv_query(id, name) else {
+        return Vec::new();
+    };
     for server in servers {
         let bind: SocketAddr = if server.is_ipv4() {
-            "0.0.0.0:0".parse().ok()?
+            SocketAddr::from(([0, 0, 0, 0], 0))
         } else {
-            "[::]:0".parse().ok()?
+            SocketAddr::from(([0u16; 8], 0))
         };
         let Ok(sock) = UdpSocket::bind(bind) else {
             continue;
@@ -193,14 +200,25 @@ pub fn lookup(name: &str, servers: &[IpAddr], timeout: Duration) -> Option<(Stri
         for _ in 0..3 {
             let Ok(n) = sock.recv(&mut buf) else { break };
             if let Some(records) = parse_srv_answer(id, &buf[..n]) {
-                if let Some(found) = pick(&records) {
-                    return Some(found);
+                if !records.is_empty() {
+                    return records;
                 }
                 break;
             }
         }
     }
-    None
+    Vec::new()
+}
+
+/// The SRV records of `name` from the nameservers the system's resolv.conf
+/// names — the file macOS generates from its primary resolver, the one
+/// Linux's resolver reads: macOS and Linux alike, no tool forked.
+#[cfg(unix)]
+pub fn query_system(name: &str) -> Vec<Srv> {
+    let conf = std::fs::read_to_string("/etc/resolv.conf")
+        .map(|t| parse_resolv_conf(&t))
+        .unwrap_or_default();
+    query(name, &conf.nameservers, Duration::from_secs(2))
 }
 
 #[cfg(test)]

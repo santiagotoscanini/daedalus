@@ -6,7 +6,6 @@
 //! over UDP of resolv.conf's nameservers (dns.rs).
 
 use std::ffi::CStr;
-use std::time::Duration;
 
 use super::{read, read_line};
 use crate::dns;
@@ -71,7 +70,6 @@ fn ipv4_of(iface: &str) -> Option<String> {
 }
 
 /// `name`'s SRV record, from resolv.conf's nameservers, two seconds each.
-pub fn srv_lookup(name: &str) -> Option<(String, u16)> {
-    let servers = resolv_conf().nameservers;
-    dns::lookup(name, &servers, Duration::from_secs(2))
+pub fn srv_lookup(name: &str) -> Vec<dns::Srv> {
+    dns::query_system(name)
 }

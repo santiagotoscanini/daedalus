@@ -116,21 +116,10 @@ pub fn local_allowed() -> crate::door::Allowed {
 
 // ── network ───────────────────────────────────────────────────────────────
 
-/// `dig +short SRV` through the system's resolver settings: dig reads the
-/// resolv.conf macOS generates from its primary resolver and bypasses the
-/// system cache. macOS ships dig, and its short form is one line per
-/// record: `prio weight port target.`
-pub fn srv_lookup(name: &str) -> Option<(String, u16)> {
-    let out = Command::new("dig")
-        .args(["+short", "+time=2", "+tries=1", "SRV", name])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .find_map(crate::discover::parse_short_srv)
+/// The SRV records from the resolv.conf macOS generates from its primary
+/// resolver (dns.rs), as Linux asks: no `dig` forked.
+pub fn srv_lookup(name: &str) -> Vec<crate::dns::Srv> {
+    crate::dns::query_system(name)
 }
 
 // ── update ────────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ use windows::Win32::NetworkManagement::Dns::{
     DNS_TYPE_SRV,
 };
 
-pub fn srv_lookup(name: &str) -> Option<(String, u16)> {
+pub fn srv_lookup(name: &str) -> Vec<crate::dns::Srv> {
     let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
     // The crate types the out-pointer as the ANSI record even for the wide
     // query; the W call fills wide records, so it is read as such.
@@ -24,9 +24,9 @@ pub fn srv_lookup(name: &str) -> Option<(String, u16)> {
             None,
         );
         if rc.is_err() || list.is_null() {
-            return None;
+            return Vec::new();
         }
-        let mut found = None;
+        let mut found = Vec::new();
         let mut cur = list.cast::<DNS_RECORDW>();
         while !cur.is_null() {
             let r = &*cur;
@@ -34,8 +34,12 @@ pub fn srv_lookup(name: &str) -> Option<(String, u16)> {
                 let srv = &r.Data.SRV;
                 let target = srv.pNameTarget.to_string().unwrap_or_default();
                 if !target.is_empty() {
-                    found = Some((target, srv.wPort));
-                    break;
+                    found.push(crate::dns::Srv {
+                        priority: srv.wPriority,
+                        weight: srv.wWeight,
+                        port: srv.wPort,
+                        target,
+                    });
                 }
             }
             cur = r.pNext;

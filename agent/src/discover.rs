@@ -6,13 +6,13 @@
 //! `search_domains`, then each suffix its adapters carry (net.rs), and takes
 //! the first answer. A `controller_address` in config.toml wins over all of
 //! it (link/node.rs), for a machine whose DNS is not the box's. What DNS
-//! names is only an address: the key is still the pin's, or a first use.
+//! names is only an address: the key is still the pin's.
 //!
-//! The query is per OS (`os::srv_lookup`). On Windows it goes through the
-//! OS resolver (`DnsQuery_W`), with the machine's DNS settings and cache.
-//! On macOS it is `dig`, which reads the resolv.conf macOS generates from
-//! its primary resolver and bypasses the system cache. On Linux it is one
-//! UDP question to resolv.conf's nameservers (dns.rs), no tool needed.
+//! The records come from the OS (`os::srv_lookup`): on Windows its resolver
+//! (`DnsQuery_W`), with the machine's DNS settings and cache; on macOS and
+//! Linux one UDP question to resolv.conf's nameservers (dns.rs), no tool
+//! needed. Which record is used is `dns::pick`'s, the same everywhere: the
+//! lowest priority, then the heaviest weight.
 
 use crate::config::Config;
 use crate::net::Adapter;
@@ -27,33 +27,8 @@ pub fn find_controller(cfg: &Config, adapter: &Adapter) -> Option<(String, Strin
         }
     }
     suffixes.into_iter().find_map(|suffix| {
-        crate::os::srv_lookup(&format!("{}.{suffix}", crate::link::SRV_SERVICE))
+        let records = crate::os::srv_lookup(&format!("{}.{suffix}", crate::link::SRV_SERVICE));
+        crate::dns::pick(&records)
             .map(|(target, port)| (format!("{}:{port}", target.trim_end_matches('.')), suffix))
     })
-}
-
-/// One line of `dig +short SRV`: `0 0 7788 s2-server.lan.` → target and port.
-/// Pure, so it is tested everywhere; macOS's lookup (`dig`) reads it.
-pub fn parse_short_srv(line: &str) -> Option<(String, u16)> {
-    let mut parts = line.split_whitespace();
-    let _prio = parts.next()?;
-    let _weight = parts.next()?;
-    let port: u16 = parts.next()?.parse().ok()?;
-    let target = parts.next()?.trim_end_matches('.').to_string();
-    (!target.is_empty()).then_some((target, port))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_short_srv;
-
-    #[test]
-    fn dig_short_srv_line() {
-        assert_eq!(
-            parse_short_srv("0 0 7788 s2-server.lan."),
-            Some(("s2-server.lan".to_string(), 7788))
-        );
-        assert_eq!(parse_short_srv(""), None);
-        assert_eq!(parse_short_srv(";; connection timed out"), None);
-    }
 }
