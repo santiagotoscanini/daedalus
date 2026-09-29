@@ -8,9 +8,9 @@
 //! service is not that user — it is LocalSystem in session 0 on Windows,
 //! root on macOS. So the SESSION (session.rs, which the tray runs)
 //! supervises the server, in the desktop session with the user's
-//! credentials, and reports to the service over loopback
-//! (`POST /claude/report`, status.rs). The service keeps the full
-//! report for `/claude` and the link, puts a summary on the status page,
+//! credentials, and reports to the service over its local socket
+//! (`claude.report`, local.rs). The service keeps the full
+//! report for the `claude` method and the link, puts a summary on the status page,
 //! and hands the session back what the box decided: whether the
 //! server should run at all and where (policy), and its two instructions —
 //! update Claude Code, and restart the server.

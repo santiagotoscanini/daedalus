@@ -370,22 +370,21 @@ digest. The machine's status page and tray show its own and the
 controller's; `system.info` shows the controller's.
 
 **Where the machine connects, and whom it trusts.** The address:
-config.toml's `controller_address` (`install --controller`); else the one a
-first-use key was trusted at, kept in `controller.json` in the data
-directory; else the SRV record `_daedalus-controller._tcp` under the
-search domains DHCP handed out (and `search_domains`). With none, the
-machine reaches nobody, says so, and asks again every minute. The key:
-config.toml's `controller_pin` (`install --pin`), which nothing overrides;
-else the first key the controller presents — trust on first use — kept in
-`controller.json`, re-pinned only by a rotation the trusted key signed
-(below). DNS only ever names an address.
+config.toml's `controller_address` (`install --controller`); else the SRV
+record `_daedalus-controller._tcp` under the search domains DHCP handed out
+(and `search_domains`), the record chosen by priority then weight on every
+OS. With neither, the machine reaches nobody, says so, and asks again
+every minute. The key: config.toml's `controller_pin`, which `install`
+requires (`--pin`) and nothing else supplies — no key is trusted on first
+use, and a machine without a pin connects nowhere and says why. It is
+re-pinned only by a rotation the trusted key signed (below). DNS only ever
+names an address.
 
 A controller that presents another key than the trusted one is refused,
 and the page and the tray say **controller key changed**, with the key
 trusted and the one that came — labelled unproven, since the pin check
 runs before the handshake signature. If the controller really has a new
-key outside a rotation, pin it (`install --pin`) or remove
-`controller.json`.
+key outside a rotation, pin it (`install --pin`).
 
 **Rotating the controller's key** (`src/link/rotation.rs`).
 `controller.rotate` makes a new identity beside the old one
@@ -395,16 +394,15 @@ new — and records both with the end of a grace period in `rotation.json`
 (both 0600 in the controller's data directory, each written whole or not
 at all). While both exist the listener presents each machine the key it
 pins: a machine names that key in the TLS server name (`k<its node
-id>.daedalus-controller`; the bare name on a first use), so one that
+id>.daedalus-controller`), so one that
 re-pinned is served the new key and every other the old one — chosen once,
 in the connection's handshake, from the keys as they stood when it was
 accepted, so a retirement mid-handshake cannot mislabel it. Every
 connection under the old key is sent the statement once (`rotate
 {new_public_key, signature}`); the machine checks it against the key its
 handshake just proved — never against anything the request carries —
-re-pins where its pin was (config.toml's `controller_pin`, rewritten in
-place with every other line kept, or `controller.json`; both written
-atomically), acknowledges, and reconnects under the new key; its page's
+re-pins config.toml's `controller_pin` (rewritten in place with every other
+line, comment and table kept, and atomically), acknowledges, and reconnects under the new key; its page's
 `controller.rotated` says from which key to which, and when. A statement
 another key signed is refused and nothing moves; an impostor, which cannot
 finish the handshake with the pinned key, never gets as far as sending
@@ -430,18 +428,22 @@ for a key of their own, and every machine that meets them first follows
 it. A leaked key is recovered from by pinning a new one by hand
 (`install --pin`) on every machine.
 
-**Pinned or not.** A key trusted on first use works like a pinned one, but
-the status page's `controller.unconfirmed` is true and the tray says
-"trusted on first use, UNCONFIRMED: pin it" with its amber dot, until a
-`controller_pin` names it.
-
-**Files that hold trust.** `identity.key` and `controller.json` are read
-only when their owner is trusted: SYSTEM or Administrators on Windows, root
-or the agent's own user elsewhere; one that is not is refused (the link
-says so and does not fall back to a first use). On Windows `install` gives
-the data directory a protected DACL — SYSTEM and Administrators full
-control, Users read and execute, and Modify on `logs\` alone, where the tray
-writes — and cuts inheritance from ProgramData.
+**Files that hold trust.** `identity.key`, `config.toml` (which names the
+controller) and `policy.json` are read only when their owner is trusted:
+SYSTEM or Administrators on Windows, root or the agent's own user
+elsewhere; one that is not is refused, and `install` refuses a data
+directory or config someone else made. Every file the agent writes is
+written whole or not at all, to a temporary that did not exist before —
+never through a planted link — then renamed (`util::write_atomic`). The key
+is its owner's alone: 0600 on unix, where a key readable by others is
+refused; on Windows an explicit protected DACL, SYSTEM and Administrators
+only, set as the file is created. On Windows `install` gives the data
+directory a protected DACL — SYSTEM and Administrators full control, Users
+read and execute (the tray reads the kept policy) — cutting inheritance
+from ProgramData; the key, `config.toml`, `agent.lock` and the service's
+`logs\` are SYSTEM's and Administrators' alone, re-applied at every start
+of the service, which also removes what a user left in `logs\`. The tray
+and the session log under the user's own `%LOCALAPPDATA%`.
 
 **Enrollment.** A key the app has not approved is held PENDING: the
 controller lists it (`nodes.list`, `nodes.pending`) and keeps nothing it
@@ -494,7 +496,7 @@ characters or holding a control character.
 The status document's `controller` block and the tray's menu show the link:
 the address and where it came from, the state (`connecting`, `pending`,
 `approved`, `revoked`, `refused`, `key-changed`), both fingerprints, how
-the controller's key is trusted (`config` or `tofu`), the last rotation
+the controller's key is pinned (always `config`), the last rotation
 (`rotated`) and the last error.
 
 ## The local socket
@@ -535,21 +537,25 @@ Administrators and its server runs in session 0 — or, in a development run
 alone, the pipe is the client's own. So a pipe squatted while the service
 is down cannot give the session orders.
 
-One request per connection, one JSON line each way (at most 1 MiB), 16
+One request per connection, one JSON line each way (at most 1 MiB), in the
+agent's one envelope (`src/rpc.rs`, the API's and the link's too), 16
 connections at once. The whole exchange has a deadline on both ends, however
-slowly the other end drips its bytes: five seconds on the service's side,
-two on the client's (the tray asks from its UI thread). The status
+slowly the other end drips its bytes and whether or not it reads: five
+seconds on the service's side, two on the client's (the tray asks from its
+UI thread) — a watchdog tears the connection down when it passes, the same
+on every OS (`src/door.rs`). The status
 document never waits on the OS: its power requests (`powercfg` on Windows)
 are read by the service every minute on a thread of their own.
-`{"m":"<method>","p":…}` → `{"ok":…}` or `{"err":"…"}`. The methods:
+`{"id":1,"m":"<method>","p":…}` → `{"id":1,"ok":…}` or
+`{"id":1,"err":{"code","msg"}}`. The methods:
 `status` (the status document), `claude` (the session's full report),
 `claude.report` (the session's poll: its report in, the `ReportAnswer`
 out), `claude.roster`, `claude.restart`, `claude.update` (refused on the
 controller, where nix pins Claude Code) and `update.check`. A socket that
 cannot be made does not stop the service: it is tried again every 15 s.
 
-An update from 0.19 to 0.20 changes the channel under a tray or a session
-still running the old binary; the new service restarts them on the new
+The tray, the session and the service are one binary, so the envelope
+moves with a release: the new service restarts the others on the new
 binary at its first start (see "How an update happens"), and a Linux tray
 whose service stops answering after its binary was replaced leaves for the
 new one.
@@ -560,7 +566,7 @@ From an administrator PowerShell on a Windows machine:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://daedalus.toscanini.me/install.ps1 | iex
+& ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) -Pin 3f2a:9c01:… -Controller s2-server.lan:7788
 ```
 
 [`install.ps1`](install.ps1) downloads the release into
@@ -573,22 +579,25 @@ nothing the LAN can reach. Re-running replaces the binaries and keeps the
 config. `daedalus-agent uninstall` removes the service and the tray's Run
 key; the data directory stays.
 
-Without parameters the machine finds the controller through DNS and trusts
-its key on first use. To name the controller and pin its key at install,
-run the script as a script block so it takes parameters:
-
-```powershell
-& ([scriptblock]::Create((irm https://daedalus.toscanini.me/install.ps1))) -Controller s2-server.lan:7788 -Pin 3f2a:9c01:…
-```
+`-Pin` is required: the machine trusts no controller it was not told of.
+Without `-Controller` it finds the controller through DNS. Settings ›
+Machines gives the whole line with both. Every file is checked against the
+release's manifest (`release.json`) by SHA-256; the manifest's signature is
+the agent's to check on every later update (PowerShell has no ed25519), so
+at install the trust is HTTPS to GitHub.
 
 On a Mac or a Linux machine, from a terminal, as the user whose Claude Code
-should run there (`sh -s -- --controller HOST:PORT --pin FINGERPRINT` to
-name the controller and pin its key; both optional, the one-liner below
-unchanged without them):
+should run there (`--pin` required, `--controller` else DNS; the Machines
+page gives the line):
 
 ```sh
-curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
+curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh -s -- --pin 3f2a:9c01:… --controller s2-server.lan:7788
 ```
+
+It checks every file against the release's manifest by SHA-256, and the
+manifest's signature against the release key where the machine's openssl
+can check ed25519 (OpenSSL 3; not macOS's LibreSSL, where the trust at
+install is HTTPS to GitHub).
 
 [`install.sh`](install.sh) on a Mac downloads the two universal binaries,
 registers the service as a LaunchDaemon (root, at boot, kept alive) and the
@@ -888,11 +897,9 @@ C:\ProgramData\daedalus-agent\config.toml                 local knobs, never pol
 C:\ProgramData\daedalus-agent\state.json                  the last update check and install, an update on probation, a version rolled back from
 \\.\pipe\daedalus-agent                                   the local socket: the tray, the session and the verbs
 C:\ProgramData\daedalus-agent\identity.key                the machine's key, DPAPI-wrapped
-C:\ProgramData\daedalus-agent\controller.json             the controller key trusted on first use, and its address (the link)
 C:\ProgramData\daedalus-agent\policy.json                 the last policy the controller sent, what a restart starts from
-C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
-C:\ProgramData\daedalus-agent\logs\claude-rc.log          what `claude remote-control` printed
-C:\ProgramData\daedalus-agent\logs\claude-session-<uuid>.log  what a resumed session showed (the holder's log)
+C:\ProgramData\daedalus-agent\logs\agent.log.*            the service's daily-rotated log (SYSTEM and Administrators only)
+%LOCALAPPDATA%\daedalus-agent\logs\                       the tray's and the session's logs: claude-rc.log, claude-session-<uuid>.log
 %LOCALAPPDATA%\daedalus-agent\jobs\<job>.json             each Claude job's pid and creation time, to re-attach by
 %LOCALAPPDATA%\daedalus-agent\claude-recovery.json        the sessions to resume after a Remote Control restart
 ```
@@ -902,7 +909,7 @@ macOS:
 ```
 /Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update, .bad after a rollback)
 /Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the menu bar app
-/Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,controller.json,logs/}
+/Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,policy.json,logs/}
 /Library/Application Support/daedalus-agent/run/agent.sock            the local socket: the menu bar app and the verbs
 /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
 /Library/LaunchAgents/me.toscanini.daedalus-agent-tray.plist          the menu bar app's job
@@ -918,7 +925,7 @@ Linux:
 ```
 /opt/daedalus-agent/bin/daedalus-agent                the service (.old / .new around an update, .bad after a rollback); /usr/local/bin links to it
 /opt/daedalus-agent/bin/daedalus-agent-tray           the tray, x86_64 desktops only
-/var/lib/daedalus-agent/{config.toml,state.json,identity.key,controller.json,policy.json,session.json,logs/}
+/var/lib/daedalus-agent/{config.toml,state.json,identity.key,policy.json,session.json,logs/}
 /var/lib/daedalus-agent/run/agent.sock                the local socket: the session, the tray and the verbs
 /etc/systemd/system/daedalus-agent.service            the service's unit
 /etc/systemd/user/daedalus-agent-session.service      the session's unit, enabled for one user, lingering
@@ -964,7 +971,7 @@ search_domains = []       # more domains to ask for _daedalus-controller._tcp
 # updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
 # controller_address = "…" # the controller's link address, host:port; absent: DNS
-# controller_pin = "…"     # its key's fingerprint; absent: trust on first use
+# controller_pin = "…"     # its key's fingerprint; required (install --pin)
 ```
 
 `telemetry = "full"` reads everything above; `minimal` reads the machine
@@ -989,16 +996,25 @@ most recently used trusted project (Claude refuses the home directory;
 
 ## How an update happens
 
-Every ten minutes (`update_check_secs`), and when the tray or the box asks,
-the agent lists the repository's releases, keeps the `agent-v<semver>` ones
-that are neither drafts nor prereleases, and takes the highest above its own
-version that carries this target's required assets (on Linux the service
-alone; the tray is optional and follows only where it is installed). Unless
-config.toml says only to report it (`updates`, or `auto_update = false`),
-it downloads those executables and their `.sig`s, checks each raw ed25519
-signature against `RELEASE_PUBLIC_KEY_HEX` in [`src/update/`](src/update/),
-renames the running binaries to `.old`, moves the new ones into place and
-exits with code 3. The service's recovery action (launchd's KeepAlive on
+Every ten minutes (`update_check_secs`), and when the tray or the box asks
+(a nudge that wakes the updater at once), the agent lists the repository's
+releases, keeps the `agent-v<semver>` ones that are neither drafts nor
+prereleases and are newer than its own, and reads each one's `release.json`,
+newest first, until one holds (`src/update/`). GitHub's listing says only
+where to look; the manifest says what the release is — product, version,
+tag, and per asset its target, role, name, SHA-256 and size — and must be
+signed by a key in `RELEASE_PUBLIC_KEYS` over a context of its own, its
+version its tag's, and carry this binary's own target's required assets (on
+Linux the service alone; the tray is optional and follows only where it is
+installed). So a re-published old binary, another target's binary under
+this one's name or a moved tag is refused. Unless config.toml says only to
+report it (`updates`, or `auto_update = false`), it streams each asset to
+`.new` through a cap at its stated size, hashing on the way, keeps it only
+when size and hash are the manifest's and flushes it to disk, records the
+probation in `state.json` (and installs nothing when that cannot be
+saved), renames the running binaries to `.old`, moves the new ones into
+place, asks the new service binary its version — the manifest's, or
+everything goes back and that version is refused — and exits with code 3. The service's recovery action (launchd's KeepAlive on
 macOS, `Restart=always` on Linux) starts it on the new binary; the tray and
 the session see the status document report a version other than their own and restart
 (the Linux session unit by leaving, for systemd to start it again), and the
@@ -1060,14 +1076,18 @@ Bump `version` in `Cargo.toml`, commit, tag `agent-v<version>` on a commit
 on `main`, push the tag. [`.github/workflows/agent.yml`](../.github/workflows/agent.yml) builds
 the Windows binaries, the macOS universal binaries, the static Linux
 service for x86_64 and aarch64 (musl, rustls; each on a runner of its own
-architecture) and the Linux tray for x86_64 (glibc, GTK), signs every one
-with the `AGENT_SIGNING_KEY` secret, checks the signatures against the
-compiled-in public key, and publishes the release. The tag and `Cargo.toml`
-must agree or the build refuses.
+architecture) and the Linux tray for x86_64 (glibc, GTK), every build
+`--locked`; writes `release.json`, signs it once with `AGENT_SIGNING_KEY`
+(held in the `release` environment, `agent-v*` tags only, the operator the
+required reviewer), checks the signature against the compiled-in key, and
+publishes the release. The tag and `Cargo.toml` must agree, and the tagged
+commit must be on `main`, or nothing is published. For one release the
+assets are also signed one by one, as agents up to 0.20 verify them.
 
-The private key has no recovery path but the operator's copies; losing it
-strands every installed agent on its version. Rotation is a release signed
-with the old key that carries the new public key.
+The agent trusts every key in `RELEASE_PUBLIC_KEYS`: the current one, and
+a spare made and kept offline (PLAN, owed to the operator). Losing every
+listed private key strands every installed agent on its version; a leaked
+current key is left by a release the spare signs that drops it.
 
 **Apple's signature.** The macOS binaries are codesigned (Developer ID,
 hardened runtime) and notarized on the runner when the repository's
