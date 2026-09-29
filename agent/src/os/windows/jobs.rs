@@ -39,7 +39,7 @@ use windows::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use crate::claude::roster::UnitCost;
+use crate::jobs::UnitCost;
 use crate::jobs::{self, JobRecord, JobState, ServerJob, SessionJob};
 use crate::state::now_rfc3339;
 

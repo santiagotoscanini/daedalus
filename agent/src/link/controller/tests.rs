@@ -9,8 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::*;
-use crate::api::wire::{code, CommandOk, DesiredState, NodeSummary, Response, SetDesiredOk};
-use crate::api::Events;
+use crate::api::wire::{CommandOk, DesiredState, NodeSummary, SetDesiredOk};
 use crate::claude::Report;
 use crate::config::{Config, Mode};
 use crate::identity::{digest, Identity};
@@ -20,6 +19,8 @@ use crate::link::tls as ltls;
 use crate::link::wire::{self, name, Command, ControllerId, Hello, NodeState, Welcome, PROTO};
 use crate::link::{PREAUTH_PER_IP, UNKNOWN_ADDRESSES};
 use crate::role::Role;
+use crate::rpc::Events;
+use crate::rpc::{code, Response};
 use crate::shared::Shared;
 use crate::state::State;
 use crate::telemetry::Telemetry;

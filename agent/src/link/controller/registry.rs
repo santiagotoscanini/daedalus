@@ -12,11 +12,10 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::api::wire::{
-    code, event, ApiError, ClaudeSessionSent, CommandOk, DesiredState, NodeChanged, NodeClaude,
-    NodeClaudeRoster, NodeDetail, NodePending, NodeProviders, NodeSummary, NodeTelemetry,
-    ProviderModelSent, SetDesiredOk,
+    event, ClaudeSessionSent, CommandOk, DesiredState, NodeChanged, NodeClaude, NodeClaudeRoster,
+    NodeDetail, NodePending, NodeProviders, NodeSummary, NodeTelemetry, ProviderModelSent,
+    SetDesiredOk,
 };
-use crate::api::Events;
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of, Identity};
 use crate::link::wire::Policy;
@@ -29,6 +28,7 @@ use crate::link::{
     PREAUTH_BUDGET, PREAUTH_PER_IP, UNKNOWN_ADDRESSES, UNKNOWN_PER_MINUTE,
 };
 use crate::providers::ProviderReport;
+use crate::rpc::{code, ApiError, Events};
 use crate::state::now_rfc3339;
 use crate::telemetry::Telemetry;
 

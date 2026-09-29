@@ -48,7 +48,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     CommandOk::export_all(cfg)?;
     ControllerInfo::export_all(cfg)?;
     RootRunOk::export_all(cfg)?;
-    ApiError::export_all(cfg)?;
+    crate::rpc::ApiError::export_all(cfg)?;
     // The parameters.
     HelloParams::export_all(cfg)?;
     ClaudeSession::export_all(cfg)?;

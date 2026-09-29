@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use crate::claude::roster::UnitCost;
 use crate::exec;
+use crate::jobs::UnitCost;
 use crate::jobs::{self, JobState, ServerJob, SessionJob, Tools};
 
 pub const JOB_KIND: &str = "a launchd job in the user's gui domain";

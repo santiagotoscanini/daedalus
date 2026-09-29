@@ -83,7 +83,7 @@ pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 pub use imp::{hide_console, lock_exclusive, monotonic_usec, on_interrupt, parent_pid, pid_alive};
 // the local sockets: the controller's API (api/) and the agent's own door (local.rs)
 pub use imp::{
-    connect_local, local_allowed, local_socket_path, serve_local, serve_local_socket, LocalSocket,
+    connect_local, local_allowed, local_socket_path, serve_api_socket, serve_local, LocalSocket,
 };
 // Claude Code
 pub use imp::{

@@ -56,8 +56,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::System::IO::CancelSynchronousIo;
 
-use crate::api::conn::Conn;
-use crate::local::{Allowed, Peer, Serve};
+use crate::door::Conn;
+use crate::door::{Allowed, Peer, Policy};
 
 /// SYSTEM and the pipe's owner (the service) everything; the interactive
 /// users FILE_GENERIC_READ | FILE_WRITE_DATA (0x12008b) — without
@@ -128,7 +128,7 @@ fn client_sid(h: HANDLE) -> Option<Peer> {
 /// What the client can see of the server without opening its process
 /// (which a non-elevated user cannot, the service being SYSTEM): the pipe
 /// object's owner, and the server's session.
-fn server_side(h: HANDLE) -> crate::local::ServerSide {
+fn server_side(h: HANDLE) -> crate::door::ServerSide {
     let mut owner = PSID::default();
     let mut sd = PSECURITY_DESCRIPTOR::default();
     // SAFETY: out pointers valid for the call; `owner` points into `sd`,
@@ -168,7 +168,7 @@ fn server_side(h: HANDLE) -> crate::local::ServerSide {
     let session = unsafe { GetNamedPipeServerSessionId(h, &mut session) }
         .ok()
         .map(|()| session);
-    crate::local::ServerSide::Pipe {
+    crate::door::ServerSide::Pipe {
         owner: owner_sid,
         owner_privileged: privileged,
         session,
@@ -221,7 +221,7 @@ pub fn local_allowed() -> Allowed {
     }
     sids.sort();
     sids.dedup();
-    crate::local::windows_allowed(sids)
+    crate::door::windows_allowed(sids)
 }
 
 /// The pipe's name: `\\.\pipe\daedalus-agent`, or with a development run's
@@ -419,7 +419,7 @@ impl Drop for LocalSocket {
 /// Serve the pipe at `path` (module doc): refused when an instance of that
 /// name exists already (another agent, or a squatter). Each connection runs
 /// on a thread of its own, within `serve.deadline`.
-pub fn serve_local<F>(path: &Path, serve: &Serve, on_conn: F) -> Result<LocalSocket>
+pub fn serve_local<F>(path: &Path, policy: &Policy, on_conn: F) -> Result<LocalSocket>
 where
     F: Fn(Conn) + Send + Sync + 'static,
 {
@@ -434,7 +434,7 @@ where
     let stop = Arc::new(AtomicBool::new(false));
     let active = Arc::new(AtomicUsize::new(0));
     let on_conn = Arc::new(on_conn);
-    let serve = serve.clone();
+    let serve = policy.clone();
     let first_raw = first.0 as usize;
     {
         let (stop, name) = (Arc::clone(&stop), name.clone());
@@ -488,7 +488,7 @@ where
                         .spawn(move || {
                             // The whole exchange, the request's read
                             // included, within the deadline.
-                            let _deadline = Deadline::arm(serve.deadline);
+                            let _deadline = Deadline::arm(serve.whole.unwrap_or(serve.first_line));
                             let h = HANDLE(raw as *mut c_void);
                             let Ok(mut conn) = conn_of(h, true) else {
                                 slot.fetch_sub(1, Ordering::AcqRel);
@@ -498,7 +498,7 @@ where
                                 tracing::warn!("local: refused a connection past the limit");
                                 let _ = conn
                                     .writer
-                                    .write_all(crate::local::too_many(serve.max_connections).as_bytes());
+                                    .write_all(serve.busy.as_bytes());
                                 (conn.close)();
                                 slot.fetch_sub(1, Ordering::AcqRel);
                                 return;
@@ -508,7 +508,7 @@ where
                             let mut line = Vec::new();
                             let _ = std::io::BufRead::read_until(
                                 &mut std::io::BufReader::new(
-                                    std::io::Read::take(&mut conn.reader, crate::local::MAX_LINE as u64 + 1),
+                                    std::io::Read::take(&mut conn.reader, crate::door::MAX_LINE as u64 + 1),
                                 ),
                                 b'\n',
                                 &mut line,
@@ -518,7 +518,7 @@ where
                                 tracing::warn!(peer = ?peer, "local: refused a user that may not use the pipe");
                                 let _ = conn
                                     .writer
-                                    .write_all(crate::local::refusal(peer.as_ref()).as_bytes());
+                                    .write_all((serve.refusal)(peer.as_ref()).as_bytes());
                                 (conn.close)();
                             } else {
                                 conn.reader = Box::new(std::io::Cursor::new(line));
@@ -577,7 +577,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> io::Result<Conn> {
     // tray cannot open. The pipe object's owner and the server's session
     // say who made it (`local::server_trusted`).
     let side = server_side(h);
-    if !crate::local::server_trusted(&side, own_sid().as_ref(), crate::local::dev_run()) {
+    if !crate::door::server_trusted(&side, own_sid().as_ref(), crate::door::dev_run()) {
         // SAFETY: ours.
         unsafe {
             let _ = CloseHandle(h);

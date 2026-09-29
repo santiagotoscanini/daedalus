@@ -10,7 +10,6 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use crate::api::wire::{code, ApiError, Response};
 use crate::identity::{node_id_of, Identity};
 use crate::link::rotation::{ConnResolver, Keys, Served};
 use crate::link::tls::{Recv, Tls};
@@ -18,6 +17,7 @@ use crate::link::wire::{
     self, name, Command, CommandParams, Hello, Incoming, MAX_HELLO_LINE, PROTO,
 };
 use crate::link::{MAX_LINE, WRITE_TIMEOUT};
+use crate::rpc::{code, ApiError, Response};
 
 use super::registry::{busy, ip_bucket, Admission, Out, Registry};
 

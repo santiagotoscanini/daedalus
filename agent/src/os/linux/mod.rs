@@ -28,8 +28,8 @@ pub mod tray;
 
 pub use super::unix::{
     claude_holder, connect_local, file_owner, hide_console, local_socket_path, lock_exclusive,
-    mark_executable, monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_local,
-    serve_local_socket, unseal, write_private, LocalSocket, CLAUDE_CLI_NAMES,
+    mark_executable, monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_api_socket,
+    serve_local, unseal, write_private, LocalSocket, CLAUDE_CLI_NAMES,
 };
 pub use net::{primary_adapter, srv_lookup};
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
@@ -98,9 +98,9 @@ pub fn port_holder(port: u16) -> Option<String> {
 /// uid, and the user `install` enabled the session for (`session.json`) —
 /// read at each connection, since `install` records it after the service
 /// is up.
-pub fn local_allowed() -> crate::local::Allowed {
+pub fn local_allowed() -> crate::door::Allowed {
     let session: Vec<u32> = systemd::session_uid().into_iter().collect();
-    crate::local::unix_allowed(super::unix::own_uid().unwrap_or(0), &session)
+    crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &session)
 }
 
 // ── facts ─────────────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ pub fn claude_keychain_login() -> bool {
 /// A process's parent, from /proc.
 pub fn parent_pid(pid: u32) -> Option<u32> {
     let text = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    crate::claude::roster::parse_proc_stat(&text).map(|s| s.ppid)
+    crate::jobs::parse_proc_stat(&text).map(|s| s.ppid)
 }
 
 /// /proc answers for a live session's process.
@@ -208,10 +208,9 @@ pub const PROCESS_STATS: bool = true;
 /// A process from /proc: its start (clock ticks since boot, what a session
 /// file's `procStart` records), CPU time, resident memory and command line.
 /// None when it is gone or unreadable.
-pub fn process_stats(pid: u32) -> Option<crate::claude::roster::ProcStats> {
+pub fn process_stats(pid: u32) -> Option<crate::jobs::ProcStats> {
     let dir = PathBuf::from(format!("/proc/{pid}"));
-    let stat =
-        crate::claude::roster::parse_proc_stat(&std::fs::read_to_string(dir.join("stat")).ok()?)?;
+    let stat = crate::jobs::parse_proc_stat(&std::fs::read_to_string(dir.join("stat")).ok()?)?;
     // SAFETY: sysconf reads a constant.
     let (hz, page) = unsafe {
         (
@@ -234,7 +233,7 @@ pub fn process_stats(pid: u32) -> Option<crate::claude::roster::ProcStats> {
                 .collect()
         })
         .unwrap_or_default();
-    Some(crate::claude::roster::ProcStats {
+    Some(crate::jobs::ProcStats {
         start_ticks: stat.start_ticks,
         cpu_ms: (stat.utime + stat.stime) * 1000 / hz,
         rss_bytes: resident * page,

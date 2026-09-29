@@ -122,8 +122,7 @@
 pub mod conn;
 pub mod wire;
 
-use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -133,8 +132,9 @@ use serde_json::Value;
 
 use crate::config::{Config, TelemetryLevel};
 use crate::role::Role;
+use crate::rpc::{code, error_line, ApiError, Events};
 use crate::shared::Shared;
-use wire::{code, ApiError, ClaudeStatus, Event, OsInfo, Queued, SystemInfo, TelemetryGet};
+use wire::{ClaudeStatus, OsInfo, Queued, SystemInfo, TelemetryGet};
 
 /// The API version this agent speaks.
 pub const API_VERSION: u32 = 1;
@@ -142,8 +142,6 @@ pub const API_VERSION: u32 = 1;
 pub const MAX_LINE: usize = 1 << 20;
 /// Requests one connection may have in flight before `busy`.
 pub const MAX_IN_FLIGHT: usize = 32;
-/// Events queued for one subscriber before the rest are dropped.
-pub const EVENT_QUEUE: usize = 256;
 /// Connections served at once.
 pub const MAX_CONNECTIONS: usize = 16;
 /// How long a new connection has to send `hello`.
@@ -172,6 +170,29 @@ impl Limits {
             max_connections: MAX_CONNECTIONS,
             hello_deadline: HELLO_DEADLINE,
             write_timeout: WRITE_TIMEOUT,
+        }
+    }
+
+    /// The door's policy (door.rs): this agent's own uid and the listed
+    /// ones, `hello` within its deadline, the file modes opened to others
+    /// when uids are listed.
+    pub fn policy(&self) -> crate::door::Policy {
+        let own = crate::os::own_uid().unwrap_or(u32::MAX);
+        let listed = self.allowed_uids.clone();
+        let uid = |p: Option<&crate::door::Peer>| match p {
+            Some(crate::door::Peer::Uid(u)) => Some(*u),
+            _ => None,
+        };
+        crate::door::Policy {
+            what: "api",
+            allow: std::sync::Arc::new(move |p| peer_allowed(uid(p), own, &listed)),
+            refusal: std::sync::Arc::new(move |p| refusal(uid(p))),
+            busy: too_many(self.max_connections),
+            max_connections: self.max_connections,
+            first_line: self.hello_deadline,
+            write_timeout: self.write_timeout,
+            whole: None,
+            open_to_others: !self.allowed_uids.is_empty(),
         }
     }
 }
@@ -218,45 +239,6 @@ pub fn capabilities(cfg: &Config, nodes: bool) -> Vec<&'static str> {
         c.push("root");
     }
     c
-}
-
-/// The subscribers to events: one bounded queue each, of lines ready to
-/// write.
-#[derive(Default)]
-pub struct Events {
-    subscribers: Mutex<Vec<SyncSender<Arc<str>>>>,
-}
-
-impl Events {
-    pub fn subscribe(&self) -> Receiver<Arc<str>> {
-        let (tx, rx) = mpsc::sync_channel(EVENT_QUEUE);
-        self.lock().push(tx);
-        rx
-    }
-
-    /// Tell every subscriber; one whose connection is gone is forgotten,
-    /// one whose queue is full misses this event.
-    pub fn publish<P: Serialize>(&self, name: &'static str, payload: &P) {
-        let mut subs = self.lock();
-        if subs.is_empty() {
-            return;
-        }
-        let Ok(line) = serde_json::to_string(&Event {
-            e: name,
-            p: payload,
-        }) else {
-            return;
-        };
-        let line: Arc<str> = line.into();
-        subs.retain(|tx| match tx.try_send(Arc::clone(&line)) {
-            Ok(()) | Err(TrySendError::Full(_)) => true,
-            Err(TrySendError::Disconnected(_)) => false,
-        });
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<SyncSender<Arc<str>>>> {
-        self.subscribers.lock().unwrap_or_else(|p| p.into_inner())
-    }
 }
 
 /// What the methods read: the service's shared state and what this agent
@@ -755,7 +737,7 @@ pub fn serve(cfg: &Config, shared: Arc<Shared>) -> Result<crate::os::LocalSocket
     let path = cfg.api_socket();
     let api = Arc::new(Api::new(shared, cfg));
     let limits = Limits::of(cfg);
-    let socket = crate::os::serve_local_socket(&path, &limits, move |c| {
+    let socket = crate::os::serve_api_socket(&path, &limits.policy(), move |c| {
         conn::serve_connection(Arc::clone(&api), c);
     })?;
     tracing::info!(
@@ -765,15 +747,6 @@ pub fn serve(cfg: &Config, shared: Arc<Shared>) -> Result<crate::os::LocalSocket
         "local API answering"
     );
     Ok(socket)
-}
-
-/// An error that is not an answer to any request, as one line: what a
-/// connection gets before it is closed.
-pub fn error_line(code: &'static str, msg: impl Into<String>) -> String {
-    let mut line = serde_json::to_string(&wire::Response::err(None, ApiError::new(code, msg)))
-        .unwrap_or_default();
-    line.push('\n');
-    line
 }
 
 /// The line a refused peer gets before its connection is closed.
@@ -984,37 +957,5 @@ mod tests {
                 .code,
             code::UNSUPPORTED
         );
-    }
-
-    #[test]
-    fn events_reach_live_subscribers_and_forget_gone_ones() {
-        let events = Events::default();
-        let rx = events.subscribe();
-        let gone = events.subscribe();
-        drop(gone);
-        events.publish(
-            wire::event::CLAUDE_CHANGED,
-            &wire::ClaudeChanged {
-                reporting: true,
-                state: Some("running".into()),
-                pid: Some(1),
-            },
-        );
-        assert_eq!(
-            &*rx.try_recv().unwrap(),
-            r#"{"e":"claude.changed","p":{"reporting":true,"state":"running","pid":1}}"#
-        );
-        assert_eq!(events.lock().len(), 1);
-        // A subscriber that does not read loses events, not its place.
-        for _ in 0..EVENT_QUEUE + 5 {
-            events.publish(
-                wire::event::TELEMETRY_UPDATED,
-                &wire::TelemetryUpdated {
-                    sampled_at: "t".into(),
-                },
-            );
-        }
-        assert_eq!(rx.try_iter().count(), EVENT_QUEUE);
-        assert_eq!(events.lock().len(), 1);
     }
 }

@@ -26,35 +26,13 @@ use std::time::Duration;
 use serde::Serialize;
 use serde_json::Value;
 
-use super::wire::{code, hello_api, ApiError, HelloParams, Request, Response, Subscribed};
+use super::wire::{hello_api, HelloParams, Subscribed};
 use super::{Api, API_VERSION, MAX_LINE};
+use crate::door::Conn;
+use crate::rpc::{code, salvage_id, ApiError, Request, Response};
 
 /// How much of a client's self-description reaches the log.
 const CLIENT_LOGGED: usize = 64;
-
-/// One connection's transport, as the os layer hands it over.
-pub struct Conn {
-    pub reader: Box<dyn Read + Send>,
-    pub writer: Box<dyn Write + Send>,
-    /// `hello` was answered: lift the deadline the first line had.
-    pub on_hello: Box<dyn FnOnce() + Send>,
-    /// Tear the transport down both ways: a blocked read returns, and the
-    /// peer sees the connection end.
-    pub close: Arc<dyn Fn() + Send + Sync>,
-}
-
-impl Conn {
-    /// Two halves with no deadline to lift and nothing to tear down beyond
-    /// dropping them (the tests' in-memory transports).
-    pub fn plain(reader: impl Read + Send + 'static, writer: impl Write + Send + 'static) -> Self {
-        Self {
-            reader: Box::new(reader),
-            writer: Box::new(writer),
-            on_hello: Box::new(|| {}),
-            close: Arc::new(|| {}),
-        }
-    }
-}
 
 /// The writing half, shared by the answers and the events.
 struct Out {
@@ -117,15 +95,6 @@ fn read_line<R: BufRead>(r: &mut R) -> Line {
             }
         }
     }
-}
-
-/// The `id` of something that is not a valid request, when it has one, so
-/// the error can still be matched to it.
-fn salvage_id(text: &[u8]) -> Option<u64> {
-    serde_json::from_slice::<Value>(text)
-        .ok()?
-        .get("id")?
-        .as_u64()
 }
 
 /// `hello`'s answer: the version first, from the raw parameters, so any

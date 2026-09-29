@@ -14,21 +14,22 @@
 //! development run (`DAEDALUS_AGENT_DATA_DIR`) gets a pipe of its own, as
 //! it gets its own Claude unit.
 //!
-//! **Who** (`peer_allowed`, the OS's `local_allowed`): on macOS and Linux,
-//! root, the agent's own uid, and the user the machine runs Claude for —
-//! on Linux the session user `install` recorded (`session.json`), on macOS
-//! the user at the console (the owner of `/dev/console`); on Windows,
+//! **Who** (door.rs `peer_allowed`, the OS's `local_allowed`): on macOS and
+//! Linux, root, the agent's own uid, and the user the machine runs Claude
+//! for — on Linux the session user `install` recorded (`session.json`), on
+//! macOS the user at the console (the owner of `/dev/console`); on Windows,
 //! SYSTEM and the users logged on interactively (each session's token),
-//! read from the client's process token (`GetNamedPipeClientProcessId`).
-//! Anyone else gets one `forbidden` line and a closed connection. The
-//! client checks the other end too (`server_trusted`): root or SYSTEM, or
-//! its own user (a development run), so a pipe squatted while the service
-//! is down cannot hand the session orders.
+//! read from the client's process token. Anyone else gets one `forbidden`
+//! error and a closed connection. The client checks the other end too
+//! (door.rs `server_trusted`): root or SYSTEM, or its own user (a
+//! development run), so a pipe squatted while the service is down cannot
+//! hand the session orders.
 //!
-//! **Protocol.** One request per connection, one JSON line each way, at
-//! most `MAX_LINE` bytes: `{"m":"<method>","p":…}` → `{"ok":…}` or
-//! `{"err":"…"}`, then the service closes. The whole exchange has
-//! `DEADLINE`; at most `MAX_CONNECTIONS` are served at once.
+//! **Protocol.** The agent's one envelope (rpc.rs), one request per
+//! connection, at most `MAX_LINE` bytes a line: `{"id":1,"m":"<method>","p":…}`
+//! → `{"id":1,"ok":…}` or `{"id":1,"err":{"code","msg"}}`, then the service
+//! closes. The whole exchange has `DEADLINE`; at most `MAX_CONNECTIONS` are
+//! served at once. Both ends are this binary, so the envelope moves with it.
 //!
 //! | method           | takes            | answers                                        |
 //! |------------------|------------------|------------------------------------------------|
@@ -49,15 +50,16 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
-use crate::api::conn::Conn;
 use crate::claude::{Report, Roster};
+use crate::door::{Conn, Peer, Policy};
+use crate::rpc::{code, error_line, line_of, Answer, ApiError, Request, Response};
 use crate::shared::Shared;
 
 /// The longest line either way.
-pub const MAX_LINE: usize = 1 << 20;
+pub const MAX_LINE: usize = crate::door::MAX_LINE;
 /// The whole exchange, from connect to the answer.
 pub const DEADLINE: Duration = Duration::from_secs(5);
 /// A client's whole exchange: short, since the tray asks from its UI
@@ -65,146 +67,32 @@ pub const DEADLINE: Duration = Duration::from_secs(5);
 pub const CLIENT_DEADLINE: Duration = Duration::from_secs(2);
 /// Connections served at once.
 pub const MAX_CONNECTIONS: usize = 16;
-/// Windows' LocalSystem.
-pub const SYSTEM_SID: &str = "S-1-5-18";
 
-/// Who is on the other end, as the kernel says.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Peer {
-    /// A unix uid.
-    Uid(u32),
-    /// A Windows SID, in its string form (`S-1-5-…`).
-    Sid(String),
-}
-
-impl std::fmt::Display for Peer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Peer::Uid(u) => write!(f, "uid {u}"),
-            Peer::Sid(s) => write!(f, "{s}"),
-        }
+/// The door's policy: `allow` asked per connection, at most `max`
+/// connections, each whole exchange within `deadline`.
+pub fn policy(allow: crate::door::Allow, max: usize, deadline: Duration) -> Policy {
+    Policy {
+        what: "local",
+        allow,
+        refusal: Arc::new(refusal),
+        busy: too_many(max),
+        max_connections: max,
+        first_line: deadline,
+        write_timeout: deadline,
+        whole: Some(deadline),
+        open_to_others: true,
     }
 }
 
-/// Whom the socket serves right now (the OS's `local_allowed`).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Allowed {
-    pub peers: Vec<Peer>,
-}
-
-/// macOS and Linux: root, the agent's own uid, and the users the machine
-/// runs Claude for.
-pub fn unix_allowed(own_uid: u32, claude_users: &[u32]) -> Allowed {
-    let mut peers = vec![Peer::Uid(0), Peer::Uid(own_uid)];
-    peers.extend(claude_users.iter().map(|u| Peer::Uid(*u)));
-    peers.dedup();
-    Allowed { peers }
-}
-
-/// Windows: SYSTEM and the users logged on interactively.
-pub fn windows_allowed(logged_on: Vec<String>) -> Allowed {
-    let mut peers = vec![Peer::Sid(SYSTEM_SID.into())];
-    peers.extend(logged_on.into_iter().map(Peer::Sid));
-    Allowed { peers }
-}
-
-/// The gate: a peer whose credentials could not be read is refused.
-pub fn peer_allowed(peer: Option<&Peer>, allowed: &Allowed) -> bool {
-    peer.is_some_and(|p| allowed.peers.contains(p))
-}
-
-/// What a client can learn about the server end without opening the
-/// service's process (a non-elevated user cannot open a SYSTEM process).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ServerSide {
-    /// A unix socket: the server's uid as the kernel names it
-    /// (`SO_PEERCRED` / `getpeereid` work from the client too), and the
-    /// socket file's owner.
-    Unix {
-        uid: Option<u32>,
-        file_owner: Option<u32>,
-    },
-    /// A named pipe: the pipe object's owner — SYSTEM or Administrators
-    /// when a service made it (`owner_privileged`), else its SID — and the
-    /// server's session (`GetNamedPipeServerSessionId`; 0 for a service).
-    Pipe {
-        owner: Option<String>,
-        owner_privileged: bool,
-        session: Option<u32>,
-    },
-}
-
-/// The client's check on the service (module doc). On unix: the server is
-/// root or this very user (the controller's operator, a development run),
-/// and owns the socket file it answers on. On Windows: the pipe belongs to
-/// SYSTEM or Administrators and its server runs in session 0 — or, for a
-/// development run (`dev`) alone, the pipe is this user's own.
-pub fn server_trusted(server: &ServerSide, own: Option<&Peer>, dev: bool) -> bool {
-    match server {
-        ServerSide::Unix {
-            uid: Some(uid),
-            file_owner: Some(owner),
-        } => uid == owner && (*uid == 0 || own == Some(&Peer::Uid(*uid))),
-        ServerSide::Unix { .. } => false,
-        ServerSide::Pipe {
-            owner_privileged: true,
-            session: Some(0),
-            ..
-        } => true,
-        ServerSide::Pipe { owner: Some(o), .. } => dev && own == Some(&Peer::Sid(o.clone())),
-        ServerSide::Pipe { .. } => false,
-    }
-}
-
-/// Whether this process is a development run (`DAEDALUS_AGENT_DATA_DIR`).
-pub fn dev_run() -> bool {
-    std::env::var_os(crate::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty())
-}
-
-/// The check a connection passes, with the peer the kernel named.
-pub type Gate = Arc<dyn Fn(Option<&Peer>) -> bool + Send + Sync>;
-
-/// What the os layer applies to every connection before `serve` sees it.
-#[derive(Clone)]
-pub struct Serve {
-    /// Asked for each connection, with the peer the kernel named.
-    pub allow: Gate,
-    pub max_connections: usize,
-    /// The read deadline for the request, and the write timeout.
-    pub deadline: Duration,
-}
-
-impl Serve {
-    /// The service's: the OS's peers of the moment, asked per connection
-    /// (a Linux install records the session user after the service is up;
-    /// a Mac's console user changes).
-    pub fn service() -> Self {
-        Self {
-            allow: Arc::new(|peer| peer_allowed(peer, &crate::os::local_allowed())),
-            max_connections: MAX_CONNECTIONS,
-            deadline: DEADLINE,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct Request {
-    m: String,
-    #[serde(default)]
-    p: Value,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Answer {
-    Ok(Value),
-    Err(String),
-}
-
-fn line_of(a: &Answer) -> String {
-    let mut s = serde_json::to_string(a).unwrap_or_else(|_| r#"{"err":"internal"}"#.into());
-    s.push('\n');
-    s
+/// The service's: the OS's peers of the moment, asked per connection (a
+/// Linux install records the session user after the service is up; a Mac's
+/// console user changes).
+pub fn service_policy() -> Policy {
+    policy(
+        Arc::new(|peer| crate::door::peer_allowed(peer, &crate::os::local_allowed())),
+        MAX_CONNECTIONS,
+        DEADLINE,
+    )
 }
 
 /// The line a refused peer gets before its connection is closed.
@@ -213,24 +101,31 @@ pub fn refusal(peer: Option<&Peer>) -> String {
         Some(p) => p.to_string(),
         None => "a peer whose credentials could not be read".into(),
     };
-    line_of(&Answer::Err(format!(
-        "forbidden: {who} may not use this agent's socket (root, the service's own user and the user it runs Claude for may)"
-    )))
+    error_line(
+        code::FORBIDDEN,
+        format!("{who} may not use this agent's socket (root, the service's own user and the user it runs Claude for may)"),
+    )
 }
 
 /// The line a connection past the limit gets.
 pub fn too_many(max: usize) -> String {
-    line_of(&Answer::Err(format!(
-        "busy: at most {max} connections at once"
-    )))
+    error_line(code::BUSY, format!("at most {max} connections at once"))
+}
+
+fn bad(msg: impl Into<String>) -> ApiError {
+    ApiError::new(code::BAD_REQUEST, msg)
+}
+
+fn value<T: Serialize>(v: &T) -> Result<Value, ApiError> {
+    serde_json::to_value(v).map_err(|e| ApiError::new(code::INTERNAL, e.to_string()))
 }
 
 /// One method for the service's shared state (module doc's table).
-fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, String> {
+fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, ApiError> {
     let none = |p: &Value| match p {
         Value::Null => Ok(()),
         Value::Object(o) if o.is_empty() => Ok(()),
-        _ => Err(format!("`{m}` takes no parameters")),
+        _ => Err(bad(format!("`{m}` takes no parameters"))),
     };
     match m {
         "status" => {
@@ -239,14 +134,16 @@ fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, String> {
         }
         "claude" => {
             none(&p)?;
-            serde_json::to_value(shared.claude_report()).map_err(|e| e.to_string())
+            value(&shared.claude_report())
         }
         "claude.report" => {
-            let r: Report = serde_json::from_value(p).map_err(|e| format!("not a report: {e}"))?;
-            serde_json::to_value(shared.set_claude(r)).map_err(|e| e.to_string())
+            let r: Report =
+                serde_json::from_value(p).map_err(|e| bad(format!("not a report: {e}")))?;
+            value(&shared.set_claude(r))
         }
         "claude.roster" => {
-            let r: Roster = serde_json::from_value(p).map_err(|e| format!("not a roster: {e}"))?;
+            let r: Roster =
+                serde_json::from_value(p).map_err(|e| bad(format!("not a roster: {e}")))?;
             shared.set_claude_roster(r);
             Ok(Value::Null)
         }
@@ -258,7 +155,10 @@ fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, String> {
         "claude.update" => {
             none(&p)?;
             if !shared.role().claude_update {
-                return Err("Claude Code is updated by nix on this machine".into());
+                return Err(ApiError::new(
+                    code::UNSUPPORTED,
+                    "Claude Code is updated by nix on this machine",
+                ));
             }
             shared.request_claude_update();
             Ok("update queued for the session".into())
@@ -268,7 +168,24 @@ fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, String> {
             shared.request_check();
             Ok("checking".into())
         }
-        _ => Err(format!("no method `{m}`")),
+        _ => Err(ApiError::new(
+            code::UNKNOWN_METHOD,
+            format!("no method `{m}`"),
+        )),
+    }
+}
+
+/// The answer to one request line.
+fn answer(shared: &Shared, line: &[u8]) -> Response {
+    match Request::parse(line) {
+        Ok(r) => match handle(shared, &r.m, r.p) {
+            Ok(v) => Response::ok(r.id, &v),
+            Err(e) => Response::err(Some(r.id), e),
+        },
+        Err(e) => Response::err(
+            crate::rpc::salvage_id(line),
+            bad(format!("not a request: {e}")),
+        ),
     }
 }
 
@@ -277,24 +194,22 @@ fn serve_one(shared: &Shared, c: Conn) {
     let mut w = c.writer;
     let mut line = Vec::new();
     let read = BufReader::new(c.reader.take(MAX_LINE as u64 + 1)).read_until(b'\n', &mut line);
-    let answer = match read {
-        Ok(_) if line.len() > MAX_LINE => {
-            Answer::Err(format!("a line is at most {MAX_LINE} bytes"))
-        }
-        Ok(_) => match serde_json::from_slice::<Request>(&line) {
-            Ok(r) => match handle(shared, &r.m, r.p) {
-                Ok(v) => Answer::Ok(v),
-                Err(e) => Answer::Err(e),
-            },
-            Err(e) => Answer::Err(format!("not a request: {e}")),
-        },
+    let response = match read {
+        Ok(_) if line.len() > MAX_LINE => Response::err(
+            None,
+            ApiError::new(
+                code::TOO_LARGE,
+                format!("a line is at most {MAX_LINE} bytes"),
+            ),
+        ),
+        Ok(_) => answer(shared, &line),
         Err(e) => {
             tracing::debug!(error = %e, "local: a request that never came");
             (c.close)();
             return;
         }
     };
-    let _ = w.write_all(line_of(&answer).as_bytes());
+    let _ = w.write_all(line_of(&response).as_bytes());
     let _ = w.flush();
     (c.close)();
 }
@@ -381,7 +296,7 @@ impl Drop for Door {
 /// handle is dropped (which removes it, where it is a file).
 pub fn serve(shared: Arc<Shared>) -> anyhow::Result<crate::os::LocalSocket> {
     let path = crate::paths::local_socket();
-    let socket = crate::os::serve_local(&path, &Serve::service(), move |c| serve_one(&shared, c))?;
+    let socket = crate::os::serve_local(&path, &service_policy(), move |c| serve_one(&shared, c))?;
     tracing::info!(socket = %path.display(), "local socket answering");
     Ok(socket)
 }
@@ -391,17 +306,26 @@ pub fn call(m: &str, p: Value) -> Result<Value, String> {
     call_at(&crate::paths::local_socket(), m, p)
 }
 
+/// The request line a client sends: one request, id 1.
+fn request_line(m: &str, p: Value) -> String {
+    #[derive(Serialize)]
+    struct Out<'a> {
+        id: u64,
+        m: &'a str,
+        p: Value,
+    }
+    line_of(&Out { id: 1, m, p })
+}
+
 /// The same, at `path`.
 pub fn call_at(path: &Path, m: &str, p: Value) -> Result<Value, String> {
     let c = crate::os::connect_local(path, CLIENT_DEADLINE)
         .map_err(|e| format!("the agent did not answer at {} ({e})", path.display()))?;
     let mut w = c.writer;
-    let mut req = serde_json::to_string(&Request { m: m.into(), p }).map_err(|e| e.to_string())?;
-    req.push('\n');
     // A refusal is written before the request is read: a failed write is
     // only an error when no answer came either.
     let sent = w
-        .write_all(req.as_bytes())
+        .write_all(request_line(m, p).as_bytes())
         .and_then(|()| w.flush())
         .map_err(|e| format!("sending to the agent: {e}"));
     let mut line = Vec::new();
@@ -411,10 +335,12 @@ pub fn call_at(path: &Path, m: &str, p: Value) -> Result<Value, String> {
         read.map_err(|e| format!("reading the agent's answer: {e}"))?;
     }
     (c.close)();
-    match serde_json::from_slice::<Answer>(&line) {
+    if line.is_empty() {
+        return Err("the agent closed without answering".into());
+    }
+    match crate::rpc::Answer::parse(&line) {
         Ok(Answer::Ok(v)) => Ok(v),
-        Ok(Answer::Err(e)) => Err(e),
-        Err(_) if line.is_empty() => Err("the agent closed without answering".into()),
+        Ok(Answer::Err { msg, .. }) => Err(msg),
         Err(e) => Err(format!("the agent's answer did not parse: {e}")),
     }
 }
@@ -423,7 +349,6 @@ pub fn call_at(path: &Path, m: &str, p: Value) -> Result<Value, String> {
 pub fn call_as<T: serde::de::DeserializeOwned>(m: &str, p: Value) -> Result<T, String> {
     serde_json::from_value(call(m, p)?).map_err(|e| format!("`{m}`'s answer: {e}"))
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -435,138 +360,46 @@ mod tests {
     use std::time::Instant;
 
     #[test]
-    fn root_the_agent_and_the_claude_user_are_served_on_unix() {
-        let a = unix_allowed(0, &[1000]);
-        assert!(peer_allowed(Some(&Peer::Uid(0)), &a));
-        assert!(peer_allowed(Some(&Peer::Uid(1000)), &a));
-        assert!(!peer_allowed(Some(&Peer::Uid(1001)), &a));
-        assert!(!peer_allowed(None, &a));
-        // The controller: its own user, root, nobody else by default.
-        let c = unix_allowed(1000, &[]);
-        assert!(peer_allowed(Some(&Peer::Uid(1000)), &c));
-        assert!(peer_allowed(Some(&Peer::Uid(0)), &c));
-        assert!(!peer_allowed(Some(&Peer::Uid(100999)), &c));
-        // A SID is never a uid.
-        assert!(!peer_allowed(Some(&Peer::Sid("S-1-5-18".into())), &c));
-    }
-
-    #[test]
-    fn system_and_the_logged_on_users_are_served_on_windows() {
-        let me = "S-1-5-21-1-2-3-1001".to_string();
-        let a = windows_allowed(vec![me.clone()]);
-        assert!(peer_allowed(Some(&Peer::Sid(SYSTEM_SID.into())), &a));
-        assert!(peer_allowed(Some(&Peer::Sid(me)), &a));
-        assert!(!peer_allowed(
-            Some(&Peer::Sid("S-1-5-21-1-2-3-1002".into())),
-            &a
-        ));
-        // Nobody logged on: SYSTEM alone.
-        let none = windows_allowed(vec![]);
-        assert!(!peer_allowed(
-            Some(&Peer::Sid("S-1-5-21-1-2-3-1001".into())),
-            &none
-        ));
-        assert!(!peer_allowed(Some(&Peer::Uid(0)), &none));
-    }
-
-    #[test]
-    fn the_client_trusts_the_service_by_what_it_can_see_of_it() {
-        let me = Peer::Uid(1000);
-        let unix = |uid, file_owner| ServerSide::Unix { uid, file_owner };
-        // Root, on a socket file root owns: the installed service.
-        assert!(server_trusted(&unix(Some(0), Some(0)), Some(&me), false));
-        // This user, on its own socket: the controller's operator, a dev run.
-        assert!(server_trusted(
-            &unix(Some(1000), Some(1000)),
-            Some(&me),
-            false
-        ));
-        // Anyone else, or a server that is not the file's owner, or unread.
-        assert!(!server_trusted(
-            &unix(Some(1001), Some(1001)),
-            Some(&me),
-            false
-        ));
-        assert!(!server_trusted(
-            &unix(Some(1000), Some(0)),
-            Some(&me),
-            false
-        ));
-        assert!(!server_trusted(
-            &unix(Some(0), Some(1001)),
-            Some(&me),
-            false
-        ));
-        assert!(!server_trusted(&unix(None, Some(0)), Some(&me), false));
-        // A pipe the service made: SYSTEM or Administrators own it, session 0.
-        let sid = Peer::Sid("S-1-5-21-9".into());
-        let pipe = |owner: Option<&str>, owner_privileged, session| ServerSide::Pipe {
-            owner: owner.map(str::to_string),
-            owner_privileged,
-            session,
-        };
-        assert!(server_trusted(
-            &pipe(Some(SYSTEM_SID), true, Some(0)),
-            Some(&sid),
-            false
-        ));
-        // Privileged but in a user's session, or unprivileged: no.
-        assert!(!server_trusted(
-            &pipe(Some(SYSTEM_SID), true, Some(1)),
-            Some(&sid),
-            false
-        ));
-        assert!(!server_trusted(
-            &pipe(Some("S-1-5-21-8"), false, Some(0)),
-            Some(&sid),
-            false
-        ));
-        // This user's own pipe: a development run only.
-        assert!(!server_trusted(
-            &pipe(Some("S-1-5-21-9"), false, Some(1)),
-            Some(&sid),
-            false
-        ));
-        assert!(server_trusted(
-            &pipe(Some("S-1-5-21-9"), false, Some(1)),
-            Some(&sid),
-            true
-        ));
-        assert!(!server_trusted(
-            &pipe(Some("S-1-5-21-8"), false, Some(1)),
-            Some(&sid),
-            true
-        ));
-        assert!(!server_trusted(&pipe(None, false, None), Some(&sid), true));
-    }
-
-    #[test]
     fn the_lines_on_the_wire() {
         assert_eq!(
-            serde_json::to_string(&Request {
-                m: "status".into(),
-                p: Value::Null
-            })
-            .unwrap(),
-            r#"{"m":"status","p":null}"#
+            request_line("status", Value::Null),
+            "{\"id\":1,\"m\":\"status\",\"p\":null}\n"
+        );
+        let s = shared(Mode::Node);
+        let a = |line: &str| line_of(&answer(&s, line.as_bytes()));
+        assert_eq!(
+            a(r#"{"id":1,"m":"update.check"}"#),
+            "{\"id\":1,\"ok\":\"checking\"}\n"
         );
         assert_eq!(
-            line_of(&Answer::Ok("checking".into())),
-            "{\"ok\":\"checking\"}\n"
+            a(r#"{"id":2,"m":"nope"}"#),
+            "{\"id\":2,\"err\":{\"code\":\"unknown_method\",\"msg\":\"no method `nope`\"}}\n"
         );
-        assert_eq!(line_of(&Answer::Err("no".into())), "{\"err\":\"no\"}\n");
+        assert!(
+            a(r#"{"m":"status"}"#).starts_with("{\"id\":null,\"err\":{\"code\":\"bad_request\"")
+        );
         assert_eq!(
             refusal(Some(&Peer::Uid(1001))),
-            "{\"err\":\"forbidden: uid 1001 may not use this agent's socket \
-             (root, the service's own user and the user it runs Claude for may)\"}\n"
+            "{\"id\":null,\"err\":{\"code\":\"forbidden\",\"msg\":\"uid 1001 may not use this agent's socket \
+             (root, the service's own user and the user it runs Claude for may)\"}}\n"
         );
         assert_eq!(
             too_many(16),
-            "{\"err\":\"busy: at most 16 connections at once\"}\n"
+            "{\"id\":null,\"err\":{\"code\":\"busy\",\"msg\":\"at most 16 connections at once\"}}\n"
         );
-        // A request without `p` is one without parameters.
-        let r: Request = serde_json::from_str(r#"{"m":"claude"}"#).unwrap();
-        assert_eq!((r.m.as_str(), r.p), ("claude", Value::Null));
+        // The client reads both shapes, a null answer included.
+        assert_eq!(
+            Answer::parse(b"{\"id\":1,\"ok\":null}"),
+            Ok(Answer::Ok(Value::Null))
+        );
+        assert_eq!(
+            Answer::parse(b"{\"id\":1,\"err\":{\"code\":\"busy\",\"msg\":\"m\"}}"),
+            Ok(Answer::Err {
+                code: "busy".into(),
+                msg: "m".into()
+            })
+        );
+        assert!(Answer::parse(b"{\"id\":1}").is_err());
     }
 
     fn shared(mode: Mode) -> Shared {
@@ -606,11 +439,13 @@ mod tests {
         assert!(handle(&s, "status", serde_json::json!({"x": 1})).is_err());
         assert!(handle(&s, "reboot", Value::Null)
             .unwrap_err()
+            .msg
             .contains("no method"));
         // nix pins Claude on the controller.
         let c = shared(Mode::Controller);
         assert!(handle(&c, "claude.update", Value::Null)
             .unwrap_err()
+            .msg
             .contains("nix"));
     }
 
@@ -627,13 +462,16 @@ mod tests {
             let s = Arc::clone(&s);
             crate::os::serve_local(
                 &path,
-                &Serve {
-                    allow: Arc::new(|peer| {
-                        peer_allowed(peer, &unix_allowed(crate::os::own_uid().unwrap(), &[]))
+                &policy(
+                    Arc::new(|peer| {
+                        crate::door::peer_allowed(
+                            peer,
+                            &crate::door::unix_allowed(crate::os::own_uid().unwrap(), &[]),
+                        )
                     }),
-                    max_connections: 4,
-                    deadline: Duration::from_secs(2),
-                },
+                    4,
+                    Duration::from_secs(2),
+                ),
                 move |c| serve_one(&s, c),
             )
             .unwrap()
@@ -659,16 +497,12 @@ mod tests {
         // A gate that says no: one line, closed.
         let refusing = crate::os::serve_local(
             &path,
-            &Serve {
-                allow: Arc::new(|_| false),
-                max_connections: 4,
-                deadline: Duration::from_secs(2),
-            },
+            &policy(Arc::new(|_| false), 4, Duration::from_secs(2)),
             |_| unreachable!("refused before serving"),
         )
         .unwrap();
         let e = call_at(&path, "status", Value::Null).unwrap_err();
-        assert!(e.starts_with("forbidden: uid "), "{e}");
+        assert!(e.starts_with("uid "), "{e}");
         drop(refusing);
         assert!(call_at(&path, "status", Value::Null).is_err());
         let _ = std::fs::remove_dir_all(&dir);
@@ -686,11 +520,7 @@ mod tests {
         let s = Arc::new(shared(Mode::Node));
         let served = crate::os::serve_local(
             &path,
-            &Serve {
-                allow: Arc::new(|_| true),
-                max_connections: 4,
-                deadline: Duration::from_millis(500),
-            },
+            &policy(Arc::new(|_| true), 4, Duration::from_millis(500)),
             move |c| serve_one(&s, c),
         )
         .unwrap();

@@ -7,8 +7,8 @@
 use std::process::Command;
 use std::time::Duration;
 
-use crate::claude::roster::UnitCost;
 use crate::exec;
+use crate::jobs::UnitCost;
 use crate::jobs::{self, JobState, ServerJob, SessionJob, Tools};
 
 /// What the jobs are here, for the logs and the report.
@@ -84,7 +84,7 @@ pub fn running(prefix: &str) -> Result<Vec<String>, String> {
         "--plain",
         &pattern,
     ])?;
-    Ok(crate::claude::roster::parse_running_units(&text, prefix))
+    Ok(crate::jobs::parse_running_units(&text, prefix))
 }
 
 /// A unit's memory and CPU from the user manager.
@@ -98,7 +98,7 @@ pub fn cost(name: &str) -> Option<UnitCost> {
         "CPUUsageNSec",
     ])
     .ok()
-    .map(|t| crate::claude::roster::parse_unit_cost(&t))
+    .map(|t| crate::jobs::parse_unit_cost(&t))
 }
 
 /// The environment a job gets besides the user manager's own (jobs/

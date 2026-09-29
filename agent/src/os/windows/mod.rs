@@ -121,13 +121,13 @@ pub fn monotonic_usec() -> Option<u64> {
 /// Refused: the controller's API is a unix socket with peer credentials,
 /// and controller mode, the only role that serves it, runs on Linux (the
 /// box). The agent's own local door is the named pipe (pipe.rs).
-pub fn serve_local_socket<F>(
+pub fn serve_api_socket<F>(
     path: &Path,
-    _limits: &crate::api::Limits,
+    _policy: &crate::door::Policy,
     _on_conn: F,
 ) -> Result<LocalSocket>
 where
-    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+    F: Fn(crate::door::Conn) + Send + Sync + 'static,
 {
     anyhow::bail!(
         "no local API socket at {} on Windows: controller mode runs on the box, a Linux machine",
@@ -265,7 +265,7 @@ pub fn claude_keychain_login() -> bool {
 /// so in its `errors`.
 pub const PROCESS_STATS: bool = false;
 
-pub fn process_stats(pid: u32) -> Option<crate::claude::roster::ProcStats> {
+pub fn process_stats(pid: u32) -> Option<crate::jobs::ProcStats> {
     let _ = pid;
     None
 }

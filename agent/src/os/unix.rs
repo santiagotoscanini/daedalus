@@ -250,11 +250,11 @@ fn euid() -> u32 {
 }
 
 /// The modes the socket and a directory made for it get: private to the
-/// agent's user, unless other uids are listed — then the kernel's file
+/// agent's user, unless it is open to others — then the kernel's file
 /// check must let them reach the socket (the directory traversable, the
 /// socket connectable by all) and the peer check is the gate.
-fn socket_modes(listed: &[u32]) -> (u32, u32) {
-    if listed.is_empty() {
+fn socket_modes(open_to_others: bool) -> (u32, u32) {
+    if !open_to_others {
         (0o700, 0o600)
     } else {
         (0o711, 0o666)
@@ -432,91 +432,30 @@ impl Drop for Slot {
     }
 }
 
-/// Who may connect to one of this agent's sockets, and what a refused or
-/// surplus peer is told: the API's (`serve_local_socket`) and the agent's
-/// local door (`serve_local`) differ only here.
-struct Gate {
-    dir_mode: u32,
-    sock_mode: u32,
-    allow: Arc<dyn Fn(Option<u32>) -> bool + Send + Sync>,
-    refusal: Arc<dyn Fn(Option<u32>) -> String + Send + Sync>,
-    busy: String,
-    max_connections: usize,
-    /// The read deadline a connection starts with (lifted by `on_hello`).
-    read_deadline: Duration,
-    write_timeout: Duration,
-    /// For the log and the threads' names.
-    what: &'static str,
-    /// The whole exchange's deadline, for a door that answers one request
-    /// per connection (the local socket); None for the API's long ones.
-    whole: Option<Duration>,
-}
-
-/// Serve the API's socket at `path`: the directory made if missing (0700)
-/// or checked if not (`socket_dir`), a stale socket removed, another
-/// instance refused, the socket 0600 — or, with other uids listed, 0711
-/// and 0666 (`socket_modes`). Each connection from the agent's own
-/// uid or one `limits` lists (`api::peer_allowed`), while fewer than
-/// `max_connections` are open, is handed to `on_conn` on a thread of its
-/// own with a write timeout and a read deadline until `hello`; any other
-/// peer gets `api::refusal`, one past the limit `api::too_many`, and is
-/// closed.
-pub fn serve_local_socket<F>(
+/// Serve the API's socket at `path` (api/): the directory made if missing
+/// (0700) or checked if not (`socket_dir`), a stale socket removed, another
+/// instance refused, the socket 0600 — or, open to others, 0711 and 0666.
+/// Each connection `policy.allow`s, while fewer than `max_connections` are
+/// open, is handed to `on_conn` on a thread of its own; any other peer gets
+/// `policy.refusal`, one past the limit `policy.busy`, and is closed.
+pub fn serve_api_socket<F>(
     path: &Path,
-    limits: &crate::api::Limits,
+    policy: &crate::door::Policy,
     on_conn: F,
 ) -> Result<LocalSocket>
 where
-    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+    F: Fn(crate::door::Conn) + Send + Sync + 'static,
 {
-    let (dir_mode, sock_mode) = socket_modes(&limits.allowed_uids);
-    let own = euid();
-    let listed = limits.allowed_uids.clone();
-    serve_gated(
-        path,
-        Gate {
-            dir_mode,
-            sock_mode,
-            allow: Arc::new(move |peer| crate::api::peer_allowed(peer, own, &listed)),
-            refusal: Arc::new(crate::api::refusal),
-            busy: crate::api::too_many(limits.max_connections),
-            max_connections: limits.max_connections,
-            read_deadline: limits.hello_deadline,
-            write_timeout: limits.write_timeout,
-            what: "api",
-            whole: None,
-        },
-        on_conn,
-    )
+    serve_gated(path, policy.clone(), on_conn)
 }
 
-/// Serve the agent's local socket at `path` (local.rs): the directory
-/// made 0711 if missing, the socket 0666 — every local user may reach it,
-/// and `serve.allow`, asked with the peer's uid, is the gate. Each request
-/// has `serve.deadline` to arrive and to be answered.
-pub fn serve_local<F>(path: &Path, serve: &crate::local::Serve, on_conn: F) -> Result<LocalSocket>
+/// Serve the agent's local socket at `path` (local.rs), as the API's: the
+/// policy says 0711 and 0666, and every exchange has its whole deadline.
+pub fn serve_local<F>(path: &Path, policy: &crate::door::Policy, on_conn: F) -> Result<LocalSocket>
 where
-    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+    F: Fn(crate::door::Conn) + Send + Sync + 'static,
 {
-    let allow = Arc::clone(&serve.allow);
-    serve_gated(
-        path,
-        Gate {
-            dir_mode: 0o711,
-            sock_mode: 0o666,
-            allow: Arc::new(move |uid| allow(uid.map(crate::local::Peer::Uid).as_ref())),
-            refusal: Arc::new(|uid| {
-                crate::local::refusal(uid.map(crate::local::Peer::Uid).as_ref())
-            }),
-            busy: crate::local::too_many(serve.max_connections),
-            max_connections: serve.max_connections,
-            read_deadline: serve.deadline,
-            write_timeout: serve.deadline,
-            what: "local",
-            whole: Some(serve.deadline),
-        },
-        on_conn,
-    )
+    serve_gated(path, policy.clone(), on_conn)
 }
 
 /// Where the agent's local socket is: `run/agent.sock` in the data
@@ -548,8 +487,8 @@ fn deadline_on(
 /// Connect to the agent's local socket at `path`, the whole exchange
 /// within `timeout`, and only when the other end is one to trust
 /// (`local::server_trusted`: root or this user, owning the socket file).
-pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::api::conn::Conn> {
-    use crate::local::{server_trusted, Peer, ServerSide};
+pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::door::Conn> {
+    use crate::door::{server_trusted, Peer, ServerSide};
     use std::os::unix::fs::MetadataExt;
     let file_owner = std::fs::metadata(path).ok().map(|m| m.uid());
     let stream = std::os::unix::net::UnixStream::connect(path)?;
@@ -559,7 +498,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::a
         uid: peer_uid(&stream),
         file_owner,
     };
-    if !server_trusted(&side, Some(&Peer::Uid(euid())), crate::local::dev_run()) {
+    if !server_trusted(&side, Some(&Peer::Uid(euid())), crate::door::dev_run()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             format!(
@@ -571,7 +510,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::a
     let writer = stream.try_clone()?;
     let ctl = stream.try_clone()?;
     let deadline = std::sync::Mutex::new(Some(deadline_on(stream.try_clone()?, timeout)));
-    Ok(crate::api::conn::Conn {
+    Ok(crate::door::Conn {
         reader: Box::new(stream),
         writer: Box::new(writer),
         on_hello: Box::new(|| {}),
@@ -583,10 +522,10 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::a
 }
 
 /// The core of both: bind, check each peer, count, hand over (the doc of
-/// `serve_local_socket`).
-fn serve_gated<F>(path: &Path, gate: Gate, on_conn: F) -> Result<LocalSocket>
+/// `serve_api_socket`).
+fn serve_gated<F>(path: &Path, gate: crate::door::Policy, on_conn: F) -> Result<LocalSocket>
 where
-    F: Fn(crate::api::conn::Conn) + Send + Sync + 'static,
+    F: Fn(crate::door::Conn) + Send + Sync + 'static,
 {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
@@ -595,12 +534,13 @@ where
         .parent()
         .filter(|d| !d.as_os_str().is_empty())
         .with_context(|| format!("{} names no directory", path.display()))?;
-    socket_dir(dir, gate.dir_mode)?;
+    let (dir_mode, sock_mode) = socket_modes(gate.open_to_others);
+    socket_dir(dir, dir_mode)?;
     clear_stale(path)?;
     let listener =
         UnixListener::bind(path).with_context(|| format!("binding {}", path.display()))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(gate.sock_mode))
-        .with_context(|| format!("making {} {:o}", path.display(), gate.sock_mode))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(sock_mode))
+        .with_context(|| format!("making {} {sock_mode:o}", path.display()))?;
     let ino = std::fs::symlink_metadata(path)
         .with_context(|| format!("reading {}", path.display()))?
         .ino();
@@ -626,15 +566,17 @@ where
                     // Every write on this socket, the refusals included,
                     // gives up after the timeout.
                     let _ = stream.set_write_timeout(Some(gate.write_timeout));
-                    let peer = peer_uid(&stream);
-                    if !(gate.allow)(peer) {
+                    let peer = peer_uid(&stream).map(crate::door::Peer::Uid);
+                    if !(gate.allow)(peer.as_ref()) {
                         tracing::warn!(
-                            peer_uid = peer,
+                            peer = ?peer,
                             socket = gate.what,
                             "refused a connection from a uid that may not use the socket"
                         );
-                        let _ =
-                            std::io::Write::write_all(&mut stream, (gate.refusal)(peer).as_bytes());
+                        let _ = std::io::Write::write_all(
+                            &mut stream,
+                            (gate.refusal)(peer.as_ref()).as_bytes(),
+                        );
                         continue;
                     }
                     if active.fetch_add(1, Ordering::AcqRel) >= gate.max_connections {
@@ -651,12 +593,12 @@ where
                     let whole = gate
                         .whole
                         .and_then(|d| stream.try_clone().ok().map(|s| deadline_on(s, d)));
-                    let _ = stream.set_read_timeout(Some(gate.read_deadline));
+                    let _ = stream.set_read_timeout(Some(gate.first_line));
                     let (Ok(writer), Ok(ctl)) = (stream.try_clone(), stream.try_clone()) else {
                         continue;
                     };
                     let ctl = Arc::new(ctl);
-                    let conn = crate::api::conn::Conn {
+                    let conn = crate::door::Conn {
                         reader: Box::new(stream),
                         writer: Box::new(writer),
                         on_hello: {
@@ -692,20 +634,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::conn::Conn;
-    use crate::api::Limits;
+    use crate::door::Conn;
+    use crate::door::Policy;
     use std::io::{BufRead, BufReader, Read, Write};
 
     fn scratch(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("daedalus-sock-{name}-{}", std::process::id()))
     }
 
-    fn limits() -> Limits {
-        Limits {
-            allowed_uids: Vec::new(),
+    fn limits() -> Policy {
+        let own = euid();
+        Policy {
+            what: "test",
+            allow: Arc::new(move |p| p == Some(&crate::door::Peer::Uid(own))),
+            refusal: Arc::new(|_| "refused\n".into()),
+            busy: "busy\n".into(),
             max_connections: 16,
-            hello_deadline: Duration::from_secs(10),
+            first_line: Duration::from_secs(10),
             write_timeout: Duration::from_secs(10),
+            whole: None,
+            open_to_others: false,
         }
     }
 
@@ -728,7 +676,7 @@ mod tests {
         let dir = scratch("life");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("run").join("api.sock");
-        let sock = serve_local_socket(&path, &limits(), echo).unwrap();
+        let sock = serve_api_socket(&path, &limits(), echo).unwrap();
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&path), 0o600);
         assert_eq!(mode(path.parent().unwrap()), 0o700);
@@ -737,7 +685,7 @@ mod tests {
         writeln!(c, "ping").unwrap();
         assert_eq!(read_one(&c), "ping\n");
         // A second instance is refused while this one answers.
-        let e = serve_local_socket(&path, &limits(), echo)
+        let e = serve_api_socket(&path, &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -753,7 +701,7 @@ mod tests {
         // then — which is exactly a second instance, so wait it out.
         let until = std::time::Instant::now() + Duration::from_secs(5);
         let sock = loop {
-            match serve_local_socket(&path, &limits(), echo) {
+            match serve_api_socket(&path, &limits(), echo) {
                 Ok(s) => break s,
                 Err(e) if std::time::Instant::now() < until => {
                     assert!(e.to_string().contains("already answers"), "{e}");
@@ -764,7 +712,7 @@ mod tests {
         };
         drop(sock);
         std::fs::write(&path, "not a socket").unwrap();
-        let e = serve_local_socket(&path, &limits(), echo)
+        let e = serve_api_socket(&path, &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -775,10 +723,10 @@ mod tests {
         // group or others can write it, or when it is a symlink.
         let run = path.parent().unwrap();
         std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o750)).unwrap();
-        drop(serve_local_socket(&path, &limits(), echo).unwrap());
+        drop(serve_api_socket(&path, &limits(), echo).unwrap());
         assert_eq!(mode(run), 0o750);
         std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o770)).unwrap();
-        let e = serve_local_socket(&path, &limits(), echo)
+        let e = serve_api_socket(&path, &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -786,7 +734,7 @@ mod tests {
         assert_eq!(mode(run), 0o770, "never chmods a directory it did not make");
         let link = dir.join("link");
         std::os::unix::fs::symlink(run, &link).unwrap();
-        let e = serve_local_socket(&link.join("api.sock"), &limits(), echo)
+        let e = serve_api_socket(&link.join("api.sock"), &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -797,16 +745,16 @@ mod tests {
     #[test]
     fn listed_uids_open_the_file_modes_and_leave_the_gate_to_the_peer_check() {
         use std::os::unix::fs::PermissionsExt;
-        assert_eq!(socket_modes(&[]), (0o700, 0o600));
-        assert_eq!(socket_modes(&[100999]), (0o711, 0o666));
+        assert_eq!(socket_modes(false), (0o700, 0o600));
+        assert_eq!(socket_modes(true), (0o711, 0o666));
         let dir = scratch("listed");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("run").join("api.sock");
-        let open = Limits {
-            allowed_uids: vec![100999],
+        let open = Policy {
+            open_to_others: true,
             ..limits()
         };
-        let sock = serve_local_socket(&path, &open, echo).unwrap();
+        let sock = serve_api_socket(&path, &open, echo).unwrap();
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&path), 0o666);
         assert_eq!(mode(path.parent().unwrap()), 0o711);
@@ -848,16 +796,16 @@ mod tests {
         let dir = scratch("busy");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("api.sock");
-        let one = Limits {
+        let one = Policy {
             max_connections: 1,
             ..limits()
         };
-        let sock = serve_local_socket(&path, &one, echo).unwrap();
+        let sock = serve_api_socket(&path, &one, echo).unwrap();
         let mut first = std::os::unix::net::UnixStream::connect(&path).unwrap();
         writeln!(first, "held").unwrap();
         assert_eq!(read_one(&first), "held\n");
         let second = std::os::unix::net::UnixStream::connect(&path).unwrap();
-        assert_eq!(read_one(&second), crate::api::too_many(1));
+        assert_eq!(read_one(&second), one.busy);
         let mut rest = String::new();
         (&second).read_to_string(&mut rest).unwrap();
         assert_eq!(rest, "", "closed after the line");
@@ -885,11 +833,11 @@ mod tests {
         let dir = scratch("deadline");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("api.sock");
-        let quick = Limits {
-            hello_deadline: Duration::from_millis(200),
+        let quick = Policy {
+            first_line: Duration::from_millis(200),
             ..limits()
         };
-        let sock = serve_local_socket(&path, &quick, echo).unwrap();
+        let sock = serve_api_socket(&path, &quick, echo).unwrap();
         let c = std::os::unix::net::UnixStream::connect(&path).unwrap();
         let t = std::time::Instant::now();
         let mut rest = String::new();
@@ -904,14 +852,14 @@ mod tests {
         let dir = scratch("stuck");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("api.sock");
-        let quick = Limits {
+        let quick = Policy {
             write_timeout: Duration::from_millis(200),
             ..limits()
         };
         let done = std::sync::Arc::new(AtomicBool::new(false));
         let sock = {
             let done = std::sync::Arc::clone(&done);
-            serve_local_socket(&path, &quick, move |c: Conn| {
+            serve_api_socket(&path, &quick, move |c: Conn| {
                 // Write until the socket gives up on the reader.
                 let mut w = c.writer;
                 let chunk = vec![b'x'; 64 * 1024];
@@ -938,7 +886,7 @@ mod tests {
         let dir = scratch("gone");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("api.sock");
-        let sock = serve_local_socket(&path, &limits(), |_| {}).unwrap();
+        let sock = serve_api_socket(&path, &limits(), |_| {}).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
         let t = std::time::Instant::now();
         drop(sock);

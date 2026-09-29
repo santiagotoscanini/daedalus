@@ -19,12 +19,12 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use crate::api::wire::{event, ClaudeChanged, TelemetryUpdated};
-use crate::api::Events;
 use crate::claude::{Report, ReportAnswer, Roster, SessionAction, SessionRequest, Summary};
 use crate::facts::Facts;
 use crate::link::wire::Policy;
 use crate::link::LinkStatus;
 use crate::role::Role;
+use crate::rpc::Events;
 use crate::state::State;
 use crate::telemetry::Telemetry;
 

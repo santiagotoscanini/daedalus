@@ -438,7 +438,7 @@ pub type ProvidersPayload = Vec<ProviderReport>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::wire::{code, ApiError, Response};
+    use crate::rpc::{code, ApiError, Response};
     use serde_json::json;
 
     fn wire<T: Serialize>(v: &T) -> String {

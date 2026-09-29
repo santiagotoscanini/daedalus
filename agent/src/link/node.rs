@@ -77,9 +77,9 @@ use super::wire::{
     NodeState, Policy, RotateParams, StateEvent, Welcome, PROTO,
 };
 use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT, WRITE_TIMEOUT};
-use crate::api::wire::{code, ApiError, Response};
 use crate::config::Config;
 use crate::identity::{digest, format_fingerprint, parse_fingerprint, Identity};
+use crate::rpc::{code, ApiError, Response};
 use crate::shared::Shared;
 use crate::state::now_rfc3339;
 

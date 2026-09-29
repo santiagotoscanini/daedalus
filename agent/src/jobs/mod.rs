@@ -36,11 +36,13 @@
 
 mod launchd;
 mod line_filter;
+mod proc;
 mod systemd;
 mod windows;
 
 pub use launchd::*;
 pub use line_filter::*;
+pub use proc::*;
 pub use systemd::*;
 pub use windows::*;
 
