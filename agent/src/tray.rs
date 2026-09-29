@@ -18,7 +18,7 @@
 //!   supervisor (claude/) — because this process is the one in the user's
 //!   desktop session, with the user's Claude login. `claude remote-control`
 //!   and the sessions it resumed are not its children but jobs of the OS
-//!   (a launchd job, a detached process; claude/job.rs), reported to the
+//!   (a launchd job, a detached process; jobs/), reported to the
 //!   service every poll: quitting, updating or crashing the tray ends no
 //!   Claude session, and the next tray re-attaches to them.
 //! - `Watches` (Linux): the session is a systemd user unit that runs with
@@ -44,6 +44,7 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 use crate::claude::Report;
 use crate::os::tray::{open, relaunch_self};
+use crate::paths;
 use crate::session::{Page, Places, Session, Tick, Watcher};
 use crate::{config, DISPLAY_NAME, VERSION};
 
@@ -408,7 +409,7 @@ impl Tray {
         if !cfg.role().tray {
             bail!("no tray in controller mode (config.toml says mode = \"controller\")");
         }
-        let logs: PathBuf = config::user_log_dir();
+        let logs: PathBuf = paths::user_log_dir();
         let places = Places::of_user(&cfg);
         let claude_log = places.claude_log.clone();
         // The icon first, then the session, as it always was.
@@ -492,7 +493,7 @@ impl Tray {
 /// read: `tray.err` in the tray's log directory (beside the service's logs
 /// on Windows, ~/Library/Logs on macOS, ~/.local/state on Linux).
 pub fn write_failure(e: &anyhow::Error) {
-    let dir = config::user_log_dir();
+    let dir = paths::user_log_dir();
     let _ = std::fs::create_dir_all(&dir);
     let _ = std::fs::write(dir.join("tray.err"), format!("{e:#}\n"));
 }

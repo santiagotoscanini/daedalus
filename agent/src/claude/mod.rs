@@ -29,7 +29,7 @@
 //! and whether each process is alive, the sessions the last recovery
 //! resumed, the credential CLOCK (the plan and two dates — never a token),
 //! and the model settings. The server's output goes to `claude-rc.log` in
-//! `config::user_log_dir`.
+//! `paths::user_log_dir`.
 //!
 //! None of the environment variables that disable Remote Control are set
 //! (DISABLE_TELEMETRY, DO_NOT_TRACK, ANTHROPIC_BASE_URL and friends —
@@ -60,7 +60,7 @@
 
 mod cli;
 pub mod gcroot;
-pub mod job;
+
 pub mod logs;
 mod profile;
 pub mod recovery;

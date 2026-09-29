@@ -2,21 +2,27 @@
 //! machines connecting to it over real TLS, each with its own key, its own
 //! `Shared` and a scratch store.
 
-use std::net::TcpStream;
+use std::net::{IpAddr, TcpStream};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::*;
+use crate::api::wire::{code, CommandOk, DesiredState, NodeSummary, Response, SetDesiredOk};
+use crate::api::Events;
 use crate::claude::Report;
 use crate::config::{Config, Mode};
 use crate::identity::{digest, Identity};
 use crate::link::node::{connect_once, hello_of, Cadence, Ended, Target, Trust};
+use crate::link::rotation::Keys;
 use crate::link::tls as ltls;
+use crate::link::wire::{self, name, Command, ControllerId, Hello, NodeState, Welcome, PROTO};
+use crate::link::{PREAUTH_PER_IP, UNKNOWN_ADDRESSES};
 use crate::role::Role;
+use crate::shared::Shared;
 use crate::state::State;
-use crate::status::Shared;
+use crate::telemetry::Telemetry;
 
 fn id(n: u8) -> Identity {
     Identity::from_seed([n; 32])
@@ -1136,7 +1142,7 @@ fn the_api_steers_the_machines_through_the_socket() {
     let cid = id(210);
     let registry = Arc::new(Registry::new(&cid, cshared.events_handle(), fast()));
     cshared.set_nodes(Arc::clone(&registry));
-    cshared.set_controller(crate::status::Controller {
+    cshared.set_controller(crate::shared::Controller {
         keys: Arc::new(Keys::fixed(&cid).unwrap()),
         listen: Some("127.0.0.1:0".into()),
         advertise: vec![],

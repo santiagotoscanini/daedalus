@@ -39,18 +39,22 @@ pub mod exec;
 pub mod facts;
 pub mod http;
 pub mod identity;
+pub mod jobs;
 pub mod link;
 pub mod local;
+pub mod logging;
+pub mod metrics_page;
 pub mod net;
 pub mod os;
+pub mod paths;
 pub mod power;
 pub mod private;
 pub mod providers;
 pub mod role;
 pub mod root;
 pub mod session;
+pub mod shared;
 pub mod state;
-pub mod status;
 pub mod telemetry;
 pub mod update;
 pub mod util;
@@ -80,7 +84,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// each part as far as this machine's role runs it (role.rs).
 pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     // Before anything that could fail: an update on probation counts this
-    // start, and one that started too often is rolled back here (update.rs)
+    // start, and one that started too often is rolled back here (update/)
     // — the service's starts only: a `serve` in a terminal is not one.
     let start = if foreground {
         update::Start::Normal
@@ -88,23 +92,23 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         update::on_start()
     };
     let cfg = config::load_or_default().context("reading config")?;
-    let _log = config::init_logging(&cfg, foreground)?;
+    let _log = logging::init_logging(&cfg, foreground)?;
     let role = cfg.role();
     tracing::info!(
         version = VERSION,
-        socket = %config::local_socket().display(),
+        socket = %paths::local_socket().display(),
         mode = ?role.mode,
         "daedalus-agent starting"
     );
 
     // One service per data directory: its port no longer decides that (a
-    // port another process holds is waited out, status.rs `Page`).
-    let lock_path = config::data_dir().join("agent.lock");
-    let _ = std::fs::create_dir_all(config::data_dir());
+    // port another process holds is waited out, metrics_page.rs `Page`).
+    let lock_path = paths::data_dir().join("agent.lock");
+    let _ = std::fs::create_dir_all(paths::data_dir());
     let Some(_instance) = os::lock_exclusive(&lock_path) else {
         anyhow::bail!(
             "another agent already runs on {} ({} is held)",
-            config::data_dir().display(),
+            paths::data_dir().display(),
             lock_path.display()
         );
     };
@@ -113,7 +117,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let state = state::State::load();
     let facts = facts::read();
     tracing::info!(os = %facts.os_name, version = %facts.os_version, cpu = %facts.cpu, "this machine");
-    let shared = Arc::new(status::Shared::new(
+    let shared = Arc::new(shared::Shared::new(
         state,
         facts.clone(),
         started,
@@ -128,7 +132,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
             "this version is on probation; the previous binaries stay until it has run {} s",
             update::PROBATION.as_secs()
         ),
-        // Only when the binaries could not be put back (update.rs).
+        // Only when the binaries could not be put back (update/).
         update::Start::RollBack(r) => tracing::error!(
             version = r.version,
             "this version did not last, and could not be rolled back"
@@ -148,11 +152,11 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let mut hold_wanted: Option<bool> = None;
 
     // The local socket for the tray, the session and the verbs (local.rs),
-    // and on the controller the metrics page Prometheus scrapes (status.rs).
+    // and on the controller the metrics page Prometheus scrapes (metrics_page.rs).
     // Either one that cannot be bound does not stop the service: it is tried
     // again in the background while the rest runs.
     // The OS's power requests for the status document, read here every
-    // minute rather than inside a request (status.rs).
+    // minute rather than inside a request (shared.rs).
     {
         let (shared, stop) = (Arc::clone(&shared), Arc::clone(&stop));
         let _ = std::thread::Builder::new()
@@ -167,7 +171,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let page = local::Door::start(Arc::clone(&shared));
     let metrics = role
         .status_on_lan
-        .then(|| status::Page::start(cfg.port, Arc::clone(&shared)));
+        .then(|| metrics_page::Page::start(cfg.port, Arc::clone(&shared)));
     // After an update, the tray or the session started again on the new
     // binary so it matches the service (os `restart_desktop_side`).
     if matches!(start, update::Start::Probation(1)) && role.session && !role.session_in_service {
@@ -186,9 +190,9 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let controller = if role.node_listener {
         // The keys, and a rotation under way (link/rotation.rs).
         let keys = Arc::new(
-            link::rotation::Keys::load(&config::data_dir()).context("the controller's identity")?,
+            link::rotation::Keys::load(&paths::data_dir()).context("the controller's identity")?,
         );
-        shared.set_controller(status::Controller {
+        shared.set_controller(shared::Controller {
             keys: Arc::clone(&keys),
             listen: cfg.controller_listen().map(|a| a.to_string()),
             advertise: cfg.controller.advertise.clone(),
@@ -336,7 +340,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let mut probation_looked = started;
     let mut failed_probation = false;
     while !stop.load(Ordering::Relaxed) {
-        // An update on probation proves itself, or fails its run (update.rs).
+        // An update on probation proves itself, or fails its run (update/).
         if on_probation && probation_looked.elapsed() >= Duration::from_secs(5) {
             probation_looked = std::time::Instant::now();
             let up_for = page.up_for();

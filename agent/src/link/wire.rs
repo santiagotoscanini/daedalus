@@ -49,7 +49,7 @@ pub mod name {
     pub const COMMAND: &str = "command";
     /// both ways, every `HEARTBEAT`.
     pub const HB: &str = "hb";
-    /// node → controller: the status document (`status::Shared::status_value`).
+    /// node → controller: the status document (`shared::Shared::status_value`).
     pub const STATUS: &str = "status";
     /// node → controller: the full telemetry document.
     pub const TELEMETRY: &str = "telemetry";

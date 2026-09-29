@@ -1,5 +1,5 @@
 //! Claude's jobs on Linux (and the controller): transient systemd user
-//! units of the user's own manager (claude/job.rs has what they are and the
+//! units of the user's own manager (jobs/ has what they are and the
 //! pure command lines). `systemd-run --user` starts one, `systemctl --user
 //! show` watches it, `stop` ends its whole cgroup — the sessions the server
 //! spawned with it — and `reset-failed` frees the name.
@@ -7,9 +7,9 @@
 use std::process::Command;
 use std::time::Duration;
 
-use crate::claude::job::{self, JobState, ServerJob, SessionJob, Tools};
 use crate::claude::roster::UnitCost;
 use crate::exec;
+use crate::jobs::{self, JobState, ServerJob, SessionJob, Tools};
 
 /// What the jobs are here, for the logs and the report.
 pub const JOB_KIND: &str = "a transient systemd user unit";
@@ -37,14 +37,14 @@ fn service(name: &str) -> String {
 
 /// The server's unit, started.
 pub fn start_server(j: &ServerJob) -> Result<(), String> {
-    command("systemd-run", &job::systemd_server_args(j)).map(|_| ())
+    command("systemd-run", &jobs::systemd_server_args(j)).map(|_| ())
 }
 
 /// A resumed session's unit, started — `script` found first, since the
 /// session needs its terminal.
 pub fn start_session(j: &SessionJob) -> Result<(), String> {
     let tools = Tools::locate()?;
-    let args = job::systemd_session_args(j, &tools)?;
+    let args = jobs::systemd_session_args(j, &tools)?;
     // A previous run that failed leaves the name taken.
     let _ = systemctl(&["reset-failed", &service(j.name)]);
     command("systemd-run", &args).map(|_| ())
@@ -57,8 +57,8 @@ pub fn session_shell() -> Option<std::path::PathBuf> {
 
 /// The unit's state now.
 pub fn show(name: &str) -> Result<JobState, String> {
-    let text = systemctl(&["show", "-p", job::SYSTEMD_PROPS, &service(name)])?;
-    Ok(job::parse_systemd_show(&text, super::monotonic_usec()))
+    let text = systemctl(&["show", "-p", jobs::SYSTEMD_PROPS, &service(name)])?;
+    Ok(jobs::parse_systemd_show(&text, super::monotonic_usec()))
 }
 
 /// End the job, if it runs.
@@ -101,21 +101,21 @@ pub fn cost(name: &str) -> Option<UnitCost> {
     .map(|t| crate::claude::roster::parse_unit_cost(&t))
 }
 
-/// The environment a job gets besides the user manager's own (claude/job.rs
+/// The environment a job gets besides the user manager's own (jobs/
 /// `job_env`).
 pub fn server_env(
     home: Option<&std::path::Path>,
     path: Option<&str>,
     config_dir: Option<&str>,
 ) -> Vec<(String, String)> {
-    job::job_env(home, path, config_dir, &[])
+    jobs::job_env(home, path, config_dir, &[])
 }
 
 /// The `claude` a running unit runs, from its ExecStart (what the session
 /// pins when it re-attaches to a unit an earlier agent started).
 pub fn running_cli(name: &str) -> Option<std::path::PathBuf> {
     let text = systemctl(&["show", "-p", "ExecStart", &service(name)]).ok()?;
-    job::claude_in_command(&text)
+    jobs::claude_in_command(&text)
 }
 
 /// Nothing to add about a unit beyond its state.

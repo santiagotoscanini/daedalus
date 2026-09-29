@@ -76,7 +76,7 @@ pub fn user_log_dir() -> Option<PathBuf> {
 /// recover — in `~/Library/Application Support/daedalus-agent`. Under
 /// `DAEDALUS_AGENT_DATA_DIR` (a development run) None: the moved directory.
 pub fn user_state_dir() -> Option<PathBuf> {
-    if std::env::var_os(crate::config::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
+    if std::env::var_os(crate::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
         return None;
     }
     std::env::var_os("HOME").map(|h| {

@@ -9,14 +9,14 @@ use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop};
 use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
-use crate::config;
+use crate::paths;
 use crate::tray::{write_failure, Flow, Tray};
 
 /// One tray per user: a lock on a file in the user's log directory,
 /// held for the life of the process.
 fn claim_single_instance() -> bool {
     use std::os::fd::AsRawFd;
-    let dir = config::user_log_dir();
+    let dir = paths::user_log_dir();
     let _ = std::fs::create_dir_all(&dir);
     let Ok(f) = std::fs::File::create(dir.join("tray.lock")) else {
         return true;

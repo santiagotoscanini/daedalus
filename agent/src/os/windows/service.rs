@@ -23,6 +23,7 @@ use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use windows_service::{define_windows_service, service_dispatcher};
 
 use crate::config::{self, Config};
+use crate::paths;
 use crate::{DISPLAY_NAME, SERVICE_NAME, TRAY_EXE};
 
 define_windows_service!(ffi_service_main, service_main);
@@ -161,9 +162,9 @@ pub fn install(cfg: &Config) -> Result<()> {
     println!("config at {}", path.display());
 
     // SYSTEM and Administrators own the data; Users read it (private.rs).
-    let mut dirs = vec![config::config_dir()];
-    if !dirs.contains(&config::data_dir()) {
-        dirs.push(config::data_dir());
+    let mut dirs = vec![paths::config_dir()];
+    if !dirs.contains(&paths::data_dir()) {
+        dirs.push(paths::data_dir());
     }
     for dir in dirs {
         super::protect_data_dir(&dir)
@@ -228,7 +229,7 @@ pub fn uninstall() -> Result<()> {
     // Claude runs detached from the tray (jobs.rs), so it outlives both: its
     // Remote Control and the sessions' holders are ended by their records.
     super::jobs::stop_every_users_jobs();
-    println!("data left in {}", config::data_dir().display());
+    println!("data left in {}", paths::data_dir().display());
     Ok(())
 }
 
@@ -285,12 +286,12 @@ fn tray_start(tray: &std::path::Path) {
 // put it back: it runs as LocalSystem, which may take the console user's
 // token and start a process in that session on the interactive desktop.
 // This is what agent_main calls when the tray has not reported for a while
-// (`Shared::tray_reporting`, status.rs) — `WATCHES_TRAY` below is what
+// (`Shared::tray_reporting`, shared.rs) — `WATCHES_TRAY` below is what
 // turns that watchdog on; on macOS launchd's KeepAlive and
 // `launchd::kickstart_tray` (os/macos/launchd.rs) do the same.
 
 /// Someone is logged on at the console: a tray should be reporting
-/// (update.rs, probation).
+/// (update/, probation).
 pub fn interactive_user() -> bool {
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::System::RemoteDesktop::{WTSGetActiveConsoleSessionId, WTSQueryUserToken};

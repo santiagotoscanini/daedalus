@@ -19,7 +19,7 @@
 //!   it awake, and the OS's uptime (power.rs);
 //! - identity: how the key is sealed on disk and written (identity.rs);
 //! - update: the release's asset table — required and optional — and
-//!   making a download executable (update.rs);
+//!   making a download executable (update/);
 //! - processes: running a child without a console window, whether a pid
 //!   lives, ending a process tree, and relaying Ctrl-C / SIGTERM;
 //! - the local sockets: the agent's own door for the tray, the session and
@@ -33,7 +33,7 @@
 //!   line: Linux reads /proc, the others say they do not, `PROCESS_STATS`),
 //!   and `jobs` — the server and the resumed sessions as jobs of the OS,
 //!   never the agent's children (a systemd user unit, a launchd job, a
-//!   detached process; claude/job.rs), with the Windows session's terminal
+//!   detached process; jobs/), with the Windows session's terminal
 //!   holder (`claude_holder`);
 //! - telemetry: the `Collector` and the OS-updates reader (telemetry.rs);
 //! - `svc`: installing, removing and running the service, and starting
@@ -91,7 +91,7 @@ pub use imp::{
 };
 
 /// Claude's jobs: the server and the resumed sessions, outside the agent
-/// (claude/job.rs). The same names on every OS.
+/// (jobs/). The same names on every OS.
 pub mod jobs {
     pub use super::imp::jobs::{
         caveat, clear, cost, running, running_cli, server_env, session_shell, show, start_server,

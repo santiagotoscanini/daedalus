@@ -66,7 +66,7 @@ pub fn default_data_dir() -> PathBuf {
 /// Under `DAEDALUS_AGENT_DATA_DIR` — a development run — None, so they
 /// write beside the service's logs in the moved directory.
 pub fn user_log_dir() -> Option<PathBuf> {
-    if std::env::var_os(crate::config::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
+    if std::env::var_os(crate::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
         return None;
     }
     let state = std::env::var_os("XDG_STATE_HOME")

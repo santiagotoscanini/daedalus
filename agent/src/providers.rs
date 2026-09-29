@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::link::wire::{Policy, ProvidersPolicy};
-use crate::status::Shared;
+use crate::shared::Shared;
 use crate::telemetry::App;
 
 /// One provider as the `providers` document carries it.

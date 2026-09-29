@@ -267,15 +267,7 @@ impl Roster {
 
 // ── pure helpers ──────────────────────────────────────────────────────────
 
-/// A canonical lowercase uuid: what `--resume` takes.
-pub fn is_uuid(s: &str) -> bool {
-    let b = s.as_bytes();
-    b.len() == 36
-        && b.iter().enumerate().all(|(i, c)| match i {
-            8 | 13 | 18 | 23 => *c == b'-',
-            _ => matches!(c, b'0'..=b'9' | b'a'..=b'f'),
-        })
-}
+pub use crate::jobs::is_uuid;
 
 /// Eight lowercase hex digits: a background agent's short id.
 pub fn is_short_id(s: &str) -> bool {

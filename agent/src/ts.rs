@@ -66,7 +66,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     NodePending::export_all(cfg)?;
     RootProgress::export_all(cfg)?;
     // A machine's status page, which `nodes.get` carries as it came.
-    crate::status::Document::export_all(cfg)?;
+    crate::shared::Document::export_all(cfg)?;
     Ok(())
 }
 

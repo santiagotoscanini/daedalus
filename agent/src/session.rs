@@ -4,7 +4,7 @@
 //! This process is the one with the user's Claude login, so it runs
 //! `claude remote-control` (claude/) — never as its child: as a job of the
 //! OS it starts and watches (a systemd user unit, a launchd job, a detached
-//! process; claude/job.rs), which outlives it. Every `POLL` it reads the
+//! process; jobs/), which outlives it. Every `POLL` it reads the
 //! service's status document through the local socket (local.rs), sends
 //! the service a report of the supervisor (`claude.report`), and applies
 //! the `ReportAnswer` —
@@ -46,7 +46,9 @@ use crate::claude::sessions::Context as SessionsContext;
 use crate::claude::{Recovery, Report, ReportAnswer, Roster, SessionAction, Sessions, Supervisor};
 use crate::config;
 use crate::link::wire::Policy;
-use crate::status::Shared;
+use crate::logging;
+use crate::paths;
+use crate::shared::Shared;
 use crate::VERSION;
 
 /// How often the page is read and the report sent.
@@ -239,9 +241,9 @@ impl Places {
     /// A tray's or the Linux session unit's: the user's own directories.
     pub fn of_user(cfg: &config::Config) -> Self {
         Self {
-            claude_log: config::user_log_dir().join("claude-rc.log"),
+            claude_log: paths::user_log_dir().join("claude-rc.log"),
             job: cfg.claude_unit(),
-            state_dir: config::user_state_dir(),
+            state_dir: paths::user_state_dir(),
         }
     }
 }
@@ -261,7 +263,7 @@ impl Session {
         // starts where and as the box last said, rather than once with the
         // defaults and again when the service relays the link's answer.
         // None on a fresh install, which starts with the defaults.
-        let policy = config::last_policy().unwrap_or_default();
+        let policy = paths::last_policy().unwrap_or_default();
         let sup = Supervisor::new(
             policy.claude_workdir,
             places.claude_log,
@@ -471,7 +473,7 @@ pub fn open_sessions(
 fn start_sessions(places: &Places) -> Sessions {
     Sessions::start(SessionsContext {
         server: places.job.clone(),
-        prefix: config::claude_session_prefix(),
+        prefix: paths::claude_session_prefix(),
         log_dir: places
             .claude_log
             .parent()
@@ -603,7 +605,7 @@ fn newer_than_this(version: &str) -> bool {
 /// `daedalus-agent session`: the session with no UI, until SIGTERM or
 /// Ctrl-C, or until the service runs another version (an update swapped
 /// the binary) — then it leaves, and systemd starts the new one. Its log is
-/// `session.log` in `config::user_log_dir`, beside `claude-rc.log`; in a
+/// `session.log` in `paths::user_log_dir`, beside `claude-rc.log`; in a
 /// terminal it also goes to stderr. The server's job is left running when
 /// it leaves, and the next session re-attaches to it.
 pub fn run() -> anyhow::Result<()> {
@@ -621,12 +623,13 @@ pub fn run() -> anyhow::Result<()> {
             "in controller mode the session runs inside the service (`run` or `serve`), not on its own"
         );
     }
-    let dir = config::user_log_dir();
-    let _log = config::init_logging_to(&cfg, &dir, "session.log", std::io::stderr().is_terminal())?;
+    let dir = paths::user_log_dir();
+    let _log =
+        logging::init_logging_to(&cfg, &dir, "session.log", std::io::stderr().is_terminal())?;
     let places = Places::of_user(&cfg);
     tracing::info!(
         version = VERSION,
-        socket = %config::local_socket().display(),
+        socket = %paths::local_socket().display(),
         job = places.job,
         "session starting"
     );
@@ -677,9 +680,9 @@ pub fn run_in_service(
     stop: Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
     let places = Places {
-        claude_log: config::log_dir().join("claude-rc.log"),
+        claude_log: paths::log_dir().join("claude-rc.log"),
         job: cfg.claude_unit(),
-        state_dir: config::data_dir(),
+        state_dir: paths::data_dir(),
     };
     tracing::info!(job = places.job, "session starting inside the service");
     let mut session = Session::in_process(shared, places)?;

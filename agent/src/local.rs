@@ -4,7 +4,7 @@
 //! is calling. The kernel names the peer and the service decides; nothing
 //! listens on TCP for them, so loopback is no longer a credential.
 //!
-//! **Where.** `config::local_socket()`: `<data_dir>/run/agent.sock` on
+//! **Where.** `paths::local_socket()`: `<data_dir>/run/agent.sock` on
 //! macOS and Linux, in a directory the service makes 0711 (root's on a
 //! node, the operator's on the controller) with the socket 0666 — the file
 //! modes let every local user reach it and the peer check below is the
@@ -32,7 +32,7 @@
 //!
 //! | method           | takes            | answers                                        |
 //! |------------------|------------------|------------------------------------------------|
-//! | `status`         | —                | the status document (status.rs `Document`)     |
+//! | `status`         | —                | the status document (shared.rs `Document`)     |
 //! | `claude`         | —                | the session's full report, or null             |
 //! | `claude.report`  | a `Report`       | the `ReportAnswer` (the session's poll)        |
 //! | `claude.roster`  | a `Roster`       | null                                           |
@@ -54,7 +54,7 @@ use serde_json::Value;
 
 use crate::api::conn::Conn;
 use crate::claude::{Report, Roster};
-use crate::status::Shared;
+use crate::shared::Shared;
 
 /// The longest line either way.
 pub const MAX_LINE: usize = 1 << 20;
@@ -158,7 +158,7 @@ pub fn server_trusted(server: &ServerSide, own: Option<&Peer>, dev: bool) -> boo
 
 /// Whether this process is a development run (`DAEDALUS_AGENT_DATA_DIR`).
 pub fn dev_run() -> bool {
-    std::env::var_os(crate::config::DATA_DIR_ENV).is_some_and(|v| !v.is_empty())
+    std::env::var_os(crate::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty())
 }
 
 /// The check a connection passes, with the peer the kernel named.
@@ -377,10 +377,10 @@ impl Drop for Door {
     }
 }
 
-/// Serve the agent's socket at `config::local_socket()` until the returned
+/// Serve the agent's socket at `paths::local_socket()` until the returned
 /// handle is dropped (which removes it, where it is a file).
 pub fn serve(shared: Arc<Shared>) -> anyhow::Result<crate::os::LocalSocket> {
-    let path = crate::config::local_socket();
+    let path = crate::paths::local_socket();
     let socket = crate::os::serve_local(&path, &Serve::service(), move |c| serve_one(&shared, c))?;
     tracing::info!(socket = %path.display(), "local socket answering");
     Ok(socket)
@@ -388,7 +388,7 @@ pub fn serve(shared: Arc<Shared>) -> anyhow::Result<crate::os::LocalSocket> {
 
 /// Ask the service: one method, its answer or why not.
 pub fn call(m: &str, p: Value) -> Result<Value, String> {
-    call_at(&crate::config::local_socket(), m, p)
+    call_at(&crate::paths::local_socket(), m, p)
 }
 
 /// The same, at `path`.

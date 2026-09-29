@@ -54,8 +54,8 @@ use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
 use crate::config::TelemetryLevel;
+use crate::shared::Shared;
 use crate::state::now_rfc3339;
-use crate::status::Shared;
 
 /// How often the sampled facts are read.
 pub const SAMPLE_EVERY: Duration = Duration::from_secs(15);

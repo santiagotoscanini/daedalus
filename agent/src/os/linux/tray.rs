@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 
-use crate::config;
+use crate::paths;
 use crate::tray::{Flow, Tray};
 
 /// The libraries tray-icon loads at run time for the icon, Ayatana's first.
@@ -31,7 +31,7 @@ const APPINDICATOR: &[&str] = &[
 /// up to ten seconds, as on Windows: a tray relaunching itself for an
 /// update starts while the old one is still leaving.
 fn claim_single_instance() -> bool {
-    let dir = config::user_log_dir();
+    let dir = paths::user_log_dir();
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("tray.lock");
     let until = std::time::Instant::now() + Duration::from_secs(10);

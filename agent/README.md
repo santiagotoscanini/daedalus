@@ -647,7 +647,7 @@ never ends a Claude session, on any OS. Each job's output is appended to a
 log of its own (`claude-rc.log`, `claude-session-<uuid>.log`), which the
 report's `log` names and which the session reads the server's banner back
 from, after the marker line it writes before each start.
-`src/claude/job.rs` has what a job is and the pure command lines;
+`src/jobs/` has what a job is and the pure command lines;
 `src/os/*/jobs.rs` the calls.
 
 - **Linux and the controller: a transient systemd user unit.** The server
@@ -996,7 +996,7 @@ version that carries this target's required assets (on Linux the service
 alone; the tray is optional and follows only where it is installed). Unless
 config.toml says only to report it (`updates`, or `auto_update = false`),
 it downloads those executables and their `.sig`s, checks each raw ed25519
-signature against `RELEASE_PUBLIC_KEY_HEX` in [`src/update.rs`](src/update.rs),
+signature against `RELEASE_PUBLIC_KEY_HEX` in [`src/update/`](src/update/),
 renames the running binaries to `.old`, moves the new ones into place and
 exits with code 3. The service's recovery action (launchd's KeepAlive on
 macOS, `Restart=always` on Linux) starts it on the new binary; the tray and
@@ -1085,7 +1085,7 @@ live outside the per-OS code (`src/telemetry/parse/`), the DNS SRV codec
 every OS's Claude job — the systemd arguments, the launchd plist and its
 BSD `script` line, `launchctl print`/`list` and `ps` parsing, the Windows
 job record, command-line quoting and the holder's terminal filter
-(`src/claude/job.rs`) — and the service, the power request, the tray,
+(`src/jobs/`) — and the service, the power request, the tray,
 `install`, and the Claude jobs themselves on macOS (launchd) and Windows
 (the detached process, the ConPTY holder) are exercised on the machines
 themselves: here they are compile-checked by clippy for both targets, not

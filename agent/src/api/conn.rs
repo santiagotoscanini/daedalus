@@ -336,7 +336,7 @@ mod tests {
     use super::*;
     use crate::claude::Report;
     use crate::config::Config;
-    use crate::status::Shared;
+    use crate::shared::Shared;
     use serde_json::json;
     use std::time::Instant;
 
@@ -746,7 +746,7 @@ mod tests {
         assert!(answer.sessions.iter().any(|s| s.id == "0a1b2c3d"));
         assert!(shared.set_claude(Report::default()).sessions.is_empty());
         // A session that is not taking them is not piled on.
-        for _ in 0..crate::status::MAX_QUEUED_SESSIONS {
+        for _ in 0..crate::shared::MAX_QUEUED_SESSIONS {
             assert!(shared
                 .queue_claude_session(crate::claude::SessionAction::Stop, "0a1b2c3d".into())
                 .is_some());

@@ -65,11 +65,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::cli::find_cli;
-use super::job::{self, JobState, SessionJob};
 use super::profile::{claude_dir, home_dir};
 use super::roster::{self, is_short_id, is_uuid, ActionResult, Agent, Managed, Roster, Scanner};
 use super::workdir::trusted_projects;
 use super::{gcroot, ActionState, Recovered, SessionAction, SessionRequest};
+use crate::jobs::{self as job, JobState, SessionJob};
 use crate::os::jobs;
 use crate::state::now_rfc3339;
 

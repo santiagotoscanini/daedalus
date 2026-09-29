@@ -133,7 +133,7 @@ use serde_json::Value;
 
 use crate::config::{Config, TelemetryLevel};
 use crate::role::Role;
-use crate::status::Shared;
+use crate::shared::Shared;
 use wire::{code, ApiError, ClaudeStatus, Event, OsInfo, Queued, SystemInfo, TelemetryGet};
 
 /// The API version this agent speaks.

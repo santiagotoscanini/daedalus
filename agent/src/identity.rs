@@ -26,8 +26,8 @@ use anyhow::{bail, Context, Result};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 
-use crate::config::data_dir;
 use crate::os::{seal, unseal, write_private};
+use crate::paths::data_dir;
 
 pub const FILE: &str = "identity.key";
 

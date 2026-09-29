@@ -1,8 +1,8 @@
 //! Claude's jobs on macOS: launchd jobs in the user's `gui/<uid>` domain
-//! (claude/job.rs has what they are and the pure plist and command line).
+//! (jobs/ has what they are and the pure plist and command line).
 //!
 //! The session writes each job's plist into its own state directory
-//! (`jobs/<label>.plist` under `config::user_state_dir`) — never into
+//! (`jobs/<label>.plist` under `paths::user_state_dir`) — never into
 //! `~/Library/LaunchAgents`, so no login starts one — and bootstraps it:
 //! `RunAtLoad` starts it at once, `KeepAlive` is off (the supervisor
 //! decides what runs again), and a job that exited stays loaded with its
@@ -15,9 +15,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use crate::claude::job::{self, JobState, ServerJob, SessionJob, Tools};
 use crate::claude::roster::UnitCost;
 use crate::exec;
+use crate::jobs::{self, JobState, ServerJob, SessionJob, Tools};
 
 pub const JOB_KIND: &str = "a launchd job in the user's gui domain";
 
@@ -33,7 +33,7 @@ fn domain() -> String {
 }
 
 fn target(name: &str) -> String {
-    format!("{}/{}", domain(), job::launchd_label(name))
+    format!("{}/{}", domain(), jobs::launchd_label(name))
 }
 
 /// launchctl's exit code, its stdout, and the first line of its stderr
@@ -47,9 +47,9 @@ fn launchctl(args: &[&str]) -> Result<(i32, String), String> {
 }
 
 fn plist_path(name: &str) -> PathBuf {
-    crate::config::user_state_dir()
+    crate::paths::user_state_dir()
         .join("jobs")
-        .join(format!("{}.plist", job::launchd_label(name)))
+        .join(format!("{}.plist", jobs::launchd_label(name)))
 }
 
 /// Write the plist (0600 in a 0700 directory: it carries the environment)
@@ -66,7 +66,7 @@ fn bootstrap(
     let dir = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
-    let text = job::launchd_plist(&job::launchd_label(name), program, workdir, log, env);
+    let text = jobs::launchd_plist(&jobs::launchd_label(name), program, workdir, log, env);
     let tmp = path.with_extension("plist.new");
     {
         use std::io::Write;
@@ -107,7 +107,7 @@ pub fn start_server(j: &ServerJob) -> Result<(), String> {
 
 pub fn start_session(j: &SessionJob) -> Result<(), String> {
     let tools = Tools::locate()?;
-    let line = job::macos_session_line(j, &tools)?;
+    let line = jobs::macos_session_line(j, &tools)?;
     let program = vec![tools.sh.display().to_string(), "-c".into(), line];
     bootstrap(j.name, &program, j.cwd, j.log, j.env)
 }
@@ -122,7 +122,7 @@ fn age_of(pid: u32) -> Option<u64> {
     let mut cmd = Command::new("/bin/ps");
     cmd.args(["-o", "etime=", "-p", &pid.to_string()]);
     let out = exec::stdout_or(cmd, Duration::from_secs(5), exec::Text::Lossy).ok()?;
-    job::parse_etime(&out)
+    jobs::parse_etime(&out)
 }
 
 pub fn show(name: &str) -> Result<JobState, String> {
@@ -130,7 +130,7 @@ pub fn show(name: &str) -> Result<JobState, String> {
     if code != 0 {
         // Only launchd's "no such service" is gone; any other failure is
         // not knowing, which the supervisor never takes for gone.
-        if job::launchctl_says_gone(code, &text) {
+        if jobs::launchctl_says_gone(code, &text) {
             return Ok(JobState::Gone);
         }
         return Err(format!(
@@ -139,7 +139,7 @@ pub fn show(name: &str) -> Result<JobState, String> {
             text.trim()
         ));
     }
-    match job::parse_launchctl_print(&text) {
+    match jobs::parse_launchctl_print(&text) {
         Some(JobState::Running { pid, workdir, .. }) => Ok(JobState::Running {
             pid,
             age_secs: pid.and_then(age_of),
@@ -175,7 +175,7 @@ pub fn stop(name: &str) -> Result<(), String> {
     match launchctl(&["bootout", &target(name)])? {
         (0, _) => wait_gone(name),
         // Not loaded: nothing to stop.
-        (code, out) if job::launchctl_says_gone(code, &out) => Ok(()),
+        (code, out) if jobs::launchctl_says_gone(code, &out) => Ok(()),
         (code, out) => Err(format!("launchctl bootout exited {code}: {}", out.trim())),
     }
 }
@@ -187,13 +187,13 @@ pub fn clear(name: &str) {
 /// The jobs starting with `prefix` that have a process now (`launchctl
 /// list` shows the caller's own domain).
 pub fn running(prefix: &str) -> Result<Vec<String>, String> {
-    let label_prefix = job::launchd_label(prefix);
+    let label_prefix = jobs::launchd_label(prefix);
     let (code, text) = launchctl(&["list"])?;
     if code != 0 {
         return Err(format!("launchctl list exited {code}"));
     }
-    let strip = job::launchd_label("");
-    Ok(job::parse_launchctl_list(&text, &label_prefix)
+    let strip = jobs::launchd_label("");
+    Ok(jobs::parse_launchctl_list(&text, &label_prefix)
         .into_iter()
         .filter_map(|l| l.strip_prefix(&strip).map(str::to_string))
         .collect())
@@ -213,7 +213,7 @@ pub fn server_env(
     path: Option<&str>,
     config_dir: Option<&str>,
 ) -> Vec<(String, String)> {
-    job::job_env(
+    jobs::job_env(
         home,
         path,
         config_dir,
@@ -223,7 +223,7 @@ pub fn server_env(
 
 /// The `claude` a job runs, from the plist it was bootstrapped from.
 pub fn running_cli(name: &str) -> Option<PathBuf> {
-    job::claude_in_command(&std::fs::read_to_string(plist_path(name)).ok()?)
+    jobs::claude_in_command(&std::fs::read_to_string(plist_path(name)).ok()?)
 }
 
 /// Nothing to add about a launchd job beyond its state.

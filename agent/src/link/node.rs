@@ -80,8 +80,8 @@ use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT, 
 use crate::api::wire::{code, ApiError, Response};
 use crate::config::Config;
 use crate::identity::{digest, format_fingerprint, parse_fingerprint, Identity};
+use crate::shared::Shared;
 use crate::state::now_rfc3339;
-use crate::status::Shared;
 
 /// Where the first-use controller key is kept, in the data directory.
 pub const STORE_FILE: &str = "controller.json";
@@ -105,7 +105,7 @@ pub struct Stored {
 }
 
 pub fn store_path() -> PathBuf {
-    crate::config::data_dir().join(STORE_FILE)
+    crate::paths::data_dir().join(STORE_FILE)
 }
 
 /// Whether the store may be read: absent, or owned by whom private.rs
@@ -267,7 +267,7 @@ pub fn run_loop(
     stop: Arc<AtomicBool>,
 ) {
     let store = store_path();
-    let config_path = crate::config::config_path();
+    let config_path = crate::paths::config_path();
     // The TLS side, once: the key's DER is made and loaded one time.
     let client = match tls::Client::new(&id) {
         Ok(c) => c,
@@ -1065,8 +1065,8 @@ fn converse(
 /// disk, so the next start begins from it (config.rs `last_policy`).
 fn apply_policy(shared: &Shared, p: Policy) {
     let changed = shared.set_policy(p.clone());
-    if changed || !crate::config::policy_path().exists() {
-        crate::config::save_policy(&p);
+    if changed || !crate::paths::policy_path().exists() {
+        crate::paths::save_policy(&p);
     }
     if changed {
         tracing::info!(

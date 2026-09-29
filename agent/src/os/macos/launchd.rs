@@ -27,6 +27,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 use crate::config::{self, Config};
+use crate::paths;
 use crate::TRAY_EXE;
 
 pub const DAEMON_LABEL: &str = "me.toscanini.daedalus-agent";
@@ -138,7 +139,7 @@ pub fn install(cfg: &Config) -> Result<()> {
     }
     let exe = std::env::current_exe().context("locating this binary")?;
     let tray = exe.with_file_name(TRAY_EXE);
-    let logs = config::log_dir();
+    let logs = paths::log_dir();
     std::fs::create_dir_all(&logs).context("creating the log directory")?;
     let path = config::write_for_install(cfg)?;
     converge_permissions();
@@ -205,7 +206,7 @@ pub fn uninstall() -> Result<()> {
         // Claude remote control is a job of the user's own (os/macos/jobs.rs),
         // which outlives the menu bar app: it goes too. Sessions it resumed
         // run on until they end or the user logs out.
-        let rc = crate::claude::job::launchd_label(&config::claude_unit_name());
+        let rc = crate::jobs::launchd_label(&paths::claude_unit_name());
         let _ = launchctl(&["bootout", &format!("gui/{uid}/{rc}")]);
     }
     let _ = launchctl(&["bootout", &format!("system/{DAEMON_LABEL}")]);
@@ -231,14 +232,14 @@ pub fn converge_permissions() {
     // config.toml's directory is the data directory unless `data_dir`
     // moved the rest (config.rs); both are converged.
     let dirs = [
-        config::config_dir(),
-        config::data_dir(),
+        paths::config_dir(),
+        paths::data_dir(),
         bin.clone(),
-        config::log_dir(),
+        paths::log_dir(),
     ];
     let files = [
-        config::config_path(),
-        config::state_path(),
+        paths::config_path(),
+        paths::state_path(),
         daemon_plist(),
         tray_plist(),
     ];
@@ -296,7 +297,7 @@ pub fn launch_tray_or_session() -> Result<()> {
 }
 
 /// Someone is at the console: a menu bar app should be reporting
-/// (update.rs, probation).
+/// (update/, probation).
 pub fn interactive_user() -> bool {
     console_uid().is_some_and(|u| u != 0)
 }

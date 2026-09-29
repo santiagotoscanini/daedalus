@@ -13,7 +13,7 @@
 //!       manager, enabled for the user who ran `sudo` (`$SUDO_USER`), with
 //!       lingering on so it runs from boot with nobody logged in. It runs
 //!       Claude remote control as a transient unit of its own
-//!       (`daedalus-claude-rc.service`, claude/job.rs), so restarting or
+//!       (`daedalus-claude-rc.service`, jobs/), so restarting or
 //!       updating the agent never ends a Claude session.
 //!   /etc/xdg/autostart/daedalus-agent-tray.desktop
 //!       the tray, at every graphical login, where the release carried one
@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{self, Config};
 use crate::exec;
+use crate::paths;
 use crate::TRAY_EXE;
 
 /// Where `install` keeps the binaries it registers: root's, 0755, made by
@@ -252,12 +253,12 @@ struct SessionUser {
 }
 
 fn session_record() -> PathBuf {
-    config::data_dir().join("session.json")
+    paths::data_dir().join("session.json")
 }
 
 /// The user the session unit runs for, and whether their systemd manager
 /// is up (lingering starts it at boot): then a session should be reporting
-/// (update.rs, probation). None without an install's record.
+/// (update/, probation). None without an install's record.
 fn session_user() -> Option<SessionUser> {
     let text = std::fs::read_to_string(session_record()).ok()?;
     serde_json::from_str(&text).ok()
@@ -302,7 +303,7 @@ pub fn restart_desktop_side() {
 /// The session unit's name: `SESSION_UNIT`, or under
 /// `DAEDALUS_AGENT_DATA_DIR` one of its own, as the Claude unit gets.
 fn session_unit_name() -> String {
-    let claude = config::claude_unit_name();
+    let claude = paths::claude_unit_name();
     match claude.strip_prefix("daedalus-claude-rc-") {
         Some(hash) => format!("daedalus-agent-session-{hash}.service"),
         None => SESSION_UNIT.to_string(),
@@ -386,7 +387,7 @@ fn linger(user: &str, uid: u32) -> Result<bool> {
 }
 
 fn write_record(record: &SessionUser) -> Result<()> {
-    std::fs::create_dir_all(config::data_dir()).context("creating the data directory")?;
+    std::fs::create_dir_all(paths::data_dir()).context("creating the data directory")?;
     std::fs::write(session_record(), serde_json::to_string_pretty(record)?)
         .context("writing session.json")
 }
@@ -481,9 +482,9 @@ fn place_binaries(exe: &Path) -> Result<PathBuf> {
 fn readable_by_the_session() {
     use std::os::unix::fs::PermissionsExt;
     let entries = [
-        (config::config_dir(), 0o755),
-        (config::data_dir(), 0o755),
-        (config::config_path(), 0o644),
+        (paths::config_dir(), 0o755),
+        (paths::data_dir(), 0o755),
+        (paths::config_path(), 0o644),
     ];
     for (p, mode) in entries {
         // Only what root owns: a `data_dir` pointed at someone's own
@@ -507,7 +508,7 @@ pub fn install(cfg: &Config) -> Result<()> {
     ensure_install_dir()?;
     let exe = place_binaries(&std::env::current_exe().context("locating this binary")?)?;
     let bin = Path::new(INSTALL_DIR);
-    std::fs::create_dir_all(config::log_dir()).context("creating the log directory")?;
+    std::fs::create_dir_all(paths::log_dir()).context("creating the log directory")?;
     let path = config::write_for_install(cfg)?;
     readable_by_the_session();
     println!("config at {}", path.display());
@@ -574,7 +575,7 @@ pub fn uninstall() -> Result<()> {
         // one that is, whether or not a D-Bus session bus exists, answers
         // on its own socket.
         if manager_socket(*uid).exists() {
-            let claude = format!("{}.service", config::claude_unit_name());
+            let claude = format!("{}.service", paths::claude_unit_name());
             let _ = user_systemctl(user, *uid, &["disable", "--now", SESSION_UNIT]);
             let _ = user_systemctl(user, *uid, &["stop", &claude]);
             let _ = user_systemctl(user, *uid, &["reset-failed", &claude]);

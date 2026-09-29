@@ -15,10 +15,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::cli::{cli_version, find_cli, install_method, last_meaningful};
-use super::job::{self, JobState, LogTail, ServerJob};
 use super::profile::{claude_dir, home_dir, read_credentials, read_sessions, read_settings};
 use super::workdir::pick_workdir;
 use super::{gcroot, Banner, Credentials, Report, Settings, UpdateResult};
+use crate::jobs::{self as job, JobState, LogTail, ServerJob};
 use crate::os::jobs;
 use crate::state::{now_rfc3339, rfc3339_ago};
 

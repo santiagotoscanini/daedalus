@@ -8,7 +8,7 @@
 //! session's directory and with its log as stdout; the holder makes a
 //! pseudo-console (`CreatePseudoConsole`), starts the command line in it,
 //! drains what it shows — escape sequences stripped, the status box's lines
-//! dropped (`claude::job::LineFilter`) — into the log, and leaves with the
+//! dropped (`jobs::LineFilter`) — into the log, and leaves with the
 //! CLI's exit code. Nothing is ever typed into it: the session is driven
 //! from claude.ai through `--remote-control`.
 //!
@@ -30,7 +30,7 @@ use windows::Win32::System::Threading::{
     PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, STARTF_USESTDHANDLES, STARTUPINFOEXW,
 };
 
-use crate::claude::job::LineFilter;
+use crate::jobs::LineFilter;
 
 /// The pseudo-console's size: wide enough that the CLI does not wrap the
 /// lines worth keeping.

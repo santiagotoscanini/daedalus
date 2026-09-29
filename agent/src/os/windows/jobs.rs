@@ -1,5 +1,5 @@
 //! Claude's jobs on Windows: processes started outside the tray, so the
-//! tray can leave, update or crash and they run on (claude/job.rs has what
+//! tray can leave, update or crash and they run on (jobs/ has what
 //! they are).
 //!
 //! Each starts with `CREATE_NO_WINDOW` (a hidden console its children
@@ -11,7 +11,7 @@
 //! is all "detached" takes.
 //!
 //! The session records each job — its pid and its creation time — in
-//! `jobs\<name>.json` under its state directory (`config::user_state_dir`,
+//! `jobs\<name>.json` under its state directory (`paths::user_state_dir`,
 //! `%LOCALAPPDATA%\daedalus-agent`). A later tray finds the process again
 //! by that pair: a pid alone could be a later process that got the number.
 //! While this tray is the one that started it, the process handle is kept,
@@ -39,8 +39,8 @@ use windows::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use crate::claude::job::{self, JobRecord, JobState, ServerJob, SessionJob};
 use crate::claude::roster::UnitCost;
+use crate::jobs::{self, JobRecord, JobState, ServerJob, SessionJob};
 use crate::state::now_rfc3339;
 
 pub const JOB_KIND: &str = "a process detached from the tray";
@@ -55,7 +55,7 @@ fn spawned() -> &'static Mutex<HashMap<String, Child>> {
 }
 
 fn jobs_dir() -> PathBuf {
-    crate::config::user_state_dir().join("jobs")
+    crate::paths::user_state_dir().join("jobs")
 }
 
 fn record_path(name: &str) -> PathBuf {
@@ -238,9 +238,9 @@ fn holder_exe() -> Result<PathBuf, String> {
             installed.display()
         ));
     }
-    let holders = crate::config::user_state_dir().join("holder");
+    let holders = crate::paths::user_state_dir().join("holder");
     std::fs::create_dir_all(&holders).map_err(|e| format!("{}: {e}", holders.display()))?;
-    let copy = holders.join(job::holder_file(crate::VERSION));
+    let copy = holders.join(jobs::holder_file(crate::VERSION));
     let same = |a: &Path, b: &Path| {
         let len = |p: &Path| std::fs::metadata(p).map(|m| m.len()).ok();
         len(a).is_some() && len(a) == len(b)
@@ -256,7 +256,7 @@ fn holder_exe() -> Result<PathBuf, String> {
             .flatten()
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .collect();
-        for stale in job::stale_holders(&names, crate::VERSION) {
+        for stale in jobs::stale_holders(&names, crate::VERSION) {
             // In use by a session from before the update: it stays.
             let _ = std::fs::remove_file(holders.join(stale));
         }
@@ -265,8 +265,8 @@ fn holder_exe() -> Result<PathBuf, String> {
 }
 
 pub fn start_session(j: &SessionJob) -> Result<(), String> {
-    let cli = job::check_cli(j.cli)?;
-    let line = job::windows_session_command(&cli, j.id, j.label)?;
+    let cli = jobs::check_cli(j.cli)?;
+    let line = jobs::windows_session_command(&cli, j.id, j.label)?;
     let holder = holder_exe()?;
     spawn(
         j.name,
@@ -435,7 +435,7 @@ pub fn server_env(
     path: Option<&str>,
     config_dir: Option<&str>,
 ) -> Vec<(String, String)> {
-    job::job_env(home, path, config_dir, &[])
+    jobs::job_env(home, path, config_dir, &[])
         .into_iter()
         .filter(|(k, _)| k != "HOME")
         .collect()
