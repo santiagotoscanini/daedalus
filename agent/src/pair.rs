@@ -16,11 +16,13 @@
 //!   re-pins a paired machine too — moving the trust is an administrator's.
 //! - `install --pin`: the same keys through the same writer, before the
 //!   service starts.
-//! - the tray's "Pair with the box…" (`parse_pasted`): the service does the
-//!   write (`link.pair`), since the tray runs as the user and config.toml is
-//!   the service's — and only while the machine is unpaired, so a user the
-//!   socket serves can pair a fresh machine but never move one that
-//!   already trusts a controller.
+//! - the tray's "Pair with the box…" (`parse_pasted`, tray.rs
+//!   `pair_pasted`): the same verb, run elevated behind the OS's own prompt
+//!   (UAC, macOS's administrator password, polkit), with the pasted text
+//!   checked here first. The tray runs as the user and config.toml is the
+//!   service's, and naming the controller hands that controller the
+//!   service's privileges, so pairing asks what `install` asks: an
+//!   administrator. The local socket has no pairing method.
 
 use std::path::Path;
 
@@ -145,22 +147,6 @@ pub fn reload(shared: &Shared, path: &Path) -> Result<bool> {
     Ok(shared.set_link_keys(LinkKeys::of(&crate::config::load_at(path)?)))
 }
 
-/// The service's side of the tray's pairing (local.rs `link.pair`): refused
-/// on a machine that is paired already (module doc), else written and
-/// handed to the link.
-pub fn pair_unpaired(shared: &Shared, path: &Path, p: &Pairing) -> Result<()> {
-    if paired_at(path)? {
-        bail!(
-            "this machine is paired already; moving it to another controller is an \
-             administrator's: {}",
-            command_line("<key>", None)
-        );
-    }
-    p.write_at(path)?;
-    reload(shared, path)?;
-    Ok(())
-}
-
 /// The `pair` command as this OS's administrator types it.
 pub fn command_line(pin: &str, controller: Option<&str>) -> String {
     let tail = match controller {
@@ -278,7 +264,8 @@ mod tests {
         assert!(!paired_at(&path).unwrap());
         let shared = node_shared();
         let p = Pairing::new(&fp(1), Some("box.lan:7788")).unwrap();
-        pair_unpaired(&shared, &path, &p).unwrap();
+        p.write_at(&path).unwrap();
+        assert!(reload(&shared, &path).unwrap());
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(
             text.starts_with("# mine\ntelemetry = \"minimal\"\n"),
@@ -304,14 +291,9 @@ mod tests {
             assert_eq!(mode & 0o022, 0, "{mode:o}");
         }
 
-        // The tray's door refuses to move a paired machine, and nothing moves.
-        let other = Pairing::new(&fp(2), None).unwrap();
-        let e = pair_unpaired(&shared, &path, &other).unwrap_err();
-        assert!(format!("{e:#}").contains("paired already"), "{e:#}");
-        assert!(std::fs::read_to_string(&path).unwrap().contains(&fp(1)));
-        assert_eq!(shared.link_keys().1, 1);
         // An administrator's re-pin (the verb) writes over it, keeping the
         // address; a reload that finds nothing new moves nothing.
+        let other = Pairing::new(&fp(2), None).unwrap();
         other.write_at(&path).unwrap();
         assert!(reload(&shared, &path).unwrap());
         assert!(!reload(&shared, &path).unwrap());

@@ -130,3 +130,34 @@ fn tell(text: &str, ok: bool) {
         &[text, crate::tray::PAIR_TITLE],
     );
 }
+
+/// Run `pair` as root behind macOS's administrator prompt: osascript's
+/// `do shell script … with administrator privileges`, with the binary and
+/// the checked arguments passed as `argv` and quoted by AppleScript itself
+/// (tray.rs `osascript_argv`).
+pub fn pair_elevated(
+    exe: &std::path::Path,
+    args: &[String],
+    p: &crate::pair::Pairing,
+) -> Result<String, String> {
+    let out = std::process::Command::new("/usr/bin/osascript")
+        .args(crate::tray::osascript_argv(exe, args))
+        .output()
+        .map_err(|e| format!("could not start osascript: {e}"))?;
+    if out.status.success() {
+        let said = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        return Ok(if said.is_empty() {
+            format!("paired: this machine trusts {}", p.pin)
+        } else {
+            said
+        });
+    }
+    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    if err.contains("-128") {
+        return Err("cancelled at the administrator prompt".into());
+    }
+    Err(format!(
+        "{err}\nIn a terminal, as an administrator:\n  {}",
+        crate::pair::command_line(&p.pin, p.controller.as_deref())
+    ))
+}

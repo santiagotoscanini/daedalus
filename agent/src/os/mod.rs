@@ -124,5 +124,5 @@ pub mod svc {
 /// binary.
 #[cfg(feature = "tray")]
 pub mod tray {
-    pub use super::imp::tray::{ask_pairing, open, relaunch_self, run};
+    pub use super::imp::tray::{ask_pairing, open, pair_elevated, relaunch_self, run};
 }

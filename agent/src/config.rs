@@ -540,8 +540,7 @@ pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
 /// overwrites an operator's edits on a reinstall — except the two keys
 /// `--controller` and `--pin` name, which it sets in a file that exists
 /// (`set_top_level_keys`), leaving the rest as it was. The one writer of
-/// both keys: `install` and pairing (pair.rs) — the verb and the service's
-/// `link.pair` — call it; a signed rotation re-pins through
+/// both keys: `install` and `pair` (pair.rs) call it; a signed rotation re-pins through
 /// `set_controller_pin_at`.
 pub fn write_link_config_at(path: &Path, cfg: &Config) -> Result<()> {
     let dir = path.parent().context("config.toml has no directory")?;

@@ -1645,15 +1645,16 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
     let l = shared.link().unwrap();
     assert!(!l.connected && l.controller_fingerprint.is_none() && l.error.is_none());
 
-    // Paired while it runs (the tray's door): it dials the controller named
-    // at once, under that key, and waits there for approval.
+    // Paired while it runs (`pair`: the file, then `link.reload`): it dials
+    // the controller named at once, under that key, and waits for approval.
     let ctl = controller(fast());
     let p = crate::pair::Pairing::new(
         &crate::identity::format_fingerprint(&pin_of(&ctl.id)),
         Some(&ctl.listener.local_addr.to_string()),
     )
     .unwrap();
-    crate::pair::pair_unpaired(&shared, &path, &p).unwrap();
+    p.write_at(&path).unwrap();
+    crate::pair::reload(&shared, &path).unwrap();
     wait_for("seen by the controller", 5, || {
         summary(&ctl, &nid).is_some()
     });

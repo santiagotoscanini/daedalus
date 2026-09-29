@@ -552,9 +552,9 @@ are read by the service every minute on a thread of their own.
 `status` (the status document), `claude` (the session's full report),
 `claude.report` (the session's poll: its report in, the `ReportAnswer`
 out), `claude.roster`, `claude.restart`, `claude.update` (refused on the
-controller, where nix pins Claude Code), `update.check`, `link.pair` (the
-tray's pairing, refused on a paired machine) and `link.reload` ("Pairing"
-below). A socket that cannot be made does not stop the service: it is
+controller, where nix pins Claude Code), `update.check` and `link.reload`
+("Pairing" below). There is no pairing method: naming the controller is an
+administrator's, never a socket user's. A socket that cannot be made does not stop the service: it is
 tried again every 15 s.
 
 The tray, the session and the service are one binary, so the envelope
@@ -642,6 +642,8 @@ Re-running either script replaces the binaries and keeps the config —
 except `controller_address` and `controller_pin`, which `--controller` and
 `--pin` (`-Controller`, `-Pin`) set in a config that exists too. The
 site serves both scripts from `main`, so neither command names a version.
+Neither installs a release older than 0.21.0 (`MIN_VERSION`), newest or
+named: older agents trusted the first controller that answered.
 Trust at install is HTTPS to GitHub; every update after that is verified by
 the agent against the release key it carries.
 
@@ -666,10 +668,17 @@ Settings › Machines shows:
 - **The tray's "Pair with the box…"**, shown only while unpaired: a native
   text box (a GTK dialog on Linux, AppleScript's `display dialog` on macOS,
   PowerShell's `InputBox` on Windows) takes the key, or a whole pair or
-  install line from the Machines page. The service does the write
-  (`link.pair` on the local socket), since config.toml is the service's —
-  and only while the machine is unpaired, so a user the socket serves can
-  pair a fresh machine but never move a paired one.
+  install line from the Machines page. The tray checks it (a key, and
+  host:port if one is given — nothing else goes on), then runs the `pair`
+  verb above **elevated**, behind the OS's own prompt: UAC on Windows
+  (`ShellExecuteExW`, verb `runas`), the administrator password on macOS
+  (`do shell script … with administrator privileges`, each argument quoted
+  by AppleScript), polkit's `pkexec` on Linux — and where there is no
+  pkexec, or polkit cannot ask, it shows the `sudo daedalus-agent pair …`
+  line to type. Pairing asks what `install` asks because the controller a
+  machine trusts commands its service (power, Claude, updates): a user who
+  could pair a fresh machine to a controller of their own would hold root
+  or SYSTEM on it. The local socket has no pairing method.
 
 Settings › Machines also gives lines that pair as they install (`--pin`,
 `--controller`), and the `pair` line for each system.

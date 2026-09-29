@@ -67,15 +67,27 @@ $assets = @{
 }
 $headers = @{ "User-Agent" = "daedalus-agent-install"; "Accept" = "application/vnd.github+json" }
 
+# The oldest release this script installs: the first whose machines trust
+# only a controller key they were given (-Pin, or `pair` as an
+# administrator), never the first that answers, and whose tray pairs only
+# through an elevated `pair`. Nothing older is installed, by name or as the
+# newest.
+$MinVersion = [version]"0.21.0"
+if ($Version -and [version]$Version -lt $MinVersion) {
+  throw "agent $Version predates pairing (it would trust the first controller that answers); $MinVersion or newer only"
+}
 Write-Host "looking up releases of $Repo"
 $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases?per_page=30" -Headers $headers
-$candidates = $releases | Where-Object { -not $_.draft -and -not $_.prerelease -and $_.tag_name -like "agent-v*" }
+$candidates = $releases | Where-Object {
+  -not $_.draft -and -not $_.prerelease -and $_.tag_name -match "^agent-v\d+\.\d+\.\d+$" -and
+  [version]($_.tag_name -replace "^agent-v", "") -ge $MinVersion
+}
 if ($Version) {
   $release = $candidates | Where-Object { $_.tag_name -eq "agent-v$Version" } | Select-Object -First 1
   if (-not $release) { throw "no release agent-v$Version" }
 } else {
   $release = $candidates | Sort-Object { [version]($_.tag_name -replace '^agent-v', '') } -Descending | Select-Object -First 1
-  if (-not $release) { throw "no agent-v* release found in $Repo" }
+  if (-not $release) { throw "no agent-v* release of $Repo at $MinVersion or newer yet" }
 }
 foreach ($name in $assets.Keys) {
   if (-not ($release.assets | Where-Object { $_.name -eq $name })) { throw "$($release.tag_name) has no $name" }

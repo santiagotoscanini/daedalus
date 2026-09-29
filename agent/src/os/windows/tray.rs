@@ -147,3 +147,80 @@ fn message_box(text: &str, ok: bool) {
         );
     }
 }
+
+/// Run `pair` as an administrator behind UAC: `ShellExecuteExW` with the
+/// verb `runas` on the agent binary, its window hidden, waited for, and
+/// judged by its exit code (an elevated process's output cannot be read
+/// from here). The parameters are the checked arguments, quoted as
+/// `CommandLineToArgvW` reads them (tray.rs `windows_parameters`).
+pub fn pair_elevated(
+    exe: &std::path::Path,
+    args: &[String],
+    p: &crate::pair::Pairing,
+) -> Result<String, String> {
+    use windows::core::{w, HSTRING, PCWSTR};
+    use windows::Win32::Foundation::{CloseHandle, ERROR_CANCELLED};
+    use windows::Win32::System::Com::{
+        CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+    };
+    use windows::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject, INFINITE};
+    use windows::Win32::UI::Shell::{
+        ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+    let by_hand = || {
+        format!(
+            "In an administrator PowerShell:\n  {}",
+            crate::pair::command_line(&p.pin, p.controller.as_deref())
+        )
+    };
+    let file = HSTRING::from(exe.as_os_str());
+    let params = HSTRING::from(crate::tray::windows_parameters(args));
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+        fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
+        lpVerb: w!("runas"),
+        lpFile: PCWSTR(file.as_ptr()),
+        lpParameters: PCWSTR(params.as_ptr()),
+        nShow: SW_HIDE.0,
+        ..Default::default()
+    };
+    // SAFETY: `info` is sized and filled as the call documents; the wide
+    // strings it points at outlive the call. COM is initialised on this
+    // thread (the pairing thread) as ShellExecuteEx asks; a second
+    // initialisation is harmless.
+    let started = unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        ShellExecuteExW(&mut info)
+    };
+    if let Err(e) = started {
+        if e.code() == ERROR_CANCELLED.to_hresult() {
+            return Err("cancelled at the administrator prompt".into());
+        }
+        return Err(format!(
+            "could not run `pair` as an administrator: {e}\n{}",
+            by_hand()
+        ));
+    }
+    if info.hProcess.is_invalid() {
+        return Err(format!(
+            "`pair` started without a process to wait for\n{}",
+            by_hand()
+        ));
+    }
+    let mut code = 1u32;
+    // SAFETY: the handle is the started process's, ours to wait on and close.
+    unsafe {
+        WaitForSingleObject(info.hProcess, INFINITE);
+        let _ = GetExitCodeProcess(info.hProcess, &mut code);
+        let _ = CloseHandle(info.hProcess);
+    }
+    if code == 0 {
+        Ok(format!(
+            "paired: this machine trusts {} and connects now",
+            p.pin
+        ))
+    } else {
+        Err(format!("`pair` exited with {code}\n{}", by_hand()))
+    }
+}

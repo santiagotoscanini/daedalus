@@ -40,16 +40,18 @@
 //! | `claude.restart` | —                | a sentence; the session restarts the server    |
 //! | `claude.update`  | —                | a sentence; refused where nix pins Claude      |
 //! | `update.check`   | —                | a sentence; the updater looks now              |
-//! | `link.pair`      | `{pin, controller?}` | a sentence; refused on a paired machine    |
 //! | `link.reload`    | —                | a sentence; the link reads config.toml again   |
 //!
 //! The report and the roster are the session's to post; any peer the gate
 //! lets through may, since each of those is a user the machine runs Claude
-//! for (or root). `link.pair` is the tray's pairing (pair.rs): the service
-//! writes config.toml, and only while the machine is unpaired — moving a
-//! paired machine is `pair` run as an administrator, which writes the file
+//! for (or root). Nothing on this socket names the controller a machine
+//! trusts: pairing is `pair` run as an administrator (pair.rs) — the tray
+//! runs it elevated, behind the OS's own prompt — which writes config.toml
 //! itself and asks `link.reload`, harmless to anyone (it reads a file only
-//! root or SYSTEM can write, and changes nothing unless the keys did).
+//! root or SYSTEM can write, and changes nothing unless the keys did). A
+//! pairing method here would let any user the socket serves hand a fresh
+//! machine, and with it the service's privileges, to a controller of their
+//! own.
 
 use std::io::Write;
 use std::path::Path;
@@ -176,23 +178,6 @@ fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, ApiError> {
             shared.request_check();
             Ok("checking".into())
         }
-        "link.pair" => {
-            #[derive(serde::Deserialize)]
-            #[serde(deny_unknown_fields)]
-            struct Params {
-                pin: String,
-                #[serde(default)]
-                controller: Option<String>,
-            }
-            let p: Params = serde_json::from_value(p)
-                .map_err(|e| bad(format!("`link.pair` takes {{pin, controller?}}: {e}")))?;
-            link_pair(
-                shared,
-                &crate::paths::config_path(),
-                &p.pin,
-                p.controller.as_deref(),
-            )
-        }
         "link.reload" => {
             none(&p)?;
             link_reload(shared, &crate::paths::config_path())
@@ -202,26 +187,6 @@ fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, ApiError> {
             format!("no method `{m}`"),
         )),
     }
-}
-
-/// `link.pair` against the config.toml at `path` (module doc).
-fn link_pair(
-    shared: &Shared,
-    path: &Path,
-    pin: &str,
-    controller: Option<&str>,
-) -> Result<Value, ApiError> {
-    if !shared.role().link {
-        return Err(ApiError::new(
-            code::UNSUPPORTED,
-            "the controller pairs with nobody",
-        ));
-    }
-    let p = crate::pair::Pairing::new(pin, controller).map_err(|e| bad(format!("{e:#}")))?;
-    crate::pair::pair_unpaired(shared, path, &p)
-        .map_err(|e| ApiError::new(code::FORBIDDEN, format!("{e:#}")))?;
-    tracing::info!(pin = %p.pin, controller = ?p.controller, "paired from the local socket");
-    Ok(format!("paired: this machine trusts {} and connects now", p.pin).into())
 }
 
 /// `link.reload` against the config.toml at `path` (module doc).
@@ -442,41 +407,43 @@ mod tests {
     }
 
     #[test]
-    fn the_tray_pairs_an_unpaired_machine_and_never_moves_a_paired_one() {
+    fn no_one_pairs_through_the_socket_and_a_reload_follows_the_file() {
         let dir = std::env::temp_dir().join(format!("daedalus-local-pair-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
         let key = crate::identity::format_fingerprint(&[4; 32]);
         let s = shared(Mode::Node);
-        // Checked before anything is written.
-        let e = link_pair(&s, &path, "nope", None).unwrap_err();
-        assert_eq!(e.code, code::BAD_REQUEST);
-        let e = link_pair(&s, &path, &key, Some("box.lan")).unwrap_err();
-        assert_eq!(e.code, code::BAD_REQUEST);
+        // Pairing is an administrator's (`pair`, elevated): the socket has
+        // no method for it, whoever asks and whatever the machine's state.
+        let e = handle(&s, "link.pair", serde_json::json!({"pin": key})).unwrap_err();
+        assert_eq!(e.code, code::UNKNOWN_METHOD);
+        assert_eq!(s.link_keys().0.pin, None);
         assert!(!path.exists());
-        // Unpaired (no file yet): written, and the link told.
-        let ok = link_pair(&s, &path, &key, Some("box.lan:7788")).unwrap();
-        assert!(ok.as_str().unwrap().starts_with("paired"), "{ok}");
+        // What `pair` does as root: writes the file, then asks for a reload.
+        crate::pair::Pairing::new(&key, Some("box.lan:7788"))
+            .unwrap()
+            .write_at(&path)
+            .unwrap();
+        assert!(link_reload(&s, &path)
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("new keys"));
         assert_eq!(s.link_keys().0.pin.as_deref(), Some(key.as_str()));
-        // Paired: refused, the pin as it was.
-        let other = crate::identity::format_fingerprint(&[5; 32]);
-        let e = link_pair(&s, &path, &other, None).unwrap_err();
-        assert_eq!(e.code, code::FORBIDDEN);
-        assert!(std::fs::read_to_string(&path).unwrap().contains(&key));
         // A reload with nothing new changes nothing.
         assert!(link_reload(&s, &path)
             .unwrap()
             .as_str()
             .unwrap()
             .contains("in use"));
-        // The controller has no link to pair.
-        let c = shared(Mode::Controller);
+        // The controller has no link to reload.
         assert_eq!(
-            link_pair(&c, &path, &key, None).unwrap_err().code,
+            link_reload(&shared(Mode::Controller), &path)
+                .unwrap_err()
+                .code,
             code::UNSUPPORTED
         );
-        assert!(handle(&s, "link.pair", serde_json::json!({"pin": key, "x": 1})).is_err());
         assert!(handle(&s, "link.reload", serde_json::json!({"x": 1})).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -129,7 +129,8 @@ fn run_gtk() -> Result<()> {
 /// and its loop is the tray's, so no other program is needed. Not modal:
 /// its answer comes through `connect_response` on the loop the tray already
 /// runs, so the tray's tick (which holds the tray while it runs) is never
-/// re-entered. The service's answer is a message dialog.
+/// re-entered. `pair` runs elevated through polkit (`pair_elevated`); its
+/// answer is a message dialog.
 pub fn ask_pairing() {
     use gtk::prelude::*;
     let dialog = gtk::Dialog::with_buttons(
@@ -156,25 +157,107 @@ pub fn ask_pairing() {
     area.add(&entry);
     dialog.connect_response(move |d, response| {
         if response == gtk::ResponseType::Accept {
-            let (kind, said) = match crate::tray::pair_pasted(&entry.text()) {
-                Ok(said) => (gtk::MessageType::Info, said),
-                Err(e) => (gtk::MessageType::Warning, format!("Not paired: {e}")),
-            };
-            let answer = gtk::MessageDialog::new(
-                None::<&gtk::Window>,
-                gtk::DialogFlags::empty(),
-                kind,
-                gtk::ButtonsType::Ok,
-                &said,
-            );
-            answer.set_title(crate::tray::PAIR_TITLE);
-            answer.set_keep_above(true);
-            // SAFETY: the dialog is ours and nothing else holds it.
-            answer.connect_response(|m, _| unsafe { m.destroy() });
-            answer.show_all();
+            // The prompt (polkit's) and `pair` take as long as the person
+            // does: a thread of their own, the answer back on the loop.
+            let text = entry.text().to_string();
+            let spawned = std::thread::Builder::new()
+                .name("pair".into())
+                .spawn(move || {
+                    let said = crate::tray::pair_pasted(&text);
+                    gtk::glib::MainContext::default().invoke(move || tell(said));
+                });
+            if let Err(e) = spawned {
+                tell(Err(format!("could not start pairing: {e}")));
+            }
         }
         // SAFETY: the dialog is ours; this is its last use.
         unsafe { d.destroy() };
     });
     dialog.show_all();
+}
+
+/// The pairing's outcome, as a message dialog on the tray's loop.
+fn tell(said: Result<String, String>) {
+    use gtk::prelude::*;
+    let (kind, said) = match said {
+        Ok(said) => (gtk::MessageType::Info, said),
+        Err(e) => (gtk::MessageType::Warning, format!("Not paired: {e}")),
+    };
+    let answer = gtk::MessageDialog::new(
+        None::<&gtk::Window>,
+        gtk::DialogFlags::empty(),
+        kind,
+        gtk::ButtonsType::Ok,
+        &said,
+    );
+    answer.set_title(crate::tray::PAIR_TITLE);
+    answer.set_keep_above(true);
+    // SAFETY: the dialog is ours and nothing else holds it.
+    answer.connect_response(|m, _| unsafe { m.destroy() });
+    answer.show_all();
+}
+
+/// Run `pair` as root through polkit's `pkexec`, which asks for an
+/// administrator in the desktop's own prompt (tray.rs `pkexec_argv`).
+/// Without pkexec, or when polkit could not ask, the answer is the exact
+/// `sudo` line to type instead.
+pub fn pair_elevated(
+    exe: &std::path::Path,
+    args: &[String],
+    p: &crate::pair::Pairing,
+) -> Result<String, String> {
+    let by_hand = || {
+        format!(
+            "In a terminal:\n  {}",
+            crate::pair::command_line(&p.pin, p.controller.as_deref())
+        )
+    };
+    let Some(pkexec) = find_pkexec() else {
+        return Err(format!(
+            "this desktop has no pkexec to ask for an administrator. {}",
+            by_hand()
+        ));
+    };
+    let argv = crate::tray::pkexec_argv(&pkexec, exe, args);
+    let out = std::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("could not start pkexec: {e}. {}", by_hand()))?;
+    match out.status.code() {
+        Some(0) => {
+            let said = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            Ok(if said.is_empty() {
+                format!("paired: this machine trusts {}", p.pin)
+            } else {
+                said
+            })
+        }
+        // pkexec's own: dismissed or not authorised (126), or no agent to
+        // ask with (127).
+        Some(126) => Err(format!(
+            "the administrator prompt was dismissed. {}",
+            by_hand()
+        )),
+        Some(127) => Err(format!(
+            "polkit could not ask for an administrator here. {}",
+            by_hand()
+        )),
+        _ => Err(format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&out.stderr).trim(),
+            by_hand()
+        )),
+    }
+}
+
+/// pkexec where a setuid copy is found: NixOS's wrapper first, then PATH,
+/// then the usual place.
+fn find_pkexec() -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::iter::once(std::path::PathBuf::from("/run/wrappers/bin"))
+        .chain(std::env::split_paths(&path))
+        .chain([std::path::PathBuf::from("/usr/bin")])
+        .map(|d| d.join("pkexec"))
+        .find(|p| p.is_file())
 }

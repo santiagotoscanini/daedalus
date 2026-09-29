@@ -351,16 +351,127 @@ pub const PAIR_TITLE: &str = "Pair with the box";
 pub const PAIR_PROMPT: &str = "Paste the controller key from Settings › Machines on the box. \
      The whole pair or install line from that page works too.";
 
-/// What the dialog's text becomes: the service pairs the machine
-/// (local.rs `link.pair`), or the reason it did not, as one sentence for
-/// the answer's dialog. The tray never writes config.toml itself.
+/// What the dialog's text becomes: the `pair` verb, run as an
+/// administrator behind the OS's own prompt (os/*/tray.rs
+/// `pair_elevated`: UAC, macOS's administrator password, polkit), or the
+/// reason it did not, for the answer's dialog. Pairing names the
+/// controller that commands this machine's service, so it asks what
+/// `install` asks; the tray never writes config.toml, and the local
+/// socket has no door for it (local.rs). The paste is checked first
+/// (pair.rs `parse_pasted`): nothing malformed ever reaches the prompt,
+/// and only the checked key and address — a fingerprint and host:port —
+/// reach the command line.
 pub fn pair_pasted(text: &str) -> std::result::Result<String, String> {
+    let (exe, args, p) = pair_command(text)?;
+    crate::os::tray::pair_elevated(&exe, &args, &p)
+}
+
+/// The paste, checked, as the agent binary beside the tray and the `pair`
+/// arguments to run it with.
+fn pair_command(
+    text: &str,
+) -> std::result::Result<(PathBuf, Vec<String>, crate::pair::Pairing), String> {
     let p = crate::pair::parse_pasted(text).map_err(|e| format!("{e:#}"))?;
-    let answer = crate::local::call(
-        "link.pair",
-        serde_json::json!({ "pin": p.pin, "controller": p.controller }),
-    )?;
-    Ok(answer.as_str().unwrap_or("paired").to_string())
+    Ok((agent_exe()?, pair_args(&p), p))
+}
+
+/// `pair --pin KEY [--controller HOST:PORT]` for a checked pairing.
+pub fn pair_args(p: &crate::pair::Pairing) -> Vec<String> {
+    let mut a = vec!["pair".to_string(), "--pin".to_string(), p.pin.clone()];
+    if let Some(c) = &p.controller {
+        a.extend(["--controller".to_string(), c.clone()]);
+    }
+    a
+}
+
+/// The service's binary, installed beside the tray on every OS.
+fn agent_exe() -> std::result::Result<PathBuf, String> {
+    let me = std::env::current_exe().map_err(|e| format!("locating the tray: {e}"))?;
+    let exe = me.with_file_name(format!(
+        "{}{}",
+        crate::SERVICE_NAME,
+        std::env::consts::EXE_SUFFIX
+    ));
+    if exe.is_file() {
+        Ok(exe)
+    } else {
+        Err(format!("no {} beside the tray", exe.display()))
+    }
+}
+
+/// Linux: polkit's `pkexec` runs the agent as root, after its own prompt.
+#[cfg(any(test, target_os = "linux"))]
+pub fn pkexec_argv(
+    pkexec: &std::path::Path,
+    exe: &std::path::Path,
+    args: &[String],
+) -> Vec<std::ffi::OsString> {
+    let mut v = vec![pkexec.as_os_str().to_owned(), exe.as_os_str().to_owned()];
+    v.extend(args.iter().map(Into::into));
+    v
+}
+
+/// macOS: osascript's arguments. The script is fixed; the binary and the
+/// `pair` arguments ride `argv` and each is shell-quoted by AppleScript's
+/// `quoted form of`, so nothing pasted is ever spliced into the script or
+/// the shell line. The binary comes first: an absolute path, so osascript
+/// reads every word after it as an argument, never an option.
+#[cfg(any(test, target_os = "macos"))]
+pub fn osascript_argv(exe: &std::path::Path, args: &[String]) -> Vec<std::ffi::OsString> {
+    const SCRIPT: [&str; 7] = [
+        "on run argv",
+        "set cmd to quoted form of (item 1 of argv)",
+        "repeat with a in (rest of argv)",
+        "set cmd to cmd & \" \" & quoted form of (contents of a)",
+        "end repeat",
+        "do shell script cmd with prompt \"The daedalus agent pairs this machine with the box.\" \
+         with administrator privileges without altering line endings",
+        "end run",
+    ];
+    let mut v: Vec<std::ffi::OsString> = Vec::new();
+    for line in SCRIPT {
+        v.push("-e".into());
+        v.push(line.into());
+    }
+    v.push(exe.as_os_str().to_owned());
+    v.extend(args.iter().map(Into::into));
+    v
+}
+
+/// Windows: `ShellExecuteExW`'s parameters line, each argument quoted as
+/// `CommandLineToArgvW` (and Rust's own argument parsing) reads it back.
+#[cfg(any(test, windows))]
+pub fn windows_parameters(args: &[String]) -> String {
+    let mut line = String::new();
+    for (i, a) in args.iter().enumerate() {
+        if i > 0 {
+            line.push(' ');
+        }
+        if !a.is_empty() && !a.contains([' ', '\t', '\n', '\u{b}', '"']) {
+            line.push_str(a);
+            continue;
+        }
+        line.push('"');
+        let mut slashes = 0;
+        for c in a.chars() {
+            match c {
+                '\\' => slashes += 1,
+                '"' => {
+                    line.extend(std::iter::repeat_n('\\', slashes * 2 + 1));
+                    line.push('"');
+                    slashes = 0;
+                }
+                c => {
+                    line.extend(std::iter::repeat_n('\\', slashes));
+                    line.push(c);
+                    slashes = 0;
+                }
+            }
+        }
+        line.extend(std::iter::repeat_n('\\', slashes * 2));
+        line.push('"');
+    }
+    line
 }
 
 /// For the OSes whose dialogs are other programs (osascript, PowerShell):
@@ -588,6 +699,82 @@ pub fn main() {
 mod tests {
     use super::*;
     use crate::session::LinkPage;
+    use std::ffi::OsString;
+    use std::path::Path;
+
+    #[test]
+    fn the_tray_pairs_through_the_elevated_verb_with_checked_words_only() {
+        let key = crate::identity::format_fingerprint(&[6; 32]);
+        let args = |text: &str| crate::pair::parse_pasted(text).map(|p| pair_args(&p));
+        assert_eq!(
+            args(&format!(
+                "sudo daedalus-agent pair --pin '{key}' --controller box.lan:7788"
+            ))
+            .unwrap(),
+            ["pair", "--pin", &key, "--controller", "box.lan:7788"]
+        );
+        assert_eq!(args(&key).unwrap(), ["pair", "--pin", &key]);
+        // Malformed pastes are refused before any prompt: no key, a key
+        // that is not one, an address that is not host:port.
+        for bad in [
+            String::new(),
+            "hello".into(),
+            "3f2a:9c01".into(),
+            format!("--pin {key} --controller '$(reboot):1'"),
+            format!("--pin {key} --controller box.lan"),
+            format!("--pin {key}x"),
+        ] {
+            assert!(pair_command(&bad).is_err(), "{bad:?}");
+        }
+
+        let exe = Path::new("/usr/local/bin/daedalus-agent");
+        let a: Vec<String> = ["pair", "--pin", &key, "--controller", "box.lan:7788"]
+            .map(String::from)
+            .into();
+        let os = |v: &[&str]| v.iter().map(OsString::from).collect::<Vec<_>>();
+
+        // Linux: pkexec, the absolute binary, then the words as they are.
+        let mut want = os(&["/run/wrappers/bin/pkexec", "/usr/local/bin/daedalus-agent"]);
+        want.extend(a.iter().map(OsString::from));
+        assert_eq!(
+            pkexec_argv(Path::new("/run/wrappers/bin/pkexec"), exe, &a),
+            want
+        );
+
+        // macOS: a fixed script, the binary first after it, the words as
+        // arguments — nothing pasted inside any `-e`.
+        let v = osascript_argv(exe, &a);
+        let at = v.iter().position(|w| w == exe.as_os_str()).unwrap();
+        assert_eq!(
+            v[at + 1..],
+            a.iter().map(OsString::from).collect::<Vec<_>>()
+        );
+        for pair in v[..at].chunks(2) {
+            assert_eq!(pair[0], "-e");
+            let line = pair[1].to_str().unwrap();
+            assert!(!line.contains(&key) && !line.contains("box.lan"), "{line}");
+        }
+        let script: Vec<_> = v[..at].iter().skip(1).step_by(2).collect();
+        assert!(script.iter().any(|l| l
+            .to_str()
+            .unwrap()
+            .contains("with administrator privileges")));
+        assert!(script
+            .iter()
+            .all(|l| !l.to_str().unwrap().contains("do shell script cmd &")));
+
+        // Windows: the parameters line, quoted as CommandLineToArgvW reads it.
+        assert_eq!(
+            windows_parameters(&a),
+            format!("pair --pin {key} --controller box.lan:7788")
+        );
+        let q =
+            |v: &[&str]| windows_parameters(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(q(&["a b", ""]), "\"a b\" \"\"");
+        assert_eq!(q(&["say \"hi\""]), "\"say \\\"hi\\\"\"");
+        assert_eq!(q(&["C:\\dir\\ x\\"]), "\"C:\\dir\\ x\\\\\"");
+        assert_eq!(q(&["C:\\plain\\"]), "C:\\plain\\");
+    }
 
     #[test]
     fn the_link_lines_show_both_keys_and_what_is_wrong() {

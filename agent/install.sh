@@ -98,12 +98,29 @@ command -v curl >/dev/null || die "curl is needed"
 
 api="https://api.github.com/repos/$REPO/releases?per_page=30"
 
-# Every agent-v* release's version, newest first. GitHub lists newest-first,
-# but the sort is by the three numbers so a patch to an older line never wins.
+# The oldest release this script installs: the first whose machines trust
+# only a controller key they were given (a pin, or `pair` as root), never
+# the first that answers, and whose tray pairs only through an elevated
+# `pair`. Nothing older is installed, by name or as the newest.
+MIN_VERSION="0.21.0"
+
+# at_least V: V is MIN_VERSION or newer, by the three numbers.
+at_least() {
+  [ "$(printf '%s\n%s\n' "$MIN_VERSION" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)" = "$MIN_VERSION" ]
+}
+
+if [ -n "$VERSION" ] && ! at_least "$VERSION"; then
+  die "agent $VERSION predates pairing (it would trust the first controller that answers); $MIN_VERSION or newer only"
+fi
+
+# Every agent-v* release's version from MIN_VERSION on, newest first. GitHub
+# lists newest-first, but the sort is by the three numbers so a patch to an
+# older line never wins.
 agent_versions() {
   curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: daedalus-agent-install' "$api" |
     grep -o '"tag_name": *"agent-v[0-9][0-9.]*"' | sed 's/.*"agent-v\([0-9.]*\)"/\1/' |
-    sort -t. -k1,1nr -k2,2nr -k3,3nr
+    sort -t. -k1,1nr -k2,2nr -k3,3nr |
+    while IFS= read -r v; do if at_least "$v"; then echo "$v"; fi; done
 }
 
 # Whether a release asset exists (GitHub answers a download with a redirect).
@@ -176,7 +193,7 @@ install_macos() {
     tag="agent-v$VERSION"
   else
     tag="$(agent_versions | head -n 1)"
-    [ -n "$tag" ] || die "no agent-v* release found in $REPO"
+    [ -n "$tag" ] || die "no agent-v* release of $REPO at $MIN_VERSION or newer yet"
     tag="agent-v$tag"
   fi
   base="https://github.com/$REPO/releases/download/$tag"
@@ -239,7 +256,7 @@ install_linux() {
     has_asset "$tag" "$asset" || die "$tag has no Linux build for $arch ($asset)"
   else
     versions="$(agent_versions)"
-    [ -n "$versions" ] || die "no agent-v* release found in $REPO"
+    [ -n "$versions" ] || die "no agent-v* release of $REPO at $MIN_VERSION or newer yet"
     tag=""
     for v in $versions; do
       if has_asset "agent-v$v" "$asset"; then tag="agent-v$v"; break; fi
