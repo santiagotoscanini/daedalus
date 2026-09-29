@@ -141,42 +141,6 @@ pub fn paired_at(path: &Path) -> Result<bool> {
     Ok(LinkKeys::of(&crate::config::load_at(path)?).paired())
 }
 
-/// ONE-TIME, 0.21.1 only — delete in the next release. A machine paired
-/// under 0.20's trust on first use kept the key it trusted in the data
-/// directory's `controller.json`, not in config.toml, so 0.21 (which reads
-/// config.toml alone) left it unpaired with nobody at it to run `pair`. At
-/// the service's start this moves that same key — never a new one — into
-/// config.toml through `pair`'s writer, the address with it when
-/// config.toml names none, and removes the file. Some(pin) when it did.
-pub fn adopt_first_use_pin(config: &Path, data_dir: &Path) -> Result<Option<String>> {
-    #[derive(serde::Deserialize)]
-    struct Stored {
-        address: Option<String>,
-        fingerprint: String,
-    }
-    let store = data_dir.join("controller.json");
-    if !store.exists() {
-        return Ok(None);
-    }
-    if paired_at(config)? {
-        let _ = std::fs::remove_file(&store);
-        return Ok(None);
-    }
-    crate::private::check_owner(&store)?;
-    let text =
-        std::fs::read_to_string(&store).with_context(|| format!("reading {}", store.display()))?;
-    let s: Stored = serde_json::from_str(&text).context("controller.json is not 0.20's store")?;
-    let address = if crate::config::load_at(config)?.controller_address.is_some() {
-        None
-    } else {
-        s.address
-    };
-    let p = Pairing::new(&s.fingerprint, address.as_deref())?;
-    p.write_at(config)?;
-    let _ = std::fs::remove_file(&store);
-    Ok(Some(p.pin))
-}
-
 /// Read config.toml's link keys again and hand them to the running link;
 /// true when they moved (and the link starts over under them).
 pub fn reload(shared: &Shared, path: &Path) -> Result<bool> {
@@ -345,27 +309,5 @@ mod tests {
         for d in [dir, fresh.parent().unwrap().to_path_buf()] {
             let _ = std::fs::remove_dir_all(d);
         }
-    }
-
-    #[test]
-    fn a_first_use_pin_is_adopted_once_and_never_over_a_pin() {
-        let dir = scratch("adopt");
-        let path = dir.join("config.toml");
-        std::fs::write(&path, "# mine\ntelemetry = \"minimal\"\n").unwrap();
-        let store = dir.join("controller.json");
-        let json = format!(r#"{{"address":"box.lan:7788","fingerprint":"{}"}}"#, fp(3));
-        std::fs::write(&store, &json).unwrap();
-        assert_eq!(adopt_first_use_pin(&path, &dir).unwrap(), Some(fp(3)));
-        let cfg: Config = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(cfg.controller_pin.as_deref(), Some(fp(3).as_str()));
-        assert_eq!(cfg.controller_address.as_deref(), Some("box.lan:7788"));
-        assert!(!store.exists());
-        assert_eq!(adopt_first_use_pin(&path, &dir).unwrap(), None);
-        // Already paired: the store is dropped, config.toml untouched.
-        std::fs::write(&store, format!(r#"{{"fingerprint":"{}"}}"#, fp(4))).unwrap();
-        assert_eq!(adopt_first_use_pin(&path, &dir).unwrap(), None);
-        assert!(!store.exists());
-        let cfg: Config = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(cfg.controller_pin.as_deref(), Some(fp(3).as_str()));
     }
 }
