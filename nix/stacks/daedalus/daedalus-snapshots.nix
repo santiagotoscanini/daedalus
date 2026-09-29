@@ -188,6 +188,11 @@ in
       serviceConfig = sandboxedOperator [ imageDir ] // {
         Type = "oneshot";
         ExecStart = "${imageFreshnessScript}/bin/daedalus-image-freshness";
+        # Anonymous reads, as when it ran as root: skopeo would otherwise look
+        # for its auth file under /run/containers/<uid>, which only root may
+        # open, and fail every ref. A path in the private /tmp that never
+        # exists means no credentials, as intended.
+        Environment = "REGISTRY_AUTH_FILE=/tmp/no-registry-auth.json";
         # ~55 refs with a polite sleep between network calls is a few minutes;
         # the oneshot default of 90s would SIGTERM it mid-list.
         TimeoutStartSec = "30min";
