@@ -19,7 +19,8 @@
   config.toml. `daedalus-agent uninstall` removes the service and the
   tray's Run key.
 
-  Trust at install is HTTPS to GitHub. Every later update is verified by
+  Trust at install is HTTPS to GitHub, and each file is checked against the
+  release's manifest (release.json) by SHA-256. Every later update is verified by
   the agent itself against the release key it carries.
 
 .PARAMETER Repo
@@ -77,6 +78,19 @@ foreach ($name in $assets.Keys) {
 }
 Write-Host "installing $($release.tag_name)"
 
+# The release's manifest names every asset's SHA-256 (agent/src/update/feed.rs);
+# each download is checked against it. Its ed25519 signature is the agent's to
+# check on every later update: Windows PowerShell has no ed25519, so at
+# install the manifest's trust is HTTPS to GitHub.
+$manifestUrl = ($release.assets | Where-Object { $_.name -eq "release.json" } | Select-Object -First 1).browser_download_url
+if (-not $manifestUrl) { throw "$($release.tag_name) has no signed manifest (release.json); it predates this installer" }
+# Served as a download (octet-stream), so read as bytes, then as JSON.
+$raw = (Invoke-WebRequest -Uri $manifestUrl -Headers @{ "User-Agent" = "daedalus-agent-install" } -UseBasicParsing).RawContentStream.ToArray()
+$manifest = [Text.Encoding]::UTF8.GetString($raw) | ConvertFrom-Json
+if ($manifest.product -ne "daedalus-agent" -or $manifest.tag -ne $release.tag_name -or "agent-v$($manifest.version)" -ne $release.tag_name) {
+  throw "$($release.tag_name)'s manifest is not its own"
+}
+
 $dir = Join-Path $env:ProgramFiles "daedalus-agent"
 $exe = Join-Path $dir "daedalus-agent.exe"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -95,6 +109,12 @@ foreach ($name in $assets.Keys) {
   $target = Join-Path $dir $assets[$name]
   $tmp = "$target.download"
   Invoke-WebRequest -Uri $url -OutFile $tmp -Headers @{ "User-Agent" = "daedalus-agent-install" } -UseBasicParsing
+  $want = ($manifest.assets | Where-Object { $_.name -eq $name -and $_.target -eq "x86_64-pc-windows-msvc" } | Select-Object -First 1).sha256
+  $got = (Get-FileHash -Algorithm SHA256 -Path $tmp).Hash.ToLowerInvariant()
+  if (-not $want -or $got -ne $want) {
+    Remove-Item -Force $tmp
+    throw "$name does not match the release's manifest"
+  }
   Unblock-File -Path $tmp
   Move-Item -Force -Path $tmp -Destination $target
 }

@@ -24,7 +24,10 @@
 #     autostart entry where there is a tray. The newest release that carries
 #     a build for this architecture is the one installed.
 #
-# Trust at install is HTTPS to GitHub. Every later update is verified by the
+# Trust at install: every file is checked against the release's signed
+# manifest (release.json) by SHA-256, and the manifest against the release
+# key where this machine's openssl can check ed25519 (else HTTPS to GitHub is
+# the trust). Every later update is verified by the
 # agent itself against the release key it carries.
 #
 # Environment: DAEDALUS_REPO (owner/name), DAEDALUS_AGENT_VERSION (e.g. 0.5.0
@@ -81,6 +84,62 @@ has_asset() {
   curl -fsIL -o /dev/null "https://github.com/$REPO/releases/download/$1/$2"
 }
 
+# The release's signed manifest (agent/src/update/feed.rs): release.json
+# names every asset's SHA-256, and its signature is checked against the
+# release key the agent carries (agent/src/update/mod.rs, the first of
+# RELEASE_PUBLIC_KEYS) where this machine's openssl can check ed25519 —
+# OpenSSL 3 can, macOS's LibreSSL cannot, and there the hashes alone are
+# checked and trust is HTTPS to GitHub, as it always was at install.
+RELEASE_KEY="27dc531d10284f3de682907886cbef2f1c380b7cd8fecd91f93691ce6f1aa62f"
+
+# hex2bin HEX: the bytes, with nothing but printf (no xxd on a minimal system).
+hex2bin() {
+  for h in $(printf '%s' "$1" | sed 's/../& /g'); do
+    # shellcheck disable=SC2059 # the format is the byte, by design
+    printf "\\$(printf '%03o' "0x$h")"
+  done
+}
+
+# fetch_manifest TAG DIR: release.json and its signature into DIR, the
+# signature checked where it can be, the version its tag's.
+fetch_manifest() {
+  base="https://github.com/$REPO/releases/download/$1"
+  curl -fsSL -o "$2/release.json" "$base/release.json" ||
+    die "$1 has no signed manifest (release.json); it predates this installer"
+  curl -fsSL -o "$2/release.json.sig" "$base/release.json.sig" ||
+    die "$1 has no signature for its manifest"
+  compact="$(tr -d ' \n\t\r' < "$2/release.json")"
+  case "$compact" in
+    *"\"product\":\"daedalus-agent\",\"version\":\"${1#agent-v}\",\"tag\":\"$1\""*) ;;
+    *) die "$1's manifest is not daedalus-agent ${1#agent-v}'s" ;;
+  esac
+  if command -v openssl >/dev/null 2>&1 &&
+    hex2bin "302a300506032b6570032100$RELEASE_KEY" > "$2/key.der" &&
+    openssl pkey -pubin -inform DER -in "$2/key.der" -noout 2>/dev/null; then
+    { printf 'daedalus-agent release manifest v1\000'; cat "$2/release.json"; } > "$2/signed.bin"
+    openssl pkeyutl -verify -pubin -inkey "$2/key.der" -keyform DER -rawin \
+      -in "$2/signed.bin" -sigfile "$2/release.json.sig" >/dev/null 2>&1 ||
+      die "$1's manifest does not verify against the release key"
+    echo "  release.json: signature verified"
+  else
+    echo "  release.json: this openssl cannot check ed25519; checking the hashes only"
+  fi
+}
+
+# check_asset DIR FILE NAME: FILE is the manifest's NAME, by SHA-256.
+check_asset() {
+  want="$(tr -d ' \n\t\r' < "$1/release.json" |
+    grep -o "\"name\":\"$3\",\"sha256\":\"[0-9a-f]\{64\}\"" |
+    sed 's/.*"sha256":"\([0-9a-f]*\)"/\1/')"
+  [ -n "$want" ] || die "the manifest names no $3"
+  if command -v sha256sum >/dev/null 2>&1; then
+    got="$(sha256sum "$2" | cut -d' ' -f1)"
+  else
+    got="$(shasum -a 256 "$2" | cut -d' ' -f1)"
+  fi
+  [ "$got" = "$want" ] || die "$3 does not match the release's manifest"
+}
+
 install_macos() {
   ROOT="/Library/Application Support/daedalus-agent"
   BIN="$ROOT/bin"
@@ -99,11 +158,13 @@ install_macos() {
   mkdir -p "$BIN" "$ROOT/logs"
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
+  fetch_manifest "$tag" "$tmp"
   for pair in "daedalus-agent-universal-apple-darwin:daedalus-agent" \
               "daedalus-agent-tray-universal-apple-darwin:daedalus-agent-tray"; do
     asset="${pair%%:*}"; name="${pair##*:}"
     echo "  $asset"
     curl -fsSL -o "$tmp/$name" "$base/$asset"
+    check_asset "$tmp" "$tmp/$name" "$asset"
     chmod 755 "$tmp/$name"
   done
 
@@ -163,11 +224,14 @@ install_linux() {
   mkdir -p "$BIN"
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
+  fetch_manifest "$tag" "$tmp"
   echo "  $asset"
   curl -fsSL -o "$tmp/daedalus-agent" "$base/$asset"
+  check_asset "$tmp" "$tmp/daedalus-agent" "$asset"
   chmod 755 "$tmp/daedalus-agent"
   if [ -n "$tray_asset" ] && curl -fsSL -o "$tmp/daedalus-agent-tray" "$base/$tray_asset" 2>/dev/null; then
     echo "  $tray_asset"
+    check_asset "$tmp" "$tmp/daedalus-agent-tray" "$tray_asset"
     chmod 755 "$tmp/daedalus-agent-tray"
   else
     rm -f "$tmp/daedalus-agent-tray"

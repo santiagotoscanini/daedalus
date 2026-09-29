@@ -170,25 +170,35 @@ pub fn tls(builder: ureq::AgentBuilder) -> ureq::AgentBuilder {
 /// The static musl service for this architecture, required; the tray,
 /// built against glibc and GTK for x86_64 only, optional — a release
 /// installs on a machine without it, and an aarch64 machine never has one.
+/// Each is (release target, asset name, file name here).
 #[cfg(target_arch = "x86_64")]
-pub const ASSETS: &[(&str, &str)] =
-    &[("daedalus-agent-x86_64-unknown-linux-musl", "daedalus-agent")];
+pub const ASSETS: &[(&str, &str, &str)] = &[(
+    "x86_64-unknown-linux-musl",
+    "daedalus-agent-x86_64-unknown-linux-musl",
+    "daedalus-agent",
+)];
 #[cfg(target_arch = "x86_64")]
-pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[(
+pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[(
+    "x86_64-unknown-linux-gnu",
     "daedalus-agent-tray-x86_64-unknown-linux-gnu",
     "daedalus-agent-tray",
 )];
 #[cfg(target_arch = "aarch64")]
-pub const ASSETS: &[(&str, &str)] = &[(
+pub const ASSETS: &[(&str, &str, &str)] = &[(
+    "aarch64-unknown-linux-musl",
     "daedalus-agent-aarch64-unknown-linux-musl",
     "daedalus-agent",
 )];
 #[cfg(target_arch = "aarch64")]
-pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
+pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub const ASSETS: &[(&str, &str)] = &[("daedalus-agent-unsupported", "daedalus-agent")];
+pub const ASSETS: &[(&str, &str, &str)] = &[(
+    "unsupported",
+    "daedalus-agent-unsupported",
+    "daedalus-agent",
+)];
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
+pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 
@@ -267,12 +277,13 @@ mod tests {
             assert_eq!(
                 ASSETS,
                 &[(
+                    format!("{arch}-unknown-linux-musl").as_str(),
                     format!("daedalus-agent-{arch}-unknown-linux-musl").as_str(),
                     "daedalus-agent"
                 )]
             );
         }
-        for (remote, local) in OPTIONAL_ASSETS {
+        for (_, remote, local) in OPTIONAL_ASSETS {
             assert!(
                 script.contains(remote),
                 "install.sh does not fetch {remote}"

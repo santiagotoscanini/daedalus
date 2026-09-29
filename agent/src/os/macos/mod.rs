@@ -124,16 +124,22 @@ pub fn srv_lookup(name: &str) -> Vec<crate::dns::Srv> {
 
 // ── update ────────────────────────────────────────────────────────────────
 
-/// Universal binaries: one pair for Apple Silicon and Intel alike.
-pub const ASSETS: &[(&str, &str)] = &[
-    ("daedalus-agent-universal-apple-darwin", "daedalus-agent"),
+/// Universal binaries: one pair for Apple Silicon and Intel alike. Each is
+/// (release target, asset name, file name here).
+pub const ASSETS: &[(&str, &str, &str)] = &[
     (
+        "universal-apple-darwin",
+        "daedalus-agent-universal-apple-darwin",
+        "daedalus-agent",
+    ),
+    (
+        "universal-apple-darwin",
         "daedalus-agent-tray-universal-apple-darwin",
         "daedalus-agent-tray",
     ),
 ];
 /// Both assets are required here.
-pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
+pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 

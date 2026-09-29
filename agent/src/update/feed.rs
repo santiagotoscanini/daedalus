@@ -1,19 +1,62 @@
-//! The release feed: GitHub's releases of the engine repository, the
-//! newest `agent-v*` one this target can install.
+//! The release feed: GitHub's releases of the engine repository, and the
+//! signed manifest that says what each one is.
+//!
+//! GitHub's answer is trusted for nothing but where to look: which tags
+//! exist and where their files are. What a release IS — its product, its
+//! version and tag, and for each target and role the asset's name, size
+//! and SHA-256 — is `release.json`, signed once with the release key under
+//! a context of its own (signature.rs), and every decision is taken from
+//! it: the version must be its tag's and newer than this one, and the
+//! assets are chosen by this binary's own target table (`os::ASSETS`).
+//! So a re-uploaded old asset, another target's binary under this one's
+//! name, or a tag moved onto an older build is refused (audit D3).
 
+use std::io::Read;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
 use super::*;
 
-/// One asset of a release: where it is and what it is called here.
-#[derive(Debug, Clone)]
+/// The manifest's file name in a release, and its signature's.
+pub const MANIFEST: &str = "release.json";
+pub const MANIFEST_SIG: &str = "release.json.sig";
+/// What the manifest says it is for.
+pub const PRODUCT: &str = "daedalus-agent";
+/// The longest manifest or signature read.
+const MAX_MANIFEST: u64 = 64 * 1024;
+
+/// A release as its signed manifest states it.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Manifest {
+    pub product: String,
+    pub version: String,
+    pub tag: String,
+    pub assets: Vec<ManifestAsset>,
+}
+
+/// One asset of a release: the Rust target and role it is for, its file
+/// name in the release, and what it must hash to and weigh.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManifestAsset {
+    pub target: String,
+    pub role: String,
+    pub name: String,
+    pub sha256: String,
+    pub size: u64,
+}
+
+/// One asset to install: where it is, what it is called here, and what the
+/// manifest says of it.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
     pub local_name: &'static str,
     pub url: String,
-    pub sig_url: String,
+    pub sha256: [u8; 32],
+    pub size: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -37,125 +80,183 @@ pub(super) struct ApiAsset {
     pub(super) browser_download_url: String,
 }
 
+/// A version without its build metadata (`0.21.0+g1a2b3c4` is `0.21.0`):
+/// what releases are compared as.
+pub(super) fn release_version(v: &semver::Version) -> semver::Version {
+    semver::Version {
+        build: semver::BuildMetadata::EMPTY,
+        ..v.clone()
+    }
+}
+
 pub(super) fn running_version() -> semver::Version {
-    semver::Version::parse(crate::VERSION).expect("Cargo.toml version is semver")
+    release_version(&semver::Version::parse(crate::VERSION).expect("the version is semver"))
 }
 
-/// One asset and its signature in a release, when both are there.
-pub(super) fn asset_of(r: &ApiRelease, remote: &str, local: &'static str) -> Option<Asset> {
-    let url = r.assets.iter().find(|a| a.name == remote)?;
-    let sig = r
-        .assets
-        .iter()
-        .find(|a| a.name == format!("{remote}.sig"))?;
-    Some(Asset {
-        local_name: local,
-        url: url.browser_download_url.clone(),
-        sig_url: sig.browser_download_url.clone(),
-    })
+/// The role an asset plays, from the file it becomes here.
+pub(super) fn role_of(local: &str) -> &'static str {
+    if local.starts_with("daedalus-agent-tray") {
+        "tray"
+    } else {
+        "service"
+    }
 }
 
-/// The assets this target needs from one API release, or None when a
-/// required one is missing or unsigned; plus each optional one this
-/// machine has (`installed` says, by local name) and the release carries
-/// signed — the Linux tray, which a desktop-less or aarch64 machine never
-/// has and never gets.
-pub(super) fn assets_of(r: &ApiRelease, installed: impl Fn(&str) -> bool) -> Option<Vec<Asset>> {
-    let mut out: Vec<Asset> = ASSETS
-        .iter()
-        .map(|(remote, local)| asset_of(r, remote, local))
-        .collect::<Option<_>>()?;
-    out.extend(
-        OPTIONAL_ASSETS
+/// The candidates GitHub lists, newest first: `agent-v<semver>` tags,
+/// neither drafts nor prereleases, newer than `running` and not `refused`.
+/// Nothing here is trusted yet; the manifest decides.
+pub(super) fn candidates(
+    releases: Vec<ApiRelease>,
+    running: &semver::Version,
+    refused: Option<&semver::Version>,
+) -> Vec<(semver::Version, ApiRelease)> {
+    let mut out: Vec<(semver::Version, ApiRelease)> = releases
+        .into_iter()
+        .filter(|r| !r.draft && !r.prerelease)
+        .filter_map(|r| {
+            let v = semver::Version::parse(r.tag_name.strip_prefix(TAG_PREFIX)?).ok()?;
+            (v > *running && refused != Some(&v)).then_some((v, r))
+        })
+        .collect();
+    out.sort_by(|a, b| b.0.cmp(&a.0));
+    out
+}
+
+/// A manifest whose signature held, checked against the release it came
+/// in and this machine: the product, the tag GitHub listed it under, its
+/// version that tag's and newer than `running`, not `refused` — then this
+/// target's assets (required, and the optional ones `installed` has),
+/// each with the URL GitHub gives for its name.
+pub(super) fn assets_of(
+    m: &Manifest,
+    r: &ApiRelease,
+    running: &semver::Version,
+    refused: Option<&semver::Version>,
+    installed: impl Fn(&str) -> bool,
+) -> Result<(semver::Version, Vec<Asset>)> {
+    if m.product != PRODUCT {
+        bail!("the manifest is for {:?}, not {PRODUCT}", m.product);
+    }
+    if m.tag != r.tag_name {
+        bail!("the manifest is {}'s, not {}'s", m.tag, r.tag_name);
+    }
+    let version = semver::Version::parse(&m.version).context("the manifest's version")?;
+    if format!("{TAG_PREFIX}{}", m.version) != m.tag || !version.build.is_empty() {
+        bail!("version {} is not its tag {}'s", m.version, m.tag);
+    }
+    if version <= *running {
+        bail!("{version} is not newer than this agent ({running})");
+    }
+    if refused == Some(&version) {
+        bail!("this machine rolled back from {version}");
+    }
+    let url_of = |name: &str| {
+        r.assets
             .iter()
-            .filter(|(_, local)| installed(local))
-            .filter_map(|(remote, local)| asset_of(r, remote, local)),
-    );
-    Some(out)
+            .find(|a| a.name == name)
+            .map(|a| a.browser_download_url.clone())
+    };
+    let pick = |(target, name, local): &(&str, &str, &'static str)| -> Result<Option<Asset>> {
+        let Some(entry) = m
+            .assets
+            .iter()
+            .find(|a| a.target == *target && a.role == role_of(local) && a.name == *name)
+        else {
+            return Ok(None);
+        };
+        let sha: [u8; 32] = hex::decode(&entry.sha256)
+            .ok()
+            .and_then(|b| b.try_into().ok())
+            .with_context(|| format!("{name}: the manifest's sha256 is not 64 hex characters"))?;
+        let url =
+            url_of(name).with_context(|| format!("{name} is in the manifest, not the release"))?;
+        Ok(Some(Asset {
+            local_name: local,
+            url,
+            sha256: sha,
+            size: entry.size,
+        }))
+    };
+    let mut out = Vec::new();
+    for a in ASSETS {
+        out.push(pick(a)?.with_context(|| format!("no {} for {} in the manifest", a.1, a.0))?);
+    }
+    for a in OPTIONAL_ASSETS.iter().filter(|a| installed(a.2)) {
+        if let Some(asset) = pick(a)? {
+            out.push(asset);
+        }
+    }
+    Ok((version, out))
 }
 
-/// Ask the feed. `Ok(None)` is "nothing newer"; an error is the feed not
-/// answering, which the caller reports and retries later. `refused` is a
-/// version this machine rolled back from (`State::rolled_back`), which is
-/// never offered again; a newer one is.
+/// Ask the feed. `Ok(None)` is "nothing newer to install"; an error is the
+/// feed not answering, which the caller reports and retries later.
+/// `refused` is a version this machine rolled back from
+/// (`State::rolled_back`), which is never offered again; a newer one is.
+/// A release whose manifest is missing, unsigned or wrong is skipped, and
+/// the next older one is looked at.
 pub fn check(refused: Option<&str>) -> Result<Option<Release>> {
     let url = format!(
         "https://api.github.com/repos/{}/releases?per_page=20",
         crate::config::DEFAULT_REPO
     );
-    let releases: Vec<ApiRelease> = crate::http::agent()
-        .get(&url)
-        .set("User-Agent", USER_AGENT)
-        .set("Accept", "application/vnd.github+json")
-        .timeout(Duration::from_secs(20))
-        .call()
-        .context("asking GitHub for releases")?
-        .into_json()
-        .context("reading the release list")?;
+    let releases: Vec<ApiRelease> =
+        serde_json::from_slice(&fetch_capped(&url, 4 << 20).context("asking GitHub for releases")?)
+            .context("reading the release list")?;
+    let keys = verifying_keys()?;
+    let running = running_version();
+    let refused = refused.and_then(|v| semver::Version::parse(v).ok());
     let dir = install_dir().ok();
     let installed = |local: &str| dir.as_ref().is_some_and(|d| d.join(local).exists());
-    Ok(pick(releases, &running_version(), refused, installed))
-}
-
-/// The pure half of `check`: the highest release above `running` that is
-/// not a draft, a prerelease or `refused`, and carries this target's
-/// signed assets.
-pub(super) fn pick(
-    releases: Vec<ApiRelease>,
-    running: &semver::Version,
-    refused: Option<&str>,
-    installed: impl Fn(&str) -> bool,
-) -> Option<Release> {
-    let refused = refused.and_then(|v| semver::Version::parse(v).ok());
-    let mut best: Option<Release> = None;
-    for r in releases {
-        if r.draft || r.prerelease {
-            continue;
-        }
-        let Some(v) = r.tag_name.strip_prefix(TAG_PREFIX) else {
-            continue;
-        };
-        let Ok(version) = semver::Version::parse(v) else {
-            continue;
-        };
-        if version <= *running {
-            continue;
-        }
-        if refused.as_ref() == Some(&version) {
-            tracing::info!(
-                tag = r.tag_name,
-                "this machine rolled back from that release; waiting for a newer one"
-            );
-            continue;
-        }
-        let Some(assets) = assets_of(&r, &installed) else {
-            tracing::warn!(
-                tag = r.tag_name,
-                "release lacks an asset or a signature for this target; skipped"
-            );
-            continue;
-        };
-        if best.as_ref().is_none_or(|b| version > b.version) {
-            best = Some(Release {
+    for (_, r) in candidates(releases, &running, refused.as_ref()) {
+        let checked = (|| -> Result<Release> {
+            let url_of = |name: &str| {
+                r.assets
+                    .iter()
+                    .find(|a| a.name == name)
+                    .map(|a| a.browser_download_url.clone())
+                    .with_context(|| format!("no {name}"))
+            };
+            let manifest = fetch_capped(&url_of(MANIFEST)?, MAX_MANIFEST)?;
+            let sig = fetch_capped(&url_of(MANIFEST_SIG)?, MAX_MANIFEST)?;
+            verify_manifest(&manifest, &sig, &keys)?;
+            let m: Manifest = serde_json::from_slice(&manifest).context("the manifest")?;
+            let (version, assets) = assets_of(&m, &r, &running, refused.as_ref(), installed)?;
+            Ok(Release {
                 tag: r.tag_name.clone(),
                 version,
                 assets,
-            });
+            })
+        })();
+        match checked {
+            Ok(rel) => return Ok(Some(rel)),
+            Err(e) => tracing::warn!(
+                tag = r.tag_name,
+                error = format!("{e:#}"),
+                "release skipped"
+            ),
         }
     }
-    best
+    Ok(None)
 }
 
-pub(super) fn fetch(url: &str) -> Result<Vec<u8>> {
-    let resp = crate::http::agent()
+/// A small download, whole, refused past `cap` bytes.
+pub(super) fn fetch_capped(url: &str, cap: u64) -> Result<Vec<u8>> {
+    let mut req = crate::http::agent()
         .get(url)
         .set("User-Agent", USER_AGENT)
-        .timeout(Duration::from_secs(300))
-        .call()
-        .with_context(|| format!("downloading {url}"))?;
+        .timeout(Duration::from_secs(30));
+    if url.starts_with("https://api.github.com/") {
+        req = req.set("Accept", "application/vnd.github+json");
+    }
+    let resp = req.call().with_context(|| format!("downloading {url}"))?;
     let mut bytes = Vec::new();
     resp.into_reader()
+        .take(cap + 1)
         .read_to_end(&mut bytes)
         .with_context(|| format!("reading {url}"))?;
+    if bytes.len() as u64 > cap {
+        bail!("{url} is larger than {cap} bytes");
+    }
     Ok(bytes)
 }

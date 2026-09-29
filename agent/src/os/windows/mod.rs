@@ -153,22 +153,29 @@ pub fn own_uid() -> Option<u32> {
 // ── update ────────────────────────────────────────────────────────────────
 
 /// Only x86_64 is built; an ARM Windows machine finds no asset of its own
-/// and skips every release.
+/// and skips every release. Each is (release target, asset name, file
+/// name here).
 #[cfg(target_arch = "x86_64")]
-pub const ASSETS: &[(&str, &str)] = &[
+pub const ASSETS: &[(&str, &str, &str)] = &[
     (
+        "x86_64-pc-windows-msvc",
         "daedalus-agent-x86_64-pc-windows-msvc.exe",
         "daedalus-agent.exe",
     ),
     (
+        "x86_64-pc-windows-msvc",
         "daedalus-agent-tray-x86_64-pc-windows-msvc.exe",
         "daedalus-agent-tray.exe",
     ),
 ];
 #[cfg(not(target_arch = "x86_64"))]
-pub const ASSETS: &[(&str, &str)] = &[("daedalus-agent-unsupported", "daedalus-agent")];
+pub const ASSETS: &[(&str, &str, &str)] = &[(
+    "unsupported",
+    "daedalus-agent-unsupported",
+    "daedalus-agent",
+)];
 /// Both assets are required here.
-pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
+pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
 
 /// The extension is what makes a file executable here.
 pub fn mark_executable(path: &Path) -> std::io::Result<()> {

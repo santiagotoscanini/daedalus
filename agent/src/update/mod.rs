@@ -2,22 +2,25 @@
 //!
 //! The loop asks GitHub for the repository's releases, keeps the ones whose
 //! tag is `agent-v<semver>` (the engine's own releases are `v*` and are not
-//! ours), takes the highest that is neither a draft nor a prerelease, and
-//! compares it with the running version. A newer one is downloaded next to
-//! the binary as `.new` together with its `.sig`, and the signature — a raw
-//! ed25519 signature over the asset's bytes — is checked against the public
-//! key compiled in below. Only then is the running binary renamed to `.old`
-//! and the new one moved into its place; then the process exits non-zero,
-//! and the Service Control Manager's recovery action (launchd's KeepAlive on
-//! macOS, systemd's `Restart=always` on Linux) starts it again on the new
-//! binary — on probation until it has run long enough to prove itself, its
-//! `.old` kept for going back to (the probation section below).
+//! ours), newest first, neither drafts nor prereleases, newer than this
+//! agent, and reads each one's `release.json` until one holds: signed with a
+//! release key compiled in (`RELEASE_PUBLIC_KEYS`), its version its tag's,
+//! and for this binary's own target the size and SHA-256 of every asset
+//! (feed.rs, signature.rs). Each asset is downloaded beside the binary as
+//! `.new`, capped at its size and flushed to disk, and kept only when it
+//! hashes to the manifest; the probation is recorded; only then is the
+//! running binary renamed to `.old` and the new one moved into its place,
+//! the new service binary asked its version — the manifest's, or it all
+//! goes back — and the process exits non-zero: the Service Control
+//! Manager's recovery action (launchd's KeepAlive on macOS, systemd's
+//! `Restart=always` on Linux) starts it again on the new binary, on
+//! probation until it has run long enough to prove itself, its `.old` kept
+//! for going back to (probation.rs).
 //!
-//! Trust is the key, not the transport: GitHub over TLS says where the file
-//! came from, the signature says who built it. A release missing a `.sig` is
-//! skipped; one whose signature fails is reported on the status page and
-//! never installed. Losing the private key strands every agent on its
-//! version — the recovery copy is the operator's, outside this repository.
+//! Trust is the key, not the transport: GitHub over TLS says where the files
+//! are, the signed manifest says what they are. Losing every listed private
+//! key strands every agent on its version — the recovery copies are the
+//! operator's, outside this repository.
 //!
 //! Whether a newer release is installed or only reported is config.toml's
 //! `updates`, or the older `auto_update` (`Config::self_update_off`).
@@ -42,13 +45,16 @@ use crate::config::Config;
 use crate::shared::Shared;
 use crate::state::now_rfc3339;
 
-/// The ed25519 public key every release asset is signed with (32 bytes,
-/// hex). Its private half is the engine repository's `AGENT_SIGNING_KEY`
-/// Actions secret. Changing this key means every installed agent stops
-/// accepting releases — it is rotated by shipping a release signed with the
-/// OLD key that carries the new one here, never by editing it alone.
-pub const RELEASE_PUBLIC_KEY_HEX: &str =
-    "27dc531d10284f3de682907886cbef2f1c380b7cd8fecd91f93691ce6f1aa62f";
+/// The ed25519 public keys a release manifest may be signed with (32 bytes
+/// each, hex). The first is the current key, whose private half signs every
+/// release (`AGENT_SIGNING_KEY` in the engine repository's `release`
+/// environment); a second, kept offline, is the one to move to when the
+/// first is lost or leaks: a release signed with it that drops the first.
+/// Every installed agent trusts only what is listed here, so a key is
+/// added in a release signed with one it already trusts. PLAN.md holds the
+/// spare key still owed.
+pub const RELEASE_PUBLIC_KEYS: &[&str] =
+    &["27dc531d10284f3de682907886cbef2f1c380b7cd8fecd91f93691ce6f1aa62f"];
 
 /// What a release carries for this target, and what each asset becomes on
 /// disk: the service binary and the tray, named by Rust target in the
@@ -116,15 +122,8 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
                     });
                     continue;
                 }
-                match download_and_verify(&rel).and_then(|s| swap_in(&s)) {
+                match install(&rel, &shared, &now) {
                     Ok(()) => {
-                        shared.with_state(|s| {
-                            s.last_update_check = Some(now.clone());
-                            s.last_update_result = Some(format!("installed {label}; restarting"));
-                            s.updated_from = Some(crate::VERSION.into());
-                            s.updated_at = Some(now.clone());
-                            begin_probation(s, &label, &now);
-                        });
                         shared.set_restart_pending();
                         tracing::info!(
                             version = label,
@@ -145,6 +144,57 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
                                 Some(format!("{label} available but not installed: {e:#}"));
                         });
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Install `rel`: every asset downloaded and verified beside the binaries;
+/// its probation recorded — and kept on disk — BEFORE anything running is
+/// touched, so a crash from here on still counts its starts (audit D11);
+/// the binaries swapped in; then the service binary now in place asked
+/// its version, which must be the manifest's (audit D3). A swap that does
+/// not hold is undone: the probation cleared, and a binary that says
+/// another version rolled back and refused from then on.
+pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> {
+    use anyhow::Context;
+    let label = rel.version.to_string();
+    let staged = download_and_verify(rel)?;
+    shared
+        .with_state_saved(|s| {
+            s.last_update_check = Some(now.to_string());
+            s.last_update_result = Some(format!("installed {label}; restarting"));
+            s.updated_from = Some(crate::VERSION.into());
+            s.updated_at = Some(now.to_string());
+            begin_probation(s, &label, now);
+        })
+        .context("the probation could not be recorded; nothing was replaced")?;
+    if let Err(e) = swap_in(&staged) {
+        shared.with_state(|s| s.probation = None);
+        return Err(e);
+    }
+    match installed_version() {
+        Ok(v) if v == rel.version => Ok(()),
+        said => {
+            let why = match said {
+                Ok(v) => format!("the installed binary says {v}, not {label}"),
+                Err(e) => format!("the installed binary does not run: {e:#}"),
+            };
+            let back = install_dir().and_then(|d| roll_back_in(&d));
+            shared.with_state(|s| {
+                s.probation = None;
+                s.rolled_back = Some(crate::state::RolledBack {
+                    version: label.clone(),
+                    to: crate::VERSION.into(),
+                    starts: 0,
+                    at: now.to_string(),
+                });
+            });
+            match back {
+                Ok(()) => anyhow::bail!("{why}; put the previous binaries back"),
+                Err(e) => {
+                    anyhow::bail!("{why}; and the previous binaries could not be put back: {e:#}")
                 }
             }
         }

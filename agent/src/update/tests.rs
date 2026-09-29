@@ -1,23 +1,40 @@
-//! The feed, the swap and probation, on files and pure state.
+//! The feed, the manifest, the swap and probation, on files and pure state.
 
 use std::path::Path;
+
+use ed25519_dalek::{Signer, SigningKey};
 
 use super::*;
 
 #[test]
-fn public_key_parses() {
-    verifying_key().expect("compiled-in key is a valid ed25519 public key");
+fn the_compiled_in_keys_parse() {
+    assert!(!verifying_keys()
+        .expect("every listed key is an ed25519 key")
+        .is_empty());
+}
+
+/// A manifest signed as CI signs it: the context, then the bytes.
+fn signed(key: &SigningKey, manifest: &[u8]) -> Vec<u8> {
+    let mut m = MANIFEST_CONTEXT.to_vec();
+    m.extend_from_slice(manifest);
+    key.sign(&m).to_bytes().to_vec()
 }
 
 #[test]
-fn rejects_a_wrong_signature() {
-    let err = verify(b"asset", &[0u8; 64]).unwrap_err();
-    assert!(err.to_string().contains("does not match"));
-}
-
-#[test]
-fn rejects_a_short_signature() {
-    assert!(verify(b"asset", &[0u8; 10]).is_err());
+fn a_manifest_holds_only_under_a_listed_key_and_its_own_context() {
+    let key = SigningKey::from_bytes(&[7; 32]);
+    let other = SigningKey::from_bytes(&[8; 32]);
+    let keys = [other.verifying_key(), key.verifying_key()];
+    let body = br#"{"product":"daedalus-agent"}"#;
+    // Any listed key: the spare as much as the current one.
+    verify_manifest(body, &signed(&key, body), &keys).unwrap();
+    // Not listed.
+    assert!(verify_manifest(body, &signed(&key, body), &keys[..1]).is_err());
+    // Tampered, or a signature over the bytes alone (the per-asset scheme).
+    assert!(verify_manifest(b"{}", &signed(&key, body), &keys).is_err());
+    let bare = key.sign(body).to_bytes();
+    assert!(verify_manifest(body, &bare, &keys).is_err());
+    assert!(verify_manifest(body, &[0u8; 10], &keys).is_err());
 }
 
 #[test]
@@ -54,56 +71,164 @@ fn suffixed_names() {
     assert!(p.ends_with("daedalus-agent.exe.old"));
 }
 
+/// A manifest signed as CI signs it — `openssl pkeyutl -sign -rawin` over
+/// the context and the bytes, with a throwaway key made for this test —
+/// holds here: the two ends agree on the message.
 #[test]
-fn every_asset_has_a_local_name() {
-    for (remote, local) in ASSETS.iter().chain(OPTIONAL_ASSETS) {
-        assert!(!remote.is_empty() && !local.is_empty());
+fn a_manifest_signed_by_openssl_holds() {
+    let key = ed25519_dalek::VerifyingKey::from_bytes(
+        &hex::decode("b91d1361995d23ad28acac8a269de16aafa6caf1ecbdc259b422b395c9fa0ea5")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    )
+    .unwrap();
+    let sig = hex::decode(
+        "4da6bb22139ae410e336c889f5bceb1853ae69676cc3cbc6300fa57b91f1aabb\
+         bbfbe4d3c2fcf0609132ec08b8f8c3fd6042dfb81e6eda139fa5ba77aceca20c",
+    )
+    .unwrap();
+    verify_manifest(br#"{"product":"daedalus-agent"}"#, &sig, &[key]).unwrap();
+}
+
+#[test]
+fn every_asset_has_a_target_and_a_local_name() {
+    for (target, remote, local) in ASSETS.iter().chain(OPTIONAL_ASSETS) {
+        assert!(!target.is_empty() && !remote.is_empty() && !local.is_empty());
+        assert!(remote.contains(target), "{remote} is named for {target}");
         assert!(!local.contains('/') && !local.contains('\\'));
     }
 }
 
-/// A release as the API lists it, carrying `names` (each signed when
-/// `signed` says so).
-fn release(names: &[&str], signed: bool) -> ApiRelease {
-    let mut assets = Vec::new();
-    for n in names {
-        assets.push(ApiAsset {
-            name: n.to_string(),
-            browser_download_url: format!("https://x/{n}"),
-        });
-        if signed {
-            assets.push(ApiAsset {
-                name: format!("{n}.sig"),
-                browser_download_url: format!("https://x/{n}.sig"),
-            });
-        }
+/// The manifest CI writes for a release of `version`, carrying this
+/// target's assets (`optional` too, when asked), each of `bytes`.
+fn manifest(version: &str, optional: bool, bytes: &[u8]) -> Manifest {
+    use sha2::Digest;
+    let sha = hex::encode(sha2::Sha256::digest(bytes));
+    let entries = ASSETS
+        .iter()
+        .chain(if optional { OPTIONAL_ASSETS } else { &[] })
+        .map(|(target, name, local)| ManifestAsset {
+            target: target.to_string(),
+            role: role_of(local).into(),
+            name: name.to_string(),
+            sha256: sha.clone(),
+            size: bytes.len() as u64,
+        })
+        .collect();
+    Manifest {
+        product: PRODUCT.into(),
+        version: version.into(),
+        tag: format!("agent-v{version}"),
+        assets: entries,
     }
+}
+
+/// The release GitHub lists for `m`: its tag and every file it names.
+fn listed(m: &Manifest) -> ApiRelease {
     ApiRelease {
-        tag_name: "agent-v9.9.9".into(),
+        tag_name: m.tag.clone(),
         draft: false,
         prerelease: false,
-        assets,
+        assets: m
+            .assets
+            .iter()
+            .map(|a| a.name.clone())
+            .chain([MANIFEST.into(), MANIFEST_SIG.into()])
+            .map(|n| ApiAsset {
+                browser_download_url: format!("https://x/{n}"),
+                name: n,
+            })
+            .collect(),
     }
 }
 
 #[test]
-fn required_assets_decide_and_optional_ones_follow_what_is_installed() {
-    let required: Vec<&str> = ASSETS.iter().map(|(r, _)| *r).collect();
-    let optional: Vec<&str> = OPTIONAL_ASSETS.iter().map(|(r, _)| *r).collect();
-    let all: Vec<&str> = required.iter().chain(&optional).copied().collect();
-    // Everything there and signed, the optional ones installed: all of them.
-    let got = assets_of(&release(&all, true), |_| true).unwrap();
+fn the_manifest_decides_the_version_the_target_and_the_files() {
+    let running = semver::Version::parse("0.20.0").unwrap();
+    let pick = |m: &Manifest, r: &ApiRelease, installed: bool| {
+        assets_of(m, r, &running, None, |_| installed)
+    };
+    let m = manifest("0.21.0", true, b"bin");
+    // Everything there, the optional ones installed: all of them, sized
+    // and hashed as the manifest says.
+    let (v, got) = pick(&m, &listed(&m), true).unwrap();
+    assert_eq!(v.to_string(), "0.21.0");
     assert_eq!(got.len(), ASSETS.len() + OPTIONAL_ASSETS.len());
+    assert!(got
+        .iter()
+        .all(|a| a.size == 3 && a.url.starts_with("https://x/")));
     // Not installed here: only the required ones.
-    let got = assets_of(&release(&all, true), |_| false).unwrap();
-    assert_eq!(got.len(), ASSETS.len());
-    // A release without the optional ones still installs.
-    let got = assets_of(&release(&required, true), |_| true).unwrap();
-    assert_eq!(got.len(), ASSETS.len());
-    // Unsigned: skipped.
-    assert!(assets_of(&release(&all, false), |_| true).is_none());
-    // A required one missing: skipped.
-    assert!(assets_of(&release(&optional, true), |_| true).is_none());
+    assert_eq!(pick(&m, &listed(&m), false).unwrap().1.len(), ASSETS.len());
+    // Listed under another tag than it says (an old release re-published
+    // as a new one), or a version that is not its tag's.
+    let r = ApiRelease {
+        tag_name: "agent-v99.0.0".into(),
+        ..listed(&m)
+    };
+    assert!(pick(&m, &r, false).is_err());
+    let wrong = Manifest {
+        version: "0.22.0".into(),
+        ..m.clone()
+    };
+    assert!(pick(&wrong, &listed(&wrong), false).is_err());
+    let built = Manifest {
+        version: "0.21.0+g1234567".into(),
+        tag: "agent-v0.21.0+g1234567".into(),
+        ..m.clone()
+    };
+    assert!(pick(&built, &listed(&built), false).is_err());
+    // Not newer, or rolled back from.
+    let old = manifest("0.20.0", false, b"bin");
+    assert!(pick(&old, &listed(&old), false).is_err());
+    let refused = semver::Version::parse("0.21.0").unwrap();
+    assert!(assets_of(&m, &listed(&m), &running, Some(&refused), |_| false).is_err());
+    // Another product's manifest.
+    let theirs = Manifest {
+        product: "santree".into(),
+        ..m.clone()
+    };
+    assert!(pick(&theirs, &listed(&theirs), false).is_err());
+    // Another target's binary under this one's name: not this target's.
+    let mut swapped = m.clone();
+    for a in &mut swapped.assets {
+        a.target = "x86_64-unknown-freebsd".into();
+    }
+    assert!(pick(&swapped, &listed(&swapped), false).is_err());
+    // A file the manifest names that the release does not carry.
+    let mut short = listed(&m);
+    short.assets.retain(|a| a.name != ASSETS[0].1);
+    assert!(pick(&m, &short, false).is_err());
+    // A hash that is not one.
+    let mut bad = m.clone();
+    bad.assets[0].sha256 = "zz".into();
+    assert!(pick(&bad, &listed(&bad), false).is_err());
+    // Unknown fields are refused: the manifest is a contract.
+    assert!(serde_json::from_str::<Manifest>(
+        r#"{"product":"daedalus-agent","version":"1.0.0","tag":"agent-v1.0.0","assets":[],"x":1}"#
+    )
+    .is_err());
+}
+
+#[test]
+fn a_download_is_kept_only_at_the_manifests_size_and_hash() {
+    use sha2::Digest;
+    let dir = std::env::temp_dir().join(format!("daedalus-download-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("daedalus-agent.new");
+    let body = b"the new binary".to_vec();
+    let sha: [u8; 32] = sha2::Sha256::digest(&body).into();
+    store_verified(&body[..], &path, body.len() as u64, &sha).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), body);
+    // Longer than stated: refused before it is all read, and removed.
+    assert!(store_verified(&body[..], &path, 4, &sha).is_err());
+    assert!(!path.exists());
+    // Shorter, or other bytes: refused, removed.
+    assert!(store_verified(&body[..], &path, 100, &sha).is_err());
+    assert!(store_verified(&b"the old binary"[..], &path, 14, &sha).is_err());
+    assert!(!path.exists());
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -175,42 +300,47 @@ fn a_new_version_counts_its_starts_and_is_rolled_back_past_the_limit() {
 }
 
 #[test]
-fn a_version_rolled_back_from_is_never_picked_again_but_a_newer_one_is() {
-    let names: Vec<&str> = ASSETS.iter().map(|(r, _)| *r).collect();
+fn only_newer_tags_of_ours_are_candidates_newest_first() {
     let tagged = |tag: &str| ApiRelease {
         tag_name: tag.into(),
-        ..release(&names, true)
+        draft: false,
+        prerelease: false,
+        assets: Vec::new(),
     };
     let running = semver::Version::parse("0.18.0").unwrap();
-    let got = pick(vec![tagged("agent-v0.19.0")], &running, None, |_| false).unwrap();
-    assert_eq!(got.version.to_string(), "0.19.0");
-    assert!(pick(
-        vec![tagged("agent-v0.19.0")],
-        &running,
-        Some("0.19.0"),
-        |_| false
-    )
-    .is_none());
-    let got = pick(
-        vec![tagged("agent-v0.19.0"), tagged("agent-v0.19.1")],
-        &running,
-        Some("0.19.0"),
-        |_| false,
-    )
-    .unwrap();
-    assert_eq!(got.version.to_string(), "0.19.1");
-    // Not newer than the running one, a draft or not ours: never.
+    let tags = |c: Vec<(semver::Version, ApiRelease)>| -> Vec<String> {
+        c.into_iter().map(|(v, _)| v.to_string()).collect()
+    };
     let draft = ApiRelease {
         draft: true,
         ..tagged("agent-v0.20.0")
     };
-    assert!(pick(
-        vec![tagged("agent-v0.18.0"), draft, tagged("v0.30.0")],
-        &running,
-        None,
-        |_| false
-    )
-    .is_none());
+    let pre = ApiRelease {
+        prerelease: true,
+        ..tagged("agent-v0.21.0")
+    };
+    let all = || {
+        vec![
+            tagged("agent-v0.19.0"),
+            tagged("agent-v0.18.0"),
+            tagged("agent-v0.19.1"),
+            tagged("v0.30.0"),
+            tagged("agent-vnope"),
+        ]
+    };
+    assert_eq!(
+        tags(candidates(
+            all().into_iter().chain([draft, pre]).collect(),
+            &running,
+            None
+        )),
+        ["0.19.1", "0.19.0"]
+    );
+    let refused = semver::Version::parse("0.19.1").unwrap();
+    assert_eq!(
+        tags(candidates(all(), &running, Some(&refused))),
+        ["0.19.0"]
+    );
 }
 
 #[test]
@@ -218,19 +348,19 @@ fn a_roll_back_puts_the_old_binaries_back_and_keeps_the_bad_ones_aside() {
     let dir = std::env::temp_dir().join(format!("daedalus-rollback-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let service = ASSETS[0].1;
+    let service = ASSETS[0].2;
     // Nothing to go back to: refused, nothing moved.
     std::fs::write(dir.join(service), "new").unwrap();
     assert!(roll_back_in(&dir).is_err());
     assert_eq!(std::fs::read_to_string(dir.join(service)).unwrap(), "new");
-    for (_, local) in ASSETS {
+    for (_, _, local) in ASSETS {
         std::fs::write(dir.join(local), "new").unwrap();
         std::fs::write(dir.join(format!("{local}.old")), "old").unwrap();
     }
     // A `.bad` from an earlier rollback is replaced.
     std::fs::write(dir.join(format!("{service}.bad")), "older bad").unwrap();
     roll_back_in(&dir).unwrap();
-    for (_, local) in ASSETS {
+    for (_, _, local) in ASSETS {
         assert_eq!(std::fs::read_to_string(dir.join(local)).unwrap(), "old");
         assert_eq!(
             std::fs::read_to_string(dir.join(format!("{local}.bad"))).unwrap(),
@@ -239,7 +369,7 @@ fn a_roll_back_puts_the_old_binaries_back_and_keeps_the_bad_ones_aside() {
         assert!(!dir.join(format!("{local}.old")).exists());
     }
     retire_in(&dir);
-    for (_, local) in ASSETS {
+    for (_, _, local) in ASSETS {
         assert!(dir.join(local).exists());
         assert!(!dir.join(format!("{local}.bad")).exists());
     }

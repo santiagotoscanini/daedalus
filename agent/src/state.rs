@@ -64,22 +64,20 @@ impl State {
     }
 
     pub fn save(&self) {
+        if let Err(e) = self.try_save() {
+            tracing::warn!(error = %e, "state not saved");
+        }
+    }
+
+    /// `save`, saying whether it held: what an update needs before it
+    /// replaces anything (the probation must be on disk first).
+    pub fn try_save(&self) -> std::io::Result<()> {
         let path = state_path();
         if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            std::fs::create_dir_all(dir)?;
         }
-        match serde_json::to_string_pretty(self) {
-            Ok(text) => {
-                if let Err(e) = crate::util::write_atomic(
-                    &path,
-                    text.as_bytes(),
-                    crate::util::Access::Mode(0o644),
-                ) {
-                    tracing::warn!(error = %e, "state not saved");
-                }
-            }
-            Err(e) => tracing::warn!(error = %e, "state not serialised"),
-        }
+        let text = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
+        crate::util::write_atomic(&path, text.as_bytes(), crate::util::Access::Mode(0o644))
     }
 }
 

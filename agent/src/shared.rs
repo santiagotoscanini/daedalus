@@ -568,6 +568,13 @@ impl Shared {
         l.state.save();
     }
 
+    /// `with_state`, and whether the state reached the disk.
+    pub fn with_state_saved(&self, f: impl FnOnce(&mut State)) -> std::io::Result<()> {
+        let mut l = self.lock();
+        f(&mut l.state);
+        l.state.try_save()
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, Live> {
         self.inner.lock_ok()
     }

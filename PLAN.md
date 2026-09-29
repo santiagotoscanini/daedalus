@@ -665,6 +665,26 @@ Hand edits the UI cannot make for itself:
    when the operator chooses.
 3. **The six santree secrets** into the engine repo's `release` environment,
    so the macOS agent ships signed and notarized (feature 6).
+4. **TODO(operator): the spare release key.** The agent trusts a list of
+   release keys (`RELEASE_PUBLIC_KEYS`, `agent/src/update/mod.rs`) and
+   lists one. Make the spare OFFLINE, never on the box or a runner:
+   `openssl genpkey -algorithm ed25519 -out spare.pem`; keep `spare.pem`
+   in the password manager only; its public half, as hex, is
+   `openssl pkey -in spare.pem -pubout -outform DER | tail -c 32 | xxd -p -c 64`.
+   Add that hex as the list's second entry in a release signed with the
+   current key; from then on a release signed with the spare that drops
+   the first is the way out of a lost or leaked current key.
+5. **`AGENT_SIGNING_KEY` into the `release` environment.** The release job
+   now runs in it (`.github/workflows/agent.yml`). GitHub → the engine repo
+   → Settings → Environments → `release`: deployment branches and tags
+   limited to `agent-v*`, required reviewer the operator; add
+   `AGENT_SIGNING_KEY` there, then delete the repository-level secret; and
+   a tag ruleset so only the operator creates `agent-v*` tags. Until it is
+   moved the job still reads the repository secret.
+6. **Retire the per-asset `.sig` files** once no machine runs agent 0.20 or
+   older: agents from 0.21 on verify the signed `release.json` alone; the
+   TRANSITION steps in the workflow's release job sign each asset only so a
+   0.20 updater can reach 0.21.
 
 ## Engine polish
 

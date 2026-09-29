@@ -7,9 +7,11 @@
 # `build-linux` (the static musl service, x86_64 and aarch64, each on a
 # runner of its own architecture so no cross toolchain is involved) and
 # `build-linux-tray` (the GTK tray, glibc, x86_64 only) produce the
-# binaries, and `release` signs every one with the release key and
-# publishes a GitHub release whose assets every installed agent watches
-# (agent/src/update.rs).
+# binaries, and `release` writes `release.json` — the product, version and
+# tag, and per asset its target, role, name, SHA-256 and size — signs it
+# once with the release key under its own context, and publishes a GitHub
+# release every installed agent watches (agent/src/update/). Every build is
+# `--locked`, and a tag whose commit is not on main publishes nothing.
 #
 # Two signatures on a macOS binary, for two audiences. Apple's — Developer
 # ID codesign with the hardened runtime, then notarization — is what
@@ -18,10 +20,12 @@
 # App Store Connect key (the same six secrets santree's release uses; see
 # agent/README.md "Releasing"). Without them the binaries ship unsigned and
 # the job says so: launchd runs an unsigned daemon fine, so an unsigned
-# release still installs and updates. Ours — the raw ed25519 signature from
-# AGENT_SIGNING_KEY, whose public half is compiled into the agent — is what
-# the updater checks, and it is made on Linux with openssl after the builds,
-# so the key is only ever read on a runner that never held a toolchain cache.
+# release still installs and updates. Ours — the raw ed25519 signature
+# over the manifest from AGENT_SIGNING_KEY, whose public half is compiled
+# into the agent — is what the updater checks, and it is made on Linux with
+# openssl after the builds, in the `release` environment (the secret lives
+# there, not in the repository), so the key is only ever read on a runner
+# that never held a toolchain cache.
 #
 # Convention: third-party actions are pinned to full commit SHAs.
 name: Agent
@@ -86,17 +90,19 @@ jobs:
       - name: Format
         run: cargo fmt --check
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Clippy without the tray (Linux, as the static service is built)
         if: runner.os == 'Linux'
-        run: cargo clippy --no-default-features --all-targets -- -D warnings
+        run: cargo clippy --locked --no-default-features --all-targets -- -D warnings
       - name: Test
-        run: cargo test
+        run: cargo test --locked
 
   # The tag names the version; Cargo.toml must agree, or an agent would
-  # install a release that reports a different version than its tag.
+  # install a release that reports a different version than its tag. And
+  # the tagged commit must be on main: a tag on a stray branch ships to
+  # every machine otherwise.
   guard:
-    name: Tag matches Cargo.toml
+    name: Tag matches Cargo.toml, commit on main
     if: startsWith(github.ref, 'refs/tags/agent-v')
     needs: check
     runs-on: ubuntu-latest
@@ -104,12 +110,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - env:
           REF_NAME: ${{ github.ref_name }}
         run: |
           tag="${REF_NAME#agent-v}"
           crate="$(grep -m1 '^version = ' agent/Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
           [ "$tag" = "$crate" ] || { echo "tag $tag != Cargo.toml $crate"; exit 1; }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_SHA is not on main; refusing to release it"; exit 1; }
 
   build-windows:
     name: Build (windows)
@@ -127,7 +137,7 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
       - name: Build
-        run: cargo build --release --target x86_64-pc-windows-msvc
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
       - name: Stage
         shell: bash
         run: |
@@ -166,8 +176,8 @@ jobs:
       # are still out there, and the updater's asset table names one file.
       - name: Build both architectures
         run: |
-          cargo build --release --target aarch64-apple-darwin
-          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
       - name: Stage universal binaries
         run: |
           mkdir -p dist
@@ -344,6 +354,11 @@ jobs:
     name: Sign and publish
     needs: [build-windows, build-macos, build-linux, build-linux-tray]
     runs-on: ubuntu-latest
+    # AGENT_SIGNING_KEY lives in this environment, restricted to agent-v*
+    # tags with the operator as required reviewer (agent/README.md
+    # "Releasing"), so no other workflow — nor this one on another ref —
+    # can read the key every installed agent trusts.
+    environment: release
     permissions:
       contents: write
     steps:
@@ -355,6 +370,30 @@ jobs:
           pattern: agent-dist-*
           path: dist
           merge-multiple: true
+      # What the release is, as the updater reads it (agent/src/update/
+      # feed.rs): each asset's target, role, name, SHA-256 and size.
+      - name: Manifest
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          entry() { # target role name
+            jq -n --arg target "$1" --arg role "$2" --arg name "$3" \
+              --arg sha256 "$(sha256sum "dist/$3" | cut -d' ' -f1)" \
+              --argjson size "$(stat -c %s "dist/$3")" \
+              '{target: $target, role: $role, name: $name, sha256: $sha256, size: $size}'
+          }
+          {
+            entry x86_64-pc-windows-msvc service "$ASSET"
+            entry x86_64-pc-windows-msvc tray "$TRAY_ASSET"
+            entry universal-apple-darwin service "$MAC_ASSET"
+            entry universal-apple-darwin tray "$MAC_TRAY_ASSET"
+            entry x86_64-unknown-linux-musl service "$LINUX_X64_ASSET"
+            entry aarch64-unknown-linux-musl service "$LINUX_ARM_ASSET"
+            entry x86_64-unknown-linux-gnu tray "$LINUX_TRAY_ASSET"
+          } | jq -s --arg version "${REF_NAME#agent-v}" --arg tag "$REF_NAME" \
+            '{product: "daedalus-agent", version: $version, tag: $tag, assets: .}' > dist/release.json
+          cat dist/release.json
       - name: Sign
         env:
           AGENT_SIGNING_KEY: ${{ secrets.AGENT_SIGNING_KEY }}
@@ -362,26 +401,34 @@ jobs:
           set -euo pipefail
           umask 077
           printf '%s\n' "$AGENT_SIGNING_KEY" > key.pem
+          # The manifest, under its own context (agent/src/update/signature.rs).
+          { printf 'daedalus-agent release manifest v1\000'; cat dist/release.json; } > signed.bin
+          openssl pkeyutl -sign -inkey key.pem -rawin -in signed.bin -out dist/release.json.sig
+          [ "$(stat -c %s dist/release.json.sig)" = 64 ] || { echo "the manifest signature is not 64 bytes"; exit 1; }
+          # TRANSITION: agents up to 0.20 verify a raw signature over each
+          # asset instead of the manifest. Kept only so they can update to a
+          # manifest-reading release; delete this loop, its verification and
+          # the .sig uploads once no machine runs 0.20 or older.
           for a in "$ASSET" "$TRAY_ASSET" "$MAC_ASSET" "$MAC_TRAY_ASSET" \
               "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" "$LINUX_TRAY_ASSET"; do
             openssl pkeyutl -sign -inkey key.pem -rawin -in "dist/$a" -out "dist/$a.sig"
             [ "$(stat -c %s "dist/$a.sig")" = 64 ] || { echo "$a: signature is not 64 bytes"; exit 1; }
           done
           rm -f key.pem
-          (cd dist && sha256sum "$ASSET" "$ASSET.sig" "$TRAY_ASSET" "$TRAY_ASSET.sig" \
-            "$MAC_ASSET" "$MAC_ASSET.sig" "$MAC_TRAY_ASSET" "$MAC_TRAY_ASSET.sig" \
-            "$LINUX_X64_ASSET" "$LINUX_X64_ASSET.sig" "$LINUX_ARM_ASSET" "$LINUX_ARM_ASSET.sig" \
-            "$LINUX_TRAY_ASSET" "$LINUX_TRAY_ASSET.sig" \
-            install.ps1 install.sh > SHA256SUMS)
+          (cd dist && sha256sum release.json release.json.sig "$ASSET" "$TRAY_ASSET" \
+            "$MAC_ASSET" "$MAC_TRAY_ASSET" "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" \
+            "$LINUX_TRAY_ASSET" install.ps1 install.sh > SHA256SUMS)
           cat dist/SHA256SUMS
-      # The agent's compiled-in public key must accept what was just signed,
-      # or every installed agent would refuse this release. Checked here with
-      # the same key material the agent embeds (agent/src/update.rs).
+      # The agent's compiled-in keys must accept what was just signed, or
+      # every installed agent would refuse this release: checked with the
+      # current key (the first listed in agent/src/update/mod.rs).
       - name: Verify against the compiled-in key
         run: |
           set -euo pipefail
-          hex="$(grep -A1 'RELEASE_PUBLIC_KEY_HEX' agent/src/update.rs | grep -o '"[0-9a-f]\{64\}"' | tr -d '"')"
+          hex="$(grep -A1 'RELEASE_PUBLIC_KEYS' agent/src/update/mod.rs | grep -o '"[0-9a-f]\{64\}"' | head -1 | tr -d '"')"
           printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
+          openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in signed.bin -sigfile dist/release.json.sig
+          # TRANSITION (see Sign).
           for a in "$ASSET" "$TRAY_ASSET" "$MAC_ASSET" "$MAC_TRAY_ASSET" \
               "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" "$LINUX_TRAY_ASSET"; do
             openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in "dist/$a" -sigfile "dist/$a.sig"
@@ -394,9 +441,10 @@ jobs:
           set -euo pipefail
           gh release create "$REF_NAME" \
             --title "daedalus-agent ${REF_NAME#agent-v}" \
-            --notes "Windows x86_64 and macOS (universal): the service and the tray. Linux (systemd distributions): the static service for x86_64 and aarch64, and the tray for x86_64 desktops. Installed agents pick this up on their next check. New machines — Windows, from an administrator PowerShell: \`irm https://daedalus.toscanini.me/install.ps1 | iex\`; macOS and Linux: \`curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh\`." \
-            "dist/$ASSET" "dist/$ASSET.sig" "dist/$TRAY_ASSET" "dist/$TRAY_ASSET.sig" \
-            "dist/$MAC_ASSET" "dist/$MAC_ASSET.sig" "dist/$MAC_TRAY_ASSET" "dist/$MAC_TRAY_ASSET.sig" \
-            "dist/$LINUX_X64_ASSET" "dist/$LINUX_X64_ASSET.sig" "dist/$LINUX_ARM_ASSET" "dist/$LINUX_ARM_ASSET.sig" \
-            "dist/$LINUX_TRAY_ASSET" "dist/$LINUX_TRAY_ASSET.sig" \
+            --notes "Windows x86_64 and macOS (universal): the service and the tray. Linux (systemd distributions): the static service for x86_64 and aarch64, and the tray for x86_64 desktops. Installed agents pick this up on their next check. New machines — Windows, from an administrator PowerShell: \`irm https://daedalus.toscanini.me/install.ps1 | iex\`; macOS and Linux: \`curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh\` (both with the controller's address and key fingerprint; see the Machines page)." \
+            dist/release.json dist/release.json.sig \
+            "dist/$ASSET" "dist/$TRAY_ASSET" "dist/$MAC_ASSET" "dist/$MAC_TRAY_ASSET" \
+            "dist/$LINUX_X64_ASSET" "dist/$LINUX_ARM_ASSET" "dist/$LINUX_TRAY_ASSET" \
+            "dist/$ASSET.sig" "dist/$TRAY_ASSET.sig" "dist/$MAC_ASSET.sig" "dist/$MAC_TRAY_ASSET.sig" \
+            "dist/$LINUX_X64_ASSET.sig" "dist/$LINUX_ARM_ASSET.sig" "dist/$LINUX_TRAY_ASSET.sig" \
             dist/install.ps1 dist/install.sh dist/SHA256SUMS

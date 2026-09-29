@@ -161,13 +161,25 @@ fn update_cmd(args: &[String]) -> Result<()> {
             println!("newer release: {} ({})", rel.version, rel.tag);
             if apply {
                 let staged = update::download_and_verify(&rel)?;
-                update::swap_in(&staged)?;
+                // As the service does it (update::install): the probation on
+                // disk before anything is replaced, the version checked after.
                 update::begin_probation(
                     &mut state,
                     &rel.version.to_string(),
                     &daedalus_agent::state::now_rfc3339(),
                 );
-                state.save();
+                state
+                    .try_save()
+                    .context("the probation could not be recorded; nothing was replaced")?;
+                update::swap_in(&staged)?;
+                let said = update::installed_version()?;
+                if said != rel.version {
+                    update::roll_back()?;
+                    bail!(
+                        "the installed binary says {said}, not {}; put the previous one back",
+                        rel.version
+                    );
+                }
                 println!(
                     "installed {}; start the service to run it (on probation: the previous binaries stay until it proves itself)",
                     rel.version
