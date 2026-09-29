@@ -20,10 +20,8 @@
 #       - fleet-upgrade-preflight --target.
 #     The deliberate override is nixpkgs' own: NIXOS_NO_CHECK=1.
 #
-#   switch inhibitors — the same facts as nixpkgs' `system.switch.inhibitors`
-#     (26.05+), so its own check compares them too; on a release without the
-#     option the file is written here, so the running generation carries the
-#     keys the next release's check will compare against.
+#   switch inhibitors — the same facts as nixpkgs' `system.switch.inhibitors`,
+#     so its own check compares them too.
 #
 #   fleet-upgrade-preflight (preflight.sh) and upgrade-selfcheck
 #     (selfcheck.sh) — read-only readiness checks before the reboot, and the
@@ -36,7 +34,6 @@
 {
   config,
   lib,
-  options,
   pkgs,
   ...
 }:
@@ -67,8 +64,6 @@ let
   // lib.optionalAttrs (config.boot.supportedFilesystems.zfs or false) {
     fleet-zfs = lib.versions.majorMinor config.boot.zfs.package.version;
   };
-
-  hasNativeInhibitors = options.system ? switch && options.system.switch ? inhibitors;
 
   # Everything the checks read, as variables ahead of checks.sh.
   rootFs = config.fileSystems."/" or { };
@@ -261,8 +256,7 @@ in
       that has not reached the root file system within ten minutes, or that
       landed in the emergency target, is force-rebooted (the one-shot boot
       entry is then spent, so the firmware comes back on the default one),
-      and a kernel panic reboots after 30 s. Contributes nothing on a
-      scripted initrd, so a host still on one sees no boot change'';
+      and a kernel panic reboots after 30 s. Needs a systemd initrd'';
   };
 
   config = lib.mkMerge [
@@ -323,25 +317,18 @@ in
       };
     }
 
-    (
-      if hasNativeInhibitors then
-        { system.switch.inhibitors = inhibitors; }
-      else
-        {
-          # A release without the option: write the file its successor's
-          # check reads from /run/current-system, with the same keys, plus the
-          # D-Bus implementation that release's dbus module will declare.
-          system.systemBuilderCommands = ''
-            ln -s ${
-              pkgs.writeText "switch-inhibitors" (
-                builtins.toJSON (inhibitors // { dbus-implementation = config.services.dbus.implementation; })
-              )
-            } $out/switch-inhibitors
-          '';
-        }
-    )
+    { system.switch.inhibitors = inhibitors; }
 
-    (lib.mkIf (cfg.bootFallback.enable && config.boot.initrd.systemd.enable) {
+    (lib.mkIf cfg.bootFallback.enable {
+      assertions = [
+        {
+          assertion = config.boot.initrd.systemd.enable;
+          message = "fleet.upgradeGuard.bootFallback needs a systemd initrd (boot.initrd.systemd.enable).";
+        }
+      ];
+    })
+
+    (lib.mkIf cfg.bootFallback.enable {
       boot.kernelParams = [ "panic=30" ];
       boot.initrd.systemd = {
         # A hang: the root never mounted, or switch-root never came.

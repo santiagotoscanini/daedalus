@@ -806,8 +806,6 @@ bridge binary and the agent, where the OS layer is.
 - The weekly `flake.lock` bump can move nixfmt and leave `/etc/nixos`
   treefmt-dirty, which fails `nix flake check`; check after every
   autoupgrade. `nix fmt -- --ci` writes before it fails.
-- `platform/sops.nix` overrides sops-nix's Go inputs to the 1.26 toolchain
-  because 25.11's Go 1.25 cannot build it; drop the override at 26.05.
 - The agent's release signing key has no recovery path but the operator's
   copies; losing it means every machine must be re-enrolled with a new
   compiled-in key.

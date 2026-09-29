@@ -125,8 +125,7 @@ if [ -n "$live" ]; then
   fi
 fi
 
-# Every inhibitor both generations declare (nixpkgs' mechanism, 26.05+; this
-# engine writes the file itself on releases without it).
+# Every inhibitor both generations declare (nixpkgs' `system.switch.inhibitors`).
 if [ -f "$run_ref/switch-inhibitors" ] && [ -f "$new/switch-inhibitors" ]; then
   while IFS= read -r line; do
     [ -n "$line" ] && reasons+=("  inhibitor $line")

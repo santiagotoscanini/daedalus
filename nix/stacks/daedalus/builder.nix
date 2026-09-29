@@ -66,7 +66,7 @@ let
       "${config.fleet.site.source}/vault/github-app.sops";
   haveGithubApp = githubAppVault != null && builtins.pathExists githubAppVault;
 
-  # buildkit 0.32 from unstable: 25.11 ships 0.25, and `[frontend."gateway.v0"]
+  # buildkit from unstable (0.32; 26.05 ships 0.30, a step back). `[frontend."gateway.v0"]
   # allowedRepositories` needs >= 0.26. legacyPackages rather than a second
   # `import` (claude-code needs one for allowUnfree; buildkit is Apache-2.0).
   inherit (nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}) buildkit;

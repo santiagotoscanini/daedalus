@@ -55,7 +55,7 @@ let
       pkgs.util-linux # setpriv, flock
       pkgs.coreutils
       pkgs.gawk # lib.sh log_errtail
-      config.system.build.nixos-rebuild # the system's own: ng, named nixos-rebuild, on 25.11 and 26.05 alike
+      config.system.build.nixos-rebuild # the system's own: ng, named nixos-rebuild
       config.fleet.upgradeGuard.package # fleet-switch-guard (host/lib.sh)
       pkgs.openssh # git push over ssh
       pkgs.systemd # systemctl stop, before a rollback
