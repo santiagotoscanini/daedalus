@@ -83,8 +83,8 @@ let
       lib.attrNames (lib.filterAttrs (_: c: c.autoStart) config.virtualisation.oci-containers.containers)
     )
   );
-  nodeNames = pkgs.writeText "upgrade-guard-nodes" (
-    lib.concatMapStrings (n: n.name + "\n") config.fleet.nodes
+  nodesFile = pkgs.writeText "upgrade-guard-nodes" (
+    lib.concatMapStrings (n: "${n.id} ${n.name}\n") config.fleet.nodes
   );
   daedalusOn = config.fleet.modules.daedalus.enable or false;
   syncoidUnits = map (n: "syncoid-${lib.replaceStrings [ "/" ] [ "-" ] n}.service") (
@@ -128,7 +128,7 @@ let
     LAN_IP = config.fleet.lanIp;
     LAN_IF = config.fleet.lanInterface;
     STATUS_PORT = if daedalusOn then toString config.fleet.daedalus.statusPort else "";
-    NODE_NAMES = "${nodeNames}";
+    NODES = "${nodesFile}";
     SYNCOID_UNITS = lib.concatStringsSep " " syncoidUnits;
     SYNCOID_MAX_AGE = toString cfg.syncoidMaxAgeSec;
     HOST_CHECKS = lib.concatStringsSep " " (lib.attrNames cfg.checks);

@@ -42,7 +42,9 @@ check_target_guard() {
     return 0
     ;;
   3)
-    echo "reboot-level change ($(tail -n +2 <<<"$out" | sed -E 's/^ +//; s/:.*//' | sort -u | tr '\n' ' ')): install with \`nixos-rebuild boot\` only"
+    local what
+    what="$(tail -n +2 <<<"$out" | sed -E 's/^ +//; s/^inhibitor //; s/ ?:.*//; s/^fleet-//' | sort -u | tr '\n' ' ')"
+    echo "reboot-level change (${what% }): install with \`nixos-rebuild boot\` only"
     return 2
     ;;
   *)

@@ -90,6 +90,9 @@ check_boot_entries() {
     echo "bootctl list failed"
     return 1
   }
+  # Only entries on disk (`type1`): bootctl also lists what the loader reported
+  # at boot (`loader`), which configurationLimit may have pruned since.
+  json="$(jq '[.[] | select(.type == "type1")]' <<<"$json")"
   total="$(jq 'length' <<<"$json")"
   good="$(jq -r --arg k "$kern" --arg i "$init" \
     '[.[] | select((.linux // "" | endswith($k)) and ((.initrd // []) | map(endswith($i)) | any)) | .id] | join(" ")' <<<"$json")"
@@ -98,7 +101,7 @@ check_boot_entries() {
   n="$(wc -w <<<"$good")"
   local note=""
   if [ -n "$selected" ] && ! jq -e --arg s "$selected" 'any(.[]; .id == $s)' <<<"$json" >/dev/null; then
-    note=" (booted entry $selected is no longer on the ESP)"
+    note="; the booted entry $selected is no longer on the ESP"
   fi
   echo "$n of $total entries boot the running kernel+initrd: ${good:-none}${note}"
   [ "$n" -ge 2 ]
@@ -218,14 +221,15 @@ check_node_links() {
   }
   local m up="" down=""
   m="$(curl -s --max-time 5 "http://127.0.0.1:$STATUS_PORT/nodes/metrics" 2>/dev/null || true)"
-  while IFS= read -r name; do
-    [ -n "$name" ] || continue
-    if grep -qE "^daedalus_agent_link_up\{[^}]*machine=\"$name\"[^}]*\} 1(\.0+)?$" <<<"$m"; then
-      up="$up, $name ($(grep -oE "^daedalus_agent_link_up\{[^}]*machine=\"$name\"[^}]*\}" <<<"$m" | sed -nE 's/.*host="([^"]*)".*/\1/p'))"
+  # NODES: "<id> <name>" per line; the metric carries the id as `node`.
+  while read -r id name; do
+    [ -n "$id" ] || continue
+    if grep -qE "^daedalus_agent_link_up\{[^}]*node=\"$id\"[^}]*\} 1(\.0+)?$" <<<"$m"; then
+      up="$up, $name ($(grep -oE "^daedalus_agent_link_up\{[^}]*node=\"$id\"[^}]*\}" <<<"$m" | sed -nE 's/.*host="([^"]*)".*/\1/p'))"
     else
       down="$down, $name"
     fi
-  done <"$NODE_NAMES"
+  done <"$NODES"
   echo "linked: ${up#, }${down:+; NOT linked: ${down#, }}"
   [ -z "$down" ] || return 2
 }
