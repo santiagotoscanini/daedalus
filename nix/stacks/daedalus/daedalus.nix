@@ -827,6 +827,9 @@ in
         content = lib.concatStringsSep "\n" (
           map (k: "DASH_${k}=\${${k}}") serviceKeys ++ [ "DASH_CF_API_TOKEN=\${CF_TOKEN}" ]
         );
+        # Each read above tolerates a missing key (`|| true`): a panel whose
+        # key is absent says "no data" rather than the page failing.
+        optional = serviceKeys ++ [ "CF_TOKEN" ];
       };
   };
 }

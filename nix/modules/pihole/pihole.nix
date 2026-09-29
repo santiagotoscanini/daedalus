@@ -175,7 +175,8 @@ in
           gates = [ "podman-app-daedalus.service" ];
           dir = "/run/pihole-daedalus";
           file = "/run/pihole-daedalus/hosts";
-          content = "$(cat ${config.sops.secrets."pihole-dhcp-hosts".path})";
+          prep = "DHCP_HOSTS=$(cat ${config.sops.secrets."pihole-dhcp-hosts".path})";
+          content = "$DHCP_HOSTS";
         });
 
     services.pihole-ftl = {

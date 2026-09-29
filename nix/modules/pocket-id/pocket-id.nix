@@ -153,6 +153,7 @@ in
                 config.sops.secrets."pocket-id-env".path
               } | cut -d= -f2- || true)";
               content = "DASH_POCKETID_KEY=$KEY";
+              optional = [ "KEY" ];
             });
 
         # Readiness gate, mirroring podman-pg's: "podman-pocket-id finished"

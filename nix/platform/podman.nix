@@ -571,15 +571,29 @@ in
     # Activation-render idiom: a oneshot that materializes a small file
     # on tmpfs before its consumers start — a bare token, an --env-file,
     # a DSN — sourced from an already-decrypted secret. `prep` computes
-    # shell vars; `content` is the heredoc body written to `file`.
+    # shell vars with standalone assignments; `content` is the heredoc body
+    # written to `file`, and only REFERENCES them.
     # The dir is operator-owned 0755 so rootless podman can traverse it at
     # --env-file mount time (pre-userns-remap); the file itself stays
     # `mode` (default 0400).
+    #
+    # Two guarantees, the helper's rather than each caller's:
+    #   - never an empty credential. A `$(…)` inside the heredoc runs where
+    #     errexit does not reach (a failed read renders `A=` and the unit
+    #     exits 0), so `content` may not hold one (an evaluation error); and
+    #     every variable `content` names must be non-empty when the file is
+    #     written, or the unit fails and the previous file stays. `optional`
+    #     lists the names a caller means to render empty.
+    #   - re-rendered with its consumer. PartOf the gates, so a restart of a
+    #     consumer re-runs the render first (before= orders it) and the
+    #     consumer reads the secret as it is NOW. A rebuild alone still leaves
+    #     an unchanged render alone: after rotating a secret, restart the
+    #     consumer.
     #   systemd.services."foo-render" = mkSecretRender { ... };
     _module.args.mkSecretRender =
       {
         description,
-        gates, # consumer units; the render runs before= / wantedBy= them
+        gates, # consumer units; the render runs before= / wantedBy= / partOf= them
         dir,
         file,
         content,
@@ -590,13 +604,30 @@ in
         owner ? cfg.operator.user,
         group ? cfg.operator.group,
         prep ? "",
+        # Variables `content` names that may legitimately render empty.
+        optional ? [ ],
         after ? [ ],
         wants ? [ ],
       }:
+      let
+        # Every $NAME / ${NAME} the heredoc expands.
+        referenced = lib.unique (
+          map lib.head (
+            builtins.filter builtins.isList (builtins.split "\\$\\{?([A-Za-z_][A-Za-z0-9_]*)" content)
+          )
+        );
+        required = lib.subtractLists optional referenced;
+      in
+      assert lib.assertMsg (!(lib.hasInfix "$(" content || lib.hasInfix "`" content)) ''
+        mkSecretRender "${description}": `content` runs a command. A command
+        substitution inside the heredoc fails without failing the unit and
+        renders an empty value; read it into a variable in `prep` instead.
+      '';
       {
         inherit description wants;
         before = gates;
         wantedBy = gates;
+        partOf = gates;
         # /run/secrets/* are materialized during activation, ahead of
         # every multi-user unit — no explicit sops ordering needed.
         after = [ "local-fs.target" ] ++ after;
@@ -615,6 +646,12 @@ in
           install -d -m 0755 -o ${cfg.operator.user} -g ${cfg.operator.group} ${dir}
           umask 077
           ${prep}
+          for v in ${lib.concatStringsSep " " required}; do
+            if [ -z "''${!v-}" ]; then
+              echo "${file}: $v is empty or unset; not rendering (the previous file, if any, stays)" >&2
+              exit 1
+            fi
+          done
           install -m ${mode} -o ${toString owner} -g ${toString group} /dev/stdin ${file} <<RENDER_EOF
           ${content}
           RENDER_EOF

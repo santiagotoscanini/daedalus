@@ -116,6 +116,7 @@ in
       mode = "0600";
       prep = ''
         MON_PWD=$(grep '^POSTGRES_PASSWORD=' "${monEnv}" | head -1 | cut -d= -f2-)
+        [ -n "$MON_PWD" ] || { echo "POSTGRES_PASSWORD missing from ${monEnv}" >&2; exit 1; }
         DSN="postgresql://monitoring:$MON_PWD@pg:5432/postgres?sslmode=disable"
       '';
       content = "DATA_SOURCE_NAME=$DSN";

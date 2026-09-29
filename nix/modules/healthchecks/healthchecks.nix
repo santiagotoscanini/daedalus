@@ -74,6 +74,9 @@
       # Database on the shared app-db cluster (modules/app-db).
       fleet.appDatabases.healthchecks.consumers = [ "healthchecks" ];
 
+      # The private bridge's pin (webApps.isolated): a default a host whose
+      # bridge already exists overrides with the subnet it has.
+      fleet.bridgeSubnets.iso-healthchecks = lib.mkDefault "10.89.253.0/24";
       fleet.webApps.healthchecks = {
         # `hc` is the conventional label; a host that wants another defines
         # `fleet.webApps.healthchecks.hostname` itself.
@@ -109,7 +112,8 @@
         gates = [ "podman-healthchecks.service" ];
         dir = "/run/healthchecks-smtp";
         file = "/run/healthchecks-smtp/env";
-        content = "EMAIL_HOST_PASSWORD=$(cat ${config.sops.secrets."mail-relay-password".path})";
+        prep = "EMAIL_HOST_PASSWORD=$(cat ${config.sops.secrets."mail-relay-password".path})";
+        content = "EMAIL_HOST_PASSWORD=$EMAIL_HOST_PASSWORD";
       };
       systemd.services.podman-healthchecks = {
         after = [ "healthchecks-smtp-env.service" ];
