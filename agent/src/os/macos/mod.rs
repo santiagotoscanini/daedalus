@@ -28,9 +28,9 @@ pub mod tray;
 
 pub use super::unix::{
     claude_holder, connect_local, create_private, ensure_private, file_owner, hide_console,
-    local_socket_path, lock_exclusive, mark_executable, monotonic_usec, on_interrupt, own_uid,
-    pid_alive, seal, secure_data_dir, serve_api_socket, serve_local, unseal, LocalSocket,
-    CLAUDE_CLI_NAMES, CONFIG_ACCESS,
+    isolate, kill_tree, local_socket_path, lock_exclusive, mark_executable, monotonic_usec,
+    on_interrupt, own_uid, pid_alive, seal, secure_data_dir, serve_api_socket, serve_local, unseal,
+    LocalSocket, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;
@@ -39,19 +39,20 @@ pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
 pub use telemetry::{read_updates, Collector};
 
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 /// One command's stdout, as text; empty when it fails. For the quick
 /// facts (`sw_vers`, `sysctl`, `scutil`, `route`, `ifconfig`), which
 /// answer at once.
 fn stdout_of(cmd: &str, args: &[&str]) -> String {
-    Command::new(cmd)
-        .args(args)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default()
+    let mut c = Command::new(cmd);
+    c.args(args);
+    crate::exec::stdout_or(
+        c,
+        std::time::Duration::from_secs(5),
+        crate::exec::Text::Lossy,
+    )
+    .unwrap_or_default()
 }
 
 // ── paths ─────────────────────────────────────────────────────────────────
@@ -152,13 +153,9 @@ pub const OPTIONAL_ASSETS: &[(&str, &str)] = &[];
 /// and so triggers no prompt; the dates inside it would, so they stay
 /// unread.
 pub fn claude_keychain_login() -> bool {
-    Command::new("security")
-        .args(["find-generic-password", "-s", "Claude Code-credentials"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    let mut c = Command::new("security");
+    c.args(["find-generic-password", "-s", "Claude Code-credentials"]);
+    crate::exec::both(c, std::time::Duration::from_secs(5)).is_some_and(|r| r.ok)
 }
 
 /// A process's parent: `ps -o ppid=`.

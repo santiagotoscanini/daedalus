@@ -71,7 +71,7 @@ mod ts;
 #[cfg(feature = "tray")]
 pub mod tray;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::util::Shutdown;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -86,7 +86,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// terminal): hold the machine awake, answer the local socket, keep the link
 /// to the controller, sample telemetry and check for updates until `stop` is raised —
 /// each part as far as this machine's role runs it (role.rs).
-pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
+pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     // Before anything that could fail: an update on probation counts this
     // start, and one that started too often is rolled back here (update/)
     // — the service's starts only: a `serve` in a terminal is not one.
@@ -149,6 +149,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         role,
     ));
 
+    shared.set_shutdown(stop.clone());
     match &start {
         update::Start::Probation(n) => tracing::info!(
             starts = n,
@@ -181,17 +182,12 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     // again in the background while the rest runs.
     // The OS's power requests for the status document, read here every
     // minute rather than inside a request (shared.rs).
-    {
-        let (shared, stop) = (Arc::clone(&shared), Arc::clone(&stop));
-        let _ = std::thread::Builder::new()
-            .name("power-requests".into())
-            .spawn(move || loop {
-                shared.refresh_power_requests();
-                if util::sleep_until(&stop, Duration::from_secs(60)) {
-                    return;
-                }
-            });
-    }
+    let _ = util::spawn_worker("power-requests", &shared, &stop, |shared, stop| loop {
+        shared.refresh_power_requests();
+        if stop.wait(Duration::from_secs(60)) {
+            return;
+        }
+    });
     let page = local::Door::start(Arc::clone(&shared));
     let metrics = role
         .status_on_lan
@@ -268,17 +264,12 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         None => None,
         Some(Ok(id)) => {
             tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
-            let (shared, stop, cfg, facts) = (
-                Arc::clone(&shared),
-                Arc::clone(&stop),
-                cfg.clone(),
-                facts.clone(),
-            );
+            let (cfg, facts) = (cfg.clone(), facts.clone());
             Some(
-                std::thread::Builder::new()
-                    .name("link".into())
-                    .spawn(move || link::node::run_loop(cfg, id, facts, shared, stop))
-                    .context("spawning the link")?,
+                util::spawn_worker("link", &shared, &stop, move |shared, stop| {
+                    link::node::run_loop(cfg, id, facts, shared, stop)
+                })
+                .context("spawning the link")?,
             )
         }
         Some(Err(e)) => {
@@ -294,26 +285,20 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         tracing::info!("telemetry = off: nothing is sampled");
         None
     } else {
-        let shared = Arc::clone(&shared);
-        let stop = Arc::clone(&stop);
         let level = cfg.telemetry;
         Some(
-            std::thread::Builder::new()
-                .name("telemetry".into())
-                .spawn(move || telemetry::run_loop(shared, stop, level))
-                .context("spawning the sampler")?,
+            util::spawn_worker("telemetry", &shared, &stop, move |shared, stop| {
+                telemetry::run_loop(shared, stop, level)
+            })
+            .context("spawning the sampler")?,
         )
     };
 
     // The providers' reader (providers.rs), wherever there is a link to
     // push what it finds up: on every node, whatever the telemetry level.
     let provider_reader = if role.link {
-        let shared = Arc::clone(&shared);
-        let stop = Arc::clone(&stop);
         Some(
-            std::thread::Builder::new()
-                .name("providers".into())
-                .spawn(move || providers::run_loop(shared, stop))
+            util::spawn_worker("providers", &shared, &stop, providers::run_loop)
                 .context("spawning the providers' reader")?,
         )
     } else {
@@ -322,32 +307,26 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
 
     // The controller's session runs here, in this process (role.rs).
     let session = if role.session_in_service {
-        let shared = Arc::clone(&shared);
-        let stop = Arc::clone(&stop);
         let cfg = cfg.clone();
         Some(
-            std::thread::Builder::new()
-                .name("session".into())
-                .spawn(move || {
-                    if let Err(e) = session::run_in_service(&cfg, shared, stop) {
-                        tracing::error!(error = format!("{e:#}"), "the session did not start");
-                    }
-                })
-                .context("spawning the session")?,
+            util::spawn_worker("session", &shared, &stop, move |shared, stop| {
+                if let Err(e) = session::run_in_service(&cfg, shared, stop) {
+                    tracing::error!(error = format!("{e:#}"), "the session did not start");
+                }
+            })
+            .context("spawning the session")?,
         )
     } else {
         None
     };
 
     let updater = if role.self_update {
-        let shared = Arc::clone(&shared);
-        let stop = Arc::clone(&stop);
         let cfg = cfg.clone();
         Some(
-            std::thread::Builder::new()
-                .name("updater".into())
-                .spawn(move || update::run_loop(cfg, shared, stop))
-                .context("spawning the updater")?,
+            util::spawn_worker("updater", &shared, &stop, move |shared, stop| {
+                update::run_loop(cfg, shared, stop)
+            })
+            .context("spawning the updater")?,
         )
     } else {
         None
@@ -363,7 +342,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let mut on_probation = matches!(start, update::Start::Probation(_));
     let mut probation_looked = started;
     let mut failed_probation = false;
-    while !stop.load(Ordering::Relaxed) {
+    while !stop.is_stopped() {
         // An update on probation proves itself, or fails its run (update/).
         if on_probation && probation_looked.elapsed() >= Duration::from_secs(5) {
             probation_looked = std::time::Instant::now();
@@ -383,7 +362,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
                 update::Proof::Failed(why) => {
                     tracing::error!(why, "this version failed its probation run; stopping so the service manager starts it again (a counted start)");
                     failed_probation = true;
-                    stop.store(true, Ordering::Relaxed);
+                    stop.stop();
                     break;
                 }
             }
@@ -439,7 +418,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
                 Err(e) => tracing::info!(error = format!("{e:#}"), "tray not started"),
             }
         }
-        std::thread::sleep(Duration::from_millis(500));
+        stop.wait(Duration::from_millis(500));
     }
     tracing::info!("stopping");
     drop(listener);

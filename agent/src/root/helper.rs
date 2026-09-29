@@ -615,11 +615,14 @@ fn run_unit(
     }
     // What the follower had not handed over when it was stopped.
     let after_cursor = relay.last_cursor.clone();
-    if let Ok(o) = journal(table, unit, after_cursor.as_deref(), false)
-        .stdout(Stdio::piped())
-        .output()
-    {
-        for line in String::from_utf8_lossy(&o.stdout).lines() {
+    // Bounded like every other shell-out (exec.rs): a deadline, capped
+    // output (audit D15e).
+    if let Ok(text) = crate::exec::stdout_or(
+        journal(table, unit, after_cursor.as_deref(), false),
+        QUICK,
+        crate::exec::Text::Lossy,
+    ) {
+        for line in text.lines() {
             if let Some(e) = entry(line) {
                 relay.take(e);
             }

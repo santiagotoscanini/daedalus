@@ -24,10 +24,10 @@
 //! one: Lemonade's installer brings it along, so detecting it would list
 //! every Lemonade machine twice (app/src/lib/providers/kinds.ts says more).
 
+use crate::util::Shutdown;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::Read;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -638,7 +638,7 @@ pub fn check(list: &[ProviderReport]) -> Result<(), String> {
 /// The reader's thread: a read now, then on the cadence above — and at
 /// once after a residency verb (`Shared::request_providers_read`) — each
 /// published to `shared` with the verbs' outcomes, for the link to push.
-pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
+pub fn run_loop(shared: Arc<Shared>, stop: Shutdown) {
     let mut last_policy: Option<ProvidersPolicy> = None;
     let mut read_at: Option<Instant> = None;
     let mut every = READ_EVERY;
@@ -664,7 +664,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
             last_policy = Some(policy.providers);
             read_at = Some(Instant::now());
         }
-        if crate::util::sleep_until(&stop, POLICY_POLL) {
+        if stop.wait(POLICY_POLL) {
             return;
         }
     }

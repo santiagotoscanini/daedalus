@@ -5,8 +5,7 @@
 //! unit runs. What differs by OS — the service, install, uninstall, Ctrl-C
 //! — is `os`'s.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use daedalus_agent::util::Shutdown;
 
 use anyhow::{bail, Context, Result};
 use daedalus_agent::{agent_main, config, os, role, update, VERSION};
@@ -83,10 +82,10 @@ fn run_as_service() -> Result<()> {
 }
 
 fn serve_foreground() -> Result<()> {
-    let stop = Arc::new(AtomicBool::new(false));
+    let stop = Shutdown::new();
     {
-        let stop = Arc::clone(&stop);
-        os::on_interrupt(move || stop.store(true, Ordering::Relaxed));
+        let stop = stop.clone();
+        os::on_interrupt(move || stop.stop());
     }
     agent_main(stop, true)
 }

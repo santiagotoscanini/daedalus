@@ -16,13 +16,14 @@
 //! and 404 for anything else. The app's door on the controller is the API
 //! socket (api/), which reads the same `Shared`.
 
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use tiny_http::{Header, Method, Response, Server};
 
 use crate::shared::Shared;
+use crate::util::Rebinding;
 
 /// How often a metrics page that could not bind its port tries again.
 pub const BIND_RETRY: Duration = Duration::from_secs(15);
@@ -32,33 +33,24 @@ pub const BIND_RETRY: Duration = Duration::from_secs(15);
 /// not stop the service — the link, the telemetry and the awake hold go on
 /// — it is tried again every `BIND_RETRY`, and whoever holds it is logged
 /// where the OS says (`os::port_holder`).
-pub struct Page {
-    server: Arc<Mutex<Option<Arc<Server>>>>,
-    /// When it started answering.
-    since: Arc<Mutex<Option<Instant>>>,
-    stop: Arc<std::sync::atomic::AtomicBool>,
+pub struct Page(Rebinding<Bound>);
+
+/// The page's server while it answers; dropping it ends the thread.
+struct Bound(Arc<Server>);
+
+impl Drop for Bound {
+    fn drop(&mut self) {
+        self.0.unblock();
+    }
 }
 
 impl Page {
     pub fn start(port: u16, shared: Arc<Shared>) -> Self {
-        use std::sync::atomic::AtomicBool;
-        let page = Self {
-            server: Arc::new(Mutex::new(None)),
-            since: Arc::new(Mutex::new(None)),
-            stop: Arc::new(AtomicBool::new(false)),
-        };
-        let (server, since, stop) = (
-            Arc::clone(&page.server),
-            Arc::clone(&page.since),
-            Arc::clone(&page.stop),
-        );
-        let bind = move || -> bool {
-            match serve_metrics(port, Arc::clone(&shared)) {
-                Ok(s) => {
-                    *server.lock().unwrap_or_else(|p| p.into_inner()) = Some(s);
-                    *since.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
-                    true
-                }
+        Self(Rebinding::start(
+            "status-bind",
+            BIND_RETRY,
+            move || match serve_metrics(port, Arc::clone(&shared)) {
+                Ok(s) => Some(Bound(s)),
                 Err(e) => {
                     tracing::error!(
                         error = format!("{e:#}"),
@@ -66,41 +58,18 @@ impl Page {
                         held_by = crate::os::port_holder(port).as_deref().unwrap_or("unknown"),
                         "the metrics page could not bind its port; the service runs on and tries again"
                     );
-                    false
+                    None
                 }
-            }
-        };
-        if !bind() {
-            let _ = std::thread::Builder::new()
-                .name("status-bind".into())
-                .spawn(move || {
-                    while !crate::util::sleep_until(&stop, BIND_RETRY) {
-                        if bind() {
-                            return;
-                        }
-                    }
-                });
-        }
-        page
+            },
+        ))
     }
 
     /// How long the page has answered; None while it is not bound.
     pub fn up_for(&self) -> Option<Duration> {
-        self.since
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .map(|t| t.elapsed())
+        self.0.up_for()
     }
 }
 
-impl Drop for Page {
-    fn drop(&mut self) {
-        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
-        if let Some(s) = self.server.lock().unwrap_or_else(|p| p.into_inner()).take() {
-            s.unblock();
-        }
-    }
-}
 /// Answer the controller's metrics page on every interface's `port`
 /// (module doc) from a thread until `unblock` is called on the returned
 /// server.
@@ -155,6 +124,7 @@ mod tests {
     use crate::link::wire::Policy;
     use crate::role::Role;
     use crate::state::State;
+    use std::time::Instant;
 
     fn shared_as(mode: Mode) -> Arc<Shared> {
         Arc::new(Shared::new(

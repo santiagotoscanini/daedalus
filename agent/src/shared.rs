@@ -27,6 +27,7 @@ use crate::role::Role;
 use crate::rpc::Events;
 use crate::state::State;
 use crate::telemetry::Telemetry;
+use crate::util::LockExt;
 
 /// A report older than this means the tray is gone (logged off, or no
 /// desktop session at all), and the page says so instead of repeating it.
@@ -62,6 +63,9 @@ pub struct Shared {
     nodes: OnceLock<Arc<crate::link::controller::Registry>>,
     /// The OS's power requests as last read (`refresh_power_requests`).
     power: Mutex<Option<String>>,
+    /// The service's stop, nudged when an update check is asked for, so the
+    /// updater wakes at once (`request_check`).
+    stop: OnceLock<crate::util::Shutdown>,
 }
 
 struct Live {
@@ -170,6 +174,7 @@ impl Shared {
             controller: OnceLock::new(),
             nodes: OnceLock::new(),
             power: Mutex::new(None),
+            stop: OnceLock::new(),
             inner: Mutex::new(Live {
                 state,
                 awake_hold: false,
@@ -534,8 +539,16 @@ impl Shared {
         self.lock().restart_pending = true;
     }
 
+    /// The service's stop, which a check request nudges (lib.rs).
+    pub fn set_shutdown(&self, stop: crate::util::Shutdown) {
+        let _ = self.stop.set(stop);
+    }
+
     pub fn request_check(&self) {
         self.lock().check_requested = true;
+        if let Some(s) = self.stop.get() {
+            s.nudge();
+        }
     }
 
     /// Whether a check was asked for since the last call; clears it.
@@ -556,7 +569,7 @@ impl Shared {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Live> {
-        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+        self.inner.lock_ok()
     }
 
     /// The document as the local socket serves it (local.rs): the open
@@ -564,7 +577,7 @@ impl Shared {
     /// here: on Windows that is `powercfg`, far too slow for a request
     /// (`refresh_power_requests`, on the service's own thread).
     pub fn document_value(&self) -> serde_json::Value {
-        let power = self.power.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let power = self.power.lock_ok().clone();
         self.document_with(power, true)
     }
 
@@ -572,7 +585,7 @@ impl Shared {
     /// off any request's path).
     pub fn refresh_power_requests(&self) {
         let r = crate::power::requests_report();
-        *self.power.lock().unwrap_or_else(|p| p.into_inner()) = r;
+        *self.power.lock_ok() = r;
     }
 
     /// The page as a value: with `Telemetry::public` when `telemetry`,

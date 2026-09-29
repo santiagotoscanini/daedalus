@@ -34,7 +34,7 @@ pub use probation::*;
 pub use signature::*;
 pub use swap::*;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::util::Shutdown;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -63,7 +63,7 @@ pub use crate::os::{ASSETS, OPTIONAL_ASSETS};
 pub(super) const TAG_PREFIX: &str = "agent-v";
 pub(super) const USER_AGENT: &str = concat!("daedalus-agent/", env!("CARGO_PKG_VERSION"));
 
-pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
+pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
     let interval = cfg.update_interval();
     let mut wait = Duration::from_secs(30);
     loop {
@@ -151,24 +151,27 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     }
 }
 
-/// The updater's wait: like `util::sleep_until`, and a "check now" — from the
-/// status page or from the box — cuts it short. Returns true when stopped.
-pub(super) fn sleep_until_stop(stop: &AtomicBool, shared: &Shared, total: Duration) -> bool {
-    let step = Duration::from_millis(500);
-    let mut left = total;
-    while !left.is_zero() {
-        if stop.load(Ordering::Relaxed) {
-            return true;
-        }
+/// The updater's wait: `total`, cut short by a "check now" — from the
+/// status page or from the box, which nudges the stop (`Shared::
+/// request_check`). Returns true when stopped.
+pub(super) fn sleep_until_stop(stop: &Shutdown, shared: &Shared, total: Duration) -> bool {
+    let until = std::time::Instant::now() + total;
+    loop {
+        // Taken before the flag is read, so a request between the two
+        // still wakes the wait below.
+        let seen = stop.nudges();
         if shared.take_check_request() {
             tracing::info!("update check requested from the status page");
             return false;
         }
-        let d = left.min(step);
-        std::thread::sleep(d);
-        left -= d;
+        let left = until.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return stop.is_stopped();
+        }
+        if stop.wait_nudged(seen, left) {
+            return true;
+        }
     }
-    stop.load(Ordering::Relaxed)
 }
 
 #[cfg(test)]

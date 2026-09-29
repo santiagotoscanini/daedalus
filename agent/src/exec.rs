@@ -84,13 +84,18 @@ struct Running {
     rx: Receiver<(Stream, String)>,
 }
 
+/// The most of one stream kept; past it the child's writes block and the
+/// deadline ends it.
+const MAX_OUTPUT: u64 = 16 << 20;
+
 fn drain(
-    mut pipe: impl Read + Send + 'static,
+    pipe: impl Read + Send + 'static,
     which: Stream,
     text: Text,
     tx: Sender<(Stream, String)>,
 ) {
-    std::thread::spawn(move || {
+    let read = move || {
+        let mut pipe = pipe.take(MAX_OUTPUT);
         let s = match text {
             Text::Strict => {
                 let mut s = String::new();
@@ -104,13 +109,19 @@ fn drain(
             }
         };
         let _ = tx.send((which, s));
-    });
+    };
+    // Without a thread for it the stream is not read; the deadline still
+    // ends the command.
+    let _ = std::thread::Builder::new()
+        .name("exec-drain".into())
+        .spawn(read);
 }
 
 impl Running {
     /// Start hidden, stdin closed, stdout piped, stderr piped or discarded.
     fn start(cmd: &mut Command, stderr: bool, text: Text) -> std::io::Result<Self> {
-        let mut child = crate::os::hide_console(cmd)
+        crate::os::isolate(crate::os::hide_console(cmd));
+        let mut child = cmd
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(if stderr {
@@ -137,7 +148,7 @@ impl Running {
     }
 
     fn kill(mut self) {
-        let _ = self.child.kill();
+        crate::os::kill_tree(&mut self.child);
         let _ = self.child.wait();
     }
 }
@@ -441,5 +452,32 @@ mod windows_tests {
         );
         assert!(t.elapsed() < Duration::from_secs(4));
         assert!(both(cmd("ping -n 6 127.0.0.1"), Duration::from_millis(300)).is_none());
+    }
+
+    /// The deadline ends what the command started too: a grandchild that
+    /// would hold the pipes open goes with it (audit D19).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_deadline_ends_the_whole_process_group() {
+        let marker = format!("31.{}", std::process::id());
+        let t = Instant::now();
+        let r = stdout_or(
+            sh(&format!("sleep {marker} & sleep {marker}")),
+            Duration::from_millis(300),
+            Text::Strict,
+        );
+        assert_eq!(r, Err(Failed::Timeout));
+        assert!(t.elapsed() < Duration::from_secs(2));
+        let alive = || {
+            std::fs::read_dir("/proc").unwrap().flatten().any(|e| {
+                std::fs::read(e.path().join("cmdline"))
+                    .is_ok_and(|c| String::from_utf8_lossy(&c).contains(&marker))
+            })
+        };
+        let until = Instant::now() + Duration::from_secs(3);
+        while alive() {
+            assert!(Instant::now() < until, "a sleep outlived the deadline");
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 }

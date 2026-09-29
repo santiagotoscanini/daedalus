@@ -72,6 +72,7 @@ use super::{gcroot, ActionState, Recovered, SessionAction, SessionRequest};
 use crate::jobs::{self as job, JobState, SessionJob};
 use crate::os::jobs;
 use crate::state::now_rfc3339;
+use crate::util::LockExt;
 
 /// How often the roster is read when nothing asks.
 pub const REFRESH: Duration = Duration::from_secs(60);
@@ -248,7 +249,7 @@ impl Sessions {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Latest> {
-        self.latest.lock().unwrap_or_else(|p| p.into_inner())
+        self.latest.lock_ok()
     }
 
     /// The newest roster and its generation, which moves with each one.
@@ -311,7 +312,7 @@ impl Worker {
     }
 
     fn latest(&self) -> std::sync::MutexGuard<'_, Latest> {
-        self.latest.lock().unwrap_or_else(|p| p.into_inner())
+        self.latest.lock_ok()
     }
 
     fn publish(&mut self, mut r: Roster) {

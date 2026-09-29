@@ -68,13 +68,12 @@ pub fn converge_plan() -> Result<Option<&'static str>> {
         &["/hibernate", "off"],
     ];
     for args in steps {
-        let out = Command::new("powercfg").args(args).output()?;
-        if !out.status.success() {
-            anyhow::bail!(
-                "powercfg {}: {}",
-                args.join(" "),
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
+        let mut cmd = Command::new("powercfg");
+        cmd.args(args);
+        match crate::exec::both(cmd, std::time::Duration::from_secs(30)) {
+            Some(r) if r.ok => {}
+            Some(r) => anyhow::bail!("powercfg {}: {}", args.join(" "), r.output.trim()),
+            None => anyhow::bail!("powercfg {}: not run, or no answer in time", args.join(" ")),
         }
     }
     Ok(Some("idle sleep and hibernate timers off, hibernation off"))
@@ -82,8 +81,15 @@ pub fn converge_plan() -> Result<Option<&'static str>> {
 
 /// `powercfg /requests`: what Windows says is holding it awake.
 pub fn requests_report() -> Option<String> {
-    let out = Command::new("powercfg").arg("/requests").output().ok()?;
-    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    let mut cmd = Command::new("powercfg");
+    cmd.arg("/requests");
+    crate::exec::stdout_any(
+        cmd,
+        std::time::Duration::from_secs(30),
+        crate::exec::Text::Lossy,
+    )
+    .ok()
+    .map(|(_, s)| s.trim().to_string())
 }
 
 pub fn os_uptime_secs() -> Option<u64> {

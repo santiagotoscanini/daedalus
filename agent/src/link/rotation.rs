@@ -59,6 +59,7 @@ use serde::{Deserialize, Serialize};
 
 use super::wire::RotateParams;
 use crate::identity::{self, Identity};
+use crate::util::LockExt;
 
 pub const NEXT_FILE: &str = "identity.next.key";
 pub const ROTATION_FILE: &str = "rotation.json";
@@ -312,7 +313,7 @@ impl Keys {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+        self.inner.lock_ok()
     }
 
     /// The key going forward: the new one while a rotation runs.
@@ -450,7 +451,7 @@ impl Keys {
     }
 
     fn conns(&self) -> std::sync::MutexGuard<'_, HashMap<String, usize>> {
-        self.connections.lock().unwrap_or_else(|p| p.into_inner())
+        self.connections.lock_ok()
     }
 }
 
@@ -495,17 +496,14 @@ impl ConnResolver {
 
     /// What the handshake chose; None before it chose.
     pub fn served(&self) -> Option<Served> {
-        self.chosen
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone()
+        self.chosen.lock_ok().clone()
     }
 }
 
 impl rustls::server::ResolvesServerCert for ConnResolver {
     fn resolve(&self, hello: rustls::server::ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let (cert, served) = self.snapshot.choose(hello.server_name());
-        *self.chosen.lock().unwrap_or_else(|p| p.into_inner()) = Some(served);
+        *self.chosen.lock_ok() = Some(served);
         Some(cert)
     }
 }

@@ -37,11 +37,14 @@ pub fn converge_plan() -> Result<Option<&'static str>> {
 
 /// `pmset -g assertions`: what macOS says is holding it awake.
 pub fn requests_report() -> Option<String> {
-    let out = std::process::Command::new("pmset")
-        .args(["-g", "assertions"])
-        .output()
-        .ok()?;
-    let text = String::from_utf8_lossy(&out.stdout);
+    let mut cmd = std::process::Command::new("pmset");
+    cmd.args(["-g", "assertions"]);
+    let (_, text) = crate::exec::stdout_any(
+        cmd,
+        std::time::Duration::from_secs(10),
+        crate::exec::Text::Lossy,
+    )
+    .ok()?;
     // The listing runs long on a busy machine; the summary and the
     // per-process lines are the part that names this agent.
     Some(

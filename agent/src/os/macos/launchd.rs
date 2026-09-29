@@ -18,11 +18,10 @@
 //! `run` is `agent_main` with SIGTERM as the stop: launchd sends it on
 //! `bootout` and at shutdown (the relay is unix.rs's `on_interrupt`).
 
+use crate::util::Shutdown;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
@@ -47,9 +46,9 @@ pub const WATCHES_TRAY: bool = false;
 
 /// `daedalus-agent run` under launchd: the agent until SIGTERM or SIGINT.
 pub fn run_service() -> Result<()> {
-    let stop = Arc::new(AtomicBool::new(false));
-    let relay = Arc::clone(&stop);
-    super::on_interrupt(move || relay.store(true, Ordering::Relaxed));
+    let stop = Shutdown::new();
+    let relay = stop.clone();
+    super::on_interrupt(move || relay.stop());
     if is_root() {
         converge_permissions();
         // A moment later, once agent_main has opened the log, so the
@@ -122,11 +121,8 @@ fn plist(label: &str, program: &Path, args: &[&str], log: &Path, agent: bool) ->
 /// The uid of whoever owns the console — the logged-in user — for loading
 /// the tray into their session right now rather than at their next login.
 fn console_uid() -> Option<u32> {
-    let out = Command::new("stat")
-        .args(["-f", "%u", "/dev/console"])
-        .output()
-        .ok()?;
-    String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/dev/console").ok().map(|m| m.uid())
 }
 
 /// `daedalus-agent install`: the two plists, the config, a start of both.

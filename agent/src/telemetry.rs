@@ -49,7 +49,7 @@ pub use model::{
     Update, Updates,
 };
 
-use std::sync::atomic::AtomicBool;
+use crate::util::Shutdown;
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
@@ -159,7 +159,7 @@ pub fn assemble(s: &Static, w: &Slow, p: &Sample, updates: Option<&Updates>) -> 
 /// At `minimal` the slow facts and the updates are never read and each
 /// document is cut to `Telemetry::minimal`; at `off` this thread does not
 /// run at all (lib.rs).
-pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLevel) {
+pub fn run_loop(shared: Arc<Shared>, stop: Shutdown, level: TelemetryLevel) {
     let full = level == TelemetryLevel::Full;
     #[allow(clippy::default_constructed_unit_structs)]
     let mut c = Collector::default();
@@ -204,7 +204,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>, level: TelemetryLeve
     // The first document carries every tier; later ones say when one moved.
     let mut moved = true;
     loop {
-        if crate::util::sleep_until(&stop, wait) {
+        if stop.wait(wait) {
             return;
         }
         wait = SAMPLE_EVERY;

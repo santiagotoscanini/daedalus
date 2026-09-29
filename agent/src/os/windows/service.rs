@@ -7,9 +7,8 @@
 //! the service on any failure, including a non-zero exit — which is how an
 //! update is applied: the updater swaps the binary and exits 3.
 
+use crate::util::Shutdown;
 use std::ffi::OsString;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -43,12 +42,12 @@ fn service_main(_args: Vec<OsString>) {
 }
 
 fn serve_under_scm() -> Result<()> {
-    let stop = Arc::new(AtomicBool::new(false));
+    let stop = Shutdown::new();
     let handler = {
-        let stop = Arc::clone(&stop);
+        let stop = stop.clone();
         move |control: ServiceControl| match control {
             ServiceControl::Stop | ServiceControl::Shutdown | ServiceControl::Preshutdown => {
-                stop.store(true, Ordering::Relaxed);
+                stop.stop();
                 ServiceControlHandlerResult::NoError
             }
             ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,

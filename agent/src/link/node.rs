@@ -62,9 +62,9 @@
 //! REVOKED: the machine says so and leaves; it tries again at the slowest
 //! step, in case the box changes its mind.
 
+use crate::util::Shutdown;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -264,7 +264,7 @@ pub fn run_loop(
     id: Identity,
     facts: crate::facts::Facts,
     shared: Arc<Shared>,
-    stop: Arc<AtomicBool>,
+    stop: Shutdown,
 ) {
     let store = store_path();
     let config_path = crate::paths::config_path();
@@ -283,7 +283,7 @@ pub fn run_loop(
     let mut backoff = BACKOFF_MIN;
     shared.set_link(|l| l.fingerprint = id.fingerprint());
     loop {
-        if stop.load(Ordering::Relaxed) {
+        if stop.is_stopped() {
             return;
         }
         if let Err(e) = store_trusted(&store) {
@@ -293,7 +293,7 @@ pub fn run_loop(
                 l.connected = false;
                 l.error = Some(e);
             });
-            if crate::util::sleep_until(&stop, IDLE_RETRY) {
+            if stop.wait(IDLE_RETRY) {
                 return;
             }
             continue;
@@ -324,7 +324,7 @@ pub fn run_loop(
                     l.connected = false;
                     l.error = None;
                 });
-                if crate::util::sleep_until(&stop, IDLE_RETRY) {
+                if stop.wait(IDLE_RETRY) {
                     return;
                 }
                 continue;
@@ -336,7 +336,7 @@ pub fn run_loop(
                     l.connected = false;
                     l.error = Some(e);
                 });
-                if crate::util::sleep_until(&stop, IDLE_RETRY) {
+                if stop.wait(IDLE_RETRY) {
                     return;
                 }
                 continue;
@@ -457,7 +457,7 @@ pub fn run_loop(
                 BACKOFF_MAX
             }
         };
-        if crate::util::sleep_until(&stop, wait) {
+        if stop.wait(wait) {
             return;
         }
     }
@@ -495,7 +495,7 @@ pub fn connect_once(
     client: &tls::Client,
     hello: Hello,
     shared: &Arc<Shared>,
-    stop: &AtomicBool,
+    stop: &Shutdown,
     trust: Trust<'_>,
     cadence: &Cadence,
 ) -> Ended {
@@ -924,7 +924,7 @@ fn converse(
     tls: &mut Tls,
     welcome: Welcome,
     shared: &Arc<Shared>,
-    stop: &AtomicBool,
+    stop: &Shutdown,
     cadence: &Cadence,
     claude_update: bool,
     // The key the handshake proved, and how to re-pin to its successor.
@@ -938,7 +938,7 @@ fn converse(
     let mut heard = Instant::now();
     let mut said = Instant::now();
     loop {
-        if stop.load(Ordering::Relaxed) {
+        if stop.is_stopped() {
             tls.close();
             return Ended::Stopped;
         }

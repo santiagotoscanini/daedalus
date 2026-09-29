@@ -58,6 +58,7 @@ use crate::door::{Conn, Peer, Policy};
 use crate::jsonl::LineReader;
 use crate::rpc::{code, error_line, line_of, Answer, ApiError, Request, Response};
 use crate::shared::Shared;
+use crate::util::Rebinding;
 
 /// The longest line either way.
 pub const MAX_LINE: usize = crate::door::MAX_LINE;
@@ -221,33 +222,16 @@ pub const BIND_RETRY: Duration = Duration::from_secs(15);
 /// directory that is not ours) does not stop the service — the link, the
 /// telemetry and the awake hold go on — and is tried again every
 /// `BIND_RETRY`, the reason logged each time it changes.
-pub struct Door {
-    socket: Arc<std::sync::Mutex<Option<crate::os::LocalSocket>>>,
-    since: Arc<std::sync::Mutex<Option<std::time::Instant>>>,
-    stop: Arc<std::sync::atomic::AtomicBool>,
-}
+pub struct Door(Rebinding<crate::os::LocalSocket>);
 
 impl Door {
     pub fn start(shared: Arc<Shared>) -> Self {
-        let door = Self {
-            socket: Arc::new(std::sync::Mutex::new(None)),
-            since: Arc::new(std::sync::Mutex::new(None)),
-            stop: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        };
-        let (socket, since, stop) = (
-            Arc::clone(&door.socket),
-            Arc::clone(&door.since),
-            Arc::clone(&door.stop),
-        );
         let mut last: Option<String> = None;
-        let mut open = move || -> bool {
-            match serve(Arc::clone(&shared)) {
-                Ok(s) => {
-                    *socket.lock().unwrap_or_else(|p| p.into_inner()) = Some(s);
-                    *since.lock().unwrap_or_else(|p| p.into_inner()) =
-                        Some(std::time::Instant::now());
-                    true
-                }
+        Self(Rebinding::start(
+            "local-bind",
+            BIND_RETRY,
+            move || match serve(Arc::clone(&shared)) {
+                Ok(s) => Some(s),
                 Err(e) => {
                     let why = format!("{e:#}");
                     if last.as_deref() != Some(why.as_str()) {
@@ -257,37 +241,15 @@ impl Door {
                         );
                         last = Some(why);
                     }
-                    false
+                    None
                 }
-            }
-        };
-        if !open() {
-            let _ = std::thread::Builder::new()
-                .name("local-bind".into())
-                .spawn(move || {
-                    while !crate::util::sleep_until(&stop, BIND_RETRY) {
-                        if open() {
-                            return;
-                        }
-                    }
-                });
-        }
-        door
+            },
+        ))
     }
 
     /// How long the socket has been served; None while it is not.
     pub fn up_for(&self) -> Option<Duration> {
-        self.since
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .map(|t| t.elapsed())
-    }
-}
-
-impl Drop for Door {
-    fn drop(&mut self) {
-        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
-        drop(self.socket.lock().unwrap_or_else(|p| p.into_inner()).take());
+        self.0.up_for()
     }
 }
 

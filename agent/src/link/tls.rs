@@ -49,6 +49,7 @@ use super::{cert, crypto, MAX_LINE, TICK};
 use crate::deadline::Deadline;
 use crate::identity::{digest, Identity};
 use crate::jsonl::LineBuf;
+use crate::util::LockExt;
 
 /// The name the machine's client asks for, under which it names the key it
 /// pins (`server_name_for`); nothing checks it as a name.
@@ -88,12 +89,12 @@ struct PinnedController {
 
 impl PinnedController {
     fn arm(&self, pin: Option<[u8; 32]>) {
-        *self.pin.lock().unwrap_or_else(|p| p.into_inner()) = pin;
-        *self.presented.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        *self.pin.lock_ok() = pin;
+        *self.presented.lock_ok() = None;
     }
 
     fn presented(&self) -> Option<[u8; 32]> {
-        *self.presented.lock().unwrap_or_else(|p| p.into_inner())
+        *self.presented.lock_ok()
     }
 }
 
@@ -144,7 +145,7 @@ impl Client {
         pin: Option<[u8; 32]>,
         timeout: Duration,
     ) -> Result<Tls, ConnectError> {
-        let _one = self.attempt.lock().unwrap_or_else(|p| p.into_inner());
+        let _one = self.attempt.lock_ok();
         self.verifier.arm(pin);
         match Tls::client(
             sock,
@@ -177,8 +178,8 @@ impl ServerCertVerifier for PinnedController {
     ) -> Result<ServerCertVerified, Error> {
         let key = cert::public_key_of(end_entity)
             .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
-        *self.presented.lock().unwrap_or_else(|p| p.into_inner()) = Some(key);
-        let pin = *self.pin.lock().unwrap_or_else(|p| p.into_inner());
+        *self.presented.lock_ok() = Some(key);
+        let pin = *self.pin.lock_ok();
         match pin {
             Some(pin) if pin != digest(&key) => Err(Error::InvalidCertificate(
                 CertificateError::ApplicationVerificationFailure,

@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::util::LockExt;
 use anyhow::{Context, Result};
 
 /// `gethostname`, without a DHCP or `.local` suffix; None when it fails or
@@ -131,6 +132,24 @@ pub fn stop_process_tree(child: &mut Child) {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+}
+
+/// A command `exec` runs leads a process group of its own, so `kill_tree`
+/// ends what it started too (audit D19).
+pub fn isolate(cmd: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    cmd.process_group(0);
+}
+
+/// SIGKILL to the group the child leads (`isolate`), and to the child: a
+/// grandchild holding the output pipes open goes with it.
+pub fn kill_tree(child: &mut Child) {
+    let pid = child.id() as libc::pid_t;
+    // SAFETY: a signal to the group the child leads.
+    unsafe {
+        let _ = libc::kill(-pid, libc::SIGKILL);
+    }
+    let _ = child.kill();
 }
 
 /// SIGINT or SIGTERM runs `f`, once. A C handler cannot carry a closure; a
@@ -534,7 +553,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::d
         writer: Box::new(writer),
         on_hello: Box::new(|| {}),
         close: Arc::new(move || {
-            drop(dog.lock().unwrap_or_else(|p| p.into_inner()).take());
+            drop(dog.lock_ok().take());
             let _ = ctl.shutdown(std::net::Shutdown::Both);
         }),
     })

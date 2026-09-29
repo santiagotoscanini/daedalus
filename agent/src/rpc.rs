@@ -15,6 +15,7 @@
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 
+use crate::util::LockExt;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use serde_json::Value;
@@ -255,7 +256,7 @@ impl Events {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Vec<SyncSender<Arc<str>>>> {
-        self.subscribers.lock().unwrap_or_else(|p| p.into_inner())
+        self.subscribers.lock_ok()
     }
 }
 

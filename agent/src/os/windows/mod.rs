@@ -188,6 +188,16 @@ pub fn hide_console(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
+/// Nothing to add on Windows: `hide_console` sets the creation flags.
+pub fn isolate(cmd: &mut Command) {
+    let _ = cmd;
+}
+
+/// The child alone; what it started is left to its own end of the pipes.
+pub fn kill_tree(child: &mut std::process::Child) {
+    let _ = child.kill();
+}
+
 pub fn pid_alive(pid: u32) -> bool {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{

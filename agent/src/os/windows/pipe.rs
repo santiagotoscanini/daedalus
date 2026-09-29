@@ -59,6 +59,7 @@ use windows::Win32::System::IO::CancelIoEx;
 
 use crate::door::Conn;
 use crate::door::{Allowed, Peer, Policy};
+use crate::util::LockExt;
 
 /// SYSTEM and the pipe's owner (the service) everything; the interactive
 /// users FILE_GENERIC_READ | FILE_WRITE_DATA (0x12008b) — without
@@ -374,7 +375,7 @@ struct Acceptor {
 impl crate::door::Listener for Acceptor {
     fn accept(&self) -> Option<io::Result<crate::door::Accepted>> {
         loop {
-            let waiting = self.next.lock().unwrap_or_else(|p| p.into_inner()).take();
+            let waiting = self.next.lock_ok().take();
             let this = match waiting {
                 Some(h) => HANDLE(h as *mut c_void),
                 None => match instance(&self.name, &self.sd, false) {
@@ -399,10 +400,9 @@ impl crate::door::Listener for Acceptor {
                 }
                 return None;
             }
-            *self.next.lock().unwrap_or_else(|p| p.into_inner()) =
-                instance(&self.name, &self.sd, false)
-                    .ok()
-                    .map(|h| h.0 as usize);
+            *self.next.lock_ok() = instance(&self.name, &self.sd, false)
+                .ok()
+                .map(|h| h.0 as usize);
             if !connected {
                 // SAFETY: ours.
                 unsafe {
@@ -536,7 +536,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> io::Result<Conn> {
     let (mut conn, abort) = conn_of(h, false);
     let dog = Mutex::new(Some(Watchdog::arm(deadline, move || abort())));
     conn.close = Arc::new(move || {
-        drop(dog.lock().unwrap_or_else(|p| p.into_inner()).take());
+        drop(dog.lock_ok().take());
     });
     Ok(conn)
 }

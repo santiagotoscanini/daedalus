@@ -6,6 +6,7 @@
 //! the peer's identity (os/). Two doors use it: the controller's API
 //! (api/) and the agent's own local socket (local.rs).
 
+use crate::util::LockExt;
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
@@ -305,7 +306,7 @@ fn one(a: Accepted, busy: bool, policy: &Policy, on_conn: &(dyn Fn(Conn) + Send 
     if policy.whole.is_none() {
         let dog = std::sync::Mutex::new(Some(dog));
         conn.on_hello = Box::new(move || {
-            drop(dog.lock().unwrap_or_else(|p| p.into_inner()).take());
+            drop(dog.lock_ok().take());
         });
         on_conn(conn);
     } else {

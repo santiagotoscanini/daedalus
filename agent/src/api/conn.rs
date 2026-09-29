@@ -31,6 +31,7 @@ use super::{Api, API_VERSION, MAX_LINE};
 use crate::door::Conn;
 use crate::jsonl::LineReader;
 use crate::rpc::{code, salvage_id, ApiError, Request, Response};
+use crate::util::LockExt;
 
 /// How much of a client's self-description reaches the log.
 const CLIENT_LOGGED: usize = 64;
@@ -55,7 +56,7 @@ impl Out {
         if self.broken.load(Ordering::Relaxed) {
             return;
         }
-        let mut w = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        let mut w = self.writer.lock_ok();
         let ok = w
             .write_all(line.as_bytes())
             .and_then(|()| w.write_all(b"\n"))

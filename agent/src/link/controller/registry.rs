@@ -31,6 +31,7 @@ use crate::providers::ProviderReport;
 use crate::rpc::{code, ApiError, Events};
 use crate::state::now_rfc3339;
 use crate::telemetry::Telemetry;
+use crate::util::LockExt;
 
 /// How long `command` waits for the machine's acknowledgement.
 pub const ACK_TIMEOUT: Duration = Duration::from_secs(5);
@@ -305,11 +306,7 @@ pub(super) struct PreauthSlot<'a> {
 impl Drop for PreauthSlot<'_> {
     fn drop(&mut self) {
         self.registry.preauth_open.fetch_sub(1, Ordering::AcqRel);
-        let mut per = self
-            .registry
-            .preauth
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
+        let mut per = self.registry.preauth.lock_ok();
         if let Some(n) = per.get_mut(&self.bucket) {
             *n -= 1;
             if *n == 0 {
@@ -355,7 +352,7 @@ impl Registry {
     }
 
     pub(super) fn lock(&self) -> std::sync::MutexGuard<'_, Reg> {
-        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+        self.inner.lock_ok()
     }
 
     fn changed(&self, id: &str, state: NodeState, connected: bool) {
@@ -372,7 +369,7 @@ impl Registry {
     /// A pre-auth slot for a connection from `bucket`, or None when the
     /// pool, or this address's share of it, is full.
     pub(super) fn preauth_slot(&self, bucket: IpAddr) -> Option<PreauthSlot<'_>> {
-        let mut per = self.preauth.lock().unwrap_or_else(|p| p.into_inner());
+        let mut per = self.preauth.lock_ok();
         let mine = per.get(&bucket).copied().unwrap_or(0);
         if mine >= self.limits.preauth_per_ip
             || self.preauth_open.load(Ordering::Acquire) >= self.limits.max_preauth

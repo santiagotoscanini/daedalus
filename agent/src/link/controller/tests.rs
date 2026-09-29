@@ -2,9 +2,9 @@
 //! machines connecting to it over real TLS, each with its own key, its own
 //! `Shared` and a scratch store.
 
+use crate::util::Shutdown;
 use std::net::{IpAddr, TcpStream};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -88,14 +88,14 @@ fn cadence() -> Cadence {
 
 struct Node {
     shared: Arc<Shared>,
-    stop: Arc<AtomicBool>,
+    stop: Shutdown,
     thread: std::thread::JoinHandle<Ended>,
     store: PathBuf,
 }
 
 impl Node {
     fn stop(self) -> Ended {
-        self.stop.store(true, Ordering::Relaxed);
+        self.stop.stop();
         let e = self.thread.join().unwrap();
         let _ = std::fs::remove_dir_all(self.store.parent().unwrap());
         e
@@ -116,10 +116,10 @@ fn pin_of(i: &Identity) -> [u8; 32] {
 }
 
 fn spawn_node(t: Target, nid: Identity, shared: Arc<Shared>, name: &str) -> Node {
-    let stop = Arc::new(AtomicBool::new(false));
+    let stop = Shutdown::new();
     let store = scratch(name).join(crate::link::node::STORE_FILE);
     let thread = {
-        let (stop, shared, store) = (Arc::clone(&stop), Arc::clone(&shared), store.clone());
+        let (stop, shared, store) = (stop.clone(), Arc::clone(&shared), store.clone());
         std::thread::spawn(move || {
             let hello = hello_of(&Config::default(), &nid, &facts());
             let client = ltls::Client::new(&nid).unwrap();
@@ -504,7 +504,7 @@ fn a_controller_with_another_key_is_refused_pinned_or_first_used() {
     });
     assert!(node.shared.link().unwrap().unconfirmed);
     let store = node.store.clone();
-    node.stop.store(true, Ordering::Relaxed);
+    node.stop.stop();
     node.thread.join().unwrap();
 
     let impostor = {
@@ -521,7 +521,7 @@ fn a_controller_with_another_key_is_refused_pinned_or_first_used() {
     .unwrap()
     .unwrap();
     assert_eq!(resolved.pinned_via, Some("tofu"));
-    let stop = AtomicBool::new(false);
+    let stop = Shutdown::new();
     let hello = hello_of(&Config::default(), &nid, &facts());
     let ended = connect_once(
         &resolved,
@@ -904,9 +904,9 @@ fn a_machine_reconnects_after_the_controller_comes_back() {
         ..Config::default()
     };
     let shared = node_shared();
-    let stop = Arc::new(AtomicBool::new(false));
+    let stop = Shutdown::new();
     let thread = {
-        let (shared, stop, nid) = (Arc::clone(&shared), Arc::clone(&stop), nid.clone());
+        let (shared, stop, nid) = (Arc::clone(&shared), stop.clone(), nid.clone());
         std::thread::spawn(move || crate::link::node::run_loop(cfg, nid, facts(), shared, stop))
     };
     wait_for("connected", 5, || {
@@ -937,7 +937,7 @@ fn a_machine_reconnects_after_the_controller_comes_back() {
         shared.link().is_some_and(|l| l.connected)
     });
     drop(registry);
-    stop.store(true, Ordering::Relaxed);
+    stop.stop();
     thread.join().unwrap();
 }
 
@@ -1419,11 +1419,11 @@ fn attempt_in(
     t: Target,
     nid: &Identity,
     dir: &std::path::Path,
-) -> (Arc<Shared>, Arc<AtomicBool>, std::thread::JoinHandle<Ended>) {
-    let (shared, stop) = (node_shared(), Arc::new(AtomicBool::new(false)));
+) -> (Arc<Shared>, Shutdown, std::thread::JoinHandle<Ended>) {
+    let (shared, stop) = (node_shared(), Shutdown::new());
     let (s, st, nid, dir) = (
         Arc::clone(&shared),
-        Arc::clone(&stop),
+        stop.clone(),
         nid.clone(),
         dir.to_path_buf(),
     );
@@ -1588,7 +1588,7 @@ fn a_signed_rotation_re_pins_pinned_and_first_use_machines() {
         matches!(stale.2.join().unwrap(), Ended::KeyChanged { presented_unproven, .. } if presented_unproven == *new.public_key().as_bytes())
     );
     for stop in [pstop, tstop] {
-        stop.store(true, Ordering::Relaxed);
+        stop.stop();
     }
     assert_eq!(pinned.join().unwrap(), Ended::Stopped);
     assert_eq!(tofu.join().unwrap(), Ended::Stopped);

@@ -28,10 +28,9 @@
 //! `stop`, `restart` and at shutdown (the relay is unix.rs's
 //! `on_interrupt`).
 
+use crate::util::Shutdown;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
@@ -186,9 +185,9 @@ pub fn systemd_version(text: &str) -> Option<u32> {
 
 /// `daedalus-agent run` under systemd: the agent until SIGTERM or SIGINT.
 pub fn run_service() -> Result<()> {
-    let stop = Arc::new(AtomicBool::new(false));
-    let relay = Arc::clone(&stop);
-    super::on_interrupt(move || relay.store(true, Ordering::Relaxed));
+    let stop = Shutdown::new();
+    let relay = stop.clone();
+    super::on_interrupt(move || relay.stop());
     crate::agent_main(stop, false)
 }
 

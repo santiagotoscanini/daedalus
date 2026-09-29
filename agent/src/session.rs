@@ -33,9 +33,9 @@
 //! reports straight into the service's shared state instead of through
 //! the socket (`Link::InProcess`).
 
+use crate::util::Shutdown;
 use std::io::IsTerminal;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -633,14 +633,14 @@ pub fn run() -> anyhow::Result<()> {
         job = places.job,
         "session starting"
     );
-    let stop = Arc::new(AtomicBool::new(false));
+    let stop = Shutdown::new();
     {
-        let stop = Arc::clone(&stop);
-        crate::os::on_interrupt(move || stop.store(true, Ordering::Relaxed));
+        let stop = stop.clone();
+        crate::os::on_interrupt(move || stop.stop());
     }
     let mut session = Session::new(places)?;
     let mut last: Option<(String, bool)> = None;
-    while !stop.load(Ordering::Relaxed) {
+    while !stop.is_stopped() {
         match session.tick() {
             Tick::Idle => {}
             Tick::VersionChanged => {
@@ -660,7 +660,7 @@ pub fn run() -> anyhow::Result<()> {
                 }
             }
         }
-        std::thread::sleep(Duration::from_millis(250));
+        stop.wait(Duration::from_millis(250));
     }
     tracing::info!("session stopping");
     drop(session);
@@ -677,7 +677,7 @@ pub fn run() -> anyhow::Result<()> {
 pub fn run_in_service(
     cfg: &config::Config,
     shared: Arc<Shared>,
-    stop: Arc<AtomicBool>,
+    stop: Shutdown,
 ) -> anyhow::Result<()> {
     let places = Places {
         claude_log: paths::log_dir().join("claude-rc.log"),
@@ -687,7 +687,7 @@ pub fn run_in_service(
     tracing::info!(job = places.job, "session starting inside the service");
     let mut session = Session::in_process(shared, places)?;
     let mut last: Option<String> = None;
-    while !stop.load(Ordering::Relaxed) {
+    while !stop.is_stopped() {
         if let Tick::Polled(poll) = session.tick() {
             if last.as_deref() != Some(poll.report.state.as_str()) {
                 tracing::info!(
@@ -698,7 +698,7 @@ pub fn run_in_service(
                 last = Some(poll.report.state.clone());
             }
         }
-        std::thread::sleep(Duration::from_millis(250));
+        stop.wait(Duration::from_millis(250));
     }
     tracing::info!("session stopping");
     drop(session);

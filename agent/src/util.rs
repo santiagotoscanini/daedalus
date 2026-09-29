@@ -1,25 +1,168 @@
 //! Small helpers the agent's threads share.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-/// Sleep in short steps so a stop request is honoured within half a second.
-/// Returns true when stopped. For threads with nothing else to wake for
-/// (the hello and the telemetry sampler; the updater has its own, which a
-/// "check now" also cuts short).
-pub fn sleep_until(stop: &AtomicBool, total: Duration) -> bool {
-    let step = Duration::from_millis(500);
-    let mut left = total;
-    while !left.is_zero() {
-        if stop.load(Ordering::Relaxed) {
-            return true;
-        }
-        let d = left.min(step);
-        std::thread::sleep(d);
-        left -= d;
+/// The service's stop, and the updater's "check now": one token every
+/// worker holds a clone of. Waiting on it is a condition variable, not a
+/// poll — a stop reaches every waiter at once.
+#[derive(Clone, Default)]
+pub struct Shutdown(Arc<(Mutex<Flags>, Condvar)>);
+
+#[derive(Default)]
+struct Flags {
+    stopped: bool,
+    /// Bumped by `nudge`; a waiter that asked for nudges wakes when it moves.
+    nudges: u64,
+}
+
+impl Shutdown {
+    pub fn new() -> Self {
+        Self::default()
     }
-    stop.load(Ordering::Relaxed)
+
+    /// Stop: every wait returns true from now on.
+    pub fn stop(&self) {
+        let (lock, cv) = &*self.0;
+        lock.lock_ok().stopped = true;
+        cv.notify_all();
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self.0 .0.lock_ok().stopped
+    }
+
+    /// Wake the waiters that asked for nudges (`wait_nudged`) without
+    /// stopping anyone.
+    pub fn nudge(&self) {
+        let (lock, cv) = &*self.0;
+        lock.lock_ok().nudges += 1;
+        cv.notify_all();
+    }
+
+    /// How many nudges so far: what `wait_nudged` compares against, taken
+    /// before the caller looks at what a nudge asks for, so none is missed.
+    pub fn nudges(&self) -> u64 {
+        self.0 .0.lock_ok().nudges
+    }
+
+    /// Wait `total` or until stopped; true when stopped.
+    pub fn wait(&self, total: Duration) -> bool {
+        self.wait_for(total, None)
+    }
+
+    /// The same, also cut short by a nudge after `since` (`nudges`).
+    pub fn wait_nudged(&self, since: u64, total: Duration) -> bool {
+        self.wait_for(total, Some(since))
+    }
+
+    fn wait_for(&self, total: Duration, since: Option<u64>) -> bool {
+        let until = std::time::Instant::now() + total;
+        let (lock, cv) = &*self.0;
+        let mut f = lock.lock_ok();
+        loop {
+            if f.stopped {
+                return true;
+            }
+            if since.is_some_and(|s| f.nudges != s) {
+                return false;
+            }
+            let left = until.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return false;
+            }
+            f = cv
+                .wait_timeout(f, left)
+                .unwrap_or_else(|p| p.into_inner())
+                .0;
+        }
+    }
+}
+
+/// Start a named worker thread with a clone of the shared state and of the
+/// stop, the way every worker of the service starts.
+pub fn spawn_worker<S: Send + Sync + ?Sized + 'static>(
+    name: &str,
+    shared: &Arc<S>,
+    stop: &Shutdown,
+    work: impl FnOnce(Arc<S>, Shutdown) + Send + 'static,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    let (shared, stop) = (Arc::clone(shared), stop.clone());
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || work(shared, stop))
+}
+
+/// Something bound now or later — a socket, a port — that must not stop
+/// the service when it cannot be had: `bind` is tried at once and then
+/// every `every` until it gives one (it logs its own failures), which is
+/// held until this is dropped.
+pub struct Rebinding<T> {
+    held: Arc<Mutex<Option<T>>>,
+    since: Arc<Mutex<Option<std::time::Instant>>>,
+    stop: Shutdown,
+}
+
+impl<T: Send + 'static> Rebinding<T> {
+    pub fn start(
+        name: &str,
+        every: Duration,
+        mut bind: impl FnMut() -> Option<T> + Send + 'static,
+    ) -> Self {
+        let me = Self {
+            held: Arc::new(Mutex::new(None)),
+            since: Arc::new(Mutex::new(None)),
+            stop: Shutdown::new(),
+        };
+        let (held, since, stop) = (Arc::clone(&me.held), Arc::clone(&me.since), me.stop.clone());
+        let mut take = move || match bind() {
+            Some(t) => {
+                *held.lock_ok() = Some(t);
+                *since.lock_ok() = Some(std::time::Instant::now());
+                true
+            }
+            None => false,
+        };
+        if !take() {
+            let _ = std::thread::Builder::new()
+                .name(name.into())
+                .spawn(move || {
+                    while !stop.wait(every) {
+                        if take() {
+                            return;
+                        }
+                    }
+                });
+        }
+        me
+    }
+
+    /// How long it has been held; None while it is not.
+    pub fn up_for(&self) -> Option<Duration> {
+        self.since.lock_ok().map(|t| t.elapsed())
+    }
+}
+
+impl<T> Drop for Rebinding<T> {
+    fn drop(&mut self) {
+        self.stop.stop();
+        drop(self.held.lock_ok().take());
+    }
+}
+
+/// A mutex's guard whether or not a thread panicked holding it: every
+/// lock in the agent guards plain data that stays consistent between
+/// statements, so a poisoned one is taken as it is rather than spreading
+/// the panic.
+pub trait LockExt<T> {
+    fn lock_ok(&self) -> std::sync::MutexGuard<'_, T>;
+}
+
+impl<T> LockExt<T> for std::sync::Mutex<T> {
+    fn lock_ok(&self) -> std::sync::MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(|p| p.into_inner())
+    }
 }
 
 /// Who may read a file `write_atomic` writes.
@@ -96,12 +239,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_raised_stop_ends_the_wait_at_once() {
-        let stop = AtomicBool::new(true);
-        let t = std::time::Instant::now();
-        assert!(sleep_until(&stop, Duration::from_secs(30)));
-        assert!(t.elapsed() < Duration::from_secs(1));
-        assert!(!sleep_until(&AtomicBool::new(false), Duration::ZERO));
+    fn a_stop_reaches_a_waiter_at_once_and_a_nudge_only_those_who_asked() {
+        let stop = Shutdown::new();
+        assert!(!stop.wait(Duration::ZERO));
+        let waiter = {
+            let stop = stop.clone();
+            std::thread::spawn(move || {
+                let t = std::time::Instant::now();
+                (stop.wait(Duration::from_secs(30)), t.elapsed())
+            })
+        };
+        let nudged = {
+            let stop = stop.clone();
+            std::thread::spawn(move || stop.wait_nudged(stop.nudges(), Duration::from_secs(30)))
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        stop.nudge();
+        assert!(!nudged.join().unwrap(), "a nudge is not a stop");
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!waiter.is_finished(), "a plain wait ignores nudges");
+        stop.stop();
+        let (stopped, took) = waiter.join().unwrap();
+        assert!(stopped && took < Duration::from_secs(1), "{took:?}");
+        assert!(stop.is_stopped() && stop.wait(Duration::from_secs(30)));
     }
 
     #[test]

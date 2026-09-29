@@ -5,6 +5,7 @@
 //! tearing it down when it passes — whatever the thread holding it is
 //! blocked in (a read, a write, a flush).
 
+use crate::util::LockExt;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -66,7 +67,7 @@ impl Watchdog {
             .name("deadline".into())
             .spawn(move || {
                 let (lock, cv) = &*theirs;
-                let mut disarmed = lock.lock().unwrap_or_else(|p| p.into_inner());
+                let mut disarmed = lock.lock_ok();
                 let mut wait = deadline.remaining();
                 loop {
                     if *disarmed {
@@ -100,7 +101,7 @@ impl Watchdog {
 impl Drop for Watchdog {
     fn drop(&mut self) {
         let (lock, cv) = &*self.state;
-        *lock.lock().unwrap_or_else(|p| p.into_inner()) = true;
+        *lock.lock_ok() = true;
         cv.notify_all();
     }
 }
