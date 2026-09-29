@@ -1,14 +1,18 @@
 import { Link, useRouter, useSearch } from '@tanstack/react-router'
-import { useState } from 'react'
 import { LogBoard, type LogNeighbour } from '../../../components/logs'
 import { HeadStrip, OS_MARK, WipBoard } from '../../../components/machine-system/shared'
 import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
+import { useVerbRequest } from '../../../components/verb-request'
 import { Board, BoardGrid, Chip, Measures, Pulse } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { compact, DASH, num } from '../../../lib/format'
 import { MODE_WORD } from '../../../lib/providers/policy'
-import { loadProviderModelFn, unloadProviderModelFn } from '../../../server/providers'
+import {
+  fetchProviderActionFn,
+  loadProviderModelFn,
+  unloadProviderModelFn,
+} from '../../../server/providers'
 import type { CatalogEntry, Chain, ProviderMachine, ProvidersData } from '../data/providers'
 
 // The Providers tab: the chain once, then the picked machine in full.
@@ -23,6 +27,21 @@ import type { CatalogEntry, Chain, ProviderMachine, ProvidersData } from '../dat
 // to a single question rather than a flat list. That is also what makes the
 // two buttons make sense — server/providers.ts says why a switch has to put
 // the incumbent down first.
+
+/** How long a verb may take on the machine: a cold 12B model is read off a disk and pushed across PCIe. */
+const OUTCOME_WITHIN_MS = 150_000
+
+/** A residency verb on `m`, followed to the outcome its agent reports. */
+function useResidency(m: ProviderMachine) {
+  const router = useRouter()
+  return useVerbRequest({
+    get: (request) => fetchProviderActionFn({ data: { machine: m.machine, request } }),
+    waitMs: OUTCOME_WITHIN_MS,
+    onSettle: () => {
+      void router.invalidate()
+    },
+  })
+}
 
 const BOX_MARK = { src: '/icon-nixos.webp', invert: false }
 
@@ -357,9 +376,11 @@ function ModelAlt({
   m: ProviderMachine
   replacing: CatalogEntry | null
 }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { busy, outcome, start } = useResidency(m)
+  const error =
+    outcome !== null && outcome.state !== 'running' && outcome.state !== 'done'
+      ? outcome.detail
+      : null
   const verb = replacing === null ? 'Load' : 'Switch'
 
   return (
@@ -396,27 +417,20 @@ function ModelAlt({
               : `Put ${replacing.id} down and load ${model.id}`
           }
           onClick={() => {
-            setBusy(true)
-            setError(null)
-            void loadProviderModelFn({
-              data: {
-                machine: m.machine,
-                kind: m.kind,
-                model: model.id,
-                replacing: replacing?.id ?? null,
-                // Carry the incumbent's pinning forward rather than
-                // silently changing whether the slot survives the next
-                // squeeze.
-                pinned: replacing?.loaded?.pinned ?? false,
-              },
-            })
-              .then((r) => {
-                if (!r.ok) setError(r.reason)
-                return router.invalidate()
-              })
-              .finally(() => {
-                setBusy(false)
-              })
+            start(() =>
+              loadProviderModelFn({
+                data: {
+                  machine: m.machine,
+                  kind: m.kind,
+                  model: model.id,
+                  replacing: replacing?.id ?? null,
+                  // Carry the incumbent's pinning forward rather than
+                  // silently changing whether the slot survives the next
+                  // squeeze.
+                  pinned: replacing?.loaded?.pinned ?? false,
+                },
+              }),
+            )
           }}
         >
           {busy ? `${verb}ing…` : verb}
@@ -433,8 +447,7 @@ function ModelAlt({
  * cannot be replaced or re-fetched, so a stuck download is often just this.
  */
 function EvictButton({ model, m }: { model: CatalogEntry; m: ProviderMachine }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const { busy, start } = useResidency(m)
   return (
     // Quieter still than Switch: a lit Evict button beside every resident
     // model competed with the models themselves, and evicting is a thing
@@ -447,12 +460,9 @@ function EvictButton({ model, m }: { model: CatalogEntry; m: ProviderMachine }) 
       disabled={busy}
       title={`Unload ${model.id}, leaving this slot empty`}
       onClick={() => {
-        setBusy(true)
-        void unloadProviderModelFn({ data: { machine: m.machine, kind: m.kind, model: model.id } })
-          .then(() => router.invalidate())
-          .finally(() => {
-            setBusy(false)
-          })
+        start(() =>
+          unloadProviderModelFn({ data: { machine: m.machine, kind: m.kind, model: model.id } }),
+        )
       }}
     >
       {busy ? 'Evicting…' : 'Evict'}

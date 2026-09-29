@@ -1,11 +1,12 @@
 import type { Ctx } from '../core/ctx'
 import type { ModelAction } from '../host/controller/generated'
 import { asValidator, bool, is, obj, withMessage } from '../lib/contract/decode'
-import { nonBlankField } from '../lib/contract/fields'
+import { nodeIdField, nonBlankField } from '../lib/contract/fields'
+import type { VerbOutcome } from '../lib/follow-request'
 import { isProviderKind, managesResidency, type ProviderKind } from '../lib/providers/kinds'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'
-import { adminFn } from './fn'
+import { adminFn, readFn } from './fn'
 
 // The two things worth a button on a provider: put a model into the
 // accelerator, and take it back out.
@@ -24,8 +25,9 @@ import { adminFn } from './fn'
 // on its own loopback (agent/src/providers.rs `residency`) and reports the
 // outcome in its next providers document under the request id this call
 // gets back — reading again at once, so the document that carries the
-// outcome also shows the slot as it now is. This call waits for that
-// outcome, as long as a load may take.
+// outcome also shows the slot as it now is. The page follows that id with
+// `fetchProviderActionFn` (lib/follow-request.ts): the wait is the browser's,
+// and no request is held open for as long as a load may take.
 //
 // ── deliberately not here ─────────────────────────────────────────────────
 //
@@ -43,6 +45,7 @@ import { adminFn } from './fn'
 // request at a host, and the verb goes through the identity gate like every
 // other admin action.
 
+/** The request id the outcome will be reported under, or why the verb was not sent. */
 export type ModelActionResult = Result<string>
 
 type Target = { machine: string; kind: ProviderKind; model: string }
@@ -88,44 +91,26 @@ async function checked(t: Target, ctx: Ctx): Promise<Result<null>> {
     : { ok: true, value: null }
 }
 
-/** How long a verb may take on the machine: a cold 12B model is read off a disk and pushed across PCIe. */
-const OUTCOME_WITHIN_MS = 150_000
-const POLL_MS = 500
-
 /**
- * Hand the verb to the machine and wait for its outcome in the providers
- * document. A deliberate action with a spinner on it: waiting is fine,
- * silently giving up early is not.
+ * Hand the verb to the machine: its request id, or why it was not sent. The
+ * outcome rides the machine's next providers document under that id.
  */
-async function run(
+async function send(
   ctx: Ctx,
   t: Target,
   verb: { action: ModelAction; pinned?: boolean; replacing?: string },
 ): Promise<ModelActionResult> {
   const ok = await checked(t, ctx)
   if (!ok.ok) return ok
-  let request: string
   try {
-    ;({ request } = await ctx.controller.nodesProviderModel(t.machine, {
+    const { request } = await ctx.controller.nodesProviderModel(t.machine, {
       kind: t.kind,
       model: t.model,
       ...verb,
-    }))
+    })
+    return { ok: true, value: request }
   } catch (e) {
     return { ok: false, reason: errorText(e) }
-  }
-  const until = Date.now() + OUTCOME_WITHIN_MS
-  while (Date.now() < until) {
-    await new Promise((r) => setTimeout(r, POLL_MS))
-    const answer = await ctx.controller.nodesProviders(t.machine).catch(() => null)
-    const done = answer?.providers?.flatMap((p) => p.actions).find((a) => a.request === request)
-    if (done !== undefined) {
-      return done.ok ? { ok: true, value: done.message } : { ok: false, reason: done.message }
-    }
-  }
-  return {
-    ok: false,
-    reason: `no outcome from the machine within ${String(OUTCOME_WITHIN_MS / 1000)} s`,
   }
 }
 
@@ -140,7 +125,7 @@ export const unloadProviderModelFn = adminFn
   .validator(asValidator(target))
   .handler(
     async ({ data, context }): Promise<ModelActionResult> =>
-      run(await context.ctx(), data, { action: 'unload' }),
+      send(await context.ctx(), data, { action: 'unload' }),
   )
 
 /**
@@ -171,9 +156,30 @@ export const loadProviderModelFn = adminFn
   )
   .handler(
     async ({ data, context }): Promise<ModelActionResult> =>
-      run(await context.ctx(), data, {
+      send(await context.ctx(), data, {
         action: 'load',
         pinned: data.pinned,
         ...(data.replacing === null ? {} : { replacing: data.replacing }),
       }),
   )
+
+/**
+ * How one residency request stands, from the machine's providers document:
+ * its ending, or null while the document does not list it yet. Only an ending
+ * is ever listed — the agent reports a verb once it has run.
+ */
+export const fetchProviderActionFn = readFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ machine: nodeIdField, request: nonBlankField('expected a request id') }),
+        'expected a machine and a request id',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<VerbOutcome | null> => {
+    const ctx = await context.ctx()
+    const answer = await ctx.controller.nodesProviders(data.machine)
+    const a = answer.providers?.flatMap((p) => p.actions).find((x) => x.request === data.request)
+    return a === undefined ? null : { state: a.ok ? 'done' : 'failed', detail: a.message }
+  })

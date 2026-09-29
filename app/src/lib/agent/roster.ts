@@ -13,6 +13,7 @@ import {
   reads,
   str,
 } from '../contract/decode'
+import type { VerbOutcome } from '../follow-request'
 import type { NodeClaudeSession } from './status'
 
 // A machine's roster of Claude Code sessions, as its agent reads it
@@ -284,4 +285,9 @@ export function withStats(
       logBytes: st?.logBytes ?? null,
     }
   })
+}
+
+/** A session verb's result as lib/follow-request.ts follows it; null while the roster does not list it. */
+export function sessionOutcome(a: SessionActionResult | null): VerbOutcome | null {
+  return a === null ? null : { state: a.state, detail: a.detail }
 }

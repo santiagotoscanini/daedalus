@@ -12,10 +12,10 @@
    tab: `node` null is the box's controller, an id is that machine. */
 
 import { useRouter } from '@tanstack/react-router'
-import { useRef, useState } from 'react'
-// Pure: lib/agent/roster decodes the agent's roster; only its types are used here.
+import { useState } from 'react'
+// Pure: lib/agent/roster decodes the agent's roster; nothing here needs the machine.
 import type { SessionAction } from '../../../host/controller/generated'
-import type { ClaudeSession, SessionActionResult } from '../../../lib/agent/roster'
+import { type ClaudeSession, sessionOutcome } from '../../../lib/agent/roster'
 import {
   type ClaudeRoster,
   countByState,
@@ -24,9 +24,9 @@ import {
 } from '../../../lib/claude-roster'
 import { num } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
-import { usePolledStatus } from '../../status'
 import { EMPTY, FOOT, LIST, MONO, NOTE } from '../../tokens'
 import { useArmedKey } from '../../use-armed'
+import { useVerbRequest } from '../../verb-request'
 import { Board } from '../../viz'
 import { CycleSessionsControl } from '../controls/cycle-sessions'
 import { RC_ARM_MS } from '../shared'
@@ -35,20 +35,8 @@ import { RosterRow, type VerbStatus } from './row'
 /** As many rows as read as a list rather than as a log. The rest are counted. */
 const ROSTER_ROWS = 24
 
-const VERB_IDLE: VerbStatus = { id: null, state: 'idle', session: null, detail: '', error: '' }
-
-/** A roster action as the poller reads it: refused and failed carry their sentence as the error. */
-function verbStatus(a: SessionActionResult | null): VerbStatus {
-  if (a === null) return VERB_IDLE
-  const bad = a.state === 'refused' || a.state === 'failed'
-  return {
-    id: a.request,
-    state: a.state,
-    session: a.session,
-    detail: a.detail,
-    error: bad ? a.detail : '',
-  }
-}
+/** How long one verb may stay `running` in the roster before the board stops waiting. */
+const VERB_WAIT_MS = 60_000
 
 const VERB: Record<'resume' | 'stop-unit' | 'stop-agent' | 'remove-agent', SessionAction> = {
   resume: 'resume',
@@ -87,21 +75,28 @@ export function RosterBoard({
   // request id at a time, so two rows acting at once would lose one's outcome,
   // and arming a second row must disarm the first.
   const [armed, arm, disarm] = useArmedKey<string>(RC_ARM_MS)
-  const request = useRef<string | null>(null)
   const [acted, setActed] = useState<string | null>(null)
-  const { status, running, refusal, start } = usePolledStatus<VerbStatus>({
-    initial: VERB_IDLE,
-    fetch: async () => {
-      const id = request.current
-      if (id === null) return VERB_IDLE
-      return verbStatus(await fetchClaudeActionFn({ data: { node, request: id } }))
-    },
-    intervalMs: 1_000,
-    claimTimeoutMs: 30_000,
+  const {
+    busy: running,
+    outcome,
+    start,
+  } = useVerbRequest({
+    get: async (request) => sessionOutcome(await fetchClaudeActionFn({ data: { node, request } })),
+    waitMs: VERB_WAIT_MS,
     onSettle: () => {
       void router.invalidate()
     },
   })
+  const status: VerbStatus =
+    outcome === null
+      ? { id: null, state: 'idle', session: null, detail: '', error: '' }
+      : {
+          id: null,
+          state: outcome.state,
+          session: null,
+          detail: outcome.detail,
+          error: outcome.state === 'refused' || outcome.state === 'failed' ? outcome.detail : '',
+        }
 
   return (
     <Board
@@ -142,7 +137,7 @@ export function RosterBoard({
               armed={armed === r.key}
               busy={running}
               status={status}
-              refusal={refusal}
+              refusal={null}
               onArm={() => {
                 arm(r.key)
               }}
@@ -154,7 +149,6 @@ export function RosterBoard({
                   const sent = await claudeSessionFn({
                     data: { node, action: VERB[control.kind], session: control.session },
                   })
-                  request.current = sent.request
                   return { ok: true, value: sent.request }
                 })
               }}

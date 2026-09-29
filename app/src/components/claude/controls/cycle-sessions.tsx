@@ -4,8 +4,10 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { SessionAction } from '../../../host/controller/generated'
+import { sessionOutcome } from '../../../lib/agent/roster'
 import type { RosterEntry } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
+import { followRequest } from '../../../lib/follow-request'
 import { num, text } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { GHOST_BTN } from '../../apps/shared'
@@ -31,16 +33,11 @@ const VERB_WAIT_MS = 60_000
  */
 async function settle(action: SessionAction, session: string): Promise<void> {
   const { request } = await claudeSessionFn({ data: { node: null, action, session } })
-  const deadline = Date.now() + VERB_WAIT_MS
-  for (;;) {
-    await new Promise((r) => setTimeout(r, 1_000))
-    const a = await fetchClaudeActionFn({ data: { node: null, request } })
-    if (a !== null && a.state !== 'running') {
-      if (a.state === 'done') return
-      throw new Error(a.detail)
-    }
-    if (Date.now() > deadline) throw new Error(`the ${action} did not finish within a minute`)
-  }
+  const o = await followRequest(
+    async () => sessionOutcome(await fetchClaudeActionFn({ data: { node: null, request } })),
+    { waitMs: VERB_WAIT_MS },
+  )
+  if (o.state !== 'done') throw new Error(o.detail)
 }
 
 /**
