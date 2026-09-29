@@ -21,7 +21,8 @@ import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../provide
 // Claude summary, are the controller's word, joined in on every read.
 //
 // Every decision and policy save ends in a desired-state sync
-// (host/controller/nodes.ts), which is how it reaches the machine.
+// (host/controller/nodes.ts), which is how it reaches the machine, and a
+// gateway sync (host/gateway-sync.ts), which is how its providers do.
 
 export type NodeRow = {
   id: string
@@ -154,11 +155,7 @@ export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boo
     .set({ policy })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await publishDhcpHosts()
-  // What the machine is told travels with the desired set.
-  requestDesiredSync()
-  // An alias, a mode or an offer changed: the gateway follows.
-  requestGatewaySync()
+  await afterDecision()
   return updated.length > 0
 }
 
@@ -169,8 +166,7 @@ export async function approveNode(id: string, by: string): Promise<boolean> {
     .set({ state: 'approved', approvedAt: new Date(), approvedBy: by, revokedAt: null })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await publishDhcpHosts()
-  requestDesiredSync()
+  await afterDecision()
   return updated.length > 0
 }
 
@@ -193,8 +189,7 @@ export async function enrollNode(detail: ControllerNodeDetail, by: string): Prom
     })
     .onConflictDoNothing()
     .returning({ id: nodes.id })
-  await publishDhcpHosts()
-  requestDesiredSync()
+  await afterDecision()
   return made.length > 0
 }
 
@@ -204,8 +199,7 @@ export async function revokeNode(id: string): Promise<boolean> {
     .set({ state: 'revoked', revokedAt: new Date() })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await publishDhcpHosts()
-  requestDesiredSync()
+  await afterDecision()
   return updated.length > 0
 }
 
@@ -216,9 +210,20 @@ export async function revokeNode(id: string): Promise<boolean> {
  */
 export async function forgetNode(id: string): Promise<boolean> {
   const gone = await db.delete(nodes).where(eq(nodes.id, id)).returning({ id: nodes.id })
+  await afterDecision()
+  return gone.length > 0
+}
+
+/**
+ * What follows every decision about a machine and every policy save: its DHCP
+ * line, the desired set that tells the controller, and the gateway — a machine
+ * trusted, revoked or forgotten is one whose providers are routed or not, now
+ * rather than at the next five-minute sync.
+ */
+async function afterDecision(): Promise<void> {
   await publishDhcpHosts()
   requestDesiredSync()
-  return gone.length > 0
+  requestGatewaySync()
 }
 
 /**
