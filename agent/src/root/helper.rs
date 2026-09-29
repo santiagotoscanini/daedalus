@@ -31,12 +31,30 @@ const QUICK: Duration = Duration::from_secs(10);
 pub fn main(args: &[String]) -> Result<()> {
     let path = match args {
         [flag, p] if flag == "--table" => p,
-        _ => bail!("usage: daedalus-agent root-helper --table FILE (systemd starts it, one per connection)"),
+        // The build's check (controller.nix): the rules every start applies,
+        // run once on the rendered table, so a table the helper would refuse
+        // never reaches a box.
+        [flag, p] if flag == "--check-table" => return check_table(p),
+        _ => bail!(
+            "usage: daedalus-agent root-helper --table FILE (systemd starts it, one per connection)\n       \
+             daedalus-agent root-helper --check-table FILE"
+        ),
     };
     // SAFETY: systemd hands the accepted connection over as fd 0
     // (StandardInput=socket); nothing else in this process owns it.
     let sock = unsafe { UnixStream::from_raw_fd(0) };
     serve(sock, path)
+}
+
+/// The table at `path`, parsed and held to `Table::check`: Ok, or the
+/// reason the helper would answer every request with `internal`.
+fn check_table(path: &str) -> Result<()> {
+    let bytes = std::fs::read(path).with_context(|| format!("reading {path}"))?;
+    let table: Table =
+        serde_json::from_slice(&bytes).with_context(|| format!("{path} is not a verb table"))?;
+    table
+        .check()
+        .map_err(|why| anyhow::anyhow!("{path} would be refused: {why}"))
 }
 
 /// One connection, answered, then closed so the peer reads the answer: a
@@ -700,6 +718,41 @@ mod tests {
         let m = parse_show("ActiveState=inactive\nResult=success\nLoadState=loaded\n");
         assert_eq!(m["LoadState"], "loaded");
         assert_eq!(m.len(), 3);
+    }
+
+    #[test]
+    fn the_build_check_holds_a_table_to_the_start_rules() {
+        let dir = std::env::temp_dir().join(format!("daedalus-check-table-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, verbs: serde_json::Value| {
+            let p = dir.join(name);
+            let t = serde_json::json!({
+                "allow_uid": 1000,
+                "systemctl": "/bin/systemctl",
+                "journalctl": "/bin/journalctl",
+                "verbs": verbs,
+            });
+            std::fs::write(&p, t.to_string()).unwrap();
+            p.display().to_string()
+        };
+        let good = write(
+            "good.json",
+            serde_json::json!({"reboot": {"unit": "power.service", "description": "d", "timeout_secs": 90}}),
+        );
+        assert!(main(&["--check-table".into(), good]).is_ok());
+        // `status` is the helper's own verb: a table naming it is refused.
+        let bad = write(
+            "bad.json",
+            serde_json::json!({"status": {"unit": "power.service", "description": "d", "timeout_secs": 90}}),
+        );
+        let err = main(&["--check-table".into(), bad])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("would be refused"), "{err}");
+        let garbage = dir.join("garbage.json");
+        std::fs::write(&garbage, "{").unwrap();
+        assert!(main(&["--check-table".into(), garbage.display().to_string()]).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A table whose tools are shell scripts standing in for systemd: the
