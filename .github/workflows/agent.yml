@@ -405,15 +405,6 @@ jobs:
           { printf 'daedalus-agent release manifest v1\000'; cat dist/release.json; } > signed.bin
           openssl pkeyutl -sign -inkey key.pem -rawin -in signed.bin -out dist/release.json.sig
           [ "$(stat -c %s dist/release.json.sig)" = 64 ] || { echo "the manifest signature is not 64 bytes"; exit 1; }
-          # TRANSITION: agents up to 0.20 verify a raw signature over each
-          # asset instead of the manifest. Kept only so they can update to a
-          # manifest-reading release; delete this loop, its verification and
-          # the .sig uploads once no machine runs 0.20 or older.
-          for a in "$ASSET" "$TRAY_ASSET" "$MAC_ASSET" "$MAC_TRAY_ASSET" \
-              "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" "$LINUX_TRAY_ASSET"; do
-            openssl pkeyutl -sign -inkey key.pem -rawin -in "dist/$a" -out "dist/$a.sig"
-            [ "$(stat -c %s "dist/$a.sig")" = 64 ] || { echo "$a: signature is not 64 bytes"; exit 1; }
-          done
           rm -f key.pem
           (cd dist && sha256sum release.json release.json.sig "$ASSET" "$TRAY_ASSET" \
             "$MAC_ASSET" "$MAC_TRAY_ASSET" "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" \
@@ -428,11 +419,6 @@ jobs:
           hex="$(grep -A1 'RELEASE_PUBLIC_KEYS' agent/src/update/mod.rs | grep -o '"[0-9a-f]\{64\}"' | head -1 | tr -d '"')"
           printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
           openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in signed.bin -sigfile dist/release.json.sig
-          # TRANSITION (see Sign).
-          for a in "$ASSET" "$TRAY_ASSET" "$MAC_ASSET" "$MAC_TRAY_ASSET" \
-              "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" "$LINUX_TRAY_ASSET"; do
-            openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in "dist/$a" -sigfile "dist/$a.sig"
-          done
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -445,6 +431,4 @@ jobs:
             dist/release.json dist/release.json.sig \
             "dist/$ASSET" "dist/$TRAY_ASSET" "dist/$MAC_ASSET" "dist/$MAC_TRAY_ASSET" \
             "dist/$LINUX_X64_ASSET" "dist/$LINUX_ARM_ASSET" "dist/$LINUX_TRAY_ASSET" \
-            "dist/$ASSET.sig" "dist/$TRAY_ASSET.sig" "dist/$MAC_ASSET.sig" "dist/$MAC_TRAY_ASSET.sig" \
-            "dist/$LINUX_X64_ASSET.sig" "dist/$LINUX_ARM_ASSET.sig" "dist/$LINUX_TRAY_ASSET.sig" \
             dist/install.ps1 dist/install.sh dist/SHA256SUMS

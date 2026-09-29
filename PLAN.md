@@ -681,10 +681,6 @@ Hand edits the UI cannot make for itself:
    `AGENT_SIGNING_KEY` there, then delete the repository-level secret; and
    a tag ruleset so only the operator creates `agent-v*` tags. Until it is
    moved the job still reads the repository secret.
-6. **Retire the per-asset `.sig` files** once no machine runs agent 0.20 or
-   older: agents from 0.21 on verify the signed `release.json` alone; the
-   TRANSITION steps in the workflow's release job sign each asset only so a
-   0.20 updater can reach 0.21.
 
 ## Engine polish
 
