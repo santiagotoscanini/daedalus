@@ -54,6 +54,7 @@ function fake(over: Partial<ControllerClient>): ControllerClient & { calls: stri
     controllerRotate: no('controller.rotate'),
     rootRun: no('root.run'),
     hello: () => null,
+    link: () => ({ state: 'idle' as const }),
     close: () => undefined,
     ...over,
   }

@@ -74,6 +74,19 @@ const TIMEOUT_MS = 3_000
 const BACKOFF_MS = 250
 const BACKOFF_MAX_MS = 10_000
 
+/**
+ * How the one connection stands, for the shell's banner and the boards that
+ * would otherwise read "no answer" as a verdict about the machines. `down`
+ * holds from the first failure after the last good connection until the next
+ * one, re-dials included, so it does not flicker between attempts.
+ */
+export type ControllerLink =
+  | { state: 'idle' }
+  | { state: 'not_configured' }
+  | { state: 'connecting'; since: string }
+  | { state: 'connected'; since: string }
+  | { state: 'down'; since: string; error: string }
+
 export type ControllerClient = {
   systemInfo: () => Promise<SystemInfo>
   claudeStatus: () => Promise<ClaudeStatus>
@@ -128,6 +141,8 @@ export type ControllerClient = {
   ) => Promise<RootRun>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
+  /** How the connection stands. Read from memory: it never dials. */
+  link: () => ControllerLink
   /** End this client for good: the connection goes, and later calls fail `closed`. */
   close: () => void
 }
@@ -172,6 +187,10 @@ export function createControllerClient(opts: Options): ControllerClient {
   let failures = 0
   let retryAt = 0
   let lastError: ControllerError | null = null
+  let connectedAt = 0
+  let dialStartedAt = 0
+  /** Since when, and why, no connection has held; null while one does or none was tried. */
+  let down: { since: number; error: ControllerError } | null = null
   let nextId = 1
   const pending = new Map<number, Pending>()
 
@@ -218,7 +237,10 @@ export function createControllerClient(opts: Options): ControllerClient {
 
       const drop = (e: ControllerError) => {
         socket.destroy()
-        if (live?.socket === socket) live = null
+        if (live?.socket === socket) {
+          live = null
+          down = { since: Date.now(), error: e }
+        }
         failAll(e)
         if (!settled) {
           settled = true
@@ -321,6 +343,7 @@ export function createControllerClient(opts: Options): ControllerClient {
       )
     }
     if (Date.now() < retryAt && lastError !== null) return Promise.reject(lastError)
+    dialStartedAt = Date.now()
     dialing = dial(path)
       .then((l) => {
         // Closed while the dial was in flight: this connection is nobody's.
@@ -331,6 +354,8 @@ export function createControllerClient(opts: Options): ControllerClient {
         }
         failures = 0
         lastError = null
+        connectedAt = Date.now()
+        down = null
         // After the return below has settled `live`, so a call the hook
         // makes rides this connection rather than dialling another.
         if (opts.onConnect !== undefined) queueMicrotask(() => opts.onConnect?.(self))
@@ -340,6 +365,7 @@ export function createControllerClient(opts: Options): ControllerClient {
         const err = e instanceof ControllerError ? e : new ControllerError('unreachable', String(e))
         failures += 1
         lastError = err
+        down = { since: down?.since ?? Date.now(), error: err }
         retryAt = Date.now() + Math.min(backoffMs * 2 ** (failures - 1), backoffMaxMs)
         throw err
       })
@@ -387,6 +413,15 @@ export function createControllerClient(opts: Options): ControllerClient {
         waitMs,
       ),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
+    link: () => {
+      const at = (ms: number) => new Date(ms).toISOString()
+      if (opts.path === undefined) return { state: 'not_configured' }
+      if (live !== null && !live.socket.destroyed)
+        return { state: 'connected', since: at(connectedAt) }
+      if (down !== null) return { state: 'down', since: at(down.since), error: down.error.message }
+      if (dialing !== null) return { state: 'connecting', since: at(dialStartedAt) }
+      return { state: 'idle' }
+    },
     close: () => {
       closed = true
       live?.socket.destroy()

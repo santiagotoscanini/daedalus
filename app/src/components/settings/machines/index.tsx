@@ -81,6 +81,8 @@ function verdict(m: Machine): Verdict {
   if (n === null) return { chip: 'wants to join', tone: 'warn' }
   if (n.state === 'revoked') return { chip: 'revoked', tone: 'bad' }
   const s = m.status
+  // The controller could not be asked: say so, not that the machine is away.
+  if (n.connected === null) return { chip: 'link unknown', tone: 'muted' }
   if (!n.connected) return { chip: 'not connected', tone: 'muted' }
   if (s === null) return { chip: 'connected', tone: 'muted' }
   // Off because the box said so is a state, not a fault.

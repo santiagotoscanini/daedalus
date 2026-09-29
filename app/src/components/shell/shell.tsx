@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { Account } from '../../core/settings/types'
 import type { ModuleManifest } from '../../lib/modules/manifest'
 import type { ThemeChoice } from '../../lib/theme'
+import { ControllerBanner } from '../controller-banner'
 import { EngineOverrideBanner } from '../engine-override-banner'
 import { PendingApplyBar } from '../pending-apply-bar'
 import { useAppRailContext } from './app-rail'
@@ -15,6 +16,7 @@ import { useDrawer, useRailCollapse } from './use-rail'
 //   ┌──────────┬───────────────────────────────┐
 //   │  Rail    │  main                         │   desktop: a two-column grid,
 //   │          │    EngineOverrideBanner       │   the first column as wide as
+//   │          │    ControllerBanner           │
 //   │          │    {children}   ← the page    │   --sidebar-w (theme.css)
 //   │          │    PendingApplyBar            │
 //   └──────────┴───────────────────────────────┘
@@ -61,6 +63,7 @@ export function Shell({ children, theme, account, modules, engineOverride }: She
       />
       <main className="col-start-2 min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
         <EngineOverrideBanner on={engineOverride} />
+        <ControllerBanner />
         {children ?? <Outlet />}
         <PendingApplyBar />
       </main>

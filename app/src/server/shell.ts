@@ -17,3 +17,17 @@ export const fetchShell = readFn.handler(async () => {
   ])
   return { theme, modules, site, engineOverride }
 })
+
+/**
+ * How the controller link stands, for the shell's banner. While it is not
+ * connected this asks the controller once — a dial the client's backoff
+ * already paces — so a controller that came back while nothing called it
+ * clears the banner at the next poll rather than at the next page that asks.
+ */
+export const fetchControllerLinkFn = readFn.handler(async ({ context }) => {
+  const { controller } = await context.ctx()
+  if (controller.link().state !== 'connected') {
+    await controller.systemInfo().catch(() => undefined)
+  }
+  return controller.link()
+})

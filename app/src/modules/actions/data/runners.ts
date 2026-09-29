@@ -24,7 +24,8 @@ type MachineRunner = {
   arch: string
   /** The box itself, as opposed to a node. */
   box: boolean
-  online: boolean
+  /** Null for a node while the controller cannot be asked. */
+  online: boolean | null
   agentVersion: string | null
   lastSeenAgo: number | null
   /** What a runner on it would advertise. */

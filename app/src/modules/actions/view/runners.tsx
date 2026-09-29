@@ -1,13 +1,15 @@
 import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Progress, Pulse, Stat, StatStrip } from '../../../components/viz'
 import { num, since } from '../../../lib/format'
+import { LINK_UNKNOWN } from '../../../lib/node-link'
 import type { ActionsData } from '../data'
 import { accessWord, Ext, osWord, SampleRows, WipBoard } from './shared'
 
 type Runners = Extract<ActionsData, { tab: 'runners' }>
 
 export function RunnersView({ d }: { d: Runners }) {
-  const online = d.machines.filter((m) => m.online).length
+  const online = d.machines.filter((m) => m.online === true).length
+  const unknown = d.machines.filter((m) => m.online === null).length
   const registered = d.registered.flatMap((r) => r.runners)
   const demandTotal = d.demand.reduce((s, x) => s + x.jobs, 0)
   const minutesTotal = d.demand.reduce((s, x) => s + x.minutes, 0)
@@ -18,7 +20,7 @@ export function RunnersView({ d }: { d: Runners }) {
         <Stat
           label="machines on the network"
           value={num(d.machines.length)}
-          sub={`${num(online)} online`}
+          sub={`${num(online)} online${unknown > 0 ? ` · ${num(unknown)} unknown` : ''}`}
         />
         <Stat
           label={`hosted jobs · 30 days`}
@@ -54,7 +56,7 @@ export function RunnersView({ d }: { d: Runners }) {
                 className="border-(--border-soft) border-t py-[0.45rem] first:border-t-0"
               >
                 <div className="flex min-w-0 items-center gap-[0.45rem] text-[0.77rem]">
-                  <Pulse on={m.online} tone={m.online ? 'ok' : 'muted'} />
+                  <Pulse on={m.online === true} tone={m.online === true ? 'ok' : 'muted'} />
                   <span className={ROW_MAIN}>
                     <b className="font-[550]">{m.name}</b>
                     <span className="ml-[0.4rem] text-muted-foreground">
@@ -65,9 +67,11 @@ export function RunnersView({ d }: { d: Runners }) {
                   <span className={ROW_SIDE}>
                     {m.box
                       ? 'the control plane'
-                      : m.online
-                        ? 'online'
-                        : `seen ${since(m.lastSeenAgo)} ago`}
+                      : m.online === null
+                        ? LINK_UNKNOWN
+                        : m.online
+                          ? 'online'
+                          : `last heard ${since(m.lastSeenAgo)}`}
                   </span>
                 </div>
                 <p className="m-0 mt-[0.25rem] flex flex-wrap items-center gap-[0.3rem] text-[0.72rem] text-muted-foreground">

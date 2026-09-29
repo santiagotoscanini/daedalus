@@ -369,3 +369,50 @@ describe('the controller client', () => {
     expect(connections).toBe(2)
   })
 })
+
+describe('how the link stands', () => {
+  it('is idle before any call, connected after one, and never dials to say so', async () => {
+    await serve(agent())
+    const c = client()
+    expect(c.link()).toEqual({ state: 'idle' })
+    expect(connections).toBe(0)
+    await c.systemInfo()
+    const up = c.link()
+    expect(up.state).toBe('connected')
+    expect(connections).toBe(1)
+  })
+
+  it('is down from the first failure, through every failed re-dial, until one holds', async () => {
+    const c = client({ backoffMs: 20 })
+    await rejection(c.systemInfo())
+    const first = c.link()
+    expect(first.state).toBe('down')
+    if (first.state !== 'down') return
+    expect(first.error).toMatch(/no socket at/)
+    await tick(30)
+    await rejection(c.systemInfo())
+    const again = c.link()
+    // The same outage: its start does not move with each attempt.
+    expect(again.state === 'down' && again.since).toBe(first.since)
+    await serve(agent())
+    await tick(50)
+    await c.systemInfo()
+    expect(c.link().state).toBe('connected')
+  })
+
+  it('is down when a connection that held drops, with why', async () => {
+    await serve(agent())
+    const c = client()
+    await c.systemInfo()
+    for (const s of sockets) s.destroy()
+    await tick(30)
+    const l = c.link()
+    expect(l.state).toBe('down')
+    expect(l.state === 'down' && l.error).toMatch(/closed/)
+  })
+
+  it('is not_configured when the box binds no socket', () => {
+    const c = createControllerClient({ path: undefined, client: 'daedalus/test' })
+    expect(c.link()).toEqual({ state: 'not_configured' })
+  })
+})

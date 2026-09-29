@@ -49,8 +49,12 @@ export type NodeRow = {
   approvedBy: string | null
   revokedAt: string | null
   policy: NodePolicy
-  /** Its link is up at the controller right now. */
-  connected: boolean
+  /**
+   * Its link is up at the controller right now; null when the controller
+   * could not be asked. Unknown is not "not connected": the box cannot see
+   * the machine, which says nothing about the machine.
+   */
+  connected: boolean | null
   /** Claude Code there, from the controller's summary; null without one. */
   claude: NodeClaudeSummary | null
   /** Seconds since the controller last heard from it (resolved on the server; the page streams). */
@@ -75,10 +79,11 @@ export function providersOf(p: NodePolicy): Record<ProviderKind, { port: number;
 function row(
   n: typeof nodes.$inferSelect,
   household: ReadonlySet<string>,
-  seen: ControllerNode | undefined,
+  seen: Map<string, ControllerNode> | null,
 ): NodeRow {
+  const s = seen?.get(n.id)
   const policy = n.policy ?? {}
-  const heard = seen?.lastSeen == null ? Number.NaN : Date.parse(seen.lastSeen)
+  const heard = s?.lastSeen == null ? Number.NaN : Date.parse(s.lastSeen)
   const lastSeen = Math.max(n.lastSeenAt.getTime(), Number.isFinite(heard) ? heard : 0)
   return {
     id: n.id,
@@ -90,25 +95,25 @@ function row(
     namedByHousehold: n.mac !== null && household.has(n.mac.toLowerCase()),
     os: n.os,
     arch: n.arch,
-    agentVersion: seen?.agentVersion ?? n.agentVersion,
+    agentVersion: s?.agentVersion ?? n.agentVersion,
     mac: n.mac,
-    lanIp: seen?.lanIp ?? n.lanIp,
+    lanIp: s?.lanIp ?? n.lanIp,
     firstSeenAt: n.firstSeenAt.toISOString(),
     lastSeenAt: new Date(lastSeen).toISOString(),
     approvedAt: n.approvedAt?.toISOString() ?? null,
     approvedBy: n.approvedBy,
     revokedAt: n.revokedAt?.toISOString() ?? null,
     policy,
-    connected: seen?.connected === true,
-    claude: seen?.claude ?? null,
+    connected: seen === null ? null : s?.connected === true,
+    claude: s?.claude ?? null,
     lastSeenAgo: (Date.now() - lastSeen) / 1000,
   }
 }
 
-/** The controller's list by id; empty when it cannot be read (every row then reads as not connected). */
-async function seenById(ctx: Pick<Ctx, 'controller'>): Promise<Map<string, ControllerNode>> {
-  const list = await ctx.controller.nodesList().catch(() => [] as ControllerNode[])
-  return new Map(list.map((s) => [s.id, s]))
+/** The controller's list by id; null when it cannot be read, and every link is then unknown. */
+async function seenById(ctx: Pick<Ctx, 'controller'>): Promise<Map<string, ControllerNode> | null> {
+  const list = await ctx.controller.nodesList().catch(() => null)
+  return list === null ? null : new Map(list.map((s) => [s.id, s]))
 }
 
 export async function listNodes(ctx: Pick<Ctx, 'controller'>): Promise<NodeRow[]> {
@@ -120,7 +125,7 @@ export async function listNodes(ctx: Pick<Ctx, 'controller'>): Promise<NodeRow[]
     householdMacs(),
     seenById(ctx),
   ])
-  return all.map((n) => row(n, household, seen.get(n.id)))
+  return all.map((n) => row(n, household, seen))
 }
 
 export async function getNode(ctx: Pick<Ctx, 'controller'>, id: string): Promise<NodeRow | null> {
@@ -129,7 +134,7 @@ export async function getNode(ctx: Pick<Ctx, 'controller'>, id: string): Promise
     householdMacs(),
     seenById(ctx),
   ])
-  return n === undefined ? null : row(n, household, seen.get(id))
+  return n === undefined ? null : row(n, household, seen)
 }
 
 /**

@@ -2,7 +2,8 @@ import { Link } from '@tanstack/react-router'
 
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num, since } from '../../lib/format'
+import { bytes, DASH, num } from '../../lib/format'
+import { linkWords } from '../../lib/node-link'
 import type { Tone } from '../../lib/tone'
 import { GHOST_BTN } from '../apps/shared'
 import { NodeCommandButton } from '../node-command'
@@ -159,9 +160,7 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
             },
             {
               k: 'Link',
-              v: node.connected
-                ? 'connected'
-                : `not connected · last heard ${since(node.lastSeenAgo)}`,
+              v: linkWords(node),
             },
           ]}
         />

@@ -4,6 +4,7 @@ import { withStats } from '../lib/agent/roster'
 import { NO_ROSTER } from '../lib/claude-roster'
 import type { NodeClaudeData } from '../lib/dashboard/node-claude'
 import { DASH, duration, num, since, text, until } from '../lib/format'
+import { LINK_UNKNOWN, linkWords } from '../lib/node-link'
 import type { NodeRow } from '../lib/repo/nodes'
 import type { Tone } from '../lib/tone'
 import { RosterBoard } from './claude/roster/board'
@@ -112,9 +113,11 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
             The Remote Control server on {node.hostname}, run by the agent's tray in the user's own
             session with that user's Claude login — the way this box runs its own. Everything here
             is what the agent last reported up its link to the controller
-            {node.connected
-              ? ''
-              : `, ${since(node.lastSeenAgo)} — the machine is not connected now`}
+            {node.connected === null
+              ? `, ${since(node.lastSeenAgo)}; whether it is connected now is ${LINK_UNKNOWN}`
+              : node.connected
+                ? ''
+                : `, ${since(node.lastSeenAgo)} — the machine is not connected now`}
             .
           </>
         }
@@ -377,9 +380,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
               },
               {
                 k: 'Link',
-                v: node.connected
-                  ? 'connected'
-                  : `not connected · last heard ${since(node.lastSeenAgo)}`,
+                v: linkWords(node),
               },
             ]}
           />

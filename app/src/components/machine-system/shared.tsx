@@ -170,15 +170,18 @@ export function MachineHead({
   const { node, status } = d
   const t = d.telemetry ?? null
   const edition = status?.osName || node.os
-  const awake = !node.connected
-    ? { label: 'not connected', tone: 'muted' as Tone }
-    : status === null
-      ? { label: 'no status yet', tone: 'muted' as Tone }
-      : status.awakeHold
-        ? { label: 'held awake', tone: 'ok' as Tone }
-        : status.policy.awakeHold
-          ? { label: 'hold OFF', tone: 'bad' as Tone }
-          : { label: 'may sleep', tone: 'muted' as Tone }
+  const awake =
+    node.connected === null
+      ? { label: 'link unknown', tone: 'muted' as Tone }
+      : !node.connected
+        ? { label: 'not connected', tone: 'muted' as Tone }
+        : status === null
+          ? { label: 'no status yet', tone: 'muted' as Tone }
+          : status.awakeHold
+            ? { label: 'held awake', tone: 'ok' as Tone }
+            : status.policy.awakeHold
+              ? { label: 'hold OFF', tone: 'bad' as Tone }
+              : { label: 'may sleep', tone: 'muted' as Tone }
 
   return (
     <HeadStrip

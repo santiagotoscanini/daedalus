@@ -4,6 +4,7 @@ import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { DASH, duration, num, pct, since, text } from '../../lib/format'
 import { partMatching } from '../../lib/hardware/catalog'
+import { linkWords } from '../../lib/node-link'
 import { PROVIDER_NAME, type ProviderKind } from '../../lib/providers/kinds'
 import { PartPhoto } from '../part'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
@@ -446,9 +447,7 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
             },
             {
               k: 'Box',
-              v: node.connected
-                ? 'approved · connected'
-                : `approved · last heard ${since(node.lastSeenAgo)}`,
+              v: `approved · ${linkWords(node)}`,
             },
             { k: 'Tray', v: status.trayReporting ? 'reporting' : 'not reporting' },
             {
