@@ -131,7 +131,12 @@ mod tests {
                 n.fetch_add(1, Ordering::SeqCst);
             })
         };
-        std::thread::sleep(Duration::from_millis(300));
+        // Wait for the second fire rather than a fixed sleep: a loaded CI
+        // runner (macOS, 2026-09-29) can miss a 300 ms window.
+        let until = Deadline::after(Duration::from_secs(5));
+        while n.load(Ordering::SeqCst) < 2 && !until.passed() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
         drop(w);
         let fired = n.load(Ordering::SeqCst);
         assert!(fired >= 2, "fired {fired} times");
