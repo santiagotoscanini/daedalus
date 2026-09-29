@@ -27,19 +27,9 @@ since: string | null,
  */
 fingerprint: string, 
 /**
- * The controller's key this machine trusts, once it trusts one.
+ * The controller's key this machine trusts: config.toml's pin.
  */
 controller_fingerprint: string | null, 
-/**
- * Where that trust came from: "config" or "tofu".
- */
-pinned_via: string | null, 
-/**
- * The controller's key was trusted on first use, not pinned in
- * config.toml: the link works, and the page and the tray warn until
- * the operator pins it.
- */
-unconfirmed: boolean, 
 /**
  * The last time a signed rotation moved the trusted controller key:
  * from which to which, and when (rotation.rs). Null until one does.

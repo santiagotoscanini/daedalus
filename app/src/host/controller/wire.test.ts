@@ -339,8 +339,6 @@ describe('the controller wire', () => {
           connected: true,
           fingerprint: 'aaaa:bbbb',
           controller_fingerprint: 'f3e5:a403',
-          pinned_via: 'tofu',
-          unconfirmed: true,
           error: null,
         },
       },
@@ -364,8 +362,6 @@ describe('the controller wire', () => {
     expect(full.status?.link).toMatchObject({
       fingerprint: 'aaaa:bbbb',
       controllerFingerprint: 'f3e5:a403',
-      pinnedVia: 'tofu',
-      unconfirmed: true,
     })
   })
 

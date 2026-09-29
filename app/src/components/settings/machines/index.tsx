@@ -128,22 +128,12 @@ function ClaudeCell({ m }: { m: Machine }) {
 }
 
 /**
- * How the machine trusts the controller, from its own side of the link:
- * a key pinned at install or named by the box is confirmed; one trusted on
- * first use is not, and re-running the install line pins it.
+ * The machine's side of the link, when it refuses the controller: the key it
+ * met is not the one its install line pinned.
  */
 function TrustNote({ link }: { link: AgentLink | null }) {
-  if (link === null) return null
-  if (link.error !== null && link.state === 'key-changed') {
-    return <p className={ERROR_NOTE}>{link.error}</p>
-  }
-  if (!link.unconfirmed) return null
-  return (
-    <p className={cn(NOTE, 'text-warning')}>
-      This machine trusted the controller's key on first use and nothing has confirmed it. Pin it:
-      run the install line below on the machine again — it keeps everything and writes the pin.
-    </p>
-  )
+  if (link === null || link.error === null || link.state !== 'key-changed') return null
+  return <p className={ERROR_NOTE}>{link.error}</p>
 }
 
 /** One decided machine: the head, the facts, the decision, and — once approved — the policy. */

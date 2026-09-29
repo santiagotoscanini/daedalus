@@ -80,7 +80,8 @@ fn no_tls12() -> Error {
 /// pin of each attempt.
 #[derive(Debug, Default)]
 struct PinnedController {
-    /// The SHA-256 of the key to accept; None trusts the first key seen.
+    /// The SHA-256 of the key to accept; None, before the first attempt
+    /// arms it, accepts nothing.
     pin: Mutex<Option<[u8; 32]>>,
     /// The key the controller's certificate carried on the last attempt,
     /// recorded before the handshake signature is checked: unproven.
@@ -88,8 +89,8 @@ struct PinnedController {
 }
 
 impl PinnedController {
-    fn arm(&self, pin: Option<[u8; 32]>) {
-        *self.pin.lock_ok() = pin;
+    fn arm(&self, pin: [u8; 32]) {
+        *self.pin.lock_ok() = Some(pin);
         *self.presented.lock_ok() = None;
     }
 
@@ -136,32 +137,28 @@ impl Client {
         &self.fingerprint
     }
 
-    /// Connect over `sock`, accepting the controller only by `pin` (None:
-    /// the first key, which the caller then records), the handshake done
-    /// within `timeout`.
+    /// Connect over `sock`, accepting the controller only by the key
+    /// `pinned` names, the handshake done within `timeout`.
     pub fn connect(
         &self,
         sock: TcpStream,
         pinned: [u8; 32],
         timeout: Duration,
     ) -> Result<Tls, ConnectError> {
-        let pin = Some(pinned);
         let _one = self.attempt.lock_ok();
-        self.verifier.arm(pin);
+        self.verifier.arm(pinned);
         match Tls::client(
             sock,
             Arc::clone(&self.config),
-            &server_name_for(pin),
+            &server_name_for(Some(pinned)),
             timeout,
         ) {
             Ok(t) => Ok(t),
-            Err(e) => match (self.verifier.presented(), pin) {
-                (Some(key), Some(pinned)) if digest(&key) != pinned => {
-                    Err(ConnectError::KeyMismatch {
-                        presented_unproven: key,
-                        pinned,
-                    })
-                }
+            Err(e) => match self.verifier.presented() {
+                Some(key) if digest(&key) != pinned => Err(ConnectError::KeyMismatch {
+                    presented_unproven: key,
+                    pinned,
+                }),
                 _ => Err(ConnectError::Io(e)),
             },
         }

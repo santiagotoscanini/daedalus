@@ -222,10 +222,6 @@ fn an_approved_machine_connects_and_pushes() {
     let status = d.status.unwrap();
     assert!(status.get("awake_hold").is_some() && status.get("telemetry").is_none());
     assert_eq!(status["controller"]["state"], "approved", "{status}");
-    assert_eq!(
-        status["controller"]["unconfirmed"], false,
-        "pinned in config"
-    );
     assert_eq!(status["controller"]["fingerprint"], nid.fingerprint());
     assert_eq!(
         status["controller"]["controller_fingerprint"],
@@ -1399,7 +1395,7 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
 
     // Two machines pinned in config.toml (comments and other keys kept, and
     // the other with nothing but the pin).
-    let (pinned_dir, tofu_dir) = (scratch("rot-pinned"), scratch("rot-bare"));
+    let (pinned_dir, bare_dir) = (scratch("rot-pinned"), scratch("rot-bare"));
     std::fs::write(
         pinned_dir.join("config.toml"),
         format!(
@@ -1409,16 +1405,16 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
     )
     .unwrap();
     std::fs::write(
-        tofu_dir.join("config.toml"),
+        bare_dir.join("config.toml"),
         format!("controller_pin = \"{}\"\n", old.fingerprint()),
     )
     .unwrap();
-    let (pinned_id, tofu_id) = (id(60), id(61));
+    let (pinned_id, bare_id) = (id(60), id(61));
     let t = target_in(&addr, &pinned_dir);
     let (_, _, pinned) = attempt_in(t, &pinned_id, &pinned_dir);
-    let (_, _, tofu) = attempt_in(target_in(&addr, &tofu_dir), &tofu_id, &tofu_dir);
+    let (_, _, bare) = attempt_in(target_in(&addr, &bare_dir), &bare_id, &bare_dir);
     wait_for("both connected", 5, || {
-        [&pinned_id, &tofu_id].iter().all(|n| {
+        [&pinned_id, &bare_id].iter().all(|n| {
             registry
                 .list()
                 .iter()
@@ -1440,7 +1436,7 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
         }
     );
     assert_eq!(
-        tofu.join().unwrap(),
+        bare.join().unwrap(),
         Ended::Rotated {
             from: pin_of(&old),
             new: new_pin
@@ -1454,9 +1450,9 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
             new.fingerprint()
         )
     );
-    let bare = std::fs::read_to_string(tofu_dir.join("config.toml")).unwrap();
+    let bare_config = std::fs::read_to_string(bare_dir.join("config.toml")).unwrap();
     assert_eq!(
-        bare,
+        bare_config,
         format!("controller_pin = \"{}\"\n", new.fingerprint())
     );
 
@@ -1465,7 +1461,7 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
     let t = target_in(&addr, &pinned_dir);
     assert_eq!(t.pin, new_pin);
     let (pshared, pstop, pinned) = attempt_in(t, &pinned_id, &pinned_dir);
-    let (tshared, tstop, tofu) = attempt_in(target_in(&addr, &tofu_dir), &tofu_id, &tofu_dir);
+    let (tshared, tstop, bare) = attempt_in(target_in(&addr, &bare_dir), &bare_id, &bare_dir);
     wait_for("both back under the new key", 5, || {
         [&pshared, &tshared].iter().all(|s| {
             s.link().is_some_and(|l| {
@@ -1512,9 +1508,9 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
         stop.stop();
     }
     assert_eq!(pinned.join().unwrap(), Ended::Stopped);
-    assert_eq!(tofu.join().unwrap(), Ended::Stopped);
+    assert_eq!(bare.join().unwrap(), Ended::Stopped);
     drop(listener);
-    for d in [cdir, pinned_dir, tofu_dir, late_dir] {
+    for d in [cdir, pinned_dir, bare_dir, late_dir] {
         let _ = std::fs::remove_dir_all(d);
     }
 }

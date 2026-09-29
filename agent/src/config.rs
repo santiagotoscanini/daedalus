@@ -35,8 +35,8 @@
 //! controller (link/node.rs), the only party it talks to: `install
 //! --controller` and `--pin` write them, into a file that exists too.
 //! Without an address the machine asks DNS for the controller's SRV record;
-//! without a pin it trusts the first key the controller presents, never
-//! re-pins, and warns until one is pinned. A pin that is not a fingerprint
+//! without a pin it connects nowhere, and the status page and the tray say
+//! so (link/node.rs, `NO_PIN`). A pin that is not a fingerprint
 //! does not stop the agent: the link says so on the status page and the
 //! hold goes on.
 //!

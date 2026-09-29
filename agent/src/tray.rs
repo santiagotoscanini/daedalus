@@ -516,8 +516,6 @@ mod tests {
             connected: true,
             fingerprint: "aaaa:bbbb".into(),
             controller_fingerprint: Some("cccc:dddd".into()),
-            pinned_via: Some("config".into()),
-            unconfirmed: false,
             error: None,
         };
         let (first, own, theirs) = link_lines(Some(&pending));

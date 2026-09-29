@@ -71,7 +71,7 @@ export function Install({ controller }: { controller: ControllerView }) {
       ))}
       <p className={NOTE}>
         {pinned === null
-          ? `The controller did not say where it listens${controller.reachable ? '' : ` (${controller.error})`}, so these lines name no controller: a machine then looks it up in DNS and trusts the first key it meets.`
+          ? `The controller did not say where it listens${controller.reachable ? '' : ` (${controller.error})`}, so these lines name no controller and pin no key: a machine installed from them connects nowhere until it runs the line again with the pin, once the controller answers here.`
           : 'The line names the controller and pins its key: the machine connects to it and to nothing else. It then appears above as waiting, with both fingerprints, until you approve it. Re-running the line on a machine that is already here replaces the binaries, keeps its key, and pins the controller.'}
       </p>
     </div>

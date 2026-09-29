@@ -81,8 +81,6 @@ pub struct LinkPage {
     pub connected: bool,
     pub fingerprint: String,
     pub controller_fingerprint: Option<String>,
-    pub pinned_via: Option<String>,
-    pub unconfirmed: bool,
     pub error: Option<String>,
 }
 
@@ -753,8 +751,7 @@ mod tests {
                 "last_update_check":"2026-09-27T10:00:00Z","last_update_result":"x",
                 "policy":{"awake_hold":false,"claude_remote_control":true},
                 "controller":{"address":"box.lan:7788","found_via":"config","state":"approved",
-                  "connected":true,"since":null,"fingerprint":"aa","controller_fingerprint":"bb",
-                  "pinned_via":"tofu","unconfirmed":true,"error":null},
+                  "connected":true,"since":null,"fingerprint":"aa","controller_fingerprint":"bb","error":null},
                 "telemetry":null}"#,
         )
         .unwrap();
@@ -763,7 +760,7 @@ mod tests {
         assert!(!p.policy.awake_hold);
         let l = p.controller.unwrap();
         assert_eq!(l.state.as_deref(), Some("approved"));
-        assert!(l.connected && l.unconfirmed);
+        assert!(l.connected);
     }
 
     #[test]

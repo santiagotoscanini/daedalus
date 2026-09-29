@@ -179,19 +179,14 @@ export type AgentStatus = {
 }
 
 /**
- * How the machine holds the controller: both fingerprints, and whether the
- * controller's key is CONFIRMED — pinned at install, or named by the box —
- * or trusted on first use, which a re-run of the install command with its
- * `--pin` fixes.
+ * How the machine holds the controller: both fingerprints — the controller's
+ * being the pin its install line wrote, the only key it trusts.
  */
 export type AgentLink = {
   state: string | null
   connected: boolean
   fingerprint: string
   controllerFingerprint: string | null
-  /** "config", "box" or "tofu". */
-  pinnedVia: string | null
-  unconfirmed: boolean
   /** The last signed rotation that moved the trusted controller key, in the agent's words. */
   rotated: string | null
   error: string | null
@@ -203,8 +198,6 @@ const link = reads<LinkStatus>()(
     connected: optional(bool, false),
     fingerprint: optional(str, ''),
     controller_fingerprint: nstr,
-    pinned_via: nstr,
-    unconfirmed: optional(bool, false),
     rotated: nstr,
     error: nstr,
   }),
@@ -423,8 +416,6 @@ export function agentStatus(body: unknown): AgentStatus {
             connected: s.controller.connected,
             fingerprint: s.controller.fingerprint,
             controllerFingerprint: s.controller.controller_fingerprint,
-            pinnedVia: s.controller.pinned_via,
-            unconfirmed: s.controller.unconfirmed,
             rotated: s.controller.rotated,
             error: s.controller.error,
           },

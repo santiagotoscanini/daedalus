@@ -22,9 +22,9 @@
 //!
 //! **Trust.** A machine pins the controller's key by its fingerprint
 //! (identity.rs): config.toml's `controller_pin` (what `install --pin`
-//! writes), else the first key the controller presents — trust on first
-//! use — recorded and never silently replaced: another key afterwards is a
-//! loud error on the status page and in the tray (node.rs).
+//! writes) and nothing else, never silently replaced: another key is a loud
+//! error on the status page and in the tray, and no pin is no link
+//! (node.rs).
 //!
 //! **Enrollment.** A key the app has not approved is held PENDING: the
 //! controller lists it for the app (`nodes.list`, the `nodes.pending`
@@ -123,14 +123,8 @@ pub struct LinkStatus {
     pub since: Option<String>,
     /// This machine's key.
     pub fingerprint: String,
-    /// The controller's key this machine trusts, once it trusts one.
+    /// The controller's key this machine trusts: config.toml's pin.
     pub controller_fingerprint: Option<String>,
-    /// Where that trust came from: "config" or "tofu".
-    pub pinned_via: Option<String>,
-    /// The controller's key was trusted on first use, not pinned in
-    /// config.toml: the link works, and the page and the tray warn until
-    /// the operator pins it.
-    pub unconfirmed: bool,
     /// The last time a signed rotation moved the trusted controller key:
     /// from which to which, and when (rotation.rs). Null until one does.
     pub rotated: Option<String>,

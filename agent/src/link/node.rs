@@ -257,8 +257,6 @@ pub fn run_loop(
             l.address = Some(target.address.clone());
             l.found_via = Some(target.found_via.clone());
             l.controller_fingerprint = Some(format_fingerprint(&target.pin));
-            l.pinned_via = Some("config".into());
-            l.unconfirmed = false;
             l.state = Some("connecting".into());
         });
         let hello = hello_of(&cfg, &id, &facts);
@@ -432,8 +430,6 @@ pub fn connect_once(
     shared.set_link(|l| {
         l.fingerprint = client.fingerprint().to_string();
         l.controller_fingerprint = Some(controller_fp.clone());
-        l.pinned_via = Some("config".into());
-        l.unconfirmed = false;
     });
 
     // hello, and its answer.
