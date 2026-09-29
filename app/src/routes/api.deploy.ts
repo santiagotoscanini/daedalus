@@ -124,7 +124,8 @@ export const Route = createFileRoute('/api/deploy')({
         // Not awaited: the helper answers when the deploy unit has finished
         // (minutes), and zot only needs to hear it was taken. The outcome
         // goes to the log; the deploy's own record is deploy.sh's.
-        void requestDeploy({
+        const { makeCtx } = await import('../core/ctx')
+        void requestDeploy(await makeCtx(), {
           app,
           reason: eventType || 'registry push',
           actor: actorLabelOf(request, 'registry'),

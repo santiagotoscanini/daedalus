@@ -28,7 +28,7 @@ const run = (outcome: RootRun['outcome'], detail: string): RootRun => ({
 describe('requestReboot', () => {
   it('asks the root helper for reboot, with no selectors, and waits past its 90 s', async () => {
     const { client, asked } = fake(() => Promise.resolve(run('done', 'rebooting')))
-    expect(await requestReboot({ actor: 'alice' }, client)).toEqual({
+    expect(await requestReboot({ controller: client }, { actor: 'alice' })).toEqual({
       state: 'rebooting',
       detail: 'rebooting',
     })
@@ -40,12 +40,12 @@ describe('requestReboot', () => {
 
   it("carries the unit's refusal, and a failure, as the reason", async () => {
     const refused = fake(() => Promise.resolve(run('refused', 'an apply is running')))
-    expect(await requestReboot({ actor: 'a' }, refused.client)).toEqual({
+    expect(await requestReboot({ controller: refused.client }, { actor: 'a' })).toEqual({
       state: 'refused',
       reason: 'an apply is running',
     })
     const failed = fake(() => Promise.resolve(run('failed', '')))
-    expect(await requestReboot({ actor: 'a' }, failed.client)).toEqual({
+    expect(await requestReboot({ controller: failed.client }, { actor: 'a' })).toEqual({
       state: 'refused',
       reason: 'the restart failed',
     })
@@ -53,10 +53,12 @@ describe('requestReboot', () => {
 
   it('reads a connection that closed mid-call as the box going down, and anything else as a refusal', async () => {
     const closed = fake(() => Promise.reject(new ControllerError('closed', 'gone')))
-    expect((await requestReboot({ actor: 'a' }, closed.client)).state).toBe('rebooting')
+    expect((await requestReboot({ controller: closed.client }, { actor: 'a' })).state).toBe(
+      'rebooting',
+    )
     for (const code of ['unreachable', 'unsupported', 'timeout', 'unavailable'] as const) {
       const f = fake(() => Promise.reject(new ControllerError(code, `said ${code}`)))
-      expect(await requestReboot({ actor: 'a' }, f.client)).toEqual({
+      expect(await requestReboot({ controller: f.client }, { actor: 'a' })).toEqual({
         state: 'refused',
         reason: `said ${code}`,
       })

@@ -29,7 +29,9 @@ export const Route = createFileRoute('/api/healthz')({
         // And the controller's minute: re-dial it if it restarted (the dial
         // hands it the desired set again), keep the machines' last-known
         // facts. Not awaited — a probe must not wait on the controller.
-        void import('../host/controller/nodes').then((m) => m.ensureControllerLink())
+        void Promise.all([import('../host/controller/nodes'), import('../core/ctx')])
+          .then(async ([m, c]) => m.ensureControllerLink(await c.makeCtx()))
+          .catch(() => undefined)
         // And the environment's startup report: malformed optional variables
         // warned about once, a required one that is missing thrown — a 500 here
         // is what fails the deploy unit's health check and gatus alike.

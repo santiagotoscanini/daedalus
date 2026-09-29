@@ -1,3 +1,4 @@
+import type { Ctx } from '../../core/ctx'
 import { sealAppSecret } from '../../core/vault'
 import { readAppSecrets } from '../../host/app-secrets'
 import { readEnvSnapshot } from '../../host/env-snapshot'
@@ -92,19 +93,22 @@ async function requestError(name: string, key: string): Promise<string | null> {
  * comes back as a refusal, which is the honest report, and `Sealed` already
  * guarantees the reason never carries the value.
  */
-export async function setAppSecret(data: {
-  name: string
-  key: string
-  value: string
-  actor: string
-}): Promise<RootAnswer> {
+export async function setAppSecret(
+  ctx: Pick<Ctx, 'controller'>,
+  data: {
+    name: string
+    key: string
+    value: string
+    actor: string
+  },
+): Promise<RootAnswer> {
   const bad = await requestError(data.name, data.key)
   if (bad !== null) return { outcome: 'refused', detail: bad }
 
   const sealed = await sealAppSecret(data.name, data.value)
   if (!sealed.ok) return { outcome: 'refused', detail: sealed.reason }
 
-  return requestSecretSet({
+  return requestSecretSet(ctx, {
     actor: data.actor,
     app: data.name,
     key: data.key,
@@ -119,13 +123,16 @@ export async function setAppSecret(data: {
  * that needs no sops at all on this side. The host refuses a key the file does
  * not hold, rather than committing a no-op.
  */
-export async function removeAppSecret(data: {
-  name: string
-  key: string
-  actor: string
-}): Promise<RootAnswer> {
+export async function removeAppSecret(
+  ctx: Pick<Ctx, 'controller'>,
+  data: {
+    name: string
+    key: string
+    actor: string
+  },
+): Promise<RootAnswer> {
   const bad = await requestError(data.name, data.key)
   if (bad !== null) return { outcome: 'refused', detail: bad }
 
-  return requestSecretRemove({ actor: data.actor, app: data.name, key: data.key })
+  return requestSecretRemove(ctx, { actor: data.actor, app: data.name, key: data.key })
 }

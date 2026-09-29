@@ -99,7 +99,12 @@ const stripComments = (src: string) =>
 const FROM = /(?:^|\n)\s*(import|export)(\s+type\b)?([^;=]*?)(?<![.\w])from\s*['"]([^'"]+)['"]/g
 const SIDE_EFFECT = /(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g
 
-type Module = { statics: string[]; usesProcessEnv: boolean; inlinesEnv: boolean }
+type Module = {
+  statics: string[]
+  usesProcessEnv: boolean
+  inlinesEnv: boolean
+  makesController: boolean
+}
 
 const parsed = new Map<string, Module>()
 for (const f of files) {
@@ -111,6 +116,7 @@ for (const f of files) {
     statics,
     usesProcessEnv: /process\.env/.test(src),
     inlinesEnv: /import\.meta\.env\.VITE_/.test(src),
+    makesController: /\bcontroller\(\)/.test(src),
   })
 }
 
@@ -255,6 +261,19 @@ describe('the host boundary', () => {
       .flatMap((f) =>
         (edges.get(f) ?? []).filter((d) => clients.includes(d)).map((d) => `${f} → ${d}`),
       )
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  it('hands the controller out one way: ctx.controller', () => {
+    // `controller()` is the process's one client, and makeCtx is the one
+    // place that asks for it. Everything else takes a Ctx (or the
+    // `Pick<Ctx, 'controller'>` of it) as a required argument, so a test
+    // substitutes a fake the one way and no verb falls back to the real socket
+    // because its caller forgot to pass one.
+    const allowed = ['src/core/ctx.ts', 'src/host/controller/client.ts']
+    const offenders = files.filter(
+      (f) => parsed.get(f)?.makesController === true && !allowed.includes(f),
+    )
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

@@ -222,7 +222,7 @@ export const fetchProviderModelsFn = readFn
     const { resolveModel } = await import('../lib/providers/policy')
     const { getNode } = await import('../lib/repo/nodes')
     const ctx = await context.ctx()
-    const node = await getNode(data.id)
+    const node = await getNode(ctx, data.id)
     const provider = (await fleetProviders(ctx)).find(
       (p) => p.machine === data.id && p.kind === data.kind,
     )

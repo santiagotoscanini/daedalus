@@ -21,7 +21,7 @@ const TOKEN = `ghs${'_'}${'Q9w8E7r6'.repeat(5)}`
 // What reached the root helper: each `github-token` ask.
 const asked = vi.hoisted(() => ({ verbs: [] as string[] }))
 vi.mock('../host/root', () => ({
-  runRoot: async (verb: string) => {
+  runRoot: async (_ctx: unknown, verb: string) => {
     asked.verbs.push(verb)
     return { outcome: 'done', detail: 'minted' }
   },
@@ -106,7 +106,7 @@ describe('ghApp', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(asked.verbs).toEqual(['github-token'])
 
-    expect(await requestTokenRefresh()).toBe(false)
+    expect(await requestTokenRefresh(ctx)).toBe(false)
     await ghApp(ctx, '/installation/repositories')
     expect(asked.verbs).toEqual(['github-token'])
   })

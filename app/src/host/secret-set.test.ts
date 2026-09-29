@@ -28,8 +28,8 @@ describe('requestSecretSet', () => {
     const { client, asked } = fake()
     const doc = '{"data":"ENC[x]","sops":{}}'
     const r = await requestSecretSet(
+      { controller: client },
       { actor: 'op@example.test', app: 'hermes', key: 'K', ciphertext: doc },
-      client,
     )
     expect(r).toEqual({ outcome: 'done', detail: 'sealed K' })
     expect(asked).toEqual([
@@ -45,8 +45,8 @@ describe('requestSecretSet', () => {
   it('refuses a sealed document over the cap without asking', async () => {
     const { client, asked } = fake()
     const r = await requestSecretSet(
+      { controller: client },
       { actor: 'a', app: 'hermes', key: 'K', ciphertext: 'x'.repeat(SECRET_PAYLOAD_MAX + 1) },
-      client,
     )
     expect(r.outcome).toBe('refused')
     expect(asked).toEqual([])
@@ -56,7 +56,7 @@ describe('requestSecretSet', () => {
 describe('requestSecretRemove', () => {
   it('carries no payload, and an actor the pattern takes', async () => {
     const { client, asked } = fake()
-    await requestSecretRemove({ actor: 'José', app: 'hermes', key: 'K' }, client)
+    await requestSecretRemove({ controller: client }, { actor: 'José', app: 'hermes', key: 'K' })
     expect(asked).toEqual([
       [
         'secret-set',

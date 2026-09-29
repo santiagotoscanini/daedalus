@@ -1,6 +1,7 @@
 import { constants } from 'node:fs'
 import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { Ctx } from '../core/ctx'
 import {
   BUILD_REQUEST_FILE,
   BUILD_STATUS_FILE,
@@ -18,7 +19,6 @@ import {
 import { redactSecrets } from '../lib/redact'
 import { writeAtomic } from './bridge'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
-import type { ControllerClient } from './controller/client'
 import { env } from './env'
 import { type RootAnswer, runRoot } from './root'
 
@@ -53,10 +53,10 @@ const CANCEL_WAIT_MS = 170_000
  * Answers once the unit has stopped (the build's reaper has run by then).
  */
 export async function requestBuildCancel(
+  ctx: Pick<Ctx, 'controller'>,
   app: string,
-  client?: ControllerClient,
 ): Promise<RootAnswer> {
-  return runRoot('build-cancel', { app }, CANCEL_WAIT_MS, client)
+  return runRoot(ctx, 'build-cancel', { app }, CANCEL_WAIT_MS)
 }
 
 /**

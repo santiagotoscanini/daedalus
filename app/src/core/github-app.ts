@@ -47,11 +47,11 @@ const REFRESH_WAIT_MS = 170_000
  * file, which is the answer, and the caller that noticed the missing token
  * has already been told there is none; the helper's word goes to the log.
  */
-export async function requestTokenRefresh(): Promise<boolean> {
+export async function requestTokenRefresh(ctx: Pick<Ctx, 'controller'>): Promise<boolean> {
   const now = Date.now()
   if (now - (memo.daedalusGithubTokenRefreshAt ?? 0) < REFRESH_DEBOUNCE_MS) return false
   memo.daedalusGithubTokenRefreshAt = now
-  void runRoot('github-token', {}, REFRESH_WAIT_MS).then((a) => {
+  void runRoot(ctx, 'github-token', {}, REFRESH_WAIT_MS).then((a) => {
     if (a.outcome !== 'done') console.info(`[github] token refresh ${a.outcome}: ${a.detail}`)
   })
   return true
@@ -104,11 +104,11 @@ export async function ghApp<T = unknown>(
 ): Promise<GhResult<T>> {
   const token = usableToken(await installationState(ctx))
   if (token === null) {
-    await requestTokenRefresh()
+    await requestTokenRefresh(ctx)
     return none('no-token')
   }
   const r = await ghFetch<T>(token, path, init)
-  if (r.status === 401) await requestTokenRefresh()
+  if (r.status === 401) await requestTokenRefresh(ctx)
   return r
 }
 

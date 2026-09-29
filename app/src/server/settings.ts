@@ -143,12 +143,12 @@ export const discardGithubPendingApplyFn = adminFn.handler(
  * type one into a link — so all this does is ask the host's minter to look
  * now; the minter finds the installation on its own.
  */
-export const githubInstallLandedFn = adminFn.handler(async (): Promise<Result<null>> => {
+export const githubInstallLandedFn = adminFn.handler(async ({ context }): Promise<Result<null>> => {
   const { requireActor } = await import('../core/auth')
   const gate = requireActor()
   if (!gate.ok) return gate
   const { requestTokenRefresh } = await import('../core/github-app')
-  await requestTokenRefresh()
+  await requestTokenRefresh(await context.ctx())
   return { ok: true, value: null }
 })
 

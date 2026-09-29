@@ -87,9 +87,9 @@ export const fetchClaudeActionFn = readFn
 /** The Claude page for one node: its row and its live status page. */
 export const fetchNodeClaudeFn = readFn
   .validator(asValidator(withMessage(obj({ id: nodeIdField }), 'expected a node id')))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { loadNodeClaude } = await import('../lib/dashboard/node-claude')
-    return loadNodeClaude(data.id)
+    return loadNodeClaude(await context.ctx(), data.id)
   })
 
 /* ── moving this box's Claude Code pin ────────────────────────────────── */

@@ -1,7 +1,6 @@
-import { type ControllerClient, controller } from '../../host/controller/client'
+import type { Ctx } from '../../core/ctx'
 import { readNode } from '../../host/controller/nodes'
 import type { NodeProviderReport } from '../../host/controller/wire'
-import { promQuote, promSeries } from '../../host/prom'
 import type { AgentStatus, NodeTelemetry } from '../agent/status'
 import { getNode, type NodeRow } from '../repo/nodes'
 import { type BoardReleases, boardReleases } from './board-releases'
@@ -53,19 +52,20 @@ export type NodeSystemData = {
 }
 
 export async function loadNodeSystem(
+  ctx: Pick<Ctx, 'controller' | 'prom'>,
   id: string,
-  opts: { board?: boolean; browsers?: boolean; macos?: boolean; client?: ControllerClient } = {},
+  opts: { board?: boolean; browsers?: boolean; macos?: boolean } = {},
 ): Promise<NodeSystemData | null> {
-  const node = await getNode(id)
+  const node = await getNode(ctx, id)
   if (node === null) return null
-  const client = opts.client ?? controller()
+  const client = ctx.controller
   // The spark does not need the machine: it is what the box has scraped,
   // and a machine that is asleep still has a history.
   const [read, cpuSpark] = await Promise.all([
-    readNode(client, id),
-    promSeries(`daedalus_agent_cpu_usage_percent{node=${promQuote(node.id)}}`, 6 * 60, 120).catch(
-      () => [],
-    ),
+    readNode(ctx, id),
+    ctx.prom
+      .series(`daedalus_agent_cpu_usage_percent{node=${ctx.prom.quote(node.id)}}`, 6 * 60, 120)
+      .catch(() => []),
   ])
   const none = {
     node,

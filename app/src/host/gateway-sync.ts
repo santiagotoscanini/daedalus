@@ -345,7 +345,7 @@ export function lastGatewaySync(): SyncSummary | null {
 }
 
 async function policiesOf(ctx: Ctx): Promise<(p: FleetProvider) => ModelPolicies | undefined> {
-  const nodes = await listNodes()
+  const nodes = await listNodes(ctx)
   const box =
     (await ctx.store.read(BOX_PROVIDERS_KEY, isBoxProviderPolicy)) ?? ({} as BoxProviderPolicy)
   return (p) => {

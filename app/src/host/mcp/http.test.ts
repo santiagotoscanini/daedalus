@@ -45,11 +45,13 @@ vi.mock('../../core/builds/actions', () => ({
     h.builds.push(input)
     return { ok: true, value: { id: 'build-1', sha: 'a'.repeat(40), existing: false } }
   },
-  cancelBuild: async (input: { app: string; id: string; actor: string }) => {
+  cancelBuild: async (_ctx: unknown, input: { app: string; id: string; actor: string }) => {
     h.cancels.push(input)
     return { ok: true, value: null }
   },
 }))
+
+vi.mock('../../core/ctx', () => ({ makeCtx: async () => ({}) }))
 
 vi.mock('../../lib/dashboard/health', () => ({
   loadHealth: async () => {

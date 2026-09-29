@@ -95,7 +95,7 @@ function nodeProviders(n: NodeRow, domain: string): FleetProvider[] {
 export async function fleetProviders(ctx: Ctx): Promise<FleetProvider[]> {
   const [box, nodes, { domain }] = await Promise.all([
     boxProviders(ctx),
-    listNodes().then((all) => all.filter((n) => n.state === 'approved')),
+    listNodes(ctx).then((all) => all.filter((n) => n.state === 'approved')),
     lanDomain(),
   ])
   return [...box, ...nodes.flatMap((n) => nodeProviders(n, domain))]

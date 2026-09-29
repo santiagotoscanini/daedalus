@@ -1,4 +1,4 @@
-import type { ControllerClient } from './controller/client'
+import type { Ctx } from '../core/ctx'
 import { type RootAnswer, runRoot } from './root'
 
 // Asking the host to run one of an app's scheduled tasks NOW, instead of
@@ -25,9 +25,9 @@ import { type RootAnswer, runRoot } from './root'
 const TASK_WAIT_MS = 24 * 60 * 60 * 1000
 
 export async function requestTaskRun(
+  ctx: Pick<Ctx, 'controller'>,
   input: { actor: string; app: string; task: string },
-  client?: ControllerClient,
 ): Promise<RootAnswer> {
   console.info(`[task-run] ${input.app} ${input.task}, asked by ${input.actor}`)
-  return runRoot('task-run', { task: `${input.app}-task-${input.task}` }, TASK_WAIT_MS, client)
+  return runRoot(ctx, 'task-run', { task: `${input.app}-task-${input.task}` }, TASK_WAIT_MS)
 }

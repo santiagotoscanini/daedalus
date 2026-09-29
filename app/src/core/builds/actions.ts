@@ -9,6 +9,7 @@ import {
   isTerminalBuildState,
 } from '../../lib/builds'
 import type { Result } from '../../lib/result'
+import type { Ctx } from '../ctx'
 
 // The two build mutations, once.
 //
@@ -127,11 +128,10 @@ export async function buildNow(input: { app: string; actor: string }): Promise<B
  * one that could not be asked is reported. Idempotent: a second call finds
  * the row already terminal.
  */
-export async function cancelBuild(input: {
-  app: string
-  id: string
-  actor: string
-}): Promise<CancelBuildResult> {
+export async function cancelBuild(
+  ctx: Pick<Ctx, 'controller'>,
+  input: { app: string; id: string; actor: string },
+): Promise<CancelBuildResult> {
   const { app, id, actor } = input
 
   const { getBuild, updateFromStatus } = await import('../../lib/repo/builds')
@@ -155,7 +155,7 @@ export async function cancelBuild(input: {
     },
     'engine',
   )
-  const answer = await requestBuildCancel(app)
+  const answer = await requestBuildCancel(ctx, app)
   // The actor is in the journal, never on the row: the row's words reach a
   // GitHub check run, and an email address does not belong there.
   console.info(

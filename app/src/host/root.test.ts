@@ -28,7 +28,7 @@ const run = (outcome: RootRun['outcome'], detail: string): RootRun => ({
 describe('runRoot', () => {
   it('asks for the verb with its selectors and wait, and carries the answer', async () => {
     const { client, asked } = fake(() => Promise.resolve(run('refused', 'already running')))
-    expect(await runRoot('deploy', { app: 'blog' }, 1234, client)).toEqual({
+    expect(await runRoot({ controller: client }, 'deploy', { app: 'blog' }, 1234)).toEqual({
       outcome: 'refused',
       detail: 'already running',
     })
@@ -37,13 +37,13 @@ describe('runRoot', () => {
 
   it('hands a payload on beside the selectors', async () => {
     const { client, asked } = fake(() => Promise.resolve(run('done', 'sealed')))
-    await runRoot('secret-set', { app: 'blog' }, 5, client, '{"data":"ENC[x]"}')
+    await runRoot({ controller: client }, 'secret-set', { app: 'blog' }, 5, '{"data":"ENC[x]"}')
     expect(asked).toEqual([['secret-set', { app: 'blog' }, 5, '{"data":"ENC[x]"}']])
   })
 
   it('reads a call that got no answer as failed, with why', async () => {
     const f = fake(() => Promise.reject(new ControllerError('unreachable', 'no controller')))
-    expect(await runRoot('deploy', { app: 'blog' }, 1, f.client)).toEqual({
+    expect(await runRoot({ controller: f.client }, 'deploy', { app: 'blog' }, 1)).toEqual({
       outcome: 'failed',
       detail: 'no controller',
     })

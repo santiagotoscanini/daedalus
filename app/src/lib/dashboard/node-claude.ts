@@ -1,4 +1,4 @@
-import { type ControllerClient, controller } from '../../host/controller/client'
+import type { Ctx } from '../../core/ctx'
 import { readNode } from '../../host/controller/nodes'
 import type { AgentRoster } from '../agent/roster'
 import type { AgentStatus, NodeClaude } from '../agent/status'
@@ -28,10 +28,10 @@ export type NodeClaudeData = {
 }
 
 export async function loadNodeClaude(
+  ctx: Pick<Ctx, 'controller'>,
   id: string,
-  client: ControllerClient = controller(),
 ): Promise<NodeClaudeData | null> {
-  const node = await getNode(id)
+  const node = await getNode(ctx, id)
   if (node === null) return null
   const none = {
     node,
@@ -41,7 +41,7 @@ export async function loadNodeClaude(
     roster: null,
     rosterMissing: null,
   }
-  const read = await readNode(client, id)
+  const read = await readNode(ctx, id)
   const d = read.detail
   if (d === null) return { ...none, error: read.error }
   if (d.status === null) {
@@ -51,12 +51,12 @@ export async function loadNodeClaude(
     }
   }
   const [report, roster] = await Promise.all([
-    client.nodesClaude(id).then(
+    ctx.controller.nodesClaude(id).then(
       (a) => ({ report: a.report, reportError: null }),
       (e: unknown) => ({ report: null, reportError: e instanceof Error ? e.message : String(e) }),
     ),
     readRoster(
-      () => client.nodesClaudeRoster(id),
+      () => ctx.controller.nodesClaudeRoster(id),
       'the machine has not sent a roster since the controller started',
     ),
   ])

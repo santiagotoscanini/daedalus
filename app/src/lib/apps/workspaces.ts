@@ -1,5 +1,4 @@
-import { actorLabel } from '../../core/auth'
-import { makeCtx } from '../../core/ctx'
+import type { Ctx } from '../../core/ctx'
 import { listExternalApps } from '../../core/settings/external-apps'
 import type { RootAnswer } from '../../host/root'
 import { requestWorkspaceClone } from '../../host/workspaces'
@@ -18,8 +17,10 @@ import { appRepo } from '../site'
 // has to be here rather than in a validator because it is built from the
 // registry.
 
-export async function cloneOfferedWorkspace(data: { repo: string }): Promise<RootAnswer> {
-  const ctx = await makeCtx()
+export async function cloneOfferedWorkspace(
+  ctx: Ctx,
+  data: { repo: string; actor: string },
+): Promise<RootAnswer> {
   const [apps, EXTERNAL_APPS] = await Promise.all([listApps(), listExternalApps(ctx)])
   const offered = new Set([
     ...apps.map((a) => appRepo(ctx.site, a.name).toLowerCase()),
@@ -28,5 +29,5 @@ export async function cloneOfferedWorkspace(data: { repo: string }): Promise<Roo
   if (!offered.has(data.repo.toLowerCase())) {
     return { outcome: 'refused', detail: `${data.repo} is not one of this box's project repos` }
   }
-  return requestWorkspaceClone({ repo: data.repo, actor: actorLabel() })
+  return requestWorkspaceClone(ctx, { repo: data.repo, actor: data.actor })
 }

@@ -1,4 +1,5 @@
-import { type ControllerClient, controller } from './controller/client'
+import type { Ctx } from '../core/ctx'
+import type { ControllerClient } from './controller/client'
 import { ControllerError } from './controller/wire'
 
 // Restarting the box: the root helper's `reboot` verb, asked through the
@@ -20,13 +21,13 @@ export type RebootAnswer =
   | { state: 'refused'; reason: string }
 
 export async function requestReboot(
+  ctx: Pick<Ctx, 'controller'>,
   input: { actor: string },
-  client: ControllerClient = controller(),
 ): Promise<RebootAnswer> {
   console.info(`[power] restart asked by ${input.actor}`)
   let r: Awaited<ReturnType<ControllerClient['rootRun']>>
   try {
-    r = await client.rootRun('reboot', {}, REBOOT_WAIT_MS)
+    r = await ctx.controller.rootRun('reboot', {}, REBOOT_WAIT_MS)
   } catch (e) {
     // The connection ending with the call unanswered is what the box going
     // down looks like from here: the controller stops with it, possibly

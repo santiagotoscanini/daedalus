@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
+import type { Ctx } from '../../core/ctx'
 import { wireName, wirePolicy } from '../../lib/agent/policy'
 import type { NodePolicy, NodeState } from '../schema'
-import { type ControllerClient, controller } from './client'
 import {
   ControllerError,
   type ControllerNode,
@@ -123,18 +123,18 @@ async function decidedRows(): Promise<DecidedRow[]> {
     .from(nodes)
 }
 
-type SyncDeps = { client?: ControllerClient; rows?: () => Promise<DecidedRow[]> }
+type Rows = () => Promise<DecidedRow[]>
 
-async function runSync(deps: SyncDeps): Promise<DesiredSync> {
+async function runSync(ctx: Pick<Ctx, 'controller'>, rows: Rows): Promise<DesiredSync> {
   const at = new Date().toISOString()
   let sent: DesiredSync['sent'] = []
   let skipped: DesiredSync['skipped'] = []
   let result: DesiredSync
   try {
-    const set = desiredSet(await (deps.rows ?? decidedRows)())
+    const set = desiredSet(await rows())
     sent = set.nodes.map((n) => ({ id: n.id, state: n.state }))
     skipped = set.skipped
-    const answer = await (deps.client ?? controller()).nodesSetDesired(set.nodes)
+    const answer = await ctx.controller.nodesSetDesired(set.nodes)
     result = { at, sent, skipped, answer, error: null }
   } catch (e) {
     result = { at, sent, skipped, answer: null, error: e instanceof Error ? e.message : String(e) }
@@ -154,21 +154,28 @@ async function runSync(deps: SyncDeps): Promise<DesiredSync> {
  * while one is queued share it; one made while a sync runs queues the next,
  * which reads the table afresh.
  */
-export function syncDesired(deps: SyncDeps = {}): Promise<DesiredSync> {
+export function syncDesired(
+  ctx: Pick<Ctx, 'controller'>,
+  rows: Rows = decidedRows,
+): Promise<DesiredSync> {
   const s = slot()
   if (s.queued !== null) return s.queued
   const q = s.tail.then(() => {
     s.queued = null
-    return runSync(deps)
+    return runSync(ctx, rows)
   })
   s.queued = q
   s.tail = q.catch(() => undefined)
   return q
 }
 
-/** A sync, not awaited: for a decision that must not wait on the controller. */
+/** A sync, not awaited, on its own Ctx: for a decision that must not wait on the controller. */
 export function requestDesiredSync(): void {
-  void syncDesired()
+  void import('../../core/ctx')
+    .then(async ({ makeCtx }) => syncDesired(await makeCtx()))
+    .catch((e: unknown) => {
+      console.warn(`controller: no desired sync: ${e instanceof Error ? e.message : String(e)}`)
+    })
 }
 
 export function lastDesiredSync(): DesiredSync | null {
@@ -260,11 +267,11 @@ export function enrollValues(d: ControllerNodeDetail): {
  * print after the machine's name.
  */
 export async function readNode(
-  client: ControllerClient,
+  ctx: Pick<Ctx, 'controller'>,
   id: string,
 ): Promise<{ detail: ControllerNodeDetail | null; error: string | null }> {
   try {
-    return { detail: await client.nodesGet(id), error: null }
+    return { detail: await ctx.controller.nodesGet(id), error: null }
   } catch (e) {
     if (e instanceof ControllerError && e.code === 'not_found') {
       return {
@@ -283,12 +290,12 @@ export async function readNode(
  * next comes is not doubled.
  */
 let ticking = false
-export async function ensureControllerLink(client: ControllerClient = controller()): Promise<void> {
+export async function ensureControllerLink(ctx: Pick<Ctx, 'controller'>): Promise<void> {
   if (ticking) return
   ticking = true
   try {
-    if (client.hello() === null) await client.systemInfo()
-    const seen = await client.nodesList()
+    if (ctx.controller.hello() === null) await ctx.controller.systemInfo()
+    const seen = await ctx.controller.nodesList()
     const { recordObserved } = await import('../../lib/repo/nodes')
     await recordObserved(seen)
   } catch {

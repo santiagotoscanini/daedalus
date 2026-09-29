@@ -139,14 +139,14 @@ describe('the desired set', () => {
       },
     })
     const rows = () => Promise.resolve([row(KEY_A, 'approved'), row(KEY_B, 'revoked')])
-    const r = await syncDesired({ client, rows })
+    const r = await syncDesired({ controller: client }, rows)
     expect(r.error).toBeNull()
     expect(r.answer?.nodes).toBe(2)
     expect(sent).toHaveLength(1)
     expect(r.sent.map((s) => s.state).sort()).toEqual(['approved', 'revoked'])
     expect(lastDesiredSync()).toBe(r)
 
-    const down = await syncDesired({ client: fake({}), rows })
+    const down = await syncDesired({ controller: fake({}) }, rows)
     expect(down.answer).toBeNull()
     expect(down.error).toMatch(/fake: nodes.set_desired/)
     expect(lastDesiredSync()).toBe(down)
@@ -161,7 +161,10 @@ describe('the desired set', () => {
       },
     })
     const rows = () => Promise.resolve([])
-    const [a, b] = [syncDesired({ client, rows }), syncDesired({ client, rows })]
+    const [a, b] = [
+      syncDesired({ controller: client }, rows),
+      syncDesired({ controller: client }, rows),
+    ]
     expect(a).toBe(b)
     await a
     expect(n).toBe(1)
@@ -176,7 +179,7 @@ describe('the minute’s tick', () => {
         return Promise.reject(new ControllerError('unreachable', 'down'))
       },
     })
-    await ensureControllerLink(client)
+    await ensureControllerLink({ controller: client })
     expect(client.calls).toEqual(['system.info'])
   })
 })
@@ -280,12 +283,16 @@ describe('enrolment', () => {
 describe('reading one machine', () => {
   it('says a machine the controller never heard of is not connected', async () => {
     const r = await readNode(
-      fake({ nodesGet: () => Promise.reject(new ControllerError('not_found', 'no machine')) }),
+      {
+        controller: fake({
+          nodesGet: () => Promise.reject(new ControllerError('not_found', 'no machine')),
+        }),
+      },
       '0123456789abcdef',
     )
     expect(r.detail).toBeNull()
     expect(r.error).toMatch(/not connected/)
-    const down = await readNode(fake({}), '0123456789abcdef')
+    const down = await readNode({ controller: fake({}) }, '0123456789abcdef')
     expect(down.error).toMatch(/^the controller: fake: nodes.get/)
   })
 })

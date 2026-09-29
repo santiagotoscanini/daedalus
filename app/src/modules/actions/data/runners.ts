@@ -109,7 +109,7 @@ export async function loadRunners(ctx: Ctx): Promise<RunnersData> {
   const now = Date.now()
   const [repos, nodes, uname] = await Promise.all([
     collect(ctx, now),
-    listNodes().catch(() => []),
+    listNodes(ctx).catch(() => []),
     ctx.prom.vector('node_uname_info'),
   ])
   const demand = demandOf(repos, now)

@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { Ctx } from '../core/ctx'
 import { type Decoder, nullable, num, obj, str } from '../lib/contract/decode'
 import { readSnapshot } from './contract/snapshot'
-import type { ControllerClient } from './controller/client'
 import { env } from './env'
 import { type RootAnswer, runRoot } from './root'
 
@@ -90,9 +90,9 @@ export async function pullFailing(app: string): Promise<boolean> {
  * else is refused before a unit is named.
  */
 export async function requestDeploy(
+  ctx: Pick<Ctx, 'controller'>,
   input: { app: string; reason: string; actor: string },
-  client?: ControllerClient,
 ): Promise<RootAnswer> {
   console.info(`[deploy] ${input.app}: ${input.reason}, asked by ${input.actor}`)
-  return runRoot('deploy', { app: input.app }, DEPLOY_WAIT_MS, client)
+  return runRoot(ctx, 'deploy', { app: input.app }, DEPLOY_WAIT_MS)
 }

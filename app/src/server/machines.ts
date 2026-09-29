@@ -5,9 +5,9 @@ import { readFn } from './fn'
 // The machine picker's list and a node's System page. Read-only.
 
 /** Every approved node: what the pickers on System and Claude offer beside this box. */
-export const fetchMachineNodesFn = readFn.handler(async () => {
+export const fetchMachineNodesFn = readFn.handler(async ({ context }) => {
   const { listNodes } = await import('../lib/repo/nodes')
-  return (await listNodes()).filter((n) => n.state === 'approved')
+  return (await listNodes(await context.ctx())).filter((n) => n.state === 'approved')
 })
 
 export const fetchNodeSystemFn = readFn
@@ -19,9 +19,9 @@ export const fetchNodeSystemFn = readFn
       ),
     ),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { loadNodeSystem } = await import('../lib/dashboard/node-system')
-    return loadNodeSystem(data.id, {
+    return loadNodeSystem(await context.ctx(), data.id, {
       board: data.board,
       browsers: data.browsers,
       macos: data.macos,

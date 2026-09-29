@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Ctx } from '../../core/ctx'
 
 // The write half of the app-secrets editor, asserted over WHAT REACHED THE
 // HOST rather than over what was returned.
@@ -34,11 +35,11 @@ vi.mock('../../host/nix-manifest', () => ({
 }))
 
 vi.mock('../../host/secret-set', () => ({
-  requestSecretSet: async (body: Row) => {
+  requestSecretSet: async (_ctx: unknown, body: Row) => {
     h.requested.push({ verb: 'set', ...body })
     return { outcome: 'done', detail: 'sealed' }
   },
-  requestSecretRemove: async (body: Row) => {
+  requestSecretRemove: async (_ctx: unknown, body: Row) => {
     h.requested.push({ verb: 'remove', ...body })
     return { outcome: 'done', detail: 'removed' }
   },
@@ -55,6 +56,8 @@ vi.mock('../../core/vault', () => ({
 
 const { removeAppSecret, setAppSecret } = await import('./secrets')
 
+const CTX = {} as Pick<Ctx, 'controller'>
+
 beforeEach(() => {
   h.apps = ['hermes']
   h.requested = []
@@ -64,7 +67,7 @@ beforeEach(() => {
 
 describe('setAppSecret', () => {
   it('seals the value and sends the CIPHERTEXT, never the value', async () => {
-    const r = await setAppSecret({
+    const r = await setAppSecret(CTX, {
       name: 'hermes',
       key: 'INVITE_CODE',
       value: 'hunter2',
@@ -87,7 +90,7 @@ describe('setAppSecret', () => {
 
   it('refuses a key that is not an environment variable name, and seals nothing', async () => {
     for (const key of ['HAS-HYPHEN', '9LEADING', 'sops_mac', '']) {
-      const r = await setAppSecret({ name: 'hermes', key, value: 'v', actor: 'a' })
+      const r = await setAppSecret(CTX, { name: 'hermes', key, value: 'v', actor: 'a' })
       expect(r.outcome, key).toBe('refused')
     }
     expect(h.sealed).toEqual([])
@@ -98,7 +101,7 @@ describe('setAppSecret', () => {
     // The host has no writable path for such a name — nix builds SECRET_APPS
     // from the same committed registry — so this refusal is the readable
     // version of what would otherwise be a rejected request a second later.
-    const r = await setAppSecret({ name: 'ghost', key: 'TOKEN', value: 'v', actor: 'a' })
+    const r = await setAppSecret(CTX, { name: 'ghost', key: 'TOKEN', value: 'v', actor: 'a' })
     expect(r).toEqual({
       outcome: 'refused',
       detail:
@@ -109,7 +112,7 @@ describe('setAppSecret', () => {
   })
 
   it('checks the key BEFORE the app, so a bad name never leaks which apps exist', async () => {
-    const r = await setAppSecret({ name: 'ghost', key: 'HAS-HYPHEN', value: 'v', actor: 'a' })
+    const r = await setAppSecret(CTX, { name: 'ghost', key: 'HAS-HYPHEN', value: 'v', actor: 'a' })
     expect(r.outcome).toBe('refused')
     expect(r.detail).not.toContain('ghost')
   })
@@ -119,7 +122,7 @@ describe('setAppSecret', () => {
     // request asked anyway would ask the host to decrypt something that is
     // not a sops file.
     h.sealFails = 'Nothing was sent: the value is not encrypted.'
-    const r = await setAppSecret({ name: 'hermes', key: 'TOKEN', value: 'v', actor: 'a' })
+    const r = await setAppSecret(CTX, { name: 'hermes', key: 'TOKEN', value: 'v', actor: 'a' })
     expect(r).toEqual({
       outcome: 'refused',
       detail: 'Nothing was sent: the value is not encrypted.',
@@ -130,7 +133,7 @@ describe('setAppSecret', () => {
 
 describe('removeAppSecret', () => {
   it('sends the app, the key and the actor — and nothing else', async () => {
-    const r = await removeAppSecret({ name: 'hermes', key: 'INVITE_CODE', actor: 'op' })
+    const r = await removeAppSecret(CTX, { name: 'hermes', key: 'INVITE_CODE', actor: 'op' })
     expect(r).toEqual({ outcome: 'done', detail: 'removed' })
     // No ciphertext: there is no value to send, and this is the one verb here
     // that needs no sops on this side at all.
@@ -141,10 +144,10 @@ describe('removeAppSecret', () => {
   })
 
   it('refuses an unknown app and a bad key, asking nothing either way', async () => {
-    expect((await removeAppSecret({ name: 'ghost', key: 'TOKEN', actor: 'op' })).outcome).toBe(
+    expect((await removeAppSecret(CTX, { name: 'ghost', key: 'TOKEN', actor: 'op' })).outcome).toBe(
       'refused',
     )
-    expect((await removeAppSecret({ name: 'hermes', key: '../x', actor: 'op' })).outcome).toBe(
+    expect((await removeAppSecret(CTX, { name: 'hermes', key: '../x', actor: 'op' })).outcome).toBe(
       'refused',
     )
     expect(h.requested).toEqual([])

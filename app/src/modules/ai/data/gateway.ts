@@ -18,7 +18,7 @@ export async function loadGateway(ctx: Ctx): Promise<GatewayData> {
   const [litellm, routing, nodes] = await Promise.all([
     loadLitellm(ctx),
     gatewayRoutes(ctx),
-    listNodes().catch(() => []),
+    listNodes(ctx).catch(() => []),
   ])
   return {
     ...litellm,

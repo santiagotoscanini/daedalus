@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Ctx } from '../../core/ctx'
 
 // The Tasks tab's two jobs, and the part of each that would fail silently.
 //
@@ -28,17 +29,18 @@ vi.mock('../repo/apps', () => ({
 }))
 
 vi.mock('../../host/task-run', () => ({
-  requestTaskRun: async (body: Record<string, unknown>) => {
+  requestTaskRun: async (_ctx: unknown, body: Record<string, unknown>) => {
     h.requested.push(body)
     return { outcome: 'done', detail: 'ran' }
   },
 }))
 
-vi.mock('../../core/auth', () => ({ actorLabel: () => 'someone@example.com' }))
-
 vi.mock('../dashboard/host-facts', () => ({ hostFacts: async () => ({ jobs: h.jobs }) }))
 
 const { loadTasksTab, runAppTaskNow } = await import('./tasks')
+
+const CTX = {} as Pick<Ctx, 'controller'>
+const ACTOR = 'someone@example.com'
 
 const task = (taskId: string, over: Row = {}) => ({
   taskId,
@@ -56,7 +58,7 @@ beforeEach(() => {
 
 describe('runAppTaskNow', () => {
   it('asks for the app, the task and the actor, and returns the host answer', async () => {
-    expect(await runAppTaskNow({ name: 'hermes', task: 'digest' })).toEqual({
+    expect(await runAppTaskNow(CTX, { name: 'hermes', task: 'digest', actor: ACTOR })).toEqual({
       outcome: 'done',
       detail: 'ran',
     })
@@ -67,21 +69,25 @@ describe('runAppTaskNow', () => {
   // If this ever published, the host would be asked to start a unit that does
   // not exist, on a name daedalus never generated.
   it('refuses a task the app does not declare, and publishes nothing', async () => {
-    await expect(runAppTaskNow({ name: 'hermes', task: 'not-a-task' })).rejects.toThrow(
-      'declares no task called not-a-task',
-    )
+    await expect(
+      runAppTaskNow(CTX, { name: 'hermes', task: 'not-a-task', actor: ACTOR }),
+    ).rejects.toThrow('declares no task called not-a-task')
     expect(h.requested).toEqual([])
   })
 
   it('refuses a declared app — there is no container to exec into', async () => {
     h.record = { name: 'hermes', stage: 'declared', tasks: [task('digest')] }
-    await expect(runAppTaskNow({ name: 'hermes', task: 'digest' })).rejects.toThrow('not running')
+    await expect(
+      runAppTaskNow(CTX, { name: 'hermes', task: 'digest', actor: ACTOR }),
+    ).rejects.toThrow('not running')
     expect(h.requested).toEqual([])
   })
 
   it('refuses an app that is not in the registry at all', async () => {
     h.record = null
-    await expect(runAppTaskNow({ name: 'ghost', task: 'digest' })).rejects.toThrow('no app named')
+    await expect(
+      runAppTaskNow(CTX, { name: 'ghost', task: 'digest', actor: ACTOR }),
+    ).rejects.toThrow('no app named')
     expect(h.requested).toEqual([])
   })
 })

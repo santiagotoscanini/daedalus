@@ -451,7 +451,7 @@ export function controller(): ControllerClient {
       // Every (re)connection hands the controller the desired set again: it
       // keeps nothing across its own restart (./nodes.ts).
       onConnect: (c) => {
-        void import('./nodes').then((m) => m.syncDesired({ client: c }))
+        void import('./nodes').then((m) => m.syncDesired({ controller: c }))
       },
     })
     slot.path = path

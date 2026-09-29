@@ -196,7 +196,7 @@ describe('requestBuildCancel', () => {
         })
       },
     } as unknown as ControllerClient
-    expect(await requestBuildCancel('blog', client)).toEqual({
+    expect(await requestBuildCancel({ controller: client }, 'blog')).toEqual({
       outcome: 'refused',
       detail: 'the build in flight is not blog’s',
     })

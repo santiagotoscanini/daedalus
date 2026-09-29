@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm'
-import { controller } from '../../host/controller/client'
+import type { Ctx } from '../../core/ctx'
 import { enrollValues, observedFacts, requestDesiredSync } from '../../host/controller/nodes'
 import type { ControllerNode, ControllerNodeDetail } from '../../host/controller/wire'
 import { db } from '../../host/db'
@@ -106,30 +106,28 @@ function row(
 }
 
 /** The controller's list by id; empty when it cannot be read (every row then reads as not connected). */
-async function seenById(): Promise<Map<string, ControllerNode>> {
-  const list = await controller()
-    .nodesList()
-    .catch(() => [] as ControllerNode[])
+async function seenById(ctx: Pick<Ctx, 'controller'>): Promise<Map<string, ControllerNode>> {
+  const list = await ctx.controller.nodesList().catch(() => [] as ControllerNode[])
   return new Map(list.map((s) => [s.id, s]))
 }
 
-export async function listNodes(): Promise<NodeRow[]> {
+export async function listNodes(ctx: Pick<Ctx, 'controller'>): Promise<NodeRow[]> {
   // In the order they joined, and never by when they last spoke: a picker
   // whose pills swap places between two loads because one machine spoke a
   // second later reads as a race, not as a list.
   const [all, household, seen] = await Promise.all([
     db.select().from(nodes).orderBy(asc(nodes.firstSeenAt), asc(nodes.id)),
     householdMacs(),
-    seenById(),
+    seenById(ctx),
   ])
   return all.map((n) => row(n, household, seen.get(n.id)))
 }
 
-export async function getNode(id: string): Promise<NodeRow | null> {
+export async function getNode(ctx: Pick<Ctx, 'controller'>, id: string): Promise<NodeRow | null> {
   const [[n], household, seen] = await Promise.all([
     db.select().from(nodes).where(eq(nodes.id, id)).limit(1),
     householdMacs(),
-    seenById(),
+    seenById(ctx),
   ])
   return n === undefined ? null : row(n, household, seen.get(id))
 }

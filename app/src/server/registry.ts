@@ -216,9 +216,9 @@ export const triggerDeploy = adminFn
   // The one server function here whose request is the bare name rather than a
   // record around it.
   .validator(asValidator(appNameField))
-  .handler(async ({ data: name }) => {
+  .handler(async ({ data: name, context }) => {
     const { requestManualDeploy } = await import('../lib/apps/deploy')
-    return requestManualDeploy(name)
+    return requestManualDeploy(await context.ctx(), name, context.actor())
   })
 
 export const revealEnvVar = adminFn
@@ -263,7 +263,7 @@ export const setAppSecretFn = adminFn
   )
   .handler(async ({ data, context }): Promise<RootAnswer> => {
     const { setAppSecret } = await import('../lib/apps/secrets')
-    return setAppSecret({ ...data, actor: context.actor() })
+    return setAppSecret(await context.ctx(), { ...data, actor: context.actor() })
   })
 
 export const removeAppSecretFn = adminFn
@@ -277,7 +277,7 @@ export const removeAppSecretFn = adminFn
   )
   .handler(async ({ data, context }): Promise<RootAnswer> => {
     const { removeAppSecret } = await import('../lib/apps/secrets')
-    return removeAppSecret({ ...data, actor: context.actor() })
+    return removeAppSecret(await context.ctx(), { ...data, actor: context.actor() })
   })
 
 export const cloneWorkspaceFn = adminFn
@@ -285,9 +285,9 @@ export const cloneWorkspaceFn = adminFn
   // check that matters and cannot live here, since it is built from the
   // registry.
   .validator(asValidator(withMessage(obj({ repo: str }), 'expected a repo')))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { cloneOfferedWorkspace } = await import('../lib/apps/workspaces')
-    return cloneOfferedWorkspace(data)
+    return cloneOfferedWorkspace(await context.ctx(), { ...data, actor: context.actor() })
   })
 
 /**
@@ -306,7 +306,7 @@ export const runTaskNow = adminFn
       withMessage(obj({ name: appNameField, task: taskIdField }), 'expected an app and a task'),
     ),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { runAppTaskNow } = await import('../lib/apps/tasks')
-    return runAppTaskNow(data)
+    return runAppTaskNow(await context.ctx(), { ...data, actor: context.actor() })
   })

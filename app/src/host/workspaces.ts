@@ -1,3 +1,4 @@
+import type { Ctx } from '../core/ctx'
 import {
   arrayOf,
   bool,
@@ -9,7 +10,6 @@ import {
   str,
 } from '../lib/contract/decode'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
-import type { ControllerClient } from './controller/client'
 import { env } from './env'
 import { type RootAnswer, rootActor, runRoot } from './root'
 
@@ -111,13 +111,13 @@ const CLONE_WAIT_MS = 980_000
  * answer is the unit's last line: what it did, or why it refused.
  */
 export async function requestWorkspaceClone(
+  ctx: Pick<Ctx, 'controller'>,
   input: { repo: string; actor: string },
-  client?: ControllerClient,
 ): Promise<RootAnswer> {
   return runRoot(
+    ctx,
     'workspace-clone',
     { repo: input.repo, actor: rootActor(input.actor) },
     CLONE_WAIT_MS,
-    client,
   )
 }

@@ -1,4 +1,4 @@
-import { actorLabel } from '../../core/auth'
+import type { Ctx } from '../../core/ctx'
 import type { RootAnswer } from '../../host/root'
 import { requestTaskRun } from '../../host/task-run'
 import { hostFacts, type JobRun } from '../dashboard/host-facts'
@@ -122,7 +122,10 @@ export async function loadTasksTab(name: string): Promise<TasksPayload> {
  * the app must be running: a task is `podman exec app-<name> …`, which fails
  * every tick against a `declared` app that has no container.
  */
-export async function runAppTaskNow(input: { name: string; task: string }): Promise<RootAnswer> {
+export async function runAppTaskNow(
+  ctx: Pick<Ctx, 'controller'>,
+  input: { name: string; task: string; actor: string },
+): Promise<RootAnswer> {
   const record = await getApp(input.name)
   if (!record) throw new Error(`no app named ${input.name}`)
 
@@ -135,6 +138,5 @@ export async function runAppTaskNow(input: { name: string; task: string }): Prom
     )
   }
 
-  const actor = actorLabel()
-  return requestTaskRun({ app: input.name, task: input.task, actor })
+  return requestTaskRun(ctx, { app: input.name, task: input.task, actor: input.actor })
 }

@@ -1,4 +1,4 @@
-import { type ControllerClient, controller } from './controller/client'
+import type { Ctx } from '../core/ctx'
 import type { RootOutcome } from './controller/wire'
 
 // One root verb, the way a page wants it: the root helper's word (agent
@@ -15,14 +15,14 @@ import type { RootOutcome } from './controller/wire'
 export type RootAnswer = { outcome: RootOutcome; detail: string }
 
 export async function runRoot(
+  ctx: Pick<Ctx, 'controller'>,
   verb: string,
   selectors: Record<string, string>,
   waitMs: number,
-  client: ControllerClient = controller(),
   payload?: string,
 ): Promise<RootAnswer> {
   try {
-    const r = await client.rootRun(verb, selectors, waitMs, payload)
+    const r = await ctx.controller.rootRun(verb, selectors, waitMs, payload)
     return { outcome: r.outcome, detail: r.detail }
   } catch (e) {
     return { outcome: 'failed', detail: e instanceof Error ? e.message : String(e) }

@@ -269,13 +269,13 @@ export const buildNowFn = adminFn
 /** Cancel, as the button's door onto `core/builds/actions.ts cancelBuild`. */
 export const cancelBuildFn = adminFn
   .validator(asValidator(buildRequest))
-  .handler(async ({ data }): Promise<CancelBuildResult> => {
+  .handler(async ({ data, context }): Promise<CancelBuildResult> => {
     const { requireActor } = await import('../core/auth')
     const gate = requireActor()
     if (!gate.ok) return gate
 
     const { cancelBuild } = await import('../core/builds/actions')
-    return cancelBuild({ app: data.app, id: data.id, actor: gate.value })
+    return cancelBuild(await context.ctx(), { app: data.app, id: data.id, actor: gate.value })
   })
 
 export type RetryReportResult = Result<null>

@@ -182,7 +182,7 @@ async function handleDelivery(delivery: Delivery, deps: WebhookDeps): Promise<Re
     return Response.json({ status: 'ignored', reason: 'duplicate' })
   }
   log(delivery.id, delivery.event, done.outcome)
-  if (done.installationChanged) await afterInstallationChange(delivery)
+  if (done.installationChanged) await afterInstallationChange(delivery, deps)
   return Response.json(done.body)
 }
 
@@ -246,10 +246,10 @@ async function planPush(delivery: Delivery, deps: WebhookDeps): Promise<Plan | R
  * After an installation or repository event is recorded. Never throws: the
  * delivery has committed, and a 500 now would make its redelivery a duplicate.
  */
-async function afterInstallationChange(delivery: Delivery): Promise<void> {
+async function afterInstallationChange(delivery: Delivery, deps: WebhookDeps): Promise<void> {
   try {
     const { requestTokenRefresh } = await import('../core/github-app')
-    await requestTokenRefresh()
+    await requestTokenRefresh(deps)
 
     const move = repoMove(delivery.event, delivery.action)
     const repoId = repositoryId(delivery.payload)

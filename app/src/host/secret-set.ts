@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer'
-import type { ControllerClient } from './controller/client'
+import type { Ctx } from '../core/ctx'
 import { type RootAnswer, rootActor, runRoot } from './root'
 
 // Asking the host to set or remove ONE key in an app's operator-secrets file
@@ -45,8 +45,8 @@ export const SECRET_PAYLOAD_MAX = 65_536
  * one from `sealAppSecret` and have no other way to make one.
  */
 export async function requestSecretSet(
+  ctx: Pick<Ctx, 'controller'>,
   input: { actor: string; app: string; key: string; ciphertext: string },
-  client?: ControllerClient,
 ): Promise<RootAnswer> {
   if (Buffer.byteLength(input.ciphertext) > SECRET_PAYLOAD_MAX) {
     return {
@@ -55,23 +55,23 @@ export async function requestSecretSet(
     }
   }
   return runRoot(
+    ctx,
     'secret-set',
     { app: input.app, action: 'set', key: input.key, actor: rootActor(input.actor) },
     SECRET_WAIT_MS,
-    client,
     input.ciphertext,
   )
 }
 
 /** Ask for a remove. Nothing is sealed: there is no value to send. */
 export async function requestSecretRemove(
+  ctx: Pick<Ctx, 'controller'>,
   input: { actor: string; app: string; key: string },
-  client?: ControllerClient,
 ): Promise<RootAnswer> {
   return runRoot(
+    ctx,
     'secret-set',
     { app: input.app, action: 'remove', key: input.key, actor: rootActor(input.actor) },
     SECRET_WAIT_MS,
-    client,
   )
 }

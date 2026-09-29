@@ -113,7 +113,7 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
     readFleetProviders(ctx),
     gatewayRoutes(ctx),
     listApps().catch(() => []),
-    listNodes().catch(() => []),
+    listNodes(ctx).catch(() => []),
   ])
   // The same policy the gateway sync resolves against, so the alias this
   // page prints and the alias the gateway publishes cannot disagree.

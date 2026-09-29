@@ -106,7 +106,7 @@ async function controllerView(client: ControllerClient): Promise<ControllerView>
 export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   const client = ctx.controller
   const [rows, domain, view, seen] = await Promise.all([
-    listNodes(),
+    listNodes(ctx),
     lanDomain(),
     controllerView(client),
     client.nodesList().then(
@@ -122,7 +122,7 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
       // Only a machine the box acts on is read further: a waiting key has
       // no status to show until it is approved.
       if (m.node === null || m.node.state !== 'approved' || !m.node.connected) return m
-      const d = (await readNode(client, m.node.id)).detail
+      const d = (await readNode(ctx, m.node.id)).detail
       const t = d?.telemetry ?? null
       return {
         ...m,

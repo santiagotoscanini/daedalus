@@ -22,13 +22,14 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('../host/deploy', () => ({
-  requestDeploy: async (input: { app: string; reason: string; actor: string }) => {
+  requestDeploy: async (_ctx: unknown, input: { app: string; reason: string; actor: string }) => {
     h.deploys.push(input)
     return { outcome: 'done', detail: 'deployed' }
   },
 }))
 vi.mock('../lib/repo/apps', () => ({ getApp: async () => h.app ?? undefined }))
 vi.mock('../host/app-icon', () => ({ forgetAppIcon: () => undefined }))
+vi.mock('../core/ctx', () => ({ makeCtx: async () => ({}) }))
 
 type Handler = (ctx: { request: Request }) => Promise<Response>
 type RouteLike = { options?: { server?: { handlers?: { POST?: Handler } } } }

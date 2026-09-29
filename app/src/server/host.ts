@@ -15,5 +15,5 @@ import { adminFn } from './fn'
  */
 export const requestRebootFn = adminFn.handler(async ({ context }) => {
   const { requestReboot } = await import('../host/power')
-  return requestReboot({ actor: context.actor() })
+  return requestReboot(await context.ctx(), { actor: context.actor() })
 })

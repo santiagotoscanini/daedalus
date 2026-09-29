@@ -311,7 +311,12 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
     { ...appArg, id: z.string().min(1).describe('The build id.') },
     async (args, actor) => {
       const { cancelBuild } = await import('../../core/builds/actions')
-      const outcome = await cancelBuild({ app: String(args.app), id: String(args.id), actor })
+      const { makeCtx } = await import('../../core/ctx')
+      const outcome = await cancelBuild(await makeCtx(), {
+        app: String(args.app),
+        id: String(args.id),
+        actor,
+      })
       return outcome.ok ? ok({ cancelled: String(args.id) }) : refuse(outcome.reason)
     },
   )
@@ -320,7 +325,8 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
     const { requestManualDeploy } = await import('../../lib/apps/deploy')
     // Answers when the deploy unit has finished: its last line on success,
     // its reason otherwise (already running, a failed pull).
-    const answer = await requestManualDeploy(String(args.app), actor)
+    const { makeCtx } = await import('../../core/ctx')
+    const answer = await requestManualDeploy(await makeCtx(), String(args.app), actor)
     return answer.outcome === 'done'
       ? ok({ deployed: String(args.app), detail: answer.detail })
       : refuse(`the deploy ${answer.outcome}: ${answer.detail}`)
