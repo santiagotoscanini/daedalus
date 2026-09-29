@@ -73,7 +73,8 @@
 #
 # The metrics page, and the machines' metrics:
 #
-#   bind           `0.0.0.0:<statusPort>` (7787), every interface: the
+#   bind           `0.0.0.0:<fleet.daedalus.statusPort>` (7787 unless the
+#                  host says otherwise), every interface: the
 #                  prometheus container reaches the host through pasta's
 #                  host alias, and its connections arrive at the host's
 #                  own address, not loopback. Every address, loopback
@@ -170,24 +171,31 @@
 #                sees it.
 #   verbs        `fleet.daedalus.rootVerbs`, contributed by the module that
 #                owns each unit, rendered into the helper's table (with the
-#                operator's uid and the systemctl/journalctl paths) and
-#                asserted here: a name, an EXISTING oneshot unit with no path
-#                unit left, a timeout, and selectors that are fixed lists
-#                spliced in as `{name}` — never a path, a flag or a free unit
-#                name from the caller. `status` is the helper's own read:
-#                the verbs and their units' state.
+#                operator's uid and the systemctl/journalctl paths): a name, an
+#                EXISTING oneshot unit with no path unit left, a timeout, and
+#                selectors that are fixed lists spliced in as `{name}` — never
+#                a path, a flag or a free unit name from the caller. The
+#                helper's own `--check-table` holds the table to the rules it
+#                applies at every start, at build time; the evaluation asserts
+#                only what the helper cannot see (each unit exists, is enabled,
+#                is a oneshot, has no path unit). `status` is the helper's own
+#                read: the verbs and their units' state.
 #   run file     a value no list can hold is a PATTERN (`patterns.<name>`: an
-#                anchored regex over a small character set, a length cap,
-#                checked here and by the helper), and a sealed secret is a
-#                PAYLOAD (`payloadMax`). Neither goes into a unit name —
-#                escaping would quadruple a slug past systemd's 256-character
-#                limit and leave the unit to unescape `%I` and trust it — nor
-#                onto a command line: such a verb names a template, `x@.service`;
-#                the helper writes every selector and the payload to
-#                `<rootRunDir>/<run id>.json` (root's, 0600, O_EXCL,
-#                O_NOFOLLOW, in a 0700 root directory — the one path its
-#                sandbox may write) and starts `x@<run id>`, which reads the
-#                file and deletes it. One run of such a verb at a time.
+#                anchored regex over a small character set, a length cap),
+#                and a sealed secret is a PAYLOAD (`payloadMax`). Neither goes
+#                into a unit name — escaping would quadruple a slug past
+#                systemd's 256-character limit and leave the unit to unescape
+#                `%I` and trust it — nor onto a command line: such a verb names
+#                a template, `x@.service`; the helper writes every selector and
+#                the payload to `<rootRunDir>/<run id>.json` (root's, 0600,
+#                O_EXCL, O_NOFOLLOW, in a 0700 root directory — the one path
+#                its sandbox may write) and starts `x@<run id>`. The unit gets
+#                the file as a systemd credential (`LoadCredential=request:`,
+#                read by systemd as root, handed over read-only in
+#                $CREDENTIALS_DIRECTORY), so it runs as the operator and never
+#                opens root's directory; the helper removes the file once the
+#                unit is done, and the unit's root `ExecStopPost` does again.
+#                One run of such a verb at a time.
 #   running      `systemctl start <unit>`, so the work is the unit's and
 #                survives a switch restarting the helper or the controller; its
 #                journal lines stream back; a failed start job is `failed`,
@@ -198,9 +206,10 @@
 #   moved so far reboot (daedalus-verbs.nix `daedalus-power`); deploy and
 #                task-run (the apps' own deploy and task units, values from the
 #                committed registry); build-cancel (build-agent.nix, a template
-#                instance per app); github-token (daedalus-github.nix). Each
-#                verb that moves here deletes its request file, path unit and
-#                app module.
+#                instance per app); github-token (daedalus-github.nix);
+#                workspace-clone and secret-set (daedalus-verbs.nix, run-file
+#                templates). Each verb that moves here deletes its request
+#                file, path unit and app module.
 #
 # What nix hands it:
 #
@@ -222,13 +231,13 @@
 #   socket         on the box talks to. The agent makes `run/` 0711 and the
 #                  socket 0666, and serves only root and the operator (the
 #                  peer's uid, SO_PEERCRED); nothing here names it.
-#   dataDir        must stay WRITABLE by the service — no ReadOnlyPaths,
-#                  ProtectHome or ProtectSystem=strict without a
-#                  ReadWritePaths for it: besides state.json, the logs and
-#                  the gcroots, the agent writes `run/agent.sock` there at
-#                  every start and `identity.next.key` + `rotation.json` in
-#                  a rotation (each temp + fsync + rename, so the directory
-#                  itself, not only the files).
+#   dataDir        the one place the service may write besides its socket's
+#                  directory (ProtectSystem=strict, ProtectHome=read-only,
+#                  ReadWritePaths for both, below): besides state.json, the
+#                  logs and the gcroots, the agent writes `run/agent.sock`
+#                  there at every start and `identity.next.key` +
+#                  `rotation.json` in a rotation (each temp + fsync + rename,
+#                  so the directory itself, not only the files).
 #   the socket     `<controllerDir>/api.sock`, in a directory tmpfiles makes
 #                  the operator's before any unit starts, so the app's bind
 #                  source always exists. The agent refuses a directory that is
@@ -305,7 +314,7 @@ let
   # The status page: every interface, the firewall keeping it from the LAN
   # (see the header). Written into config.toml so the agent and the scrape
   # below agree.
-  statusPort = 7787;
+  inherit (config.fleet.daedalus) statusPort;
 
   # The published image's `node` user, as the host sees it. Dev mode runs the
   # container as the operator, who needs no listing.
@@ -343,6 +352,15 @@ let
   # An instance outlives its longest verb's wait by a minute, no more.
   rootRuntimeMax = 60 + lib.foldl' lib.max 60 (lib.mapAttrsToList (_: v: v.timeoutSec) rootVerbs);
 
+  # The table, held at build time to the rules the helper applies at every
+  # start (agent src/root/mod.rs `Table::check`: names, selector values,
+  # patterns, caps) by the helper itself, so the rules have one home. A table
+  # it would refuse fails the build naming the reason.
+  rootTableChecked = pkgs.runCommand "daedalus-root-verbs-checked.json" { } ''
+    ${lib.getExe agent} root-helper --check-table ${rootTable}
+    cp ${rootTable} $out
+  '';
+
   # Every unit a verb can name: its template with each selector's values
   # spliced in (the helper's `expand`); a run-file verb's is its template.
   expansions =
@@ -354,29 +372,9 @@ let
         combo:
         lib.foldl' (u: k: lib.replaceStrings [ "{${k}}" ] [ combo.${k} ] u) v.unit (lib.attrNames combo)
       ) (lib.cartesianProduct v.selectors);
-  placeholders =
-    unit: map lib.head (builtins.filter builtins.isList (builtins.split "\\{([^}]*)}" unit));
-  nameRe = "[a-z][a-z0-9-]{0,31}";
-  valueRe = "[A-Za-z0-9][A-Za-z0-9._-]{0,63}";
-  # What a pattern is written with (agent src/root/mod.rs PATTERN_CHARS):
-  # no backslash, so no escape reads one way here and another there.
-  patternCharsRe = "[][A-Za-z0-9^$(){},|*+?._@ /:-]+";
-  # A pattern, as the helper will check it: anchored, those characters, a
-  # cap of 1 to 256 — and it must compile here too, which `builtins.match`
-  # forces through the `seq` (a regex it cannot read stops the evaluation
-  # with nix's own message).
-  patternOk =
-    p:
-    lib.hasPrefix "^" p.regex
-    && lib.hasSuffix "$" p.regex
-    && builtins.match patternCharsRe p.regex != null
-    && builtins.seq (builtins.match p.regex "") true
-    && p.maxLength >= 1
-    && p.maxLength <= 256;
-  # The rules agent/src/root/mod.rs `Table::check` applies at start, so a
-  # table the helper would refuse never builds; and past them what only the
-  # evaluation can see: each unit exists, is a oneshot, and has no path unit
-  # left — the file-drop door a verb leaves behind when it moves here.
+  # What only the evaluation can see, and the helper cannot: each unit a verb
+  # can start exists on this system, is enabled, is a oneshot, and has no path
+  # unit left — the file-drop door a verb leaves behind when it moves here.
   rootVerbAssertions = lib.concatLists (
     lib.mapAttrsToList (
       verb: v:
@@ -390,55 +388,15 @@ let
           in
           if at == null then stem else lib.head at;
         cfgOf = u: config.systemd.services.${svc u} or null;
-        say = msg: "fleet.daedalus.rootVerbs.${verb}: ${msg}";
       in
-      [
-        {
-          assertion = builtins.match nameRe verb != null && verb != "status";
-          message = say "a verb is ${nameRe}, and `status` is the helper's own";
-        }
-        {
-          assertion = v.timeoutSec <= 86400;
-          message = say "timeoutSec is at most 86400";
-        }
-        {
-          assertion =
-            if runFileVerb v then
-              placeholders v.unit == [ ] && builtins.match "[A-Za-z0-9_.:-]+@\\.service" v.unit != null
-            else
-              lib.sort lib.lessThan (placeholders v.unit) == lib.attrNames v.selectors;
-          message = say (
-            if runFileVerb v then
-              "a verb with patterns or a payload names a template, x@.service, with no {placeholders}"
-            else
-              "the unit's {placeholders} and the selectors must name the same set"
-          );
-        }
-        {
-          assertion = lib.all (vals: vals != [ ] && lib.all (x: builtins.match valueRe x != null) vals) (
-            lib.attrValues v.selectors
-          );
-          message = say "every selector lists at least one value, each ${valueRe}";
-        }
-        {
-          assertion = lib.all (
-            n: builtins.match nameRe n != null && !(v.selectors ? ${n}) && patternOk v.patterns.${n}
-          ) (lib.attrNames v.patterns);
-          message = say "every pattern is named ${nameRe}, is not also a selector, is anchored ^…$, uses only ${patternCharsRe}, and caps its value at 1 to 256";
-        }
-        {
-          assertion = v.payloadMax == null || (v.payloadMax >= 1 && v.payloadMax <= 65536);
-          message = say "payloadMax is 1 to 65536";
-        }
-      ]
-      ++ map (u: {
+      map (u: {
         assertion =
           lib.hasSuffix ".service" u
           && cfgOf u != null
           && (cfgOf u).enable
           && (cfgOf u).serviceConfig.Type or null == "oneshot"
           && !(config.systemd.paths ? ${svc u});
-        message = say "${u} must be an enabled oneshot service of this system with no path unit";
+        message = "fleet.daedalus.rootVerbs.${verb}: ${u} must be an enabled oneshot service of this system with no path unit";
       }) (expansions v)
     ) rootVerbs
   );
@@ -496,6 +454,17 @@ let
   };
 in
 {
+  options.fleet.daedalus.statusPort = lib.mkOption {
+    type = lib.types.port;
+    default = 7787;
+    description = ''
+      The TCP port of the controller's status page (`/healthz`,
+      `/nodes/metrics`): bound on every interface, opened on none, and
+      scraped by the `nodes` job through the containers' host alias. The
+      agent's own default, so a machine and the box agree without saying so.
+    '';
+  };
+
   options.fleet.daedalus.controllerPort = lib.mkOption {
     type = lib.types.port;
     default = 7788;
@@ -515,7 +484,8 @@ in
       name the controller may ask for, the existing oneshot unit it starts,
       and the selectors it takes — each a fixed list of values, spliced into
       the unit name where it says `{name}`. Contributed by the module that
-      owns the unit; checked at evaluation and again by the helper.
+      owns the unit; held to the helper's own rules at build time and at
+      every start, and its units asserted at evaluation.
     '';
     type = lib.types.attrsOf (
       lib.types.submodule {
@@ -694,6 +664,43 @@ in
         # once; each machine's link a thread and a descriptor, up to 64 admitted
         # and 32 in the handshake; beside telemetry and the session's tools.
         LimitNOFILE = 4096;
+
+        # The root helper is its only way to root (the header's `root`), so
+        # it may not take another: no setuid (sudo is on its PATH for the
+        # Claude units, which the USER manager runs — not this process's
+        # children, so none of this reaches them). It writes its own state
+        # and its socket's directory and nothing else; everything it asks
+        # of systemd, logind or the nix daemon goes over a socket, which a
+        # read-only filesystem does not stop. Measured under exactly this
+        # (2026-09-29): `systemctl --user`, `systemd-run --user`,
+        # `loginctl`, `nix-store --add-root`, `claude --version`. No
+        # MemoryDenyWriteExecute or syscall filter: `claude` (a JIT) runs
+        # under it.
+        NoNewPrivileges = true;
+        RestrictSUIDSGID = true;
+        ProtectSystem = "strict";
+        ProtectHome = "read-only";
+        ReadWritePaths = [
+          dataDir
+          controllerDir
+        ];
+        PrivateTmp = true;
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+          # getifaddrs, for the machine's addresses.
+          "AF_NETLINK"
+        ];
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        LockPersonality = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        ProtectControlGroups = true;
+        ProtectClock = true;
+        ProtectHostname = true;
       };
       unitConfig = {
         StartLimitBurst = 20;
@@ -730,7 +737,7 @@ in
       description = "Daedalus root helper: one request from the controller";
       restartIfChanged = false;
       serviceConfig = {
-        ExecStart = "${lib.getExe agent} root-helper --table ${rootTable}";
+        ExecStart = "${lib.getExe agent} root-helper --table ${rootTableChecked}";
         StandardInput = "socket";
         StandardOutput = "journal";
         StandardError = "journal";
