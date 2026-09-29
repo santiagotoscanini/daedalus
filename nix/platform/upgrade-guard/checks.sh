@@ -170,16 +170,55 @@ check_containers() {
   [ -z "$missing" ]
 }
 
-# The containers the selfcheck insists on, and a floor on the total.
+# The containers the selfcheck insists on, and a floor on the total. The
+# detail also names every declared container that is not running, so a
+# failed boot's mail says which ones without a second look.
 check_critical_containers() {
-  local running c missing="" count
+  local running c missing="" absent="" count
   running=" $(podman_op ps --format '{{.Names}}' 2>/dev/null | tr '\n' ' ') "
   for c in $CRITICAL_CONTAINERS; do
     case "$running" in *" $c "*) ;; *) missing="$missing $c" ;; esac
   done
+  while read -r c; do
+    [ -n "$c" ] || continue
+    case "$running" in *" $c "*) ;; *) absent="$absent $c" ;; esac
+  done <"$DECLARED_CONTAINERS"
   count="$(wc -w <<<"$running")"
-  echo "$count running (floor $MIN_CONTAINERS)${missing:+; critical not running:$missing}"
+  echo "$count running (floor $MIN_CONTAINERS)${missing:+; critical not running:$missing}${absent:+; declared not running:$absent}"
   [ -z "$missing" ] && [ "$count" -ge "$MIN_CONTAINERS" ]
+}
+
+# Start jobs that never finish. A unit whose start job hangs is neither
+# active nor failed, so the failed-units check cannot see it, and everything
+# ordered after it waits with it: the first 26.05 boot sat with every
+# container unit `activating` for its whole deadline. FAIL when a start job
+# has been RUNNING for STUCK_MIN minutes or more, naming those units.
+# Waiting jobs are counted but do not decide: while this check runs,
+# multi-user.target (and whatever is ordered after it) waits on the
+# selfcheck's own job, and every waiting job is blocked by some running one.
+check_start_jobs() {
+  local now stuck="" young=0 waiting=0 id unit type state since age
+  now="$(awk '{printf "%d", $1 * 1000000}' /proc/uptime)"
+  while read -r id unit type state; do
+    [ -n "$id" ] || continue
+    [ "$unit" != upgrade-selfcheck.service ] || continue
+    case "$unit" in *.target) continue ;; esac
+    if [ "$state" = waiting ]; then
+      waiting=$((waiting + 1))
+      continue
+    fi
+    [ "$type" = start ] || continue
+    since="$(systemctl show -p InactiveExitTimestampMonotonic --value "$unit" 2>/dev/null || echo 0)"
+    since="${since:-0}"
+    age=$(((now - since) / 60000000))
+    if [ "$since" -gt 0 ] && [ "$age" -ge "$STUCK_MIN" ]; then
+      stuck="$stuck $unit(${age}m)"
+    else
+      young=$((young + 1))
+    fi
+  done < <(systemctl list-jobs --no-legend --plain 2>/dev/null)
+  echo "system $(systemctl is-system-running 2>/dev/null || true); ${stuck:+start jobs running ${STUCK_MIN}m+:$stuck; }$young recent running, $waiting waiting"
+  [ -z "$stuck" ]
 }
 
 check_sso() {

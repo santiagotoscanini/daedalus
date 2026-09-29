@@ -118,6 +118,8 @@ let
     DECLARED_CONTAINERS = "${declaredContainers}";
     CRITICAL_CONTAINERS = lib.concatStringsSep " " cfg.criticalContainers;
     MIN_CONTAINERS = toString cfg.minContainers;
+    # A start job running this long is a hung one (check_start_jobs).
+    STUCK_MIN = "5";
     OPERATOR_USER = config.fleet.operator.user;
     OPERATOR_GROUP = config.fleet.operator.group;
     OPERATOR_HOME = config.fleet.operator.home;

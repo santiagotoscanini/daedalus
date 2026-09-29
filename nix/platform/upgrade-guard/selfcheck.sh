@@ -60,6 +60,7 @@ run_all() {
   run_check containers check_critical_containers
   run_check sso-discovery check_sso
   run_check controller check_controller
+  run_check start-jobs check_start_jobs
   run_check failed-units check_failed_units
 }
 
