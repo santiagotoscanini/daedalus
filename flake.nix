@@ -12,7 +12,7 @@
   # (`inputs.daedalus.inputs.nixpkgs.follows = "nixpkgs"`), so importing the
   # engine adds nothing to its lock file.
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";

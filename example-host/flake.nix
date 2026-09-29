@@ -2,7 +2,7 @@
   description = "A NixOS host run by daedalus";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     # Two engine modules pick a package from unstable; the engine never reads
     # its own copy, so this host's is the one that counts.
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";

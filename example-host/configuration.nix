@@ -45,5 +45,5 @@
 
   # NixOS's compatibility anchor: the release this host was first installed
   # with. Never bump it on an existing box.
-  system.stateVersion = "25.11";
+  system.stateVersion = "26.05";
 }
