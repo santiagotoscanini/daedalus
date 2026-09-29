@@ -255,6 +255,10 @@ export function AgentInstall() {
       </p>
 
       <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">
+        When it finishes, it asks for your box's key, which Settings › Machines shows.
+      </p>
+
+      <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">
         What it installs, and how it updates, is in the{" "}
         <a
           href={AGENT_README}

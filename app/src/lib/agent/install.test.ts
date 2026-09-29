@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { installLines, psQuote, shQuote } from './install'
+import { installLines, pairLines, psQuote, shQuote } from './install'
 
 describe('the install lines', () => {
   const box = { address: 's2.example.org:7788', fingerprint: 'f3e5:a403:294c' }
@@ -28,5 +28,22 @@ describe('the install lines', () => {
     const evil = installLines({ address: "x'; rm -rf / #", fingerprint: '`whoami`' })
     expect(evil[1]?.command).toContain(`--controller 'x'\\''; rm -rf / #' --pin '\`whoami\`'`)
     expect(evil[0]?.command).toContain(`-Controller 'x''; rm -rf / #' -Pin '\`whoami\`'`)
+  })
+
+  it('pair a machine installed without a key, as an administrator', () => {
+    const [windows, macos, linux] = pairLines(box)
+    expect(windows?.command).toBe(
+      `& "$env:ProgramFiles\\daedalus-agent\\daedalus-agent.exe" pair --pin 'f3e5:a403:294c' --controller 's2.example.org:7788'`,
+    )
+    expect(macos?.command).toBe(
+      "sudo daedalus-agent pair --pin 'f3e5:a403:294c' --controller 's2.example.org:7788'",
+    )
+    expect(linux?.command).toBe(macos?.command)
+    expect(pairLines(null)).toEqual([])
+    const evil = pairLines({ address: "x'; rm -rf / #", fingerprint: '$(whoami)' })
+    expect(evil[1]?.command).toBe(
+      `sudo daedalus-agent pair --pin '$(whoami)' --controller 'x'\\''; rm -rf / #'`,
+    )
+    expect(evil[0]?.command).toContain(`--pin '$(whoami)' --controller 'x''; rm -rf / #'`)
   })
 })
