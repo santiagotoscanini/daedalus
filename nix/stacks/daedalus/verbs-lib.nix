@@ -19,12 +19,12 @@ let
     mkAgent
     operatorVars
     operatorHomeVars
+    operatorUnitVars
     commitVars
     workspaceVars
     workspaceRuntimeInputs
     githubAppField
     githubTokenDir
-    rootRunDir
     ;
 
   # The site-vault paths an Apply is allowed to write an operator secret to:
@@ -66,18 +66,16 @@ let
       pkgs.gnugrep
       pkgs.jq
       pkgs.openssh # git push over ssh, as the operator
-      pkgs.systemd # refresh the repo snapshot when it is done
       pkgs.util-linux # setpriv
     ];
     vars =
       operatorHomeVars
       // commitVars
+      // operatorUnitVars
       // {
-        ROOT_RUN_DIR = rootRunDir;
         PREV_DIR = prevDir;
         SITE_DIR = config.fleet.site.path;
         SECRET_APPS = lib.concatStringsSep " " secretApps;
-        SYSTEMCTL = "${pkgs.systemd}/bin/systemctl";
         GIT = "${pkgs.git}/bin/git";
         # sopsStatic, the same binary the container bind-mounts. Nothing here
         # runs in a container, but `pkgs.sops` would be a SECOND 49 MB sops in
@@ -86,7 +84,6 @@ let
         # The same derivation sops-nix uses at activation, which is why the
         # identity it produces matches the `age13…` recipient in site/.sops.yaml.
         SSH_TO_AGE = "${pkgs.ssh-to-age}/bin/ssh-to-age";
-        HOST_SSH_KEY = lib.head config.sops.age.sshKeyPaths;
       };
     files = [
       ./host/lib.sh
@@ -153,9 +150,7 @@ let
   workspaceCloneScript = mkAgent {
     name = "daedalus-workspace-clone";
     runtimeInputs = workspaceRuntimeInputs;
-    vars = workspaceVars // {
-      ROOT_RUN_DIR = rootRunDir;
-    };
+    vars = workspaceVars // operatorUnitVars;
     files = [
       ./host/lib.sh
       ./host/workspace-lib.sh

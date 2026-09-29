@@ -39,6 +39,7 @@ let
     applyDir
     mkUpdateReaper
     mkAgent
+    bridgeAgent
     operatorHomeVars
     commitVars
     ;
@@ -91,18 +92,13 @@ in
     # commits to the flake, and switches the system. What is different is the
     # file it moves — flake.lock — and the second tree it touches, the engine
     # clone the control plane runs out of.
-    systemd.services.daedalus-engine-update = {
+    systemd.services.daedalus-engine-update = bridgeAgent // {
       description = "Move the engine's flake pin and rebuild, on daedalus's behalf";
       after = [
         "network-online.target"
         "linger-users.service"
       ];
       wants = [ "network-online.target" ];
-
-      # The one property every bridge agent shares (daedalus-lib.nix, bridgeAgent):
-      # a path unit makes each request a start, and systemd's default start
-      # limit would silently drop the next request after a burst.
-      startLimitIntervalSec = 0;
 
       # A unit that runs `nixos-rebuild switch` must not be restarted BY that
       # switch — and this one moves the whole engine input, so its own

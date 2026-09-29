@@ -1,7 +1,7 @@
 # Clone a project's repo into the workspace root on daedalus's behalf: the
 # root helper's `workspace-clone` (daedalus-verbs.nix), started as
-# `daedalus-workspace-clone@<run id>` with the request in its run file
-# (host/lib.sh take_run_file). On a repo that is already cloned it
+# `daedalus-workspace-clone@<run id>` as the operator, with the request as its
+# `request` credential (host/lib.sh take_request). On a repo already cloned it
 # fast-forwards instead, so the one button is honestly "make the workspace
 # exist and make it current".
 #
@@ -29,7 +29,7 @@ refuse() {
   exit 0
 }
 
-REQ_JSON="$(take_run_file "${1-}")" || exit 1
+REQ_JSON="$(take_request)" || exit 1
 REPO="$(jq -r '.selectors.repo // ""' <<<"$REQ_JSON")"
 ACTOR="$(jq -r '.selectors.actor // "unknown"' <<<"$REQ_JSON")"
 
@@ -79,20 +79,19 @@ echo "cloning $REPO"
 # hidden names), renamed only once complete — a half-transferred clone must
 # never be something the sync timer or a Claude session can walk into.
 #
-# The removals and the rename run as the operator: the workspace root is
-# theirs, and a root `mv` into a DEST that became a link between the check
-# above and here would move the clone wherever the link pointed (host/lib.sh).
-# -T for the same race from the other side: a directory that appeared at DEST
-# fails the rename instead of swallowing the clone.
+# The unit runs as the operator, so a link swapped in at DEST reaches nothing
+# the operator could not reach anyway. -T for the race from the other side: a
+# directory that appeared at DEST fails the rename instead of swallowing the
+# clone.
 TMP="$WORKSPACE_ROOT/.$NAME_PART.cloning"
-as_operator rm -rf -- "$TMP"
+rm -rf -- "$TMP"
 ERR="$(mktemp)"
 if ! git_op clone --quiet -- "git@github.com:$REPO.git" "$TMP" 2>"$ERR"; then
-  as_operator rm -rf -- "$TMP"
+  rm -rf -- "$TMP"
   refuse "git clone failed: $(tail -c 300 "$ERR" | tr '\n' ' ')"
 fi
 rm -f "$ERR"
-as_operator mv -T -- "$TMP" "$DEST" || refuse "$DEST appeared while cloning — the clone is left at $TMP"
+mv -T -- "$TMP" "$DEST" || refuse "$DEST appeared while cloning — the clone is left at $TMP"
 
 jq -n --arg at "$(date -Is)" '{result: "ok", detail: "cloned", at: $at}' \
   >"$OUT_DIR/.state/$NAME_PART"

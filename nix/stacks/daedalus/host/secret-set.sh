@@ -1,8 +1,10 @@
 # Set or remove ONE key in an app's operator-secrets file, on request from
 # daedalus: the root helper's `secret-set` (daedalus-verbs.nix), started as
-# `daedalus-secret-set@<run id>` with the request in its run file
-# (host/lib.sh take_run_file) — the app, the action, the key and the actor as
-# selectors, the sealed value as the payload.
+# `daedalus-secret-set@<run id>` as the operator, with the request as its
+# `request` credential (host/lib.sh take_request) — the app, the action, the
+# key and the actor as selectors, the sealed value as the payload — and the
+# host's SSH key as its `hostkey` credential, the one thing it needs root's
+# files for.
 #
 # The host half of the write-only secrets editor. daedalus holds an
 # encrypt-only sops identity — a static sops binary and the PUBLIC recipients
@@ -39,8 +41,8 @@
 # The plaintext exists only inside the `sops decrypt | jq | sops set` pipeline
 # — no temp file, no argv (that is what `--value-stdin` is for), no journal
 # line. The container seals the value before the request exists, so what
-# crosses the controller, the helper and the run file (tmpfs, root's 0600) is
-# ciphertext only.
+# crosses the controller, the helper and the run file (tmpfs, root's 0600; this
+# unit's credential) is ciphertext only.
 #
 # ── what this does NOT do ─────────────────────────────────────────────────
 #
@@ -64,36 +66,40 @@ fail() {
   exit 1
 }
 
-# sops as root, standing in the site directory.
+# sops with the host's identity, standing in the site directory.
 #
 # The identity is derived from the SSH host key by ssh-to-age through
 # SOPS_AGE_KEY_CMD, so it lives in a pipe for the length of one call and is
 # never written to a file or an environment variable — sops-nix derives the
 # same identity the same way at activation, which is why this box's own
-# recipient in .sops.yaml matches it.
+# recipient in .sops.yaml matches it. The key is the unit's `hostkey`
+# credential: systemd reads it as root and hands this operator-run unit a
+# private read-only copy. HOME is an empty private directory, so sops finds
+# no other identity (the operator's own SSH key, an age keys.txt) to try.
 #
 # The cwd is what makes `--filename-override vault/apps/…` match .sops.yaml's
 # creation rule: sops resolves that regex against the path RELATIVE to where it
 # stands. --config names the file explicitly so the walk-up never finds
 # another.
-sops_root() {
+sops_host() {
   (
     cd "$SITE_DIR" &&
-      SOPS_AGE_KEY_CMD="$SSH_TO_AGE -private-key -i $HOST_SSH_KEY" HOME=/root \
+      SOPS_AGE_KEY_CMD="$SSH_TO_AGE -private-key -i $CREDENTIALS_DIRECTORY/hostkey" HOME="$SOPS_HOME" \
         "$SOPS" --config "$SITE_DIR/.sops.yaml" "$@"
   )
 }
 
-# Root-private temps in root's own /tmp: the container cannot reach them, so
-# these are the one place in this script where root may work by name. The
-# request (its payload is the sealed value) is kept in one rather than in a
-# variable, so it never reaches a command line.
+# Temps in the unit's private /tmp (PrivateTmp): nothing else can reach them.
+# The request (its payload is the sealed value) is kept in one rather than in
+# a variable, so it never reaches a command line.
 REQ="$(mktemp)"
 WORK="$(mktemp)"
 SEALED="$(mktemp)"
-trap 'rm -f "$REQ" "$WORK" "$SEALED"' EXIT
+SOPS_HOME="$(mktemp -d)"
+trap 'rm -rf "$REQ" "$WORK" "$SEALED" "$SOPS_HOME"' EXIT
 
-take_run_file "${1-}" >"$REQ" || exit 1
+[ -r "${CREDENTIALS_DIRECTORY:-}/hostkey" ] || fail "no hostkey credential: this unit is started by the root helper"
+take_request >"$REQ" || exit 1
 
 APP="$(jq -r '.selectors.app // ""' "$REQ")"
 KEY="$(jq -r '.selectors.key // ""' "$REQ")"
@@ -155,7 +161,7 @@ else
   # writes the recipients and the MAC, and the `set` below adds the key. This
   # is also what turns operator-secrets-lib.nix's switch ON for the app — the
   # file existing IS the setting — so the next rebuild starts injecting it.
-  sops_root encrypt --input-type dotenv --output-type dotenv \
+  sops_host encrypt --input-type dotenv --output-type dotenv \
     --filename-override "$FILE" /dev/null >"$WORK" ||
     fail "sops could not create $FILE"
 fi
@@ -165,15 +171,15 @@ if [ "$ACTION" = remove ]; then
   # happily rewrite the file (new MAC, new timestamp) and leave a commit
   # claiming a removal that removed nothing.
   grep -q -- "^$KEY=" "$WORK" || refuse "$FILE has no $KEY, so nothing was removed"
-  sops_root unset --input-type dotenv --output-type dotenv "$WORK" "[\"$KEY\"]" ||
+  sops_host unset --input-type dotenv --output-type dotenv "$WORK" "[\"$KEY\"]" ||
     fail "sops could not remove $KEY from $FILE"
 else
   # The one pipeline the plaintext lives in. `--value-stdin` keeps it out of
   # the process table; `jq -Rs` is there because `sops set` takes its value as
   # JSON, and encoding it any other way would mean a shell quoting it.
-  if ! sops_root decrypt --input-type binary --output-type binary "$SEALED" |
+  if ! sops_host decrypt --input-type binary --output-type binary "$SEALED" |
     jq -Rs . |
-    sops_root set --value-stdin --input-type dotenv --output-type dotenv "$WORK" "[\"$KEY\"]"; then
+    sops_host set --value-stdin --input-type dotenv --output-type dotenv "$WORK" "[\"$KEY\"]"; then
     fail "sops could not seal $KEY into $FILE — is the host still a recipient of it?"
   fi
 fi
@@ -200,9 +206,10 @@ echo "committing"
 site_stage "$FILE" || fail "git add failed for $FILE"
 COMMIT="$(site_commit "secrets: $APP $ACTION $KEY" "$ACTOR")" || fail "git commit failed"
 
-# Refresh the repository facts, which is where the page reads "set <when> by
-# <who>" from — the git history of this file IS the audit trail.
-"$SYSTEMCTL" start daedalus-repo-snapshot.service || true
+# The repository facts, where the page reads "set <when> by <who>" from (the
+# git history of this file IS the audit trail), refresh when this unit is done:
+# its ExecStartPost starts the repo snapshot as root (daedalus-verbs.nix), a
+# thing the operator this runs as may not ask systemd for.
 
 if [ "$ACTION" = set ]; then
   DETAIL="sealed $KEY into $FILE"

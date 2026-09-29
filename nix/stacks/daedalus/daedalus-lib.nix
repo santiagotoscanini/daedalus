@@ -124,6 +124,36 @@ rec {
     # writeShellApplication's PATH resolution for the command itself.
     ENV_BIN = "${pkgs.coreutils}/bin/env";
   };
+  # For an agent whose UNIT runs as the operator (`User=`): its scripts share
+  # host/lib.sh with the root agents, and every drop there (as_operator,
+  # git_op, site_git, podman_) is `$SETPRIV --reuid=<operator> … cmd`. Run as
+  # the operator there is nothing to drop — and setpriv's --init-groups would
+  # fail without CAP_SETGID — so this stands in for setpriv: root still gets
+  # the real one, the operator gets the command as it is, anyone else a
+  # refusal.
+  operatorUnitVars = {
+    SETPRIV = pkgs.writeShellScript "setpriv-or-self" ''
+      set -eu
+      id=${pkgs.coreutils}/bin/id
+      if [ "$("$id" -u)" -eq 0 ]; then
+        exec ${pkgs.util-linux}/bin/setpriv "$@"
+      fi
+      want=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+        --reuid=*) want="''${1#--reuid=}" ;;
+        --regid=* | --init-groups | --inh-caps=*) ;;
+        *) break ;;
+        esac
+        shift
+      done
+      if [ "$want" != "$("$id" -un)" ] && [ "$want" != "$("$id" -u)" ]; then
+        echo "setpriv: this unit runs as $("$id" -un), and cannot become '$want'" >&2
+        exit 1
+      fi
+      exec "$@"
+    '';
+  };
   # The identities a commit the box makes may carry (host/lib.sh commit_name).
   commitVars = {
     GIT_EMAIL = config.fleet.mail.sender;
@@ -312,7 +342,8 @@ rec {
 
   # Where the root helper writes a verb's run file (controller.nix, the
   # header's `run file`) and the verb's unit reads it: root's, 0700, never
-  # mounted anywhere. host/lib.sh `take_run_file` is the unit's side.
+  # mounted anywhere. The unit gets its file as a systemd credential
+  # (`LoadCredential=request:`); host/lib.sh `take_request` is its side.
   rootRunDir = "/run/daedalus-root-runs";
 
   # What an actor label is held to on its way to a root verb that records it
@@ -322,7 +353,8 @@ rec {
     maxLength = 128;
   };
 
-  # The ExecStopPost every run-file verb's template carries: its run file
+  # The ExecStopPost every run-file verb's template carries, as root (`+`:
+  # the unit itself is the operator's, and the directory root's): its run file
   # goes whatever the script did with it.
-  dropRunFile = "${pkgs.coreutils}/bin/rm -f -- ${rootRunDir}/%i.json";
+  dropRunFile = "+${pkgs.coreutils}/bin/rm -f -- ${rootRunDir}/%i.json";
 }

@@ -12,7 +12,15 @@
 }:
 
 let
-  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) registryApps bridgeAgent;
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
+    registryApps
+    bridgeAgent
+    envDir
+    imageDir
+    repoDir
+    workspaceRoot
+    workspacesDir
+    ;
   inherit (import ./snapshots-lib.nix { inherit config lib pkgs; })
     mkWorkspaceSyncScript
     envSnapshotScript
@@ -24,10 +32,68 @@ let
     registrySnapshot
     ;
   builderOn = config.fleet.builder.enable;
+
+  # The snapshots that only ever did the operator's work — podman in the
+  # rootless store, git in the operator's trees, a registry probe — run as the
+  # operator rather than as root dropping to them per call (host/lib.sh's
+  # drops go through daedalus-lib's setpriv-or-self there). Their /run
+  # directories are the operator's, made by tmpfiles below. The two that read
+  # the rootless store keep no further sandbox: podman may have to create
+  # the user namespace (newuidmap is setuid) and writes its own runtime state.
+  asOperator = {
+    User = config.fleet.operator.user;
+    Group = config.fleet.operator.group;
+  };
+  # The rest write only their own directories.
+  sandboxedOperator =
+    writable:
+    asOperator
+    // {
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ProtectSystem = "strict";
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictSUIDSGID = true;
+      LockPersonality = true;
+      ReadWritePaths = writable;
+    };
+  workspaceDirs = [
+    "-${workspaceRoot}"
+    workspacesDir
+  ];
 in
 
 {
   config = lib.mkIf config.fleet.modules.daedalus.enable {
+    # The operator-run snapshots' directories (asOperator above): the
+    # operator cannot make a directory in /run, so tmpfiles does, at boot and
+    # at every switch. `Z` hands the workspace directory's contents over too —
+    # they were root's while its agents ran as root.
+    systemd.tmpfiles.settings."10-daedalus-snapshots" =
+      let
+        dir = mode: {
+          d = {
+            inherit mode;
+            inherit (config.fleet.operator) user;
+            inherit (config.fleet.operator) group;
+          };
+        };
+      in
+      {
+        ${envDir} = dir "0750";
+        ${imageDir} = dir "0755";
+        ${repoDir} = dir "0755";
+        ${workspacesDir} = dir "0755" // {
+          Z = {
+            inherit (config.fleet.operator) user;
+            inherit (config.fleet.operator) group;
+          };
+        };
+      };
+
     # Refresh the published environments. A timer rather than an on-demand
     # request/response through the bind mount: a container's env only changes
     # when it restarts, so a page render should read a recent snapshot rather
@@ -46,7 +112,7 @@ in
       ];
       before = [ "podman-app-daedalus.service" ];
       wantedBy = [ "podman-app-daedalus.service" ];
-      serviceConfig = {
+      serviceConfig = asOperator // {
         Type = "oneshot";
         ExecStart = "${envSnapshotScript}/bin/daedalus-env-snapshot";
       };
@@ -81,7 +147,7 @@ in
       ];
       before = [ "podman-app-daedalus.service" ];
       wantedBy = [ "podman-app-daedalus.service" ];
-      serviceConfig = {
+      serviceConfig = asOperator // {
         Type = "oneshot";
         ExecStart = "${imageSnapshotScript}/bin/daedalus-image-snapshot";
       };
@@ -119,7 +185,7 @@ in
       description = "Check digest-pinned images against where their tags point now";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
-      serviceConfig = {
+      serviceConfig = sandboxedOperator [ imageDir ] // {
         Type = "oneshot";
         ExecStart = "${imageFreshnessScript}/bin/daedalus-image-freshness";
         # ~55 refs with a polite sleep between network calls is a few minutes;
@@ -227,7 +293,7 @@ in
       description = "Publish the configuration and site repositories' state for daedalus";
       before = [ "podman-app-daedalus.service" ];
       wantedBy = [ "podman-app-daedalus.service" ];
-      serviceConfig = {
+      serviceConfig = sandboxedOperator [ repoDir ] // {
         Type = "oneshot";
         ExecStart = "${repoSnapshotScript}/bin/daedalus-repo-snapshot";
       };
@@ -263,7 +329,7 @@ in
       description = "Fetch and fast-forward the project workspaces";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
-      serviceConfig = {
+      serviceConfig = sandboxedOperator workspaceDirs // {
         Type = "oneshot";
         ExecStart = "${mkWorkspaceSyncScript true}/bin/daedalus-workspace-sync";
         TimeoutStartSec = "15min";
@@ -301,7 +367,7 @@ in
       description = "Publish the project workspace facts for daedalus";
       before = [ "podman-app-daedalus.service" ];
       wantedBy = [ "podman-app-daedalus.service" ];
-      serviceConfig = {
+      serviceConfig = sandboxedOperator workspaceDirs // {
         Type = "oneshot";
         ExecStart = "${mkWorkspaceSyncScript false}/bin/daedalus-workspace-publish";
       };

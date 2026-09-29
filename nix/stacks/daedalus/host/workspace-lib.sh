@@ -1,23 +1,22 @@
 # Shared helpers for the two workspace agents (workspace-clone.sh,
 # workspace-sync.sh). Inlined by their writeShellApplication wrappers after
 # lib.sh; expects WORKSPACE_ROOT, OUT_DIR, OPERATOR_USER, OPERATOR_GROUP,
-# OPERATOR_HOME, SETPRIV, ENV_BIN and GIT in the environment.
+# OPERATOR_HOME, ENV_BIN and GIT in the environment.
 #
 # A "workspace" is a working clone of a project repo under $WORKSPACE_ROOT,
 # owned by the operator — the checkout a Claude Code session on this box works
-# in. Every git command here runs AS the operator: the clones are theirs, the
-# GitHub SSH identity (platform/git) is theirs, and root-made objects in a
-# working tree are exactly the "unable to open loose object" trap CLAUDE.md
-# warns about for the configuration checkout.
+# in. Every unit that runs these (the sync, the publish, the clone) runs AS the
+# operator (`User=`): the clones are theirs, the GitHub SSH identity
+# (platform/git) is theirs, and root-made objects in a working tree are
+# exactly the "unable to open loose object" trap CLAUDE.md warns about for the
+# configuration checkout. Nothing here drops privilege, because nothing here
+# has any.
 
-# setpriv, not runuser/sudo, for the same reason as deploy.sh: no PAM session
-# lines in the journal for something that runs every half hour. Absolute
-# paths because the child does not inherit this script's PATH for $GIT itself;
-# PATH stays inherited so git finds ssh (runtimeInputs provides it).
+# git with the operator's HOME (its config and known_hosts). Absolute paths,
+# so the command does not depend on the unit's PATH; PATH stays inherited so
+# git finds ssh (runtimeInputs provides it).
 git_op() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
-    "$ENV_BIN" HOME="$OPERATOR_HOME" \
-    "$GIT" "$@"
+  "$ENV_BIN" HOME="$OPERATOR_HOME" "$GIT" "$@"
 }
 
 # origin URL → owner/name, or "" for a remote that is not GitHub. The three
@@ -33,13 +32,12 @@ slug_of() {
   esac
 }
 
-# $OUT_DIR is root's (a /run dir nothing else can write), so root creates it.
-# $WORKSPACE_ROOT sits in the operator's home, so the operator does: root's
-# `install -d -o` there chowns by name, and a link swapped in at that name
-# would have handed ownership of wherever it pointed (host/lib.sh's rule).
+# $OUT_DIR is the operator's /run directory (tmpfiles makes it, daedalus-
+# snapshots.nix), and every workspace unit runs as the operator, so both
+# directories are simply theirs to make.
 ensure_dirs() {
   install -d -m 0755 "$OUT_DIR" "$OUT_DIR/.state"
-  as_operator mkdir -p -m 0755 -- "$WORKSPACE_ROOT"
+  install -d -m 0755 -- "$WORKSPACE_ROOT"
 }
 
 # One lock for every workspace mutation, clone and sync alike: the 30-minute

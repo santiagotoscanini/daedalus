@@ -24,9 +24,9 @@
 # stays in /run for the same reason: it is derived state that should not
 # survive a reboot or ride the ZFS snapshots.
 #
-# Runs as root and drops to the operator for podman, because the containers live in
-# the operator's rootless store. Same setpriv-not-sudo reasoning as deploy.sh: no
-# PAM session per call.
+# Runs as the operator (daedalus-snapshots.nix), whose rootless store the
+# containers live in; podman_ below still reads as a drop, which the unit's
+# setpriv-or-self turns into the command itself.
 
 set -euo pipefail
 

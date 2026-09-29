@@ -31,7 +31,7 @@ set -euo pipefail
 
 install -d -m 0755 -o "$OPERATOR_USER" -g "$OPERATOR_GROUP" "$OUT_DIR"
 
-# Built in root's own /tmp and published with write_json_atomic, whose temp
+# Built in the unit's private /tmp and published with write_json_atomic, whose temp
 # lives beside the target: /tmp and /run are different tmpfs mounts, and an mv
 # across filesystems is a copy the reader could see torn. The publish runs as
 # the operator because $OUT_DIR is theirs — root writing a temp there by name

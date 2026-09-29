@@ -25,6 +25,9 @@ let
     longestTaskSec
     actorPattern
     dropRunFile
+    rootRunDir
+    workspaceRoot
+    workspacesDir
     ;
   inherit (import ./verbs-lib.nix { inherit config lib pkgs; })
     secretApps
@@ -35,6 +38,22 @@ let
     imageUpdateScript
     imageUpdateReaper
     ;
+
+  # What the two run-file verbs share: the operator's, never root's — the run
+  # file arrives as a credential (the controller's header, `run file`) — with
+  # no way back up and a /tmp of their own.
+  operatorVerb = {
+    User = config.fleet.operator.user;
+    Group = config.fleet.operator.group;
+    NoNewPrivileges = true;
+    PrivateTmp = true;
+    PrivateDevices = true;
+    ProtectKernelTunables = true;
+    ProtectKernelModules = true;
+    ProtectControlGroups = true;
+    RestrictSUIDSGID = true;
+    LockPersonality = true;
+  };
 in
 
 {
@@ -178,17 +197,25 @@ in
     # The workspace clone: the root helper's `workspace-clone` (controller.nix,
     # `root`). A slug is not a value a list can hold, so it is a pattern
     # selector and travels in the run file; the unit is a template the run id
-    # instantiates. Root because it runs under the helper; every git call
-    # inside drops to the operator (the clones and the SSH identity are
-    # theirs). Not monitoredJobs: a refusal is shown on the page that asked
+    # instantiates. It runs as the operator — the clones and the SSH identity
+    # are theirs — and gets its run file as a credential (the controller's
+    # header, `run file`). Not monitoredJobs: a refusal is shown on the page that asked
     # and exits 0.
-    systemd.services."daedalus-workspace-clone@" = bridgeAgent // {
+    systemd.services."daedalus-workspace-clone@" = {
       description = "Clone a project repo into the workspace root on daedalus's behalf";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
-      serviceConfig = {
+      serviceConfig = operatorVerb // {
         Type = "oneshot";
-        ExecStart = "${workspaceCloneScript}/bin/daedalus-workspace-clone %i";
+        ExecStart = "${workspaceCloneScript}/bin/daedalus-workspace-clone";
+        LoadCredential = "request:${rootRunDir}/%i.json";
+        # The clones and the snapshot directory, and nothing else of the
+        # filesystem, are its to write.
+        ProtectSystem = "strict";
+        ReadWritePaths = [
+          "-${workspaceRoot}"
+          workspacesDir
+        ];
         ExecStopPost = dropRunFile;
         # A large repo on a slow evening plus the 10-minute lock wait; the
         # default 90s would SIGTERM a legitimate first clone.
@@ -219,7 +246,7 @@ in
     #
     # No network ordering: it asks systemd three questions and calls
     # `systemctl reboot`. Nothing it does needs a resolver.
-    systemd.services.daedalus-power = bridgeAgent // {
+    systemd.services.daedalus-power = {
       description = "Restart the box on daedalus's behalf";
       serviceConfig = {
         Type = "oneshot";
@@ -259,11 +286,27 @@ in
     # Not monitoredJobs: a refusal is shown on the page that asked and exits
     # 0; the only mailable event is the agent itself breaking, which
     # `systemctl --failed` and the failed-units alert already carry.
-    systemd.services."daedalus-secret-set@" = bridgeAgent // {
+    systemd.services."daedalus-secret-set@" = {
       description = "Set or remove one key in an app's operator-secrets file on daedalus's behalf";
-      serviceConfig = {
+      serviceConfig = operatorVerb // {
         Type = "oneshot";
-        ExecStart = "${secretSetScript}/bin/daedalus-secret-set %i";
+        ExecStart = "${secretSetScript}/bin/daedalus-secret-set";
+        LoadCredential = [
+          "request:${rootRunDir}/%i.json"
+          # The identity sops opens the sealed value with (host/secret-set.sh).
+          "hostkey:${lib.head config.sops.age.sshKeyPaths}"
+        ];
+        # The configuration checkout (site/ and its git) and the rollback
+        # copies are its to write; nothing else of the filesystem.
+        ProtectSystem = "strict";
+        ReadWritePaths = [
+          config.fleet.config.repo
+          prevDir
+        ];
+        # The repository facts, where the page reads "set <when> by <who>",
+        # refreshed once it is done — as root (`+`): the operator may not ask
+        # systemd to start a unit.
+        ExecStartPost = "+${config.systemd.package}/bin/systemctl start --no-block daedalus-repo-snapshot.service";
         ExecStopPost = dropRunFile;
         # Two sops runs, a git commit and a push. Two minutes is generous; past it
         # something is wedged and the page should say so rather than hang.
