@@ -146,6 +146,10 @@
 
       formatter.${system} = treefmtEval.config.build.wrapper;
 
+      # A VM test, run by hand (never a check: no VM builds in CI) — the
+      # container unit shape under this nixpkgs (nix/tests/oneshot-vm).
+      packages.${system}.vmtest-oneshot = import ./nix/tests/oneshot-vm { inherit pkgs; };
+
       checks.${system} = {
         formatting = treefmtEval.config.build.check self;
 

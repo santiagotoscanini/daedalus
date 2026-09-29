@@ -42,4 +42,35 @@ rec {
         tag = builtins.elemAt m 1;
         digest = builtins.elemAt m 2;
       };
+
+  # The [Service] half of every oci-container unit the platform generates
+  # (podman.nix, mkContainerOverride), and of the VM test that proves it
+  # (nix/tests/oneshot-vm). oci-containers ships Type=notify +
+  # NotifyAccess=all + Delegate=true (the last new in 26.05) and
+  # `--sdnotify=conmon`; our units are oneshot + RemainAfterExit instead
+  # (a green unit means `podman run -d` returned, nothing more).
+  #
+  # Delegate and NotifyAccess must be forced with Type, or the start job
+  # never ends: with Delegate=true rootless podman sees it owns the
+  # unit's cgroup and stays in it instead of moving into a
+  # podman-<pid>.scope of the user manager, so conmon lives in the system
+  # unit; its sd_notify MAINPID=<conmon> is then accepted (NotifyAccess=all
+  # admits any process of the cgroup), a oneshot's start job waits for its
+  # main process to exit, conmon lives as long as the container, and
+  # TimeoutStartSec=0 removes the limit. Every unit ordered After= one
+  # waits with it: the first 26.05 boot of the reference host sat with
+  # every container unit `activating`. Delegate=false restores the layout
+  # every release before 26.05 ran (conmon in a user-manager scope);
+  # NotifyAccess=none means systemd passes no NOTIFY_SOCKET at all, so
+  # podman behaves as `podman run` in a shell and no MAINPID can be
+  # adopted wherever conmon ends up. Either one alone ends the hang
+  # (measured, nix/tests/oneshot-vm); both, so neither is load-bearing.
+  containerServiceConfig = {
+    Type = lib.mkForce "oneshot";
+    RemainAfterExit = true;
+    Delegate = lib.mkForce false;
+    NotifyAccess = lib.mkForce "none";
+    Restart = lib.mkForce "on-failure";
+    RestartSec = "15s";
+  };
 }

@@ -33,11 +33,17 @@ let
 
   # Bridge-membership spec parsing lives in fleet-lib (shared with
   # publishing.nix — one parser, no hand-synced mirror).
-  inherit (import ./lib/fleet-lib.nix { inherit lib; }) bridgeOf networkFlag parsePin;
+  inherit (import ./lib/fleet-lib.nix { inherit lib; })
+    bridgeOf
+    networkFlag
+    parsePin
+    containerServiceConfig
+    ;
 
   # Applied to every podman-<name>.service. Without this override
-  # oci-containers ships Type=notify + Restart=always, which doesn't
-  # survive rootless + system-unit boundaries.
+  # oci-containers ships Type=notify + Delegate=true + Restart=always, which
+  # doesn't survive rootless + system-unit boundaries (fleet-lib's
+  # containerServiceConfig says why Delegate and NotifyAccess are forced).
   #
   # Also emits `RequiresMountsFor` for every absolute host path in the
   # container's volumes — closes the cold-boot race where a container
@@ -57,12 +63,7 @@ let
       bridgeUnits = map (b: "podman-network-${b}-net.service") (lib.unique (map bridgeOf nets));
     in
     {
-      serviceConfig = {
-        Type = lib.mkForce "oneshot";
-        RemainAfterExit = true;
-        Restart = lib.mkForce "on-failure";
-        RestartSec = "15s";
-      };
+      serviceConfig = containerServiceConfig;
       # StartLimit* and RequiresMountsFor are [Unit] keys; systemd drops
       # them silently from [Service], turning the guards above into no-ops.
       unitConfig = {
