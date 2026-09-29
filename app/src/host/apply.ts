@@ -40,8 +40,39 @@ const bridge = defineBridge<ApplyStatus>({
   status: APPLY_STATUS,
 })
 
+/**
+ * How long a `running` status may go unrefreshed before it is a corpse.
+ *
+ * apply.sh rewrites the whole status file — `finishedAt` included — at every
+ * phase, so that field is "last written". Past the unit's TimeoutStartSec of
+ * 30 minutes (nix/stacks/daedalus/daedalus-verbs.nix) systemd has killed the
+ * run; five minutes of slack keeps a slow switch from being called dead while
+ * it still goes. The two move together.
+ */
+const RUNNING_MAX_MS = 35 * 60_000
+
+/**
+ * The status, with a dead run reported as dead.
+ *
+ * The apply unit has no reaper, so a run killed at its timeout — or a box
+ * that went down mid-Apply — leaves the file `running`, and the gate refuses
+ * every Apply while it says so. This clock is what brings the button back.
+ */
 export async function readApplyStatus(): Promise<ApplyStatus> {
-  return bridge.readStatus()
+  const s = await bridge.readStatus()
+  if (s.state !== 'running') return s
+
+  const last = Date.parse(s.finishedAt ?? '')
+  if (Number.isFinite(last) && Date.now() - last < RUNNING_MAX_MS) return s
+
+  return {
+    ...s,
+    state: 'failed',
+    error:
+      `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
+      'The rebuild may or may not have completed — check `journalctl -u daedalus-apply` ' +
+      'and `git log` in the configuration checkout before applying again.',
+  }
 }
 
 /**

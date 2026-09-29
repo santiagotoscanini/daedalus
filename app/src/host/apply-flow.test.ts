@@ -90,8 +90,13 @@ async function flow() {
   return import('./apply-flow')
 }
 
+/** Written just now, as apply.sh stamps every write (host/apply.ts's dead-run clock reads it). */
 const hostStatus = (status: Record<string, unknown>) =>
-  writeFile(join(dir, 'apply-status.json'), JSON.stringify(status), 'utf8')
+  writeFile(
+    join(dir, 'apply-status.json'),
+    JSON.stringify({ finishedAt: new Date().toISOString(), ...status }),
+    'utf8',
+  )
 
 /** Id-stamped, so counting these counts requests rather than overwrites. */
 const payloads = async () => (await readdir(dir)).filter((f) => f.startsWith('payload-'))
