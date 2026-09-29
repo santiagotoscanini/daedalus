@@ -558,7 +558,8 @@ pub fn write_for_install(cfg: &Config) -> Result<PathBuf> {
     if !keys.is_empty() {
         let text = std::fs::read_to_string(&path)
             .with_context(|| format!("reading {}", path.display()))?;
-        let edited = set_top_level_keys(&text, &keys);
+        let edited = set_top_level_keys(&text, &keys)
+            .with_context(|| format!("editing {}", path.display()))?;
         toml::from_str::<Config>(&edited)
             .with_context(|| format!("{} would not parse with the new keys", path.display()))?;
         crate::util::write_atomic(&path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
@@ -577,53 +578,25 @@ pub fn set_controller_pin_at(path: &Path, fingerprint: &str) -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
     };
-    let edited = set_top_level_keys(&text, &[("controller_pin", fingerprint)]);
+    let edited = set_top_level_keys(&text, &[("controller_pin", fingerprint)])
+        .with_context(|| format!("editing {}", path.display()))?;
     toml::from_str::<Config>(&edited)
         .with_context(|| format!("{} would not parse with the new pin", path.display()))?;
     crate::util::write_atomic(path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
         .with_context(|| format!("writing {}", path.display()))
 }
 
-/// `text` with each key set to its string value at the top level: an
-/// existing line for the key (before the first table) is replaced, and a
-/// missing one is added before the first table header, so it stays a
-/// top-level key. Comments and every other line stay as they are.
-fn set_top_level_keys(text: &str, keys: &[(&str, &str)]) -> String {
-    let quoted = |v: &str| toml::Value::String(v.to_string()).to_string();
-    let mut out: Vec<String> = Vec::new();
-    let mut done = vec![false; keys.len()];
-    let mut in_table = false;
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('[') && !in_table {
-            in_table = true;
-            for (i, (k, v)) in keys.iter().enumerate() {
-                if !done[i] {
-                    out.push(format!("{k} = {}", quoted(v)));
-                    done[i] = true;
-                }
-            }
-        }
-        if !in_table {
-            let key = trimmed.split('=').next().unwrap_or("").trim();
-            if let Some(i) = keys.iter().position(|(k, _)| *k == key) {
-                if !done[i] {
-                    out.push(format!("{} = {}", keys[i].0, quoted(keys[i].1)));
-                    done[i] = true;
-                }
-                continue;
-            }
-        }
-        out.push(line.to_string());
+/// `text` with each key set to its string value at the top level — a key
+/// there replaced in place, a missing one added among the top-level keys —
+/// through a format-preserving TOML editor (toml_edit), so comments, tables,
+/// dotted keys and multi-line strings stay as they are. An error when
+/// `text` is not TOML.
+fn set_top_level_keys(text: &str, keys: &[(&str, &str)]) -> Result<String> {
+    let mut doc: toml_edit::DocumentMut = text.parse().context("the file is not TOML")?;
+    for (k, v) in keys {
+        doc[k] = toml_edit::value(*v);
     }
-    for (i, (k, v)) in keys.iter().enumerate() {
-        if !done[i] {
-            out.push(format!("{k} = {}", quoted(v)));
-        }
-    }
-    let mut s = out.join("\n");
-    s.push('\n');
-    s
+    Ok(doc.to_string())
 }
 
 #[cfg(test)]
@@ -846,26 +819,49 @@ mod tests {
 
     #[test]
     fn install_sets_the_controller_keys_and_keeps_the_rest() {
-        let file = "# daedalus-agent — written by `install`\n\nport = 7790\ncontroller_pin = \"old\"\n\n[controller]\nclaude_unit = \"x\"\n";
+        let file = "# daedalus-agent — written by `install`\n\nport = 7790 # the page\ncontroller_pin = \"old\"\n\n[controller]\nclaude_unit = \"x\"\n";
         let out = set_top_level_keys(
             file,
             &[
                 ("controller_address", "box.lan:7788"),
                 ("controller_pin", "aa:bb"),
             ],
+        )
+        .unwrap();
+        assert!(
+            out.starts_with("# daedalus-agent — written by `install`\n\nport = 7790 # the page\n"),
+            "{out}"
         );
-        assert_eq!(
-            out,
-            "# daedalus-agent — written by `install`\n\nport = 7790\ncontroller_pin = \"aa:bb\"\n\n\
-             controller_address = \"box.lan:7788\"\n[controller]\nclaude_unit = \"x\"\n"
+        assert!(
+            out.contains("controller_pin = \"aa:bb\"") && !out.contains("old"),
+            "{out}"
+        );
+        assert!(
+            out.ends_with("[controller]\nclaude_unit = \"x\"\n"),
+            "{out}"
         );
         let cfg: Config = toml::from_str(&out).unwrap();
         assert_eq!(cfg.port, 7790);
         assert_eq!(cfg.controller_address.as_deref(), Some("box.lan:7788"));
         assert_eq!(cfg.controller_pin.as_deref(), Some("aa:bb"));
-        // No table: appended at the end.
-        let out = set_top_level_keys("port = 1\n", &[("controller_pin", "p")]);
+        assert_eq!(cfg.controller.claude_unit.as_deref(), Some("x"));
+        // No table: added.
+        let out = set_top_level_keys("port = 1\n", &[("controller_pin", "p")]).unwrap();
         assert_eq!(out, "port = 1\ncontroller_pin = \"p\"\n");
+        // What the old line editor broke: a table on the first line, a
+        // multi-line string holding `key =` text, a dotted key.
+        let tricky = "[controller]\nclaude_unit = \"x\"\n";
+        let out = set_top_level_keys(tricky, &[("controller_pin", "p")]).unwrap();
+        let cfg: Config = toml::from_str(&out).unwrap();
+        assert_eq!(cfg.controller_pin.as_deref(), Some("p"));
+        assert_eq!(cfg.controller.claude_unit.as_deref(), Some("x"));
+        let multi = "log_level = \"\"\"\ncontroller_pin = \"not a key\"\n\"\"\"\n";
+        let out = set_top_level_keys(multi, &[("controller_pin", "p")]).unwrap();
+        assert!(
+            out.contains("controller_pin = \"not a key\"\n\"\"\""),
+            "{out}"
+        );
+        assert!(set_top_level_keys("not = [toml", &[("a", "b")]).is_err());
         // What install writes without the flags is unchanged.
         assert!(!toml::to_string_pretty(&Config::default())
             .unwrap()
