@@ -33,6 +33,7 @@
 pub mod api;
 pub mod claude;
 pub mod config;
+pub mod deadline;
 pub mod discover;
 pub mod dns;
 pub mod door;
@@ -41,6 +42,7 @@ pub mod facts;
 pub mod http;
 pub mod identity;
 pub mod jobs;
+pub mod jsonl;
 pub mod link;
 pub mod local;
 pub mod logging;

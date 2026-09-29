@@ -45,7 +45,7 @@
 //! lets through may, since each of those is a user the machine runs Claude
 //! for (or root).
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -55,6 +55,7 @@ use serde_json::Value;
 
 use crate::claude::{Report, Roster};
 use crate::door::{Conn, Peer, Policy};
+use crate::jsonl::LineReader;
 use crate::rpc::{code, error_line, line_of, Answer, ApiError, Request, Response};
 use crate::shared::Shared;
 
@@ -192,19 +193,17 @@ fn answer(shared: &Shared, line: &[u8]) -> Response {
 /// One connection: the request line, its answer, closed.
 fn serve_one(shared: &Shared, c: Conn) {
     let mut w = c.writer;
-    let mut line = Vec::new();
-    let read = BufReader::new(c.reader.take(MAX_LINE as u64 + 1)).read_until(b'\n', &mut line);
-    let response = match read {
-        Ok(_) if line.len() > MAX_LINE => Response::err(
+    let response = match LineReader::new(c.reader, MAX_LINE).next_line() {
+        Ok(Some(line)) => answer(shared, &line),
+        Err(e) if crate::jsonl::is_too_long(&e) => Response::err(
             None,
             ApiError::new(
                 code::TOO_LARGE,
                 format!("a line is at most {MAX_LINE} bytes"),
             ),
         ),
-        Ok(_) => answer(shared, &line),
-        Err(e) => {
-            tracing::debug!(error = %e, "local: a request that never came");
+        Ok(None) | Err(_) => {
+            tracing::debug!("local: a request that never came");
             (c.close)();
             return;
         }
@@ -328,16 +327,19 @@ pub fn call_at(path: &Path, m: &str, p: Value) -> Result<Value, String> {
         .write_all(request_line(m, p).as_bytes())
         .and_then(|()| w.flush())
         .map_err(|e| format!("sending to the agent: {e}"));
-    let mut line = Vec::new();
-    let read = BufReader::new(c.reader.take(MAX_LINE as u64 + 1)).read_until(b'\n', &mut line);
-    if line.is_empty() {
-        sent?;
-        read.map_err(|e| format!("reading the agent's answer: {e}"))?;
-    }
+    let read = LineReader::new(c.reader, MAX_LINE).next_line();
     (c.close)();
-    if line.is_empty() {
-        return Err("the agent closed without answering".into());
-    }
+    let line = match read {
+        Ok(Some(line)) => line,
+        Ok(None) => {
+            sent?;
+            return Err("the agent closed without answering".into());
+        }
+        Err(e) => {
+            sent?;
+            return Err(format!("reading the agent's answer: {e}"));
+        }
+    };
     match crate::rpc::Answer::parse(&line) {
         Ok(Answer::Ok(v)) => Ok(v),
         Ok(Answer::Err { msg, .. }) => Err(msg),

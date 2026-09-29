@@ -314,7 +314,11 @@ fn converse(
                 Err(mpsc::TryRecvError::Disconnected) => return "replaced",
             }
         }
-        if opened.elapsed() > limits.pending_ttl && registry.is_pending(id) {
+        // A pending key pushes nothing it could need a long line for: it
+        // gets the hello's limit until it is approved.
+        let pending = registry.is_pending(id);
+        tls.set_max_line(if pending { MAX_HELLO_LINE } else { MAX_LINE });
+        if pending && opened.elapsed() > limits.pending_ttl {
             return "pending past its time; it may connect again";
         }
         // A rotation under way reaches a machine under the old key once.

@@ -40,6 +40,8 @@ anyhow = "1"
 ed25519-dalek = { version = "2", features = ["std", "rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 hex = "0.4"
+# The line scan of every door (jsonl.rs): already in the tree through regex.
+memchr = "2"
 png = "0.18"
 semver = "1"
 serde = { version = "1", features = ["derive"] }

@@ -375,6 +375,11 @@ impl Config {
             if uids.contains(&u32::MAX) {
                 bail!("controller.api_allowed_uids may not name uid 4294967295 (no user)");
             }
+            // The kernel reports an unmapped user namespace's peer as the
+            // overflow uid: listing it would admit every such peer.
+            if uids.contains(&65534) {
+                bail!("controller.api_allowed_uids may not name uid 65534 (the overflow uid unmapped peers get)");
+            }
             if let Some(l) = non_empty_str(self.controller.listen.as_deref()) {
                 if l.parse::<std::net::SocketAddr>().is_err() {
                     bail!("controller.listen must be an address and port such as 0.0.0.0:7788, not {l:?}");
@@ -731,6 +736,7 @@ mod tests {
         assert!(check("api_allowed_uids = [100999]").is_ok());
         assert!(check("api_allowed_uids = [0]").is_err());
         assert!(check("api_allowed_uids = [4294967295]").is_err());
+        assert!(check("api_allowed_uids = [65534]").is_err());
         assert!(toml::from_str::<Config>("[controller]\napi_allowed_uids = [-1]").is_err());
         // A typo fails loudly, in either mode, at parse.
         for mode in ["controller", "node"] {

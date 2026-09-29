@@ -62,10 +62,13 @@
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{BufRead, Read};
+use std::io::Read;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+
+use crate::deadline::Deadline;
+use crate::jsonl::LineReader;
 
 pub mod relay;
 
@@ -582,26 +585,21 @@ impl Table {
     }
 }
 
-/// One line of at most `max` bytes, without its newline; None at the end
-/// of the stream. A longer line is an error, and so is one that is not
-/// UTF-8.
-pub fn read_line<R: BufRead>(r: &mut R, max: usize) -> std::io::Result<Option<String>> {
-    let mut buf = Vec::new();
-    let n = r.take(max as u64 + 1).read_until(b'\n', &mut buf)?;
-    if n == 0 {
-        return Ok(None);
+/// The next line from `r` as text, all of it before `deadline` however it
+/// trickles in (`set_timeout` is handed what is left before each read);
+/// None at the end of the stream. A line past the reader's maximum is an
+/// error, and so is one that is not UTF-8.
+pub fn read_line<R: Read>(
+    r: &mut LineReader<R>,
+    deadline: Deadline,
+    set_timeout: impl Fn(&R, Duration) -> std::io::Result<()>,
+) -> std::io::Result<Option<String>> {
+    match r.next_line_by(deadline, set_timeout)? {
+        None => Ok(None),
+        Some(buf) => String::from_utf8(buf).map(Some).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "a line that is not UTF-8")
+        }),
     }
-    if buf.last() == Some(&b'\n') {
-        buf.pop();
-    } else if buf.len() > max {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("a line is at most {max} bytes"),
-        ));
-    }
-    String::from_utf8(buf).map(Some).map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, "a line that is not UTF-8")
-    })
 }
 
 /// A journal message as a progress line: control characters (ANSI's ESC
@@ -806,12 +804,21 @@ mod tests {
 
     #[test]
     fn lines_are_bounded() {
-        let mut r = std::io::Cursor::new(b"abc\ndef".to_vec());
-        assert_eq!(read_line(&mut r, 8).unwrap().as_deref(), Some("abc"));
-        assert_eq!(read_line(&mut r, 8).unwrap().as_deref(), Some("def"));
-        assert_eq!(read_line(&mut r, 8).unwrap(), None);
-        let mut long = std::io::Cursor::new(vec![b'x'; 20]);
-        assert!(read_line(&mut long, 8).is_err());
+        let later = || Deadline::after(Duration::from_secs(5));
+        let mut r = LineReader::new(&b"abc\ndef"[..], 8);
+        let none = |_: &&[u8], _| Ok(());
+        assert_eq!(
+            read_line(&mut r, later(), none).unwrap().as_deref(),
+            Some("abc")
+        );
+        assert_eq!(
+            read_line(&mut r, later(), none).unwrap().as_deref(),
+            Some("def")
+        );
+        assert_eq!(read_line(&mut r, later(), none).unwrap(), None);
+        let long = [b'x'; 20];
+        let mut long = LineReader::new(&long[..], 8);
+        assert!(read_line(&mut long, later(), none).is_err());
         assert_eq!(progress_text("\x1b[31mred\x1b[0m\tok"), "[31mred[0m\tok");
         assert_eq!(progress_text(&"y".repeat(5000)).len(), MAX_PROGRESS);
     }

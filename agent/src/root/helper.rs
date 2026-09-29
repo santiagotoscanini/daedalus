@@ -77,7 +77,8 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
     let peer = peer_uid(&sock);
     let mut out = sock.try_clone().context("the connection")?;
     let _ = out.set_write_timeout(Some(WRITE_TIMEOUT));
-    let _ = sock.set_read_timeout(Some(REQUEST_DEADLINE));
+    // The request, all of it, within REQUEST_DEADLINE of the connection.
+    let deadline = crate::deadline::Deadline::after(REQUEST_DEADLINE);
 
     let table = std::fs::read(path)
         .map_err(anyhow::Error::from)
@@ -111,8 +112,8 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
         return Ok(());
     }
 
-    let mut reader = BufReader::new(sock);
-    let req = match read_line(&mut reader, MAX_REQUEST) {
+    let mut reader = crate::jsonl::LineReader::new(sock, MAX_REQUEST);
+    let req = match read_line(&mut reader, deadline, |s, d| s.set_read_timeout(Some(d))) {
         Ok(Some(l)) => serde_json::from_str::<Request>(&l).map_err(|e| e.to_string()),
         Ok(None) => Err("no request".into()),
         Err(e) => Err(e.to_string()),

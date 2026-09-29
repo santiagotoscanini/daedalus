@@ -10,23 +10,24 @@
 //! the pipe object's owner (SYSTEM or Administrators) and the server's
 //! session (0).
 //!
-//! Synchronous pipes, a thread per connection, and a deadline on each —
-//! `CancelSynchronousIo` on the thread when it passes — so no peer can hold
-//! a thread by not reading or not writing.
+//! Synchronous pipes served as a door (door.rs `serve`): a thread per
+//! connection under a watchdog that cancels the call it is blocked in
+//! (`CancelIoEx`, then `DisconnectNamedPipe`) when its deadline passes, and
+//! again until the thread lets go — so no peer holds a thread by not
+//! writing, not reading, or leaving a flush pending (audit D8).
 
 use std::ffi::c_void;
-use std::io::{self, Write as _};
+use std::io;
 use std::os::windows::io::{FromRawHandle, RawHandle};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{
-    CloseHandle, DuplicateHandle, LocalFree, DUPLICATE_SAME_ACCESS, ERROR_PIPE_BUSY,
-    ERROR_PIPE_CONNECTED, ERROR_SUCCESS, HANDLE, HLOCAL,
+    CloseHandle, LocalFree, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, ERROR_SUCCESS, HANDLE, HLOCAL,
 };
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo,
@@ -54,7 +55,7 @@ use windows::Win32::System::RemoteDesktop::{
 use windows::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
 };
-use windows::Win32::System::IO::CancelSynchronousIo;
+use windows::Win32::System::IO::CancelIoEx;
 
 use crate::door::Conn;
 use crate::door::{Allowed, Peer, Policy};
@@ -234,70 +235,6 @@ pub fn local_socket_path(data_dir: &Path, dev: Option<&str>) -> std::path::PathB
     }
 }
 
-/// `CancelSynchronousIo` on the thread that armed it, once `after` passes
-/// before it is dropped.
-struct Deadline {
-    done: Option<mpsc::Sender<()>>,
-    timer: Option<std::thread::JoinHandle<()>>,
-}
-
-impl Deadline {
-    fn arm(after: Duration) -> Self {
-        let mut me = HANDLE::default();
-        // SAFETY: a real handle to this thread, for the timer to cancel its
-        // I/O by; the timer closes it.
-        let ok = unsafe {
-            DuplicateHandle(
-                GetCurrentProcess(),
-                GetCurrentThread(),
-                GetCurrentProcess(),
-                &mut me,
-                0,
-                false,
-                DUPLICATE_SAME_ACCESS,
-            )
-            .is_ok()
-        };
-        if !ok {
-            return Self {
-                done: None,
-                timer: None,
-            };
-        }
-        let raw = me.0 as usize;
-        let (tx, rx) = mpsc::channel::<()>();
-        let timer = std::thread::Builder::new()
-            .name("local-deadline".into())
-            .spawn(move || {
-                let h = HANDLE(raw as *mut c_void);
-                if let Err(mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(after) {
-                    // SAFETY: the thread handle duplicated above.
-                    unsafe {
-                        let _ = CancelSynchronousIo(h);
-                    }
-                }
-                // SAFETY: ours to close.
-                unsafe {
-                    let _ = CloseHandle(h);
-                }
-            })
-            .ok();
-        Self {
-            done: Some(tx),
-            timer,
-        }
-    }
-}
-
-impl Drop for Deadline {
-    fn drop(&mut self) {
-        drop(self.done.take());
-        if let Some(t) = self.timer.take() {
-            let _ = t.join();
-        }
-    }
-}
-
 /// The pipe's security descriptor, freed when dropped.
 struct Descriptor(PSECURITY_DESCRIPTOR);
 
@@ -361,32 +298,135 @@ fn instance(name: &[u16], sd: &Descriptor, first: bool) -> io::Result<HANDLE> {
     Ok(h)
 }
 
-/// A pipe handle as the reading and writing halves of a `Conn`, with
-/// `close` flushing what was written to the client and disconnecting.
-fn conn_of(h: HANDLE, server: bool) -> io::Result<Conn> {
+/// One pipe handle, both halves of a `Conn` over it: one handle, so
+/// `CancelIoEx` on it reaches whatever call the connection's thread is
+/// blocked in.
+struct PipeIo(Arc<std::fs::File>);
+
+impl io::Read for PipeIo {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        io::Read::read(&mut &*self.0, buf)
+    }
+}
+
+impl io::Write for PipeIo {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        io::Write::write(&mut &*self.0, buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn raw(f: &std::fs::File) -> HANDLE {
+    use std::os::windows::io::AsRawHandle;
+    HANDLE(f.as_raw_handle())
+}
+
+/// Cancel every call blocked on `f`, from any thread; on a server's end,
+/// disconnect the client too, so a call started after this one fails at
+/// once.
+fn cut(f: &std::fs::File, server: bool) {
+    // SAFETY: the handle `f` keeps open.
+    unsafe {
+        let _ = CancelIoEx(raw(f), None);
+        if server {
+            let _ = DisconnectNamedPipe(raw(f));
+        }
+    }
+}
+
+/// A pipe handle as a `Conn`, and what tears it down at once (the
+/// watchdog's). A server's graceful `close` flushes what it wrote to the
+/// client — a flush that waits for the client to read, so it is only ever
+/// called under a watchdog — then disconnects.
+fn conn_of(h: HANDLE, server: bool) -> (Conn, Arc<dyn Fn() + Send + Sync>) {
     // SAFETY: `h` is an open pipe handle this function now owns.
-    let file = unsafe { std::fs::File::from_raw_handle(h.0 as RawHandle) };
-    let writer = file.try_clone()?;
-    let ctl = Arc::new(Mutex::new(file.try_clone()?));
-    Ok(Conn {
-        reader: Box::new(file),
-        writer: Box::new(writer),
+    let file = Arc::new(unsafe { std::fs::File::from_raw_handle(h.0 as RawHandle) });
+    let (ctl, aborter) = (Arc::clone(&file), Arc::clone(&file));
+    let conn = Conn {
+        reader: Box::new(PipeIo(Arc::clone(&file))),
+        writer: Box::new(PipeIo(file)),
         on_hello: Box::new(|| {}),
         close: Arc::new(move || {
-            if !server {
-                return;
-            }
-            use std::os::windows::io::AsRawHandle;
-            let f = ctl.lock().unwrap_or_else(|p| p.into_inner());
-            let h = HANDLE(f.as_raw_handle());
-            // SAFETY: the handle `f` keeps open.
-            unsafe {
-                let _ = FlushFileBuffers(h);
-                let _ = DisconnectNamedPipe(h);
+            if server {
+                // SAFETY: the handle `ctl` keeps open.
+                unsafe {
+                    let _ = FlushFileBuffers(raw(&ctl));
+                    let _ = DisconnectNamedPipe(raw(&ctl));
+                }
             }
         }),
-    })
+    };
+    (conn, Arc::new(move || cut(&aborter, server)))
 }
+
+/// The pipe as a door's listener (door.rs `Listener`): each instance
+/// connected, the next made before it is handed over (so a client always
+/// finds one waiting), the client's user read once it has written.
+struct Acceptor {
+    name: Vec<u16>,
+    sd: Descriptor,
+    stop: Arc<AtomicBool>,
+    next: Mutex<Option<usize>>,
+}
+
+impl crate::door::Listener for Acceptor {
+    fn accept(&self) -> Option<io::Result<crate::door::Accepted>> {
+        loop {
+            let waiting = self.next.lock().unwrap_or_else(|p| p.into_inner()).take();
+            let this = match waiting {
+                Some(h) => HANDLE(h as *mut c_void),
+                None => match instance(&self.name, &self.sd, false) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        if self.stop.load(Ordering::Relaxed) {
+                            return None;
+                        }
+                        return Some(Err(e));
+                    }
+                },
+            };
+            // SAFETY: a pipe instance this listener owns.
+            let connected = match unsafe { ConnectNamedPipe(this, None) } {
+                Ok(()) => true,
+                Err(e) => e.code() == ERROR_PIPE_CONNECTED.to_hresult(),
+            };
+            if self.stop.load(Ordering::Relaxed) {
+                // SAFETY: ours.
+                unsafe {
+                    let _ = CloseHandle(this);
+                }
+                return None;
+            }
+            *self.next.lock().unwrap_or_else(|p| p.into_inner()) =
+                instance(&self.name, &self.sd, false)
+                    .ok()
+                    .map(|h| h.0 as usize);
+            if !connected {
+                // SAFETY: ours.
+                unsafe {
+                    let _ = CloseHandle(this);
+                }
+                continue;
+            }
+            let raw_h = this.0 as usize;
+            let (conn, abort) = conn_of(this, true);
+            return Some(Ok(crate::door::Accepted {
+                conn,
+                abort,
+                peer: crate::door::PeerAt::AfterRequest(Box::new(move || {
+                    client_sid(HANDLE(raw_h as *mut c_void))
+                })),
+            }));
+        }
+    }
+}
+
+// SAFETY: the waiting instance is a handle value only this listener uses.
+unsafe impl Send for Acceptor {}
+// SAFETY: as above; the handle is behind the mutex.
+unsafe impl Sync for Acceptor {}
 
 /// The pipe while it is served; dropping it stops accepting.
 pub struct LocalSocket {
@@ -416,9 +456,9 @@ impl Drop for LocalSocket {
     }
 }
 
-/// Serve the pipe at `path` (module doc): refused when an instance of that
-/// name exists already (another agent, or a squatter). Each connection runs
-/// on a thread of its own, within `serve.deadline`.
+/// Serve the pipe at `path` (module doc) as a door (door.rs `serve`):
+/// refused when an instance of that name exists already (another agent, or
+/// a squatter).
 pub fn serve_local<F>(path: &Path, policy: &Policy, on_conn: F) -> Result<LocalSocket>
 where
     F: Fn(Conn) + Send + Sync + 'static,
@@ -432,125 +472,27 @@ where
         )
     })?;
     let stop = Arc::new(AtomicBool::new(false));
-    let active = Arc::new(AtomicUsize::new(0));
-    let on_conn = Arc::new(on_conn);
-    let serve = policy.clone();
-    let first_raw = first.0 as usize;
-    {
-        let (stop, name) = (Arc::clone(&stop), name.clone());
-        std::thread::Builder::new()
-            .name("local-accept".into())
-            .spawn(move || {
-                let mut next: Option<usize> = Some(first_raw);
-                loop {
-                    let this = match next.take() {
-                        Some(h) => HANDLE(h as *mut c_void),
-                        None => match instance(&name, &sd, false) {
-                            Ok(h) => h,
-                            Err(e) => {
-                                tracing::warn!(error = %e, "local: no pipe instance");
-                                std::thread::sleep(Duration::from_millis(500));
-                                if stop.load(Ordering::Relaxed) {
-                                    return;
-                                }
-                                continue;
-                            }
-                        },
-                    };
-                    // SAFETY: a pipe instance this thread owns.
-                    let connected = match unsafe { ConnectNamedPipe(this, None) } {
-                        Ok(()) => true,
-                        Err(e) => e.code() == ERROR_PIPE_CONNECTED.to_hresult(),
-                    };
-                    if stop.load(Ordering::Relaxed) {
-                        // SAFETY: ours.
-                        unsafe {
-                            let _ = CloseHandle(this);
-                        }
-                        return;
-                    }
-                    // The next instance before this one is handed over, so
-                    // a client always finds one waiting.
-                    next = instance(&name, &sd, false).ok().map(|h| h.0 as usize);
-                    if !connected {
-                        // SAFETY: ours.
-                        unsafe {
-                            let _ = CloseHandle(this);
-                        }
-                        continue;
-                    }
-                    let busy = active.fetch_add(1, Ordering::AcqRel) >= serve.max_connections;
-                    let raw = this.0 as usize;
-                    let (serve, on_conn, slot) =
-                        (serve.clone(), Arc::clone(&on_conn), Arc::clone(&active));
-                    let spawned = std::thread::Builder::new()
-                        .name("local-conn".into())
-                        .spawn(move || {
-                            // The whole exchange, the request's read
-                            // included, within the deadline.
-                            let _deadline = Deadline::arm(serve.whole.unwrap_or(serve.first_line));
-                            let h = HANDLE(raw as *mut c_void);
-                            let Ok(mut conn) = conn_of(h, true) else {
-                                slot.fetch_sub(1, Ordering::AcqRel);
-                                return;
-                            };
-                            if busy {
-                                tracing::warn!("local: refused a connection past the limit");
-                                let _ = conn
-                                    .writer
-                                    .write_all(serve.busy.as_bytes());
-                                (conn.close)();
-                                slot.fetch_sub(1, Ordering::AcqRel);
-                                return;
-                            }
-                            // The request first: the client's identity is
-                            // taken from the pipe once it has written.
-                            let mut line = Vec::new();
-                            let _ = std::io::BufRead::read_until(
-                                &mut std::io::BufReader::new(
-                                    std::io::Read::take(&mut conn.reader, crate::door::MAX_LINE as u64 + 1),
-                                ),
-                                b'\n',
-                                &mut line,
-                            );
-                            let peer = client_sid(h);
-                            if !(serve.allow)(peer.as_ref()) {
-                                tracing::warn!(peer = ?peer, "local: refused a user that may not use the pipe");
-                                let _ = conn
-                                    .writer
-                                    .write_all((serve.refusal)(peer.as_ref()).as_bytes());
-                                (conn.close)();
-                            } else {
-                                conn.reader = Box::new(std::io::Cursor::new(line));
-                                on_conn(conn);
-                            }
-                            slot.fetch_sub(1, Ordering::AcqRel);
-                        });
-                    if spawned.is_err() {
-                        active.fetch_sub(1, Ordering::AcqRel);
-                        // SAFETY: not handed over.
-                        unsafe {
-                            let _ = CloseHandle(HANDLE(raw as *mut c_void));
-                        }
-                    }
-                }
-            })
-            .context("spawning the pipe's accept thread")?;
-    }
+    let acceptor = Acceptor {
+        name: name.clone(),
+        sd,
+        stop: Arc::clone(&stop),
+        next: Mutex::new(Some(first.0 as usize)),
+    };
+    crate::door::serve(acceptor, policy.clone(), on_conn)
+        .context("spawning the pipe's accept thread")?;
     Ok(LocalSocket { name, stop })
 }
 
 /// Connect to the pipe at `path`, waiting at most `timeout` for a free
 /// instance, and only when its server is a service (the pipe owned by
 /// SYSTEM or Administrators, served from session 0), or in a development
-/// run this user
-/// (`local::server_trusted`). The whole exchange on the returned
-/// connection has `timeout`: past it the calls on this thread are
-/// cancelled.
+/// run this user (`door::server_trusted`). The whole exchange on the
+/// returned connection has `timeout`: past it every call on the pipe is
+/// cancelled, again until the connection is closed.
 pub fn connect_local(path: &Path, timeout: Duration) -> io::Result<Conn> {
+    use crate::deadline::{Deadline, Watchdog};
     let name = wide(path);
-    let until = Instant::now() + timeout;
-    let deadline = Deadline::arm(timeout);
+    let deadline = Deadline::after(timeout);
     let h = loop {
         // SAFETY: a NUL-terminated name. The server may only identify this
         // client, never act as it (SECURITY_IDENTIFICATION).
@@ -566,16 +508,17 @@ pub fn connect_local(path: &Path, timeout: Duration) -> io::Result<Conn> {
             )
         } {
             Ok(h) => break h,
-            Err(e) if e.code() == ERROR_PIPE_BUSY.to_hresult() && Instant::now() < until => {
+            Err(e) if e.code() == ERROR_PIPE_BUSY.to_hresult() && !deadline.passed() => {
+                let wait = deadline.timeout(Duration::from_millis(500)).as_millis() as u32;
                 // SAFETY: a NUL-terminated name.
-                let _ = unsafe { WaitNamedPipeW(PCWSTR(name.as_ptr()), 500) };
+                let _ = unsafe { WaitNamedPipeW(PCWSTR(name.as_ptr()), wait) };
             }
             Err(e) => return Err(win_err(e)),
         }
     };
     // Never the server's process: the service is SYSTEM, which a user's
     // tray cannot open. The pipe object's owner and the server's session
-    // say who made it (`local::server_trusted`).
+    // say who made it (`door::server_trusted`).
     let side = server_side(h);
     if !crate::door::server_trusted(&side, own_sid().as_ref(), crate::door::dev_run()) {
         // SAFETY: ours.
@@ -590,11 +533,10 @@ pub fn connect_local(path: &Path, timeout: Duration) -> io::Result<Conn> {
             ),
         ));
     }
-    let mut conn = conn_of(h, false)?;
-    // The deadline lives as long as the connection's close.
-    let deadline = Mutex::new(Some(deadline));
+    let (mut conn, abort) = conn_of(h, false);
+    let dog = Mutex::new(Some(Watchdog::arm(deadline, move || abort())));
     conn.close = Arc::new(move || {
-        drop(deadline.lock().unwrap_or_else(|p| p.into_inner()).take());
+        drop(dog.lock().unwrap_or_else(|p| p.into_inner()).take());
     });
     Ok(conn)
 }

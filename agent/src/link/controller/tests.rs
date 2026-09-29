@@ -1065,6 +1065,75 @@ fn pre_auth_connections_are_capped_per_address_and_timed() {
     assert!(raw(&ctl, &id(24)).is_ok());
 }
 
+/// A peer that trickles its handshake a byte at a time — each byte inside
+/// any per-read timeout — still loses its pre-auth slot when the budget
+/// ends (audit D4).
+#[test]
+fn a_trickled_handshake_is_cut_off_at_the_budget() {
+    use std::io::Write as _;
+    let ctl = controller(Limits {
+        preauth_budget: Duration::from_secs(1),
+        ..fast()
+    });
+    let mut sock = TcpStream::connect(ctl.listener.local_addr).unwrap();
+    // A handshake record's header announcing 16 KiB, then its body a byte
+    // at a time.
+    sock.write_all(&[0x16, 0x03, 0x01, 0x40, 0x00]).unwrap();
+    let t = Instant::now();
+    let trickler = std::thread::spawn(move || {
+        while t.elapsed() < Duration::from_secs(6) {
+            if sock.write_all(&[0]).is_err() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        false
+    });
+    wait_for("the slot to be taken", 5, || {
+        ctl.registry.preauth_connections() == 1
+    });
+    wait_for("the budget to end the trickle", 4, || {
+        ctl.registry.preauth_connections() == 0
+    });
+    assert!(t.elapsed() < Duration::from_secs(3), "{:?}", t.elapsed());
+    assert!(trickler.join().unwrap(), "the connection was closed");
+}
+
+/// The same past the handshake: a `hello` that never ends, a byte per
+/// record, is cut off at the budget too.
+#[test]
+fn a_trickled_hello_is_cut_off_at_the_budget() {
+    let ctl = controller(Limits {
+        preauth_budget: Duration::from_secs(1),
+        ..fast()
+    });
+    let nid = id(29);
+    let client = ltls::Client::new(&nid).unwrap();
+    let sock = TcpStream::connect(ctl.listener.local_addr).unwrap();
+    let mut t = client
+        .connect(sock, Some(pin_of(&ctl.id)), Duration::from_secs(5))
+        .unwrap();
+    let start = Instant::now();
+    let mut cut = false;
+    while start.elapsed() < Duration::from_secs(6) {
+        if t.send_bytes(b"{").is_err() {
+            cut = true;
+            break;
+        }
+        if ctl.registry.preauth_connections() == 0 {
+            cut = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(cut, "still held after {:?}", start.elapsed());
+    assert!(
+        start.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        start.elapsed()
+    );
+}
+
 #[test]
 fn an_oversized_or_out_of_bounds_hello_is_refused() {
     let ctl = controller(fast());

@@ -163,6 +163,157 @@ pub struct Policy {
     pub open_to_others: bool,
 }
 
+/// When the OS can name a connection's peer.
+pub enum PeerAt {
+    /// At once, before a byte is read (`SO_PEERCRED`, `getpeereid`).
+    Now(Option<Peer>),
+    /// Once the client has written: a named pipe's client token is read
+    /// while impersonating it, which needs its first write read.
+    AfterRequest(Box<dyn FnOnce() -> Option<Peer> + Send>),
+}
+
+/// One connection as the OS hands it to `serve`.
+pub struct Accepted {
+    /// `close` ends it gracefully (what was written reaches the peer).
+    pub conn: Conn,
+    /// Tear it down at once, from any thread, whatever the connection's
+    /// own thread is blocked in: the watchdog's.
+    pub abort: Arc<dyn Fn() + Send + Sync>,
+    pub peer: PeerAt,
+}
+
+/// The OS's half of a door: the next connection, and nothing else.
+pub trait Listener: Send + 'static {
+    /// The next connection; None once the door is stopped.
+    fn accept(&self) -> Option<std::io::Result<Accepted>>;
+}
+
+/// Connections counted, for as long as each lives.
+struct Slot(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
+/// Serve a door (module doc), the same on every OS: each connection on a
+/// thread of its own under a `Watchdog` — the first line's deadline, lifted
+/// by `hello`, or the whole exchange's — so no peer holds a thread or a
+/// slot past it by trickling, by not reading, or by leaving a flush
+/// pending; the peer checked before its connection reaches `on_conn`,
+/// before anything is read where the OS can say who it is; at most
+/// `max_connections` served, one past that told `busy`, and past twice
+/// that closed without a word.
+pub fn serve<L, F>(listener: L, policy: Policy, on_conn: F) -> std::io::Result<()>
+where
+    L: Listener,
+    F: Fn(Conn) + Send + Sync + 'static,
+{
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let on_conn = Arc::new(on_conn);
+    let served = Arc::new(AtomicUsize::new(0));
+    let open = Arc::new(AtomicUsize::new(0));
+    std::thread::Builder::new()
+        .name(format!("{}-accept", policy.what))
+        .spawn(move || {
+            while let Some(next) = listener.accept() {
+                let a = match next {
+                    Ok(a) => a,
+                    Err(e) => {
+                        // Out of descriptors, say: not a reason to spin.
+                        tracing::debug!(error = %e, door = policy.what, "accept failed");
+                        std::thread::sleep(Duration::from_millis(100));
+                        continue;
+                    }
+                };
+                if open.fetch_add(1, Ordering::AcqRel) >= 2 * policy.max_connections {
+                    open.fetch_sub(1, Ordering::AcqRel);
+                    tracing::warn!(door = policy.what, "closed a connection far past the limit");
+                    (a.abort)();
+                    continue;
+                }
+                let opened = Slot(Arc::clone(&open));
+                let busy = served.fetch_add(1, Ordering::AcqRel) >= policy.max_connections;
+                let counted = Slot(Arc::clone(&served));
+                let (policy, on_conn) = (policy.clone(), Arc::clone(&on_conn));
+                let abort = Arc::clone(&a.abort);
+                let spawned = std::thread::Builder::new()
+                    .name(format!("{}-conn", policy.what))
+                    .spawn(move || {
+                        let _slots = (opened, counted);
+                        one(a, busy, &policy, &*on_conn);
+                    });
+                if spawned.is_err() {
+                    abort();
+                }
+            }
+        })?;
+    Ok(())
+}
+
+/// One connection, on its own thread (`serve`).
+fn one(a: Accepted, busy: bool, policy: &Policy, on_conn: &(dyn Fn(Conn) + Send + Sync)) {
+    use crate::deadline::{Deadline, Watchdog};
+    let Accepted {
+        mut conn,
+        abort,
+        peer,
+    } = a;
+    let first = policy.whole.unwrap_or(policy.first_line);
+    let dog = {
+        let abort = Arc::clone(&abort);
+        Watchdog::arm(Deadline::after(first), move || abort())
+    };
+    let refuse = |mut conn: Conn, line: &str| {
+        let _ = conn.writer.write_all(line.as_bytes());
+        let _ = conn.writer.flush();
+        (conn.close)();
+    };
+    if busy {
+        tracing::warn!(
+            max = policy.max_connections,
+            door = policy.what,
+            "refused a connection past the limit"
+        );
+        return refuse(conn, &policy.busy);
+    }
+    let peer = match peer {
+        PeerAt::Now(p) => p,
+        PeerAt::AfterRequest(who) => {
+            let mut lines = crate::jsonl::LineReader::new(conn.reader, MAX_LINE);
+            let line = match lines.next_line() {
+                Ok(Some(l)) => l,
+                _ => {
+                    abort();
+                    return;
+                }
+            };
+            let p = who();
+            let (mut rest, reader) = lines.into_parts();
+            let mut first = line;
+            first.push(b'\n');
+            first.append(&mut rest);
+            conn.reader = Box::new(std::io::Cursor::new(first).chain(reader));
+            p
+        }
+    };
+    if !(policy.allow)(peer.as_ref()) {
+        tracing::warn!(peer = ?peer, door = policy.what, "refused a peer that may not use the door");
+        return refuse(conn, &(policy.refusal)(peer.as_ref()));
+    }
+    if policy.whole.is_none() {
+        let dog = std::sync::Mutex::new(Some(dog));
+        conn.on_hello = Box::new(move || {
+            drop(dog.lock().unwrap_or_else(|p| p.into_inner()).take());
+        });
+        on_conn(conn);
+    } else {
+        on_conn(conn);
+        drop(dog);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

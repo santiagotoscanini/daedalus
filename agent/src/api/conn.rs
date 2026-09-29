@@ -17,7 +17,7 @@
 //! in-memory halves on every OS; os `serve_local_socket` hands it a unix
 //! socket.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Mutex};
@@ -29,6 +29,7 @@ use serde_json::Value;
 use super::wire::{hello_api, HelloParams, Subscribed};
 use super::{Api, API_VERSION, MAX_LINE};
 use crate::door::Conn;
+use crate::jsonl::LineReader;
 use crate::rpc::{code, salvage_id, ApiError, Request, Response};
 
 /// How much of a client's self-description reaches the log.
@@ -76,24 +77,12 @@ enum Line {
     End,
 }
 
-fn read_line<R: BufRead>(r: &mut R) -> Line {
-    let mut buf = Vec::new();
-    match r.take(MAX_LINE as u64 + 1).read_until(b'\n', &mut buf) {
+fn read_line<R: Read>(r: &mut LineReader<R>) -> Line {
+    match r.next_line() {
+        Ok(Some(buf)) => Line::Text(buf),
+        Err(e) if crate::jsonl::is_too_long(&e) => Line::TooLong,
         // End of stream, a read error, or the pre-hello deadline passing.
-        Ok(0) | Err(_) => Line::End,
-        Ok(_) => {
-            if buf.last() == Some(&b'\n') {
-                buf.pop();
-                if buf.last() == Some(&b'\r') {
-                    buf.pop();
-                }
-            }
-            if buf.len() > MAX_LINE {
-                Line::TooLong
-            } else {
-                Line::Text(buf)
-            }
-        }
+        Ok(None) | Err(_) => Line::End,
     }
 }
 
@@ -153,7 +142,7 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
     let mut events = None;
     let mut client: Option<String> = None;
     let mut on_hello = Some(on_hello);
-    let mut reader = BufReader::new(reader);
+    let mut reader = LineReader::new(reader, MAX_LINE);
 
     loop {
         if out.broken.load(Ordering::Relaxed) {

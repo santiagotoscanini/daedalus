@@ -46,7 +46,9 @@ use rustls::{
 };
 
 use super::{cert, crypto, MAX_LINE, TICK};
+use crate::deadline::Deadline;
 use crate::identity::{digest, Identity};
+use crate::jsonl::LineBuf;
 
 /// The name the machine's client asks for, under which it names the key it
 /// pins (`server_name_for`); nothing checks it as a name.
@@ -344,9 +346,7 @@ pub enum Recv {
 pub struct Tls {
     conn: rustls::Connection,
     sock: TcpStream,
-    inbuf: Vec<u8>,
-    /// The longest line `recv` accepts (`MAX_LINE` unless set lower).
-    max_line: usize,
+    lines: LineBuf,
 }
 
 fn is_timeout(e: &io::Error) -> bool {
@@ -383,30 +383,54 @@ impl Tls {
         Self::handshake(conn.into(), sock, timeout)
     }
 
+    /// The handshake, all of it within `timeout` from now: every read and
+    /// write waits at most what is left, and the deadline is checked after
+    /// each, so a peer trickling a byte at a time is cut off on time
+    /// (rustls' `complete_io` would loop for as long as bytes arrive).
     fn handshake(
         mut conn: rustls::Connection,
         mut sock: TcpStream,
         timeout: Duration,
     ) -> io::Result<Self> {
         sock.set_nodelay(true)?;
-        sock.set_read_timeout(Some(timeout))?;
-        sock.set_write_timeout(Some(timeout))?;
-        let until = std::time::Instant::now() + timeout;
+        let deadline = Deadline::after(timeout);
         while conn.is_handshaking() {
-            if std::time::Instant::now() > until {
+            if deadline.passed() {
                 return Err(io::ErrorKind::TimedOut.into());
             }
-            conn.complete_io(&mut sock)?;
+            let wait = deadline.timeout(timeout);
+            sock.set_write_timeout(Some(wait))?;
+            while conn.wants_write() {
+                conn.write_tls(&mut sock)?;
+            }
+            if !conn.is_handshaking() {
+                break;
+            }
+            sock.set_read_timeout(Some(wait))?;
+            match conn.read_tls(&mut sock) {
+                Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
+                Ok(_) => {}
+                Err(e) if is_timeout(&e) => continue,
+                Err(e) => return Err(e),
+            }
+            if let Err(e) = conn.process_new_packets() {
+                // The alert that says why, then the error.
+                let _ = conn.write_tls(&mut sock);
+                return Err(invalid(e));
+            }
+        }
+        while conn.wants_write() {
+            conn.write_tls(&mut sock)?;
         }
         // Lines up to MAX_LINE go out whole; the peer's pace is the
         // write timeout's to judge.
         conn.set_buffer_limit(None);
         sock.set_read_timeout(Some(TICK))?;
+        sock.set_write_timeout(Some(timeout))?;
         Ok(Self {
             conn,
             sock,
-            inbuf: Vec::new(),
-            max_line: MAX_LINE,
+            lines: LineBuf::new(MAX_LINE),
         })
     }
 
@@ -434,7 +458,7 @@ impl Tls {
     /// Accept lines up to `n` bytes (a connection not yet admitted reads
     /// less than `MAX_LINE`, link/controller.rs).
     pub fn set_max_line(&mut self, n: usize) {
-        self.max_line = n.min(MAX_LINE);
+        self.lines.set_max(n.min(MAX_LINE));
     }
 
     /// The read timeout `recv` waits at most.
@@ -447,6 +471,13 @@ impl Tls {
             self.conn.write_tls(&mut self.sock)?;
         }
         Ok(())
+    }
+
+    /// Bytes as they are, one record, flushed (the tests' tricklers).
+    #[cfg(test)]
+    pub fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.conn.writer().write_all(bytes)?;
+        self.flush()
     }
 
     /// One line, newline added, written and flushed.
@@ -462,37 +493,21 @@ impl Tls {
         self.flush()
     }
 
-    fn take_line(&mut self) -> io::Result<Option<Vec<u8>>> {
-        match self.inbuf.iter().position(|b| *b == b'\n') {
-            Some(at) => {
-                let mut line: Vec<u8> = self.inbuf.drain(..=at).collect();
-                line.pop();
-                if line.last() == Some(&b'\r') {
-                    line.pop();
-                }
-                if line.len() > self.max_line {
-                    return Err(invalid(format!("a line past {} bytes", self.max_line)));
-                }
-                Ok(Some(line))
-            }
-            None if self.inbuf.len() > self.max_line => {
-                Err(invalid(format!("a line past {} bytes", self.max_line)))
-            }
-            None => Ok(None),
-        }
-    }
-
-    /// The next line, waiting at most the read timeout for the network.
+    /// The next line, or `Idle` once one read of the network brought no
+    /// whole line — nothing within the read timeout, or a part of one — so
+    /// the caller's deadlines are checked at least that often however the
+    /// peer paces its bytes. Each look scans only the bytes that are new
+    /// (jsonl.rs).
     pub fn recv(&mut self) -> io::Result<Recv> {
         let mut chunk = [0u8; 16 * 1024];
         loop {
-            if let Some(line) = self.take_line()? {
+            if let Some(line) = self.lines.take()? {
                 return Ok(Recv::Line(line));
             }
             match self.conn.reader().read(&mut chunk) {
                 Ok(0) => return Ok(Recv::Closed),
                 Ok(n) => {
-                    self.inbuf.extend_from_slice(&chunk[..n]);
+                    self.lines.push(&chunk[..n]);
                     continue;
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
@@ -508,6 +523,29 @@ impl Tls {
             self.conn.process_new_packets().map_err(invalid)?;
             // Alerts and key updates the packets asked for.
             self.flush()?;
+            // What that record held, then back to the caller — a line it
+            // completed before any close that came with it.
+            let mut ended = false;
+            loop {
+                match self.conn.reader().read(&mut chunk) {
+                    Ok(0) => {
+                        ended = true;
+                        break;
+                    }
+                    Ok(n) => self.lines.push(&chunk[..n]),
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
+                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                        ended = true;
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            return Ok(match self.lines.take()? {
+                Some(line) => Recv::Line(line),
+                None if ended => Recv::Closed,
+                None => Recv::Idle,
+            });
         }
     }
 

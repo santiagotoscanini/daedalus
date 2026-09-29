@@ -49,7 +49,7 @@ pub fn run(
     silence: Duration,
     mut on_progress: impl FnMut(&str),
 ) -> Result<Answer, RelayError> {
-    use std::io::{BufReader, Write};
+    use std::io::Write;
     use std::os::unix::net::UnixStream;
 
     use super::Line;
@@ -60,15 +60,17 @@ pub fn run(
     let mut stream = UnixStream::connect(socket)
         .map_err(|e| RelayError::Unreachable(format!("{}: {e}", socket.display())))?;
     let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
-    let _ = stream.set_read_timeout(Some(silence));
+
     let mut line = serde_json::to_string(request).map_err(|e| RelayError::Broken(e.to_string()))?;
     line.push('\n');
     stream
         .write_all(line.as_bytes())
         .map_err(|e| RelayError::Broken(format!("sending the request: {e}")))?;
-    let mut reader = BufReader::new(stream);
+    let mut reader = crate::jsonl::LineReader::new(stream, super::MAX_ANSWER);
     loop {
-        let text = match super::read_line(&mut reader, super::MAX_ANSWER) {
+        // `silence` for each line, however it trickles in.
+        let by = crate::deadline::Deadline::after(silence);
+        let text = match super::read_line(&mut reader, by, |s, d| s.set_read_timeout(Some(d))) {
             Ok(Some(t)) => t,
             Ok(None) => {
                 return Err(RelayError::Broken(

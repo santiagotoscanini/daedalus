@@ -422,16 +422,6 @@ fn clear_stale(path: &Path) -> Result<()> {
     }
 }
 
-/// One connection counted against `Limits::max_connections`, for as long
-/// as it lives.
-struct Slot(std::sync::Arc<std::sync::atomic::AtomicUsize>);
-
-impl Drop for Slot {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::AcqRel);
-    }
-}
-
 /// Serve the API's socket at `path` (api/): the directory made if missing
 /// (0700) or checked if not (`socket_dir`), a stale socket removed, another
 /// instance refused, the socket 0600 — or, open to others, 0711 and 0666.
@@ -466,33 +456,15 @@ pub fn local_socket_path(data_dir: &Path, dev: Option<&str>) -> std::path::PathB
     data_dir.join("run").join("agent.sock")
 }
 
-/// Shut `stream` down both ways once `after` passes, unless the returned
-/// sender is dropped first: a whole-exchange deadline, however slowly the
-/// other end drips its bytes.
-fn deadline_on(
-    stream: std::os::unix::net::UnixStream,
-    after: Duration,
-) -> std::sync::mpsc::Sender<()> {
-    let (tx, rx) = std::sync::mpsc::channel::<()>();
-    let _ = std::thread::Builder::new()
-        .name("local-deadline".into())
-        .spawn(move || {
-            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(after) {
-                let _ = stream.shutdown(std::net::Shutdown::Both);
-            }
-        });
-    tx
-}
-
 /// Connect to the agent's local socket at `path`, the whole exchange
 /// within `timeout`, and only when the other end is one to trust
-/// (`local::server_trusted`: root or this user, owning the socket file).
+/// (`door::server_trusted`: root or this user, owning the socket file).
 pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::door::Conn> {
+    use crate::deadline::{Deadline, Watchdog};
     use crate::door::{server_trusted, Peer, ServerSide};
     use std::os::unix::fs::MetadataExt;
     let file_owner = std::fs::metadata(path).ok().map(|m| m.uid());
     let stream = std::os::unix::net::UnixStream::connect(path)?;
-    stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
     let side = ServerSide::Unix {
         uid: peer_uid(&stream),
@@ -509,27 +481,72 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::d
     }
     let writer = stream.try_clone()?;
     let ctl = stream.try_clone()?;
-    let deadline = std::sync::Mutex::new(Some(deadline_on(stream.try_clone()?, timeout)));
+    let cut = stream.try_clone()?;
+    let dog = Watchdog::arm(Deadline::after(timeout), move || {
+        let _ = cut.shutdown(std::net::Shutdown::Both);
+    });
+    let dog = std::sync::Mutex::new(Some(dog));
     Ok(crate::door::Conn {
         reader: Box::new(stream),
         writer: Box::new(writer),
         on_hello: Box::new(|| {}),
         close: Arc::new(move || {
-            drop(deadline.lock().unwrap_or_else(|p| p.into_inner()).take());
+            drop(dog.lock().unwrap_or_else(|p| p.into_inner()).take());
             let _ = ctl.shutdown(std::net::Shutdown::Both);
         }),
     })
 }
 
-/// The core of both: bind, check each peer, count, hand over (the doc of
-/// `serve_api_socket`).
+/// A unix socket as a door's listener (door.rs `Listener`): each stream
+/// with its write timeout and the peer's uid as the kernel states it.
+struct Acceptor {
+    listener: Arc<std::os::unix::net::UnixListener>,
+    stop: Arc<AtomicBool>,
+    write_timeout: Duration,
+}
+
+impl crate::door::Listener for Acceptor {
+    fn accept(&self) -> Option<std::io::Result<crate::door::Accepted>> {
+        let accepted = self.listener.accept();
+        if self.stop.load(Ordering::Relaxed) {
+            return None;
+        }
+        Some(accepted.and_then(|(stream, _)| {
+            // Every write on this socket, the refusals included, gives up
+            // after the timeout.
+            stream.set_write_timeout(Some(self.write_timeout))?;
+            let peer = peer_uid(&stream).map(crate::door::Peer::Uid);
+            let (writer, ctl, cut) = (
+                stream.try_clone()?,
+                stream.try_clone()?,
+                stream.try_clone()?,
+            );
+            Ok(crate::door::Accepted {
+                conn: crate::door::Conn {
+                    reader: Box::new(stream),
+                    writer: Box::new(writer),
+                    on_hello: Box::new(|| {}),
+                    close: Arc::new(move || {
+                        let _ = ctl.shutdown(std::net::Shutdown::Both);
+                    }),
+                },
+                abort: Arc::new(move || {
+                    let _ = cut.shutdown(std::net::Shutdown::Both);
+                }),
+                peer: crate::door::PeerAt::Now(peer),
+            })
+        }))
+    }
+}
+
+/// The core of both: make the directory and the socket, then serve it as a
+/// door (door.rs `serve`).
 fn serve_gated<F>(path: &Path, gate: crate::door::Policy, on_conn: F) -> Result<LocalSocket>
 where
     F: Fn(crate::door::Conn) + Send + Sync + 'static,
 {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
-    use std::sync::atomic::AtomicUsize;
     let dir = path
         .parent()
         .filter(|d| !d.as_os_str().is_empty())
@@ -545,84 +562,13 @@ where
         .with_context(|| format!("reading {}", path.display()))?
         .ino();
     let stop = Arc::new(AtomicBool::new(false));
-    let on_conn = Arc::new(on_conn);
     let listener = Arc::new(listener);
-    let active = Arc::new(AtomicUsize::new(0));
-    {
-        let stop = Arc::clone(&stop);
-        let listener = Arc::clone(&listener);
-        std::thread::Builder::new()
-            .name(format!("{}-accept", gate.what))
-            .spawn(move || {
-                for stream in listener.incoming() {
-                    if stop.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    let Ok(mut stream) = stream else {
-                        // Out of descriptors, say: not a reason to spin.
-                        std::thread::sleep(Duration::from_millis(100));
-                        continue;
-                    };
-                    // Every write on this socket, the refusals included,
-                    // gives up after the timeout.
-                    let _ = stream.set_write_timeout(Some(gate.write_timeout));
-                    let peer = peer_uid(&stream).map(crate::door::Peer::Uid);
-                    if !(gate.allow)(peer.as_ref()) {
-                        tracing::warn!(
-                            peer = ?peer,
-                            socket = gate.what,
-                            "refused a connection from a uid that may not use the socket"
-                        );
-                        let _ = std::io::Write::write_all(
-                            &mut stream,
-                            (gate.refusal)(peer.as_ref()).as_bytes(),
-                        );
-                        continue;
-                    }
-                    if active.fetch_add(1, Ordering::AcqRel) >= gate.max_connections {
-                        active.fetch_sub(1, Ordering::AcqRel);
-                        tracing::warn!(
-                            max = gate.max_connections,
-                            socket = gate.what,
-                            "refused a connection past the limit"
-                        );
-                        let _ = std::io::Write::write_all(&mut stream, gate.busy.as_bytes());
-                        continue;
-                    }
-                    let slot = Slot(Arc::clone(&active));
-                    let whole = gate
-                        .whole
-                        .and_then(|d| stream.try_clone().ok().map(|s| deadline_on(s, d)));
-                    let _ = stream.set_read_timeout(Some(gate.first_line));
-                    let (Ok(writer), Ok(ctl)) = (stream.try_clone(), stream.try_clone()) else {
-                        continue;
-                    };
-                    let ctl = Arc::new(ctl);
-                    let conn = crate::door::Conn {
-                        reader: Box::new(stream),
-                        writer: Box::new(writer),
-                        on_hello: {
-                            let ctl = Arc::clone(&ctl);
-                            Box::new(move || {
-                                let _ = ctl.set_read_timeout(None);
-                            })
-                        },
-                        close: Arc::new(move || {
-                            let _ = ctl.shutdown(std::net::Shutdown::Both);
-                        }),
-                    };
-                    let on_conn = Arc::clone(&on_conn);
-                    let _ = std::thread::Builder::new()
-                        .name(format!("{}-conn", gate.what))
-                        .spawn(move || {
-                            let _slot = slot;
-                            let _whole = whole;
-                            on_conn(conn);
-                        });
-                }
-            })
-            .context("spawning a socket's accept thread")?;
-    }
+    let acceptor = Acceptor {
+        listener: Arc::clone(&listener),
+        stop: Arc::clone(&stop),
+        write_timeout: gate.write_timeout,
+    };
+    crate::door::serve(acceptor, gate, on_conn).context("spawning a socket's accept thread")?;
     Ok(LocalSocket {
         path: path.to_path_buf(),
         ino,
@@ -874,6 +820,92 @@ mod tests {
         let until = std::time::Instant::now() + Duration::from_secs(5);
         while !done.load(Ordering::SeqCst) {
             assert!(std::time::Instant::now() < until, "the write never gave up");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        drop(c);
+        drop(sock);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A peer that trickles its first line a byte at a time — each byte
+    /// well inside any per-read timeout — is cut off at the first line's
+    /// deadline, and its slot comes back (audit D17, D4's local twin).
+    #[test]
+    fn a_trickled_first_line_is_cut_off_at_its_deadline() {
+        let dir = scratch("trickle");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("api.sock");
+        let quick = Policy {
+            first_line: Duration::from_millis(400),
+            max_connections: 1,
+            ..limits()
+        };
+        let sock = serve_api_socket(&path, &quick, |c: Conn| {
+            // Reads forever, as the API's reader does before `hello`.
+            let mut sink = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut { c.reader }, &mut sink);
+            (c.close)();
+        })
+        .unwrap();
+        let mut c = std::os::unix::net::UnixStream::connect(&path).unwrap();
+        let t = std::time::Instant::now();
+        while t.elapsed() < Duration::from_secs(4) {
+            if c.write_all(b"x").is_err() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(t.elapsed() < Duration::from_secs(2), "{:?}", t.elapsed());
+        // The one slot is free again.
+        let until = std::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            let again = std::os::unix::net::UnixStream::connect(&path).unwrap();
+            again
+                .set_read_timeout(Some(Duration::from_millis(200)))
+                .unwrap();
+            let mut got = String::new();
+            let busy = BufReader::new(&again).read_line(&mut got).is_ok() && got == "busy\n";
+            if !busy {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < until,
+                "the slot never came back"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        drop(sock);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A handler blocked writing to a peer that never reads, with no write
+    /// timeout to save it, is freed at the whole exchange's deadline (the
+    /// pipe's D8 on every OS: the watchdog, not the write timeout).
+    #[test]
+    fn a_peer_that_never_reads_is_cut_off_at_the_whole_deadline() {
+        let dir = scratch("never");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("agent.sock");
+        let whole = Policy {
+            whole: Some(Duration::from_millis(400)),
+            write_timeout: Duration::from_secs(3600),
+            ..limits()
+        };
+        let done = std::sync::Arc::new(AtomicBool::new(false));
+        let sock = {
+            let done = std::sync::Arc::clone(&done);
+            serve_local(&path, &whole, move |c: Conn| {
+                let mut w = c.writer;
+                let chunk = vec![b'x'; 64 * 1024];
+                while w.write_all(&chunk).is_ok() {}
+                done.store(true, Ordering::SeqCst);
+            })
+            .unwrap()
+        };
+        let c = std::os::unix::net::UnixStream::connect(&path).unwrap();
+        let t = std::time::Instant::now();
+        while !done.load(Ordering::SeqCst) {
+            assert!(t.elapsed() < Duration::from_secs(3), "never cut off");
             std::thread::sleep(Duration::from_millis(20));
         }
         drop(c);
