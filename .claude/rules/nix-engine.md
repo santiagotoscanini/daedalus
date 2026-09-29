@@ -119,7 +119,8 @@ the key fails eval):
 Optional, null/empty by default, host-defined when wanted:
 `fleet.claude.mcpSopsFile`, `fleet.hcPing.keySopsFile`,
 `fleet.zfs.datasets`, `fleet.zfs.arcMaxBytes`, `fleet.backup.replications`,
-`fleet.autoupgrade.inputs`.
+`fleet.autoupgrade.inputs`, `fleet.upgradeGuard.*` (checks, criticalContainers,
+minContainers, bootFallback.enable).
 
 Re-derive the list rather than trusting it:
 

@@ -66,6 +66,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # The preflight's question before a reboot (platform/upgrade-guard). No
+    # RCON port reaches the host (the manager drives RCON itself), so the
+    # count is unknowable from here; what is knowable is whether a game runs.
+    fleet.upgradeGuard.checks.factorio-players = ''
+      if podman_op exec factorio pgrep -f 'bin/x64/factorio' >/dev/null 2>&1; then
+        echo "a Factorio game is running; its player count is not readable without RCON — ask, or check the manager"
+        return 2
+      fi
+      echo "no Factorio game running (only the manager, or nothing)"
+    '';
+
     # Handed to the control plane (fleet.dashboard) so its Gaming tile shows
     # the running version rather than carrying a second copy of the number.
     # It is the same string the container downloads on start, so the tile

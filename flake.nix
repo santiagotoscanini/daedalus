@@ -84,6 +84,7 @@
         "smartd.nix"
         "sops.nix"
         "storage.nix"
+        "upgrade-guard/upgrade-guard.nix"
         "zfs.nix"
       ];
 

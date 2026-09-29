@@ -234,6 +234,43 @@ log_errtail() {
       }' || true
 }
 
+# ── the live-switch guard ─────────────────────────────────────────────────
+#
+# A generation whose kernel, initrd, module tree, ZFS, systemd major or D-Bus
+# implementation differs from the running system's is never activated live
+# (platform/upgrade-guard). Every generation refuses it in its own pre-switch
+# check, which alone would make the verb's switch FAIL and roll back; asking
+# first, right after the build, lets a verb report it as what it is — a change
+# that is waiting for a reboot. Expects `fleet-switch-guard` on PATH.
+
+# The toplevel the last `nixos-rebuild build` logged to $1 produced. Both
+# implementations end a build with "Done. The new configuration is <path>",
+# the path on stdout.
+built_toplevel() {
+  { read_as_operator "$1" 2>/dev/null || true; } |
+    grep -oE "/nix/store/[a-z0-9]{32}-nixos-system-[^[:space:]'\"]+" | grep -v '\.drv$' | tail -n 1 || true
+}
+
+# Prints the guard's reasons and returns 0 when the generation built into log
+# $1 needs a reboot; returns 1 when it may be activated. A log that names no
+# generation, or a guard that cannot answer, returns 1 too: the activation
+# then meets the generation's own check, which fails closed.
+reboot_required() {
+  local top out rc=0
+  top="$(built_toplevel "$1")"
+  [ -n "$top" ] || return 1
+  out="$(fleet-switch-guard "$top" 2>&1)" || rc=$?
+  [ "$rc" -eq 3 ] || return 1
+  printf '%s\n' "$out"
+}
+
+# The status text for that outcome: the reasons, then how to take the change.
+# $1 reasons, $2 what happened to the change, in a sentence.
+reboot_note() {
+  printf '%s\n\n%s Install it for the next boot and reboot:\n  sudo nixos-rebuild boot --flake %s#%s && sudo systemctl reboot' \
+    "$1" "$2" "$FLAKE" "$HOSTNAME"
+}
+
 # ── the engine override ───────────────────────────────────────────────────
 #
 # site.json's `developer.engineOverride`: `true` to build from the engine

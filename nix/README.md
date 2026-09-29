@@ -154,7 +154,26 @@ Optional, null or empty by default: `fleet.hcPing.keySopsFile`,
 `fleet.claude.mcpSopsFile`, `fleet.zfs.datasets`, `fleet.zfs.arcMaxBytes`,
 `fleet.backup.replications`, `fleet.autoupgrade.inputs`,
 `fleet.daedalus.routerProduct`, `fleet.builder.npmMirrorHost`,
-`fleet.daedalus.dev`, `fleet.daedalus.image`.
+`fleet.daedalus.dev`, `fleet.daedalus.image`, `fleet.upgradeGuard.*`.
+
+### Reboot-level changes
+
+`platform/upgrade-guard` never lets a generation that moves the kernel,
+initrd, kernel-module tree, ZFS major.minor, systemd major or D-Bus
+implementation be activated live. Every generation carries the check
+(`fleet-switch-guard`, a pre-switch check, so a hand-typed `nixos-rebuild
+switch` meets it too); the Apply and the updaters ask it after their build
+and end `done` / `reboot-required` instead of switching; the weekly upgrade,
+which only ever runs `boot`, logs it. Take such a change with
+`nixos-rebuild boot` and a reboot (`NIXOS_NO_CHECK=1` is nixpkgs' deliberate
+override). For the reboot itself: `fleet-upgrade-preflight [--target
+<toplevel>]` (read-only readiness checks, PASS/WARN/FAIL) and
+`upgrade-selfcheck`, which after a boot armed by writing the new toplevel to
+`/var/lib/upgrade-guard/armed` checks the box, mails the result and, on
+failure, reboots onto the bootloader's persistent default — so pin that to
+the old entry and boot the new one with `bootctl set-oneshot`.
+`fleet.upgradeGuard.bootFallback.enable` adds the stage-1 half on a systemd
+initrd (a hung or failed initrd force-reboots; `panic=30`).
 
 ### Moving the engine
 

@@ -487,6 +487,23 @@ if ! log_run "$LOGFILE" nixos-rebuild build --flake "$FLAKE#$HOSTNAME"; then
   fail building "$build_error"
 fi
 
+# --- a reboot-level change pending ------------------------------------------
+# A pin cannot move the kernel, initrd, ZFS, systemd or D-Bus, so when the
+# build does (host/lib.sh, the live-switch guard), the configuration was
+# already waiting for a reboot before this run. Nothing is activated, and the
+# pin commit is reverted rather than left unverified: `done` /
+# `reboot-required`, to be retried after the reboot.
+if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
+  log_line "$LOGFILE" "$REBOOT_REASONS"
+  log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+    revert --no-edit "$UPDATE_COMMIT" ||
+    log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
+  COMMIT_SHA=""
+  write_status "done" "reboot-required" \
+    "$(reboot_note "$REBOOT_REASONS" "This box is already waiting for a reboot, so nothing was activated and the pin commit was reverted; update again after the reboot.")"
+  exit 0
+fi
+
 # --- switch ---------------------------------------------------------------
 # One retry before rolling back, for the reason apply.sh documents: `switch`
 # exits non-zero if ANY unit fails to come back, and some of those failures

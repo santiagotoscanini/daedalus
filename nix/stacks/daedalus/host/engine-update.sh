@@ -287,6 +287,23 @@ rollback() {
   COMMIT_SHA=""
 }
 
+# --- a reboot-level change -----------------------------------------------
+# The new engine moves the kernel, initrd, ZFS, systemd or D-Bus (host/lib.sh,
+# the live-switch guard): it cannot be switched to, and reverting would only
+# make the same update impossible again after any reboot. So the lock commit
+# stands and is pushed, nothing is activated, and the run ends `done` /
+# `reboot-required`. The control-plane check happens after the reboot, by the
+# operator.
+if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
+  log_line "$LOGFILE" "$REBOOT_REASONS"
+  write_status running pushing ""
+  log_run "$LOGFILE" git_ push ||
+    log_line "$LOGFILE" "push failed (the commit is local only)"
+  write_status "done" "reboot-required" \
+    "$(reboot_note "$REBOOT_REASONS" "Nothing was activated; the lock commit is built and pushed.")"
+  exit 0
+fi
+
 # --- switch ---------------------------------------------------------------
 # One retry before rolling back, for the reason apply.sh documents: `switch`
 # exits non-zero if ANY unit fails to come back, and some of those failures

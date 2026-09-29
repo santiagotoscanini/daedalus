@@ -192,6 +192,20 @@ if ! log_run "$LOGFILE" nixos-rebuild build --flake "$FLAKE#$HOSTNAME"; then
   fail building "$build_error"
 fi
 
+# --- a reboot-level change pending ------------------------------------------
+# A version pin cannot move the kernel, initrd, ZFS, systemd or D-Bus, so when
+# the build does (host/lib.sh, the live-switch guard) the configuration was
+# already waiting for a reboot. Nothing is snapshotted or activated; the
+# commit is reverted, and the run ends `done` / `reboot-required`.
+if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
+  log_line "$LOGFILE" "$REBOOT_REASONS"
+  revert_commit
+  ROLLED_BACK=true
+  write_status "done" "reboot-required" \
+    "$(reboot_note "$REBOOT_REASONS" "This box is already waiting for a reboot, so nothing was activated and the version commit was reverted; update again after the reboot.")"
+  exit 0
+fi
+
 # --- snapshot -------------------------------------------------------------
 if [ -n "$DATASET" ]; then
   write_status running snapshotting ""

@@ -34,6 +34,7 @@ let
       pkgs.openssh
       pkgs.util-linux
       pkgs.coreutils
+      config.fleet.upgradeGuard.package # fleet-switch-guard, after the boot
     ];
     text = ''
       REBUILD_LOCK=${lib.escapeShellArg config.fleet.rebuildLock}
@@ -44,6 +45,7 @@ let
       OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
       OPERATOR_HOME=${lib.escapeShellArg config.fleet.operator.home}
       UPGRADE_INPUTS=${lib.escapeShellArg (lib.concatStringsSep " " config.fleet.autoupgrade.inputs)}
+      UPGRADE_ARMED=${lib.escapeShellArg "${config.fleet.upgradeGuard.stateDir}/armed"}
 
       ${builtins.readFile ./assets/autoupgrade.sh}
     '';

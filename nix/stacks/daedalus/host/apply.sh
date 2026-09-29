@@ -345,16 +345,28 @@ else
   ACTIVATE_PHASE=switching
   DONE_PHASE=complete
 fi
-write_status running "$ACTIVATE_PHASE" ""
-if ! log_run "$LOGFILE" rebuild "$ACTIVATE"; then
-  log_line "$LOGFILE" "$ACTIVATE failed once — retrying in 20s before rolling back"
-  sleep 20
+#
+# Unless the build is a reboot-level change (host/lib.sh, the live-switch
+# guard): then nothing is activated, the commit stands — it is the operator's
+# change, and it is valid, it built — and the run ends `done` /
+# `reboot-required` with the reasons and the command that installs it for the
+# next boot. Not a failure, so nothing is rolled back.
+REBOOT_REASONS=""
+if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
+  log_line "$LOGFILE" "$REBOOT_REASONS"
+else
+  REBOOT_REASONS=""
+  write_status running "$ACTIVATE_PHASE" ""
   if ! log_run "$LOGFILE" rebuild "$ACTIVATE"; then
-    switch_error="$(errtail)"
-    rollback
-    fail "$ACTIVATE_PHASE" "$switch_error"
+    log_line "$LOGFILE" "$ACTIVATE failed once — retrying in 20s before rolling back"
+    sleep 20
+    if ! log_run "$LOGFILE" rebuild "$ACTIVATE"; then
+      switch_error="$(errtail)"
+      rollback
+      fail "$ACTIVATE_PHASE" "$switch_error"
+    fi
+    log_line "$LOGFILE" "$ACTIVATE succeeded on retry (first failure was transient)"
   fi
-  log_line "$LOGFILE" "$ACTIVATE succeeded on retry (first failure was transient)"
 fi
 
 # --- push -----------------------------------------------------------------
@@ -371,4 +383,9 @@ if [ "$WANT_COMMIT" = "yes" ] && [ -n "$COMMIT_SHA" ]; then
     log_line "$LOGFILE" "push failed (the switch succeeded; the commit is local only)"
 fi
 
+if [ -n "$REBOOT_REASONS" ]; then
+  write_status "done" "reboot-required" \
+    "$(reboot_note "$REBOOT_REASONS" "Nothing was activated; the change is committed and built.")"
+  exit 0
+fi
 write_status "done" "$DONE_PHASE" ""

@@ -39,6 +39,15 @@ if ! flock -w 1800 9; then
   exit 0
 fi
 
+# An upgrade boot is armed (platform/upgrade-guard): the boot menu is being
+# managed by hand until it is committed, and a staged generation now would
+# change what the fallback reboot lands on. The timer is Persistent; next
+# week's run carries the update.
+if [ -e "$UPGRADE_ARMED" ]; then
+  echo "flake-autoupgrade: an upgrade boot is armed ($UPGRADE_ARMED); skipping this run"
+  exit 0
+fi
+
 # A tree someone left dirty is not this job's to build on: the lock it
 # restores on failure, and the commit it makes on success, both assume
 # flake.lock matched HEAD when it started. Compared against HEAD, not the
@@ -77,8 +86,8 @@ fi
 # Build the candidate from the dirty tree. `nix build`, not `nixos-rebuild
 # boot`: nothing is staged until the lock is committed, so the generation
 # that does get staged carries a real configurationRevision.
-if ! as_operator /run/current-system/sw/bin/nix build --no-link \
-  "$FLAKE#nixosConfigurations.\"$HOSTNAME\".config.system.build.toplevel"; then
+if ! candidate="$(as_operator /run/current-system/sw/bin/nix build --no-link --print-out-paths \
+  "$FLAKE#nixosConfigurations.\"$HOSTNAME\".config.system.build.toplevel")"; then
   echo "flake-autoupgrade: the updated lock does not build; restoring the old one" >&2
   as_operator git checkout -- flake.lock
   exit 1
@@ -90,6 +99,11 @@ as_operator git commit -m "flake.lock: Update" -- flake.lock
 # the running system alone. Rebooting stays a manual decision. Everything but
 # the revision stamp is already in the store from the build above.
 /run/current-system/sw/bin/nixos-rebuild boot --flake "$FLAKE"
+
+# Say whether that generation takes effect at the next switch or only at the
+# next boot (platform/upgrade-guard): after a kernel/ZFS/systemd move every
+# live activation refuses until the reboot, daedalus's Applies included.
+fleet-switch-guard "$candidate" || true
 
 # Offline must not fail the upgrade: the lock is already committed locally, so
 # a failed push is swallowed and the next run carries it forward.

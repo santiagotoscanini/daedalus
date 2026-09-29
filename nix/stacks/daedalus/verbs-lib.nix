@@ -101,7 +101,8 @@ let
       pkgs.coreutils
       pkgs.gnugrep
       pkgs.gawk # lib.sh log_errtail
-      pkgs.nixos-rebuild
+      config.system.build.nixos-rebuild # the system's own: ng, named nixos-rebuild, on 25.11 and 26.05 alike
+      config.fleet.upgradeGuard.package # fleet-switch-guard (host/lib.sh)
       pkgs.openssh # git push over ssh
     ];
     vars =
@@ -181,7 +182,8 @@ let
       pkgs.util-linux # setpriv, flock
       pkgs.coreutils
       pkgs.gawk # lib.sh log_errtail
-      pkgs.nixos-rebuild
+      config.system.build.nixos-rebuild # the system's own: ng, named nixos-rebuild, on 25.11 and 26.05 alike
+      config.fleet.upgradeGuard.package # fleet-switch-guard (host/lib.sh)
       pkgs.openssh # git push over ssh
     ];
     vars =
