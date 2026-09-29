@@ -215,7 +215,8 @@
 #
 #   the binary    built from the crate's own files only (Cargo.toml,
 #                  Cargo.lock, build.rs, src/), so a commit that touches
-#                  anything else in the repository does not rebuild it. No
+#                  anything else in the repository does not rebuild it; its
+#                  version names that source (`+src.<hash>`). No
 #                  tray (`--no-default-features`), only `daedalus-agent`.
 #   config.toml    generated below. The agent reads it from a FIXED place —
 #                  `/var/lib/daedalus-agent/config.toml`, the Linux default
@@ -272,24 +273,33 @@ let
   crate = ../../../agent;
   cargoToml = builtins.fromTOML (builtins.readFile (crate + "/Cargo.toml"));
 
+  # What the binary is built from: the crate's own files, nothing else.
+  agentSrc = lib.fileset.toSource {
+    root = crate;
+    fileset = lib.fileset.unions [
+      (crate + "/Cargo.toml")
+      (crate + "/Cargo.lock")
+      (crate + "/build.rs")
+      (crate + "/src")
+    ];
+  };
+  # That source's store path is content-addressed: its hash names the source
+  # exactly and moves only when one of those files does (agent/README.md
+  # "Versions").
+  agentSrcId = builtins.substring 0 12 (
+    baseNameOf (builtins.unsafeDiscardStringContext (toString agentSrc))
+  );
+
   # The tests run in the crate's own gate (agent/gate.sh) and in CI; building
   # the box's binary does not run them again.
   agent = pkgs.rustPlatform.buildRustPackage {
     pname = "daedalus-agent";
     inherit (cargoToml.package) version;
-    src = lib.fileset.toSource {
-      root = crate;
-      fileset = lib.fileset.unions [
-        (crate + "/Cargo.toml")
-        (crate + "/Cargo.lock")
-        (crate + "/build.rs")
-        (crate + "/src")
-      ];
-    };
+    src = agentSrc;
     cargoLock.lockFile = crate + "/Cargo.lock";
     buildNoDefaultFeatures = true;
     # The build's identity in its version (agent/build.rs): not a release.
-    env.DAEDALUS_BUILD_REV = toString config.fleet.daedalus.engineRev;
+    env.DAEDALUS_BUILD_ID = "src.${agentSrcId}";
     cargoBuildFlags = [
       "--bin"
       "daedalus-agent"
@@ -456,18 +466,6 @@ let
   };
 in
 {
-  options.fleet.daedalus.engineRev = lib.mkOption {
-    type = lib.types.nullOr lib.types.str;
-    default = null;
-    internal = true;
-    description = ''
-      The engine commit this system was built from (the flake sets it from
-      its own `shortRev`, `dirtyShortRev` for a dirty tree): the controller's
-      agent reports its version as `<crate version>+g<rev>`, so two builds
-      never report the same one (agent/README.md "Versions").
-    '';
-  };
-
   options.fleet.daedalus.statusPort = lib.mkOption {
     type = lib.types.port;
     default = 7787;

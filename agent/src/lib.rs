@@ -80,8 +80,8 @@ use anyhow::{Context, Result};
 pub const SERVICE_NAME: &str = "daedalus-agent";
 pub const DISPLAY_NAME: &str = "Daedalus Agent";
 pub use os::TRAY_EXE;
-/// This build's version: the crate's, with `+g<rev>` on a build that is not a
-/// release (build.rs).
+/// This build's version: the crate's, with `+<build id>` on a build that is
+/// not a release (build.rs).
 pub const VERSION: &str = env!("DAEDALUS_VERSION");
 
 /// The agent's work, shared by `run` (as a service) and `serve` (in a

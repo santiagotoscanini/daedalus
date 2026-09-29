@@ -1061,13 +1061,15 @@ directory (`agent.lock` there).
 
 The version an agent reports names the build exactly. A release is the
 crate's version alone (`0.21.0`), built by CI from the tag, whose name the
-`guard` job holds to `Cargo.toml`. Every other build carries the commit it
-was made from as semver build metadata: nix builds the controller with the
-engine's locked revision (`fleet.daedalus.engineRev`, from the flake's
-`shortRev`), and `build.rs` reports `0.21.0+g1a2b3c4`
-(`DAEDALUS_BUILD_REV`); a dirty tree says so (`-dirty`). Build metadata
-does not order versions, so the updater compares releases alone. Bump
-`Cargo.toml` with every change under `agent/src` that is meant to ship: the
+`guard` job holds to `Cargo.toml`. Every other build carries the source it
+was made from as semver build metadata: nix builds the controller from the
+crate's own files alone (`Cargo.toml`, `Cargo.lock`, `build.rs`, `src/`),
+a content-addressed store path, and passes the start of that path's hash as
+`DAEDALUS_BUILD_ID`; `build.rs` reports `0.21.0+src.1a2b3c4d5e6f`. The id
+moves when one of those files does and never otherwise, so an engine
+commit that leaves the crate alone rebuilds nothing and restarts nothing.
+Build metadata does not order versions, so the updater compares releases
+alone. Bump `Cargo.toml` with every change under `agent/src` that is meant to ship: the
 next release's number, which the box's build carries until it is tagged.
 
 ## Releasing
