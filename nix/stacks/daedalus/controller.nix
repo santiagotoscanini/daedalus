@@ -748,14 +748,15 @@ in
     systemd.services."daedalus-root@" = {
       description = "Daedalus root helper: one request from the controller";
       restartIfChanged = false;
+      # A refusal exits 0; an instance that crashed is not kept for
+      # `systemctl --failed` — its journal says what happened. A [Unit] key:
+      # under serviceConfig systemd ignored it ("Unknown key in [Service]").
+      unitConfig.CollectMode = "inactive-or-failed";
       serviceConfig = {
         ExecStart = "${lib.getExe agent} root-helper --table ${rootTableChecked}";
         StandardInput = "socket";
         StandardOutput = "journal";
         StandardError = "journal";
-        # A refusal exits 0; an instance that crashed is not kept for
-        # `systemctl --failed` — its journal says what happened.
-        CollectMode = "inactive-or-failed";
         RuntimeMaxSec = rootRuntimeMax;
         CapabilityBoundingSet = "";
         AmbientCapabilities = "";
