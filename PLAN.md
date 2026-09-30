@@ -601,21 +601,27 @@ priority; each can be done independently unless noted.
       per machine or for all (System › Machines or an MCP write tool), naming
       a version, never bytes, refusing a downgrade; on the box the lock bump
       is the stage step. The last self-updating release has to carry it.
-    - **Separate:** santree (its session host on the box, then relayed to
-      machines that opt in; the parked 2026-09-27 daemon returns as a crate in
-      a Cargo workspace shared with `agent/`, and its workspace-sync fix for
-      `.santree/` can land any time), the power verbs (feature 6), and the
-      box's System page drawn from capabilities instead of the root
-      snapshots.
+    - **santree through the agent.** The box's session host exists
+      (`session-host/`, `fleet.daedalus.sessionHost.enable`, off). Left: a
+      per-node `santree` policy, and the controller writing the host's
+      allow-list from it (approved nodes with it on, recomputed on every
+      decision) and handing agents the host's address and key; the agent
+      serving a local santree socket and piping each connection over a TLS
+      connection of its own with its node key (an agent release); Settings ›
+      Machines' toggle and one host line (state, "restart to apply" from the
+      status file's `exe`, Restart naming the live PTY count); santree moving
+      to the agent socket; then the proof on the MacBook, at home and over
+      the VPN.
+    - **Separate:** the power verbs (feature 6), and the box's System page
+      drawn from capabilities instead of the root snapshots.
     - **Risks.** The controller is critical (down means no machines on the
       pages and no Apply): small, restarts cleanly, holds nothing it cannot
       rebuild. Version skew between the live-on-save app and the lock-bumped
       controller. The release signing key covers three OSes and has no
       recovery path.
-    - **Costs.** The santree crates bring tokio, a PTY layer and a `specta`
-      prerelease needing Rust ≥ 1.93 (the agent's MSRV is 1.85); Windows is
-      a port for santree, not a recompile (ConPTY, pwsh, paths, hook
-      callbacks).
+    - **Costs.** A santree session host on a machine other than the box
+      would be a port, not a recompile — Windows above all (ConPTY, pwsh,
+      paths, hook callbacks).
 
 ---
 

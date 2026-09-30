@@ -1,0 +1,68 @@
+# The session host (session-host/ — santree's protocol v1 over pinned TLS,
+# served on the box; nix builds and runs it, nix/stacks/daedalus/session-host.nix).
+#
+# The same parts as session-host/gate.sh, on Linux (the only OS it runs on):
+# fmt, clippy with warnings denied, the tests, a build on the rustc the box
+# builds it with (its rust-version, 1.95), and the interop test against the
+# daedalus agent's own TLS client (session-host/interop/). An agent change
+# runs it too: that test builds the agent's link.
+#
+# Convention: third-party actions are pinned to full commit SHAs.
+name: Session host
+
+on:
+  pull_request:
+    paths:
+      - "session-host/**"
+      - "agent/**"
+      - ".github/workflows/session-host.yml"
+  push:
+    branches: [main]
+    paths:
+      - "session-host/**"
+      - "agent/**"
+      - ".github/workflows/session-host.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: session-host-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: session-host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The runners ship rustup; no third-party toolchain action to pin.
+      - name: Toolchains
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default stable
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      # The tests fork shells behind PTYs and run git (both on the runner).
+      - name: Test
+        run: cargo test --locked
+      - name: Build on rust-version (1.95)
+        run: cargo +1.95.0 build --locked --release
+      - name: Interop with the agent (format, clippy, test)
+        working-directory: session-host/interop
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked

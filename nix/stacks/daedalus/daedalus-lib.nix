@@ -340,6 +340,12 @@ rec {
   # container starts whether or not the controller is up.
   controllerDir = "/run/daedalus-controller";
 
+  # The controller's own state (controller.nix, the header's `dataDir`): the
+  # one place it writes besides that socket's directory — which is why the
+  # session host's allow-list, which the controller writes, lives here
+  # (session-host.nix).
+  controllerDataDir = "${config.fleet.stateRoot}/apps/daedalus/controller";
+
   # Where the root helper writes a verb's run file (controller.nix, the
   # header's `run file`) and the verb's unit reads it: root's, 0700, never
   # mounted anywhere. The unit gets its file as a systemd credential

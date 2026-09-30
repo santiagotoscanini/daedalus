@@ -100,6 +100,7 @@
         "daedalus.nix"
         "engine-update.nix"
         "railpack.nix"
+        "session-host.nix"
         "version-update.nix"
       ];
 

@@ -245,6 +245,25 @@ lines and pushes its decided keys with `nodes.set_desired`; the
 controller keeps nothing across a restart. `controller.nix`'s header is the
 full story.
 
+### The session host
+
+`stacks/daedalus/session-host.nix`, off unless the host sets
+`fleet.daedalus.sessionHost.enable = true`: santree's remote projects on the
+box (`session-host/`, built from the crate's own files, santree's crates by
+the git rev its `Cargo.lock` names). `daedalus-session-host.service` runs as
+the operator with the operator's login environment, and is never restarted by
+a switch (`restartIfChanged = false` — its PTYs are its children); the root
+verb `session-host-restart` is how a new build takes over. It listens on
+`0.0.0.0:<fleet.daedalus.sessionHost.port>` (default 7789) with the
+controller's exposure — the firewall on `fleet.lanInterface` only, and
+`tunnelHostPorts` — and admits the node keys in
+`fleet.daedalus.sessionHost.allowList`, a file the controller writes in its
+own data directory. Its `host.key` and `status.json`
+(`fleet.daedalus.sessionHost.statusFile`, what the controller reads) live in
+`<stateRoot>/apps/daedalus/session-host`. An admitted node is root on the
+box: see `ARCHITECTURE.md`, trust boundaries. The module's header and the
+crate's README are the full story.
+
 ## What is NOT done yet
 
 - **The rest of the reference host's stacks.** The spine — everything a

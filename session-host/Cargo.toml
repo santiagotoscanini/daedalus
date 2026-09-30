@@ -1,0 +1,42 @@
+[package]
+name = "daedalus-session-host"
+description = "The daedalus session host: santree's protocol v1 (PTYs, exec, files, a hook queue) over pinned TLS, for approved machines."
+version = "0.1.0"
+edition = "2021"
+# The rustc of the nixpkgs the box builds it with (26.05).
+rust-version = "1.95"
+license = "MIT"
+publish = false
+
+[lib]
+name = "daedalus_session_host"
+path = "src/lib.rs"
+
+[[bin]]
+name = "daedalus-session-host"
+path = "src/main.rs"
+
+[dependencies]
+# santree at one pinned rev: its PTY manager, protocol v1's wire types and the
+# link's TLS profile. The three are a contract santree keeps for this crate
+# (their manifests say so): no santree-core, no specta, ring as the only
+# crypto provider.
+santree-pty = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+santree-remote-proto = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+santree-remote-tls = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "io-util", "process", "time", "sync", "macros", "signal"] }
+# Keepalive and TCP_USER_TIMEOUT on accepted sockets; already under tokio.
+socket2 = { version = "0.6", features = ["all"] }
+# SHA-256 for node ids; already under santree-remote-tls.
+ring = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+log = "0.4"
+libc = "0.2"
+
+[dev-dependencies]
+# santree's own client, for the conformance test: the app's side of the wire.
+santree-remote-client = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "io-util", "time", "macros"] }
+base64 = "0.22"
+tempfile = "3"

@@ -5,6 +5,9 @@
 { config, ... }:
 {
   fleet = {
+    # Not a catalog module but the control plane's opt-in part: evaluated here
+    # beside wg-easy, whose tunnel it joins.
+    daedalus.sessionHost.enable = true;
     modules = {
       factorio = {
         enable = true;

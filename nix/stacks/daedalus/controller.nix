@@ -270,7 +270,11 @@
 }:
 
 let
-  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) controllerDir rootRunDir;
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
+    controllerDir
+    controllerDataDir
+    rootRunDir
+    ;
 
   daedalusDev = config.fleet.daedalus.dev;
 
@@ -316,8 +320,9 @@ let
   # Its state (state.json, identity.key, a rotation's files), its local socket
   # (run/) and logs — writable by the service (the header's `dataDir`). Beside
   # the control plane's other host-side state (apply/, prev/), and only the
-  # operator's: nothing else reads it.
-  dataDir = "${config.fleet.stateRoot}/apps/daedalus/controller";
+  # operator's. The session host (session-host.nix, the same uid) reads one
+  # file of it: the allow-list the controller keeps there.
+  dataDir = controllerDataDir;
   # The agent's logs, Claude remote control's among them (the header's `logs`).
   logDir = "${dataDir}/logs";
 
