@@ -63,11 +63,24 @@
 # way to create a second user — no users API, and INIT runs on an empty
 # database alone). Its password must be the one in that file (change it
 # in the UI, then in the file, together) and it must have no TOTP.
-# Browsers still meet OIDC first: OAUTH_AUTO_LAUNCH sends /login to
-# Pocket ID, and `/login?auto_launch=false` is the password form — on the
-# LAN alone, as the whole UI is (no exposeRemotely). Anyone who can reach
-# :51821 — a traefik-net member, a peer on the tunnel at 10.8.0.1 — can
-# try that password, so it is a long random one.
+# Browsers meet OIDC only: OAUTH_AUTO_LAUNCH sends /login to Pocket ID.
+#
+# Through traefik, passwords stay OFF. Turning them on in the app opened
+# them on the hostname too — the password form (POST /api/auth/password)
+# and Basic auth on every API route (session.ts reads `Authorization:
+# Basic` whenever there is no session cookie) — and the hostname is not
+# behind forward-auth (native OIDC is the gate). So a router beside the
+# webApp's (`wg-easy-deny.yml` below; the traefikRawRules mechanism the
+# registry's deploy hook uses) answers 403 for any request on the
+# hostname whose path starts /api/auth/password or that carries a Basic
+# Authorization header, and never forwards it. The OIDC login and callback,
+# the /cnf/ one-time links, the session-cookie API the UI itself calls and
+# everything else pass untouched. A browser that tries
+# `/login?auto_launch=false` sees the form and a refused submit.
+#
+# What is left able to try the password is whoever reaches :51821
+# directly — the control plane on `wg-easy-api`, a traefik-net member, a
+# peer on the tunnel at 10.8.0.1 — so it is a long random one.
 #
 # ── the control plane's API path ────────────────────────────────────────
 #
@@ -249,6 +262,37 @@ in
         path = "/metrics/prometheus";
       };
     };
+
+    # The password paths, refused at traefik (the header): a router beside
+    # the webApp's, on every name and entrypoint it answers, whose one
+    # middleware allows no source address at all — a 403 from traefik, and
+    # `noop@internal` behind it so nothing it matches could reach wg-easy
+    # even if the middleware went. Explicit priority, so it outranks the
+    # app's `Host(...)` router whatever the rule lengths.
+    fleet.traefikRawRules."wg-easy-deny.yml" =
+      let
+        w = config.fleet.webApps.wg-easy;
+        hosts = lib.concatMapStringsSep " || " (h: "Host(`${h}`)") ([ w.hostname ] ++ w.aliases);
+        router = entry: {
+          entryPoints = [ entry ];
+          rule = "(${hosts}) && (PathRegexp(`(?i)^/+api/+auth/+password`) || HeaderRegexp(`Authorization`, `(?i)^basic`))";
+          priority = 10000;
+          middlewares = [ "wg-easy-deny@file" ];
+          service = "noop@internal";
+        };
+      in
+      builtins.toJSON {
+        http = {
+          # No client is 255.255.255.255: every request is refused.
+          middlewares.wg-easy-deny.ipAllowList.sourceRange = [ "255.255.255.255/32" ];
+          routers = {
+            wg-easy-deny-rtr = router "websecure" // {
+              tls.options = "tls-opts@file";
+            };
+          }
+          // lib.optionalAttrs w.exposeRemotely { wg-easy-deny-cf-rtr = router "cfweb"; };
+        };
+      };
 
     # A gluetun tunnel (platform/lib/gluetun-lib.nix) adds the same modules;
     # NixOS merges the lists.
