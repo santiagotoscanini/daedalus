@@ -51,15 +51,48 @@
 # sends /login straight to Pocket ID; `/login?auto_launch=false` shows
 # the password form.
 #
-# DISABLE_PASSWORD_AUTH is on — set only once a Pocket ID login had
-# succeeded, since upstream says to link an admin BEFORE disabling
-# passwords. The pre-OIDC admin stays in wg-easy.db as
-# dormant rows; INIT_USERNAME/INIT_PASSWORD (the host's env file) matter only for
-# a fresh-bootstrap first init, which is why they are not removed.
-# Break-glass on a fresh bootstrap: comment the flag out, rebuild, log in
-# with INIT_*, let auto-register link the Pocket ID account, re-enable.
-# The WireGuard tunnel itself never depends on any of this: :51820 is
-# key-authenticated and stays up whether or not the UI can log in.
+# The pre-OIDC admin stays in wg-easy.db. The WireGuard tunnel itself never
+# depends on any of this: :51820 is key-authenticated and stays up whether
+# or not the UI can log in.
+#
+# Passwords are ON (DISABLE_PASSWORD_AUTH=false) for one reason: the
+# control plane's API calls. wg-easy's API takes HTTP Basic auth — and
+# only for a password account without TOTP — so passwords stay enabled
+# for the one password account there is, the INIT admin
+# (INIT_USERNAME/INIT_PASSWORD in the host's env file; wg-easy 15 has no
+# way to create a second user — no users API, and INIT runs on an empty
+# database alone). Its password must be the one in that file (change it
+# in the UI, then in the file, together) and it must have no TOTP.
+# Browsers still meet OIDC first: OAUTH_AUTO_LAUNCH sends /login to
+# Pocket ID, and `/login?auto_launch=false` is the password form — on the
+# LAN alone, as the whole UI is (no exposeRemotely). Anyone who can reach
+# :51821 — a traefik-net member, a peer on the tunnel at 10.8.0.1 — can
+# try that password, so it is a long random one.
+#
+# ── the control plane's API path ────────────────────────────────────────
+#
+# daedalus signs a machine in (the agent's "Log in", enroll.rs in the
+# agent) by creating it as an ordinary wg-easy client, and removes the
+# client when the machine logs out or is revoked. It calls wg-easy's API
+# directly on a bridge of its own — `wg-easy-api`, just these two
+# containers, never traefik — as the INIT admin, with Basic auth. The
+# bridge is `--internal` (fleet.internalBridges): no default route on
+# wg-easy's side of it, so the tunnel's egress and its MASQUERADE stay on
+# eth0, the traefik bridge (listed first: podman numbers the interfaces in
+# the order of its --network flags). Handed to the control plane
+# (fleet.dashboard.wg-easy):
+#   WG_EASY_URL          http://wg-easy:51821 on that bridge
+#   WG_EASY_CREDENTIALS  a file holding `username:password` (the Basic
+#                        userinfo), rendered from the host's env file —
+#                        the one copy of the secret, read per call so a
+#                        rotation needs no restart of the app
+#   WG_EASY_HOST_ALIAS   where the tunnel's host ports land after the DNAT
+#                        below: an agent client's per-client firewall
+#                        names this address (`<alias>:7788/tcp`), not the
+#                        LAN address, because wg-easy filters in FORWARD,
+#                        after PREROUTING rewrote the destination.
+# Holding this admin is no escalation for the control plane: it already
+# builds and runs arbitrary containers as the operator.
 #
 # The IdP side has one per-user requirement: wg-easy 401s
 # "Email is not verified" unless userinfo carries email_verified=true,
@@ -68,7 +101,8 @@
 #
 # The host brings:
 #   fleet.modules.wg-easy.enable       the switch (default off, as every catalog module)
-#   fleet.modules.wg-easy.envSopsFile  INIT_USERNAME, INIT_PASSWORD (first-init admin)
+#   fleet.modules.wg-easy.envSopsFile  INIT_USERNAME, INIT_PASSWORD (first-init admin,
+#                                      and the control plane's API account)
 #   fleet.images.wg-easy               the digest-pinned image
 # The tunnel's public address is `fleet.wanHost`; the port (51820/udp) must be
 # forwarded to the box by the router.
@@ -79,12 +113,17 @@
   pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
+  mkSecretRender,
   pinnedImage,
   ...
 }:
 
 let
   cfg = config.fleet.modules.wg-easy;
+  # The control plane is on this box (its container exists): it gets the API
+  # path (the header).
+  controlPlane = config.fleet.modules.daedalus.enable && config.fleet.modules.apps.enable;
+  credentialsDir = "/run/wg-easy-daedalus";
   inherit (config.fleet.webApps.wg-easy) hostname;
 
   # The container's /etc/alternatives (see the header): each iptables name
@@ -112,8 +151,9 @@ in
       example = lib.literalExpression "./host/sops/wg-easy/env.sops";
       description = ''
         sops-encrypted dotenv carrying INIT_USERNAME and INIT_PASSWORD, the
-        local admin a fresh database is initialised with (the header says
-        when it matters). Host data: the engine carries no box's ciphertext.
+        local admin a fresh database is initialised with — and the account
+        the control plane calls the API as, so the password must stay the
+        one that admin has (the header). Host data: the engine carries no box's ciphertext.
         Only read while the module is on.
       '';
     };
@@ -175,7 +215,32 @@ in
       };
     };
 
-    fleet.bridgeMemberships.wg-easy = [ "traefik" ];
+    # `traefik` first and eth0: the tunnel's egress (the header).
+    fleet.bridgeMemberships.wg-easy = [ "traefik" ] ++ lib.optional controlPlane "wg-easy-api";
+    fleet.bridgeMemberships.app-daedalus = lib.mkIf controlPlane [ "wg-easy-api" ];
+    fleet.internalBridges = lib.optional controlPlane "wg-easy-api";
+
+    # What the control plane reads (the header): where the API is, the file
+    # with the Basic credentials, and where the tunnel's host ports land.
+    fleet.dashboard.wg-easy = lib.mkIf controlPlane {
+      env = {
+        WG_EASY_URL = "http://wg-easy:51821";
+        WG_EASY_CREDENTIALS = "/wg-easy/credentials";
+        WG_EASY_HOST_ALIAS = config.fleet.podman.hostAlias;
+      };
+      volumes = [ "${credentialsDir}:/wg-easy:ro" ];
+    };
+    systemd.services.wg-easy-daedalus-credentials = lib.mkIf controlPlane (mkSecretRender {
+      description = "Render wg-easy's API credentials for daedalus";
+      gates = [ "podman-app-daedalus.service" ];
+      dir = credentialsDir;
+      file = "${credentialsDir}/credentials";
+      prep = ''
+        USERNAME=$(grep -m1 '^INIT_USERNAME=' ${config.sops.secrets."wg-easy-env".path} | cut -d= -f2-)
+        PASSWORD=$(grep -m1 '^INIT_PASSWORD=' ${config.sops.secrets."wg-easy-env".path} | cut -d= -f2-)
+      '';
+      content = "$USERNAME:$PASSWORD";
+    });
     fleet.webApps.wg-easy = {
       serviceName = "wg-easy";
       port = 51821;
@@ -355,7 +420,8 @@ in
         OAUTH_OIDC_NAME = "Pocket ID";
         OAUTH_AUTO_REGISTER = "true";
         OAUTH_AUTO_LAUNCH = "oidc";
-        DISABLE_PASSWORD_AUTH = "true";
+        # The control plane's Basic auth needs it (the header).
+        DISABLE_PASSWORD_AUTH = "false";
       };
 
       # INIT_USERNAME + INIT_PASSWORD (first-init admin credentials; inert

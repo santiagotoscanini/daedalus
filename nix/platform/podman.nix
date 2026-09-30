@@ -12,10 +12,10 @@
 #     for the same reason: its consumers force it inside a top-level
 #     config mkMerge, where a module arg would recurse.
 #   - Runtime options: fleet.bridgeMemberships (the single source of
-#     bridge membership), fleet.bridgeSubnets, fleet.statePaths — plus
-#     the machinery they drive: the Type=oneshot unit override per
-#     container, bridge-creation oneshots, state-paths.service, and the
-#     1:1 registry assertion.
+#     bridge membership), fleet.bridgeSubnets, fleet.internalBridges,
+#     fleet.statePaths — plus the machinery they drive: the Type=oneshot
+#     unit override per container, bridge-creation oneshots,
+#     state-paths.service, and the 1:1 registry assertion.
 #
 # The publishing layer (webApps, logStacks and the other registries)
 # lives in platform/publishing.nix; monitoredJobs is declared in
@@ -165,7 +165,7 @@ let
       needsNetwork = false;
       execStart = "${pkgs.podman}/bin/podman network create --ignore${
         lib.optionalString (cfg.bridgeSubnets ? ${net}) " --subnet ${cfg.bridgeSubnets.${net}}"
-      } ${net}-net";
+      }${lib.optionalString (lib.elem net cfg.internalBridges) " --internal"} ${net}-net";
     };
 
   distinctBridges = lib.unique (
@@ -364,6 +364,20 @@ in
           traefik = "10.89.7.0/24";
         }
       '';
+    };
+
+    internalBridges = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Bridges (short names) created `--internal`: no gateway, so no
+        default route on the members' side of them. A container that joins
+        one for a single peer's sake keeps its default route, and so its
+        egress, on its other bridges; name resolution between the members
+        still works. Like `bridgeSubnets`, read at creation: an existing
+        bridge is not changed.
+      '';
+      example = [ "wg-easy-api" ];
     };
 
     podman.hostAlias = lib.mkOption {

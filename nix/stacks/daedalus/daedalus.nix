@@ -494,11 +494,19 @@ in
         #                 The other two are here so a favicon behaves the same way
         #                 in any client that requests it outside a page load.
         #
+        #   /api/agent/enroll — where a machine's agent service redeems its log-in
+        #                 (the agent's enroll.rs): a root service with no browser
+        #                 session behind it. It authenticates itself: a single-use
+        #                 code minted minutes earlier by the operator's Confirm on
+        #                 the gated enroll page, bound to the PKCE challenge the
+        #                 agent sent there, redeemed only with the matching verifier
+        #                 (S256) — so a code seen in transit is useless.
+        #
         # A bypassed path is effectively public on the LAN, so each is written to
         # deserve it: three of these are the app's own artwork and the other
-        # two authenticate themselves. Everything else on this app still needs a
+        # three authenticate themselves. Everything else on this app still needs a
         # passkey.
-        authBypassRule = "Path(`/api/deploy`) || PathPrefix(`/mcp`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`)";
+        authBypassRule = "Path(`/api/deploy`) || PathPrefix(`/mcp`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`) || Path(`/api/agent/enroll`)";
       };
 
       # The build log mount (volumes below) exists only once the App does, like
