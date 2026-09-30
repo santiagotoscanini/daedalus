@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { LaptopIcon } from 'lucide-react'
-import { useId, useState, useTransition } from 'react'
+import { useEffect, useId, useRef, useState, useTransition } from 'react'
 import { Measure, PageHead } from '../components/page'
 import { ERROR_NOTE, FIELD_LABEL, Mono, NOTE, Section } from '../components/settings/shared'
 import { Button } from '../components/ui/button'
@@ -100,6 +100,12 @@ function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> })
   const m = page.machine
   const inputId = useId()
   const [typed, setTyped] = useState('')
+  const field = useRef<HTMLInputElement>(null)
+  // The field is focused from the server's HTML: what was typed before the
+  // page hydrated sits in the DOM but never reached state.
+  useEffect(() => {
+    if (field.current?.value) setTyped(field.current.value)
+  }, [])
   const [error, setError] = useState<string | null>(null)
   const [spent, setSpent] = useState(false)
   const [leaving, setLeaving] = useState(false)
@@ -160,6 +166,7 @@ function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> })
           </label>
           <Input
             id={inputId}
+            ref={field}
             className="max-w-[10rem] font-mono"
             value={typed}
             maxLength={9}
