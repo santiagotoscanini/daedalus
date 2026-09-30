@@ -64,7 +64,27 @@ pub const RELEASE_PUBLIC_KEYS: &[&str] =
 /// half-installed version. The optional ones (the Linux tray, x86_64 only)
 /// are updated where installed and never hold an update back. The tables
 /// are per OS (`os::ASSETS`, `os::OPTIONAL_ASSETS`).
-pub use crate::os::{ASSETS, OPTIONAL_ASSETS};
+pub use crate::os::{ASSETS, BUNDLE_TARGETS, OPTIONAL_ASSETS};
+
+/// A newer release this machine is re-installed with rather than updated
+/// to ([`Offer::Reinstall`]: from 0.24 a Mac's agent is an app bundle,
+/// which this version cannot apply). On the status page — which the tray
+/// reads and the controller is sent — beside `update_available`, which
+/// stays null for it: nothing is waiting to be installed here.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ReinstallRequired {
+    /// The release's version, "0.24.0".
+    pub version: String,
+}
+
+/// `last_update_result` for a re-install: what to do, in one line.
+pub fn reinstall_line(version: &str) -> String {
+    format!(
+        "{} {version} is available: re-install it from the website or with install.sh",
+        crate::DISPLAY_NAME
+    )
+}
 
 pub(super) const TAG_PREFIX: &str = "agent-v";
 pub(super) const USER_AGENT: &str = concat!("daedalus-agent/", env!("CARGO_PKG_VERSION"));
@@ -90,6 +110,7 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
             }
             Ok(None) => {
                 shared.set_update_available(None);
+                shared.set_reinstall_required(None);
                 shared.with_state(|s| {
                     s.last_update_check = Some(now.clone());
                     s.last_update_result = Some(match &refused {
@@ -100,9 +121,23 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
                     });
                 });
             }
-            Ok(Some(rel)) => {
+            // Never applied: said, on the page and in the tray, until a
+            // re-install replaces this agent.
+            Ok(Some(Offer::Reinstall { version, .. })) => {
+                let label = version.to_string();
+                shared.set_update_available(None);
+                shared.set_reinstall_required(Some(ReinstallRequired {
+                    version: label.clone(),
+                }));
+                shared.with_state(|s| {
+                    s.last_update_check = Some(now.clone());
+                    s.last_update_result = Some(reinstall_line(&label));
+                });
+            }
+            Ok(Some(Offer::Install(rel))) => {
                 let label = rel.version.to_string();
                 shared.set_update_available(Some(label.clone()));
+                shared.set_reinstall_required(None);
                 if let Some(why) = cfg.self_update_off() {
                     shared.with_state(|s| {
                         s.last_update_check = Some(now.clone());

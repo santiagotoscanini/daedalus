@@ -38,7 +38,10 @@ pub struct Manifest {
 }
 
 /// One asset of a release: the Rust target and role it is for, its file
-/// name in the release, and what it must hash to and weigh.
+/// name in the release, and what it must hash to and weigh. The role is
+/// free text: `service` and `tray` are what this version installs,
+/// `bundle` ([`ROLE_BUNDLE`]) what it recognises and cannot apply, and
+/// any other (`installer`, a DMG) is read and ignored.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestAsset {
@@ -59,11 +62,37 @@ pub struct Asset {
     pub size: u64,
 }
 
+/// The role of a macOS app bundle: one `.app.zip` for its target, in place
+/// of the bare service and tray (agent 0.24 on). This version cannot apply
+/// one; a release that carries only that for this machine is a re-install.
+pub const ROLE_BUNDLE: &str = "bundle";
+
 #[derive(Debug, Clone)]
 pub struct Release {
     pub tag: String,
     pub version: semver::Version,
     pub assets: Vec<Asset>,
+}
+
+/// What the newest signed release newer than this agent is to this machine.
+#[derive(Debug, Clone)]
+pub enum Offer {
+    /// Its assets for this target, to install.
+    Install(Release),
+    /// Packaged in a form this version cannot apply — the macOS app bundle
+    /// ([`ROLE_BUNDLE`]) with no bare binaries beside it: reported, never
+    /// applied; the machine is re-installed from the website or install.sh.
+    Reinstall {
+        tag: String,
+        version: semver::Version,
+    },
+}
+
+/// [`offer_of`]'s answer for one release.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum Offered {
+    Assets(semver::Version, Vec<Asset>),
+    Reinstall(semver::Version),
 }
 
 #[derive(Deserialize)]
@@ -122,18 +151,14 @@ pub(super) fn candidates(
     out
 }
 
-/// A manifest whose signature held, checked against the release it came
-/// in and this machine: the product, the tag GitHub listed it under, its
-/// version that tag's and newer than `running`, not `refused` — then this
-/// target's assets (required, and the optional ones `installed` has),
-/// each with the URL GitHub gives for its name.
-pub(super) fn assets_of(
+/// The product, the tag GitHub listed the manifest under, its version that
+/// tag's and newer than `running`, not `refused`.
+fn checked_version(
     m: &Manifest,
     r: &ApiRelease,
     running: &semver::Version,
     refused: Option<&semver::Version>,
-    installed: impl Fn(&str) -> bool,
-) -> Result<(semver::Version, Vec<Asset>)> {
+) -> Result<semver::Version> {
     if m.product != PRODUCT {
         bail!("the manifest is for {:?}, not {PRODUCT}", m.product);
     }
@@ -150,6 +175,22 @@ pub(super) fn assets_of(
     if refused == Some(&version) {
         bail!("this machine rolled back from {version}");
     }
+    Ok(version)
+}
+
+/// A manifest whose signature held, checked against the release it came
+/// in and this machine: the product, the tag GitHub listed it under, its
+/// version that tag's and newer than `running`, not `refused` — then this
+/// target's assets (required, and the optional ones `installed` has),
+/// each with the URL GitHub gives for its name.
+pub(super) fn assets_of(
+    m: &Manifest,
+    r: &ApiRelease,
+    running: &semver::Version,
+    refused: Option<&semver::Version>,
+    installed: impl Fn(&str) -> bool,
+) -> Result<(semver::Version, Vec<Asset>)> {
+    let version = checked_version(m, r, running, refused)?;
     let url_of = |name: &str| {
         r.assets
             .iter()
@@ -189,13 +230,57 @@ pub(super) fn assets_of(
     Ok((version, out))
 }
 
-/// Ask the feed. `Ok(None)` is "nothing newer to install"; an error is the
-/// feed not answering, which the caller reports and retries later.
+/// What a signed manifest offers this machine: its assets for this target
+/// ([`assets_of`]); else, when it carries an app bundle for one of
+/// `bundle_targets` (`os::BUNDLE_TARGETS`: macOS's, none elsewhere) that
+/// GitHub lists too, a re-install of its version; else `assets_of`'s
+/// refusal. Any bare binary for this target rules the bundle out. The same checks
+/// of product, tag and version hold either way: an old or refused release
+/// is nothing, bundle or not.
+pub(super) fn offer_of(
+    m: &Manifest,
+    r: &ApiRelease,
+    running: &semver::Version,
+    refused: Option<&semver::Version>,
+    installed: impl Fn(&str) -> bool,
+    bundle_targets: &[&str],
+) -> Result<Offered> {
+    let refusal = match assets_of(m, r, running, refused, installed) {
+        Ok((version, assets)) => return Ok(Offered::Assets(version, assets)),
+        Err(e) => e,
+    };
+    let version = checked_version(m, r, running, refused)?;
+    // Any bare binary for this target makes it a release of the old form,
+    // whole or broken — `assets_of` has said which — and a bundle beside it
+    // changes nothing.
+    let bare = m.assets.iter().any(|a| {
+        ASSETS
+            .iter()
+            .any(|(target, _, local)| a.target == *target && a.role == role_of(local))
+    });
+    let bundled = !bare
+        && m.assets.iter().any(|a| {
+            a.role == ROLE_BUNDLE
+                && bundle_targets.contains(&a.target.as_str())
+                && r.assets.iter().any(|l| l.name == a.name)
+        });
+    if bundled {
+        Ok(Offered::Reinstall(version))
+    } else {
+        Err(refusal)
+    }
+}
+
+/// Ask the feed. `Ok(None)` is "nothing newer"; an error is the feed not
+/// answering, which the caller reports and retries later. The newest
+/// release this machine can install is offered; one newer still that it
+/// can only be re-installed with ([`Offer::Reinstall`]) is offered when
+/// there is nothing to install.
 /// `refused` is a version this machine rolled back from
 /// (`State::rolled_back`), which is never offered again; a newer one is.
 /// A release whose manifest is missing, unsigned or wrong is skipped, and
 /// the next older one is looked at.
-pub fn check(refused: Option<&str>) -> Result<Option<Release>> {
+pub fn check(refused: Option<&str>) -> Result<Option<Offer>> {
     let url = format!(
         "https://api.github.com/repos/{}/releases?per_page=20",
         crate::config::DEFAULT_REPO
@@ -208,8 +293,9 @@ pub fn check(refused: Option<&str>) -> Result<Option<Release>> {
     let refused = refused.and_then(|v| semver::Version::parse(v).ok());
     let dir = install_dir().ok();
     let installed = |local: &str| dir.as_ref().is_some_and(|d| d.join(local).exists());
+    let mut reinstall = None;
     for (_, r) in candidates(releases, &running, refused.as_ref()) {
-        let checked = (|| -> Result<Release> {
+        let checked = (|| -> Result<Offered> {
             let url_of = |name: &str| {
                 r.assets
                     .iter()
@@ -221,15 +307,33 @@ pub fn check(refused: Option<&str>) -> Result<Option<Release>> {
             let sig = fetch_capped(&url_of(MANIFEST_SIG)?, MAX_MANIFEST)?;
             verify_manifest(&manifest, &sig, &keys)?;
             let m: Manifest = serde_json::from_slice(&manifest).context("the manifest")?;
-            let (version, assets) = assets_of(&m, &r, &running, refused.as_ref(), installed)?;
-            Ok(Release {
-                tag: r.tag_name.clone(),
-                version,
-                assets,
-            })
+            offer_of(
+                &m,
+                &r,
+                &running,
+                refused.as_ref(),
+                installed,
+                BUNDLE_TARGETS,
+            )
         })();
         match checked {
-            Ok(rel) => return Ok(Some(rel)),
+            Ok(Offered::Assets(version, assets)) => {
+                return Ok(Some(Offer::Install(Release {
+                    tag: r.tag_name.clone(),
+                    version,
+                    assets,
+                })))
+            }
+            Ok(Offered::Reinstall(version)) => {
+                tracing::info!(
+                    tag = r.tag_name,
+                    "release is a macOS app bundle: this agent is re-installed, not updated"
+                );
+                reinstall.get_or_insert(Offer::Reinstall {
+                    tag: r.tag_name.clone(),
+                    version,
+                });
+            }
             Err(e) => tracing::warn!(
                 tag = r.tag_name,
                 error = format!("{e:#}"),
@@ -237,7 +341,7 @@ pub fn check(refused: Option<&str>) -> Result<Option<Release>> {
             ),
         }
     }
-    Ok(None)
+    Ok(reinstall)
 }
 
 /// A small download, whole, refused past `cap` bytes.

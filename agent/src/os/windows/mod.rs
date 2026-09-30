@@ -176,6 +176,8 @@ pub const ASSETS: &[(&str, &str, &str)] = &[(
 )];
 /// Both assets are required here.
 pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
+/// No release is an app bundle here (the macOS table says what one is).
+pub const BUNDLE_TARGETS: &[&str] = &[];
 
 /// The extension is what makes a file executable here.
 pub fn mark_executable(path: &Path) -> std::io::Result<()> {

@@ -158,6 +158,12 @@ pub const ASSETS: &[(&str, &str, &str)] = &[
 ];
 /// Both assets are required here.
 pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
+/// The target whose release may carry an app bundle (role `bundle`, one
+/// `.app.zip`) in place of the bare binaries above: from 0.24 the macOS
+/// agent ships as `Daedalus Agent.app`, which this version cannot apply —
+/// such a release is reported as a re-install (`update::Offer::Reinstall`),
+/// never skipped as though it were not there.
+pub const BUNDLE_TARGETS: &[&str] = &["universal-apple-darwin"];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 

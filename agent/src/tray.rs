@@ -131,6 +131,27 @@ fn clock(ts: &str) -> &str {
     ts.get(11..16).unwrap_or(ts)
 }
 
+/// The menu's update line. A release this agent cannot apply (a Mac's app
+/// bundle, update/) says how to get it instead of "up to date".
+fn update_line(p: &crate::session::Page) -> String {
+    if p.restart_pending {
+        return "Updates: installed, restarting".to_string();
+    }
+    if let Some(r) = &p.reinstall_required {
+        return crate::update::reinstall_line(&r.version);
+    }
+    match (
+        &p.update_available,
+        &p.last_update_result,
+        &p.last_update_check,
+    ) {
+        (Some(v), _, _) => format!("Updates: {v} available"),
+        (None, Some(r), Some(t)) => format!("Updates: {r} · {}", clock(t)),
+        (None, Some(r), None) => format!("Updates: {r}"),
+        _ => "Updates: not checked yet".to_string(),
+    }
+}
+
 struct Ui {
     tray: TrayIcon,
     icons: Icons,
@@ -283,15 +304,7 @@ impl Ui {
                 None => "Awake hold: OFF".to_string(),
             }
         };
-        let update = match (&p.update_available, p.restart_pending) {
-            (_, true) => "Updates: installed, restarting".to_string(),
-            (Some(v), _) => format!("Updates: {v} available"),
-            (None, _) => match (&p.last_update_result, &p.last_update_check) {
-                (Some(r), Some(t)) => format!("Updates: {r} · {}", clock(t)),
-                (Some(r), None) => format!("Updates: {r}"),
-                _ => "Updates: not checked yet".to_string(),
-            },
-        };
+        let update = update_line(p);
         self.line_hold.set_text(&hold);
         self.line_update.set_text(&update);
         let (link, own, theirs) = link_lines(p.controller.as_ref());
@@ -331,8 +344,10 @@ impl Ui {
             UNJOINED
         } else if hold_bad {
             "awake hold OFF"
-        } else if p.update_available.is_some() || p.restart_pending {
+        } else if p.restart_pending || p.update_available.is_some() {
             "update pending"
+        } else if p.reinstall_required.is_some() {
+            "a newer version needs a re-install — see the menu"
         } else if claude_bad {
             "Claude remote control not running"
         } else {
@@ -347,6 +362,7 @@ impl Ui {
             || unpaired
             || hold_bad
             || p.update_available.is_some()
+            || p.reinstall_required.is_some()
             || p.restart_pending
             || claude_bad
         {
@@ -811,6 +827,32 @@ mod tests {
     use crate::session::LinkPage;
     use std::ffi::OsString;
     use std::path::Path;
+
+    #[test]
+    fn a_release_to_re_install_says_so_instead_of_up_to_date() {
+        use crate::session::Page;
+        let checked = Page {
+            last_update_result: Some("up to date".into()),
+            last_update_check: Some("2026-09-30T10:00:00Z".into()),
+            ..Page::default()
+        };
+        assert_eq!(update_line(&checked), "Updates: up to date · 10:00");
+        let pending = Page {
+            update_available: Some("0.23.1".into()),
+            ..Page::default()
+        };
+        assert_eq!(update_line(&pending), "Updates: 0.23.1 available");
+        let reinstall = Page {
+            reinstall_required: Some(crate::update::ReinstallRequired {
+                version: "0.24.0".into(),
+            }),
+            ..checked
+        };
+        assert_eq!(
+            update_line(&reinstall),
+            "Daedalus Agent 0.24.0 is available: re-install it from the website or with install.sh"
+        );
+    }
 
     #[cfg(not(target_os = "macos"))]
     #[test]
