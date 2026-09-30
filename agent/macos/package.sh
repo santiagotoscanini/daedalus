@@ -142,6 +142,11 @@ with timeout of 120 seconds
   end tell
 end timeout
 EOF
+# Finder writes the layout (.DS_Store) when it gets to it.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ -f "/Volumes/$name/.DS_Store" ] && break
+  sleep 1
+done
 [ -f "/Volumes/$name/.DS_Store" ] || { echo "Finder wrote no layout (.DS_Store)" >&2; exit 1; }
 sync
 hdiutil detach "/Volumes/$name" > /dev/null

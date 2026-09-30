@@ -121,8 +121,12 @@ jobs:
           pkg="$RUNNER_TEMP/pkg"
           app="$pkg/Daedalus Agent.app"
           codesign --verify --deep --strict --verbose=2 "$app"
-          codesign -dv "$app/Contents/MacOS/daedalus-agent" 2>&1 | grep -qx 'Identifier=me.toscanini.daedalus-agent'
-          codesign -dv "$app" 2>&1 | grep -qx 'Identifier=me.toscanini.daedalus-agent-tray'
+          # Read whole first: `grep -q` leaving early would SIGPIPE codesign
+          # under pipefail.
+          said="$(codesign -dv "$app/Contents/MacOS/daedalus-agent" 2>&1)"
+          grep -qx 'Identifier=me.toscanini.daedalus-agent' <<< "$said"
+          said="$(codesign -dv "$app" 2>&1)"
+          grep -qx 'Identifier=me.toscanini.daedalus-agent-tray' <<< "$said"
           "$app/Contents/MacOS/daedalus-agent" version
           # The menu built in the window server, then gone.
           DAEDALUS_AGENT_SMOKE=1 "$app/Contents/MacOS/daedalus-agent-tray"
@@ -300,8 +304,9 @@ jobs:
           codesign --verify --strict -R "$(req me.toscanini.daedalus-agent-tray)" "$app"
           codesign --verify --strict -R "$(req me.toscanini.daedalus-agent)" "$app/Contents/MacOS/daedalus-agent"
           for target in "$app" "$app/Contents/MacOS/daedalus-agent"; do
-            codesign -dv "$target" 2>&1 | grep -E '^(Identifier|TeamIdentifier|Timestamp|Runtime Version)='
-            codesign -dv "$target" 2>&1 | grep -qx "TeamIdentifier=$team"
+            said="$(codesign -dv "$target" 2>&1)"
+            grep -E '^(Identifier|TeamIdentifier|Timestamp|Runtime Version)=' <<< "$said"
+            grep -qx "TeamIdentifier=$team" <<< "$said"
           done
           spctl --assess --type exec --verbose=4 "$app"
           spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
