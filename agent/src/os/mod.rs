@@ -91,6 +91,9 @@ pub use imp::{
 pub use imp::{
     connect_local, local_allowed, local_socket_path, serve_api_socket, serve_local, LocalSocket,
 };
+// santree's socket (santree.rs), where there is one
+#[cfg(unix)]
+pub use imp::santree_allowed;
 // Claude Code
 pub use imp::{
     claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES, PROCESS_STATS,

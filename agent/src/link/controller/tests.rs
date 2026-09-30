@@ -168,7 +168,7 @@ fn claude_policy() -> crate::link::wire::Policy {
         awake_hold: false,
         claude_remote_control: true,
         claude_workdir: Some("/work".into()),
-        providers: Default::default(),
+        ..Default::default()
     }
 }
 
@@ -1666,5 +1666,105 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
     assert!(!dialled(&bait), "the old address was dialled");
     stop.stop();
     thread.join().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// santree: the session host rides the policy of approved machines with
+/// santree on, and only theirs; the allow-list is written from the app's
+/// set — never before its first — ahead of the policy events, and follows
+/// every change of it.
+#[test]
+fn santree_machines_are_told_the_session_host_and_the_allow_list_leads() {
+    use crate::link::wire::{Policy, SessionHost};
+    let dir = scratch("santree-allow");
+    let allow = dir.join("session-host-allow.json");
+    let cid = id(200);
+    let events = events();
+    let registry =
+        Arc::new(Registry::new(&cid, Arc::clone(&events), fast()).with_allow_list(allow.clone()));
+    let listener = listen("127.0.0.1:0".parse().unwrap(), &cid, Arc::clone(&registry)).unwrap();
+    let ctl = Ctl {
+        id: cid,
+        registry,
+        listener,
+        events,
+    };
+    let (on, off) = (id(41), id(42));
+    let (s_on, s_off) = (node_shared(), node_shared());
+    let t = target(&ctl, pin_of(&ctl.id));
+    let n_on = spawn_node(t.clone(), on.clone(), Arc::clone(&s_on), "santree-on");
+    let n_off = spawn_node(t, off.clone(), Arc::clone(&s_off), "santree-off");
+    wait_for("both pending", 5, || {
+        [&on, &off]
+            .iter()
+            .all(|n| summary(&ctl, n).is_some_and(|s| s.connected && s.state == NodeState::Pending))
+    });
+    assert!(
+        !allow.exists(),
+        "nothing is written before the app's first set"
+    );
+
+    let host = SessionHost {
+        address: "box.example.org:7789".into(),
+        public_key: "ab".repeat(32),
+    };
+    ctl.registry.set_session_host(host.clone());
+    let santree = Policy {
+        santree: true,
+        ..Policy::default()
+    };
+    let listed = |ids: &[&Identity]| {
+        let doc: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&allow).unwrap()).unwrap();
+        let have: Vec<String> = doc["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n["id"].as_str().unwrap().to_string())
+            .collect();
+        let mut want: Vec<String> = ids.iter().map(|i| i.node_id()).collect();
+        want.sort();
+        have == want
+    };
+    ctl.registry.set_desired(vec![
+        entry(&on, DesiredState::Approved, santree.clone()),
+        entry(&off, DesiredState::Approved, Policy::default()),
+    ]);
+    // The moment the machine holds santree on, the file already lists it.
+    wait_for("santree on", 5, || s_on.policy().santree);
+    assert!(listed(&[&on]));
+    assert_eq!(s_on.policy().session_host, Some(host.clone()));
+    wait_for("the other approved", 5, || {
+        summary(&ctl, &off).is_some_and(|s| s.state == NodeState::Approved)
+    });
+    assert_eq!(s_off.policy().session_host, None, "only santree machines");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&allow).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    // A new host key reaches the santree machine at once.
+    let moved = SessionHost {
+        public_key: "cd".repeat(32),
+        ..host
+    };
+    ctl.registry.set_session_host(moved.clone());
+    wait_for("the new key", 5, || {
+        s_on.policy().session_host.as_ref() == Some(&moved)
+    });
+    assert_eq!(s_off.policy().session_host, None);
+
+    // santree off: out of the file, and the machine told.
+    ctl.registry.set_desired(vec![
+        entry(&on, DesiredState::Approved, Policy::default()),
+        entry(&off, DesiredState::Approved, Policy::default()),
+    ]);
+    assert!(listed(&[]));
+    wait_for("santree off", 5, || !s_on.policy().santree);
+    assert_eq!(s_on.policy().session_host, None);
+    n_on.stop();
+    n_off.stop();
     let _ = std::fs::remove_dir_all(dir);
 }

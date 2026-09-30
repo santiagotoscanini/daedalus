@@ -57,6 +57,11 @@
 //! queued, since a resume that fires whenever the machine next connects is
 //! one nobody asked for then. The outcome rides the machine's next
 //! `claude_roster` push, under the request id minted here.
+//!
+//! **santree** (session_host.rs): a machine's policy carries the session
+//! host's address and key while the app turns santree on for it
+//! (registry.rs `effective`), and the host's allow-list is written from each
+//! desired set before its policy events go out, one set at a time.
 
 mod accept;
 mod registry;

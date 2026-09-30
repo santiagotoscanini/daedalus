@@ -114,6 +114,16 @@ pub fn local_allowed() -> crate::door::Allowed {
     crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &console)
 }
 
+/// Whom santree's socket serves (santree.rs): root, the service's own
+/// uid, and the user who installed the agent (`launchd::installer_uid`,
+/// recorded by `install` from `sudo`) — never whoever holds the console,
+/// since a connection there is a shell on the box: another account that
+/// fast-user-switches in gets `forbidden`.
+pub fn santree_allowed() -> crate::door::Allowed {
+    let installer: Vec<u32> = launchd::installer_uid().into_iter().collect();
+    crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
+}
+
 // ── network ───────────────────────────────────────────────────────────────
 
 /// The SRV records from the resolv.conf macOS generates from its primary

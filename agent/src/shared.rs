@@ -59,6 +59,9 @@ pub struct Shared {
     /// The machines connected to this controller, when it listens for
     /// them; the API's `nodes.*` and `/nodes/metrics` read it.
     nodes: OnceLock<Arc<crate::link::controller::Registry>>,
+    /// The session host this controller follows, where the box has one
+    /// (session_host.rs); `santree.status` reads it.
+    session_host: OnceLock<Arc<crate::session_host::SessionHost>>,
     /// The OS's power requests as last read (`refresh_power_requests`).
     power: Mutex<Option<String>>,
     /// The service's stop, nudged when an update check is asked for, so the
@@ -176,6 +179,7 @@ impl Shared {
             events: Arc::new(Events::default()),
             controller: OnceLock::new(),
             nodes: OnceLock::new(),
+            session_host: OnceLock::new(),
             power: Mutex::new(None),
             stop: OnceLock::new(),
             inner: Mutex::new(Live {
@@ -395,6 +399,15 @@ impl Shared {
 
     pub fn nodes(&self) -> Option<&Arc<crate::link::controller::Registry>> {
         self.nodes.get()
+    }
+
+    /// The session host this controller follows, once it does.
+    pub fn set_session_host(&self, h: Arc<crate::session_host::SessionHost>) {
+        let _ = self.session_host.set(h);
+    }
+
+    pub fn session_host(&self) -> Option<&Arc<crate::session_host::SessionHost>> {
+        self.session_host.get()
     }
 
     /// The events handle, for what publishes beside this struct (the

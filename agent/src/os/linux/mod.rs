@@ -104,6 +104,15 @@ pub fn local_allowed() -> crate::door::Allowed {
     crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &session)
 }
 
+/// Whom santree's socket serves (santree.rs): root, the service's own
+/// uid, and the user `install` recorded (`session.json`) — the one who ran
+/// it under `sudo`, the same set as the local socket's. A connection there
+/// is a shell on the box, so it is this list and never who is logged in.
+pub fn santree_allowed() -> crate::door::Allowed {
+    let installer: Vec<u32> = systemd::session_uid().into_iter().collect();
+    crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
+}
+
 // ── facts ─────────────────────────────────────────────────────────────────
 
 fn os_release() -> std::collections::HashMap<String, String> {

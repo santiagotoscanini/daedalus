@@ -259,9 +259,10 @@ impl Drop for LocalSocket {
     }
 }
 
-/// The uid on the other end of a unix socket, as the kernel states it.
+/// The uid and the pid on the other end of a unix socket, as the kernel
+/// states them.
 #[cfg(target_os = "linux")]
-fn peer_uid(s: &std::os::unix::net::UnixStream) -> Option<u32> {
+fn peer_cred(s: &std::os::unix::net::UnixStream) -> (Option<u32>, Option<u32>) {
     use std::os::fd::AsRawFd;
     let mut cred = libc::ucred {
         pid: 0,
@@ -279,17 +280,45 @@ fn peer_uid(s: &std::os::unix::net::UnixStream) -> Option<u32> {
             &mut len,
         )
     };
-    (rc == 0 && len as usize == std::mem::size_of::<libc::ucred>()).then_some(cred.uid)
+    if rc == 0 && len as usize == std::mem::size_of::<libc::ucred>() {
+        (
+            Some(cred.uid),
+            u32::try_from(cred.pid).ok().filter(|p| *p != 0),
+        )
+    } else {
+        (None, None)
+    }
 }
 
-/// The uid on the other end of a unix socket, as the kernel states it.
+/// The uid and the pid on the other end of a unix socket, as the kernel
+/// states them.
 #[cfg(target_os = "macos")]
-fn peer_uid(s: &std::os::unix::net::UnixStream) -> Option<u32> {
+fn peer_cred(s: &std::os::unix::net::UnixStream) -> (Option<u32>, Option<u32>) {
     use std::os::fd::AsRawFd;
     let (mut uid, mut gid) = (0, 0);
     // SAFETY: getpeereid writes two ids for a connected unix socket.
     let rc = unsafe { libc::getpeereid(s.as_raw_fd(), &mut uid, &mut gid) };
-    (rc == 0).then_some(uid)
+    let mut pid: libc::pid_t = 0;
+    let mut len = std::mem::size_of::<libc::pid_t>() as libc::socklen_t;
+    // SAFETY: LOCAL_PEERPID fills a pid_t of the stated size on this socket.
+    let got = unsafe {
+        libc::getsockopt(
+            s.as_raw_fd(),
+            libc::SOL_LOCAL,
+            libc::LOCAL_PEERPID,
+            (&mut pid as *mut libc::pid_t).cast(),
+            &mut len,
+        )
+    };
+    (
+        (rc == 0).then_some(uid),
+        (got == 0).then(|| u32::try_from(pid).ok()).flatten(),
+    )
+}
+
+/// The uid on the other end of a unix socket, as the kernel states it.
+fn peer_uid(s: &std::os::unix::net::UnixStream) -> Option<u32> {
+    peer_cred(s).0
 }
 
 /// This process's effective uid.
@@ -556,6 +585,9 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::d
             drop(dog.lock_ok().take());
             let _ = ctl.shutdown(std::net::Shutdown::Both);
         }),
+        end_writes: Arc::new(|| {}),
+        peer: None,
+        pid: None,
     })
 }
 
@@ -577,8 +609,10 @@ impl crate::door::Listener for Acceptor {
             // Every write on this socket, the refusals included, gives up
             // after the timeout.
             stream.set_write_timeout(Some(self.write_timeout))?;
-            let peer = peer_uid(&stream).map(crate::door::Peer::Uid);
-            let (writer, ctl, cut) = (
+            let (uid, pid) = peer_cred(&stream);
+            let peer = uid.map(crate::door::Peer::Uid);
+            let (writer, ctl, half, cut) = (
+                stream.try_clone()?,
                 stream.try_clone()?,
                 stream.try_clone()?,
                 stream.try_clone()?,
@@ -591,6 +625,11 @@ impl crate::door::Listener for Acceptor {
                     close: Arc::new(move || {
                         let _ = ctl.shutdown(std::net::Shutdown::Both);
                     }),
+                    end_writes: Arc::new(move || {
+                        let _ = half.shutdown(std::net::Shutdown::Write);
+                    }),
+                    peer: None,
+                    pid,
                 },
                 abort: Arc::new(move || {
                     let _ = cut.shutdown(std::net::Shutdown::Both);
@@ -991,5 +1030,6 @@ mod tests {
     fn the_kernel_names_the_peer() {
         let (a, _b) = std::os::unix::net::UnixStream::pair().unwrap();
         assert_eq!(peer_uid(&a), Some(euid()));
+        assert_eq!(peer_cred(&a), (Some(euid()), Some(std::process::id())));
     }
 }

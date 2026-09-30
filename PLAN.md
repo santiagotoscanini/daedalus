@@ -601,17 +601,15 @@ priority; each can be done independently unless noted.
       per machine or for all (System › Machines or an MCP write tool), naming
       a version, never bytes, refusing a downgrade; on the box the lock bump
       is the stage step. The last self-updating release has to carry it.
-    - **santree through the agent.** The box's session host exists
-      (`session-host/`, `fleet.daedalus.sessionHost.enable`, off). Left: a
-      per-node `santree` policy, and the controller writing the host's
-      allow-list from it (approved nodes with it on, recomputed on every
-      decision) and handing agents the host's address and key; the agent
-      serving a local santree socket and piping each connection over a TLS
-      connection of its own with its node key (an agent release); Settings ›
-      Machines' toggle and one host line (state, "restart to apply" from the
-      status file's `exe`, Restart naming the live PTY count); santree moving
-      to the agent socket; then the proof on the MacBook, at home and over
-      the VPN.
+    - **santree through the agent.** The session host, the controller's
+      allow-list and `santree.status`, and the agent's santree socket exist
+      (agent 0.22.0, untagged). Left: the box running that controller
+      (lock bump, switch); Settings › Machines' `santree` toggle (sent only
+      when on) and one host line from `santree.status` (state, "restart to
+      apply", Restart naming the live PTY count, a desired set the
+      controller did not take); the `agent-v0.22.0` release; the MacBook
+      reinstalled onto it and approved; santree moving to the agent socket;
+      then the proof on the MacBook, at home and over the VPN.
     - **Separate:** the power verbs (feature 6), and the box's System page
       drawn from capabilities instead of the root snapshots.
     - **Risks.** The controller is critical (down means no machines on the

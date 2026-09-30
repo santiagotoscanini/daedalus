@@ -1,5 +1,8 @@
-# The session host against the daedalus agent's OWN TLS client (agent/src/link:
-# its pure-Rust crypto provider, its certificate, its pinning), in process.
+# The session host against the daedalus agent: the agent's OWN TLS client
+# (agent/src/link: its pure-Rust crypto provider, its certificate, its
+# pinning) in process, and the whole santree path end to end — the
+# controller's allow-list and policy, a node's santree door, santree's own
+# client through it.
 #
 # A crate of its own so the agent's dependency tree stays out of the session
 # host's Cargo.lock and nix build: this runs in session-host/gate.sh only.
@@ -12,6 +15,8 @@ publish = false
 [dev-dependencies]
 daedalus-session-host = { path = ".." }
 daedalus-agent = { path = "../../agent", default-features = false }
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "sync"] }
+# santree's own client, at the session host's rev: what santree runs.
+santree-remote-client = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "sync", "net", "io-util", "time"] }
 serde_json = "1"
 tempfile = "3"

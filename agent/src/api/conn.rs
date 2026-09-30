@@ -130,6 +130,7 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
         writer,
         on_hello,
         close,
+        ..
     } = conn;
     let out = Arc::new(Out {
         writer: Mutex::new(writer),
@@ -495,6 +496,7 @@ mod tests {
                     feed.lock().unwrap().take();
                 })
             },
+            ..Conn::plain(std::io::empty(), std::io::sink())
         };
         let done = std::thread::spawn(move || serve_connection(api, conn));
         let until = Instant::now() + Duration::from_secs(5);

@@ -130,6 +130,19 @@ pub fn save_policy(p: &crate::link::wire::Policy) {
     }
 }
 
+/// Take the box's santree grant out of the kept policy, on disk: what
+/// `pair` and `install` do when they move the pin to another box (the
+/// running service does the same through link/node.rs `drop_santree`).
+pub fn forget_santree() {
+    if let Some(mut p) = last_policy() {
+        if p.santree || p.session_host.is_some() {
+            p.santree = false;
+            p.session_host = None;
+            save_policy(&p);
+        }
+    }
+}
+
 pub fn state_path() -> PathBuf {
     data_dir().join("state.json")
 }
@@ -211,6 +224,14 @@ pub fn local_socket() -> PathBuf {
         hex::encode(sha2::Sha256::digest(d.as_os_str().as_encoded_bytes()))[..10].to_string()
     });
     crate::os::local_socket_path(&data_dir(), dev.as_deref())
+}
+
+/// santree's socket (santree.rs): `run/santree.sock` beside the local
+/// socket in the data directory, so it moves with `DAEDALUS_AGENT_DATA_DIR`
+/// too. macOS and Linux only.
+#[cfg(unix)]
+pub fn santree_socket() -> PathBuf {
+    data_dir().join("run").join("santree.sock")
 }
 
 /// The config, or the defaults when there is no file. Refuses a relative

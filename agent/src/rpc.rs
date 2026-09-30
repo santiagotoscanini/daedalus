@@ -109,6 +109,11 @@ pub mod code {
     pub const INTERNAL: &str = "internal";
     /// No machine by that id is known to the controller.
     pub const NOT_FOUND: &str = "not_found";
+    /// The santree socket: this machine's policy keeps santree off.
+    pub const SANTREE_OFF: &str = "santree_off";
+    /// The santree socket: the session host proved another key than the
+    /// one the box named for it.
+    pub const HOST_KEY_CHANGED: &str = "host_key_changed";
 }
 
 impl ApiError {

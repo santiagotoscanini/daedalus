@@ -127,6 +127,9 @@ same in a terminal), with
   names an address (absent: none — the box opens no port until nix says
   so), and the registry of machines the API's `nodes.*` methods read
   (see "The link to the controller");
+- **the session host's two files**, where `[controller.session_host]`
+  names them: the allow-list it writes from the app's decisions and the
+  status file it reads every 2 s (see "The session host");
 - **`GET /nodes/metrics`**, the one endpoint Prometheus scrapes for every
   machine: each connected, approved machine's telemetry as Prometheus text
   (`src/telemetry/metrics.rs`), and `daedalus_agent_link_up` (1 while
@@ -169,13 +172,21 @@ api_socket = "/run/user/1000/daedalus-agent/api.sock"
 api_allowed_uids = [100999]             # host uids served besides the agent's own; default none
 listen = "0.0.0.0:7788"                 # the machines' links; absent: no listener
 advertise = ["s2-server.lan:7788"]      # what machines should dial (one or a list), for the app
+
+[controller.session_host]               # absent: this box runs no session host
+address = "box.example.org:7789"        # where machines dial it, handed to santree machines
+allow_list = "/srv/state/controller/session-host-allow.json"  # written here, read by the host
+status_file = "/srv/state/session-host/status.json"          # written by the host, read here
+bin = "/nix/store/…-daedalus-session-host-0.1.0/bin/daedalus-session-host"  # the installed build
 ```
 
 The table's values are checked only in controller mode (`api_socket` and
 `claude_workdir` absolute, `claude_unit` a plain unit name, no root in
 `api_allowed_uids`, `listen` an address and port, `advertise` host:port
-pairs), but a key it does not know is an error in every mode, so a typo in
-what nix writes fails loudly. A controller never holds the machine awake.
+pairs, `[controller.session_host]` all four keys, its address host:port
+and its paths absolute), but a key it does not know is an error in every
+mode, so a typo in what nix writes fails loudly. A controller never holds
+the machine awake.
 
 What the unit nix writes should carry:
 
@@ -270,12 +281,13 @@ verbs, none taking a command, a path or a flag:
 | `nodes.set_desired` `{nodes: [{id, public_key, state, policy, name}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
 | `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
 | `root.run` `{verb, selectors?}` | `{run, verb, outcome, detail, verbs?}`: one of the root helper's verbs run to its end (`done`, `refused` with the unit's reason, `failed`); `status` answers every verb and its unit's state in `verbs`. Answers when the unit has finished, so a client gives it its own timeout; its unit's lines go out as `root.progress` meanwhile ("The root helper", below) | `root` |
+| `santree.status` | `{state, version, restart_pending, live_ptys, connections: [{node, name, count}], error}`: the session host from its status file — `state` `running`, `stale` (not written for 30 s), `stopped` or `missing`; `restart_pending` when the running build is not the installed one; `error` why the file could not be read or the allow-list written. `unavailable` where `[controller.session_host]` names none ("The session host") | — |
 
 `state` is `pending` (connected, not decided), `approved`, `revoked` or
 `unknown` (seen, not decided, gone). `nodes.set_desired` is the app's
 COMPLETE set of decided keys — `state` `approved` or `revoked`, `policy`
 the link's `Policy` (`src/link/wire.rs`: `awake_hold`, `claude_remote_control`,
-`claude_workdir`, `providers.lemonade.port`, plus `providers.lemonade.offer`, which the controller keeps for `/nodes/metrics` and does not pass on; absent for an approved key:
+`claude_workdir`, `providers.lemonade.port`, `santree` (absent: off), plus `providers.lemonade.offer`, which the controller keeps for `/nodes/metrics` and does not pass on — and never `session_host`, which is the controller's to fill; absent for an approved key:
 the defaults), `name` what the pages call the machine (optional; the
 `machine` label in `/nodes/metrics`, the hostname when absent) — idempotent, applied as a difference to the connections open
 now; a key left out is pending while connected. Every entry is checked
@@ -466,7 +478,12 @@ carries newly read static or slow facts or OS updates and otherwise every
 minute, `claude` (the full report) on change and every minute,
 `claude_roster` (the roster of Claude sessions, at most 512 KiB) on change
 — its clock and its ticking costs aside — and every minute, and
-`providers` (the providers document, at most 4 providers of 256 models each, refused past its bounds) on change — its clocks aside — and every minute. Controller → machine: `state`, `policy`, `command`
+`providers` (the providers document, at most 4 providers of 256 models each, refused past its bounds) on change — its clocks aside — and every minute. Controller → machine: `state`, `policy`
+(`{awake_hold, claude_remote_control, claude_workdir?, providers?, santree?,
+session_host?}`: `santree` the app's toggle, `session_host` —
+`{address, public_key}` — filled by the controller only while it is on;
+kept in `policy.json`, and a revoked machine, or one paired with another
+box, drops the two), `command`
 requests (`check_update`, `claude_update`, `claude_restart`),
 `claude_session` requests (`{action, id, request}`: one verb on one
 session, under the request id the controller minted) and `provider_model`
@@ -562,6 +579,84 @@ moves with a release: the new service restarts the others on the new
 binary at its first start (see "How an update happens"), and a Linux tray
 whose service stops answering after its binary was replaced leaves for the
 new one.
+
+## The santree socket
+
+[santree](https://github.com/santree-ai/santree) opens its projects on the
+box through the agent on its own machine (`src/santree.rs`). santree
+connects to a local socket; for each connection the agent opens a TLS 1.3
+connection of its own to the box's session host (`session-host/` in this
+repository), proving this machine's node key and pinning the host's, and
+pipes the bytes both ways. It never reads santree's protocol, and the link
+to the controller carries none of it.
+
+- **Where**: `run/santree.sock` in the data directory, beside
+  `agent.sock` — `/Library/Application Support/daedalus-agent/run/santree.sock`,
+  `/var/lib/daedalus-agent/run/santree.sock` — on macOS and Linux (no door
+  on Windows yet). A socket that cannot be made never stops the service; it
+  is tried again every 15 s.
+- **Who**: root, the service's own uid, and the user who installed the
+  agent — recorded by `install` from `sudo` (`installer.json` on macOS,
+  `session.json` on Linux) — and nobody else. Not the console user: a
+  connection here is a shell as the operator on the box (who has NOPASSWD
+  sudo), so it must not follow whoever sits at the machine; another account
+  gets `forbidden`. Every process of that user may use it, as they may use
+  that user's ssh keys. The socket is 0666 in the service's 0711 `run/`,
+  the kernel's peer check the gate; santree checks the other end is root's.
+- **The first line** is the agent's, in its envelope, before santree writes
+  anything:
+  `{"id":null,"ok":{"host":"<host:port>","node":"<node id>","agent":"<version>"}}`,
+  then raw bytes both ways; or `{"id":null,"err":{"code","msg"}}` and a
+  closed socket — `santree_off` (the policy keeps it off: Settings ›
+  Machines), `host_key_changed` (the host proved another key than the box
+  named), `unavailable` with the reason (not paired, not approved, no session
+  host named, not reachable, TLS failed). The door's own `forbidden` and
+  `busy` (past four connections at once, the host's per-machine cap) come
+  the same way. The checks read the kept policy, so a controller restart
+  does not stop santree; the host's allow-list is what admits the key, and
+  its refusal — which TLS 1.3 delivers after the handshake — is the stream
+  ending after `ok`, logged as such.
+- **The dial**: every address the name resolves to, then the handshake, in
+  one 10 s deadline, on the agent's own TLS provider (link/crypto.rs; the
+  host runs ring's, and `session-host/interop` proves the two meet).
+- **The pipe**: two threads over one TLS connection, records sealed and
+  sent in order, no lock held across a read. A santree that stops reading
+  stalls the host, which drops the link and parks its sessions (santree
+  re-attaches losslessly); a write either way blocked for 30 s, or a host
+  silent for 60 s (it pings every 15), ends the pipe. santree's end is
+  passed on as close_notify and a half-close, the host's close_notify as
+  santree's end of stream; anything else tears both down.
+- **The log**: one line as a connection opens or is refused (the peer's
+  uid and pid, the host, the code), one as it ends (how long, bytes each
+  way, who ended it). Never a byte of what it carried.
+
+A machine learns where the host is from its policy (see "The link to the
+controller"): `santree`, the app's toggle, and `session_host`, which the
+controller fills from the host's status file for approved machines with
+santree on. Both are kept in `policy.json`; a revoked machine, or one
+paired with another box, drops them.
+
+### The session host
+
+On the controller, `[controller.session_host]` names the host's files
+(`src/session_host.rs`; nix writes the table from `session-host.nix`):
+
+- **the allow-list** it writes — `{"schemaVersion":1,"nodes":[{"id","publicKey"}]}`,
+  the app's approved machines with santree on, sorted — from every
+  `nodes.set_desired`, before that set's policy events go out; atomically,
+  0600, as the controller's user (the host's), only when it changes, one set
+  at a time. Never before the first set after a start: the registry is empty
+  until the app pushes, and writing that would cut every terminal across a
+  controller restart. So a revocation made while the controller is down, or
+  while it refuses the app's set, reaches the host with the next set it
+  takes. A write that fails is logged and reported by `santree.status`; the
+  set applies to the links regardless;
+- **the status file** it reads every 2 s (the host rewrites it at least
+  every 10 s) — only a regular file, root's or its own, writable by nobody
+  else, at most 1 MiB, read leniently: its key goes to every santree machine
+  with its policy (a new key at once), and `santree.status` answers from it —
+  `stale` when a running host has not written it for 30 s, `restart_pending`
+  when its `exe` is not `bin`, the installed build.
 
 ## Install
 

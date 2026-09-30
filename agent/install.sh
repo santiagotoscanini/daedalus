@@ -15,7 +15,9 @@
 #
 #   macOS: the two universal binaries under
 #     /Library/Application Support/daedalus-agent/bin; the service as a root
-#     LaunchDaemon, the menu bar app as a LaunchAgent in every user's session.
+#     LaunchDaemon, the menu bar app as a LaunchAgent in every user's session;
+#     `install` records the user who ran sudo (installer.json), the one user
+#     santree's socket serves besides root.
 #   Linux (systemd distributions, x86_64 and aarch64): the static service
 #     under /opt/daedalus-agent/bin — and on x86_64 the tray, for desktops —
 #     then `daedalus-agent install`: a root systemd service, the session as a

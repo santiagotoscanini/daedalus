@@ -18,11 +18,11 @@ use crate::api::wire::{
 };
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of, Identity};
-use crate::link::wire::Policy;
 use crate::link::wire::{
     self, name, ClaudeSessionParams, Command, CommandParams, ControllerId, Hello, NodeState,
     StateEvent, Welcome, PROTO,
 };
+use crate::link::wire::{Policy, SessionHost};
 use crate::link::{
     DEAD_AFTER, HEARTBEAT, MAX_CONNECTIONS, MAX_PENDING, MAX_PREAUTH, PENDING_PER_IP, PENDING_TTL,
     PREAUTH_BUDGET, PREAUTH_PER_IP, UNKNOWN_ADDRESSES, UNKNOWN_PER_MINUTE,
@@ -199,11 +199,27 @@ pub(super) struct Reg {
     nodes: HashMap<String, Entry>,
     desired: HashMap<String, Desired>,
     queued: HashMap<String, Vec<Command>>,
+    /// Where the session host is and its key, from its status file
+    /// (session_host.rs): handed to every machine whose policy turns santree
+    /// on (`effective`).
+    session_host: Option<SessionHost>,
     /// Unknown keys presented per address, within the last minute.
     pub(super) unknown_by_ip: HashMap<IpAddr, VecDeque<Instant>>,
 }
 
 impl Reg {
+    /// The policy a machine is sent: the app's, with the session host filled
+    /// in while santree is on (and never otherwise).
+    fn effective(&self, d: &Desired) -> Policy {
+        let mut p = d.policy.clone();
+        p.session_host = if p.santree {
+            self.session_host.clone()
+        } else {
+            None
+        };
+        p
+    }
+
     /// The app's decision for `id` — if it was made for the key this entry
     /// holds (or there is no entry): a decision is for a key, not an id.
     fn decided(&self, id: &str) -> Option<&Desired> {
@@ -291,7 +307,7 @@ pub(super) enum Admission {
         id: String,
         conn_id: u64,
         rx: Receiver<Out>,
-        welcome: Welcome,
+        welcome: Box<Welcome>,
         queued: Vec<Command>,
     },
     Refuse(ApiError),
@@ -331,6 +347,13 @@ pub struct Registry {
     /// Pre-auth connections, in all and per address.
     preauth_open: AtomicUsize,
     preauth: Mutex<HashMap<IpAddr, usize>>,
+    /// The session host's allow-list, where this box has one
+    /// (session_host.rs).
+    allow: Option<crate::session_host::AllowList>,
+    /// One `set_desired` at a time: the allow-list is written and the set
+    /// applied in the order the sets came, so the file never ends on an
+    /// older set than the registry.
+    apply: Mutex<()>,
 }
 
 impl Registry {
@@ -348,7 +371,57 @@ impl Registry {
             next_request: AtomicU64::new(1),
             preauth_open: AtomicUsize::new(0),
             preauth: Mutex::new(HashMap::new()),
+            allow: None,
+            apply: Mutex::new(()),
         }
+    }
+
+    /// Keep the session host's allow-list at `path` (session_host.rs).
+    pub fn with_allow_list(mut self, path: std::path::PathBuf) -> Self {
+        self.allow = Some(crate::session_host::AllowList::new(path));
+        self
+    }
+
+    /// Why the allow-list could not be written last time, if it could not.
+    pub fn allow_list_error(&self) -> Option<String> {
+        self.allow.as_ref().and_then(|a| a.error())
+    }
+
+    /// The session host machines are told of; None until its status file
+    /// named a key.
+    pub fn session_host(&self) -> Option<SessionHost> {
+        self.lock().session_host.clone()
+    }
+
+    /// Where the session host is and its key moved: every connected, approved
+    /// machine with santree on gets its policy again, with it.
+    pub fn set_session_host(&self, pin: SessionHost) {
+        let mut reg = self.lock();
+        if reg.session_host.as_ref() == Some(&pin) {
+            return;
+        }
+        tracing::info!(address = %pin.address, key = %pin.public_key, "session host: machines with santree on are told of it");
+        reg.session_host = Some(pin);
+        for (id, d) in &reg.desired {
+            if d.state != DesiredState::Approved || !d.policy.santree {
+                continue;
+            }
+            if reg.state_of(id) != NodeState::Approved {
+                continue;
+            }
+            if let Some(e) = reg.nodes.get(id) {
+                e.send(wire::event(name::POLICY, &reg.effective(d)));
+            }
+        }
+    }
+
+    /// What the pages call machine `id`: the app's name, else its hostname.
+    pub fn node_name(&self, id: &str) -> Option<String> {
+        let reg = self.lock();
+        reg.desired
+            .get(id)
+            .and_then(|d| d.name.clone())
+            .or_else(|| reg.nodes.get(id).and_then(|e| e.hostname.clone()))
     }
 
     pub(super) fn lock(&self) -> std::sync::MutexGuard<'_, Reg> {
@@ -500,7 +573,7 @@ impl Registry {
             .desired
             .get(&id)
             .filter(|d| d.state == DesiredState::Approved)
-            .map(|d| d.policy.clone());
+            .map(|d| reg.effective(d));
         let queued = if state == NodeState::Approved {
             reg.queued.remove(&id).unwrap_or_default()
         } else {
@@ -543,13 +616,13 @@ impl Registry {
             );
         }
         Admission::Welcome {
-            welcome: Welcome {
+            welcome: Box::new(Welcome {
                 proto: PROTO,
                 node_id: id.clone(),
                 state,
                 controller: self.me.clone(),
                 policy,
-            },
+            }),
             id,
             conn_id,
             rx,
@@ -653,6 +726,12 @@ impl Registry {
     /// The app's complete set of decided keys (module doc). The caller
     /// has checked each entry (ids are their keys' node ids, no id twice).
     pub fn set_desired(&self, set: Vec<DesiredEntry>) -> SetDesiredOk {
+        // One set at a time, the session host's allow-list before the
+        // registry and its policy events (session_host.rs).
+        let _one = self.apply.lock_ok();
+        if let Some(allow) = &self.allow {
+            allow.write(&set);
+        }
         let mut reg = self.lock();
         let before: HashMap<String, NodeState> = reg
             .nodes
@@ -692,7 +771,7 @@ impl Registry {
         for id in ids {
             let was = before.get(&id).copied().unwrap_or(NodeState::Unknown);
             let now = reg.state_of(&id);
-            let policy = reg.desired.get(&id).map(|d| d.policy.clone());
+            let policy = reg.desired.get(&id).map(|d| reg.effective(d));
             let connected = reg.nodes.get(&id).is_some_and(|e| e.conn.is_some());
             if now != NodeState::Approved {
                 reg.queued.remove(&id);
@@ -735,8 +814,8 @@ impl Registry {
                         ok.approved.push(id.clone());
                     }
                     (NodeState::Approved, NodeState::Approved) => {
-                        let old_policy = old.get(&id).map(|d| &d.policy);
-                        if old_policy != policy.as_ref() {
+                        let old_policy = old.get(&id).map(|d| reg.effective(d));
+                        if old_policy != policy {
                             entry.send(wire::event(name::POLICY, &policy));
                             ok.policy.push(id.clone());
                         }

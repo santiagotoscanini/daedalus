@@ -71,6 +71,7 @@
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
 //! | `controller.rotate`| `ControllerInfo` with its `rotation`: a new controller key, the old one retired after `{grace_secs?}` (link/rotation.rs) | the controller |
 //! | `root.run`         | `RootRunOk`: one root verb `{verb, selectors?}` run by the root helper to its end — `done`, `refused` or `failed` with a detail; `status` lists the verbs (root/) | `root` |
+//! | `santree.status` | `SantreeStatus`: the session host from its status file — `running`, `stale`, `stopped` or `missing`, its version, whether a restart would apply a newer build, its live PTYs and connections by machine, and why the controller cannot read it or write its allow-list (session_host.rs); `unavailable` where the box has none | — |
 //!
 //! `root.run` answers when the verb's unit has finished, which can be
 //! minutes: a client gives it a timeout of its own. It is the only door to
@@ -433,6 +434,13 @@ impl Api {
                 keys.start(grace)
                     .map_err(|e| ApiError::new(code::UNAVAILABLE, e))?;
                 to_value(&self.shared.controller_info())
+            }
+            "santree.status" => {
+                no_params()?;
+                let host = self.shared.session_host().ok_or_else(|| {
+                    ApiError::new(code::UNAVAILABLE, "no session host on this box")
+                })?;
+                to_value(&host.status())
             }
             "root.run" => {
                 self.has("root")?;

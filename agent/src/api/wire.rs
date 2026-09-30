@@ -348,6 +348,11 @@ pub struct DesiredPolicy {
     #[serde(default)]
     #[cfg_attr(test, ts(as = "Option<DesiredProviders>", optional))]
     pub providers: DesiredProviders,
+    /// santree on this machine may open its projects on the box. Absent is
+    /// off, so a set from an app that predates it is still exact.
+    #[serde(default)]
+    #[cfg_attr(test, ts(as = "Option<bool>", optional))]
+    pub santree: bool,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -385,6 +390,9 @@ impl From<DesiredPolicy> for Policy {
                     .lemonade
                     .map(|l| ProviderPolicy { port: l.port }),
             },
+            santree: p.santree,
+            // The controller's to fill (registry.rs `effective`), never the app's.
+            session_host: None,
         }
     }
 }
@@ -509,6 +517,51 @@ pub struct RootProgress {
     pub run: String,
     pub verb: String,
     pub line: String,
+}
+
+// ── the session host (session_host.rs) ──────────────────────────────────────
+
+/// `santree.status`'s answer: the session host as its status file tells it,
+/// and the allow-list the controller keeps for it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SantreeStatus {
+    pub state: SessionHostState,
+    /// The running host's version; null without a status file.
+    pub version: Option<String>,
+    /// The build that runs is not the one installed: a restart applies it
+    /// (and ends `live_ptys` terminals).
+    pub restart_pending: bool,
+    /// Terminals whose process runs: what a restart ends.
+    pub live_ptys: u32,
+    /// The machines connected now, one entry each, most connections first.
+    pub connections: Vec<SantreeConnections>,
+    /// What stops the controller from reading the host or writing its
+    /// allow-list, when something does.
+    pub error: Option<String>,
+}
+
+/// Where the session host stands, from its status file: `running`, `stale`
+/// (it says running but has not written for a while: killed, or hung),
+/// `stopped` (it said so as it stopped), `missing` (no file to read).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionHostState {
+    Running,
+    Stale,
+    Stopped,
+    Missing,
+}
+
+/// One machine's connections to the session host.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SantreeConnections {
+    pub node: String,
+    /// What the pages call it (`nodes.set_desired`), else its hostname.
+    pub name: Option<String>,
+    pub count: u32,
 }
 
 /// A node id as the API takes it: sixteen lowercase hex characters.
@@ -1356,5 +1409,69 @@ mod tests {
                 r#""browsers":[],"apps":[],"app_count":null,"updates":null,"errors":[]}}"#
             )
         );
+    }
+
+    #[test]
+    fn santree_in_the_desired_set_and_the_status_on_the_wire() {
+        let entry = |policy: Value| json!({"nodes":[{"id":"0123456789abcdef","public_key":"ab","state":"approved","policy":policy}]});
+        // Absent is off: the set an app that predates it sends is exact.
+        let set: SetDesired = serde_json::from_value(entry(
+            json!({"awake_hold":true,"claude_remote_control":true}),
+        ))
+        .unwrap();
+        let p = set.nodes[0].policy.clone().unwrap();
+        assert!(!p.santree);
+        let set: SetDesired = serde_json::from_value(entry(
+            json!({"awake_hold":true,"claude_remote_control":true,"santree":true}),
+        ))
+        .unwrap();
+        let p: Policy = set.nodes[0].policy.clone().unwrap().into();
+        assert!(p.santree);
+        assert_eq!(
+            p.session_host, None,
+            "the controller fills it, never the app"
+        );
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            r#"{"awake_hold":true,"claude_remote_control":true,"santree":true}"#
+        );
+        // The app cannot name the session host, nor anything else.
+        for bad in [
+            json!({"awake_hold":true,"claude_remote_control":true,"santree":"yes"}),
+            json!({"awake_hold":true,"claude_remote_control":true,"santree":true,
+                   "session_host":{"address":"evil.example:1","public_key":"00"}}),
+        ] {
+            assert!(
+                serde_json::from_value::<SetDesired>(entry(bad.clone())).is_err(),
+                "{bad}"
+            );
+        }
+
+        let status = SantreeStatus {
+            state: SessionHostState::Running,
+            version: Some("0.1.0".into()),
+            restart_pending: false,
+            live_ptys: 3,
+            connections: vec![SantreeConnections {
+                node: "0123456789abcdef".into(),
+                name: Some("MacBook".into()),
+                count: 2,
+            }],
+            error: None,
+        };
+        assert_eq!(
+            wire(&status),
+            concat!(
+                r#"{"state":"running","version":"0.1.0","restart_pending":false,"live_ptys":3,"#,
+                r#""connections":[{"node":"0123456789abcdef","name":"MacBook","count":2}],"error":null}"#
+            )
+        );
+        for (s, w) in [
+            (SessionHostState::Stale, "stale"),
+            (SessionHostState::Stopped, "stopped"),
+            (SessionHostState::Missing, "missing"),
+        ] {
+            assert_eq!(wire(&s), format!("\"{w}\""));
+        }
     }
 }

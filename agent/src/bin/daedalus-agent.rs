@@ -106,6 +106,13 @@ fn install(args: &[String]) -> Result<()> {
     // Without --pin the machine installs unpaired: it runs and dials nobody
     // until `pair` names the controller (pair.rs).
     let (pairing, controller) = daedalus_agent::pair::parse_args(args)?;
+    // Paired with another box: the last one's santree grant goes before the
+    // service starts again.
+    if pairing.as_ref().is_some_and(|p| {
+        daedalus_agent::pair::moves_pin(&daedalus_agent::paths::config_path(), &p.pin)
+    }) {
+        daedalus_agent::paths::forget_santree();
+    }
     let cfg = config::Config {
         controller_pin: pairing.map(|p| p.pin),
         controller_address: controller,
@@ -141,6 +148,7 @@ fn pair(args: &[String]) -> Result<()> {
             daedalus_agent::pair::command_line("<key>", None)
         );
     };
+    let moved = daedalus_agent::pair::moves_pin(&path, &p.pin);
     p.write_at(&path).with_context(|| {
         format!(
             "config.toml is the service's: run `pair` as {}",
@@ -151,6 +159,9 @@ fn pair(args: &[String]) -> Result<()> {
             }
         )
     })?;
+    if moved {
+        daedalus_agent::paths::forget_santree();
+    }
     println!("paired: this machine trusts the controller key {}", p.pin);
     match daedalus_agent::local::call("link.reload", serde_json::Value::Null) {
         Ok(_) => println!("the service connects now; `daedalus-agent status` shows the link"),

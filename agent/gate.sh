@@ -13,6 +13,9 @@
 # generates now (a type changed and the app's copy did not). `gen` writes
 # them — then the tests run over what it wrote — and prints what changed
 # against git; commit them with the Rust change.
+# AGENT_GEN_DIR names another directory for them — a staged copy, while a
+# save under app/ would be a live deploy (the dev server serves it): the gate
+# then checks and `gen` writes that copy, and the app's is left alone.
 #
 # The Linux tray links GTK, so the container gets GTK's and AppIndicator's
 # development packages (cached in /tmp/agent-apt between runs), and
@@ -20,7 +23,8 @@
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 what="${1:-all}"
-gen="$here/../app/src/host/controller/generated"
+app_gen="$here/../app/src/host/controller/generated"
+gen="${AGENT_GEN_DIR:-$app_gen}"
 mkdir -p /tmp/agent-apt "$gen"
 set +e
 podman run --rm -v "$here":/w -w /w \
@@ -79,7 +83,10 @@ podman run --rm -v "$here":/w -w /w \
   '
 status=$?
 set -e
-if [ "$what" = gen ] && command -v git >/dev/null 2>&1; then
+if [ "$what" = gen ] && [ "$gen" != "$app_gen" ]; then
+  echo "--- the generated types against the app's copy (land them with the Rust change)"
+  diff -rq "$app_gen" "$gen" || true
+elif [ "$what" = gen ] && command -v git >/dev/null 2>&1; then
   echo "--- the generated types against git (commit them with the Rust change)"
   git -C "$here/.." status --short -- app/src/host/controller/generated
 fi

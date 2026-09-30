@@ -358,6 +358,9 @@ fn conn_of(h: HANDLE, server: bool) -> (Conn, Arc<dyn Fn() + Send + Sync>) {
                 }
             }
         }),
+        end_writes: Arc::new(|| {}),
+        peer: None,
+        pid: None,
     };
     (conn, Arc::new(move || cut(&aborter, server)))
 }

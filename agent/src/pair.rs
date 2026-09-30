@@ -141,6 +141,18 @@ pub fn paired_at(path: &Path) -> Result<bool> {
     Ok(LinkKeys::of(&crate::config::load_at(path)?).paired())
 }
 
+/// Whether pairing with `pin` moves the config.toml at `path` to another
+/// controller key than the one it trusts (or trusted none): then the kept
+/// santree grant, the last box's, goes too (paths.rs `forget_santree`).
+pub fn moves_pin(path: &Path, pin: &str) -> bool {
+    let key = |p: &str| parse_fingerprint(p.trim()).ok();
+    let held = crate::config::load_at(path)
+        .ok()
+        .and_then(|c| c.controller_pin)
+        .and_then(|p| key(&p));
+    held.is_none() || held != key(pin)
+}
+
 /// Read config.toml's link keys again and hand them to the running link;
 /// true when they moved (and the link starts over under them).
 pub fn reload(shared: &Shared, path: &Path) -> Result<bool> {
@@ -309,5 +321,19 @@ mod tests {
         for d in [dir, fresh.parent().unwrap().to_path_buf()] {
             let _ = std::fs::remove_dir_all(d);
         }
+    }
+
+    #[test]
+    fn a_pin_moves_to_another_box_or_stays() {
+        let dir = scratch("moves");
+        let path = dir.join("config.toml");
+        // Unpaired (no file, or no pin): any pin moves it.
+        assert!(moves_pin(&path, &fp(1)));
+        Pairing::new(&fp(1), None).unwrap().write_at(&path).unwrap();
+        assert!(!moves_pin(&path, &fp(1)));
+        // The same key however it is written.
+        assert!(!moves_pin(&path, &fp(1).to_uppercase()));
+        assert!(moves_pin(&path, &fp(2)));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -25,6 +25,15 @@ pub struct Conn {
     /// Tear the transport down both ways: a blocked read returns, and the
     /// peer sees the connection end.
     pub close: Arc<dyn Fn() + Send + Sync>,
+    /// Stop writing: the peer reads the end while it may still write (a
+    /// unix socket's half-close); nothing where the transport has none.
+    pub end_writes: Arc<dyn Fn() + Send + Sync>,
+    /// Who is on the other end, as the door checked it (`serve` sets it
+    /// before the handler runs).
+    pub peer: Option<Peer>,
+    /// The peer's process, where the OS names it (a unix socket's
+    /// `SO_PEERCRED` or `LOCAL_PEERPID`): for the log.
+    pub pid: Option<u32>,
 }
 
 impl Conn {
@@ -36,6 +45,9 @@ impl Conn {
             writer: Box::new(writer),
             on_hello: Box::new(|| {}),
             close: Arc::new(|| {}),
+            end_writes: Arc::new(|| {}),
+            peer: None,
+            pid: None,
         }
     }
 }
@@ -303,6 +315,7 @@ fn one(a: Accepted, busy: bool, policy: &Policy, on_conn: &(dyn Fn(Conn) + Send 
         tracing::warn!(peer = ?peer, door = policy.what, "refused a peer that may not use the door");
         return refuse(conn, &(policy.refusal)(peer.as_ref()));
     }
+    conn.peer = peer;
     if policy.whole.is_none() {
         let dog = std::sync::Mutex::new(Some(dog));
         conn.on_hello = Box::new(move || {

@@ -57,7 +57,10 @@ pub mod providers;
 pub mod role;
 pub mod root;
 pub mod rpc;
+#[cfg(unix)]
+pub mod santree;
 pub mod session;
+pub mod session_host;
 pub mod shared;
 pub mod state;
 pub mod telemetry;
@@ -227,12 +230,31 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         );
         match cfg.controller_listen() {
             Some(addr) => {
-                let registry = Arc::new(link::controller::Registry::new(
+                let mut registry = link::controller::Registry::new(
                     &keys.forward(),
                     shared.events_handle(),
                     link::controller::Limits::default(),
-                ));
+                );
+                if let Some(host) = &cfg.controller.session_host {
+                    registry = registry.with_allow_list(host.allow_list.clone());
+                }
+                let registry = Arc::new(registry);
                 shared.set_nodes(Arc::clone(&registry));
+                // The session host this box runs, when nix names one: its
+                // status followed, its key handed to santree machines
+                // (session_host.rs). Never a reason not to start.
+                if let Some(host) = cfg.controller.session_host.clone() {
+                    let status = host.status_file.display().to_string();
+                    let host =
+                        Arc::new(session_host::SessionHost::new(host, Arc::clone(&registry)));
+                    match host.start(&stop) {
+                        Ok(()) => {
+                            tracing::info!(status = %status, "following the session host");
+                            shared.set_session_host(host);
+                        }
+                        Err(e) => tracing::error!(error = %e, "the session host is not followed"),
+                    }
+                }
                 Some((keys, addr, registry))
             }
             None => {
@@ -263,10 +285,17 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     // The machine's key, made on the first start, and with it the link to
     // the controller (link/node.rs). Without the key there is no link, but
     // the hold and the page above do not depend on it.
+    // santree's door rides the same key, on macOS and Linux (santree.rs).
+    #[cfg(unix)]
+    let mut santree_door = None;
     let uplink = match role.link.then(identity::Identity::load_or_create) {
         None => None,
         Some(Ok(id)) => {
             tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
+            #[cfg(unix)]
+            {
+                santree_door = Some(santree::Door::start(Arc::clone(&shared), id.clone()));
+            }
             let (cfg, facts) = (cfg.clone(), facts.clone());
             Some(
                 util::spawn_worker("link", &shared, &stop, move |shared, stop| {
@@ -425,6 +454,8 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     }
     tracing::info!("stopping");
     drop(listener);
+    #[cfg(unix)]
+    drop(santree_door);
     drop(api);
     drop(page);
     drop(metrics);

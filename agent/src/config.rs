@@ -210,6 +210,28 @@ pub struct ControllerConfig {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub advertise: Vec<String>,
+    /// The session host on this box (`[controller.session_host]`): the
+    /// controller writes its allow-list and reads its status file
+    /// (session_host.rs). Absent means there is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_host: Option<SessionHostConfig>,
+}
+
+/// `[controller.session_host]`: nix's, from session-host.nix, so the two
+/// units name each file once.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionHostConfig {
+    /// Where machines dial it, `host:port`: handed to each santree node in
+    /// its policy.
+    pub address: String,
+    /// The allow-list the controller writes and the host reads.
+    pub allow_list: PathBuf,
+    /// The status file the host writes and the controller reads.
+    pub status_file: PathBuf,
+    /// The installed binary, as `/proc/self/exe` names it: a running host
+    /// whose `exe` differs has an update waiting for a restart.
+    pub bin: PathBuf,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -288,7 +310,7 @@ impl Config {
                 awake_hold: false,
                 claude_remote_control: self.controller.claude_remote_control,
                 claude_workdir: self.controller.claude_workdir.clone(),
-                providers: Default::default(),
+                ..Default::default()
             },
         }
     }
@@ -394,6 +416,26 @@ impl Config {
                         "controller.claude_unit must be a plain unit name (letters, digits, \
                          `-`, `_`, `.`, `:`; not starting with `-`; without `.service`), not {u:?}"
                     );
+                }
+            }
+            if let Some(s) = &self.controller.session_host {
+                if s.address.len() > 255 || !valid_host_port(&s.address) {
+                    bail!(
+                        "controller.session_host.address is host:port, not {:?}",
+                        s.address
+                    );
+                }
+                for (key, p) in [
+                    ("allow_list", &s.allow_list),
+                    ("status_file", &s.status_file),
+                    ("bin", &s.bin),
+                ] {
+                    if !p.is_absolute() {
+                        bail!(
+                            "controller.session_host.{key} must be an absolute path, not {}",
+                            p.display()
+                        );
+                    }
                 }
             }
         }
@@ -758,6 +800,28 @@ mod tests {
         assert!(check("api_allowed_uids = [4294967295]").is_err());
         assert!(check("api_allowed_uids = [65534]").is_err());
         assert!(toml::from_str::<Config>("[controller]\napi_allowed_uids = [-1]").is_err());
+        // The session host's table: all four keys, the address host:port, the
+        // paths absolute.
+        let host = |address: &str, allow: &str| {
+            format!(
+                "[controller.session_host]\naddress = \"{address}\"\nallow_list = \"{allow}\"\n\
+                 status_file = \"/s/status.json\"\nbin = \"/nix/store/x/bin/daedalus-session-host\"\n"
+            )
+        };
+        let ok = toml::from_str::<Config>(&format!(
+            "mode = \"controller\"\n{}",
+            host("box.example.org:7789", "/c/allow.json")
+        ))
+        .unwrap();
+        assert!(ok.validate().is_ok());
+        let s = ok.controller.session_host.as_ref().unwrap();
+        assert_eq!(s.allow_list, PathBuf::from("/c/allow.json"));
+        assert!(check(&host("box.example.org", "/c/a.json")).is_err());
+        assert!(check(&host("box.example.org:7789", "c/a.json")).is_err());
+        assert!(toml::from_str::<Config>(
+            "mode = \"controller\"\n[controller.session_host]\naddress = \"b:1\"\n"
+        )
+        .is_err());
         // A typo fails loudly, in either mode, at parse.
         for mode in ["controller", "node"] {
             let typo = format!("mode = \"{mode}\"\n[controller]\nclaude_remote_contrl = true\n");

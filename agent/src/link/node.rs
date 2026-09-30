@@ -245,6 +245,9 @@ pub fn run_loop_at(
     let mut dns_found: Option<((String, String), Instant)> = None;
     let mut backoff = BACKOFF_MIN;
     let mut last_keys = u64::MAX;
+    // The pin the loop last ran under, to tell a pairing with another box
+    // (the santree grant goes) from a rotation (it stays).
+    let mut last_pin: Option<Option<String>> = None;
     shared.set_link(|l| l.fingerprint = id.fingerprint());
     loop {
         if stop.is_stopped() {
@@ -256,6 +259,10 @@ pub fn run_loop_at(
             last_keys = keys_at;
             dns_found = None;
             backoff = BACKOFF_MIN;
+            if last_pin.as_ref().is_some_and(|p| *p != keys.pin) {
+                drop_santree(&shared);
+            }
+            last_pin = Some(keys.pin.clone());
         }
         if !keys.paired() {
             // Unpaired: no address is resolved and nothing is dialled
@@ -337,6 +344,8 @@ pub fn run_loop_at(
                     "link: re-pinned to the controller's new key (a signed rotation); connecting under it"
                 );
                 // config.toml was rewritten; the keys held follow it.
+                // The same box under its new key: the santree grant stays.
+                last_pin = Some(Some(fp.clone()));
                 shared.set_link_keys(super::LinkKeys {
                     pin: Some(fp.clone()),
                     address: keys.address.clone(),
@@ -401,6 +410,7 @@ pub fn run_loop_at(
             }
             Ended::Revoked => {
                 tracing::warn!("link: the box revoked this machine");
+                drop_santree(&shared);
                 shared.set_link(|l| {
                     l.connected = false;
                     l.since = None;
@@ -1008,6 +1018,22 @@ fn converse(
     }
 }
 
+/// Withdraw the box's santree grant from the policy held and kept: a machine
+/// the box revoked, or one paired with another box, must not reach the
+/// session host it was told of (santree.rs refuses at once, rather than
+/// dialling a host that will turn it away — or the other box's). The rest
+/// of the policy stands as it was.
+pub fn drop_santree(shared: &Shared) {
+    let mut p = shared.policy();
+    if !p.santree && p.session_host.is_none() {
+        return;
+    }
+    p.santree = false;
+    p.session_host = None;
+    tracing::info!("santree: the box's grant withdrawn from the kept policy");
+    apply_policy(shared, p);
+}
+
 /// The box's decision: into the shared state, and — when it moved — kept on
 /// disk, so the next start begins from it (config.rs `last_policy`).
 fn apply_policy(shared: &Shared, p: Policy) {
@@ -1070,5 +1096,36 @@ mod tests {
         let c = serde_json::json!({"uptime_secs": 9, "awake_hold": false, "tray": {"reporting": true, "last_report": "t2"}});
         assert_eq!(status_digest(&a), status_digest(&b));
         assert_ne!(status_digest(&b), status_digest(&c));
+    }
+
+    #[test]
+    fn a_revoked_or_re_paired_machine_drops_the_santree_grant_alone() {
+        use crate::link::wire::SessionHost;
+        let granted = Policy {
+            awake_hold: false,
+            santree: true,
+            session_host: Some(SessionHost {
+                address: "box.example.org:7789".into(),
+                public_key: "ab".repeat(32),
+            }),
+            ..Policy::default()
+        };
+        let shared = Shared::new(
+            crate::state::State::default(),
+            crate::facts::Facts::default(),
+            Instant::now(),
+            granted.clone(),
+            crate::role::Role::of(crate::config::Mode::Node),
+        );
+        drop_santree(&shared);
+        assert_eq!(
+            shared.policy(),
+            Policy {
+                santree: false,
+                session_host: None,
+                ..granted
+            },
+            "the rest of the policy stands"
+        );
     }
 }

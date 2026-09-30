@@ -251,7 +251,7 @@ dependencies = [
 
 [[package]]
 name = "daedalus-agent"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "anyhow",
  "chacha20poly1305",
@@ -1101,6 +1101,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "santree-remote-client"
+version = "0.1.17-beta.8"
+source = "git+https://github.com/santree-ai/santree?rev=c9766c4539973e7959287d9fc65dff01c585c575#c9766c4539973e7959287d9fc65dff01c585c575"
+dependencies = [
+ "log",
+ "santree-remote-proto",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "santree-remote-proto"
 version = "0.1.17-beta.8"
 source = "git+https://github.com/santree-ai/santree?rev=c9766c4539973e7959287d9fc65dff01c585c575#c9766c4539973e7959287d9fc65dff01c585c575"
@@ -1244,6 +1257,7 @@ version = "0.0.0"
 dependencies = [
  "daedalus-agent",
  "daedalus-session-host",
+ "santree-remote-client",
  "serde_json",
  "tempfile",
  "tokio",

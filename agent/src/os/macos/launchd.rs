@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::config::{self, Config};
 use crate::paths;
@@ -140,6 +141,15 @@ pub fn install(cfg: &Config) -> Result<()> {
     let path = config::write_for_install(cfg)?;
     converge_permissions();
     println!("config at {}", path.display());
+    match record_installer() {
+        Ok(Some(who)) => println!("santree's socket serves {who} (and root)"),
+        Ok(None) => println!(
+            "no SUDO_USER: santree's socket serves the user recorded before, or root alone"
+        ),
+        Err(e) => println!(
+            "the installing user was not recorded ({e:#}); santree's socket serves root alone"
+        ),
+    }
 
     // The daemon. bootout first so a re-install lands on the new binary.
     let _ = launchctl(&["bootout", &format!("system/{DAEMON_LABEL}")]);
@@ -215,6 +225,7 @@ pub fn uninstall() -> Result<()> {
             std::fs::remove_file(&p).with_context(|| format!("removing {}", p.display()))?;
         }
     }
+    let _ = std::fs::remove_file(installer_record());
     println!("service and menu bar app removed");
     Ok(())
 }
@@ -343,5 +354,82 @@ pub fn kickstart_tray() {
     match launchctl_timeout(&["bootstrap", &domain, &tray_plist().to_string_lossy()], 10) {
         Ok(_) => tracing::info!(uid, "menu bar app loaded into the console session"),
         Err(e) => tracing::warn!(uid, error = %e, "menu bar app not loaded"),
+    }
+}
+
+/// Who installed the agent: the user `sudo` ran `install` for, as Linux
+/// records its session user (`session.json`). santree's socket serves that
+/// user and root, and nobody else (`super::santree_allowed`).
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Installer {
+    user: String,
+    uid: u32,
+}
+
+fn installer_record() -> PathBuf {
+    paths::data_dir().join("installer.json")
+}
+
+/// Record `SUDO_USER` (`curl … | sudo sh` passes it to `install`) with its
+/// uid; returns who, or None without one — a reinstall from root's own
+/// shell keeps the record there is.
+fn record_installer() -> Result<Option<String>> {
+    let Some(user) = std::env::var("SUDO_USER")
+        .ok()
+        .filter(|u| !u.is_empty() && u != "root")
+    else {
+        return Ok(None);
+    };
+    let out = Command::new("/usr/bin/id")
+        .args(["-u", &user])
+        .output()
+        .context("running id")?;
+    let uid: u32 = String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse()
+        .ok()
+        .filter(|_| out.status.success())
+        .with_context(|| format!("no uid for {user}"))?;
+    let text = serde_json::to_string_pretty(&Installer {
+        user: user.clone(),
+        uid,
+    })?;
+    crate::util::write_atomic(
+        &installer_record(),
+        text.as_bytes(),
+        crate::util::Access::Mode(0o644),
+    )
+    .context("writing installer.json")?;
+    Ok(Some(format!("{user} (uid {uid})")))
+}
+
+/// The uid `install` recorded; None without a record, or with one root (or
+/// this user) did not write.
+pub fn installer_uid() -> Option<u32> {
+    installer_uid_at(&installer_record())
+}
+
+fn installer_uid_at(path: &Path) -> Option<u32> {
+    let text = std::fs::read_to_string(path).ok()?;
+    crate::private::check_owner(path).ok()?;
+    serde_json::from_str::<Installer>(&text).ok().map(|r| r.uid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_installer_is_read_from_its_record() {
+        let dir = std::env::temp_dir().join(format!("daedalus-installer-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("installer.json");
+        assert_eq!(installer_uid_at(&path), None);
+        std::fs::write(&path, r#"{"user":"alice","uid":501}"#).unwrap();
+        assert_eq!(installer_uid_at(&path), Some(501));
+        std::fs::write(&path, "not json").unwrap();
+        assert_eq!(installer_uid_at(&path), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

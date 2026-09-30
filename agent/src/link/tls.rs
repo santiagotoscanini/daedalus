@@ -89,6 +89,13 @@ struct PinnedController {
 }
 
 impl PinnedController {
+    /// Armed once with `pin`, for a config that never changes its pin.
+    fn armed(pin: [u8; 32]) -> Self {
+        let v = Self::default();
+        v.arm(pin);
+        v
+    }
+
     fn arm(&self, pin: [u8; 32]) {
         *self.pin.lock_ok() = Some(pin);
         *self.presented.lock_ok() = None;
@@ -278,6 +285,25 @@ fn client_config(
     Ok(Arc::new(config))
 }
 
+/// A machine's config for a peer other than the controller — the session
+/// host (santree.rs): this identity's certificate, the peer accepted only
+/// by the key `peer_key` (raw), its SHA-256 pinned once for good. Nothing
+/// re-arms it, so any number of connections may share it; a refused key is
+/// told apart by `pin_refused`.
+pub fn pinned_client(id: &Identity, peer_key: &[u8; 32]) -> anyhow::Result<Arc<ClientConfig>> {
+    client_config(id, Arc::new(PinnedController::armed(digest(peer_key))))
+}
+
+/// Whether a handshake failed because the peer's key is not the pinned one:
+/// the pin check's own error, which nothing else raises.
+pub fn pin_refused(e: &io::Error) -> bool {
+    e.get_ref()
+        .and_then(|inner| inner.downcast_ref::<Error>())
+        .is_some_and(|e| {
+            *e == Error::InvalidCertificate(CertificateError::ApplicationVerificationFailure)
+        })
+}
+
 /// The controller's side: its own certificate, every machine asked for one.
 pub fn server_config(id: &Identity) -> anyhow::Result<Arc<ServerConfig>> {
     let (certs, key) = certificate_and_key(id);
@@ -416,7 +442,9 @@ impl Tls {
             if let Err(e) = conn.process_new_packets() {
                 // The alert that says why, then the error.
                 let _ = conn.write_tls(&mut sock);
-                return Err(invalid(e));
+                // Kept as rustls' own, so a caller can tell a pin that failed
+                // (`pin_refused`) from the rest.
+                return Err(io::Error::new(io::ErrorKind::InvalidData, e));
             }
         }
         while conn.wants_write() {
@@ -547,6 +575,17 @@ impl Tls {
                 None => Recv::Idle,
             });
         }
+    }
+
+    /// The connection and its socket, for a caller that drives them itself
+    /// (santree.rs's pipe), with no timeout left on the socket: the ones
+    /// the handshake and `recv` use are this type's own, and the new owner
+    /// sets its own. Nothing has been read past the handshake.
+    pub fn into_parts(self) -> io::Result<(rustls::Connection, TcpStream)> {
+        debug_assert!(self.lines.rest().is_empty(), "bytes read and never taken");
+        self.sock.set_read_timeout(None)?;
+        self.sock.set_write_timeout(None)?;
+        Ok((self.conn, self.sock))
     }
 
     /// Say goodbye and tear the connection down.

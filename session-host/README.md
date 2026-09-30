@@ -259,9 +259,13 @@ and `interop/`. CI (`.github/workflows/session-host.yml`) runs the same.
   writable `/tmp` (socket paths must fit 108 bytes); one waits the full 15 s
   for the first ping.
 - `interop/` is a crate of its own so the agent's dependency tree stays out of
-  this crate's lock and nix build: it runs a host in process and connects with
+  this crate's lock and nix build. It runs a host in process and connects with
   `daedalus_agent::link::tls::Client` — an allowed node key is answered, an
-  unlisted one reads `access_denied`.
+  unlisted one reads `access_denied` — and runs santree's whole path: the
+  agent's controller registry writing this host's allow-list and reading its
+  status file, a node linked to it and told the host's key, the node's
+  santree socket, and santree's own `RemoteClient` through it (hello, a PTY
+  round trip), cut off within seconds once the policy turns santree off.
 
 The nix build takes santree's crates by the git rev in `Cargo.lock`
 (`allowBuiltinFetchGit`): the rev is the pin, so moving santree is a

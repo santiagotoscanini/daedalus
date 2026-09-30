@@ -248,6 +248,47 @@ pub struct Policy {
     /// the port to look for each on. Absent when it names none.
     #[serde(default, skip_serializing_if = "ProvidersPolicy::is_empty")]
     pub providers: ProvidersPolicy,
+    /// santree on this machine may open its projects on the box: the
+    /// agent's santree socket pipes it to the session host (santree.rs).
+    /// The app's toggle; absent means off.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub santree: bool,
+    /// Where the session host is and the key it proves: the controller's to
+    /// fill, and only while `santree` is on (registry.rs `effective`).
+    /// Strings, checked where they are used (`SessionHost::checked`), so a
+    /// kept policy with a bad one still parses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_host: Option<SessionHost>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// The session host as a machine is told it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionHost {
+    /// `host:port`.
+    pub address: String,
+    /// Its raw ed25519 key, 64 hex characters: what the agent pins.
+    pub public_key: String,
+}
+
+impl SessionHost {
+    /// The address and the key, checked: `host:port` of at most 255 bytes,
+    /// and 32 bytes of hex.
+    pub fn checked(&self) -> Result<(&str, [u8; 32]), String> {
+        if self.address.len() > 255 || !crate::config::valid_host_port(&self.address) {
+            return Err(format!(
+                "the session host's address {:?} is not host:port",
+                self.address
+            ));
+        }
+        let key = crate::identity::parse_public_key(&self.public_key)
+            .map_err(|e| format!("the session host's key: {e}"))?;
+        Ok((&self.address, key))
+    }
 }
 
 /// The providers half of the policy, one optional entry per kind.
@@ -281,6 +322,8 @@ impl Default for Policy {
             claude_remote_control: true,
             claude_workdir: None,
             providers: ProvidersPolicy::default(),
+            santree: false,
+            session_host: None,
         }
     }
 }
@@ -525,7 +568,7 @@ mod tests {
                 awake_hold: false,
                 claude_remote_control: true,
                 claude_workdir: Some("C:/p".into()),
-                providers: Default::default(),
+                ..Default::default()
             }),
         };
         assert_eq!(
@@ -727,6 +770,78 @@ mod tests {
                 "{:?}",
                 std::str::from_utf8(bad)
             );
+        }
+    }
+
+    #[test]
+    fn santree_rides_the_policy_and_either_side_may_be_older() {
+        let host = SessionHost {
+            address: "box.example.org:7789".into(),
+            public_key: "ab".repeat(32),
+        };
+        let on = Policy {
+            santree: true,
+            session_host: Some(host.clone()),
+            ..Policy::default()
+        };
+        assert_eq!(
+            event(name::POLICY, &on),
+            format!(
+                r#"{{"e":"policy","p":{{"awake_hold":true,"claude_remote_control":true,"santree":true,"session_host":{{"address":"box.example.org:7789","public_key":"{}"}}}}}}"#,
+                "ab".repeat(32)
+            )
+        );
+        // Off is absent: what a 0.21 controller sent, and a 0.21 kept
+        // policy.json, parse to santree off.
+        assert_eq!(
+            wire(&Policy::default()),
+            r#"{"awake_hold":true,"claude_remote_control":true}"#
+        );
+        let old: Policy =
+            serde_json::from_str(r#"{"awake_hold":false,"claude_remote_control":true}"#).unwrap();
+        assert!(!old.santree && old.session_host.is_none());
+        // A 0.21 agent reads a new controller's policy: its Policy had no
+        // such fields, and the link ignores what it does not know.
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct Policy021 {
+            awake_hold: bool,
+            claude_remote_control: bool,
+        }
+        let read: Policy021 = serde_json::from_str(&wire(&on)).unwrap();
+        assert!(read.awake_hold);
+        // A newer controller's further fields are ignored here too.
+        let mut v = serde_json::to_value(&on).unwrap();
+        v["future"] = json!({"x": 1});
+        v["session_host"]["future"] = json!(1);
+        assert_eq!(serde_json::from_value::<Policy>(v).unwrap(), on);
+
+        // Checked where it is used; a bad one still parses.
+        assert_eq!(
+            host.checked().unwrap(),
+            ("box.example.org:7789", [0xab; 32])
+        );
+        for bad in [
+            SessionHost {
+                address: "box.example.org".into(),
+                ..host.clone()
+            },
+            SessionHost {
+                address: format!("{}:7789", "a".repeat(252)),
+                ..host.clone()
+            },
+            SessionHost {
+                public_key: "ab".into(),
+                ..host.clone()
+            },
+        ] {
+            assert!(bad.checked().is_err(), "{bad:?}");
+            let kept = Policy {
+                santree: true,
+                session_host: Some(bad),
+                ..Policy::default()
+            };
+            assert_eq!(serde_json::from_str::<Policy>(&wire(&kept)).unwrap(), kept);
         }
     }
 }
