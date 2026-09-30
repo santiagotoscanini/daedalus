@@ -116,7 +116,23 @@ pub struct LinkKeys {
 }
 
 impl LinkKeys {
+    /// config.toml's keys as the link follows them. On macOS a Mac joins
+    /// the box by logging in from its menu bar alone (enroll.rs), which
+    /// writes a tunnel config beside the pin: a pin WITHOUT one — an older
+    /// agent's `pair`, a log-out cut short — is a Mac logged out, and the
+    /// link dials nobody. Other systems pair as they always have.
     pub fn of(cfg: &crate::config::Config) -> Self {
+        Self::of_config(
+            cfg,
+            cfg!(target_os = "macos") && !crate::paths::tunnel_path().exists(),
+        )
+    }
+
+    /// The pure half of `of`: config.toml's keys, or none when `logged_out`.
+    pub fn of_config(cfg: &crate::config::Config, logged_out: bool) -> Self {
+        if logged_out {
+            return Self::default();
+        }
         Self {
             pin: cfg.controller_pin.clone(),
             address: cfg.controller_address.clone(),
@@ -155,5 +171,32 @@ pub struct LinkStatus {
     pub rotated: Option<String>,
     /// What went wrong last, when something did — a changed controller key
     /// above all.
+    pub error: Option<String>,
+    /// The machine's own WireGuard tunnel to the box, while a tunnel config
+    /// governs it (tunnel/): the link and santree go through it alone.
+    /// Absent without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub tunnel: Option<TunnelStatus>,
+}
+
+/// The tunnel as the status page and the tray show it (tunnel/ `status`).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct TunnelStatus {
+    /// `host:port` of the box's WireGuard socket, as tunnel.toml names it.
+    pub endpoint: String,
+    /// What that name resolved to last; null until it has.
+    pub resolved: Option<String>,
+    /// This machine inside the tunnel.
+    pub address: String,
+    /// Seconds since the last handshake with the box; null without one.
+    pub last_handshake_secs: Option<u64>,
+    /// Data bytes through the tunnel, each way.
+    pub rx_bytes: u64,
+    pub tx_bytes: u64,
+    /// What went wrong last: a name that does not resolve, a network that
+    /// refuses to send, no handshake for long, a tunnel config that could
+    /// not be brought up.
     pub error: Option<String>,
 }

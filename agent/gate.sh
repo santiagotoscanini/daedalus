@@ -20,6 +20,15 @@
 # The Linux tray links GTK, so the container gets GTK's and AppIndicator's
 # development packages (cached in /tmp/agent-apt between runs), and
 # musl-tools for the static build.
+#
+# The macOS check builds C: the WireGuard tunnel's boringtun uses ring,
+# whose build compiles C and assembly for the target, and Debian has no
+# compiler for Apple's. zig does (`zig cc -target aarch64-macos`, with the
+# libc headers it ships): downloaded once into the cargo cache, pinned by
+# its SHA-256, and handed to ring's build through a two-line wrapper that
+# drops the flags cc-rs adds for Apple's clang (`-arch`,
+# `-mmacosx-version-min`). Windows builds no C crypto at all: `check`
+# fails when ring or aws-lc is in the Windows tree.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 what="${1:-all}"
@@ -52,6 +61,25 @@ podman run --rm -v "$here":/w -w /w \
       fi
     fi
     if [ "$what" = check ] || [ "$what" = all ]; then
+      # zig: the C compiler for ring on the macOS target (see the header).
+      zig_version=0.14.1
+      zig_sha256=24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c
+      zig_dir="$CARGO_HOME/zig-$zig_version"
+      if [ ! -x "$zig_dir/zig" ]; then
+        curl -fsSL -o /tmp/zig.tar.xz "https://ziglang.org/download/$zig_version/zig-x86_64-linux-$zig_version.tar.xz" \
+          || { echo "downloading zig failed"; exit 1; }
+        echo "$zig_sha256  /tmp/zig.tar.xz" | sha256sum -c --quiet \
+          || { echo "zig $zig_version does not match its pinned SHA-256"; exit 1; }
+        mkdir -p "$zig_dir" && tar -xJf /tmp/zig.tar.xz -C "$zig_dir" --strip-components=1
+      fi
+      export ZIG_GLOBAL_CACHE_DIR="$CARGO_HOME/zig-cache"
+      printf "%s\n" "#!/bin/bash" "out=(); skip=0" \
+        "for a in \"\$@\"; do if [ \$skip = 1 ]; then skip=0; continue; fi" \
+        "  case \"\$a\" in -arch) skip=1;; -mmacosx-version-min=*|--target=*) ;; *) out+=(\"\$a\");; esac; done" \
+        "exec $zig_dir/zig cc -target aarch64-macos \"\${out[@]}\"" > /usr/local/bin/zcc-aarch64-macos
+      printf "%s\n" "#!/bin/sh" "exec $zig_dir/zig ar \"\$@\"" > /usr/local/bin/zar
+      chmod 755 /usr/local/bin/zcc-aarch64-macos /usr/local/bin/zar
+      export CC_aarch64_apple_darwin=/usr/local/bin/zcc-aarch64-macos AR_aarch64_apple_darwin=/usr/local/bin/zar
       for t in "" "--no-default-features" "--target x86_64-pc-windows-gnu" "--target aarch64-apple-darwin"; do
         echo "--- clippy $t"
         if ! cargo clippy $t --all-targets -- -D warnings > /tmp/clippy.log 2>&1; then
@@ -59,6 +87,14 @@ podman run --rm -v "$here":/w -w /w \
           grep -E "^(warning|error)" -A12 /tmp/clippy.log | grep -v "resource not embedded" | head -80
         fi
       done
+      echo "--- no C crypto on Windows"
+      if cargo tree --target x86_64-pc-windows-gnu -e normal,build --prefix none > /tmp/tree.log 2>&1 \
+          && ! grep -Eq "^(ring|aws-lc-rs|aws-lc-sys) " /tmp/tree.log; then
+        echo "none: no ring, no aws-lc"
+      else
+        failed=1
+        grep -E "^(ring|aws-lc-rs|aws-lc-sys) |error" /tmp/tree.log | sort -u | head -5
+      fi
     fi
     if [ "$what" = test ] || [ "$what" = gen ] || [ "$what" = all ]; then
       if ! cargo test > /tmp/test.log 2>&1; then failed=1; fi

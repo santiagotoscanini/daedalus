@@ -44,6 +44,8 @@ pub mod event {
     pub const NODES_PENDING: &str = "nodes.pending";
     /// A root verb's unit wrote a line (`RootProgress`).
     pub const ROOT_PROGRESS: &str = "root.progress";
+    /// An approved machine logged out and asks to be forgotten (`NodeLeft`).
+    pub const NODES_LEFT: &str = "nodes.left";
 }
 
 // ── the methods ───────────────────────────────────────────────────────────
@@ -453,6 +455,15 @@ pub struct NodeChanged {
     pub connected: bool,
 }
 
+/// `nodes.left`'s payload: an approved machine logged out (enroll.rs) and
+/// asks the app to forget it — its tunnel's client too. The controller
+/// forgets nothing itself: the app's next set does.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct NodeLeft {
+    pub id: String,
+}
+
 /// `nodes.pending`'s payload: an unknown key connected and waits.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -651,6 +662,75 @@ pub struct ClaudeChanged {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TelemetryUpdated {
     pub sampled_at: String,
+}
+
+// ── logging in (enroll.rs): the agent and the app, over HTTPS ─────────────
+
+/// What a machine's service sends to redeem its log-in: `POST
+/// <app>/api/agent/enroll` with this JSON, the one route past the app's
+/// forward-auth gate that a machine calls. `code` is what the app handed
+/// the browser for the machine's loopback, once; `code_verifier` the PKCE
+/// verifier (RFC 7636, S256) whose challenge the machine put in the page it
+/// opened — only the service that began the log-in holds it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EnrollRedeem {
+    pub code: String,
+    pub code_verifier: String,
+}
+
+/// The app's answer to a redeem: everything the machine needs to link
+/// through its own tunnel. Read leniently: a newer app may say more.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct EnrollRedeemed {
+    /// The node id the app approved: this machine's, or the log-in stops.
+    pub node: String,
+    pub controller: EnrollController,
+    pub wireguard: WireguardConfig,
+}
+
+/// The controller as a logged-in machine trusts and dials it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EnrollController {
+    /// Its key's fingerprint (`ControllerInfo::fingerprint`): the pin.
+    pub pin: String,
+    /// Its link inside the tunnel: the box's LAN address and the link's
+    /// port, `a.b.c.d:port` — the address must be the tunnel's AllowedIPs.
+    pub address: String,
+}
+
+/// A wg-easy client config, as wg-quick names its fields: what the app
+/// reads back from wg-easy for the machine (`[Interface]` PrivateKey and
+/// Address, `[Peer]` PublicKey, PresharedKey, Endpoint and AllowedIPs), and
+/// what the machine keeps in `tunnel.toml` (tunnel/). Its keys are wiped
+/// from memory when it is dropped, and it is never printed.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireguardConfig {
+    pub private_key: String,
+    /// This machine inside the tunnel, `a.b.c.d` — wg-easy writes a prefix
+    /// (`/24`), which is ignored.
+    pub address: String,
+    pub server_public_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub preshared_key: Option<String>,
+    /// `host:port`.
+    pub endpoint: String,
+    /// Exactly one: the box's LAN address, `/32`.
+    pub allowed_ips: Vec<String>,
+}
+
+impl Drop for WireguardConfig {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.private_key.zeroize();
+        if let Some(k) = self.preshared_key.as_mut() {
+            k.zeroize();
+        }
+    }
 }
 
 #[cfg(test)]

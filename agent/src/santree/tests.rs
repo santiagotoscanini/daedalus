@@ -5,7 +5,7 @@
 //! crate's (session-host/interop).
 
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -126,7 +126,7 @@ fn conn_of(s: &UnixStream, write_timeout: Duration) -> Conn {
 
 /// A pipe to the host at `addr`: santree's end, and the pipe's thread.
 fn piped(addr: SocketAddr, limits: Limits) -> (UnixStream, std::thread::JoinHandle<End>) {
-    let tls = dial(&addr.to_string(), config(), DIAL).unwrap();
+    let tls = dial(&Dialer::Direct, &addr.to_string(), config(), DIAL).unwrap();
     let (santree, agent) = UnixStream::pair().unwrap();
     let conn = conn_of(&agent, limits.write_timeout);
     drop(agent);
@@ -258,7 +258,7 @@ fn the_first_line_is_the_agents_envelope() {
 fn a_host_with_another_key_is_host_key_changed_and_a_closed_port_unavailable() {
     let (addr, _) = echo_host();
     let other = tls::pinned_client(&node_id(), &[7; 32]).unwrap();
-    let e = dial(&addr.to_string(), other, DIAL)
+    let e = dial(&Dialer::Direct, &addr.to_string(), other, DIAL)
         .map(|_| ())
         .unwrap_err();
     assert_eq!(e.code, code::HOST_KEY_CHANGED, "{}", e.msg);
@@ -268,7 +268,7 @@ fn a_host_with_another_key_is_host_key_changed_and_a_closed_port_unavailable() {
         .local_addr()
         .unwrap();
     let t = Instant::now();
-    let e = dial(&closed.to_string(), config(), DIAL)
+    let e = dial(&Dialer::Direct, &closed.to_string(), config(), DIAL)
         .map(|_| ())
         .unwrap_err();
     assert_eq!(e.code, code::UNAVAILABLE);

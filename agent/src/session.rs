@@ -82,6 +82,8 @@ pub struct LinkPage {
     pub fingerprint: String,
     pub controller_fingerprint: Option<String>,
     pub error: Option<String>,
+    /// The machine's own tunnel, while a log-in governs it.
+    pub tunnel: Option<crate::link::TunnelStatus>,
 }
 
 /// What one `tick` did.

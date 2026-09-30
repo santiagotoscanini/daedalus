@@ -359,7 +359,7 @@ pub fn kickstart_tray() {
 
 /// Who installed the agent: the user `sudo` ran `install` for, as Linux
 /// records its session user (`session.json`). santree's socket serves that
-/// user and root, and nobody else (`super::santree_allowed`).
+/// user and root, and nobody else (`super::operator_allowed`).
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Installer {
     user: String,

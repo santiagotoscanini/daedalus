@@ -20,6 +20,8 @@
 //! node → {"id":9,"ok":{"accepted":true}}
 //! ctl  ← {"id":10,"m":"rotate","p":{"new_public_key":"<64 hex>","signature":"<128 hex>"}}
 //! node → {"id":10,"ok":{"accepted":true}}      (re-pinned; it reconnects under the new key)
+//! node → {"id":2,"m":"leave","p":{}}              (logging out; enroll.rs)
+//! ctl  ← {"id":2,"ok":{}}                        (the app hears nodes.left; the node closes)
 //! both → {"e":"hb"}
 //! ```
 //!
@@ -72,6 +74,9 @@ pub mod name {
     pub const ROTATE: &str = "rotate";
     /// controller → node: the box's policy for it.
     pub const POLICY: &str = "policy";
+    /// node → controller: this machine logs out (enroll.rs) and asks to be
+    /// forgotten; acknowledged, then the app hears `nodes.left`.
+    pub const LEAVE: &str = "leave";
 }
 
 /// Where a machine stands with the box: what the app decided, or pending

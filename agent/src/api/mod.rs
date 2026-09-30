@@ -117,8 +117,10 @@
 //! 30 s); `telemetry.updated` with every sample; `nodes.changed` `{id,
 //! state, connected}` when a machine connects, leaves or changes standing;
 //! `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
-//! connects and waits for approval; `root.progress` `{run, verb, line}` for
-//! each line a running root verb's unit writes.
+//! connects and waits for approval; `nodes.left` `{id}` when an approved
+//! machine logs out (the link's `leave`: the app forgets it and deletes its
+//! wg-easy client); `root.progress` `{run, verb, line}` for each line a
+//! running root verb's unit writes.
 
 pub mod conn;
 pub mod wire;

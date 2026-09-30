@@ -21,6 +21,11 @@ use crate::rpc::{code, ApiError, Response};
 
 use super::registry::{busy, ip_bucket, Admission, Out, Registry};
 
+/// Why a connection the registry closed ended.
+const CLOSED_BY_CONTROLLER: &str = "closed by the controller";
+/// How long such a connection waits for the machine to close its side.
+const CLOSE_LINGER: Duration = Duration::from_secs(1);
+
 /// The listener: accepting until dropped.
 pub struct Listener {
     stop: Arc<AtomicBool>,
@@ -259,7 +264,13 @@ fn serve_connection(
     let why = converse(
         &mut tls, registry, &id, conn_id, &rx, queued, keys, &served, stop,
     );
-    tls.close();
+    // Cut by the controller (a revocation, a key decided for another): the
+    // machine must read why before the connection goes (`close_gracefully`).
+    if why == CLOSED_BY_CONTROLLER {
+        tls.close_gracefully(CLOSE_LINGER);
+    } else {
+        tls.close();
+    }
     registry.detach(&id, conn_id);
     tracing::info!(%peer, node = %id, why, "link: machine left");
 }
@@ -309,7 +320,7 @@ fn converse(
                     }
                     said = Instant::now();
                 }
-                Ok(Out::Close) => return "closed by the controller",
+                Ok(Out::Close) => return CLOSED_BY_CONTROLLER,
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => return "replaced",
             }
@@ -365,6 +376,21 @@ fn converse(
                             }
                         }
                         registry.ack(id, conn_id, req, result.map(|_| ()).map_err(|e| e.msg));
+                    }
+                    Ok(Incoming::Request { id: rid, m, .. })
+                        if m == name::LEAVE && registry.is_approved(id) =>
+                    {
+                        // Heard and acknowledged; the machine closes once it
+                        // has the answer.
+                        registry.left(id);
+                        let ok = Response::ok(rid, &serde_json::json!({}));
+                        if tls
+                            .send(&serde_json::to_string(&ok).unwrap_or_default())
+                            .is_err()
+                        {
+                            return "a write failed";
+                        }
+                        said = Instant::now();
                     }
                     Ok(Incoming::Request { id: rid, m, .. }) => {
                         registry.record(id, conn_id, name::HB, Value::Null);

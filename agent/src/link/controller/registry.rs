@@ -13,8 +13,8 @@ use serde_json::Value;
 
 use crate::api::wire::{
     event, ClaudeSessionSent, CommandOk, DesiredState, NodeChanged, NodeClaude, NodeClaudeRoster,
-    NodeDetail, NodePending, NodeProviders, NodeSummary, NodeTelemetry, ProviderModelSent,
-    SetDesiredOk,
+    NodeDetail, NodeLeft, NodePending, NodeProviders, NodeSummary, NodeTelemetry,
+    ProviderModelSent, SetDesiredOk,
 };
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of, Identity};
@@ -641,6 +641,23 @@ impl Registry {
     /// Whether machine `id` is pending (for the connection's TTL).
     pub(super) fn is_pending(&self, id: &str) -> bool {
         self.lock().state_of(id) == NodeState::Pending
+    }
+
+    /// Whether machine `id` is approved (a `leave` is heard from no other).
+    pub(super) fn is_approved(&self, id: &str) -> bool {
+        self.lock().state_of(id) == NodeState::Approved
+    }
+
+    /// An approved machine logged out (enroll.rs, the link's `leave`): the
+    /// app hears `nodes.left`, deletes its tunnel's client and forgets it;
+    /// its next set is what removes the machine here.
+    pub(super) fn left(&self, id: &str) {
+        tracing::info!(
+            node = id,
+            "link: the machine logged out and asks to be forgotten"
+        );
+        self.events
+            .publish(event::NODES_LEFT, &NodeLeft { id: id.to_string() });
     }
     /// A line from connection `conn_id` of machine `id`: it is alive, and
     /// what it pushed is kept — if it is approved.

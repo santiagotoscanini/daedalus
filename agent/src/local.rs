@@ -41,6 +41,9 @@
 //! | `claude.update`  | —                | a sentence; refused where nix pins Claude      |
 //! | `update.check`   | —                | a sentence; the updater looks now              |
 //! | `link.reload`    | —                | a sentence; the link reads config.toml again   |
+//! | `enroll.begin`   | `{app_url}`      | a log-in begun: key, fingerprint, challenge    |
+//! | `enroll.finish`  | `{code}`         | a sentence; redeemed, tunnel up (root alone)   |
+//! | `enroll.leave`   | —                | a sentence; logged out                         |
 //!
 //! The report and the roster are the session's to post; any peer the gate
 //! lets through may, since each of those is a user the machine runs Claude
@@ -51,7 +54,9 @@
 //! root or SYSTEM can write, and changes nothing unless the keys did). A
 //! pairing method here would let any user the socket serves hand a fresh
 //! machine, and with it the service's privileges, to a controller of their
-//! own.
+//! own. A log-in's last step does name it (`enroll.finish`, macOS and Linux,
+//! enroll.rs), which is why it is root's alone: the tray runs it behind the
+//! administrator prompt.
 
 use std::io::Write;
 use std::path::Path;
@@ -70,8 +75,9 @@ use crate::util::Rebinding;
 
 /// The longest line either way.
 pub const MAX_LINE: usize = crate::door::MAX_LINE;
-/// The whole exchange, from connect to the answer.
-pub const DEADLINE: Duration = Duration::from_secs(5);
+/// The whole exchange, from connect to the answer: room for the slowest
+/// method, a log-in's redeem at the app (enroll.rs `REDEEM_TIMEOUT`).
+pub const DEADLINE: Duration = Duration::from_secs(15);
 /// A client's whole exchange: short, since the tray asks from its UI
 /// thread.
 pub const CLIENT_DEADLINE: Duration = Duration::from_secs(2);
@@ -130,13 +136,21 @@ fn value<T: Serialize>(v: &T) -> Result<Value, ApiError> {
     serde_json::to_value(v).map_err(|e| ApiError::new(code::INTERNAL, e.to_string()))
 }
 
-/// One method for the service's shared state (module doc's table).
-fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, ApiError> {
-    let none = |p: &Value| match p {
+/// A method that takes no parameters was given none.
+fn no_params(m: &str, p: &Value) -> Result<(), ApiError> {
+    match p {
         Value::Null => Ok(()),
         Value::Object(o) if o.is_empty() => Ok(()),
         _ => Err(bad(format!("`{m}` takes no parameters"))),
-    };
+    }
+}
+
+/// One method for the service's shared state (module doc's table), asked
+/// by `peer` (as the door checked it).
+fn handle(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Value, ApiError> {
+    #[cfg(windows)]
+    let _ = peer; // no log-in on Windows
+    let none = |p: &Value| no_params(m, p);
     match m {
         "status" => {
             none(&p)?;
@@ -182,6 +196,8 @@ fn handle(shared: &Shared, m: &str, p: Value) -> Result<Value, ApiError> {
             none(&p)?;
             link_reload(shared, &crate::paths::config_path())
         }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        "enroll.begin" | "enroll.finish" | "enroll.leave" => enroll(shared, peer, m, p),
         _ => Err(ApiError::new(
             code::UNKNOWN_METHOD,
             format!("no method `{m}`"),
@@ -207,10 +223,64 @@ fn link_reload(shared: &Shared, path: &Path) -> Result<Value, ApiError> {
     }
 }
 
-/// The answer to one request line.
-fn answer(shared: &Shared, line: &[u8]) -> Response {
+/// A log-in's three methods (enroll.rs): `begin` and `leave` for the
+/// operator, `finish` for root alone — the tray runs it behind the
+/// administrator prompt.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn enroll(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Value, ApiError> {
+    let who = || {
+        peer.map(ToString::to_string)
+            .unwrap_or_else(|| "a peer whose credentials could not be read".into())
+    };
+    if m == "enroll.finish" {
+        if !crate::enroll::may_finish(peer) {
+            return Err(ApiError::new(
+                code::FORBIDDEN,
+                format!(
+                    "{} may not finish a log-in: it names the box this machine trusts, so it \
+                     runs as root (the menu bar asks for an administrator's password)",
+                    who()
+                ),
+            ));
+        }
+        let p: crate::enroll::FinishParams =
+            serde_json::from_value(p).map_err(|e| bad(format!("enroll.finish: {e}")))?;
+        return crate::enroll::finish(
+            shared,
+            &crate::enroll::Files::here(),
+            p,
+            crate::enroll::redeem_https,
+        )
+        .map(Value::from);
+    }
+    if !crate::enroll::may_enroll(peer) {
+        return Err(ApiError::new(
+            code::FORBIDDEN,
+            format!(
+                "{} may not log this machine in or out (root and the user who installed the \
+                 agent may)",
+                who()
+            ),
+        ));
+    }
+    if m == "enroll.begin" {
+        let p: crate::enroll::BeginParams =
+            serde_json::from_value(p).map_err(|e| bad(format!("enroll.begin: {e}")))?;
+        value(&crate::enroll::begin(
+            shared,
+            &crate::enroll::Files::here(),
+            p,
+        )?)
+    } else {
+        no_params(m, &p)?;
+        crate::enroll::leave(shared, &crate::enroll::Files::here()).map(Value::from)
+    }
+}
+
+/// The answer to one request line from `peer`.
+fn answer(shared: &Shared, peer: Option<&Peer>, line: &[u8]) -> Response {
     match Request::parse(line) {
-        Ok(r) => match handle(shared, &r.m, r.p) {
+        Ok(r) => match handle(shared, peer, &r.m, r.p) {
             Ok(v) => Response::ok(r.id, &v),
             Err(e) => Response::err(Some(r.id), e),
         },
@@ -225,7 +295,7 @@ fn answer(shared: &Shared, line: &[u8]) -> Response {
 fn serve_one(shared: &Shared, c: Conn) {
     let mut w = c.writer;
     let response = match LineReader::new(c.reader, MAX_LINE).next_line() {
-        Ok(Some(line)) => answer(shared, &line),
+        Ok(Some(line)) => answer(shared, c.peer.as_ref(), &line),
         Err(e) if crate::jsonl::is_too_long(&e) => Response::err(
             None,
             ApiError::new(
@@ -297,6 +367,16 @@ pub fn call(m: &str, p: Value) -> Result<Value, String> {
     call_at(&crate::paths::local_socket(), m, p)
 }
 
+/// A log-in's or log-out's whole exchange (enroll.rs): a redeem at the app,
+/// or the controller's goodbye, inside the service's own `DEADLINE`.
+pub const ENROLL_DEADLINE: Duration = DEADLINE;
+
+/// `call` for a method that takes longer than `CLIENT_DEADLINE`, from a
+/// thread that may wait (never the tray's UI thread).
+pub fn call_within(m: &str, p: Value, deadline: Duration) -> Result<Value, String> {
+    call_at_within(&crate::paths::local_socket(), m, p, deadline)
+}
+
 /// The request line a client sends: one request, id 1.
 fn request_line(m: &str, p: Value) -> String {
     #[derive(Serialize)]
@@ -310,7 +390,11 @@ fn request_line(m: &str, p: Value) -> String {
 
 /// The same, at `path`.
 pub fn call_at(path: &Path, m: &str, p: Value) -> Result<Value, String> {
-    let c = crate::os::connect_local(path, CLIENT_DEADLINE)
+    call_at_within(path, m, p, CLIENT_DEADLINE)
+}
+
+fn call_at_within(path: &Path, m: &str, p: Value, deadline: Duration) -> Result<Value, String> {
+    let c = crate::os::connect_local(path, deadline)
         .map_err(|e| format!("the agent did not answer at {} ({e})", path.display()))?;
     let mut w = c.writer;
     // A refusal is written before the request is read: a failed write is
@@ -360,7 +444,7 @@ mod tests {
             "{\"id\":1,\"m\":\"status\",\"p\":null}\n"
         );
         let s = shared(Mode::Node);
-        let a = |line: &str| line_of(&answer(&s, line.as_bytes()));
+        let a = |line: &str| line_of(&answer(&s, None, line.as_bytes()));
         assert_eq!(
             a(r#"{"id":1,"m":"update.check"}"#),
             "{\"id\":1,\"ok\":\"checking\"}\n"
@@ -416,7 +500,7 @@ mod tests {
         let s = shared(Mode::Node);
         // Pairing is an administrator's (`pair`, elevated): the socket has
         // no method for it, whoever asks and whatever the machine's state.
-        let e = handle(&s, "link.pair", serde_json::json!({"pin": key})).unwrap_err();
+        let e = handle(&s, None, "link.pair", serde_json::json!({"pin": key})).unwrap_err();
         assert_eq!(e.code, code::UNKNOWN_METHOD);
         assert_eq!(s.link_keys().0.pin, None);
         assert!(!path.exists());
@@ -444,42 +528,45 @@ mod tests {
                 .code,
             code::UNSUPPORTED
         );
-        assert!(handle(&s, "link.reload", serde_json::json!({"x": 1})).is_err());
+        assert!(handle(&s, None, "link.reload", serde_json::json!({"x": 1})).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn the_methods_reach_the_shared_state() {
         let s = shared(Mode::Node);
-        assert_eq!(handle(&s, "claude", Value::Null).unwrap(), Value::Null);
+        assert_eq!(
+            handle(&s, None, "claude", Value::Null).unwrap(),
+            Value::Null
+        );
         let report = serde_json::to_value(Report {
             state: "running".into(),
             ..Default::default()
         })
         .unwrap();
         s.request_claude_restart();
-        let answer = handle(&s, "claude.report", report).unwrap();
+        let answer = handle(&s, None, "claude.report", report).unwrap();
         assert_eq!(answer["restart"], true);
         assert_eq!(
-            handle(&s, "claude", Value::Null).unwrap()["state"],
+            handle(&s, None, "claude", Value::Null).unwrap()["state"],
             "running"
         );
         assert_eq!(
-            handle(&s, "status", Value::Null).unwrap()["claude"]["state"],
+            handle(&s, None, "status", Value::Null).unwrap()["claude"]["state"],
             "running"
         );
-        assert!(handle(&s, "claude.update", Value::Null).is_ok());
-        assert!(handle(&s, "update.check", Value::Null).is_ok());
+        assert!(handle(&s, None, "claude.update", Value::Null).is_ok());
+        assert!(handle(&s, None, "update.check", Value::Null).is_ok());
         assert!(s.take_check_request());
-        assert!(handle(&s, "claude.report", serde_json::json!({"state": 3})).is_err());
-        assert!(handle(&s, "status", serde_json::json!({"x": 1})).is_err());
-        assert!(handle(&s, "reboot", Value::Null)
+        assert!(handle(&s, None, "claude.report", serde_json::json!({"state": 3})).is_err());
+        assert!(handle(&s, None, "status", serde_json::json!({"x": 1})).is_err());
+        assert!(handle(&s, None, "reboot", Value::Null)
             .unwrap_err()
             .msg
             .contains("no method"));
         // nix pins Claude on the controller.
         let c = shared(Mode::Controller);
-        assert!(handle(&c, "claude.update", Value::Null)
+        assert!(handle(&c, None, "claude.update", Value::Null)
             .unwrap_err()
             .msg
             .contains("nix"));

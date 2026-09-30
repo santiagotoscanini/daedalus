@@ -35,8 +35,15 @@
 # Environment: DAEDALUS_REPO (owner/name), DAEDALUS_AGENT_VERSION (e.g. 0.5.0
 # instead of the newest).
 #
-# Pairing — which controller key to trust. The machine trusts none it was
-# not told of: installed without --pin it runs unpaired and connects to
+# Logging in (macOS) — a Mac joins the box from its menu bar: "Log in…"
+# asks for the app's address, an admin confirms in the browser,
+# and the Mac gets a WireGuard tunnel of its own to the box (agent/README.md,
+# "Logging in"). No key is typed here, and --pin and --controller are
+# refused on a Mac. Nothing older than 0.23.0 is installed on one: older
+# agents paired instead of logging in.
+#
+# Pairing (Linux) — which controller key to trust. The machine trusts none
+# it was not told of: installed without --pin it runs unpaired and connects to
 # nothing. At the end, with a terminal to ask on (/dev/tty, even under
 # `curl | sh`), the script asks for the key from Settings › Machines and
 # runs `daedalus-agent pair`; Enter, or no terminal, skips it and prints the
@@ -93,7 +100,7 @@ offer_pairing() {
   esac
   echo "pair it with the controller key from Settings › Machines on the box:"
   echo "  sudo daedalus-agent pair --pin <key>"
-  echo "or with \"Pair with the box…\" in the tray or menu bar, where there is one"
+  echo "or with \"Pair with the box…\" in the tray, where there is one"
 }
 
 command -v curl >/dev/null || die "curl is needed"
@@ -103,17 +110,14 @@ api="https://api.github.com/repos/$REPO/releases?per_page=30"
 # The oldest release this script installs: the first whose machines trust
 # only a controller key they were given (a pin, or `pair` as root), never
 # the first that answers, and whose tray pairs only through an elevated
-# `pair`. Nothing older is installed, by name or as the newest.
+# `pair` — and on a Mac the first that logs in from the menu bar (set
+# below). Nothing older is installed, by name or as the newest.
 MIN_VERSION="0.21.0"
 
 # at_least V: V is MIN_VERSION or newer, by the three numbers.
 at_least() {
   [ "$(printf '%s\n%s\n' "$MIN_VERSION" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)" = "$MIN_VERSION" ]
 }
-
-if [ -n "$VERSION" ] && ! at_least "$VERSION"; then
-  die "agent $VERSION predates pairing (it would trust the first controller that answers); $MIN_VERSION or newer only"
-fi
 
 # Every agent-v* release's version from MIN_VERSION on, newest first. GitHub
 # lists newest-first, but the sort is by the three numbers so a patch to an
@@ -189,6 +193,7 @@ check_asset() {
 install_macos() {
   ROOT="/Library/Application Support/daedalus-agent"
   BIN="$ROOT/bin"
+  [ -z "$LINK_ARGS" ] || die "a Mac logs in from its menu bar (\"Log in…\"): --pin and --controller are for Linux"
 
   echo "looking up releases of $REPO"
   if [ -n "$VERSION" ]; then
@@ -231,8 +236,9 @@ install_macos() {
   echo
   echo "installed $tag. Status: daedalus-agent status"
   echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
-  echo "nothing listens on the LAN; the box hears from this machine over its link to the controller"
-  offer_pairing "$BIN/daedalus-agent"
+  echo "nothing listens on the LAN; the box hears from this Mac through its own tunnel, once it logs in"
+  echo
+  echo "Log in from the menu bar: the daedalus mark › \"Log in…\"."
 }
 
 install_linux() {
@@ -314,6 +320,11 @@ esac
 if [ "$(id -u)" != 0 ]; then
   [ "$os" = macos ] && die "run it with sudo: the service and the launchd jobs need root"
   die "run it with sudo: the service and its systemd units need root"
+fi
+# A Mac logs in from its menu bar, which 0.23.0 brought: nothing older there.
+[ "$os" = macos ] && MIN_VERSION="0.23.0"
+if [ -n "$VERSION" ] && ! at_least "$VERSION"; then
+  die "agent $VERSION is older than $MIN_VERSION, the oldest this installer puts on a $os machine"
 fi
 
 if [ "$os" = macos ]; then install_macos; else install_linux; fi

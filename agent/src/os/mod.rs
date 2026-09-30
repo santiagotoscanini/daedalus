@@ -91,9 +91,9 @@ pub use imp::{
 pub use imp::{
     connect_local, local_allowed, local_socket_path, serve_api_socket, serve_local, LocalSocket,
 };
-// santree's socket (santree.rs), where there is one
+// the operator: whom santree's socket (santree.rs) and a log-in (enroll.rs) serve
 #[cfg(unix)]
-pub use imp::{santree_allowed, santree_installer};
+pub use imp::{operator_allowed, operator_uid};
 // Claude Code
 pub use imp::{
     claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES, PROCESS_STATS,
@@ -123,9 +123,13 @@ pub mod svc {
 }
 
 /// The tray's platform side: the loop that drives `tray::Tray`, opening a
-/// URL or folder, asking for the key to pair with, and leaving for a new
-/// binary.
+/// URL or folder, joining the box — pairing (the key asked for, then `pair`
+/// elevated), or on a Mac logging in and out — and leaving for a new binary.
 #[cfg(feature = "tray")]
 pub mod tray {
-    pub use super::imp::tray::{ask_pairing, open, pair_elevated, relaunch_self, run};
+    #[cfg(not(target_os = "macos"))]
+    pub use super::imp::tray::pair_elevated;
+    pub use super::imp::tray::{join, open, relaunch_self, run};
+    #[cfg(target_os = "macos")]
+    pub use super::imp::tray::{log_in_note, log_out};
 }

@@ -67,6 +67,17 @@ pub struct Shared {
     /// The service's stop, nudged when an update check is asked for, so the
     /// updater wakes at once (`request_check`).
     stop: OnceLock<crate::util::Shutdown>,
+    /// How this machine reaches the box (net.rs): direct, or through its
+    /// own tunnel only — set at start from tunnel.toml, moved by a log-in
+    /// or a log-out (enroll.rs).
+    dialer: Mutex<crate::net::Dialer>,
+    /// A log-out waiting for the link to tell the controller
+    /// (`request_leave`): answered once the controller acknowledged.
+    leave: Mutex<Option<std::sync::mpsc::SyncSender<()>>>,
+    /// A log-in begun and not finished: its app and PKCE verifier
+    /// (enroll.rs), held here and nowhere else.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    log_in: Mutex<Option<crate::enroll::Started>>,
 }
 
 struct Live {
@@ -182,6 +193,10 @@ impl Shared {
             session_host: OnceLock::new(),
             power: Mutex::new(None),
             stop: OnceLock::new(),
+            dialer: Mutex::new(crate::net::Dialer::Direct),
+            leave: Mutex::new(None),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            log_in: Mutex::new(None),
             inner: Mutex::new(Live {
                 state,
                 awake_hold: false,
@@ -300,10 +315,66 @@ impl Shared {
         f(self.lock().link.get_or_insert_with(LinkStatus::default));
     }
 
-    /// The link as the page shows it; None on the controller and before the
-    /// link's loop starts.
+    /// The link as the page shows it, the tunnel with it; None on the
+    /// controller and before the link's loop starts.
     pub fn link(&self) -> Option<LinkStatus> {
-        self.lock().link.clone()
+        let tunnel = self.tunnel_status();
+        self.lock().link.clone().map(|l| LinkStatus { tunnel, ..l })
+    }
+
+    /// How this machine reaches the box now (net.rs).
+    pub fn dialer(&self) -> crate::net::Dialer {
+        self.dialer.lock_ok().clone()
+    }
+
+    /// Reach the box another way from now on: a log-in's tunnel, or
+    /// direct again after a log-out. The old tunnel stops when its last
+    /// user lets go of it (enroll.rs stops it at once).
+    pub fn set_dialer(&self, d: crate::net::Dialer) {
+        *self.dialer.lock_ok() = d;
+    }
+
+    /// The tunnel as the page shows it: its own status, or why a tunnel
+    /// config is not up; None without one.
+    pub fn tunnel_status(&self) -> Option<crate::link::TunnelStatus> {
+        match self.dialer() {
+            crate::net::Dialer::Direct => None,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            crate::net::Dialer::Tunnel(t) => Some(t.status()),
+            crate::net::Dialer::Refused(why) => Some(crate::link::TunnelStatus {
+                error: Some(why),
+                ..Default::default()
+            }),
+        }
+    }
+
+    /// Ask the link to tell the controller this machine leaves (a log-out,
+    /// enroll.rs): the answer comes once the controller acknowledged, and
+    /// never when the link is down — the caller waits a bounded time.
+    pub fn request_leave(&self) -> std::sync::mpsc::Receiver<()> {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        *self.leave.lock_ok() = Some(tx);
+        if let Some(s) = self.stop.get() {
+            s.nudge();
+        }
+        rx
+    }
+
+    /// A log-out's request for the link, once (link/node.rs).
+    pub fn take_leave(&self) -> Option<std::sync::mpsc::SyncSender<()>> {
+        self.leave.lock_ok().take()
+    }
+
+    /// Keep a log-in begun (or drop the one kept: None).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn set_log_in(&self, s: Option<crate::enroll::Started>) {
+        *self.log_in.lock_ok() = s;
+    }
+
+    /// The log-in begun, taken: a code is redeemed once.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn take_log_in(&self) -> Option<crate::enroll::Started> {
+        self.log_in.lock_ok().take()
     }
 
     /// The link's keys and their count (`Live::link_keys`).
@@ -642,6 +713,7 @@ impl Shared {
     /// with its block null otherwise; `power_requests` is what the OS
     /// reported, read by the caller outside the lock.
     fn document_with(&self, power_requests: Option<String>, telemetry: bool) -> serde_json::Value {
+        let tunnel = self.tunnel_status();
         let l = self.lock();
         let os_uptime = crate::power::os_uptime_secs();
         let doc = Document {
@@ -677,7 +749,7 @@ impl Shared {
             } else {
                 None
             },
-            controller: l.link.clone(),
+            controller: l.link.clone().map(|c| LinkStatus { tunnel, ..c }),
             state: &l.state,
         };
         serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null)

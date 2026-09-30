@@ -12,7 +12,7 @@
 //! the local socket, 0666 in the service's 0711 `run/`, served on macOS and
 //! Linux only (a named pipe on Windows is later work). The file modes let
 //! anyone reach it and the kernel's peer check is the gate
-//! (`os::santree_allowed`): root, the service's own uid, and the user who
+//! (`os::operator_allowed`): root, the service's own uid, and the user who
 //! installed the agent — `install` records who ran it under `sudo` — and
 //! nobody else. Not the console user, as the local socket serves on macOS:
 //! a connection here is a shell as the operator on the box (NOPASSWD sudo:
@@ -66,7 +66,7 @@
 //! each way, who ended it. Never a byte of what it carried.
 
 use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::net::Shutdown;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Once};
@@ -80,6 +80,7 @@ use crate::door::{Conn, Peer};
 use crate::identity::Identity;
 use crate::link::tls::{self, Tls};
 use crate::link::wire::Policy;
+use crate::net::{Dialer, Sock};
 use crate::rpc::{code, error_line, line_of, ApiError, Body, Response};
 use crate::shared::Shared;
 use crate::util::{LockExt, Rebinding};
@@ -138,34 +139,19 @@ pub fn admit(
     Ok((address.to_string(), key))
 }
 
-/// Connect to the session host at `address` and prove both keys, the whole
-/// of it within `within` (module doc).
-pub fn dial(address: &str, config: Arc<ClientConfig>, within: Duration) -> Result<Tls, ApiError> {
+/// Connect to the session host at `address` the way this machine reaches
+/// the box (`dialer`: TCP, or its tunnel alone) and prove both keys, the
+/// whole of it within `within` (module doc).
+pub fn dial(
+    dialer: &Dialer,
+    address: &str,
+    config: Arc<ClientConfig>,
+    within: Duration,
+) -> Result<Tls, ApiError> {
     let deadline = Deadline::after(within);
-    let addrs: Vec<_> = address
-        .to_socket_addrs()
-        .map_err(|e| unavailable(format!("the session host {address} does not resolve: {e}")))?
-        .collect();
-    let mut why = String::from("no address");
-    let mut sock = None;
-    for a in &addrs {
-        if deadline.passed() {
-            why = "no answer in time".into();
-            break;
-        }
-        match TcpStream::connect_timeout(a, deadline.timeout(within)) {
-            Ok(s) => {
-                sock = Some(s);
-                break;
-            }
-            Err(e) => why = e.to_string(),
-        }
-    }
-    let sock = sock.ok_or_else(|| {
-        unavailable(format!(
-            "the session host at {address} did not answer ({why})"
-        ))
-    })?;
+    let sock = dialer
+        .connect(address, within)
+        .map_err(|e| unavailable(format!("the session host: {e}")))?;
     if deadline.passed() {
         return Err(unavailable(format!(
             "the session host at {address} did not answer in time"
@@ -215,7 +201,12 @@ impl Ctx {
         let (keys, _) = self.shared.link_keys();
         let state = self.shared.link().and_then(|l| l.state);
         let (address, key) = admit(keys.paired(), state.as_deref(), &self.shared.policy())?;
-        let tls = dial(&address, self.config_for(&key)?, DIAL)?;
+        let tls = dial(
+            &self.shared.dialer(),
+            &address,
+            self.config_for(&key)?,
+            DIAL,
+        )?;
         Ok((address, tls))
     }
 }
@@ -291,7 +282,7 @@ fn door_policy(allow: crate::door::Allow) -> crate::door::Policy {
     crate::door::Policy {
         what: "santree",
         allow,
-        refusal: Arc::new(|peer| refusal(peer, crate::os::santree_installer().is_some())),
+        refusal: Arc::new(|peer| refusal(peer, crate::os::operator_uid().is_some())),
         busy: error_line(
             code::BUSY,
             format!("at most {MAX_CONNECTIONS} santree connections at once"),
@@ -355,7 +346,7 @@ impl Door {
         let mut last: Option<String> = None;
         let _socket = Rebinding::start("santree-bind", crate::local::BIND_RETRY, move || {
             let allow: crate::door::Allow =
-                Arc::new(|peer| crate::door::peer_allowed(peer, &crate::os::santree_allowed()));
+                Arc::new(|peer| crate::door::peer_allowed(peer, &crate::os::operator_allowed()));
             match serve_at(&path, Arc::clone(&shared), identity.clone(), allow) {
                 Ok(s) => {
                     tracing::info!(socket = %path.display(), "santree socket answering");
@@ -413,8 +404,8 @@ struct Link {
     tls: Mutex<rustls::Connection>,
     /// The socket's writes: held while records are sealed and sent, and
     /// always taken before `tls`.
-    wire: Mutex<TcpStream>,
-    tcp: TcpStream,
+    wire: Mutex<Sock>,
+    tcp: Sock,
     santree_close: Arc<dyn Fn() + Send + Sync>,
     closed: Once,
     /// Who ended it, first come.
@@ -493,7 +484,7 @@ enum Down {
 /// host → santree, on a thread of its own (module doc).
 fn downstream(
     link: &Link,
-    mut tcp: TcpStream,
+    mut tcp: Sock,
     mut to: Box<dyn Write + Send>,
     end_writes: &(dyn Fn() + Send + Sync),
     silence: Duration,

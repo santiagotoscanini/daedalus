@@ -1768,3 +1768,49 @@ fn santree_machines_are_told_the_session_host_and_the_allow_list_leads() {
     n_off.stop();
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn a_machine_that_logs_out_is_heard_and_a_revoked_one_hears_it_first() {
+    let ctl = controller(fast());
+    let subscribed = ctl.events.subscribe();
+    let (leaver, revoked) = (id(51), id(52));
+    let (s_leaver, s_revoked) = (node_shared(), node_shared());
+    let t = target(&ctl, pin_of(&ctl.id));
+    let n_leaver = spawn_node(t.clone(), leaver.clone(), Arc::clone(&s_leaver), "leaver");
+    let n_revoked = spawn_node(t, revoked.clone(), Arc::clone(&s_revoked), "revoked-first");
+    ctl.registry.set_desired(vec![
+        entry(&leaver, DesiredState::Approved, Default::default()),
+        entry(&revoked, DesiredState::Approved, Default::default()),
+    ]);
+    wait_for("both approved", 5, || {
+        [&leaver, &revoked].iter().all(|n| {
+            summary(&ctl, n).is_some_and(|s| s.connected && s.state == NodeState::Approved)
+        })
+    });
+
+    // Logging out: the machine says so, the controller acknowledges, the
+    // machine closes, and the app hears `nodes.left` — the controller
+    // forgets nothing itself.
+    let told = s_leaver.request_leave();
+    told.recv_timeout(Duration::from_secs(5))
+        .expect("the controller acknowledged the leave");
+    wait_for("nodes.left", 5, || {
+        subscribed
+            .try_iter()
+            .any(|l| l.contains("\"nodes.left\"") && l.contains(&leaver.node_id()))
+    });
+    assert!(matches!(n_leaver.thread.join().unwrap(), Ended::Dropped(_)));
+    assert_eq!(summary(&ctl, &leaver).unwrap().state, NodeState::Approved);
+
+    // Revoked: however busy the machine is pushing, it reads why before
+    // its connection goes (the controller closes gracefully).
+    for _ in 0..5 {
+        s_revoked.set_link(|l| l.error = Some("x".repeat(64 * 1024)));
+    }
+    ctl.registry.set_desired(vec![entry(
+        &revoked,
+        DesiredState::Revoked,
+        Default::default(),
+    )]);
+    assert_eq!(n_revoked.thread.join().unwrap(), Ended::Revoked);
+}

@@ -33,7 +33,7 @@
 //! ever touches the connection.
 
 use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpStream};
+use std::net::Shutdown;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -49,6 +49,7 @@ use super::{cert, crypto, MAX_LINE, TICK};
 use crate::deadline::Deadline;
 use crate::identity::{digest, Identity};
 use crate::jsonl::LineBuf;
+use crate::net::Sock;
 use crate::util::LockExt;
 
 /// The name the machine's client asks for, under which it names the key it
@@ -144,18 +145,19 @@ impl Client {
         &self.fingerprint
     }
 
-    /// Connect over `sock`, accepting the controller only by the key
-    /// `pinned` names, the handshake done within `timeout`.
+    /// Connect over `sock` (TCP, or a stream in the machine's tunnel:
+    /// net.rs), accepting the controller only by the key `pinned` names, the
+    /// handshake done within `timeout`.
     pub fn connect(
         &self,
-        sock: TcpStream,
+        sock: impl Into<Sock>,
         pinned: [u8; 32],
         timeout: Duration,
     ) -> Result<Tls, ConnectError> {
         let _one = self.attempt.lock_ok();
         self.verifier.arm(pinned);
         match Tls::client(
-            sock,
+            sock.into(),
             Arc::clone(&self.config),
             &server_name_for(Some(pinned)),
             timeout,
@@ -371,7 +373,7 @@ pub enum Recv {
 /// One connection (module doc).
 pub struct Tls {
     conn: rustls::Connection,
-    sock: TcpStream,
+    sock: Sock,
     lines: LineBuf,
 }
 
@@ -389,7 +391,7 @@ fn invalid(e: impl std::fmt::Display) -> io::Error {
 impl Tls {
     /// Connect as the machine and finish the handshake within `timeout`.
     pub fn client(
-        sock: TcpStream,
+        sock: Sock,
         config: Arc<ClientConfig>,
         name: &str,
         timeout: Duration,
@@ -401,12 +403,12 @@ impl Tls {
 
     /// Accept as the controller and finish the handshake within `timeout`.
     pub fn server(
-        sock: TcpStream,
+        sock: std::net::TcpStream,
         config: Arc<ServerConfig>,
         timeout: Duration,
     ) -> io::Result<Self> {
         let conn = rustls::ServerConnection::new(config).map_err(invalid)?;
-        Self::handshake(conn.into(), sock, timeout)
+        Self::handshake(conn.into(), Sock::Tcp(sock), timeout)
     }
 
     /// The handshake, all of it within `timeout` from now: every read and
@@ -415,10 +417,10 @@ impl Tls {
     /// (rustls' `complete_io` would loop for as long as bytes arrive).
     fn handshake(
         mut conn: rustls::Connection,
-        mut sock: TcpStream,
+        mut sock: Sock,
         timeout: Duration,
     ) -> io::Result<Self> {
-        sock.set_nodelay(true)?;
+        sock.set_nodelay()?;
         let deadline = Deadline::after(timeout);
         while conn.is_handshaking() {
             if deadline.passed() {
@@ -582,7 +584,7 @@ impl Tls {
     /// the handshake and `recv` use are this type's own, and the new owner
     /// sets its own. Refused when bytes were already read past the
     /// handshake: they would be lost, so the caller ends the connection.
-    pub fn into_parts(self) -> io::Result<(rustls::Connection, TcpStream)> {
+    pub fn into_parts(self) -> io::Result<(rustls::Connection, Sock)> {
         if !self.lines.rest().is_empty() {
             return Err(io::Error::other(
                 "the peer spoke before it was asked to; its bytes would be lost",
@@ -599,12 +601,41 @@ impl Tls {
         let _ = self.flush();
         let _ = self.sock.shutdown(Shutdown::Both);
     }
+
+    /// Say goodbye so the peer reads it: close_notify and this side's end,
+    /// then what the peer still sends read and dropped until it closes too
+    /// or `linger` passes, then torn down. Closing outright with the
+    /// peer's bytes unread resets the connection, and a reset can take the
+    /// last lines with it (a revocation, link/controller/).
+    pub fn close_gracefully(&mut self, linger: Duration) {
+        self.conn.send_close_notify();
+        let _ = self.flush();
+        let _ = self.sock.shutdown(Shutdown::Write);
+        let deadline = Deadline::after(linger);
+        let mut buf = [0u8; 4096];
+        while !deadline.passed() {
+            if self
+                .sock
+                .set_read_timeout(Some(deadline.timeout(TICK)))
+                .is_err()
+            {
+                break;
+            }
+            match self.sock.read(&mut buf) {
+                Ok(0) => break,
+                Ok(_) => {}
+                Err(e) if is_timeout(&e) => {}
+                Err(_) => break,
+            }
+        }
+        let _ = self.sock.shutdown(Shutdown::Both);
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use std::net::TcpListener;
+    use std::net::{TcpListener, TcpStream};
 
     /// A connected client and server over loopback; `pin` is what the
     /// client expects of the server's key.

@@ -138,14 +138,24 @@ struct Ui {
     line_hold: MenuItem,
     line_update: MenuItem,
     line_link: MenuItem,
+    /// The machine's own tunnel (`tunnel_line`): in the menu, under the link's
+    /// line, only while a tunnel config governs the machine.
+    line_tunnel: MenuItem,
+    tunnel_shown: bool,
     line_key_own: MenuItem,
     line_key_controller: MenuItem,
     line_claude: MenuItem,
-    /// The menu, kept to add and take away `pair`.
+    /// The menu, kept to add and take away `join` (and `log_out`).
     menu: Menu,
-    /// "Pair with the box…": in the menu only while the machine is unpaired.
-    pair: MenuItem,
-    pair_shown: bool,
+    /// `JOIN_LABEL`: in the menu only while the machine has not joined the
+    /// box — unpaired, or on a Mac logged out.
+    join: MenuItem,
+    join_shown: bool,
+    /// "Log out": on a Mac, in the menu only while it is logged in.
+    #[cfg(target_os = "macos")]
+    log_out: MenuItem,
+    #[cfg(target_os = "macos")]
+    log_out_shown: bool,
     open_status: MenuItem,
     check_now: MenuItem,
     restart_claude: MenuItem,
@@ -165,10 +175,13 @@ impl Ui {
         let line_hold = MenuItem::new("Awake hold: …", false, None);
         let line_update = MenuItem::new("Updates: …", false, None);
         let line_link = MenuItem::new("Controller: …", false, None);
+        let line_tunnel = MenuItem::new("VPN: …", false, None);
         let line_key_own = MenuItem::new("This machine's key: …", false, None);
         let line_key_controller = MenuItem::new("Controller's key: …", false, None);
         let line_claude = MenuItem::new("Claude: …", false, None);
-        let pair = MenuItem::new(PAIR_LABEL, true, None);
+        let join = MenuItem::new(JOIN_LABEL, true, None);
+        #[cfg(target_os = "macos")]
+        let log_out = MenuItem::new("Log out", true, None);
         let open_status = MenuItem::new("Show status", true, None);
         let check_now = MenuItem::new("Check for updates now", true, None);
         let restart_claude = MenuItem::new("Restart Claude remote control", true, None);
@@ -210,12 +223,18 @@ impl Ui {
             line_hold,
             line_update,
             line_link,
+            line_tunnel,
+            tunnel_shown: false,
             line_key_own,
             line_key_controller,
             line_claude,
             menu,
-            pair,
-            pair_shown: false,
+            join,
+            join_shown: false,
+            #[cfg(target_os = "macos")]
+            log_out,
+            #[cfg(target_os = "macos")]
+            log_out_shown: false,
             open_status,
             check_now,
             restart_claude,
@@ -276,20 +295,31 @@ impl Ui {
         self.line_hold.set_text(&hold);
         self.line_update.set_text(&update);
         let (link, own, theirs) = link_lines(p.controller.as_ref());
+        // A log-in waiting for the browser says so where the link would.
+        #[cfg(target_os = "macos")]
+        let link = crate::os::tray::log_in_note().unwrap_or(link);
         self.line_link.set_text(&link);
         self.line_key_own.set_text(&own);
         self.line_key_controller.set_text(&theirs);
+        self.show_tunnel(p.controller.as_ref().and_then(|l| l.tunnel.as_ref()));
         let link_bad = p.controller.as_ref().is_some_and(|l| {
             matches!(
                 l.state.as_deref(),
                 Some("key-changed" | "revoked" | "refused")
             )
         });
-        let unpaired = p
-            .controller
-            .as_ref()
-            .is_some_and(|l| l.state.as_deref() == Some("unpaired"));
-        self.show_pair(unpaired);
+        // Not joined to the box: unpaired — on a Mac, no tunnel config (it
+        // logs in rather than pairs, enroll.rs).
+        let unpaired = if cfg!(target_os = "macos") {
+            p.controller.as_ref().is_some_and(|l| l.tunnel.is_none())
+        } else {
+            p.controller
+                .as_ref()
+                .is_some_and(|l| l.state.as_deref() == Some("unpaired"))
+        };
+        self.show_join(unpaired);
+        #[cfg(target_os = "macos")]
+        self.show_log_out(p.controller.as_ref().is_some_and(|l| l.tunnel.is_some()));
 
         // The hold is a fault only when the box wants it; Claude, only when
         // it is wanted and not (yet) running.
@@ -298,7 +328,7 @@ impl Ui {
         let short = if link_bad {
             "controller refused — see the menu"
         } else if unpaired {
-            "not paired — Pair with the box… in the menu"
+            UNJOINED
         } else if hold_bad {
             "awake hold OFF"
         } else if p.update_available.is_some() || p.restart_pending {
@@ -327,27 +357,80 @@ impl Ui {
         self.set_look(look);
     }
 
-    /// The pairing entry, just above "Show status", while unpaired.
-    fn show_pair(&mut self, unpaired: bool) {
-        if unpaired == self.pair_shown {
+    /// Where the actions start: after the title, the lines (six, and the
+    /// tunnel's when shown) and the separator.
+    fn actions_at(&self) -> usize {
+        8 + usize::from(self.tunnel_shown)
+    }
+
+    /// The tunnel's line, under the link's, while there is a tunnel.
+    fn show_tunnel(&mut self, tunnel: Option<&crate::link::TunnelStatus>) {
+        if let Some(t) = tunnel {
+            self.line_tunnel.set_text(tunnel_line(t));
+        }
+        if tunnel.is_some() == self.tunnel_shown {
             return;
         }
-        let done = if unpaired {
-            // The title, six lines and the separator come first.
-            self.menu.insert(&self.pair, 8)
+        let done = if tunnel.is_some() {
+            // The title, the awake hold, updates and the link come first.
+            self.menu.insert(&self.line_tunnel, 4)
         } else {
-            self.menu.remove(&self.pair)
+            self.menu.remove(&self.line_tunnel)
         };
         if done.is_ok() {
-            self.pair_shown = unpaired;
+            self.tunnel_shown = tunnel.is_some();
+        }
+    }
+
+    /// The joining entry, just above "Show status", while unjoined.
+    fn show_join(&mut self, unjoined: bool) {
+        if unjoined == self.join_shown {
+            return;
+        }
+        let done = if unjoined {
+            self.menu.insert(&self.join, self.actions_at())
+        } else {
+            self.menu.remove(&self.join)
+        };
+        if done.is_ok() {
+            self.join_shown = unjoined;
+        }
+    }
+
+    /// "Log out", in the same place, while a Mac is logged in.
+    #[cfg(target_os = "macos")]
+    fn show_log_out(&mut self, logged_in: bool) {
+        if logged_in == self.log_out_shown {
+            return;
+        }
+        let done = if logged_in {
+            self.menu.insert(&self.log_out, self.actions_at())
+        } else {
+            self.menu.remove(&self.log_out)
+        };
+        if done.is_ok() {
+            self.log_out_shown = logged_in;
         }
     }
 }
 
-/// The pairing entry's label, and its dialog's title and prompt
-/// (os/*/tray.rs `ask_pairing`).
-pub const PAIR_LABEL: &str = "Pair with the box…";
+/// The entry that joins the box while the machine has not: a Mac logs in
+/// (enroll.rs, os/macos/tray.rs `join`), every other machine pairs
+/// (pair.rs, os/*/tray.rs `join`).
+#[cfg(target_os = "macos")]
+pub const JOIN_LABEL: &str = "Log in…";
+#[cfg(not(target_os = "macos"))]
+pub const JOIN_LABEL: &str = "Pair with the box…";
+/// The tooltip's word for a machine that has not joined.
+#[cfg(target_os = "macos")]
+const UNJOINED: &str = "logged out — Log in… in the menu";
+#[cfg(not(target_os = "macos"))]
+const UNJOINED: &str = "not paired — Pair with the box… in the menu";
+
+/// The pairing dialog's title and prompt (os/*/tray.rs `join`).
+#[cfg(not(target_os = "macos"))]
 pub const PAIR_TITLE: &str = "Pair with the box";
+#[cfg(not(target_os = "macos"))]
 pub const PAIR_PROMPT: &str = "Paste the controller key from Settings › Machines on the box. \
      The whole pair or install line from that page works too.";
 
@@ -361,6 +444,7 @@ pub const PAIR_PROMPT: &str = "Paste the controller key from Settings › Machin
 /// (pair.rs `parse_pasted`): nothing malformed ever reaches the prompt,
 /// and only the checked key and address — a fingerprint and host:port —
 /// reach the command line.
+#[cfg(not(target_os = "macos"))]
 pub fn pair_pasted(text: &str) -> std::result::Result<String, String> {
     let (exe, args, p) = pair_command(text)?;
     crate::os::tray::pair_elevated(&exe, &args, &p)
@@ -368,6 +452,7 @@ pub fn pair_pasted(text: &str) -> std::result::Result<String, String> {
 
 /// The paste, checked, as the agent binary beside the tray and the `pair`
 /// arguments to run it with.
+#[cfg(not(target_os = "macos"))]
 fn pair_command(
     text: &str,
 ) -> std::result::Result<(PathBuf, Vec<String>, crate::pair::Pairing), String> {
@@ -376,6 +461,7 @@ fn pair_command(
 }
 
 /// `pair --pin KEY [--controller HOST:PORT]` for a checked pairing.
+#[cfg(not(target_os = "macos"))]
 pub fn pair_args(p: &crate::pair::Pairing) -> Vec<String> {
     let mut a = vec!["pair".to_string(), "--pin".to_string(), p.pin.clone()];
     if let Some(c) = &p.controller {
@@ -385,7 +471,7 @@ pub fn pair_args(p: &crate::pair::Pairing) -> Vec<String> {
 }
 
 /// The service's binary, installed beside the tray on every OS.
-fn agent_exe() -> std::result::Result<PathBuf, String> {
+pub(crate) fn agent_exe() -> std::result::Result<PathBuf, String> {
     let me = std::env::current_exe().map_err(|e| format!("locating the tray: {e}"))?;
     let exe = me.with_file_name(format!(
         "{}{}",
@@ -411,11 +497,13 @@ pub fn pkexec_argv(
     v
 }
 
-/// macOS: osascript's arguments. The script is fixed; the binary and the
-/// `pair` arguments ride `argv` and each is shell-quoted by AppleScript's
-/// `quoted form of`, so nothing pasted is ever spliced into the script or
-/// the shell line. The binary comes first: an absolute path, so osascript
-/// reads every word after it as an argument, never an option.
+/// macOS: osascript's arguments to run the agent as root behind the
+/// administrator prompt (a log-in's `enroll-finish`, os/macos/tray.rs).
+/// The script is fixed; the binary and its arguments ride `argv` and each is
+/// shell-quoted by AppleScript's `quoted form of`, so nothing the browser
+/// sent is ever spliced into the script or the shell line. The binary comes
+/// first: an absolute path, so osascript reads every word after it as an
+/// argument, never an option.
 #[cfg(any(test, target_os = "macos"))]
 pub fn osascript_argv(exe: &std::path::Path, args: &[String]) -> Vec<std::ffi::OsString> {
     const SCRIPT: [&str; 7] = [
@@ -424,7 +512,7 @@ pub fn osascript_argv(exe: &std::path::Path, args: &[String]) -> Vec<std::ffi::O
         "repeat with a in (rest of argv)",
         "set cmd to cmd & \" \" & quoted form of (contents of a)",
         "end repeat",
-        "do shell script cmd with prompt \"The daedalus agent pairs this machine with the box.\" \
+        "do shell script cmd with prompt \"The daedalus agent logs this Mac in to the box.\" \
          with administrator privileges without altering line endings",
         "end run",
     ];
@@ -474,10 +562,10 @@ pub fn windows_parameters(args: &[String]) -> String {
     line
 }
 
-/// For the OSes whose dialogs are other programs (osascript, PowerShell):
-/// ask on a thread of its own so the tray's loop never waits on a person,
-/// pair with what came back, and show the outcome. One at a time.
-#[cfg(any(windows, target_os = "macos"))]
+/// Windows, whose dialogs are another program (PowerShell): ask on a thread
+/// of its own so the tray's loop never waits on a person, pair with what
+/// came back, and show the outcome. One at a time.
+#[cfg(windows)]
 pub fn pair_on_a_thread(ask: fn() -> Option<String>, tell: fn(&str, bool)) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static OPEN: AtomicBool = AtomicBool::new(false);
@@ -535,6 +623,23 @@ fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, Strin
         (None, _) => "Controller's key: not seen yet".into(),
     };
     (first, own, theirs)
+}
+
+/// A session older than this without a new handshake is gone (WireGuard's
+/// REJECT_AFTER_TIME); the tunnel's keepalive handshakes every two minutes.
+const HANDSHAKE_STALE_SECS: u64 = 180;
+
+/// The machine's own tunnel in one menu line (tunnel/): up or down, how
+/// fresh its handshake is, where it goes — or what went wrong.
+fn tunnel_line(t: &crate::link::TunnelStatus) -> String {
+    match (&t.error, t.last_handshake_secs) {
+        (Some(e), _) => format!("VPN: down — {e}"),
+        (None, Some(s)) if s < HANDSHAKE_STALE_SECS => {
+            format!("VPN: up · handshake {s} s ago · {}", t.endpoint)
+        }
+        (None, Some(s)) => format!("VPN: down · last handshake {s} s ago · {}", t.endpoint),
+        (None, None) => format!("VPN: no handshake yet · {}", t.endpoint),
+    }
 }
 
 /// One line for Claude Code, as the menu and the tooltip show it.
@@ -630,8 +735,13 @@ impl Tray {
     pub fn menu(&mut self) -> Flow {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
             let id = ev.id();
-            if *id == self.ui.pair.id() {
-                crate::os::tray::ask_pairing();
+            #[cfg(target_os = "macos")]
+            if *id == self.ui.log_out.id() {
+                crate::os::tray::log_out();
+                continue;
+            }
+            if *id == self.ui.join.id() {
+                crate::os::tray::join();
             } else if *id == self.ui.open_status.id() {
                 self.show_status();
             } else if *id == self.ui.check_now.id() {
@@ -702,6 +812,7 @@ mod tests {
     use std::ffi::OsString;
     use std::path::Path;
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn the_tray_pairs_through_the_elevated_verb_with_checked_words_only() {
         let key = crate::identity::format_fingerprint(&[6; 32]);
@@ -741,28 +852,6 @@ mod tests {
             want
         );
 
-        // macOS: a fixed script, the binary first after it, the words as
-        // arguments — nothing pasted inside any `-e`.
-        let v = osascript_argv(exe, &a);
-        let at = v.iter().position(|w| w == exe.as_os_str()).unwrap();
-        assert_eq!(
-            v[at + 1..],
-            a.iter().map(OsString::from).collect::<Vec<_>>()
-        );
-        for pair in v[..at].chunks(2) {
-            assert_eq!(pair[0], "-e");
-            let line = pair[1].to_str().unwrap();
-            assert!(!line.contains(&key) && !line.contains("box.lan"), "{line}");
-        }
-        let script: Vec<_> = v[..at].iter().skip(1).step_by(2).collect();
-        assert!(script.iter().any(|l| l
-            .to_str()
-            .unwrap()
-            .contains("with administrator privileges")));
-        assert!(script
-            .iter()
-            .all(|l| !l.to_str().unwrap().contains("do shell script cmd &")));
-
         // Windows: the parameters line, quoted as CommandLineToArgvW reads it.
         assert_eq!(
             windows_parameters(&a),
@@ -776,6 +865,65 @@ mod tests {
         assert_eq!(q(&["C:\\plain\\"]), "C:\\plain\\");
     }
 
+    /// A log-in's last step runs as root behind the administrator prompt:
+    /// a fixed script, the binary first after it, the words as arguments —
+    /// nothing the browser sent inside any `-e`.
+    #[test]
+    fn the_elevated_log_in_passes_its_words_as_arguments_only() {
+        let exe = Path::new("/Library/Application Support/daedalus-agent/bin/daedalus-agent");
+        // What the callback brought back, as hostile as it may be.
+        let code = "c0de'; rm -rf / # box.example.org";
+        let a: Vec<String> = vec!["enroll-finish".into(), code.into()];
+        let v = osascript_argv(exe, &a);
+        let at = v.iter().position(|w| w == exe.as_os_str()).unwrap();
+        assert_eq!(
+            v[at + 1..],
+            a.iter().map(OsString::from).collect::<Vec<_>>()
+        );
+        for pair in v[..at].chunks(2) {
+            assert_eq!(pair[0], "-e");
+            let line = pair[1].to_str().unwrap();
+            assert!(
+                !line.contains("rm -rf") && !line.contains("box.example"),
+                "{line}"
+            );
+        }
+        let script: Vec<_> = v[..at].iter().skip(1).step_by(2).collect();
+        assert!(script.iter().any(|l| l
+            .to_str()
+            .unwrap()
+            .contains("with administrator privileges")));
+        assert!(script
+            .iter()
+            .all(|l| !l.to_str().unwrap().contains("do shell script cmd &")));
+    }
+
+    #[test]
+    fn the_tunnel_line_says_up_or_down_how_fresh_and_where() {
+        let t = |error: Option<&str>, secs: Option<u64>| crate::link::TunnelStatus {
+            endpoint: "box.example.org:51820".into(),
+            error: error.map(String::from),
+            last_handshake_secs: secs,
+            ..Default::default()
+        };
+        assert_eq!(
+            tunnel_line(&t(None, Some(12))),
+            "VPN: up · handshake 12 s ago · box.example.org:51820"
+        );
+        assert_eq!(
+            tunnel_line(&t(None, Some(600))),
+            "VPN: down · last handshake 600 s ago · box.example.org:51820"
+        );
+        assert_eq!(
+            tunnel_line(&t(None, None)),
+            "VPN: no handshake yet · box.example.org:51820"
+        );
+        assert_eq!(
+            tunnel_line(&t(Some("box.example.org:51820 does not resolve"), Some(12))),
+            "VPN: down — box.example.org:51820 does not resolve"
+        );
+    }
+
     #[test]
     fn the_link_lines_show_both_keys_and_what_is_wrong() {
         assert!(link_lines(None).0.contains("not started"));
@@ -786,6 +934,7 @@ mod tests {
             fingerprint: "aaaa:bbbb".into(),
             controller_fingerprint: Some("cccc:dddd".into()),
             error: None,
+            tunnel: None,
         };
         let (first, own, theirs) = link_lines(Some(&pending));
         assert_eq!(

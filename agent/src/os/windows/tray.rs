@@ -104,7 +104,7 @@ pub fn run() -> Result<()> {
 /// so PowerShell's (Visual Basic's `InputBox`, part of .NET on every
 /// Windows) asks, on a thread of its own, with no console; the answer is a
 /// plain message box (tray.rs `pair_on_a_thread`).
-pub fn ask_pairing() {
+pub fn join() {
     crate::tray::pair_on_a_thread(input_box, message_box);
 }
 

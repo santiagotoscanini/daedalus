@@ -6,7 +6,9 @@
 //! and `controller_address` when one is named (without one the address
 //! stays config.toml's, else DNS's), through the one writer `install`
 //! uses (config.rs `write_link_config_at`), then hands the running service
-//! the new keys (`reload`) and the link starts over under them.
+//! the new keys (`reload`) and the link starts over under them. That is
+//! Windows' and Linux's way; a Mac logs in instead (enroll.rs), and `pair`
+//! and `install --pin` refuse there.
 //!
 //! Three doors, one path:
 //!
@@ -18,7 +20,7 @@
 //!   service starts.
 //! - the tray's "Pair with the box…" (`parse_pasted`, tray.rs
 //!   `pair_pasted`): the same verb, run elevated behind the OS's own prompt
-//!   (UAC, macOS's administrator password, polkit), with the pasted text
+//!   (UAC, polkit), with the pasted text
 //!   checked here first. The tray runs as the user and config.toml is the
 //!   service's, and naming the controller hands that controller the
 //!   service's privileges, so pairing asks what `install` asks: an
@@ -101,9 +103,11 @@ pub fn parse_args(args: &[String]) -> Result<(Option<Pairing>, Option<String>)> 
     Ok((pairing, controller))
 }
 
-/// What someone pasted into the tray's box: the key alone, the key and
+/// What someone pasted into the tray's box (Windows and Linux: a Mac signs
+/// in instead, enroll.rs): the key alone, the key and
 /// `host:port`, or a whole `pair` or install line from Settings › Machines
 /// (`--pin`/`-Pin`, `--controller`/`-Controller`, quoted or not).
+#[cfg(not(target_os = "macos"))]
 pub fn parse_pasted(text: &str) -> Result<Pairing> {
     let words: Vec<&str> = text
         .split_whitespace()
@@ -175,8 +179,14 @@ pub fn command_line(pin: &str, controller: Option<&str>) -> String {
     }
 }
 
-/// What an unpaired machine says on the terminal (`install`, `status`).
+/// What an unpaired machine says on the terminal (`install`, `status`); a
+/// Mac, which logs in instead (enroll.rs), says how.
 pub fn unpaired_hint() -> String {
+    if cfg!(target_os = "macos") {
+        return "logged out: this Mac reaches no box until it logs in — the daedalus mark in \
+                the menu bar › \"Log in…\"."
+            .into();
+    }
     format!(
         "not paired: this machine trusts no controller yet, so it connects to none. Copy the \
          controller key from Settings › Machines, then run\n  {}\nor use \"Pair with the \
@@ -246,6 +256,7 @@ mod tests {
         assert!(parse_args(&args(&["--force"])).is_err());
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn a_paste_is_the_key_or_a_whole_line() {
         let key = fp(9);

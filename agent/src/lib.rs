@@ -37,6 +37,9 @@ pub mod deadline;
 pub mod discover;
 pub mod dns;
 pub mod door;
+// Logging in to the box for a tunnel of this machine's own (tunnel/).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod enroll;
 pub mod exec;
 pub mod facts;
 pub mod http;
@@ -64,6 +67,10 @@ pub mod session_host;
 pub mod shared;
 pub mod state;
 pub mod telemetry;
+// The machine's own WireGuard tunnel to the box (macOS and Linux: none on
+// Windows in this version).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod tunnel;
 pub mod update;
 pub mod util;
 
@@ -281,6 +288,14 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         Some((keys, addr, registry)) => Some(link::controller::listen_with(addr, keys, registry)?),
         None => None,
     };
+
+    // How this machine reaches the box: through its own tunnel alone when
+    // a log-in left one (enroll.rs), directly otherwise — before anything
+    // dials.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    if role.link {
+        enroll::start(&shared, &enroll::Files::here());
+    }
 
     // The machine's key, made on the first start, and with it the link to
     // the controller (link/node.rs). Without the key there is no link, but

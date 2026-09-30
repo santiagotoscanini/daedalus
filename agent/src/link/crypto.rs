@@ -6,15 +6,15 @@
 //! `x25519-dalek`, `ed25519-dalek`) and the OS's random numbers.
 //!
 //! Why not rustls' ring provider: ring is C and assembly, built by a C
-//! compiler for each target, and the gate checks the Windows and macOS
-//! builds from a Linux container that has no such compiler for them (and
-//! the crate's rule is that no C crypto library is cross-compiled to check
-//! a target). The suite is the one ring's provider offers under the same
-//! name; the record layer below follows ring's provider line for line
-//! (nonce from the IV and sequence number, the TLS 1.3 additional data, the
-//! content type appended inside the ciphertext), and a test on Linux runs a
-//! handshake and a record in each direction between this provider and
-//! ring's, so a mistake here cannot hide behind both ends sharing it.
+//! compiler for each target, and the link must build without one on every
+//! OS — Windows has no C crypto library at all. (On macOS and Linux ring is
+//! in the tree anyway, for the WireGuard tunnel alone: tunnel/.) The suite
+//! is the one ring's provider offers under the same name; the record layer
+//! below follows ring's provider line for line (nonce from the IV and
+//! sequence number, the TLS 1.3 additional data, the content type appended
+//! inside the ciphertext), and a test on Linux runs a handshake and a record
+//! in each direction between this provider and ring's, so a mistake here
+//! cannot hide behind both ends sharing it.
 
 use std::sync::Arc;
 

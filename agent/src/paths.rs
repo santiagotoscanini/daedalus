@@ -90,6 +90,12 @@ pub fn data_dir() -> PathBuf {
     .clone()
 }
 
+/// The machine's WireGuard client config, from its log-in (tunnel/, enroll.rs):
+/// present means the link and santree go through the tunnel alone.
+pub fn tunnel_path() -> PathBuf {
+    data_dir().join("tunnel.toml")
+}
+
 /// Where the last policy from the controller is kept (`save_policy`).
 pub fn policy_path() -> PathBuf {
     data_dir().join("policy.json")

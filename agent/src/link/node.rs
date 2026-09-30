@@ -61,7 +61,6 @@
 //! step, in case the box changes its mind.
 
 use crate::util::Shutdown;
-use std::net::{TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -84,6 +83,8 @@ use crate::state::now_rfc3339;
 pub const PUSH_EVERY: Duration = Duration::from_secs(60);
 /// How often the pushes are looked at.
 const PUSH_CHECK: Duration = Duration::from_secs(2);
+/// The id of the one request a machine sends after `hello` (1): `leave`.
+const LEAVE_ID: u64 = 2;
 /// How long a DNS-found address is used before the record is asked again.
 const REDISCOVER: Duration = Duration::from_secs(10 * 60);
 /// How long the loop waits when there is no controller to try.
@@ -282,6 +283,11 @@ pub fn run_loop_at(
             continue;
         }
         let target = resolve_target(keys.address.as_deref(), keys.pin.as_deref(), || {
+            // A machine with a tunnel config reaches the box at its tunnel
+            // address, which config.toml names; DNS is never asked for one.
+            if shared.dialer().tunnelled() {
+                return None;
+            }
             if let Some((f, at)) = &dns_found {
                 if at.elapsed() < REDISCOVER {
                     return Some(f.clone());
@@ -411,6 +417,22 @@ pub fn run_loop_at(
             Ended::Revoked => {
                 tracing::warn!("link: the box revoked this machine");
                 drop_santree(&shared);
+                // The app deletes its tunnel's wg-easy client with the
+                // revocation: the log-in is over, and the machine says so
+                // (enroll.rs).
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                if shared.dialer().tunnelled() {
+                    if let Err(e) = crate::enroll::forget_log_in(
+                        &shared,
+                        &crate::enroll::Files::here(),
+                        "the box revoked this machine",
+                    ) {
+                        tracing::error!(
+                            error = format!("{e:#}"),
+                            "link: the revoked log-in was not forgotten whole"
+                        );
+                    }
+                }
                 shared.set_link(|l| {
                     l.connected = false;
                     l.since = None;
@@ -474,15 +496,10 @@ pub fn connect_once(
     // The keys this attempt was made under: a pairing that moves them ends
     // it (module doc).
     let keys_at = shared.link_keys().1;
-    let addrs: Vec<_> = match target.address.to_socket_addrs() {
-        Ok(a) => a.collect(),
-        Err(e) => return Ended::Failed(format!("{}: {e}", target.address)),
-    };
-    let Some(sock) = addrs
-        .iter()
-        .find_map(|a| TcpStream::connect_timeout(a, HANDSHAKE_TIMEOUT).ok())
-    else {
-        return Ended::Failed(format!("{}: no answer", target.address));
+    // Direct, or through this machine's tunnel alone (net.rs).
+    let sock = match shared.dialer().connect(&target.address, HANDSHAKE_TIMEOUT) {
+        Ok(s) => s,
+        Err(e) => return Ended::Failed(e),
     };
     let _ = sock.set_write_timeout(Some(WRITE_TIMEOUT));
     let mut tls = match client.connect(sock, target.pin, HANDSHAKE_TIMEOUT) {
@@ -889,10 +906,25 @@ fn converse(
     let mut pushed = Pushed::default();
     let mut heard = Instant::now();
     let mut said = Instant::now();
+    // A log-out told to the controller, until it acknowledges.
+    let mut leaving: Option<std::sync::mpsc::SyncSender<()>> = None;
     loop {
         if stop.is_stopped() {
             tls.close();
             return Ended::Stopped;
+        }
+        if state == NodeState::Approved && leaving.is_none() {
+            if let Some(tx) = shared.take_leave() {
+                if let Err(e) = tls.send(&wire::request(
+                    LEAVE_ID,
+                    name::LEAVE,
+                    &serde_json::json!({}),
+                )) {
+                    return Ended::Dropped(format!("a write failed: {e}"));
+                }
+                said = Instant::now();
+                leaving = Some(tx);
+            }
         }
         if shared.link_keys().1 != keys_at {
             return Ended::Dropped(
@@ -1010,6 +1042,17 @@ fn converse(
                 if let Some((from, new)) = rotated {
                     tls.close();
                     return Ended::Rotated { from, new };
+                }
+            }
+            Ok(Incoming::Answer {
+                id: Some(LEAVE_ID), ..
+            }) => {
+                if let Some(tx) = leaving.take() {
+                    // Acknowledged: the leaver closes, and the log-out that
+                    // asked moves the keys (enroll.rs).
+                    let _ = tx.try_send(());
+                    tls.close();
+                    return Ended::Dropped("logged out: the controller heard it".into());
                 }
             }
             Ok(Incoming::Answer { .. }) => {}

@@ -20,6 +20,7 @@
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
 //! controller_address = "…"    # the controller, host:port; absent = its DNS SRV record
 //! controller_pin = "…"        # its key's fingerprint; absent = unpaired, no controller
+//! app_url = "…"               # the app a Mac last logged in to (enroll.rs); the next "Log in…" offers it
 //!
 //! [controller]                # read only when mode = "controller"; nix writes it
 //! claude_remote_control = false   # run Claude remote control on the box
@@ -34,7 +35,9 @@
 //! `controller_address` and `controller_pin` are a machine's way to the
 //! controller (link/node.rs), the only party it talks to: `install
 //! --controller` and `--pin` write them, into a file that exists too, and
-//! so does `pair` (pair.rs). Without an address the machine asks DNS for
+//! so does `pair` (pair.rs), and on macOS a log-in (enroll.rs), the only
+//! way there: a Mac without a tunnel config (`tunnel.toml`) is logged out
+//! whatever its pin says (link/mod.rs `LinkKeys`). Without an address the machine asks DNS for
 //! the controller's SRV record; without a pin it is unpaired and connects
 //! nowhere, and the status page and the tray say so (link/node.rs). A pin that is not a fingerprint
 //! does not stop the agent: the link says so on the status page and the
@@ -155,6 +158,10 @@ pub struct Config {
     /// controller (link/node.rs). `install --pin` and `pair` write it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_pin: Option<String>,
+    /// The box's app, `https://host[:port]`, as the last log-in named it
+    /// (enroll.rs): what the menu bar offers the next time. Nothing dials it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_url: Option<String>,
     /// What this agent is to the rest: an ordinary machine, or the
     /// controller on the box. Decides which parts run (role.rs).
     #[serde(skip_serializing_if = "is_default")]
@@ -286,6 +293,7 @@ impl Default for Config {
             search_domains: Vec::new(),
             controller_address: None,
             controller_pin: None,
+            app_url: None,
             mode: Mode::default(),
             telemetry: TelemetryLevel::default(),
             updates: None,
@@ -613,6 +621,7 @@ pub fn write_link_config_at(path: &Path, cfg: &Config) -> Result<()> {
     let keys: Vec<(&str, &str)> = [
         ("controller_address", cfg.controller_address.as_deref()),
         ("controller_pin", cfg.controller_pin.as_deref()),
+        ("app_url", cfg.app_url.as_deref()),
     ]
     .into_iter()
     .filter_map(|(k, v)| v.map(|v| (k, v)))
@@ -644,6 +653,29 @@ pub fn set_controller_pin_at(path: &Path, fingerprint: &str) -> Result<()> {
         .with_context(|| format!("editing {}", path.display()))?;
     toml::from_str::<Config>(&edited)
         .with_context(|| format!("{} would not parse with the new pin", path.display()))?;
+    crate::util::write_atomic(path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
+        .with_context(|| format!("writing {}", path.display()))
+}
+
+/// Take `controller_pin` and `controller_address` out of the config.toml at
+/// `path`, every other line as it was: a log-out (enroll.rs), after which
+/// the machine trusts no controller and dials nobody. Nothing to do when
+/// there is no file, or neither key is in it.
+pub fn clear_link_keys_at(path: &Path) -> Result<()> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+    };
+    let mut doc: toml_edit::DocumentMut = text.parse().context("the file is not TOML")?;
+    let had_pin = doc.remove("controller_pin").is_some();
+    let had_address = doc.remove("controller_address").is_some();
+    if !had_pin && !had_address {
+        return Ok(());
+    }
+    let edited = doc.to_string();
+    toml::from_str::<Config>(&edited)
+        .with_context(|| format!("{} would not parse without its link keys", path.display()))?;
     crate::util::write_atomic(path, edited.as_bytes(), crate::os::CONFIG_ACCESS)
         .with_context(|| format!("writing {}", path.display()))
 }

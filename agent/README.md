@@ -364,8 +364,10 @@ traffic. `src/link/` has it all; its `mod.rs` header is the reference.
 
 **Transport.** TLS 1.3 over TCP on every OS, through rustls with pure-Rust
 primitives the agent plugs in itself (`src/link/crypto.rs`: X25519,
-ChaCha20-Poly1305, SHA-256, ed25519 — so no C crypto library is built for
-any target; a test runs it against rustls' ring provider on Linux). Both
+ChaCha20-Poly1305, SHA-256, ed25519 — so the link builds no C crypto
+library; a test runs it against rustls' ring provider on Linux). The
+tunnel's boringtun brings ring on macOS and Linux; Windows builds no C
+crypto at all, and the gate checks it. Both
 ends present a self-signed certificate made from their ed25519 identity
 key and sign the handshake with it; there is no CA and no hostname. A
 machine accepts the controller only if the SHA-256 of its key matches the
@@ -388,7 +390,7 @@ record `_daedalus-controller._tcp` under the search domains DHCP handed out
 (and `search_domains`), the record chosen by priority then weight on every
 OS. With neither, the machine reaches nobody, says so, and asks again
 every minute. The key: config.toml's `controller_pin`, which `install
---pin` or `pair` writes and nothing else supplies — no key is trusted on
+--pin` or `pair` writes (on a Mac, a log-in) and nothing else supplies — no key is trusted on
 first use. A machine without a pin is **unpaired**: it resolves no address
 and dials nobody, and its page and tray say `unpaired` until it is paired
 (see "Install"). It is re-pinned only by a rotation the trusted key signed (below). DNS only ever
@@ -518,6 +520,51 @@ the address and where it came from, the state (`connecting`, `pending`,
 the controller's key is pinned (always `config`), the last rotation
 (`rotated`) and the last error.
 
+## Logging in (macOS)
+
+A Mac does not pair: it **logs in**, from the menu bar's "Log in…", and
+gets a WireGuard tunnel of its own to the box — an ordinary client of the
+box's wg-easy — through which alone it reaches the controller's link and
+the session host, at home or away. A Mac with a pin but no tunnel config is
+logged out, and dials nobody. `src/enroll.rs`'s header is the reference for
+the flow and who may run each step; `src/tunnel/mod.rs`'s for the tunnel.
+
+1. "Log in…" asks for the app's address (`https://host[:port]`, the last
+   one offered), and the service answers with the Mac's key, fingerprint
+   and a PKCE challenge (`enroll.begin`); the verifier stays in the
+   service's memory.
+2. The browser opens the app's enroll page with those, a loopback port and
+   a `state`; the menu shows the fingerprint to check. The operator signs
+   in (Pocket ID), types the fingerprint's first four characters and
+   confirms — or declines, and nothing changes.
+3. On confirm the app approves the node, makes its wg-easy client, and
+   sends the browser to `http://127.0.0.1:<port>/callback` with a
+   single-use code. The menu bar asks for an administrator's password once
+   and runs `daedalus-agent enroll-finish CODE` as root: the service
+   redeems the code with its verifier (`POST /api/agent/enroll`), keeps the
+   client config in `tunnel.toml` (0600, root's) and the pin, the
+   controller's in-tunnel address and the app's address in config.toml,
+   brings the tunnel up and links through it.
+
+"Log out" tells the controller (`leave` on the link; the app deletes the
+wg-easy client) and forgets the log-in: pin and address out of
+config.toml, the tunnel down, `tunnel.toml` and the kept policy deleted. A
+Mac the box revokes forgets its log-in the same way. The menu and the
+status page show the tunnel (`link.tunnel`): up or down, the last
+handshake's age, the endpoint, and why it is down.
+
+**The tunnel** runs in the service: boringtun (the WireGuard protocol,
+sans-IO) and smoltcp (TCP) on one thread — no utun device, no route,
+nothing of it reaches the Mac's own network stack. It reaches one address,
+the box's (its AllowedIPs, one /32), and dials nothing else; its UDP
+socket is unconnected, so it follows the Mac from network to network, and
+an unanswered handshake has the endpoint's name resolved again. MTU 1280,
+so it fits inside another WireGuard (the system VPN) too.
+
+Linux builds the same code, so the tests and `e2e-tunnel.sh` (the tunnel
+against a real wg-easy, its API driven as the app drives it) run there, but
+its tray pairs; Windows pairs and builds none of it.
+
 ## The local socket
 
 The tray, the session and the verbs (`daedalus-agent status`, `claude
@@ -559,10 +606,11 @@ is down cannot give the session orders.
 One request per connection, one JSON line each way (at most 1 MiB), in the
 agent's one envelope (`src/rpc.rs`, the API's and the link's too), 16
 connections at once. The whole exchange has a deadline on both ends, however
-slowly the other end drips its bytes and whether or not it reads: five
-seconds on the service's side, two on the client's (the tray asks from its
-UI thread) — a watchdog tears the connection down when it passes, the same
-on every OS (`src/door.rs`). The status
+slowly the other end drips its bytes and whether or not it reads: fifteen
+seconds on the service's side (room for a log-in's redeem at the app),
+two on the client's (the tray asks from its UI thread; a log-in's steps wait
+the service's fifteen, from threads of their own) — a watchdog tears the
+connection down when it passes, the same on every OS (`src/door.rs`). The status
 document never waits on the OS: its power requests (`powercfg` on Windows)
 are read by the service every minute on a thread of their own.
 `{"id":1,"m":"<method>","p":…}` → `{"id":1,"ok":…}` or
@@ -571,8 +619,12 @@ are read by the service every minute on a thread of their own.
 `claude.report` (the session's poll: its report in, the `ReportAnswer`
 out), `claude.roster`, `claude.restart`, `claude.update` (refused on the
 controller, where nix pins Claude Code), `update.check` and `link.reload`
-("Pairing" below). There is no pairing method: naming the controller is an
-administrator's, never a socket user's. A socket that cannot be made does not stop the service: it is
+("Pairing" below), and on macOS and Linux a log-in's three (see "Logging
+in (macOS)"): `enroll.begin` and `enroll.leave` for the operator, as
+santree's socket admits them (`os::operator_allowed`), and `enroll.finish`
+for root alone. There is no pairing method: naming the controller is an
+administrator's, never a socket user's — which is why a log-in's last step
+runs as root. A socket that cannot be made does not stop the service: it is
 tried again every 15 s.
 
 The tray, the session and the service are one binary, so the envelope
@@ -752,13 +804,17 @@ except `controller_address` and `controller_pin`, which `--controller` and
 `--pin` (`-Controller`, `-Pin`) set in a config that exists too. The
 site serves both scripts from `main`, so neither command names a version.
 Neither installs a release older than 0.21.0 (`MIN_VERSION`), newest or
-named: older agents trusted the first controller that answered.
+named: older agents trusted the first controller that answered — and on a
+Mac nothing older than 0.23.0, which paired instead of logging in.
 Trust at install is HTTPS to GitHub; every update after that is verified by
 the agent against the release key it carries.
 
 ### Pairing
 
-Install first, pair after. A machine installed without a pin is
+Windows and Linux pair; a Mac logs in instead (see "Logging in (macOS)"):
+`install` there takes no `--pin` or `--controller`, `pair` refuses, and the
+menu bar offers "Log in…" where the tray elsewhere offers "Pair with the
+box…". Install first, pair after. A machine installed without a pin is
 **unpaired**: the service, session and tray run, but it trusts no
 controller and dials nobody — nothing is trusted on first use
 ([`src/pair.rs`](src/pair.rs)). Three ways to pair it, each with the key
@@ -1020,10 +1076,11 @@ once.
 daedalus-agent install [--controller HOST:PORT] [--pin FINGERPRINT]
                                     register and start the service, the session and the tray (administrator / sudo);
                                     --controller and --pin name the controller and pin its key in config.toml;
-                                    without --pin the machine runs unpaired
+                                    without --pin the machine runs unpaired. macOS: no options (the Mac logs in)
 daedalus-agent pair --pin FINGERPRINT [--controller HOST:PORT]
                                     pair it: trust that controller key (administrator / sudo); the running
-                                    service connects at once. pair --check exits 0 when paired
+                                    service connects at once. pair --check exits 0 when paired. Not on macOS
+daedalus-agent enroll-finish CODE   (macOS, Linux) a log-in's last step, as root; the menu bar runs it behind the password prompt
 daedalus-agent uninstall            stop and remove them (administrator / sudo)
 daedalus-agent run                  service entry point; what the SCM, launchd or systemd calls (and nix, for the controller)
 daedalus-agent serve                the same work in the foreground, in a terminal
@@ -1061,6 +1118,7 @@ macOS:
 /Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update, .bad after a rollback)
 /Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the menu bar app
 /Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,policy.json,logs/}
+/Library/Application Support/daedalus-agent/tunnel.toml              the WireGuard client config from the log-in (root's, 0600); absent: logged out
 /Library/Application Support/daedalus-agent/run/agent.sock            the local socket: the menu bar app and the verbs
 /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
 /Library/LaunchAgents/me.toscanini.daedalus-agent-tray.plist          the menu bar app's job
@@ -1122,7 +1180,8 @@ search_domains = []       # more domains to ask for _daedalus-controller._tcp
 # updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
 # controller_address = "…" # the controller's link address, host:port; absent: DNS
-# controller_pin = "…"     # its key's fingerprint; absent: unpaired (install --pin, pair --pin)
+# controller_pin = "…"     # its key's fingerprint; absent: unpaired (install --pin, pair --pin; a Mac's log-in)
+# app_url = "…"            # the app a Mac last logged in to, offered at the next "Log in…"
 ```
 
 `telemetry = "full"` reads everything above; `minimal` reads the machine

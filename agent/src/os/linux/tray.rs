@@ -131,7 +131,7 @@ fn run_gtk() -> Result<()> {
 /// runs, so the tray's tick (which holds the tray while it runs) is never
 /// re-entered. `pair` runs elevated through polkit (`pair_elevated`); its
 /// answer is a message dialog.
-pub fn ask_pairing() {
+pub fn join() {
     use gtk::prelude::*;
     let dialog = gtk::Dialog::with_buttons(
         Some(crate::tray::PAIR_TITLE),
