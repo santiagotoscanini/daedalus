@@ -28,6 +28,13 @@ describe('the policy a machine hears', () => {
     })
   })
 
+  it('sends santree only when it is on', () => {
+    expect(effectivePolicy({}).santree).toBe(false)
+    expect('santree' in wirePolicy({})).toBe(false)
+    expect('santree' in wirePolicy({ santree: false })).toBe(false)
+    expect(wirePolicy({ santree: true }).santree).toBe(true)
+  })
+
   it('treats a blank workdir as none', () => {
     expect(effectivePolicy({ claudeWorkdir: '   ' }).claudeWorkdir).toBeNull()
     expect('claude_workdir' in wirePolicy({ claudeWorkdir: '   ' })).toBe(false)

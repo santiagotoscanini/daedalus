@@ -589,6 +589,12 @@ export type NodePolicy = {
   /** The directory the server runs in. Unset, the tray picks the most recently used trusted project. */
   claudeWorkdir?: string
   /**
+   * santree on this machine may open its projects on the box: the agent
+   * pipes it to the session host, whose allow-list the controller writes from
+   * this. A shell on the box. Unset is off.
+   */
+  santree?: boolean
+  /**
    * The parts nothing in the machine reports — case, cooler, power supply —
    * chosen from lib/hardware/catalog.ts by id. Only the pages read these;
    * the agent never hears them.

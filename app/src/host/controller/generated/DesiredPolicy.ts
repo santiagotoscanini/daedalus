@@ -5,4 +5,9 @@ import type { DesiredProviders } from "./DesiredProviders";
  * The policy as the app sends it: link/wire.rs's `Policy`, field for field,
  * but exact — a field the controller does not know is refused.
  */
-export type DesiredPolicy = { awake_hold: boolean, claude_remote_control: boolean, claude_workdir?: string, providers?: DesiredProviders, };
+export type DesiredPolicy = { awake_hold: boolean, claude_remote_control: boolean, claude_workdir?: string, providers?: DesiredProviders, 
+/**
+ * santree on this machine may open its projects on the box. Absent is
+ * off, so a set from an app that predates it is still exact.
+ */
+santree?: boolean, };

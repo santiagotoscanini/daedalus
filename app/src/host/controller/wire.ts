@@ -49,6 +49,7 @@ import type {
   Queued,
   RootRunOk,
   RootVerb,
+  SessionHostState,
   SessionQueued,
   SetDesiredOk,
   TelemetryLevel,
@@ -56,6 +57,7 @@ import type {
   ClaudeStatus as WireClaudeStatus,
   ControllerInfo as WireControllerInfo,
   ProviderReport as WireProviderReport,
+  SantreeStatus as WireSantreeStatus,
   SystemInfo as WireSystemInfo,
   TelemetryGet as WireTelemetryGet,
 } from './generated'
@@ -928,5 +930,45 @@ export function rootRunOk(v: unknown): RootRun {
       activeState: x.active_state,
       result: x.result,
     })),
+  }
+}
+
+// ── the session host ─────────────────────────────────────────────────────────
+
+/** `santree.status`: the session host as the controller reads it (session_host.rs). */
+export type SessionHostStatus = {
+  state: SessionHostState
+  /** The running host's version; null without a status file. */
+  version: string | null
+  /** A newer build is installed; a restart applies it and ends the live terminals. */
+  restartPending: boolean
+  /** Terminals whose process runs: what a restart ends. */
+  livePtys: number
+  /** The machines connected now, most connections first; `name` null means its hostname. */
+  connections: { node: string; name: string | null; count: number }[]
+  /** Why the controller cannot read the host or write its allow-list, when it cannot. */
+  error: string | null
+}
+
+const santreeStatusShape = reads<WireSantreeStatus>()(
+  obj({
+    state: literal('running', 'stale', 'stopped', 'missing'),
+    version: nstr,
+    restart_pending: flag,
+    live_ptys: optional(int, 0),
+    connections: optional(arrayOf(obj({ node: str, name: nstr, count: int })), []),
+    error: nstr,
+  }),
+)
+
+export function santreeStatus(v: unknown): SessionHostStatus {
+  const s = decode(santreeStatusShape, v)
+  return {
+    state: s.state,
+    version: s.version,
+    restartPending: s.restart_pending,
+    livePtys: s.live_ptys,
+    connections: s.connections,
+    error: s.error,
   }
 }

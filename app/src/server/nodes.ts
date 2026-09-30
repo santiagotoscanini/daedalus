@@ -171,7 +171,7 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
     }
     if (Object.keys(hardware).length > 0) policy.hardware = hardware
   }
-  for (const k of ['awakeHold', 'claudeRemoteControl'] as const) {
+  for (const k of ['awakeHold', 'claudeRemoteControl', 'santree'] as const) {
     if (o[k] !== undefined) {
       if (typeof o[k] !== 'boolean') throw new Error(`${k} must be true or false`)
       policy[k] = o[k]
@@ -194,6 +194,24 @@ export const fetchNodesChangeFn = readFn.handler(async (): Promise<string[]> => 
   const { nodesChange } = await import('../host/apply-flow')
   const c = await nodesChange()
   return c.changed ? c.fields : []
+})
+
+/* ── the session host ─────────────────────────────────────────────────── */
+
+/** The session host's line, afresh: what the restart's confirm counts. Null on a box without one. */
+export const fetchSessionHostFn = readFn.handler(async ({ context }) => {
+  const { readSessionHost } = await import('../host/session-host')
+  return readSessionHost(await context.ctx())
+})
+
+/**
+ * Restart the session host (the root helper's `session-host-restart`), which
+ * is how a new build takes over. Every live terminal ends; the page names how
+ * many before the click. Answers once the unit has finished.
+ */
+export const restartSessionHostFn = adminFn.handler(async ({ context }) => {
+  const { restartSessionHost } = await import('../host/session-host')
+  return restartSessionHost(await context.ctx(), { actor: context.actor() })
 })
 
 /* ── the gateway: providers' models and the sync ──────────────────────── */

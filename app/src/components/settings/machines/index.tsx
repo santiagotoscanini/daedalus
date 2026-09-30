@@ -12,6 +12,7 @@ import { Decision } from './decision'
 import { Install } from './install'
 import { Policy } from './policy'
 import { RotateKey, RotationState } from './rotate'
+import { SessionHost } from './session-host'
 
 // Settings › Machines — the other computers that run the agent: what each
 // one is, whether the box trusts it, and what the box asks of it. One card
@@ -33,7 +34,8 @@ import { RotateKey, RotationState } from './rotate'
 //
 // This file is the tab and one card per machine; the trust buttons are
 // ./decision.tsx, the policy rows ./policy.tsx over ./use-policy-editor.ts,
-// the install lines ./install.tsx, the controller's key rotation ./rotate.tsx.
+// the install lines ./install.tsx, the controller's key rotation ./rotate.tsx, the
+// session host's line ./session-host.tsx.
 
 /** The OS's mark, by the family the agent reports. */
 function osMark(os: string): { src: string; invert: boolean } | null {
@@ -48,6 +50,12 @@ function osMark(os: string): { src: string; invert: boolean } | null {
       return null
   }
 }
+
+/**
+ * What a decision saved while the controller cannot take it waits for: the app
+ * hands over the whole set again whenever it reconnects.
+ */
+const BACK = 'Changes made here apply when the controller is back.'
 
 type Verdict = { chip: string; tone: Tone }
 
@@ -340,15 +348,21 @@ export function Machines({ d }: { d: MachinesData }) {
                   ? [{ k: 'Rotating', v: <RotationState r={c.rotation} /> }]
                   : []),
                 { k: 'Agent', v: <Mono>{c.version}</Mono> },
+                ...(d.sessionHost !== null
+                  ? [{ k: 'Session host', v: <SessionHost line={d.sessionHost} /> }]
+                  : []),
                 {
                   k: 'Decisions',
                   v:
                     sync === null ? (
                       <span className={ASIDE}>not sent since this process started</span>
                     ) : sync.error !== null ? (
-                      <span className="text-[0.78rem] text-destructive">
-                        not delivered {since((Date.now() - Date.parse(sync.at)) / 1000)}:{' '}
-                        {sync.error}
+                      <span className="inline-flex flex-col items-start gap-1">
+                        <span className="text-[0.78rem] text-destructive">
+                          not delivered {since((Date.now() - Date.parse(sync.at)) / 1000)}:{' '}
+                          {sync.error}
+                        </span>
+                        <span className={ASIDE}>{BACK}</span>
                       </span>
                     ) : (
                       <span className={ASIDE}>
@@ -363,8 +377,11 @@ export function Machines({ d }: { d: MachinesData }) {
                 {
                   k: 'State',
                   v: (
-                    <span className="text-[0.78rem] text-destructive">
-                      not reachable: {c.error}
+                    <span className="inline-flex flex-col items-start gap-1">
+                      <span className="text-[0.78rem] text-destructive">
+                        not reachable: {c.error}
+                      </span>
+                      <span className={ASIDE}>{BACK}</span>
                     </span>
                   ),
                 },

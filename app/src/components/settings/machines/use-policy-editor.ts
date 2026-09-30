@@ -133,6 +133,7 @@ export function usePolicyEditor(n: NodeRow) {
     busy,
     failed,
   )
+  const [santree, showSantree] = useShown(n.policy.santree ?? POLICY_DEFAULTS.santree, busy, failed)
   const setAwake = (v: boolean) => {
     showAwake(v)
     save({ ...base.current, awakeHold: v })
@@ -140,6 +141,10 @@ export function usePolicyEditor(n: NodeRow) {
   const setClaude = (v: boolean) => {
     showClaude(v)
     save({ ...base.current, claudeRemoteControl: v })
+  }
+  const setSantree = (v: boolean) => {
+    showSantree(v)
+    save({ ...base.current, santree: v })
   }
 
   return {
@@ -167,5 +172,7 @@ export function usePolicyEditor(n: NodeRow) {
     setAwake,
     claude,
     setClaude,
+    santree,
+    setSantree,
   }
 }

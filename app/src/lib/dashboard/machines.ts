@@ -3,6 +3,7 @@ import type { ControllerClient } from '../../host/controller/client'
 import { type DesiredSync, lastDesiredSync, readNode } from '../../host/controller/nodes'
 import type { ControllerNode, ControllerRotation } from '../../host/controller/wire'
 import { lanDomain } from '../../host/providers/fleet'
+import { readSessionHost, type SessionHostLine } from '../../host/session-host'
 import type { AgentStatus } from '../agent/status'
 import { listNodes, type NodeRow } from '../repo/nodes'
 
@@ -57,6 +58,8 @@ export type MachinesData = {
   controller: ControllerView
   /** The last desired-state sync, as the controller answered it. */
   sync: DesiredSync | null
+  /** The session host's line; null on a box without one. */
+  sessionHost: SessionHostLine | null
   machines: Machine[]
   /** Why the controller's list of machines could not be read, when it could not. */
   listError: string | null
@@ -105,10 +108,11 @@ async function controllerView(client: ControllerClient): Promise<ControllerView>
 
 export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   const client = ctx.controller
-  const [rows, domain, view, seen] = await Promise.all([
+  const [rows, domain, view, sessionHost, seen] = await Promise.all([
     listNodes(ctx),
     lanDomain(),
     controllerView(client),
+    readSessionHost(ctx),
     client.nodesList().then(
       (list) => ({ list, error: null }),
       (e: unknown) => ({
@@ -138,6 +142,7 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
     lanDomain: domain.domain,
     controller: view,
     sync: lastDesiredSync(),
+    sessionHost,
     machines,
     listError: seen.error,
   }

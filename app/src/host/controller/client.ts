@@ -38,9 +38,11 @@ import {
   type RootRun,
   requestLine,
   rootRunOk,
+  type SessionHostStatus,
   type SessionSent,
   type SetDesiredOk,
   type SystemInfo,
+  santreeStatus,
   sessionQueued,
   setDesiredOk,
   systemInfo,
@@ -139,6 +141,8 @@ export type ControllerClient = {
     waitMs?: number,
     payload?: string,
   ) => Promise<RootRun>
+  /** The session host (`santree.status`); `unavailable` on a box without one. */
+  santreeStatus: () => Promise<SessionHostStatus>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
   /** How the connection stands. Read from memory: it never dials. */
@@ -412,6 +416,7 @@ export function createControllerClient(opts: Options): ControllerClient {
         { verb, selectors: selectors ?? {}, ...(payload === undefined ? {} : { payload }) },
         waitMs,
       ),
+    santreeStatus: () => call('santree.status', santreeStatus),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
     link: () => {
       const at = (ms: number) => new Date(ms).toISOString()

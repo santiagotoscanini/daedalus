@@ -12,12 +12,17 @@ import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../provide
 // the pages show the same defaults.
 
 /** The agent's own defaults, which a key the policy leaves unset falls back to. */
-export const POLICY_DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as const
+export const POLICY_DEFAULTS = {
+  awakeHold: true,
+  claudeRemoteControl: true,
+  santree: false,
+} as const
 
 export type EffectivePolicy = {
   awakeHold: boolean
   claudeRemoteControl: boolean
   claudeWorkdir: string | null
+  santree: boolean
   providers: Record<ProviderKind, { port: number }>
 }
 
@@ -26,6 +31,7 @@ export function effectivePolicy(p: NodePolicy): EffectivePolicy {
     awakeHold: p.awakeHold ?? POLICY_DEFAULTS.awakeHold,
     claudeRemoteControl: p.claudeRemoteControl ?? POLICY_DEFAULTS.claudeRemoteControl,
     claudeWorkdir: p.claudeWorkdir?.trim() || null,
+    santree: p.santree ?? POLICY_DEFAULTS.santree,
     // Every kind a node can offer, with the port it would be probed on.
     providers: Object.fromEntries(
       NODE_PROVIDER_KINDS.map((k) => [k, { port: p.providers?.[k]?.port ?? DEFAULT_PORT[k] }]),
@@ -44,6 +50,8 @@ export function wirePolicy(p: NodePolicy): DesiredPolicy {
     awake_hold: e.awakeHold,
     claude_remote_control: e.claudeRemoteControl,
     ...(e.claudeWorkdir === null ? {} : { claude_workdir: e.claudeWorkdir }),
+    // Only when on: absent is off (wire.rs `DesiredPolicy`).
+    ...(e.santree ? { santree: true } : {}),
     // Where each provider listens, so the agent reads the right port; and
     // whether the gateway is offered it, which the controller keeps for
     // `/nodes/metrics` (the "Model Server Down" alert fires on offered ones).

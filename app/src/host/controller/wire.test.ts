@@ -17,6 +17,7 @@ import {
   providerModelSent,
   queued,
   requestLine,
+  santreeStatus,
   sessionQueued,
   setDesiredOk,
   systemInfo,
@@ -544,5 +545,33 @@ describe('the controller wire', () => {
     expect(
       providerModelSent(JSON.parse('{"delivered":true,"request":"00112233445566ff"}')),
     ).toEqual({ request: '00112233445566ff' })
+  })
+
+  it('decodes santree.status, and a host with no status file', () => {
+    expect(
+      santreeStatus(
+        JSON.parse(
+          [
+            '{"state":"running","version":"0.1.0","restart_pending":false,"live_ptys":3,',
+            '"connections":[{"node":"0123456789abcdef","name":"MacBook","count":2}],"error":null}',
+          ].join(''),
+        ),
+      ),
+    ).toEqual({
+      state: 'running',
+      version: '0.1.0',
+      restartPending: false,
+      livePtys: 3,
+      connections: [{ node: '0123456789abcdef', name: 'MacBook', count: 2 }],
+      error: null,
+    })
+    expect(
+      santreeStatus(
+        JSON.parse(
+          '{"state":"missing","version":null,"restart_pending":false,"live_ptys":0,"connections":[],"error":"allow-list: denied"}',
+        ),
+      ),
+    ).toMatchObject({ state: 'missing', version: null, error: 'allow-list: denied' })
+    expect(() => santreeStatus({ state: 'gone' })).toThrow()
   })
 })

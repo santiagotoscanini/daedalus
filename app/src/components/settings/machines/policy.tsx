@@ -22,8 +22,8 @@ import { ASIDE, ERROR_NOTE, FIELD_LABEL, Mono, Rows, Stack } from '../shared'
 import { type PolicyEditor, usePolicyEditor } from './use-policy-editor'
 
 // What the box asks of an approved machine, one row per thing it can ask:
-// its names, the model servers it offers, keeping it awake, Claude, and the
-// parts nothing in it reports. Each row saves on its own
+// its names, the model servers it offers, keeping it awake, Claude, santree,
+// and the parts nothing in it reports. Each row saves on its own
 // (./use-policy-editor.ts). The groups below return rows, not cards, so the
 // whole policy stays one list.
 
@@ -56,6 +56,7 @@ export function Policy({
           ...policyProviders(ed, n, lanDomain),
           ...policyAwake(ed),
           ...policyClaude(ed, n),
+          ...policySantree(ed),
           ...policyHardware(ed, n, shape),
         ]}
       />
@@ -291,6 +292,35 @@ function policyClaude(ed: PolicyEditor, n: NodeRow): Row[] {
             refuses the home directory (home-directory trust is never saved), so this must be a
             project directory <Mono>claude</Mono> has been run in once and trusted. Empty lets the
             tray pick the trusted project used most recently.
+          </span>
+        </Stack>
+      ),
+    },
+  ]
+}
+
+/** Whether santree on the machine may open the box's projects, through the session host. */
+function policySantree(ed: PolicyEditor): Row[] {
+  return [
+    {
+      k: 'santree',
+      v: (
+        <Stack>
+          <span className="inline-flex items-center gap-3">
+            <Switch
+              checked={ed.santree}
+              disabled={ed.busy}
+              onCheckedChange={ed.setSantree}
+              aria-label="santree"
+            />
+            <span className="text-[0.82rem]">
+              {ed.santree ? "opens the box's projects" : 'off'}
+            </span>
+          </span>
+          <span className={ASIDE}>
+            On, santree on this machine can open terminals and run commands in the box's projects,
+            through its agent: a shell on the box. Off closes its connections and ends its
+            terminals.
           </span>
         </Stack>
       ),

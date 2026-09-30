@@ -53,6 +53,7 @@ function fake(over: Partial<ControllerClient>): ControllerClient & { calls: stri
     nodesCommand: no('nodes.command'),
     controllerRotate: no('controller.rotate'),
     rootRun: no('root.run'),
+    santreeStatus: no('santree.status'),
     hello: () => null,
     link: () => ({ state: 'idle' as const }),
     close: () => undefined,
@@ -74,10 +75,11 @@ describe('the desired set', () => {
         displayName: 'PC',
         awakeHold: false,
         claudeWorkdir: '  C:/p  ',
+        santree: true,
         providers: { lemonade: { port: 8000, offer: true, models: {} } },
         hardware: { finish: 'space-black' },
       }),
-      row(KEY_B, 'revoked', { awakeHold: true }),
+      row(KEY_B, 'revoked', { awakeHold: true, santree: true }),
       row(KEY_C, 'approved'),
     ])
     expect(skipped).toEqual([])
@@ -95,9 +97,11 @@ describe('the desired set', () => {
         awake_hold: false,
         claude_remote_control: true,
         claude_workdir: 'C:/p',
+        santree: true,
         providers: { lemonade: { port: 8000, offer: true } },
       },
     })
+    // A revoked key hears no policy, santree or not: the allow-list never holds it.
     expect(byId.get(nodeIdOf(KEY_B))).toEqual({
       id: nodeIdOf(KEY_B),
       public_key: KEY_B,
@@ -105,7 +109,7 @@ describe('the desired set', () => {
     })
     // No display name, no name: the controller labels it by its hostname.
     expect(byId.get(nodeIdOf(KEY_C))).not.toHaveProperty('name')
-    // The agent's defaults for an empty policy; no workdir key at all.
+    // The agent's defaults for an empty policy; no workdir or santree key at all.
     expect(byId.get(nodeIdOf(KEY_C))?.policy).toEqual({
       awake_hold: true,
       claude_remote_control: true,
