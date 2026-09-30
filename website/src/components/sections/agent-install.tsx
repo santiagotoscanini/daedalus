@@ -3,12 +3,16 @@ import {
   AppleLogo,
   CheckIcon,
   CopyIcon,
+  DownloadIcon,
   GitHubLogo,
   LinuxLogo,
   WindowsLogo,
 } from "~/components/icons";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
+/** The newest release's disk image, by the fixed name every release gives
+ * it, so the link never names a version (agent/macos/package.sh). */
+const MAC_DMG = `${REPO}/releases/latest/download/daedalus-agent-macos.dmg`;
 /** GitHub's release search matches titles, not tags: the releases are titled
  * "daedalus-agent <version>", so that is the word that lists them. */
 const AGENT_RELEASES = `${REPO}/releases?q=daedalus-agent`;
@@ -25,30 +29,47 @@ const INSTALL_UNIX = "curl -fsSL https://daedalus.toscanini.me/install.sh | sudo
 
 type OsId = "windows" | "macos" | "linux";
 
-const OSES: { id: OsId; label: string; Icon: typeof WindowsLogo; command: string; note: string }[] =
-  [
-    {
-      id: "windows",
-      label: "Windows",
-      Icon: WindowsLogo,
-      command: INSTALL_WINDOWS,
-      note: "In PowerShell as administrator.",
-    },
-    {
-      id: "macos",
-      label: "macOS",
-      Icon: AppleLogo,
-      command: INSTALL_UNIX,
-      note: "In Terminal. Apple silicon and Intel.",
-    },
-    {
-      id: "linux",
-      label: "Linux",
-      Icon: LinuxLogo,
-      command: INSTALL_UNIX,
-      note: "Any systemd distribution (systemd 240+), x86_64 or aarch64. Tray icon on x86_64 desktops.",
-    },
-  ];
+/** Each system's install: the command line; for a Mac first the app to
+ * download, the line then being the headless way to the same install
+ * (`commandLabel`); a note under the line; and what happens after. */
+const OSES: {
+  id: OsId;
+  label: string;
+  Icon: typeof WindowsLogo;
+  download?: string;
+  commandLabel?: string;
+  command: string;
+  note: string;
+  after: string;
+}[] = [
+  {
+    id: "windows",
+    label: "Windows",
+    Icon: WindowsLogo,
+    command: INSTALL_WINDOWS,
+    note: "In PowerShell as administrator.",
+    after: "When it finishes, it asks for your box's key, which Settings › Machines shows.",
+  },
+  {
+    id: "macos",
+    label: "macOS",
+    Icon: AppleLogo,
+    download: MAC_DMG,
+    commandLabel: "Headless or over ssh, the same install from Terminal:",
+    command: INSTALL_UNIX,
+    note: "macOS 13 or newer, Apple silicon and Intel.",
+    after:
+      "Drag the app into Applications and open it. It asks once for an administrator's password, then Log in… from the menu bar joins your box.",
+  },
+  {
+    id: "linux",
+    label: "Linux",
+    Icon: LinuxLogo,
+    command: INSTALL_UNIX,
+    note: "Any systemd distribution (systemd 240+), x86_64 or aarch64. Tray icon on x86_64 desktops.",
+    after: "When it finishes, it asks for your box's key, which Settings › Machines shows.",
+  },
+];
 
 /** Which tab the visitor's own machine is. Phones and tablets get the
  * default: none of them runs the agent, and a guess would only be wrong. */
@@ -67,9 +88,9 @@ function detectOs(): OsId | null {
 }
 
 /** The agent's install block: a picker for the three systems, one button
- * that copies the selected system's line, and the line itself underneath,
- * small but always shown, because it runs as root and should be read
- * before it is pasted.
+ * that copies the selected system's line — on a Mac, after the one that
+ * downloads the app — and the line itself underneath, small but always
+ * shown, because it runs as root and should be read before it is pasted.
  *
  * Prerender has no navigator, so the static page shows Windows (the first
  * tab); after hydration the visitor's own system is selected. All three
@@ -192,29 +213,38 @@ export function AgentInstall() {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={copy}
-          aria-label={`Copy install command for ${current.label}`}
-          className="btn btn-primary h-11 grow px-5 sm:grow-0"
-        >
-          {/* Both labels share one grid cell, so the button keeps the width
-              of the longer one and "Copied" does not shrink it. */}
-          <span className="grid">
-            <span
-              className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${copied ? "invisible" : ""}`}
-            >
-              <CopyIcon size={15} />
-              Copy install command
+        {/* A Mac downloads the app; its command line, the headless way to
+            the same install, is copied from beside the line itself. */}
+        {current.download ? (
+          <a href={current.download} className="btn btn-primary h-11 grow px-5 sm:grow-0">
+            <DownloadIcon size={15} />
+            Download for Mac
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={copy}
+            aria-label={`Copy install command for ${current.label}`}
+            className="btn btn-primary h-11 grow px-5 sm:grow-0"
+          >
+            {/* Both labels share one grid cell, so the button keeps the width
+                of the longer one and "Copied" does not shrink it. */}
+            <span className="grid">
+              <span
+                className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${copied ? "invisible" : ""}`}
+              >
+                <CopyIcon size={15} />
+                Copy install command
+              </span>
+              <span
+                className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${copied ? "" : "invisible"}`}
+              >
+                <CheckIcon size={15} className="text-status-ok" />
+                Copied
+              </span>
             </span>
-            <span
-              className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${copied ? "" : "invisible"}`}
-            >
-              <CheckIcon size={15} className="text-status-ok" />
-              Copied
-            </span>
-          </span>
-        </button>
+          </button>
+        )}
         <a href={AGENT_RELEASES} className="btn btn-ghost h-11 grow px-5 sm:grow-0">
           <GitHubLogo size={15} />
           All releases
@@ -232,6 +262,22 @@ export function AgentInstall() {
               aria-labelledby={`${baseId}-tab-${o.id}`}
               className={`col-start-1 row-start-1 min-w-0 ${active ? "" : "invisible"}`}
             >
+              {o.commandLabel && (
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-pretty text-[12px] leading-relaxed text-dim">
+                    {o.commandLabel}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={copy}
+                    tabIndex={active ? 0 : -1}
+                    aria-label={`Copy install command for ${o.label}`}
+                    className="shrink-0 rounded-md px-2 py-1 font-mono text-[11px] text-dim transition-colors hover:bg-white/5 hover:text-accent"
+                  >
+                    {active && copied ? "copied" : "copy"}
+                  </button>
+                </div>
+              )}
               <CommandLine
                 text={o.command}
                 label={`${o.label} install command`}
@@ -245,6 +291,7 @@ export function AgentInstall() {
                 </p>
               )}
               <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">{o.note}</p>
+              <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">{o.after}</p>
             </div>
           );
         })}
@@ -252,10 +299,6 @@ export function AgentInstall() {
 
       <p role="status" className="sr-only">
         {announcement}
-      </p>
-
-      <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">
-        When it finishes, it asks for your box's key, which Settings › Machines shows.
       </p>
 
       <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">

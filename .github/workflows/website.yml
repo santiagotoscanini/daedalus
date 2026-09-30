@@ -89,6 +89,12 @@ jobs:
           test -f dist/client/install.ps1
           test -f dist/client/install.sh
 
+      # "Download for Mac" links the newest agent release's disk image by its
+      # fixed name (agent/macos/package.sh): a release without it, or an
+      # engine `v*` release that took "latest", would 404 the button.
+      - name: The Mac download resolves
+        run: curl -fsSI -o /dev/null https://github.com/santiagotoscanini/daedalus/releases/latest/download/daedalus-agent-macos.dmg
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

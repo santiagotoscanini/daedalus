@@ -11,13 +11,19 @@
 # Claude Code's remote control for the user who ran sudo, and updates itself.
 # Re-running on an installed machine replaces the binaries and keeps
 # config.toml.
-# `sudo daedalus-agent uninstall` removes what `install` registered.
+# `sudo daedalus-agent uninstall` removes what `install` registered (on a
+# Mac, `uninstall --app` — the menu bar's "Uninstall…" — the app as well).
 #
-#   macOS: the two universal binaries under
-#     /Library/Application Support/daedalus-agent/bin; the service as a root
-#     LaunchDaemon, the menu bar app as a LaunchAgent in every user's session;
-#     `install` records the user who ran sudo (installer.json), the one user
-#     santree's socket serves besides root.
+#   macOS 13 or newer: Daedalus Agent.app, the same bundle the disk image
+#     carries (the website's "Download for Mac"), unpacked and checked here,
+#     then its own `install`, which puts it in its place under
+#     /Library/Application Support/daedalus-agent (root's alone) and registers
+#     the service as a root LaunchDaemon and the menu bar app as a LaunchAgent
+#     in every user's session; it records the user who ran sudo
+#     (installer.json), the one user santree's socket and the log-in serve
+#     besides root, and refuses to change a recorded one without
+#     --replace-operator. For a Mac with nobody at it (over ssh); with a
+#     person at it, the disk image is the same install.
 #   Linux (systemd distributions, x86_64 and aarch64): the static service
 #     under /opt/daedalus-agent/bin — and on x86_64 the tray, for desktops —
 #     then `daedalus-agent install`: a root systemd service, the session as a
@@ -39,8 +45,8 @@
 # asks for the app's address, an admin confirms in the browser,
 # and the Mac gets a WireGuard tunnel of its own to the box (agent/README.md,
 # "Logging in"). No key is typed here, and --pin and --controller are
-# refused on a Mac. Nothing older than 0.23.0 is installed on one: older
-# agents paired instead of logging in.
+# refused on a Mac. Nothing older than 0.24.0 is installed on one: the
+# Mac's agent is an app from 0.24 on.
 #
 # Pairing (Linux) — which controller key to trust. The machine trusts none
 # it was not told of: installed without --pin it runs unpaired and connects to
@@ -64,8 +70,10 @@ umask 022
 REPO="${DAEDALUS_REPO:-santiagotoscanini/daedalus}"
 VERSION="${DAEDALUS_AGENT_VERSION:-}"
 
-# --controller HOST:PORT and --pin FINGERPRINT, passed on to `install`.
+# --controller HOST:PORT and --pin FINGERPRINT, passed on to `install`; on a
+# Mac, --replace-operator.
 LINK_ARGS=""
+REPLACE_OPERATOR=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --controller | --pin)
@@ -74,7 +82,11 @@ while [ $# -gt 0 ]; do
       LINK_ARGS="$LINK_ARGS $1 $2"
       shift 2
       ;;
-    *) echo "install.sh: unknown argument $1 (known: --controller HOST:PORT, --pin FINGERPRINT)" >&2; exit 1 ;;
+    --replace-operator)
+      REPLACE_OPERATOR="--replace-operator"
+      shift
+      ;;
+    *) echo "install.sh: unknown argument $1 (known: --controller HOST:PORT, --pin FINGERPRINT, --replace-operator)" >&2; exit 1 ;;
   esac
 done
 die() { echo "install.sh: $*" >&2; exit 1; }
@@ -191,9 +203,10 @@ check_asset() {
 }
 
 install_macos() {
-  ROOT="/Library/Application Support/daedalus-agent"
-  BIN="$ROOT/bin"
+  asset="daedalus-agent-universal-apple-darwin.app.zip"
   [ -z "$LINK_ARGS" ] || die "a Mac logs in from its menu bar (\"Log in…\"): --pin and --controller are for Linux"
+  macos="$(sw_vers -productVersion)"
+  [ "${macos%%.*}" -ge 13 ] || die "Daedalus Agent needs macOS 13 or newer; this Mac runs $macos"
 
   echo "looking up releases of $REPO"
   if [ -n "$VERSION" ]; then
@@ -206,36 +219,25 @@ install_macos() {
   base="https://github.com/$REPO/releases/download/$tag"
   echo "installing $tag"
 
-  mkdir -p "$BIN" "$ROOT/logs"
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
   fetch_manifest "$tag" "$tmp"
-  for pair in "daedalus-agent-universal-apple-darwin:daedalus-agent" \
-              "daedalus-agent-tray-universal-apple-darwin:daedalus-agent-tray"; do
-    asset="${pair%%:*}"; name="${pair##*:}"
-    echo "  $asset"
-    curl -fsSL -o "$tmp/$name" "$base/$asset"
-    check_asset "$tmp" "$tmp/$name" "$asset"
-    chmod 755 "$tmp/$name"
-  done
+  echo "  $asset"
+  curl -fsSL -o "$tmp/app.zip" "$base/$asset"
+  check_asset "$tmp" "$tmp/app.zip" "$asset"
+  ditto -x -k "$tmp/app.zip" "$tmp/unpacked"
+  app="$tmp/unpacked/Daedalus Agent.app"
+  [ -d "$app" ] || die "$asset holds no Daedalus Agent.app"
+  codesign --verify --deep --strict "$app" || die "the app's signature does not verify"
 
-  # Stop what runs before the files move, so the daemon's rename-in-place
-  # updater and this installer never race.
-  launchctl bootout system/me.toscanini.daedalus-agent 2>/dev/null || true
-  uid="$(stat -f %u /dev/console 2>/dev/null || echo 0)"
-  [ "$uid" = 0 ] || launchctl bootout "gui/$uid/me.toscanini.daedalus-agent-tray" 2>/dev/null || true
-
-  mv -f "$tmp/daedalus-agent" "$BIN/daedalus-agent"
-  mv -f "$tmp/daedalus-agent-tray" "$BIN/daedalus-agent-tray"
-  # A `daedalus-agent status` from any terminal.
-  ln -sf "$BIN/daedalus-agent" /usr/local/bin/daedalus-agent 2>/dev/null || true
-  chmod 755 "$ROOT" "$BIN" "$ROOT/logs"
-
-  # shellcheck disable=SC2086 # LINK_ARGS is flag/value pairs checked above
-  "$BIN/daedalus-agent" install $LINK_ARGS
+  # The app's own `install`: it copies this bundle into its place as root,
+  # checks it, swaps it in, and starts both jobs (and moves an older
+  # install's files out of the way). SUDO_USER names the user it serves.
+  # shellcheck disable=SC2086 # empty, or the one flag
+  "$app/Contents/MacOS/daedalus-agent" install $REPLACE_OPERATOR
   echo
   echo "installed $tag. Status: daedalus-agent status"
-  echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
+  echo "logs: /Library/Application Support/daedalus-agent/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
   echo "nothing listens on the LAN; the box hears from this Mac through its own tunnel, once it logs in"
   echo
   echo "Log in from the menu bar: the daedalus mark › \"Log in…\"."
@@ -317,12 +319,13 @@ case "$(uname -s)" in
   Linux) os=linux ;;
   *) die "this installer is for macOS and Linux; Windows uses install.ps1" ;;
 esac
+[ -z "$REPLACE_OPERATOR" ] || [ "$os" = macos ] || die "--replace-operator is for a Mac"
 if [ "$(id -u)" != 0 ]; then
   [ "$os" = macos ] && die "run it with sudo: the service and the launchd jobs need root"
   die "run it with sudo: the service and its systemd units need root"
 fi
-# A Mac logs in from its menu bar, which 0.23.0 brought: nothing older there.
-[ "$os" = macos ] && MIN_VERSION="0.23.0"
+# A Mac's agent is an app from 0.24.0 on: nothing older there.
+[ "$os" = macos ] && MIN_VERSION="0.24.0"
 if [ -n "$VERSION" ] && ! at_least "$VERSION"; then
   die "agent $VERSION is older than $MIN_VERSION, the oldest this installer puts on a $os machine"
 fi
