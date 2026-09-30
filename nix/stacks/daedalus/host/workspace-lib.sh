@@ -61,6 +61,20 @@ lock_workspaces() {
 # The outcome lands in $OUT_DIR/.state/<name> for publish_workspaces to fold
 # into the snapshot, so the UI can say "left alone: uncommitted changes"
 # instead of silently showing a workspace that stopped following its repo.
+
+# Whether a tree carries changes a fast-forward could lose. Untracked paths
+# under `.santree/` do not count: santree keeps its own state there (a nested
+# `.gitignore` that ignores its worktrees but not itself, per-ticket worktrees
+# on their own branches), and none of it is anything a fast-forward touches —
+# if an incoming commit ever adds a path that exists there untracked, `merge
+# --ff-only` refuses on its own and the workspace reads `blocked`. A TRACKED
+# change under `.santree/` still counts, like any other.
+tree_dirty() {
+  local s
+  s="$(git_op -C "$1" status --porcelain 2>/dev/null || true)"
+  [ -n "$(grep -v '^?? \.santree/' <<<"$s" || true)" ]
+}
+
 sync_workspace() {
   local dir="$1" name result detail err
   name="$(basename "$dir")"
@@ -70,7 +84,7 @@ sync_workspace() {
   if ! git_op -C "$dir" fetch --quiet --prune 2>"$err"; then
     result=failed
     detail="fetch failed: $(tail -c 200 "$err" | tr '\n' ' ')"
-  elif [ -n "$(git_op -C "$dir" status --porcelain 2>/dev/null)" ]; then
+  elif tree_dirty "$dir"; then
     result=dirty
     detail="uncommitted changes — left alone"
   elif ! git_op -C "$dir" merge --ff-only --quiet '@{upstream}' 2>"$err"; then
@@ -99,7 +113,7 @@ publish_workspaces() {
     head="$(git_op -C "$d" rev-parse --short=12 HEAD 2>/dev/null || true)"
     head_at="$(git_op -C "$d" log -1 --format=%cI 2>/dev/null || true)"
     dirty=false
-    [ -n "$(git_op -C "$d" status --porcelain 2>/dev/null)" ] && dirty=true
+    tree_dirty "$d" && dirty=true
     # "<ahead>\t<behind>" against the upstream; empty (→ nulls) when the
     # branch tracks nothing, which the UI reports rather than inventing 0/0.
     counts="$(git_op -C "$d" rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null || true)"
