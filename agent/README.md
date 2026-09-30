@@ -748,8 +748,39 @@ SHA-256; the manifest's signature is the agent's to check on every later
 update (PowerShell has no ed25519), so at install the trust is HTTPS to
 GitHub.
 
-On a Mac or a Linux machine, from a terminal, as the user whose Claude Code
-should run there:
+On a Mac (macOS 13 or newer), as the user whose Claude Code should run
+there: download the disk image — the website's "Download for Mac", the
+newest release's `daedalus-agent-macos.dmg` — drag **Daedalus Agent** into
+Applications, and open it. One administrator prompt says what it installs
+and for whom; then the daedalus mark is in the menu bar, and "Log in…"
+joins the box ("Logging in (macOS)"). The app and the disk image are
+Developer ID signed, notarized and stapled.
+
+What opening it does: the app in `/Applications` is only the user's copy.
+Its `install` (`daedalus-agent install --installer-uid <that user>`, run
+behind the prompt) copies the bundle into a staging folder only root can
+reach, makes it root's there and checks it — its identifier, its version,
+and that its service answers with that version — and only then moves it,
+in one exchange, to `/Library/Application Support/daedalus-agent/Daedalus
+Agent.app`, a folder chain no one but root can write. That copy is what
+launchd runs: the service as a LaunchDaemon (root, at boot, kept alive), the
+menu bar app as a LaunchAgent for every user, both listed under the app's
+name in System Settings › Login Items (switched off there, the service
+stops answering; the menu then says so, and its entry opens that pane). It
+links `daedalus-agent` into
+`/usr/local/bin` and records the user it serves (`installer.json`: santree's
+socket and the log-in answer to that user and root), which only the user at
+the console can be, and which a later install changes only with
+`--replace-operator`. Opening the app again starts the menu bar app when it
+is not running; opening a newer copy installs that one. Nothing is
+registered with the application firewall: the agent listens on nothing the
+LAN can reach. "Uninstall Daedalus Agent…" in the menu (`sudo daedalus-agent
+uninstall --app`) logs the Mac out and removes the jobs, the link and both
+copies of the app; the data directory stays, so a re-install is the same
+machine. `sudo daedalus-agent uninstall` removes only the jobs.
+
+On a Mac with nobody at it, or a Linux machine, from a terminal, as the user
+whose Claude Code should run there:
 
 ```sh
 curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
@@ -760,12 +791,10 @@ manifest's signature against the release key where the machine's openssl
 can check ed25519 (OpenSSL 3; not macOS's LibreSSL, where the trust at
 install is HTTPS to GitHub).
 
-[`install.sh`](install.sh) on a Mac downloads the two universal binaries,
-registers the service as a LaunchDaemon (root, at boot, kept alive) and the
-menu bar app as a LaunchAgent for every user, starts both, and links
-`daedalus-agent` into `/usr/local/bin`. Nothing is registered with the
-application firewall: the agent listens on nothing the LAN can reach.
-`sudo daedalus-agent uninstall` removes both jobs.
+[`install.sh`](install.sh) on a Mac downloads the same app bundle the disk
+image carries, checks its signature, and runs the bundle's own `install`
+for the user who ran sudo — the same install as opening the app, without
+the prompt. The menu bar app starts at that user's next login.
 
 On Linux — a distribution running systemd 240 or newer (2018 onwards;
 `install` refuses an older one), on x86_64 or aarch64 (NixOS is configured
@@ -805,7 +834,10 @@ except `controller_address` and `controller_pin`, which `--controller` and
 site serves both scripts from `main`, so neither command names a version.
 Neither installs a release older than 0.21.0 (`MIN_VERSION`), newest or
 named: older agents trusted the first controller that answered — and on a
-Mac nothing older than 0.23.0, which paired instead of logging in.
+Mac nothing older than 0.24.0, the first that is an app. A Mac on 0.23
+says a newer release needs a re-install, and one re-install — the disk
+image or install.sh — moves it to the app: the old `bin/` goes, and the
+data directory, the identity, the log-in and the tunnel stay as they are.
 Trust at install is HTTPS to GitHub; every update after that is verified by
 the agent against the release key it carries.
 
@@ -1076,12 +1108,16 @@ once.
 daedalus-agent install [--controller HOST:PORT] [--pin FINGERPRINT]
                                     register and start the service, the session and the tray (administrator / sudo);
                                     --controller and --pin name the controller and pin its key in config.toml;
-                                    without --pin the machine runs unpaired. macOS: no options (the Mac logs in)
+                                    without --pin the machine runs unpaired. macOS: run from inside Daedalus
+                                    Agent.app, which it puts in place; no --pin (the Mac logs in);
+                                    --installer-uid UID is the app's first open's, --replace-operator lets
+                                    another user become the one it serves
 daedalus-agent pair --pin FINGERPRINT [--controller HOST:PORT]
                                     pair it: trust that controller key (administrator / sudo); the running
                                     service connects at once. pair --check exits 0 when paired. Not on macOS
 daedalus-agent enroll-finish CODE   (macOS, Linux) a log-in's last step, as root; the menu bar runs it behind the password prompt
-daedalus-agent uninstall            stop and remove them (administrator / sudo)
+daedalus-agent uninstall [--app]    stop and remove them (administrator / sudo); macOS --app: log out and
+                                    remove the app too, the data directory staying (the menu's "Uninstall…")
 daedalus-agent run                  service entry point; what the SCM, launchd or systemd calls (and nix, for the controller)
 daedalus-agent serve                the same work in the foreground, in a terminal
 daedalus-agent session              the Claude session without a tray: the Linux user unit (refused where the tray runs it, and on the controller)
@@ -1115,9 +1151,15 @@ C:\ProgramData\daedalus-agent\logs\agent.log.*            the service's daily-ro
 macOS:
 
 ```
-/Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update, .bad after a rollback)
-/Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the menu bar app
-/Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,policy.json,logs/}
+/Library/Application Support/daedalus-agent/Daedalus Agent.app       what launchd runs, root:wheel: Contents/MacOS/daedalus-agent
+                                                                      (the service; /usr/local/bin links to it) and daedalus-agent-tray
+                                                                      (the menu bar app)
+/Library/Application Support/daedalus-agent/.update/                 root's alone (0700): stage/ (the next bundle, checked there),
+                                                                      old/ (the one it replaced, until it proves itself), bad/
+                                                                      (one rolled back from), download (while it unpacks)
+/Applications/Daedalus Agent.app                                      the user's copy, dragged from the disk image: opening it
+                                                                      starts the menu bar app, or installs (never run by launchd)
+/Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,policy.json,installer.json,logs/}
 /Library/Application Support/daedalus-agent/tunnel.toml              the WireGuard client config from the log-in (root's, 0600); absent: logged out
 /Library/Application Support/daedalus-agent/run/agent.sock            the local socket: the menu bar app and the verbs
 /Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
@@ -1237,6 +1279,22 @@ its binary was replaced leaves for the new one too. Claude keeps running in
 its jobs on every OS and is re-attached. A release whose signature fails is
 reported in the status document and never installed.
 
+**On a Mac the release is the app.** Its one asset (role `bundle`,
+`daedalus-agent-universal-apple-darwin.app.zip`) is downloaded into
+`.update/`, checked against the manifest, unpacked into the stage, made
+root's there and fenced before anything else happens: Apple's signature
+whole, with Developer ID of team H8M3SN9RDZ and the fixed identifiers
+(`me.toscanini.daedalus-agent-tray` for the bundle,
+`me.toscanini.daedalus-agent` for the service), the manifest's version in
+Info.plist, and the staged service itself answering `version` with it — so a
+bundle that would not start never replaces one that does. Then the
+probation is recorded and the two bundles are exchanged in one rename
+(`RENAME_SWAP`), the previous one kept in `.update/old/`; going back
+exchanges them again and keeps the failed one in `.update/bad/`. Every path
+here is the canonical bundle's, never the running executable's
+(`src/update/{bundle,slot}.rs`, `src/os/macos/bundle.rs`). The disk image in
+the same release (role `installer`) is for people and is never downloaded.
+
 **Probation, and going back.** A signed binary is not trusted until it has
 run. The update records the new version on probation in `state.json`
 (`probation`: the version, the one it replaced, its starts), and its
@@ -1286,31 +1344,55 @@ next release's number, which the box's build carries until it is tagged.
 
 Bump `version` in `Cargo.toml`, commit, tag `agent-v<version>` on a commit
 on `main`, push the tag. [`.github/workflows/agent.yml`](../.github/workflows/agent.yml) builds
-the Windows binaries, the macOS universal binaries, the static Linux
-service for x86_64 and aarch64 (musl, rustls; each on a runner of its own
-architecture) and the Linux tray for x86_64 (glibc, GTK), every build
-`--locked`; writes `release.json`, signs it once with `AGENT_SIGNING_KEY`
-(held in the `release` environment, `agent-v*` tags only, the operator the
-required reviewer), checks the signature against the compiled-in key, and
-publishes the release. The tag and `Cargo.toml` must agree, and the tagged
-commit must be on `main`, or nothing is published. For one release the
-assets are also signed one by one, as agents up to 0.20 verify them.
+the Windows binaries, Daedalus Agent.app for macOS (universal; zipped for
+the updater, and in the disk image `daedalus-agent-macos.dmg`, a fixed name
+so `releases/latest/download/` reaches it), the static Linux service for
+x86_64 and aarch64 (musl, rustls; each on a runner of its own architecture)
+and the Linux tray for x86_64 (glibc, GTK), every build `--locked`; writes
+`release.json`, signs it once with `AGENT_SIGNING_KEY` (held in the
+`release` environment, `agent-v*` tags only, the operator the required
+reviewer), checks the signature against the compiled-in key, and publishes
+the release as the latest. The tag and `Cargo.toml` must agree, and the
+tagged commit must be on `main`, or nothing is published.
+
+**A draft first.** A version whose `Cargo.toml` carries
+`[package.metadata.release] draft = true` is published as a draft: GitHub
+lists it to the repository's writers alone, so no agent is offered it (the
+updater skips drafts besides) and the website's download does not point at
+it. Try it — `gh release download agent-v<version> -R
+santiagotoscanini/daedalus -p daedalus-agent-macos.dmg` — then publish it
+with `gh release edit agent-v<version> -R santiagotoscanini/daedalus
+--draft=false --latest`, and drop the table in the next version's bump.
+
+**The Mac's app** is put together by [`macos/package.sh`](macos/package.sh)
+with the tools every Mac has: the two universal binaries in a bundle,
+`Info.plist` from `macos/Info.plist.in`, the icon from
+`macos/AppIcon-1024.png` (the daedalus mark on macOS's icon grid;
+`macos/AppIcon.svg` is its source), and the disk image's window from
+`macos/dmg-background.png` (source: `macos/dmg-background.html`) laid out by
+Finder. The PR check packages it too, signed ad hoc, and runs the menu bar
+app's smoke test (`DAEDALUS_AGENT_SMOKE=1`).
 
 The agent trusts every key in `RELEASE_PUBLIC_KEYS`: the current one, and
 a spare made and kept offline (PLAN, owed to the operator). Losing every
 listed private key strands every installed agent on its version; a leaked
 current key is left by a release the spare signs that drops it.
 
-**Apple's signature.** The macOS binaries are codesigned (Developer ID,
-hardened runtime) and notarized on the runner when the repository's
-`release` environment holds `APPLE_CERTIFICATE` (the Developer ID
-Application .p12, base64), `APPLE_CERTIFICATE_PASSWORD`,
-`APPLE_SIGNING_IDENTITY` (the certificate's common name), `APPLE_API_KEY`
-(the App Store Connect .p8), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`.
-Without them the job warns and ships the binaries unsigned by Apple —
-launchd runs them all the same, and the updater trusts only our own
-signature. Bare executables notarize but cannot be stapled; a Mac that is
-online fetches the ticket.
+**Apple's signature.** The app is codesigned (Developer ID, hardened
+runtime, a timestamp; the service with the identifier
+`me.toscanini.daedalus-agent`, the bundle with its own,
+`me.toscanini.daedalus-agent-tray` — both fixed for good, as launchd's
+records and the updater's fence key on them), notarized and stapled, then
+zipped; the disk image is signed, notarized and stapled too. Each
+notarization must come back "Accepted", and the job then checks what a Mac
+will: the team and identifiers, `spctl` on the app and on the disk image,
+both tickets (`stapler validate`, retried while Apple does not answer), the
+version, and the menu bar app's smoke test. The secrets are the `release`
+environment's `APPLE_CERTIFICATE` (the Developer ID Application .p12,
+base64), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (the
+certificate's common name), `APPLE_API_KEY` (the App Store Connect .p8),
+`APPLE_API_KEY_ID` and `APPLE_API_ISSUER`; without them the job fails, since
+Gatekeeper and the updater would both refuse the app.
 
 ## Developing without Windows or a Mac
 

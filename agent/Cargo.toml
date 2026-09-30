@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.23.1"
+version = "0.24.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
@@ -8,6 +8,13 @@ repository = "https://github.com/santiagotoscanini/daedalus"
 license = "MIT"
 publish = false
 build = "build.rs"
+
+# Published as a draft (.github/workflows/agent.yml, "Publish"): the operator
+# tries 0.24's Mac app before any machine or the website sees it, then
+# publishes it by hand (README "Releasing"). The next version's bump drops
+# this table.
+[package.metadata.release]
+draft = true
 
 [lib]
 name = "daedalus_agent"
@@ -31,9 +38,9 @@ required-features = ["tray"]
 
 [features]
 default = ["tray"]
-# The tray's dependencies: tray-icon everywhere, tao's event loop on macOS,
-# GTK's on Linux.
-tray = ["dep:tray-icon", "dep:tao", "dep:gtk"]
+# The tray's dependencies: tray-icon everywhere, tao's event loop and Login
+# Items' status on macOS, GTK's on Linux.
+tray = ["dep:tray-icon", "dep:tao", "dep:gtk", "dep:objc2-service-management", "dep:objc2-foundation"]
 
 [dependencies]
 anyhow = "1"
@@ -135,6 +142,12 @@ libc = "0.2"
 [target.'cfg(target_os = "macos")'.dependencies]
 tray-icon = { version = "0.25", optional = true }
 tao = { version = "0.37", optional = true }
+# Whether the user switched the service off in System Settings › Login
+# Items (`SMAppService.statusForLegacyURL`), and opening that pane: the
+# menu bar app's one read of Background Task Management. objc2 and
+# objc2-foundation are tao's already.
+objc2-service-management = { version = "0.3", optional = true, default-features = false, features = ["std", "SMAppService", "objc2", "objc2-foundation"] }
+objc2-foundation = { version = "0.3", optional = true, default-features = false, features = ["std", "NSString", "NSURL"] }
 # Info.plist, the LaunchServices handlers and the install history read in
 # process, binary or XML, from a bounded regular-file read (no `plutil`).
 plist = { version = "1", default-features = false }

@@ -3,24 +3,30 @@
 # `check` runs on every PR and push to main that touches agent/: fmt, clippy
 # with warnings denied, and the tests, on Windows, macOS and Linux (all three
 # ship; on Linux clippy also runs without the GTK tray, as the static
-# service is built). On an `agent-v*` tag, `build-windows`, `build-macos`,
-# `build-linux` (the static musl service, x86_64 and aarch64, each on a
-# runner of its own architecture so no cross toolchain is involved) and
-# `build-linux-tray` (the GTK tray, glibc, x86_64 only) produce the
-# binaries, and `release` writes `release.json` — the product, version and
-# tag, and per asset its target, role, name, SHA-256 and size — signs it
-# once with the release key under its own context, and publishes a GitHub
-# release every installed agent watches (agent/src/update/). Every build is
-# `--locked`, and a tag whose commit is not on main publishes nothing.
+# service is built; on macOS the app and its disk image are packaged, signed
+# ad hoc, and opened in a smoke run). On an `agent-v*` tag, `build-windows`,
+# `build-macos` (Daedalus Agent.app: zipped for the updater, in a disk image
+# for people; agent/macos/package.sh), `build-linux` (the static musl
+# service, x86_64 and aarch64, each on a runner of its own architecture so
+# no cross toolchain is involved) and `build-linux-tray` (the GTK tray,
+# glibc, x86_64 only) produce the assets, and `release` writes
+# `release.json` — the product, version and tag, and per asset its target,
+# role, name, SHA-256 and size — signs it once with the release key under
+# its own context, and publishes a GitHub release every installed agent
+# watches (agent/src/update/). Every build is `--locked`, and a tag whose
+# commit is not on main publishes nothing. A version whose Cargo.toml says
+# `[package.metadata.release] draft = true` is published as a draft, which
+# no agent and no website link sees until the operator publishes it
+# (agent/README.md "Releasing").
 #
-# Two signatures on a macOS binary, for two audiences. Apple's — Developer
-# ID codesign with the hardened runtime, then notarization — is what
-# Gatekeeper and the application firewall look at, and it happens on the
-# macOS runner when the `release` environment holds the certificate and the
-# App Store Connect key (the same six secrets santree's release uses; see
-# agent/README.md "Releasing"). Without them the binaries ship unsigned and
-# the job says so: launchd runs an unsigned daemon fine, so an unsigned
-# release still installs and updates. Ours — the raw ed25519 signature
+# Two signatures on the Mac's app, for two audiences. Apple's — Developer
+# ID codesign with the hardened runtime, notarization and a stapled ticket,
+# for the app and again for the disk image — is what Gatekeeper looks at
+# when a person opens it, and what the updater's fence asks for (our team,
+# the fixed identifiers); it is made on the macOS runner from the `release`
+# environment's certificate and App Store Connect key (the same six secrets
+# santree's release uses; see agent/README.md "Releasing"), and without
+# them the job fails. Ours — the raw ed25519 signature
 # over the manifest from AGENT_SIGNING_KEY, whose public half is compiled
 # into the agent — is what the updater checks, and it is made on Linux with
 # openssl after the builds, in the `release` environment (the secret lives
@@ -54,8 +60,8 @@ env:
   CARGO_TERM_COLOR: always
   ASSET: daedalus-agent-x86_64-pc-windows-msvc.exe
   TRAY_ASSET: daedalus-agent-tray-x86_64-pc-windows-msvc.exe
-  MAC_ASSET: daedalus-agent-universal-apple-darwin
-  MAC_TRAY_ASSET: daedalus-agent-tray-universal-apple-darwin
+  MAC_BUNDLE_ASSET: daedalus-agent-universal-apple-darwin.app.zip
+  MAC_DMG_ASSET: daedalus-agent-macos.dmg
   LINUX_X64_ASSET: daedalus-agent-x86_64-unknown-linux-musl
   LINUX_ARM_ASSET: daedalus-agent-aarch64-unknown-linux-musl
   LINUX_TRAY_ASSET: daedalus-agent-tray-x86_64-unknown-linux-gnu
@@ -96,6 +102,43 @@ jobs:
         run: cargo clippy --locked --no-default-features --all-targets -- -D warnings
       - name: Test
         run: cargo test --locked
+      # The Mac's app as a release packages it (agent/macos/package.sh),
+      # signed ad hoc: the bundle and its icon, the zip, the disk image's
+      # window laid out by Finder — then what a Mac runs of it.
+      - name: Package the app (macOS)
+        if: runner.os == 'macOS'
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          cargo build --locked --bins
+          version="$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
+          macos/package.sh "$version" target/debug "$RUNNER_TEMP/pkg"
+      - name: Check the app (macOS)
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          pkg="$RUNNER_TEMP/pkg"
+          app="$pkg/Daedalus Agent.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app/Contents/MacOS/daedalus-agent" 2>&1 | grep -qx 'Identifier=me.toscanini.daedalus-agent'
+          codesign -dv "$app" 2>&1 | grep -qx 'Identifier=me.toscanini.daedalus-agent-tray'
+          "$app/Contents/MacOS/daedalus-agent" version
+          # The menu built in the window server, then gone.
+          DAEDALUS_AGENT_SMOKE=1 "$app/Contents/MacOS/daedalus-agent-tray"
+          # The zip unpacks to the one bundle, as the updater requires.
+          x="$(mktemp -d)"
+          ditto -x -k "$pkg/daedalus-agent-universal-apple-darwin.app.zip" "$x"
+          [ "$(ls "$x")" = "Daedalus Agent.app" ]
+          # The disk image: the app, the Applications link, the window's art
+          # and the layout Finder wrote.
+          mnt="$(mktemp -d)"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mnt" "$pkg/daedalus-agent-macos.dmg" > /dev/null
+          test -d "$mnt/Daedalus Agent.app"
+          [ "$(readlink "$mnt/Applications")" = /Applications ]
+          test -f "$mnt/.background/background.png"
+          test -f "$mnt/.DS_Store"
+          hdiutil detach "$mnt" > /dev/null
 
   # The tag names the version; Cargo.toml must agree, or an agent would
   # install a release that reports a different version than its tag. And
@@ -161,8 +204,6 @@ jobs:
     defaults:
       run:
         working-directory: agent
-    env:
-      HAS_APPLE: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,30 +213,35 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
-      # One universal binary rather than two per-arch downloads: Intel Macs
+      # One universal app rather than two per-arch downloads: Intel Macs
       # are still out there, and the updater's asset table names one file.
       - name: Build both architectures
         run: |
           cargo build --release --locked --target aarch64-apple-darwin
           cargo build --release --locked --target x86_64-apple-darwin
-      - name: Stage universal binaries
+      - name: Universal binaries
         run: |
-          mkdir -p dist
+          mkdir -p "$RUNNER_TEMP/bin"
           for bin in daedalus-agent daedalus-agent-tray; do
-            lipo -create -output "dist/$bin" \
+            lipo -create -output "$RUNNER_TEMP/bin/$bin" \
               "target/aarch64-apple-darwin/release/$bin" \
               "target/x86_64-apple-darwin/release/$bin"
-            lipo -info "dist/$bin"
+            lipo -info "$RUNNER_TEMP/bin/$bin"
           done
-          cp install.sh dist/
+      # Gatekeeper refuses an app that is not signed and notarized, and the
+      # updater's fence one not signed by our team: no Apple secrets, no
+      # release.
       - name: Import the signing certificate
-        if: env.HAS_APPLE == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           set -euo pipefail
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "::error::no APPLE_CERTIFICATE / APPLE_SIGNING_IDENTITY in the release environment (agent/README.md \"Releasing\")"
+            exit 1
+          fi
           keychain="$RUNNER_TEMP/agent-signing.keychain-db"
           password=$(openssl rand -base64 24)
           security create-keychain -p "$password" "$keychain"
@@ -215,9 +261,13 @@ jobs:
             echo "::error::the imported certificate does not provide the expected signing identity"
             exit 1
           fi
-      - name: Codesign and notarize
-        if: env.HAS_APPLE == 'true'
+      # The app signed and notarized, stapled, zipped; the disk image laid
+      # out, signed, notarized and stapled (agent/macos/package.sh). Each
+      # notarization must come back "Accepted" or the job fails.
+      - name: Package, sign and notarize
+        timeout-minutes: 60
         env:
+          REF_NAME: ${{ github.ref_name }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -225,28 +275,63 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          printf '%s\n' "$APPLE_API_KEY" > "$RUNNER_TEMP/asc-api-key.p8"
-          for bin in daedalus-agent daedalus-agent-tray; do
-            codesign --force --options runtime --timestamp \
-              --sign "$APPLE_SIGNING_IDENTITY" "dist/$bin"
-            codesign --verify --strict --verbose=2 "dist/$bin"
+          export APPLE_API_KEY_PATH="$RUNNER_TEMP/asc-api-key.p8"
+          printf '%s\n' "$APPLE_API_KEY" > "$APPLE_API_KEY_PATH"
+          umask 022
+          macos/package.sh "${REF_NAME#agent-v}" "$RUNNER_TEMP/bin" "$RUNNER_TEMP/pkg"
+          rm -f "$APPLE_API_KEY_PATH"
+      # What a Mac will check, checked here: our team and the fixed
+      # identifiers (the updater's fence, agent/src/os/macos/bundle.rs),
+      # Gatekeeper's verdict on the app and the disk image, both tickets,
+      # the version, and the menu bar app building its menu.
+      - name: Verify the app and the disk image
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          pkg="$RUNNER_TEMP/pkg"
+          app="$pkg/Daedalus Agent.app"
+          dmg="$pkg/$MAC_DMG_ASSET"
+          team=H8M3SN9RDZ
+          req() {
+            echo "=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"$team\" and identifier \"$1\""
+          }
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --verify --strict -R "$(req me.toscanini.daedalus-agent-tray)" "$app"
+          codesign --verify --strict -R "$(req me.toscanini.daedalus-agent)" "$app/Contents/MacOS/daedalus-agent"
+          for target in "$app" "$app/Contents/MacOS/daedalus-agent"; do
+            codesign -dv "$target" 2>&1 | grep -E '^(Identifier|TeamIdentifier|Timestamp|Runtime Version)='
+            codesign -dv "$target" 2>&1 | grep -qx "TeamIdentifier=$team"
           done
-          # Bare executables notarize as a zip and cannot be stapled; a Mac
-          # that is online fetches the ticket. The updater and launchd do
-          # not ask Gatekeeper at all, so this is hygiene rather than a gate.
-          (cd dist && zip -q ../notarize.zip daedalus-agent daedalus-agent-tray)
-          xcrun notarytool submit notarize.zip --wait \
-            --key "$RUNNER_TEMP/asc-api-key.p8" \
-            --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER"
-          rm -f notarize.zip "$RUNNER_TEMP/asc-api-key.p8"
-      - name: Unsigned by Apple
-        if: env.HAS_APPLE != 'true'
+          spctl --assess --type exec --verbose=4 "$app"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          # `stapler validate` asks Apple, so it fails for two reasons: no
+          # ticket (the release must stop) or Apple not answering (santree's
+          # v0.1.16 met a CloudKit 503) — retried, and then a warning.
+          staple() {
+            local out
+            for attempt in 1 2 3 4 5; do
+              out=$(xcrun stapler validate "$1" 2>&1) && { printf '%s\n' "$out"; return 0; }
+              printf '%s\n' "$out"
+              case "$out" in
+                *CloudKit*|*"Status Code: 5"*|*"network connection"*|*"Could not connect"*) ;;
+                *) return 1 ;;
+              esac
+              sleep $((attempt * 30))
+            done
+            echo "::warning::stapler could not reach Apple to confirm $1 after 5 tries; spctl accepted it above"
+          }
+          staple "$app"
+          staple "$dmg"
+          said="$("$app/Contents/MacOS/daedalus-agent" version)"
+          [ "$said" = "daedalus-agent ${REF_NAME#agent-v}" ] || { echo "::error::the app says $said"; exit 1; }
+          plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" | grep -qx "${REF_NAME#agent-v}"
+          DAEDALUS_AGENT_SMOKE=1 "$app/Contents/MacOS/daedalus-agent-tray"
+      - name: Stage
         run: |
-          echo "::warning::no APPLE_CERTIFICATE in the release environment — the macOS binaries are not codesigned or notarized (launchd still runs them; see agent/README.md)"
-      - name: Name the assets
-        run: |
-          mv dist/daedalus-agent "dist/$MAC_ASSET"
-          mv dist/daedalus-agent-tray "dist/$MAC_TRAY_ASSET"
+          mkdir -p dist
+          cp "$RUNNER_TEMP/pkg/$MAC_BUNDLE_ASSET" "$RUNNER_TEMP/pkg/$MAC_DMG_ASSET" dist/
+          cp install.sh dist/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agent-dist-macos
@@ -386,8 +471,8 @@ jobs:
           {
             entry x86_64-pc-windows-msvc service "$ASSET"
             entry x86_64-pc-windows-msvc tray "$TRAY_ASSET"
-            entry universal-apple-darwin service "$MAC_ASSET"
-            entry universal-apple-darwin tray "$MAC_TRAY_ASSET"
+            entry universal-apple-darwin bundle "$MAC_BUNDLE_ASSET"
+            entry universal-apple-darwin installer "$MAC_DMG_ASSET"
             entry x86_64-unknown-linux-musl service "$LINUX_X64_ASSET"
             entry aarch64-unknown-linux-musl service "$LINUX_ARM_ASSET"
             entry x86_64-unknown-linux-gnu tray "$LINUX_TRAY_ASSET"
@@ -407,7 +492,7 @@ jobs:
           [ "$(stat -c %s dist/release.json.sig)" = 64 ] || { echo "the manifest signature is not 64 bytes"; exit 1; }
           rm -f key.pem
           (cd dist && sha256sum release.json release.json.sig "$ASSET" "$TRAY_ASSET" \
-            "$MAC_ASSET" "$MAC_TRAY_ASSET" "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" \
+            "$MAC_BUNDLE_ASSET" "$MAC_DMG_ASSET" "$LINUX_X64_ASSET" "$LINUX_ARM_ASSET" \
             "$LINUX_TRAY_ASSET" install.ps1 install.sh > SHA256SUMS)
           cat dist/SHA256SUMS
       # The agent's compiled-in keys must accept what was just signed, or
@@ -419,16 +504,27 @@ jobs:
           hex="$(grep -A1 'RELEASE_PUBLIC_KEYS' agent/src/update/mod.rs | grep -o '"[0-9a-f]\{64\}"' | head -1 | tr -d '"')"
           printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
           openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in signed.bin -sigfile dist/release.json.sig
+      # Published as a draft when this version's Cargo.toml says so
+      # (`[package.metadata.release] draft = true`): no agent sees a draft
+      # (GitHub lists drafts to no one but the repository's writers, and the
+      # updater skips any it is shown), and `releases/latest` — the
+      # website's download — never points at one. The operator publishes it
+      # after trying it (agent/README.md "Releasing"). Otherwise it is the
+      # latest release, said explicitly: a future engine `v*` release must
+      # pass --latest=false.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          gh release create "$REF_NAME" \
+          draft="$(sed -n '/^\[package\.metadata\.release\]/,/^\[/p' agent/Cargo.toml | grep -cE '^draft *= *true' || true)"
+          if [ "$draft" = 1 ]; then how="--draft"; else how="--latest"; fi
+          echo "publishing $REF_NAME with $how"
+          gh release create "$REF_NAME" "$how" \
             --title "daedalus-agent ${REF_NAME#agent-v}" \
-            --notes "Windows x86_64 and macOS (universal): the service and the tray. Linux (systemd distributions): the static service for x86_64 and aarch64, and the tray for x86_64 desktops. Installed agents pick this up on their next check. New machines — Windows, from an administrator PowerShell: \`irm https://daedalus.toscanini.me/install.ps1 | iex\`; macOS and Linux: \`curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh\` (both with the controller's address and key fingerprint; see the Machines page)." \
+            --notes "Windows x86_64: the service and the tray. macOS 13 or newer (universal): Daedalus Agent.app — the disk image to download and open, and the app bundle installed agents update to. Linux (systemd distributions): the static service for x86_64 and aarch64, and the tray for x86_64 desktops. Installed agents pick this up on their next check. New machines — a Mac: open \`$MAC_DMG_ASSET\`, drag the app into Applications and open it (headless: \`curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh\`), then Log in… from the menu bar; Windows, from an administrator PowerShell: \`irm https://daedalus.toscanini.me/install.ps1 | iex\`; Linux: \`curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh\` (with the controller's address and key fingerprint; see the Machines page)." \
             dist/release.json dist/release.json.sig \
-            "dist/$ASSET" "dist/$TRAY_ASSET" "dist/$MAC_ASSET" "dist/$MAC_TRAY_ASSET" \
+            "dist/$ASSET" "dist/$TRAY_ASSET" "dist/$MAC_BUNDLE_ASSET" "dist/$MAC_DMG_ASSET" \
             "dist/$LINUX_X64_ASSET" "dist/$LINUX_ARM_ASSET" "dist/$LINUX_TRAY_ASSET" \
             dist/install.ps1 dist/install.sh dist/SHA256SUMS

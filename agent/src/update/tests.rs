@@ -1,5 +1,8 @@
 //! The feed, the manifest, the swap and probation, on files and pure state.
+//! The file strategy's tests are Windows' and Linux's (a Mac replaces its
+//! app bundle whole: slot.rs, os/macos/bundle.rs).
 
+#[cfg(not(target_os = "macos"))]
 use std::path::Path;
 
 use ed25519_dalek::{Signer, SigningKey};
@@ -37,6 +40,7 @@ fn a_manifest_holds_only_under_a_listed_key_and_its_own_context() {
     assert!(verify_manifest(body, &[0u8; 10], &keys).is_err());
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn an_old_binary_in_use_is_moved_aside_and_retired_later() {
     let old = Path::new("C:/x/daedalus-agent.exe.old");
@@ -65,6 +69,7 @@ fn an_old_binary_in_use_is_moved_aside_and_retired_later() {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn suffixed_names() {
     let p = suffixed(Path::new("C:/x/daedalus-agent.exe"), "old");
@@ -257,6 +262,7 @@ fn a_manifest_with_a_bundle_or_an_unknown_role_parses() {
     assert_eq!(m.assets[1].role, "installer");
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn a_newer_bundle_only_release_is_a_re_install_never_an_install() {
     let running = semver::Version::parse("0.23.0").unwrap();
@@ -319,12 +325,14 @@ fn a_newer_bundle_only_release_is_a_re_install_never_an_install() {
 }
 
 #[test]
-fn windows_and_linux_never_see_a_bundle() {
-    // Only macOS names a bundle target; elsewhere the table is empty.
-    #[cfg(target_os = "macos")]
-    assert_eq!(BUNDLE_TARGETS, MAC);
-    #[cfg(not(target_os = "macos"))]
+fn no_target_is_a_re_install_in_this_version() {
+    // 0.24 applies the Mac's bundle itself: nothing is left to re-install.
     assert!(BUNDLE_TARGETS.is_empty());
+}
+
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn windows_and_linux_never_see_a_bundle() {
     let running = semver::Version::parse("0.23.0").unwrap();
     let offer = |m: &Manifest| offer_of(m, &listed(m), &running, None, |_| true, &[]);
     // A Mac-only release is skipped, as it always was.
@@ -366,6 +374,7 @@ fn a_download_is_kept_only_at_the_manifests_size_and_hash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn a_bad_copy_is_retired_like_an_old_one() {
     for yes in ["daedalus-agent.exe.bad", "daedalus-agent.exe.bad.2"] {
@@ -478,6 +487,7 @@ fn only_newer_tags_of_ours_are_candidates_newest_first() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn a_roll_back_puts_the_old_binaries_back_and_keeps_the_bad_ones_aside() {
     let dir = std::env::temp_dir().join(format!("daedalus-rollback-{}", std::process::id()));
@@ -546,4 +556,40 @@ fn a_probation_run_proves_itself_by_its_page_and_a_report_when_someone_is_there(
         judge_proof(None, REPORT_WINDOW, || false, false),
         Proof::Failed(w) if w.contains("never")
     ));
+}
+
+/// A Mac's update is the app bundle: one asset, the `.app.zip`, whatever
+/// else the release carries (the disk image, other targets' binaries); a
+/// release of the old form — bare binaries for this target — is not one.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_mac_updates_to_the_bundle_and_ignores_the_disk_image() {
+    let running = semver::Version::parse("0.23.1").unwrap();
+    let offer = |m: &Manifest| offer_of(m, &listed(m), &running, None, |_| true, MAC);
+    let b = bundled("0.24.0", false);
+    let Offered::Assets(v, got) = offer(&b).unwrap() else {
+        panic!("the bundle is installed");
+    };
+    assert_eq!(v.to_string(), "0.24.0");
+    assert_eq!(got.len(), 1);
+    assert!(got[0]
+        .url
+        .ends_with("daedalus-agent-universal-apple-darwin.app.zip"));
+    assert_eq!(got[0].size, 1234);
+    let old = Manifest {
+        assets: [
+            ("service", "daedalus-agent-universal-apple-darwin"),
+            ("tray", "daedalus-agent-tray-universal-apple-darwin"),
+        ]
+        .map(|(role, name)| ManifestAsset {
+            target: MAC[0].into(),
+            role: role.into(),
+            name: name.into(),
+            sha256: "ab".repeat(32),
+            size: 5,
+        })
+        .into(),
+        ..b.clone()
+    };
+    assert!(offer(&old).is_err());
 }

@@ -39,9 +39,9 @@ pub struct Manifest {
 
 /// One asset of a release: the Rust target and role it is for, its file
 /// name in the release, and what it must hash to and weigh. The role is
-/// free text: `service` and `tray` are what this version installs,
-/// `bundle` ([`ROLE_BUNDLE`]) what it recognises and cannot apply, and
-/// any other (`installer`, a DMG) is read and ignored.
+/// free text: `service` and `tray` are what Windows and Linux install,
+/// `bundle` ([`ROLE_BUNDLE`]) what a Mac installs, and any other
+/// (`installer`, the Mac's disk image) is read and ignored.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestAsset {
@@ -63,8 +63,7 @@ pub struct Asset {
 }
 
 /// The role of a macOS app bundle: one `.app.zip` for its target, in place
-/// of the bare service and tray (agent 0.24 on). This version cannot apply
-/// one; a release that carries only that for this machine is a re-install.
+/// of the bare service and tray (agent 0.24 on; `os::ASSETS` on a Mac).
 pub const ROLE_BUNDLE: &str = "bundle";
 
 #[derive(Debug, Clone)]
@@ -79,9 +78,11 @@ pub struct Release {
 pub enum Offer {
     /// Its assets for this target, to install.
     Install(Release),
-    /// Packaged in a form this version cannot apply — the macOS app bundle
-    /// ([`ROLE_BUNDLE`]) with no bare binaries beside it: reported, never
-    /// applied; the machine is re-installed from the website or install.sh.
+    /// Packaged in a form this version cannot apply — a bundle for one of
+    /// `os::BUNDLE_TARGETS` with no bare binaries beside it (0.23 on a Mac,
+    /// meeting 0.24's app): reported, never applied; the machine is
+    /// re-installed from the website or install.sh. No target is listed in
+    /// this version, which applies the Mac's bundle itself.
     Reinstall {
         tag: String,
         version: semver::Version,
@@ -122,9 +123,12 @@ pub(super) fn running_version() -> semver::Version {
     release_version(&semver::Version::parse(crate::VERSION).expect("the version is semver"))
 }
 
-/// The role an asset plays, from the file it becomes here.
+/// The role an asset plays, from the file it becomes here: a Mac's app
+/// bundle, the tray, or the service.
 pub(super) fn role_of(local: &str) -> &'static str {
-    if local.starts_with("daedalus-agent-tray") {
+    if local.ends_with(".app.zip") {
+        ROLE_BUNDLE
+    } else if local.starts_with("daedalus-agent-tray") {
         "tray"
     } else {
         "service"
@@ -232,7 +236,7 @@ pub(super) fn assets_of(
 
 /// What a signed manifest offers this machine: its assets for this target
 /// ([`assets_of`]); else, when it carries an app bundle for one of
-/// `bundle_targets` (`os::BUNDLE_TARGETS`: macOS's, none elsewhere) that
+/// `bundle_targets` (`os::BUNDLE_TARGETS`: none in this version) that
 /// GitHub lists too, a re-install of its version; else `assets_of`'s
 /// refusal. Any bare binary for this target rules the bundle out. The same checks
 /// of product, tag and version hold either way: an old or refused release

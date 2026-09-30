@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  The disk image's window (dmg-background.png, which package.sh lays out):
+  660 x 400 points, rendered at 2x (1320 x 800 px) and stamped 144 DPI by
+  package.sh (`sips`), so Finder draws it at its point size. The app's icon
+  sits at (165, 190) points and the Applications link at (495, 190); the
+  arrow runs between them — keep package.sh's positions and these in step.
+
+  Light on purpose: Finder draws the icons' labels itself, in a dark colour
+  it does not let us change.
+
+  Regenerate: render this at 1320 x 800 with Geist (website/'s
+  @fontsource-variable/geist) in a real browser — `shot run` on the box —
+  and save it as dmg-background.png.
+-->
+<html lang="en"><head><meta charset="utf-8"><style>
+  @font-face { font-family: "Geist"; src: url("GEIST_WOFF2") format("woff2"); font-weight: 100 900; }
+  html, body { margin: 0; padding: 0; }
+  body { width: 1320px; height: 800px; overflow: hidden;
+         background: linear-gradient(180deg, #fbf7f4 0%, #f3ebe6 100%);
+         font-family: "Geist", -apple-system, "Helvetica Neue", sans-serif; }
+  svg { display: block; }
+</style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="800" viewBox="0 0 1320 800">
+  <!-- The mark and the name, top centre. -->
+  <g transform="translate(482 70)">
+    <rect width="64" height="64" rx="14" fill="#e2795a"/>
+    <path transform="scale(2)" d="M16 16 L16 20 L12 20 L12 12 L20 12 L20 24 L8 24 L8 8 L24 8 L24 28 L4 28 L4 4 L28 4"
+          fill="none" stroke="#fdf3ef" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="566" y="115" font-size="36" font-weight="600" letter-spacing="-0.5" fill="#1d1715">Daedalus Agent</text>
+
+  <!-- From the app's slot to the Applications slot. -->
+  <g stroke="#e2795a" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="500" y1="380" x2="812" y2="380"/>
+    <polyline points="784,352 816,380 784,408"/>
+  </g>
+
+  <text x="660" y="672" text-anchor="middle" font-size="26" font-weight="500" fill="#3b312d">Drag Daedalus Agent into Applications, then open it there.</text>
+  <text x="660" y="712" text-anchor="middle" font-size="21" fill="#7a6d67">It asks once for an administrator's password, then lives in the menu bar.</text>
+</svg>
+</body></html>

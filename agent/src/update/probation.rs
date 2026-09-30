@@ -96,7 +96,7 @@ pub fn on_start() -> Start {
         Start::Normal => {}
         Start::Probation(_) => state.save(),
         Start::RollBack(r) => {
-            let done = install_dir().and_then(|d| roll_back_in(&d));
+            let done = roll_back();
             state.last_update_result = Some(match &done {
                 Ok(()) => format!(
                     "{} rolled back to {}: it started {} times without proving itself",

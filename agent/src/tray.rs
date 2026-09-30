@@ -177,6 +177,19 @@ struct Ui {
     log_out: MenuItem,
     #[cfg(target_os = "macos")]
     log_out_shown: bool,
+    /// "Uninstall Daedalus Agent…", above Quit (os/macos/tray.rs).
+    #[cfg(target_os = "macos")]
+    uninstall: MenuItem,
+    /// Login Items' switch for the service, off: shown, and opens that pane,
+    /// while the service does not answer because the user turned it off.
+    #[cfg(target_os = "macos")]
+    login_items: MenuItem,
+    #[cfg(target_os = "macos")]
+    login_items_shown: bool,
+    /// When Login Items was last asked: at most once a minute, and only while
+    /// the service does not answer (review N4).
+    #[cfg(target_os = "macos")]
+    login_asked: Option<std::time::Instant>,
     open_status: MenuItem,
     check_now: MenuItem,
     restart_claude: MenuItem,
@@ -203,6 +216,10 @@ impl Ui {
         let join = MenuItem::new(JOIN_LABEL, true, None);
         #[cfg(target_os = "macos")]
         let log_out = MenuItem::new("Log out", true, None);
+        #[cfg(target_os = "macos")]
+        let uninstall = MenuItem::new(format!("Uninstall {DISPLAY_NAME}…"), true, None);
+        #[cfg(target_os = "macos")]
+        let login_items = MenuItem::new(LOGIN_ITEMS_LABEL, true, None);
         let open_status = MenuItem::new("Show status", true, None);
         let check_now = MenuItem::new("Check for updates now", true, None);
         let restart_claude = MenuItem::new("Restart Claude remote control", true, None);
@@ -226,9 +243,11 @@ impl Ui {
             &open_logs,
             &open_claude_log,
             &PredefinedMenuItem::separator(),
-            &quit,
         ])
         .context("building the menu")?;
+        #[cfg(target_os = "macos")]
+        menu.append(&uninstall).context("building the menu")?;
+        menu.append(&quit).context("building the menu")?;
 
         let tray = TrayIconBuilder::new()
             .with_menu(Box::new(menu.clone()))
@@ -256,6 +275,14 @@ impl Ui {
             log_out,
             #[cfg(target_os = "macos")]
             log_out_shown: false,
+            #[cfg(target_os = "macos")]
+            uninstall,
+            #[cfg(target_os = "macos")]
+            login_items,
+            #[cfg(target_os = "macos")]
+            login_items_shown: false,
+            #[cfg(target_os = "macos")]
+            login_asked: None,
             open_status,
             check_now,
             restart_claude,
@@ -283,9 +310,20 @@ impl Ui {
         let claude_line = claude_line(claude);
         self.line_claude.set_text(&claude_line);
 
+        #[cfg(target_os = "macos")]
+        self.show_login_items(page.is_none());
+        // Login Items has the service switched off (a Mac's, in the menu).
+        #[cfg(target_os = "macos")]
+        let switched_off = self.login_items_shown;
+        #[cfg(not(target_os = "macos"))]
+        let switched_off = false;
         let Some(p) = page else {
             self.set_look(Look::Off);
-            self.line_hold.set_text("Awake hold: service not answering");
+            self.line_hold.set_text(if switched_off {
+                "Awake hold: the service is off in Login Items"
+            } else {
+                "Awake hold: service not answering"
+            });
             self.line_update.set_text("Updates: unknown");
             self.line_link.set_text("Controller: unknown");
             let _ = self.tray.set_tooltip(Some(format!(
@@ -379,6 +417,38 @@ impl Ui {
         8 + usize::from(self.tunnel_shown)
     }
 
+    /// "Turn the service on in Login Items…", where joining goes, while the
+    /// service does not answer (`silent`) and Login Items says the user
+    /// switched it off; asked at most once a minute.
+    #[cfg(target_os = "macos")]
+    fn show_login_items(&mut self, silent: bool) {
+        let now = std::time::Instant::now();
+        let off = silent
+            && match self.login_asked {
+                Some(t) if now.duration_since(t) < std::time::Duration::from_secs(60) => {
+                    self.login_items_shown
+                }
+                _ => {
+                    self.login_asked = Some(now);
+                    crate::os::tray::service_switched_off()
+                }
+            };
+        if !silent {
+            self.login_asked = None;
+        }
+        if off == self.login_items_shown {
+            return;
+        }
+        let done = if off {
+            self.menu.insert(&self.login_items, self.actions_at())
+        } else {
+            self.menu.remove(&self.login_items)
+        };
+        if done.is_ok() {
+            self.login_items_shown = off;
+        }
+    }
+
     /// The tunnel's line, under the link's, while there is a tunnel.
     fn show_tunnel(&mut self, tunnel: Option<&crate::link::TunnelStatus>) {
         if let Some(t) = tunnel {
@@ -429,6 +499,10 @@ impl Ui {
         }
     }
 }
+
+/// The Login Items entry (`Ui::show_login_items`).
+#[cfg(target_os = "macos")]
+const LOGIN_ITEMS_LABEL: &str = "The service is off: turn it on in Login Items…";
 
 /// The entry that joins the box while the machine has not: a Mac logs in
 /// (enroll.rs, os/macos/tray.rs `join`), every other machine pairs
@@ -514,21 +588,28 @@ pub fn pkexec_argv(
 }
 
 /// macOS: osascript's arguments to run the agent as root behind the
-/// administrator prompt (a log-in's `enroll-finish`, os/macos/tray.rs).
-/// The script is fixed; the binary and its arguments ride `argv` and each is
-/// shell-quoted by AppleScript's `quoted form of`, so nothing the browser
-/// sent is ever spliced into the script or the shell line. The binary comes
-/// first: an absolute path, so osascript reads every word after it as an
-/// argument, never an option.
+/// administrator prompt, which says `prompt` (the app's install, a
+/// log-in's `enroll-finish`, "Uninstall…"; os/macos/tray.rs). The script is
+/// fixed; the binary, its arguments and the prompt ride `argv`, and each
+/// word of the command is shell-quoted by AppleScript's `quoted form of`,
+/// so nothing the browser sent — nor an account's name — is ever spliced
+/// into the script or the shell line. The binary comes first: an absolute
+/// path, so osascript reads every word after it as an argument, never an
+/// option; the prompt is the last.
 #[cfg(any(test, target_os = "macos"))]
-pub fn osascript_argv(exe: &std::path::Path, args: &[String]) -> Vec<std::ffi::OsString> {
-    const SCRIPT: [&str; 7] = [
+pub fn osascript_argv(
+    exe: &std::path::Path,
+    args: &[String],
+    prompt: &str,
+) -> Vec<std::ffi::OsString> {
+    const SCRIPT: [&str; 8] = [
         "on run argv",
+        "set n to count of argv",
         "set cmd to quoted form of (item 1 of argv)",
-        "repeat with a in (rest of argv)",
-        "set cmd to cmd & \" \" & quoted form of (contents of a)",
+        "repeat with i from 2 to (n - 1)",
+        "set cmd to cmd & \" \" & quoted form of (item i of argv)",
         "end repeat",
-        "do shell script cmd with prompt \"The daedalus agent logs this Mac in to the box.\" \
+        "do shell script cmd with prompt (item n of argv) \
          with administrator privileges without altering line endings",
         "end run",
     ];
@@ -539,6 +620,7 @@ pub fn osascript_argv(exe: &std::path::Path, args: &[String]) -> Vec<std::ffi::O
     }
     v.push(exe.as_os_str().to_owned());
     v.extend(args.iter().map(Into::into));
+    v.push(prompt.into());
     v
 }
 
@@ -756,6 +838,16 @@ impl Tray {
                 crate::os::tray::log_out();
                 continue;
             }
+            #[cfg(target_os = "macos")]
+            if *id == self.ui.uninstall.id() {
+                crate::os::tray::uninstall();
+                continue;
+            }
+            #[cfg(target_os = "macos")]
+            if *id == self.ui.login_items.id() {
+                crate::os::tray::open_login_items();
+                continue;
+            }
             if *id == self.ui.join.id() {
                 crate::os::tray::join();
             } else if *id == self.ui.open_status.id() {
@@ -797,6 +889,13 @@ impl Tray {
             }
         }
     }
+}
+
+/// The menu and its icons built, and nothing run: the CI smoke test of a
+/// built app (`DAEDALUS_AGENT_SMOKE`, os/macos/tray.rs).
+#[cfg(target_os = "macos")]
+pub fn smoke() -> Result<()> {
+    Ui::build(QUIT_LABEL).map(|_| ())
 }
 
 /// Write why the tray could not run where a windowless program can be
@@ -912,21 +1011,28 @@ mod tests {
     /// nothing the browser sent inside any `-e`.
     #[test]
     fn the_elevated_log_in_passes_its_words_as_arguments_only() {
-        let exe = Path::new("/Library/Application Support/daedalus-agent/bin/daedalus-agent");
-        // What the callback brought back, as hostile as it may be.
+        let exe = Path::new(
+            "/Library/Application Support/daedalus-agent/Daedalus Agent.app/Contents/MacOS/daedalus-agent",
+        );
+        // What the callback brought back, as hostile as it may be, and a
+        // prompt naming an account that is.
         let code = "c0de'; rm -rf / # box.example.org";
+        let prompt = "It serves \"x\" & (do shell script \"id\")";
         let a: Vec<String> = vec!["enroll-finish".into(), code.into()];
-        let v = osascript_argv(exe, &a);
+        let v = osascript_argv(exe, &a, prompt);
         let at = v.iter().position(|w| w == exe.as_os_str()).unwrap();
         assert_eq!(
-            v[at + 1..],
+            v[at + 1..v.len() - 1],
             a.iter().map(OsString::from).collect::<Vec<_>>()
         );
+        assert_eq!(v.last().unwrap(), prompt);
         for pair in v[..at].chunks(2) {
             assert_eq!(pair[0], "-e");
             let line = pair[1].to_str().unwrap();
             assert!(
-                !line.contains("rm -rf") && !line.contains("box.example"),
+                !line.contains("rm -rf")
+                    && !line.contains("box.example")
+                    && !line.contains("\"id\""),
                 "{line}"
             );
         }

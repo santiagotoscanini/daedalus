@@ -122,14 +122,26 @@ pub mod svc {
     };
 }
 
+/// macOS alone: Daedalus Agent.app — where it runs from, and how a copy is
+/// staged, sealed and checked (also the updater's, update/bundle.rs) — and
+/// the install and uninstall verbs' Mac-only options.
+#[cfg(target_os = "macos")]
+pub mod mac {
+    pub use super::imp::bundle;
+    pub use super::imp::launchd::{install_with, uninstall_app, Options};
+}
+
 /// The tray's platform side: the loop that drives `tray::Tray`, opening a
 /// URL or folder, joining the box — pairing (the key asked for, then `pair`
-/// elevated), or on a Mac logging in and out — and leaving for a new binary.
+/// elevated), or on a Mac logging in and out, uninstalling, and Login
+/// Items — and leaving for a new binary.
 #[cfg(feature = "tray")]
 pub mod tray {
     #[cfg(not(target_os = "macos"))]
     pub use super::imp::tray::pair_elevated;
     pub use super::imp::tray::{join, open, relaunch_self, run};
     #[cfg(target_os = "macos")]
-    pub use super::imp::tray::{log_in_note, log_out};
+    pub use super::imp::tray::{
+        log_in_note, log_out, open_login_items, service_switched_off, uninstall,
+    };
 }

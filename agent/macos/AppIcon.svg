@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Daedalus Agent.app's icon: the daedalus mark (website/src/components/
+       logo.tsx, agent/assets/icon.svg) — the terracotta rounded square and
+       its one unbroken off-white labyrinth stroke — scaled onto macOS's icon
+       grid: an 824 px tile at 100 px, 32 mark units to 824 px, with the
+       system's drop shadow and a faint top light. AppIcon-1024.png is this,
+       rendered (agent/README.md, "Releasing"). -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e7856a"/>
+      <stop offset="1" stop-color="#d86e50"/>
+    </linearGradient>
+    <radialGradient id="light" cx="0.5" cy="0" r="0.85">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
+      <feOffset dy="10" result="blur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.32"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="180" fill="url(#tile)" filter="url(#shadow)"/>
+  <rect x="100" y="100" width="824" height="824" rx="180" fill="url(#light)"/>
+  <rect x="101" y="101" width="822" height="822" rx="179" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="2"/>
+  <path transform="translate(100 100) scale(25.75)"
+        d="M16 16 L16 20 L12 20 L12 12 L20 12 L20 24 L8 24 L8 8 L24 8 L24 28 L4 28 L4 4 L28 4"
+        fill="none" stroke="#fdf3ef" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

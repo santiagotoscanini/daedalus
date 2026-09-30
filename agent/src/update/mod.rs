@@ -6,16 +6,20 @@
 //! agent, and reads each one's `release.json` until one holds: signed with a
 //! release key compiled in (`RELEASE_PUBLIC_KEYS`), its version its tag's,
 //! and for this binary's own target the size and SHA-256 of every asset
-//! (feed.rs, signature.rs). Each asset is downloaded beside the binary as
-//! `.new`, capped at its size and flushed to disk, and kept only when it
-//! hashes to the manifest; the probation is recorded; only then is the
-//! running binary renamed to `.old` and the new one moved into its place,
+//! (feed.rs, signature.rs). Each asset is downloaded, capped at its size and
+//! flushed to disk, and kept only when it hashes to the manifest — on
+//! Windows and Linux beside the binary as `.new` (files.rs); on macOS the
+//! one app bundle, unpacked into its slot's stage and fenced there — Apple's
+//! signature with our team, the manifest's version from the staged service
+//! itself (bundle.rs, slot.rs); the probation is recorded; only then is the
+//! running binary renamed to `.old` and the new one moved into its place —
+//! on macOS the two bundles exchanged, the previous one kept as `old` —
 //! the new service binary asked its version — the manifest's, or it all
 //! goes back — and the process exits non-zero: the Service Control
 //! Manager's recovery action (launchd's KeepAlive on macOS, systemd's
 //! `Restart=always` on Linux) starts it again on the new binary, on
-//! probation until it has run long enough to prove itself, its `.old` kept
-//! for going back to (probation.rs).
+//! probation until it has run long enough to prove itself, the previous
+//! one kept for going back to (probation.rs).
 //!
 //! Trust is the key, not the transport: GitHub over TLS says where the files
 //! are, the signed manifest says what they are. Losing every listed private
@@ -27,15 +31,32 @@
 //!
 //! The box cannot pin an agent version; the newest release is the pin.
 
+// How a release is put in place: the binaries beside this one on Windows and
+// Linux (files.rs); on macOS the app bundle, whole, in its fixed slot
+// (bundle.rs, slot.rs). Both answer to the same names.
+#[cfg(target_os = "macos")]
+mod bundle;
 mod feed;
+#[cfg(not(target_os = "macos"))]
+mod files;
 mod probation;
 mod signature;
+#[cfg(any(target_os = "macos", all(test, target_os = "linux")))]
+mod slot;
 mod swap;
 
+#[cfg(target_os = "macos")]
+pub use bundle::*;
 pub use feed::*;
+#[cfg(not(target_os = "macos"))]
+pub use files::*;
 pub use probation::*;
 pub use signature::*;
-pub use swap::*;
+#[cfg(target_os = "macos")]
+pub use slot::{remove, Slot};
+#[cfg(target_os = "macos")]
+pub(crate) use swap::version_of;
+use swap::*;
 
 use crate::util::Shutdown;
 use std::sync::Arc;
@@ -58,10 +79,10 @@ pub const RELEASE_PUBLIC_KEYS: &[&str] =
 
 /// What a release carries for this target, and what each asset becomes on
 /// disk: the service binary and the tray, named by Rust target in the
-/// release and by their plain names beside this executable. The required
-/// ones must be present and signed, or the release is skipped — on Windows
-/// and macOS a service without its tray, or the reverse, is a
-/// half-installed version. The optional ones (the Linux tray, x86_64 only)
+/// release and by their plain names beside this executable — on macOS the
+/// one app bundle that holds both. The required ones must be present and
+/// signed, or the release is skipped — on Windows a service without its
+/// tray, or the reverse, is a half-installed version. The optional ones (the Linux tray, x86_64 only)
 /// are updated where installed and never hold an update back. The tables
 /// are per OS (`os::ASSETS`, `os::OPTIONAL_ASSETS`).
 pub use crate::os::{ASSETS, BUNDLE_TARGETS, OPTIONAL_ASSETS};
@@ -216,7 +237,7 @@ pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> 
                 Ok(v) => format!("the installed binary says {v}, not {label}"),
                 Err(e) => format!("the installed binary does not run: {e:#}"),
             };
-            let back = install_dir().and_then(|d| roll_back_in(&d));
+            let back = roll_back();
             shared.with_state(|s| {
                 s.probation = None;
                 s.rolled_back = Some(crate::state::RolledBack {

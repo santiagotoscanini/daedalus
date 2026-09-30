@@ -6,6 +6,8 @@
 //! - `net`: the default route's interface, its addresses, and the search
 //!   domains (`route`, `ifconfig`, `scutil`);
 //! - `power`: the IOKit assertion and the boot time;
+//! - `bundle`: Daedalus Agent.app — where it runs from, and how a copy of
+//!   it is staged, sealed and checked before it replaces the one there;
 //! - `launchd`: `install`, `uninstall`, `run` and the menu bar app's
 //!   kickstart — the `svc` surface;
 //! - `tray`: one instance, the tao event loop that drives `tray::Tray`,
@@ -17,6 +19,7 @@
 //! The rest is here: paths, the SRV lookup, and Claude Code's keychain
 //! login; unix.rs has what Linux shares.
 
+pub mod bundle;
 mod facts;
 pub mod jobs;
 pub mod launchd;
@@ -142,28 +145,19 @@ pub fn srv_lookup(name: &str) -> Vec<crate::dns::Srv> {
 
 // ── update ────────────────────────────────────────────────────────────────
 
-/// Universal binaries: one pair for Apple Silicon and Intel alike. Each is
-/// (release target, asset name, file name here).
-pub const ASSETS: &[(&str, &str, &str)] = &[
-    (
-        "universal-apple-darwin",
-        "daedalus-agent-universal-apple-darwin",
-        "daedalus-agent",
-    ),
-    (
-        "universal-apple-darwin",
-        "daedalus-agent-tray-universal-apple-darwin",
-        "daedalus-agent-tray",
-    ),
-];
-/// Both assets are required here.
+/// One asset: Daedalus Agent.app, universal (Apple Silicon and Intel), zipped
+/// — (release target, asset name, what it is here). The updater replaces
+/// the bundle whole in its fixed place (update/bundle.rs, bundle.rs).
+pub const ASSETS: &[(&str, &str, &str)] = &[(
+    "universal-apple-darwin",
+    "daedalus-agent-universal-apple-darwin.app.zip",
+    "Daedalus Agent.app.zip",
+)];
+/// Nothing optional: the bundle carries the service and the menu bar app.
 pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
-/// The target whose release may carry an app bundle (role `bundle`, one
-/// `.app.zip`) in place of the bare binaries above: from 0.24 the macOS
-/// agent ships as `Daedalus Agent.app`, which this version cannot apply —
-/// such a release is reported as a re-install (`update::Offer::Reinstall`),
-/// never skipped as though it were not there.
-pub const BUNDLE_TARGETS: &[&str] = &["universal-apple-darwin"];
+/// No release form this version cannot apply: 0.24 installs the bundle that
+/// 0.23 could only report as a re-install (`update::Offer::Reinstall`).
+pub const BUNDLE_TARGETS: &[&str] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 

@@ -17,7 +17,7 @@ fn main() {
 
     let outcome = match verb {
         "install" => install(rest),
-        "uninstall" => uninstall(),
+        "uninstall" => uninstall(rest),
         "pair" => pair(rest),
         // The last step of a log-in (enroll.rs): the menu bar runs it as
         // root, behind the administrator prompt.
@@ -57,10 +57,10 @@ fn print_help() {
     println!(
         "daedalus-agent {VERSION}\n\n\
          usage: daedalus-agent <verb>\n\n  \
-         install [--pin FINGERPRINT] [--controller HOST:PORT]\n                       register and start the service and the tray (administrator);\n                       with --pin it is paired at once, without it it runs unpaired\n                       (macOS: no options; the Mac logs in from its menu bar)\n  \
+         install [--pin FINGERPRINT] [--controller HOST:PORT]\n                       register and start the service and the tray (administrator);\n                       with --pin it is paired at once, without it it runs unpaired\n                       (macOS: from inside Daedalus Agent.app, which it puts in place;\n                       [--installer-uid UID] is the app's own, [--replace-operator]\n                       lets another user become the one it serves)\n  \
          pair --pin FINGERPRINT [--controller HOST:PORT]\n                       trust the controller with that key (administrator), written\n                       to config.toml; the running service connects to it at once;\n                       --controller where it is (else DNS). pair --check: exit 0 if paired\n                       (not on macOS: \"Log in…\" in the menu bar)\n  \
          enroll-finish CODE   (macOS, Linux) a log-in's last step, as root; the menu bar runs it\n  \
-         uninstall            stop and remove the service and the tray (administrator)\n  \
+         uninstall [--app]    stop and remove the service and the tray (administrator);\n                       macOS --app: log out, and remove the app too (the data stays)\n  \
          run                  service entry point; used by the Service Control Manager\n  \
          serve                run in the foreground, in this terminal\n  \
          status               print the running agent's status page\n  \
@@ -107,9 +107,11 @@ fn role() -> role::Role {
 fn install(args: &[String]) -> Result<()> {
     config::refuse_env_override("install")?;
     role().allow_install("install")?;
-    if cfg!(target_os = "macos") {
-        return install_mac(args);
-    }
+    install_os(args)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn install_os(args: &[String]) -> Result<()> {
     // Without --pin the machine installs unpaired: it runs and dials nobody
     // until `pair` names the controller (pair.rs).
     let (pairing, controller) = daedalus_agent::pair::parse_args(args)?;
@@ -132,22 +134,39 @@ fn install(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// macOS: install with no options — the Mac logs in from its menu bar
+/// macOS: install from the bundle this binary is in (os/macos/launchd.rs)
+/// — no --pin or --controller: the Mac logs in from its menu bar
 /// (enroll.rs) — and clear a pin a logged-out Mac kept (an older agent's
 /// `pair`): without a tunnel config it is logged out, and says so.
-fn install_mac(args: &[String]) -> Result<()> {
-    if !args.is_empty() {
-        bail!(
-            "a Mac logs in from its menu bar (\"Log in…\"); `install` takes no --pin or \
-             --controller here"
-        );
+/// `--installer-uid UID` is what the app's first open passes (the user who
+/// opened it); `--replace-operator` lets the recorded user change.
+#[cfg(target_os = "macos")]
+fn install_os(args: &[String]) -> Result<()> {
+    let mut opts = os::mac::Options::default();
+    let mut words = args.iter();
+    while let Some(w) = words.next() {
+        match w.as_str() {
+            "--installer-uid" => {
+                let uid = words
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .context("--installer-uid needs a number")?;
+                opts.installer_uid = Some(uid);
+            }
+            "--replace-operator" => opts.replace_operator = true,
+            "--pin" | "--controller" => bail!(
+                "a Mac logs in from its menu bar (\"Log in…\"); `install` takes no --pin or \
+                 --controller here"
+            ),
+            other => bail!("install: unknown option {other}"),
+        }
     }
     let path = daedalus_agent::paths::config_path();
     if !daedalus_agent::paths::tunnel_path().exists() {
         config::clear_link_keys_at(&path)?;
         daedalus_agent::paths::forget_santree();
     }
-    os::svc::install(&config::Config::default())?;
+    os::mac::install_with(&config::Config::default(), &opts)?;
     if !daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
         println!("\n{}", daedalus_agent::pair::unpaired_hint());
     }
@@ -226,10 +245,22 @@ fn enroll_finish(_args: &[String]) -> Result<()> {
     bail!("no log-in on Windows: pair the machine (`daedalus-agent pair`)")
 }
 
-fn uninstall() -> Result<()> {
+fn uninstall(args: &[String]) -> Result<()> {
     config::refuse_env_override("uninstall")?;
     role().allow_install("uninstall")?;
-    os::svc::uninstall()
+    match args {
+        [] => os::svc::uninstall(),
+        #[cfg(target_os = "macos")]
+        [app] if app == "--app" => os::mac::uninstall_app(),
+        _ => bail!(
+            "usage: daedalus-agent uninstall{}",
+            if cfg!(target_os = "macos") {
+                " [--app]"
+            } else {
+                ""
+            }
+        ),
+    }
 }
 
 fn status_cmd() -> Result<()> {

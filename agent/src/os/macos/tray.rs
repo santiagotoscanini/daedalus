@@ -1,8 +1,20 @@
 //! The menu bar app's macOS side: one instance per user (a file lock), the
 //! tao event loop AppKit requires, which drives `tray::Tray`, `open` as the
-//! opener, leaving through launchd, and logging in and out (enroll.rs) —
-//! AppleScript's dialogs through osascript, each on a thread of its own.
+//! opener, leaving through launchd, logging in and out (enroll.rs) and
+//! uninstalling — AppleScript's dialogs through osascript, each on a thread
+//! of its own — and Login Items' word on the service.
+//!
+//! **The first open.** The same executable is Daedalus Agent.app's main
+//! one, so opening the app from Finder runs it outside launchd
+//! (`XPC_SERVICE_NAME` is not the job's label). Then it is an opener, not
+//! the menu bar app: with this version or a newer one installed, it starts
+//! the menu bar app in this login (the installed one, from its own place)
+//! and leaves; otherwise one administrator prompt — saying what it
+//! installs and for whom — runs this bundle's `install --installer-uid
+//! <this user>`, which puts the bundle in its place and starts both jobs.
+//! Under `DAEDALUS_AGENT_SMOKE` it builds the menu and leaves (CI).
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -13,6 +25,7 @@ use tao::event_loop::{ControlFlow, EventLoop};
 use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
 use crate::enroll::{Begin, Loopback, Outcome, LOG_IN_TIMEOUT};
+use crate::os::mac::bundle;
 use crate::paths;
 use crate::tray::{write_failure, Flow, Tray};
 use crate::util::LockExt;
@@ -54,7 +67,17 @@ fn bootout() {
         .spawn();
 }
 
+/// Set in CI: build the menu, then leave with 0 (or 1 and `tray.err`).
+const SMOKE_ENV: &str = "DAEDALUS_AGENT_SMOKE";
+
 pub fn run() -> Result<()> {
+    if std::env::var_os(SMOKE_ENV).is_some() {
+        smoke();
+    }
+    if let Some(app) = opened_by_hand() {
+        first_open(&app);
+        return Ok(());
+    }
     if !claim_single_instance() {
         return Ok(());
     }
@@ -93,6 +116,166 @@ pub fn run() -> Result<()> {
         }
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
     });
+}
+
+/// The menu built once, in the event loop AppKit wants it in; nothing else.
+fn smoke() -> ! {
+    let mut event_loop = EventLoop::new();
+    event_loop.set_activation_policy(ActivationPolicy::Accessory);
+    event_loop.run(move |event, _, control_flow| {
+        if let Event::NewEvents(StartCause::Init) = event {
+            *control_flow = match crate::tray::smoke() {
+                Ok(()) => ControlFlow::Exit,
+                Err(e) => {
+                    write_failure(&e);
+                    ControlFlow::ExitWithCode(1)
+                }
+            };
+        }
+    })
+}
+
+// ── the first open ────────────────────────────────────────────────────────
+
+/// The bundle this runs from, when it was opened by hand rather than by its
+/// launchd job; None for the job, and for a development build outside any
+/// bundle.
+fn opened_by_hand() -> Option<std::path::PathBuf> {
+    let job = std::env::var("XPC_SERVICE_NAME").is_ok_and(|v| v == super::launchd::TRAY_LABEL);
+    if job {
+        return None;
+    }
+    bundle::running_app()
+}
+
+/// What opening the app does (the module doc): start the installed menu
+/// bar app, or install this one behind the administrator prompt.
+fn first_open(app: &Path) {
+    let mine = match bundle::info(app) {
+        Ok(i) => i.version,
+        Err(e) => {
+            return tell(
+                &format!("This copy of Daedalus Agent is damaged: {e:#}"),
+                false,
+            )
+        }
+    };
+    // SAFETY: no arguments.
+    let uid = unsafe { libc::getuid() };
+    if bundle::installed().is_some_and(|v| v >= mine) {
+        if let Err(e) = super::launchd::start_tray(uid) {
+            tell(
+                &format!("Daedalus Agent is installed, but its menu bar item did not start: {e:#}"),
+                false,
+            );
+        }
+        return;
+    }
+    let user = super::launchd::account_of_uid(uid)
+        .map(|(name, _)| name)
+        .unwrap_or_else(|| format!("uid {uid}"));
+    let args = [
+        "install".to_string(),
+        "--installer-uid".to_string(),
+        uid.to_string(),
+    ];
+    match elevated(&bundle::service_exe(app), &args, &install_prompt(&user)) {
+        Elevated::Done(_) | Elevated::Cancelled => {}
+        Elevated::Failed(e) => tell(&format!("Daedalus Agent was not installed: {e}"), false),
+    }
+}
+
+/// The administrator prompt's words for an install: what it puts on the
+/// Mac, and the one account it serves (review S3).
+fn install_prompt(user: &str) -> String {
+    format!(
+        "Daedalus Agent is installing a background service that runs as root, and a menu \
+         bar item. It serves {user}: only that account can log this Mac in to your box and \
+         reach it through santree."
+    )
+}
+
+/// How a run behind the administrator prompt ended.
+enum Elevated {
+    Done(String),
+    Cancelled,
+    Failed(String),
+}
+
+/// `exe args…` as root behind the administrator prompt, which says
+/// `prompt` (tray.rs `osascript_argv`).
+fn elevated(exe: &Path, args: &[String], prompt: &str) -> Elevated {
+    let out = match std::process::Command::new("/usr/bin/osascript")
+        .args(crate::tray::osascript_argv(exe, args, prompt))
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return Elevated::Failed(format!("could not start osascript: {e}")),
+    };
+    if out.status.success() {
+        return Elevated::Done(String::from_utf8_lossy(&out.stdout).trim().to_string());
+    }
+    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    if err.contains("-128") {
+        Elevated::Cancelled
+    } else {
+        Elevated::Failed(err)
+    }
+}
+
+// ── uninstalling, and Login Items ─────────────────────────────────────────
+
+/// "Uninstall Daedalus Agent…": asked once, then the installed service's
+/// `uninstall --app` behind the administrator prompt (launchd.rs): logged
+/// out, the jobs and the app removed, this menu bar app last. The data
+/// directory stays.
+pub fn uninstall() {
+    one_at_a_time("uninstall", || {
+        let asked = osascript(
+            "display dialog (item 1 of argv) with title (item 2 of argv) buttons \
+             {\"Cancel\", \"Uninstall\"} default button \"Cancel\" cancel button \"Cancel\"",
+            &[
+                "Uninstall Daedalus Agent? This Mac logs out of the box, and the service, the \
+                 menu bar item and the app are removed. Its identity stays, so installing again \
+                 brings back the same machine.",
+                TITLE,
+            ],
+        );
+        if asked.is_none() {
+            return Ok(None);
+        }
+        let exe = bundle::service_exe(&bundle::canonical());
+        let args = ["uninstall".to_string(), "--app".to_string()];
+        match elevated(
+            &exe,
+            &args,
+            "Daedalus Agent is removing its background service, its menu bar item and the app.",
+        ) {
+            Elevated::Done(said) => Ok(Some(said)),
+            Elevated::Cancelled => Ok(None),
+            Elevated::Failed(e) => Err(format!("Not uninstalled: {e}")),
+        }
+    });
+}
+
+/// Whether the user switched the service off in System Settings › Login
+/// Items: Background Task Management's status for the daemon's plist
+/// (`SMAppService.statusForLegacyURL`).
+pub fn service_switched_off() -> bool {
+    use objc2_service_management::{SMAppService, SMAppServiceStatus};
+    let path = super::launchd::daemon_plist();
+    let url = objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(
+        &path.to_string_lossy(),
+    ));
+    // SAFETY: a file URL, read by a class method with no other input.
+    let status = unsafe { SMAppService::statusForLegacyURL(&url) };
+    status == SMAppServiceStatus::RequiresApproval
+}
+
+/// System Settings, at Login Items.
+pub fn open_login_items() {
+    // SAFETY: no arguments; it opens a pane.
+    unsafe { objc2_service_management::SMAppService::openSystemSettingsLoginItems() }
 }
 
 // ── logging in and out (enroll.rs) ────────────────────────────────────────
@@ -176,26 +359,16 @@ fn log_in() -> Result<Option<String>, String> {
     };
     *NOTE.lock_ok() = Some("Logging in — confirm with this Mac's password".into());
     let exe = crate::tray::agent_exe()?;
-    let out = std::process::Command::new("/usr/bin/osascript")
-        .args(crate::tray::osascript_argv(
-            &exe,
-            &["enroll-finish".to_string(), code],
-        ))
-        .output()
-        .map_err(|e| format!("could not start osascript: {e}"))?;
-    if out.status.success() {
-        let said = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        return Ok(Some(if said.is_empty() {
-            "Logged in.".into()
-        } else {
-            said
-        }));
+    match elevated(
+        &exe,
+        &["enroll-finish".to_string(), code],
+        "Daedalus Agent is logging this Mac in to your box.",
+    ) {
+        Elevated::Done(said) if said.is_empty() => Ok(Some("Logged in.".into())),
+        Elevated::Done(said) => Ok(Some(said)),
+        Elevated::Cancelled => Err("Not logged in: cancelled at the administrator prompt.".into()),
+        Elevated::Failed(e) => Err(format!("Not logged in: {e}")),
     }
-    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    if err.contains("-128") {
-        return Err("Not logged in: cancelled at the administrator prompt.".into());
-    }
-    Err(format!("Not logged in: {err}"))
 }
 
 /// "Log out": asked once, then the service logs this Mac out (enroll.rs
