@@ -17,7 +17,7 @@ use crate::link::node::{connect_once, hello_of, Cadence, Ended, Target};
 use crate::link::rotation::Keys;
 use crate::link::tls as ltls;
 use crate::link::wire::{self, name, Command, ControllerId, Hello, NodeState, Welcome, PROTO};
-use crate::link::{PREAUTH_PER_IP, UNKNOWN_ADDRESSES};
+use crate::link::{KeyFiles, PREAUTH_PER_IP, UNKNOWN_ADDRESSES};
 use crate::role::Role;
 use crate::rpc::Events;
 use crate::rpc::{code, Response};
@@ -828,11 +828,18 @@ fn a_machine_reconnects_after_the_controller_comes_back() {
         controller_pin: Some(ctl.id.fingerprint()),
         ..Config::default()
     };
+    // Paired, or on a Mac logged in (its tunnel config there): its own
+    // files, never the machine's.
+    let dir = scratch("reconnects");
+    std::fs::write(dir.join("tunnel.toml"), "").unwrap();
+    let files = KeyFiles::on_this_os(dir.join("config.toml"), dir.join("tunnel.toml"));
     let shared = node_shared();
     let stop = Shutdown::new();
     let thread = {
         let (shared, stop, nid) = (Arc::clone(&shared), stop.clone(), nid.clone());
-        std::thread::spawn(move || crate::link::node::run_loop(cfg, nid, facts(), shared, stop))
+        std::thread::spawn(move || {
+            crate::link::node::run_loop_at(cfg, nid, facts(), shared, stop, &files)
+        })
     };
     wait_for("connected", 5, || {
         summary(&ctl, &nid).is_some_and(|s| s.connected)
@@ -864,6 +871,7 @@ fn a_machine_reconnects_after_the_controller_comes_back() {
     drop(registry);
     stop.stop();
     thread.join().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
@@ -1626,13 +1634,23 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
         ..Config::default()
     };
     std::fs::write(&path, toml::to_string(&cfg).unwrap()).unwrap();
+    // A system that pairs (Windows, Linux): a pin alone is paired. A Mac
+    // logs in instead (the next test).
+    let files = KeyFiles {
+        config: path.clone(),
+        login: None,
+    };
     let (shared, stop, nid) = (node_shared(), Shutdown::new(), id(90));
     shared.set_shutdown(stop.clone());
     let thread = {
-        let (shared, stop, nid, path) =
-            (Arc::clone(&shared), stop.clone(), nid.clone(), path.clone());
+        let (shared, stop, nid, files) = (
+            Arc::clone(&shared),
+            stop.clone(),
+            nid.clone(),
+            files.clone(),
+        );
         std::thread::spawn(move || {
-            crate::link::node::run_loop_at(cfg, nid, facts(), shared, stop, &path)
+            crate::link::node::run_loop_at(cfg, nid, facts(), shared, stop, &files)
         })
     };
     wait_for("unpaired", 5, || {
@@ -1654,7 +1672,76 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
     )
     .unwrap();
     p.write_at(&path).unwrap();
-    crate::pair::reload(&shared, &path).unwrap();
+    crate::pair::reload(&shared, &files).unwrap();
+    wait_for("seen by the controller", 5, || {
+        summary(&ctl, &nid).is_some()
+    });
+    wait_for("pending", 5, || {
+        shared
+            .link()
+            .is_some_and(|l| l.state.as_deref() == Some("pending"))
+    });
+    assert!(!dialled(&bait), "the old address was dialled");
+    stop.stop();
+    thread.join().unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// macOS's rule, run on every system: a Mac with a pin and an address but
+/// no tunnel config (an older agent's `pair`, a log-out cut short) is
+/// logged out and dials nobody; its log-in (enroll.rs: the tunnel config,
+/// then the keys, then a reload) has it dial the box at once.
+#[test]
+fn a_logged_out_mac_dials_nobody_until_it_logs_in() {
+    let bait = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    bait.set_nonblocking(true).unwrap();
+    let dialled = |bait: &std::net::TcpListener| !matches!(bait.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock);
+    let dir = scratch("logged-out");
+    let (path, tunnel) = (dir.join("config.toml"), dir.join("tunnel.toml"));
+    let cfg = Config {
+        controller_address: Some(bait.local_addr().unwrap().to_string()),
+        controller_pin: Some(id(92).fingerprint()),
+        ..Config::default()
+    };
+    std::fs::write(&path, toml::to_string(&cfg).unwrap()).unwrap();
+    let files = KeyFiles {
+        config: path.clone(),
+        login: Some(tunnel.clone()),
+    };
+    let (shared, stop, nid) = (node_shared(), Shutdown::new(), id(91));
+    shared.set_shutdown(stop.clone());
+    let thread = {
+        let (shared, stop, nid, files) = (
+            Arc::clone(&shared),
+            stop.clone(),
+            nid.clone(),
+            files.clone(),
+        );
+        std::thread::spawn(move || {
+            crate::link::node::run_loop_at(cfg, nid, facts(), shared, stop, &files)
+        })
+    };
+    wait_for("logged out", 5, || {
+        shared
+            .link()
+            .is_some_and(|l| l.state.as_deref() == Some("unpaired"))
+    });
+    std::thread::sleep(Duration::from_millis(1500));
+    assert!(!dialled(&bait), "a logged-out Mac dialled its old address");
+    let l = shared.link().unwrap();
+    assert!(!l.connected && l.controller_fingerprint.is_none() && l.error.is_none());
+
+    // Logged in while it runs.
+    let ctl = controller(fast());
+    std::fs::write(&tunnel, "").unwrap();
+    crate::pair::Pairing::new(
+        &crate::identity::format_fingerprint(&pin_of(&ctl.id)),
+        Some(&ctl.listener.local_addr.to_string()),
+    )
+    .unwrap()
+    .write_at(&path)
+    .unwrap();
+    assert!(crate::pair::reload(&shared, &files).unwrap());
     wait_for("seen by the controller", 5, || {
         summary(&ctl, &nid).is_some()
     });

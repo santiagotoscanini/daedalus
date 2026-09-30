@@ -32,7 +32,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::config::{valid_host_port, Config};
 use crate::identity::{format_fingerprint, parse_fingerprint};
-use crate::link::LinkKeys;
+use crate::link::KeyFiles;
 use crate::shared::Shared;
 
 /// A controller to trust, checked: the pin a fingerprint, the address
@@ -140,9 +140,10 @@ pub fn parse_pasted(text: &str) -> Result<Pairing> {
     Pairing::new(pin, controller)
 }
 
-/// Whether the config.toml at `path` names a pin (an absent file does not).
-pub fn paired_at(path: &Path) -> Result<bool> {
-    Ok(LinkKeys::of(&crate::config::load_at(path)?).paired())
+/// Whether the link's keys in `files` name a pin (an absent config.toml
+/// does not; nor does a logged-out Mac's, link/mod.rs `KeyFiles`).
+pub fn paired_at(files: &KeyFiles) -> Result<bool> {
+    Ok(files.load()?.paired())
 }
 
 /// Whether pairing with `pin` moves the config.toml at `path` to another
@@ -157,10 +158,10 @@ pub fn moves_pin(path: &Path, pin: &str) -> bool {
     held.is_none() || held != key(pin)
 }
 
-/// Read config.toml's link keys again and hand them to the running link;
+/// Read the link's keys in `files` again and hand them to the running link;
 /// true when they moved (and the link starts over under them).
-pub fn reload(shared: &Shared, path: &Path) -> Result<bool> {
-    Ok(shared.set_link_keys(LinkKeys::of(&crate::config::load_at(path)?)))
+pub fn reload(shared: &Shared, files: &KeyFiles) -> Result<bool> {
+    Ok(shared.set_link_keys(files.load()?))
 }
 
 /// The `pair` command as this OS's administrator types it.
@@ -278,17 +279,26 @@ mod tests {
         assert!(parse_pasted(&format!("--pin {key} --controller nope")).is_err());
     }
 
+    /// A system that pairs (Windows, Linux): a pin alone is paired.
+    fn pairs(config: &std::path::Path) -> KeyFiles {
+        KeyFiles {
+            config: config.to_path_buf(),
+            login: None,
+        }
+    }
+
     #[test]
     fn pairing_writes_config_toml_in_place_and_reloads_the_link() {
         let dir = scratch("write");
         let path = dir.join("config.toml");
+        let files = pairs(&path);
         // A machine installed unpaired: its file, with an operator's comment.
         std::fs::write(&path, "# mine\ntelemetry = \"minimal\"\n").unwrap();
-        assert!(!paired_at(&path).unwrap());
+        assert!(!paired_at(&files).unwrap());
         let shared = node_shared();
         let p = Pairing::new(&fp(1), Some("box.lan:7788")).unwrap();
         p.write_at(&path).unwrap();
-        assert!(reload(&shared, &path).unwrap());
+        assert!(reload(&shared, &files).unwrap());
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(
             text.starts_with("# mine\ntelemetry = \"minimal\"\n"),
@@ -297,7 +307,7 @@ mod tests {
         let cfg: Config = toml::from_str(&text).unwrap();
         assert_eq!(cfg.controller_pin.as_deref(), Some(fp(1).as_str()));
         assert_eq!(cfg.controller_address.as_deref(), Some("box.lan:7788"));
-        assert!(paired_at(&path).unwrap());
+        assert!(paired_at(&files).unwrap());
         let (keys, moved) = shared.link_keys();
         assert_eq!((keys.pin.as_deref(), moved), (Some(fp(1).as_str()), 1));
         // Written whole, and the service's: no stray temp file, and on unix
@@ -318,8 +328,8 @@ mod tests {
         // address; a reload that finds nothing new moves nothing.
         let other = Pairing::new(&fp(2), None).unwrap();
         other.write_at(&path).unwrap();
-        assert!(reload(&shared, &path).unwrap());
-        assert!(!reload(&shared, &path).unwrap());
+        assert!(reload(&shared, &files).unwrap());
+        assert!(!reload(&shared, &files).unwrap());
         let (keys, moved) = shared.link_keys();
         assert_eq!(keys.pin.as_deref(), Some(fp(2).as_str()));
         assert_eq!(keys.address.as_deref(), Some("box.lan:7788"));
@@ -328,10 +338,45 @@ mod tests {
         // A machine never installed gets the whole default file.
         let fresh = scratch("fresh").join("config.toml");
         p.write_at(&fresh).unwrap();
-        assert!(paired_at(&fresh).unwrap());
+        assert!(paired_at(&pairs(&fresh)).unwrap());
         for d in [dir, fresh.parent().unwrap().to_path_buf()] {
             let _ = std::fs::remove_dir_all(d);
         }
+    }
+
+    #[test]
+    fn a_mac_with_a_pin_and_no_tunnel_is_logged_out() {
+        let dir = scratch("mac");
+        let (path, tunnel) = (dir.join("config.toml"), dir.join("tunnel.toml"));
+        // Only a Mac logs in; everything else pairs.
+        let here = KeyFiles::on_this_os(path.clone(), tunnel.clone());
+        assert_eq!(here.login.is_some(), cfg!(target_os = "macos"));
+        let mac = KeyFiles {
+            config: path.clone(),
+            login: Some(tunnel.clone()),
+        };
+        // A pin an older agent's `pair` left, and no log-in: logged out,
+        // and the link is handed no keys at all.
+        Pairing::new(&fp(3), Some("box.lan:7788"))
+            .unwrap()
+            .write_at(&path)
+            .unwrap();
+        assert!(paired_at(&pairs(&path)).unwrap());
+        assert!(!paired_at(&mac).unwrap());
+        let shared = node_shared();
+        assert!(!reload(&shared, &mac).unwrap());
+        assert_eq!(shared.link_keys().0, crate::link::LinkKeys::default());
+        // Logged in (enroll.rs writes the tunnel config): the same pin is
+        // the link's.
+        std::fs::write(&tunnel, "").unwrap();
+        assert!(paired_at(&mac).unwrap());
+        assert!(reload(&shared, &mac).unwrap());
+        assert_eq!(shared.link_keys().0.pin.as_deref(), Some(fp(3).as_str()));
+        // Logged out again: the keys go.
+        std::fs::remove_file(&tunnel).unwrap();
+        assert!(reload(&shared, &mac).unwrap());
+        assert!(!shared.link_keys().0.paired());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

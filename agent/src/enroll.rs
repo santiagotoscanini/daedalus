@@ -96,6 +96,12 @@ impl Files {
             policy: paths::policy_path(),
         }
     }
+
+    /// Where the link reads its keys from: this config.toml, and this
+    /// tunnel config as this system's rule has it (link/mod.rs `KeyFiles`).
+    pub fn keys(&self) -> crate::link::KeyFiles {
+        crate::link::KeyFiles::on_this_os(self.config.clone(), self.tunnel.clone())
+    }
 }
 
 /// A log-in the service began and has not finished: the app it goes to
@@ -359,7 +365,7 @@ pub fn finish(
     }
     // The tunnel first, then the keys: the link's next dial goes through it.
     shared.set_dialer(Dialer::Tunnel(tunnel));
-    crate::pair::reload(shared, &files.config).map_err(|e| internal(format!("{e:#}")))?;
+    crate::pair::reload(shared, &files.keys()).map_err(|e| internal(format!("{e:#}")))?;
     tracing::info!(
         app = %started.app,
         endpoint = %settings.endpoint,
@@ -419,7 +425,7 @@ pub fn forget_log_in(shared: &Shared, files: &Files, why: &str) -> anyhow::Resul
         }
     }
     shared.set_policy(crate::link::wire::Policy::default());
-    crate::pair::reload(shared, &files.config)?;
+    crate::pair::reload(shared, &files.keys())?;
     tracing::info!(why, "logged out: no tunnel, no controller trusted");
     Ok(())
 }

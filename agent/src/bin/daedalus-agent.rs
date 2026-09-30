@@ -126,7 +126,7 @@ fn install(args: &[String]) -> Result<()> {
         ..config::Config::default()
     };
     os::svc::install(&cfg)?;
-    if !daedalus_agent::pair::paired_at(&daedalus_agent::paths::config_path())? {
+    if !daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
         println!("\n{}", daedalus_agent::pair::unpaired_hint());
     }
     Ok(())
@@ -148,7 +148,7 @@ fn install_mac(args: &[String]) -> Result<()> {
         daedalus_agent::paths::forget_santree();
     }
     os::svc::install(&config::Config::default())?;
-    if !daedalus_agent::pair::paired_at(&path)? {
+    if !daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
         println!("\n{}", daedalus_agent::pair::unpaired_hint());
     }
     Ok(())
@@ -166,7 +166,7 @@ fn pair(args: &[String]) -> Result<()> {
     }
     let path = daedalus_agent::paths::config_path();
     if args.len() == 1 && args[0] == "--check" {
-        if daedalus_agent::pair::paired_at(&path)? {
+        if daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
             println!("paired");
             return Ok(());
         }

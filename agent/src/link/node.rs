@@ -198,7 +198,7 @@ pub fn run_loop(
     shared: Arc<Shared>,
     stop: Shutdown,
 ) {
-    run_loop_at(cfg, id, facts, shared, stop, &crate::paths::config_path())
+    run_loop_at(cfg, id, facts, shared, stop, &super::KeyFiles::here())
 }
 
 /// Wait `total`, cut short by a stop (true) or by the link's keys moving
@@ -220,18 +220,20 @@ fn wait_keys(stop: &Shutdown, shared: &Shared, seen: u64, total: Duration) -> bo
     }
 }
 
-/// `run_loop` with its config.toml at `config_path` (where a rotation
-/// re-pins); the keys it follows are the service's (`Shared::link_keys`),
-/// set here from `cfg` and moved by a pairing.
+/// `run_loop` with its keys in `files` (link/mod.rs `KeyFiles`: its
+/// config.toml is where a rotation re-pins); the keys it follows are the
+/// service's (`Shared::link_keys`), set here from `cfg` and moved by a
+/// pairing or a log-in.
 pub fn run_loop_at(
     cfg: Config,
     id: Identity,
     facts: crate::facts::Facts,
     shared: Arc<Shared>,
     stop: Shutdown,
-    config_path: &Path,
+    files: &super::KeyFiles,
 ) {
-    shared.set_link_keys(super::LinkKeys::of(&cfg));
+    shared.set_link_keys(files.keys(&cfg));
+    let config_path = files.config.as_path();
     // The TLS side, once: the key's DER is made and loaded one time.
     let client = match tls::Client::new(&id) {
         Ok(c) => c,

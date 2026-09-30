@@ -194,7 +194,7 @@ fn handle(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Val
         }
         "link.reload" => {
             none(&p)?;
-            link_reload(shared, &crate::paths::config_path())
+            link_reload(shared, &crate::link::KeyFiles::here())
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         "enroll.begin" | "enroll.finish" | "enroll.leave" => enroll(shared, peer, m, p),
@@ -205,15 +205,15 @@ fn handle(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Val
     }
 }
 
-/// `link.reload` against the config.toml at `path` (module doc).
-fn link_reload(shared: &Shared, path: &Path) -> Result<Value, ApiError> {
+/// `link.reload` against the link's keys in `files` (module doc).
+fn link_reload(shared: &Shared, files: &crate::link::KeyFiles) -> Result<Value, ApiError> {
     if !shared.role().link {
         return Err(ApiError::new(
             code::UNSUPPORTED,
             "the controller has no link to reload",
         ));
     }
-    match crate::pair::reload(shared, path) {
+    match crate::pair::reload(shared, files) {
         Ok(true) => {
             tracing::info!("the link's keys changed in config.toml; connecting under them");
             Ok("the link follows config.toml's new keys now".into())
@@ -497,6 +497,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
         let key = crate::identity::format_fingerprint(&[4; 32]);
+        // As a system that pairs has them (Windows, Linux: a pin alone).
+        let files = crate::link::KeyFiles {
+            config: path.clone(),
+            login: None,
+        };
         let s = shared(Mode::Node);
         // Pairing is an administrator's (`pair`, elevated): the socket has
         // no method for it, whoever asks and whatever the machine's state.
@@ -509,21 +514,21 @@ mod tests {
             .unwrap()
             .write_at(&path)
             .unwrap();
-        assert!(link_reload(&s, &path)
+        assert!(link_reload(&s, &files)
             .unwrap()
             .as_str()
             .unwrap()
             .contains("new keys"));
         assert_eq!(s.link_keys().0.pin.as_deref(), Some(key.as_str()));
         // A reload with nothing new changes nothing.
-        assert!(link_reload(&s, &path)
+        assert!(link_reload(&s, &files)
             .unwrap()
             .as_str()
             .unwrap()
             .contains("in use"));
         // The controller has no link to reload.
         assert_eq!(
-            link_reload(&shared(Mode::Controller), &path)
+            link_reload(&shared(Mode::Controller), &files)
                 .unwrap_err()
                 .code,
             code::UNSUPPORTED
