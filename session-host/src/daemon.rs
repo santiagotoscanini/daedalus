@@ -25,7 +25,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -34,7 +34,7 @@ use santree_remote_proto::*;
 use serde::Serialize;
 use serde_json::value::RawValue;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{mpsc, oneshot, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio::task::JoinSet;
 
 use crate::allow::{AllowList, AllowSet};
@@ -53,6 +53,27 @@ pub const MAX_CONNS_PER_NODE: usize = 4;
 /// it; the link is then dropped and its sessions parked — nothing is lost, the
 /// ring replays it on the next attach.
 pub const OUT_QUEUE: usize = 1024;
+/// …and bytes: a few `exec.run` replies (up to ~22 MiB each) are enough to
+/// fill memory long before 1024 lines.
+pub const OUT_QUEUE_BYTES: usize = 128 * 1024 * 1024;
+/// Blocking work (the handlers that run on tokio's blocking pool) one node
+/// may have running at once; more get `busy`. Counted per node, not per
+/// connection, and held by the work itself until it returns: a reconnect
+/// does not reset it, so work that outlives its connection cannot pile up.
+pub const MAX_BLOCKING_PER_NODE: usize = 32;
+/// Bytes waiting to be written into one PTY (`pty.write`): a program that
+/// does not read its input fills it, and further writes get `busy`.
+pub const PTY_INPUT_QUEUE: usize = 1024 * 1024;
+/// PTY input threads at once (`Input`): one per session that was written
+/// to, plus any a closed session left parked in the kernel.
+pub const MAX_INPUT_THREADS: usize = 2 * MAX_PTYS;
+/// How long a `pty.write` waits for its bytes to go in before it answers
+/// `timeout` (they stay queued, in order).
+pub const PTY_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+/// Bytes of hook events kept for a subscriber, besides their count.
+pub const HOOK_QUEUE_BYTES: usize = 64 * 1024 * 1024;
+/// The longest `hello.client` kept (status file, log).
+pub const MAX_CLIENT_NAME: usize = 128;
 /// An exited session nobody is attached to is closed after this long.
 pub const REAP_AFTER: Duration = Duration::from_secs(3600);
 /// How often exited sessions are looked for.
@@ -108,6 +129,8 @@ fn ok<T: Serialize>(value: &T) -> Outcome {
 struct Out {
     tx: mpsc::Sender<String>,
     conn: u64,
+    /// Bytes queued and not yet taken by the writer ([`OUT_QUEUE_BYTES`]).
+    queued: Arc<AtomicUsize>,
     full: Arc<AtomicBool>,
     close: Arc<Notify>,
 }
@@ -116,19 +139,31 @@ impl Out {
     /// Queue one line; false when it was not (the queue is full, and the
     /// connection is closing, or already gone).
     fn send(&self, line: String) -> bool {
+        let len = line.len();
+        if self.queued.fetch_add(len, Ordering::AcqRel) + len > OUT_QUEUE_BYTES {
+            self.queued.fetch_sub(len, Ordering::AcqRel);
+            self.overflow("bytes");
+            return false;
+        }
         match self.tx.try_send(line) {
             Ok(()) => true,
-            Err(mpsc::error::TrySendError::Full(_)) => {
-                if !self.full.swap(true, Ordering::AcqRel) {
-                    log::warn!(
-                        "connection {}: {OUT_QUEUE} lines queued and unread; dropping the link",
-                        self.conn
-                    );
-                    self.close.notify_one();
+            Err(e) => {
+                self.queued.fetch_sub(len, Ordering::AcqRel);
+                if let mpsc::error::TrySendError::Full(_) = e {
+                    self.overflow("lines");
                 }
                 false
             }
-            Err(mpsc::error::TrySendError::Closed(_)) => false,
+        }
+    }
+
+    fn overflow(&self, what: &str) {
+        if !self.full.swap(true, Ordering::AcqRel) {
+            log::warn!(
+                "connection {}: too many {what} queued and unread; dropping the link",
+                self.conn
+            );
+            self.close.notify_one();
         }
     }
 }
@@ -137,6 +172,10 @@ struct Conn {
     id: u64,
     node: String,
     out: Out,
+    /// Set before its sessions are parked at teardown: an attach that lands
+    /// after that sweep parks the session again instead of routing it to a
+    /// dead connection.
+    closed: AtomicBool,
 }
 
 /// What the status file reports about one connection.
@@ -203,6 +242,89 @@ struct SessState {
     live: Mutex<Live>,
     /// The daemon's status-change signal, raised when the process ends.
     changed: Arc<Notify>,
+    /// Its input (`pty.write`), started on the first write.
+    input: Mutex<Option<Input>>,
+}
+
+/// One PTY's input: a thread of its own that writes the queued bytes in
+/// order. A program that does not read its input blocks that thread — and
+/// only it: no pool thread waits, and a full queue answers `busy`. The
+/// thread ends when the session's state is dropped (it was closed) and the
+/// write in progress, if any, returns.
+///
+/// That write may not return: santree-pty's writer is a blocking master fd
+/// this crate cannot reach, and on Linux (seen on 6.18) a write blocked on a
+/// full PTY stays blocked after the session is closed and its process is
+/// gone. Such a thread holds its
+/// queue (at most [`PTY_INPUT_QUEUE`]) until the host restarts, so input
+/// threads are capped at [`MAX_INPUT_THREADS`]; past it `pty.write` answers
+/// `busy`. The fix belongs in santree-pty (a non-blocking master writer and
+/// a deadline).
+struct Input {
+    tx: std::sync::mpsc::Sender<InputJob>,
+    queued: Arc<AtomicUsize>,
+}
+
+struct InputJob {
+    data: Vec<u8>,
+    done: oneshot::Sender<Result<(), String>>,
+}
+
+impl Input {
+    /// Start one, counted in `inputs` until its thread ends.
+    fn start(mgr: PtyManager, id: SessionId, inputs: Arc<AtomicUsize>) -> Result<Self, WireError> {
+        inputs
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_INPUT_THREADS).then_some(n + 1)
+            })
+            .map_err(|_| {
+                busy(format!(
+                    "{MAX_INPUT_THREADS} terminals' input writers are running; \
+                     restart the session host to clear the stuck ones"
+                ))
+            })?;
+        let (tx, rx) = std::sync::mpsc::channel::<InputJob>();
+        let queued = Arc::new(AtomicUsize::new(0));
+        let left = queued.clone();
+        let count = inputs.clone();
+        let started = std::thread::Builder::new()
+            .name(format!("pty-input-{id}"))
+            .spawn(move || {
+                for job in rx {
+                    let written = mgr.write(id, &job.data).map_err(|e| format!("{e:#}"));
+                    left.fetch_sub(job.data.len(), Ordering::AcqRel);
+                    let _ = job.done.send(written);
+                }
+                count.fetch_sub(1, Ordering::AcqRel);
+            });
+        if let Err(e) = started {
+            inputs.fetch_sub(1, Ordering::AcqRel);
+            return Err(err(ErrorCode::Io, format!("starting its input: {e}")));
+        }
+        Ok(Self { tx, queued })
+    }
+
+    /// Queue `data`; the receiver says when it went in. `busy` when the
+    /// queue holds [`PTY_INPUT_QUEUE`] bytes already (a write into an empty
+    /// queue is always taken, however large).
+    fn queue(&self, data: Vec<u8>) -> Result<oneshot::Receiver<Result<(), String>>, WireError> {
+        let len = data.len();
+        self.queued
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |q| {
+                (q == 0 || q + len <= PTY_INPUT_QUEUE).then_some(q + len)
+            })
+            .map_err(|q| {
+                busy(format!(
+                    "{q} bytes are waiting for this terminal to read its input"
+                ))
+            })?;
+        let (done, rx) = oneshot::channel();
+        if self.tx.send(InputJob { data, done }).is_err() {
+            self.queued.fetch_sub(len, Ordering::AcqRel);
+            return Err(err(ErrorCode::Io, "the terminal's input is closed"));
+        }
+        Ok(rx)
+    }
 }
 
 impl SessState {
@@ -212,6 +334,7 @@ impl SessState {
             attach: Mutex::new(()),
             live: Mutex::new(Live::default()),
             changed,
+            input: Mutex::new(None),
         }
     }
 
@@ -249,6 +372,10 @@ fn parked_sink(sess: Arc<SessState>) -> impl Fn(Vec<u8>) + Send + 'static {
 
 struct HookQueue {
     cap: usize,
+    /// The queue's budget in bytes ([`hook_size`]), besides its count: one
+    /// push can carry a 32 MiB stdin, and nobody may be subscribed for days.
+    max_bytes: usize,
+    bytes: usize,
     last_seq: u64,
     items: VecDeque<HookEvent>,
     /// Overflow not yet reported to a subscriber.
@@ -281,15 +408,34 @@ impl HookQueue {
             env,
             stdin,
         };
-        while self.items.len() >= self.cap.max(1) {
-            self.items.pop_front();
+        let size = hook_size(&hook);
+        // The oldest go first, counted as dropped, until the new one fits
+        // (one larger than the whole budget is still kept, alone).
+        while !self.items.is_empty()
+            && (self.items.len() >= self.cap.max(1) || self.bytes + size > self.max_bytes)
+        {
+            if let Some(old) = self.items.pop_front() {
+                self.bytes -= hook_size(&old);
+            }
             self.dropped += 1;
         }
         self.report_dropped();
+        self.bytes += size;
         self.items.push_back(hook.clone());
         self.notify(Event::Hook(hook).encode());
         self.last_seq
     }
+
+    /// `hooks.ack`: drop everything up to `up_to`.
+    fn ack(&mut self, up_to: u64) {
+        self.items.retain(|h| h.seq > up_to);
+        self.bytes = self.items.iter().map(hook_size).sum();
+    }
+}
+
+/// What one queued hook costs, roughly its size in memory.
+fn hook_size(h: &HookEvent) -> usize {
+    64 + h.event.len() + h.stdin.len() + h.env.iter().map(|(k, v)| k.len() + v.len()).sum::<usize>()
 }
 
 // ── the daemon ────────────────────────────────────────────────────────────
@@ -308,6 +454,10 @@ pub struct Daemon {
     /// open can slip between a revocation and its sweep.
     opening: Mutex<()>,
     hooks: Mutex<HookQueue>,
+    /// Each node's blocking work ([`MAX_BLOCKING_PER_NODE`]).
+    blocking: Mutex<HashMap<String, Arc<Semaphore>>>,
+    /// PTY input threads alive ([`MAX_INPUT_THREADS`]).
+    inputs: Arc<AtomicUsize>,
     next_conn: AtomicU64,
     conns: Mutex<HashMap<u64, ConnSummary>>,
     /// Raised on every change the status file reports.
@@ -327,15 +477,53 @@ impl Daemon {
             opening: Mutex::new(()),
             hooks: Mutex::new(HookQueue {
                 cap,
+                max_bytes: HOOK_QUEUE_BYTES,
+                bytes: 0,
                 last_seq: 0,
                 items: VecDeque::new(),
                 dropped: 0,
                 subscriber: None,
             }),
+            blocking: Mutex::new(HashMap::new()),
+            inputs: Arc::new(AtomicUsize::new(0)),
             next_conn: AtomicU64::new(1),
             conns: Mutex::new(HashMap::new()),
             changed: Arc::new(Notify::new()),
         })
+    }
+
+    /// A slot for one piece of `node`'s blocking work, or `busy`. The work
+    /// holds it until it returns (`blocking`), not until its connection
+    /// ends.
+    fn permit(&self, node: &str) -> Result<OwnedSemaphorePermit, WireError> {
+        let sem = lock(&self.blocking)
+            .entry(node.to_string())
+            .or_insert_with(|| Arc::new(Semaphore::new(MAX_BLOCKING_PER_NODE)))
+            .clone();
+        sem.try_acquire_owned().map_err(|_| {
+            busy(format!(
+                "{MAX_BLOCKING_PER_NODE} requests of this machine are still running on the host"
+            ))
+        })
+    }
+
+    /// Queue `data` for session `id`'s input (`Input`).
+    fn pty_input(
+        &self,
+        id: SessionId,
+        data: Vec<u8>,
+    ) -> Result<oneshot::Receiver<Result<(), String>>, WireError> {
+        let Some(sess) = self.session(id) else {
+            return Err(err(
+                ErrorCode::NotFound,
+                format!("no terminal session {id}"),
+            ));
+        };
+        let mut input = lock(&sess.input);
+        if input.is_none() {
+            *input = Some(Input::start(self.mgr.clone(), id, self.inputs.clone())?);
+        }
+        input.as_ref().expect("just made").queue(data)
     }
 
     pub fn boot_id(&self) -> &str {
@@ -373,18 +561,28 @@ impl Daemon {
         self.mgr.sessions().iter().filter(|s| s.alive).count()
     }
 
-    /// Close every PTY opened by a node the allow-list no longer names.
+    /// Close every PTY opened by a node the allow-list no longer names. The
+    /// sessions are taken out under `opening`, so no open slips between the
+    /// revocation and this sweep (`pty_open` checks the set under it too),
+    /// and closed after it is released, so a sweep of many sessions (each
+    /// close can take a quarter second) does not hold up other nodes' opens.
     pub fn close_revoked(&self) {
-        let _one = lock(&self.opening);
-        let set = self.allow.current();
-        let gone: Vec<(SessionId, String)> = lock(&self.sessions)
-            .iter()
-            .filter(|(_, s)| !set.contains_node(&s.node))
-            .map(|(id, s)| (*id, s.node.clone()))
-            .collect();
+        let gone: Vec<(SessionId, String)> = {
+            let _one = lock(&self.opening);
+            let set = self.allow.current();
+            let mut sessions = lock(&self.sessions);
+            let gone: Vec<(SessionId, String)> = sessions
+                .iter()
+                .filter(|(_, s)| !set.contains_node(&s.node))
+                .map(|(id, s)| (*id, s.node.clone()))
+                .collect();
+            for (id, _) in &gone {
+                sessions.remove(id);
+            }
+            gone
+        };
         for (id, node) in gone {
             let _ = self.mgr.close(id);
-            lock(&self.sessions).remove(&id);
             log::info!("node {node} is no longer allowed: closed pty session {id}");
         }
         self.touch();
@@ -467,6 +665,15 @@ impl Daemon {
                 }
             };
         }
+        // A slot of this node's blocking work, or the `busy` answer.
+        macro_rules! permit {
+            () => {
+                match self.permit(&conn.node) {
+                    Ok(permit) => permit,
+                    Err(e) => return Some(Err(e)),
+                }
+            };
+        }
         let this = self.clone();
         let audit = |what: String| {
             log::info!(
@@ -481,7 +688,7 @@ impl Daemon {
             m::PtyOpen::NAME => {
                 let p = params!(PtyOpenParams);
                 audit(format!(
-                    "{:?} in {}",
+                    "{:?} in {:?}",
                     if p.command.is_empty() {
                         "login shell"
                     } else {
@@ -490,17 +697,28 @@ impl Daemon {
                     p.cwd.as_deref().unwrap_or("-")
                 ));
                 let node = conn.node.clone();
-                blocking(move || Some(this.pty_open(p, node))).await
+                blocking(permit!(), move || Some(this.pty_open(p, node))).await
             }
             m::PtyAttach::NAME => {
                 let p = params!(PtyAttachParams);
-                let (conn, id) = (conn.clone(), request.id);
-                blocking(move || this.pty_attach(&conn, id, p)).await
+                let (conn, id, sid) = (conn.clone(), request.id, p.id);
+                blocking(permit!(), move || {
+                    let outcome = this.pty_attach(&conn, id, p);
+                    // Its connection ended while this ran: the teardown's
+                    // sweep may have missed the route just set (`Conn`).
+                    if conn.closed.load(Ordering::SeqCst) {
+                        if let Some(sess) = this.session(sid) {
+                            this.park(sid, &sess, Some(conn.id));
+                        }
+                    }
+                    outcome
+                })
+                .await
             }
             m::PtyDetach::NAME => {
                 let p = params!(SessionRef);
                 let conn = conn.id;
-                blocking(move || {
+                blocking(permit!(), move || {
                     if let Some(sess) = this.session(p.id) {
                         this.park(p.id, &sess, Some(conn));
                     }
@@ -509,20 +727,31 @@ impl Daemon {
                 .await
             }
             m::PtyWrite::NAME => {
+                // Through the session's own input thread (`Input`), never
+                // the blocking pool; the answer waits at most
+                // PTY_WRITE_TIMEOUT.
                 let p = params!(PtyWriteParams);
-                blocking(move || {
-                    Some(
-                        this.mgr
-                            .write(p.id, &p.data)
-                            .map_err(|e| pty_err(&this, p.id, e))
-                            .and_then(|()| ok(&Empty)),
-                    )
+                let done = match self.pty_input(p.id, p.data) {
+                    Ok(done) => done,
+                    Err(e) => return Some(Err(e)),
+                };
+                Some(match tokio::time::timeout(PTY_WRITE_TIMEOUT, done).await {
+                    Ok(Ok(Ok(()))) => ok(&Empty),
+                    Ok(Ok(Err(e))) => Err(pty_err(self, p.id, e)),
+                    Ok(Err(_)) => Err(err(ErrorCode::Io, "the terminal's input is closed")),
+                    Err(_) => Err(err(
+                        ErrorCode::Timeout,
+                        format!(
+                            "terminal session {} has not read its input for {}s; the bytes stay queued",
+                            p.id,
+                            PTY_WRITE_TIMEOUT.as_secs()
+                        ),
+                    )),
                 })
-                .await
             }
             m::PtyResize::NAME => {
                 let p = params!(PtyResizeParams);
-                blocking(move || {
+                blocking(permit!(), move || {
                     Some(
                         this.mgr
                             .resize(p.id, p.cols, p.rows)
@@ -535,7 +764,7 @@ impl Daemon {
             m::PtyClose::NAME => {
                 let p = params!(SessionRef);
                 audit(format!("session {}", p.id));
-                blocking(move || {
+                blocking(permit!(), move || {
                     let _ = this.mgr.close(p.id);
                     lock(&this.sessions).remove(&p.id);
                     this.touch();
@@ -544,23 +773,32 @@ impl Daemon {
                 .await
             }
             m::PtySessions::NAME => {
-                blocking(move || Some(ok(&this.infos(this.mgr.sessions())))).await
+                blocking(permit!(), move || {
+                    Some(ok(&this.infos(this.mgr.sessions())))
+                })
+                .await
             }
             m::PtyAdopt::NAME => {
                 let p = params!(PtyAdoptParams);
                 audit(String::new());
-                blocking(move || Some(this.pty_adopt(&p.owner))).await
+                blocking(permit!(), move || Some(this.pty_adopt(&p.owner))).await
             }
             m::ExecRun::NAME => {
                 let p = params!(ExecParams);
                 audit(format!(
-                    "{:?} in {}",
+                    "{:?} in {:?}",
                     p.argv.first().map(String::as_str).unwrap_or(""),
                     p.cwd
                 ));
                 let root = self.root.clone();
                 let cwd = p.cwd.clone();
-                let cwd = match tokio::task::spawn_blocking(move || root.cwd(Some(&cwd))).await {
+                let permit = permit!();
+                let cwd = match tokio::task::spawn_blocking(move || {
+                    let _permit = permit;
+                    root.cwd(Some(&cwd))
+                })
+                .await
+                {
                     Ok(Ok(cwd)) => cwd,
                     Ok(Err(e)) => return Some(Err(e)),
                     Err(e) => return Some(Err(err(ErrorCode::Io, e.to_string()))),
@@ -569,12 +807,15 @@ impl Daemon {
             }
             m::FsRead::NAME => {
                 let p = params!(FsReadParams);
-                blocking(move || Some(fsops::read(&p).and_then(|r| ok(&r)))).await
+                blocking(permit!(), move || {
+                    Some(fsops::read(&p).and_then(|r| ok(&r)))
+                })
+                .await
             }
             m::FsWrite::NAME => {
                 let p = params!(FsWriteParams);
-                audit(p.path.clone());
-                blocking(move || {
+                audit(format!("{:?}", p.path));
+                blocking(permit!(), move || {
                     Some(
                         this.root
                             .write_target(&p.path)
@@ -586,7 +827,10 @@ impl Daemon {
             }
             m::FsStat::NAME => {
                 let p = params!(FsStatParams);
-                blocking(move || Some(fsops::stat(&p.path).and_then(|r| ok(&r)))).await
+                blocking(permit!(), move || {
+                    Some(fsops::stat(&p.path).and_then(|r| ok(&r)))
+                })
+                .await
             }
             m::HooksSubscribe::NAME => {
                 let p = params!(HooksSubscribeParams);
@@ -612,12 +856,12 @@ impl Daemon {
             }
             m::HooksAck::NAME => {
                 let p = params!(HooksAckParams);
-                lock(&self.hooks).items.retain(|h| h.seq > p.up_to);
+                lock(&self.hooks).ack(p.up_to);
                 self.touch();
                 Some(ok(&Empty))
             }
             m::WorkspacesList::NAME => {
-                blocking(move || {
+                blocking(permit!(), move || {
                     Some(
                         workspaces::list(&this.opts.workspaces, &this.opts.projects_root)
                             .map_err(|e| err(ErrorCode::Io, e))
@@ -841,14 +1085,19 @@ fn pty_err(daemon: &Daemon, id: SessionId, e: impl std::fmt::Display) -> WireErr
     )
 }
 
-/// Run a blocking handler off the async workers.
-async fn blocking<F>(f: F) -> Option<Outcome>
+/// Run a blocking handler off the async workers, holding its node's
+/// `permit` until it returns — even when its request is aborted (the
+/// connection ended), which cannot stop a blocking task.
+async fn blocking<F>(permit: OwnedSemaphorePermit, f: F) -> Option<Outcome>
 where
     F: FnOnce() -> Option<Outcome> + Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
-        .await
-        .unwrap_or_else(|e| Some(Err(err(ErrorCode::Io, format!("handler panicked: {e}")))))
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        f()
+    })
+    .await
+    .unwrap_or_else(|e| Some(Err(err(ErrorCode::Io, format!("handler panicked: {e}")))))
 }
 
 // ── one connection ────────────────────────────────────────────────────────
@@ -916,24 +1165,29 @@ where
     let (reader, writer) = tokio::io::split(stream);
     let (tx, mut out_rx) = mpsc::channel::<String>(OUT_QUEUE);
     let close = Arc::new(Notify::new());
+    let queued = Arc::new(AtomicUsize::new(0));
     let conn = Arc::new(Conn {
         id,
         node: peer.node.clone(),
         out: Out {
             tx,
             conn: id,
+            queued: queued.clone(),
             full: Arc::new(AtomicBool::new(false)),
             close: close.clone(),
         },
+        closed: AtomicBool::new(false),
     });
 
     let writer_task = tokio::spawn(async move {
         let mut writer = writer;
         while let Some(line) = out_rx.recv().await {
+            queued.fetch_sub(line.len(), Ordering::AcqRel);
             let mut batch = line;
             batch.push('\n');
             // Whatever else is already queued goes in the same flush.
             while let Ok(mut more) = out_rx.try_recv() {
+                queued.fetch_sub(more.len(), Ordering::AcqRel);
                 more.push('\n');
                 batch.push_str(&more);
                 if batch.len() > 1024 * 1024 {
@@ -1007,10 +1261,11 @@ where
             let outcome = match daemon.hello(&request) {
                 Ok((params, result)) => {
                     greeted = true;
+                    let client: String = params.client.chars().take(MAX_CLIENT_NAME).collect();
+                    log::info!("connection {id}: hello from {client:?}");
                     if let Some(c) = lock(&daemon.conns).get_mut(&id) {
-                        c.client = Some(params.client.clone());
+                        c.client = Some(client);
                     }
-                    log::info!("connection {id}: hello from {:?}", params.client);
                     daemon.touch();
                     Ok(result)
                 }
@@ -1050,6 +1305,8 @@ where
     // Whatever is still running for this connection has no one to answer:
     // an `exec.run` among it kills its process group.
     requests.abort_all();
+    // Before the sweep: an attach still running parks again (`Conn`).
+    conn.closed.store(true, Ordering::SeqCst);
     // A dropped connection detaches, never closes.
     let routed: Vec<(SessionId, Arc<SessState>)> = lock(&daemon.sessions)
         .iter()
@@ -1273,6 +1530,107 @@ mod tests {
         assert!(daemon.session(theirs).is_none());
         let refused = open(&daemon, dir.path(), &node(&a), &["sleep", "30"]).unwrap_err();
         assert_eq!(refused.code, ErrorCode::Other("access_denied".into()));
+        daemon.close_all();
+    }
+
+    /// Review S4: the hook queue is bounded by bytes as well as count; the
+    /// oldest go first and are counted as dropped.
+    #[test]
+    fn the_hook_queue_is_bounded_by_bytes() {
+        let mut q = HookQueue {
+            cap: 100,
+            max_bytes: 3 * (64 + 1 + 1000),
+            bytes: 0,
+            last_seq: 0,
+            items: VecDeque::new(),
+            dropped: 0,
+            subscriber: None,
+        };
+        for _ in 0..5 {
+            q.push("e".into(), Vec::new(), vec![0u8; 1000]);
+        }
+        let seqs: Vec<u64> = q.items.iter().map(|h| h.seq).collect();
+        assert_eq!(seqs, vec![3, 4, 5]);
+        assert_eq!(q.dropped, 2);
+        assert!(q.bytes <= q.max_bytes);
+        // One larger than the whole budget is kept, alone.
+        q.push("e".into(), Vec::new(), vec![0u8; 10_000]);
+        assert_eq!(q.items.len(), 1);
+        assert_eq!(q.dropped, 5);
+        q.ack(6);
+        assert_eq!((q.items.len(), q.bytes), (0, 0));
+    }
+
+    /// Review S5: blocking work is counted per node and held until it
+    /// returns, not reset by a reconnect.
+    #[test]
+    fn blocking_work_is_capped_per_node() {
+        let dir = tempfile::tempdir().unwrap();
+        let daemon = Daemon::new(
+            options(dir.path()),
+            "b".into(),
+            AllowList::open(dir.path().join("allow.json")),
+        );
+        let held: Vec<_> = (0..MAX_BLOCKING_PER_NODE)
+            .map(|_| daemon.permit("a").unwrap())
+            .collect();
+        assert_eq!(
+            daemon.permit("a").unwrap_err().code,
+            ErrorCode::Other("busy".into())
+        );
+        assert!(daemon.permit("b").is_ok(), "another node is not affected");
+        drop(held);
+        assert!(daemon.permit("a").is_ok());
+    }
+
+    /// Review S5: a `pty.write` into a terminal that does not read its
+    /// input waits on the session's own input thread, never the blocking
+    /// pool; a full queue is `busy`; and a revocation closes the session at
+    /// once regardless, which ends the stuck write.
+    #[test]
+    fn a_terminal_that_does_not_read_cannot_pin_writes_or_the_revocation() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = Identity::generate().unwrap();
+        let path = dir.path().join("allow.json");
+        write_allow(&path, &[&a]);
+        let list = AllowList::open(path.clone());
+        let daemon = Daemon::new(options(dir.path()), "b".into(), list.clone());
+        // Raw mode, so the line discipline stops taking input once full.
+        let id = id_of(open(
+            &daemon,
+            dir.path(),
+            &node(&a),
+            &["sh", "-c", "stty raw -echo; exec sleep 60"],
+        ));
+        std::thread::sleep(Duration::from_millis(500));
+
+        let mut stuck = daemon.pty_input(id, vec![b'x'; 512 * 1024]).unwrap();
+        std::thread::sleep(Duration::from_millis(1500));
+        assert!(
+            matches!(stuck.try_recv(), Err(oneshot::error::TryRecvError::Empty)),
+            "the write went in: the terminal was reading"
+        );
+        let full = daemon
+            .pty_input(id, vec![b'y'; PTY_INPUT_QUEUE])
+            .unwrap_err();
+        assert_eq!(full.code, ErrorCode::Other("busy".into()));
+
+        write_allow(&path, &[]);
+        list.reload();
+        let started = Instant::now();
+        daemon.close_revoked();
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "the revocation waited {:?}",
+            started.elapsed()
+        );
+        assert!(daemon.session(id).is_none());
+        let gone = daemon.pty_input(id, b"z".to_vec()).unwrap_err();
+        assert_eq!(gone.code, ErrorCode::NotFound);
+        // The kernel may keep that write parked after the close (`Input`):
+        // it is counted against MAX_INPUT_THREADS, never the pool.
+        assert!(daemon.inputs.load(Ordering::Acquire) <= 1);
+        let _ = stuck.try_recv();
         daemon.close_all();
     }
 }

@@ -10,6 +10,7 @@
 //! `within`).
 
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::UNIX_EPOCH;
@@ -135,10 +136,23 @@ pub fn read(p: &FsReadParams) -> Result<FsReadResult, WireError> {
         }
         None => path,
     };
-    let mut file = std::fs::File::open(&path).map_err(|e| io_err(e, &p.path))?;
+    // O_NONBLOCK: opening a FIFO nobody writes to returns at once instead of
+    // pinning this thread; O_NOCTTY: a terminal device never becomes ours.
+    // Then only a regular file is read, checked on the descriptor itself.
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY)
+        .open(&path)
+        .map_err(|e| io_err(e, &p.path))?;
     let meta = file.metadata().map_err(|e| io_err(e, &p.path))?;
     if meta.is_dir() {
         return Err(err(ErrorCode::Io, format!("{} is a directory", p.path)));
+    }
+    if !meta.is_file() {
+        return Err(err(
+            ErrorCode::Io,
+            format!("{} is not a regular file", p.path),
+        ));
     }
     let size = meta.len();
     let start = match p.offset.unwrap_or(0) {
@@ -157,7 +171,10 @@ pub fn read(p: &FsReadParams) -> Result<FsReadResult, WireError> {
 }
 
 /// Write `p.data` to `target` (from [`Root::write_target`]) atomically: a
-/// temp file beside it, then a rename.
+/// temp file beside it, then a rename. The temp file is made 0600, so the
+/// content is never readable by others on the way, and given its final mode
+/// (`p.mode`, else the replaced file's, else the umask's default) before the
+/// rename — permission bits only: never setuid, setgid or sticky.
 pub fn write(p: &FsWriteParams, target: &Path) -> Result<(), WireError> {
     use std::os::unix::fs::PermissionsExt;
     static TEMP: AtomicU64 = AtomicU64::new(0);
@@ -174,18 +191,19 @@ pub fn write(p: &FsWriteParams, target: &Path) -> Result<(), WireError> {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
+            .mode(0o600)
             .open(&temp)?;
         file.write_all(&p.data)?;
-        file.sync_all()?;
         let mode = match p.mode {
-            Some(mode) => Some(mode),
-            None => std::fs::metadata(target)
-                .ok()
-                .map(|m| m.permissions().mode()),
+            Some(mode) => mode,
+            None => match std::fs::metadata(target) {
+                Ok(meta) => meta.permissions().mode(),
+                Err(_) => 0o666 & !umask(),
+            },
         };
-        if let Some(mode) = mode {
-            std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(mode & 0o7777))?;
-        }
+        file.set_permissions(std::fs::Permissions::from_mode(mode & 0o777))?;
+        file.sync_all()?;
+        drop(file);
         std::fs::rename(&temp, target)
     })();
     if let Err(e) = written {
@@ -193,6 +211,20 @@ pub fn write(p: &FsWriteParams, target: &Path) -> Result<(), WireError> {
         return Err(io_err(e, &p.path));
     }
     Ok(())
+}
+
+/// This process's umask, from `/proc/self/status` (reading it with umask(2)
+/// would set it, racing every thread that creates a file). Unreadable: 0o077,
+/// the private answer.
+fn umask() -> u32 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find_map(|l| l.strip_prefix("Umask:"))
+                .and_then(|v| u32::from_str_radix(v.trim(), 8).ok())
+        })
+        .unwrap_or(0o077)
 }
 
 pub fn stat(path: &str) -> Result<FsStat, WireError> {
@@ -294,5 +326,70 @@ mod tests {
         write(&p, &t).unwrap();
         assert!(!dir.path().join("elsewhere/target").exists());
         assert_eq!(std::fs::read(root_path.join("web/link")).unwrap(), b"hi");
+    }
+
+    /// Review S5: `fs.read` of a FIFO nobody writes to is refused at once
+    /// instead of blocking its thread in `open` forever; so is a device.
+    #[test]
+    fn reads_refuse_what_is_not_a_regular_file_without_blocking() {
+        let dir = tempfile::tempdir().unwrap();
+        let fifo = dir.path().join("fifo");
+        let c = std::ffi::CString::new(fifo.to_string_lossy().as_bytes()).unwrap();
+        // SAFETY: plain mkfifo(3) on a NUL-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
+        let read_of = |path: &Path| {
+            let p = FsReadParams {
+                path: path.to_string_lossy().into_owned(),
+                ..Default::default()
+            };
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(read(&p));
+            });
+            rx.recv_timeout(std::time::Duration::from_secs(5))
+                .expect("fs.read blocked")
+        };
+        let e = read_of(&fifo).unwrap_err();
+        assert!(e.msg.contains("not a regular file"), "{}", e.msg);
+        let e = read_of(Path::new("/dev/null")).unwrap_err();
+        assert!(e.msg.contains("not a regular file"), "{}", e.msg);
+        std::fs::write(dir.path().join("f"), b"data").unwrap();
+        assert_eq!(read_of(&dir.path().join("f")).unwrap().data, b"data");
+    }
+
+    /// Review S6: the final mode is permission bits only (no setuid, setgid
+    /// or sticky), a replaced file's mode is kept the same way, and a new
+    /// file without a mode gets the umask's default.
+    #[test]
+    fn writes_get_permission_bits_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mode_of = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o7777;
+        let put = |name: &str, mode: Option<u32>| {
+            let target = dir.path().join(name);
+            let p = FsWriteParams {
+                path: target.to_string_lossy().into_owned(),
+                data: b"secret".to_vec(),
+                mode,
+            };
+            write(&p, &target).unwrap();
+            mode_of(&target)
+        };
+        assert_eq!(put(".env", Some(0o600)), 0o600);
+        assert_eq!(put("tool", Some(0o6755)), 0o755, "setuid/setgid dropped");
+        assert_eq!(put("dir-ish", Some(0o1777)), 0o777, "sticky dropped");
+        std::fs::set_permissions(
+            dir.path().join(".env"),
+            std::fs::Permissions::from_mode(0o640),
+        )
+        .unwrap();
+        assert_eq!(put(".env", None), 0o640, "the replaced file's mode is kept");
+        assert_eq!(put("new", None), 0o666 & !umask());
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".tmp"))
+            .collect();
+        assert!(names.is_empty(), "{names:?}");
     }
 }

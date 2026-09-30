@@ -49,18 +49,40 @@ fn create(path: &Path) -> Result<Identity, String> {
     std::fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut seed))
         .map_err(|e| format!("reading /dev/urandom: {e}"))?;
-    // O_EXCL: two starts racing never overwrite each other's key.
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|e| format!("creating {shown}: {e}"))?;
-    file.write_all(&seed)
-        .and_then(|()| file.sync_all())
-        .map_err(|e| format!("writing {shown}: {e}"))?;
-    log::info!("made a new host key at {shown}");
-    Ok(Identity::from_seed(&seed))
+    // Written whole to a temp file (O_EXCL, 0600) and fsynced, then linked
+    // into place: a crash never leaves a short key behind (which every later
+    // start would refuse), and link(2) fails rather than replace a key
+    // another start made meanwhile — that one is then loaded.
+    let temp = path.with_file_name(format!(
+        ".{}.{}.tmp",
+        path.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&temp);
+    let made = (|| {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temp)?;
+        file.write_all(&seed)?;
+        file.sync_all()?;
+        std::fs::hard_link(&temp, path)
+    })();
+    let _ = std::fs::remove_file(&temp);
+    match made {
+        Ok(()) => {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::File::open(dir).and_then(|d| d.sync_all());
+            }
+            log::info!("made a new host key at {shown:?}");
+            Ok(Identity::from_seed(&seed))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => load_or_create(path),
+        Err(e) => Err(format!("creating {shown}: {e}")),
+    }
 }
 
 #[cfg(test)]

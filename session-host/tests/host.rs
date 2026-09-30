@@ -1523,20 +1523,31 @@ async fn caps_on_ptys_requests_and_connections() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pre_auth_slots_per_address_and_the_handshake_deadline() {
+async fn pre_auth_slots_on_loopback_and_the_handshake_deadline() {
     let dir = tempdir();
     let host = Host::start(dir.path());
-    // Three silent TCP connections hold loopback's three slots…
-    let silent: Vec<TcpStream> = connect_many(host.addr, 3).await;
+    // Review S8: loopback (every VPN peer, every container) is not one
+    // address's three slots: a local client holding a few silent
+    // connections leaves the others room to handshake.
+    let few: Vec<TcpStream> = connect_many(host.addr, 8).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
-    // …so a fourth is closed without a handshake.
-    let mut fourth = TcpStream::connect(host.addr).await.unwrap();
+    let mut raw = host.greeted().await;
+    raw.ok("pty.sessions", json!({})).await;
+    drop(raw);
+    drop(few);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // Loopback's own pool is full at LOOPBACK_PREAUTH…
+    let silent: Vec<TcpStream> =
+        connect_many(host.addr, daedalus_session_host::serve::LOOPBACK_PREAUTH).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    // …so one more is closed without a handshake.
+    let mut over = TcpStream::connect(host.addr).await.unwrap();
     let mut buf = [0u8; 1];
-    let n = tokio::time::timeout(WAIT, fourth.read(&mut buf))
+    let n = tokio::time::timeout(WAIT, over.read(&mut buf))
         .await
         .unwrap()
         .unwrap_or(0);
-    assert_eq!(n, 0, "the fourth connection was served");
+    assert_eq!(n, 0, "the connection past the pool was served");
     // The silent ones are cut at the handshake deadline (5 s).
     let started = Instant::now();
     for mut s in silent {
@@ -1635,7 +1646,9 @@ async fn the_status_file_tracks_the_host_and_says_stopped() {
     assert_eq!(
         keys,
         [
+            "allowList",
             "bootId",
+            "config",
             "connections",
             "exe",
             "generatedAt",
@@ -1661,6 +1674,13 @@ async fn the_status_file_tracks_the_host_and_says_stopped() {
     );
     assert!(status["startedAt"].as_str().unwrap().ends_with('Z'));
     assert_eq!(status["sessions"], 0);
+    // Review S3: the config it runs on, which the controller compares with
+    // the installed one as it does `exe`.
+    assert_eq!(
+        Path::new(status["config"].as_str().unwrap()),
+        dir.path().join("config.json")
+    );
+    assert_eq!(status["allowList"], json!({"nodes": 1, "error": null}));
 
     let mut raw = host.greeted().await;
     raw.ok("pty.open", open(&host, "sh", &["-c", "sleep 30"]))

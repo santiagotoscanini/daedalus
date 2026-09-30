@@ -45,7 +45,9 @@ unknown keys refused:
 | `workspaces` | the control plane's workspaces snapshot, `/run/daedalus-workspaces/workspaces.json` |
 | `hookBin` | `hello.hookBin`: `/run/current-system/sw/bin/daedalus-session-host` |
 
-`host.key` is a 32-byte ed25519 seed, made on the first start (O_EXCL, 0600).
+`host.key` is a 32-byte ed25519 seed, made on the first start: written whole to
+a 0600 temp file (O_EXCL), fsynced, then linked into place, so a crash never
+leaves a short key and a concurrent start's key is never replaced.
 One that is not this uid's, not a regular file, readable by others or not 32
 bytes stops the start; it is never replaced.
 
@@ -75,7 +77,11 @@ change re-read (the rename always changes the inode).
 - **refused** — a symlink or not a regular file, not this uid's,
   group/other-writable, or over 1 MiB → nobody is admitted, logged;
 - **malformed** → the last good set stays, logged (the controller writes whole
-  files, so this is a bug, not a revocation).
+  files, so this is a bug, not a revocation), and said in the status file's
+  `allowList.error`.
+
+The watch starts from the stamp the first read saw, so a file renamed between
+the host's start and the watch's first look is still applied.
 
 The TLS handshake admits a key only while the current set holds it. A node
 that leaves the set loses every connection and every PTY it opened within
@@ -92,12 +98,26 @@ the change is refused).
   which a TLS 1.3 client reads on its **first read**, not at connect. The
   daedalus agent's own client (its pure-Rust provider) meets it on X25519 +
   ChaCha20-Poly1305, proven by `interop/`.
-- **Before admission** a connection holds a pre-auth slot — 32 in all, 3 per
-  source address (an IPv6 /64 is one), as the controller's link counts them —
-  and has 5 s to finish the handshake. A wg-easy tunnel peer and a container
-  dialling the host both arrive from `127.0.0.1` (the DNAT and pasta reach the
-  host over loopback): they share loopback's slots, and the log shows them as
-  that address.
+- **Before admission** a connection holds a pre-auth slot and has 5 s to
+  finish the handshake. Two pools, neither able to starve the other:
+  - **the network**: 32 in all, 3 per source address (an IPv6 /64 is one), as
+    the controller's link counts them. One LAN host claiming a dozen
+    addresses can fill it — an accepted home-LAN risk.
+  - **loopback**: 64 of its own. A wg-easy tunnel peer and every container
+    dialling the host arrive from `127.0.0.1` (the DNAT and pasta reach the
+    host over loopback), and so will every agent once the tunnel moves into
+    the agent: a per-address limit there would be one bucket for all of
+    them. A buggy local client leaves ample room for the real handshakes
+    (one round trip each). **Residual risk**: a process on the box that
+    deliberately holds 64 silent connections, re-opened every 5 s, locks
+    out loopback clients until it stops (the LAN pool is unaffected). It
+    must already run on the box or in a container, where it has easier ways
+    to deny service (the disk, the pi-hole's shared rate limit, the CPU),
+    and it gains nothing past the key check.
+
+  The log shows loopback peers as `127.0.0.1`. A refused or timed-out
+  handshake is logged at most 10 times a minute; the next minute's first line
+  says how many were not.
 - **Accepted sockets**: TCP keepalive (15 s idle, 5 s × 3) and
   `TCP_USER_TIMEOUT` 30 s, so a vanished peer is noticed in about half a
   minute and its sessions parked.
@@ -132,12 +152,15 @@ per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list"]`.
    and stats are not confined (`fs.read` keeps its `within`).
 4. **Caps**, answered with the error code `busy` (not in the doc's list;
    santree reads it as `ErrorCode::Other("busy")`): 64 PTYs on the host (live
-   or exited), 32 requests running per connection. A node's 5th connection is
-   closed right after its handshake. An exited session nobody is attached to
-   is closed after an hour.
-5. **Output is bounded**: 1024 lines queued per connection. A peer that stops
-   reading fills it; the link is dropped and its sessions parked — the ring
-   replays what it missed on the next attach.
+   or exited), 32 requests running per connection, and 32 pieces of blocking
+   work per node (every handler but `exec.run`'s process, `pty.write` and the
+   hook methods runs on tokio's blocking pool; the slot is held by the work
+   until it returns, so a reconnect does not reset it). A node's 5th
+   connection is closed right after its handshake. An exited session nobody
+   is attached to is closed after an hour.
+5. **Output is bounded**: 1024 lines and 128 MiB queued per connection. A
+   peer that stops reading fills it; the link is dropped and its sessions
+   parked — the ring replays what it missed on the next attach.
 6. **`exec.run` runs in a process group of its own**, killed whole on a
    timeout, on output that never closes, and when the request is dropped (its
    connection ended). Output is capped at 8 MiB a stream, as the fake: two
@@ -149,7 +172,28 @@ per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list"]`.
    `pub(crate)` there) without its idle bound: the client times a silent link
    out, and keepalive catches a vanished peer.
 10. **Parking** after a dropped connection runs on a blocking task, keeping the
-    manager's locks off the async workers; the behaviour is the fake's.
+    manager's locks off the async workers; the behaviour is the fake's. An
+    attach still running when its connection ends parks the session again.
+11. **`pty.write`** goes through the session's own input thread, in order:
+    the answer waits at most 10 s for the bytes to go in (`timeout` after
+    that; they stay queued), and a session with 1 MiB already waiting answers
+    `busy`. A program that stops reading its input blocks only that thread.
+    Linux can leave such a write blocked even after the session is closed;
+    the thread then stays until the host restarts, so input threads are
+    capped at 128 (`busy` past it).
+12. **`fs.read`** reads regular files only: a FIFO, a device or a socket is an
+    `io` error, found without blocking (the open is non-blocking and the type
+    checked on the descriptor).
+13. **`fs.write`**'s temp file is 0600 until it gets its final mode, just
+    before the rename: `mode` (or the replaced file's, or the umask's default
+    for a new one), permission bits only — never setuid, setgid or sticky.
+14. **A read EOF ends the connection**: whatever it still has running is
+    aborted and unanswered (an `exec.run` kills its group). A client that
+    half-closes after its last request does not get the answers.
+15. **PTYs belong to their opener only for revocation**: any admitted node
+    may attach to, write to, adopt or close any PTY, and a revocation closes
+    the PTYs a node opened, not the ones it is using. Every admitted node is
+    the operator, so nothing separates them.
 
 Everything else matches the fake: newline JSON with a 32 MiB line cap (empty
 lines skipped, an undecodable line logged and unanswered), concurrent
@@ -159,8 +203,10 @@ connection stays open), the attach gate and replay, one receiver per session,
 detach-not-close on a drop, `pty.exit` after attaching to an exited session,
 exited sessions listed `alive: false` until closed, `pty.adopt` dedupe,
 `GIT_OPTIONAL_LOCKS=0` last, exec timeouts (60 s default, 1 ms–10 min),
-`fs.*` semantics, the 10k hook queue (newest subscriber only; response, then
-the dropped report, then the backlog; `ack` keeps `seq > upTo`), and a
+`fs.*` semantics, the 10k hook queue — here also capped at 64 MiB, the oldest
+dropped and counted in the next `hooks.dropped` (newest subscriber only;
+response, then the dropped report, then the backlog; `ack` keeps
+`seq > upTo`), and a
 request's `env` overlaying the host's for that call only.
 
 ### `workspaces.list`
@@ -214,8 +260,10 @@ last time on shutdown:
   "pid": 1234,
   "startedAt": "2026-09-29T09:00:00Z",
   "exe": "/nix/store/…-daedalus-session-host-0.1.0/bin/daedalus-session-host",
+  "config": "/nix/store/…-daedalus-session-host.json",
   "hostKey": "<64 hex>",
   "listen": ["0.0.0.0:7789"],
+  "allowList": { "nodes": 1, "error": null },
   "connections": [
     { "node": "21fe31dfa154a261", "peer": "192.0.2.10:51544",
       "connectedAt": "2026-09-29T09:30:00Z", "client": "santree/0.1.17" }
@@ -229,17 +277,26 @@ last time on shutdown:
 - `exe`: `/proc/self/exe` at start — the build this process runs. The
   controller compares it with the installed one: different means "update
   installed, restart to apply" (the unit is never restarted by a switch).
+- `config`: the `--config` file it was started with (absolute). nix writes
+  every version of it to a new store path, so the controller compares it with
+  the installed one too: a changed port, root or allow-list path is also
+  "restart to apply".
 - `hostKey`: the key nodes pin, raw, 64 hex — also in the `stopped` file.
+- `allowList`: the nodes the set in force admits, and why the file on disk is
+  not that set when it is not (malformed: the last good set stays; refused:
+  nobody is admitted).
 - `connections`: one per admitted connection; `client` is `hello.client`,
   null until a hello succeeds.
 - `sessions`: PTYs whose process is still running — what a restart ends.
-  `stopped` lists no connections and 0 sessions.
+  `stopped` lists no connections and 0 sessions, and no write follows it.
+- `client` is cut to 128 characters.
 
 ## Logging
 
 stderr, one line per event, no timestamps (journald adds them), with a `<N>`
 syslog prefix when stderr is the journal. `SESSION_HOST_LOG` =
-`off|error|warn|info|debug|trace` (default `info`).
+`off|error|warn|info|debug|trace` (default `info`). Control characters are
+escaped (`\n`, `\u{1b}`), so a remote path or cwd cannot forge a line.
 
 An audit trail, never data: connections (node id, peer address, open, close,
 why), refused handshakes, the allow-list's changes, revocation closing a PTY,

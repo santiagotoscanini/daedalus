@@ -580,9 +580,14 @@ impl Tls {
     /// The connection and its socket, for a caller that drives them itself
     /// (santree.rs's pipe), with no timeout left on the socket: the ones
     /// the handshake and `recv` use are this type's own, and the new owner
-    /// sets its own. Nothing has been read past the handshake.
+    /// sets its own. Refused when bytes were already read past the
+    /// handshake: they would be lost, so the caller ends the connection.
     pub fn into_parts(self) -> io::Result<(rustls::Connection, TcpStream)> {
-        debug_assert!(self.lines.rest().is_empty(), "bytes read and never taken");
+        if !self.lines.rest().is_empty() {
+            return Err(io::Error::other(
+                "the peer spoke before it was asked to; its bytes would be lost",
+            ));
+        }
         self.sock.set_read_timeout(None)?;
         self.sock.set_write_timeout(None)?;
         Ok((self.conn, self.sock))

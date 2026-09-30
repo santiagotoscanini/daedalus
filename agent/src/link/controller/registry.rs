@@ -387,6 +387,14 @@ impl Registry {
         self.allow.as_ref().and_then(|a| a.error())
     }
 
+    /// Write the allow-list again if its last write failed
+    /// (session_host.rs).
+    pub fn retry_allow_list(&self) {
+        if let Some(allow) = &self.allow {
+            allow.retry();
+        }
+    }
+
     /// The session host machines are told of; None until its status file
     /// named a key.
     pub fn session_host(&self) -> Option<SessionHost> {

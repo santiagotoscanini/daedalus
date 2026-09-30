@@ -313,7 +313,10 @@ fn session_unit_name() -> String {
 /// before an install recorded one (and under a development run, whose
 /// service is the user itself).
 pub fn session_uid() -> Option<u32> {
-    let text = std::fs::read_to_string(session_record()).ok()?;
+    let path = session_record();
+    let text = std::fs::read_to_string(&path).ok()?;
+    // Only a record root (or this user) wrote, as macOS reads its own.
+    crate::private::check_owner(&path).ok()?;
     serde_json::from_str::<SessionUser>(&text)
         .ok()
         .map(|r| r.uid)

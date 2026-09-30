@@ -1,14 +1,34 @@
 //! `serve`: the TLS listeners and the hook socket, the tasks beside them
 //! (status file, revocation, reaper), and a clean stop.
 //!
-//! **Before a connection is admitted** it holds a pre-auth slot —
-//! [`MAX_PREAUTH`] in all, [`PREAUTH_PER_IP`] per address (an IPv6 /64 is one
-//! address), as the controller's link counts them — and has
-//! [`HANDSHAKE_TIMEOUT`] to finish the TLS handshake. The handshake admits a
-//! key only if the allow-list does (santree-remote-tls `server_config`). A
-//! tunnel's peers, and containers on this host, all arrive from loopback
-//! (wg-easy's DNAT and pasta), so they share one address's slots and the audit
-//! log shows them as `127.0.0.1`.
+//! **Before a connection is admitted** it holds a pre-auth slot and has
+//! [`HANDSHAKE_TIMEOUT`] to finish the TLS handshake; the handshake admits a
+//! key only if the allow-list does (santree-remote-tls `server_config`). The
+//! slots come from two pools that cannot starve each other:
+//!
+//! - **the network**: [`MAX_PREAUTH`] in all, [`PREAUTH_PER_IP`] per address
+//!   (an IPv6 /64 is one address), as the controller's link counts them. One
+//!   LAN host that claims a dozen addresses can fill it; on a home LAN that
+//!   is an accepted risk.
+//! - **loopback**: [`LOOPBACK_PREAUTH`], its own and generous. A tunnel's
+//!   peers and every container on this host (wg-easy's DNAT, pasta) arrive
+//!   from 127.0.0.1, and all agents will once the tunnel moves into them, so
+//!   a per-address limit there would be one bucket for everybody: three
+//!   silent connections from one container would lock every VPN user out.
+//!   With [`LOOPBACK_PREAUTH`] slots, each freed after at most
+//!   [`HANDSHAKE_TIMEOUT`], a buggy local client (a health checker, a port
+//!   scan, a reconnect loop) leaves plenty for the real handshakes, which
+//!   take one round trip. What remains: a process on this box that
+//!   deliberately holds that many silent connections open, re-opened every
+//!   five seconds, still locks out loopback clients (the LAN keeps its own
+//!   pool). It has to be running on the box or in a container already, and
+//!   from there it has easier ways to deny service (filling the disk,
+//!   exhausting the pi-hole's shared rate limit, CPU); nothing it does here
+//!   gets it past the TLS key check. The audit log shows loopback peers as
+//!   `127.0.0.1`.
+//!
+//! A refused handshake is logged at most [`REFUSALS_PER_MINUTE`] times a
+//! minute, with a count of the rest, so a scanner cannot flood the journal.
 //!
 //! **Accepted sockets** get TCP keepalive and `TCP_USER_TIMEOUT` =
 //! [`USER_TIMEOUT`]: a peer that vanished (a laptop lid closed mid-session)
@@ -34,10 +54,15 @@ use crate::daemon::{self, Daemon, Options, Peer};
 use crate::status::StatusWriter;
 use crate::{hostkey, sys};
 
-/// Connections not yet admitted, in all…
+/// Connections from the network not yet admitted, in all…
 pub const MAX_PREAUTH: usize = 32;
 /// …and from one address.
 pub const PREAUTH_PER_IP: usize = 3;
+/// Connections from loopback (VPN peers, containers) not yet admitted: a
+/// pool of their own (module doc).
+pub const LOOPBACK_PREAUTH: usize = 64;
+/// Refused handshakes logged a minute; the rest are counted.
+pub const REFUSALS_PER_MINUTE: u32 = 10;
 /// From accept to a finished TLS handshake.
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Unacknowledged data older than this ends the connection.
@@ -98,6 +123,7 @@ impl Server {
             sys::new_boot_id()?,
             allow.clone(),
         );
+        revocations(daemon.clone(), allow.clone())?;
         Ok(Self {
             config,
             identity,
@@ -134,13 +160,19 @@ impl Server {
             exe: std::fs::read_link("/proc/self/exe")
                 .ok()
                 .map(|p| p.to_string_lossy().into_owned()),
+            config: self
+                .config
+                .file
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned()),
             host_key: santree_remote_tls::key_hex(&self.identity.public_key()),
             listen: listen.clone(),
+            allow: self.allow.clone(),
             daemon: daemon.clone(),
+            written: Default::default(),
         });
         let mut tasks = vec![
             tokio::spawn(status.clone().run()),
-            tokio::spawn(revocations(daemon.clone(), self.allow.clone())),
             tokio::spawn(reaper(daemon.clone())),
             tokio::spawn(accept_hooks(daemon.clone(), self.hooks)),
         ];
@@ -201,21 +233,38 @@ fn ip_bucket(ip: IpAddr) -> IpAddr {
     }
 }
 
+/// The pre-auth pools (module doc).
 #[derive(Default)]
 struct Preauth {
+    /// The network's, by address; its total is the sum.
     per_ip: Mutex<HashMap<IpAddr, usize>>,
     total: AtomicUsize,
+    loopback: AtomicUsize,
 }
 
 /// One pre-auth slot, given back on drop.
 struct Slot {
     preauth: Arc<Preauth>,
-    bucket: IpAddr,
+    /// None: a loopback slot.
+    bucket: Option<IpAddr>,
 }
 
 impl Preauth {
     fn slot(self: &Arc<Self>, ip: IpAddr) -> Option<Slot> {
         let bucket = ip_bucket(ip);
+        // `::1`'s /64 is `::`: loopback is asked of the address itself (and of
+        // its IPv4, for an IPv4-mapped one).
+        if ip.is_loopback() || bucket.is_loopback() {
+            self.loopback
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                    (n < LOOPBACK_PREAUTH).then_some(n + 1)
+                })
+                .ok()?;
+            return Some(Slot {
+                preauth: self.clone(),
+                bucket: None,
+            });
+        }
         let mut per = self.per_ip.lock().unwrap_or_else(|e| e.into_inner());
         let mine = per.get(&bucket).copied().unwrap_or(0);
         if mine >= PREAUTH_PER_IP || self.total.load(Ordering::Acquire) >= MAX_PREAUTH {
@@ -225,25 +274,56 @@ impl Preauth {
         self.total.fetch_add(1, Ordering::AcqRel);
         Some(Slot {
             preauth: self.clone(),
-            bucket,
+            bucket: Some(bucket),
         })
     }
 }
 
 impl Drop for Slot {
     fn drop(&mut self) {
+        let Some(bucket) = self.bucket else {
+            self.preauth.loopback.fetch_sub(1, Ordering::AcqRel);
+            return;
+        };
         let mut per = self
             .preauth
             .per_ip
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        if let Some(n) = per.get_mut(&self.bucket) {
+        if let Some(n) = per.get_mut(&bucket) {
             *n -= 1;
             if *n == 0 {
-                per.remove(&self.bucket);
+                per.remove(&bucket);
             }
         }
         self.preauth.total.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// At most [`REFUSALS_PER_MINUTE`] refusal lines a minute; the rest counted
+/// and summed up in the first line of the next minute.
+#[derive(Default)]
+struct RefusalLog {
+    window: Mutex<(Option<std::time::Instant>, u32, u64)>,
+}
+
+impl RefusalLog {
+    /// Whether to log this one, and how many were held back before it.
+    fn admit(&self) -> Option<u64> {
+        let now = std::time::Instant::now();
+        let mut w = self.window.lock().unwrap_or_else(|e| e.into_inner());
+        let (start, logged, held) = &mut *w;
+        if start.is_none_or(|s| now.duration_since(s) >= Duration::from_secs(60)) {
+            *start = Some(now);
+            *logged = 0;
+        }
+        if *logged < REFUSALS_PER_MINUTE {
+            *logged += 1;
+            Some(std::mem::take(held))
+        } else {
+            *held += 1;
+            None
+        }
     }
 }
 
@@ -268,6 +348,7 @@ async fn accept_tls(
     daemon: Arc<Daemon>,
     preauth: Arc<Preauth>,
 ) {
+    let refusals = Arc::new(RefusalLog::default());
     loop {
         let (stream, addr) = match listener.accept().await {
             Ok(accepted) => accepted,
@@ -287,22 +368,33 @@ async fn accept_tls(
             continue;
         }
         let (tls, allow, daemon) = (tls.clone(), allow.clone(), daemon.clone());
+        let refusals = refusals.clone();
         tokio::spawn(async move {
             let accepted =
                 tokio::time::timeout(HANDSHAKE_TIMEOUT, santree_remote_tls::accept(tls, stream))
                     .await;
             drop(slot);
+            let refused = |why: String| {
+                if let Some(held) = refusals.admit() {
+                    let more = if held > 0 {
+                        format!(" ({held} more refusals not logged in the last minute)")
+                    } else {
+                        String::new()
+                    };
+                    log::info!("{addr}: {why}{more}");
+                }
+            };
             let stream = match accepted {
                 Ok(Ok(stream)) => stream,
                 Ok(Err(e)) => {
-                    log::info!("{addr}: handshake refused: {e}");
+                    refused(format!("handshake refused: {e}"));
                     return;
                 }
                 Err(_) => {
-                    log::info!(
-                        "{addr}: no handshake within {}s; closed",
+                    refused(format!(
+                        "no handshake within {}s; closed",
                         HANDSHAKE_TIMEOUT.as_secs()
-                    );
+                    ));
                     return;
                 }
             };
@@ -317,14 +409,22 @@ async fn accept_tls(
 }
 
 /// A node leaving the allow-list loses the PTYs it opened (its connections
-/// close themselves, daemon.rs).
-async fn revocations(daemon: Arc<Daemon>, allow: Arc<AllowList>) {
+/// close themselves, daemon.rs). On a thread of its own, never the blocking
+/// pool: whatever a node has running there, its revocation does not wait
+/// behind it. The thread lives as long as the process.
+fn revocations(daemon: Arc<Daemon>, allow: Arc<AllowList>) -> Result<(), String> {
+    let runtime = tokio::runtime::Handle::current();
     let mut set = allow.subscribe();
-    while set.changed().await.is_ok() {
-        set.borrow_and_update();
-        let daemon = daemon.clone();
-        let _ = tokio::task::spawn_blocking(move || daemon.close_revoked()).await;
-    }
+    std::thread::Builder::new()
+        .name("revocations".into())
+        .spawn(move || {
+            while runtime.block_on(set.changed()).is_ok() {
+                set.borrow_and_update();
+                daemon.close_revoked();
+            }
+        })
+        .map(|_| ())
+        .map_err(|e| format!("starting the revocation thread: {e}"))
 }
 
 async fn reaper(daemon: Arc<Daemon>) {
@@ -394,5 +494,57 @@ async fn accept_hooks(daemon: Arc<Daemon>, listener: UnixListener) {
             Ok(cred) => log::warn!("hook socket: refused uid {}", cred.uid()),
             Err(e) => log::warn!("hook socket: no peer credentials: {e}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Review S8: loopback has a pool of its own, the network its per-address
+    /// and total limits, and neither can starve the other.
+    #[test]
+    fn loopback_and_the_network_have_separate_pre_auth_pools() {
+        let pre = Arc::new(Preauth::default());
+        let lan = |n: u8| IpAddr::from([192, 0, 2, n]);
+        let lo: IpAddr = "127.0.0.1".parse().unwrap();
+        let lo6: IpAddr = "::1".parse().unwrap();
+
+        let mut held: Vec<Slot> = (0..LOOPBACK_PREAUTH)
+            .map(|i| pre.slot(if i % 2 == 0 { lo } else { lo6 }).unwrap())
+            .collect();
+        assert!(pre.slot(lo).is_none(), "loopback's pool is full");
+        // The network is untouched by it: three per address…
+        for _ in 0..PREAUTH_PER_IP {
+            held.push(pre.slot(lan(1)).unwrap());
+        }
+        assert!(pre.slot(lan(1)).is_none());
+        // …and MAX_PREAUTH in all.
+        let mut n = 2;
+        while held.len() < LOOPBACK_PREAUTH + MAX_PREAUTH {
+            if let Some(slot) = pre.slot(lan(n)) {
+                held.push(slot);
+            } else {
+                n += 1;
+            }
+        }
+        assert!(pre.slot(lan(200)).is_none(), "the network's pool is full");
+        drop(held);
+        assert!(pre.slot(lo).is_some() && pre.slot(lan(1)).is_some());
+        assert_eq!(pre.loopback.load(Ordering::Acquire), 0);
+        assert_eq!(pre.total.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn refusals_are_logged_a_few_a_minute() {
+        let log = RefusalLog::default();
+        for _ in 0..REFUSALS_PER_MINUTE {
+            assert_eq!(log.admit(), Some(0));
+        }
+        assert_eq!(log.admit(), None);
+        assert_eq!(log.admit(), None);
+        // A new minute: the first line says how many were held back.
+        log.window.lock().unwrap().0 = Some(std::time::Instant::now() - Duration::from_secs(61));
+        assert_eq!(log.admit(), Some(2));
     }
 }

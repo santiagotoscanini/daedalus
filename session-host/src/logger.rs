@@ -2,6 +2,10 @@
 //! those. When stderr is the journal (`JOURNAL_STREAM`), each line carries a
 //! `<N>` syslog priority prefix so journald files it at the right level.
 //! `SESSION_HOST_LOG` = off|error|warn|info|debug|trace (default info).
+//!
+//! Control characters in a record are escaped (`\n` as the two characters
+//! `\` `n`): records carry remote strings (paths, a cwd), and a newline in
+//! one would otherwise forge a line — and, under journald, its priority.
 
 use std::io::Write;
 
@@ -37,6 +41,7 @@ impl log::Log for Logger {
             return;
         }
         let module = record.target().split("::").next().unwrap_or("");
+        let text = escape_controls(&record.args().to_string());
         let line = if self.journal {
             let priority = match record.level() {
                 log::Level::Error => 3,
@@ -44,9 +49,9 @@ impl log::Log for Logger {
                 log::Level::Info => 6,
                 log::Level::Debug | log::Level::Trace => 7,
             };
-            format!("<{priority}>{module}: {}\n", record.args())
+            format!("<{priority}>{module}: {text}\n")
         } else {
-            format!("{} {module}: {}\n", record.level(), record.args())
+            format!("{} {module}: {text}\n", record.level())
         };
         // One write per record so lines never interleave; a closed stderr is
         // not worth dying over.
@@ -54,4 +59,32 @@ impl log::Log for Logger {
     }
 
     fn flush(&self) {}
+}
+
+/// `s` with every control character escaped as Rust would (`\n`, `\u{1b}`).
+fn escape_controls(s: &str) -> String {
+    if !s.chars().any(char::is_control) {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        if c.is_control() {
+            out.extend(c.escape_default());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn control_characters_cannot_forge_a_line() {
+        assert_eq!(super::escape_controls("plain /p/ä"), "plain /p/ä");
+        assert_eq!(
+            super::escape_controls("/p/x\n<3>forged\u{1b}[31m"),
+            "/p/x\\n<3>forged\\u{1b}[31m"
+        );
+    }
 }

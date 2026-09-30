@@ -178,6 +178,7 @@ address = "box.example.org:7789"        # where machines dial it, handed to sant
 allow_list = "/srv/state/controller/session-host-allow.json"  # written here, read by the host
 status_file = "/srv/state/session-host/status.json"          # written by the host, read here
 bin = "/nix/store/…-daedalus-session-host-0.1.0/bin/daedalus-session-host"  # the installed build
+config = "/nix/store/…-daedalus-session-host.json"                          # the installed config
 ```
 
 The table's values are checked only in controller mode (`api_socket` and
@@ -281,7 +282,7 @@ verbs, none taking a command, a path or a flag:
 | `nodes.set_desired` `{nodes: [{id, public_key, state, policy, name}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
 | `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
 | `root.run` `{verb, selectors?}` | `{run, verb, outcome, detail, verbs?}`: one of the root helper's verbs run to its end (`done`, `refused` with the unit's reason, `failed`); `status` answers every verb and its unit's state in `verbs`. Answers when the unit has finished, so a client gives it its own timeout; its unit's lines go out as `root.progress` meanwhile ("The root helper", below) | `root` |
-| `santree.status` | `{state, version, restart_pending, live_ptys, connections: [{node, name, count}], error}`: the session host from its status file — `state` `running`, `stale` (not written for 30 s), `stopped` or `missing`; `restart_pending` when the running build is not the installed one; `error` why the file could not be read or the allow-list written. `unavailable` where `[controller.session_host]` names none ("The session host") | — |
+| `santree.status` | `{state, version, restart_pending, live_ptys, connections: [{node, name, count}], error}`: the session host from its status file — `state` `running`, `stale` (not written for 30 s), `stopped` or `missing`; `restart_pending` when the running build or config is not the installed one; `error` why the file could not be read, why the allow-list could not be written (revocations are not reaching the host; retried every 2 s), or why the host is not using it as written. `unavailable` where `[controller.session_host]` names none ("The session host") | — |
 
 `state` is `pending` (connected, not decided), `approved`, `revoked` or
 `unknown` (seen, not decided, gone). `nodes.set_desired` is the app's
@@ -600,7 +601,10 @@ to the controller carries none of it.
   `session.json` on Linux) — and nobody else. Not the console user: a
   connection here is a shell as the operator on the box (who has NOPASSWD
   sudo), so it must not follow whoever sits at the machine; another account
-  gets `forbidden`. Every process of that user may use it, as they may use
+  gets `forbidden`. With no user recorded — a Mac that updated itself from
+  before 0.22, since only `install` records one — the operator is refused
+  too, and the `forbidden` line says so and to run `sudo daedalus-agent
+  install` from their account. Every process of that user may use it, as they may use
   that user's ssh keys. The socket is 0666 in the service's 0711 `run/`,
   the kernel's peer check the gate; santree checks the other end is root's.
 - **The first line** is the agent's, in its envelope, before santree writes
@@ -649,14 +653,24 @@ On the controller, `[controller.session_host]` names the host's files
   until the app pushes, and writing that would cut every terminal across a
   controller restart. So a revocation made while the controller is down, or
   while it refuses the app's set, reaches the host with the next set it
-  takes. A write that fails is logged and reported by `santree.status`; the
-  set applies to the links regardless;
+  takes. The set applies to the links regardless of the write, so a write
+  that fails must not leave a revoked machine admitted: when the file there
+  admits anyone the new set does not (or cannot be read), it is removed —
+  the host reads a missing file as nobody, and an unlink needs no free
+  space — while a failed write that only adds machines leaves it be (it
+  revokes nothing; removing it would cut every terminal). The set is then
+  written again every 2 s until a write succeeds, and `santree.status` says
+  revocations are not reaching the host meanwhile. An unchanged file is left
+  alone only when it is a regular 0600 file of this user, as the host needs;
 - **the status file** it reads every 2 s (the host rewrites it at least
   every 10 s) — only a regular file, root's or its own, writable by nobody
   else, at most 1 MiB, read leniently: its key goes to every santree machine
   with its policy (a new key at once), and `santree.status` answers from it —
   `stale` when a running host has not written it for 30 s, `restart_pending`
-  when its `exe` is not `bin`, the installed build.
+  when its `exe` is not `bin` or its `config` not `config` (the installed
+  build and config file; nix writes a changed config to a new store path),
+  and the host's own word that it is not using the allow-list as written
+  (`allowList.error`) in `error`.
 
 ## Install
 

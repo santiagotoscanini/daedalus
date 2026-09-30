@@ -24,15 +24,22 @@ pub struct Config {
     pub workspaces: PathBuf,
     /// `hello.hookBin`: the path an agent's hook command runs.
     pub hook_bin: String,
+    /// The file this was loaded from ([`Config::load`]), which the status
+    /// file names (`config`): nix writes each version to a new store path,
+    /// so the controller tells a running host on an old config from the
+    /// installed one.
+    #[serde(skip)]
+    pub file: Option<PathBuf>,
 }
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("reading {}: {e}", path.display()))?;
-        let config: Config =
+        let mut config: Config =
             serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         config.check()?;
+        config.file = Some(std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()));
         Ok(config)
     }
 

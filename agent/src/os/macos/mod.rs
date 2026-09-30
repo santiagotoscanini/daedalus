@@ -120,8 +120,15 @@ pub fn local_allowed() -> crate::door::Allowed {
 /// since a connection there is a shell on the box: another account that
 /// fast-user-switches in gets `forbidden`.
 pub fn santree_allowed() -> crate::door::Allowed {
-    let installer: Vec<u32> = launchd::installer_uid().into_iter().collect();
+    let installer: Vec<u32> = santree_installer().into_iter().collect();
     crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
+}
+
+/// The installing user santree's socket serves, when one is recorded: an
+/// agent that updated itself from before 0.22 has none until `install`
+/// runs again.
+pub fn santree_installer() -> Option<u32> {
+    launchd::installer_uid()
 }
 
 // ── network ───────────────────────────────────────────────────────────────

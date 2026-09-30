@@ -22,15 +22,17 @@
 #                controller's link is (controller.nix, the header's
 #                `firewall` and `tunnel`): LAN or the system VPN, and the
 #                router forwards nothing to it. A tunnel peer arrives over
-#                loopback, as do containers dialling the host; both share
-#                loopback's pre-auth slots (the crate's serve.rs).
+#                loopback, as do containers dialling the host; loopback has
+#                a pre-auth pool of its own, apart from the LAN's (the
+#                crate's serve.rs says what a local client can still do).
 #   host.key     made by the host on its first start, in `stateDir` (0600),
 #                beside `status.json`; under fleet.stateRoot, so a restore
 #                brings the same key back and no node has to re-pin.
 #   status.json  what the controller reads (`statusFile`): state, version,
-#                the running build (`exe`), the host key, connections by node
-#                id, live PTYs. Rewritten at least every 10 s; the last one
-#                says `stopped`.
+#                the running build (`exe`) and config (`config`), the host
+#                key, connections by node id, live PTYs, the allow-list in
+#                force. Rewritten at least every 10 s; the last one says
+#                `stopped`.
 #   hooks        agents on the box run `<hookBin> hook <event>`, which pushes
 #                to `/run/daedalus-session-host/hook.sock` (the unit's
 #                RuntimeDirectory, 0700; the socket 0600 and served to this
@@ -39,9 +41,12 @@
 #
 # restartIfChanged = false is load-bearing: every live terminal and agent is
 # a child of this unit, so a restart kills them all. A switch installs the new
-# build and leaves the running host alone; the controller compares `exe` in
-# the status file with the installed build and the app offers the restart,
-# which is the root verb `session-host-restart` (below).
+# build and config and leaves the running host alone; the controller compares
+# `exe` and `config` in the status file with the installed `bin` and
+# `configFile` (a new port, root or path is a new store path) and the app
+# offers the restart, which is the root verb `session-host-restart` (below).
+# The unit's environment (PATH, LANG) is not compared: a change there alone
+# waits for the next restart.
 #
 # The unit is the operator's shell, not a sandboxed daemon: its PTYs and
 # `exec.run` `git push`, build and `sudo nixos-rebuild`, so there is no
@@ -169,6 +174,19 @@ in
         the two: different means a restart would apply an update.
       '';
     };
+
+    configFile = lib.mkOption {
+      type = lib.types.str;
+      readOnly = true;
+      default = "${configFile}";
+      defaultText = lib.literalMD "the generated `daedalus-session-host.json` in the store";
+      description = ''
+        Read-only: the installed `--config` file, as the running host names
+        it in its status file (`config`). The controller compares the two,
+        as it does `bin`: a changed port or path is a new store path, and a
+        restart applies it.
+      '';
+    };
   };
 
   config = lib.mkIf (config.fleet.modules.daedalus.enable && cfg.enable) {
@@ -216,7 +234,7 @@ in
         UMask = "0022";
         RuntimeDirectory = runtimeName;
         RuntimeDirectoryMode = "0700";
-        ExecStart = "${lib.getExe package} serve --config ${configFile}";
+        ExecStart = "${lib.getExe package} serve --config ${cfg.configFile}";
         Restart = "always";
         RestartSec = "2s";
         # 64 PTYs (a few descriptors each), the nodes' connections, and what

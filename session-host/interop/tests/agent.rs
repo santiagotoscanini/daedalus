@@ -84,6 +84,7 @@ async fn the_agents_client_meets_the_session_host() {
         projects_root: d.join("projects"),
         workspaces: d.join("workspaces.json"),
         hook_bin: "/bin/true".into(),
+        file: None,
     })
     .await
     .unwrap();

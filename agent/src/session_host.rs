@@ -19,10 +19,19 @@
 //! down, or while it refuses the app's set, reaches the host with the next
 //! set it takes. The write comes before the policy events the same set
 //! sends, so a machine told santree is on finds itself in the file (give
-//! or take the host's one-second look). A write that fails is logged and
-//! stated by `santree.status`; the registry takes the set regardless — the
-//! control link's standing never waits on this file — and the next set
-//! writes again.
+//! or take the host's one-second look). The registry takes the set
+//! regardless of the write — the control link's standing never waits on
+//! this file — so a write that fails must not leave the host admitting a
+//! machine the set revoked: when the file on disk admits anyone the new set
+//! does not (or cannot be read), it is removed, and the host reads a
+//! missing file as nobody (fail closed; an unlink needs no free space).
+//! A failed write that only adds machines leaves the file as it is: it
+//! revokes nothing, and removing it would cut every live terminal. Either
+//! way the set is kept as pending and written again every `POLL` (from the
+//! status thread) until a write succeeds, and `santree.status` says
+//! revocations are not reaching the host meanwhile. The file is left alone
+//! only when it already holds these bytes as a regular 0600 file of this
+//! user, which the host accepts.
 //!
 //! **The status file** (`SessionHost`), written by the host at least every
 //! 10 s and read here every `POLL`: its state, version, running build
@@ -56,19 +65,49 @@ pub const MAX_FILE: u64 = 1024 * 1024;
 
 // ── the allow-list ────────────────────────────────────────────────────────
 
-/// The allow-list file (module doc); its writes are serialised by the
-/// registry, which calls `write` under its own lock for sets.
+/// The allow-list file (module doc). Its writes — a new set's and the
+/// retries — are serialised by `state`; the registry calls `write` in the
+/// order the sets came.
 pub struct AllowList {
     path: PathBuf,
+    state: Mutex<AllowState>,
+}
+
+#[derive(Default)]
+struct AllowState {
+    /// The bytes the file must hold, while no write of them has succeeded.
+    pending: Option<Vec<u8>>,
     /// Why the last write failed; None once one succeeds.
-    error: Mutex<Option<String>>,
+    error: Option<String>,
+}
+
+/// The file's entries, as a set, to tell a revoking set from an adding one.
+fn entries(bytes: &[u8]) -> Option<std::collections::BTreeSet<(String, String)>> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct File {
+        nodes: Vec<Node>,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Node {
+        id: String,
+        public_key: String,
+    }
+    let file: File = serde_json::from_slice(bytes).ok()?;
+    Some(
+        file.nodes
+            .into_iter()
+            .map(|n| (n.id, n.public_key.to_ascii_lowercase()))
+            .collect(),
+    )
 }
 
 impl AllowList {
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
-            error: Mutex::new(None),
+            state: Mutex::new(AllowState::default()),
         }
     }
 
@@ -107,30 +146,103 @@ impl AllowList {
 
     /// Make the file say `set`, when it does not already (module doc).
     pub fn write(&self, set: &[DesiredEntry]) {
-        let bytes = Self::render(set);
-        if std::fs::read(&self.path).is_ok_and(|have| have == bytes) {
+        let mut st = self.state.lock_ok();
+        st.pending = Some(Self::render(set));
+        self.flush(&mut st);
+    }
+
+    /// Write the pending set again, if the last write of it failed (module
+    /// doc); every `POLL`, from the status thread.
+    pub fn retry(&self) {
+        let mut st = self.state.lock_ok();
+        if st.pending.is_some() {
+            self.flush(&mut st);
+        }
+    }
+
+    fn flush(&self, st: &mut AllowState) {
+        let Some(bytes) = st.pending.clone() else {
+            return;
+        };
+        if self.holds(&bytes) {
+            st.pending = None;
+            st.error = None;
             return;
         }
         let path = self.path.display();
         match crate::util::write_atomic(&self.path, &bytes, crate::util::Access::Private) {
             Ok(()) => {
-                let admitted = set
-                    .iter()
-                    .filter(|d| d.state == DesiredState::Approved && d.policy.santree)
-                    .count();
-                tracing::info!(path = %path, machines = admitted, "session host: allow-list written");
-                *self.error.lock_ok() = None;
+                let machines = entries(&bytes).map_or(0, |e| e.len());
+                if st.error.is_some() {
+                    tracing::info!(path = %path, machines, "session host: allow-list written after failing; revocations reach the host again");
+                } else {
+                    tracing::info!(path = %path, machines, "session host: allow-list written");
+                }
+                st.pending = None;
+                st.error = None;
             }
             Err(e) => {
-                tracing::error!(path = %path, error = %e, "session host: the allow-list could not be written; the host keeps the one it has");
-                *self.error.lock_ok() =
-                    Some(format!("the allow-list {path} could not be written: {e}"));
+                let then = self.fail_closed(&bytes);
+                let why = format!(
+                    "revocations are not reaching the session host: the allow-list {path} \
+                     could not be written ({e}); {then}; retrying every {}s",
+                    POLL.as_secs()
+                );
+                if st.error.as_deref() != Some(why.as_str()) {
+                    tracing::error!(path = %path, error = %e, "session host: {then}; retrying every {}s", POLL.as_secs());
+                }
+                st.error = Some(why);
             }
         }
     }
 
+    /// After a failed write of `bytes`: remove the file when it admits
+    /// anyone `bytes` does not (or cannot be read), so the host admits
+    /// nobody rather than a revoked machine. What was done, for the status.
+    fn fail_closed(&self, bytes: &[u8]) -> String {
+        let want = entries(bytes).unwrap_or_default();
+        let only_adds = std::fs::symlink_metadata(&self.path)
+            .is_ok_and(|m| m.file_type().is_file() && m.len() <= MAX_FILE)
+            && std::fs::read(&self.path)
+                .ok()
+                .and_then(|have| entries(&have))
+                .is_some_and(|have| have.is_subset(&want));
+        if only_adds {
+            return "the file there revokes nothing, so it stays until then".into();
+        }
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => "it was removed, so the host admits no machine until a write succeeds".into(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                "there is none, so the host admits no machine until a write succeeds".into()
+            }
+            Err(e) => format!(
+                "it could not be removed either ({e}): the host may still admit a revoked machine"
+            ),
+        }
+    }
+
+    /// Whether the file already is `bytes` in a form the host accepts: a
+    /// regular file (never read otherwise: a FIFO would block), this user's,
+    /// 0600.
+    fn holds(&self, bytes: &[u8]) -> bool {
+        let Ok(meta) = std::fs::symlink_metadata(&self.path) else {
+            return false;
+        };
+        if !meta.file_type().is_file() || meta.len() != bytes.len() as u64 {
+            return false;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if Some(meta.uid()) != crate::os::own_uid() || meta.mode() & 0o777 != 0o600 {
+                return false;
+            }
+        }
+        std::fs::read(&self.path).is_ok_and(|have| have == bytes)
+    }
+
     pub fn error(&self) -> Option<String> {
-        self.error.lock_ok().clone()
+        self.state.lock_ok().error.clone()
     }
 }
 
@@ -144,9 +256,19 @@ struct StatusFile {
     state: String,
     version: Option<String>,
     exe: Option<String>,
+    config: Option<String>,
     host_key: Option<String>,
+    allow_list: StatusAllowList,
     connections: Vec<StatusConnection>,
     sessions: u32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+struct StatusAllowList {
+    /// Why the host is not using the file as written (session-host
+    /// allow.rs): malformed, or refused.
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
@@ -234,8 +356,10 @@ impl SessionHost {
     }
 
     /// One read: kept for `status`, a changed reason logged once, and the
-    /// host's key handed to the registry.
+    /// host's key handed to the registry. And a failed allow-list write
+    /// tried again (`AllowList::retry`).
     pub fn poll(&self) {
+        self.registry.retry_allow_list();
         let now = look(&self.cfg.status_file);
         {
             let mut last = self.last.lock_ok();
@@ -291,12 +415,17 @@ impl SessionHost {
                 };
                 out.version = file.version.clone();
                 if out.state != SessionHostState::Stopped {
-                    out.restart_pending = file
-                        .exe
-                        .as_deref()
-                        .is_some_and(|exe| Path::new(exe) != self.cfg.bin);
+                    // Another build, or another config (nix writes each to
+                    // a new store path: a new port, root or file), installed
+                    // since it started.
+                    out.restart_pending = file.exe.as_deref().map(Path::new)
+                        != Some(self.cfg.bin.as_path())
+                        || file.config.as_deref().map(Path::new) != Some(self.cfg.config.as_path());
                     out.live_ptys = file.sessions;
                     out.connections = self.grouped(&file.connections);
+                    if let Some(e) = &file.allow_list.error {
+                        errors.push(format!("the session host's allow-list: {e}"));
+                    }
                 }
             }
         }
@@ -430,11 +559,114 @@ mod tests {
         std::fs::create_dir_all(dir.join("missing-dir")).unwrap();
         blocked.write(&set);
         assert_eq!(blocked.error(), None);
+        // N6: a file with the right bytes but a mode the host refuses is
+        // rewritten, not left failed closed.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let before = ino(&path);
+        allow.write(&[]);
+        assert_ne!(ino(&path), before, "rewritten");
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
         assert_eq!(
             std::fs::read_dir(&dir).unwrap().count(),
             2,
             "no temporary left behind"
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Review S1: a write that fails never leaves the host admitting a
+    /// revoked machine — the file is removed (the host reads missing as
+    /// nobody) — while one that only adds leaves it be; either way the set
+    /// is written again by `retry` once it can be, and `santree.status`
+    /// says so meanwhile.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_revocation_fails_closed_and_is_retried() {
+        let dir = scratch("allow-fail");
+        let path = dir.join("allow.json");
+        let allow = AllowList::new(path.clone());
+        let (three, four) = (
+            entry(3, DesiredState::Approved, true),
+            entry(4, DesiredState::Approved, true),
+        );
+        allow.write(std::slice::from_ref(&three));
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            AllowList::render(std::slice::from_ref(&three))
+        );
+        allow.retry();
+        assert_eq!(allow.error(), None, "nothing pending");
+
+        // Writes fail from here: `write_atomic`'s temp name is taken by a
+        // directory it cannot remove (as ENOSPC would, but not for root).
+        let temp = dir.join(format!(".allow.json.{}.tmp", std::process::id()));
+        let block = || {
+            std::fs::create_dir_all(temp.join("x")).unwrap();
+        };
+        let unblock = || std::fs::remove_dir_all(&temp).unwrap();
+        block();
+
+        // Adding a machine: the file there revokes nothing and stays.
+        allow.write(&[three.clone(), four.clone()]);
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            AllowList::render(std::slice::from_ref(&three))
+        );
+        let e = allow.error().unwrap();
+        assert!(
+            e.contains("revocations are not reaching the session host"),
+            "{e}"
+        );
+        assert!(e.contains("revokes nothing"), "{e}");
+
+        // Revoking one: the file admits it, so it goes.
+        allow.write(std::slice::from_ref(&four));
+        assert!(!path.exists(), "removed: the host admits nobody");
+        assert!(allow.error().unwrap().contains("removed"));
+        allow.retry();
+        assert!(!path.exists() && allow.error().is_some(), "still failing");
+
+        // Writable again: the retry writes the newest set and clears it.
+        unblock();
+        allow.retry();
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            AllowList::render(std::slice::from_ref(&four))
+        );
+        assert_eq!(allow.error(), None);
+
+        // Through the registry and the status thread's poll, as it runs.
+        let reg = Arc::new(
+            Registry::new(
+                &Identity::from_seed([201; 32]),
+                Arc::new(Events::default()),
+                crate::link::controller::Limits::default(),
+            )
+            .with_allow_list(path.clone()),
+        );
+        let host = SessionHost::new(
+            SessionHostConfig {
+                address: "b:1".into(),
+                allow_list: path.clone(),
+                status_file: dir.join("status.json"),
+                bin: "/b".into(),
+                config: "/c".into(),
+            },
+            Arc::clone(&reg),
+        );
+        block();
+        reg.set_desired(Vec::new());
+        assert!(!path.exists());
+        assert!(host
+            .status()
+            .error
+            .unwrap()
+            .contains("revocations are not reaching the session host"));
+        unblock();
+        host.poll();
+        assert_eq!(std::fs::read(&path).unwrap(), AllowList::render(&[]));
+        assert_eq!(host.status().error, None);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -451,8 +683,10 @@ mod tests {
   "pid": 1234,
   "startedAt": "2026-09-29T09:00:00Z",
   "exe": "/nix/store/aaaa-daedalus-session-host-0.1.0/bin/daedalus-session-host",
+  "config": "/nix/store/cccc-daedalus-session-host.json",
   "hostKey": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
   "listen": ["0.0.0.0:7789"],
+  "allowList": { "nodes": 1, "error": null },
   "connections": [
     { "node": "21fe31dfa154a261", "peer": "192.0.2.10:51544",
       "connectedAt": "2026-09-29T09:30:00Z", "client": "santree/0.1.17" },
@@ -473,6 +707,7 @@ mod tests {
                 allow_list: dir.join("allow.json"),
                 status_file: dir.join("status.json"),
                 bin: "/nix/store/aaaa-daedalus-session-host-0.1.0/bin/daedalus-session-host".into(),
+                config: "/nix/store/cccc-daedalus-session-host.json".into(),
             },
             registry,
         )
@@ -562,7 +797,32 @@ mod tests {
         host.poll();
         assert!(host.status().restart_pending);
 
+        // Review S3: the same build on another config (a new port, say):
+        // a restart is pending too.
+        write_status(
+            &dir,
+            &RUNNING.replace("cccc-daedalus-session-host", "dddd-daedalus-session-host"),
+        );
+        host.poll();
+        assert!(host.status().restart_pending, "another config");
+        write_status(&dir, RUNNING);
+        host.poll();
+        assert!(!host.status().restart_pending);
+
+        // The host not using its allow-list as written is said.
+        write_status(
+            &dir,
+            &RUNNING.replace("\"error\": null", "\"error\": \"malformed (EOF)\""),
+        );
+        host.poll();
+        let e = host.status().error.unwrap();
+        assert!(e.contains("allow-list: malformed"), "{e}");
+
         // Stale: running by its word, but not written for a while.
+        write_status(
+            &dir,
+            &RUNNING.replace("aaaa-daedalus-session-host", "bbbb-daedalus-session-host"),
+        );
         let old = SystemTime::now() - Duration::from_secs(60);
         std::fs::File::options()
             .write(true)

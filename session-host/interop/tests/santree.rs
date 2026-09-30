@@ -106,6 +106,7 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
         projects_root: d.join("projects"),
         workspaces: d.join("workspaces.json"),
         hook_bin: "/bin/true".into(),
+        file: None,
     })
     .await
     .unwrap();
@@ -130,6 +131,7 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
             allow_list: allow.clone(),
             status_file: d.join("state").join("status.json"),
             bin: "/nix/store/x-daedalus-session-host/bin/daedalus-session-host".into(),
+            config: "/nix/store/y-daedalus-session-host.json".into(),
         },
         Arc::clone(&registry),
     );

@@ -11,12 +11,13 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use santree_remote_proto::PROTOCOL_VERSION;
 use serde::Serialize;
 
+use crate::allow::AllowList;
 use crate::daemon::Daemon;
 
 /// Never more often than this…
@@ -36,10 +37,21 @@ struct Status {
     pid: u32,
     started_at: String,
     exe: Option<String>,
+    config: Option<String>,
     host_key: String,
     listen: Vec<String>,
+    allow_list: AllowListStatus,
     connections: Vec<Connection>,
     sessions: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AllowListStatus {
+    /// The nodes the set in force admits.
+    nodes: usize,
+    /// Why the file on disk is not that set, when it is not (allow.rs).
+    error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -58,9 +70,24 @@ pub struct StatusWriter {
     /// `/proc/self/exe` at start: the build this process runs, which the
     /// controller compares with the one installed.
     pub exe: Option<String>,
+    /// The `--config` file this process was started with: nix writes each
+    /// version to a new path, so the controller compares it with the
+    /// installed one, as it does `exe`.
+    pub config: Option<String>,
     pub host_key: String,
     pub listen: Vec<SocketAddr>,
+    pub allow: Arc<AllowList>,
     pub daemon: Arc<Daemon>,
+    /// One write at a time, and none after the final one: a periodic write
+    /// still running when the host stops must neither tear the file (both
+    /// use the same temp name) nor rename `running` over `stopped`.
+    pub written: Mutex<Written>,
+}
+
+/// What [`StatusWriter::write`] serialises on.
+#[derive(Default)]
+pub struct Written {
+    stopped: bool,
 }
 
 impl StatusWriter {
@@ -93,8 +120,13 @@ impl StatusWriter {
             pid: std::process::id(),
             started_at: rfc3339(self.started_at),
             exe: self.exe.clone(),
+            config: self.config.clone(),
             host_key: self.host_key.clone(),
             listen: self.listen.iter().map(ToString::to_string).collect(),
+            allow_list: AllowListStatus {
+                nodes: self.allow.current().len(),
+                error: self.allow.error(),
+            },
             connections,
             sessions,
         };
@@ -103,8 +135,14 @@ impl StatusWriter {
         bytes
     }
 
-    /// Write one snapshot. `running = false` is the final one.
+    /// Write one snapshot. `running = false` is the final one: nothing is
+    /// written after it.
     pub fn write(&self, running: bool) -> std::io::Result<()> {
+        let mut written = self.written.lock().unwrap_or_else(|e| e.into_inner());
+        if written.stopped {
+            return Ok(());
+        }
+        written.stopped = !running;
         write_atomic(&self.path, &self.render(running))
     }
 

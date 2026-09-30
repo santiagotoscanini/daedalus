@@ -247,15 +247,14 @@ where
                     continue;
                 }
                 let opened = Slot(Arc::clone(&open));
-                let busy = served.fetch_add(1, Ordering::AcqRel) >= policy.max_connections;
-                let counted = Slot(Arc::clone(&served));
                 let (policy, on_conn) = (policy.clone(), Arc::clone(&on_conn));
+                let served = Arc::clone(&served);
                 let abort = Arc::clone(&a.abort);
                 let spawned = std::thread::Builder::new()
                     .name(format!("{}-conn", policy.what))
                     .spawn(move || {
-                        let _slots = (opened, counted);
-                        one(a, busy, &policy, &*on_conn);
+                        let _opened = opened;
+                        one(a, &served, &policy, &*on_conn);
                     });
                 if spawned.is_err() {
                     abort();
@@ -265,9 +264,18 @@ where
     Ok(())
 }
 
-/// One connection, on its own thread (`serve`).
-fn one(a: Accepted, busy: bool, policy: &Policy, on_conn: &(dyn Fn(Conn) + Send + Sync)) {
+/// One connection, on its own thread (`serve`). It counts against
+/// `served` (`max_connections`) only once its peer passed the check, so a
+/// peer the door refuses, however often it connects, never makes an
+/// allowed one `busy`.
+fn one(
+    a: Accepted,
+    served: &Arc<std::sync::atomic::AtomicUsize>,
+    policy: &Policy,
+    on_conn: &(dyn Fn(Conn) + Send + Sync),
+) {
     use crate::deadline::{Deadline, Watchdog};
+    use std::sync::atomic::Ordering;
     let Accepted {
         mut conn,
         abort,
@@ -283,14 +291,6 @@ fn one(a: Accepted, busy: bool, policy: &Policy, on_conn: &(dyn Fn(Conn) + Send 
         let _ = conn.writer.flush();
         (conn.close)();
     };
-    if busy {
-        tracing::warn!(
-            max = policy.max_connections,
-            door = policy.what,
-            "refused a connection past the limit"
-        );
-        return refuse(conn, &policy.busy);
-    }
     let peer = match peer {
         PeerAt::Now(p) => p,
         PeerAt::AfterRequest(who) => {
@@ -314,6 +314,16 @@ fn one(a: Accepted, busy: bool, policy: &Policy, on_conn: &(dyn Fn(Conn) + Send 
     if !(policy.allow)(peer.as_ref()) {
         tracing::warn!(peer = ?peer, door = policy.what, "refused a peer that may not use the door");
         return refuse(conn, &(policy.refusal)(peer.as_ref()));
+    }
+    let busy = served.fetch_add(1, Ordering::AcqRel) >= policy.max_connections;
+    let _counted = Slot(Arc::clone(served));
+    if busy {
+        tracing::warn!(
+            max = policy.max_connections,
+            door = policy.what,
+            "refused a connection past the limit"
+        );
+        return refuse(conn, &policy.busy);
     }
     conn.peer = peer;
     if policy.whole.is_none() {

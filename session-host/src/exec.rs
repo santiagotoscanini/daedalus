@@ -54,6 +54,15 @@ impl Drop for Group {
     }
 }
 
+/// A task aborted when this is dropped.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 async fn read_capped<R: AsyncRead + Unpin>(mut reader: R) -> (Vec<u8>, bool) {
     let mut kept = Vec::new();
     let mut truncated = false;
@@ -98,11 +107,14 @@ pub async fn run(p: ExecParams, cwd: PathBuf) -> Result<ExecResult, WireError> {
     let mut group = Group {
         pgid: child.id().map(|pid| pid as libc::pid_t),
     };
-    if let (Some(mut pipe), Some(data)) = (child.stdin.take(), p.stdin) {
-        tokio::spawn(async move {
+    // Aborted on every way out (`_feed`'s drop): a grandchild that keeps
+    // stdin open without reading must not keep the task and its buffer.
+    let _feed = match (child.stdin.take(), p.stdin) {
+        (Some(mut pipe), Some(data)) => Some(AbortOnDrop(tokio::spawn(async move {
             let _ = pipe.write_all(&data).await;
-        });
-    }
+        }))),
+        _ => None,
+    };
     let stdout = tokio::spawn(read_capped(child.stdout.take().expect("piped")));
     let stderr = tokio::spawn(read_capped(child.stderr.take().expect("piped")));
     let started = tokio::time::Instant::now();

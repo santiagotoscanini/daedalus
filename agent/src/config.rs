@@ -232,6 +232,10 @@ pub struct SessionHostConfig {
     /// The installed binary, as `/proc/self/exe` names it: a running host
     /// whose `exe` differs has an update waiting for a restart.
     pub bin: PathBuf,
+    /// The installed host's `--config` file: a running host whose `config`
+    /// differs was started on another one (a port, a root), and a restart
+    /// applies it too.
+    pub config: PathBuf,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -429,6 +433,7 @@ impl Config {
                     ("allow_list", &s.allow_list),
                     ("status_file", &s.status_file),
                     ("bin", &s.bin),
+                    ("config", &s.config),
                 ] {
                     if !p.is_absolute() {
                         bail!(
@@ -800,12 +805,13 @@ mod tests {
         assert!(check("api_allowed_uids = [4294967295]").is_err());
         assert!(check("api_allowed_uids = [65534]").is_err());
         assert!(toml::from_str::<Config>("[controller]\napi_allowed_uids = [-1]").is_err());
-        // The session host's table: all four keys, the address host:port, the
+        // The session host's table: all five keys, the address host:port, the
         // paths absolute.
         let host = |address: &str, allow: &str| {
             format!(
                 "[controller.session_host]\naddress = \"{address}\"\nallow_list = \"{allow}\"\n\
-                 status_file = \"/s/status.json\"\nbin = \"/nix/store/x/bin/daedalus-session-host\"\n"
+                 status_file = \"/s/status.json\"\nbin = \"/nix/store/x/bin/daedalus-session-host\"\n\
+                 config = \"/nix/store/y-daedalus-session-host.json\"\n"
             )
         };
         let ok = toml::from_str::<Config>(&format!(
@@ -818,6 +824,15 @@ mod tests {
         assert_eq!(s.allow_list, PathBuf::from("/c/allow.json"));
         assert!(check(&host("box.example.org", "/c/a.json")).is_err());
         assert!(check(&host("box.example.org:7789", "c/a.json")).is_err());
+        assert!(check(
+            &host("box.example.org:7789", "/c/a.json").replace("config = \"/", "config = \"")
+        )
+        .is_err());
+        assert!(toml::from_str::<Config>(&format!(
+            "mode = \"controller\"\n{}",
+            host("b:1", "/c/a.json").replace("config = ", "# ")
+        ))
+        .is_err());
         assert!(toml::from_str::<Config>(
             "mode = \"controller\"\n[controller.session_host]\naddress = \"b:1\"\n"
         )

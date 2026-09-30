@@ -93,7 +93,7 @@ pub use imp::{
 };
 // santree's socket (santree.rs), where there is one
 #[cfg(unix)]
-pub use imp::santree_allowed;
+pub use imp::{santree_allowed, santree_installer};
 // Claude Code
 pub use imp::{
     claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES, PROCESS_STATS,

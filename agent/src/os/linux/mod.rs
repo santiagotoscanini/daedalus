@@ -109,8 +109,14 @@ pub fn local_allowed() -> crate::door::Allowed {
 /// it under `sudo`, the same set as the local socket's. A connection there
 /// is a shell on the box, so it is this list and never who is logged in.
 pub fn santree_allowed() -> crate::door::Allowed {
-    let installer: Vec<u32> = systemd::session_uid().into_iter().collect();
+    let installer: Vec<u32> = santree_installer().into_iter().collect();
     crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
+}
+
+/// The installing user santree's socket serves, when `install` recorded
+/// one.
+pub fn santree_installer() -> Option<u32> {
+    systemd::session_uid()
 }
 
 // ── facts ─────────────────────────────────────────────────────────────────

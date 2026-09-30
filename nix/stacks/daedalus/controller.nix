@@ -172,8 +172,12 @@
 #   status       the host's status file, read every 2 s: its key goes to
 #                every santree machine in its policy with the address
 #                (`<fleet.wanHost>:<port>`, as `advertise` above), and
-#                `santree.status` answers the app from it — `bin` against
-#                the running `exe` says whether a restart applies an update.
+#                `santree.status` answers the app from it — `bin` and
+#                `config` against the running `exe` and `config` say
+#                whether a restart applies an update. A write of the
+#                allow-list that fails is retried every 2 s, and one that
+#                would revoke removes the file meanwhile (the host then
+#                admits nobody).
 #
 # The root helper (agent src/root/): how root actions reach the box
 # without the controller, which runs as the operator, holding any privilege.
@@ -496,6 +500,7 @@ let
         address = "${config.fleet.wanHost}:${toString sessionHost.port}";
         allow_list = sessionHost.allowList;
         status_file = sessionHost.statusFile;
+        config = sessionHost.configFile;
         inherit (sessionHost) bin;
       };
     };

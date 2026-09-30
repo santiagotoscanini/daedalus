@@ -30,7 +30,7 @@
 use std::collections::{HashMap, HashSet};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -172,19 +172,34 @@ fn look(path: &Path) -> (Option<Stamp>, Read) {
     }
 }
 
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// The live set, and the file it comes from.
 pub struct AllowList {
     path: PathBuf,
     tx: watch::Sender<Arc<AllowSet>>,
+    /// The file's stamp at the last look — `open`'s, then the watch's. The
+    /// watch starts from the stamp `open` read, so a file renamed between the
+    /// two is applied, never recorded as already seen.
+    seen: Mutex<Option<Stamp>>,
+    /// Why the file on disk is not the set in force (malformed: the last good
+    /// set stays; refused: nobody is admitted), for the status file.
+    error: Mutex<Option<String>>,
 }
 
 impl AllowList {
     /// Read the file once, now; [`watch`](Self::watch) keeps it current.
     pub fn open(path: PathBuf) -> Arc<Self> {
         let (tx, _) = watch::channel(Arc::new(AllowSet::default()));
-        let list = Arc::new(Self { path, tx });
-        let mut last = None;
-        list.apply(&mut last, true);
+        let list = Arc::new(Self {
+            path,
+            tx,
+            seen: Mutex::new(None),
+            error: Mutex::new(None),
+        });
+        list.apply(true);
         list
     }
 
@@ -201,57 +216,65 @@ impl AllowList {
         self.tx.subscribe()
     }
 
+    /// Why the file is not the set in force, when it is not.
+    pub fn error(&self) -> Option<String> {
+        lock(&self.error).clone()
+    }
+
     /// Read the file now, without waiting for the poll.
     #[cfg(test)]
     pub(crate) fn reload(&self) {
-        self.apply(&mut None, true);
+        self.apply(true);
     }
 
     /// Poll the file every [`POLL`] on a thread of its own, for the life of
-    /// the process.
+    /// the process, from the stamp [`open`](Self::open) saw.
     pub fn watch(self: &Arc<Self>) -> std::io::Result<()> {
         let list = self.clone();
         std::thread::Builder::new()
             .name("allow-list".into())
-            .spawn(move || {
-                let mut last = std::fs::symlink_metadata(&list.path)
-                    .ok()
-                    .map(|m| stamp(&m));
-                loop {
-                    std::thread::sleep(POLL);
-                    list.apply(&mut last, false);
-                }
+            .spawn(move || loop {
+                std::thread::sleep(POLL);
+                list.apply(false);
             })
             .map(|_| ())
     }
 
-    /// Look at the file; act on it when it changed since `last` (or always,
-    /// the first time).
-    fn apply(&self, last: &mut Option<Stamp>, first: bool) {
+    /// Look at the file; act on it when it changed since the last look (or
+    /// always, when `force`).
+    fn apply(&self, force: bool) {
         let (at, read) = look(&self.path);
-        if !first && at == *last {
-            return;
+        {
+            let mut seen = lock(&self.seen);
+            if !force && at == *seen {
+                return;
+            }
+            *seen = at;
         }
-        *last = at;
         let path = self.path.display();
-        let next = match read {
+        let (next, error) = match read {
             Read::Good(set) => {
-                log::info!("allow-list {path}: {} node(s)", set.len());
-                set
+                log::info!("allow-list {path:?}: {} node(s)", set.len());
+                (set, None)
             }
             Read::Missing => {
-                log::info!("allow-list {path}: missing; no node is admitted");
-                AllowSet::default()
+                log::info!("allow-list {path:?}: missing; no node is admitted");
+                (AllowSet::default(), None)
             }
             Read::Refused(why) => {
-                log::error!("allow-list {path}: refused ({why}); no node is admitted");
-                AllowSet::default()
+                log::error!("allow-list {path:?}: refused ({why}); no node is admitted");
+                (
+                    AllowSet::default(),
+                    Some(format!("refused ({why}); no node is admitted")),
+                )
             }
             Read::Malformed(why) => {
-                log::error!("allow-list {path}: malformed ({why}); keeping the last good set");
+                log::error!("allow-list {path:?}: malformed ({why}); keeping the last good set");
+                *lock(&self.error) = Some(format!("malformed ({why}); the last good set stays"));
                 return;
             }
         };
+        *lock(&self.error) = error;
         self.tx.send_if_modified(|current| {
             if **current == next {
                 false
@@ -332,28 +355,55 @@ mod tests {
             std::fs::rename(&temp, &path).unwrap();
         };
         let write = |text: &str| write_mode(text, 0o600);
-        let mut last = None;
         write(&doc(&[(ID, KEY)]));
-        list.apply(&mut last, false);
+        list.apply(false);
         assert_eq!(list.node_of(&key).as_deref(), Some(ID));
 
         write("{ not json");
-        list.apply(&mut last, false);
+        list.apply(false);
         assert_eq!(list.node_of(&key).as_deref(), Some(ID), "kept");
+        assert!(list.error().unwrap().contains("malformed"), "and said");
 
         write_mode(&doc(&[(ID, KEY)]), 0o622);
-        list.apply(&mut last, false);
+        list.apply(false);
         assert!(list.current().is_empty(), "group-writable fails closed");
+        assert!(list.error().unwrap().contains("group/other-writable"));
 
         write(&doc(&[(ID, KEY)]));
-        list.apply(&mut last, false);
+        list.apply(false);
         assert!(!list.current().is_empty());
+        assert_eq!(list.error(), None, "a good file clears it");
         std::fs::remove_file(&path).unwrap();
-        list.apply(&mut last, false);
+        list.apply(false);
         assert!(list.current().is_empty(), "missing fails closed");
 
         std::os::unix::fs::symlink(dir.path().join("elsewhere"), &path).unwrap();
-        list.apply(&mut last, false);
+        list.apply(false);
         assert!(list.current().is_empty(), "a symlink is refused");
+    }
+
+    /// Review S2: a file renamed between `open` and the watch's first look
+    /// is applied: the watch starts from the stamp `open` read, not from a
+    /// fresh one that would record the new file as already seen.
+    #[test]
+    fn a_change_between_open_and_watch_is_applied() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("allow.json");
+        let key = santree_remote_tls::parse_key_hex(KEY).unwrap();
+        let list = AllowList::open(path.clone());
+        assert!(list.current().is_empty());
+        let temp = dir.path().join("t");
+        std::fs::write(&temp, doc(&[(ID, KEY)])).unwrap();
+        std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(0o600)).unwrap();
+        std::fs::rename(&temp, &path).unwrap();
+        list.watch().unwrap();
+        let deadline = std::time::Instant::now() + POLL * 5;
+        while list.node_of(&key).is_none() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the watch never applied the file written before it started"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 }
