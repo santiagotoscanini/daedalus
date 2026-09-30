@@ -157,6 +157,18 @@ in
         (session-host/README.md, "The status file").
       '';
     };
+
+    bin = lib.mkOption {
+      type = lib.types.str;
+      readOnly = true;
+      default = lib.getExe package;
+      defaultText = lib.literalMD "the session host package's `bin/daedalus-session-host`";
+      description = ''
+        Read-only: the installed build, as the running host names itself in
+        its status file (`exe`, `/proc/self/exe`). The controller compares
+        the two: different means a restart would apply an update.
+      '';
+    };
   };
 
   config = lib.mkIf (config.fleet.modules.daedalus.enable && cfg.enable) {

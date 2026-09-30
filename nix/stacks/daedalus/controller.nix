@@ -159,6 +159,22 @@
 #   keeps nothing across a restart; reads machines through `nodes.*` and
 #   sends commands with `nodes.command`.
 #
+# The session host (session-host.nix), while `fleet.daedalus.sessionHost`
+# is on — `[controller.session_host]` in config.toml (agent
+# src/session_host.rs):
+#
+#   allow-list   written by this controller from every desired set: the
+#                approved machines whose policy turns santree on, 0600 in
+#                `dataDir`, as the operator, only when it changes — and
+#                never before the app's first set after a start, so a
+#                restart cuts no terminal. A revocation made while the
+#                controller is down reaches the host with the next set.
+#   status       the host's status file, read every 2 s: its key goes to
+#                every santree machine in its policy with the address
+#                (`<fleet.wanHost>:<port>`, as `advertise` above), and
+#                `santree.status` answers the app from it — `bin` against
+#                the running `exe` says whether a restart applies an update.
+#
 # The root helper (agent src/root/): how root actions reach the box
 # without the controller, which runs as the operator, holding any privilege.
 #
@@ -277,6 +293,7 @@ let
     ;
 
   daedalusDev = config.fleet.daedalus.dev;
+  sessionHost = config.fleet.daedalus.sessionHost;
 
   # The crate, by its own files only (see the header).
   crate = ../../../agent;
@@ -472,6 +489,15 @@ let
       root_socket = rootSocket;
       listen = "0.0.0.0:${toString port}";
       advertise = [ "${config.fleet.wanHost}:${toString port}" ];
+    }
+    // lib.optionalAttrs sessionHost.enable {
+      # The session host (session-host.nix; the header's `session host`).
+      session_host = {
+        address = "${config.fleet.wanHost}:${toString sessionHost.port}";
+        allow_list = sessionHost.allowList;
+        status_file = sessionHost.statusFile;
+        inherit (sessionHost) bin;
+      };
     };
   };
 in
