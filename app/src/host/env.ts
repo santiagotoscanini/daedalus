@@ -237,6 +237,28 @@ export const SCHEMA = {
     about: 'The controller’s local API socket (host/controller/client.ts).',
     source: DAEDALUS,
   },
+  // ── wg-easy's API: a Mac's log-in (host/enroll.ts) ───────────────────────
+  WG_EASY_URL: {
+    kind: 'url',
+    about: 'wg-easy’s API on its own bridge. Unset, a Mac cannot log in.',
+    source: 'modules/wg-easy fleet.dashboard.wg-easy.env',
+  },
+  WG_EASY_CREDENTIALS: {
+    kind: 'path',
+    about: 'A file of one line, `username:password`: wg-easy’s Basic auth, read per call.',
+    source: 'modules/wg-easy fleet.dashboard.wg-easy.env',
+  },
+  WG_EASY_HOST_ALIAS: {
+    kind: 'string',
+    about: 'Where the tunnel’s host ports land after wg-easy’s DNAT: a client’s firewall names it.',
+    source: 'modules/wg-easy fleet.dashboard.wg-easy.env',
+  },
+  SESSION_HOST_PORT: {
+    kind: 'int',
+    fallback: '7789',
+    about: 'The session host’s port, which a logged-in Mac’s tunnel firewall lets through.',
+    source: `${UNBOUND}: the default of fleet.daedalus.sessionHost.port`,
+  },
   SHOTTER_DIR: {
     kind: 'path',
     fallback: '/shotter',

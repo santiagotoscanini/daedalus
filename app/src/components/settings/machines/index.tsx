@@ -1,6 +1,6 @@
 import { MonitorSmartphoneIcon, NetworkIcon } from 'lucide-react'
 
-import type { AgentLink } from '../../../lib/agent/status'
+import type { AgentLink, AgentTunnel } from '../../../lib/agent/status'
 import { cn } from '../../../lib/cn'
 import type { Machine, MachinesData } from '../../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../../lib/format'
@@ -135,6 +135,34 @@ function ClaudeCell({ m }: { m: Machine }) {
   return <span className={ASIDE}>—</span>
 }
 
+/** How long a tunnel goes without a handshake before it reads as down (WireGuard rekeys every 2 min). */
+const TUNNEL_STALE_SECS = 180
+
+/**
+ * A logged-in machine's own tunnel, as the machine reports it: up while its
+ * handshakes are fresh, and why not when they are not.
+ */
+function TunnelCell({ t }: { t: AgentTunnel }) {
+  const up =
+    t.error === null && t.lastHandshakeSecs !== null && t.lastHandshakeSecs < TUNNEL_STALE_SECS
+  return (
+    <span className="inline-flex flex-col items-start gap-1">
+      <Line>
+        <Chip tone={up ? 'ok' : 'warn'}>{up ? 'up' : 'down'}</Chip>
+        {t.address !== '' && <Mono>{t.address}</Mono>}
+        <span className={ASIDE}>
+          {t.lastHandshakeSecs === null
+            ? 'no handshake yet'
+            : `handshake ${since(t.lastHandshakeSecs)}`}
+          {` · ${bytes(t.rxBytes)} in · ${bytes(t.txBytes)} out`}
+        </span>
+      </Line>
+      {t.endpoint !== '' && <span className={ASIDE}>through {t.endpoint}</span>}
+      {t.error !== null && <span className="text-[0.78rem] text-destructive">{t.error}</span>}
+    </span>
+  )
+}
+
 /**
  * The machine's side of the link, when it refuses the controller: the key it
  * met is not the one its install line pinned.
@@ -186,6 +214,7 @@ function MachineSection({ m, lanDomain }: { m: Machine; lanDomain: string }) {
       v: n.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{n.lanIp}</Mono>,
     },
     ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
+    ...(s?.link?.tunnel != null ? [{ k: 'Tunnel', v: <TunnelCell t={s.link.tunnel} /> }] : []),
     ...(s?.link != null ? [{ k: 'Its key', v: <Mono>{s.link.fingerprint}</Mono> }] : []),
     ...(s?.link?.rotated != null
       ? [{ k: 'Controller key', v: <span className={ASIDE}>{s.link.rotated}</span> }]

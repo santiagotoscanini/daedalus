@@ -1,15 +1,22 @@
 import { asc, eq } from 'drizzle-orm'
 import type { Ctx } from '../../core/ctx'
-import { enrollValues, observedFacts, requestDesiredSync } from '../../host/controller/nodes'
+import {
+  enrollValues,
+  observedFacts,
+  requestDesiredSync,
+  syncDesired,
+} from '../../host/controller/nodes'
 import type { ControllerNode, ControllerNodeDetail } from '../../host/controller/wire'
 import { db } from '../../host/db'
 import { dhcpHostsMissing, householdMacs, writeDhcpHosts } from '../../host/dhcp-hosts'
+import { releaseTunnel } from '../../host/enroll'
 import { requestGatewaySync } from '../../host/gateway-sync'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
 import type { NodeClaudeSummary } from '../agent/status'
 import type { NodeForFile } from '../nodes-file'
 import { slugOf } from '../nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
+import { enrollStore } from './enroll'
 
 // The nodes table: the machines the box has decided about, and what it asks
 // of each. A row is born when an admin approves a key the controller holds
@@ -203,6 +210,12 @@ export async function revokeNode(id: string): Promise<boolean> {
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   await afterDecision()
+  if (updated.length > 0 && (await hasTunnel(id))) {
+    // Told first, through the tunnel, so the machine forgets its log-in
+    // rather than dialling a tunnel that is gone.
+    await syncNow()
+    await releaseTunnel({ store: enrollStore, wg: await boxWgEasy() }, id)
+  }
   return updated.length > 0
 }
 
@@ -210,11 +223,49 @@ export async function revokeNode(id: string): Promise<boolean> {
  * Forget a row entirely — for a machine that is gone, or a key that was a
  * mistake. Left out of the desired set, a key that connects again waits
  * pending, as a stranger's would.
+ *
+ * A logged-in machine (one with a tunnel) is revoked first and the
+ * controller's answer awaited, so it hears `revoked` before its tunnel goes;
+ * one that logged out itself (`left`, the controller's `nodes.left`) already
+ * forgot, and only its tunnel and row go.
  */
-export async function forgetNode(id: string): Promise<boolean> {
+export async function forgetNode(id: string, opts: { left?: boolean } = {}): Promise<boolean> {
+  if (await hasTunnel(id)) {
+    if (opts.left !== true) {
+      const revoked = await db
+        .update(nodes)
+        .set({ state: 'revoked', revokedAt: new Date() })
+        .where(eq(nodes.id, id))
+        .returning({ id: nodes.id })
+      if (revoked.length > 0) await syncNow()
+    }
+    await releaseTunnel({ store: enrollStore, wg: await boxWgEasy() }, id)
+  }
   const gone = await db.delete(nodes).where(eq(nodes.id, id)).returning({ id: nodes.id })
   await afterDecision()
   return gone.length > 0
+}
+
+/** Whether the node logged in with a tunnel of its own; a table that cannot be read says no. */
+async function hasTunnel(id: string): Promise<boolean> {
+  try {
+    return (await enrollStore.tunnelOf(id)) !== null
+  } catch (e) {
+    console.warn(`nodes: ${id}'s tunnel not read: ${e instanceof Error ? e.message : String(e)}`)
+    return false
+  }
+}
+
+/** The desired set, sent and answered now (a decision's own sync is not awaited). */
+async function syncNow(): Promise<void> {
+  const { makeCtx } = await import('../../core/ctx')
+  const s = await syncDesired(await makeCtx())
+  if (s.error !== null) console.warn(`nodes: the controller did not take the set: ${s.error}`)
+}
+
+async function boxWgEasy() {
+  const { wgEasy } = await import('../../host/wg-easy')
+  return wgEasy()
 }
 
 /**

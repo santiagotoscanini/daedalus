@@ -544,6 +544,38 @@ export const nodes = pgTable('nodes', {
   policy: jsonb('policy').$type<NodePolicy>().notNull().default({}),
 })
 
+// A logged-in machine's WireGuard client of the box's wg-easy (host/enroll.ts):
+// which client is whose, so a log-out, a revoke or a forget deletes the right
+// one. Its own table rather than a column on `nodes`, and no foreign key: a
+// forgotten node's row goes before its client does when wg-easy cannot be
+// reached, and this row is what a later attempt deletes it from.
+export const nodeTunnels = pgTable('node_tunnels', {
+  nodeId: text('node_id').primaryKey(),
+  /** wg-easy's client id. */
+  clientId: integer('client_id').notNull().unique(),
+  /** The machine's address inside the tunnel, as wg-easy assigned it. */
+  address: text('address').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// The single-use codes an admin's Confirm hands a machine's loopback, and its
+// service redeems at /api/agent/enroll with the PKCE verifier (host/enroll.ts).
+// Stored by digest, never the code itself; a redeem deletes the row before it
+// checks anything, so a code is spent by its first use, right or wrong. The
+// controller's pin and address are the public half of the answer, fixed at
+// Confirm; the tunnel's private key is read from wg-easy at redeem, never kept.
+export const enrollCodes = pgTable('enroll_codes', {
+  codeHash: text('code_hash').primaryKey(),
+  nodeId: text('node_id').notNull(),
+  clientId: integer('client_id').notNull(),
+  /** PKCE S256, from the page the admin confirmed. */
+  challenge: text('challenge').notNull(),
+  controllerPin: text('controller_pin').notNull(),
+  controllerAddress: text('controller_address').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 /** One provider on a node: where it listens, whether to offer it, what to call its models. */
 export type ProviderPolicy = {
   port?: number

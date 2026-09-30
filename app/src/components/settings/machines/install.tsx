@@ -61,8 +61,7 @@ export function Install({ controller }: { controller: ControllerView }) {
     controller.reachable && controller.address !== null
       ? { address: controller.address, fingerprint: controller.fingerprint }
       : null
-  // macOS and Linux share one `pair` line.
-  const pair = pairLines(pinned).filter((l) => l.os !== 'linux')
+  const pair = pairLines(pinned)
   return (
     <div className="flex flex-col gap-3">
       {installLines(pinned).map((l) => (
@@ -71,27 +70,30 @@ export function Install({ controller }: { controller: ControllerView }) {
             {l.label}, from {l.where}:
           </p>
           <CopyLine command={l.command} label={`${l.label} install command`} />
+          {l.os === 'macos' && (
+            <p className={NOTE}>
+              Then choose Log in… in its menu bar: you confirm it here, and it gets a tunnel of its
+              own to the box.
+            </p>
+          )}
         </div>
       ))}
       <p className={NOTE}>
         {pinned === null
           ? `The controller did not say where it listens${controller.reachable ? '' : ` (${controller.error})`}, so there is no key to pin yet. A machine installed without one stays unpaired and connects to nothing until it is paired, once the controller answers here.`
-          : 'The line names the controller and pins its key: the machine connects to it and to nothing else. It then appears above as waiting, with both fingerprints, until you approve it. Re-running the line on a machine that is already here replaces the binaries, keeps its key, and pins the controller.'}
+          : 'The Windows and Linux lines name the controller and pin its key: the machine connects to it and to nothing else. It then appears above as waiting, with both fingerprints, until you approve it. Re-running the line on a machine that is already here replaces the binaries, keeps its key, and pins the controller.'}
       </p>
       {pinned !== null && (
         <>
           <p className={NOTE}>
             Installed from the website, without a key? It waits unpaired. Paste this key into “Pair
-            with the box…” in its tray, or run the line for its system:
+            with the box…” in its tray, or run the line for its system (a Mac logs in instead):
           </p>
           <CopyLine command={pinned.fingerprint} label="controller key" />
           {pair.map((l) => (
             <div key={l.os} className="flex flex-col gap-1">
               <p className={NOTE}>
-                {l.os === 'macos'
-                  ? 'macOS or Linux, from a terminal'
-                  : `${l.label}, from ${l.where}`}
-                :
+                {l.label}, from {l.where}:
               </p>
               <CopyLine command={l.command} label={`${l.label} pair command`} />
             </div>

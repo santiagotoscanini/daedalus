@@ -28,6 +28,7 @@ import {
   nodeClaudeAnswer,
   nodeClaudeRosterAnswer,
   nodeDetail,
+  nodeLeftId,
   nodeProvidersAnswer,
   nodesList,
   nodeTelemetryAnswer,
@@ -165,6 +166,12 @@ type Options = {
    * app hands it the desired set again. Its failure is its own business.
    */
   onConnect?: (client: ControllerClient) => void
+  /**
+   * Given, every connection subscribes to the controller's events
+   * (`events.subscribe`) and hands each here: best effort, as the agent sends
+   * them — an event says what moved, and a method reads the picture.
+   */
+  onEvent?: (event: string, payload: unknown) => void
 }
 
 type Pending = {
@@ -261,7 +268,15 @@ export function createControllerClient(opts: Options): ControllerClient {
           drop(e instanceof ControllerError ? e : new ControllerError('protocol', String(e)))
           return
         }
-        if (msg.kind === 'event') return
+        if (msg.kind === 'event') {
+          // A handler's failure is its own; it never costs the connection.
+          try {
+            opts.onEvent?.(msg.e, msg.p)
+          } catch (e) {
+            console.warn(`controller: the ${msg.e} event's handler failed: ${String(e)}`)
+          }
+          return
+        }
         if (msg.kind === 'err' && msg.id === null) {
           // Not an answer to anything: the agent says why before it closes
           // (forbidden, busy, too_large) — the connection's error, not a call's.
@@ -329,6 +344,12 @@ export function createControllerClient(opts: Options): ControllerClient {
             const l = { socket, hello: helloOk(ok) }
             live = l
             resolve(l)
+            // The events belong to the connection, so each one subscribes.
+            if (opts.onEvent !== undefined) {
+              send(socket, 'events.subscribe').catch((e: unknown) => {
+                console.warn(`controller: no events on this connection: ${String(e)}`)
+              })
+            }
           })
           .catch((e: unknown) => {
             drop(e instanceof ControllerError ? e : new ControllerError('protocol', String(e)))
@@ -492,6 +513,16 @@ export function controller(): ControllerClient {
       // keeps nothing across its own restart (./nodes.ts).
       onConnect: (c) => {
         void import('./nodes').then((m) => m.syncDesired({ controller: c }))
+      },
+      // A machine that logged out asks to be forgotten, its tunnel with it.
+      onEvent: (e, p) => {
+        const id = nodeLeftId(e, p)
+        if (id === null) return
+        void import('../../lib/repo/nodes')
+          .then((m) => m.forgetNode(id, { left: true }))
+          .catch((err: unknown) => {
+            console.warn(`controller: ${id} logged out but was not forgotten: ${String(err)}`)
+          })
       },
     })
     slot.path = path

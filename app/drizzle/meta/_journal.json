@@ -155,6 +155,13 @@
       "when": 1790554193246,
       "tag": "0021_woozy_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790775166034,
+      "tag": "0022_slippery_magneto",
+      "breakpoints": true
     }
   ]
 }

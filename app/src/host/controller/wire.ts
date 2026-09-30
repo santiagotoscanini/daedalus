@@ -41,6 +41,7 @@ import type {
   NodeClaudeOk,
   NodeClaudeRosterOk,
   NodeDetail,
+  NodeLeft,
   NodeProvidersOk,
   NodeState,
   NodeSummary,
@@ -971,4 +972,17 @@ export function santreeStatus(v: unknown): SessionHostStatus {
     connections: s.connections,
     error: s.error,
   }
+}
+
+// ── events ──────────────────────────────────────────────────────────────────
+
+/**
+ * The machine a `nodes.left` event names (wire.rs `NodeLeft`): an approved
+ * machine that logged out and asks to be forgotten. Null for any other event,
+ * and for a payload that does not name a node id.
+ */
+export function nodeLeftId(event: string, payload: unknown): string | null {
+  if (event !== 'nodes.left') return null
+  const id = (payload as Partial<NodeLeft> | null)?.id
+  return typeof id === 'string' && /^[0-9a-f]{16}$/.test(id) ? id : null
 }

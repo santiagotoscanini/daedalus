@@ -7,6 +7,7 @@ import type {
   StatusPage,
   Summary,
   Telemetry,
+  TunnelStatus,
 } from '../../host/controller/generated'
 import {
   arrayOf,
@@ -190,7 +191,33 @@ export type AgentLink = {
   /** The last signed rotation that moved the trusted controller key, in the agent's words. */
   rotated: string | null
   error: string | null
+  /** The machine's own WireGuard tunnel to the box, while a log-in governs it; null without one. */
+  tunnel: AgentTunnel | null
 }
+
+/** A logged-in machine's tunnel (agent/src/tunnel/ `status`), as the machine sees it. */
+export type AgentTunnel = {
+  /** `host:port` of the box's WireGuard socket. */
+  endpoint: string
+  /** The machine inside the tunnel. */
+  address: string
+  /** Seconds since the last handshake; null without one. */
+  lastHandshakeSecs: number | null
+  rxBytes: number
+  txBytes: number
+  error: string | null
+}
+
+const tunnel = reads<TunnelStatus>()(
+  obj({
+    endpoint: optional(str, ''),
+    address: optional(str, ''),
+    last_handshake_secs: nnum,
+    rx_bytes: optional(num, 0),
+    tx_bytes: optional(num, 0),
+    error: nstr,
+  }),
+)
 
 const link = reads<LinkStatus>()(
   obj({
@@ -200,6 +227,7 @@ const link = reads<LinkStatus>()(
     controller_fingerprint: nstr,
     rotated: nstr,
     error: nstr,
+    tunnel: optional(nullable(tunnel), null),
   }),
 )
 
@@ -418,6 +446,17 @@ export function agentStatus(body: unknown): AgentStatus {
             controllerFingerprint: s.controller.controller_fingerprint,
             rotated: s.controller.rotated,
             error: s.controller.error,
+            tunnel:
+              s.controller.tunnel === null
+                ? null
+                : {
+                    endpoint: s.controller.tunnel.endpoint,
+                    address: s.controller.tunnel.address,
+                    lastHandshakeSecs: s.controller.tunnel.last_handshake_secs,
+                    rxBytes: s.controller.tunnel.rx_bytes,
+                    txBytes: s.controller.tunnel.tx_bytes,
+                    error: s.controller.tunnel.error,
+                  },
           },
     probation:
       s.probation === null

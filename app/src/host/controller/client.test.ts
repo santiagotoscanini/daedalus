@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type ControllerClient, createControllerClient } from './client'
-import { ControllerError } from './wire'
+import { ControllerError, nodeLeftId } from './wire'
 
 // The client against a fake controller on a real unix socket: the framing,
 // the hello, id matching, the error codes, the timeout and the reconnect are
@@ -94,7 +94,12 @@ function stop(): Promise<void> {
 }
 
 function client(
-  opts: { timeoutMs?: number; backoffMs?: number; onConnect?: (c: ControllerClient) => void } = {},
+  opts: {
+    timeoutMs?: number
+    backoffMs?: number
+    onConnect?: (c: ControllerClient) => void
+    onEvent?: (e: string, p: unknown) => void
+  } = {},
 ): ControllerClient {
   const c = createControllerClient({ path, client: 'daedalus/test', ...opts })
   clients.push(c)
@@ -414,5 +419,50 @@ describe('how the link stands', () => {
   it('is not_configured when the box binds no socket', () => {
     const c = createControllerClient({ path: undefined, client: 'daedalus/test' })
     expect(c.link()).toEqual({ state: 'not_configured' })
+  })
+})
+
+describe('the controller’s events', () => {
+  it('are subscribed to on each connection and handed over, a bad handler costing nothing', async () => {
+    await serve(
+      agent((req, sock) => {
+        if (req.m !== 'events.subscribe') return null
+        sock.write(answer(req.id, {}))
+        sock.write(`${JSON.stringify({ e: 'telemetry.updated', p: {} })}\n`)
+        sock.write(`${JSON.stringify({ e: 'nodes.left', p: { id: '0123456789abcdef' } })}\n`)
+        return null
+      }),
+    )
+    const got: [string, unknown][] = []
+    const c = client({
+      onEvent: (e, p) => {
+        got.push([e, p])
+        if (e === 'telemetry.updated') throw new Error('a handler that fails')
+      },
+    })
+    await c.systemInfo()
+    await tick(50)
+    // Subscribed as the connection opens, beside the first call.
+    expect(seen.map((r) => r.m).sort()).toEqual(['events.subscribe', 'hello', 'system.info'])
+    expect(got).toEqual([
+      ['telemetry.updated', {}],
+      ['nodes.left', { id: '0123456789abcdef' }],
+    ])
+    // The connection outlived the handler's throw.
+    expect((await c.systemInfo()).version).toBe('0.13.0')
+  })
+
+  it('are not asked for by a client with no handler', async () => {
+    await serve(agent())
+    await client().systemInfo()
+    await tick(20)
+    expect(seen.map((r) => r.m)).toEqual(['hello', 'system.info'])
+  })
+
+  it('name the machine that logged out, and nothing else', () => {
+    expect(nodeLeftId('nodes.left', { id: '0123456789abcdef' })).toBe('0123456789abcdef')
+    expect(nodeLeftId('nodes.changed', { id: '0123456789abcdef' })).toBeNull()
+    expect(nodeLeftId('nodes.left', { id: '../../etc' })).toBeNull()
+    expect(nodeLeftId('nodes.left', null)).toBeNull()
   })
 })

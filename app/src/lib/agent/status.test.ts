@@ -81,6 +81,36 @@ describe('agentStatus', () => {
     expect([bare.probation, bare.rolledBack]).toEqual([null, null])
   })
 
+  it('reads a logged-in machine’s tunnel, and none without one', () => {
+    const s = agentStatus({
+      version: '0.23.0',
+      controller: {
+        state: 'approved',
+        connected: true,
+        fingerprint: 'aaaa:bbbb',
+        tunnel: {
+          endpoint: 'box.example.org:51820',
+          resolved: '203.0.113.9:51820',
+          address: '10.8.0.7',
+          last_handshake_secs: 12,
+          rx_bytes: 2048,
+          tx_bytes: 1024,
+          error: null,
+        },
+      },
+    })
+    expect(s.link?.tunnel).toEqual({
+      endpoint: 'box.example.org:51820',
+      address: '10.8.0.7',
+      lastHandshakeSecs: 12,
+      rxBytes: 2048,
+      txBytes: 1024,
+      error: null,
+    })
+    const direct = agentStatus({ version: '0.22.0', controller: { state: 'approved' } })
+    expect(direct.link?.tunnel).toBeNull()
+  })
+
   it('refuses a body without a version', () => {
     expect(() => agentStatus({ hostname: 'X' })).toThrow()
   })
