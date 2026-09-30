@@ -257,7 +257,7 @@ export const SCHEMA = {
     kind: 'int',
     fallback: '7789',
     about: 'The session host’s port, which a logged-in Mac’s tunnel firewall lets through.',
-    source: `${UNBOUND}: the default of fleet.daedalus.sessionHost.port`,
+    source: 'stacks/daedalus/session-host.nix fleet.dashboard.session-host.env',
   },
   SHOTTER_DIR: {
     kind: 'path',

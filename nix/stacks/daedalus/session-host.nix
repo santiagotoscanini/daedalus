@@ -198,6 +198,9 @@ in
     # LAN only, and through the tunnel: the controller's own pattern
     # (controller.nix).
     networking.firewall.interfaces.${config.fleet.lanInterface}.allowedTCPPorts = [ cfg.port ];
+
+    # The app names this port in a logged-in Mac's tunnel firewall.
+    fleet.dashboard.session-host.env.SESSION_HOST_PORT = toString cfg.port;
     fleet.modules.wg-easy.tunnelHostPorts = [ { inherit (cfg) port; } ];
 
     fleet.monitoredJobs.daedalus-session-host = { };
