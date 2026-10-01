@@ -2,26 +2,15 @@ import { GrafanaLogs } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
 import { Button } from '../../../components/ui/button'
-import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
-import { cn } from '../../../lib/cn'
-import { compact, DASH, daysAgo, ms, num, pct } from '../../../lib/format'
+import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { LitellmData } from '../data/litellm'
 import {
-  AXIS,
-  comparePinned,
-  EMPTY,
-  FOOT,
-  ITEM,
-  ITEM_MAIN,
-  ITEM_N,
-  ITEM_SIDE,
-  ITEMS,
-  LIVE,
-  MONO,
-  NOTE,
-  RANKS,
-  REJECTED,
-} from './shared'
+  NeighbourPair,
+  ToolsModelsCalledBoard,
+  TrafficBoard,
+  WhoIsCallingBoard,
+} from './litellm-boards'
+import { comparePinned, EMPTY, MONO } from './shared'
 
 /**
  * The tab on a box with no gateway bound. Said once, in place of a page of
@@ -45,13 +34,8 @@ function NotConfigured() {
 
 export function LitellmView({ data }: { data: LitellmData }) {
   if (!data.configured) return <NotConfigured />
-  const { gap, daily, window: total } = data
-  const busy = data.inFlight !== null && data.inFlight > 0
-  const firstDate = daily[0]?.date ?? ''
-  // The window's last day IS today, since the window ends at today — and it is
-  // the reference every "2d ago" below is measured against, rather than the
-  // browser's clock, which would not agree with the server's at midnight.
-  const todayDate = daily[daily.length - 1]?.date ?? ''
+  const f = litellmFacts({ data })
+  const { gap } = f
 
   return (
     <>
@@ -91,111 +75,9 @@ export function LitellmView({ data }: { data: LitellmData }) {
           inside the panel whose chart they describe, where they can be read
           AGAINST that chart instead of a screen away from it. */}
       <BoardGrid>
-        <Board
-          title="Traffic"
-          icon="◇"
-          span={8}
-          aside={
-            <span className={LIVE}>
-              <Pulse on={busy} tone="accent" />
-              {busy ? `${num(data.inFlight)} in flight` : 'idle'}
-            </span>
-          }
-        >
-          <Measures
-            items={[
-              { k: 'today', v: volume(data.today) },
-              { k: `${String(total.days)} days`, v: volume(total) },
-              {
-                k: 'failed',
-                v:
-                  total.requests === 0
-                    ? DASH
-                    : `${num(total.failed)} · ${pct((total.failed / total.requests) * 100)}`,
-                tone: total.failed > 0 ? 'bad' : undefined,
-              },
-              // The one latency figure on this page that is actually about the
-              // gateway. Every other one is end-to-end and therefore mostly the
-              // model server, and this is the number that says so.
-              { k: 'gateway adds', v: ms(data.overheadMs) },
-            ]}
-          />
+        <TrafficBoard f={f} />
 
-          <Columns
-            points={daily.map((d) => ({
-              // Month-day only: the year is the same for every column.
-              label: d.date.slice(5),
-              value: d.requests,
-              display:
-                `${num(d.requests)} requests · ${num(d.tokens)} tokens` +
-                (d.failed > 0 ? ` · ${num(d.failed)} failed` : ''),
-              flag: d.failed > 0,
-            }))}
-            height={112}
-            empty="the gateway’s ledger is empty"
-          />
-          {daily.length > 0 && (
-            <p className={AXIS}>
-              <span>{firstDate.slice(5)}</span>
-              <span>requests per day</span>
-              <span>{todayDate.slice(5)}</span>
-            </p>
-          )}
-
-          <p className={FOOT}>
-            {data.endpoints.length > 0 && (
-              <span className="mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-subdued [&_b]:tabular-nums">
-                {data.endpoints.map((e) => (
-                  <span key={e.label}>
-                    {e.label} <b>{num(e.value)}</b>
-                  </span>
-                ))}
-              </span>
-            )}
-            Counted from the gateway’s own ledger, which survives a restart. Its Prometheus counters
-            do not. A day that saw a failure is underlined in red.
-            {data.partial && ' The window has more rows than one page, so these are a lower bound.'}
-          </p>
-        </Board>
-
-        <Board
-          title="Tools models called"
-          icon="hash"
-          span={4}
-          aside={
-            <span className={NOTE}>
-              {data.mcpServers.length === 0
-                ? `MCP, ${String(total.days)}d`
-                : data.mcpServers.map((s) => `${s.name} ${String(s.calls)}`).join(' · ')}
-            </span>
-          }
-        >
-          {data.mcp.length === 0 ? (
-            <p className={EMPTY}>no tool calls in the window</p>
-          ) : (
-            <ul className={ITEMS}>
-              {data.mcp.map((t) => (
-                <li key={`${t.server}/${t.tool}`} className={ITEM}>
-                  <Chip tone="info">{t.server}</Chip>
-                  <span className={cn(ITEM_MAIN, MONO)} title={t.tool}>
-                    {t.tool}
-                  </span>
-                  {/* The tool's own time, which is the only latency on this
-                      page that is NOT mostly the model server — a tool call is the
-                      gateway talking to a container on this box, so tens of
-                      milliseconds is what right looks like. */}
-                  <span className={ITEM_SIDE}>{ms(t.latencyMs)}</span>
-                  <span className={ITEM_N}>{num(t.calls)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            The other direction: tools the gateway hands to a model mid-answer, counted when one was
-            invoked. A registered server with no calls does not appear, and a tool whose counters
-            were reset by a restart shows no time.
-          </p>
-        </Board>
+        <ToolsModelsCalledBoard f={f} />
 
         {/* The one axis on this page worth a panel of this size (see `Caller`
             in ../data/litellm.ts): who is calling cannot be known from
@@ -206,53 +88,7 @@ export function LitellmView({ data }: { data: LitellmData }) {
             twice the height of the traffic panel, so the two are paired with
             boards of their own size — stretching makes a row share one bottom
             edge, but it cannot invent content to fill the taller one with. */}
-        <Board
-          title="Who is calling"
-          icon="◑"
-          span={6}
-          aside={<span className={NOTE}>requests, {total.days}d</span>}
-        >
-          {data.callers.length === 0 ? (
-            <p className={EMPTY}>no keyed traffic in the window</p>
-          ) : (
-            <ul className={RANKS}>
-              {data.callers.map((c) => (
-                <CallerRow
-                  key={c.name}
-                  caller={c}
-                  max={data.callers[0]?.requests ?? 1}
-                  today={todayDate}
-                />
-              ))}
-            </ul>
-          )}
-
-          {/* Rejected keys are split out rather than ranked — see `callersOf`:
-              a rejected key returns no tokens at all, so on a token ranking it
-              would score zero and never appear. */}
-          {data.rejected.keys > 0 && (
-            <p className={REJECTED}>
-              <b>{num(data.rejected.keys)}</b> keys never completed a request.{' '}
-              <b>{num(data.rejected.requests)}</b> attempts, last{' '}
-              {ledgerAgo(data.rejected.last, todayDate)}.{' '}
-              {data.rejected.live === 0 ? (
-                'None of them exists on the gateway today.'
-              ) : (
-                <>
-                  <b>{num(data.rejected.live)}</b> of them still exists on the gateway, which is a
-                  fault rather than a stale credential.
-                </>
-              )}
-            </p>
-          )}
-
-          <p className={FOOT}>
-            Named by their key’s alias; a key with none shows as its hash, and one the gateway no
-            longer holds is marked <b>revoked</b>. Hover any name for what it is. A key that fails
-            authentication never reaches a model, so it has no tokens and no model against it. The
-            gateway is LAN-only, so every attempt above came from something in the house.
-          </p>
-        </Board>
+        <WhoIsCallingBoard f={f} />
 
         <Changelog gap={gap} span={6} />
 
@@ -270,131 +106,16 @@ export function LitellmView({ data }: { data: LitellmData }) {
   )
 }
 
-type NeighbourData = LitellmData['neighbours'][number]
-
-/**
- * One of the gateway's neighbours, as a pair of half-width boards.
- *
- * Changelog on the left, log on the right, because those are the only two
- * things ever wanted from a container with no page of its own: what would
- * change if I updated it, and what has it been saying. The title carries the
- * verdict, so the row answers "is anything here behind" before it is read.
- *
- * A container that is two projects (`via`) gets a third of the row for each:
- * two changelogs and the one log, rather than one changelog silently speaking
- * for both.
- */
-function NeighbourPair({ n }: { n: NeighbourData }) {
-  const behind = n.gap?.behind.length ?? n.build?.behind.length ?? 0
-  const unit =
-    n.gap !== null ? (behind === 1 ? 'release behind' : 'releases behind') : 'commits behind'
-  const count = String(behind)
-  const span = n.via === null ? 6 : 4
-  const viaBehind = n.via?.gap?.behind.length ?? 0
-
-  return (
-    <>
-      <Changelog
-        gap={n.gap}
-        build={n.build}
-        span={span}
-        title={behind === 0 ? `${n.label} — current` : `${n.label} — ${count} ${unit}`}
-        aside={
-          <span className={NOTE}>
-            {n.version === null ? 'version unknown' : <span className={MONO}>{n.version}</span>}
-          </span>
-        }
-        foot={<p className={FOOT}>{n.note}</p>}
-      />
-      {n.via !== null && (
-        <Changelog
-          gap={n.via.gap}
-          span={span}
-          title={
-            viaBehind === 0
-              ? `${n.via.label} — current`
-              : `${n.via.label} — ${String(viaBehind)} ${viaBehind === 1 ? 'release behind' : 'releases behind'}`
-          }
-          aside={
-            <span className={NOTE}>
-              {n.via.version === null ? (
-                'version unknown'
-              ) : (
-                <span className={MONO}>{n.via.version}</span>
-              )}
-            </span>
-          }
-        />
-      )}
-      <Board
-        title={`${n.label} logs`}
-        icon="logs"
-        span={span}
-        aside={<span className={NOTE}>{n.role}</span>}
-      >
-        <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />
-      </Board>
-    </>
-  )
+/** What the page's boards read. */
+function litellmFacts({ data }: { data: LitellmData }) {
+  const { gap, daily, window: total } = data
+  const busy = data.inFlight !== null && data.inFlight > 0
+  const firstDate = daily[0]?.date ?? ''
+  // The window's last day IS today, since the window ends at today — and it is
+  // the reference every "2d ago" below is measured against, rather than the
+  // browser's clock, which would not agree with the server's at midnight.
+  const todayDate = daily[daily.length - 1]?.date ?? ''
+  return { data, gap, daily, total, busy, firstDate, todayDate }
 }
 
-type Caller = LitellmData['callers'][number]
-
-/**
- * One caller.
- *
- * Failures get the only colour in the row, and only when there are any. A
- * caller that works is the normal case and does not need to be decorated to
- * say so.
- */
-function CallerRow({ caller, max, today }: { caller: Caller; max: number; today: string }) {
-  return (
-    <RankRow
-      name={caller.name}
-      note={caller.note}
-      badges={caller.live ? [] : [{ text: 'revoked', tone: 'warn' } as const]}
-      value={caller.requests}
-      max={max}
-      meta={
-        <>
-          {caller.tokens > 0 && <span>{compact(caller.tokens)} tok</span>}
-          {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
-          {caller.failed > 0 && <span className="text-danger">{num(caller.failed)} failed</span>}
-          {/* One name and a count. A caller reaching a single model is the
-              norm, and two full model names wrap this line onto a second row
-              for the one caller (usually the master key) that reaches several —
-              the rest is a hover away. */}
-          {caller.models[0] !== undefined && (
-            <span className={cn(MONO, 'truncate')} title={caller.models.join(', ')}>
-              {caller.models[0]}
-              {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
-            </span>
-          )}
-          <span>{ledgerAgo(caller.last, today)}</span>
-        </>
-      }
-    />
-  )
-}
-
-/**
- * A ledger date as a phrase.
- *
- * Days rather than `since`, because the ledger's resolution IS a day: it knows
- * a key called on the 3rd, not at what time, and "2 days ago" is the strongest
- * true statement available. Computed against a date passed in rather than
- * against `Date.now()` — this page renders on the server and hydrates in the
- * browser, and a relative time derived from two different clocks is a
- * hydration mismatch waiting for midnight.
- */
-function ledgerAgo(date: string | null, today: string): string {
-  if (date === null || date === '') return DASH
-  const days = Math.round((Date.parse(today) - Date.parse(date)) / 86400_000)
-  return Number.isFinite(days) ? daysAgo(days) : date
-}
-
-/** `29 req · 28k tok`, or an em dash for a day the gateway served nothing. */
-function volume(v: { requests: number; tokens: number } | null): string {
-  if (v === null || v.requests === 0) return DASH
-  return `${num(v.requests)} req · ${compact(v.tokens)} tok`
-}
+export type LitellmFacts = NonNullable<ReturnType<typeof litellmFacts>>

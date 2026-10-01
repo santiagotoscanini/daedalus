@@ -23,7 +23,9 @@ import { AXIS, EMPTY, FOOT, LIVE, MAIN, MONO, NOTE, ROW, ROWS, SWITCH_BAR, tone 
  * by being declared. The list comes from `fleet.vpnEgress`, which
  * `mkGluetunInstance` writes itself.
  */
-export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }> }) {
+type Outbound = Extract<NetworkData, { tab: 'outbound' }>
+
+export function OutboundView({ data }: { data: Outbound }) {
   const [selected, setSelected] = useState(data.tunnels[0]?.key ?? '')
   const t = data.tunnels.find((x) => x.key === selected) ?? data.tunnels[0]
 
@@ -170,116 +172,11 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
       </div>
 
       <BoardGrid>
-        <Board
-          title="Staying up"
-          icon="⛨"
-          span={8}
-          aside={
-            <span className={LIVE}>
-              <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
-              {t.up === null ? 'unknown' : t.up ? 'tunnel up' : 'tunnel down'}
-            </span>
-          }
-        >
-          <Measures
-            items={[
-              { k: '7 days', v: t.uptime7d === null ? DASH : pct(t.uptime7d * 100, 2) },
-              {
-                k: 'key expires',
-                v: t.expiryDays < 0 ? `${String(-t.expiryDays)}d ago` : until(t.expiryDays * 86400),
-                tone: expiryTone,
-              },
-              ...(t.portForwarding
-                ? [{ k: 'forwarded port', v: t.port === null ? 'none yet' : String(t.port) }]
-                : []),
-            ]}
-          />
+        <StayingUpBoard t={t} expiryTone={expiryTone} />
 
-          <Columns
-            points={t.daily.map((d) => ({
-              label: d.date.slice(5),
-              value: d.uptime,
-              display: `${pct(d.uptime * 100, 2)} up`,
-              flag: d.uptime < 0.999,
-            }))}
-            tone="ok"
-            height={112}
-            empty="no history yet"
-          />
-          {t.daily.length > 0 && (
-            <p className={AXIS}>
-              <span>{t.daily[0]?.date.slice(5)}</span>
-              <span>share of the day connected</span>
-              <span>{t.daily[t.daily.length - 1]?.date.slice(5)}</span>
-            </p>
-          )}
+        <RidersBoard t={t} />
 
-          <p className={FOOT}>
-            {/* A near-full column is the normal state, so the axis starting at
-                zero is the honest choice AND the useless one — the flag is what
-                carries a bad day. */}
-            gluetun reports its own tunnel state every 30 seconds; this is the share of each day it
-            said it was connected. Columns are near-full by design, so a day that dropped at all is
-            underlined in red rather than left to a difference of a pixel. The WireGuard key expires{' '}
-            <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead, and the renewal
-            runbook is the header of <code>{t.runbook}</code>.
-          </p>
-        </Board>
-
-        <Board
-          title="What rides it"
-          icon="panels"
-          span={4}
-          aside={<span className={NOTE}>{t.tenants.length} containers</span>}
-        >
-          <ul className={ROWS}>
-            {t.tenants.map((c) => (
-              <li key={c.name} className={ROW}>
-                <Chip tone={c.up === null ? 'muted' : c.up ? 'ok' : 'bad'}>
-                  {c.up === null ? '?' : c.up ? 'up' : 'down'}
-                </Chip>
-                <span className={cn(MAIN, MONO)}>{c.name}</span>
-              </li>
-            ))}
-          </ul>
-          <p className={FOOT}>
-            Read from each container’s own <code>--network=container:{t.container}</code>, so this
-            is the set that actually shares the namespace rather than a list kept beside it. They
-            publish no ports of their own — only a namespace’s owner can — which is why every one of
-            their UIs is published on the gluetun container instead.
-          </p>
-        </Board>
-
-        <Board
-          title="Where it comes out"
-          icon="◍"
-          span={12}
-          aside={
-            // A provider's mark beside the title — the network a tunnel comes
-            // out on is a brand, and the logo says it faster than the word.
-            <span className="inline-flex items-center gap-[0.35rem] text-[0.72rem] text-muted-foreground [&_img]:block [&_img]:rounded-[3px]">
-              <img src="/icon-protonvpn.svg" alt="" width={16} height={16} />
-              {t.provider}
-            </span>
-          }
-        >
-          <Facts
-            rows={[
-              // `flag` already emits the country name beside the emoji.
-              { k: 'Country', v: flag(t.exit.country) },
-              { k: 'City', v: place(t.exit.city, t.exit.region) },
-              { k: 'Address', v: <span className={MONO}>{t.exit.ip ?? DASH}</span> },
-              { k: 'Carrier', v: t.exit.org ?? DASH },
-              { k: 'Timezone', v: t.exit.timezone ?? DASH },
-            ]}
-          />
-          <p className={FOOT}>
-            Asked of gluetun’s control API, which asks the provider. Nothing on this box can answer
-            it: the container only ever sees a private tunnel address and the exit is only knowable
-            from outside. The carrier is what an observer on the far side attributes this traffic
-            to.
-          </p>
-        </Board>
+        <ExitBoard t={t} />
 
         {/* The exporter is the one container genuinely tied to this tunnel and
             nothing else: it exists solely to poll this gluetun's control API,
@@ -299,6 +196,134 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
         />
       </BoardGrid>
     </>
+  )
+}
+
+function StayingUpBoard({
+  t,
+  expiryTone,
+}: {
+  t: Outbound['tunnels'][number]
+  expiryTone: Tone | undefined
+}) {
+  return (
+    <Board
+      title="Staying up"
+      icon="⛨"
+      span={8}
+      aside={
+        <span className={LIVE}>
+          <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
+          {t.up === null ? 'unknown' : t.up ? 'tunnel up' : 'tunnel down'}
+        </span>
+      }
+    >
+      <Measures
+        items={[
+          { k: '7 days', v: t.uptime7d === null ? DASH : pct(t.uptime7d * 100, 2) },
+          {
+            k: 'key expires',
+            v: t.expiryDays < 0 ? `${String(-t.expiryDays)}d ago` : until(t.expiryDays * 86400),
+            tone: expiryTone,
+          },
+          ...(t.portForwarding
+            ? [{ k: 'forwarded port', v: t.port === null ? 'none yet' : String(t.port) }]
+            : []),
+        ]}
+      />
+
+      <Columns
+        points={t.daily.map((d) => ({
+          label: d.date.slice(5),
+          value: d.uptime,
+          display: `${pct(d.uptime * 100, 2)} up`,
+          flag: d.uptime < 0.999,
+        }))}
+        tone="ok"
+        height={112}
+        empty="no history yet"
+      />
+      {t.daily.length > 0 && (
+        <p className={AXIS}>
+          <span>{t.daily[0]?.date.slice(5)}</span>
+          <span>share of the day connected</span>
+          <span>{t.daily[t.daily.length - 1]?.date.slice(5)}</span>
+        </p>
+      )}
+
+      <p className={FOOT}>
+        {/* A near-full column is the normal state, so the axis starting at
+            zero is the honest choice AND the useless one — the flag is what
+            carries a bad day. */}
+        gluetun reports its own tunnel state every 30 seconds; this is the share of each day it said
+        it was connected. Columns are near-full by design, so a day that dropped at all is
+        underlined in red rather than left to a difference of a pixel. The WireGuard key expires{' '}
+        <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead, and the renewal runbook is
+        the header of <code>{t.runbook}</code>.
+      </p>
+    </Board>
+  )
+}
+
+function RidersBoard({ t }: { t: Outbound['tunnels'][number] }) {
+  return (
+    <Board
+      title="What rides it"
+      icon="panels"
+      span={4}
+      aside={<span className={NOTE}>{t.tenants.length} containers</span>}
+    >
+      <ul className={ROWS}>
+        {t.tenants.map((c) => (
+          <li key={c.name} className={ROW}>
+            <Chip tone={c.up === null ? 'muted' : c.up ? 'ok' : 'bad'}>
+              {c.up === null ? '?' : c.up ? 'up' : 'down'}
+            </Chip>
+            <span className={cn(MAIN, MONO)}>{c.name}</span>
+          </li>
+        ))}
+      </ul>
+      <p className={FOOT}>
+        Read from each container’s own <code>--network=container:{t.container}</code>, so this is
+        the set that actually shares the namespace rather than a list kept beside it. They publish
+        no ports of their own — only a namespace’s owner can — which is why every one of their UIs
+        is published on the gluetun container instead.
+      </p>
+    </Board>
+  )
+}
+
+function ExitBoard({ t }: { t: Outbound['tunnels'][number] }) {
+  return (
+    <Board
+      title="Where it comes out"
+      icon="◍"
+      span={12}
+      aside={
+        // A provider's mark beside the title — the network a tunnel comes
+        // out on is a brand, and the logo says it faster than the word.
+        <span className="inline-flex items-center gap-[0.35rem] text-[0.72rem] text-muted-foreground [&_img]:block [&_img]:rounded-[3px]">
+          <img src="/icon-protonvpn.svg" alt="" width={16} height={16} />
+          {t.provider}
+        </span>
+      }
+    >
+      <Facts
+        rows={[
+          // `flag` already emits the country name beside the emoji.
+          { k: 'Country', v: flag(t.exit.country) },
+          { k: 'City', v: place(t.exit.city, t.exit.region) },
+          { k: 'Address', v: <span className={MONO}>{t.exit.ip ?? DASH}</span> },
+          { k: 'Carrier', v: t.exit.org ?? DASH },
+          { k: 'Timezone', v: t.exit.timezone ?? DASH },
+        ]}
+      />
+      <p className={FOOT}>
+        Asked of gluetun’s control API, which asks the provider. Nothing on this box can answer it:
+        the container only ever sees a private tunnel address and the exit is only knowable from
+        outside. The carrier is what an observer on the far side attributes this traffic to.
+      </p>
+    </Board>
   )
 }
 

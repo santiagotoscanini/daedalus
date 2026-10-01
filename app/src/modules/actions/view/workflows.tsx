@@ -85,90 +85,92 @@ export function WorkflowsView({ d }: { d: Workflows }) {
         </Board>
 
         {d.repos.map((r) => (
-          <Board
-            key={r.repo}
-            title={r.repo}
-            icon="logs"
-            span={12}
-            aside={
-              <span className={NOTE}>
-                <Ext href={`${r.url}/actions`} className="text-primary">
-                  {num(r.workflows.length)} workflows
-                </Ext>
-                {' · '}
-                {r.kind} · {accessWord(r.access.runs)}
-              </span>
-            }
-          >
-            {r.workflows.length === 0 ? (
-              <p className={FOOT}>
-                {r.access.files === 'app' || r.access.files === 'public'
-                  ? 'No workflow files.'
-                  : `Could not list the files: ${accessWord(r.access.files)}.`}
-              </p>
-            ) : (
-              <ul className={LIST}>
-                {r.workflows.map((w) => (
-                  <li key={w.id} className="border-subtle border-t py-[0.45rem] first:border-t-0">
-                    <div className="flex min-w-0 items-center gap-[0.45rem] text-[0.77rem]">
-                      {w.lastRun !== null ? (
-                        <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />
-                      ) : (
-                        <Chip tone="muted">
-                          {w.state === 'unknown' ? 'no run read' : w.state.replace(/_/g, ' ')}
-                        </Chip>
-                      )}
-                      <span className={ROW_MAIN}>
-                        <Ext href={w.url}>
-                          <b className="font-[550]">{w.name}</b>
-                        </Ext>
-                        <span className={`ml-[0.4rem] ${MONO} text-muted-foreground`}>
-                          {w.path.replace(/^\.github\/workflows\//, '')}
-                        </span>
-                      </span>
-                      <span className={ROW_SIDE}>
-                        {w.runs > 0 && (
-                          <>
-                            {num(w.runs)} runs
-                            {w.failed > 0 && (
-                              <span className="text-danger"> · {num(w.failed)} failed</span>
-                            )}
-                            {' · median '}
-                            {took(w.p50)}
-                            {w.lastRun !== null && (
-                              <>
-                                {' · last '}
-                                <Ago at={w.lastRun.at} />
-                              </>
-                            )}
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    <p
-                      className={`${SUB} mt-[0.2rem] flex flex-wrap gap-x-[0.9rem] gap-y-[0.1rem] font-normal`}
-                    >
-                      <span>
-                        on{' '}
-                        {w.triggers.length === 0
-                          ? 'unknown'
-                          : w.triggers.map(triggerWord).join(', ')}
-                        {w.schedules.length > 0 && ` (${w.schedules.join('; ')})`}
-                      </span>
-                      <span>
-                        {num(w.jobs)} {w.jobs === 1 ? 'job' : 'jobs'}
-                        {w.runsOn.length > 0 &&
-                          ` on ${[...new Set(w.runsOn.map(imageWord))].join(', ')}`}
-                      </span>
-                      {w.uses.length > 0 && <span>uses {w.uses.join(', ')}</span>}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Board>
+          <RepoBoard key={r.repo} r={r} />
         ))}
       </BoardGrid>
     </>
+  )
+}
+
+/** One repository: its workflows, how they have run, and what they use. */
+function RepoBoard({ r }: { r: Workflows['repos'][number] }) {
+  return (
+    <Board
+      title={r.repo}
+      icon="logs"
+      span={12}
+      aside={
+        <span className={NOTE}>
+          <Ext href={`${r.url}/actions`} className="text-primary">
+            {num(r.workflows.length)} workflows
+          </Ext>
+          {' · '}
+          {r.kind} · {accessWord(r.access.runs)}
+        </span>
+      }
+    >
+      {r.workflows.length === 0 ? (
+        <p className={FOOT}>
+          {r.access.files === 'app' || r.access.files === 'public'
+            ? 'No workflow files.'
+            : `Could not list the files: ${accessWord(r.access.files)}.`}
+        </p>
+      ) : (
+        <ul className={LIST}>
+          {r.workflows.map((w) => (
+            <li key={w.id} className="border-subtle border-t py-[0.45rem] first:border-t-0">
+              <div className="flex min-w-0 items-center gap-[0.45rem] text-[0.77rem]">
+                {w.lastRun !== null ? (
+                  <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />
+                ) : (
+                  <Chip tone="muted">
+                    {w.state === 'unknown' ? 'no run read' : w.state.replace(/_/g, ' ')}
+                  </Chip>
+                )}
+                <span className={ROW_MAIN}>
+                  <Ext href={w.url}>
+                    <b className="font-[550]">{w.name}</b>
+                  </Ext>
+                  <span className={`ml-[0.4rem] ${MONO} text-muted-foreground`}>
+                    {w.path.replace(/^\.github\/workflows\//, '')}
+                  </span>
+                </span>
+                <span className={ROW_SIDE}>
+                  {w.runs > 0 && (
+                    <>
+                      {num(w.runs)} runs
+                      {w.failed > 0 && (
+                        <span className="text-danger"> · {num(w.failed)} failed</span>
+                      )}
+                      {' · median '}
+                      {took(w.p50)}
+                      {w.lastRun !== null && (
+                        <>
+                          {' · last '}
+                          <Ago at={w.lastRun.at} />
+                        </>
+                      )}
+                    </>
+                  )}
+                </span>
+              </div>
+              <p
+                className={`${SUB} mt-[0.2rem] flex flex-wrap gap-x-[0.9rem] gap-y-[0.1rem] font-normal`}
+              >
+                <span>
+                  on {w.triggers.length === 0 ? 'unknown' : w.triggers.map(triggerWord).join(', ')}
+                  {w.schedules.length > 0 && ` (${w.schedules.join('; ')})`}
+                </span>
+                <span>
+                  {num(w.jobs)} {w.jobs === 1 ? 'job' : 'jobs'}
+                  {w.runsOn.length > 0 && ` on ${[...new Set(w.runsOn.map(imageWord))].join(', ')}`}
+                </span>
+                {w.uses.length > 0 && <span>uses {w.uses.join(', ')}</span>}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Board>
   )
 }

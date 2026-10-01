@@ -38,9 +38,8 @@ const shotUrl = (run: string, file: string) => `/api/shot-run/${run}/${file}`
  * version, with microsoft/playwright's releases behind the changelog.
  */
 export function ShotterView({ data }: { data: ClaudeData }) {
-  const sh = data.shotter
-  const latest = sh.latest
-  const verdict = shotterVerdict(data.shotterGap)
+  const f = shotterFacts({ data })
+  const { sh, verdict } = f
 
   return (
     <>
@@ -121,77 +120,9 @@ export function ShotterView({ data }: { data: ClaudeData }) {
       </StatStrip>
 
       <BoardGrid>
-        <Board
-          title="Latest run"
-          icon="panels"
-          span={4}
-          aside={
-            latest === null ? undefined : <span className={cn(NOTE, MONO_FACE)}>{latest.id}</span>
-          }
-        >
-          {latest === null ? (
-            <p className={EMPTY}>
-              No run directories yet. <span className={MONO}>shot quick &lt;url&gt;</span> makes the
-              first one.
-            </p>
-          ) : (
-            <>
-              {latest.shots.length > 0 && (
-                <div className={SHOT_STRIP}>
-                  {latest.shots.map((f) => (
-                    <a key={f} href={shotUrl(latest.id, f)} target="_blank" rel="noreferrer">
-                      <img
-                        className={SHOT_IMG}
-                        src={shotUrl(latest.id, f)}
-                        alt={`${latest.id} — ${f}`}
-                        loading="lazy"
-                      />
-                    </a>
-                  ))}
-                </div>
-              )}
-              {latest.log.length > 0 && <pre className={SHOT_LOG}>{latest.log.join('\n')}</pre>}
-            </>
-          )}
-          <p className={FOOT}>
-            The newest run&rsquo;s viewport slices — consecutive crops of one long page, each
-            linking to its full-size self — and the runner&rsquo;s own log under them. The full
-            evidence (every slice, <span className={MONO}>events.json</span>,{' '}
-            <span className={MONO}>log.txt</span>) is{' '}
-            <span className={MONO}>shot show &lt;id&gt;</span> on the box.
-          </p>
-        </Board>
+        <LatestRunBoard f={f} />
 
-        <Board
-          title="Runs"
-          icon="logs"
-          span={8}
-          aside={
-            <span className={NOTE}>
-              {sh.runs.length === 0 ? 'none yet' : `last ${num(sh.runs.length)}, newest first`}
-            </span>
-          }
-        >
-          {sh.runs.length === 0 ? (
-            <p className={EMPTY}>
-              Nothing in the ledger. <span className={MONO}>shot quick &lt;url&gt;</span> writes the
-              first line.
-            </p>
-          ) : (
-            <ul className={LIST}>
-              {sh.runs.map((r) => (
-                <ShotRunRow key={r.id} run={r} />
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            The append-only ledger, one line per <span className={MONO}>shot</span> invocation. The
-            verdict chip reads the run&rsquo;s event counters, not its screenshots — events outrank
-            pixels, because a page can render beautifully over a broken deploy. <b>fail</b> is the
-            runner itself dying; <b>issues</b> is a page that answered with console errors, failed
-            requests or 4xx/5xx underneath.
-          </p>
-        </Board>
+        <RunsBoard f={f} />
 
         <Changelog
           gap={data.shotterGap}
@@ -209,28 +140,122 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           }
         />
 
-        <LogBoard
-          source={{ unit: 'shotter-image.service' }}
-          title="Image build logs"
-          foot={
-            <p className={FOOT}>
-              The rebuild-time image build — layer cache makes the no-change case near-silent, so
-              lines here mean the Playwright pin moved or a fresh box paid the base pull. The runs
-              themselves do NOT log here: each run&rsquo;s log lives in its own run directory,
-              excerpted above.
-            </p>
-          }
-          neighbours={[
-            {
-              source: { unit: 'shotter-prune.service' },
-              label: 'shotter-prune',
-              role: 'the weekly archive trim',
-              note: 'Sunday 04:20, 30 days back, at most 40 runs kept. Monitored — a failure mails the operator.',
-            },
-          ]}
-        />
+        <ImageBuildLogsBoard />
       </BoardGrid>
     </>
+  )
+}
+
+/** What the page's boards read. */
+function shotterFacts({ data }: { data: ClaudeData }) {
+  const sh = data.shotter
+  const latest = sh.latest
+  const verdict = shotterVerdict(data.shotterGap)
+  return { data, sh, latest, verdict }
+}
+
+type ShotterFacts = NonNullable<ReturnType<typeof shotterFacts>>
+
+function LatestRunBoard({ f }: { f: ShotterFacts }) {
+  const { latest } = f
+  return (
+    <Board
+      title="Latest run"
+      icon="panels"
+      span={4}
+      aside={latest === null ? undefined : <span className={cn(NOTE, MONO_FACE)}>{latest.id}</span>}
+    >
+      {latest === null ? (
+        <p className={EMPTY}>
+          No run directories yet. <span className={MONO}>shot quick &lt;url&gt;</span> makes the
+          first one.
+        </p>
+      ) : (
+        <>
+          {latest.shots.length > 0 && (
+            <div className={SHOT_STRIP}>
+              {latest.shots.map((f) => (
+                <a key={f} href={shotUrl(latest.id, f)} target="_blank" rel="noreferrer">
+                  <img
+                    className={SHOT_IMG}
+                    src={shotUrl(latest.id, f)}
+                    alt={`${latest.id} — ${f}`}
+                    loading="lazy"
+                  />
+                </a>
+              ))}
+            </div>
+          )}
+          {latest.log.length > 0 && <pre className={SHOT_LOG}>{latest.log.join('\n')}</pre>}
+        </>
+      )}
+      <p className={FOOT}>
+        The newest run&rsquo;s viewport slices — consecutive crops of one long page, each linking to
+        its full-size self — and the runner&rsquo;s own log under them. The full evidence (every
+        slice, <span className={MONO}>events.json</span>, <span className={MONO}>log.txt</span>) is{' '}
+        <span className={MONO}>shot show &lt;id&gt;</span> on the box.
+      </p>
+    </Board>
+  )
+}
+
+function RunsBoard({ f }: { f: ShotterFacts }) {
+  const { sh } = f
+  return (
+    <Board
+      title="Runs"
+      icon="logs"
+      span={8}
+      aside={
+        <span className={NOTE}>
+          {sh.runs.length === 0 ? 'none yet' : `last ${num(sh.runs.length)}, newest first`}
+        </span>
+      }
+    >
+      {sh.runs.length === 0 ? (
+        <p className={EMPTY}>
+          Nothing in the ledger. <span className={MONO}>shot quick &lt;url&gt;</span> writes the
+          first line.
+        </p>
+      ) : (
+        <ul className={LIST}>
+          {sh.runs.map((r) => (
+            <ShotRunRow key={r.id} run={r} />
+          ))}
+        </ul>
+      )}
+      <p className={FOOT}>
+        The append-only ledger, one line per <span className={MONO}>shot</span> invocation. The
+        verdict chip reads the run&rsquo;s event counters, not its screenshots — events outrank
+        pixels, because a page can render beautifully over a broken deploy. <b>fail</b> is the
+        runner itself dying; <b>issues</b> is a page that answered with console errors, failed
+        requests or 4xx/5xx underneath.
+      </p>
+    </Board>
+  )
+}
+
+function ImageBuildLogsBoard() {
+  return (
+    <LogBoard
+      source={{ unit: 'shotter-image.service' }}
+      title="Image build logs"
+      foot={
+        <p className={FOOT}>
+          The rebuild-time image build — layer cache makes the no-change case near-silent, so lines
+          here mean the Playwright pin moved or a fresh box paid the base pull. The runs themselves
+          do NOT log here: each run&rsquo;s log lives in its own run directory, excerpted above.
+        </p>
+      }
+      neighbours={[
+        {
+          source: { unit: 'shotter-prune.service' },
+          label: 'shotter-prune',
+          role: 'the weekly archive trim',
+          note: 'Sunday 04:20, 30 days back, at most 40 runs kept. Monitored — a failure mails the operator.',
+        },
+      ]}
+    />
   )
 }
 

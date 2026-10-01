@@ -36,10 +36,8 @@ function RunLine({ r, showFailure = false }: { r: RunRow; showFailure?: boolean 
 }
 
 export function RunsView({ d }: { d: Runs }) {
-  const t = d.totals
-  const okRate = t.runs === 0 ? null : (100 * t.ok) / Math.max(1, t.ok + t.failed)
-  const first = d.days[0]?.label ?? ''
-  const last = d.days[d.days.length - 1]?.label ?? ''
+  const f = runsFacts({ d })
+  const { t, okRate } = f
 
   return (
     <>
@@ -67,136 +65,194 @@ export function RunsView({ d }: { d: Runs }) {
       </StatStrip>
 
       <BoardGrid>
-        <Board
-          title="Runs per day"
-          icon="clock"
-          span={8}
-          aside={<span className={NOTE}>a hairline marks a day with a failure</span>}
-        >
-          <Columns points={d.days} height={92} empty="no runs in the window" />
-          <p className={AXIS}>
-            <span>{first}</span>
-            <span>runs</span>
-            <span>{last}</span>
-          </p>
-        </Board>
+        <RunsPerDayBoard f={f} />
 
-        <Board title="By event" icon="rows" span={4}>
-          <BarList
-            items={d.byEvent.map((e) => ({ label: e.label.replace(/_/g, ' '), value: e.value }))}
-            empty="nothing ran"
-          />
-          <p className={FOOT}>
-            What starts a workflow: a push, a pull request, a schedule, a tag, or a hand on "Run
-            workflow". The apps deploy through daedalus's own webhook and never appear here.
-          </p>
-        </Board>
+        <ByEventBoard f={f} />
 
-        {d.running.length > 0 && (
-          <Board
-            title="Running now"
-            icon="clock"
-            span={12}
-            aside={<Chip tone="accent">{String(d.running.length)} live</Chip>}
-          >
-            <ul className={LIST}>
-              {d.running.map((r) => (
-                <RunLine key={r.id} r={r} />
-              ))}
-            </ul>
-          </Board>
-        )}
+        <RunningNowBoard f={f} />
 
         <GrantBoard unreadable={d.unreadable} publicRepos={d.publicRepos} budget={d.budget} />
 
-        <Board
-          title="Recent runs"
-          icon="logs"
-          span={12}
-          aside={<span className={NOTE}>newest first · {num(d.recent.length)} shown</span>}
-        >
-          {d.recent.length === 0 ? (
-            <p className={FOOT}>No run the box can read in the last {String(d.windowDays)} days.</p>
-          ) : (
-            <ul className={LIST}>
-              {d.recent.map((r) => (
-                <RunLine key={r.id} r={r} />
-              ))}
-            </ul>
-          )}
-        </Board>
+        <RecentRunsBoard f={f} />
 
-        <Board
-          title="Failures"
-          icon="warn"
-          span={6}
-          aside={
-            <Chip tone={d.failures.length > 0 ? 'bad' : 'ok'}>
-              {d.failures.length === 0 ? 'none' : String(d.failures.length)}
-            </Chip>
-          }
-        >
-          {d.failures.length === 0 ? (
-            <p className={FOOT}>Nothing failed in the window.</p>
-          ) : (
-            <ul className={LIST}>
-              {d.failures.map((r) => (
-                <RunLine key={r.id} r={r} showFailure />
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            The job and the step that failed, read from the run's jobs; the link opens the run's log
-            on GitHub.
-          </p>
-        </Board>
+        <FailuresBoard f={f} />
 
-        <Board title="By workflow" icon="rows" span={6}>
-          <ul className={LIST}>
-            {d.byWorkflow.map((w) => (
-              <li key={w.label} className={ROW}>
-                <span className={ROW_MAIN}>{w.label}</span>
-                <span className={ROW_SIDE}>
-                  {num(w.runs)} runs
-                  {w.failed > 0 && <span className="text-danger"> · {num(w.failed)} failed</span>}
-                  {' · median '}
-                  {took(w.p50)}
-                </span>
-              </li>
-            ))}
-            {d.byWorkflow.length === 0 && <li className={FOOT}>no runs</li>}
-          </ul>
-        </Board>
+        <ByWorkflowBoard f={f} />
 
-        <Board title="By repository" icon="grid" span={12}>
-          <ul className={LIST}>
-            {d.byRepo.map((r) => (
-              <li key={r.repo} className={ROW}>
-                <span className={ROW_MAIN}>
-                  <Ext href={`${r.url}/actions`}>{r.repo}</Ext>
-                  <span className="ml-[0.4rem] text-muted-foreground">{r.kind}</span>
-                </span>
-                <span className={ROW_SIDE}>
-                  {r.access === 'app' || r.access === 'public' ? (
-                    <>
-                      {num(r.runs)} runs
-                      {r.total > r.runs && ` of ${num(r.total)}`}
-                      {r.failed > 0 && (
-                        <span className="text-danger"> · {num(r.failed)} failed</span>
-                      )}
-                      {' · median '}
-                      {r.p50 === null ? DASH : duration(r.p50)}
-                      {r.access === 'public' && ' · public'}
-                    </>
-                  ) : (
-                    <span className={MONO}>needs actions: read</span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Board>
+        <ByRepositoryBoard f={f} />
       </BoardGrid>
     </>
+  )
+}
+
+/** What the page's boards read. */
+function runsFacts({ d }: { d: Runs }) {
+  const t = d.totals
+  const okRate = t.runs === 0 ? null : (100 * t.ok) / Math.max(1, t.ok + t.failed)
+  const first = d.days[0]?.label ?? ''
+  const last = d.days[d.days.length - 1]?.label ?? ''
+  return { d, t, okRate, first, last }
+}
+
+type RunsFacts = NonNullable<ReturnType<typeof runsFacts>>
+
+function RunsPerDayBoard({ f }: { f: RunsFacts }) {
+  const { d, first, last } = f
+  return (
+    <Board
+      title="Runs per day"
+      icon="clock"
+      span={8}
+      aside={<span className={NOTE}>a hairline marks a day with a failure</span>}
+    >
+      <Columns points={d.days} height={92} empty="no runs in the window" />
+      <p className={AXIS}>
+        <span>{first}</span>
+        <span>runs</span>
+        <span>{last}</span>
+      </p>
+    </Board>
+  )
+}
+
+function ByEventBoard({ f }: { f: RunsFacts }) {
+  const { d } = f
+  return (
+    <Board title="By event" icon="rows" span={4}>
+      <BarList
+        items={d.byEvent.map((e) => ({ label: e.label.replace(/_/g, ' '), value: e.value }))}
+        empty="nothing ran"
+      />
+      <p className={FOOT}>
+        What starts a workflow: a push, a pull request, a schedule, a tag, or a hand on "Run
+        workflow". The apps deploy through daedalus's own webhook and never appear here.
+      </p>
+    </Board>
+  )
+}
+
+function RunningNowBoard({ f }: { f: RunsFacts }) {
+  const { d } = f
+  return (
+    d.running.length > 0 && (
+      <Board
+        title="Running now"
+        icon="clock"
+        span={12}
+        aside={<Chip tone="accent">{String(d.running.length)} live</Chip>}
+      >
+        <ul className={LIST}>
+          {d.running.map((r) => (
+            <RunLine key={r.id} r={r} />
+          ))}
+        </ul>
+      </Board>
+    )
+  )
+}
+
+function RecentRunsBoard({ f }: { f: RunsFacts }) {
+  const { d } = f
+  return (
+    <Board
+      title="Recent runs"
+      icon="logs"
+      span={12}
+      aside={<span className={NOTE}>newest first · {num(d.recent.length)} shown</span>}
+    >
+      {d.recent.length === 0 ? (
+        <p className={FOOT}>No run the box can read in the last {String(d.windowDays)} days.</p>
+      ) : (
+        <ul className={LIST}>
+          {d.recent.map((r) => (
+            <RunLine key={r.id} r={r} />
+          ))}
+        </ul>
+      )}
+    </Board>
+  )
+}
+
+function FailuresBoard({ f }: { f: RunsFacts }) {
+  const { d } = f
+  return (
+    <Board
+      title="Failures"
+      icon="warn"
+      span={6}
+      aside={
+        <Chip tone={d.failures.length > 0 ? 'bad' : 'ok'}>
+          {d.failures.length === 0 ? 'none' : String(d.failures.length)}
+        </Chip>
+      }
+    >
+      {d.failures.length === 0 ? (
+        <p className={FOOT}>Nothing failed in the window.</p>
+      ) : (
+        <ul className={LIST}>
+          {d.failures.map((r) => (
+            <RunLine key={r.id} r={r} showFailure />
+          ))}
+        </ul>
+      )}
+      <p className={FOOT}>
+        The job and the step that failed, read from the run's jobs; the link opens the run's log on
+        GitHub.
+      </p>
+    </Board>
+  )
+}
+
+function ByWorkflowBoard({ f }: { f: RunsFacts }) {
+  const { d } = f
+  return (
+    <Board title="By workflow" icon="rows" span={6}>
+      <ul className={LIST}>
+        {d.byWorkflow.map((w) => (
+          <li key={w.label} className={ROW}>
+            <span className={ROW_MAIN}>{w.label}</span>
+            <span className={ROW_SIDE}>
+              {num(w.runs)} runs
+              {w.failed > 0 && <span className="text-danger"> · {num(w.failed)} failed</span>}
+              {' · median '}
+              {took(w.p50)}
+            </span>
+          </li>
+        ))}
+        {d.byWorkflow.length === 0 && <li className={FOOT}>no runs</li>}
+      </ul>
+    </Board>
+  )
+}
+
+function ByRepositoryBoard({ f }: { f: RunsFacts }) {
+  const { d } = f
+  return (
+    <Board title="By repository" icon="grid" span={12}>
+      <ul className={LIST}>
+        {d.byRepo.map((r) => (
+          <li key={r.repo} className={ROW}>
+            <span className={ROW_MAIN}>
+              <Ext href={`${r.url}/actions`}>{r.repo}</Ext>
+              <span className="ml-[0.4rem] text-muted-foreground">{r.kind}</span>
+            </span>
+            <span className={ROW_SIDE}>
+              {r.access === 'app' || r.access === 'public' ? (
+                <>
+                  {num(r.runs)} runs
+                  {r.total > r.runs && ` of ${num(r.total)}`}
+                  {r.failed > 0 && <span className="text-danger"> · {num(r.failed)} failed</span>}
+                  {' · median '}
+                  {r.p50 === null ? DASH : duration(r.p50)}
+                  {r.access === 'public' && ' · public'}
+                </>
+              ) : (
+                <span className={MONO}>needs actions: read</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Board>
   )
 }

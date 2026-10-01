@@ -70,9 +70,8 @@ const ARR_COPY = {
 } as const
 
 export function ArrPage({ d }: { d: Wanted['sonarr'] }) {
-  const copy = ARR_COPY[d.app]
-  const { counts } = d
-  const reachable = d.version !== null
+  const f = arrFacts({ d })
+  const { copy, reachable } = f
 
   return (
     <>
@@ -97,127 +96,13 @@ export function ArrPage({ d }: { d: Wanted['sonarr'] }) {
           <HealthChecks checks={d.health} reachable={reachable} />
         </Board>
 
-        <Board title="The library" icon="grid" span={4}>
-          <Facts
-            rows={[
-              { k: copy.unit, v: num(counts.library) },
-              { k: 'Monitored', v: num(counts.monitored) },
-              { k: 'On disk', v: bytes(counts.sizeBytes) },
-              {
-                k: 'Still wanted',
-                v:
-                  (counts.wanted ?? 0) === 0 ? (
-                    num(counts.wanted)
-                  ) : (
-                    <span className="text-warning">{num(counts.wanted)}</span>
-                  ),
-              },
-            ]}
-          />
-          {d.disk.map((disk) => (
-            <div key={disk.path}>
-              <h4 className={SUB}>{disk.path}</h4>
-              <Progress
-                pct={
-                  disk.totalBytes > 0
-                    ? ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100
-                    : null
-                }
-                tone="info"
-              />
-              <p className={FOOT}>
-                {bytes(disk.freeBytes)} free of {bytes(disk.totalBytes)}
-              </p>
-            </div>
-          ))}
-        </Board>
+        <TheLibraryBoard f={f} />
 
-        <Board
-          title="Queue"
-          icon="down"
-          span={8}
-          aside={
-            <span className={NOTE}>
-              {num(counts.queued)} item{counts.queued === 1 ? '' : 's'}
-            </span>
-          }
-        >
-          {d.queue.length === 0 ? (
-            <p className={EMPTY}>
-              Nothing in the queue. Completed downloads are removed once imported.
-            </p>
-          ) : (
-            <ul className={TRANSFERS}>
-              {d.queue.map((q, i) => (
-                <li key={`${q.title}-${String(i)}`} className={TRANSFER_ROW}>
-                  <div className={TRANSFER_HEAD}>
-                    <span className={TRANSFER_NAME} title={q.title}>
-                      {q.title}
-                    </span>
-                    <span className={TRANSFER_META}>
-                      {q.pct.toFixed(0)}% of {bytes(q.sizeBytes)}
-                      {q.issue !== null && <span className="text-danger"> · {q.issue}</span>}
-                    </span>
-                  </div>
-                  <Progress
-                    pct={q.pct}
-                    tone={q.issue !== null ? 'bad' : 'accent'}
-                    active={q.issue === null && q.pct < 100}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            An item stuck at 100% with a note against it is the failure this panel exists for: the
-            download finished and the import did not, so nothing is moving and nothing is wrong
-            anywhere else.
-          </p>
-        </Board>
+        <QueueBoard f={f} />
 
-        <Board title={copy.upcoming} icon="clock" span={4}>
-          {d.upcoming.length === 0 ? (
-            <p className={EMPTY}>Nothing scheduled in the next fortnight.</p>
-          ) : (
-            <ul className={UPNEXT}>
-              {d.upcoming.map((u, i) => (
-                <li key={`${u.title}-${String(i)}`} className={UPNEXT_ROW}>
-                  <span className={UPNEXT_TITLE} title={u.sub ?? u.title}>
-                    {u.title}
-                    {u.sub !== null && <em className={UPNEXT_SUB}>{u.sub}</em>}
-                  </span>
-                  <span
-                    className={cn(UPNEXT_WHEN, u.have ? 'text-muted-foreground' : 'text-primary')}
-                  >
-                    {u.have ? 'have it' : inDays(u.inDays)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Board>
+        <Panel f={f} />
 
-        <Board title="Lately" icon="≋" span={12}>
-          {d.history.length === 0 ? (
-            <p className={EMPTY}>no recorded activity</p>
-          ) : (
-            <ul className={FEED}>
-              {d.history.map((h, i) => (
-                <li key={`${h.title}-${String(i)}`} className={FEED_ROW}>
-                  <span className={cn(FEED_EVENT, EVENT_INK[h.tone])}>{h.event}</span>
-                  <span className={FEED_TITLE} title={h.title}>
-                    {h.title}
-                  </span>
-                  <span className={FEED_WHEN}>{daysAgo(h.ageDays)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            Only failures are coloured. A grab and an import are the machine working, and colouring
-            those would bury the two events that mean somebody has to look.
-          </p>
-        </Board>
+        <LatelyBoard f={f} />
 
         <Changelog gap={d.gap} span={12} />
 
@@ -228,5 +113,155 @@ export function ArrPage({ d }: { d: Wanted['sonarr'] }) {
         />
       </BoardGrid>
     </>
+  )
+}
+
+/** What the page's boards read. */
+function arrFacts({ d }: { d: Wanted['sonarr'] }) {
+  const copy = ARR_COPY[d.app]
+  const { counts } = d
+  const reachable = d.version !== null
+  return { d, copy, counts, reachable }
+}
+
+type ArrFacts = NonNullable<ReturnType<typeof arrFacts>>
+
+function TheLibraryBoard({ f }: { f: ArrFacts }) {
+  const { d, copy, counts } = f
+  return (
+    <Board title="The library" icon="grid" span={4}>
+      <Facts
+        rows={[
+          { k: copy.unit, v: num(counts.library) },
+          { k: 'Monitored', v: num(counts.monitored) },
+          { k: 'On disk', v: bytes(counts.sizeBytes) },
+          {
+            k: 'Still wanted',
+            v:
+              (counts.wanted ?? 0) === 0 ? (
+                num(counts.wanted)
+              ) : (
+                <span className="text-warning">{num(counts.wanted)}</span>
+              ),
+          },
+        ]}
+      />
+      {d.disk.map((disk) => (
+        <div key={disk.path}>
+          <h4 className={SUB}>{disk.path}</h4>
+          <Progress
+            pct={
+              disk.totalBytes > 0
+                ? ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100
+                : null
+            }
+            tone="info"
+          />
+          <p className={FOOT}>
+            {bytes(disk.freeBytes)} free of {bytes(disk.totalBytes)}
+          </p>
+        </div>
+      ))}
+    </Board>
+  )
+}
+
+function QueueBoard({ f }: { f: ArrFacts }) {
+  const { d, counts } = f
+  return (
+    <Board
+      title="Queue"
+      icon="down"
+      span={8}
+      aside={
+        <span className={NOTE}>
+          {num(counts.queued)} item{counts.queued === 1 ? '' : 's'}
+        </span>
+      }
+    >
+      {d.queue.length === 0 ? (
+        <p className={EMPTY}>
+          Nothing in the queue. Completed downloads are removed once imported.
+        </p>
+      ) : (
+        <ul className={TRANSFERS}>
+          {d.queue.map((q, i) => (
+            <li key={`${q.title}-${String(i)}`} className={TRANSFER_ROW}>
+              <div className={TRANSFER_HEAD}>
+                <span className={TRANSFER_NAME} title={q.title}>
+                  {q.title}
+                </span>
+                <span className={TRANSFER_META}>
+                  {q.pct.toFixed(0)}% of {bytes(q.sizeBytes)}
+                  {q.issue !== null && <span className="text-danger"> · {q.issue}</span>}
+                </span>
+              </div>
+              <Progress
+                pct={q.pct}
+                tone={q.issue !== null ? 'bad' : 'accent'}
+                active={q.issue === null && q.pct < 100}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={FOOT}>
+        An item stuck at 100% with a note against it is the failure this panel exists for: the
+        download finished and the import did not, so nothing is moving and nothing is wrong anywhere
+        else.
+      </p>
+    </Board>
+  )
+}
+
+function Panel({ f }: { f: ArrFacts }) {
+  const { d, copy } = f
+  return (
+    <Board title={copy.upcoming} icon="clock" span={4}>
+      {d.upcoming.length === 0 ? (
+        <p className={EMPTY}>Nothing scheduled in the next fortnight.</p>
+      ) : (
+        <ul className={UPNEXT}>
+          {d.upcoming.map((u, i) => (
+            <li key={`${u.title}-${String(i)}`} className={UPNEXT_ROW}>
+              <span className={UPNEXT_TITLE} title={u.sub ?? u.title}>
+                {u.title}
+                {u.sub !== null && <em className={UPNEXT_SUB}>{u.sub}</em>}
+              </span>
+              <span className={cn(UPNEXT_WHEN, u.have ? 'text-muted-foreground' : 'text-primary')}>
+                {u.have ? 'have it' : inDays(u.inDays)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Board>
+  )
+}
+
+function LatelyBoard({ f }: { f: ArrFacts }) {
+  const { d } = f
+  return (
+    <Board title="Lately" icon="≋" span={12}>
+      {d.history.length === 0 ? (
+        <p className={EMPTY}>no recorded activity</p>
+      ) : (
+        <ul className={FEED}>
+          {d.history.map((h, i) => (
+            <li key={`${h.title}-${String(i)}`} className={FEED_ROW}>
+              <span className={cn(FEED_EVENT, EVENT_INK[h.tone])}>{h.event}</span>
+              <span className={FEED_TITLE} title={h.title}>
+                {h.title}
+              </span>
+              <span className={FEED_WHEN}>{daysAgo(h.ageDays)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={FOOT}>
+        Only failures are coloured. A grab and an import are the machine working, and colouring
+        those would bury the two events that mean somebody has to look.
+      </p>
+    </Board>
   )
 }

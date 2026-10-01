@@ -126,9 +126,8 @@ type Dhcp = Extract<NetworkData, { tab: 'dhcp' }>
  * to, even though FTL serves both (the manifest's `dhcp` tab says why).
  */
 export function DhcpView({ data }: { data: Dhcp }) {
-  const { dhcp, devices, admin } = data
-  const active = devices.filter((v) => v.lastSeenAgo !== null && v.lastSeenAgo < ACTIVE)
-  const unbound = devices.filter((v) => v.reserved && v.lastSeenAgo === null)
+  const f = dhcpFacts({ data })
+  const { dhcp, admin } = f
 
   return (
     <>
@@ -176,134 +175,161 @@ export function DhcpView({ data }: { data: Dhcp }) {
       />
 
       <BoardGrid>
-        <Board
-          title="The pool"
-          icon="⊞"
-          span={6}
-          aside={<Chip tone={dhcp.active ? 'ok' : 'muted'}>{dhcp.active ? 'serving' : 'off'}</Chip>}
-        >
-          <Facts
-            rows={[
-              {
-                k: 'Range',
-                v: (
-                  <span className={MONO}>
-                    {dhcp.start} – {dhcp.end}
-                  </span>
-                ),
-              },
-              { k: 'Lease', v: dhcp.leaseTime },
-              { k: 'Gateway offered', v: <span className={MONO}>{dhcp.router}</span> },
-              {
-                k: 'Fixed addresses',
-                v: dhcp.reservationsKnown ? (
-                  num(dhcp.reservations.length)
-                ) : (
-                  <span
-                    className="text-warning"
-                    title="the reservations hostsfile could not be read"
-                  >
-                    unknown
-                  </span>
-                ),
-              },
-            ]}
-          />
-          <p className={FOOT}>
-            The resolver is the DHCP server too, so addresses on this LAN are decided by this box
-            rather than by the router, which is also why the device list below can exist. Everything
-            without a reservation gets whatever is free in that range, for {dhcp.leaseTime} at a
-            time. A reservation is what lets something else on this box name a device by address,
-            which is why the fixed ones are declared in the repo's encrypted hostsfile and not
-            clicked into an admin.
-          </p>
-        </Board>
+        <ThePoolBoard f={f} />
 
-        <Board
-          title="Leases"
-          icon="⇌"
-          span={6}
-          aside={<span className={NOTE}>since FTL started</span>}
-        >
-          <Facts
-            rows={[
-              { k: 'Offers made', v: num(dhcp.counters.offers) },
-              { k: 'Accepted', v: num(dhcp.counters.acks) },
-              {
-                k: 'Declined',
-                v:
-                  dhcp.counters.declines === null ? (
-                    DASH
-                  ) : dhcp.counters.declines === 0 ? (
-                    <span className="text-success">0</span>
-                  ) : (
-                    <span className="text-warning">{num(dhcp.counters.declines)}</span>
-                  ),
-              },
-              {
-                k: 'Refused',
-                v:
-                  dhcp.counters.nak === null ? (
-                    DASH
-                  ) : dhcp.counters.nak === 0 ? (
-                    <span className="text-success">0</span>
-                  ) : (
-                    <span className="text-warning">{num(dhcp.counters.nak)}</span>
-                  ),
-              },
-            ]}
-          />
-          <p className={FOOT}>
-            Offers vastly outnumber acceptances and that is normal. A device wakes, is offered an
-            address, and often already has one it is happy with. The two to watch are the bottom
-            pair: a <b>decline</b> means a client found the address already in use, a <b>refusal</b>{' '}
-            means it asked for one this server would not give it. Both are zero on a LAN with one
-            DHCP server, and non-zero is usually a second one.
-          </p>
-        </Board>
+        <LeasesBoard f={f} />
 
-        <Board
-          title="Everything on the LAN"
-          icon="rows"
-          span={12}
-          aside={
-            <span className={NOTE}>
-              {active.length} active · {devices.length} known · {dhcp.reservations.length} fixed
-            </span>
-          }
-        >
-          <LanDevices devices={devices} />
-          <p className={FOOT}>
-            Two lists joined on the hardware address. Everything in the house resolves through this
-            box, so anything that ever asked for a name has a row here whether or not it took a
-            lease. That is what makes this more than the leases above. The <b>fixed</b> ones are the
-            reservations, and one of those with no matching device is kept and marked <b>never</b>:
-            a declared address for something that has not appeared is the only thing on this page
-            worth acting on.
-            {unbound.length > 0 &&
-              ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state. A device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
-            <b>active</b> means it looked something up in the last day.
-          </p>
-        </Board>
+        <EverythingOnTheLANBoard f={f} />
 
         {/* The same log the DNS tab shows, repeated on purpose: one process
           serves both, and a reader chasing a device should not have to know
           they share a binary to find it. No changelog here — see the note on
           the header above. */}
-        <LogBoard
-          source={{ unit: 'pihole-ftl.service' }}
-          title="pihole-FTL logs"
-          foot={
-            <p className={FOOT}>
-              Shipped out of <span className={MONO}>/var/log/pihole/FTL.log</span> rather than the
-              journal. FTL keeps its own file, and the unit&rsquo;s journal lines are
-              systemd&rsquo;s rather than its own. Every lease offered, acknowledged and declined is
-              in here by hardware address, which is the only place the counters above can be turned
-              back into &ldquo;which device&rdquo;.
-            </p>
-          }
-        />
+        <PiholeFTLLogsBoard />
       </BoardGrid>
     </>
+  )
+}
+
+/** What the page's boards read. */
+function dhcpFacts({ data }: { data: Dhcp }) {
+  const { dhcp, devices, admin } = data
+  const active = devices.filter((v) => v.lastSeenAgo !== null && v.lastSeenAgo < ACTIVE)
+  const unbound = devices.filter((v) => v.reserved && v.lastSeenAgo === null)
+  return { data, dhcp, devices, admin, active, unbound }
+}
+
+type DhcpFacts = NonNullable<ReturnType<typeof dhcpFacts>>
+
+function ThePoolBoard({ f }: { f: DhcpFacts }) {
+  const { dhcp } = f
+  return (
+    <Board
+      title="The pool"
+      icon="⊞"
+      span={6}
+      aside={<Chip tone={dhcp.active ? 'ok' : 'muted'}>{dhcp.active ? 'serving' : 'off'}</Chip>}
+    >
+      <Facts
+        rows={[
+          {
+            k: 'Range',
+            v: (
+              <span className={MONO}>
+                {dhcp.start} – {dhcp.end}
+              </span>
+            ),
+          },
+          { k: 'Lease', v: dhcp.leaseTime },
+          { k: 'Gateway offered', v: <span className={MONO}>{dhcp.router}</span> },
+          {
+            k: 'Fixed addresses',
+            v: dhcp.reservationsKnown ? (
+              num(dhcp.reservations.length)
+            ) : (
+              <span className="text-warning" title="the reservations hostsfile could not be read">
+                unknown
+              </span>
+            ),
+          },
+        ]}
+      />
+      <p className={FOOT}>
+        The resolver is the DHCP server too, so addresses on this LAN are decided by this box rather
+        than by the router, which is also why the device list below can exist. Everything without a
+        reservation gets whatever is free in that range, for {dhcp.leaseTime} at a time. A
+        reservation is what lets something else on this box name a device by address, which is why
+        the fixed ones are declared in the repo's encrypted hostsfile and not clicked into an admin.
+      </p>
+    </Board>
+  )
+}
+
+function LeasesBoard({ f }: { f: DhcpFacts }) {
+  const { dhcp } = f
+  return (
+    <Board title="Leases" icon="⇌" span={6} aside={<span className={NOTE}>since FTL started</span>}>
+      <Facts
+        rows={[
+          { k: 'Offers made', v: num(dhcp.counters.offers) },
+          { k: 'Accepted', v: num(dhcp.counters.acks) },
+          {
+            k: 'Declined',
+            v:
+              dhcp.counters.declines === null ? (
+                DASH
+              ) : dhcp.counters.declines === 0 ? (
+                <span className="text-success">0</span>
+              ) : (
+                <span className="text-warning">{num(dhcp.counters.declines)}</span>
+              ),
+          },
+          {
+            k: 'Refused',
+            v:
+              dhcp.counters.nak === null ? (
+                DASH
+              ) : dhcp.counters.nak === 0 ? (
+                <span className="text-success">0</span>
+              ) : (
+                <span className="text-warning">{num(dhcp.counters.nak)}</span>
+              ),
+          },
+        ]}
+      />
+      <p className={FOOT}>
+        Offers vastly outnumber acceptances and that is normal. A device wakes, is offered an
+        address, and often already has one it is happy with. The two to watch are the bottom pair: a{' '}
+        <b>decline</b> means a client found the address already in use, a <b>refusal</b> means it
+        asked for one this server would not give it. Both are zero on a LAN with one DHCP server,
+        and non-zero is usually a second one.
+      </p>
+    </Board>
+  )
+}
+
+function EverythingOnTheLANBoard({ f }: { f: DhcpFacts }) {
+  const { dhcp, devices, active, unbound } = f
+  return (
+    <Board
+      title="Everything on the LAN"
+      icon="rows"
+      span={12}
+      aside={
+        <span className={NOTE}>
+          {active.length} active · {devices.length} known · {dhcp.reservations.length} fixed
+        </span>
+      }
+    >
+      <LanDevices devices={devices} />
+      <p className={FOOT}>
+        Two lists joined on the hardware address. Everything in the house resolves through this box,
+        so anything that ever asked for a name has a row here whether or not it took a lease. That
+        is what makes this more than the leases above. The <b>fixed</b> ones are the reservations,
+        and one of those with no matching device is kept and marked <b>never</b>: a declared address
+        for something that has not appeared is the only thing on this page worth acting on.
+        {unbound.length > 0 &&
+          ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state. A device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
+        <b>active</b> means it looked something up in the last day.
+      </p>
+    </Board>
+  )
+}
+
+function PiholeFTLLogsBoard() {
+  return (
+    <LogBoard
+      source={{ unit: 'pihole-ftl.service' }}
+      title="pihole-FTL logs"
+      foot={
+        <p className={FOOT}>
+          Shipped out of <span className={MONO}>/var/log/pihole/FTL.log</span> rather than the
+          journal. FTL keeps its own file, and the unit&rsquo;s journal lines are systemd&rsquo;s
+          rather than its own. Every lease offered, acknowledged and declined is in here by hardware
+          address, which is the only place the counters above can be turned back into &ldquo;which
+          device&rdquo;.
+        </p>
+      }
+    />
   )
 }
