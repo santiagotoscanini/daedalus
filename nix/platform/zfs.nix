@@ -136,96 +136,100 @@ in
     };
   };
 
-  # On only for a host with a dataset table — a ZFS box lists at least its
-  # pools there. A host without one (ext4, or a root pool it leaves untuned)
-  # gets no scrub, trim, snapshots or converge; a zfs `fileSystems` entry still
-  # brings the kernel module on its own.
-  config = lib.mkIf (datasets != { }) {
-    boot.supportedFilesystems = [ "zfs" ];
-
-    boot.zfs = {
-      # Stable by-id paths survive kernel drive renames.
-      devNodes = "/dev/disk/by-id";
-      # The pool carries this host's hostid — force-import would defeat
-      # ZFS's split-brain guard.
-      forceImportRoot = false;
-    };
-
-    # The ARC cap is the host's call (fleet.zfs.arcMaxBytes): it depends on
-    # how much RAM the box has and what else wants it.
-    boot.extraModprobeConfig = lib.mkIf (
-      cfg.arcMaxBytes != null
-    ) "options zfs zfs_arc_max=${toString cfg.arcMaxBytes}";
-
-    # Install-time mounts stay in hardware-configuration.nix.
-    fileSystems = lib.mapAttrs' (
-      ds: v:
-      lib.nameValuePair v.mount (
-        {
-          device = ds;
-          fsType = "zfs";
-        }
-        // lib.optionalAttrs (v.mountOptions != [ ]) { options = v.mountOptions; }
-      )
-    ) toMount;
-
-    # Dead-man's-switch pings only (email = false): a MISSED run is the
-    # failure mode that matters for snapshots/scrub; a run that fails
-    # loudly already lands in the failed-units alert.
-    fleet.monitoredJobs = {
-      zfs-snapshot-daily = {
-        slug = "zfs-snapshot-daily";
-        email = false;
+  config = lib.mkMerge [
+    {
+      # Import behaviour, for any host whose filesystems bring ZFS in (inert
+      # on one without): stable by-id paths survive kernel drive renames, and
+      # the pool carries this host's hostid — force-import would defeat ZFS's
+      # split-brain guard.
+      boot.zfs = {
+        devNodes = "/dev/disk/by-id";
+        forceImportRoot = false;
       };
-      zfs-scrub = {
-        slug = "zfs-scrub";
-        email = false;
+    }
+
+    # The rest only for a host with a dataset table — a ZFS box lists at
+    # least its pools there. A host without one (ext4, or a root pool it
+    # leaves untuned) gets no scrub, trim, snapshots or converge.
+    (lib.mkIf (datasets != { }) {
+      boot.supportedFilesystems = [ "zfs" ];
+
+      # The ARC cap is the host's call (fleet.zfs.arcMaxBytes): it depends on
+      # how much RAM the box has and what else wants it.
+      boot.extraModprobeConfig = lib.mkIf (
+        cfg.arcMaxBytes != null
+      ) "options zfs zfs_arc_max=${toString cfg.arcMaxBytes}";
+
+      # Install-time mounts stay in hardware-configuration.nix.
+      fileSystems = lib.mapAttrs' (
+        ds: v:
+        lib.nameValuePair v.mount (
+          {
+            device = ds;
+            fsType = "zfs";
+          }
+          // lib.optionalAttrs (v.mountOptions != [ ]) { options = v.mountOptions; }
+        )
+      ) toMount;
+
+      # Dead-man's-switch pings only (email = false): a MISSED run is the
+      # failure mode that matters for snapshots/scrub; a run that fails
+      # loudly already lands in the failed-units alert.
+      fleet.monitoredJobs = {
+        zfs-snapshot-daily = {
+          slug = "zfs-snapshot-daily";
+          email = false;
+        };
+        zfs-scrub = {
+          slug = "zfs-scrub";
+          email = false;
+        };
       };
-    };
 
-    services.zfs = {
-      autoScrub.enable = true; # monthly — catches bit-rot
-      trim.enable = true; # no-op on pools of spinning disks
+      services.zfs = {
+        autoScrub.enable = true; # monthly — catches bit-rot
+        trim.enable = true; # no-op on pools of spinning disks
 
-      autoSnapshot = {
-        enable = true;
-        flags = "-k -p --utc";
-        frequent = 4; # last hour
-        hourly = 24; # last day
-        daily = 7; # last week
-        weekly = 4; # last month
-        monthly = 0; # off-site backup territory
+        autoSnapshot = {
+          enable = true;
+          flags = "-k -p --utc";
+          frequent = 4; # last hour
+          hourly = 24; # last day
+          daily = 7; # last week
+          weekly = 4; # last month
+          monthly = 0; # off-site backup territory
+        };
       };
-    };
 
-    # monthly = 0 still generates an active timer whose service is a
-    # no-op (and no monthly snapshots exist to prune) — keep it out of
-    # list-timers and the log sweep.
-    systemd.timers.zfs-snapshot-monthly.enable = false;
+      # monthly = 0 still generates an active timer whose service is a
+      # no-op (and no monthly snapshots exist to prune) — keep it out of
+      # list-timers and the log sweep.
+      systemd.timers.zfs-snapshot-monthly.enable = false;
 
-    # Quiet no-op when properties match; logs `set:` on actual changes.
-    # wantedBy (not requiredBy): a failed converge must never block the
-    # data mounts — and with them most of the container fleet. Ordering
-    # via `before` still guarantees properties apply first when it runs;
-    # a failure surfaces through its monitoredJobs mail (below) + the
-    # failed-units alert.
-    systemd.services.zfs-converge = {
-      description = "Converge ZFS dataset properties";
-      # zfs-import.target covers every imported pool (the root pool is imported in
-      # initrd and has no per-pool import unit).
-      after = [ "zfs-import.target" ];
-      wants = [ "zfs-import.target" ];
-      before = mountUnits;
-      wantedBy = mountUnits;
-      unitConfig.DefaultDependencies = false;
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = convergeScript;
+      # Quiet no-op when properties match; logs `set:` on actual changes.
+      # wantedBy (not requiredBy): a failed converge must never block the
+      # data mounts — and with them most of the container fleet. Ordering
+      # via `before` still guarantees properties apply first when it runs;
+      # a failure surfaces through its monitoredJobs mail (below) + the
+      # failed-units alert.
+      systemd.services.zfs-converge = {
+        description = "Converge ZFS dataset properties";
+        # zfs-import.target covers every imported pool (the root pool is imported in
+        # initrd and has no per-pool import unit).
+        after = [ "zfs-import.target" ];
+        wants = [ "zfs-import.target" ];
+        before = mountUnits;
+        wantedBy = mountUnits;
+        unitConfig.DefaultDependencies = false;
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = convergeScript;
+        };
       };
-    };
 
-    # A silently-failed converge would leave declared properties drifted.
-    fleet.monitoredJobs.zfs-converge = { };
-  };
+      # A silently-failed converge would leave declared properties drifted.
+      fleet.monitoredJobs.zfs-converge = { };
+    })
+  ];
 }
