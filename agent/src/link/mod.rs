@@ -129,8 +129,8 @@ impl LinkKeys {
 /// Where the link's keys are read from: config.toml, and — on a system that
 /// logs in rather than pairs — the tunnel config a log-in writes beside the
 /// pin. A Mac joins the box by logging in from its menu bar alone
-/// (enroll.rs): a pin WITHOUT a tunnel config — an older agent's `pair`, a
-/// log-out cut short — is a Mac logged out, and the link dials nobody.
+/// (enroll.rs): a pin WITHOUT a tunnel config — a log-out cut short — is
+/// a Mac logged out, and the link dials nobody.
 /// Other systems pair, and a pin is all they need.
 ///
 /// The files are named, never assumed: a test (on any system) reads its

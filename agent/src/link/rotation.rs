@@ -10,7 +10,7 @@
 //! **While both exist** the listener presents, per connection, the key the
 //! machine pins: a machine names it in the TLS server name
 //! (tls.rs `server_name_for`), so one that re-pinned gets the new key and
-//! every other — an older agent, a machine that was away — the old one. Which key a
+//! every other — a machine that was away — the old one. Which key a
 //! connection got is decided ONCE, in its handshake, from a snapshot of
 //! the keys taken as it was accepted (`Snapshot`, `ConnResolver`), so a
 //! retirement mid-handshake can neither mislabel nor strand it. Every

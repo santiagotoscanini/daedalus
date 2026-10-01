@@ -47,9 +47,7 @@ impl Identity {
         if path.exists() {
             // A key someone else could have planted is not this machine's.
             crate::private::check_owner(path)?;
-            // And one others could read is not a secret (T4): refused on
-            // unix; on Windows, where an older agent left it under the data
-            // directory's inherited grants, made private first.
+            // And one others could read is not a secret (T4): refused.
             crate::os::ensure_private(path)?;
             let sealed =
                 std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;

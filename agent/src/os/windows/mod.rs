@@ -31,7 +31,7 @@ mod telemetry;
 #[cfg(feature = "tray")]
 pub mod tray;
 
-pub use acl::{create_private, ensure_private, file_owner, protect_data_dir, secure_data_dir};
+pub use acl::{create_private, ensure_private, file_owner, protect_data_dir};
 pub use dns::srv_lookup;
 pub use dpapi::{seal, unseal};
 pub use facts::{cpu_name, memory_bytes, os_name, os_version};

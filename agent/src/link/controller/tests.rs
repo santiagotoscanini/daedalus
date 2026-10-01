@@ -1232,7 +1232,7 @@ fn the_api_steers_the_machines_through_the_socket() {
     // Approved: the policy reaches the machine without a reconnect.
     let set = serde_json::json!({"id":7,"m":"nodes.set_desired","p":{"nodes":[
         {"id": n, "public_key": nid.public_key_hex(), "state":"approved", "name":"Gaming PC",
-         "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"/work"}}]}});
+         "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"/work","santree":false}}]}});
     let ok = call(set.to_string());
     assert_eq!(ok["ok"]["approved"], serde_json::json!([n]));
     wait_for("the policy", 5, || shared.policy() == claude_policy());
@@ -1688,7 +1688,7 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
 }
 
 /// macOS's rule, run on every system: a Mac with a pin and an address but
-/// no tunnel config (an older agent's `pair`, a log-out cut short) is
+/// no tunnel config (a log-out cut short) is
 /// logged out and dials nobody; its log-in (enroll.rs: the tunnel config,
 /// then the keys, then a reload) has it dial the box at once.
 #[test]

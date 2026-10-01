@@ -162,8 +162,7 @@ pub fn install(cfg: &Config) -> Result<()> {
 
 /// `daedalus-agent install`, run as root from inside a Daedalus Agent.app:
 /// that bundle copied, sealed and checked in the slot's stage, then put in
-/// place (bundle.rs); the 0.23 layout's `bin/` removed; the terminal's
-/// link, the config, the operator's record, both jobs written and started.
+/// place (bundle.rs); the terminal's link, the config, the operator's record, both jobs written and started.
 /// Idempotent: from the installed bundle itself nothing is copied, and the
 /// jobs are rewritten and restarted. config.toml is left as it is.
 pub fn install_with(cfg: &Config, opts: &Options) -> Result<()> {
@@ -228,7 +227,6 @@ pub fn install_with(cfg: &Config, opts: &Options) -> Result<()> {
     if state.probation.take().is_some() {
         state.save();
     }
-    retire_bin_layout();
     link_cli();
 
     std::fs::create_dir_all(paths::log_dir()).context("creating the log directory")?;
@@ -338,18 +336,6 @@ fn ensure_home() -> Result<()> {
         .with_context(|| format!("setting {}'s mode", home.display()))
 }
 
-/// 0.23 and older ran from `bin/` beside the data: gone once the bundle
-/// is in place (its jobs were booted out and are rewritten).
-fn retire_bin_layout() {
-    let bin = bundle::home().join("bin");
-    if bin.exists() {
-        match crate::update::remove(&bin) {
-            Ok(()) => println!("removed {} (the layout before the app)", bin.display()),
-            Err(e) => println!("{e:#}"),
-        }
-    }
-}
-
 /// `daedalus-agent` in /usr/local/bin, a link to the canonical service.
 fn link_cli() {
     let target = bundle::service_exe(&bundle::canonical());
@@ -369,8 +355,8 @@ fn link_cli() {
     }
 }
 
-/// Whether the terminal's link is ours: it names something in the bundle
-/// or the old `bin/`.
+/// Whether the terminal's link is ours: it names something in the bundle's
+/// home.
 fn cli_link_is_ours() -> bool {
     std::fs::read_link(CLI_LINK).is_ok_and(|t| t.starts_with(bundle::home()))
 }
@@ -419,11 +405,7 @@ pub fn uninstall_app() -> Result<()> {
         let _ = std::fs::remove_file(CLI_LINK);
     }
     let slot = bundle::slot();
-    for p in [
-        slot.live.clone(),
-        slot.work.clone(),
-        bundle::home().join("bin"),
-    ] {
+    for p in [slot.live.clone(), slot.work.clone()] {
         crate::update::remove(&p)?;
     }
     let dragged = Path::new(bundle::APPLICATIONS_COPY);

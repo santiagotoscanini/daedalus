@@ -451,14 +451,14 @@ elsewhere; one that is not is refused, and `install` refuses a data
 directory or config someone else made. Every file the agent writes is
 written whole or not at all, to a temporary that did not exist before —
 never through a planted link — then renamed (`util::write_atomic`). The key
-is its owner's alone: 0600 on unix, where a key readable by others is
-refused; on Windows an explicit protected DACL, SYSTEM and Administrators
-only, set as the file is created. On Windows `install` gives the data
+is its owner's alone: 0600 on unix, an explicit protected DACL, SYSTEM
+and Administrators only, on Windows — set as the file is created, and a
+key open to anyone else is refused. On Windows `install` gives the data
 directory a protected DACL — SYSTEM and Administrators full control, Users
 read and execute (the tray reads the kept policy) — cutting inheritance
 from ProgramData; the key, `config.toml`, `agent.lock` and the service's
-`logs\` are SYSTEM's and Administrators' alone, re-applied at every start
-of the service, which also removes what a user left in `logs\`. The tray
+`logs\` are SYSTEM's and Administrators' alone, and what a user left in
+`logs\` before is removed. The tray
 and the session log under the user's own `%LOCALAPPDATA%`.
 
 **Enrollment.** A key the app has not approved is held PENDING: the
@@ -693,10 +693,7 @@ to the controller carries none of it.
   `session.json` on Linux) — and nobody else. Not the console user: a
   connection here is a shell as the operator on the box (who has NOPASSWD
   sudo), so it must not follow whoever sits at the machine; another account
-  gets `forbidden`. With no user recorded — a Mac that updated itself from
-  before 0.22, since only `install` records one — the operator is refused
-  too, and the `forbidden` line says so and to run `sudo daedalus-agent
-  install` from their account. Every process of that user may use it, as they may use
+  gets `forbidden`. Every process of that user may use it, as they may use
   that user's ssh keys. The socket is 0666 in the service's 0711 `run/`,
   the kernel's peer check the gate; santree checks the other end is root's.
 - **The first line** is the agent's, in its envelope, before santree writes

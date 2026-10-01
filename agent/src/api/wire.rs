@@ -353,10 +353,7 @@ pub struct DesiredPolicy {
     #[serde(default)]
     #[cfg_attr(test, ts(as = "Option<DesiredProviders>", optional))]
     pub providers: DesiredProviders,
-    /// santree on this machine may open its projects on the box. Absent is
-    /// off, so a set from an app that predates it is still exact.
-    #[serde(default)]
-    #[cfg_attr(test, ts(as = "Option<bool>", optional))]
+    /// santree on this machine may open its projects on the box.
     pub santree: bool,
 }
 
@@ -1110,7 +1107,7 @@ mod tests {
 
         let set: SetDesired = serde_json::from_value(json!({"nodes":[
             {"id":"0123456789abcdef","public_key":"ab","state":"approved",
-             "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p",
+             "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p","santree":false,
                        "providers":{"lemonade":{"port":8000,"offer":true}}},
              "name":"Gaming PC"},
             {"id":"fedcba9876543210","public_key":"cd","state":"revoked"}
@@ -1139,7 +1136,7 @@ mod tests {
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved","name":7}]}),
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved","extra":1}]}),
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved",
-                             "policy":{"awake_hold":true,"claude_remote_control":true,"shell":"x"}}]}),
+                             "policy":{"awake_hold":true,"claude_remote_control":true,"santree":false,"shell":"x"}}]}),
             json!({"nodes":[],"more":1}),
         ] {
             assert!(
@@ -1508,13 +1505,11 @@ mod tests {
     #[test]
     fn santree_in_the_desired_set_and_the_status_on_the_wire() {
         let entry = |policy: Value| json!({"nodes":[{"id":"0123456789abcdef","public_key":"ab","state":"approved","policy":policy}]});
-        // Absent is off: the set an app that predates it sends is exact.
-        let set: SetDesired = serde_json::from_value(entry(
+        // Required: a set that leaves it out is refused.
+        assert!(serde_json::from_value::<SetDesired>(entry(
             json!({"awake_hold":true,"claude_remote_control":true}),
         ))
-        .unwrap();
-        let p = set.nodes[0].policy.clone().unwrap();
-        assert!(!p.santree);
+        .is_err());
         let set: SetDesired = serde_json::from_value(entry(
             json!({"awake_hold":true,"claude_remote_control":true,"santree":true}),
         ))

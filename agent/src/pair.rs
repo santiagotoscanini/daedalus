@@ -355,7 +355,7 @@ mod tests {
             config: path.clone(),
             login: Some(tunnel.clone()),
         };
-        // A pin an older agent's `pair` left, and no log-in: logged out,
+        // A pin and no log-in: logged out,
         // and the link is handed no keys at all.
         Pairing::new(&fp(3), Some("box.lan:7788"))
             .unwrap()

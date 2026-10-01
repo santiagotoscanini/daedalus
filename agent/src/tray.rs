@@ -307,7 +307,7 @@ pub fn header(
     if claude_wanted && !matches!(claude.state.as_str(), "running" | "starting") {
         return h(Dot::Amber, "Claude remote control is not running");
     }
-    if p.settings.as_ref().is_some_and(|s| !s.failed.is_empty()) {
+    if !p.settings.failed.is_empty() {
         return h(Dot::Amber, "A setting was not applied");
     }
     h(Dot::Green, &format!("{DISPLAY_NAME} is connected"))
@@ -1058,7 +1058,7 @@ impl Ui {
         }
 
         // The switches.
-        let settings = page.and_then(|p| p.settings.clone());
+        let settings = page.map(|p| p.settings.clone());
         let may = settings.as_ref().is_some_and(may_change_here);
         let set_switch = |item: &CheckMenuItem, key: Key| match &settings {
             Some(s) => {
@@ -1079,7 +1079,6 @@ impl Ui {
         set_switch(&self.santree, Key::Santree);
         self.note.set_text(match &settings {
             Some(s) => switches_note(s, may),
-            None if page.is_some() => "Restart the service to change these here".into(),
             None => "—".into(),
         });
         self.settings = settings;
@@ -1632,14 +1631,14 @@ mod tests {
                     ..Default::default()
                 }),
             }),
-            settings: Some(View {
+            settings: View {
                 linked: true,
                 awake_hold: true,
                 claude_remote_control: true,
                 operator_uid: Some(501),
                 operator: Some("santiago".into()),
                 ..Default::default()
-            }),
+            },
             ..Page::default()
         }
     }
@@ -1753,7 +1752,7 @@ mod tests {
         );
         assert_eq!(h(Some(&ok), false, &exited, false).0, Dot::Green);
         let mut failed = linked_page();
-        failed.settings.as_mut().unwrap().failed = vec![FailedView {
+        failed.settings.failed = vec![FailedView {
             key: Key::AwakeHold,
             want: false,
             why: "Daedalus did not apply it".into(),
@@ -1766,7 +1765,7 @@ mod tests {
 
     #[test]
     fn a_switch_shows_the_box_s_value_or_the_one_on_its_way() {
-        let base = linked_page().settings.unwrap();
+        let base = linked_page().settings;
         let sw = switch(Key::AwakeHold, &base, true);
         assert_eq!(
             sw,

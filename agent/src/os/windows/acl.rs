@@ -7,8 +7,8 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{LocalFree, ERROR_SUCCESS, HLOCAL};
 use windows::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
 use windows::Win32::Security::{
-    IsWellKnownSid, WinBuiltinAdministratorsSid, WinLocalSystemSid, OWNER_SECURITY_INFORMATION,
-    PSECURITY_DESCRIPTOR, PSID,
+    IsWellKnownSid, WinBuiltinAdministratorsSid, WinLocalSystemSid, DACL_SECURITY_INFORMATION,
+    OBJECT_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
 };
 
 use crate::private::Owner;
@@ -76,21 +76,13 @@ fn system32(exe: &str) -> std::path::PathBuf {
         .join(exe)
 }
 
-/// Give the data directory its DACL at install (`private::windows_data_dir_acl`).
+/// Give the data directory its DACL at install (`private::windows_data_dir_acl`),
+/// and remove whatever a user left in `logs\` while ProgramData's grants
+/// let them — a link or a file planted where the service opens a log by
+/// name (audit D2).
 pub fn protect_data_dir(dir: &Path) -> Result<()> {
     std::fs::create_dir_all(dir.join("logs")).context("creating the logs directory")?;
     icacls(crate::private::windows_data_dir_acl(dir))?;
-    clear_planted(&dir.join("logs"));
-    Ok(())
-}
-
-/// At every start of the service: the secrets and `logs\` SYSTEM's and
-/// Administrators' alone (`private::windows_private_acl`), and whatever a
-/// user left in `logs\` while it was theirs removed — a link or a file
-/// planted where the service opens a log by name (audit D2).
-pub fn secure_data_dir(dir: &Path) -> Result<()> {
-    std::fs::create_dir_all(dir.join("logs")).context("creating the logs directory")?;
-    icacls(crate::private::windows_private_acl(dir))?;
     clear_planted(&dir.join("logs"));
     Ok(())
 }
@@ -191,42 +183,75 @@ pub fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
     Ok(unsafe { std::fs::File::from_raw_handle(h.0 as RawHandle) })
 }
 
-/// Give an existing file the private ACL (SYSTEM and Administrators only,
-/// inheritance cut): what a secret an earlier agent wrote under the data
-/// directory's inherited grants needs before it is trusted again.
+/// A secret file is SYSTEM's and Administrators' alone: refused when its
+/// DACL lets anyone else in or inherits from its directory
+/// (`private::sddl_is_private`), and when it is not a regular file.
 pub fn ensure_private(path: &Path) -> Result<()> {
-    use windows::core::BOOL;
-    use windows::Win32::Security::Authorization::SetNamedSecurityInfoW;
-    use windows::Win32::Security::{
-        GetSecurityDescriptorDacl, ACL, DACL_SECURITY_INFORMATION,
-        PROTECTED_DACL_SECURITY_INFORMATION,
+    let m =
+        std::fs::symlink_metadata(path).with_context(|| format!("reading {}", path.display()))?;
+    if !m.file_type().is_file() {
+        bail!("{} is not a regular file; refusing it", path.display());
+    }
+    let sddl = sddl_of(path, DACL_SECURITY_INFORMATION)?;
+    if !crate::private::sddl_is_private(&sddl) {
+        bail!(
+            "{} is open beyond SYSTEM and Administrators ({sddl}); a key others could read is \
+             not a secret — refusing it (delete it for a new identity)",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+/// The parts `info` names of a file's security descriptor, in SDDL.
+fn sddl_of(path: &Path, info: OBJECT_SECURITY_INFORMATION) -> Result<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Security::Authorization::{
+        ConvertSecurityDescriptorToStringSecurityDescriptorW, SDDL_REVISION_1,
     };
-    let sd = Descriptor::of(PRIVATE_SDDL)?;
-    let (mut present, mut defaulted) = (BOOL(0), BOOL(0));
-    let mut dacl: *mut ACL = std::ptr::null_mut();
-    // SAFETY: `sd` is a valid descriptor; `dacl` points into it and is
-    // used while `sd` lives.
-    unsafe { GetSecurityDescriptorDacl(sd.0, &mut present, &mut dacl, &mut defaulted) }
-        .context("reading the private ACL")?;
     let name = wide(path);
-    // SAFETY: a NUL-terminated name; the ACL outlives the call.
+    let mut sd = PSECURITY_DESCRIPTOR::default();
+    // SAFETY: a NUL-terminated name; the descriptor the call allocates is
+    // freed below.
     let err = unsafe {
-        SetNamedSecurityInfoW(
+        GetNamedSecurityInfoW(
             PCWSTR(name.as_ptr()),
             SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            info,
             None,
             None,
-            Some(dacl),
             None,
+            None,
+            &mut sd,
         )
     };
     if err != ERROR_SUCCESS {
         bail!(
-            "making {} private (SYSTEM and Administrators only): error {}",
+            "reading the security of {}: error {}",
             path.display(),
             err.0
         );
     }
-    Ok(())
+    let mut text = PWSTR::null();
+    // SAFETY: `sd` is the valid descriptor read above; the string the call
+    // allocates is read, then freed.
+    let converted = unsafe {
+        ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            sd,
+            SDDL_REVISION_1,
+            info,
+            &mut text,
+            None,
+        )
+    };
+    let out = converted.map(|()| unsafe { text.to_string() });
+    // SAFETY: both were allocated by the calls above for the caller.
+    unsafe {
+        let _ = LocalFree(Some(HLOCAL(sd.0)));
+        if !text.is_null() {
+            let _ = LocalFree(Some(HLOCAL(text.0.cast())));
+        }
+    }
+    out.with_context(|| format!("reading the security of {}", path.display()))?
+        .with_context(|| format!("the security of {} is not text", path.display()))
 }

@@ -32,8 +32,8 @@ pub mod tray;
 pub use super::unix::{
     claude_holder, connect_local, create_private, ensure_private, file_owner, hide_console,
     isolate, kill_tree, local_socket_path, lock_exclusive, mark_executable, monotonic_usec,
-    on_interrupt, own_uid, pid_alive, seal, secure_data_dir, serve_api_socket, serve_local, unseal,
-    LocalSocket, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
+    on_interrupt, own_uid, pid_alive, seal, serve_api_socket, serve_local, unseal, LocalSocket,
+    CLAUDE_CLI_NAMES, CONFIG_ACCESS,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;
@@ -129,8 +129,7 @@ pub fn operator_allowed() -> crate::door::Allowed {
     crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
 }
 
-/// The installing user, when one is recorded: an agent that updated
-/// itself from before 0.22 has none until `install` runs again.
+/// The installing user, when `install` recorded one.
 pub fn operator_uid() -> Option<u32> {
     launchd::installer_uid()
 }

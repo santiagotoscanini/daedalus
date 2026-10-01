@@ -1191,9 +1191,7 @@ impl Registry {
         if !offers {
             return Err(ApiError::new(
                 code::UNSUPPORTED,
-                format!(
-                    "machine {id} does not offer `{capability}` (an older agent, or {without})"
-                ),
+                format!("machine {id} does not offer `{capability}` ({without})"),
             ));
         }
         let req = self.next_request.fetch_add(1, Ordering::Relaxed);

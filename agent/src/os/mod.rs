@@ -76,10 +76,7 @@ pub use imp::{converge_plan, os_uptime_secs, requests_report, Hold};
 // the status page's port
 pub use imp::port_holder;
 // identity
-pub use imp::{
-    create_private, ensure_private, file_owner, own_uid, seal, secure_data_dir, unseal,
-    CONFIG_ACCESS,
-};
+pub use imp::{create_private, ensure_private, file_owner, own_uid, seal, unseal, CONFIG_ACCESS};
 // update
 pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 // processes, a single-instance lock, the monotonic clock

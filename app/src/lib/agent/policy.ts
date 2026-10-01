@@ -50,8 +50,7 @@ export function wirePolicy(p: NodePolicy): DesiredPolicy {
     awake_hold: e.awakeHold,
     claude_remote_control: e.claudeRemoteControl,
     ...(e.claudeWorkdir === null ? {} : { claude_workdir: e.claudeWorkdir }),
-    // Only when on: absent is off (wire.rs `DesiredPolicy`).
-    ...(e.santree ? { santree: true } : {}),
+    santree: e.santree,
     // Where each provider listens, so the agent reads the right port; and
     // whether the gateway is offered it, which the controller keeps for
     // `/nodes/metrics` (the "Model Server Down" alert fires on offered ones).

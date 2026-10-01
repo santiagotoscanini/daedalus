@@ -6,6 +6,7 @@ describe('the policy a machine hears', () => {
     expect(wirePolicy({})).toEqual({
       awake_hold: true,
       claude_remote_control: true,
+      santree: false,
       providers: { lemonade: { port: 13305, offer: false } },
     })
   })
@@ -24,14 +25,15 @@ describe('the policy a machine hears', () => {
       awake_hold: false,
       claude_remote_control: false,
       claude_workdir: 'C:/work',
+      santree: false,
       providers: { lemonade: { port: 9000, offer: true } },
     })
   })
 
-  it('sends santree only when it is on', () => {
+  it('always sends santree, off unless the policy turns it on', () => {
     expect(effectivePolicy({}).santree).toBe(false)
-    expect('santree' in wirePolicy({})).toBe(false)
-    expect('santree' in wirePolicy({ santree: false })).toBe(false)
+    expect(wirePolicy({}).santree).toBe(false)
+    expect(wirePolicy({ santree: false }).santree).toBe(false)
     expect(wirePolicy({ santree: true }).santree).toBe(true)
   })
 

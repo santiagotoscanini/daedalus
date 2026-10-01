@@ -214,28 +214,9 @@ fn the_installer_is_served_and_the_console_user_is_not() {
     assert!(!peer_allowed(Some(&Peer::Uid(502)), &allowed));
     assert!(!peer_allowed(None, &allowed));
     assert_eq!(
-        refusal(Some(&Peer::Uid(502)), true),
+        refusal(Some(&Peer::Uid(502))),
         "{\"id\":null,\"err\":{\"code\":\"forbidden\",\"msg\":\"uid 502 may not use santree's socket \
          (root and the user who installed the agent may)\"}}\n"
-    );
-}
-
-/// Review S7: a Mac that updated itself to 0.22 has no installer record,
-/// so the operator's santree is refused; the refusal says how to fix it.
-#[test]
-fn without_an_installer_record_the_refusal_says_what_to_run() {
-    let line = refusal(Some(&Peer::Uid(501)), false);
-    let v: serde_json::Value = serde_json::from_str(&line).unwrap();
-    assert_eq!(v["err"]["code"], "forbidden");
-    let msg = v["err"]["msg"].as_str().unwrap();
-    assert!(
-        msg.starts_with("uid 501 may not use santree's socket"),
-        "{msg}"
-    );
-    assert!(msg.contains("no installing user is recorded"), "{msg}");
-    assert!(
-        msg.contains("run `sudo daedalus-agent install` from your account"),
-        "{msg}"
     );
 }
 

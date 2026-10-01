@@ -109,10 +109,11 @@ describe('the desired set', () => {
     })
     // No display name, no name: the controller labels it by its hostname.
     expect(byId.get(nodeIdOf(KEY_C))).not.toHaveProperty('name')
-    // The agent's defaults for an empty policy; no workdir or santree key at all.
+    // The agent's defaults for an empty policy; no workdir key at all.
     expect(byId.get(nodeIdOf(KEY_C))?.policy).toEqual({
       awake_hold: true,
       claude_remote_control: true,
+      santree: false,
       providers: { lemonade: { port: 13305, offer: false } },
     })
     // Sorted by id, so the same table sends the same set.

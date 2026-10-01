@@ -70,10 +70,8 @@ pub struct Page {
     /// The link to the controller (link/), when the page carries one.
     #[serde(default)]
     pub controller: Option<LinkPage>,
-    /// The settings this machine may ask for (settings.rs); absent from an
-    /// agent before 0.25.
-    #[serde(default)]
-    pub settings: Option<crate::settings::View>,
+    /// The settings this machine may ask for (settings.rs).
+    pub settings: crate::settings::View,
     /// santree's door (shared.rs `SantreeDoor`); absent where there is none.
     #[serde(default)]
     pub santree: Option<crate::shared::SantreeDoor>,
@@ -766,16 +764,22 @@ mod tests {
 
     #[test]
     fn the_page_reads_what_the_status_page_writes() {
-        let p: Page = serde_json::from_str(
-            r#"{"agent":"daedalus-agent","version":"0.14.0","awake_hold":true,
+        let settings = crate::settings::View {
+            linked: true,
+            ..Default::default()
+        };
+        let p: Page = serde_json::from_str(&format!(
+            r#"{{"agent":"daedalus-agent","version":"0.14.0","awake_hold":true,
                 "hold_error":null,"update_available":"0.15.0","restart_pending":false,
                 "last_update_check":"2026-09-27T10:00:00Z","last_update_result":"x",
-                "policy":{"awake_hold":false,"claude_remote_control":true},
-                "controller":{"address":"box.lan:7788","found_via":"config","state":"approved",
-                  "connected":true,"since":null,"fingerprint":"aa","controller_fingerprint":"bb","error":null},
-                "telemetry":null}"#,
-        )
+                "policy":{{"awake_hold":false,"claude_remote_control":true}},
+                "controller":{{"address":"box.lan:7788","found_via":"config","state":"approved",
+                  "connected":true,"since":null,"fingerprint":"aa","controller_fingerprint":"bb","error":null}},
+                "settings":{},"telemetry":null}}"#,
+            serde_json::to_string(&settings).unwrap()
+        ))
         .unwrap();
+        assert_eq!(p.settings, settings);
         assert_eq!(p.version, "0.14.0");
         assert_eq!(p.update_available.as_deref(), Some("0.15.0"));
         assert!(!p.policy.awake_hold);

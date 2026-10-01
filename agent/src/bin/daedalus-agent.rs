@@ -136,9 +136,7 @@ fn install_os(args: &[String]) -> Result<()> {
 
 /// macOS: install from the bundle this binary is in (os/macos/launchd.rs)
 /// — no --pin or --controller: the Mac logs in from its menu bar
-/// (enroll.rs) — and clear a pin a logged-out Mac kept (an older agent's
-/// `pair`): without a tunnel config it is logged out, and says so.
-/// `--installer-uid UID` is what the app's first open passes (the user who
+/// (enroll.rs). `--installer-uid UID` is what the app's first open passes (the user who
 /// opened it); `--replace-operator` lets the recorded user change.
 #[cfg(target_os = "macos")]
 fn install_os(args: &[String]) -> Result<()> {
@@ -160,11 +158,6 @@ fn install_os(args: &[String]) -> Result<()> {
             ),
             other => bail!("install: unknown option {other}"),
         }
-    }
-    let path = daedalus_agent::paths::config_path();
-    if !daedalus_agent::paths::tunnel_path().exists() {
-        config::clear_link_keys_at(&path)?;
-        daedalus_agent::paths::forget_santree();
     }
     os::mac::install_with(&config::Config::default(), &opts)?;
     if !daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {

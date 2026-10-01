@@ -285,7 +285,7 @@ fn door_policy(allow: crate::door::Allow) -> crate::door::Policy {
     crate::door::Policy {
         what: "santree",
         allow,
-        refusal: Arc::new(|peer| refusal(peer, crate::os::operator_uid().is_some())),
+        refusal: Arc::new(refusal),
         busy: error_line(
             code::BUSY,
             format!("at most {MAX_CONNECTIONS} santree connections at once"),
@@ -298,26 +298,18 @@ fn door_policy(allow: crate::door::Allow) -> crate::door::Policy {
     }
 }
 
-/// The line a refused peer gets before its connection is closed. With no
-/// installing user recorded (an agent that updated itself from before 0.22:
-/// only `install` records one), it says how to record one, since the
-/// operator's own santree is refused until then.
-pub fn refusal(peer: Option<&Peer>, installer_recorded: bool) -> String {
+/// The line a refused peer gets before its connection is closed.
+pub fn refusal(peer: Option<&Peer>) -> String {
     let who = match peer {
         Some(p) => p.to_string(),
         None => "a peer whose credentials could not be read".into(),
     };
-    let msg = if installer_recorded {
+    error_line(
+        code::FORBIDDEN,
         format!(
             "{who} may not use santree's socket (root and the user who installed the agent may)"
-        )
-    } else {
-        format!(
-            "{who} may not use santree's socket: no installing user is recorded on this \
-             machine, so only root may; run `sudo daedalus-agent install` from your account"
-        )
-    };
-    error_line(code::FORBIDDEN, msg)
+        ),
+    )
 }
 
 /// Serve santree's door at `path`, `allow` deciding each peer, until the

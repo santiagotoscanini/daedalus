@@ -18,8 +18,9 @@
 //! the grants are applied to everything already inside. The key, the config
 //! and the instance lock are then SYSTEM's and Administrators' alone, and so
 //! is `logs\`, the service's — the tray and the session log under the
-//! user's own `%LOCALAPPDATA%` (`windows_private_acl`, re-applied at every
-//! start of the service, audit D1, D2, D6).
+//! user's own `%LOCALAPPDATA%` (`windows_private_acl`, audit D1, D2, D6).
+//! A secret the service reads later must still be so (`sddl_is_private`),
+//! or it is refused, as unix refuses one others may read.
 
 use std::ffi::OsString;
 use std::path::Path;
@@ -76,9 +77,8 @@ pub const WINDOWS_PRIVATE_FILES: &[&str] = &["identity.key", "config.toml", "age
 /// The `icacls` runs that keep the Windows data directory's secrets and
 /// the service's logs to SYSTEM and Administrators (module doc): `logs\`
 /// protected, inheritance cut, and each file of `WINDOWS_PRIVATE_FILES`
-/// that exists the same. Run at install, after `windows_data_dir_acl`, and
-/// at every start of the service, so an install an older agent made is
-/// brought to it. Well-known SIDs, so a localized Windows names the same
+/// that exists the same. Run at install, after `windows_data_dir_acl`.
+/// Well-known SIDs, so a localized Windows names the same
 /// groups: S-1-5-18 SYSTEM, S-1-5-32-544 Administrators.
 pub fn windows_private_acl(dir: &Path) -> Vec<Vec<OsString>> {
     let arg = |s: &str| OsString::from(s);
@@ -90,11 +90,6 @@ pub fn windows_private_acl(dir: &Path) -> Vec<Vec<OsString>> {
             arg(&format!("*S-1-5-18:{inherit}F")),
             arg("/grant:r"),
             arg(&format!("*S-1-5-32-544:{inherit}F")),
-            // Whatever else an older install granted by name.
-            arg("/remove:g"),
-            arg("*S-1-5-32-545"),
-            arg("*S-1-5-11"),
-            arg("*S-1-1-0"),
         ]
     };
     let mut runs = vec![only_system(&dir.join("logs"), "(OI)(CI)")];
@@ -136,6 +131,62 @@ pub fn windows_data_dir_acl(dir: &Path) -> Vec<Vec<OsString>> {
     ];
     runs.extend(windows_private_acl(dir));
     runs
+}
+
+/// One ACE of a DACL in SDDL: its type (`A` allows, `D` denies) and whom
+/// it names.
+struct Ace<'a> {
+    kind: &'a str,
+    sid: &'a str,
+}
+
+/// The DACL of a security descriptor in SDDL (`O:…G:…D:…S:…`): its flags
+/// (`P` protected, `AI`, `AR`) and its ACEs. None when it has no `D:`.
+fn sddl_dacl(sddl: &str) -> Option<(&str, Vec<Ace<'_>>)> {
+    let d = &sddl[sddl.find("D:")? + 2..];
+    // The SACL, when there is one, follows outside the parentheses.
+    let d = match d.find(")S:") {
+        Some(i) => &d[..=i],
+        None => d.split_once("S:").map_or(d, |(a, _)| a),
+    };
+    let (flags, mut rest) = d.split_at(d.find('(').unwrap_or(d.len()));
+    let mut aces = Vec::new();
+    while let Some(body) = rest.strip_prefix('(') {
+        let end = body.find(')')?;
+        let f: Vec<&str> = body[..end].split(';').collect();
+        let [kind, _, _, _, _, sid] = f[..] else {
+            return None;
+        };
+        aces.push(Ace { kind, sid });
+        rest = &body[end + 1..];
+    }
+    rest.is_empty().then_some((flags, aces))
+}
+
+/// A SID as SDDL may spell it, as the alias it has: SYSTEM is `SY`,
+/// Administrators `BA`, CREATOR OWNER `CO`.
+fn sid_alias(sid: &str) -> &str {
+    match sid {
+        "S-1-5-18" => "SY",
+        "S-1-5-32-544" => "BA",
+        "S-1-3-0" => "CO",
+        s => s,
+    }
+}
+
+/// Whether a file's descriptor, in SDDL, keeps it a secret: a protected
+/// DACL (nothing inherited from the directory) whose every grant is
+/// SYSTEM's or Administrators' — what `create_private` and
+/// `windows_private_acl` give it. A null DACL (everyone) is not.
+pub fn sddl_is_private(sddl: &str) -> bool {
+    let Some((flags, aces)) = sddl_dacl(sddl) else {
+        return false;
+    };
+    flags.replace("AI", "").replace("AR", "").contains('P')
+        && !flags.contains("NO_ACCESS_CONTROL")
+        && aces
+            .iter()
+            .all(|a| a.kind == "D" || matches!(sid_alias(a.sid), "SY" | "BA"))
 }
 
 #[cfg(test)]
@@ -195,12 +246,26 @@ mod tests {
         );
         // Users never get more than read, and nothing but the directory.
         for t in &text[2..] {
-            assert!(!t.contains("545:"), "{t}");
-            assert!(
-                t.ends_with("/remove:g *S-1-5-32-545 *S-1-5-11 *S-1-1-0"),
-                "{t}"
-            );
+            assert!(!t.contains("545"), "{t}");
         }
+    }
+
+    #[test]
+    fn a_secret_is_private_only_with_a_protected_dacl_for_the_system_alone() {
+        // What `create_private` gives a file, and what icacls leaves.
+        assert!(sddl_is_private("D:P(A;;FA;;;SY)(A;;FA;;;BA)"));
+        assert!(sddl_is_private("O:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)"));
+        assert!(sddl_is_private(
+            "D:P(A;;FA;;;S-1-5-18)(A;;FA;;;S-1-5-32-544)(D;;FA;;;WD)"
+        ));
+        // Inherited grants (no P), a user's read, a null DACL, none at all.
+        assert!(!sddl_is_private("D:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)"));
+        assert!(!sddl_is_private("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;BU)"));
+        assert!(!sddl_is_private(
+            "D:P(A;;FA;;;SY)(A;;0x1200a9;;;S-1-5-21-1-2-3-1001)"
+        ));
+        assert!(!sddl_is_private("D:NO_ACCESS_CONTROL"));
+        assert!(!sddl_is_private("O:BA"));
     }
 
     #[test]

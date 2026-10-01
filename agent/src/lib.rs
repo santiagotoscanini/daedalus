@@ -110,20 +110,16 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         update::on_start()
     };
     let cfg = config::load_or_default().context("reading config")?;
-    // The service's own files — the key, the config, the lock and its
-    // logs — to the OS alone where an older install left them open (T4), and
-    // its instance lock never one another user can open (audit D6). A
-    // `serve` in a terminal is its user's, and keeps its files.
-    let secured = if foreground {
-        Ok(())
-    } else {
+    // The service's instance lock is never one another user can open
+    // (audit D6): made private when it is first made. A `serve` in a
+    // terminal is its user's, and keeps its files.
+    if !foreground {
         let lock = paths::data_dir().join("agent.lock");
         if !lock.exists() {
             let _ = std::fs::create_dir_all(paths::data_dir());
             let _ = os::create_private(&lock);
         }
-        os::secure_data_dir(&paths::data_dir())
-    };
+    }
     let _log = logging::init_logging(&cfg, foreground)?;
     let role = cfg.role();
     tracing::info!(
@@ -132,12 +128,6 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         mode = ?role.mode,
         "daedalus-agent starting"
     );
-    if let Err(e) = secured {
-        tracing::warn!(
-            error = format!("{e:#}"),
-            "the data directory's private files could not be secured"
-        );
-    }
 
     // One service per data directory: its port no longer decides that (a
     // port another process holds is waited out, metrics_page.rs `Page`).

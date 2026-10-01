@@ -82,13 +82,6 @@ pub fn ensure_private(path: &Path) -> Result<()> {
 /// user; it holds no secret.
 pub const CONFIG_ACCESS: crate::util::Access = crate::util::Access::Mode(0o644);
 
-/// The data directory's modes are the installer's (0755, root's; the
-/// secrets 0600 by `create_private`): nothing to bring up to date at start.
-pub fn secure_data_dir(dir: &Path) -> Result<()> {
-    let _ = dir;
-    Ok(())
-}
-
 /// Mode 0755: a downloaded binary is not executable until it is said to be.
 pub fn mark_executable(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
@@ -208,7 +201,7 @@ pub fn monotonic_usec() -> Option<u64> {
 /// user can hold to keep the agent from starting (audit D6).
 pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
     use std::os::fd::AsRawFd;
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
     let f = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -216,9 +209,6 @@ pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
         .mode(0o600)
         .custom_flags(libc::O_NOFOLLOW)
         .open(path)
-        .ok()?;
-    // One an older agent made 0644.
-    f.set_permissions(std::fs::Permissions::from_mode(0o600))
         .ok()?;
     // SAFETY: flock on a descriptor this function owns.
     let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
