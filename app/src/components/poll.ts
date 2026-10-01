@@ -62,3 +62,31 @@ export function usePoll(fn: () => Promise<void>, ms: number, active: boolean): v
     }
   }, [active, ms])
 }
+
+/**
+ * A loader value kept live: `initial` until the loader hands over a new one,
+ * replaced by what `fetch` answers every `ms` while `active` says the value
+ * can still move. `fetch` is given the value it is replacing; a failed or null read
+ * keeps it, and the next tick asks again.
+ */
+export function useLiveValue<T>(
+  initial: T,
+  fetch: (current: T) => Promise<T | null>,
+  ms: number | ((current: T) => number),
+  active: (current: T) => boolean,
+): T {
+  const [value, setValue] = useState(initial)
+  useEffect(() => {
+    setValue(initial)
+  }, [initial])
+
+  usePoll(
+    async () => {
+      const next = await fetch(value).catch(() => null)
+      if (next !== null) setValue(next)
+    },
+    typeof ms === 'number' ? ms : ms(value),
+    active(value),
+  )
+  return value
+}

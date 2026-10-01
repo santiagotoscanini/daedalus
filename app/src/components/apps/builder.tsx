@@ -1,5 +1,4 @@
 import { Link, useRouter } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
 import type { BuilderData } from '../../lib/apps/builder'
 import {
   buildDurationMs,
@@ -15,7 +14,7 @@ import { useSite } from '../../lib/site-context'
 import { type Tone, toneStyle } from '../../lib/tone'
 import { fetchBuilderNow } from '../../server/builds'
 import { ImageRow } from '../image-row'
-import { useNow, usePoll } from '../poll'
+import { useLiveValue, useNow } from '../poll'
 import {
   FOOT as BOARD_FOOT,
   NOTE as BOARD_NOTE,
@@ -76,26 +75,19 @@ const STEP_TONE: Record<TimelineStep['status'], Tone> = {
 
 function NowBoard({ initial }: { initial: LiveBuild[] }) {
   const router = useRouter()
-  const [builds, setBuilds] = useState(initial)
-  useEffect(() => {
-    setBuilds(initial)
-  }, [initial])
-
+  const builds = useLiveValue(
+    initial,
+    async (current) => {
+      const next = await fetchBuilderNow()
+      // A build finished: History and the medians are now one build out of date.
+      if (current.some((b) => !next.some((n) => n.id === b.id))) void router.invalidate()
+      return next
+    },
+    (current) => (current.length > 0 ? 3000 : 15_000),
+    () => true,
+  )
   const open = builds.length > 0
   const now = useNow(open)
-
-  usePoll(
-    async () => {
-      const next = await fetchBuilderNow().catch(() => null)
-      if (next === null) return
-      const left = builds.some((b) => !next.some((n) => n.id === b.id))
-      setBuilds(next)
-      // A build finished: History and the medians are now one build out of date.
-      if (left) void router.invalidate()
-    },
-    open ? 3000 : 15_000,
-    true,
-  )
 
   const running = builds.filter((b) => b.state !== 'queued').length
   return (

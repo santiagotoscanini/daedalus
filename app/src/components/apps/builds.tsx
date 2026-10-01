@@ -1,5 +1,4 @@
 import { Link, useRouter } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
 import type { Detection } from '../../lib/build-detect'
 import {
   type BuildSummary,
@@ -12,7 +11,7 @@ import type { BuildState } from '../../lib/builds'
 import { DASH, ms, since } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
 import { buildNowFn, fetchBuilds } from '../../server/builds'
-import { useNow, usePoll } from '../poll'
+import { useLiveValue, useNow } from '../poll'
 import { Button } from '../ui/button'
 import { useAction } from '../use-action'
 import { Board, Chip } from '../viz'
@@ -61,22 +60,15 @@ export function BuildsBoard({
   /** The sweep has matched the app to its GitHub repository. */
   linked: boolean
 }) {
-  const [builds, setBuilds] = useState(initial)
-  useEffect(() => {
-    setBuilds(initial)
-  }, [initial])
-
-  const open = builds.some((b) => isOpenBuild(b.state))
-  const now = useNow(open)
-
-  usePoll(
-    async () => {
-      const r = await fetchBuilds({ data: { app, limit: 10 } }).catch(() => null)
-      if (r !== null) setBuilds(r)
-    },
+  const anyOpen = (bs: BuildSummary[]) => bs.some((b) => isOpenBuild(b.state))
+  const builds = useLiveValue(
+    initial,
+    () => fetchBuilds({ data: { app, limit: 10 } }),
     3000,
-    open,
+    anyOpen,
   )
+  const open = anyOpen(builds)
+  const now = useNow(open)
 
   const refusal = !buildOnBox
     ? 'Box builds are off for this app.'
