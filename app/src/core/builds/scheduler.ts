@@ -16,7 +16,7 @@
 // shape-checked on every access (core/settings/github-app.ts's finish lock is
 // the outage that taught it). A re-evaluation swaps the tick and re-arms the
 // interval in place — never a second one — and keeps the busy flag and the
-// pickup guard. No closure but `tick` is stored, and nothing awaits the slot.
+// dispatched build. No closure but `tick` is stored, and nothing awaits the slot.
 // When the state's shape changes the key moves on.
 //
 // This file holds the slot, the tick and the fold; the queue's half of a tick

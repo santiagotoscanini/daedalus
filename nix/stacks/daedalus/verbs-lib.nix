@@ -1,8 +1,6 @@
-# verbs-lib — the scripts behind the control plane's host verbs: the file-drop
-# bridge's agents (the container writes `<verb>-request.json` into the apply
-# dir, a path unit starts the matching agent) and the units of the root
-# helper's verbs (ARCHITECTURE.md's root-helper table). Their services are
-# daedalus-verbs.nix and daedalus-github.nix. Each is the env nix hands it
+# verbs-lib — the scripts behind the control plane's host verbs: the units
+# of the root helper's verbs (ARCHITECTURE.md's root-helper table) and their
+# reapers. Their services are daedalus-verbs.nix and daedalus-github.nix. Each is the env nix hands it
 # followed by the shell under host/. A plain function, imported by path; never
 # a module.
 {
@@ -33,7 +31,7 @@ let
   # one per app in the committed registry. This is apply.sh's MANAGED list for
   # `vault/apps/`, and it is a LIST rather than a pattern on purpose — the
   # names an Apply may write are fixed host-side, because a name that came
-  # across the bridge is a path traversal with extra steps. Nix spells them out
+  # from the container is a path traversal with extra steps. Nix spells them out
   # from the same apps.json declarations.nix reads, so an app that does not
   # exist has no writable path at all.
   #
@@ -131,9 +129,8 @@ let
     ];
   };
 
-  # Restart the box: the root helper's `reboot` (controller.nix, `root`), not
-  # a file-drop verb. It takes nothing from anyone — host/power.sh has why
-  # poweroff exists nowhere.
+  # Restart the box: the root helper's `reboot` (controller.nix, `root`). It
+  # takes nothing from anyone — host/power.sh has why poweroff exists nowhere.
   powerScript = mkAgent {
     name = "daedalus-power";
     runtimeInputs = [

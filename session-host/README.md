@@ -43,7 +43,7 @@ unknown keys refused:
 | `hookSocket` | the local hook socket, `/run/daedalus-session-host/hook.sock` |
 | `projectsRoot` | where the checkouts live; confinement's root, `hello.projectsRoot` |
 | `workspaces` | the control plane's workspaces snapshot, `/run/daedalus-workspaces/workspaces.json` |
-| `workspaceIcons` | the workspace icons the control plane exports, `<stateRoot>/apps/daedalus/apply/workspace-icons` |
+| `workspaceIcons` | the workspace icons the control plane exports, `<stateRoot>/apps/daedalus/workspace-icons` |
 | `hookBin` | `hello.hookBin`: `/run/current-system/sw/bin/daedalus-session-host` |
 
 `host.key` is a 32-byte ed25519 seed, made on the first start: written whole to

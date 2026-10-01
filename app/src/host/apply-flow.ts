@@ -10,8 +10,8 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 //
 // runSecretApply is the third door, for a vault secret set from Settings
 // (core/settings/cloudflare-token.ts, core/settings/github-app.ts). It shares
-// the lock, the busy checks and the pickup window, and differs in one rule: it
-// is always its own Apply.
+// the lock and the busy checks, and differs in one rule: it is always its own
+// Apply.
 //
 // The lock and the order of the steps are host/flow.ts's; the root helper
 // runs one Apply at a time.

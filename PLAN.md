@@ -1,11 +1,11 @@
 # Daedalus — what is missing, and how to do it
 
 Daedalus is the box's control plane: a TanStack Start app that writes JSON
-under `site/` in the operator's NixOS config, a file-drop bridge that lets root
-agents act on those writes, the nix modules that read the JSON back, and a
-Rust agent that makes the other machines on the network (a Windows PC, a Mac)
-part of the same page. Today it runs this one box (`s2-server`) from a dev
-server against a bind-mounted checkout, builds the seven first-party apps on
+under `site/` in the operator's NixOS config, a root helper that
+starts a fixed list of host verbs on its behalf, the nix modules that read the
+JSON back, and a Rust agent that makes the other machines on the network (a
+Windows PC, a Mac) part of the same page. Today it runs this one box
+(`s2-server`) from a dev server against a bind-mounted checkout, builds the seven first-party apps on
 the box with Railpack, reports to GitHub as a check run and a Deployment, and
 draws a System page for each enrolled machine from the document its agent
 publishes.
@@ -60,7 +60,7 @@ ENGINE  github.com/santiagotoscanini/daedalus   (public; one branch, main)
   nix/{platform,modules/<id>,stacks/daedalus}   every catalog stack gated by fleet.modules.<id>.enable
   app/                the TanStack Start app; src/core + src/modules/<id> (manifest, loaders, views)
   agent/              the Rust agent for the other machines (Windows service, macOS LaunchDaemon, tray)
-  nix/stacks/daedalus/host/*.sh   the bridge agents (apply, build, deploy, image-update, engine-update, power, secrets, workspaces)
+  nix/stacks/daedalus/host/*.sh   the root verbs (apply, build, deploy, image-update, engine-update, power, secrets, workspaces)
 
 CONFIG  the user's own NixOS config at /etc/nixos   (theirs; this box keeps its flake + hardware here)
   flake.nix           inputs.daedalus (pinned by tag, or a local clone for a box that develops it)
@@ -110,10 +110,10 @@ on bundle cost).
 
 **Secrets, end state.** One value per sops file, encrypted **in the container
 with public recipients only** (static `sops` binary in the image); no private
-key ever in the container; plaintext never crosses the bridge directory.
+key ever in the container; plaintext never reaches a host file.
 Multi-key env files are assembled on the host by `sops.templates` with
 `restartUnits`. Recipients: the host key via `ssh-to-age` and an operator
-recovery age key shown exactly once. Rekey is a root bridge running `sops
+recovery age key shown exactly once. Rekey is a root verb running `sops
 updatekeys -y`. Never mount the repo root into the container.
 
 **Onboarding, end state** (every step skippable and re-runnable from
@@ -350,7 +350,7 @@ priority; each can be done independently unless noted.
 
    **The rule that sorts every piece.** What nix builds from goes in
    `site/` as JSON; what the host needs at runtime and must not be in git
-   (a MAC) is a file the control plane writes and a path unit applies;
+   (a MAC) is a payload the control plane hands a root verb;
    what a service manages through its own API (LiteLLM's model table) is
    driven through that API. Three kinds of change, three costs: an Apply, a
    file write, a request.
@@ -358,10 +358,10 @@ priority; each can be done independently unless noted.
    **The name comes from the MAC, not the address.** A node gets a slug
    (`gaming-pc`; default the hostname slugified, editable on Settings ›
    Machines, unique). The control plane writes one dnsmasq line per
-   approved node, `<MAC>,<slug>`, to `<apply dir>/nodes/dhcp-hosts`;
-   the pihole module names that directory as `dhcp-hostsdir` and
-   `hostsdir` (`misc.dnsmasq_lines`), copied by a path unit into a
-   pihole-readable `/run/daedalus-nodes/` that also sends FTL a SIGHUP
+   approved node, `<MAC>,<slug>`, as the `nodes-dhcp` verb's payload; the
+   verb keeps it in `/verbs` and copies it into the pihole-readable
+   `/run/daedalus-nodes/` (the pihole module's `dhcp-hostsdir` and
+   `hostsdir`, `misc.dnsmasq_lines`), then sends FTL a SIGHUP
    (`pihole reloaddns`: dnsmasq re-reads its hosts files without dropping
    a query — new files are read on their own, a changed or removed line
    needs the HUP). dnsmasq gives the lease that hostname, overriding what
@@ -369,7 +369,7 @@ priority; each can be done independently unless noted.
    address the pool hands it; "pin the address" is a per-node toggle that
    adds the IP to the line. No rebuild, no MAC in git, and the household
    file loses the line it carries for the PC (the operator's one sops
-   edit, or a `reservation-set` bridge verb later). Verify on the box
+   edit, or a `reservation-set` root verb later). Verify on the box
    before relying on it: a `dhcp-host=MAC,name` line with no address,
    FTL honouring `dhcp-hostsdir` through `dnsmasq_lines`, and a HUP
    landing without a gap in DNS.
@@ -454,8 +454,8 @@ priority; each can be done independently unless noted.
 
 7. **Git commit attribution from the signed-in user.** Every `site/` commit
    is authored by "daedalus" regardless of who pressed Apply (no `--author`
-   in any bridge script). The forward-auth headers carry the operator's
-   email; pass the identity through the bridge request and commit with
+   in any verb script). The forward-auth headers carry the operator's
+   email; pass the identity through the verb's payload and commit with
    `--author="Name <email>"`, so GitHub shows who authored and daedalus
    committed.
 
@@ -471,7 +471,7 @@ priority; each can be done independently unless noted.
    The app page shows the app's flags with a link into Flipt's UI.
 
 9. **App variables and secrets: convert, rotate, scope.** The editor sets
-   and removes one secret at a time through the bridge and shows "set
+   and removes one secret at a time through the `secret-set` verb and shows "set
    <date> by <actor>" from git. Still missing:
    - **Convert to secret.** The value moves from `apps.json` into the sops
      file in one Apply; the old plaintext remains in git history, and the
@@ -479,7 +479,7 @@ priority; each can be done independently unless noted.
      container can never read a secret back.
    - **Rotate the machine-generated ones.** `AUTH_SECRET` and the app's
      database password are "delete the file + rebuild" today (the app page
-     says so in prose); a Rotate button per app is one more bridge verb
+     says so in prose); a Rotate button per app is one more root verb
      doing exactly that, with a confirm. Like `secret-set`, the verb joins
      the `redact` fixtures before it ships.
    - **The runtime/build-time flag and the preview scope.** A real
@@ -566,19 +566,6 @@ priority; each can be done independently unless noted.
     only by a rotation the trusted key signed). The app reaches every
     machine only through the controller's unix socket; capabilities, not
     "is this the box", draw the tabs. What remains:
-    - **The rest of the root verbs onto the root helper.** The helper and
-      `root.run` exist (ARCHITECTURE.md "The root helper"): reboot, deploy,
-      task-run, build-cancel, github-token, workspace-clone and secret-set
-      have moved, the last two through pattern selectors and the run file.
-      Each remaining file-drop verb moves the same way — a
-      `fleet.daedalus.rootVerbs` entry, its unit ending on `refused: …` to
-      refuse, its request module, path unit and status file deleted — in
-      this order: build, then the rebuilding verbs — claude-code, version,
-      engine and image updates, whose `*-last.log` the progress stream
-      replaces once a page opened mid-run can reattach to it (the helper
-      follows only its own caller's run today) — and Apply last.
-      Workspace sync and the nodes' DHCP bindings are not requests and stay
-      path units until the agent owns them.
     - **Proof of 0.19 and 0.20 on the real machines.** Only the box runs
       them. On the Windows PC and the Mac: the update from 0.17 lands and
       proves itself (probation cleared, trays and sessions restarted onto
@@ -685,7 +672,7 @@ TypeScript, identified but not acted on (`noUncheckedIndexedAccess` and
 
 - Audit for places where `as` casts hide real type narrowing opportunities.
 - `satisfies` where appropriate (config objects, exhaustive checks).
-- Template literal types for the bridge verb strings (type-safe file names).
+- Template literal types for the root verb names.
 - Branded types for app names, sha hashes, build ids and node ids.
 - `using` declarations for locks and cleanup — check the Vite plugin
   supports them first.
@@ -715,8 +702,8 @@ What exists: `ARCHITECTURE.md` (5 Mermaid diagrams; Mermaid stays in the repo
 by decision), `BUILDS.md`, `CONTRIBUTING.md`, `nix/README.md`,
 `agent/README.md`, and the website's boundary document. Missing:
 
-- **Bridge API reference.** The file-drop request shapes of the verbs in
-  `ARCHITECTURE.md`'s bridge table have no standalone doc beyond the code
+- **Root verb payload reference.** The payload shapes of the verbs in
+  `ARCHITECTURE.md`'s root helper table have no standalone doc beyond the code
   and `apply.sh`'s subject cases.
 - **Operational runbook** for the build pipeline beyond what `BUILDS.md`
   covers — what to do when a build hangs, how to force-rebuild, how to read
@@ -731,7 +718,7 @@ by decision), `BUILDS.md`, `CONTRIBUTING.md`, `nix/README.md`,
   `systemctl --failed`, every `healthPath` curl, and a `diff-closures`
   helper. The justfile has fmt/check/lint/boot/switch/engine-* today.
 - The no-secret-in-logs test: `lib/redact.test.ts` covers error text and
-  the `secret-set` verb; nothing asserts that no vault value or bridge
+  the `secret-set` verb; nothing asserts that no vault value or verb
   secret appears in status files, build logs or the app's stdout. Write it
   as a fixture-driven test and add it to CI.
 - The break-glass drill (Phase 8) and the fresh-box rehearsal (Phase 12).
@@ -775,8 +762,8 @@ rendered on the website. Decided after evaluating Coolify (2026-09-15): no
 second container engine, no control plane whose state lives outside git, no
 one-container-per-database model. Decided 2026-09-23: no Rust rewrite of the
 app's backend — the app holds no privilege and does no OS work in-process, so
-its latency is I/O and hydration, not JavaScript; Rust belongs in the host
-bridge binary and the agent, where the OS layer is.
+its latency is I/O and hydration, not JavaScript; Rust belongs in the
+agent, where the OS layer is.
 
 ## Risks
 

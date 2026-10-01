@@ -51,7 +51,7 @@
 # no credential helper, no trace variables. The repository is hostile input —
 # a `package.json` can be a symlink to /etc/shadow — so root never opens a
 # file in the work dir by name: it reads them through the build user with
-# O_NOFOLLOW, the rule host/lib.sh states for the apply dir.
+# O_NOFOLLOW, the rule host/lib.sh states for every operator-writable directory.
 #
 # Root's own scratch lives in $CTL, a directory under the unit's private /tmp
 # that only root can write: the stripped Railpack plan, the checks plan, the

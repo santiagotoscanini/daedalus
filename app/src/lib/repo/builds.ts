@@ -331,7 +331,7 @@ export function claimQueuedQuery(id: string, now: Date, exec: Executor = db) {
  * Take a queued build for the host: `queued` → `cloning`, with the hard cap's
  * clock started. Returns the row only when THIS call moved it — a build a
  * concurrent tick claimed, or one superseded or cancelled since it was read,
- * returns undefined, and the scheduler writes the request file only for a row.
+ * returns undefined, and the scheduler starts a build only for a row.
  * This is the one way out of `queued`, as insertOrSupersedeQueued is the one
  * way in.
  */

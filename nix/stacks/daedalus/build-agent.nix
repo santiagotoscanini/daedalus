@@ -15,17 +15,17 @@
 #                                              reads `failed: interrupted`;
 #                                              then the run file goes
 #   daedalus-build-cancel@<app>.service    the root helper's `build-cancel` →
-#                                          host/build-cancel.sh (no path unit)
+#                                          host/build-cancel.sh
 #   daedalus-build-gc.{timer,service}      nightly sweep → host/build-gc.sh
 #
 # ── how each script is made ───────────────────────────────────────────────
 #
 # A writeShellApplication whose text is, in order: the variables nix hands it
 # (`NAME='value'` lines, fixed when the system is built), the shared helpers
-# (host/lib.sh — the bridge's rules for touching files the container can
-# write; host/github-lib.sh for the build itself), then the script under
-# host/. So a change to apps.json or to a builder path is a new script, never
-# a run-time lookup. host/build.sh opens with the trust model.
+# (host/lib.sh — the rules for touching files the operator can write;
+# host/github-lib.sh for the build itself), then the script under host/. So
+# a change to apps.json or to a builder path is a new script, never a run-time
+# lookup. host/build.sh opens with the trust model.
 #
 # Gated like the builder itself (`fleet.builder.enable`: the GitHub App's
 # vault file is in the flake). Nothing here exists before the App does. The
@@ -365,7 +365,7 @@ in
         # The root helper's `build-cancel` (controller.nix, `root`): one instance
         # per app, the app its instance name, so the value is a name from
         # buildableApps and the script refuses a build in flight that is not
-        # that app's. No path unit, no request file.
+        # that app's.
         systemd.services."daedalus-build-cancel@" = {
           description = "Stop %i's build, on daedalus's behalf";
           # Deliberately NOT monitoredJobs: its refusals are the normal case

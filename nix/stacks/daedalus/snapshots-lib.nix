@@ -281,7 +281,7 @@ let
   # re-runs whenever apps.json changes (its ExecStart embeds the file's store
   # path, so the unit definition changes and systemd restarts it), while the
   # container's definition stays put. Nothing else about the app moves.
-  # Into /run/daedalus-export — the READ-ONLY mount — not the rw apply dir:
+  # Into /run/daedalus-export — a READ-ONLY mount — never one the app writes:
   # applied.json is the drift-comparison target, the one file the app must
   # not be able to overwrite.
   registrySnapshot = pkgs.writeShellApplication {

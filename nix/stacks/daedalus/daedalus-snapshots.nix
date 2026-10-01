@@ -14,7 +14,6 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     registryApps
-    bridgeAgent
     envDir
     imageDir
     repoDir
@@ -330,8 +329,13 @@ in
     #
     # Monotonic timer, deliberately off the hour (the myspeed rule); a sync is
     # a handful of `git fetch`es, so the cost is SSH round trips, not bandwidth.
-    systemd.services.daedalus-workspace-sync = bridgeAgent // {
+    systemd.services.daedalus-workspace-sync = {
       description = "Fetch and fast-forward the project workspaces";
+      # The path unit below turns every deploy into a start, and a burst of
+      # deploys (three in three seconds, seen live) is past systemd's 5 in
+      # 10 s: the refused start is never retried, since the file does not
+      # change again. A bounded oneshot with nothing to loop on, so no limit.
+      startLimitIntervalSec = 0;
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       serviceConfig = sandboxedOperator workspaceDirs // {

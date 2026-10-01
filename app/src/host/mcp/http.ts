@@ -100,7 +100,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
     sessionIdGenerator: undefined,
     // Answer with a plain JSON body rather than opening an SSE stream. Nothing
     // here is long-running from the transport's point of view — a write tool
-    // returns as soon as the bridge request is published, and the host's
+    // returns as soon as the host's run has started, and the host's
     // progress is read back by a later read-tool call (builds.get,
     // deployments, apply.preview's `blocked`), not by streaming.
     enableJsonResponse: true,

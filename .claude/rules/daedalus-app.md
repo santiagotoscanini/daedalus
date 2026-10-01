@@ -148,8 +148,8 @@ here.
   `src/host/schema.ts` + `host/db.ts` for the database side
   (`pnpm db:generate` / `db:migrate` for schema changes; drizzle.config
   points at `src/host/schema.ts`).
-- `src/host/` — everything that needs the machine: the bridge and one
-  module per verb (`bridge.ts`, then e.g. `apply.ts`, `build-verb.ts`,
+- `src/host/` — everything that needs the machine: the root verbs, one
+  module per verb (`root.ts`, `root-verb.ts`, then e.g. `apply.ts`, `build-verb.ts`,
   `deploy.ts`, `image-update.ts`, `engine-update.ts`, `secret-set-request.ts`
   — the full set is below), the flows (`*-flow.ts`), the MCP server
   (`mcp/`), the database (`db.ts`, `schema.ts`), the env schema and the snapshot
@@ -184,7 +184,7 @@ here.
   a digest per managed file, never the tree itself. (The engine clone's
   own git facts come from /workspaces, not /repo.) The committed site
   directory is at /site, read-only like the rest even though it is the
-  one directory daedalus writes — the writes go through the bridge —
+  one directory daedalus writes — the writes go through the `apply` verb —
   and its site.json is THE source of the site constants nix builds
   with, so the settings tabs edit against it. The two design documents the MCP
   server serves (`host/mcp/docs.ts`) are in the image, at
@@ -225,34 +225,27 @@ here.
   constant may hold any of it.
 - Secrets (service API keys) arrive via rendered env files
   (`DASH_*`). The app only ever GETs with them.
-- Writes to the box go through the file-drop bridges — one request file
-  written into `/apply`, a host `.path` unit watching it, one status
-  file written back; the container deliberately holds no host
-  privilege. The verbs (request file → host unit → status file) are the
-  table in `ARCHITECTURE.md` § The bridge; the host half of each is in
-  `nix/stacks/daedalus/`. `host/bridge.ts` is the one implementation of
-  the mechanics (temp + rename, payload written before the request that
-  points at it), and each verb's app half is one module under `host/`
-  named for it (`apply.ts`, `deploy.ts`, `image-update.ts`, `engine-update.ts`,
-  `workspaces.ts`,
-  `secret-set-request.ts`,
-  `version-update.ts`, `claude-code-update.ts`).
-  **The bridge is being retired verb by verb** onto the root helper,
-  reached only as the controller's `root.run` (`ControllerClient.rootRun`;
-  ARCHITECTURE.md "The root helper") through `host/root.ts` `runRoot`, and
-  a button waits on it with `components/root-action.tsx` `useRootAction` —
-  the answer is the outcome, no status file: `host/power.ts` (reboot) is the
-  first and the pattern; `deploy.ts`, `task-run.ts`, `build-verb.ts`'s
-  `requestBuildCancel` and `core/github-app.ts`'s `requestTokenRefresh`
-  followed. A verb that runs longer than a request should wait is asked
-  with `rootStart` (`detach`): the answer comes once its unit started, and
-  `rootFollow` reads its lines and its end from the controller's run store.
-  The build is the first (`build-verb.ts` `startBuild`). The app never
-  touches the helper's socket.
-  The verbs that take a lock and a busy check before they publish are
-  arrangements of `host/flow.ts` — `defineGate` (the lock, the `running`
-  check, the pickup window) and `defineFlow` (check input → refuse busy
-  → prepare → publish, in that order): `apply-flow.ts`,
+- Writes to the box go through ONE door: the controller's `root.run`
+  (`ControllerClient.rootRun`; ARCHITECTURE.md "The root helper", whose
+  verb table is the list), reached through `host/root.ts` `runRoot`. The
+  container holds no host privilege and never touches the helper's
+  socket. A short verb answers with its outcome, and a button waits on it
+  with `components/root-action.tsx` `useRootAction` (`host/power.ts` is
+  the pattern; `deploy.ts`, `task-run.ts`, `build-verb.ts`
+  `requestBuildCancel`, `core/github-app.ts` `requestTokenRefresh`,
+  `workspaces.ts`, `secret-set-request.ts`, `dhcp-hosts.ts`). A verb that
+  runs longer than a request should wait is asked with `rootStart`
+  (`detach`): the answer comes once its unit started, its status is
+  `/verbs/<verb>-status.json` (root's, read-only here), and
+  `host/root-verb.ts` `defineRootVerb` is the one reader — a `running`
+  file whose run `rootFollow` says has ended reads as failed, never by a
+  clock. Those are `apply.ts`, `build-verb.ts`, `image-update.ts`,
+  `version-update.ts`, `claude-code-update.ts`, `engine-update.ts`; the
+  host half of each is in `nix/stacks/daedalus/`.
+  The verbs that take a lock and a busy check before they start are
+  arrangements of `host/flow.ts` — `defineGate` (the lock and the `running`
+  check) and `defineFlow` (check input → refuse busy
+  → prepare → start, in that order): `apply-flow.ts`,
   `update-flow.ts`, `engine-flow.ts`, `claude-code-flow.ts` and the flow
   inside `version-update.ts`. The first three are also what the MCP
   write tools call, so a button and a tool share one body. WHO may call
@@ -261,7 +254,7 @@ here.
   The box's own builder is the root verb `build`: the scheduler starts
   it detached with the request as its payload, `daedalus-build@<run>`
   writes progress to `/verbs/build-status.json` (root's, read-only here;
-  heartbeated, stale past 90 s) and its log to
+  heartbeated; the queue presumes a silent run dead past 90 s) and its log to
   `/var/log/daedalus-builds/<id>.log`, the `/builds` mount above.
 - External-service reads follow the escalating-retry rule: retry only
   thrown requests with a `[400, 800, 1500, 2500]` ms ladder, and only to a

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 // The two design documents, served as MCP resources.
 //
 // WHY THEY ARE RESOURCES. An agent that can press Apply should be able to read
-// what Apply does first. ARCHITECTURE.md is the engine as built — the bridge,
-// the apply flow, the seam; BUILDS.md is the build→zot→deploy loop the write
+// what Apply does first. ARCHITECTURE.md is the engine as built — the root
+// helper, the apply flow, the seam; BUILDS.md is the build→zot→deploy loop the write
 // tools drive. Handing those to a caller before it acts is the cheapest
 // possible way to stop it inventing a mental model of this box.
 //
@@ -38,7 +38,7 @@ export const MCP_DOCS: readonly McpDoc[] = [
     file: 'ARCHITECTURE.md',
     title: 'Daedalus architecture',
     description:
-      'The engine as built: the file-drop bridge, the apply flow, the server-function seam, and what writes where.',
+      'The engine as built: the root helper, the apply flow, the server-function seam, and what writes where.',
   },
   {
     uri: 'daedalus://docs/builds',

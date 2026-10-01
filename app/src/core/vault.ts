@@ -19,8 +19,8 @@ import {
 //
 // The static sops mounted at /usr/local/bin/sops and the public recipients in
 // /site/.sops.yaml are all it takes: the container holds no age identity, so
-// it can write a secret and never read one back, and the bridge directory (on
-// a snapshotted dataset) only ever sees ciphertext. Every secret the UI sets
+// it can write a secret and never read one back, and what it hands the root
+// helper only ever carries ciphertext. Every secret the UI sets
 // goes through here: the Cloudflare token (core/settings/cloudflare-token.ts)
 // and the GitHub App's key (core/settings/github-app.ts) then go to Apply as
 // their own change (host/apply-flow.ts runSecretApply); an app's secret

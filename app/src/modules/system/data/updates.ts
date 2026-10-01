@@ -56,7 +56,7 @@ export type UpdatesData = {
   /** True when the probe's answers are missing entirely, not merely old. */
   probeMissing: boolean
   /**
-   * The bridge's current state, so a page opened mid-update joins the run
+   * The update's current state, so a page opened mid-update joins the run
    * already in progress rather than offering to start a second one.
    */
   status: ImageUpdateStatus

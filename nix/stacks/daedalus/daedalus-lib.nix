@@ -1,8 +1,9 @@
 # daedalus-lib — the values the control plane's modules share: where the
-# bridge lives, which apps the committed registry holds, the GitHub App's
-# preconditions, where each snapshot publishes. A plain function, imported by
-# path from daedalus.nix, its sibling modules and the two script libraries
-# (verbs-lib.nix, snapshots-lib.nix); never a module, never in an import list.
+# root verbs and their status live, which apps the committed registry holds,
+# the GitHub App's preconditions, where each snapshot publishes. A plain
+# function, imported by path from daedalus.nix, its sibling modules and the
+# two script libraries (verbs-lib.nix, snapshots-lib.nix); never a module,
+# never in an import list.
 {
   config,
   lib,
@@ -27,28 +28,6 @@ rec {
   # Where the container dropped requests for root before the root helper:
   # emptied once, as the operator (daedalus-verbs.nix).
   retiredApplyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
-
-  # Mixed into every bridge agent (daedalus-verbs.nix, daedalus-github.nix,
-  # the workspace sync in daedalus-snapshots.nix). One property, one argument, written
-  # once — the agents differ in what they do and in how long they may take, but
-  # not in this.
-  #
-  # A path unit turns each request into a START, so a burst of requests is a
-  # burst of starts, and systemd's default is 5 in 10 seconds before it REFUSES
-  # the next one. A refused start is never retried: the request file is already
-  # in its final state, so nothing changes the path again and the verb is
-  # silently dropped — visible only as `start-limit-hit` in a mail, and likeliest
-  # exactly when the box is busiest. Seen live: three deploy triggers in three
-  # seconds, then a refusal.
-  #
-  # Dropping the limit is safe here in a way it would not be for a daemon.
-  # These are oneshots doing bounded work; each script re-reads the request and
-  # refuses an id it has already answered; and the one verb that talks to a
-  # third party throttles itself (the token minter, one mint a minute). There is
-  # no loop for a rate limit to catch.
-  bridgeAgent = {
-    startLimitIntervalSec = 0;
-  };
 
   # ── the agents' scripts ─────────────────────────────────────────────────
   #
@@ -156,7 +135,7 @@ rec {
   # `fleet.site.source`, a path set in configuration.nix.
   registryApps = (builtins.fromJSON (builtins.readFile config.fleet.registry.file)).apps;
 
-  # The two allowlists the bridge agents are handed, both from the registry
+  # The two allowlists the host verbs are handed, both from the registry
   # above. Defined once here because a name in either becomes part of a unit
   # name root starts: the root helper's `deploy` verb (daedalus-verbs.nix) and
   # the build agent (build-agent.nix) must never disagree about them.

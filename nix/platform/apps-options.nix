@@ -527,7 +527,7 @@ in
                         Short name, unique within the app: `^[a-z0-9][a-z0-9-]{0,39}$`,
                         asserted. It becomes the systemd unit name
                         `app-<name>-task-<id>`, which root starts (daedalus's
-                        Run-now bridge), so the charset is a security control
+                        Run-now verb, `task-run`), so the charset is a security control
                         rather than a naming convention.
                       '';
                     };

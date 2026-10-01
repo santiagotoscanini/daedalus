@@ -3,13 +3,15 @@
 daedalus is a control plane for one machine. It runs *on* the machine it
 manages, as an ordinary unprivileged container, and it has no privilege over
 that machine at all — no docker socket, no sudo, no root, no ssh key. What it
-has instead is one writable directory. It writes a JSON file into it; a systemd
-path unit notices; a root oneshot reads the file and acts.
+has instead is one door: a socket to the controller, the agent on the box,
+which runs as the operator and can ask a root helper to start one of a fixed
+list of verbs. A verb is an existing systemd unit; what the app may say about
+it is a value from a list nix wrote, or a payload the unit validates.
 
 That constraint is the whole design. Everything below is a consequence of it:
 the engine decides, the host executes, and the boundary between them is a
-filename allowlist rather than an API. A compromised control plane can ask for
-the few things the host knows how to do, and nothing else.
+verb table nix renders rather than an API. A compromised control plane can
+ask for the few things the host knows how to do, and nothing else.
 
 The machine is a NixOS box, so "act" mostly means: write a file into a git
 repository, commit it, and run `nixos-rebuild switch`. The system's real source
@@ -42,12 +44,13 @@ flowchart LR
     Apps["the managed apps"]
   end
 
-  Bridge[/"apply/ the one writable mount<br/>NAME-request.json, NAME-status.json"/]
-  Snaps[/"read-only snapshot mounts<br/>(listed under The bridge)"/]
+  Ctl["the controller<br/>the agent, as the operator"]
+  Verbs[/"/verbs: each verb's status, root's<br/>read-only in the container"/]
+  Snaps[/"read-only snapshot mounts<br/>(listed under The root helper)"/]
 
   subgraph root["systemd — root"]
-    Paths["daedalus-*.path"]
-    Agents["one agent per verb<br/>(the table under The bridge)"]
+    Helper["daedalus-root@: one helper per request"]
+    Units["one unit per verb<br/>(the table under The root helper)"]
     SnapJobs["daedalus-*-snapshot timers"]
     DeployU["app-NAME-deploy.service / .timer"]
   end
@@ -60,10 +63,11 @@ flowchart LR
   Traefik -- "forward-auth" --> PID
   Traefik --> App
   App --- PG
-  App -- "drops JSON" --> Bridge --> Paths --> Agents
-  Agents --> Nix
-  Agents --> BK -- "push sha-SHA + latest" --> Zot
-  Agents -- "systemctl start" --> DeployU
+  App -- "root.run" --> Ctl --> Helper -- "systemctl start" --> Units
+  Units --> Verbs --> App
+  Units --> Nix
+  Units --> BK -- "push sha-SHA + latest" --> Zot
+  Units -- "systemctl start" --> DeployU
   DeployU -- "pull, restart only if the digest moved" --> Apps
   SnapJobs --> Snaps --> App
   App -- "check run + Deployment" --> GH
@@ -77,7 +81,7 @@ restartable at any moment.
 
 ---
 
-## The bridge
+## The root helper
 
 This is the part to understand first, because every privileged thing daedalus
 does goes through it.
@@ -86,14 +90,18 @@ does goes through it.
 flowchart TB
   subgraph unpriv["app-daedalus: rootless podman, container root maps to an unprivileged host user"]
     Engine["the engine<br/>TanStack Start + drizzle"]
-    Rd[/"reads, all ro: /export /repo /site /system /images<br/>/workspaces /deploy-state /env-snapshot<br/>/builds /github /github-token /registry<br/>(dev mode: /engine)<br/>and what stacks contribute: /dhcp /shotter"/]
+    Rd[/"reads, all ro: /export /repo /site /system /images /verbs<br/>/workspaces /deploy-state /env-snapshot<br/>/builds /github /github-token /registry<br/>(dev mode: /engine)<br/>and what stacks contribute: /dhcp /shotter"/]
+    Wr[/"writes, for the operator's readers only:<br/>/workspace-icons /boards"/]
     Sops["/usr/local/bin/sops: static, holds no age identity<br/>so it can encrypt and never decrypt"]
   end
 
-  Wr[/"the ONE writable mount: apply/<br/>one request file per verb, their status files, payload-ID.json"/]
+  subgraph op["the operator"]
+    Ctl["the controller: root.run, root.follow, root.runs<br/>keeps every run's lines and outcome for an hour"]
+  end
 
   subgraph priv["systemd — root"]
-    P["one daedalus-VERB.path per request file<br/>and the agent it starts (table below)"]
+    H["daedalus-root@: checks the peer, reads ONE line,<br/>looks the verb up in nix's table"]
+    U["the verb's oneshot unit, or a template instance<br/>with its run file as a credential"]
     Caps["may: commit and push as the operator<br/>nixos-rebuild switch under the rebuild lock<br/>start a deploy unit, reboot<br/>read the sops vault, sign as the GitHub App"]
   end
 
@@ -105,106 +113,105 @@ flowchart TB
 
   Rd --> Engine
   Engine --> Sops
-  Engine -- "payload first, request last" --> Wr
-  Wr -- "PathChanged fires on rename-into-place" --> P --> Caps
-  P -- "setpriv, env rebuilt from nothing" --> BU
+  Engine -- "the API socket" --> Ctl
+  Ctl -- "daedalus-root.socket, the operator's, 0600" --> H
+  H -- "systemctl start" --> U --> Caps
+  U -- "setpriv, env rebuilt from nothing" --> BU
   BU -- "buildctl over a group-owned socket" --> BKU
   BU --- Fence
   BKU --- Fence
 ```
 
-**The protocol.** Each verb is one request filename and one status filename in
-the same directory:
-
-| request | agent unit | status |
-|---|---|---|
-
-Five rules make this safe, and each of them was learned the hard way:
-
-1. **The request is written last.** Large inputs go into `payload-<id>.json`
-   first; the small request that names it lands afterwards. A path unit that
-   fires early therefore never sees a half-delivered job.
-2. **Every write is a rename into place.** `PathChanged` fires on
-   close-after-write *and* on rename, and only the rename is atomic, so a
-   half-written request is never observable.
-3. **The host reads as the unprivileged user, and refuses symlinks.** The
-   request directory is writable by the container; without this, a planted
-   symlink would make a root agent read or overwrite any file on the box.
-4. **An answered id is never acted on twice.** Each agent compares the request's
-   id against the id in its own status file. Path units re-fire on a daemon
-   reload at boot, and the engine may rewrite a file it already dispatched;
-   without this rule both would replay.
-5. **The host decides what is real.** The engine's opinion about a build is a
-   guess made from a status file; when the host later reports a terminal
-   outcome for the same id, the host wins.
-
-**What the container can and cannot reach.** It can *encrypt* a secret — it has
-a sops binary with no age identity — and it can never read one back. It can ask
-for a commit of a fixed set of filenames and nothing else: the apply agent's
-allowlist is `apps.json`, `nodes.json`, `site.json`, the two vault files, one
-`vault/apps/<name>-env.sops` per app already in the committed registry (the
-list is built host-side, never read from the request), and the `daedalus.json`
-provenance stamp. It cannot run a command, name a path, or choose a unit to
-restart.
-
-### The root helper
-
-The bridge's successor, one verb at a time (PLAN feature 13). The app asks
-the controller — the agent on the box, running as the operator — for
-`root.run {verb, selectors}` over its API socket; the controller connects to
-`daedalus-root.socket`, a systemd socket the operator owns (0600,
+**The path.** The app asks the controller — the agent on the box, running as
+the operator — for `root.run {verb, selectors, payload?, detach?}` over its API
+socket; the app never reaches anything else of the host's. The controller
+connects to `daedalus-root.socket`, a systemd socket the operator owns (0600,
 `Accept=yes`, outside every container's mounts); systemd starts a fresh root
 process for that one connection, `daedalus-agent root-helper`, with no
 capabilities and a strict sandbox. The helper checks the peer's uid is the
 operator's (`SO_PEERCRED`), reads one line, looks the verb up in a table nix
 rendered from `fleet.daedalus.rootVerbs`, and runs `systemctl start` on the
 verb's existing oneshot unit — each selector a value from a fixed list,
-spliced into the unit name, never a path or a flag. The unit's journal lines
-stream back as `root.progress` events, and the journal carries the answer too:
-a start job that failed is `failed`; otherwise what the unit's one outcome
-entry says (`host/lib.sh` `outcome`: `DAEDALUS_OUTCOME` `done` or `refused`,
-matched by the unit's invocation id, never by a line's text), or `done` with
-its last line when it wrote none. A refusal exits 0 — it is not a failed unit
-— and the journal, not an exit status, carries the word, because systemd
-forgets a oneshot's exit status once it is inactive. The controller keeps
-every run's lines and outcome for an hour (`root.follow`, `root.runs`), so a
-page opened mid-run reattaches, and a long verb is asked with `detach`: the
-answer comes once its unit has started, and the request is not held for the
-run.
+spliced into the unit name, never a path or a flag.
 
-The rules the bridge learned hold here without files: nothing is replayed,
-because nothing but a connection starts a verb (no path unit re-fires at
-boot); the work outlives its caller, because it is the unit's; and the host
-still decides what is real, because the answer is the unit's own result.
-The app never reaches the socket — the controller is its one door.
+**Values no list can hold.** A repository slug or a variable name is a
+*pattern* selector: an anchored regex nix declares and the helper checks
+again, over a small character set with a length cap. A request body — a
+sealed secret, the build request, an Apply's rendered files — is a *payload*,
+capped per verb. Neither goes into a unit name or onto a command line: such a
+verb names a template, `x@.service`, and the helper writes the selectors and
+the payload to `/run/daedalus-root-runs/<run id>.json` (root's, 0600, created
+exclusively without following a link) and starts `x@<run id>`, which gets the
+file as a systemd credential and validates every field as if it were hostile —
+it was the container's to choose. The file goes when the unit stops.
 
-A value no list can hold (a repository slug, a variable name) is a *pattern*
-selector: an anchored regex nix declares and the helper checks again, over a
-small character set with a length cap. A sealed secret is a *payload*. Neither
-goes into a unit name or onto a command line: such a verb names a template,
-`x@.service`, and the helper writes the selectors and the payload to
-`/run/daedalus-root-runs/<run id>.json` (root's, 0600, created exclusively
-without following a link) and starts `x@<run id>`, which reads the file and
-deletes it. One run of such a verb at a time: a running instance, or another
-helper holding the template's lock, refuses the next.
+**The answer.** The unit's journal lines stream back as `root.progress`
+events, and the journal carries the outcome too: a start job that failed is
+`failed`; otherwise what the unit's one outcome entry says (`host/lib.sh`
+`verb_done` / `refuse`: `DAEDALUS_OUTCOME` `done` or `refused`, matched by the
+unit's invocation id, never by a line's text), or `done` with its last line
+when it wrote none. A refusal exits 0 — it is not a failed unit — and the
+journal, not an exit status, carries the word, because systemd forgets a
+oneshot's exit status once it is inactive. The controller keeps every run's
+lines and outcome for an hour (`root.follow`, `root.runs`), so a page opened
+mid-run reattaches. A long verb is asked with `detach`: the answer comes once
+its unit has started, and no request is held for the run.
 
-| verb | unit | since |
+**What holds.**
+
+1. **Nothing is replayed.** Nothing but a connection starts a verb: no path
+   unit re-fires at boot, no file sits waiting to be read twice.
+2. **One run of a verb at a time.** A unit already running is refused, never
+   joined; every verb holds a lock in the run directory (its unit's, or its
+   template's) from before its busy check until its answer, so two requests
+   cannot both start it.
+3. **The work outlives its caller.** It is the unit's: a switch that restarts
+   the controller, the helper or the app leaves it running, and a unit that
+   rebuilds the system is never restarted by that rebuild
+   (`restartIfChanged = false`).
+4. **Root reads nothing the container wrote.** The request is a run file only
+   root can write; the status a verb reports goes into `/verbs`, a directory
+   only root can write and the container mounts read-only. The two directories
+   the container does write (`/workspace-icons`, `/boards`) have readers that
+   run as the operator, never root.
+5. **The host decides what is real.** A verb's status is the unit's word; a
+   `running` status whose run the controller says has ended (or whose unit
+   systemd says is not running) is reported as failed, never guessed from a
+   clock.
+
+**What the container can and cannot reach.** It can *encrypt* a secret — it has
+a sops binary with no age identity — and it can never read one back. It can ask
+for a commit of a fixed set of filenames and nothing else: the Apply's
+allowlist is `apps.json`, `nodes.json`, `site.json`, the two vault files, one
+`vault/apps/<name>-env.sops` per app already in the committed registry (the
+list is built host-side, never read from the request), `README.md` and the
+`daedalus.json` provenance stamp. It cannot run a command, name a path, or
+choose a unit to start.
+
+**The verbs** — THE list; `fleet.daedalus.rootVerbs` is its source, and
+`status` reads it back with each unit's state.
+
+| verb | unit | what it does |
 |---|---|---|
-| `status` | the helper's own read: every verb and its unit's state | — |
-| `reboot` | `daedalus-power` (refuses mid-rebuild; there is no poweroff) | 2026-09-28 |
-| `deploy {app}` | the app's own `app-<app>-deploy` (a run the timer started is refused, not joined) | 2026-09-28 |
-| `task-run {task}` | the task's own `app-<app>-task-<id>`; the value is `<app>-task-<id>`, one token per unit | 2026-09-28 |
-| `build-cancel {app}` | `daedalus-build-cancel@<app>` (refuses a build in flight that is not that app's) | 2026-09-28 |
-| `github-token` | `daedalus-github-token`, the timer's unit (refuses inside its one-mint-a-minute throttle) | 2026-09-28 |
-| `workspace-clone {repo, actor}` | `daedalus-workspace-clone@<run>` (both patterns): clone, or fast-forward an existing clone, over the operator's SSH identity | 2026-09-28 |
-| `secret-set {app, action, key, actor} + payload` | `daedalus-secret-set@<run>` (`key` and `actor` patterns): merge or drop one key in `vault/apps/<app>-env.sops` and commit; the payload is the value sealed by the container | 2026-09-28 |
-| `session-host-restart` | `daedalus-session-host-restart`, which restarts the session host: how a new build takes over, ending every live terminal | 2026-09-29 |
-| `apply` + payload, detached | `daedalus-apply@<run>` (daedalus-verbs.nix): `{actor, summary, commit, files}`; write the managed files, commit, build, switch (or `test` under an engine override), roll back keeping the first error; `/verbs/apply-status.json`. The Apply loop, below | 2026-10-01 |
-| `build` + payload, detached | `daedalus-build@<run>` (build-agent.nix): the engine's build request is the payload; progress and the result go to `/verbs/build-status.json`, root's and read-only in the container; the scheduler follows the run until that file names it (BUILDS.md) | 2026-10-01 |
-| `image-update` + payload, detached | `daedalus-image-update@<run>` (daedalus-verbs.nix): `{targets, actor}` is the payload; one commit, one rebuild, verify, revert on failure; progress in `/verbs/image-update-status.json` under the run's id. A `running` file whose run the controller says has ended reads as failed — no clock | 2026-10-01 |
-| `version-update` + payload, detached | `daedalus-version-update@<run>` (version-update.nix): `{target, values, actor}`; rewrite a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure; `/verbs/version-update-status.json` | 2026-10-01 |
-| `claude-code-update` + payload, detached | `daedalus-claude-code-update@<run>` (claude-code-update.nix): `{actor}`; fetch upstream's latest release manifest, verify its signature, commit and push it in the engine, then hand the rebuild to the engine update; `/verbs/claude-code-update-status.json` | 2026-10-01 |
-| `engine-update` + payload, detached | `daedalus-engine-update@<run>` (engine-update.nix): `{actor}`; fast-forward the engine clone, move the configuration's lock onto it, build, switch, verify the control plane answers, revert if not, push; `/verbs/engine-update-status.json`. The Claude Code pin starts it too, the way the helper would: a run file of its own, then the instance | 2026-10-01 |
+| `status` | the helper's own read | every verb and its unit's state (a template's: whether an instance runs) |
+| `reboot` | `daedalus-power` | restart the box; refuses mid-rebuild; there is no poweroff |
+| `deploy {app}` | `app-<app>-deploy` | the app's own deploy now; a run the timer started is refused, not joined |
+| `task-run {task}` | `app-<app>-task-<id>` | an app's scheduled task now; the value is `<app>-task-<id>`, one token per unit |
+| `github-token` | `daedalus-github-token` | mint the installation token now; refuses inside its one-mint-a-minute throttle |
+| `session-host-restart` | `daedalus-session-host-restart` | restart the session host: how a new build takes over, ending every live terminal |
+| `build-cancel {app}` | `daedalus-build-cancel@<app>` | stop the build in flight, only when it is that app's |
+| `workspace-clone {repo, actor}` | `daedalus-workspace-clone@<run>` | clone, or fast-forward an existing clone, over the operator's SSH identity |
+| `secret-set {app, action, key, actor}` + payload | `daedalus-secret-set@<run>` | merge or drop one key in `vault/apps/<app>-env.sops` and commit; the payload is the value sealed by the container |
+| `nodes-dhcp` + payload | `daedalus-nodes-dhcp@<run>` | the approved nodes' `dhcp-host` lines: kept in `/verbs`, handed to pi-hole, FTL reloaded (daedalus-nodes.nix) |
+| `build` + payload, detached | `daedalus-build@<run>` | build an app's image and start its deploy; status `/verbs/build-status.json`, followed by the scheduler (BUILDS.md) |
+| `apply` + payload, detached | `daedalus-apply@<run>` | write the managed files, commit, build, switch (or `test` under an engine override), roll back keeping the first error; the Apply loop, below |
+| `image-update` + payload, detached | `daedalus-image-update@<run>` | move image pins: one commit, one rebuild, verify, revert on failure |
+| `version-update` + payload, detached | `daedalus-version-update@<run>` | move a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure |
+| `engine-update` + payload, detached | `daedalus-engine-update@<run>` | fast-forward the engine clone, move the lock onto it, build, switch, verify the control plane answers, revert if not, push |
+| `claude-code-update` + payload, detached | `daedalus-claude-code-update@<run>` | pin upstream's latest Claude Code in the engine, push, and start the engine update as the helper would |
+
+Every detached verb reports in `/verbs/<verb>-status.json` under its run's id,
+which the page that started it waits for.
 
 ---
 
@@ -230,7 +237,7 @@ flowchart TB
   PathU["the controller, then the root helper"]
   Sh["daedalus-apply@RUN, root<br/>restartIfChanged = false"]
   Allow{"any payload file on the allowlist?<br/>apps.json, nodes.json, site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops<br/>vault/apps/NAME-env.sops, README.md, daedalus.json<br/>other names are skipped"}
-  Prev["copy the current bytes aside,<br/>outside the bridge directory"]
+  Prev["copy the current bytes aside,<br/>outside every container's reach"]
   Git["write verbatim, git add, commit<br/>as the operator, never as root"]
   Lock["take the shared rebuild lock"]
   Sw["nixos-rebuild switch"]
@@ -307,7 +314,7 @@ flowchart TB
   end
 
   subgraph host["src/host/: needs the machine, node builtins, the database, process.env"]
-    Bridges["bridge.ts + one module per verb"]
+    Verbs["root.ts, root-verb.ts + one module per verb"]
     Contract["contract/**: one reader per host file"]
     Dbm["db, schema"]
     Clients["env, keys, prom, loki, registry<br/>nix-manifest, env-snapshot, workspaces<br/>github-token, github-repos, app-icon"]
@@ -315,23 +322,23 @@ flowchart TB
 
   DB[("Postgres: apps, builds, deployments, nodes, settings, ...<br/>(The data model, below)")]
   Snap[/"read-only mounts"/]
-  Apply[/"apply/ — write"/]
+  Ctl["the controller: root.run"]
 
   Routes --> Comps
   Routes --> Views
   Routes -- "loaders" --> Srv
   Srv --> Ctx
   Api --> Ctx
-  Srv --> Bridges
+  Srv --> Verbs
   Srv --> Set
   Srv --> Dash
   Api --> Bld
   Mcp -- "the same loaders and flows" --> Dash
-  Mcp --> Bridges
+  Mcp --> Verbs
   Mcp --> Bld
   Bld --> BuildLib
   Bld --> Ghc
-  Bld --> Bridges
+  Bld --> Verbs
   Bld --> Repo
   Set --> Contract
   Dash --> Contract
@@ -340,7 +347,7 @@ flowchart TB
   Contract --> Decode
   Contract --> Snap
   Clients --> Snap
-  Bridges --> Apply
+  Verbs --> Ctl
   Ctx -.-> Snap
 ```
 
@@ -562,7 +569,7 @@ codes once expired.
 | Machine's tunnel → box | A Mac's own WireGuard client of the box's wg-easy (UDP 51820, the forwarded port), ended inside the agent's service (boringtun + smoltcp, no utun): AllowedIPs the box's LAN address alone, and the agent dials only the link's and the session host's ports through it | WireGuard's keys; the client's private key reaches the machine once, in the redeem answer, and is kept 0600 by root. **A stolen tunnel key is a LAN presence at the box's address**, so the client carries a per-client firewall (wg-easy's, on with `firewallEnabled`) of those two ports alone; what the netns itself serves (traefik's 80/443, the wg-easy UI) stays reachable, as for every peer. Past the tunnel the node key still gates the controller and the session host. Revoke and log-out delete the client |
 | A Mac's user → its root service | Daedalus Agent.app, which launchd runs as root from `/Library/Application Support/daedalus-agent/` — a folder chain only root can write — never from the user's copy in `/Applications`, where any admin can rename entries | Install and update are one path: a copy (the app's own, or the release's) into a staging folder root alone can reach, made root's and link-free there, checked — its identifier, its version, its service answering with that version — and only then exchanged into place in one rename; nothing is chowned where a user could still change it. The updater also requires Apple's Developer ID signature of the team with the fixed identifiers. The app's first open installs behind one administrator prompt that names the account it serves, which must be the console user's; a recorded operator changes only with `--replace-operator` |
 | Engine → wg-easy | The API on an `--internal` bridge of the two containers, never through traefik | HTTP Basic as wg-easy's one password account (its INIT admin; the credential rendered from the host's sops file into a file the app reads). Password auth is on for this; the UI's browser path is still OIDC-first. Not an escalation: the engine already runs containers as the operator |
-| Engine → host | The request filenames of the bridge table | The rules in [The bridge](#the-bridge) |
+| Engine → host | The controller's `root.run`, and the verbs of its table | The rules in [The root helper](#the-root-helper) |
 | Controller → root | One request line per connection to the root helper's socket | The socket is the operator's and 0600, outside every container; the helper checks the peer is the operator's uid (root refused), takes only a verb nix listed with selector values from nix's lists, and starts that verb's existing unit — [The root helper](#the-root-helper) |
 | Engine → GitHub | An installation token, minted by the host, never the private key | The key is root-only on the host and never enters the container; the token carries contents, metadata and actions read, checks and deployments write |
 | Host → repository code | A clone and a build | Repository content only ever runs as an unprivileged user inside an egress fence; the registry push credential exists for the duration of the one publishing call and is deleted after it |
@@ -585,9 +592,10 @@ Most of this vocabulary is invented here, so it is worth stating plainly.
 - **Apply** — the act of turning the database's current state into committed
   files and a rebuilt system. The bar at the top of the UI counts what is
   pending.
-- **Bridge** — the request-file mechanism between the container and the host.
+- **Root helper** — the one door from the container to root: the controller
+  asks it, it starts a verb's unit.
 - **Verb** — one thing the host knows how to do on the engine's behalf; one
-  request filename, one path unit, one script.
+  entry in `fleet.daedalus.rootVerbs`, one unit, one script.
 - **Snapshot** — a read-only copy of host state, refreshed by a timer into a
   mount the engine reads. Never a live query.
 - **The site directory** — the git directory daedalus writes: `site.json`,

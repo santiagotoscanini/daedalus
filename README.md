@@ -33,9 +33,9 @@ to match. The craftsman, not the labyrinth.
   the app's image itself, lands it in its own registry, and deploys on
   the digest change. Nothing leaves the house.
 - **The app holds zero host privilege.** Daedalus runs in a rootless
-  container and talks to the machine through file-drop bridges watched
-  by systemd — it can't rebuild, restart or read anything the host
-  didn't explicitly hand it.
+  container and asks the machine for a fixed list of systemd
+  verbs through one root helper — it can't rebuild, restart or read
+  anything the host didn't explicitly hand it.
 - **Honest by construction.** Every panel distinguishes "no" from
   "couldn't ask": a dead probe renders as unknown, never as healthy;
   a stale snapshot is treated as absent, never served as current.
@@ -45,7 +45,7 @@ to match. The craftsman, not the labyrinth.
 | Where | What |
 |---|---|
 | [`app/`](app/) | Daedalus itself — the TypeScript app (TanStack Start + React 19, drizzle-orm, Tailwind v4). |
-| [`nix/`](nix/) | The NixOS side: the platform layer, the control plane's own module and its host agents (the bridges that apply, build, deploy and snapshot on the app's behalf), and the catalog of stacks a host can switch on. Exported by [`flake.nix`](flake.nix); [`nix/README.md`](nix/README.md) says how a host imports it and what is not done yet. |
+| [`nix/`](nix/) | The NixOS side: the platform layer, the control plane's own module and its host verbs (the units that apply, build, deploy and snapshot on the app's behalf), and the catalog of stacks a host can switch on. Exported by [`flake.nix`](flake.nix); [`nix/README.md`](nix/README.md) says how a host imports it and what is not done yet. |
 | [`example-host/`](example-host/) | A complete example host to start from (`nix flake init -t github:santiagotoscanini/daedalus#config`), and the host `nix flake check` evaluates. |
 | [`agent/`](agent/) | The Rust service for the other machines the box talks to — [`agent/README.md`](agent/README.md). |
 | [`session-host/`](session-host/) | santree's remote projects, served on the box to approved machines — [`session-host/README.md`](session-host/README.md). |

@@ -280,7 +280,9 @@ verbs, none taking a command, a path or a flag:
 | `nodes.provider_model` `{id, kind, action, model, pinned?, replacing?}` | `{delivered: true, request}`: one residency verb (`load` or `unload`; a load may put `replacing` down first) on one model of the machine's provider, acknowledged at once and run on the machine's loopback; its providers document reports the outcome under `request` (`actions`). Needs `providers.residency`; never queued | `nodes` |
 | `nodes.set_desired` `{nodes: [{id, public_key, state, policy, name}]}` | `{nodes, approved, revoked, pending, policy}`: the ids whose open connection was upgraded, revoked and closed, sent back to pending, or sent a changed policy | `nodes` |
 | `nodes.command` `{id, command}` | `{delivered, queued}`: acknowledged by the connected machine, or kept for its next connection | `nodes` |
-| `root.run` `{verb, selectors?}` | `{run, verb, outcome, detail, verbs?}`: one of the root helper's verbs run to its end (`done`, `refused` with the unit's reason, `failed`); `status` answers every verb and its unit's state in `verbs`. Answers when the unit has finished, so a client gives it its own timeout; its unit's lines go out as `root.progress` meanwhile ("The root helper", below) | `root` |
+| `root.run` `{verb, selectors?, payload?, detach?}` | `{run, verb, outcome, detail, verbs?}`: one of the root helper's verbs run to its end (`done`, `refused` with the unit's reason, `failed`); `status` answers every verb and its unit's state in `verbs`. Answers when the unit has finished, so a client gives it its own timeout; with `detach`, once the unit has started, `outcome` null. Its unit's lines go out as `root.progress` meanwhile ("The root helper", below) | `root` |
+| `root.follow` `{run, after?}` | `{run, lines: [{seq, line}], next, more, dropped}`: a run the controller holds, its summary (`verb`, `started_at`, `finished_at`, `started`, `outcome` null while it runs, `detail`) and its lines past `after`, a page at a time; `not_found` for a run it never held or has forgotten | `root` |
+| `root.runs` `{verb}` | `{runs}`: that verb's runs the controller holds, newest first, as `root.follow`'s summary | `root` |
 | `santree.status` | `{state, version, restart_pending, live_ptys, connections: [{node, name, count}], error}`: the session host from its status file — `state` `running`, `stale` (not written for 30 s), `stopped` or `missing`; `restart_pending` when the running build or config is not the installed one; `error` why the file could not be read, why the allow-list could not be written (revocations are not reaching the host; retried every 2 s), or why the host is not using it as written. `unavailable` where `[controller.session_host]` names none ("The session host") | — |
 
 `state` is `pending` (connected, not decided), `approved`, `revoked` or
@@ -335,12 +337,15 @@ may do on the box reaches it through a systemd-owned socket
 connection starts a fresh, sandboxed root process, `daedalus-agent
 root-helper --table FILE` (`src/root/`), which checks the peer is the
 table's one uid (`SO_PEERCRED`; root itself is refused), reads one request
-line `{verb, id, selectors}`, and answers. No root process stays resident.
+line `{verb, id, selectors, payload?}`, and answers. No root process stays resident.
 
 The table is nix's (`fleet.daedalus.rootVerbs` in
 `nix/stacks/daedalus/controller.nix`): each verb an existing oneshot unit
 and its selectors, each a fixed list of values spliced into the unit name
-as `{name}`; nothing from the caller becomes a path, a flag or a unit name.
+as `{name}`, or a pattern; nothing from the caller becomes a path, a flag
+or a unit name. A verb with a pattern selector or a payload names a
+template: the helper writes the request to a root-only run file and starts
+the instance named for the run, which gets it as a credential.
 A verb runs as `systemctl start <unit>`, so the work is the unit's and
 survives a restart of its caller; `{"t":"started","unit":…}` says the start
 was asked for, the unit's journal lines stream back as
@@ -348,7 +353,7 @@ was asked for, the unit's journal lines stream back as
 "detail":…}`: `failed` when the start job failed, else what the unit's
 outcome entry says — one journal entry with `DAEDALUS_OUTCOME` `done` or
 `refused`, `DAEDALUS_DETAIL` and `DAEDALUS_INVOCATION`, written by
-`nix/stacks/daedalus/host/lib.sh` `outcome` and matched by its invocation,
+`nix/stacks/daedalus/host/lib.sh` `verb_done` / `refuse` and matched by its invocation,
 never by a line's text (a refusal exits 0, so no failed unit; systemd
 forgets a oneshot's exit status once it is inactive, so the journal
 carries the word) — and `done` with the last line when it wrote none. A

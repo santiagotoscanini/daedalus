@@ -10,7 +10,7 @@ const PRINCIPLES = [
   },
   {
     title: "Zero host privilege.",
-    body: "Daedalus runs in a rootless container and talks to the machine through file-drop bridges watched by systemd. It can't rebuild, restart or read anything the host didn't hand it.",
+    body: "Daedalus runs in a rootless container and asks the machine for a fixed list of systemd verbs through one root helper. It can't rebuild, restart or read anything the host didn't hand it.",
   },
   {
     title: "Lose the box, keep the cloud.",

@@ -105,9 +105,9 @@ against that, not zero.
 
 `.claude/rules/daedalus-app.md` (loads on `app/**`) is the architecture
 map, the data-flow rules (snapshot mounts, env schema, the app side of
-the file-drop bridges, the escalating-retry ladder) and the style rule.
+the root verbs, the escalating-retry ladder) and the style rule.
 `ARCHITECTURE.md` and `BUILDS.md` are the design as a reader outside the
-code needs it — the bridge protocol and its verb table, the two loops,
+code needs it — the root helper and its verb table, the two loops,
 trust boundaries — and the MCP server serves both to agents.
 `.claude/rules/daedalus-ui.md` (loads on `app/src/components/**`,
 `app/src/routes/**`, `app/src/*.css`) is how to write a component:

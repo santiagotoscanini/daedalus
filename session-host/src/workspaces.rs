@@ -10,7 +10,7 @@
 //! root than this host's describes other checkouts and is served as none.
 //!
 //! `workspaces.icon` ([`icon`]): one workspace's app icon, which the control
-//! plane exports beside its other files (`<applyDir>/workspace-icons`).
+//! plane exports into a directory of its own (the config's `workspaceIcons`).
 
 use std::io::Read;
 use std::os::unix::fs::OpenOptionsExt;

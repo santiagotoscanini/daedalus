@@ -1,9 +1,7 @@
-# daedalus-verbs — the control plane's host verbs. The file-drop bridge's
-# agents, one verb at a time: each verb's service, the path unit that starts it
-# on `<verb>-request.json`, and whether a failure mails (monitoredJobs) or is
-# shown on the page that asked. And some of the root helper's verbs
-# (controller.nix, `root`), each a `fleet.daedalus.rootVerbs` entry naming a
-# unit with no path unit — ARCHITECTURE.md's root-helper table lists them all.
+# daedalus-verbs — the control plane's host verbs: the root helper's
+# (controller.nix, `root`), each a `fleet.daedalus.rootVerbs` entry naming its
+# unit, and whether a failure mails (monitoredJobs) or is shown on the page
+# that asked — ARCHITECTURE.md's root-helper table lists them all.
 # The scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
 # daedalus stack (daedalus.nix holds the switch); never imports its siblings.
 {
@@ -151,8 +149,7 @@ in
           timeoutSec = 960;
         };
 
-        # Restart: the root helper's `reboot` (controller.nix, `root`) — the first
-        # verb off the file-drop bridge, so no path unit and no request file. The
+        # Restart: the root helper's `reboot` (controller.nix, `root`). The
         # helper starts this unit and relays what it prints; a refusal (host/lib.sh
         # `refuse`) still exits 0, so a refused restart is not a failed unit.
         #

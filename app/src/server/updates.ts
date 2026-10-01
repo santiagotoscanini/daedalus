@@ -91,7 +91,7 @@ export const fetchEngineUpdateStatus = readFn.handler(async ({ context }) => {
  * Nothing to validate: the request carries only the actor. What "latest" is,
  * and whether the box is in a state to take it (no engine override, the
  * clone not diverged), is the host's answer — reported through the status
- * file the caller polls, like every other bridge verb.
+ * file the caller polls, like every other root verb.
  */
 export const requestEngineUpdateFn = adminFn.handler(async ({ context }) => {
   const { runEngineUpdate } = await import('../host/engine-flow')

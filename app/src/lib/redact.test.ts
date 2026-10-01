@@ -49,9 +49,9 @@ describe('redactSecrets, over the secret-set verb', () => {
     '"sops":{"age":[{"recipient":"age13xjamkkjcc2wdan3c8tscslqulgwz9uv"}],"mac":"ENC[AES256_GCM,data:z]"}}'
 
   it('leaves a sops document alone — ciphertext is not a credential', () => {
-    // This is the whole body of a secret-set request, and the bridge log holds
-    // it. Redacting it would destroy the only copy of a value nobody can
-    // retype, for no gain: it is already unreadable without the host's key.
+    // This is the whole payload of a secret-set, and a journal may hold it.
+    // Redacting it would destroy the only copy of a value nobody can retype,
+    // for no gain: it is already unreadable without the host's key.
     expect(redactSecrets(SEALED)).toBe(SEALED)
   })
 

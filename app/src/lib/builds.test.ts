@@ -436,7 +436,7 @@ describe('Railpack switches', () => {
 })
 
 describe('request size', () => {
-  it('measures the exact bytes the bridge writes, under the host ceiling', () => {
+  it('measures the exact bytes the host is handed, under its ceiling', () => {
     const r = buildRequest({
       id: ID,
       app: 'iris',

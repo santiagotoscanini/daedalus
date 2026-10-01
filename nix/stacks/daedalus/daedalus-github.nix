@@ -15,7 +15,6 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     appsOn
-    bridgeAgent
     hooksHost
     githubAppVault
     haveGithubApp
@@ -166,24 +165,21 @@ in
     # The token minter. Root, because the key is root's; network-ordered and
     # deliberately NOT ordered before the container — a GitHub outage must never
     # gate the app's start (the image-freshness rule).
-    systemd.services.daedalus-github-token = lib.mkIf haveGithubApp (
-      bridgeAgent
-      // {
-        description = "Mint the daedalus GitHub App's installation token";
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${githubTokenScript}/bin/daedalus-github-token";
-          # Two GitHub calls at 15 s each, plus a revoke at most.
-          TimeoutStartSec = "2min";
-          # The JWT, the token answer and the curl configs live in a mktemp dir;
-          # a private /tmp keeps even their names off the shared one.
-          PrivateTmp = true;
-          UMask = "0077";
-        };
-      }
-    );
+    systemd.services.daedalus-github-token = lib.mkIf haveGithubApp {
+      description = "Mint the daedalus GitHub App's installation token";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${githubTokenScript}/bin/daedalus-github-token";
+        # Two GitHub calls at 15 s each, plus a revoke at most.
+        TimeoutStartSec = "2min";
+        # The JWT, the token answer and the curl configs live in a mktemp dir;
+        # a private /tmp keeps even their names off the shared one.
+        PrivateTmp = true;
+        UMask = "0077";
+      };
+    };
 
     # A token lives 60 minutes; every 30 means a reader always holds one with
     # 25+ left (the engine wants 5). Monotonic, so never on the hour.

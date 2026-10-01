@@ -114,7 +114,7 @@ EOF
 
 agent "$T/cc.sh" "" lib.sh claude-code-update.sh
 rc=0
-CREDENTIALS_DIRECTORY="$A/creds" VERBS_DIR="$A" APPLY_DIR="$A" FLAKE="$F" SITE_DIR="$T/site" WORKSPACES_DIR="$W" bash "$T/cc.sh" >"$T/cc.out" 2>&1 || rc=$?
+CREDENTIALS_DIRECTORY="$A/creds" VERBS_DIR="$A" FLAKE="$F" SITE_DIR="$T/site" WORKSPACES_DIR="$W" bash "$T/cc.sh" >"$T/cc.out" 2>&1 || rc=$?
 check "the run fails" '[ "$rc" -ne 0 ]'
 check "at committing, saying the commit was undone" \
   'jq -e ".state == \"failed\" and .phase == \"committing\" and (.error | test(\"undone\"))" "$A/claude-code-update-status.json" >/dev/null'

@@ -4,18 +4,18 @@ import type { Result } from '../lib/result'
 
 // Polling a host-side status file, without being lied to by it.
 //
-// Every host action here is a file drop: the server function returns as soon
-// as the request file is written, which is BEFORE the host has done anything —
-// so for a second or two the status file still shows the PREVIOUS run's
-// terminal state. A poller that trusts the file alone reads that stale `done`,
+// Every host action here is a root verb started detached: the server function
+// returns as soon as the verb's unit has started, which is BEFORE it has
+// written anything — so for a moment the status file still shows the PREVIOUS
+// run's terminal state. A poller that trusts the file alone reads that stale `done`,
 // declares victory, and flips the button back to idle while a multi-minute
 // rebuild is just starting.
 //
 // The fix is a claim: start() records the id the submit returned, and until
 // the status file speaks for THAT id, whatever it says is somebody else's
 // history — the poller keeps waiting. A status that stays foreign past
-// `claimTimeoutMs` means the host agent never picked the request up (a crashed
-// path unit), and settles as a synthesized failure rather than spinning
+// `claimTimeoutMs` means the run ended before it wrote one (its unit failed
+// at the start), and settles as a synthesized failure rather than spinning
 // forever.
 //
 // The other half is `refusal`: a request that never became a run at all. The
@@ -94,20 +94,20 @@ export function usePolledStatus<S extends HostStatus>(opts: {
         if (Date.now() - claim.at > (latest.current.claimTimeoutMs ?? 60_000)) {
           // Synthesized rather than read: the file never mentioned our id, so
           // there is nothing true to show about this request except that the
-          // host did not come for it. Every status shape here carries
+          // run never reported. Every status shape here carries
           // state/error, which is all this writes.
           const timedOut = {
             ...s,
             id: claim.id,
             state: 'failed',
-            error: 'the host did not pick this request up. Is its path unit alive?',
+            error: 'the host started this run but it never reported: the unit journal says why.',
           } as S
           setClaim(null)
           setSubmitting(false)
           setStatus(timedOut)
           latest.current.onSettle?.(timedOut)
         }
-        // Still foreign, still inside the pickup window: keep waiting.
+        // Still foreign, still inside the claim's window: keep waiting.
       })
     }, latest.current.intervalMs ?? 2_000)
 

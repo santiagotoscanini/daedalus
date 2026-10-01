@@ -75,7 +75,7 @@ const withCtx = createMiddleware({ type: 'function' }).server(async ({ next }) =
  *
  * What it passes with is `context.actor`: the operator the gate admitted — the
  * forwarded email, or `local:<name>` for a break-glass session — and every
- * record the mutation writes (a commit, a request file, a journal line) is made
+ * record the mutation writes (a commit, a root run, a journal line) is made
  * under it. Handed down rather than read again from the headers, so a mutation
  * cannot admit one identity and record another, and nothing below the gate
  * has an absent identity left to handle.

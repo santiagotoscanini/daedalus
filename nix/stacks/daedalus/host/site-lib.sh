@@ -17,18 +17,14 @@
 # noise), and a caller that needs to undo restores them and re-stages. One
 # mechanism whether or not the directory is versioned.
 #
-# ⚠ $PREV_DIR is NOT $APPLY_DIR, and must never become it. Rollback state is
-# something this code later TRUSTS for a decision — "was this file absent, so
-# delete it" or "put these bytes back" — and a rollback commits and pushes
-# whatever that decision produced. It used to live in the rw-mounted apply
-# directory, where the container could send an Apply that fails the build and
-# then plant `prev-apps.json.absent` (or rewrite `prev-apps.json`) before the
-# rollback read it: the rollback then deleted or replaced site/apps.json, or a
-# vault file, and pushed the result. $PREV_DIR is a sibling of apply/ that the
-# container does not mount (stacks/daedalus/daedalus.nix), owned by the
-# operator at 0700. Every operation in it still runs as the operator and
-# refuses links — nothing should be able to plant one there, and nothing
-# here assumes that.
+# ⚠ $PREV_DIR must never be a directory a container can write. Rollback state
+# is something this code later TRUSTS for a decision — "was this file absent,
+# so delete it" or "put these bytes back" — and a rollback commits and pushes
+# whatever that decision produced: a planted `prev-apps.json.absent` would
+# delete site/apps.json and push the result. $PREV_DIR is a directory no
+# container mounts (stacks/daedalus/daedalus.nix), owned by the operator at
+# 0700. Every operation in it still runs as the operator and refuses links —
+# nothing should be able to plant one there, and nothing here assumes that.
 
 # The work tree $SITE_DIR belongs to, or "" when it is a plain directory.
 site_toplevel() {

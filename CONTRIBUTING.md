@@ -112,11 +112,11 @@ request. Reload the page yourself.
 
 ## What you cannot do here
 
-Apply, deploys, builds and image updates go through file-drop bridges whose
-host half is the NixOS module in `nix/stacks/daedalus/`, and the logs panel
+Apply, deploys, builds and image updates are root verbs asked through the
+agent's controller, whose host half is the NixOS module in `nix/stacks/daedalus/`, and the logs panel
 reads a Loki the host runs. Without a NixOS host running that module the
 pages render and the write paths are not exercisable. Changes to them are
-best reviewed as code plus a test; `pnpm test` covers the bridge, build and
+best reviewed as code plus a test; `pnpm test` covers the verbs, build and
 contract logic without a host.
 
 ## Building and running the built server
@@ -210,7 +210,7 @@ Verdaccio proxies).
 The `sops` stage is the one thing in the image that is not the app: Settings ›
 Integrations › Cloudflare › Replace token seals the new token to the
 recipients in `/site/.sops.yaml` before it leaves the container, so the
-plaintext never lands on the bridge directory. The image holds no age
+plaintext never reaches the host's files. The image holds no age
 identity, which makes that binary encrypt-only by construction — it can write
 a secret it can never read back. It is the upstream release for linux/amd64,
 pinned by version and sha256 in the Dockerfile (`SOPS_VERSION`,

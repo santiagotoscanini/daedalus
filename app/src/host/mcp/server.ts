@@ -140,7 +140,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       instructions:
         'The control plane for this NixOS box: its app registry, builds, deploys, image pins ' +
         'and the site document a rebuild reads. Read the `daedalus://docs/architecture` ' +
-        'resource before using a write tool. Write tools go through the same bridge verbs and ' +
+        'resource before using a write tool. Write tools go through the same root verbs and ' +
         'the same guards as the buttons in the web UI, so they can do nothing the UI cannot.',
     },
   )

@@ -4,17 +4,20 @@
 #
 # ── the trust boundary these helpers exist for ────────────────────────────
 #
-# The agents run as root and hear from the daedalus container through
-# $APPLY_DIR, a directory the container can write — container root IS the
-# operator's uid under rootless podman. Anything root does to a file BY NAME
-# in such a directory (open, chmod, chown, copy, even read) lands on whatever
-# the container put at that name by then. A symlink turns "publish
-# status.json" into "write /etc/shadow", and "copy the payload into site/"
-# into "commit /run/secrets/<x>". Checking first does not close it: the check
-# and the use are two system calls, and the container runs between them.
+# The agents run as root, and many of them work in directories the operator
+# can write — the configuration checkout and its site directory, the engine
+# clone, the snapshot directories the container reads — and the container's
+# root IS the operator's uid under rootless podman. Anything root does to a
+# file BY NAME in such a directory (open, chmod, chown, copy, even read) lands
+# on whatever was put at that name by then. A symlink turns "publish
+# status.json" into "write /etc/shadow", and "copy the bytes into site/" into
+# "commit /run/secrets/<x>". Checking first does not close it: the check and
+# the use are two system calls, and the other side runs between them. (What
+# the container asks of root arrives as a root verb's run file, which only
+# root can write: nothing it drops anywhere is read by root.)
 #
-# So the rule, for $APPLY_DIR and for every other directory the operator can
-# write: root never touches a file there by name. Writes, reads and removals
+# So the rule, for every directory the operator can write: root never touches
+# a file there by name. Writes, reads and removals
 # run AS the operator (setpriv), where a planted link reaches nothing the
 # operator could not already reach — and every open also refuses to follow a
 # link at all (O_NOFOLLOW through dd, O_EXCL through noclobber), because "the
@@ -117,48 +120,11 @@ op_publish() {
   fi
 }
 
-# [operator] Append stdin to log file $1, never through a link.
-#
-# If the log cannot be opened — a link, a directory, a FIFO nobody reads —
-# the rest of stdin is DRAINED rather than refused. The writer on the other
-# end of this pipe is `nixos-rebuild switch`, and a sink that exits early
-# SIGPIPEs it halfway through activation. A lost log is an inconvenience; a
-# half-switched system is not. nonblock for the FIFO case: an open that waits
-# for a reader would hold the rebuild lock for as long as nobody came.
-op_append() {
-  dd of="$1" oflag=append,nofollow,nonblock conv=notrunc status=none 2>/dev/null || cat >/dev/null
-}
-
 # The bytes of $1, read as the operator and never through a link. nonblock so
 # a FIFO planted at the name reads as empty (or fails) instead of hanging the
 # agent; it changes nothing for a regular file.
 read_as_operator() {
   as_operator dd if="$1" iflag=nofollow,nonblock status=none
-}
-
-# A request file the container dropped, as text on stdout — or a journal line
-# and a non-zero exit when it is not a file this agent will read.
-#
-# A symlink is refused outright. The app publishes requests by temp-and-rename
-# (src/host/bridge.ts), so a link at a request name is never the app: it is
-# something reaching for a file through the bridge. The `-L` test is the
-# readable refusal; the O_NOFOLLOW read as the operator is what actually
-# holds, because a link that appears after the test still cannot be followed
-# and root's privilege is never lent to the open.
-read_request() {
-  if [ -L "$1" ]; then
-    echo "refusing $1: it is a symlink, and the bridge only accepts regular files" >&2
-    return 1
-  fi
-  read_as_operator "$1"
-}
-
-# The id in a status file this agent published earlier, or "" — what the
-# replay guards compare against. Unreadable, unparseable or a link all answer
-# "" (no earlier run), exactly what the direct `jq` read this replaces did
-# with a file it could not parse.
-published_id() {
-  { read_as_operator "$1" 2>/dev/null || true; } | jq -r '.id // ""' 2>/dev/null || true
 }
 
 # Atomic publish for JSON the container polls. $2 is the mode (default 0644).
@@ -172,7 +138,7 @@ published_id() {
 # killed script mid-write) can never be published as truth.
 #
 # Who writes depends on who else can. Into a directory the operator can write
-# ($APPLY_DIR, the operator-owned /run snapshot dirs) the whole publish runs
+# (the operator-owned /run snapshot dirs) the whole publish runs
 # as the operator — see the header — and the file is born theirs, which is
 # also what lets the rootless container read it. Into a root-only directory
 # root writes directly and hands ownership over, as it always did: nothing
@@ -197,40 +163,22 @@ write_json_atomic() {
 
 # ── the verbs' logs ───────────────────────────────────────────────────────
 #
-# A log in a directory only root can write (a root verb's, in the verbs
-# directory) root writes by name, as write_json_atomic does there; nothing
-# else can plant anything at the name. A log in a directory the operator can
-# write (the bridge's) is created, truncated and appended as the operator
-# through op_append, so root never opens it by name and never needs to chown
-# one afterwards.
-
-# Is $1's directory root's alone: root's, and writable by nobody else?
-log_root_only() {
-  local d m
-  d="$(dirname -- "$1")"
-  [ -d "$d" ] && [ ! -L "$d" ] && [ "$EUID" -eq 0 ] || return 1
-  m="$(stat -c '%u %a' -- "$d")" || return 1
-  [ "${m%% *}" = 0 ] && [ $((8#${m#* } & 8#022)) -eq 0 ]
-}
+# Each in the verbs directory, which only root can write (daedalus-lib.nix
+# verbsDir), so root writes them by name, as write_json_atomic does there:
+# nothing else can plant anything at the name.
 
 # stdin appended to log $1, never failing and never stopping early: the
-# writer may be `nixos-rebuild switch` (see op_append).
+# writer may be `nixos-rebuild switch`, and a sink that exits early SIGPIPEs
+# it halfway through activation. A lost log is an inconvenience; a
+# half-switched system is not.
 log_sink() {
-  if log_root_only "$1"; then
-    cat >>"$1" 2>/dev/null || cat >/dev/null
-  else
-    as_operator_fn op_append "$1"
-  fi
+  cat >>"$1" 2>/dev/null || cat >/dev/null
 }
 
 # Empty log $1 (creating it). Best-effort: a log that cannot be reset is a
 # worse log, never a failed rebuild.
 log_reset() {
-  if log_root_only "$1"; then
-    : >"$1" 2>/dev/null || true
-  else
-    as_operator dd if=/dev/null of="$1" oflag=nofollow,nonblock status=none 2>/dev/null || true
-  fi
+  : >"$1" 2>/dev/null || true
 }
 
 # Append one line ($2) to log $1.
@@ -261,9 +209,7 @@ log_run() {
 # The rootless `--sdnotify=conmon` eval warnings are dropped: one per container,
 # cosmetic, and left in they fill the window on their own.
 #
-# Read as the operator and never through a link (the log sits in the
-# container's directory, and this is published in a status it reads). Never
-# fails: callers run it in an assignment right before rollback, where an
+# Never fails: callers run it in an assignment right before rollback, where an
 # errexit would skip the rollback.
 log_errtail() {
   { read_as_operator "$1" 2>/dev/null || true; } |

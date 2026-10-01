@@ -333,7 +333,7 @@ write_status running writing ""
 
 # sed pattern escaping. Digests are hex and safe; tags admit `.`, which would
 # otherwise match any character. Cheap to do properly, and this is the one
-# place in the bridge where a regex touches source code.
+# place in the host verbs where a regex touches source code.
 esc() { printf '%s' "$1" | sed -e 's/[][\.*^$|]/\\&/g'; }
 
 TOUCHED=""
