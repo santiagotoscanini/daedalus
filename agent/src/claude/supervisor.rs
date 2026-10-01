@@ -16,7 +16,8 @@ use std::time::{Duration, Instant};
 
 use super::cli::{cli_version, find_cli, install_method, last_meaningful};
 use super::profile::{
-    claude_dir, home_dir, read_credentials, read_session_files, read_sessions, read_settings,
+    claude_dir, forget_keychain, home_dir, read_credentials, read_session_files, read_sessions,
+    read_settings,
 };
 use super::workdir::pick_workdir;
 use super::{gcroot, Banner, Credentials, Report, Settings, UpdateResult};
@@ -579,6 +580,8 @@ impl Supervisor {
             self.next_start = Some(Instant::now() + Duration::from_secs(60));
             return;
         };
+        // A log-in made since the last look shows in the next report.
+        forget_keychain();
         // A trust accepted since the last look is honoured on the next start.
         let (dir, via) = pick_workdir(self.named_workdir.as_deref());
         self.workdir = dir;

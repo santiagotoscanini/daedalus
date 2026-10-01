@@ -4,10 +4,13 @@
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Deserializer};
 
 use super::{Credentials, Session, Settings};
+use crate::util::LockExt;
 
 pub fn home_dir() -> Option<PathBuf> {
     std::env::var_os("USERPROFILE")
@@ -183,7 +186,7 @@ pub fn read_credentials(dir: &Path) -> Credentials {
 /// without reading the secret (so no prompt); its dates stay unread.
 /// Absent everywhere else.
 fn keychain_credentials() -> Credentials {
-    if crate::os::claude_keychain_login() {
+    if KEYCHAIN.get(crate::os::claude_keychain_login) {
         return Credentials {
             present: true,
             store: Some("keychain".into()),
@@ -191,6 +194,42 @@ fn keychain_credentials() -> Credentials {
         };
     }
     Credentials::default()
+}
+
+/// How long one look at the keychain stands. Asking is a `security` run,
+/// and the report is read every five seconds; the item comes and goes only
+/// with a log-in or a log-out, and a server restart looks again
+/// (`forget_keychain`).
+const KEYCHAIN_FOR: Duration = Duration::from_secs(10 * 60);
+
+static KEYCHAIN: Asked = Asked(Mutex::new(None));
+
+/// One yes-or-no answer, kept for `KEYCHAIN_FOR`.
+struct Asked(Mutex<Option<(Instant, bool)>>);
+
+impl Asked {
+    /// `probe`'s last answer while it is younger than `KEYCHAIN_FOR`, a new
+    /// one after.
+    fn get(&self, probe: impl FnOnce() -> bool) -> bool {
+        let mut seen = self.0.lock_ok();
+        if let Some((at, present)) = *seen {
+            if at.elapsed() < KEYCHAIN_FOR {
+                return present;
+            }
+        }
+        let present = probe();
+        *seen = Some((Instant::now(), present));
+        present
+    }
+
+    fn forget(&self) {
+        *self.0.lock_ok() = None;
+    }
+}
+
+/// The next report looks at the keychain again.
+pub fn forget_keychain() {
+    KEYCHAIN.forget();
 }
 
 pub fn read_settings(dir: &Path) -> Settings {
@@ -259,6 +298,24 @@ mod tests {
         assert_eq!(s[0].last_activity_at, Some(7));
         assert!(!s[1].alive);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The keychain is asked once per `KEYCHAIN_FOR`, and again after a
+    /// server start forgets the answer — not on every five-second report.
+    #[test]
+    fn the_keychain_is_asked_once_until_forgotten() {
+        let asked = std::cell::Cell::new(0);
+        let probe = || {
+            asked.set(asked.get() + 1);
+            true
+        };
+        let keychain = Asked(Mutex::new(None));
+        assert!(keychain.get(probe));
+        assert!(keychain.get(probe));
+        assert_eq!(asked.get(), 1);
+        keychain.forget();
+        assert!(keychain.get(probe));
+        assert_eq!(asked.get(), 2);
     }
 
     /// One reader, one set of rules for every use of the session files: a
