@@ -14,8 +14,9 @@ drives.
 
 The root `flake.nix` exports:
 
-- `nixosModules.platform`, `nixosModules.daedalus`, `nixosModules.catalog`,
-  and `nixosModules.default` (all three);
+- `nixosModules.default` — the whole engine: platform, control plane and
+  catalog (every catalog module off). One module, not three: the control
+  plane defines options only catalog modules declare;
 - `templates.config` — the example host under `../example-host/`, to start from (`nix flake init -t
   github:santiagotoscanini/daedalus#config`), which is also the host the
   checks evaluate;

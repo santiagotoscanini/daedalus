@@ -17,7 +17,7 @@ behind a switch that defaults OFF — §7), `example-host/` (the host a
 stranger starts from, and the one `nix flake check` evaluates) and
 `nix/tests/` (that evaluation). `example-host/site/` is also the one sample of
 each site and registry document both halves of the app↔nix contract test.
-`flake.nix` exports it as `nixosModules.{platform,daedalus,catalog,default}`,
+`flake.nix` exports it as ONE module, `nixosModules.default`,
 `templates.config`
 and `lib.path`. Its MODULES take nothing from the flake's inputs — the host
 picks the nixpkgs they are evaluated against and imports sops-nix beside

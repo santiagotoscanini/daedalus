@@ -23,7 +23,7 @@ path-scoped rules load as you touch files.
   updater, the host agents `host/*.sh` — apply, deploy, build, image and
   engine updates, app secrets, the snapshot scripts) and `nix/modules/<id>/`
   (the catalog: the spine every box needs, plus leaves), exported by the
-  root `flake.nix` as `nixosModules.{platform,daedalus,catalog,default}` and
+  root `flake.nix` as one module, `nixosModules.default`, and
   `templates.config` (a host to start from, and the host CI evaluates). The
   operator's private
   configuration takes it as a flake input pinned by rev. It lives on

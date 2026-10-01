@@ -56,7 +56,7 @@ Two pieces:
 
 ```
 ENGINE  github.com/santiagotoscanini/daedalus   (public; one branch, main)
-  flake.nix           nixosModules.{platform,daedalus,catalog,default}, lib.path, templates.config; packages.init is Phase 12
+  flake.nix           nixosModules.default (the whole engine), lib.path, templates.config; packages.init is Phase 12
   nix/{platform,modules/<id>,stacks/daedalus}   every catalog stack gated by fleet.modules.<id>.enable
   app/                the TanStack Start app; src/core + src/modules/<id> (manifest, loaders, views)
   agent/              the Rust agent for the other machines (Windows service, macOS LaunchDaemon, tray)

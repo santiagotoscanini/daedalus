@@ -103,11 +103,10 @@
 
       # The catalog: one stack per directory, `modules/<id>/…`, each behind
       # `fleet.modules.<id>.enable` — default OFF, so importing them all costs a
-      # host nothing. Listed FILE by file like the two lists above, because a
-      # multi-file stack keeps its files as separate entries: the module system
-      # merges list-typed options in an order that depends on nesting, and a
-      # host that names these files one by one in its own list (nix-engine.md
-      # §6) must be able to keep each in the slot it always had.
+      # host nothing. Listed FILE by file like the two lists above: a module
+      # never imports its siblings (nix-engine.md §6), because the module
+      # system merges a module's own `imports` ahead of the level above it, so
+      # a multi-file stack that did would reorder list-typed options.
       catalogModules = [
         "app-db/app-db.nix"
         "app-db/claude-ro.nix"
@@ -324,31 +323,21 @@
         description = "A NixOS host run by daedalus: the engine as a flake input, and the definitions a host brings";
       };
 
-      nixosModules = {
-        # The OS-level base every stack rides on: the container runtime and its
-        # helpers, the publishing registries, the site constants read from the
-        # host's `site/`, secrets, ZFS and backup mechanisms. No switches.
-        platform = {
-          imports = map (m: root + "/platform/${m}") platformModules;
-        };
-
-        # The control plane itself, behind `fleet.modules.daedalus.enable`.
-        daedalus = {
-          imports = map (m: root + "/stacks/daedalus/${m}") daedalusModules;
-        };
-
-        # The catalog of stacks, all switched off until the host says otherwise.
-        catalog = {
-          imports = map (m: root + "/modules/${m}") catalogModules;
-        };
-
-        default = {
-          imports = [
-            self.nixosModules.platform
-            self.nixosModules.daedalus
-            self.nixosModules.catalog
-          ];
-        };
+      # ONE module, the whole engine: the platform (the base every stack rides
+      # on, no switches), the control plane behind `fleet.modules.daedalus.enable`,
+      # and the catalog, every stack off until the host switches it on. Not
+      # three exports: the control plane defines options only catalog modules
+      # declare, so no part evaluates without the others.
+      #
+      # Three nested groups, in this order: the module system merges list-typed
+      # options in an order that depends on nesting, so flattening them into
+      # one list would reorder every host's units.
+      nixosModules.default = {
+        imports = [
+          { imports = map (m: root + "/platform/${m}") platformModules; }
+          { imports = map (m: root + "/stacks/daedalus/${m}") daedalusModules; }
+          { imports = map (m: root + "/modules/${m}") catalogModules; }
+        ];
       };
     };
 }
