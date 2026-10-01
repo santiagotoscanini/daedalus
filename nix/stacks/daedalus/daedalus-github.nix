@@ -191,8 +191,12 @@ in
         ];
         RestrictNamespaces = true;
         SystemCallArchitectures = "native";
+        # DAC_READ_SEARCH: the published token is the operator's and 0400, and
+        # the throttle reads its mintedAt back; without it root reads nothing
+        # and every request mints.
         CapabilityBoundingSet = [
           "CAP_CHOWN"
+          "CAP_DAC_READ_SEARCH"
           "CAP_SETUID"
           "CAP_SETGID"
         ];
