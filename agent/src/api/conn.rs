@@ -556,8 +556,8 @@ mod tests {
         assert_eq!(out[0]["id"], 1);
         assert_eq!(out[1]["err"]["code"], "unknown_method");
         assert_eq!(out[2]["err"]["code"], "bad_request");
-        // Not offered on the controller: nix pins Claude there.
-        assert_eq!(out[3]["err"]["code"], "unsupported");
+        // Not a method of the controller's API: nix pins Claude there.
+        assert_eq!(out[3]["err"]["code"], "unknown_method");
         // An unknown field in the envelope is ignored (wire.rs).
         assert_eq!(out[4]["id"], 5);
         assert_eq!(out[4]["ok"]["api"], 1);

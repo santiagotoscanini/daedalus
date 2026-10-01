@@ -37,10 +37,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::claude::{Report, Roster, SessionAction};
+use crate::claude::SessionAction;
 use crate::config::TelemetryLevel;
-use crate::providers::ProviderReport;
-use crate::telemetry::Telemetry;
 
 /// The link protocol this agent speaks.
 pub const PROTO: u32 = 1;
@@ -521,16 +519,10 @@ pub fn event<P: Serialize>(e: &str, p: &P) -> String {
 /// The heartbeat line.
 pub const HB_LINE: &str = r#"{"e":"hb"}"#;
 
-/// The payloads a machine pushes, typed for the controller that reads them.
-pub type StatusPayload = Value;
-pub type TelemetryPayload = Telemetry;
-pub type ClaudePayload = Option<Report>;
-pub type ClaudeRosterPayload = Option<Roster>;
-pub type ProvidersPayload = Vec<ProviderReport>;
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::claude::Roster;
     use crate::rpc::{code, ApiError, Response};
     use serde_json::json;
 

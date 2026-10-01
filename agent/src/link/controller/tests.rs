@@ -43,7 +43,7 @@ struct Ctl {
 fn controller(limits: Limits) -> Ctl {
     let cid = id(200);
     let events = events();
-    let registry = Arc::new(Registry::new(&cid, Arc::clone(&events), limits));
+    let registry = Arc::new(Registry::new(Arc::clone(&events), limits));
     let listener = listen("127.0.0.1:0".parse().unwrap(), &cid, Arc::clone(&registry)).unwrap();
     Ctl {
         id: cid,
@@ -856,7 +856,7 @@ fn a_machine_reconnects_after_the_controller_comes_back() {
     wait_for("the machine sees it go", 5, || {
         shared.link().is_some_and(|l| !l.connected)
     });
-    let registry2 = Arc::new(Registry::new(&cid, events(), fast()));
+    let registry2 = Arc::new(Registry::new(events(), fast()));
     approve(&registry2, &nid, claude_policy());
     let _listener2 = listen(addr, &cid, Arc::clone(&registry2)).unwrap();
     wait_for("reconnected", 10, || {
@@ -1143,7 +1143,7 @@ fn the_api_steers_the_machines_through_the_socket() {
         cfg.role(),
     ));
     let cid = id(210);
-    let registry = Arc::new(Registry::new(&cid, cshared.events_handle(), fast()));
+    let registry = Arc::new(Registry::new(cshared.events_handle(), fast()));
     cshared.set_nodes(Arc::clone(&registry));
     cshared.set_controller(crate::shared::Controller {
         keys: Arc::new(Keys::fixed(&cid).unwrap()),
@@ -1386,7 +1386,6 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
     let keys = Arc::new(Keys::load(&cdir).unwrap());
     let old = keys.forward();
     let registry = Arc::new(Registry::new(
-        &old,
         events(),
         Limits {
             pending_per_ip: 8,
@@ -1601,7 +1600,7 @@ fn a_rotation_the_trusted_key_did_not_sign_is_refused() {
     let impostor = listen_with(
         "127.0.0.1:0".parse().unwrap(),
         ikeys,
-        Arc::new(Registry::new(&id(74), events(), fast())),
+        Arc::new(Registry::new(events(), fast())),
     )
     .unwrap();
     let (_, _, node) = attempt_in(
@@ -1768,7 +1767,7 @@ fn santree_machines_are_told_the_session_host_and_the_allow_list_leads() {
     let cid = id(200);
     let events = events();
     let registry =
-        Arc::new(Registry::new(&cid, Arc::clone(&events), fast()).with_allow_list(allow.clone()));
+        Arc::new(Registry::new(Arc::clone(&events), fast()).with_allow_list(allow.clone()));
     let listener = listen("127.0.0.1:0".parse().unwrap(), &cid, Arc::clone(&registry)).unwrap();
     let ctl = Ctl {
         id: cid,

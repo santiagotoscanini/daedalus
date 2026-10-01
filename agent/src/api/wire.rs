@@ -632,8 +632,8 @@ pub struct SessionQueued {
     pub request: String,
 }
 
-/// `claude.restart`'s and `claude.update`'s answer: the instruction is
-/// queued for the session, which takes it with its next report.
+/// `claude.restart`'s answer: the instruction is queued for the session,
+/// which takes it with its next report.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Queued {

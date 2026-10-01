@@ -54,7 +54,6 @@
 //! | `system.info`      | `SystemInfo`: version, mode, OS, uptime, role, capabilities | —                  |
 //! | `claude.status`    | `ClaudeStatus`: the session's last report              | `claude.remote_control` |
 //! | `claude.restart`   | `Queued`; the session restarts the server (`unavailable` while off or no session reports) | `claude.remote_control` |
-//! | `claude.update`    | `Queued`; the session runs `claude update`             | `claude.update`         |
 //! | `claude.roster`    | `ClaudeRosterGet`: the session's roster of Claude sessions (claude/roster.rs) | `claude.sessions` |
 //! | `claude.session`   | `SessionQueued`: one verb `{action, id}` queued for the session; its roster's `actions` reports it under `request` | `claude.sessions` |
 //! | `telemetry.get`    | `TelemetryGet`: the document at the configured level   | —                       |
@@ -352,12 +351,6 @@ impl Api {
                     ));
                 }
                 self.shared.request_claude_restart();
-                to_value(&Queued { queued: true })
-            }
-            "claude.update" => {
-                no_params()?;
-                self.has("claude.update")?;
-                self.shared.request_claude_update();
                 to_value(&Queued { queued: true })
             }
             "claude.roster" => {

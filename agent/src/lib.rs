@@ -229,7 +229,6 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         match cfg.controller_listen() {
             Some(addr) => {
                 let mut registry = link::controller::Registry::new(
-                    &keys.forward(),
                     shared.events_handle(),
                     link::controller::Limits::default(),
                 );

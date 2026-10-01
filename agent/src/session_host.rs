@@ -639,7 +639,6 @@ mod tests {
         // Through the registry and the status thread's poll, as it runs.
         let reg = Arc::new(
             Registry::new(
-                &Identity::from_seed([201; 32]),
                 Arc::new(Events::default()),
                 crate::link::controller::Limits::default(),
             )
@@ -716,7 +715,6 @@ mod tests {
     #[cfg(unix)]
     fn registry() -> Arc<Registry> {
         Arc::new(Registry::new(
-            &Identity::from_seed([200; 32]),
             Arc::new(Events::default()),
             crate::link::controller::Limits::default(),
         ))

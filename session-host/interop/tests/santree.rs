@@ -122,7 +122,7 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     // the node's link, and it follows the host's status file.
     let ctl = Identity::from_seed([200; 32]);
     let registry = Arc::new(
-        Registry::new(&ctl, Arc::new(Events::default()), Limits::default())
+        Registry::new(Arc::new(Events::default()), Limits::default())
             .with_allow_list(allow.clone()),
     );
     let listener = listen("127.0.0.1:0".parse().unwrap(), &ctl, Arc::clone(&registry)).unwrap();

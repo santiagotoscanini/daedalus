@@ -17,7 +17,7 @@ use crate::api::wire::{
     NodeTelemetry, ProviderModelSent, SetDesiredOk,
 };
 use crate::claude::{Report, Roster, SessionAction};
-use crate::identity::{fingerprint, node_id_of, Identity};
+use crate::identity::{fingerprint, node_id_of};
 use crate::link::wire::PolicyRequest;
 use crate::link::wire::{
     self, name, ClaudeSessionParams, Command, CommandParams, ControllerId, Hello, NodeState,
@@ -364,12 +364,14 @@ pub struct Registry {
 }
 
 impl Registry {
-    pub fn new(identity: &Identity, events: Arc<Events>, limits: Limits) -> Self {
+    pub fn new(events: Arc<Events>, limits: Limits) -> Self {
         Self {
+            // The fingerprint is the key each connection was served
+            // (accept.rs), set as its welcome is sent.
             me: ControllerId {
                 version: crate::VERSION.into(),
                 hostname: crate::facts::hostname(),
-                fingerprint: identity.fingerprint(),
+                fingerprint: String::new(),
             },
             limits,
             inner: Mutex::new(Reg::default()),

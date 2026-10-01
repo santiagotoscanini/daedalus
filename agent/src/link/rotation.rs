@@ -519,7 +519,7 @@ mod tests {
     }
 
     fn sni_of(i: &Identity) -> String {
-        super::super::tls::server_name_for(Some(identity::digest(i.public_key().as_bytes())))
+        super::super::tls::server_name_for(identity::digest(i.public_key().as_bytes()))
     }
 
     #[test]

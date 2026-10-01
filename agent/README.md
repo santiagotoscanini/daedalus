@@ -266,7 +266,6 @@ verbs, none taking a command, a path or a flag:
 | `controller.rotate` `{grace_secs?}` | the same `controller` block: a new controller key made, the old one retired after `grace_secs` (60 s to 90 days; absent, 7 days); `unavailable` while one runs | the controller |
 | `claude.status`    | `{reporting, wanted, report}`: the session's last report, or `reporting: false` | `claude.remote_control` |
 | `claude.restart`   | `{queued: true}`; the session restarts the server at once (`unavailable` while no session reports) | `claude.remote_control` |
-| `claude.update`    | `{queued: true}`; never offered on the controller                    | `claude.update`         |
 | `claude.roster`    | `{reporting, roster}`: the session's roster of Claude sessions, or `reporting: false` | `claude.sessions` |
 | `claude.session` `{action, id}` | `{queued: true, request}`: one verb — `resume`, `stop`, `remove` — for the session; its roster's `actions` reports the outcome under `request` | `claude.sessions` |
 | `telemetry.get`    | `{level, telemetry}`: the document at the configured level           | —                       |

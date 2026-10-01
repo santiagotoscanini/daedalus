@@ -141,9 +141,7 @@ mod tests {
     #[test]
     fn the_metrics_page_answers_the_scrape_alone() {
         let shared = shared_as(Mode::Controller);
-        let cid = crate::identity::Identity::from_seed([200; 32]);
         shared.set_nodes(Arc::new(crate::link::controller::Registry::new(
-            &cid,
             shared.events_handle(),
             Default::default(),
         )));

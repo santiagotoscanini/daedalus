@@ -159,7 +159,7 @@ impl Client {
         match Tls::client(
             sock.into(),
             Arc::clone(&self.config),
-            &server_name_for(Some(pinned)),
+            &server_name_for(pinned),
             timeout,
         ) {
             Ok(t) => Ok(t),
@@ -306,7 +306,9 @@ pub fn pin_refused(e: &io::Error) -> bool {
         })
 }
 
-/// The controller's side: its own certificate, every machine asked for one.
+/// The controller's side: its own certificate, every machine asked for one
+/// (the tests'; the controller resolves its keys, `server_config_resolving`).
+#[cfg(test)]
 pub fn server_config(id: &Identity) -> anyhow::Result<Arc<ServerConfig>> {
     let (certs, key) = certificate_and_key(id);
     let mut config = ServerConfig::builder_with_provider(crypto::provider())
@@ -320,13 +322,9 @@ pub fn server_config(id: &Identity) -> anyhow::Result<Arc<ServerConfig>> {
 
 /// The name a machine asks for (SNI): the node id of the key it pins, under
 /// `SERVER_NAME`, so a controller holding two keys during a rotation
-/// presents the one this machine trusts (rotation.rs); the bare name
-/// without one (the tests' raw clients).
-pub fn server_name_for(pin: Option<[u8; 32]>) -> String {
-    match pin {
-        Some(d) => format!("k{}.{SERVER_NAME}", &hex::encode(d)[..16]),
-        None => SERVER_NAME.to_string(),
-    }
+/// presents the one this machine trusts (rotation.rs).
+pub fn server_name_for(pin: [u8; 32]) -> String {
+    format!("k{}.{SERVER_NAME}", &hex::encode(pin)[..16])
 }
 
 /// The node id of the key a machine pins, from the name it asked for; None
@@ -465,15 +463,6 @@ impl Tls {
         })
     }
 
-    /// The name the machine asked for, on the controller's side (SNI;
-    /// `pinned_id_of` reads the key it pins from it).
-    pub fn sni(&self) -> Option<&str> {
-        match &self.conn {
-            rustls::Connection::Server(s) => s.server_name(),
-            rustls::Connection::Client(_) => None,
-        }
-    }
-
     /// The key the peer's certificate carries — the one its handshake
     /// signature proved.
     pub fn peer_key(&self) -> Option<[u8; 32]> {
@@ -481,20 +470,10 @@ impl Tls {
         cert::public_key_of(certs.first()?).ok()
     }
 
-    /// Where the peer connects from.
-    pub fn peer_addr(&self) -> Option<std::net::SocketAddr> {
-        self.sock.peer_addr().ok()
-    }
-
     /// Accept lines up to `n` bytes (a connection not yet admitted reads
     /// less than `MAX_LINE`, link/controller.rs).
     pub fn set_max_line(&mut self, n: usize) {
         self.lines.set_max(n.min(MAX_LINE));
-    }
-
-    /// The read timeout `recv` waits at most.
-    pub fn set_read_timeout(&self, d: Duration) -> io::Result<()> {
-        self.sock.set_read_timeout(Some(d))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -678,10 +657,9 @@ pub(crate) mod tests {
     #[test]
     fn a_machine_names_the_key_it_pins() {
         let d = [0xabu8; 32];
-        let name = server_name_for(Some(d));
+        let name = server_name_for(d);
         assert_eq!(name, "kabababababababab.daedalus-controller");
         assert_eq!(pinned_id_of(Some(&name)), Some("abababababababab"));
-        assert_eq!(server_name_for(None), SERVER_NAME);
         for other in [
             SERVER_NAME,
             "kABABABABABABABAB.daedalus-controller",
