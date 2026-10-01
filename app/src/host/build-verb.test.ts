@@ -1,17 +1,18 @@
-import { mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { BuildRequest } from '../lib/builds'
-import { readBuildLogTail, readBuildStatus, requestBuild, requestBuildCancel } from './build-bridge'
+import { readBuildLogTail, readBuildStatus, requestBuildCancel, startBuild } from './build-verb'
 import type { ControllerClient } from './controller/client'
+import { ControllerError, type RootRun } from './controller/wire'
 
 let dir: string
 let env: (name: string) => string | undefined
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'build-bridge-'))
-  env = (name) => (name === 'APPLY_DIR' || name === 'BUILD_LOGS_PATH' ? dir : undefined)
+  dir = await mkdtemp(join(tmpdir(), 'build-verb-'))
+  env = (name) => (name === 'VERBS_DIR' || name === 'BUILD_LOGS_PATH' ? dir : undefined)
 })
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
@@ -37,35 +38,58 @@ const REQUEST: BuildRequest = {
 const writeStatus = (body: unknown) =>
   writeFile(join(dir, 'build-status.json'), JSON.stringify(body), 'utf8')
 
-describe('requestBuild', () => {
-  it('writes the request file and nothing else', async () => {
-    await requestBuild(REQUEST, env)
-    expect(await readdir(dir)).toEqual(['build-request.json'])
-    expect(JSON.parse(await readFile(join(dir, 'build-request.json'), 'utf8'))).toEqual(REQUEST)
+/** A controller whose rootStart answers `answer`, recording what it was asked. */
+function controller(answer: () => Promise<RootRun>) {
+  const asked: unknown[][] = []
+  const client = {
+    rootStart: (...args: unknown[]) => {
+      asked.push(args)
+      return answer()
+    },
+  } as unknown as ControllerClient
+  return { ctx: { controller: client }, asked }
+}
+
+const run = (outcome: RootRun['outcome'], detail = ''): RootRun => ({
+  run: 'a1b2c3d4e5f60718',
+  verb: 'build',
+  outcome,
+  detail,
+  verbs: [],
+})
+
+describe('startBuild', () => {
+  it('asks the root helper’s build, detached, with the request as the payload', async () => {
+    const { ctx, asked } = controller(() => Promise.resolve(run(null)))
+    expect(await startBuild(ctx, REQUEST)).toEqual({ started: true, run: 'a1b2c3d4e5f60718' })
+    expect(asked[0]?.slice(0, 2)).toEqual(['build', {}])
+    expect(JSON.parse(String(asked[0]?.[2]))).toEqual(REQUEST)
   })
 
-  it('writes the build env with the request', async () => {
-    const withEnv: BuildRequest = {
-      ...REQUEST,
-      buildEnv: { placeholders: { AUTH_SECRET: 'placeholder' }, railpack: {} },
-    }
-    await requestBuild(withEnv, env)
-    expect(JSON.parse(await readFile(join(dir, 'build-request.json'), 'utf8'))).toEqual(withEnv)
+  it('carries a refusal before the start, and a call that could not be made', async () => {
+    const busy = controller(() =>
+      Promise.resolve(run('refused', 'daedalus-build@x is still running; wait for it to finish')),
+    )
+    expect(await startBuild(busy.ctx, REQUEST)).toEqual({
+      started: false,
+      detail: 'daedalus-build@x is still running; wait for it to finish',
+    })
+    const down = controller(() =>
+      Promise.reject(new ControllerError('unreachable', 'no socket at /controller/api.sock')),
+    )
+    expect(await startBuild(down.ctx, REQUEST)).toEqual({
+      started: false,
+      detail: 'no socket at /controller/api.sock',
+    })
   })
 
-  it('refuses a bad build env name before writing', async () => {
+  it('refuses a bad build env name before asking anything', async () => {
+    const { ctx, asked } = controller(() => Promise.resolve(run(null)))
     await expect(
-      requestBuild(
-        { ...REQUEST, buildEnv: { placeholders: {}, railpack: { NODE_ENV: 'x' } } },
-        env,
-      ),
+      startBuild(ctx, { ...REQUEST, buildEnv: { placeholders: {}, railpack: { NODE_ENV: 'x' } } }),
     ).rejects.toThrow(/buildEnv\.railpack/)
-    expect(await readdir(dir)).toEqual([])
-  })
-
-  it('refuses an invalid request before writing', async () => {
-    await expect(requestBuild({ ...REQUEST, id: '../x' }, env)).rejects.toThrow(/id/)
-    expect(await readdir(dir)).toEqual([])
+    await expect(startBuild(ctx, { ...REQUEST, id: '../x' })).rejects.toThrow(/id/)
+    expect(asked).toEqual([])
   })
 })
 

@@ -11,7 +11,7 @@ elif in_list "$APP" "$DEPLOYABLE"; then
   if systemctl start --no-block "app-$APP-deploy.service"; then
     finish succeeded "published; app-$APP-deploy started" ""
   else
-    finish succeeded "published; app-$APP-deploy could not be started (journalctl -u daedalus-build)" ""
+    finish succeeded "published; app-$APP-deploy could not be started (journalctl -u 'daedalus-build@*')" ""
   fi
 else
   finish succeeded "published; not deployed: $APP is pinned" "" '.pinned = true'

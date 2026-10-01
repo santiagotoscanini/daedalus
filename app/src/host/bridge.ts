@@ -12,11 +12,9 @@ import { env } from './env'
 // file the host writes back. A systemd.path unit on the host watches each
 // request file and starts the matching root-side service; the trust boundary
 // is "can write into /apply", and the Pocket ID gate in front of the app is
-// what guards that. Each verb's module (apply.ts, deploy.ts, workspaces.ts,
-// core/github-app.ts, …) instantiates this with its own file names and status
-// shape — the mechanics live here once. build-bridge.ts is the exception: its
-// request id is the builds row id rather than one minted here, so it writes
-// through `writeAtomic` alone.
+// what guards that. Each verb's module (apply.ts, image-update.ts, …)
+// instantiates this with its own file names and status shape — the mechanics
+// live here once.
 
 export type BridgeStatus = { id: string | null; state: string }
 

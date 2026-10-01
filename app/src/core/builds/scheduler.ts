@@ -34,6 +34,7 @@ import {
   reconcile,
 } from '../../lib/build-queue'
 import {
+  BUILD_STATUS_MAX_AGE_MS,
   type BuildState,
   type BuildStatus,
   isActiveBuildState,
@@ -53,8 +54,6 @@ export const ACTIVE_TICK_MS = 3_000
 export const IDLE_TICK_MS = 30_000
 /** A tick or sweep still running after this is presumed hung; the next one takes over. */
 export const TICK_TIMEOUT_MS = 5 * 60_000
-/** A written request the host has not answered blocks another this long (host/flow.ts's, restated). */
-export const PICKUP_MS = 120_000
 export const FIRST_SWEEP_MS = 60_000
 export const SWEEP_EVERY_MS = 60 * 60_000
 const SWEEP_JITTER_MIN_MS = 30_000
@@ -62,7 +61,7 @@ const SWEEP_JITTER_SPAN_MS = 60_000
 
 // ── the slot ───────────────────────────────────────────────────────────────
 
-const SLOT_KEY = 'daedalusBuildSchedulerV2'
+const SLOT_KEY = 'daedalusBuildSchedulerV3'
 
 type Hold = { since: number }
 
@@ -74,8 +73,13 @@ export type SchedulerState = {
   busy: Hold | null
   sweeping: Hold | null
   nextSweepAt: number
-  /** The last request written and not yet seen in the status file. */
-  pending: { id: string; at: number } | null
+  /**
+   * The last build started (its row and the root helper's run) and not yet
+   * seen in the status file: while it is, the run's own end is asked of the
+   * controller, so a start the unit never got past (the fence check) fails the
+   * row with its words rather than as `interrupted` 90 s later.
+   */
+  dispatched: { id: string; run: string; at: number } | null
   /** The status last folded, so an unchanged file does not cost a lookup per tick. */
   seenStatus: string | null
   /**
@@ -108,8 +112,11 @@ function isState(v: unknown): v is SchedulerState {
     isHold(v.busy) &&
     isHold(v.sweeping) &&
     isNum(v.nextSweepAt) &&
-    (v.pending === null ||
-      (isRecord(v.pending) && typeof v.pending.id === 'string' && isNum(v.pending.at))) &&
+    (v.dispatched === null ||
+      (isRecord(v.dispatched) &&
+        typeof v.dispatched.id === 'string' &&
+        typeof v.dispatched.run === 'string' &&
+        isNum(v.dispatched.at))) &&
     (v.seenStatus === null || typeof v.seenStatus === 'string') &&
     (v.detectedSeen === null ||
       (isRecord(v.detectedSeen) &&
@@ -128,7 +135,7 @@ export function freshState(now: number): SchedulerState {
     busy: null,
     sweeping: null,
     nextSweepAt: now + FIRST_SWEEP_MS,
-    pending: null,
+    dispatched: null,
     seenStatus: null,
     detectedSeen: null,
     githubBackoffUntil: 0,
@@ -315,8 +322,10 @@ export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promi
   const { reportBuildChange, reportTick } = await import('./report')
   const report = (row: BuildRow) => quietly(state, 'report', () => reportBuildChange(ctx, row))
 
-  // (a) the host's word
+  // (a) the host's word: its status, or for a build it has not written one
+  // for, how the build's unit ended
   const { status, stale } = await readHostStatus(state)
+  await settleDispatched(ctx, status, now, state, report)
   const rows = await rowsToFold(status, state)
 
   // (b) reconcile
@@ -325,7 +334,6 @@ export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promi
   await enqueueSupersededTips(intents, supersededHere, state, now)
 
   // (c) the queue: cancel what cannot build, then dispatch when nothing is in flight
-  if (state.pending !== null && now.getTime() - state.pending.at >= PICKUP_MS) state.pending = null
   const inFlight = isInFlight(status, stale, next, state)
   const dispatched = await settleQueue(ctx, now, state, report, inFlight)
 
@@ -335,17 +343,64 @@ export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promi
   return inFlight || dispatched
 }
 
-/** The host's status file, or null; a status naming the pending request clears it. */
+/** The host's status file, or null; a status naming the dispatched build clears it. */
 async function readHostStatus(
   state: SchedulerState,
 ): Promise<{ status: BuildStatus | null; stale: boolean }> {
-  const bridge = await import('../../host/build-bridge')
-  const snapshot = await bridge.readBuildStatus()
+  const host = await import('../../host/build-verb')
+  const snapshot = await host.readBuildStatus()
   if (snapshot.error !== null)
     logOnce(state, 'status-decode', `build status unreadable: ${snapshot.error}`)
   const status = snapshot.available ? snapshot.data : null
-  if (status !== null && state.pending?.id === status.id) state.pending = null
+  if (status !== null && state.dispatched?.id === status.id) state.dispatched = null
   return { status, stale: snapshot.stale }
+}
+
+/**
+ * A build started and not yet in the status file: when its unit has already
+ * ended (the controller holds the run), the row fails with the run's words —
+ * the egress fence missing, the build refused before it wrote anything. A run
+ * the controller no longer holds (it restarted), or one past the status's own
+ * staleness, is left to the row's staleness clock, as is anything the
+ * controller cannot answer now.
+ */
+async function settleDispatched(
+  ctx: Ctx,
+  status: BuildStatus | null,
+  now: Date,
+  state: SchedulerState,
+  report: (row: BuildRow) => Promise<void>,
+): Promise<void> {
+  const d = state.dispatched
+  if (d === null) return
+  if (now.getTime() - d.at >= BUILD_STATUS_MAX_AGE_MS) {
+    state.dispatched = null
+    return
+  }
+  let run: Awaited<ReturnType<Ctx['controller']['rootFollow']>>
+  try {
+    run = await ctx.controller.rootFollow(d.run, Number.MAX_SAFE_INTEGER)
+  } catch (e) {
+    // The controller restarted and forgot the run: nothing left to ask.
+    if (isRecord(e) && e.code === 'not_found') state.dispatched = null
+    return
+  }
+  const { outcome, detail } = run.run
+  // Still running, or it wrote a status after this tick read the file.
+  if (outcome === null || status?.id === d.id) return
+  state.dispatched = null
+  const { getBuild, toBuildRow, updateFromStatus } = await import('../../lib/repo/builds')
+  const record = await getBuild(d.id)
+  if (record === undefined) return
+  const row = toBuildRow(record)
+  if (!isActiveBuildState(row.state)) return
+  const error = `the build did not start: ${detail === '' ? `its unit ended ${outcome}` : detail}`
+  const written = await updateFromStatus(
+    d.id,
+    { state: 'failed', phase: 'failed', error, updatedAt: now },
+    'engine',
+  )
+  if (written !== undefined) await report(toBuildRow({ ...written, app: row.app }))
 }
 
 /** The running rows, plus a finished one the status has just answered for. */
@@ -487,7 +542,7 @@ async function enqueueSupersededTips(
   }
 }
 
-/** A build the host is running, a request it has not picked up, or an active row. */
+/** A build the host is running, one just started that has not reported yet, or an active row. */
 function isInFlight(
   status: BuildStatus | null,
   stale: boolean,
@@ -495,7 +550,7 @@ function isInFlight(
   state: SchedulerState,
 ): boolean {
   const hostBusy = status !== null && !stale && !isTerminalBuildState(status.state)
-  return hostBusy || state.pending !== null || next.some((r) => isActiveBuildState(r.state))
+  return hostBusy || state.dispatched !== null || next.some((r) => isActiveBuildState(r.state))
 }
 
 // A re-evaluation of this file (a Vite save) swaps the running scheduler onto

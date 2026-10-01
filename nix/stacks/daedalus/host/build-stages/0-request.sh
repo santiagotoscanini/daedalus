@@ -1,40 +1,29 @@
 # host/build-stages/0-request.sh — stage 0 of the build (see host/build.sh).
 #
-# Read and validate build-request.json; make the scratch dirs, start the log
-# and the heartbeat; check the egress fence and that the daemon answers.
+# Read and validate the request; make the scratch dirs, start the log and the
+# heartbeat; check the egress fence and that the daemon answers.
 #
 # ── 0. the request ────────────────────────────────────────────────────────
 
-if [ -L "$REQ" ]; then
-  echo "refusing $REQ: it is a symlink, and the bridge only accepts regular files" >&2
-  exit 1
-fi
-[ -e "$REQ" ] || exit 0
-
-# Read once, as the operator, never through a link (host/lib.sh).
-REQ_JSON="$(read_request "$REQ" | head -c "$((MAX_REQUEST_BYTES + 1))")" || true
+# The run file's payload (host/lib.sh take_request): the engine's request, as
+# the scheduler serialised it. The container chose these bytes, so every
+# field is checked below exactly as if it had written them itself.
+REQ_JSON="$(take_request | jq -r 'if (.payload | type) == "string" then .payload else "" end' | head -c "$((MAX_REQUEST_BYTES + 1))")" || true
 if [ -z "$REQ_JSON" ]; then
-  echo "could not read $REQ as $OPERATOR_USER" >&2
+  echo "the run carries no build request" >&2
   exit 1
 fi
 if [ "${#REQ_JSON}" -gt "$MAX_REQUEST_BYTES" ]; then
-  echo "refusing $REQ: over $MAX_REQUEST_BYTES bytes" >&2
+  echo "refusing the build request: over $MAX_REQUEST_BYTES bytes" >&2
   exit 1
 fi
 
 # The id names the log file and is what the status answers; without a usable
 # one there is nothing to answer, so this is the one refusal that only mails.
 BUILD_ID="$(jq -r 'if type == "object" and (.id | type) == "string" then .id else "" end' <<<"$REQ_JSON" 2>/dev/null || true)"
-if ! [[ "$BUILD_ID" =~ ^[0-9a-fA-F-]{1,64}$ ]]; then
-  echo "refusing $REQ: it carries no usable build id" >&2
+if ! [[ "$BUILD_ID" =~ $BUILD_ID_RE ]]; then
+  echo "refusing the build request: it carries no usable build id" >&2
   exit 1
-fi
-
-# The path unit re-fires on a daemon-reload replay at boot, and the engine may
-# rewrite the file it already dispatched: an answered id is never built again.
-if [ "$(published_id "$STATUS")" = "$BUILD_ID" ]; then
-  echo "build $BUILD_ID was already answered; not building it again"
-  exit 0
 fi
 
 gh_init

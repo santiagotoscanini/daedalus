@@ -36,10 +36,10 @@
 #   3. Apply. Nothing starts; what this buys is the app's presence in
 #      apps.json, which is what makes it buildable at all (build.sh's
 #      BUILDABLE is generated from this file).
-#   4. Push, or press Build now: daedalus-build fetches the commit, runs the
-#      repo's checks inside the image build, and pushes `sha-<sha>` + `latest`
-#      to zot. Watch it with `journalctl -fu daedalus-build.service` or the
-#      build page.
+#   4. Push, or press Build now: the box's build (the root verb `build`)
+#      fetches the commit, runs the repo's checks inside the image build, and
+#      pushes `sha-<sha>` + `latest` to zot. Watch it with
+#      `journalctl -fu 'daedalus-build@*'` or the build page.
 #   5. Promote it to "lab" (or "live") and Apply again. THAT is the Apply that
 #      creates the container, the route, the DNS record and the probe.
 #

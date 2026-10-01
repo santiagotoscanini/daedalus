@@ -334,4 +334,62 @@ rec {
   # the unit itself is the operator's, and the directory root's): its run file
   # goes whatever the script did with it.
   dropRunFile = "+${pkgs.coreutils}/bin/rm -f -- ${rootRunDir}/%i.json";
+
+  # What the root verbs that report as they run (build, …) publish: each its
+  # `<verb>-status.json` (and a log), written by root into a directory only
+  # root can write and mounted read-only into the container at /verbs
+  # (daedalus.nix). The request reaches root through the root helper's run
+  # file, so root reads nothing the container wrote. Not /run: a status
+  # outlives a reboot, like the run it reports. Made by tmpfiles
+  # (daedalus-verbs.nix).
+  verbsDir = "/var/lib/daedalus-verbs";
+
+  # One root verb that takes its request as a payload (controller.nix, the
+  # header's `run file`): the template `<unit>@.service` the helper starts
+  # once per run, running `script` with the run file as its `request`
+  # credential (host/lib.sh take_request), the `fleet.daedalus.rootVerbs`
+  # entry that names it, and — unless `monitored` is false — its
+  # monitoredJobs registration. The helper waits `timeoutStartSec` and a
+  # minute. `unit` and `serviceConfig` merge over what every such verb has:
+  # `restartIfChanged = false`, because a switch must never restart a run (a
+  # rebuilding verb would SIGTERM itself mid-switch, and a build its own push);
+  # the next run gets the new definition. A plain function returning module
+  # config, for the verb's own module to merge.
+  mkRootVerb =
+    {
+      verb,
+      unit,
+      description,
+      script,
+      timeoutStartSec,
+      payloadMax,
+      verbDescription ? description,
+      selectors ? { },
+      patterns ? { },
+      monitored ? true,
+      serviceConfig ? { },
+      execStopPost ? [ ],
+      unitAttrs ? { },
+    }:
+    {
+      systemd.services."${unit}@" = unitAttrs // {
+        inherit description;
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = lib.getExe script;
+          LoadCredential = "request:${rootRunDir}/%i.json";
+          ExecStopPost = execStopPost ++ [ dropRunFile ];
+          TimeoutStartSec = timeoutStartSec;
+        }
+        // serviceConfig;
+      };
+      fleet.daedalus.rootVerbs.${verb} = {
+        unit = "${unit}@.service";
+        description = verbDescription;
+        inherit selectors patterns payloadMax;
+        timeoutSec = timeoutStartSec + 60;
+      };
+      fleet.monitoredJobs = lib.optionalAttrs monitored { "${unit}@" = { }; };
+    };
 }

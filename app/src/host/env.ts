@@ -155,6 +155,12 @@ export const SCHEMA = {
     about: 'The file-drop bridge: the one writable mount.',
     source: DAEDALUS,
   },
+  VERBS_DIR: {
+    kind: 'path',
+    fallback: '/verbs',
+    about: 'The status files of the root verbs: written by root, read-only here.',
+    source: DAEDALUS,
+  },
   SITE_PATH: {
     kind: 'path',
     fallback: '/site',

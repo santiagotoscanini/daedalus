@@ -1,6 +1,6 @@
 // The queue's half of a scheduler tick: cancel what can never build, log what
 // waits, and — when nothing is in flight — hand the next queued build to the
-// host. Also `enqueueChecked`, the one way the engine itself queues a build.
+// host (the root helper's `build`). Also `enqueueChecked`, the one way the engine itself queues a build.
 // The choosing is lib/build-dispatch.ts (pure); this file reads its inputs and
 // acts on the plan. Everything with a side effect is imported dynamically.
 
@@ -46,7 +46,7 @@ export async function settleQueue(
   })
   await cancelAndLogHeld(plan, now, state, report)
   if (inFlight) return false
-  return dispatchNext(plan.next, inputs.apps, now, state, report)
+  return dispatchNext(ctx, plan.next, inputs.apps, now, state, report)
 }
 
 /** The queue and what deciding it needs; null when nothing is queued. */
@@ -105,8 +105,9 @@ async function cancelAndLogHeld(
   }
 }
 
-/** Claim the chosen row and write its request for the host. True when it was written. */
+/** Claim the chosen row and hand it to the host. True when its build started. */
 async function dispatchNext(
+  ctx: Ctx,
   row: BuildRow | null,
   apps: Map<string, AppBuildFacts>,
   now: Date,
@@ -155,20 +156,21 @@ async function dispatchNext(
   const repo = await import('../../lib/repo/builds')
   const claimed = await repo.claimQueued(row.id, now)
   if (claimed === undefined) return false
-  try {
-    await (await import('../../host/build-bridge')).requestBuild(request)
-    state.pending = { id: row.id, at: now.getTime() }
-  } catch (e) {
-    console.warn(`[builds] ${row.app}: the build request could not be written: ${errorText(e)}`)
+  const started = await (await import('../../host/build-verb')).startBuild(ctx, request)
+  if (!started.started) {
+    console.warn(`[builds] ${row.app}: the build did not start: ${started.detail}`)
     await failBuild(
       repo.toBuildRow({ ...claimed, app: row.app }),
-      { state: 'failed', error: 'the build request could not be written' },
+      { state: 'failed', error: `the build did not start: ${started.detail}` },
       now,
       report,
     )
     return false
   }
-  console.info(`[builds] ${row.app}: dispatched ${row.sha.slice(0, 7)} (${row.id})`)
+  state.dispatched = { id: row.id, run: started.run, at: now.getTime() }
+  console.info(
+    `[builds] ${row.app}: dispatched ${row.sha.slice(0, 7)} (${row.id}, run ${started.run})`,
+  )
   await report(repo.toBuildRow({ ...claimed, app: row.app }))
   return true
 }

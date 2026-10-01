@@ -229,11 +229,11 @@ let
         DATASET = config.fileSystems.${b.root}.device;
         MISE_CACHE_DIR = b.miseCacheDir;
         ZFS = "${pkgs.zfs}/bin/zfs";
-        # Every unit the builder is made of (builder/*.nix, build-agent.nix).
+        # Every unit the builder is made of (builder/*.nix, build-agent.nix),
+        # bar the build itself: a template, one instance per run, whose runs
+        # are the engine's builds table.
         UNITS = [
           "buildkitd.service"
-          "daedalus-build.path"
-          "daedalus-build.service"
           "daedalus-build-gc.service"
           "daedalus-builds-mounted.service"
           "daedalus-builds-layout.service"

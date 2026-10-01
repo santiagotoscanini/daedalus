@@ -231,7 +231,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
         .describe('How much of the END of the log to read. Default 64000, max 1048576.'),
     },
     async (args) => {
-      const { readBuildLogTail } = await import('../build-bridge')
+      const { readBuildLogTail } = await import('../build-verb')
       return readBuildLogTail(
         String(args.id),
         args.maxBytes === undefined ? {} : { maxBytes: Number(args.maxBytes) },

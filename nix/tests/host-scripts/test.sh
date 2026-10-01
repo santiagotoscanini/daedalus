@@ -216,6 +216,40 @@ out="$(INVOCATION_ID=inv2 bash "$T/done.sh" 2>&1)"
 check "done goes on, and says done" \
   '[ "$out" = "$(printf "rebooting\nafter")" ] && grep -qx "DAEDALUS_OUTCOME=done" "$LOGGED"'
 
+# ── 6. the build reads its request from the run file, and only there ───────
+# The root helper hands it over as the `request` credential; an id that could
+# name a path is refused before anything is made of it.
+echo "# build: the request is the run file's payload"
+B="$T/build"
+mkdir -p "$B/creds" "$B/verbs"
+agent "$T/build.sh" "VERBS_DIR=$B/verbs NPM_MIRROR_HOST= SETPRIV=setpriv BUILD_USER=nobody BUILD_GROUP=nogroup" \
+  lib.sh build.sh build-stages/states.sh build-stages/helpers.sh build-stages/0-request.sh
+rc=0
+out="$(bash "$T/build.sh" 2>&1)" || rc=$?
+check "no credential: the run fails, saying why" '[ "$rc" -eq 1 ] && grep -q "no request credential" <<<"$out"'
+jq -n '{id: "r1", verb: "build", selectors: {}, payload: ({version: 1, id: "../etc"} | tojson)}' >"$B/creds/request"
+rc=0
+out="$(CREDENTIALS_DIRECTORY="$B/creds" bash "$T/build.sh" 2>&1)" || rc=$?
+check "a path-shaped build id is refused" '[ "$rc" -eq 1 ] && grep -q "no usable build id" <<<"$out"'
+check "and nothing is published" '[ -z "$(ls -A "$B/verbs")" ]'
+
+# ── 7. a cancel stops only the named app's build ──────────────────────────
+echo "# build-cancel"
+stub systemctl <<'EOF'
+echo "$*" >>"$CALLS"
+EOF
+: >"$CALLS"
+: >"$LOGGED"
+agent "$T/cancel.sh" "STATUS=$B/verbs/build-status.json BUILDABLE='blog shop'" \
+  lib.sh build-stages/states.sh build-cancel.sh
+echo '{"id":"0b6f3c1e-8a2d","app":"blog","state":"building"}' >"$B/verbs/build-status.json"
+rc=0
+bash "$T/cancel.sh" shop >/dev/null 2>&1 || rc=$?
+check "another app's build is refused, exit 0, nothing stopped" \
+  '[ "$rc" -eq 0 ] && grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && [ ! -s "$CALLS" ]'
+bash "$T/cancel.sh" blog >/dev/null 2>&1
+check "its own is stopped, whatever run it is" '[ "$(cat "$CALLS")" = "stop daedalus-build@*.service" ]'
+
 if [ "$fails" -ne 0 ]; then
   cat "$T/apply.out"
   echo "$fails check(s) failed"

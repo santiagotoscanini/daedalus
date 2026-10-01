@@ -2,7 +2,7 @@
 # platform the box does not build through the registry loop.
 #
 # Everything else on the platform rides the registry loop: push to main, the
-# GitHub App webhook reaches daedalus, `daedalus-build.service` builds the
+# GitHub App webhook reaches daedalus, the root helper's `build` builds the
 # image and pushes it to the box's registry, and the deploy that build starts
 # runs it. daedalus is the engine itself — this repository — and comes as ONE
 # image built from the Dockerfile at the repository root (Dockerfile,
@@ -70,6 +70,7 @@ let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     appsOn
     applyDir
+    verbsDir
     at
     hooksHost
     haveGithubApp
@@ -630,6 +631,8 @@ in
             GITHUB_OWNER = config.fleet.github.owner;
             # Where apply requests are dropped for the host agent.
             APPLY_DIR = "/apply";
+            # Where the root verbs publish their status (the mount below).
+            VERBS_DIR = "/verbs";
 
             # The GitHub App. hooks.<baseDomain> is the webhook's public name: Vite
             # 403s any Host it was not told about (vite.config.ts allowedHosts,
@@ -741,6 +744,10 @@ in
         # restarts it.
         "/run/daedalus-export:/export:ro"
         "${applyDir}:/apply"
+        # The root verbs' status files (daedalus-lib.nix verbsDir): root writes
+        # them, so the container can read and never write them. The
+        # DIRECTORY: each is replaced by rename.
+        "${verbsDir}:/verbs:ro"
         # Last deploy result per app, written by app-<name>-deploy.service
         # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
         # files, so a rewritten state file is picked up without pinning an inode.

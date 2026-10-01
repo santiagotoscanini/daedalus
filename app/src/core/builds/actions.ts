@@ -115,7 +115,7 @@ export async function buildNow(input: { app: string; actor: string }): Promise<B
  * Stop a running build.
  *
  * Ask first, write after. The root helper's `build-cancel` stops the unit
- * (host/build-bridge.ts), whose reaper publishes the terminal status, and
+ * (host/build-verb.ts), whose reaper publishes the terminal status, and
  * answers once it has. Only a `done` — the host stopped THIS app's build —
  * marks the row `cancelled` (`markCancelled`), because the host cannot tell a
  * Cancel from a crash: its reaper says `failed: interrupted` for both
@@ -144,7 +144,7 @@ export async function cancelBuild(
     return { ok: false, reason: 'This build is still queued — nothing is running to stop.' }
   }
 
-  const { requestBuildCancel } = await import('../../host/build-bridge')
+  const { requestBuildCancel } = await import('../../host/build-verb')
   const answer = await requestBuildCancel(ctx, app)
   // The actor is in the journal, never on the row: the row's words reach a
   // GitHub check run, and an email address does not belong there.

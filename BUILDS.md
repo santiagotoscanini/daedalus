@@ -11,8 +11,8 @@ Nothing leaves the house. The image is built on the machine that will run it,
 by a GitHub App that can read the repository and write checks, and by nothing
 else.
 
-Read [ARCHITECTURE.md](ARCHITECTURE.md) first if you have not — the bridge is
-how the unprivileged engine gets a privileged build to happen at all.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) first if you have not — the root helper
+is how the unprivileged engine gets a privileged build to happen at all.
 
 ---
 
@@ -25,8 +25,9 @@ sequenceDiagram
   participant WH as POST /api/github/webhook
   participant DB as Postgres (builds + deliveries)
   participant SC as the scheduler tick
-  participant BR as apply/ (request and status)
-  participant AG as daedalus-build.service (root)
+  participant CT as the controller and the root helper
+  participant ST as /verbs/build-status.json (root's, read-only in the app)
+  participant AG as daedalus-build@RUN (root)
   participant BK as buildkitd uid 350 / daedalus-build uid 351
   participant ZOT as the box's registry
   participant DP as app-NAME-deploy.service
@@ -37,8 +38,9 @@ sequenceDiagram
   WH->>DB: insert the delivery id AND enqueue in one transaction
   Note over DB: an older queued row on this<br/>(app, lane) becomes superseded
   SC->>DB: claim the queued row (the only dispatch edge)
-  SC->>BR: write build-request.json
-  BR-->>AG: the path unit fires on rename-into-place
+  SC->>CT: root.run build, the request as payload, detached
+  CT->>AG: start the unit with the request as its run file
+  CT-->>SC: started: the run id, answered at once
   AG->>AG: 0. validate, re-check the egress fence, probe the builder
   AG->>GH: 1. mint a token for this ONE repo (read-only)
   AG->>AG: 2. clone at depth 1, check out, revoke the token
@@ -48,8 +50,8 @@ sequenceDiagram
   AG->>BK: 5. build the image (building)
   BK->>ZOT: push sha-SHA and latest (publishing)
   loop every 20 s while running
-    AG-->>BR: rewrite build-status.json
-    SC->>BR: read it, older than 90 s reads as interrupted
+    AG-->>ST: rewrite the status
+    SC->>ST: read it, older than 90 s reads as interrupted
     SC->>DB: record phase + state + digest + facts
   end
   AG->>DP: 6. start the deploy unit directly
@@ -95,7 +97,7 @@ stateDiagram-v2
   queued --> cloning : claimed (the only dispatch edge)
   queued --> superseded : a newer sha queues on the same app and lane
   queued --> cancelled : building on the box is off, or the App is not installed
-  queued --> failed : the request was refused
+  queued --> failed : the request was refused, or the build did not start
 
   publishing --> succeeded : image pushed
 
@@ -135,7 +137,11 @@ GitHub hears `cancelled` for both `cancelled` and `superseded`.
 
 A status file is rewritten every 20 seconds as a heartbeat. The engine treats a
 status older than 90 seconds as a dead build, which is why the heartbeat exists
-at all: without it every long build would be declared interrupted.
+at all: without it every long build would be declared interrupted. Before the
+first status the controller has the word: the engine follows the build's run
+(`root.follow`) until the status names the build, so a start the unit never got
+past — the egress fence missing — fails the build with the unit's own words
+rather than as `interrupted` a minute and a half later.
 
 **The checks contract.** The repo's `ci` script if it has one; otherwise
 whichever of `generate-routes`, `format:check`, `lint`, `typecheck` and `test`

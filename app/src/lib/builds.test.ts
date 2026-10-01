@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  BUILD_ID_RE,
   BUILD_REQUEST_MAX_BYTES,
   buildLogPath,
   buildRequest,
@@ -228,31 +229,36 @@ describe('build request env', () => {
   })
 })
 
-describe('the build env rules, identical in host/build.sh', () => {
-  // host/build.sh sits in this same repository (nix/stacks/daedalus/host/), so
-  // its RESERVED_ENV_RE and RAILPACK_KNOBS are read straight out of it and the
-  // engine's lists are held to that text. In the dev container app/ is mounted
-  // alone at /app and the whole engine read-only at /engine, so that is looked
-  // at next — a missing file fails, never skips.
-  function hostBuildSh(): string {
+describe('the build rules, identical in the host scripts', () => {
+  // host/build.sh and host/build-stages/states.sh sit in this same repository
+  // (nix/stacks/daedalus/host/), so their RESERVED_ENV_RE, RAILPACK_KNOBS and
+  // BUILD_ID_RE are read straight out of them and the engine's are held to that
+  // text. In the dev container app/ is mounted alone at /app and the whole
+  // engine read-only at /engine, so that is looked at next — a missing file
+  // fails, never skips.
+  function hostFile(rel: string): string {
     const candidates = [
-      fileURLToPath(new URL('../../../nix/stacks/daedalus/host/build.sh', import.meta.url)),
-      '/engine/nix/stacks/daedalus/host/build.sh',
+      fileURLToPath(new URL(`../../../nix/stacks/daedalus/host/${rel}`, import.meta.url)),
+      `/engine/nix/stacks/daedalus/host/${rel}`,
     ]
     const found = candidates.find((path) => existsSync(path))
     if (found === undefined) {
-      throw new Error(`host/build.sh not found at ${candidates.join(' or ')}`)
+      throw new Error(`host/${rel} not found at ${candidates.join(' or ')}`)
     }
     return readFileSync(found, 'utf8')
   }
-  const hostText = hostBuildSh()
+  const hostText = hostFile('build.sh')
 
-  /** A `NAME='…'` assignment's value, which build.sh keeps in exactly that form. */
+  /** A `NAME='…'` assignment's value, which the host scripts keep in exactly that form. */
   function assignment(text: string, name: string): string {
     const m = new RegExp(`^${name}='([^']*)'$`, 'm').exec(text)
-    if (m?.[1] === undefined) throw new Error(`host/build.sh has no ${name}='…' line`)
+    if (m?.[1] === undefined) throw new Error(`the host script has no ${name}='…' line`)
     return m[1]
   }
+
+  it('take the same build id as the host', () => {
+    expect(BUILD_ID_RE.source).toBe(assignment(hostFile('build-stages/states.sh'), 'BUILD_ID_RE'))
+  })
 
   const hostReserved = assignment(hostText, 'RESERVED_ENV_RE')
   const hostKnobs: Record<string, string> = JSON.parse(assignment(hostText, 'RAILPACK_KNOBS'))

@@ -509,7 +509,7 @@ on_exit() {
     if [ "$INTERRUPTED" = 1 ]; then
       with_lock_exit _finish failed "$(current_state)" "interrupted" '.'
     else
-      with_lock_exit _finish failed "$(current_state)" "the build agent stopped unexpectedly (exit $rc); see journalctl -u daedalus-build" '.'
+      with_lock_exit _finish failed "$(current_state)" "the build agent stopped unexpectedly (exit $rc); see journalctl -u 'daedalus-build@*'" '.'
       [ "$rc" -ne 0 ] || rc=1
     fi
   fi

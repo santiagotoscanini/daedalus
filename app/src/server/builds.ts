@@ -133,7 +133,7 @@ export const fetchBuild = readFn
     const { getApp } = await import('../lib/repo/apps')
     const { deploymentOfDigest } = await import('../lib/repo/build-views')
     const { detectionFromStatus } = await import('../lib/build-detect')
-    const { readBuildLogTail } = await import('../host/build-bridge')
+    const { readBuildLogTail } = await import('../host/build-verb')
     const { deployOutcome } = await import('../lib/build-display')
 
     const row = toBuildRow(record)

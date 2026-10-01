@@ -1,18 +1,19 @@
-# daedalus-build — the host side of daedalus's `build` bridge verb: turn a
-# `build-request.json` the engine drops into the apply dir into an image in
+# daedalus-build — the host side of the root helper's `build` verb: turn the
+# build request the engine hands it (the run file's payload) into an image in
 # the box's registry, then start the app's deploy.
 #
 # ── the units ─────────────────────────────────────────────────────────────
 #
-#   daedalus-build.path       watches build-request.json, starts:
-#   daedalus-build.service    one build, three scripts in order —
-#     ExecStartPre   host/build-fence-gate.sh  no egress fence, no build
+#   daedalus-build@<run>.service   one build, started by the root helper
+#                                  (`build`), one at a time —
+#     ExecStartPre   fleet.builder.fenceCheck  no egress fence, no build
 #     ExecStart      host/build.sh             token, clone, railpack prepare,
 #                    + host/build-stages/*     checks, build + push, deploy
 #                                              (one file per stage; not named
 #                                              `build/`, which editors hide)
 #     ExecStopPost   host/build-reaper.sh      a run that died unannounced
-#                                              reads `failed: interrupted`
+#                                              reads `failed: interrupted`;
+#                                              then the run file goes
 #   daedalus-build-cancel@<app>.service    the root helper's `build-cancel` →
 #                                          host/build-cancel.sh (no path unit)
 #   daedalus-build-gc.{timer,service}      nightly sweep → host/build-gc.sh
@@ -73,10 +74,11 @@
 let
   inherit (config.fleet) builder;
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    applyDir
+    verbsDir
     buildableApps
     deployableApps
     mkAgent
+    mkRootVerb
     operatorVars
     ;
 
@@ -130,8 +132,8 @@ let
       pkgs.systemd # systemctl, journalctl
     ];
     vars = operatorVars // {
-      # the bridge: where the request and the status live
-      APPLY_DIR = applyDir;
+      # where the status is published (the request is the run file's)
+      VERBS_DIR = verbsDir;
 
       # the allowlists: apps this may build at all, and apps whose deploy it
       # starts once the image is pushed
@@ -197,26 +199,6 @@ let
     ];
   };
 
-  # daedalus-build's ExecStartPre: the fence check, with an answer for the
-  # pending request when it fails — a bare failed check would read as
-  # "interrupted" on the build page.
-  fenceGate = mkAgent {
-    name = "daedalus-build-fence-gate";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.coreutils
-      pkgs.util-linux # setpriv, for lib.sh's operator-side reads and publish
-    ];
-    vars = operatorVars // {
-      APPLY_DIR = applyDir;
-      FENCE_CHECK = builder.fenceCheck;
-    };
-    files = [
-      ./host/lib.sh
-      ./host/build-fence-gate.sh
-    ];
-  };
-
   # daedalus-build's ExecStopPost: marks a run that died without publishing
   # its own end, and drops its work dir.
   buildReaper = mkAgent {
@@ -226,7 +208,7 @@ let
       pkgs.coreutils
     ];
     vars = operatorVars // {
-      STATUS = "${applyDir}/build-status.json";
+      STATUS = "${verbsDir}/build-status.json";
       LOG_DIR = builder.logDir;
       WORK_ROOT = builder.workDir;
       BUILD_USER = builder.user;
@@ -250,7 +232,7 @@ let
       config.systemd.package # systemctl
     ];
     vars = operatorVars // {
-      STATUS = "${applyDir}/build-status.json";
+      STATUS = "${verbsDir}/build-status.json";
       BUILDABLE = lib.concatStringsSep " " buildableApps;
     };
     files = [
@@ -284,155 +266,158 @@ let
 in
 
 {
-  config = lib.mkIf (config.fleet.modules.daedalus.enable && builder.enable) {
+  config = lib.mkIf (config.fleet.modules.daedalus.enable && builder.enable) (
+    lib.mkMerge [
+      {
+        # The checks target's base, listed on System › Updates. Not the control
+        # plane's own node (NODE_IMAGE in the engine's Dockerfile): the two are
+        # bumped apart, on purpose.
+        fleet.manualPins.build-checks-node = {
+          image = nodeImage;
+          upstream = "nodejs/node";
+          note = "Candidate-build a Dockerfile-strategy app before any live one.";
+        };
+      }
 
-    # The checks target's base, listed on System › Updates. Not the control
-    # plane's own node (NODE_IMAGE in the engine's Dockerfile): the two are
-    # bumped apart, on purpose.
-    fleet.manualPins.build-checks-node = {
-      image = nodeImage;
-      upstream = "nodejs/node";
-      note = "Candidate-build a Dockerfile-strategy app before any live one.";
-    };
-
-    # ── the build ─────────────────────────────────────────────────────────
-
-    systemd.paths.daedalus-build = {
-      description = "Watch for a daedalus build request";
-      wantedBy = [ "multi-user.target" ];
-      # Fires on the rename the engine publishes the request with.
-      pathConfig.PathChanged = "${applyDir}/build-request.json";
-    };
-
-    systemd.services.daedalus-build = {
-      description = "Build an app image on daedalus's behalf (BuildKit + Railpack)";
-      after = [
-        "network-online.target"
-        "buildkitd.service"
-        "daedalus-build-dockerconfig.service"
-      ];
-      wants = [
-        "network-online.target"
-        "daedalus-build-dockerconfig.service"
-      ];
-      # A buildkitd restart — the documented backstop for a wedged build — stops
-      # this unit with it, and the reaper marks the run interrupted.
-      requires = [ "buildkitd.service" ];
-
-      # A build can outlast a rebuild, and a rebuild that changes apps.json
-      # changes this unit's ExecStart (BUILDABLE, DEPLOYABLE). switch must not
-      # SIGTERM a push halfway; the next request gets the new definition.
-      restartIfChanged = false;
-
-      unitConfig.RequiresMountsFor = [ builder.root ];
-
-      serviceConfig = {
-        Type = "oneshot";
-        # Fail closed, first thing: no fence, no start. The egress fence is
-        # firewall extraCommands (builder.nix), and a reload that failed halfway
-        # leaves no OUTPUT jump — then the start fails here instead of a build
-        # reaching the LAN, and the gate answers the pending request with
-        # `builder unfenced`. `+`: as root, outside this unit's sandboxing,
-        # where iptables can read the tables. build.sh runs fenceCheck again
-        # per build, for a fence removed after the daemon started.
-        ExecStartPre = [ "+${fenceGate}/bin/daedalus-build-fence-gate" ];
-        ExecStart = "${buildScript}/bin/daedalus-build";
-        ExecStopPost = "${buildReaper}/bin/daedalus-build-reaper";
+      # ── the build ───────────────────────────────────────────────────────
+      #
+      # The root helper's `build`: the engine's scheduler asks for it with the
+      # request as the payload (app lib/builds.ts buildRequestDecoder), and
+      # the helper starts `daedalus-build@<run>`, one at a time. Refusals (a
+      # bad request, failed checks, GitHub saying no) exit 0 and are on the
+      # build page; what mails is the agent itself breaking.
+      (mkRootVerb {
+        verb = "build";
+        unit = "daedalus-build";
+        description = "Build an app image on daedalus's behalf (BuildKit + Railpack)";
+        verbDescription = "Build an app's image and start its deploy";
+        script = buildScript;
         # Clone 5 + detect 3 (twice, with a retry) + checks 30 + build and
         # publish 45, plus slack. The engine's hard cap is 100 min from
         # dispatch (BUILD_HARD_CAP_MS); this must stay under it.
-        TimeoutStartSec = "95min";
-        # A SIGTERM stop is a requested stop: the operator cancelling a
-        # build (daedalus-build-cancel), a shutdown, or buildkitd going
-        # down and taking its Requires= with it. None of those are worth
-        # mail, and build.sh's TERM trap publishes the interrupted state. A
-        # crash, an OOM kill or the timeout SIGKILL exits otherwise, fails
-        # the unit, mails, and leaves the state to the ExecStopPost reaper.
-        SuccessExitStatus = "143";
-        # The token, the JWT, the secret files, the per-build push credential
-        # copy and root's plan copies live in a mktemp dir under /tmp; a
-        # private /tmp keeps even their names off the shared one.
-        #
-        # It is also the mount namespace Railpack's mise cache lives in.
-        # Railpack hard-codes /tmp/railpack/mise, and which app's cache goes
-        # there is only known per request, so there is no unit-level bind:
-        # build.sh mounts `miseCacheDir/<app>` at /tmp/railpack and the pinned
-        # mise read-only at `misePath` (the file exists, so Railpack's
-        # unverified download never happens; railpack.nix) around `railpack
-        # prepare`, and unmounts both before the checks. The mounts never leave
-        # this unit's namespace.
-        PrivateTmp = true;
-        UMask = "0077";
-        # build.sh's reap (every build-user process killed before root mounts
-        # the mise cache and before it copies the push credential) finds those
-        # processes by uid. A build-user process that exec'd a setuid program
-        # would read as another uid and survive it. Nothing here needs setuid:
-        # root already holds its capabilities, and the `+` fence gate runs
-        # outside this setting. (buildkitd cannot take it — builder.nix.)
-        NoNewPrivileges = true;
-      };
-    };
+        timeoutStartSec = 95 * 60;
+        # The engine's request, at most BUILD_REQUEST_MAX_BYTES (60 KiB);
+        # build.sh refuses one past 64 KiB on its own.
+        payloadMax = 65536;
+        # Marks a run that died without publishing its own end, and drops its
+        # work dir.
+        execStopPost = [ "${buildReaper}/bin/daedalus-build-reaper" ];
+        unitAttrs = {
+          after = [
+            "network-online.target"
+            "buildkitd.service"
+            "daedalus-build-dockerconfig.service"
+          ];
+          wants = [
+            "network-online.target"
+            "daedalus-build-dockerconfig.service"
+          ];
+          # A buildkitd restart — the documented backstop for a wedged build —
+          # stops this unit with it, and the reaper marks the run interrupted.
+          requires = [ "buildkitd.service" ];
+          unitConfig.RequiresMountsFor = [ builder.root ];
+        };
+        serviceConfig = {
+          # Fail closed, first thing: no fence, no start. The egress fence is
+          # firewall extraCommands (builder.nix), and a reload that failed
+          # halfway leaves no OUTPUT jump — then the start fails here instead
+          # of a build reaching the LAN, and the helper's answer is the check's
+          # own words, which the engine puts on the build. `+`: as root,
+          # outside this unit's sandboxing, where iptables can read the
+          # tables. build.sh runs fenceCheck again per build, for a fence
+          # removed after the daemon started.
+          ExecStartPre = [ "+${builder.fenceCheck}" ];
+          # A SIGTERM stop is a requested stop: the operator cancelling a
+          # build (daedalus-build-cancel), a shutdown, or buildkitd going
+          # down and taking its Requires= with it. None of those are worth
+          # mail, and build.sh's TERM trap publishes the interrupted state. A
+          # crash, an OOM kill or the timeout SIGKILL exits otherwise, fails
+          # the unit, mails, and leaves the state to the ExecStopPost reaper.
+          SuccessExitStatus = "143";
+          # The token, the JWT, the secret files, the per-build push
+          # credential copy and root's plan copies live in a mktemp dir under
+          # /tmp; a private /tmp keeps even their names off the shared one.
+          #
+          # It is also the mount namespace Railpack's mise cache lives in.
+          # Railpack hard-codes /tmp/railpack/mise, and which app's cache goes
+          # there is only known per request, so there is no unit-level bind:
+          # build.sh mounts `miseCacheDir/<app>` at /tmp/railpack and the
+          # pinned mise read-only at `misePath` (the file exists, so Railpack's
+          # unverified download never happens; railpack.nix) around `railpack
+          # prepare`, and unmounts both before the checks. The mounts never
+          # leave this unit's namespace.
+          PrivateTmp = true;
+          UMask = "0077";
+          # build.sh's reap (every build-user process killed before root
+          # mounts the mise cache and before it copies the push credential)
+          # finds those processes by uid. A build-user process that exec'd a
+          # setuid program would read as another uid and survive it. Nothing
+          # here needs setuid: root already holds its capabilities, and the
+          # `+` fence check runs outside this setting. (buildkitd cannot take
+          # it — builder.nix.)
+          NoNewPrivileges = true;
+        };
+      })
 
-    # Refusals (a bad request, failed checks, GitHub saying no) exit 0 and are
-    # on the build page; what mails is the agent itself breaking.
-    fleet.monitoredJobs.daedalus-build = { };
+      {
+        # ── cancel ────────────────────────────────────────────────────────────
 
-    # ── cancel ────────────────────────────────────────────────────────────
+        # The root helper's `build-cancel` (controller.nix, `root`): one instance
+        # per app, the app its instance name, so the value is a name from
+        # buildableApps and the script refuses a build in flight that is not
+        # that app's. No path unit, no request file.
+        systemd.services."daedalus-build-cancel@" = {
+          description = "Stop %i's build, on daedalus's behalf";
+          # Deliberately NOT monitoredJobs: its refusals are the normal case
+          # (a late cancel, a build that already finished) and they exit 0.
+          # No start limit: the moment an operator presses Cancel twice is exactly
+          # the moment they most want it to work.
+          startLimitIntervalSec = 0;
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${cancelScript}/bin/daedalus-build-cancel %i";
+            NoNewPrivileges = true;
+          };
+        };
 
-    # The root helper's `build-cancel` (controller.nix, `root`): one instance
-    # per app, the app its instance name, so the value is a name from
-    # buildableApps and the script refuses a build in flight that is not
-    # that app's. No path unit, no request file.
-    systemd.services."daedalus-build-cancel@" = {
-      description = "Stop %i's build, on daedalus's behalf";
-      # Deliberately NOT monitoredJobs: its refusals are the normal case
-      # (a late cancel, a build that already finished) and they exit 0.
-      # No start limit: the moment an operator presses Cancel twice is exactly
-      # the moment they most want it to work.
-      startLimitIntervalSec = 0;
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${cancelScript}/bin/daedalus-build-cancel %i";
-        NoNewPrivileges = true;
-      };
-    };
+        fleet.daedalus.rootVerbs.build-cancel = lib.mkIf (buildableApps != [ ]) {
+          unit = "daedalus-build-cancel@{app}.service";
+          description = "Stop an app's build in flight";
+          selectors.app = buildableApps;
+          # The stop waits for the build's TERM trap and its reaper.
+          timeoutSec = 150;
+        };
 
-    fleet.daedalus.rootVerbs.build-cancel = lib.mkIf (buildableApps != [ ]) {
-      unit = "daedalus-build-cancel@{app}.service";
-      description = "Stop an app's build in flight";
-      selectors.app = buildableApps;
-      # The stop waits for the build's TERM trap and its reaper.
-      timeoutSec = 150;
-    };
+        # ── the nightly sweep ─────────────────────────────────────────────────
 
-    # ── the nightly sweep ─────────────────────────────────────────────────
+        systemd.services.daedalus-build-gc = {
+          description = "Sweep daedalus build work dirs, old logs and unused BuildKit cache";
+          after = [ "buildkitd.service" ];
+          wants = [ "buildkitd.service" ];
+          unitConfig.RequiresMountsFor = [ builder.root ];
+          serviceConfig = {
+            Type = "oneshot";
+            # It runs as the build user too (fleet.builder.fenceCheck's rule for
+            # every such unit); a fence that is down mails from here daily.
+            ExecStartPre = [ "+${builder.fenceCheck}" ];
+            ExecStart = "${gcScript}/bin/daedalus-build-gc";
+            TimeoutStartSec = "45min";
+            PrivateTmp = true;
+          };
+        };
 
-    systemd.services.daedalus-build-gc = {
-      description = "Sweep daedalus build work dirs, old logs and unused BuildKit cache";
-      after = [ "buildkitd.service" ];
-      wants = [ "buildkitd.service" ];
-      unitConfig.RequiresMountsFor = [ builder.root ];
-      serviceConfig = {
-        Type = "oneshot";
-        # It runs as the build user too (fleet.builder.fenceCheck's rule for
-        # every such unit); a fence that is down mails from here daily.
-        ExecStartPre = [ "+${builder.fenceCheck}" ];
-        ExecStart = "${gcScript}/bin/daedalus-build-gc";
-        TimeoutStartSec = "45min";
-        PrivateTmp = true;
-      };
-    };
+        # 04:37, off the hour (a speed test on the hour takes the house's DNS down
+        # for a minute or two) and after the nightly snapshot churn.
+        systemd.timers.daedalus-build-gc = {
+          wantedBy = [ "timers.target" ];
+          timerConfig = {
+            OnCalendar = "*-*-* 04:37:00";
+            Persistent = true;
+          };
+        };
 
-    # 04:37, off the hour (a speed test on the hour takes the house's DNS down
-    # for a minute or two) and after the nightly snapshot churn.
-    systemd.timers.daedalus-build-gc = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "*-*-* 04:37:00";
-        Persistent = true;
-      };
-    };
-
-    fleet.monitoredJobs.daedalus-build-gc = { };
-  };
+        fleet.monitoredJobs.daedalus-build-gc = { };
+      }
+    ]
+  );
 }

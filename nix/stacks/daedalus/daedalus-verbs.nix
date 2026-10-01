@@ -17,6 +17,7 @@ let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
     prevDir
+    verbsDir
     bridgeAgent
     deployableApps
     runnableTasks
@@ -61,6 +62,9 @@ in
 {
   config = lib.mkIf config.fleet.modules.daedalus.enable {
     fleet.statePaths.${applyDir} = { };
+    # The root verbs' status files (daedalus-lib.nix verbsDir): root's, read
+    # by everyone, mounted read-only into the container.
+    systemd.tmpfiles.rules = [ "d ${verbsDir} 0755 root root -" ];
     # Rollback state (see prevDir). statePaths rather than a use-time mkdir
     # alone: it is the fleet's one convention for pre-creating these (tmpfiles
     # skips /home), it exists before the first Apply on a fresh restore, and

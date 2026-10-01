@@ -32,7 +32,7 @@ const REPO_MUTED = 'bg-transparent text-muted-foreground'
 /** zot's neighbours: the two logs that answer what zot's own cannot (each `note` says why). */
 const ZOT_NEIGHBOURS: readonly LogNeighbour[] = [
   {
-    source: { unit: 'daedalus-build.service' },
+    source: { unit: 'daedalus-build@.service' },
     label: 'daedalus-build',
     role: 'what pushes here',
     note: 'Every image in this registry is built on this box by daedalus’s own build agent and pushed as the builder user. An image that never appeared is a build that never finished, and that is this log rather than zot’s: zot can only report the pushes it received.',

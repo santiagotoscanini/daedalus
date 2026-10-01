@@ -231,7 +231,7 @@ async function completeCheckRun(
   const m = memo()
   const conclusion = CONCLUSION[row.state]
   if (conclusion !== undefined && m.completed.get(row.id) !== row.state) {
-    const { readBuildLogTail } = await import('../../host/build-bridge')
+    const { readBuildLogTail } = await import('../../host/build-verb')
     const [tail, whole] = await Promise.all([readBuildLogTail(row.id), withDetails(row)])
     const out = checkRunOutput({
       title: titleOf(whole, site, delivery),

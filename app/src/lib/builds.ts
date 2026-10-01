@@ -15,17 +15,15 @@ import {
 import { isAppName } from './hostname'
 import { redactSecrets } from './redact'
 
-// The `build` bridge verb: what this container asks the host builder to do,
-// and what the host says back. Client-safe on purpose — the build page renders
-// statuses and log tails in the browser. The file half (writing the request,
-// reading the status and the log) is host/build-bridge.ts.
+// The root helper's `build` verb: what this container asks the host builder
+// to do, and what the host says back. Client-safe on purpose — the build page
+// renders statuses and log tails in the browser. The host half (starting the
+// build, reading the status and the log) is host/build-verb.ts.
 //
-// The request id is the builds row id, not a bridge-minted one: the host names
+// The request id is the builds row id, not the helper's run id: the host names
 // the log `<id>.log` and stamps the status with it, and the queue matches the
-// status back to its row by that id. So this verb does not go through
-// defineBridge, whose request() mints its own.
+// status back to its row by that id.
 
-export const BUILD_REQUEST_FILE = 'build-request.json'
 export const BUILD_STATUS_FILE = 'build-status.json'
 /**
  * A running build's status must be rewritten at least this often. The host
@@ -33,8 +31,12 @@ export const BUILD_STATUS_FILE = 'build-status.json'
  */
 export const BUILD_STATUS_MAX_AGE_MS = 90_000
 
-/** Also the log file's stem, so nothing a request carries can name a path. */
-const BUILD_ID_RE = /^[0-9a-fA-F-]{1,64}$/
+/**
+ * Also the log file's stem, so nothing a request carries can name a path.
+ * nix/stacks/daedalus/host/build-stages/states.sh holds the host's copy, and
+ * builds.test.ts holds the two to one text.
+ */
+export const BUILD_ID_RE = /^[0-9a-fA-F-]{1,64}$/
 export const BUILD_SHA_RE = /^[0-9a-f]{40}$/
 
 export const BUILD_STRATEGIES = ['auto', 'railpack', 'dockerfile'] as const
@@ -339,7 +341,7 @@ export function railpackValueRefusal(name: string, value: string): string | null
 
 const encoder = new TextEncoder()
 
-/** The request file's exact bytes (host/build-bridge.ts writes this). */
+/** The request's exact bytes: the payload host/build-verb.ts hands the root helper. */
 export function serializeBuildRequest(req: BuildRequest): string {
   return `${JSON.stringify(req, null, 2)}\n`
 }

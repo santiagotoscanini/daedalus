@@ -61,7 +61,7 @@ vi.mock('../../lib/repo/builds', () => ({
   },
 }))
 
-vi.mock('../../host/build-bridge', () => ({
+vi.mock('../../host/build-verb', () => ({
   requestBuildCancel: async (): Promise<RootAnswer> => {
     h.asked += 1
     return h.host()

@@ -78,7 +78,7 @@ vi.mock('../../lib/apps/deployments', () => ({
   },
 }))
 vi.mock('../../lib/repo/deployments', () => ({ listDeployments: async () => h.deploys }))
-vi.mock('../../host/build-bridge', () => ({ readBuildLogTail: async () => h.log }))
+vi.mock('../../host/build-verb', () => ({ readBuildLogTail: async () => h.log }))
 vi.mock('../../host/contract/domains/site-doc', () => ({
   readCommittedSite: async () => {
     boom('site')

@@ -149,7 +149,7 @@ here.
   (`pnpm db:generate` / `db:migrate` for schema changes; drizzle.config
   points at `src/host/schema.ts`).
 - `src/host/` — everything that needs the machine: the bridge and one
-  module per verb (`bridge.ts`, then e.g. `apply.ts`, `build-bridge.ts`,
+  module per verb (`bridge.ts`, then e.g. `apply.ts`, `build-verb.ts`,
   `deploy.ts`, `image-update.ts`, `engine-update.ts`, `secret-set-request.ts`
   — the full set is below), the flows (`*-flow.ts`), the MCP server
   (`mcp/`), the database (`db.ts`, `schema.ts`), the env schema and the snapshot
@@ -233,8 +233,7 @@ here.
   `nix/stacks/daedalus/`. `host/bridge.ts` is the one implementation of
   the mechanics (temp + rename, payload written before the request that
   points at it), and each verb's app half is one module under `host/`
-  named for it (`apply.ts`, `build-bridge.ts`, `deploy.ts`,
-  `image-update.ts`, `engine-update.ts`,
+  named for it (`apply.ts`, `deploy.ts`, `image-update.ts`, `engine-update.ts`,
   `workspaces.ts`,
   `secret-set-request.ts`,
   `version-update.ts`, `claude-code-update.ts`).
@@ -243,9 +242,13 @@ here.
   ARCHITECTURE.md "The root helper") through `host/root.ts` `runRoot`, and
   a button waits on it with `components/root-action.tsx` `useRootAction` —
   the answer is the outcome, no status file: `host/power.ts` (reboot) is the
-  first and the pattern; `deploy.ts`, `task-run.ts`, `build-bridge.ts`'s
+  first and the pattern; `deploy.ts`, `task-run.ts`, `build-verb.ts`'s
   `requestBuildCancel` and `core/github-app.ts`'s `requestTokenRefresh`
-  followed. The app never touches the helper's socket.
+  followed. A verb that runs longer than a request should wait is asked
+  with `rootStart` (`detach`): the answer comes once its unit started, and
+  `rootFollow` reads its lines and its end from the controller's run store.
+  The build is the first (`build-verb.ts` `startBuild`). The app never
+  touches the helper's socket.
   The verbs that take a lock and a busy check before they publish are
   arrangements of `host/flow.ts` — `defineGate` (the lock, the `running`
   check, the pickup window) and `defineFlow` (check input → refuse busy
@@ -255,11 +258,11 @@ here.
   write tools call, so a button and a tool share one body. WHO may call
   stays with each door. `deploy.ts`'s `requestDeploy` is shared the same
   way by the redeploy button and the MCP tool.
-  `build-request.json` is the one the box's own builder watches:
-  `daedalus-build.service` picks it up, writes progress back to
-  `/apply/build-status.json` (heartbeated; stale past 90 s) and its log
-  to `/var/log/daedalus-builds/<id>.log`, which is the `/builds` mount
-  above.
+  The box's own builder is the root verb `build`: the scheduler starts
+  it detached with the request as its payload, `daedalus-build@<run>`
+  writes progress to `/verbs/build-status.json` (root's, read-only here;
+  heartbeated, stale past 90 s) and its log to
+  `/var/log/daedalus-builds/<id>.log`, the `/builds` mount above.
 - External-service reads follow the escalating-retry rule: retry only
   thrown requests with a `[400, 800, 1500, 2500]` ms ladder, and only to a
   `host.containers.internal` origin (the rootless-port first-SYN stall);

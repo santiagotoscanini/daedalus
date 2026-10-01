@@ -137,7 +137,9 @@ rec {
     systemd.services.daedalus-build-dockerconfig = lib.mkMerge [
       (mkSecretRender {
         description = "Render the builder's registry credential as a docker config.json";
-        gates = [ "daedalus-build.service" ];
+        # The build template wants and orders itself after this render
+        # (build-agent.nix): a template is no unit to be wanted by or before.
+        gates = [ ];
         after = [ passwordUnit ];
         wants = [ passwordUnit ];
         dir = cfg.dockerConfigDir;

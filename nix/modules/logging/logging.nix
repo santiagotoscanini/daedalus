@@ -177,6 +177,16 @@ let
         source_labels = ["__journal__systemd_unit"]
         target_label  = "unit"
       }
+      // One stream per root verb (stacks/daedalus, controller.nix `run
+      // file`): each run is an instance named by its sixteen-hex run id,
+      // `daedalus-build@<run>.service`, and a stream per run would be a new
+      // stream per build. Its lines carry the template instead.
+      rule {
+        source_labels = ["__journal__systemd_unit"]
+        regex         = "^(daedalus-[a-z-]+@)[0-9a-f]{16}\\.service$"
+        target_label  = "unit"
+        replacement   = "$1.service"
+      }
       rule {
         source_labels = ["__journal__hostname"]
         target_label  = "host"

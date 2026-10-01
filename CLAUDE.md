@@ -11,9 +11,9 @@ path-scoped rules load as you touch files.
   `.github/workflows/website.yml`). Public: `santiagotoscanini/daedalus`.
 - **Also is:** the app builder. Daedalus owns the fleet's image builds —
   the box's GitHub App takes the push webhook, the queue and
-  the `build` bridge verb live in `app/src/lib/` (`builds.ts`,
-  `build-queue.ts`) and `app/src/host/` (`build-bridge.ts`, the half that
-  touches the disk), the driver that dispatches them and
+  the root helper's `build` verb live in `app/src/lib/` (`builds.ts`,
+  `build-queue.ts`) and `app/src/host/` (`build-verb.ts`, the half that
+  touches the host), the driver that dispatches them and
   reports back in `app/src/core/builds/` (`scheduler.ts`, `report.ts`), and
   results reach GitHub as a check run plus a Deployment. The app repos carry
   no workflow files; a `railpack.json` is the normal build path, and a repo's

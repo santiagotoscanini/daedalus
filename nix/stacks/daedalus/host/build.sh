@@ -16,22 +16,24 @@
 #   host/build-stages/5-publish.sh    build the image and push it
 #   host/build-stages/6-done.sh       start the deploy, publish the final status
 #
-# The variables (build-agent.nix comments each one): APPLY_DIR,
+# The variables (build-agent.nix comments each one): VERBS_DIR,
 # BUILDABLE, DEPLOYABLE, OWNER, OWNER_ID, CLIENT_ID, PEM, REGISTRY,
 # NPM_MIRROR_HOST, LAN_IP, NODE_IMAGE, BUILDKIT_ADDR, RAILPACK_FRONTEND,
 # DOCKER_CONFIG_DIR, BUILD_ROOT, WORK_ROOT, MISE_CACHE_DIR, MISE_MOUNT,
 # MISE_PATH, MISE_BINARY, LOG_DIR, BUILD_USER, BUILD_GROUP, BUILD_PATH,
 # CHECKS_DOCKERFILE, FENCE_CHECK, OPERATOR_USER, OPERATOR_GROUP, SETPRIV.
 #
-# ── the bridge ────────────────────────────────────────────────────────────
+# ── in and out ────────────────────────────────────────────────────────────
 #
-#   $APPLY_DIR/build-request.json  written by the engine (app/src/lib/builds.ts
-#                                  buildRequestDecoder), plus the host-side
-#                                  `buildEnv` field described below
-#   $APPLY_DIR/build-status.json   written here (buildStatusDecoder), rewritten
+#   the run file's payload         the engine's request (app/src/lib/builds.ts
+#                                  buildRequestDecoder, with the `buildEnv`
+#                                  field described below), handed over by the
+#                                  root helper (host/lib.sh take_request)
+#   $VERBS_DIR/build-status.json   written here (buildStatusDecoder), rewritten
 #                                  at least every $HEARTBEAT_SECS while running:
 #                                  the engine presumes a status older than 90 s
-#                                  dead (BUILD_STATUS_MAX_AGE_MS)
+#                                  dead (BUILD_STATUS_MAX_AGE_MS). Root's
+#                                  directory, read-only in the container
 #   $LOG_DIR/<id>.log              root 0644, redacted as it is written, capped
 #                                  at 20 MiB; the container reads it at /builds
 #
@@ -84,14 +86,13 @@
 #   0  a status was published: succeeded, superseded, or failed for a reason
 #      that is the request's or the repository's (bad field, checks failed,
 #      GitHub said no). The build page says why; nothing to mail.
-#   1  the agent could not do its job: a request it cannot even answer (a
-#      symlink, no id), its key missing, or a line nobody tested. monitoredJobs
+#   1  the agent could not do its job: a request it cannot even answer (no
+#      payload, no id), its key missing, or a line nobody tested. monitoredJobs
 #      mails it, and a failed status is published whenever there is an id.
 
 set -euo pipefail
 
-REQ="$APPLY_DIR/build-request.json"
-STATUS="$APPLY_DIR/build-status.json"
+STATUS="$VERBS_DIR/build-status.json"
 
 # Where a build installs its packages from. With a mirror the box publishes
 # (fleet.builder.npmMirrorHost), its name is pinned to the LAN address inside

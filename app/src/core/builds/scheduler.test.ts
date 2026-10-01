@@ -3,8 +3,9 @@ import type { BuildRow } from '../../lib/build-queue'
 import type { BuildStatus } from '../../lib/builds'
 import type { Ctx } from '../ctx'
 
-// The scheduler against mocked edges: the bridge files, the repositories,
-// GitHub and the reporter. Nothing here touches a database or the filesystem.
+// The scheduler against mocked edges: the host's build verb, the controller,
+// the repositories, GitHub and the reporter. Nothing here touches a database or
+// the filesystem.
 
 const NOW = new Date('2026-09-12T10:00:00Z')
 const ID = '0b6f3c1e-8a2d-4e5f-9c7b-1d2e3f4a5b6c'
@@ -51,19 +52,25 @@ const h = vi.hoisted(() => ({
     retention: [] as [string, Date][],
     gh: [] as string[],
     store: [] as unknown[][],
+    follow: [] as string[],
   },
   readStatusHook: null as null | (() => Promise<void>),
+  /** How startBuild answers. */
+  start: { started: true, run: 'r1' } as unknown,
+  /** What root.follow answers, or the error it throws. */
+  follow: { run: { outcome: null, detail: '' } } as unknown,
   forgotten: [] as string[],
 }))
 
-vi.mock('../../host/build-bridge', () => ({
+vi.mock('../../host/build-verb', () => ({
   readBuildStatus: async () => {
     h.calls.readStatus++
     if (h.readStatusHook) await h.readStatusHook()
     return h.status
   },
-  requestBuild: async (req: unknown) => {
+  startBuild: async (_ctx: unknown, req: unknown) => {
     h.calls.request.push(req)
+    return h.start
   },
 }))
 
@@ -161,11 +168,18 @@ const ctx = {
       h.calls.store.push([key, value])
     },
   },
+  controller: {
+    rootFollow: async (run: string) => {
+      h.calls.follow.push(run)
+      if (h.follow instanceof Error) throw h.follow
+      return h.follow
+    },
+  },
 } as unknown as Ctx
 vi.mock('../ctx', () => ({ makeCtx: async () => ctx }))
 
 const scheduler = await import('./scheduler')
-const { freshState, runTick, PICKUP_MS } = scheduler
+const { freshState, runTick } = scheduler
 const { runSweep } = await import('./sweep')
 const { REQUEST_TOO_LARGE } = await import('./dispatch')
 const { planDispatch, BOX_BUILDS_OFF, NO_INSTALLATION } = await import('../../lib/build-dispatch')
@@ -275,6 +289,8 @@ beforeEach(() => {
   h.pinResult = true
   h.installation = { available: true, data: { state: 'ok' } }
   h.readStatusHook = null
+  h.start = { started: true, run: 'r1' }
+  h.follow = { run: { outcome: null, detail: '' } }
   h.forgotten = []
   h.calls = {
     request: [],
@@ -289,6 +305,7 @@ beforeEach(() => {
     retention: [],
     gh: [],
     store: [],
+    follow: [],
   }
   vi.spyOn(console, 'info').mockImplementation(() => undefined)
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -301,7 +318,7 @@ afterEach(() => {
 })
 
 describe('dispatch', () => {
-  it('writes the request only after a successful claim, with the build env', async () => {
+  it('starts the build only after a successful claim, with the build env', async () => {
     const q = row()
     h.queued = [q]
     h.claim = { ...record(q), state: 'cloning', phase: 'requested', startedAt: NOW, updatedAt: NOW }
@@ -326,7 +343,7 @@ describe('dispatch', () => {
         },
       },
     ])
-    expect(state.pending).toEqual({ id: ID, at: NOW.getTime() })
+    expect(state.dispatched).toEqual({ id: ID, run: 'r1', at: NOW.getTime() })
     expect(h.calls.report).toHaveLength(1)
     expect(h.calls.reportTick).toBe(1)
   })
@@ -419,17 +436,66 @@ describe('dispatch', () => {
     expect(h.calls.claim).toEqual([])
   })
 
-  it('does not re-send while the last request awaits pickup', async () => {
+  it('does not start another while the last one has not reported', async () => {
     h.queued = [row({ id: ID2 })]
     h.claim = { ...record(row({ id: ID2 })), state: 'cloning' }
+    h.follow = { run: { outcome: null, detail: '' } }
     const state = freshState(NOW.getTime())
-    state.pending = { id: ID, at: NOW.getTime() - 10_000 }
+    state.dispatched = { id: ID, run: 'r0', at: NOW.getTime() - 10_000 }
     await runTick(ctx, NOW, state)
+    expect(h.calls.follow).toEqual(['r0'])
     expect(h.calls.request).toEqual([])
+    expect(state.dispatched).not.toBeNull()
 
-    const later = new Date(NOW.getTime() - 10_000 + PICKUP_MS)
-    await runTick(ctx, later, state)
+    // Past the status's own staleness it is the rows' staleness clock's.
+    await runTick(ctx, new Date(NOW.getTime() - 10_000 + 90_000), state)
     expect(h.calls.request).toHaveLength(1)
+  })
+
+  it('fails a started build whose unit ended before it wrote a status, with its words', async () => {
+    h.builds.set(
+      ID,
+      record(row({ state: 'cloning', phase: 'requested', startedAt: NOW, updatedAt: NOW })),
+    )
+    h.follow = {
+      run: { outcome: 'failed', detail: 'the egress fence is not in place (no OUTPUT jump)' },
+    }
+    const state = freshState(NOW.getTime())
+    state.dispatched = { id: ID, run: 'r1', at: NOW.getTime() - 5_000 }
+    await runTick(ctx, NOW, state)
+    expect(state.dispatched).toBeNull()
+    const [id, patch, source] = h.calls.update[0] ?? []
+    expect([id, source]).toEqual([ID, 'engine'])
+    expect((patch as Rec).state).toBe('failed')
+    expect((patch as Rec).error).toBe(
+      'the build did not start: the egress fence is not in place (no OUTPUT jump)',
+    )
+    expect((h.calls.report[0] as BuildRow).state).toBe('failed')
+  })
+
+  it('leaves a run the controller forgot to the staleness clock', async () => {
+    h.follow = Object.assign(new Error('no run'), { code: 'not_found' })
+    const state = freshState(NOW.getTime())
+    state.dispatched = { id: ID, run: 'r1', at: NOW.getTime() - 5_000 }
+    await runTick(ctx, NOW, state)
+    expect(state.dispatched).toBeNull()
+    expect(h.calls.update).toEqual([])
+  })
+
+  it('fails the claimed row when the build does not start', async () => {
+    const q = row()
+    h.queued = [q]
+    h.claim = { ...record(q), state: 'cloning', phase: 'requested', startedAt: NOW, updatedAt: NOW }
+    h.start = {
+      started: false,
+      detail: 'daedalus-build@r0 is still running; wait for it to finish',
+    }
+    const state = freshState(NOW.getTime())
+    expect(await runTick(ctx, NOW, state)).toBe(false)
+    expect(state.dispatched).toBeNull()
+    expect((h.calls.update[0]?.[1] as Rec | undefined)?.error).toBe(
+      'the build did not start: daedalus-build@r0 is still running; wait for it to finish',
+    )
   })
 
   it('cancels queued builds when the App is not installed, leaving the running one', async () => {
@@ -930,7 +996,7 @@ describe('sweep', () => {
 })
 
 describe('ensureScheduler', () => {
-  const SLOT = 'daedalusBuildSchedulerV2'
+  const SLOT = 'daedalusBuildSchedulerV3'
   const g = globalThis as unknown as Record<string, unknown>
 
   it('starts one interval, ticks at 30 s idle, and sweeps a minute after start', async () => {

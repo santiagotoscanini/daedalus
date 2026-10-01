@@ -1,9 +1,8 @@
 import { constants } from 'node:fs'
-import { mkdir, open } from 'node:fs/promises'
+import { open } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Ctx } from '../core/ctx'
 import {
-  BUILD_REQUEST_FILE,
   BUILD_STATUS_FILE,
   BUILD_STATUS_MAX_AGE_MS,
   type BuildRequest,
@@ -16,30 +15,48 @@ import {
   serializeBuildRequest,
   tailFromBytes,
 } from '../lib/builds'
-import { redactSecrets } from '../lib/redact'
-import { writeAtomic } from './bridge'
+import { errorText, redactSecrets } from '../lib/redact'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
 import { env } from './env'
 import { type RootAnswer, runRoot } from './root'
 
-// The file half of the `build` verb (lib/builds.ts is the contract). Server-only.
+// The host half of a build (lib/builds.ts is the contract). Server-only.
 //
-//   /apply/build-request.json         written here; daedalus-build.path starts the host builder
-//   root.run build-cancel {app}       asked here; daedalus-build-cancel@<app> stops it
-//   /apply/build-status.json          written by nix/stacks/daedalus/host/build.sh, heartbeated while running
-//   /builds/<id>.log                  the host's already-redacted log, mounted read-only
+//   root.run build + the request       asked here, detached; the root helper starts
+//                                      daedalus-build@<run> (nix build-agent.nix)
+//   root.run build-cancel {app}        asked here; daedalus-build-cancel@<app> stops it
+//   /verbs/build-status.json           written by nix/stacks/daedalus/host/build.sh,
+//                                      heartbeated while running; root's, read-only here
+//   /builds/<id>.log                   the host's already-redacted log, read-only here
 
 const processEnv: EnvReader = (name) => env.text(name)
 
-const applyDir = (env: EnvReader): string => env('APPLY_DIR') ?? '/apply'
+const verbsDir = (env: EnvReader): string => env('VERBS_DIR') ?? '/verbs'
 
-/** Publish one build request. Throws DecodeError before writing anything invalid. */
-export async function requestBuild(req: BuildRequest, env: EnvReader = processEnv): Promise<void> {
+/** How a start went: the run the controller follows, or why there is none. */
+export type BuildStart = { started: true; run: string } | { started: false; detail: string }
+
+/**
+ * Hand one build to the host: the root helper's `build`, the request its
+ * payload, asked with `detach` so the answer comes once the build's unit has
+ * started — a build outlives any request that could wait on it. Refused
+ * before the start (another build is running), or not asked at all (no
+ * controller), is `started: false` with why. Throws DecodeError before asking
+ * anything invalid.
+ */
+export async function startBuild(
+  ctx: Pick<Ctx, 'controller'>,
+  req: BuildRequest,
+): Promise<BuildStart> {
   const checked = buildRequestDecoder(req, '')
-  const dir = applyDir(env)
-  await mkdir(dir, { recursive: true })
-  // The same bytes core/builds/dispatch.ts measured against BUILD_REQUEST_MAX_BYTES.
-  await writeAtomic(join(dir, BUILD_REQUEST_FILE), serializeBuildRequest(checked))
+  try {
+    // The same bytes core/builds/dispatch.ts measured against BUILD_REQUEST_MAX_BYTES.
+    const r = await ctx.controller.rootStart('build', {}, serializeBuildRequest(checked))
+    if (r.outcome === null) return { started: true, run: r.run }
+    return { started: false, detail: r.detail === '' ? `the build was ${r.outcome}` : r.detail }
+  } catch (e) {
+    return { started: false, detail: errorText(e) }
+  }
 }
 
 /** The helper waits 150 s for the stop (build-agent.nix `rootVerbs.build-cancel`); this is that and slack. */
@@ -68,7 +85,7 @@ export async function readBuildStatus(
   env: EnvReader = processEnv,
 ): Promise<SnapshotResult<BuildStatus | null>> {
   return readSnapshot<BuildStatus | null>({
-    path: join(applyDir(env), BUILD_STATUS_FILE),
+    path: join(verbsDir(env), BUILD_STATUS_FILE),
     decoder: buildStatusDecoder,
     fallback: NO_BUILD,
     maxAgeMs: BUILD_STATUS_MAX_AGE_MS,
