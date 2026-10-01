@@ -1382,7 +1382,9 @@ next release's number, which the box's build carries until it is tagged.
 
 ## Releasing
 
-Bump `version` in `Cargo.toml`, commit, tag `agent-v<version>` on a commit
+Bump `version` in `Cargo.toml` and run `agent/gate.sh`, which also moves
+`session-host/interop/Cargo.lock` to the new version (that crate builds the
+agent by path, `--locked`); commit both, tag `agent-v<version>` on a commit
 on `main`, push the tag. [`.github/workflows/agent.yml`](../.github/workflows/agent.yml) builds
 the Windows binaries, Daedalus Agent.app for macOS (universal; zipped for
 the updater, and in the disk image `daedalus-agent-macos.dmg`, a fixed name

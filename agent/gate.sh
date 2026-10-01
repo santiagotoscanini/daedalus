@@ -17,6 +17,12 @@
 # save under app/ would be a live deploy (the dev server serves it): the gate
 # then checks and `gen` writes that copy, and the app's is left alone.
 #
+# Every mode also brings session-host/interop/Cargo.lock to this crate's
+# version (the session host is mounted beside the agent for it): the interop
+# test builds the agent by path, --locked, so a bump that leaves that lock
+# behind fails the session host's CI. It says when it changed the lock;
+# commit it with the bump.
+#
 # The Linux tray links GTK, so the container gets GTK's and AppIndicator's
 # development packages (cached in /tmp/agent-apt between runs), and
 # musl-tools for the static build.
@@ -36,7 +42,7 @@ app_gen="$here/../app/src/host/controller/generated"
 gen="${AGENT_GEN_DIR:-$app_gen}"
 mkdir -p /tmp/agent-apt "$gen"
 set +e
-podman run --rm -v "$here":/w -w /w \
+podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -w /w/agent \
   -v /tmp/agent-cargo:/tmp/agent-cargo -v /tmp/agent-target:/tmp/agent-target \
   -v /tmp/agent-apt:/var/cache/apt/archives \
   -v "$gen":/gen -e DAEDALUS_TS_DIR=/gen \
@@ -50,6 +56,13 @@ podman run --rm -v "$here":/w -w /w \
       || { echo "apt-get install failed"; exit 1; }
     rustup target add x86_64-pc-windows-gnu aarch64-apple-darwin x86_64-unknown-linux-musl >/dev/null 2>&1
     rustup component add clippy rustfmt >/dev/null 2>&1
+    # session-host/interop builds this crate by path and pins its version in
+    # its own Cargo.lock: a version bump here leaves that lock stale and its
+    # --locked CI red. Rewritten on every run, from the cache when it can be.
+    echo "--- session-host/interop/Cargo.lock follows the version"
+    cargo update -q -p daedalus-agent --manifest-path ../session-host/interop/Cargo.toml --offline 2>/dev/null \
+      || cargo update -q -p daedalus-agent --manifest-path ../session-host/interop/Cargo.toml \
+      || { echo "cargo update of session-host/interop failed"; exit 1; }
     what="'"$what"'"
     failed=0
     if [ "$what" = fmt ] || [ "$what" = all ]; then cargo fmt; fi
@@ -125,5 +138,8 @@ if [ "$what" = gen ] && [ "$gen" != "$app_gen" ]; then
 elif [ "$what" = gen ] && command -v git >/dev/null 2>&1; then
   echo "--- the generated types against git (commit them with the Rust change)"
   git -C "$here/.." status --short -- app/src/host/controller/generated
+fi
+if command -v git >/dev/null 2>&1 && [ -n "$(git -C "$here/.." status --porcelain -- session-host/interop/Cargo.lock)" ]; then
+  echo "--- session-host/interop/Cargo.lock changed (commit it with the version bump)"
 fi
 exit $status
