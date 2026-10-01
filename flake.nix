@@ -291,7 +291,7 @@
           # template instance with no template, and one whose template is not
           # a oneshot.
           assert refused "nope" { unit = "no-such-unit.service"; };
-          assert refused "apply" { unit = "daedalus-apply.service"; };
+          assert refused "dhcp" { unit = "daedalus-nodes-dhcp.service"; };
           assert refused "tpl" {
             unit = "no-such-template@{app}.service";
             selectors.app = [ "a" ];

@@ -22,7 +22,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../../host/apply-flow', () => ({
   secretApplyBlocker: async () => h.blocker,
-  runSecretApply: async (...args: unknown[]) => {
+  runSecretApply: async (_ctx: unknown, ...args: unknown[]) => {
     h.applyCalls.push(args)
     return h.apply
   },

@@ -1,30 +1,26 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Ctx } from '../core/ctx'
 import type { ApplyOutcome } from './apply-flow'
 
-// Two Applies must never both publish.
+// Two Applies must never both run, and a refused one must never reach the
+// host.
 //
-// `runApply` writes the finished bytes of apps.json (and site.json, nodes.json)
-// into the bridge directory, and the host commits and rebuilds from exactly
-// those bytes. A second Apply that got past the checks would replace them
-// under a rebuild that is about to read them (host/flow.ts's `pending` comment
-// names that failure). This file proves the three things that prevent it: the
-// `running` check, the pickup window that covers the gap between requesting
-// and the host writing `running`, and `serialised()` keeping two callers from
-// interleaving their check and their write.
+// `runApply` hands the finished bytes of apps.json (and site.json, nodes.json)
+// to the root helper's `apply`, and the host commits and rebuilds from
+// exactly those bytes. This file proves what keeps a second one out: the
+// `running` check, `serialised()` keeping two callers from interleaving their
+// check and their start, and the helper's one-run-at-a-time, whose refusal is
+// the answer. A fake Ctx's controller records every start, because "refused"
+// has to mean "asked nothing" rather than "returned an object saying no".
+// Everything behind it — the registry, the site document, the settings row —
+// is mocked at the module boundary, so this file is about the lock and
+// nothing else.
 //
-// The bridge is real here, pointed at a temp APPLY_DIR (host/bridge.test.ts's
-// archetype), because "refused" has to mean "wrote no request file" rather
-// than "returned an object saying no". Everything behind it — the registry,
-// the site document, the settings row — is mocked at the module boundary, so
-// this file is about the lock and nothing else.
-//
-// `pending` and `chain` are module-scoped with no reset hook, so every test
-// takes a FRESH module: `vi.resetModules()` then `await import`. Resetting
-// also gives host/apply.ts (and its bridge) a fresh instance, which is
-// harmless — the bridge reads APPLY_DIR per call.
+// `chain` is module-scoped with no reset hook, so every test takes a FRESH
+// module: `vi.resetModules()` then `await import`.
 
 const h = vi.hoisted(() => ({
   apps: [{ name: 'iris', managedInNix: false }],
@@ -56,151 +52,158 @@ vi.mock('../lib/repo/settings', () => ({
 
 let dir: string
 let site: string
-let previousApplyDir: string | undefined
-let previousSitePath: string | undefined
+let started: unknown[][]
+let answers: unknown[]
+const previous: Record<string, string | undefined> = {}
+
+const ctx = {
+  controller: {
+    rootFollow: async () => ({ run: { outcome: null, detail: '' } }),
+    rootStart: async (...args: unknown[]) => {
+      started.push(args)
+      const run = `r${String(started.length)}`
+      return answers.shift() ?? { run, verb: 'apply', outcome: null, detail: '', verbs: [] }
+    },
+  },
+} as unknown as Pick<Ctx, 'controller'>
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'apply-flow-'))
-  previousApplyDir = process.env.APPLY_DIR
-  process.env.APPLY_DIR = dir
   // An empty site dir of its own: the committed nodes.json is read from
   // SITE_PATH, and the box's real one would make "nothing to apply" depend
   // on which machines it has approved.
   site = await mkdtemp(join(tmpdir(), 'apply-flow-site-'))
-  previousSitePath = process.env.SITE_PATH
+  for (const k of ['VERBS_DIR', 'SITE_PATH']) previous[k] = process.env[k]
+  process.env.VERBS_DIR = dir
   process.env.SITE_PATH = site
+  started = []
+  answers = []
   h.apps = [{ name: 'iris', managedInNix: false }]
   h.drift = ['image']
   h.siteChanges = []
 })
 
 afterEach(async () => {
-  vi.useRealTimers()
-  if (previousApplyDir === undefined) delete process.env.APPLY_DIR
-  else process.env.APPLY_DIR = previousApplyDir
-  if (previousSitePath === undefined) delete process.env.SITE_PATH
-  else process.env.SITE_PATH = previousSitePath
+  for (const [k, v] of Object.entries(previous)) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
   await rm(dir, { recursive: true, force: true })
   await rm(site, { recursive: true, force: true })
 })
 
-/** A fresh module, so the previous test's `pending` and `chain` are gone. */
+/** A fresh module, so the previous test's `chain` is gone. */
 async function flow() {
   vi.resetModules()
   return import('./apply-flow')
 }
 
-/** Written just now, as apply.sh stamps every write (host/apply.ts's dead-run clock reads it). */
 const hostStatus = (status: Record<string, unknown>) =>
-  writeFile(
-    join(dir, 'apply-status.json'),
-    JSON.stringify({ finishedAt: new Date().toISOString(), ...status }),
-    'utf8',
-  )
+  writeFile(join(dir, 'apply-status.json'), JSON.stringify(status), 'utf8')
 
-/** Id-stamped, so counting these counts requests rather than overwrites. */
-const payloads = async () => (await readdir(dir)).filter((f) => f.startsWith('payload-'))
-
-const NOT_PICKED_UP = {
-  ok: false,
-  code: 'busy',
-  reason: 'the previous apply request has not been picked up by the host yet',
-}
+/** The payload of the nth start. */
+const payload = (n: number) =>
+  JSON.parse(String(started[n]?.[2])) as {
+    actor: string
+    summary: string
+    commit: boolean
+    files: Record<string, string>
+  }
 
 function idOf(outcome: ApplyOutcome): string {
   if (!outcome.ok) throw new Error(`expected an apply, got ${outcome.code}: ${outcome.reason}`)
   return outcome.id
 }
 
+describe('an apply', () => {
+  it('starts the root helper’s apply with the rendered files and what to record', async () => {
+    const { runApply } = await flow()
+    expect(idOf(await runApply(ctx, 'santiago'))).toBe('r1')
+    expect(started[0]?.slice(0, 2)).toEqual(['apply', {}])
+    const p = payload(0)
+    expect([p.actor, p.summary, p.commit]).toEqual(['santiago', 'iris: image', false])
+    expect(Object.keys(p.files).sort()).toEqual([
+      'README.md',
+      'apps.json',
+      'daedalus.json',
+      'nodes.json',
+    ])
+  })
+})
+
 describe('an apply the host is already running', () => {
-  it('is refused, and writes nothing into the bridge', async () => {
+  it('is refused, and asks the helper nothing', async () => {
     await hostStatus({ id: 'abc', state: 'running', phase: 'rebuilding' })
     const { runApply } = await flow()
 
-    expect(await runApply('santiago')).toEqual({
+    expect(await runApply(ctx, 'santiago')).toEqual({
       ok: false,
       code: 'busy',
       reason: 'an apply is already running (rebuilding)',
     })
-    // The whole point: no apply-request.json for the path unit to fire on, and no
-    // payload to replace the bytes the running rebuild is reading.
-    expect(await readdir(dir)).toEqual(['apply-status.json'])
-  })
-})
-
-describe('the pickup window', () => {
-  // Between requestApply returning and apply.sh writing `running`, apply-status.json
-  // still shows the PREVIOUS run's terminal state — so the file check alone
-  // reads "idle" while a request is very much in flight. PICKUP_MS (120s) is
-  // how long `pending` covers that gap; keep these two either side of it.
-  it('refuses inside it and clears after it', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    const { runApply } = await flow()
-
-    const firstId = idOf(await runApply('santiago'))
-    expect(await payloads()).toEqual([`payload-${firstId}.json`])
-
-    vi.setSystemTime(Date.now() + 119_000)
-    expect(await runApply('santiago')).toEqual(NOT_PICKED_UP)
-    expect(await payloads()).toHaveLength(1)
-
-    // Past the window the host is not coming for it, and refusing forever
-    // would wedge the button until a container restart.
-    vi.setSystemTime(Date.now() + 2_000)
-    expect(idOf(await runApply('santiago'))).not.toBe(firstId)
-    expect(await payloads()).toHaveLength(2)
-  })
-
-  it('ends the moment the host acknowledges the request', async () => {
-    const { runApply } = await flow()
-
-    const firstId = idOf(await runApply('santiago'))
-    await hostStatus({ id: firstId, state: 'done', phase: 'done' })
-
-    // apply-status.json now speaks for our request, so the `running` check is the
-    // guard again and the operator does not wait out two minutes.
-    expect(idOf(await runApply('santiago'))).not.toBe(firstId)
+    expect(started).toEqual([])
   })
 })
 
 describe('two callers at once', () => {
-  it('publish exactly one request', async () => {
+  it('start one run: the helper refuses the other, in its words', async () => {
+    answers = [
+      undefined,
+      {
+        run: 'r2',
+        verb: 'apply',
+        outcome: 'refused',
+        detail: 'daedalus-apply@r1 is still running; wait for it to finish',
+        verbs: [],
+      },
+    ]
     const { runApply } = await flow()
 
-    // Un-awaited on purpose: both enter before either has written anything,
-    // which is the interleaving `serialised()` exists to prevent.
-    const [a, b] = await Promise.all([runApply('one'), runApply('two')])
-
-    const applied = [a, b].filter((o): o is Extract<ApplyOutcome, { ok: true }> => o.ok)
-    expect([a, b].filter((o) => !o.ok)).toEqual([NOT_PICKED_UP])
-    const only = applied[0]
-    if (applied.length !== 1 || !only) throw new Error('both callers published')
-
-    expect(await payloads()).toEqual([`payload-${only.id}.json`])
-    // And apply-request.json — the file the host's path unit fires on — points at
-    // that one payload rather than at a second nobody can see.
-    const request = JSON.parse(await readFile(join(dir, 'apply-request.json'), 'utf8')) as {
-      id: string
-    }
-    expect(request.id).toBe(only.id)
+    // Un-awaited on purpose: both enter before either has started, which is
+    // the interleaving `serialised()` orders and the helper refuses.
+    const [a, b] = await Promise.all([runApply(ctx, 'one'), runApply(ctx, 'two')])
+    expect(idOf(a)).toBe('r1')
+    expect(b).toEqual({
+      ok: false,
+      code: 'busy',
+      reason: 'daedalus-apply@r1 is still running; wait for it to finish',
+    })
   })
 })
 
 describe('an apply with nothing to carry', () => {
-  it('writes nothing and does not block the next one', async () => {
+  it('asks nothing and does not block the next one', async () => {
     h.drift = []
     const { runApply } = await flow()
 
-    expect(await runApply('santiago')).toEqual({
+    expect(await runApply(ctx, 'santiago')).toEqual({
       ok: false,
       code: 'noop',
       reason: 'nothing to apply',
     })
-    expect(await readdir(dir)).toEqual([])
+    expect(started).toEqual([])
 
-    // A no-op must not set `pending`: an idle click would otherwise refuse the
-    // real Apply behind it for two minutes.
     h.drift = ['image']
-    expect(idOf(await runApply('santiago'))).toBeTruthy()
+    expect(idOf(await runApply(ctx, 'santiago'))).toBeTruthy()
+  })
+})
+
+describe('a secret', () => {
+  it('is its own Apply, refused while anything else is pending', async () => {
+    const { runSecretApply, secretApplyBlocker } = await flow()
+    const secret = {
+      file: 'vault/cloudflare-api-token.sops' as const,
+      name: 'Cloudflare API token',
+      ciphertext: 'sealed',
+    }
+    expect(await secretApplyBlocker(ctx)).toMatch(/^Apply or undo the pending changes first/)
+    expect((await runSecretApply(ctx, 'santiago', secret)).ok).toBe(false)
+    expect(started).toEqual([])
+
+    h.drift = []
+    expect(await secretApplyBlocker(ctx)).toBeNull()
+    expect(idOf(await runSecretApply(ctx, 'santiago', secret))).toBe('r1')
+    expect(payload(0).files['vault/cloudflare-api-token.sops']).toBe('sealed')
+    expect(payload(0).summary).toBe('replace Cloudflare API token')
   })
 })

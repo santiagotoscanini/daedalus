@@ -194,22 +194,22 @@ export const applyRegistry = adminFn.handler(
     context,
   }): Promise<Result<{ id: string; changed: { name: string; fields: string[] }[] }>> => {
     const { runApply } = await import('../host/apply-flow')
-    const outcome = await runApply(context.actor)
+    const outcome = await runApply(await context.ctx(), context.actor)
     return outcome.ok
       ? { ok: true, value: { id: outcome.id, changed: outcome.changed } }
       : { ok: false, reason: outcome.reason }
   },
 )
 
-export const fetchApplyStatus = readFn.handler(async () => {
+export const fetchApplyStatus = readFn.handler(async ({ context }) => {
   const { readApplyStatus } = await import('../host/apply')
-  return readApplyStatus()
+  return readApplyStatus(await context.ctx())
 })
 
 /** Everything the next Apply would do, for the bar every page draws (host/pending-apply.ts). */
-export const fetchPendingApply = readFn.handler(async () => {
+export const fetchPendingApply = readFn.handler(async ({ context }) => {
   const { pendingApply } = await import('../host/pending-apply')
-  return pendingApply()
+  return pendingApply(await context.ctx())
 })
 
 export const triggerDeploy = adminFn

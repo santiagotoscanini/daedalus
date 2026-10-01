@@ -36,7 +36,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
     siteIdentity(),
     networkSnapshot(),
     repoFacts(),
-    readApplyStatus(),
+    readApplyStatus(ctx),
   ])
   const s = site.data
   // The one fact about how THIS app is run: fleet.daedalus.source = "dev" sets

@@ -2,8 +2,8 @@
 # switch, commit) them, rebuild the system. Restore the bytes if the rebuild fails.
 #
 # Deliberately dumb. It does NOT generate, transform or validate the registry
-# — daedalus renders the exact bytes (src/lib/registry-file.ts) and drops them
-# at $APPLY_DIR/payload-<id>.json; this copies that file verbatim. Every
+# — daedalus renders the exact bytes (src/lib/registry-file.ts) and hands
+# them over as the run's payload; this writes them verbatim. Every
 # decision about shape is application logic and belongs in TypeScript, where
 # it can be typed and tested. What is left here is the part that genuinely
 # needs the host: a privileged rebuild, and git.
@@ -17,20 +17,20 @@
 # — the same reason flake-autoupgrade does it. setpriv, not sudo/runuser:
 # those open a PAM session per call.
 #
-# The container never runs any of this. It writes files into a bind mount; a
-# systemd.path unit notices and starts this. So the app holds no privilege it
-# could lose — the trust boundary is "can write into $APPLY_DIR". That
-# includes the container itself (its root is the operator's uid), which is why
-# nothing below touches a file in that directory as root: the request, the
-# payload, the log and the status are all read and written as the operator,
-# never through a link (host/lib.sh has the full argument). The previous bytes
-# a rollback trusts are NOT in that directory at all — see host/site-lib.sh.
+# The container never runs any of this. It asks the root helper's `apply`
+# verb (daedalus-verbs.nix) through the controller, with the rendered files
+# as the payload; the helper hands that to this unit as its run file (host/lib.sh
+# take_request), one run at a time. So the app holds no privilege it could
+# lose: it chooses bytes, never a name — the names written are MANAGED, below,
+# fixed here — and root reads nothing the container wrote into a directory.
+# The status and the log are root's, in $VERBS_DIR, which the container reads
+# and cannot write. The previous bytes a rollback trusts are in $PREV_DIR,
+# which the container cannot reach either (host/site-lib.sh).
 
 set -euo pipefail
 
-REQ="$APPLY_DIR/apply-request.json"
-STATUS="$APPLY_DIR/apply-status.json"
-LOGFILE="$APPLY_DIR/apply-last.log"
+STATUS="$VERBS_DIR/apply-status.json"
+LOGFILE="$VERBS_DIR/apply-last.log"
 
 # Status is the ONLY channel back to the UI, so it is written at every exit
 # path including the failure ones. `phase` drives the progress display;
@@ -73,36 +73,17 @@ errtail() {
   log_errtail "$LOGFILE"
 }
 
-[ -f "$REQ" ] || exit 0
-
-# The request is read ONCE, as the operator, and every field below comes from
-# this copy. A symlinked apply-request.json is refused with exit 1: the app never
-# writes one, so it is somebody reaching through the bridge, and a failed unit
-# (mailed — see monitoredJobs) is the right amount of noise for that.
-REQ_JSON="$(read_request "$REQ")" || exit 1
-
-REQ_ID="$(jq -r '.id // ""' <<<"$REQ_JSON")"
-[ -n "$REQ_ID" ] || exit 0
-# The id names a path below, and apply-request.json is written by the container —
-# the far side of the trust boundary. Constrain it to UUID characters so a
-# crafted id cannot traverse out of $APPLY_DIR; a request the app didn't
-# write this way is not one worth answering.
-[[ "$REQ_ID" =~ ^[0-9a-fA-F-]+$ ]] || exit 0
+# The run (host/lib.sh run_id, run_payload): its id, which the status carries
+# and the page waits on, and the payload — the files the app rendered and
+# what to record — copied once into a root-private file that every step below
+# works from, so nothing can change the bytes between validating them and
+# committing them.
+REQ_ID="$(run_id)" || exit 1
 STARTED_AT="$(date -Is)"
-
-# The payload rides under the request's own id — derived from the id HERE,
-# never read as a filename from the request body. A second Apply queued while
-# this one runs writes payload-<other-id>.json and cannot touch the bytes
-# this run is committing; the old fixed apps.json name was the last TOCTOU
-# sliver in the bridge.
-PAYLOAD="$APPLY_DIR/payload-$REQ_ID.json"
-
-# The path unit fires on any write to the request file, and again on a
-# daemon-reload replay at boot. Without this guard a completed apply could
-# re-run its own rebuild forever.
-if [ -f "$STATUS" ] && [ "$(published_id "$STATUS")" = "$REQ_ID" ]; then
-  exit 0
-fi
+PAYLOAD_COPY="$(mktemp)"
+trap 'rm -f "$PAYLOAD_COPY"' EXIT
+run_payload >"$PAYLOAD_COPY"
+REQ_JSON="$(jq -c 'del(.files)' "$PAYLOAD_COPY")"
 
 COMMIT_SHA=""
 
@@ -136,25 +117,6 @@ fi
 
 write_status running validating ""
 
-# apply-request.json is written after the payload precisely so this cannot race,
-# but check rather than assume: a missing payload here would otherwise commit
-# an empty registry and take every app down.
-#
-# A symlinked payload is the attack this bridge was hardened against, not a
-# payload: linked at /run/secrets/<x>, root would have copied a secret into
-# site/ and committed it. Refused by name, and then read — once, as the
-# operator, never through a link — into a root-private copy that every step
-# below works from, so nothing can change the bytes between validating them
-# and committing them.
-if [ -L "$PAYLOAD" ]; then
-  fail validating "payload-$REQ_ID.json is a symlink — the bridge only accepts regular files, so it was not read"
-fi
-[ -s "$PAYLOAD" ] || fail validating "no payload-$REQ_ID.json alongside the request"
-PAYLOAD_COPY="$(mktemp)"
-trap 'rm -f "$PAYLOAD_COPY"' EXIT
-read_as_operator "$PAYLOAD" >"$PAYLOAD_COPY" ||
-  fail validating "payload-$REQ_ID.json could not be read as $OPERATOR_USER"
-
 SUMMARY="$(jq -r '.summary // "update app registry"' <<<"$REQ_JSON")"
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 
@@ -166,7 +128,7 @@ ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 # for the rollback below; the id-stamped payload is removed once copied so a
 # failure path cannot leave payloads accumulating in the mount.
 write_status running writing ""
-jq -e .files "$PAYLOAD_COPY" >/dev/null 2>&1 || fail writing "payload-$REQ_ID.json is not a map of files"
+jq -e '.files | type == "object"' "$PAYLOAD_COPY" >/dev/null 2>&1 || fail writing "the payload carries no map of files"
 # The vault entries are ciphertext the app encrypted in its container
 # (Settings › Integrations); this script copies bytes and never sees a value.
 # README.md (rendered from site.json) and daedalus.json (the provenance stamp)
@@ -207,7 +169,6 @@ for f in "${MANAGED[@]}"; do
   fi
   rm -f "$tmp"
 done
-as_operator rm -f -- "$PAYLOAD"
 [ "${#WRITTEN[@]}" -gt 0 ] || fail writing "the payload carries none of ${MANAGED[*]}"
 
 # --- the engine override --------------------------------------------------

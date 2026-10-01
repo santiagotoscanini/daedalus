@@ -1,3 +1,4 @@
+import type { Ctx } from '../core/ctx'
 import { siteBarFields } from '../lib/module-switch'
 import { defineFlow, defineGate, type FlowOutcome } from './flow'
 
@@ -12,7 +13,8 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 // the lock, the busy checks and the pickup window, and differs in one rule: it
 // is always its own Apply.
 //
-// The lock, the pickup window and the order of the steps are host/flow.ts's.
+// The lock and the order of the steps are host/flow.ts's; the root helper
+// runs one Apply at a time.
 // What is here is what an Apply IS: what it carries, and when there is nothing
 // to carry.
 
@@ -27,11 +29,12 @@ export type ApplyOutcome = FlowOutcome<
   'noop' | 'pending'
 >
 
-// ONE gate for both flows below: they publish to the same request file, so a
-// secret's Apply and a registry Apply must refuse each other.
+type WithCtx = { ctx: Pick<Ctx, 'controller'> }
+
+// ONE gate for both flows below: they start the same verb, so a secret's Apply
+// and a registry Apply must refuse each other.
 const gate = defineGate({
-  noun: 'apply',
-  readStatus: async () => (await import('./apply')).readApplyStatus(),
+  readStatus: async (input: WithCtx) => (await import('./apply')).readApplyStatus(input.ctx),
   running: (inFlight) => `an apply is already running (${inFlight.phase})`,
 })
 /**
@@ -151,46 +154,53 @@ async function commitSwitch(): Promise<boolean> {
   )
 }
 
-const apply = defineFlow<string, { changed: { name: string; fields: string[] }[] }, 'noop'>(gate, {
-  prepare: async (actor) => {
-    const { toRegistryExport } = await import('../lib/apps/manifest-map')
-    const { requestApply, summarise } = await import('./apply')
-    const { renderRegistryFile } = await import('../lib/registry-file')
-    const { renderSiteMeta } = await import('../core/site')
+type ApplyInput = WithCtx & { actor: string }
 
-    const { records, site, nodesFile, changed } = await currentChanges()
-    if (changed.length === 0) {
-      return { ok: false, code: 'noop', reason: 'nothing to apply' }
-    }
+const apply = defineFlow<ApplyInput, { changed: { name: string; fields: string[] }[] }, 'noop'>(
+  gate,
+  {
+    prepare: async ({ ctx, actor }) => {
+      const { toRegistryExport } = await import('../lib/apps/manifest-map')
+      const { startApply, summarise } = await import('./apply')
+      const { renderRegistryFile } = await import('../lib/registry-file')
+      const { renderSiteMeta } = await import('../core/site')
 
-    return {
-      ok: true,
-      value: { changed },
-      publish: async () =>
-        requestApply({
-          // Finished files, not data structures: the host agent writes these
-          // bytes verbatim and never parses them. apps.json and nodes.json
-          // always — their renders are idempotent and the agent reports
-          // no-change; site.json only when its desired document differs from
-          // the committed one; README.md and daedalus.json always — the README
-          // is rendered from the document, and the point of the stamp is that
-          // every write into the directory says which engine made it.
-          files: {
-            'apps.json': renderRegistryFile(toRegistryExport(records)),
-            'nodes.json': nodesFile.text,
-            ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
-            ...(await renderSiteMeta(site.desired, actor)),
-          },
-          summary: summarise(changed),
-          actor,
-          commit: await commitSwitch(),
-        }),
-    }
+      const { records, site, nodesFile, changed } = await currentChanges()
+      if (changed.length === 0) {
+        return { ok: false, code: 'noop', reason: 'nothing to apply' }
+      }
+
+      return {
+        ok: true,
+        value: { changed },
+        publish: async () => {
+          const started = await startApply(ctx, {
+            // Finished files, not data structures: the host agent writes these
+            // bytes verbatim and never parses them. apps.json and nodes.json
+            // always — their renders are idempotent and the agent reports
+            // no-change; site.json only when its desired document differs from
+            // the committed one; README.md and daedalus.json always — the README
+            // is rendered from the document, and the point of the stamp is that
+            // every write into the directory says which engine made it.
+            files: {
+              'apps.json': renderRegistryFile(toRegistryExport(records)),
+              'nodes.json': nodesFile.text,
+              ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
+              ...(await renderSiteMeta(site.desired, actor)),
+            },
+            summary: summarise(changed),
+            actor,
+            commit: await commitSwitch(),
+          })
+          return started.ok ? started.id : started
+        },
+      }
+    },
   },
-})
+)
 
-export function runApply(actor: string): Promise<ApplyOutcome> {
-  return apply(actor)
+export function runApply(ctx: Pick<Ctx, 'controller'>, actor: string): Promise<ApplyOutcome> {
+  return apply({ ctx, actor })
 }
 
 export type VaultFile = import('../lib/vault').VaultFile
@@ -205,14 +215,14 @@ const pendingReason = (other: { name: string }[]) =>
  * a GitHub App mints a key, and one minted and then refused here is a key
  * nobody can use. runSecretApply asks again at the moment it writes.
  */
-export async function secretApplyBlocker(): Promise<string | null> {
-  const blocked = await gate.blocked()
+export async function secretApplyBlocker(ctx: Pick<Ctx, 'controller'>): Promise<string | null> {
+  const blocked = await gate.blocked({ ctx })
   if (blocked !== null) return blocked.reason
   const { changed } = await currentChanges()
   return changed.length > 0 ? pendingReason(changed) : null
 }
 
-type SecretApply = {
+type SecretApply = WithCtx & {
   actor: string
   secret: { file: VaultFile; name: string; ciphertext: string }
   extraFiles?: Pick<import('./apply').ApplyFiles, 'site.json'>
@@ -223,8 +233,8 @@ const secretApply = defineFlow<
   { changed: { name: string; fields: string[] }[] },
   'pending'
 >(gate, {
-  prepare: async ({ actor, secret, extraFiles }) => {
-    const { requestApply } = await import('./apply')
+  prepare: async ({ ctx, actor, secret, extraFiles }) => {
+    const { startApply } = await import('./apply')
     const { renderSiteMeta } = await import('../core/site')
 
     const { changed: other, site } = await currentChanges()
@@ -235,8 +245,8 @@ const secretApply = defineFlow<
     return {
       ok: true,
       value: { changed: [{ name: 'vault', fields: [secret.name] }] },
-      publish: async () =>
-        requestApply({
+      publish: async () => {
+        const started = await startApply(ctx, {
           // The README and the stamp ride this door too — every write into the
           // directory records what wrote it. Neither changes the commit's
           // subject: the agent leaves both out of that decision, so this stays
@@ -249,7 +259,9 @@ const secretApply = defineFlow<
           summary: `replace ${secret.name}`,
           actor,
           commit: await commitSwitch(),
-        }),
+        })
+        return started.ok ? started.id : started
+      },
     }
   },
 })
@@ -265,11 +277,13 @@ const secretApply = defineFlow<
  * caller from the COMMITTED document, since anything pending is refused here.
  */
 export function runSecretApply(
+  ctx: Pick<Ctx, 'controller'>,
   actor: string,
   secret: { file: VaultFile; name: string; ciphertext: string },
   opts?: { extraFiles?: Pick<import('./apply').ApplyFiles, 'site.json'> },
 ): Promise<ApplyOutcome> {
   return secretApply({
+    ctx,
     actor,
     secret,
     ...(opts?.extraFiles === undefined ? {} : { extraFiles: opts.extraFiles }),
@@ -284,19 +298,18 @@ export function runSecretApply(
  * rebuilding the comparison somewhere else. A preview that could disagree with
  * the Apply it previews would be worse than no preview.
  *
- * Nothing here takes the lock or writes a request file, and `gate.blocked()`
- * only ever forgets a `pending` the host has settled: two callers previewing
- * at once is a pair of reads. The MCP `apply.preview` tool's body — how an
+ * Nothing here takes the lock or starts anything: two callers previewing at
+ * once is a pair of reads. The MCP `apply.preview` tool's body — how an
  * agent sees what it is about to commit to before it calls `apply`.
  */
-export async function applyPreview(): Promise<{
+export async function applyPreview(ctx: Pick<Ctx, 'controller'>): Promise<{
   changed: { name: string; fields: string[] }[]
   /** The site-document fields an Apply would write, if any. */
   site: string[]
   /** Why a new Apply would be refused right now, or null. */
   blocked: string | null
 }> {
-  const [{ changed, site }, blocker] = await Promise.all([currentChanges(), gate.blocked()])
+  const [{ changed, site }, blocker] = await Promise.all([currentChanges(), gate.blocked({ ctx })])
   return {
     changed,
     site: [...site.changes],

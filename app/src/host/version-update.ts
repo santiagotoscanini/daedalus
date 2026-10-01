@@ -9,7 +9,7 @@ import {
   optional,
   str,
 } from '../lib/contract/decode'
-import { defineFlow, defineRootGate, type FlowOutcome } from './flow'
+import { defineFlow, defineGate, type FlowOutcome } from './flow'
 import { defineRootVerb } from './root-verb'
 
 // The app half of a version update: the root helper's `version-update` verb
@@ -80,7 +80,7 @@ type Input = {
   actor: string
 }
 
-const gate = defineRootGate({
+const gate = defineGate({
   readStatus: (input: Input) => readVersionUpdateStatus(input.ctx),
   running: (s) => `an update of ${s.target} is already running (${s.phase})`,
 })

@@ -1,7 +1,7 @@
 import type { Ctx } from '../core/ctx'
 import { ceremonyArmed, ceremonyFor, ceremonyRefusal } from '../lib/image-ceremony'
 import { imagePins, manualPins } from './contract/domains/images'
-import { defineFlow, defineRootGate, type FlowOutcome } from './flow'
+import { defineFlow, defineGate, type FlowOutcome } from './flow'
 import {
   type ImageTarget,
   type ImageUpdateStatus,
@@ -31,7 +31,7 @@ type Moved = { targets: { container: string; toTag: string | null }[] }
 
 export type UpdateOutcome = FlowOutcome<Moved, 'refused'>
 
-const gate = defineRootGate({
+const gate = defineGate({
   readStatus: (input: UpdateInput) => readImageUpdateStatus(input.ctx),
   running: (inFlight) => {
     const what =

@@ -34,7 +34,7 @@ export async function loadAppList(ctx: Ctx) {
       ctx,
       records.map((r) => r.name),
     ),
-    readApplyStatus(),
+    readApplyStatus(ctx),
     // Resolved per app, in parallel, and cached for an hour in that module —
     // so this costs one round of probes after a restart and nothing after.
     Promise.all(

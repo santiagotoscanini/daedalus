@@ -20,7 +20,7 @@ set -euo pipefail
 # half can boot a generation that was never finished being installed. The three
 # checks are the same question asked of the three things that rebuild this
 # system.
-if systemctl is-active --quiet daedalus-apply.service; then
+if systemctl is-active --quiet 'daedalus-apply@*.service'; then
   refuse "an apply is running — rebooting mid-rebuild would leave a half-applied generation. Wait for it to finish."
 fi
 

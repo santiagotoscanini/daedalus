@@ -99,7 +99,7 @@ let
         (
           lib.filter (n: config.systemd.services ? ${n}) [
             "flake-autoupgrade"
-            "daedalus-apply"
+            "daedalus-apply@"
             "daedalus-engine-update@"
             "daedalus-image-update@"
             "daedalus-version-update@"

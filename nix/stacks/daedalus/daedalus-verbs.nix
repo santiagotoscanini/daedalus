@@ -18,7 +18,6 @@ let
     applyDir
     prevDir
     verbsDir
-    bridgeAgent
     deployableApps
     runnableTasks
     longestTaskSec
@@ -74,60 +73,6 @@ in
         # owner + 0700 are re-enforced at every boot. site-lib's mkdir is only the
         # fallback for a run that beats state-paths.service.
         fleet.statePaths.${prevDir}.mode = "0700";
-
-        # The apply agent. Root, because only root can `nixos-rebuild switch`.
-        #
-        # Triggered by a path unit rather than a socket or an API: the container
-        # writes apply-request.json into the apply dir (bound in daedalus.nix),
-        # systemd notices, and this runs. The container therefore holds no host privilege at all — the trust
-        # boundary is "can write into that directory". The container itself can
-        # (its root is the operator's uid), which is why every agent reads and
-        # writes files there only as the operator and never through a link — the
-        # rule and its reasons are in host/lib.sh.
-        #
-        # NOT a timer: an apply should start when one is requested, not up to N
-        # seconds later, and a rebuild is far too expensive to poll for.
-        systemd.services.daedalus-apply = bridgeAgent // {
-          description = "Apply the daedalus app registry: commit the export and rebuild";
-          # linger-users gates /run/user/1000; the rebuild restarts rootless units.
-          after = [
-            "network-online.target"
-            "linger-users.service"
-          ];
-          wants = [ "network-online.target" ];
-
-          # Load-bearing, for the reason spelled out on the image update below:
-          # a unit that runs `nixos-rebuild switch` must not be restarted by that
-          # switch. VAULT_APP_SECRETS is derived from apps.json, so an Apply that
-          # adds an app moves this unit's ExecStart; this line is what keeps that
-          # from SIGTERMing the apply that caused it.
-          restartIfChanged = false;
-
-          serviceConfig = {
-            Type = "oneshot";
-            ExecStart = "${applyScript}/bin/daedalus-apply";
-            # Marks a killed run failed instead of leaving it "running" (host/update-reaper.sh).
-            ExecStopPost = "${applyReaper}/bin/daedalus-apply-reaper";
-            # A rebuild can take minutes on a cold cache; the default 90s would
-            # SIGTERM it mid-switch.
-            TimeoutStartSec = "30min";
-          };
-        };
-
-        systemd.paths.daedalus-apply = {
-          description = "Watch for a daedalus apply request";
-          wantedBy = [ "multi-user.target" ];
-          pathConfig = {
-            # PathChanged fires on close-after-write and on rename-into-place, which
-            # is how the app publishes the file — it writes a temp and renames, so a
-            # half-written request is never observable.
-            PathChanged = "${applyDir}/apply-request.json";
-          };
-        };
-
-        # A failed apply means the box may have been rolled back without anyone
-        # watching the UI. Mail it.
-        fleet.monitoredJobs.daedalus-apply = { };
 
         # Redeploy: the root helper's `deploy` (controller.nix, `root`) starts the
         # app's EXISTING `app-<name>-deploy.service` (modules/apps) — the unit
@@ -321,8 +266,40 @@ in
         };
       }
 
+      # The Apply: the root helper's `apply`, the rendered files and what to
+      # record its payload (host/apply.sh). Root, because only root can
+      # `nixos-rebuild switch`. mkRootVerb's `restartIfChanged = false` is
+      # load-bearing: VAULT_APP_SECRETS is derived from apps.json, so an Apply
+      # that adds an app moves this unit's ExecStart, and a switch that
+      # restarted it would SIGTERM the Apply that caused it. A failed Apply
+      # means the box may have been rolled back without anyone watching the UI,
+      # so it mails.
+      (mkRootVerb {
+        verb = "apply";
+        unit = "daedalus-apply";
+        description = "Apply the daedalus app registry: commit the export and rebuild";
+        verbDescription = "Write the rendered site files, commit them and rebuild";
+        script = applyScript;
+        # A rebuild can take minutes on a cold cache.
+        timeoutStartSec = 30 * 60;
+        # The rendered site files and what to record: about 40 KiB on the
+        # reference box, so the helper's whole cap.
+        payloadMax = 262144;
+        # Marks a killed run failed instead of leaving it "running"
+        # (host/update-reaper.sh).
+        execStopPost = [ "${applyReaper}/bin/daedalus-apply-reaper" ];
+        # linger-users gates /run/user/1000; the rebuild restarts rootless units.
+        unitAttrs = {
+          after = [
+            "network-online.target"
+            "linger-users.service"
+          ];
+          wants = [ "network-online.target" ];
+        };
+      })
+
       # Image updates: the root helper's `image-update`, the request its
-      # payload. The sibling of apply: it takes the shared rebuild lock,
+      # payload. The sibling of the Apply: it takes the shared rebuild lock,
       # commits to the flake, and switches the system. What is different is
       # that it EDITS nix source to get there; host/image-update.sh opens with
       # why the digest is the only anchor that makes that safe to do
@@ -337,7 +314,7 @@ in
       # definition, which is exactly when fresh pins are wanted.
       #
       # A failed update means the box may have been rolled back without anyone
-      # watching the page that started it: monitored, like daedalus-apply.
+      # watching the page that started it: monitored, like the Apply.
       (mkRootVerb {
         verb = "image-update";
         unit = "daedalus-image-update";

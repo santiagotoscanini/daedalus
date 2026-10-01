@@ -296,7 +296,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
 
   read('apply.preview', {}, async () => {
     const { applyPreview } = await import('../apply-flow')
-    return applyPreview()
+    return applyPreview(await ctx())
   })
 
   read('health', {}, async () => {
@@ -384,7 +384,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
 
   write('apply', {}, async (_args, actor) => {
     const { runApply } = await import('../apply-flow')
-    const outcome = await runApply(actor)
+    const outcome = await runApply(await ctx(), actor)
     return outcome.ok
       ? ok({ id: outcome.id, changed: outcome.changed })
       : refuse(`${outcome.code}: ${outcome.reason}`)

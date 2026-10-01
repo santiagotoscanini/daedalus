@@ -2,7 +2,7 @@ import type { Ctx } from '../core/ctx'
 import { readClaudeCodeUpdateStatus, startClaudeCodeUpdate } from './claude-code-update'
 import { readCommittedSite } from './contract/domains/site-doc'
 import { readEngineUpdateStatus } from './engine-update'
-import { defineFlow, defineRootGate, type FlowOutcome } from './flow'
+import { defineFlow, defineGate, type FlowOutcome } from './flow'
 
 // The one claude-code-update implementation, in host/engine-flow.ts's shape.
 //
@@ -24,7 +24,7 @@ export type ClaudeCodeUpdateOutcome = FlowOutcome<Requested, 'refused'>
 
 type Input = { ctx: Pick<Ctx, 'controller'>; actor: string }
 
-const gate = defineRootGate({
+const gate = defineGate({
   readStatus: (input: Input) => readClaudeCodeUpdateStatus(input.ctx),
   running: (inFlight) => `a Claude Code pin is already running (${inFlight.phase})`,
 })

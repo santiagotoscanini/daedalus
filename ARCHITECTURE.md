@@ -118,7 +118,6 @@ the same directory:
 
 | request | agent unit | status |
 |---|---|---|
-| `apply-request.json` | `daedalus-apply` | `apply-status.json` + `apply-last.log` + `payload-<id>.json` |
 
 Five rules make this safe, and each of them was learned the hard way:
 
@@ -200,6 +199,7 @@ helper holding the template's lock, refuses the next.
 | `workspace-clone {repo, actor}` | `daedalus-workspace-clone@<run>` (both patterns): clone, or fast-forward an existing clone, over the operator's SSH identity | 2026-09-28 |
 | `secret-set {app, action, key, actor} + payload` | `daedalus-secret-set@<run>` (`key` and `actor` patterns): merge or drop one key in `vault/apps/<app>-env.sops` and commit; the payload is the value sealed by the container | 2026-09-28 |
 | `session-host-restart` | `daedalus-session-host-restart`, which restarts the session host: how a new build takes over, ending every live terminal | 2026-09-29 |
+| `apply` + payload, detached | `daedalus-apply@<run>` (daedalus-verbs.nix): `{actor, summary, commit, files}`; write the managed files, commit, build, switch (or `test` under an engine override), roll back keeping the first error; `/verbs/apply-status.json`. The Apply loop, below | 2026-10-01 |
 | `build` + payload, detached | `daedalus-build@<run>` (build-agent.nix): the engine's build request is the payload; progress and the result go to `/verbs/build-status.json`, root's and read-only in the container; the scheduler follows the run until that file names it (BUILDS.md) | 2026-10-01 |
 | `image-update` + payload, detached | `daedalus-image-update@<run>` (daedalus-verbs.nix): `{targets, actor}` is the payload; one commit, one rebuild, verify, revert on failure; progress in `/verbs/image-update-status.json` under the run's id. A `running` file whose run the controller says has ended reads as failed — no clock | 2026-10-01 |
 | `version-update` + payload, detached | `daedalus-version-update@<run>` (version-update.nix): `{target, values, actor}`; rewrite a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure; `/verbs/version-update-status.json` | 2026-10-01 |
@@ -226,9 +226,9 @@ flowchart TB
   UI["Apps or Settings: the operator edits"]
   DBT[("apps table, settings, site fields")]
   Render["render the EXACT bytes"]
-  Req[/"apply/apply-request.json {actor, summary, commit}<br/>+ apply/payload-ID.json"/]
-  PathU["daedalus-apply.path"]
-  Sh["daedalus-apply.service, root<br/>restartIfChanged = false"]
+  Req[/"root.run apply, detached: the payload is<br/>{actor, summary, commit, files}"/]
+  PathU["the controller, then the root helper"]
+  Sh["daedalus-apply@RUN, root<br/>restartIfChanged = false"]
   Allow{"any payload file on the allowlist?<br/>apps.json, nodes.json, site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops<br/>vault/apps/NAME-env.sops, README.md, daedalus.json<br/>other names are skipped"}
   Prev["copy the current bytes aside,<br/>outside the bridge directory"]
   Git["write verbatim, git add, commit<br/>as the operator, never as root"]

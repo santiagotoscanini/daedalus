@@ -147,7 +147,7 @@ export async function replaceCloudflareToken(
   if (!sealed.ok) return sealed
 
   const { runSecretApply } = await import('../../host/apply-flow')
-  const outcome = await runSecretApply(actor, {
+  const outcome = await runSecretApply(ctx, actor, {
     file: CLOUDFLARE_TOKEN_FILE,
     name: CLOUDFLARE_TOKEN_SECRET,
     ciphertext: sealed.value,

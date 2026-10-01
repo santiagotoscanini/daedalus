@@ -1,7 +1,7 @@
 import type { Ctx } from '../core/ctx'
 import { readCommittedSite } from './contract/domains/site-doc'
 import { type EngineUpdateStatus, readEngineUpdateStatus, startEngineUpdate } from './engine-update'
-import { defineFlow, defineRootGate, type FlowOutcome } from './flow'
+import { defineFlow, defineGate, type FlowOutcome } from './flow'
 
 // The one engine-update implementation.
 //
@@ -28,7 +28,7 @@ export type EngineUpdateOutcome = FlowOutcome<Requested, 'refused'>
 
 type Input = { ctx: Pick<Ctx, 'controller'>; actor: string }
 
-const gate = defineRootGate({
+const gate = defineGate({
   readStatus: (input: Input) => readEngineUpdateStatus(input.ctx),
   running: (inFlight) => `an engine update is already running (${inFlight.phase})`,
 })

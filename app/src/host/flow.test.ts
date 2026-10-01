@@ -1,19 +1,20 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { defineFlow, defineGate, type FlowPlan, PICKUP_MS } from './flow'
+import { describe, expect, it } from 'vitest'
+import { defineFlow, defineGate, type FlowPlan } from './flow'
 
 // host/apply-flow.test.ts, update-flow.test.ts and engine-flow.test.ts prove
-// the lock through a real bridge. What they cannot show is the skeleton's own
-// contract — the ORDER of the steps, and that two flows on one gate refuse
-// each other — since each of them has exactly one arrangement of it. The status and the write are
-// fakes here for that reason: `published` is the list of requests that reached
-// the bridge, and a refusal is only a refusal if it is not on it.
+// the lock through a fake controller. What they cannot show is the
+// skeleton's own contract — the ORDER of the steps, and that two flows on one
+// gate take turns — since each of them has exactly one arrangement of it. The
+// status and the start are fakes here for that reason: `started` is the list
+// of runs that reached the root helper, and a refusal is only a refusal if it
+// is not on it. The helper refuses a second run while one is under way: the
+// fake start does too, once `running` says so.
 
 type Status = { id: string | null; state: string; phase: string }
 
 function harness(initial: Status = { id: null, state: 'idle', phase: '' }) {
-  const box = { status: initial, published: [] as string[], prepared: 0 }
-  const gate = defineGate<Status>({
-    noun: 'apply',
+  const box = { status: initial, started: [] as string[], prepared: 0 }
+  const gate = defineGate<string, Status>({
     readStatus: async () => box.status,
     running: (s) => `an apply is already running (${s.phase})`,
   })
@@ -24,8 +25,11 @@ function harness(initial: Status = { id: null, state: 'idle', phase: '' }) {
       ok: true,
       value: { name },
       publish: async () => {
-        const id = `id-${String(box.published.length + 1)}`
-        box.published.push(id)
+        if (box.started.length > 0) {
+          return { ok: false, code: 'busy', reason: 'daedalus-apply@id-1 is still running' }
+        }
+        const id = `id-${String(box.started.length + 1)}`
+        box.started.push(id)
         return id
       },
     }
@@ -37,16 +41,6 @@ function harness(initial: Status = { id: null, state: 'idle', phase: '' }) {
   })
   return { box, gate, run, plan }
 }
-
-const NOT_PICKED_UP = {
-  ok: false,
-  code: 'busy',
-  reason: 'the previous apply request has not been picked up by the host yet',
-}
-
-afterEach(() => {
-  vi.useRealTimers()
-})
 
 describe('the order of the steps', () => {
   it('refuses a malformed input as malformed even while the host is running', async () => {
@@ -63,7 +57,7 @@ describe('the order of the steps', () => {
       reason: 'an apply is already running (rebuilding)',
     })
     expect(box.prepared).toBe(0)
-    expect(box.published).toEqual([])
+    expect(box.started).toEqual([])
   })
 
   it('reports the id beside the plan’s own fields', async () => {
@@ -72,65 +66,61 @@ describe('the order of the steps', () => {
   })
 })
 
-describe('a refusal from prepare', () => {
-  it('publishes nothing and opens no pickup window', async () => {
+describe('a refusal', () => {
+  it('from prepare starts nothing', async () => {
     const { run, box } = harness()
     expect(await run('nothing')).toEqual({ ok: false, code: 'noop', reason: 'nothing to apply' })
-    expect(box.published).toEqual([])
+    expect(box.started).toEqual([])
     expect(await run('iris')).toMatchObject({ ok: true })
   })
-})
 
-describe('the pickup window', () => {
-  it('refuses inside it, clears after it, and ends early on the host’s acknowledgement', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    const { run, box } = harness()
-
+  it('from the start is the answer', async () => {
+    const { run } = harness()
     expect(await run('one')).toMatchObject({ ok: true, id: 'id-1' })
-    vi.setSystemTime(Date.now() + PICKUP_MS - 1_000)
-    expect(await run('two')).toEqual(NOT_PICKED_UP)
-
-    vi.setSystemTime(Date.now() + 2_000)
-    expect(await run('two')).toMatchObject({ ok: true, id: 'id-2' })
-
-    expect(await run('three')).toEqual(NOT_PICKED_UP)
-    box.status = { id: 'id-2', state: 'done', phase: 'done' }
-    expect(await run('three')).toMatchObject({ ok: true, id: 'id-3' })
+    expect(await run('two')).toEqual({
+      ok: false,
+      code: 'busy',
+      reason: 'daedalus-apply@id-1 is still running',
+    })
   })
 })
 
 describe('two flows on one gate', () => {
-  // Apply's arrangement: runApply and runSecretApply write the same request
-  // file, so whichever publishes first must be what the other is refused by.
-  it('refuse each other, and only one of two concurrent callers publishes', async () => {
+  // Apply's arrangement: runApply and runSecretApply start the same verb, so
+  // whichever starts first is what the other is refused by.
+  it('take turns, and only one of two concurrent callers starts', async () => {
     const { gate, run, plan, box } = harness()
     const other = defineFlow<string, { name: string }, 'noop' | 'malformed'>(gate, {
       prepare: plan,
     })
 
     const outcomes = await Promise.all([run('one'), other('two')])
-    expect(outcomes.filter((o) => !o.ok)).toEqual([NOT_PICKED_UP])
-    expect(box.published).toEqual(['id-1'])
+    expect(outcomes.filter((o) => !o.ok)).toHaveLength(1)
+    expect(box.started).toEqual(['id-1'])
   })
 
   it('keeps serving after a flow throws', async () => {
     const { gate, run } = harness()
     const broken = defineFlow<string, { name: string }>(gate, {
       prepare: async () => {
-        throw new Error('the bridge would not take the write')
+        throw new Error('the start could not be asked')
       },
     })
-    await expect(broken('x')).rejects.toThrow('the bridge would not take the write')
+    await expect(broken('x')).rejects.toThrow('the start could not be asked')
     expect(await run('iris')).toMatchObject({ ok: true })
   })
 })
 
 describe('blocked', () => {
-  it('answers the gate’s question without taking the lock or publishing', async () => {
-    const { gate, run, box } = harness()
-    expect(await gate.blocked()).toBeNull()
-    await run('iris')
-    expect(await gate.blocked()).toEqual(NOT_PICKED_UP)
-    expect(box.published).toEqual(['id-1'])
+  it('answers the gate’s question without taking the lock or starting anything', async () => {
+    const { gate, box } = harness({ id: 'abc', state: 'running', phase: 'building' })
+    expect(await gate.blocked('x')).toEqual({
+      ok: false,
+      code: 'busy',
+      reason: 'an apply is already running (building)',
+    })
+    box.status = { id: 'abc', state: 'done', phase: 'complete' }
+    expect(await gate.blocked('x')).toBeNull()
+    expect(box.started).toEqual([])
   })
 })

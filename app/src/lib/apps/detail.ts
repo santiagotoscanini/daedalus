@@ -53,7 +53,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     site,
   ] = await Promise.all([
     appStatuses(ctx, [name]),
-    readApplyStatus(),
+    readApplyStatus(ctx),
     lastDeploy(name),
     pullFailing(name),
     // So the hostname field can reject a collision as it is typed rather

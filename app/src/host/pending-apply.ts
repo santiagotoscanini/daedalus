@@ -1,3 +1,4 @@
+import type { Ctx } from '../core/ctx'
 import { type ApplyStatus, readApplyStatus } from './apply'
 import { currentChanges } from './apply-flow'
 
@@ -15,7 +16,7 @@ export type PendingApply = {
   status: ApplyStatus
 }
 
-export async function pendingApply(): Promise<PendingApply> {
-  const [{ changed }, status] = await Promise.all([currentChanges(), readApplyStatus()])
+export async function pendingApply(ctx: Pick<Ctx, 'controller'>): Promise<PendingApply> {
+  const [{ changed }, status] = await Promise.all([currentChanges(), readApplyStatus(ctx)])
   return { changed, status }
 }

@@ -268,7 +268,7 @@ export async function startAppCreation(
     return refuse('A created App is still waiting for its Apply. Retry or discard that first.')
   }
   const { secretApplyBlocker } = await import('../../host/apply-flow')
-  const blocked = await secretApplyBlocker()
+  const blocked = await secretApplyBlocker(ctx)
   if (blocked !== null) return refuse(blocked)
 
   const site = await readCommittedSite()
@@ -415,6 +415,7 @@ async function convert(code: string): Promise<
  * follow (`priorAppId`, null for none).
  */
 async function applyApp(
+  ctx: Ctx,
   actor: string,
   ciphertext: string,
   app: SiteGithubApp,
@@ -440,6 +441,7 @@ async function applyApp(
   try {
     const { runSecretApply } = await import('../../host/apply-flow')
     const outcome = await runSecretApply(
+      ctx,
       actor,
       { file: GITHUB_APP_FILE, name: VAULT_NAME, ciphertext },
       { extraFiles: { 'site.json': siteJson } },
@@ -621,7 +623,7 @@ async function finish(
     ownerId: c.ownerId,
   }
   if (!owns()) return SUPERSEDED
-  const applied = await applyApp(actor, sealed.value, app, priorAppId)
+  const applied = await applyApp(ctx, actor, sealed.value, app, priorAppId)
   if (applied.ok) {
     await ctx.store.delete(SETTING_KEYS.githubAppPendingApply)
     return { outcome: 'created', id: applied.value }
@@ -647,7 +649,7 @@ export async function retryPendingApply(ctx: Ctx, actor: string): Promise<Github
   const pending = await ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply)
   if (pending === undefined) return { ok: false, reason: 'No created App is waiting for an Apply.' }
 
-  const applied = await applyApp(actor, pending.ciphertext, pending.github, pending.priorAppId)
+  const applied = await applyApp(ctx, actor, pending.ciphertext, pending.github, pending.priorAppId)
   if (applied.ok) {
     await ctx.store.delete(SETTING_KEYS.githubAppPendingApply)
   } else {
@@ -710,7 +712,7 @@ export async function pasteAppKey(
 
   try {
     const { runSecretApply } = await import('../../host/apply-flow')
-    const outcome = await runSecretApply(actor, {
+    const outcome = await runSecretApply(ctx, actor, {
       file: GITHUB_APP_FILE,
       name: VAULT_NAME,
       ciphertext: sealed.value,

@@ -1,18 +1,19 @@
-import type { BridgeStatus } from './bridge'
-
-// The skeleton every bridge verb that must refuse a second request while the
-// host is busy shares: a promise chain, a `pending` request, a pickup window,
-// a `running` check. Its arrangements are host/apply-flow.ts,
-// host/update-flow.ts (both reachable from a button and an MCP tool),
-// host/engine-flow.ts, host/claude-code-flow.ts and host/version-update.ts
-// (a button each). The steps are
+// The skeleton every root verb that must refuse a second request while the
+// host is busy shares: a promise chain and a `running` check. Its
+// arrangements are host/apply-flow.ts, host/update-flow.ts (both reachable
+// from a button and an MCP tool), host/engine-flow.ts,
+// host/claude-code-flow.ts and host/version-update.ts (a button each). The
+// steps are
 //
-//   check the input → refuse if the host is busy → prepare → publish → remember
+//   check the input → refuse if the host is busy → prepare → start
 //
 // in that order, under one lock. The order is part of the contract: a
 // malformed request is refused as malformed even while the host is busy, and
 // nothing is prepared (the registry read, the site render) for a request that
-// is about to be refused as busy.
+// is about to be refused as busy. The start is the root helper's
+// (host/root-verb.ts): answered once the verb's unit has started, and refused
+// by the helper while another run of the verb is under way — so no request
+// can sit unclaimed, and the helper is the last word on "one at a time".
 //
 // WHAT IS NOT HERE, on purpose.
 //
@@ -23,68 +24,51 @@ import type { BridgeStatus } from './bridge'
 // core/builds/actions.ts: a flow that read the ambient request could not be
 // called from /mcp, which has none.
 //
-// Waiting for the outcome. No flow waits: each returns the request's id the
-// moment it is published and the caller polls the status file (the button's
+// Waiting for the outcome. No flow waits: each returns the run's id the
+// moment it has started and the caller polls the status file (the button's
 // status query; the MCP tool hands its caller the id). A rebuild outlives any
 // request that could wait on it.
 //
 // The gate and the flow are two things because Apply has two flows behind ONE
-// lock: `runApply` and `runSecretApply` publish to the same request file, so
-// they must share a chain and a `pending`, and `secretApplyBlocker` /
-// `applyPreview` ask the gate its question without taking it.
+// lock: `runApply` and `runSecretApply` start the same verb, so they must
+// share a chain, and `secretApplyBlocker` / `applyPreview` ask the gate its
+// question without taking it.
 
 export type FlowRefusal<C extends string> = { ok: false; code: C; reason: string }
 
 /**
- * lib/result.ts's shape, flat: the published request's `id` and the flow's own
+ * lib/result.ts's shape, flat: the started run's `id` and the flow's own
  * fields on success, a `code` beside the `reason` on failure. Flat because a
  * machine caller branches on `code` (the MCP tool prefixes it to the refusal;
  * the buttons show only the reason) — see lib/result.ts for why that is not a
  * nested `reason.code`.
- * `busy` is the gate's own code and every flow can answer it; `unavailable`
- * is a root verb's start that could not be asked (no controller, no helper).
+ * `busy` is the gate's own code (and the helper's, for a run already under
+ * way) and every flow can answer it; `unavailable` is a start that could not
+ * be asked (no controller, no helper).
  */
 export type FlowOutcome<T extends object, C extends string = never> =
   | ({ ok: true; id: string } & T)
   | FlowRefusal<C | 'busy' | 'unavailable'>
 
-/**
- * How long a published request may sit unclaimed before a new one is allowed
- * to overwrite it. The path unit normally reacts within a second or two; a
- * request still foreign to the status file after two minutes means the host
- * agent is not coming for it, and refusing forever would wedge the button
- * until a container restart.
- */
-export const PICKUP_MS = 120_000
-
-export type FlowGate<I = unknown> = {
+export type FlowGate<I> = {
   /**
-   * Why a new request may not be published now, or null when it may — asked
-   * of the flow's input where the gate needs it (a root verb's, for its
-   * Ctx). A read, apart from forgetting a `pending` the host has acknowledged
-   * or abandoned.
+   * Why a new request may not start now, or null when it may: the verb's
+   * status says a run is under way. Asked of the flow's input, which carries
+   * the Ctx the status is read with. A read.
    */
-  blocked: (input?: I) => Promise<FlowRefusal<'busy'> | null>
-  /** Run `work` after every earlier caller's: check-then-write must not interleave. */
+  blocked: (input: I) => Promise<FlowRefusal<'busy'> | null>
+  /** Run `work` after every earlier caller's: check-then-start must not interleave. */
   serialised: <O>(work: () => Promise<O>) => Promise<O>
-  /** Record a request just published, which opens its pickup window. */
-  published: (id: string) => void
 }
 
-/**
- * The gate of a root verb (host/root-verb.ts): the `running` check alone. No
- * pickup window — the start is answered once the verb's unit has started,
- * and the helper refuses a second run while one is under way, so a request
- * can never sit unclaimed.
- */
-export function defineRootGate<I, S extends { state: string }>(opts: {
+export function defineGate<I, S extends { state: string }>(opts: {
   readStatus: (input: I) => Promise<S>
+  /** The refusal's sentence for a status whose state is `running`. */
   running: (status: S) => string
 }): FlowGate<I> {
   let chain: Promise<unknown> = Promise.resolve()
   return {
     async blocked(input) {
-      if (input === undefined) return null
       const inFlight = await opts.readStatus(input)
       return inFlight.state === 'running'
         ? { ok: false, code: 'busy', reason: opts.running(inFlight) }
@@ -95,78 +79,13 @@ export function defineRootGate<I, S extends { state: string }>(opts: {
       chain = outcome.catch(() => undefined)
       return outcome
     },
-    published() {},
-  }
-}
-
-export function defineGate<S extends BridgeStatus>(opts: {
-  /** The verb as the refusal names it: "the previous <noun> request has not been picked up…". */
-  noun: string
-  readStatus: () => Promise<S>
-  /** The refusal's sentence for a status whose state is `running`. */
-  running: (status: S) => string
-}): FlowGate {
-  // The last request this process published and has not yet seen the host
-  // acknowledge in the status file. This closes the window the file cannot:
-  // between the request being written and the host writing `running`, the file
-  // still shows the PREVIOUS run's terminal state, so a second caller racing
-  // through the file check alone would replace a request (and for Apply, the
-  // bytes of apps.json) under a rebuild that is about to read it.
-  //
-  // Process-local on purpose: this container is the only writer into /apply,
-  // and a single node process serves every door.
-  let pending: { id: string; at: number } | null = null
-  let chain: Promise<unknown> = Promise.resolve()
-
-  return {
-    async blocked() {
-      // Refuse while one is in flight. The rebuilding host scripts hold
-      // fleet.rebuildLock (claude-code's hands its rebuild to engine-update),
-      // so a second request could not corrupt anything — it would queue behind
-      // the first and then act on a snapshot taken BEFORE the first one landed.
-      // Rejecting here is both faster feedback and the correct answer.
-      //
-      // Deliberately global per verb rather than per subject: the lock is the
-      // box's, and two in flight means two rebuilds racing whatever they name.
-      const inFlight = await opts.readStatus()
-      if (inFlight.state === 'running') {
-        return { ok: false, code: 'busy', reason: opts.running(inFlight) }
-      }
-
-      if (pending !== null) {
-        if (inFlight.id === pending.id) {
-          // The host has caught up: the status file now speaks for our
-          // request, and the `running` check above is the guard again.
-          pending = null
-        } else if (Date.now() - pending.at < PICKUP_MS) {
-          return {
-            ok: false,
-            code: 'busy',
-            reason: `the previous ${opts.noun} request has not been picked up by the host yet`,
-          }
-        } else {
-          pending = null
-        }
-      }
-      return null
-    },
-
-    serialised(work) {
-      const outcome = chain.then(work)
-      chain = outcome.catch(() => undefined)
-      return outcome
-    },
-
-    published(id) {
-      pending = { id, at: Date.now() }
-    },
   }
 }
 
 /**
- * What `prepare` hands back: a refusal, or the write and what to report beside
- * its id. A root verb's `publish` is its start, which the helper may still
- * refuse (one run at a time) — that refusal is the flow's answer.
+ * What `prepare` hands back: a refusal, or the start and what to report beside
+ * its id. The start may still be refused by the helper (a run already under
+ * way) or not be asked at all — that refusal is the flow's answer.
  */
 export type FlowPlan<T extends object, C extends string> =
   | FlowRefusal<C>
@@ -186,8 +105,8 @@ export function defineFlow<I, T extends object, C extends string = never>(
     check?: (input: I) => FlowRefusal<C> | null
     /**
      * Everything that reads the box, asked only once the gate is open.
-     * `publish` is the bridge write and returns the request's id; it is a
-     * thunk so a refusal here provably wrote nothing.
+     * `publish` is the start and returns the run's id; it is a thunk so a
+     * refusal here provably started nothing.
      */
     prepare: (input: I) => Promise<FlowPlan<T, C>>
   },
@@ -205,7 +124,6 @@ export function defineFlow<I, T extends object, C extends string = never>(
 
       const id = await plan.publish()
       if (typeof id !== 'string') return id
-      gate.published(id)
       return { ok: true, id, ...plan.value }
     })
 }

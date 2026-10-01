@@ -158,8 +158,9 @@ echo "{ edited = true; }" >"$R/other.nix"
 head_before="$(git -C "$R" rev-parse HEAD)"
 A="$T/apply2"
 mkdir -p "$A" "$T/prev"
-printf '%s\n' '{"files":{"apps.json":"{\"apps\":\"new\"}\n"}}' >"$A/payload-bbbb-2.json"
-echo '{"id":"bbbb-2","commit":true,"summary":"test","actor":"test"}' >"$A/apply-request.json"
+mkdir -p "$A/creds"
+jq -n '{id: "bbbb2", verb: "apply", selectors: {}, payload: ({commit: true, summary: "test", actor: "test", files: {"apps.json": "{\"apps\":\"new\"}\n"}} | tojson)}' \
+  >"$A/creds/request"
 
 stub nixos-rebuild <<'EOF'
 echo "$1" >>"$CALLS"
@@ -170,7 +171,7 @@ export CALLS="$T/rebuild-calls"
 
 agent "$T/apply.sh" "VAULT_APP_SECRETS=()" lib.sh site-lib.sh apply.sh
 rc=0
-APPLY_DIR="$A" PREV_DIR="$T/prev" FLAKE="$R" SITE_DIR="$R/site" ENGINE_CLONE="$T/none" \
+CREDENTIALS_DIRECTORY="$A/creds" VERBS_DIR="$A" PREV_DIR="$T/prev" FLAKE="$R" SITE_DIR="$R/site" ENGINE_CLONE="$T/none" \
   LOCKFILE="$T/rebuild.lock" SITE_LOCK="$T/site.lock" bash "$T/apply.sh" >"$T/apply.out" 2>&1 || rc=$?
 check "the Apply fails" '[ "$rc" -ne 0 ]'
 check "at building" 'jq -e ".state == \"failed\" and .phase == \"building\"" "$A/apply-status.json" >/dev/null'

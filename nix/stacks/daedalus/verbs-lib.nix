@@ -13,7 +13,6 @@
 
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    applyDir
     verbsDir
     prevDir
     siteLock
@@ -113,7 +112,7 @@ let
       operatorHomeVars
       // commitVars
       // {
-        APPLY_DIR = applyDir;
+        VERBS_DIR = verbsDir;
         PREV_DIR = prevDir;
         SITE_LOCK = siteLock;
         FLAKE = config.fleet.config.repo;
@@ -238,13 +237,14 @@ let
     ];
   };
 
-  # The same undertaker for an Apply: a run killed mid-rebuild (its timeout, OOM)
-  # would otherwise leave apply-status.json `running` and the Apply button
-  # refused until the app's staleness clock ran out.
+  # The same undertaker for an Apply: a run killed mid-rebuild (its timeout,
+  # OOM) would otherwise leave apply-status.json `running` and the Apply
+  # button refused.
   applyReaper = mkUpdateReaper {
     name = "daedalus-apply-reaper";
+    dir = verbsDir;
     statusFile = "apply-status.json";
-    nextSteps = "The rebuild may or may not have completed — check `journalctl -u daedalus-apply` and `git log` in ${config.fleet.config.repo} before applying again";
+    nextSteps = "The rebuild may or may not have completed — check `journalctl -u 'daedalus-apply@*'` and `git log` in ${config.fleet.config.repo} before applying again";
   };
 
   # The status file's undertaker (host/update-reaper.sh). A queued batch is a
