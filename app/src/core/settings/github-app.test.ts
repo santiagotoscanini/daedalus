@@ -46,7 +46,6 @@ vi.mock('../github-app', async (importOriginal) => ({
 }))
 
 const {
-  DISABLED_REASON,
   FINISH_LOCK_MS,
   callbackLocation,
   discardPendingApply,
@@ -142,13 +141,10 @@ const REFUSED = {
   reason: 'Apply or undo the pending changes first (site).',
 }
 
-function fakeCtx(
-  env: Record<string, string> = { GITHUB_APP_ENABLED: '1' },
-  shared?: Map<string, unknown>,
-) {
-  const store = shared ?? new Map<string, unknown>()
+function fakeCtx() {
+  const store = new Map<string, unknown>()
   const ctx = {
-    env: (name: string) => env[name],
+    env: () => undefined,
     secret: () => '',
     exportPath: (f: string) => f,
     snapshot: async () => {
@@ -259,49 +255,6 @@ afterEach(() => {
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
   delete (globalThis as { daedalusGithubAppFinishHold?: unknown }).daedalusGithubAppFinishHold
-})
-
-describe('the disabled flag', () => {
-  it('refuses every mutation until the host can take the vault file', async () => {
-    const { ctx, store } = fakeCtx({})
-    h.site = committed(APP)
-    const refused = { ok: false, reason: DISABLED_REASON }
-    expect(await startAppCreation(ctx, ACTOR, { name: 'daedalus-example' })).toEqual(refused)
-    expect(
-      await pasteAppKey(ctx, ACTOR, {
-        pem: PEM,
-        webhookSecret: WEBHOOK,
-        clientSecret: CLIENT_SECRET,
-      }),
-    ).toEqual(refused)
-    store.set(PENDING, pendingRecord())
-    expect(await retryPendingApply(ctx, ACTOR)).toEqual(refused)
-    expect(await discardPendingApply(ctx, ACTOR)).toEqual(refused)
-    expect(store.has(PENDING)).toBe(true)
-    expect(calls).toEqual([])
-    expect(h.sealCalls).toEqual([])
-    expect(h.applyCalls).toEqual([])
-  })
-
-  it('refuses the callback without converting or consuming the record', async () => {
-    const shared = new Map<string, unknown>()
-    const on = fakeCtx(undefined, shared)
-    const state = await begin(on.ctx)
-    const off = fakeCtx({}, shared)
-    stubGithub()
-    expect(await finishAppCreation(off.ctx, ACTOR, CODE, state)).toEqual({
-      outcome: 'failed',
-      code: 'disabled',
-      reason: DISABLED_REASON,
-    })
-    expect(conversions()).toBe(0)
-    expect(shared.has(CREATION)).toBe(true)
-  })
-
-  it('only "1" enables', async () => {
-    const { ctx } = fakeCtx({ GITHUB_APP_ENABLED: 'true' })
-    expect(await startAppCreation(ctx, ACTOR, { name: 'x' })).toMatchObject({ ok: false })
-  })
 })
 
 describe('the signed-in identity', () => {
@@ -858,10 +811,9 @@ describe('githubAppStatus', () => {
   })
 
   it('reads none, created, installed, installed elsewhere and pending', async () => {
-    const { ctx, store } = fakeCtx({})
+    const { ctx, store } = fakeCtx()
     const none = await githubAppStatus(ctx)
     expect(none).toMatchObject({
-      enabled: false,
       state: 'none',
       defaultName: 'daedalus-example',
       nameMax: 34,

@@ -7,7 +7,7 @@ import { pasteAppKeyFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
-import { ERROR_NOTE, FIELD_LABEL, NOTE, PANEL, WAITING_FOR_HOST } from './shared'
+import { ERROR_NOTE, FIELD_LABEL, NOTE, PANEL } from './shared'
 
 // The GitHub App's recovery form, and only that.
 //
@@ -21,13 +21,7 @@ import { ERROR_NOTE, FIELD_LABEL, NOTE, PANEL, WAITING_FOR_HOST } from './shared
  * Recovery: a new private key for the App site.json names. The three values
  * are typed here, sent once, and cleared on submit; nothing comes back.
  */
-export function PasteKey({
-  enabled,
-  settingsUrl,
-}: {
-  enabled: boolean
-  settingsUrl: string | undefined
-}) {
+export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
   const pemId = useId()
   const webhookId = useId()
   const clientId = useId()
@@ -44,7 +38,7 @@ export function PasteKey({
     setWebhookSecret('')
     setClientSecret('')
   }
-  const ready = enabled && !busy && pem.trim() !== '' && webhookSecret !== '' && clientSecret !== ''
+  const ready = !busy && pem.trim() !== '' && webhookSecret !== '' && clientSecret !== ''
 
   const submit = () => {
     if (!ready) return
@@ -111,7 +105,6 @@ export function PasteKey({
         id={pemId}
         rows={6}
         value={pem}
-        disabled={!enabled}
         spellCheck={false}
         autoComplete="off"
         placeholder="-----BEGIN RSA PRIVATE KEY-----"
@@ -131,7 +124,6 @@ export function PasteKey({
             autoComplete="off"
             spellCheck={false}
             value={webhookSecret}
-            disabled={!enabled}
             onChange={(e) => {
               setWebhookSecret(e.target.value)
             }}
@@ -148,7 +140,6 @@ export function PasteKey({
             autoComplete="off"
             spellCheck={false}
             value={clientSecret}
-            disabled={!enabled}
             onChange={(e) => {
               setClientSecret(e.target.value)
             }}
@@ -156,7 +147,6 @@ export function PasteKey({
           />
         </div>
       </div>
-      {!enabled && <p className={NOTE}>{WAITING_FOR_HOST}</p>}
       {outcome !== null && !outcome.ok && (
         <p role="alert" className={ERROR_NOTE}>
           {outcome.text}

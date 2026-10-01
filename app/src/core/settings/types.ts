@@ -189,8 +189,6 @@ export type GithubAppState =
   | 'pending-apply'
 
 export type GithubAppStatus = {
-  /** GITHUB_APP_ENABLED: the host can take the App's vault file. */
-  enabled: boolean
   state: GithubAppState
   /** The account the App is created under. */
   owner: string
@@ -215,7 +213,6 @@ export type GithubAppStart = Result<{ action: string; manifest: string; state: s
  * the sentence for each.
  */
 export type GithubCallbackCode =
-  | 'disabled'
   | 'state-expired'
   | 'state-mismatch'
   | 'other-actor'

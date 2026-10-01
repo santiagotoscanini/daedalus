@@ -644,9 +644,6 @@ in
             # comma-separated), so the cfweb router (daedalus-github.nix) would reach a server that
             # refuses it.
             APP_EXTRA_HOSTS = hooksHost;
-            # This box's apply agent accepts vault/github-app.sops and nix consumes
-            # it, so the engine may offer to create the App.
-            GITHUB_APP_ENABLED = "1";
             # The token minter's installation.json and the webhook secret's dir.
             # Both mounts exist only once the App does (volumes below); until then
             # the engine reads their absence as "no App yet".

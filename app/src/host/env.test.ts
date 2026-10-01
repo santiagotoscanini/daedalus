@@ -133,9 +133,9 @@ describe('an optional variable', () => {
   })
 
   it('parses by kind through get and hands back the bound string through text', () => {
-    const { env } = envOf({ ...REQUIRED, GITHUB_APP_ENABLED: '1', MINECRAFT_PAPER_BUILD: '130' })
-    expect(env.get('GITHUB_APP_ENABLED')).toBe(true)
-    expect(env.text('GITHUB_APP_ENABLED')).toBe('1')
+    const { env } = envOf({ ...REQUIRED, DAEDALUS_DEV: '1', MINECRAFT_PAPER_BUILD: '130' })
+    expect(env.get('DAEDALUS_DEV')).toBe(true)
+    expect(env.text('DAEDALUS_DEV')).toBe('1')
     expect(env.get('MINECRAFT_PAPER_BUILD')).toBe(130)
     expect(env.text('MINECRAFT_PAPER_BUILD')).toBe('130')
   })

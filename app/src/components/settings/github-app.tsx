@@ -34,7 +34,6 @@ import {
   Rows,
   Stack,
   Unset,
-  WAITING_FOR_HOST,
 } from './shared'
 
 // The GitHub half of Settings › Integrations: the repo-token cell, and the
@@ -117,17 +116,10 @@ export function GithubApp({ app, notice, onDismissNotice }: GithubAppProps) {
         ) : (
           <>
             {app.pending !== undefined && (
-              <PendingApply
-                enabled={app.enabled}
-                pending={app.pending}
-                owner={app.owner}
-                appsUrl={app.appsUrl}
-              />
+              <PendingApply pending={app.pending} owner={app.owner} appsUrl={app.appsUrl} />
             )}
             {app.identity !== undefined && <AppFacts app={app} identity={app.identity} />}
-            {app.identity !== undefined && (
-              <PasteKey enabled={app.enabled} settingsUrl={app.settingsUrl} />
-            )}
+            {app.identity !== undefined && <PasteKey settingsUrl={app.settingsUrl} />}
           </>
         ))}
     </div>
@@ -140,7 +132,6 @@ export function GithubApp({ app, notice, onDismissNotice }: GithubAppProps) {
  * code this table does not know reads as `unknown`.
  */
 const CALLBACK_SENTENCES: Record<GithubCallbackCode, string> = {
-  disabled: 'The host does not support GitHub Apps yet, so nothing was kept.',
   'state-expired':
     'The creation expired. GitHub has to send you back within an hour of starting it.',
   'state-mismatch':
@@ -262,7 +253,7 @@ function CreateApp({ app }: { app: GithubAppStatus }) {
 
   const trimmed = name.trim()
   const tooLong = [...trimmed].length > app.nameMax
-  const canCreate = app.enabled && !busy && launch === null && trimmed !== '' && !tooLong
+  const canCreate = !busy && launch === null && trimmed !== '' && !tooLong
 
   const create = () => {
     if (!canCreate) return
@@ -300,7 +291,6 @@ function CreateApp({ app }: { app: GithubAppStatus }) {
             id={id}
             value={name}
             maxLength={app.nameMax}
-            disabled={!app.enabled}
             autoComplete="off"
             spellCheck={false}
             aria-invalid={tooLong}
@@ -314,11 +304,7 @@ function CreateApp({ app }: { app: GithubAppStatus }) {
           {busy || launch !== null ? 'Opening GitHub…' : 'Create GitHub App…'}
         </Button>
       </form>
-      <p className={NOTE}>
-        {app.enabled
-          ? `App names are unique across GitHub, ${String(app.nameMax)} characters at most.`
-          : `${WAITING_FOR_HOST} Until then it has nowhere to keep the App’s private key.`}
-      </p>
+      <p className={NOTE}>App names are unique across GitHub, {app.nameMax} characters at most.</p>
       {error !== null && (
         <p role="alert" className={ERROR_NOTE}>
           {error}
@@ -440,12 +426,10 @@ function TokenFreshness({ installation: i }: { installation: Installation }) {
 }
 
 function PendingApply({
-  enabled,
   pending,
   owner,
   appsUrl,
 }: {
-  enabled: boolean
   pending: NonNullable<GithubAppStatus['pending']>
   owner: string
   appsUrl: string
@@ -530,28 +514,15 @@ function PendingApply({
           else is waiting to be applied, or discard them if this App is not the one to keep.
         </p>
         <div className="flex flex-wrap items-center gap-3 pt-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy || !enabled}
-            onClick={retry}
-          >
+          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={retry}>
             {busy ? 'Working…' : 'Retry Apply'}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={busy || !enabled}
-            onClick={discard}
-          >
+          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={discard}>
             Discard
           </Button>
           {outcome !== null && (
             <span className={outcome.ok ? NOTE : ERROR_NOTE}>{outcome.text}</span>
           )}
-          {!enabled && <span className={NOTE}>{WAITING_FOR_HOST}</span>}
         </div>
       </AlertDescription>
     </Alert>

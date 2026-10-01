@@ -355,11 +355,6 @@ export const SCHEMA = {
     about: 'The Cloudflare tunnel.',
     source: 'stacks/cloudflared fleet.dashboard.cloudflared.env',
   },
-  GITHUB_APP_ENABLED: {
-    kind: 'flag',
-    about: 'The host accepts the GitHub App’s vault file, so creating one is offered.',
-    source: DAEDALUS,
-  },
   DAEDALUS_DEV: {
     kind: 'flag',
     about:

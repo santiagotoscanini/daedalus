@@ -236,13 +236,6 @@ export const ERROR_NOTE = 'm-0 text-[0.78rem] text-destructive'
 export const FIELD_LABEL = 'font-medium text-[0.8rem]'
 export const PANEL = 'flex flex-col gap-2 rounded-[9px] border border-(--border-soft) p-3'
 
-/**
- * What the two GitHub App forms say when the host cannot keep an App's private
- * key yet. Shared so the App section and the recovery form beside it cannot
- * disagree about why their buttons are disabled.
- */
-export const WAITING_FOR_HOST = 'Waiting for the host to support GitHub Apps.'
-
 /** A service that answered, but not with a yes. */
 export function Bad({ children }: { children: ReactNode }) {
   return (

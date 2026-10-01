@@ -47,10 +47,7 @@ import type {
 // and the seal. No result, error or log line below carries it, the webhook
 // secret, the client secret or the code.
 //
-// Every mutation refuses unless the host can take the vault file
-// (GITHUB_APP_ENABLED=1, which nix sets where apply.sh and the sops rules know
-// it): otherwise a created App would lose its key in the Apply. Every mutation
-// takes the actor its caller admitted: server/fn.ts `adminOnly` for the
+// Every mutation takes the actor its caller admitted: server/fn.ts `adminOnly` for the
 // buttons, `actorOf` for the callback, which refuses without one.
 
 const APP_NAME_MAX = 34
@@ -58,10 +55,6 @@ const CREATION_TTL_MS = 60 * 60_000
 const OWNER_ATTEMPTS = [3_000, 8_000]
 const CONVERSION_TIMEOUT_MS = 8_000
 const VAULT_NAME = 'github-app'
-
-export const DISABLED_REASON = 'Waiting for the host to support GitHub Apps.'
-
-const enabled = (ctx: Ctx): boolean => ctx.env('GITHUB_APP_ENABLED') === '1'
 
 const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex')
 
@@ -265,7 +258,6 @@ export async function startAppCreation(
   input: { replace?: boolean; name: string },
 ): Promise<GithubAppStart> {
   const refuse = (reason: string): GithubAppStart => ({ ok: false, reason })
-  if (!enabled(ctx)) return refuse(DISABLED_REASON)
 
   const name = input.name.trim()
   const badName = appNameError(name)
@@ -564,7 +556,6 @@ async function finish(
     code,
     reason,
   })
-  if (!enabled(ctx)) return failed('disabled', DISABLED_REASON)
 
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
 
@@ -652,7 +643,6 @@ async function finish(
 // ── retry, discard, paste ──────────────────────────────────────────────────
 
 export async function retryPendingApply(ctx: Ctx, actor: string): Promise<GithubAppApply> {
-  if (!enabled(ctx)) return { ok: false, reason: DISABLED_REASON }
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
   const pending = await ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply)
   if (pending === undefined) return { ok: false, reason: 'No created App is waiting for an Apply.' }
@@ -675,7 +665,6 @@ export async function retryPendingApply(ctx: Ctx, actor: string): Promise<Github
  * operator deletes it there, which the page says.
  */
 export async function discardPendingApply(ctx: Ctx, actor: string): Promise<GithubAppDiscard> {
-  if (!enabled(ctx)) return { ok: false, reason: DISABLED_REASON }
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
   const pending = await ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply)
   if (pending === undefined) return { ok: false, reason: 'No created App is waiting for an Apply.' }
@@ -697,7 +686,6 @@ export async function pasteAppKey(
   input: { pem: string; webhookSecret: string; clientSecret: string },
 ): Promise<GithubAppApply> {
   const refuse = (reason: string): GithubAppApply => ({ ok: false, reason })
-  if (!enabled(ctx)) return refuse(DISABLED_REASON)
 
   const site = await readCommittedSite()
   const app = site.ok ? (site.value.doc.github?.app ?? null) : null
@@ -761,7 +749,6 @@ export async function githubAppStatus(ctx: Ctx): Promise<GithubAppStatus> {
   }
 
   return {
-    enabled: enabled(ctx),
     state,
     owner: ctx.site.owner,
     defaultName: defaultAppName(site.ok ? site.value.doc.identity.baseDomain : ctx.site.baseDomain),
