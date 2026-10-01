@@ -1582,7 +1582,7 @@ async fn pre_auth_slots_on_loopback_and_the_handshake_deadline() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     // Loopback's own pool is full at LOOPBACK_PREAUTH…
     let silent: Vec<TcpStream> =
-        connect_many(host.addr, daedalus_session_host::serve::LOOPBACK_PREAUTH).await;
+        connect_many(host.addr, daedalus_session_host::preauth::LOOPBACK_PREAUTH).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
     // …so one more is closed without a handshake.
     let mut over = TcpStream::connect(host.addr).await.unwrap();

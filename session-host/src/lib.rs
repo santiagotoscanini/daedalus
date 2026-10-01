@@ -13,6 +13,7 @@ mod fsops;
 pub mod hook;
 mod hostkey;
 pub mod logger;
+pub mod preauth;
 pub mod serve;
 mod status;
 mod sys;
