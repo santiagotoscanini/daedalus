@@ -476,7 +476,6 @@ fn downstream(
     link: &Link,
     mut tcp: Sock,
     mut to: Box<dyn Write + Send>,
-    end_writes: &(dyn Fn() + Send + Sync),
     silence: Duration,
 ) -> Down {
     let failed = |why: String| Down::Failed {
@@ -567,7 +566,6 @@ fn downstream(
                 };
             }
             if closed {
-                end_writes();
                 return Down::Closed;
             }
         }
@@ -621,16 +619,19 @@ pub fn pipe(conn: Conn, tls: Tls, limits: &Limits) -> End {
         let link = Arc::clone(&link);
         std::thread::Builder::new()
             .name("santree-down".into())
-            .spawn(
-                move || match downstream(&link, reading, writer, &*end_writes, silence) {
-                    Down::Closed => link.end("the session host"),
-                    Down::Failed { why, refused } => {
-                        link.refused_key.store(refused, Ordering::Relaxed);
-                        link.end(why);
-                        link.close();
-                    }
-                },
-            )
+            .spawn(move || match downstream(&link, reading, writer, silence) {
+                // Who ended it is recorded before santree hears of it:
+                // its EOF can make santree end its side at once.
+                Down::Closed => {
+                    link.end("the session host");
+                    end_writes();
+                }
+                Down::Failed { why, refused } => {
+                    link.refused_key.store(refused, Ordering::Relaxed);
+                    link.end(why);
+                    link.close();
+                }
+            })
     };
     let down = match down {
         Ok(d) => d,
