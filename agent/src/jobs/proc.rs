@@ -1,5 +1,5 @@
-//! What the OS says a job's process costs: `/proc/<pid>/stat`, systemd's
-//! accounting, and the units that are running.
+//! What the OS says a job's process costs: a process as `os::process_stats`
+//! reads it, systemd's accounting, and the units that are running.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,39 +11,42 @@ pub struct UnitCost {
     pub cpu_nsec: Option<u64>,
 }
 
-/// What `/proc/<pid>/stat` says of a process: its parent, its start time in
-/// clock ticks since boot, and its user and system time in ticks.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ProcStat {
-    pub ppid: u32,
-    pub start_ticks: u64,
-    pub utime: u64,
-    pub stime: u64,
-}
-
-/// `/proc/<pid>/stat`: `comm` is parenthesised and may hold spaces and
-/// parens, so everything through the LAST `)` goes first; the rest starts
-/// at field 3 (state), which puts ppid at 4 and utime, stime and starttime
-/// at 14, 15 and 22.
-pub fn parse_proc_stat(text: &str) -> Option<ProcStat> {
-    let rest = &text[text.rfind(')')? + 1..];
-    let f: Vec<&str> = rest.split_whitespace().collect();
-    Some(ProcStat {
-        ppid: f.get(1)?.parse().ok()?,
-        utime: f.get(11)?.parse().ok()?,
-        stime: f.get(12)?.parse().ok()?,
-        start_ticks: f.get(19)?.parse().ok()?,
-    })
-}
-
 /// A process as the OS reads it (os `process_stats`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProcStats {
-    pub start_ticks: u64,
+    /// When it started, in the form a Claude session file's `procStart`
+    /// records it — clock ticks since boot, which only Linux's CLI writes
+    /// as a number (macOS's is `ps -o lstart`, Windows' another field). None
+    /// where the two cannot be compared.
+    pub start_ticks: Option<u64>,
     pub cpu_ms: u64,
     pub rss_bytes: u64,
-    /// Its command line, argument by argument.
+    /// Its command line, argument by argument (empty where it is not read).
     pub args: Vec<String>,
+}
+
+/// The arguments in a `KERN_PROCARGS2` buffer (macOS): the argument count
+/// as a native-endian int, the executable's path, NUL padding, then the
+/// arguments, each NUL-terminated, then the environment — never read. At
+/// most `max`.
+pub fn parse_procargs2(buf: &[u8], max: usize) -> Vec<String> {
+    let Some(count) = buf.get(..4).and_then(|b| b.try_into().ok()) else {
+        return Vec::new();
+    };
+    let argc = usize::try_from(i32::from_ne_bytes(count)).unwrap_or(0);
+    let rest = &buf[4..];
+    // Past the executable's path and the padding after it.
+    let Some(path_end) = rest.iter().position(|b| *b == 0) else {
+        return Vec::new();
+    };
+    let Some(start) = rest[path_end..].iter().position(|b| *b != 0) else {
+        return Vec::new();
+    };
+    rest[path_end + start..]
+        .split(|b| *b == 0)
+        .take(argc.min(max))
+        .map(|a| String::from_utf8_lossy(a).into_owned())
+        .collect()
 }
 
 /// `systemctl --user show -p MemoryCurrent -p CPUUsageNSec`: systemd writes
@@ -83,18 +86,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn proc_stat_units_and_their_costs() {
-        let stat = "4242 (claude (x) y) S 1 4242 4242 0 -1 4194560 100 0 0 0 250 50 0 0 20 0 12 0 987654 1000 200 18446744073709551615";
+    fn units_their_costs_and_a_macos_command_line() {
+        let mut args2 = 3i32.to_ne_bytes().to_vec();
+        args2.extend_from_slice(b"/opt/claude\0\0\0\0claude\0--resume\0cse_01\0HOME=/x\0");
         assert_eq!(
-            parse_proc_stat(stat),
-            Some(ProcStat {
-                ppid: 1,
-                utime: 250,
-                stime: 50,
-                start_ticks: 987654
-            })
+            parse_procargs2(&args2, 64),
+            ["claude", "--resume", "cse_01"]
         );
-        assert_eq!(parse_proc_stat("4242 (x) S 1"), None);
+        assert_eq!(parse_procargs2(&args2, 1), ["claude"]);
+        assert!(parse_procargs2(b"\x01", 64).is_empty());
         assert_eq!(
             parse_unit_cost("MemoryCurrent=1048576\nCPUUsageNSec=[not set]\n"),
             UnitCost {

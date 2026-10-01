@@ -108,7 +108,8 @@ use hardware::{
 };
 use pdh::Pdh;
 use powershell::{powershell_json, script_errors};
-use processes::{process_cpu, process_snapshot, process_usage};
+use processes::{process_cpu, process_snapshot};
+pub(super) use processes::{process_parents, process_usage};
 use services::read_services;
 use smbios::read_smbios;
 

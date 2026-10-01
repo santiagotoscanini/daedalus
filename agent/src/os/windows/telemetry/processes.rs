@@ -56,9 +56,33 @@ pub(super) fn process_snapshot() -> Result<Vec<(u32, String)>, String> {
     Ok(out)
 }
 
+/// Every process's parent, from one Toolhelp snapshot: pid → ppid. Empty
+/// when no snapshot could be taken.
+pub(crate) fn process_parents() -> std::collections::HashMap<u32, u32> {
+    let mut out = std::collections::HashMap::new();
+    // SAFETY: the snapshot handle is closed below; the entry's size field is
+    // set, as the calls require.
+    unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return out;
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut ok = Process32FirstW(snap, &mut entry).is_ok();
+        while ok {
+            out.insert(entry.th32ProcessID, entry.th32ParentProcessID);
+            ok = Process32NextW(snap, &mut entry).is_ok();
+        }
+        let _ = CloseHandle(snap);
+    }
+    out
+}
+
 /// A process's working set and its kernel+user time (100 ns), or None
 /// when it cannot be opened (a protected process) or has just exited.
-pub(super) fn process_usage(pid: u32) -> Option<(u64, u64)> {
+pub(crate) fn process_usage(pid: u32) -> Option<(u64, u64)> {
     // SAFETY: the handle is closed below on every path.
     let h = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
     let mut pmc = PROCESS_MEMORY_COUNTERS {

@@ -299,15 +299,16 @@ impl Collector {
             let Some(pid) = e.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
                 continue;
             };
-            let Some(st) = read(e.path().join("stat")).and_then(|t| linux_sys::pid_stat(&t)) else {
+            let Some(st) = read(e.path().join("stat")).and_then(|t| crate::procfs::parse_stat(&t))
+            else {
                 continue;
             };
-            let cpu_pct = self.prev_procs.get(&pid).and_then(|(ticks, at)| {
+            let ticks = st.utime + st.stime;
+            let cpu_pct = self.prev_procs.get(&pid).and_then(|(prev, at)| {
                 let secs = now.duration_since(*at).as_secs_f64();
-                (secs > 0.0 && st.ticks >= *ticks)
-                    .then(|| 100.0 * (st.ticks - ticks) as f64 / tick / secs)
+                (secs > 0.0 && ticks >= *prev).then(|| 100.0 * (ticks - prev) as f64 / tick / secs)
             });
-            seen.insert(pid, (st.ticks, now));
+            seen.insert(pid, (ticks, now));
             all.push(Process {
                 name: st.comm,
                 pid,

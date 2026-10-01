@@ -28,9 +28,9 @@
 //!
 //! Beside them: `session_stats`, per live session file whose process is
 //! still the one that wrote it, its CPU, resident memory and the Remote
-//! Control bridge's debug log (Linux reads /proc; elsewhere the list is
-//! empty and `errors` says so); `server`, the Remote Control job's own
-//! accounting where the OS keeps one (a systemd unit's; null elsewhere);
+//! Control bridge's debug log (`os::process_stats`, on every OS);
+//! `server`, the Remote Control job's own accounting where the OS keeps
+//! one (a systemd unit's; null elsewhere);
 //! `actions`, the last requests the verbs took — the operator's and the
 //! automatic recovery's (recovery.rs) — and how each ended.
 //!
@@ -762,7 +762,7 @@ pub fn session_stats(claude_dir: &Path, bridge_dir: Option<&Path>) -> Vec<Sessio
             Value::Number(n) => n.as_u64(),
             _ => None,
         });
-        if recorded.is_some_and(|r| r != st.start_ticks) {
+        if recorded.zip(st.start_ticks).is_some_and(|(r, s)| r != s) {
             continue;
         }
         let remote = st.args.iter().find(|a| {
@@ -817,8 +817,9 @@ pub fn session_live(claude_dir: &Path, id: &str) -> bool {
                 .get("procStart")
                 .and_then(Value::as_str)
                 .and_then(|s| s.parse::<u64>().ok())
-                .is_none_or(|r| r == st.start_ticks),
-            None => !crate::os::PROCESS_STATS && crate::os::pid_alive(pid),
+                .zip(st.start_ticks)
+                .is_none_or(|(r, s)| r == s),
+            None => false,
         }
     })
 }

@@ -21,7 +21,8 @@
 //! - update: the release's asset table — required and optional — and
 //!   making a download executable (update/);
 //! - processes: running a child without a console window, whether a pid
-//!   lives, ending a process tree, and relaying Ctrl-C / SIGTERM;
+//!   lives, every process's parent in one read (`process_table`), ending a
+//!   process tree, and relaying Ctrl-C / SIGTERM;
 //! - the local sockets: the agent's own door for the tray, the session and
 //!   the verbs — a unix socket, a named pipe on Windows — with the peer the
 //!   kernel names and whom it may serve (local.rs); and the controller's API,
@@ -29,8 +30,9 @@
 //!   by its peer credentials, made and cleaned up (api/; unix.rs — Windows
 //!   is never a controller and refuses);
 //! - Claude Code: the command's file names, whether the login is in the
-//!   keychain, a live session's process (its start, CPU, memory and command
-//!   line: Linux reads /proc, the others say they do not, `PROCESS_STATS`),
+//!   keychain, a live session's process (its CPU, memory and command line
+//!   on every OS — /proc, libproc, the process's own counters on Windows —
+//!   and its start where the CLI records one to compare, on Linux),
 //!   and `jobs` — the server and the resumed sessions as jobs of the OS,
 //!   never the agent's children (a systemd user unit, a launchd job, a
 //!   detached process; jobs/), with the Windows session's terminal
@@ -82,7 +84,7 @@ pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 // processes, a single-instance lock, the monotonic clock
 pub use imp::{
     contain, hide_console, isolate, kill_tree, lock_exclusive, monotonic_usec, on_interrupt,
-    parent_pid, pid_alive, Tree,
+    pid_alive, process_table, Tree,
 };
 // the local sockets: the controller's API (api/) and the agent's own door (local.rs)
 pub use imp::{
@@ -94,9 +96,7 @@ pub use self::unix::user_name;
 #[cfg(unix)]
 pub use imp::{operator_allowed, operator_uid};
 // Claude Code
-pub use imp::{
-    claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES, PROCESS_STATS,
-};
+pub use imp::{claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES};
 
 /// Claude's jobs: the server and the resumed sessions, outside the agent
 /// (jobs/). The same names on every OS.

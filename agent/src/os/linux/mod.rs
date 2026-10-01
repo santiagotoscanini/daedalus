@@ -222,21 +222,26 @@ pub fn claude_keychain_login() -> bool {
     false
 }
 
-/// A process's parent, from /proc.
-pub fn parent_pid(pid: u32) -> Option<u32> {
-    let text = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    crate::jobs::parse_proc_stat(&text).map(|s| s.ppid)
+/// Every process's parent, from one pass over /proc: pid → ppid.
+pub fn process_table() -> std::collections::HashMap<u32, u32> {
+    let Ok(dir) = std::fs::read_dir("/proc") else {
+        return Default::default();
+    };
+    dir.flatten()
+        .filter_map(|e| {
+            let pid = e.file_name().to_str()?.parse::<u32>().ok()?;
+            let text = std::fs::read_to_string(e.path().join("stat")).ok()?;
+            Some((pid, crate::procfs::parse_stat(&text)?.ppid))
+        })
+        .collect()
 }
-
-/// /proc answers for a live session's process.
-pub const PROCESS_STATS: bool = true;
 
 /// A process from /proc: its start (clock ticks since boot, what a session
 /// file's `procStart` records), CPU time, resident memory and command line.
 /// None when it is gone or unreadable.
 pub fn process_stats(pid: u32) -> Option<crate::jobs::ProcStats> {
     let dir = PathBuf::from(format!("/proc/{pid}"));
-    let stat = crate::jobs::parse_proc_stat(&std::fs::read_to_string(dir.join("stat")).ok()?)?;
+    let stat = crate::procfs::parse_stat(&std::fs::read_to_string(dir.join("stat")).ok()?)?;
     // SAFETY: sysconf reads a constant.
     let (hz, page) = unsafe {
         (
@@ -246,23 +251,13 @@ pub fn process_stats(pid: u32) -> Option<crate::jobs::ProcStats> {
     };
     let hz = u64::try_from(hz).ok().filter(|h| *h > 0).unwrap_or(100);
     let page = u64::try_from(page).ok().filter(|p| *p > 0).unwrap_or(4096);
-    let resident = std::fs::read_to_string(dir.join("statm"))
-        .ok()
-        .and_then(|t| t.split_whitespace().nth(1)?.parse::<u64>().ok())
-        .unwrap_or(0);
     let args = std::fs::read(dir.join("cmdline"))
-        .map(|b| {
-            b.split(|c| *c == 0)
-                .filter(|a| !a.is_empty())
-                .take(64)
-                .map(|a| String::from_utf8_lossy(a).into_owned())
-                .collect()
-        })
+        .map(|b| crate::procfs::parse_cmdline(&b, 64))
         .unwrap_or_default();
     Some(crate::jobs::ProcStats {
-        start_ticks: stat.start_ticks,
+        start_ticks: Some(stat.start_ticks),
         cpu_ms: (stat.utime + stat.stime) * 1000 / hz,
-        rss_bytes: resident * page,
+        rss_bytes: stat.rss_pages * page,
         args,
     })
 }
@@ -279,6 +274,18 @@ pub use crate::tray::main as tray_main;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One pass over /proc names every process's parent, this one's too, and
+    /// the stats of a live process carry the start a session file records.
+    #[test]
+    fn the_process_table_and_stats_read_proc() {
+        let me = std::process::id();
+        let table = process_table();
+        assert_eq!(table.get(&me).copied(), Some(std::os::unix::process::parent_id()));
+        assert!(table.len() > 1);
+        let st = process_stats(me).expect("this process");
+        assert!(st.start_ticks.is_some() && st.rss_bytes > 0 && !st.args.is_empty());
+    }
 
     /// install.sh downloads by name what the updater later replaces by
     /// name; the two must agree, or a machine installs and never updates.

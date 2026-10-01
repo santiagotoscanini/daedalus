@@ -285,32 +285,9 @@ pub fn pid_alive(pid: u32) -> bool {
     }
 }
 
-/// A process's parent, from a toolhelp snapshot (None when it is gone).
-pub fn parent_pid(pid: u32) -> Option<u32> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
-        TH32CS_SNAPPROCESS,
-    };
-    // SAFETY: a snapshot walked with a sized entry, then closed.
-    unsafe {
-        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
-        let mut e = PROCESSENTRY32W {
-            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
-            ..Default::default()
-        };
-        let mut found = None;
-        let mut more = Process32FirstW(snap, &mut e).is_ok();
-        while more {
-            if e.th32ProcessID == pid {
-                found = Some(e.th32ParentProcessID);
-                break;
-            }
-            more = Process32NextW(snap, &mut e).is_ok();
-        }
-        let _ = CloseHandle(snap);
-        found
-    }
+/// Every process's parent, from one Toolhelp snapshot: pid → ppid.
+pub fn process_table() -> std::collections::HashMap<u32, u32> {
+    telemetry::process_parents()
 }
 
 /// Ctrl-C in `serve`'s console, through the console control handler.
@@ -342,13 +319,18 @@ pub fn claude_keychain_login() -> bool {
     false
 }
 
-/// A live session's CPU and memory are not read here yet; the roster says
-/// so in its `errors`.
-pub const PROCESS_STATS: bool = false;
-
+/// A process's working set and CPU time, where this user may open it. Its
+/// start is not compared (the CLI records it in another field here) and
+/// its command line not read (jobs/proc.rs `ProcStats`).
 pub fn process_stats(pid: u32) -> Option<crate::jobs::ProcStats> {
-    let _ = pid;
-    None
+    let (rss_bytes, times) = telemetry::process_usage(pid)?;
+    Some(crate::jobs::ProcStats {
+        start_ticks: None,
+        // 100 ns ticks.
+        cpu_ms: times / 10_000,
+        rss_bytes,
+        args: Vec::new(),
+    })
 }
 
 // ── HTTPS ─────────────────────────────────────────────────────────────────

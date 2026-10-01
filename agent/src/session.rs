@@ -392,7 +392,14 @@ impl Session {
             .latest()
             .map(|(_, r)| r.managed.into_iter().map(|m| m.id).collect())
             .unwrap_or_default();
-        let open = open_sessions(report, server, &managed, crate::os::parent_pid);
+        // One read of the process table per poll, and none when no live
+        // session file could descend from a server.
+        let table = if server.is_some() && report.sessions.iter().any(|s| s.alive) {
+            crate::os::process_table()
+        } else {
+            Default::default()
+        };
+        let open = open_sessions(report, server, &managed, |p| table.get(&p).copied());
         let due = self.sup.starts() != self.recovered_for;
         self.recovery.freeze(due || self.sessions.recovering());
         self.recovery.observe(server, &open, Instant::now());

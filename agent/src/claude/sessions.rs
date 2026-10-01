@@ -720,17 +720,10 @@ impl Worker {
         let jobs_listed = errors.len() == before;
         self.tend_logs(&managed);
         self.tend_pins(&managed, jobs_listed);
-        let session_stats = match (&dir, crate::os::PROCESS_STATS) {
-            (Some(d), true) => roster::session_stats(d, roster::bridge_dir().as_deref()),
-            (_, false) => {
-                errors.push(format!(
-                    "per-session CPU, memory and bridge logs are read on Linux only, not on {}",
-                    std::env::consts::OS
-                ));
-                Vec::new()
-            }
-            (None, true) => Vec::new(),
-        };
+        let session_stats = dir
+            .as_deref()
+            .map(|d| roster::session_stats(d, roster::bridge_dir().as_deref()))
+            .unwrap_or_default();
         let r = Roster {
             reported_at: now_rfc3339(),
             agents_available: listed.is_some(),

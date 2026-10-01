@@ -325,33 +325,6 @@ pub fn volumes(mounts: &[Mount]) -> Vec<Mount> {
     by_dev
 }
 
-/// What `/proc/<pid>/stat` says about one process.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PidStat {
-    pub comm: String,
-    /// utime + stime, clock ticks.
-    pub ticks: u64,
-    /// Resident set, pages.
-    pub rss_pages: u64,
-}
-
-/// `pid (comm) state ppid …`: comm may hold spaces and parentheses, so the
-/// fields are counted from the LAST `)`. utime and stime are fields 14 and
-/// 15, rss is 24 (proc(5), 1-based).
-pub fn pid_stat(text: &str) -> Option<PidStat> {
-    let open = text.find('(')?;
-    let close = text.rfind(')')?;
-    let comm = text.get(open + 1..close)?.to_string();
-    let rest: Vec<&str> = text.get(close + 1..)?.split_whitespace().collect();
-    // rest[0] is field 3 (state).
-    let f = |n: usize| rest.get(n - 3).and_then(|x| x.parse::<u64>().ok());
-    Some(PidStat {
-        comm,
-        ticks: f(14)? + f(15)?,
-        rss_pages: f(24)?,
-    })
-}
-
 /// A `/sys/class/power_supply/*/uevent` of a battery, as the page's
 /// battery: charge, charging, health against design, cycles. None when it
 /// is not a battery (an AC adapter, a mouse's `scope=Device` battery).
@@ -636,17 +609,6 @@ mod tests {
         let points: Vec<&str> = v.iter().map(|m| m.mount_point.as_str()).collect();
         assert_eq!(points, ["/", "/boot", "/mnt/My Disk"]);
         assert_eq!(v[1].source, "/dev/nvme0n1p1");
-    }
-
-    #[test]
-    fn pid_stat_counts_from_the_last_paren() {
-        let t = "1234 (Web Content (x)) S 1 1234 1234 0 -1 4194560 100 0 0 0 250 50 0 0 20 0 30 0 \
-                 9876 1234567890 5000 18446744073709551615";
-        let p = pid_stat(t).unwrap();
-        assert_eq!(p.comm, "Web Content (x)");
-        assert_eq!(p.ticks, 300);
-        assert_eq!(p.rss_pages, 5000);
-        assert_eq!(pid_stat("garbage"), None);
     }
 
     #[test]

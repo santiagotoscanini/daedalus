@@ -1076,8 +1076,9 @@ a verb, pushed to the controller when it changes:
   systemd unit; null on macOS and Windows).
 - `session_stats` — per live session file whose process is still the one
   that wrote it: CPU, resident memory, the Remote Control bridge's debug
-  log size and mtime. Linux reads /proc; on Windows and macOS the list is
-  empty and `errors` says so.
+  log size and mtime: /proc on Linux, libproc on macOS, the process's
+  own counters on Windows (no bridge log there: its command line is not
+  read).
 - `server` — the Remote Control job's memory and CPU, where the OS keeps
   them (a systemd unit's); null elsewhere.
 - `actions` — the last 24 verb requests, the operator's and the automatic

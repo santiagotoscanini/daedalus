@@ -167,28 +167,117 @@ pub fn claude_keychain_login() -> bool {
     crate::exec::both(c, std::time::Duration::from_secs(5)).is_some_and(|r| r.ok)
 }
 
-/// A process's parent: `ps -o ppid=`.
-pub fn parent_pid(pid: u32) -> Option<u32> {
-    let mut cmd = Command::new("/bin/ps");
-    cmd.args(["-o", "ppid=", "-p", &pid.to_string()]);
-    crate::exec::stdout_or(
-        cmd,
-        std::time::Duration::from_secs(5),
-        crate::exec::Text::Lossy,
-    )
-    .ok()?
-    .trim()
-    .parse()
-    .ok()
+/// One `proc_pidinfo` flavor of a process, whole; None when it is gone or
+/// not this user's to read.
+fn pidinfo<T>(pid: u32, flavor: libc::c_int) -> Option<T> {
+    let size = libc::c_int::try_from(std::mem::size_of::<T>()).ok()?;
+    let mut info = std::mem::MaybeUninit::<T>::zeroed();
+    // SAFETY: a buffer of exactly `size` bytes for the flavor's struct;
+    // read only when the kernel filled all of it.
+    unsafe {
+        let n = libc::proc_pidinfo(
+            libc::c_int::try_from(pid).ok()?,
+            flavor,
+            0,
+            info.as_mut_ptr().cast(),
+            size,
+        );
+        (n == size).then(|| info.assume_init())
+    }
 }
 
-/// A live session's CPU and memory are not read here yet (it would take
-/// `proc_pidinfo`); the roster says so in its `errors`.
-pub const PROCESS_STATS: bool = false;
+/// Every process's parent, from libproc (no `ps`): pid → ppid.
+pub fn process_table() -> std::collections::HashMap<u32, u32> {
+    // SAFETY: a null buffer asks for the count; the second call fills at
+    // most the buffer's size and says how many it wrote.
+    let pids = unsafe {
+        let n = libc::proc_listallpids(std::ptr::null_mut(), 0);
+        let mut pids = vec![0 as libc::c_int; usize::try_from(n).unwrap_or(0) + 64];
+        let bytes = libc::c_int::try_from(std::mem::size_of_val(pids.as_slice())).unwrap_or(0);
+        let got = libc::proc_listallpids(pids.as_mut_ptr().cast(), bytes);
+        pids.truncate(usize::try_from(got).unwrap_or(0));
+        pids
+    };
+    pids.into_iter()
+        .filter_map(|p| u32::try_from(p).ok().filter(|p| *p > 0))
+        .filter_map(|p| {
+            pidinfo::<libc::proc_bsdinfo>(p, libc::PROC_PIDTBSDINFO).map(|i| (p, i.pbi_ppid))
+        })
+        .collect()
+}
 
+/// The ratio that turns a task's mach time into nanoseconds (1/1 on Intel).
+fn timebase() -> (u64, u64) {
+    #[repr(C)]
+    struct Timebase {
+        numer: u32,
+        denom: u32,
+    }
+    extern "C" {
+        fn mach_timebase_info(info: *mut Timebase) -> libc::c_int;
+    }
+    let mut t = Timebase { numer: 1, denom: 1 };
+    // SAFETY: one out-struct of the declared layout.
+    let rc = unsafe { mach_timebase_info(&mut t) };
+    if rc != 0 || t.denom == 0 {
+        return (1, 1);
+    }
+    (u64::from(t.numer), u64::from(t.denom))
+}
+
+/// A process's command line (`KERN_PROCARGS2`), at most 64 arguments; empty
+/// when it cannot be read.
+fn args_of(pid: u32) -> Vec<String> {
+    let Ok(pid) = libc::c_int::try_from(pid) else {
+        return Vec::new();
+    };
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
+    let mut size: libc::size_t = 0;
+    // SAFETY: a null buffer asks the size; the second call fills at most
+    // `size` bytes of a buffer that long and says how many it wrote.
+    unsafe {
+        if libc::sysctl(
+            mib.as_mut_ptr(),
+            3,
+            std::ptr::null_mut(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        ) != 0
+        {
+            return Vec::new();
+        }
+        let mut buf = vec![0u8; size];
+        if libc::sysctl(
+            mib.as_mut_ptr(),
+            3,
+            buf.as_mut_ptr().cast(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        ) != 0
+        {
+            return Vec::new();
+        }
+        buf.truncate(size);
+        crate::jobs::parse_procargs2(&buf, 64)
+    }
+}
+
+/// A process from libproc: CPU time, resident memory and command line. Its
+/// start is not compared: the CLI records `ps -o lstart` here, not a count
+/// (jobs/proc.rs `ProcStats`).
 pub fn process_stats(pid: u32) -> Option<crate::jobs::ProcStats> {
-    let _ = pid;
-    None
+    let t = pidinfo::<libc::proc_taskinfo>(pid, libc::PROC_PIDTASKINFO)?;
+    let (numer, denom) = timebase();
+    let mach = t.pti_total_user.saturating_add(t.pti_total_system);
+    let nanos = u128::from(mach) * u128::from(numer) / u128::from(denom);
+    Some(crate::jobs::ProcStats {
+        start_ticks: None,
+        cpu_ms: u64::try_from(nanos / 1_000_000).unwrap_or(u64::MAX),
+        rss_bytes: t.pti_resident_size,
+        args: args_of(pid),
+    })
 }
 
 // ── HTTPS ─────────────────────────────────────────────────────────────────

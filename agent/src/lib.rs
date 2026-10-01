@@ -56,6 +56,7 @@ pub mod pair;
 pub mod paths;
 pub mod power;
 pub mod private;
+pub mod procfs;
 pub mod providers;
 pub mod role;
 pub mod root;
