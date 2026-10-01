@@ -19,7 +19,7 @@ use crate::link::wire::{
 use crate::link::MAX_LINE;
 use crate::rpc::{code, ApiError, Response};
 
-use super::registry::{busy, ip_bucket, Admission, Out, Registry};
+use super::registry::{busy, ip_bucket, Admission, Out, PreauthSlot, Registry};
 
 /// Why a connection the registry closed ended.
 const CLOSED_BY_CONTROLLER: &str = "closed by the controller";
@@ -69,11 +69,19 @@ pub fn listen_with(addr: SocketAddr, keys: Arc<Keys>, registry: Arc<Registry>) -
                 while !stop.load(Ordering::Relaxed) {
                     match listener.accept() {
                         Ok((sock, peer)) => {
+                            // The pre-auth cap before a thread: past it, a
+                            // socket costs a close, never a thread.
+                            let Some(slot) = registry.preauth_slot(ip_bucket(peer.ip())) else {
+                                tracing::debug!(%peer, "link: no pre-auth slot for this address; closed");
+                                continue;
+                            };
                             let (registry, keys, stop) =
                                 (Arc::clone(&registry), Arc::clone(&keys), Arc::clone(&stop));
                             let spawned =
                                 std::thread::Builder::new().name("link-conn".into()).spawn(
-                                    move || serve_connection(sock, peer, &registry, &keys, &stop),
+                                    move || {
+                                        serve_connection(sock, peer, slot, &registry, &keys, &stop)
+                                    },
                                 );
                             if let Err(e) = spawned {
                                 tracing::warn!(error = %e, "link: no thread for a connection");
@@ -175,19 +183,17 @@ fn pre_admission(tls: &mut Tls, deadline: Instant) -> Option<(u64, Hello)> {
     }
 }
 
-/// One machine's connection (module doc).
+/// One machine's connection (module doc), holding the pre-auth `slot` the
+/// listener took for it until it is admitted.
 fn serve_connection(
     sock: TcpStream,
     peer: SocketAddr,
+    slot: PreauthSlot,
     registry: &Registry,
     keys: &Arc<Keys>,
     stop: &AtomicBool,
 ) {
     let bucket = ip_bucket(peer.ip());
-    let Some(slot) = registry.preauth_slot(bucket) else {
-        tracing::debug!(%peer, "link: no pre-auth slot for this address; closed");
-        return;
-    };
     let limits = registry.limits;
     let deadline = Instant::now() + limits.preauth_budget;
     if sock.set_nonblocking(false).is_err() {

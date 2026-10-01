@@ -319,13 +319,14 @@ pub(super) enum Admission {
     Refuse(ApiError),
 }
 
-/// Holds one pre-auth slot (in all and for its address) until dropped.
-pub(super) struct PreauthSlot<'a> {
-    registry: &'a Registry,
+/// Holds one pre-auth slot (in all and for its address) until dropped; the
+/// listener takes it before it spawns the connection's thread, which owns it.
+pub(super) struct PreauthSlot {
+    registry: Arc<Registry>,
     bucket: IpAddr,
 }
 
-impl Drop for PreauthSlot<'_> {
+impl Drop for PreauthSlot {
     fn drop(&mut self) {
         self.registry.preauth_open.fetch_sub(1, Ordering::AcqRel);
         let mut per = self.registry.preauth.lock_ok();
@@ -455,7 +456,7 @@ impl Registry {
 
     /// A pre-auth slot for a connection from `bucket`, or None when the
     /// pool, or this address's share of it, is full.
-    pub(super) fn preauth_slot(&self, bucket: IpAddr) -> Option<PreauthSlot<'_>> {
+    pub(super) fn preauth_slot(self: &Arc<Self>, bucket: IpAddr) -> Option<PreauthSlot> {
         let mut per = self.preauth.lock_ok();
         let mine = per.get(&bucket).copied().unwrap_or(0);
         if mine >= self.limits.preauth_per_ip
@@ -466,7 +467,7 @@ impl Registry {
         per.insert(bucket, mine + 1);
         self.preauth_open.fetch_add(1, Ordering::AcqRel);
         Some(PreauthSlot {
-            registry: self,
+            registry: Arc::clone(self),
             bucket,
         })
     }
