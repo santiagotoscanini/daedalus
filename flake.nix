@@ -158,7 +158,14 @@
 
       # A VM test, run by hand (never a check: no VM builds in CI) — the
       # container unit shape under this nixpkgs (nix/tests/oneshot-vm).
-      packages.${system}.vmtest-oneshot = import ./nix/tests/oneshot-vm { inherit pkgs; };
+      #
+      # The two Rust binaries the box runs, as the modules build them
+      # (nix/pkgs/): the controller and root helper, and the session host.
+      packages.${system} = {
+        vmtest-oneshot = import ./nix/tests/oneshot-vm { inherit pkgs; };
+        daedalus-agent = pkgs.callPackage ./nix/pkgs/daedalus-agent.nix { };
+        session-host = pkgs.callPackage ./nix/pkgs/session-host.nix { };
+      };
 
       checks.${system} = {
         formatting = treefmtEval.config.build.check self;

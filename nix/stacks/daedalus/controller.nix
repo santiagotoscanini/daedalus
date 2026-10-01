@@ -295,44 +295,7 @@ let
 
   sessionHost = config.fleet.daedalus.sessionHost;
 
-  # The crate, by its own files only (see the header).
-  crate = ../../../agent;
-  cargoToml = builtins.fromTOML (builtins.readFile (crate + "/Cargo.toml"));
-
-  # What the binary is built from: the crate's own files, nothing else.
-  agentSrc = lib.fileset.toSource {
-    root = crate;
-    fileset = lib.fileset.unions [
-      (crate + "/Cargo.toml")
-      (crate + "/Cargo.lock")
-      (crate + "/build.rs")
-      (crate + "/src")
-    ];
-  };
-  # That source's store path is content-addressed: its hash names the source
-  # exactly and moves only when one of those files does (agent/README.md
-  # "Versions").
-  agentSrcId = builtins.substring 0 12 (
-    baseNameOf (builtins.unsafeDiscardStringContext (toString agentSrc))
-  );
-
-  # The tests run in the crate's own gate (agent/gate.sh) and in CI; building
-  # the box's binary does not run them again.
-  agent = pkgs.rustPlatform.buildRustPackage {
-    pname = "daedalus-agent";
-    inherit (cargoToml.package) version;
-    src = agentSrc;
-    cargoLock.lockFile = crate + "/Cargo.lock";
-    buildNoDefaultFeatures = true;
-    # The build's identity in its version (agent/build.rs): not a release.
-    env.DAEDALUS_BUILD_ID = "src.${agentSrcId}";
-    cargoBuildFlags = [
-      "--bin"
-      "daedalus-agent"
-    ];
-    doCheck = false;
-    meta.mainProgram = "daedalus-agent";
-  };
+  agent = pkgs.callPackage ../../pkgs/daedalus-agent.nix { };
 
   # Its state (state.json, identity.key, a rotation's files), its local socket
   # (run/) and logs — writable by the service (the header's `dataDir`). Beside
