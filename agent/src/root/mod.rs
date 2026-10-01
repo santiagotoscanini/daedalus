@@ -83,8 +83,8 @@ pub const MAX_PAYLOAD: usize = 64 * 1024;
 /// The longest value a pattern selector may declare (`max_len`).
 pub const MAX_PATTERN_LEN: usize = 256;
 /// What a pattern's regex may be written with: anchors, classes, counts,
-/// groups and a few literals — no backslash, so no escape means one thing to
-/// nix's POSIX regex and another to this one.
+/// groups and a few literals — no backslash, so what a pattern accepts reads
+/// off it, with no escape class (`\w`, `\s`, `\p{…}`) reaching past ASCII.
 pub const PATTERN_CHARS: &str = "^$[]{}(),|*+?._@ /:-";
 /// The longest answer line either side accepts (a `status` is the largest).
 pub const MAX_ANSWER: usize = 1 << 20;
@@ -320,7 +320,9 @@ pub fn valid_free_value(s: &str, max: usize) -> bool {
 
 /// A pattern as nix declares it, or why not: anchored at both ends, written
 /// with `PATTERN_CHARS` and ASCII alphanumerics only, a cap of 1 to
-/// `MAX_PATTERN_LEN`, and a regex that compiles.
+/// `MAX_PATTERN_LEN`, and a regex that compiles. What it compiles to matches
+/// a value whole: the regex is wrapped as `^(?:…)$`, so an alternation
+/// (`^[a-z]+|x$`) cannot leave one branch unanchored.
 pub fn check_pattern(p: &PatternSpec) -> Result<regex_automata::meta::Regex, String> {
     if !(1..=MAX_PATTERN_LEN).contains(&p.max_len) {
         return Err(format!("max_len is 1 to {MAX_PATTERN_LEN}"));
@@ -335,7 +337,8 @@ pub fn check_pattern(p: &PatternSpec) -> Result<regex_automata::meta::Regex, Str
     {
         return Err(format!("{:?} uses {c:?}", p.regex));
     }
-    regex_automata::meta::Regex::new(&p.regex).map_err(|e| format!("{:?}: {e}", p.regex))
+    regex_automata::meta::Regex::new(&format!("^(?:{})$", p.regex))
+        .map_err(|e| format!("{:?}: {e}", p.regex))
 }
 
 /// A run id: `[A-Za-z0-9_-]{1,64}`.
@@ -880,6 +883,24 @@ mod tests {
         let long = format!("octo/{}", "x".repeat(150));
         assert_eq!(code_of(req("clone", &[("repo", &long)])), code::BAD_REQUEST);
         assert_eq!(code_of(req("clone", &[])), code::BAD_REQUEST);
+    }
+
+    #[test]
+    fn an_alternation_is_anchored_as_a_whole() {
+        let mut t = run_table();
+        t.verbs.get_mut("clone").unwrap().patterns.insert(
+            "repo".into(),
+            PatternSpec {
+                regex: "^[a-z]+|x$".into(),
+                max_len: 40,
+            },
+        );
+        t.check().unwrap();
+        let fits = |v: &str| t.resolve(&req("clone", &[("repo", v)])).is_ok();
+        assert!(fits("abc") && fits("x"));
+        for bad in ["ABC/../x", "abc/def", "ABCx", "abc x"] {
+            assert!(!fits(bad), "{bad:?}");
+        }
     }
 
     #[test]

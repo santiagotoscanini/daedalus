@@ -566,7 +566,7 @@ in
                 options = {
                   regex = lib.mkOption {
                     type = lib.types.str;
-                    description = "Anchored `^…$`, written with letters, digits and `^$[]{}(),|*+?._@ /:-` only (no backslash): read the same by nix and by the helper.";
+                    description = "Anchored `^…$`, written with letters, digits and `^$[]{}(),|*+?._@ /:-` only (no backslash). Only the helper evaluates it (at build time through `--check-table`, and per request), against the whole value: an alternation cannot leave one branch unanchored.";
                   };
                   maxLength = lib.mkOption {
                     type = lib.types.ints.positive;
