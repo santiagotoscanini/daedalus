@@ -28,9 +28,9 @@ import { provenByProxy } from './auth'
 // Static files never reach this: the production server answers them before
 // the app handler (server.mjs), and the dev server before Start's.
 //
-// LOG-ONLY. A request that would be refused is logged (one line per path a
-// minute) and served, so the paths a real caller uses without the proof show
-// up in the journal before the gate starts refusing them.
+// A refusal is a bare 403 before any route or server function runs, and one
+// journal line per path a minute — the method and the path, never a header, a
+// query or a body.
 
 /** The paths served without traefik's proof, and why each may be. Exact matches only. */
 export const EXEMPT: Readonly<Record<string, string>> = {
@@ -70,18 +70,19 @@ export function verdictOf(request: Request): Verdict {
 const LOG_EVERY_MS = 60_000
 const lastLogged = new Map<string, number>()
 
-/** One line per method and path a minute; never a header, a query or a body. */
-function logUnproven(request: Request): void {
+/** One line per method and path a minute. */
+function logRefusal(request: Request): void {
   const key = `${request.method} ${new URL(request.url).pathname.slice(0, 200)}`
   const now = Date.now()
   if (now - (lastLogged.get(key) ?? 0) < LOG_EVERY_MS) return
   if (lastLogged.size >= 1000) lastLogged.clear()
   lastLogged.set(key, now)
-  console.warn(`[gate] would refuse ${key}: no proxy proof, not an exempt path, no reader token`)
+  console.warn(`[gate] refused ${key}: no proxy proof, not an exempt path, no reader token`)
 }
 
 /** What the request middleware answers instead of the app, or null to let it through. */
 export function gate(request: Request): Response | null {
-  if (verdictOf(request) === 'unproven') logUnproven(request)
-  return null
+  if (verdictOf(request) !== 'unproven') return null
+  logRefusal(request)
+  return new Response('Forbidden', { status: 403, headers: { 'cache-control': 'no-store' } })
 }

@@ -104,15 +104,23 @@ describe('the request middleware', () => {
   })
 })
 
-describe('log-only', () => {
-  it('serves every request, and says once a minute per path what it would refuse', () => {
+describe('the gate', () => {
+  it('answers 403 instead of the app, and says so once a minute per path', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    expect(gate(req('/claude'))).toBeNull()
-    expect(gate(req('/claude?tab=x'))).toBeNull()
-    expect(gate(req('/claude', { 'x-proxy-proof': PROOF }))).toBeNull()
+    for (const r of [req('/claude'), req('/claude?tab=x')]) {
+      const refused = gate(r)
+      expect(refused?.status).toBe(403)
+      expect(await refused?.text()).toBe('Forbidden')
+    }
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0]?.[0]).toBe(
-      '[gate] would refuse GET /claude: no proxy proof, not an exempt path, no reader token',
+      '[gate] refused GET /claude: no proxy proof, not an exempt path, no reader token',
     )
+  })
+
+  it('lets the proxied, the exempt and the reader through to the app', () => {
+    expect(gate(req('/claude', { 'x-proxy-proof': PROOF }))).toBeNull()
+    expect(gate(req('/api/healthz'))).toBeNull()
+    expect(gate(req('/claude', { [READER_TOKEN_HEADER]: READER }))).toBeNull()
   })
 })

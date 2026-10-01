@@ -77,21 +77,23 @@ podman exec app-daedalus sh -lc 'cd /app && pnpm exec biome check .'
 podman exec app-daedalus sh -lc 'cd /app && pnpm vitest run'
 ```
 
-Content under the SSO gate (the dev server trusts its caller):
+Content under the SSO gate — a GET carrying the reader token the container
+holds, which the request gate (`app/src/core/request-gate.ts`) lets read
+with no identity; anything else that dials the container is refused:
 
 ```
 podman exec app-daedalus node -e \
-  "fetch('http://localhost:3000/<page>').then(r=>r.text()).then(t=>console.log(t.includes('<needle>')))"
+  "fetch('http://localhost:3000/<page>',{headers:{'x-reader-token':process.env.READER_TOKEN}}).then(r=>r.text()).then(t=>console.log(t.includes('<needle>')))"
 ```
 
-Pixels under the gate — the shotter image on the app's own bridge, with
-the PINNED tag from `podman images` (`:latest` is a stale leftover):
+Pixels under the gate — `shot daedalus`, which runs the shotter image on
+the app's own bridge and sends the reader token to `app-daedalus` alone
+(the box's `stacks/shotter`). Reads only: a driver that presses a button
+is refused, as it should be.
 
 ```
-podman run --rm --network=iso-daedalus-net --shm-size=1g \
-  -v ~santiago/selfhost/shotter:/lab localhost/shotter:<pinned tag> \
-  node /opt/lab/runner.mjs --out /lab/runs/<id> \
-  --url http://app-daedalus:3000/<page> --script /lab/drivers/<driver>.mjs --label <label>
+shot daedalus quick /<page> [label]
+shot daedalus run <driver>.mjs [label]
 ```
 
 Read `events.json` in the run dir before trusting the PNGs. Two

@@ -92,7 +92,7 @@ export const adminOnly = createMiddleware({ type: 'function' }).server(
   },
 )
 
-/** A read (GET). No check added: reads are open to anyone past the proxy's gate. */
+/** A read (GET). No check added: the request gate (core/request-gate.ts) already refused anyone who did not come through traefik or hold the reader token. */
 export const readFn = createServerFn().middleware([plainErrors, withCtx])
 
 /** A mutation (POST), refused unless `assertAdmin()` passes — before the validator runs. */
