@@ -59,7 +59,7 @@ pub const MAX_PTYS: usize = 64;
 pub const MAX_IN_FLIGHT: usize = 32;
 /// Connections one node may hold at once; another is closed at once. The
 /// agent caps its santree connections at the same number
-/// (`agent/src/node/santree.rs` `MAX_CONNECTIONS`), so a machine is refused
+/// (`agent/src/santree.rs` `MAX_CONNECTIONS`), so a machine is refused
 /// locally, with the reason, before it reaches this one: change both.
 pub const MAX_CONNS_PER_NODE: usize = 4;
 /// Bytes queued for one connection's writer, each line counted with
