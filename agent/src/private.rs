@@ -133,10 +133,11 @@ pub fn windows_data_dir_acl(dir: &Path) -> Vec<Vec<OsString>> {
     runs
 }
 
-/// One ACE of a DACL in SDDL: its type (`A` allows, `D` denies) and whom
-/// it names.
+/// One ACE of a DACL in SDDL: its type (`A` allows, `D` denies), its
+/// rights, and whom it names.
 struct Ace<'a> {
     kind: &'a str,
+    rights: &'a str,
     sid: &'a str,
 }
 
@@ -154,10 +155,10 @@ fn sddl_dacl(sddl: &str) -> Option<(&str, Vec<Ace<'_>>)> {
     while let Some(body) = rest.strip_prefix('(') {
         let end = body.find(')')?;
         let f: Vec<&str> = body[..end].split(';').collect();
-        let [kind, _, _, _, _, sid] = f[..] else {
+        let [kind, _, rights, _, _, sid] = f[..] else {
             return None;
         };
-        aces.push(Ace { kind, sid });
+        aces.push(Ace { kind, rights, sid });
         rest = &body[end + 1..];
     }
     rest.is_empty().then_some((flags, aces))
@@ -187,6 +188,92 @@ pub fn sddl_is_private(sddl: &str) -> bool {
         && aces
             .iter()
             .all(|a| a.kind == "D" || matches!(sid_alias(a.sid), "SY" | "BA"))
+}
+
+/// TrustedInstaller, which owns and writes what Windows ships under
+/// Program Files.
+const TRUSTED_INSTALLER: &str = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+
+/// The access mask an ACE's rights field names: hex, or the two-letter
+/// aliases SDDL writes. None for one it does not know.
+fn sddl_rights(r: &str) -> Option<u32> {
+    if let Some(hex) = r.strip_prefix("0x").or_else(|| r.strip_prefix("0X")) {
+        return u32::from_str_radix(hex, 16).ok();
+    }
+    if !r.is_ascii() || !r.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..r.len()).step_by(2).try_fold(0u32, |m, i| {
+        Some(
+            m | match &r[i..i + 2] {
+                "GA" => 0x1000_0000,
+                "GX" => 0x2000_0000,
+                "GW" => 0x4000_0000,
+                "GR" => 0x8000_0000,
+                "FA" => 0x001F_01FF,
+                "FR" => 0x0012_0089,
+                "FW" => 0x0012_0116,
+                "FX" => 0x0012_00A0,
+                "SD" => 0x0001_0000,
+                "RC" => 0x0002_0000,
+                "WD" => 0x0004_0000,
+                "WO" => 0x0008_0000,
+                "CC" => 0x1,
+                "DC" => 0x2,
+                "LC" => 0x4,
+                "SW" => 0x8,
+                "RP" => 0x10,
+                "WP" => 0x20,
+                "DT" => 0x40,
+                "LO" => 0x80,
+                "CR" => 0x100,
+                _ => return None,
+            },
+        )
+    })
+}
+
+/// What lets a holder change a file or a directory's contents, or its
+/// security: write data, append (or add a subdirectory), write extended
+/// attributes, delete a child, write attributes, delete, change the DACL,
+/// take ownership, and generic write and all.
+const WRITE_RIGHTS: u32 =
+    0x2 | 0x4 | 0x10 | 0x40 | 0x100 | 0x1_0000 | 0x4_0000 | 0x8_0000 | 0x1000_0000 | 0x4000_0000;
+
+/// Whether a descriptor, in SDDL with its owner and DACL, keeps what the
+/// service runs as LocalSystem out of anyone else's reach: owned by
+/// SYSTEM, Administrators or TrustedInstaller, and no grant to write it
+/// (`WRITE_RIGHTS`) for anyone but them and CREATOR OWNER (which an
+/// inherited ACE turns into the owner of what is made inside). Why not,
+/// when it does not.
+pub fn sddl_admins_alone_write(sddl: &str) -> Result<(), String> {
+    let trusted = |sid: &str| matches!(sid_alias(sid), "SY" | "BA") || sid == TRUSTED_INSTALLER;
+    let owner = sddl
+        .strip_prefix("O:")
+        .map(|o| &o[..o.find("G:").or_else(|| o.find("D:")).unwrap_or(o.len())]);
+    match owner {
+        Some(o) if trusted(o) => {}
+        Some(o) => return Err(format!("it is owned by {o}")),
+        None => return Err("its owner could not be read".into()),
+    }
+    let Some((flags, aces)) = sddl_dacl(sddl) else {
+        return Err("its DACL could not be read".into());
+    };
+    if flags.contains("NO_ACCESS_CONTROL") {
+        return Err("it has no DACL: everyone may write it".into());
+    }
+    for a in aces.iter().filter(|a| a.kind != "D") {
+        let Some(mask) = sddl_rights(a.rights) else {
+            return Err(format!(
+                "{} holds rights {:?} that are not understood",
+                a.sid, a.rights
+            ));
+        };
+        if mask & WRITE_RIGHTS != 0 && !trusted(a.sid) && sid_alias(a.sid) != "CO" {
+            return Err(format!("{} may write to it", a.sid));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -266,6 +353,49 @@ mod tests {
         ));
         assert!(!sddl_is_private("D:NO_ACCESS_CONTROL"));
         assert!(!sddl_is_private("O:BA"));
+    }
+
+    #[test]
+    fn the_service_runs_only_from_where_administrators_alone_write() {
+        // `%ProgramFiles%\daedalus-agent` as install.ps1 makes it: owned by
+        // Administrators, Program Files' grants inherited — users read and
+        // execute, app packages too.
+        let ti = TRUSTED_INSTALLER;
+        let made = format!(
+            "O:BAD:AI(A;ID;FA;;;{ti})(A;CIIOID;GA;;;{ti})(A;ID;0x1301bf;;;SY)\
+             (A;OICIIOID;GA;;;SY)(A;ID;0x1301bf;;;BA)(A;OICIIOID;GA;;;BA)\
+             (A;ID;0x1200a9;;;BU)(A;OICIIOID;GXGR;;;BU)(A;OICIIOID;GA;;;CO)\
+             (A;ID;0x1200a9;;;AC)(A;OICIIOID;GXGR;;;AC)"
+        );
+        assert_eq!(sddl_admins_alone_write(&made), Ok(()));
+        assert_eq!(
+            sddl_admins_alone_write(&format!("O:{ti}D:PAI(A;;FA;;;SY)")),
+            Ok(())
+        );
+        // A user who may write in it, or own it; everyone; rights not
+        // understood; no DACL at all.
+        let user = "S-1-5-21-1-2-3-1001";
+        for (sddl, why) in [
+            (format!("{made}(A;OICI;0x1301bf;;;{user})"), "may write"),
+            (format!("{made}(A;;FW;;;BU)"), "may write"),
+            (format!("{made}(A;OICI;GW;;;WD)"), "may write"),
+            (format!("{made}(A;;WD;;;AU)"), "may write"),
+            (format!("O:{user}D:PAI(A;;FA;;;SY)"), "owned by"),
+            (format!("{made}(A;;QQ;;;BU)"), "not understood"),
+            ("O:BAD:NO_ACCESS_CONTROL".to_string(), "no DACL"),
+            ("D:PAI(A;;FA;;;SY)".to_string(), "owner"),
+        ] {
+            let got = sddl_admins_alone_write(&sddl);
+            assert!(
+                got.as_ref().is_err_and(|e| e.contains(why)),
+                "{sddl}: {got:?}"
+            );
+        }
+        // A denial takes nothing away from the check.
+        assert_eq!(
+            sddl_admins_alone_write(&format!("{made}(D;;FA;;;{user})")),
+            Ok(())
+        );
     }
 
     #[test]

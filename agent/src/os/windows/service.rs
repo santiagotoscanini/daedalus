@@ -80,12 +80,48 @@ fn serve_under_scm() -> Result<()> {
     outcome
 }
 
+/// Where the service runs from: `%ProgramFiles%\daedalus-agent`, where
+/// install.ps1 puts it.
+fn install_dir() -> std::path::PathBuf {
+    std::env::var_os("ProgramFiles")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| r"C:\Program Files".into())
+        .join("daedalus-agent")
+}
+
+/// This binary, as the service is registered at: refused unless it runs
+/// from `install_dir`, and that directory, it and the tray beside it are
+/// owned by SYSTEM, Administrators or TrustedInstaller and writable by
+/// nobody else — LocalSystem runs whatever is there, at every boot.
+fn installed_exe() -> Result<std::path::PathBuf> {
+    let exe = std::env::current_exe().context("locating this binary")?;
+    let dir = install_dir();
+    let here = std::fs::canonicalize(&exe).context("locating this binary")?;
+    let canonical = std::fs::canonicalize(&dir).ok();
+    if canonical.is_none() || here.parent() != canonical.as_deref() {
+        bail!(
+            "install registers the service from {}: run install.ps1, which puts it there, \
+             not {}",
+            dir.display(),
+            exe.display()
+        );
+    }
+    let exe = dir.join(here.file_name().context("this binary has no name")?);
+    super::acl::check_admins_alone_write(&dir)?;
+    super::acl::check_admins_alone_write(&exe)?;
+    let tray = dir.join(TRAY_EXE);
+    if tray.exists() {
+        super::acl::check_admins_alone_write(&tray)?;
+    }
+    Ok(exe)
+}
+
 /// `daedalus-agent install`: the service, its recovery, the config file, and
 /// a start. Idempotent: a second run on an installed
 /// machine updates the binary path (the installer copies a new exe to the
 /// same place), leaves config.toml alone, and makes sure the service runs.
 pub fn install(cfg: &Config) -> Result<()> {
-    let exe = std::env::current_exe().context("locating this binary")?;
+    let exe = installed_exe()?;
     let manager = ServiceManager::local_computer(
         None::<&str>,
         ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,

@@ -203,6 +203,20 @@ pub fn ensure_private(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Refuse `path` unless SYSTEM, Administrators or TrustedInstaller own it
+/// and nobody else may write it (`private::sddl_admins_alone_write`):
+/// where the LocalSystem service runs from.
+pub fn check_admins_alone_write(path: &Path) -> Result<()> {
+    let sddl = sddl_of(path, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION)?;
+    crate::private::sddl_admins_alone_write(&sddl).map_err(|why| {
+        anyhow::anyhow!(
+            "{}: {why} ({sddl}); the service runs from it as LocalSystem, so only \
+             Administrators may write it",
+            path.display()
+        )
+    })
+}
+
 /// The parts `info` names of a file's security descriptor, in SDDL.
 fn sddl_of(path: &Path, info: OBJECT_SECURITY_INFORMATION) -> Result<String> {
     use windows::core::PWSTR;

@@ -771,7 +771,10 @@ irm https://daedalus.toscanini.me/install.ps1 | iex
 
 [`install.ps1`](install.ps1) downloads the release into
 `C:\Program Files\daedalus-agent\` and runs `daedalus-agent install`, which
-registers the `daedalus-agent` service (LocalSystem, automatic start,
+refuses to run from anywhere else, or when that directory or the binaries
+in it are not owned by SYSTEM, Administrators or TrustedInstaller or
+anyone else may write them — the service runs from it as LocalSystem —
+then registers the `daedalus-agent` service (LocalSystem, automatic start,
 restart on failure), registers the tray under the machine's Run key and
 starts it as the desktop user, writes `config.toml` if there is none, and
 starts the service. It opens nothing in the firewall: the agent listens on
