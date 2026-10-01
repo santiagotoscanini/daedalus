@@ -18,17 +18,17 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use daedalus_agent::api::wire::{DesiredState, SessionHostState};
-use daedalus_agent::core::config::{Config as AgentConfig, Mode, SessionHostConfig};
-use daedalus_agent::identity::{digest, format_fingerprint, Identity};
 use daedalus_agent::controller::link::{listen, DesiredEntry, Limits, Registry};
-use daedalus_agent::node::link::{connect_once, hello_of, Cadence, Target};
+use daedalus_agent::controller::session_host::SessionHost;
+use daedalus_agent::core::config::{Config as AgentConfig, Mode, SessionHostConfig};
+use daedalus_agent::core::role::Role;
+use daedalus_agent::core::shared::Shared;
+use daedalus_agent::identity::{digest, format_fingerprint, Identity};
+use daedalus_agent::ipc::rpc::Events;
 use daedalus_agent::link::tls::Client;
 use daedalus_agent::link::wire::Policy;
 use daedalus_agent::link::LinkKeys;
-use daedalus_agent::core::role::Role;
-use daedalus_agent::ipc::rpc::Events;
-use daedalus_agent::controller::session_host::SessionHost;
-use daedalus_agent::core::shared::Shared;
+use daedalus_agent::node::link::{connect_once, hello_of, Cadence, Target};
 use daedalus_agent::util::Shutdown;
 use daedalus_session_host::{Config, Server};
 use santree_remote_client::proto::{Anchor, PtyOpenParams};
@@ -213,7 +213,10 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
         Arc::clone(&shared),
         node.clone(),
         Arc::new(move |peer| {
-            daedalus_agent::ipc::door::peer_allowed(peer, &daedalus_agent::ipc::door::unix_allowed(own, &[]))
+            daedalus_agent::ipc::door::peer_allowed(
+                peer,
+                &daedalus_agent::ipc::door::unix_allowed(own, &[]),
+            )
         }),
     )
     .unwrap();
@@ -284,7 +287,10 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     tokio::time::timeout(WAIT, client.closed())
         .await
         .expect("the host cut the link");
-    wait_for("santree off on the node", || !shared.settings.policy().santree).await;
+    wait_for("santree off on the node", || {
+        !shared.settings.policy().santree
+    })
+    .await;
     let mut again = UnixStream::connect(&socket).await.unwrap();
     assert_eq!(verdict(&mut again).await["err"]["code"], "santree_off");
 
