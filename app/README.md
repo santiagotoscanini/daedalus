@@ -23,6 +23,7 @@ Everything else is one level up, and this file does not restate it:
   the 7-day release cooldown, in its comments.
 
 `/api/healthz` is load-bearing — the gatus probe, the forward-auth
-bypass, the deploy unit's health check and what starts the build
-scheduler in a fresh process; its route file says how. Keep it
-unauthenticated and keep it meaning "can actually serve".
+bypass and the deploy unit's health check; its route file says how. Keep it
+unauthenticated, keep it meaning "can actually serve", and keep it starting
+nothing: the build scheduler and the rest of the process's own work start
+once at process start (`src/host/background.ts`).

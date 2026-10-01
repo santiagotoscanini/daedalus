@@ -1,8 +1,9 @@
 // Builds on the box: the driver that moves queued builds to the host build
 // agent and folds its status back into the builds table.
 //
-// One interval per process, started by `ensureScheduler()` from /api/healthz
-// (gatus probes it every minute) and from Build now (actions.ts). Each tick: read the host's
+// One interval per process, started by `ensureScheduler()` from
+// host/background.ts at process start; a build queued by a push or Build now
+// wakes it (`wakeScheduler`) rather than waiting out the idle beat. Each tick: read the host's
 // status and fold it into the running row, fail what can no longer finish,
 // dispatch the next queued build when nothing is in flight, then let the
 // reporter run. An hourly sweep, out of band, pins apps to their GitHub repos
@@ -229,7 +230,19 @@ function adopt(current: unknown, start: boolean): void {
   g[SLOT_KEY] = slot
 }
 
-/** Stop and forget the scheduler (tests; a later ensureScheduler starts afresh). */
+/**
+ * Tick now instead of at the next idle beat: a build was just queued. Starts
+ * nothing — without a running scheduler it does nothing — and a tick already
+ * in flight is not doubled.
+ */
+export function wakeScheduler(): void {
+  const slot = readSlot()
+  if (slot === null) return
+  slot.state.active = true
+  onInterval()
+}
+
+/** Stop and forget the scheduler (process shutdown, tests; a later ensureScheduler starts afresh). */
 export function stopScheduler(): void {
   const current = g[SLOT_KEY]
   if (isRecord(current)) disarm(current.handle)

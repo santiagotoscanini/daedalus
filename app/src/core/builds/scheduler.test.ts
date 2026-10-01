@@ -921,6 +921,23 @@ describe('ensureScheduler', () => {
     expect(h.calls.prune).toHaveLength(1)
   })
 
+  it('ticks at once when woken, and a wake alone starts nothing', async () => {
+    vi.useFakeTimers({ now: NOW })
+    scheduler.wakeScheduler()
+    expect(g[SLOT]).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
+
+    scheduler.ensureScheduler()
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(h.calls.readStatus).toBe(1)
+    // Idle: the next beats skip until 30 s have passed.
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(h.calls.readStatus).toBe(1)
+    scheduler.wakeScheduler()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.calls.readStatus).toBe(2)
+  })
+
   it('ticks every 3 s while a build is in flight', async () => {
     vi.useFakeTimers({ now: NOW })
     h.active = [row({ state: 'building', startedAt: NOW, updatedAt: NOW })]

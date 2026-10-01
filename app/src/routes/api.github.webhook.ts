@@ -34,8 +34,8 @@ import {
 // and a failure rolls the record back with the build, so the redelivery that
 // recovers it is not refused as a duplicate.
 //
-// Nothing here calls GitHub or starts a build. A push queues a row; the
-// scheduler (core/builds/scheduler.ts) hands it to the host, and the host
+// Nothing here calls GitHub or starts a build. A push queues a row and wakes
+// the scheduler (core/builds/scheduler.ts), which hands it to the host, and the host
 // builds only when the sha is still the branch tip, which is what stops a
 // replayed or out-of-order push.
 //
@@ -182,6 +182,10 @@ async function handleDelivery(delivery: Delivery, deps: WebhookDeps): Promise<Re
     return Response.json({ status: 'ignored', reason: 'duplicate' })
   }
   log(delivery.id, delivery.event, done.outcome)
+  if (done.body.status === 'queued') {
+    const { wakeScheduler } = await import('../core/builds/scheduler')
+    wakeScheduler()
+  }
   if (done.installationChanged) await afterInstallationChange(delivery, deps)
   return Response.json(done.body)
 }

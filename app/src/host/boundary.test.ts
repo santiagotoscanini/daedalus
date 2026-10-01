@@ -55,6 +55,8 @@ const SERVER_REGIONS = [
   (f: string) => f.startsWith('src/lib/dashboard/'),
   (f: string) => f.startsWith('src/lib/apps/'),
   (f: string) => /^src\/routes\/api\./.test(f),
+  // The server entry (`dist/server/server.js`), which only server.mjs imports.
+  (f: string) => f === 'src/server.ts',
   // A module's data half. Its manifest and releases are pure by contract and
   // its view half is client code — see below.
   (f: string) => /^src\/modules\/[^/]+\/data\//.test(f),

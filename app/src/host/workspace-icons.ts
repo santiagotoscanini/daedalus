@@ -197,20 +197,19 @@ export function requestIconExport(): Promise<void> {
   return run
 }
 
-/**
- * The quarter-hour run, started once per process the way the gateway sync is
- * (from /api/healthz, which gatus calls every minute). Idempotent.
- */
-let armedHere = false
+/** The quarter-hour run, started once per process by host/background.ts. Idempotent. */
 export function ensureIconExport(): void {
-  if (armedHere) return
-  armedHere = true
   const s = slot()
-  // An interval an earlier version of this module armed would keep calling
-  // that version's code; it is replaced by this one's.
-  if (s.handle !== null) clearInterval(s.handle as ReturnType<typeof setInterval>)
+  if (s.handle !== null) return
   const handle = setInterval(() => void requestIconExport(), EXPORT_EVERY_MS)
   ;(handle as { unref?: () => void }).unref?.()
   s.handle = handle
   void requestIconExport()
+}
+
+/** Stop the quarter-hour run; an export already running finishes. Idempotent. */
+export function stopIconExport(): void {
+  const s = slot()
+  if (s.handle !== null) clearInterval(s.handle as ReturnType<typeof setInterval>)
+  s.handle = null
 }

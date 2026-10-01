@@ -34,8 +34,8 @@ import type { Result } from '../lib/result'
 //
 // ── THE THREE SECRETS, and where each lives ───────────────────────────────
 //
-//   the setup token   — minted by THIS PROCESS on its first /api/healthz or
-//                       /login visit while the login is on and no admin
+//   the setup token   — minted by THIS PROCESS at start (host/background.ts)
+//                       while the login is on and no admin
 //                       exists (announceSetupTokenOnce), printed to the journal
 //                       once, stored as a SHA-256 digest with a 24h expiry
 //                       (settings `auth.localSetupToken`), and deleted the
@@ -292,7 +292,7 @@ export async function announceSetupToken(
 
 const MEMO_KEY = 'daedalusLocalLoginSetupV1'
 
-/** The per-process call: /api/healthz and the login page both make it. */
+/** The per-process call, made by host/background.ts at start. */
 export function announceSetupTokenOnce(): Promise<SetupAnnouncement> {
   const g = globalThis as unknown as Record<string, unknown>
   const slot = g[MEMO_KEY]

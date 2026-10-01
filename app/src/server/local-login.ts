@@ -13,12 +13,8 @@ import { publicFn, readFn } from './fn'
 
 /** The page's loader. Null means the route does not exist. */
 export const fetchLocalLoginState = readFn.handler(async (): Promise<LocalLoginState | null> => {
-  const { announceSetupTokenOnce, localLoginState } = await import('../core/local-login')
-  const state = await localLoginState()
-  // A fresh install's first visit may land before gatus has probed
-  // /api/healthz; the token must exist by the time the form asks for it.
-  if (state !== null && state.mode === 'setup') await announceSetupTokenOnce()
-  return state
+  const { localLoginState } = await import('../core/local-login')
+  return localLoginState()
 })
 
 /** A form field of at most `max` characters, refused as `expected <field>`. */

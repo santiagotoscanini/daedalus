@@ -24,7 +24,7 @@ import {
 // every decision or policy save (lib/repo/nodes.ts). It is idempotent — the
 // controller applies it as a difference — and serialised here, so two saves
 // in a row never race each other's sets. `ensureControllerLink` runs every
-// minute (from /api/healthz, like the build scheduler) to re-dial a
+// minute (from host/background.ts, like the build scheduler) to re-dial a
 // controller that restarted while nothing asked, and to keep each approved
 // row's last-known facts (address, versions, last seen) from what the
 // controller observed: the DHCP lines are rendered from them.

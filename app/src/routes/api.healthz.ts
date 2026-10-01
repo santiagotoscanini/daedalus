@@ -1,9 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ensureScheduler } from '../core/builds/scheduler'
 import { sql } from '../host/db'
-import { reportEnvOnce } from '../host/env'
-import { ensureGatewaySync } from '../host/gateway-sync'
-import { ensureIconExport } from '../host/workspace-icons'
 
 // Liveness + readiness. This one path carries three jobs, all following from
 // `auth.healthPath = "/api/healthz"` in nix/stacks/daedalus/self.json:
@@ -17,32 +13,12 @@ import { ensureIconExport } from '../host/workspace-icons'
 //
 // So it must stay unauthenticated and must mean "serving", not "process
 // alive". 200 = up and can reach Postgres; 503 = up but the DB roundtrip
-// failed. It returns no data about anything.
+// failed. It returns no data about anything, and it starts nothing: the
+// process's own work is host/background.ts's, started once at process start.
 export const Route = createFileRoute('/api/healthz')({
   server: {
     handlers: {
       GET: async () => {
-        // gatus calling this every minute is what starts the build scheduler
-        // in a fresh process. Synchronous and idempotent; adds nothing to the answer.
-        ensureScheduler()
-        // And the gateway sync's five-minute run, the same way.
-        ensureGatewaySync()
-        // And the workspace icons santree shows (host/workspace-icons.ts), the same way.
-        ensureIconExport()
-        // And the controller's minute: re-dial it if it restarted (the dial
-        // hands it the desired set again), keep the machines' last-known
-        // facts. Not awaited — a probe must not wait on the controller.
-        void Promise.all([import('../host/controller/nodes'), import('../core/ctx')])
-          .then(async ([m, c]) => m.ensureControllerLink(await c.makeCtx()))
-          .catch(() => undefined)
-        // And the environment's startup report: malformed optional variables
-        // warned about once, a required one that is missing thrown — a 500 here
-        // is what fails the deploy unit's health check and gatus alike.
-        reportEnvOnce()
-        // Same trick for the break-glass login's setup token: minted and printed
-        // once per process, and only while site.json turns the login on and no
-        // admin exists. Not awaited — a probe must not wait on it or fail with it.
-        void import('../core/local-login').then((m) => m.announceSetupTokenOnce()).catch(() => {})
         try {
           await sql`SELECT 1`
           return Response.json({ status: 'ok' }, { status: 200 })

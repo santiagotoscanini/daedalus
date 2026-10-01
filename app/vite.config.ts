@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, isRunnableDevEnvironment, type Plugin } from 'vite'
 
 // One image, two ways to run it (docker-entrypoint.sh picks). In dev mode
 // (`fleet.daedalus.source = "dev"`, the host that develops the engine) the
@@ -59,6 +59,36 @@ function keepServingOnRejection(): Plugin {
         // console.error, not a logger: this is the Vite dev process itself,
         // whose stdout is what podman ships to journald and Loki.
         console.error('[daedalus] unhandled rejection — kept serving:', reason)
+      })
+    },
+  }
+}
+
+// The process's background work (src/host/background.ts: the build scheduler,
+// the gateway sync, the controller link…) is started once per process, never
+// by a request. server.mjs does it in production; this is the dev server's
+// half, loaded through the SSR environment's runner — the one TanStack Start
+// serves requests with — so the scheduler a request wakes is the one running.
+// Started when the server listens, stopped when it closes.
+function background(): Plugin {
+  return {
+    name: 'daedalus:background',
+    apply: 'serve',
+    configureServer(server) {
+      const http = server.httpServer
+      const ssr = server.environments.ssr
+      if (http === null || ssr === undefined || !isRunnableDevEnvironment(ssr)) return
+      const load = () =>
+        ssr.runner.import<typeof import('./src/host/background')>('/src/host/background.ts')
+      http.once('listening', () => {
+        load()
+          .then((m) => m.start())
+          .catch((e: unknown) => console.error('[daedalus] background work not started:', e))
+      })
+      http.once('close', () => {
+        load()
+          .then((m) => m.stop())
+          .catch(() => undefined)
       })
     },
   }
@@ -133,7 +163,7 @@ export default defineConfig(({ command }) => ({
   },
 
   // Plugin order: Start must run before React. Tailwind is a CSS transform
-  // with no opinion about the others, and the guard transforms nothing, so
-  // both are free to sit first.
-  plugins: [keepServingOnRejection(), tailwindcss(), tanstackStart(), viteReact()],
+  // with no opinion about the others, and the guard and the background hook
+  // transform nothing, so all three are free to sit first.
+  plugins: [keepServingOnRejection(), background(), tailwindcss(), tanstackStart(), viteReact()],
 }))

@@ -29,6 +29,11 @@ globalForDb.daedalusSql = sql
 export const db = drizzle(sql, { schema })
 export { sql }
 
+/** End the pool at shutdown: queries in flight get five seconds, then their connections close. */
+export function closeDb(): Promise<void> {
+  return sql.end({ timeout: 5 })
+}
+
 /** The handle `db.transaction` passes its callback. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 

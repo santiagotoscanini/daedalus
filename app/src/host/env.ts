@@ -21,8 +21,8 @@
 //
 // Read at USE, never cached: a container missing a variable one page needs
 // still serves the other twenty, and tests set `process.env` between calls.
-// `reportEnvOnce()` is the whole-table pass, run once per process from
-// /api/healthz — the first thing gatus and the deploy unit ask a new process.
+// `reportEnvOnce()` is the whole-table pass, run once per process at start
+// (host/background.ts), which a missing required row stops.
 //
 // Two groups are listed and not read here. APP_HOSTNAME_ALIASES and
 // APP_EXTRA_HOSTS are read by vite.config.ts before any of `src` exists. The

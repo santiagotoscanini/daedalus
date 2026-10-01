@@ -422,20 +422,21 @@ export function requestGatewaySync(): void {
   t.unref?.()
 }
 
-/**
- * The five-minute run, started once per process the way the build scheduler
- * is (from /api/healthz, which gatus calls every minute). Idempotent.
- */
-let armedHere = false
+/** The five-minute run, started once per process by host/background.ts. Idempotent. */
 export function ensureGatewaySync(): void {
-  if (armedHere) return
-  armedHere = true
   const s = slot()
-  // An interval an earlier version of this module armed would keep calling
-  // that version's code; it is replaced by this one's.
-  if (s.handle !== null) clearInterval(s.handle as ReturnType<typeof setInterval>)
+  if (s.handle !== null) return
   const handle = setInterval(() => requestGatewaySync(), SYNC_EVERY_MS)
   ;(handle as { unref?: () => void }).unref?.()
   s.handle = handle
   if (s.last === null) requestGatewaySync()
+}
+
+/** Stop the five-minute run and a sync still waiting out its debounce. Idempotent. */
+export function stopGatewaySync(): void {
+  const s = slot()
+  if (s.handle !== null) clearInterval(s.handle as ReturnType<typeof setInterval>)
+  if (s.debounce !== null) clearTimeout(s.debounce as ReturnType<typeof setTimeout>)
+  s.handle = null
+  s.debounce = null
 }

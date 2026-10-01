@@ -102,8 +102,8 @@ export async function buildNow(input: { app: string; actor: string }): Promise<B
     requestedBy: 'operator',
     actor,
   })
-  const { ensureScheduler } = await import('./scheduler')
-  ensureScheduler()
+  const { wakeScheduler } = await import('./scheduler')
+  wakeScheduler()
   console.info(
     `[builds] ${actor} queued ${app}@${sha.slice(0, 7)} as ${enqueued.row.id}` +
       (enqueued.superseded.length > 0 ? `, superseding ${String(enqueued.superseded.length)}` : ''),

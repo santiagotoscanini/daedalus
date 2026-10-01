@@ -159,7 +159,10 @@ const started = performance.now()
 await runMigrations()
 const migrated = performance.now()
 
-const [{ default: app }, files] = await Promise.all([import(SERVER_ENTRY), indexClient()])
+const [{ default: app, startBackground, stopBackground, closeDb }, files] = await Promise.all([
+  import(SERVER_ENTRY),
+  indexClient(),
+])
 
 const server = serve({
   port: process.env.PORT ?? 3000,
@@ -167,7 +170,7 @@ const server = serve({
   hostname: process.env.HOST ?? '0.0.0.0',
   silent: true,
   // Ours, below: srvx's closes the listener and then waits for a process that
-  // never empties its event loop (the Postgres pool, the build scheduler).
+  // never empties its event loop (the Postgres pool, the background work).
   gracefulShutdown: false,
   fetch(request) {
     if (request.method === 'GET' || request.method === 'HEAD') {
@@ -195,21 +198,49 @@ const server = serve({
 
 await server.ready()
 
+// --- 5. the background work -------------------------------------------------
+//
+// The build scheduler, the gateway sync, the controller link and the rest
+// (src/host/background.ts): started once, now that the process serves, and
+// never by a request. A required environment variable that is missing throws
+// here, and the process leaves rather than serve without it.
+try {
+  startBackground()
+} catch (error) {
+  console.error('[daedalus] not starting:', error)
+  process.exit(1)
+}
+
 // Run without `--init`, node is PID 1, where a signal with no handler is
 // ignored and `podman stop` waits out its ten seconds before SIGKILL; under
 // the apps platform's `--init` the default handler would drop in-flight
-// requests instead. Either way: stop accepting, give in-flight requests a
-// moment, then leave — the pool and the scheduler's timers would otherwise
-// hold the process open after the listener closes.
+// requests instead. Either way: stop the background work, stop accepting,
+// let in-flight requests finish, end the pool, then leave. Past eight seconds
+// (podman's SIGKILL comes at ten) it leaves anyway, non-zero, and so does a
+// second signal.
+const FORCE_EXIT_MS = 8_000
 let stopping = false
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
     if (stopping) process.exit(1)
     stopping = true
     console.log(`[daedalus] ${signal} — closing`)
-    const force = setTimeout(() => process.exit(0), 5_000)
+    const force = setTimeout(() => {
+      console.error(`[daedalus] still closing after ${FORCE_EXIT_MS} ms — exiting`)
+      process.exit(1)
+    }, FORCE_EXIT_MS)
     force.unref()
-    server.close().finally(() => process.exit(0))
+    stopBackground()
+    server
+      .close()
+      .then(() => closeDb())
+      .then(
+        () => process.exit(0),
+        (error) => {
+          console.error('[daedalus] did not close cleanly:', error)
+          process.exit(1)
+        },
+      )
   })
 }
 console.log(
