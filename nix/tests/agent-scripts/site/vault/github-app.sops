@@ -1,0 +1,1 @@
+PLACEHOLDER - not ciphertext. Its presence switches the builder on (daedalus-lib.nix haveGithubApp) so the agent-scripts check builds the build agent too; nothing decrypts it.

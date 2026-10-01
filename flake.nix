@@ -213,6 +213,50 @@
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
 
+        # The host agents' scripts, BUILT — the one check that builds anything:
+        # writeShellApplication runs shellcheck over each script mkAgent
+        # assembles from nix/stacks/daedalus/host/*.sh (and the apps deploy
+        # script), and only a build runs it. The scripts are found where a box
+        # finds them, in the Exec lines of the `daedalus-*` and `app-*-deploy`
+        # units of the example host with the builder on (nix/tests/agent-scripts),
+        # and only the scripts are built: the names below never match the agent's
+        # Rust package (a version in its name) or a rendered file (a dot). Their
+        # runtime inputs are nixpkgs' and come from the binary cache.
+        agent-scripts =
+          let
+            inherit (nixpkgs) lib;
+            host = import ./nix/tests/agent-scripts {
+              inherit
+                nixpkgs
+                nixpkgs-unstable
+                sops-nix
+                system
+                ;
+              engine = self;
+            };
+            units = lib.filterAttrs (
+              name: _: lib.hasPrefix "daedalus-" name || builtins.match "app-.*-deploy" name != null
+            ) host.config.systemd.services;
+            execs = lib.concatMap (
+              unit:
+              lib.concatMap (k: lib.toList (unit.serviceConfig.${k} or [ ])) [
+                "ExecStartPre"
+                "ExecStart"
+                "ExecStartPost"
+                "ExecStopPost"
+              ]
+            ) (lib.attrValues units);
+            drvs = lib.unique (lib.concatMap (e: lib.attrNames (builtins.getContext (toString e))) execs);
+            scripts = lib.filter (
+              d: builtins.match "/nix/store/[^-]+-(daedalus-[a-z-]+|app-[a-z0-9-]+-deploy)\\.drv" d != null
+            ) drvs;
+            built = lib.concatMapStrings (d: builtins.appendContext "" { ${d}.outputs = [ "out" ]; }) scripts;
+          in
+          assert
+            lib.length scripts > 30
+            || throw "agent-scripts found only ${toString (lib.length scripts)} scripts";
+          pkgs.runCommand "agent-scripts" { } "${built}touch $out";
+
         # The root helper's verb table (nix/stacks/daedalus/controller.nix,
         # `root`): the example host carries `reboot` and `workspace-clone`
         # with every assertion holding, and a verb whose unit the evaluation

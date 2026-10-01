@@ -8,7 +8,9 @@
 #   app        frozen install, route generation + tsc, biome, vitest, the
 #              production build, and that src/host/schema.ts and drizzle/ agree
 #   nix        `nix flake check` — formatting and lint over every .nix file,
-#              and the test hosts under nix/tests evaluated as whole systems
+#              the test hosts under nix/tests evaluated as whole systems, and
+#              the host agents' scripts built, which shellchecks them
+#   shell      shellcheck over the shell scripts nix never wraps
 #   workflows  actionlint and zizmor over every file in .github/workflows
 #   codeql     CodeQL's JavaScript/TypeScript and Actions queries; findings land
 #              in the Security tab rather than failing the run
@@ -112,7 +114,7 @@ jobs:
   nix:
     name: Nix (format, lint, module shape)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,8 +124,31 @@ jobs:
       # each exported nixosModule is a module, and the flake's `checks`:
       # example-host/ evaluated as a host, its site/ files through the readers
       # (example-host), and that host with every catalog leaf switched on
-      # (all-modules).
+      # (all-modules), and the host agents' scripts built, so shellcheck runs on
+      # each as mkAgent assembles it (agent-scripts).
       - run: nix flake check --print-build-logs
+
+  # The scripts no nix derivation wraps, so nothing else shellchecks them. The
+  # host agents' scripts are the nix job's (agent-scripts): linted one file
+  # at a time, each would miss the names another piece of its agent sets.
+  shell:
+    name: Shell (shellcheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: shellcheck
+        uses: docker://koalaman/shellcheck@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d # v0.11.0
+        with:
+          args: >-
+            docker-entrypoint.sh
+            agent/install.sh agent/e2e-tunnel.sh agent/gate.sh
+            agent/macos/package.sh agent/macos/icons/render.sh
+            session-host/gate.sh
+            release/image-walk.sh
 
   workflows:
     name: Workflows (actionlint, zizmor)
