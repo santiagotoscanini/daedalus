@@ -8,8 +8,9 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { redirect } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminFn, adminOnly, publicFn, readFn } from './fn'
+import { adminFn, adminOnly, plainErrors, publicFn, readFn } from './fn'
 
 // The admin gate's verdict, steered per test: an actor, or the throw.
 const authz = vi.hoisted(() => ({ assertAdmin: vi.fn<() => Promise<string>>() }))
@@ -94,9 +95,14 @@ describe('server functions come from server/fn.ts', () => {
 describe('the builders', () => {
   const chain = (b: { options: { middleware?: readonly unknown[] } }) => b.options.middleware ?? []
 
-  it('adminFn is a POST behind adminOnly, and it runs first', () => {
+  it('adminFn is a POST behind adminOnly, the first link that checks anything', () => {
     expect(adminFn.options.method).toBe('POST')
-    expect(chain(adminFn)[0]).toBe(adminOnly)
+    // plainErrors only wraps: it runs nothing before the gate.
+    expect(chain(adminFn).slice(0, 2)).toEqual([plainErrors, adminOnly])
+  })
+
+  it('every builder hands the browser plain errors, around everything else', () => {
+    for (const b of [readFn, adminFn, publicFn]) expect(chain(b)[0]).toBe(plainErrors)
   })
 
   it('readFn is a GET with no check added', () => {
@@ -167,5 +173,60 @@ describe('adminOnly', () => {
     await expect(call(next)).rejects.toThrow('not an admin')
     expect(next).not.toHaveBeenCalled()
     expect(info).not.toHaveBeenCalled()
+  })
+})
+
+describe('plainErrors', () => {
+  type Next = () => Promise<unknown>
+  const server = (
+    plainErrors as unknown as { options: { server: (o: unknown) => Promise<unknown> } }
+  ).options.server
+  const call = (next: Next) => server({ next, serverFnMeta: { name: 'fetchThing' } })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('hands the browser the first line, redacted, and logs the original here', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const original = Object.assign(
+      new Error(
+        'git push failed\nremote: https://x-access-token:ghs_abcdefghijklmnopqrstuvwxyz0123456789@github.com',
+      ),
+      { cause: new Error('/home/operator/.config/secret'), stdout: 'Bearer abc.def.ghi' },
+    )
+
+    const thrown = await call(async () => {
+      throw original
+    }).catch((e: unknown) => e)
+
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toBe('git push failed')
+    // Nothing else of the original is left to serialise.
+    expect((thrown as Error).cause).toBeUndefined()
+    expect(Object.keys(thrown as object)).toEqual([])
+    expect((thrown as Error).stack).toBe('Error: git push failed')
+    expect(logged).toHaveBeenCalledWith('[server-fn] fetchThing failed:', original)
+  })
+
+  it('redacts a secret in the first line', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const thrown = await call(async () => {
+      throw new Error('token ghp_abcdefghijklmnopqrstuvwxyz0123456789 was refused')
+    }).catch((e: unknown) => e)
+    expect((thrown as Error).message).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz0123456789')
+  })
+
+  it('lets a redirect through untouched', async () => {
+    const to = redirect({ to: '/apps' })
+    await expect(
+      call(async () => {
+        throw to
+      }),
+    ).rejects.toBe(to)
+  })
+
+  it('passes a result through', async () => {
+    expect(await call(async () => 'ok')).toBe('ok')
   })
 })

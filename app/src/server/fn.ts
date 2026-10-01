@@ -1,5 +1,7 @@
+import { isNotFound, isRedirect } from '@tanstack/react-router'
 import { createMiddleware, createServerFn } from '@tanstack/react-start'
 import type { Ctx } from '../core/ctx'
+import { errorText } from '../lib/redact'
 
 // The builders every server function in this directory starts from.
 //
@@ -26,6 +28,32 @@ import type { Ctx } from '../core/ctx'
 // erases from the browser's copy of the file. A static value import of one
 // would land in the client chunk of every route that uses the function;
 // host/boundary.test.ts refuses it.
+
+/**
+ * What a thrown error tells the browser: its first line, redacted and capped
+ * (lib/redact.ts `errorText`), in a plain Error. The original — its stack, its
+ * cause, any property a library hung on it — is serialised whole otherwise,
+ * and those carry paths, upstream bodies and the words of subprocesses. So
+ * the original is logged here, server-side, and only the sentence crosses.
+ *
+ * First in every chain, so it wraps the admin gate's refusal and the
+ * validator's too. A redirect or a not-found is the router's control flow,
+ * not an error, and passes through untouched.
+ */
+export const plainErrors = createMiddleware({ type: 'function' }).server(
+  async ({ next, serverFnMeta }) => {
+    try {
+      return await next()
+    } catch (e) {
+      if (isRedirect(e) || isNotFound(e)) throw e
+      console.error(`[server-fn] ${serverFnMeta.name} failed:`, e)
+      const plain = new Error(errorText(e))
+      // Its own stack would name this file and the framework's; the sentence is all.
+      plain.stack = `Error: ${plain.message}`
+      throw plain
+    }
+  },
+)
 
 /**
  * `context.ctx()`: the request's Ctx (core/ctx.ts), built on first use and
@@ -65,10 +93,14 @@ export const adminOnly = createMiddleware({ type: 'function' }).server(
 )
 
 /** A read (GET). No check added: reads are open to anyone past the proxy's gate. */
-export const readFn = createServerFn().middleware([withCtx])
+export const readFn = createServerFn().middleware([plainErrors, withCtx])
 
 /** A mutation (POST), refused unless `assertAdmin()` passes — before the validator runs. */
-export const adminFn = createServerFn({ method: 'POST' }).middleware([adminOnly, withCtx])
+export const adminFn = createServerFn({ method: 'POST' }).middleware([
+  plainErrors,
+  adminOnly,
+  withCtx,
+])
 
 /**
  * A POST with NO admin check. Only for a door a caller must pass through
@@ -76,4 +108,4 @@ export const adminFn = createServerFn({ method: 'POST' }).middleware([adminOnly,
  * comment saying why, and `server/fn.test.ts` holds the list — adding one
  * means editing that list in the same review.
  */
-export const publicFn = createServerFn({ method: 'POST' }).middleware([withCtx])
+export const publicFn = createServerFn({ method: 'POST' }).middleware([plainErrors, withCtx])
