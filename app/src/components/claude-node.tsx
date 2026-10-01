@@ -227,6 +227,9 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                       {c.detail !== null && (
                         <span className="text-(--text-muted)"> — {c.detail}</span>
                       )}
+                      {c.lastLine !== null && (
+                        <span className="text-(--text-muted)"> · last line: {c.lastLine}</span>
+                      )}
                     </span>
                   ),
                 },

@@ -251,6 +251,11 @@ pub struct Report {
     pub state: String,
     /// One line more, when the state has a reason.
     pub detail: Option<String>,
+    /// What the server printed last, while it waits to be started again
+    /// (`waiting`): its own words, which can name a path, so the summary
+    /// leaves them out. Absent from the wire when there is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_line: Option<String>,
     pub pid: Option<u32>,
     pub started_at: Option<String>,
     /// Starts after the first, since the session came up.
@@ -296,8 +301,7 @@ pub struct Recovered {
 #[serde(default)]
 pub struct Summary {
     pub state: String,
-    /// The state's reason, minus anything the server printed (a last log
-    /// line can name a path).
+    /// The state's reason (never the server's own words: `last_line`).
     pub detail: Option<String>,
     pub cli_version: Option<String>,
     pub server_version: Option<String>,
@@ -312,10 +316,7 @@ impl Report {
     pub fn summary(&self) -> Summary {
         Summary {
             state: self.state.clone(),
-            detail: self
-                .detail
-                .as_deref()
-                .map(|d| d.split(" · last line:").next().unwrap_or(d).to_string()),
+            detail: self.detail.clone(),
             cli_version: self.cli_version.clone(),
             server_version: self.server.version.clone(),
             sessions: self.sessions.iter().filter(|s| s.alive).count(),

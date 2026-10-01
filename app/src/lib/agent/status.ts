@@ -77,6 +77,8 @@ export type NodeClaude = {
   /** not-installed | off | starting | running | waiting | stopped */
   state: string
   detail: string | null
+  /** What the server printed last, while it waits to start again. */
+  lastLine: string | null
   pid: number | null
   startedAt: string | null
   restarts: number
@@ -280,6 +282,7 @@ const claude = reads<Report>()(
     cli_version: nstr,
     state: optional(str, 'stopped'),
     detail: nstr,
+    last_line: nstr,
     pid: nint,
     started_at: nstr,
     restarts: optional(int, 0),
@@ -369,6 +372,7 @@ function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
     cliVersion: c.cli_version,
     state: c.state,
     detail: c.detail,
+    lastLine: c.last_line,
     pid: c.pid,
     startedAt: c.started_at,
     restarts: c.restarts,

@@ -38,7 +38,13 @@ state: string,
 /**
  * One line more, when the state has a reason.
  */
-detail: string | null, pid: number | null, started_at: string | null, 
+detail: string | null, 
+/**
+ * What the server printed last, while it waits to be started again
+ * (`waiting`): its own words, which can name a path, so the summary
+ * leaves them out. Absent from the wire when there is none.
+ */
+last_line: string | null, pid: number | null, started_at: string | null, 
 /**
  * Starts after the first, since the session came up.
  */

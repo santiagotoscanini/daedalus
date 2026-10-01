@@ -718,6 +718,11 @@ impl Supervisor {
             None => (Vec::new(), Credentials::default(), Settings::default()),
         };
         let (state, detail) = self.state();
+        // While it waits to start again, what it said last is the why.
+        let last_line = (state == "waiting")
+            .then(|| self.recent_lines.back().cloned())
+            .flatten()
+            .filter(|l| !l.is_empty());
         let server = match &self.running {
             Some(r) => r.banner.clone(),
             None => self.last_banner.clone(),
@@ -729,6 +734,7 @@ impl Supervisor {
             last_update: self.last_update.clone(),
             state,
             detail,
+            last_line,
             pid: self.server_pid(),
             started_at: self.running.as_ref().map(|r| r.started_at.clone()),
             restarts: self.restarts,
@@ -775,13 +781,10 @@ impl Supervisor {
         }
         if let Some(at) = self.next_start {
             let left = at.saturating_duration_since(self.now());
-            let last = self.recent_lines.back().cloned().unwrap_or_default();
-            let detail = if last.is_empty() {
-                format!("retrying in {}", short_duration(left))
-            } else {
-                format!("retrying in {} · last line: {last}", short_duration(left))
-            };
-            return ("waiting".into(), Some(detail));
+            return (
+                "waiting".into(),
+                Some(format!("retrying in {}", short_duration(left))),
+            );
         }
         ("stopped".into(), self.last_exit.clone())
     }
@@ -1006,11 +1009,25 @@ mod tests {
         let (mut sup, jobs, now) = rig("backoff", Ok(JobState::Gone));
         sup.tick();
         assert_eq!(jobs.starts(), 1, "the first tick starts it");
-        // It dies within a second: a failure, five seconds doubled.
+        // It dies within a second, saying why: a failure, five seconds
+        // doubled. Its words are the report's `last_line`, never the
+        // summary's.
+        {
+            use std::io::Write;
+            let mut log = OpenOptions::new().append(true).open(&sup.log_path).unwrap();
+            writeln!(log, "Error: no login in /home/ana/.claude").unwrap();
+        }
         jobs.set(Ok(JobState::Exited("1".into())));
         advance(&now, 2);
         sup.tick();
         assert!(sup.server_pid().is_none() && sup.failures == 1);
+        let r = sup.report();
+        assert_eq!(r.state, "waiting");
+        assert_eq!(
+            r.last_line.as_deref(),
+            Some("Error: no login in /home/ana/.claude")
+        );
+        assert!(!r.summary().detail.unwrap().contains("/home/ana"));
         advance(&now, 9);
         sup.tick();
         assert_eq!(jobs.starts(), 1, "still backing off");

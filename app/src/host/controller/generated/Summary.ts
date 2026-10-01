@@ -8,8 +8,7 @@
  */
 export type Summary = { state: string, 
 /**
- * The state's reason, minus anything the server printed (a last log
- * line can name a path).
+ * The state's reason (never the server's own words: `last_line`).
  */
 detail: string | null, cli_version: string | null, server_version: string | null, 
 /**

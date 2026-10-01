@@ -15,6 +15,7 @@ const report: NodeClaude = {
   lastUpdate: null,
   state: 'running',
   detail: null,
+  lastLine: null,
   pid: 4242,
   startedAt: '2026-09-28T01:00:00Z',
   restarts: 1,
