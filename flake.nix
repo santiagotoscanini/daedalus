@@ -132,6 +132,20 @@
         "verdaccio/verdaccio.nix"
         "wg-easy/wg-easy.nix"
       ];
+
+      # A test host under nix/tests/, given what any host gives the engine:
+      # sops-nix beside it and `nixpkgs-unstable` as a specialArg.
+      mkTestHost =
+        dir:
+        import dir {
+          inherit
+            nixpkgs
+            nixpkgs-unstable
+            sops-nix
+            system
+            ;
+          engine = self;
+        };
     in
     {
       # `nix/` as a path, for a host that still keeps stacks of its own and
@@ -165,15 +179,7 @@
         example-host =
           let
             inherit (nixpkgs) lib;
-            host = import ./nix/tests/example-host {
-              inherit
-                nixpkgs
-                nixpkgs-unstable
-                sops-nix
-                system
-                ;
-              engine = self;
-            };
+            host = mkTestHost ./nix/tests/example-host;
             registryLib = import ./nix/platform/lib/registry-lib.nix { inherit lib; };
             appsDoc = builtins.fromJSON (builtins.readFile ./example-host/site/apps.json);
             apps =
@@ -195,17 +201,20 @@
         # the whole catalog evaluates on one host (nix/tests/all-modules).
         all-modules =
           let
-            host = import ./nix/tests/all-modules {
-              inherit
-                nixpkgs
-                nixpkgs-unstable
-                sops-nix
-                system
-                ;
-              engine = self;
-            };
+            host = mkTestHost ./nix/tests/all-modules;
           in
           pkgs.runCommand "all-modules-evaluate" { } (
+            builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
+          );
+
+        # The example host with the catalog off but for what the control plane
+        # needs (nix/tests/daedalus-minimal): the control plane and the
+        # platform evaluate without the rest of the spine.
+        daedalus-minimal =
+          let
+            host = mkTestHost ./nix/tests/daedalus-minimal;
+          in
+          pkgs.runCommand "daedalus-minimal-evaluates" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
 
@@ -221,15 +230,7 @@
         agent-scripts =
           let
             inherit (nixpkgs) lib;
-            host = import ./nix/tests/agent-scripts {
-              inherit
-                nixpkgs
-                nixpkgs-unstable
-                sops-nix
-                system
-                ;
-              engine = self;
-            };
+            host = mkTestHost ./nix/tests/agent-scripts;
             units = lib.filterAttrs (
               name: _: lib.hasPrefix "daedalus-" name || builtins.match "app-.*-deploy" name != null
             ) host.config.systemd.services;
@@ -264,15 +265,7 @@
         root-verbs =
           let
             inherit (nixpkgs) lib;
-            host = import ./nix/tests/example-host {
-              inherit
-                nixpkgs
-                nixpkgs-unstable
-                sops-nix
-                system
-                ;
-              engine = self;
-            };
+            host = mkTestHost ./nix/tests/example-host;
             failing =
               extra:
               map (a: a.message) (
