@@ -6,4 +6,9 @@
  * The helper's table is the authority; this side checks only the shape of
  * the words before a connection is spent.
  */
-export type RootRunParams = { verb: string, selectors: { [key in string]: string }, payload?: string, };
+export type RootRunParams = { verb: string, selectors: { [key in string]: string }, payload?: string, 
+/**
+ * Answer once the unit has started rather than when it has finished;
+ * its lines and outcome are then `root.follow`'s.
+ */
+detach?: boolean, };

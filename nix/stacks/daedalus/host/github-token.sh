@@ -34,9 +34,9 @@
 # Three triggers, one unit: a 30-minute timer (a token lives 60, so a reader
 # always holds one with 25+ minutes left), the app asking through the root
 # helper (its `github-token` verb, daedalus-github.nix), and sops-nix
-# restarting the unit when the key rotates. The helper reads the last line:
-# `refused: <reason>` when no token was minted and the unit still exits 0
-# (throttled, GitHub down, not installed), anything else a mint.
+# restarting the unit when the key rotates. The helper reads its outcome
+# entry (host/lib.sh `outcome`): `refused` when no token was minted and the
+# unit still exits 0 (throttled, GitHub down, not installed), `done` a mint.
 #
 # ── failure policy ────────────────────────────────────────────────────────
 #
@@ -169,13 +169,6 @@ publish_failure() {
   fi
 }
 
-# No token minted, and the unit exits 0: the last line is the helper's
-# `refused: <reason>` (the header).
-refuse() {
-  echo "refused: $1"
-  exit 0
-}
-
 github_error() {
   echo "GitHub: $1" >&2
   publish_failure "$1"
@@ -229,8 +222,8 @@ if ! gh_mint "$GH_TMP/permissions.json"; then
 fi
 
 publish_ok
-# The last line, and the helper's `done` detail. Not an exit: when a script's
+# The helper's `done` detail. Not an exit: when a script's
 # LAST command always exits, ShellCheck 0.11 reports every function it cannot
 # see being called (lib.sh's op_* run through as_operator_fn, gh_cleanup
 # through the trap) as SC2329, and writeShellApplication fails the build on it.
-echo "minted a token for installation $(jq -r '.id' "$GH_TMP/installation.json") on $(jq -r '.account.login' "$GH_TMP/installation.json"), expiring $(jq -r '.expires_at' "$GH_TMP/token.json")"
+verb_done "minted a token for installation $(jq -r '.id' "$GH_TMP/installation.json") on $(jq -r '.account.login' "$GH_TMP/installation.json"), expiring $(jq -r '.expires_at' "$GH_TMP/token.json")"

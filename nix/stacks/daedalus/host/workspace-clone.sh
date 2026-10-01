@@ -19,15 +19,10 @@
 # only offers repos it actually lists.
 #
 # Every refusal (a malformed slug, a directory collision, a repo the key
-# cannot reach) is exit 0 with a last line `refused: <reason>`, the helper's
-# word for it. Only the agent being unable to work at all exits 1.
+# cannot reach) is `refuse` (host/lib.sh), exit 0. Only the agent being
+# unable to work at all exits 1.
 
 set -euo pipefail
-
-refuse() {
-  echo "refused: $1"
-  exit 0
-}
 
 REQ_JSON="$(take_request)" || exit 1
 REPO="$(jq -r '.selectors.repo // ""' <<<"$REQ_JSON")"
@@ -69,7 +64,7 @@ if [ -e "$DEST" ]; then
   publish_workspaces
   OUTCOME="$(jq -r '.result + (if (.detail // "") == "" then "" else " — " + .detail end)' \
     "$OUT_DIR/.state/$NAME_PART" 2>/dev/null || echo ok)"
-  echo "already at $DEST — $OUTCOME"
+  verb_done "already at $DEST — $OUTCOME"
   exit 0
 fi
 
@@ -96,4 +91,4 @@ mv -T -- "$TMP" "$DEST" || refuse "$DEST appeared while cloning — the clone is
 jq -n --arg at "$(date -Is)" '{result: "ok", detail: "cloned", at: $at}' \
   >"$OUT_DIR/.state/$NAME_PART"
 publish_workspaces
-echo "cloned $REPO into $DEST"
+verb_done "cloned $REPO into $DEST"

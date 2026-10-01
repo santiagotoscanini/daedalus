@@ -499,6 +499,11 @@ pub struct RootRun {
     #[serde(default)]
     #[cfg_attr(test, ts(optional))]
     pub payload: Option<String>,
+    /// Answer once the unit has started rather than when it has finished;
+    /// its lines and outcome are then `root.follow`'s.
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub detach: Option<bool>,
 }
 
 /// Never the payload, whatever prints the parameters.
@@ -506,6 +511,7 @@ impl std::fmt::Debug for RootRun {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RootRun")
             .field("verb", &self.verb)
+            .field("detach", &self.detach)
             .field("selectors", &self.selectors)
             .field(
                 "payload",
@@ -519,17 +525,97 @@ impl std::fmt::Debug for RootRun {
 }
 
 /// `root.run`'s answer: how the verb ended, with the run's id (its
-/// `root.progress` events carry it) and, for `status`, every verb.
+/// `root.progress` events carry it, and `root.follow` takes it) and, for
+/// `status`, every verb. `outcome` is null only for a `detach` run that
+/// started and goes on.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RootRunOk {
     pub run: String,
     pub verb: String,
-    pub outcome: crate::root::Outcome,
+    pub outcome: Option<crate::root::Outcome>,
     pub detail: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, ts(optional))]
     pub verbs: Option<Vec<crate::root::VerbState>>,
+}
+
+/// `root.follow`'s parameters: a run, and the last line the caller has.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "RootFollowParams"))]
+pub struct RootFollow {
+    pub run: String,
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub after: Option<u64>,
+}
+
+/// A run the controller holds (root/runs.rs), without its lines. Times are
+/// RFC 3339; `outcome` is null while it runs.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RootRunSummary {
+    pub run: String,
+    pub verb: String,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+    /// The helper started the verb's unit.
+    pub started: bool,
+    pub outcome: Option<crate::root::Outcome>,
+    pub detail: String,
+}
+
+impl From<crate::root::runs::Summary> for RootRunSummary {
+    fn from(s: crate::root::runs::Summary) -> Self {
+        Self {
+            run: s.run,
+            verb: s.verb,
+            started_at: crate::state::rfc3339_of(s.started_at),
+            finished_at: s.finished_at.map(crate::state::rfc3339_of),
+            started: s.started,
+            outcome: s.outcome,
+            detail: s.detail,
+        }
+    }
+}
+
+/// One line a run's unit wrote, numbered from 1.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RootLine {
+    pub seq: u64,
+    pub line: String,
+}
+
+/// `root.follow`'s answer: the run, its lines past `after` (at most a page;
+/// `more` when others wait), `next` to ask from, and `dropped` when lines
+/// past `after` were already forgotten.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RootFollowOk {
+    pub run: RootRunSummary,
+    pub lines: Vec<RootLine>,
+    pub next: u64,
+    pub more: bool,
+    pub dropped: bool,
+}
+
+/// `root.runs`'s parameters: one verb.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "RootRunsParams"))]
+pub struct RootRuns {
+    pub verb: String,
+}
+
+/// `root.runs`'s answer: the verb's runs the controller holds, newest first.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RootRunsOk {
+    pub runs: Vec<RootRunSummary>,
 }
 
 /// `root.progress`'s payload: one line the verb's unit wrote.

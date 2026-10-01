@@ -13,8 +13,9 @@ patterns: { [key in string]: string },
  */
 payload_max: number | null, 
 /**
- * The unit's `ActiveState`; null for a template (no one instance) or
- * when systemd could not be asked.
+ * The unit's `ActiveState` — a template's is `activating` while an
+ * instance runs, else `inactive`; null when systemd could not be asked
+ * or the unit has a selector in its name.
  */
 active_state: string | null, 
 /**

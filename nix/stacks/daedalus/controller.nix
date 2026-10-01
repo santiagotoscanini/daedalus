@@ -224,9 +224,13 @@
 #   running      `systemctl start <unit>`, so the work is the unit's and
 #                survives a switch restarting the helper or the controller; its
 #                journal lines stream back; a failed start job is `failed`,
-#                else `done` — or `refused` when the unit's last line is
-#                `refused: <reason>` (it exits 0, so no failed unit). Not an
-#                exit status: systemd forgets a oneshot's once it is inactive.
+#                else what the unit's outcome entry says (host/lib.sh
+#                `outcome`: `done`, or `refused` with the unit exiting 0, so
+#                no failed unit), matched by its invocation and never by a
+#                line's text. Not an exit status: systemd forgets a oneshot's
+#                once it is inactive. The controller keeps each run's lines
+#                and outcome for an hour (`root.follow`), so a long verb is
+#                asked with `detach` and answered once it starts.
 #                A unit already running is refused, never joined: every verb
 #                holds a lock in <rootRunDir> (its unit's, or its template's)
 #                until its answer, so two requests cannot both start it and
@@ -581,7 +585,7 @@ in
           payloadMax = lib.mkOption {
             type = lib.types.nullOr lib.types.ints.positive;
             default = null;
-            description = "The largest payload the verb takes, in bytes (at most 65536), delivered in its run file; null for none.";
+            description = "The largest payload the verb takes, in bytes (at most 262144), delivered in its run file; null for none.";
           };
         };
       }

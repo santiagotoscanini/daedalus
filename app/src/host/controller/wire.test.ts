@@ -18,6 +18,9 @@ import {
   providerModelSent,
   queued,
   requestLine,
+  rootFollowOk,
+  rootRunOk,
+  rootRunsOk,
   santreeStatus,
   sessionQueued,
   setDesiredOk,
@@ -604,5 +607,52 @@ describe('a machine asking for its settings (nodes.policy_request)', () => {
     no({ id })
     no(null)
     expect(nodePolicyRequest('nodes.left', { id, changes: { awake_hold: false } })).toBeNull()
+  })
+})
+
+describe('the root helper’s answers', () => {
+  const summary = {
+    run: 'a1b2c3d4e5f60718',
+    verb: 'build',
+    started_at: '2026-10-01T10:00:00Z',
+    finished_at: null,
+    started: true,
+    outcome: null,
+    detail: '',
+  }
+  it('a detached run answers with no outcome yet', () => {
+    expect(
+      rootRunOk(
+        ok('{"id":3,"ok":{"run":"a1b2c3d4e5f60718","verb":"build","outcome":null,"detail":""}}'),
+      ),
+    ).toEqual({ run: 'a1b2c3d4e5f60718', verb: 'build', outcome: null, detail: '', verbs: [] })
+  })
+  it('follows a run from a line, and lists a verb’s runs', () => {
+    expect(
+      rootFollowOk({
+        run: summary,
+        lines: [{ seq: 4, line: 'cloning' }],
+        next: 4,
+        more: false,
+        dropped: true,
+      }),
+    ).toEqual({
+      run: {
+        run: 'a1b2c3d4e5f60718',
+        verb: 'build',
+        startedAt: '2026-10-01T10:00:00Z',
+        finishedAt: null,
+        started: true,
+        outcome: null,
+        detail: '',
+      },
+      lines: [{ seq: 4, line: 'cloning' }],
+      next: 4,
+      more: false,
+      dropped: true,
+    })
+    const done = { ...summary, outcome: 'refused', detail: 'busy' }
+    expect(rootRunsOk({ runs: [done] })[0]).toMatchObject({ outcome: 'refused', detail: 'busy' })
+    expect(() => rootRunsOk({ runs: [{ ...summary, outcome: 'maybe' }] })).toThrow()
   })
 })

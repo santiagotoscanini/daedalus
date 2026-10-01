@@ -1,6 +1,6 @@
 # Restart the box: the root helper's `reboot` verb (stacks/daedalus
 # controller.nix, `root`). The helper starts this unit and streams what it
-# prints; the last line is the outcome's detail.
+# prints; its outcome entry (host/lib.sh `outcome`) is the answer.
 #
 # There is deliberately no poweroff, halt or shutdown here, nor a verb for
 # one in the helper's table: the operator's rule is that this machine is never
@@ -8,17 +8,11 @@
 # browser is usually not in the house. A verb that does not exist is reachable
 # neither by a mistake in the app nor by a compromised controller.
 #
-# Exit 0 with a last line `rebooting` = the reboot is queued (`done`); a last
-# line `refused: <reason>`, still exit 0 = refused (so a refusal is not a
-# failed unit); a non-zero exit = the agent itself broke. No replay guard:
+# `done` = the reboot is queued; `refuse` = refused, still exit 0 (so a
+# refusal is not a failed unit); a non-zero exit = the agent itself broke. No replay guard:
 # nothing starts this unit but the helper — no path unit re-fires it at boot.
 
 set -euo pipefail
-
-refuse() {
-  echo "refused: $1"
-  exit 0
-}
 
 # A reboot in the middle of a `nixos-rebuild switch` is the one way this button
 # can leave the box worse than it found it: the bootloader entry, the store
@@ -44,7 +38,7 @@ if ! flock -n 9; then
   refuse "another rebuild holds $LOCKFILE (flake-autoupgrade, or a manual nixos-rebuild) — try again when it finishes"
 fi
 
-echo "rebooting"
+verb_done "rebooting"
 sync
 
 # --no-block: this agent is itself a unit, and the shutdown transaction it asks

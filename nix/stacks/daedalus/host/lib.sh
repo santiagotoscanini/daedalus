@@ -375,3 +375,38 @@ take_request() {
   fi
   cat -- "$f"
 }
+
+# ── how a root verb's run ended ───────────────────────────────────────────
+#
+# A root verb's unit tells the helper how its run ended in ONE journal entry
+# (agent src/root/mod.rs, "Running a verb"): DAEDALUS_OUTCOME (`done` or
+# `refused`), DAEDALUS_DETAIL (the words, on one line) and DAEDALUS_INVOCATION
+# ($INVOCATION_ID, which systemd sets for every unit). The helper finds it by
+# that invocation, never by what a line says, so nothing a unit prints — a
+# git error, a log line from a repository — can pass for a refusal. The words
+# are printed too, for the unit's own journal and the page's progress.
+#
+# `verb_done` and `refuse` are how a script says it. A refusal is not a
+# failure: the unit declined, exits 0, and leaves no failed unit and no mail.
+# A unit that exits 0 without an outcome entry is `done` with its last line;
+# a non-zero exit is `failed`, whatever it said. Needs `logger` (util-linux)
+# on PATH. Never fails: an entry that could not be written leaves the helper
+# to read the run by its last line.
+outcome() {
+  local kind="$1" words="${2-}"
+  printf '%s\n' "$words"
+  printf 'MESSAGE=outcome: %s\nDAEDALUS_OUTCOME=%s\nDAEDALUS_DETAIL=%s\nDAEDALUS_INVOCATION=%s\n' \
+    "$kind" "$kind" "$(printf '%s' "$words" | tr '\n\r' '  ' | head -c 2000)" "${INVOCATION_ID:-}" |
+    logger --journald 2>/dev/null || true
+}
+
+# The run did what it was asked; $1 says what. The script goes on.
+verb_done() {
+  outcome 'done' "$1"
+}
+
+# Decline the run with reason $1 and end it: exit 0, `refused`.
+refuse() {
+  outcome refused "$1"
+  exit 0
+}

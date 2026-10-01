@@ -5,9 +5,9 @@ import type { RootOutcome } from './controller/wire'
 // src/root/, nix/stacks/daedalus/controller.nix `root`), asked through the
 // controller's `root.run` — the app's one door to root. The helper starts the
 // verb's existing unit and answers when it has finished: `done` with the
-// unit's last line, `refused` with its reason (the unit said `refused: …`, or
-// it was already running), `failed` when it failed. A call that could not be
-// made at all (no controller, a timeout) is `failed` with why.
+// unit's words, `refused` with its reason (the unit refused — host/lib.sh
+// `refuse` — or it was already running), `failed` when it failed. A call that
+// could not be made at all (no controller, a timeout) is `failed` with why.
 //
 // There is no status file to poll: the answer IS the outcome, and while the
 // verb runs its lines go out as `root.progress` events.
@@ -23,7 +23,8 @@ export async function runRoot(
 ): Promise<RootAnswer> {
   try {
     const r = await ctx.controller.rootRun(verb, selectors, waitMs, payload)
-    return { outcome: r.outcome, detail: r.detail }
+    // Null only for a detached run, which this call never asks for.
+    return { outcome: r.outcome ?? 'failed', detail: r.detail }
   } catch (e) {
     return { outcome: 'failed', detail: e instanceof Error ? e.message : String(e) }
   }

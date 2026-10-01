@@ -192,6 +192,30 @@ echo 'as_operator "$BASH" -c "echo ran"; as_operator false || echo "status kept"
 out="$(SETPRIV="$T/bin/setpriv-refuses" bash "$T/as-op.sh" 2>&1)" || true
 check "the command runs, setpriv does not" '[ "$out" = "$(printf "ran\nstatus kept")" ]'
 
+# ── 5. a refusal is one structured journal entry, and exit 0 ──────────────
+# The root helper reads a run's outcome from DAEDALUS_OUTCOME, matched by
+# the unit's invocation (agent src/root/mod.rs): never from a line's text.
+echo "# outcome: refuse"
+stub logger <<'EOF'
+cat >>"$LOGGED"
+EOF
+export LOGGED="$T/logged"
+: >"$LOGGED"
+agent "$T/refuse.sh" 'set -euo pipefail' lib.sh
+printf '%s\n' 'refuse "an apply is running' 'twice over"' 'echo "not reached"' >>"$T/refuse.sh"
+rc=0
+out="$(INVOCATION_ID=inv1 bash "$T/refuse.sh" 2>&1)" || rc=$?
+check "a refusal exits 0" '[ "$rc" -eq 0 ]'
+check "and stops the run" '! grep -q "not reached" <<<"$out"'
+check "the entry says refused, for this invocation, on one line" \
+  'grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && grep -qx "DAEDALUS_INVOCATION=inv1" "$LOGGED" && grep -qx "DAEDALUS_DETAIL=an apply is running twice over" "$LOGGED"'
+: >"$LOGGED"
+agent "$T/done.sh" 'set -euo pipefail' lib.sh
+echo 'verb_done "rebooting"; echo after' >>"$T/done.sh"
+out="$(INVOCATION_ID=inv2 bash "$T/done.sh" 2>&1)"
+check "done goes on, and says done" \
+  '[ "$out" = "$(printf "rebooting\nafter")" ] && grep -qx "DAEDALUS_OUTCOME=done" "$LOGGED"'
+
 if [ "$fails" -ne 0 ]; then
   cat "$T/apply.out"
   echo "$fails check(s) failed"

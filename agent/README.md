@@ -342,13 +342,20 @@ The table is nix's (`fleet.daedalus.rootVerbs` in
 and its selectors, each a fixed list of values spliced into the unit name
 as `{name}`; nothing from the caller becomes a path, a flag or a unit name.
 A verb runs as `systemctl start <unit>`, so the work is the unit's and
-survives a restart of its caller; the unit's journal lines stream back as
+survives a restart of its caller; `{"t":"started","unit":…}` says the start
+was asked for, the unit's journal lines stream back as
 `{"t":"progress","line":…}`, then one `{"t":"result","outcome":…,
-"detail":…}`: `failed` when the start job failed, else `done` — or
-`refused` when the unit's last line is `refused: <reason>` (it exits 0, so
-no failed unit; systemd forgets a oneshot's exit status once it is
-inactive, so the journal carries the word). A unit
-already running is refused, never joined. A request the table does not
+"detail":…}`: `failed` when the start job failed, else what the unit's
+outcome entry says — one journal entry with `DAEDALUS_OUTCOME` `done` or
+`refused`, `DAEDALUS_DETAIL` and `DAEDALUS_INVOCATION`, written by
+`nix/stacks/daedalus/host/lib.sh` `outcome` and matched by its invocation,
+never by a line's text (a refusal exits 0, so no failed unit; systemd
+forgets a oneshot's exit status once it is inactive, so the journal
+carries the word) — and `done` with the last line when it wrote none. A
+unit already running is refused, never joined. The controller keeps every
+run's lines and outcome for an hour (`src/root/runs.rs`): `root.run` with
+`detach` answers once the unit starts, and `root.follow` / `root.runs` read
+the rest. A request the table does not
 allow gets `{"t":"error","code":…,"msg":…}`. `status` is the helper's own
 read: every verb and its unit's state. Only the controller connects: the
 app asks `root.run`.

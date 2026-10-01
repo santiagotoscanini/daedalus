@@ -69,12 +69,17 @@
 //! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
 //! | `controller.rotate`| `ControllerInfo` with its `rotation`: a new controller key, the old one retired after `{grace_secs?}` (link/rotation.rs) | the controller |
-//! | `root.run`         | `RootRunOk`: one root verb `{verb, selectors?}` run by the root helper to its end — `done`, `refused` or `failed` with a detail; `status` lists the verbs (root/) | `root` |
+//! | `root.run`         | `RootRunOk`: one root verb `{verb, selectors?, payload?, detach?}` run by the root helper to its end — `done`, `refused` or `failed` with a detail; with `detach`, answered once its unit has started (outcome null); `status` lists the verbs (root/) | `root` |
+//! | `root.follow`      | `RootFollowOk`: a run's lines past `{run, after?}` and how it stands, from the controller's run store (root/runs.rs); `not_found` for a run it does not hold | `root` |
+//! | `root.runs`        | `RootRunsOk`: the runs of `{verb}` the store holds, newest first | `root` |
 //! | `santree.status` | `SantreeStatus`: the session host from its status file — `running`, `stale`, `stopped` or `missing`, its version, whether a restart would apply a newer build, its live PTYs and connections by machine, and why the controller cannot read it or write its allow-list (session_host.rs); `unavailable` where the box has none | — |
 //!
 //! `root.run` answers when the verb's unit has finished, which can be
-//! minutes: a client gives it a timeout of its own. It is the only door to
-//! the root helper — the app never connects to that socket.
+//! minutes: a client gives it a timeout of its own, or asks `detach` and
+//! reads the rest with `root.follow`, so a long verb holds neither a
+//! request slot nor a client's wait. Every run's lines and outcome are kept
+//! for an hour after it ends, whoever asked (root/runs.rs). It is the only
+//! door to the root helper — the app never connects to that socket.
 //!
 //! The `nodes.*` methods read and steer the machines connected to the
 //! controller (link/controller.rs). Their selector is a node id — sixteen
@@ -156,6 +161,9 @@ pub const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// The longest `root.run` waits for any one line from the root helper: a
 /// backstop only — the helper answers within its verb's own timeout.
 pub const ROOT_SILENCE: Duration = Duration::from_secs(2 * 60 * 60);
+/// How long a `detach` run may take to start before `root.run` stops
+/// waiting for it (the run goes on, and `root.follow` reads it).
+pub const ROOT_DETACH_WAIT: Duration = Duration::from_secs(30);
 
 /// What the socket enforces before a connection reaches `conn` (the os
 /// layer applies it; `Limits::of` is the service's).
@@ -255,6 +263,8 @@ pub struct Api {
     capabilities: Vec<&'static str>,
     /// The root helper's socket, where `root` is offered.
     root_socket: Option<std::path::PathBuf>,
+    /// Every root run this controller asked for, while it keeps them.
+    runs: Arc<crate::root::runs::Runs>,
     /// `MAX_IN_FLIGHT`, except in the tests of the `busy` answer.
     max_in_flight: usize,
 }
@@ -268,6 +278,7 @@ impl Api {
             role,
             telemetry: cfg.telemetry,
             root_socket: cfg.controller.root_socket.clone(),
+            runs: Arc::default(),
             max_in_flight: MAX_IN_FLIGHT,
         }
     }
@@ -446,6 +457,24 @@ impl Api {
                     .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
                 to_value(&self.root_run(p)?)
             }
+            "root.follow" => {
+                self.has("root")?;
+                let p: wire::RootFollow = serde_json::from_value(params.clone())
+                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+                to_value(&self.root_follow(p)?)
+            }
+            "root.runs" => {
+                self.has("root")?;
+                let p: wire::RootRuns = serde_json::from_value(params.clone())
+                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+                let runs = self
+                    .runs
+                    .of_verb(&p.verb)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+                to_value(&wire::RootRunsOk { runs })
+            }
             m if m.starts_with("nodes.") => self.nodes_call(m, params),
             _ => Err(ApiError::new(
                 code::UNKNOWN_METHOD,
@@ -543,15 +572,17 @@ impl Api {
         }
     }
 
-    /// `root.run`: one verb on the root helper, its unit's lines published
-    /// as `root.progress` while it runs, its outcome the answer. The helper
-    /// is the authority on what exists; the words are checked here only so
-    /// nonsense costs no root process.
+    /// `root.run`: one verb on the root helper, its unit's lines kept in the
+    /// run store and published as `root.progress` while it runs, its outcome
+    /// the answer — or, with `detach`, the answer as soon as the unit has
+    /// started, the rest the store's (`root.follow`). The helper is the
+    /// authority on what exists; the words are checked here only so nonsense
+    /// costs no root process.
     fn root_run(&self, p: wire::RootRun) -> Result<wire::RootRunOk, ApiError> {
-        use crate::root::{self, relay::RelayError};
+        use crate::root::{self, relay::RelayError, relay::Relayed};
         let socket = self
             .root_socket
-            .as_ref()
+            .clone()
             .ok_or_else(|| ApiError::new(code::UNSUPPORTED, "no root helper is configured"))?;
         if !root::valid_name(&p.verb) {
             return Err(ApiError::new(
@@ -581,47 +612,130 @@ impl Api {
             ));
         }
         let run = crate::claude::sessions::mint_request();
+        let verb = p.verb.clone();
         let request = root::Request {
-            verb: p.verb.clone(),
+            verb: p.verb,
             id: run.clone(),
             selectors: p.selectors,
             payload: p.payload,
         };
-        tracing::info!(verb = %p.verb, run = %run, "root: asking the helper");
-        let events = self.shared.events();
-        let answer = root::relay::run(socket, &request, ROOT_SILENCE, |line| {
-            events.publish(
-                wire::event::ROOT_PROGRESS,
-                &wire::RootProgress {
-                    run: run.clone(),
-                    verb: p.verb.clone(),
-                    line: line.to_string(),
-                },
-            );
-        });
-        match answer {
-            Ok(a) => {
-                tracing::info!(verb = %p.verb, run = %run, outcome = ?a.outcome, detail = %a.detail, "root: answered");
-                Ok(wire::RootRunOk {
-                    run,
-                    verb: p.verb,
-                    outcome: a.outcome,
-                    detail: a.detail,
-                    verbs: a.verbs,
-                })
-            }
-            Err(e) => {
-                tracing::warn!(verb = %p.verb, run = %run, error = %e, "root: no answer");
-                Err(match &e {
-                    RelayError::Refused { code: c, .. }
-                        if c == root::code::BAD_REQUEST || c == root::code::UNKNOWN_VERB =>
-                    {
-                        ApiError::new(code::BAD_REQUEST, e.to_string())
+        tracing::info!(verb = %verb, run = %run, detach = ?p.detach, "root: asking the helper");
+        self.runs.begin(&run, &verb);
+        let relay = {
+            let (runs, events) = (Arc::clone(&self.runs), self.shared.events_handle());
+            let (run, verb) = (run.clone(), verb.clone());
+            move || {
+                let answer = root::relay::run(&socket, &request, ROOT_SILENCE, |r| match r {
+                    Relayed::Started => runs.started(&run),
+                    Relayed::Progress(line) => {
+                        runs.line(&run, line);
+                        events.publish(
+                            wire::event::ROOT_PROGRESS,
+                            &wire::RootProgress {
+                                run: run.clone(),
+                                verb: verb.clone(),
+                                line: line.to_string(),
+                            },
+                        );
                     }
-                    _ => ApiError::new(code::UNAVAILABLE, e.to_string()),
-                })
+                });
+                match answer {
+                    Ok(a) => {
+                        tracing::info!(verb = %verb, run = %run, outcome = ?a.outcome, detail = %a.detail, "root: answered");
+                        Ok(wire::RootRunOk {
+                            run,
+                            verb,
+                            outcome: Some(a.outcome),
+                            detail: a.detail,
+                            verbs: a.verbs,
+                        })
+                    }
+                    Err(e) => {
+                        tracing::warn!(verb = %verb, run = %run, error = %e, "root: no answer");
+                        Err(match &e {
+                            RelayError::Refused { code: c, .. }
+                                if c == root::code::BAD_REQUEST
+                                    || c == root::code::UNKNOWN_VERB =>
+                            {
+                                ApiError::new(code::BAD_REQUEST, e.to_string())
+                            }
+                            _ => ApiError::new(code::UNAVAILABLE, e.to_string()),
+                        })
+                    }
+                }
             }
+        };
+        let record = {
+            let runs = Arc::clone(&self.runs);
+            let run = run.clone();
+            move |r: &Result<wire::RootRunOk, ApiError>| match r {
+                Ok(ok) => runs.finish(&run, ok.outcome.unwrap_or(root::Outcome::Done), &ok.detail),
+                Err(e) => runs.finish(&run, root::Outcome::Failed, &e.msg),
+            }
+        };
+        if p.detach != Some(true) {
+            let answer = relay();
+            record(&answer);
+            return answer;
         }
+        // The answer goes out first and the store moves after it, so a wait
+        // the store's move ends finds the answer already there.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("root-run".into())
+            .spawn(move || {
+                let answer = relay();
+                let _ = tx.send(answer.clone());
+                record(&answer);
+            })
+            .map_err(|e| ApiError::new(code::INTERNAL, format!("no thread for the run: {e}")))?;
+        let started = self.runs.wait_started(&run, ROOT_DETACH_WAIT);
+        if let Ok(answer) = rx.try_recv() {
+            return answer;
+        }
+        if !started {
+            return Err(ApiError::new(
+                code::UNAVAILABLE,
+                format!(
+                    "the root helper did not start `{verb}` within {} s; root.follow {run} says what became of it",
+                    ROOT_DETACH_WAIT.as_secs()
+                ),
+            ));
+        }
+        Ok(wire::RootRunOk {
+            run,
+            verb,
+            outcome: None,
+            detail: String::new(),
+            verbs: None,
+        })
+    }
+
+    /// `root.follow`: a run's lines past `after`, and how it stands.
+    fn root_follow(&self, p: wire::RootFollow) -> Result<wire::RootFollowOk, ApiError> {
+        let f = self
+            .runs
+            .follow(&p.run, p.after.unwrap_or(0))
+            .ok_or_else(|| {
+                ApiError::new(
+                    code::NOT_FOUND,
+                    format!(
+                        "no run {:?}: this controller never ran it, or has forgotten it",
+                        p.run.chars().take(64).collect::<String>()
+                    ),
+                )
+            })?;
+        Ok(wire::RootFollowOk {
+            run: f.summary.into(),
+            lines: f
+                .lines
+                .into_iter()
+                .map(|(seq, line)| wire::RootLine { seq, line })
+                .collect(),
+            next: f.next,
+            more: f.more,
+            dropped: f.dropped,
+        })
     }
 
     fn system_info(&self) -> SystemInfo {
@@ -963,5 +1077,111 @@ mod tests {
                 .code,
             code::UNSUPPORTED
         );
+    }
+
+    /// A `detach` run answers once the helper says the unit started; its
+    /// later lines and its outcome are the store's, read with `root.follow`
+    /// from any line and listed by `root.runs`. A refusal before the start
+    /// is the answer itself.
+    #[cfg(unix)]
+    #[test]
+    fn a_detached_run_answers_at_its_start_and_is_followed() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixListener;
+
+        let dir = std::env::temp_dir().join(format!("daedalus-api-detach-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let sock = dir.join("root.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let (go, wait) = std::sync::mpsc::channel::<()>();
+        let helper = std::thread::spawn(move || {
+            let accept = || {
+                let (s, _) = listener.accept().unwrap();
+                let mut line = String::new();
+                BufReader::new(s.try_clone().unwrap())
+                    .read_line(&mut line)
+                    .unwrap();
+                s
+            };
+            let s = accept();
+            (&s).write_all(b"{\"t\":\"started\",\"unit\":\"daedalus-build@x.service\"}\n{\"t\":\"progress\",\"line\":\"one\"}\n").unwrap();
+            wait.recv().unwrap();
+            (&s).write_all(b"{\"t\":\"progress\",\"line\":\"two\"}\n{\"t\":\"result\",\"outcome\":\"failed\",\"detail\":\"fence\"}\n").unwrap();
+            drop(s);
+            let s = accept();
+            (&s).write_all(
+                b"{\"t\":\"result\",\"outcome\":\"refused\",\"detail\":\"another build runs\"}\n",
+            )
+            .unwrap();
+        });
+
+        let text = format!(
+            "mode = \"controller\"\ntelemetry = \"off\"\n[controller]\nroot_socket = {:?}\n",
+            sock.display().to_string()
+        );
+        let cfg: Config = toml::from_str(&text).unwrap();
+        let shared = Arc::new(Shared::new(
+            crate::state::State::default(),
+            crate::facts::Facts::default(),
+            std::time::Instant::now(),
+            cfg.initial_policy(),
+            cfg.role(),
+        ));
+        let api = Api::new(shared, &cfg);
+        let call = |m: &str, p: Value| -> Value {
+            serde_json::from_str(api.call(m, &p).unwrap().get()).unwrap()
+        };
+
+        let ok = call(
+            "root.run",
+            serde_json::json!({"verb": "build", "detach": true}),
+        );
+        assert_eq!(ok["outcome"], Value::Null, "{ok}");
+        let run = ok["run"].as_str().unwrap().to_string();
+        let followed = call("root.follow", serde_json::json!({"run": run}));
+        assert_eq!(followed["run"]["started"], true);
+        assert_eq!(followed["run"]["outcome"], Value::Null);
+        go.send(()).unwrap();
+        // The rest arrives in the store, not on the answered request.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let last = loop {
+            let f = call("root.follow", serde_json::json!({"run": run, "after": 1}));
+            if f["run"]["outcome"] != Value::Null || std::time::Instant::now() > deadline {
+                break f;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert_eq!(last["run"]["outcome"], "failed");
+        assert_eq!(last["run"]["detail"], "fence");
+        assert_eq!(
+            last["lines"],
+            serde_json::json!([{"seq": 2, "line": "two"}])
+        );
+        assert_eq!(last["next"], 2);
+
+        let refused = call(
+            "root.run",
+            serde_json::json!({"verb": "build", "detach": true}),
+        );
+        assert_eq!(refused["outcome"], "refused");
+        assert_eq!(refused["detail"], "another build runs");
+        helper.join().unwrap();
+
+        let runs = call("root.runs", serde_json::json!({"verb": "build"}));
+        let listed: Vec<&str> = runs["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["outcome"].as_str().unwrap())
+            .collect();
+        assert_eq!(listed, ["refused", "failed"], "newest first");
+        assert_eq!(
+            api.call("root.follow", &serde_json::json!({"run": "nope"}))
+                .unwrap_err()
+                .code,
+            code::NOT_FOUND
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

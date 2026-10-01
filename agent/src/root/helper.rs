@@ -17,15 +17,17 @@ use anyhow::{bail, Context, Result};
 
 use super::{
     code, peer_allowed, progress_text, read_line, Line, Outcome, Request, Resolved, RunFile, Table,
-    VerbState, MAX_REQUEST, REFUSED_PREFIX, REQUEST_DEADLINE,
+    VerbState, DETAIL_FIELD, INVOCATION_FIELD, MAX_REQUEST, OUTCOME_FIELD, REQUEST_DEADLINE,
 };
 
 /// A write the controller does not take within this long ends the run
 /// (the unit goes on).
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
-/// After the start job ends, how long journald gets to hand over the
-/// unit's last lines.
-const JOURNAL_SETTLE: Duration = Duration::from_millis(400);
+/// After a start job that succeeded, how long the unit's outcome entry
+/// may take to reach the journal before the run is `done` without one.
+const OUTCOME_WAIT: Duration = Duration::from_secs(2);
+/// How often the journal is asked for it meanwhile.
+const OUTCOME_POLL: Duration = Duration::from_millis(100);
 /// A `systemctl show` or a cursor read answers within this long.
 const QUICK: Duration = Duration::from_secs(10);
 
@@ -241,7 +243,21 @@ fn status(table: &Table) -> Vec<VerbState> {
         .verbs
         .iter()
         .map(|(verb, spec)| {
-            let props = if spec.unit.contains('{') || spec.run_file() {
+            let props = if spec.run_file() {
+                // A template has no one instance: whether one runs.
+                let template = spec.unit.trim_end_matches(".service");
+                template_busy(table, template)
+                    .ok()
+                    .map(|busy| {
+                        let state = if busy.is_some() {
+                            "activating"
+                        } else {
+                            "inactive"
+                        };
+                        BTreeMap::from([("ActiveState".to_string(), state.to_string())])
+                    })
+                    .unwrap_or_default()
+            } else if spec.unit.contains('{') {
                 BTreeMap::new()
             } else {
                 show(table, &spec.unit, &["ActiveState", "Result"])
@@ -282,31 +298,63 @@ fn journal_cursor(table: &Table) -> Option<String> {
         .map(str::to_string)
 }
 
-/// One journal entry: its cursor, the unit invocation that wrote it, and its
-/// message.
-type Entry = (String, Option<String>, String);
+/// One journal entry: its cursor, the unit invocation that wrote it, its
+/// message, and — for an outcome entry (root/mod.rs, "Running a verb") —
+/// what it says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Entry {
+    cursor: String,
+    invocation: Option<String>,
+    message: String,
+    said: Option<Said>,
+}
 
-/// One `-o json` line as an `Entry`; a message that is not UTF-8 arrives as
-/// an array of bytes.
-fn entry(line: &str) -> Option<Entry> {
-    let v: serde_json::Value = serde_json::from_str(line).ok()?;
-    let cursor = v.get("__CURSOR")?.as_str()?.to_string();
-    let invocation = v
-        .get("_SYSTEMD_INVOCATION_ID")
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string);
-    let message = match v.get("MESSAGE")? {
-        serde_json::Value::String(s) => s.clone(),
+/// An outcome entry's word: `done` or `refused`, the detail, and the
+/// invocation it names (`INVOCATION_FIELD`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Said {
+    outcome: Outcome,
+    detail: String,
+    invocation: Option<String>,
+}
+
+/// A field's text; a value that is not UTF-8 arrives as an array of bytes.
+fn field_text(v: &serde_json::Value) -> Option<String> {
+    match v {
+        serde_json::Value::String(s) => Some(s.clone()),
         serde_json::Value::Array(b) => {
             let bytes: Vec<u8> = b
                 .iter()
                 .filter_map(|x| x.as_u64().map(|n| n as u8))
                 .collect();
-            String::from_utf8_lossy(&bytes).into_owned()
+            Some(String::from_utf8_lossy(&bytes).into_owned())
         }
-        _ => return None,
-    };
-    Some((cursor, invocation, message))
+        _ => None,
+    }
+}
+
+/// One `-o json` line as an `Entry`. An outcome field other than `done` or
+/// `refused` makes no outcome entry.
+fn entry(line: &str) -> Option<Entry> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    let cursor = v.get("__CURSOR")?.as_str()?.to_string();
+    let text = |k: &str| v.get(k).and_then(field_text);
+    let said = match text(OUTCOME_FIELD).as_deref() {
+        Some("done") => Some(Outcome::Done),
+        Some("refused") => Some(Outcome::Refused),
+        _ => None,
+    }
+    .map(|outcome| Said {
+        outcome,
+        detail: progress_text(&text(DETAIL_FIELD).unwrap_or_default()),
+        invocation: text(INVOCATION_FIELD),
+    });
+    Some(Entry {
+        cursor,
+        invocation: text("_SYSTEMD_INVOCATION_ID"),
+        message: text("MESSAGE")?,
+        said,
+    })
 }
 
 /// `journalctl` over the unit's own lines after `cursor`, following or not.
@@ -325,35 +373,75 @@ fn journal(table: &Table, unit: &str, cursor: Option<&str>, follow: bool) -> Com
     cmd
 }
 
+/// The outcome entry of `invocation`, asked of the journal by its own field
+/// rather than by unit: journald attributes an entry to a unit by the
+/// sender's cgroup, which a short-lived `logger` may have left before
+/// journald looked. Polled for up to `OUTCOME_WAIT`; None when it never
+/// came.
+fn await_outcome(table: &Table, invocation: &str) -> Option<Said> {
+    let deadline = Instant::now() + OUTCOME_WAIT;
+    loop {
+        let mut cmd = Command::new(&table.journalctl);
+        cmd.args(["-q", "--no-pager", "-o", "json"])
+            .arg(format!("{INVOCATION_FIELD}={invocation}"))
+            .stdin(Stdio::null())
+            .stderr(Stdio::null());
+        if let Ok(text) = crate::exec::stdout_or(cmd, QUICK, crate::exec::Text::Lossy) {
+            let said = text
+                .lines()
+                .filter_map(entry)
+                .filter_map(|e| e.said)
+                .find(|s| s.invocation.as_deref() == Some(invocation));
+            if said.is_some() {
+                return said;
+            }
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(OUTCOME_POLL);
+    }
+}
+
 fn kill(child: &mut Child) {
     let _ = child.kill();
     let _ = child.wait();
 }
 
 /// The unit's lines on their way out: the last cursor (where a catch-up
-/// read starts), the last non-blank line (a refusal's reason), and the
-/// invocation this run follows: the first entry's. A run of the same unit
-/// that starts right after this one ends writes under another invocation,
-/// and its lines are not this run's.
+/// read starts), the last non-blank line (the detail of a run that wrote no
+/// outcome entry), the outcome entry, and the invocation this run follows:
+/// the first entry's. A run of the same unit that starts right after this
+/// one ends writes under another invocation, and its lines are not this
+/// run's.
 struct Relay<'a> {
     out: &'a mut UnixStream,
     last_cursor: Option<String>,
     invocation: Option<String>,
     last_line: String,
+    said: Option<Said>,
     /// The controller still takes lines. When it goes, the unit does not
     /// care and neither does the outcome: they are only no one's to read.
     listening: bool,
 }
 
 impl Relay<'_> {
-    fn take(&mut self, (cursor, invocation, message): Entry) {
-        self.last_cursor = Some(cursor);
-        match (&self.invocation, invocation) {
+    fn take(&mut self, e: Entry) {
+        self.last_cursor = Some(e.cursor);
+        match (&self.invocation, e.invocation) {
             (Some(mine), Some(theirs)) if *mine != theirs => return,
             (None, Some(first)) => self.invocation = Some(first),
             _ => {}
         }
-        let text = progress_text(&message);
+        // The outcome is the run's answer, not a line of its progress; one
+        // naming another invocation is not this run's.
+        if let Some(s) = e.said {
+            if self.invocation.is_none() || s.invocation == self.invocation {
+                self.said = Some(s);
+            }
+            return;
+        }
+        let text = progress_text(&e.message);
         if self.listening && !send(self.out, &Line::Progress { line: text.clone() }) {
             self.listening = false;
         }
@@ -575,13 +663,22 @@ fn run_unit(
         }
     };
 
+    // From here the run is the unit's: a controller that waits no longer
+    // still finds the outcome in the unit's journal.
+    let listening = send(
+        out,
+        &Line::Started {
+            unit: unit.to_string(),
+        },
+    );
     let deadline = Instant::now() + timeout;
     let mut relay = Relay {
         out,
         last_cursor: cursor.clone(),
         invocation: None,
         last_line: String::new(),
-        listening: true,
+        said: None,
+        listening,
     };
     let exit = loop {
         match rx.recv_timeout(Duration::from_millis(200)) {
@@ -610,9 +707,22 @@ fn run_unit(
         s.lines().next().unwrap_or_default().to_string()
     };
 
-    std::thread::sleep(JOURNAL_SETTLE);
+    let job_ok = exit.is_some_and(|s| s.success());
     while let Ok(e) = rx.try_recv() {
         relay.take(e);
+    }
+    // A run that succeeded says how in its outcome entry, the last thing it
+    // writes: waiting for that entry is also what lets the unit's last lines
+    // reach the journal before the catch-up read below.
+    if job_ok && relay.said.is_none() {
+        let invocation = relay.invocation.clone().or_else(|| {
+            show(table, unit, &["InvocationID"])
+                .remove("InvocationID")
+                .filter(|s| !s.is_empty())
+        });
+        if let Some(inv) = invocation {
+            relay.said = await_outcome(table, &inv);
+        }
     }
     if let Some(f) = follower.as_mut() {
         kill(f);
@@ -645,7 +755,6 @@ fn run_unit(
             ),
         );
     }
-    let job_ok = exit.is_some_and(|s| s.success());
     let result = if job_ok {
         String::new()
     } else {
@@ -653,18 +762,27 @@ fn run_unit(
             .remove("Result")
             .unwrap_or_default()
     };
-    outcome_of(job_ok, &result, &relay.last_line, &start_err)
+    outcome_of(job_ok, &result, &relay.last_line, &start_err, relay.said)
 }
 
-/// The outcome from whether the start job succeeded and the unit's last
-/// line (module doc); `result` is the unit's `Result`, read only after a
-/// failure, for a detail when the unit printed nothing.
-fn outcome_of(job_ok: bool, result: &str, last_line: &str, start_err: &str) -> (Outcome, String) {
+/// The outcome from whether the start job succeeded and what the unit said
+/// (module doc): its outcome entry, else its last line. `result` is the
+/// unit's `Result`, read only after a failure, for a detail when the unit
+/// printed nothing.
+fn outcome_of(
+    job_ok: bool,
+    result: &str,
+    last_line: &str,
+    start_err: &str,
+    said: Option<Said>,
+) -> (Outcome, String) {
     if job_ok {
-        return match last_line.strip_prefix(REFUSED_PREFIX) {
-            Some(reason) if !reason.trim().is_empty() => (Outcome::Refused, reason.to_string()),
-            Some(_) => (Outcome::Refused, "refused, without a reason".into()),
-            None => (Outcome::Done, last_line.to_string()),
+        return match said {
+            Some(s) if !s.detail.trim().is_empty() => (s.outcome, s.detail),
+            Some(s) if s.outcome == Outcome::Refused => {
+                (Outcome::Refused, "refused, without a reason".into())
+            }
+            _ => (Outcome::Done, last_line.to_string()),
         };
     }
     let detail = if !last_line.is_empty() {
@@ -681,35 +799,60 @@ fn outcome_of(job_ok: bool, result: &str, last_line: &str, start_err: &str) -> (
 mod tests {
     use super::*;
 
+    fn said(outcome: Outcome, detail: &str) -> Option<Said> {
+        Some(Said {
+            outcome,
+            detail: detail.into(),
+            invocation: Some("i1".into()),
+        })
+    }
+
     #[test]
-    fn the_job_and_the_last_line_say_how_it_ended() {
+    fn the_job_and_the_outcome_entry_say_how_it_ended() {
         assert_eq!(
-            outcome_of(true, "", "rebooting", ""),
+            outcome_of(true, "", "rebooting", "", None),
             (Outcome::Done, "rebooting".into())
         );
         assert_eq!(
-            outcome_of(true, "", "refused: an apply is running", ""),
+            outcome_of(
+                true,
+                "",
+                "checking",
+                "",
+                said(Outcome::Refused, "an apply is running")
+            ),
             (Outcome::Refused, "an apply is running".into())
         );
         assert_eq!(
-            outcome_of(true, "", "refused: ", ""),
+            outcome_of(true, "", "", "", said(Outcome::Refused, " ")),
             (Outcome::Refused, "refused, without a reason".into())
         );
-        // Only the last line counts, and only as a prefix.
         assert_eq!(
-            outcome_of(true, "", "nothing was refused: all good", "").0,
+            outcome_of(true, "", "rebooting", "", said(Outcome::Done, "")),
+            (Outcome::Done, "rebooting".into())
+        );
+        // A line that reads like a refusal is a line: only the entry refuses.
+        assert_eq!(
+            outcome_of(true, "", "refused: an apply is running", "", None).0,
             Outcome::Done
         );
+        // A failed job is failed whatever the unit said before it failed.
         assert_eq!(
-            outcome_of(false, "exit-code", "", "Job for x.service failed"),
+            outcome_of(
+                false,
+                "exit-code",
+                "",
+                "Job for x.service failed",
+                said(Outcome::Done, "ok")
+            ),
             (Outcome::Failed, "Job for x.service failed".into())
         );
         assert_eq!(
-            outcome_of(false, "exit-code", "the agent broke", "Job failed"),
+            outcome_of(false, "exit-code", "the agent broke", "Job failed", None),
             (Outcome::Failed, "the agent broke".into())
         );
         assert_eq!(
-            outcome_of(false, "timeout", "", ""),
+            outcome_of(false, "timeout", "", "", None),
             (Outcome::Failed, "the unit failed (Result=timeout)".into())
         );
         assert!(busy("activating") && !busy("inactive") && !busy("failed"));
@@ -717,15 +860,38 @@ mod tests {
 
     #[test]
     fn journal_entries_and_show_lines() {
+        let plain = |cursor: &str, invocation: Option<&str>, message: &str| Entry {
+            cursor: cursor.into(),
+            invocation: invocation.map(str::to_string),
+            message: message.into(),
+            said: None,
+        };
         assert_eq!(
             entry(r#"{"__CURSOR":"s=1","MESSAGE":"rebooting","_PID":"2"}"#),
-            Some(("s=1".into(), None, "rebooting".into()))
+            Some(plain("s=1", None, "rebooting"))
         );
         assert_eq!(
             entry(r#"{"__CURSOR":"s=2","_SYSTEMD_INVOCATION_ID":"i1","MESSAGE":[104,105,255]}"#),
-            Some(("s=2".into(), Some("i1".into()), "hi\u{fffd}".into()))
+            Some(plain("s=2", Some("i1"), "hi\u{fffd}"))
         );
         assert_eq!(entry(r#"{"MESSAGE":"no cursor"}"#), None);
+        assert_eq!(
+            entry(
+                r#"{"__CURSOR":"s=3","MESSAGE":"outcome","DAEDALUS_OUTCOME":"refused","DAEDALUS_DETAIL":"busy\u001b[0m","DAEDALUS_INVOCATION":"i1"}"#
+            )
+            .and_then(|e| e.said),
+            Some(Said {
+                outcome: Outcome::Refused,
+                detail: "busy[0m".into(),
+                invocation: Some("i1".into())
+            })
+        );
+        // Only `done` and `refused` are outcomes.
+        assert_eq!(
+            entry(r#"{"__CURSOR":"s=4","MESSAGE":"x","DAEDALUS_OUTCOME":"failed"}"#)
+                .and_then(|e| e.said),
+            None
+        );
         let m = parse_show("ActiveState=inactive\nResult=success\nLoadState=loaded\n");
         assert_eq!(m["LoadState"], "loaded");
         assert_eq!(m.len(), 3);
@@ -767,11 +933,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A journal entry of invocation `i1`.
+    fn line_of(cursor: &str, message: &str) -> serde_json::Value {
+        serde_json::json!({"__CURSOR": cursor, "_SYSTEMD_INVOCATION_ID": "i1", "MESSAGE": message})
+    }
+
+    /// An outcome entry, as host/lib.sh `outcome` writes it, of invocation
+    /// `invocation`.
+    fn outcome_entry(
+        cursor: &str,
+        outcome: &str,
+        detail: &str,
+        invocation: &str,
+    ) -> serde_json::Value {
+        serde_json::json!({"__CURSOR": cursor, "MESSAGE": "outcome", "DAEDALUS_OUTCOME": outcome,
+                           "DAEDALUS_DETAIL": detail, "DAEDALUS_INVOCATION": invocation})
+    }
+
     /// A table whose tools are shell scripts standing in for systemd: the
-    /// unit is loaded and reads idle, `start` succeeds (after two seconds
-    /// while `slow` exists), and the journal has one line for the run,
-    /// `message`.
-    fn fake(dir: &std::path::Path, allow_uid: u32, message: &str) -> String {
+    /// unit is loaded and reads idle (its last invocation `i1`), `start`
+    /// succeeds (after two seconds while `slow` exists), following the
+    /// unit's journal gives `follow`, and asking for invocation `i1`'s
+    /// outcome entry gives `by_invocation`.
+    fn fake_with(
+        dir: &std::path::Path,
+        allow_uid: u32,
+        follow: &[serde_json::Value],
+        by_invocation: Option<serde_json::Value>,
+    ) -> String {
         use std::os::unix::fs::PermissionsExt;
         let runs = dir.join("runs");
         std::fs::create_dir_all(&runs).unwrap();
@@ -785,15 +974,21 @@ mod tests {
         let systemctl = script(
             "systemctl",
             &format!(
-                "case \"$1\" in\n show) printf 'ActiveState=inactive\\nLoadState=loaded\\nResult=success\\n';;\n start) [ \"$2\" = fake.service ] || exit 5; if [ -e {}/slow ]; then sleep 2; fi;;\n esac",
+                "case \"$1\" in\n show) printf 'ActiveState=inactive\\nLoadState=loaded\\nResult=success\\nInvocationID=i1\\n';;\n start) [ \"$2\" = fake.service ] || exit 5; if [ -e {}/slow ]; then sleep 2; fi;;\n esac",
                 dir.display()
             ),
         );
-        let entry = serde_json::json!({"__CURSOR": "c1", "MESSAGE": message}).to_string();
+        let lines = |v: &[serde_json::Value]| {
+            v.iter()
+                .map(|e| format!("echo '{e}'; "))
+                .collect::<String>()
+        };
         let journalctl = script(
             "journalctl",
             &format!(
-                "for a in \"$@\"; do case \"$a\" in\n --show-cursor) echo '-- cursor: c0'; exit 0;;\n -f) echo '{entry}'; exec sleep 30;;\n esac; done"
+                "for a in \"$@\"; do case \"$a\" in\n --show-cursor) echo '-- cursor: c0'; exit 0;;\n -f) {}exec sleep 30;;\n DAEDALUS_INVOCATION=i1) {}exit 0;;\n esac; done",
+                lines(follow),
+                lines(&by_invocation.into_iter().collect::<Vec<_>>())
             ),
         );
         let table = serde_json::json!({
@@ -808,6 +1003,19 @@ mod tests {
         path.display().to_string()
     }
 
+    /// `fake_with` for a run that prints `message` and ends `done`.
+    fn fake(dir: &std::path::Path, allow_uid: u32, message: &str) -> String {
+        fake_with(
+            dir,
+            allow_uid,
+            &[
+                line_of("c1", message),
+                outcome_entry("c2", "done", "", "i1"),
+            ],
+            None,
+        )
+    }
+
     #[test]
     fn a_run_keeps_to_its_own_invocation() {
         let (mut out, peer) = UnixStream::pair().unwrap();
@@ -816,13 +1024,23 @@ mod tests {
             last_cursor: None,
             invocation: None,
             last_line: String::new(),
+            said: None,
             listening: true,
         };
-        r.take(("c1".into(), Some("mine".into()), "rebooting".into()));
-        // The next run of the same unit, caught in the settle window.
-        r.take(("c2".into(), Some("next".into()), "refused: not mine".into()));
+        let at = |cursor: &str, invocation: &str, message: &str| Entry {
+            cursor: cursor.into(),
+            invocation: Some(invocation.into()),
+            message: message.into(),
+            said: None,
+        };
+        r.take(at("c1", "mine", "rebooting"));
+        // An outcome entry naming another invocation is not this run's.
+        r.take(entry(&outcome_entry("c2", "refused", "not mine", "next").to_string()).unwrap());
+        // The next run of the same unit, caught before the follower stopped.
+        r.take(at("c3", "next", "starting again"));
         assert_eq!(r.last_line, "rebooting");
-        assert_eq!(r.last_cursor.as_deref(), Some("c2"));
+        assert_eq!(r.said, None);
+        assert_eq!(r.last_cursor.as_deref(), Some("c3"));
         drop(peer);
     }
 
@@ -855,17 +1073,32 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    fn started() -> Line {
+        Line::Started {
+            unit: "fake.service".into(),
+        }
+    }
+
     #[test]
     fn a_run_streams_the_units_lines_then_its_outcome() {
         let me = unsafe { libc::geteuid() };
         let dir = scratch("run");
-        let table = fake(&dir, me, "refused: the reason");
+        let table = fake_with(
+            &dir,
+            me,
+            &[
+                line_of("c1", "checking"),
+                outcome_entry("c2", "refused", "the reason", "i1"),
+            ],
+            None,
+        );
         let lines = converse(&table, "{\"verb\":\"reboot\",\"id\":\"r2\"}\n");
         assert_eq!(
             lines,
             [
+                started(),
                 Line::Progress {
-                    line: "refused: the reason".into()
+                    line: "checking".into()
                 },
                 Line::Result {
                     outcome: Outcome::Refused,
@@ -893,6 +1126,47 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_line_that_reads_like_a_refusal_is_only_a_line() {
+        let me = unsafe { libc::geteuid() };
+        let dir = scratch("words");
+        let table = fake_with(&dir, me, &[line_of("c1", "refused: the reason")], None);
+        let lines = converse(&table, "{\"verb\":\"reboot\",\"id\":\"r5\"}\n");
+        assert_eq!(
+            lines.last(),
+            Some(&Line::Result {
+                outcome: Outcome::Done,
+                detail: "refused: the reason".into(),
+                verbs: None
+            }),
+            "{lines:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn an_outcome_journald_did_not_tie_to_the_unit_is_found_by_its_invocation() {
+        let me = unsafe { libc::geteuid() };
+        let dir = scratch("late");
+        let table = fake_with(
+            &dir,
+            me,
+            &[line_of("c1", "checking")],
+            Some(outcome_entry("c9", "refused", "found late", "i1")),
+        );
+        let lines = converse(&table, "{\"verb\":\"reboot\",\"id\":\"r6\"}\n");
+        assert_eq!(
+            lines.last(),
+            Some(&Line::Result {
+                outcome: Outcome::Refused,
+                detail: "found late".into(),
+                verbs: None
+            }),
+            "{lines:?}"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

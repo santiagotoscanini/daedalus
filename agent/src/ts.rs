@@ -48,6 +48,8 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     CommandOk::export_all(cfg)?;
     ControllerInfo::export_all(cfg)?;
     RootRunOk::export_all(cfg)?;
+    RootFollowOk::export_all(cfg)?;
+    RootRunsOk::export_all(cfg)?;
     SantreeStatus::export_all(cfg)?;
     crate::rpc::ApiError::export_all(cfg)?;
     // The parameters.
@@ -60,6 +62,8 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     NodeCommand::export_all(cfg)?;
     ControllerRotate::export_all(cfg)?;
     RootRun::export_all(cfg)?;
+    RootFollow::export_all(cfg)?;
+    RootRuns::export_all(cfg)?;
     // The events.
     ClaudeChanged::export_all(cfg)?;
     TelemetryUpdated::export_all(cfg)?;

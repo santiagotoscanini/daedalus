@@ -58,15 +58,10 @@
 
 set -euo pipefail
 
-# The helper's split: a request this agent correctly REFUSES exits 0 with a
-# last line `refused: <reason>`, which the helper answers as `refused` and the
-# page shows. Only the agent being unable to do its job exits 1 and leaves a
+# The helper's split: a request this agent correctly REFUSES is `refuse`
+# (host/lib.sh), exit 0, which the helper answers as `refused` and the page
+# shows. Only the agent being unable to do its job exits 1 and leaves a
 # failed unit for `systemctl --failed`.
-refuse() {
-  echo "refused: $1"
-  exit 0
-}
-
 fail() {
   echo "secret-set agent failure: $1" >&2
   exit 1
@@ -235,4 +230,4 @@ else
 fi
 [ -z "$COMMIT" ] || DETAIL="$DETAIL, committed $COMMIT"
 DETAIL="$DETAIL — the container reads it on the next Apply"
-echo "$DETAIL"
+verb_done "$DETAIL"

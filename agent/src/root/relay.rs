@@ -1,7 +1,7 @@
 //! The controller's side of the root helper: one connection per run, the
-//! request written, the progress handed to a callback as it comes, the
-//! result returned (root/mod.rs has the protocol). `api` calls it for
-//! `root.run`; nothing else does.
+//! request written, the start and the progress handed to a callback as they
+//! come, the result returned (root/mod.rs has the protocol). `api` calls it
+//! for `root.run`; nothing else does.
 
 use std::path::Path;
 use std::time::Duration;
@@ -14,6 +14,15 @@ pub struct Answer {
     pub outcome: Outcome,
     pub detail: String,
     pub verbs: Option<Vec<VerbState>>,
+}
+
+/// What the helper says before its answer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Relayed<'a> {
+    /// The unit's start was asked for.
+    Started,
+    /// One line the unit wrote.
+    Progress(&'a str),
 }
 
 /// Why there is no answer.
@@ -47,7 +56,7 @@ pub fn run(
     socket: &Path,
     request: &Request,
     silence: Duration,
-    mut on_progress: impl FnMut(&str),
+    mut on: impl FnMut(Relayed<'_>),
 ) -> Result<Answer, RelayError> {
     use std::io::Write;
     use std::os::unix::net::UnixStream;
@@ -87,7 +96,8 @@ pub fn run(
             Err(e) => return Err(RelayError::Broken(e.to_string())),
         };
         match serde_json::from_str::<Line>(&text) {
-            Ok(Line::Progress { line }) => on_progress(&line),
+            Ok(Line::Started { .. }) => on(Relayed::Started),
+            Ok(Line::Progress { line }) => on(Relayed::Progress(&line)),
             Ok(Line::Result {
                 outcome,
                 detail,
@@ -116,7 +126,7 @@ pub fn run(
     socket: &Path,
     _request: &Request,
     _silence: Duration,
-    _on_progress: impl FnMut(&str),
+    _on: impl FnMut(Relayed<'_>),
 ) -> Result<Answer, RelayError> {
     Err(RelayError::Unreachable(format!(
         "{}: no root helper on this OS",
@@ -171,6 +181,7 @@ mod tests {
         let (path, h) = fake_helper(
             "ok",
             &[
+                r#"{"t":"started","unit":"daedalus-power.service"}"#,
                 r#"{"t":"progress","line":"checking"}"#,
                 r#"{"t":"progress","line":"rebooting"}"#,
                 r#"{"t":"result","outcome":"done","detail":"rebooting"}"#,
@@ -178,10 +189,13 @@ mod tests {
         );
         let mut seen = Vec::new();
         let a = run(&path, &request(), Duration::from_secs(5), |l| {
-            seen.push(l.to_string())
+            seen.push(match l {
+                Relayed::Started => "(started)".to_string(),
+                Relayed::Progress(p) => p.to_string(),
+            })
         })
         .unwrap();
-        assert_eq!(seen, ["checking", "rebooting"]);
+        assert_eq!(seen, ["(started)", "checking", "rebooting"]);
         assert_eq!(a.outcome, Outcome::Done);
         assert_eq!(a.detail, "rebooting");
         assert_eq!(

@@ -147,7 +147,10 @@ let
     vars = {
       LOCKFILE = config.fleet.rebuildLock;
     };
-    files = [ ./host/power.sh ];
+    files = [
+      ./host/lib.sh
+      ./host/power.sh
+    ];
   };
 
   # The clone agent. See host/workspace-clone.sh

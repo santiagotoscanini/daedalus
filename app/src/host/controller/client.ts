@@ -37,9 +37,13 @@ import {
   providerModelSent,
   type Queued,
   queued,
+  type RootFollow,
   type RootRun,
+  type RootRunSummary,
   requestLine,
+  rootFollowOk,
   rootRunOk,
+  rootRunsOk,
   type SessionHostStatus,
   type SessionSent,
   type SetDesiredOk,
@@ -85,6 +89,8 @@ export const MACHINE_ACK_MS = 5_000
 /** The first wait after a failed dial; doubled per failure, up to the max. */
 const BACKOFF_MS = 250
 const BACKOFF_MAX_MS = 10_000
+/** A detached `root.run` answers once its unit starts: the controller's 30 s, and slack. */
+const ROOT_START_MS = 35_000
 
 /**
  * How the one connection stands, for the shell's banner and the boards that
@@ -151,6 +157,21 @@ export type ControllerClient = {
     waitMs?: number,
     payload?: string,
   ) => Promise<RootRun>
+  /**
+   * The same, answered as soon as the verb's unit has started (`detach`):
+   * outcome null, the run's lines and its end `rootFollow`'s. A refusal before
+   * the start (the verb already running) is the answer itself. For the long
+   * verbs, which must hold no request of this connection for their length.
+   */
+  rootStart: (
+    verb: string,
+    selectors?: Record<string, string>,
+    payload?: string,
+  ) => Promise<RootRun>
+  /** A run's lines past `after` and how it stands; `not_found` once the controller forgot it. */
+  rootFollow: (run: string, after?: number) => Promise<RootFollow>
+  /** The runs of one verb the controller holds, newest first. */
+  rootRuns: (verb: string) => Promise<RootRunSummary[]>
   /** The session host (`santree.status`); `unavailable` on a box without one. */
   santreeStatus: () => Promise<SessionHostStatus>
   /** The last hello's answer, or null while not connected. */
@@ -447,6 +468,21 @@ export function createControllerClient(opts: Options): ControllerClient {
         { verb, selectors: selectors ?? {}, ...(payload === undefined ? {} : { payload }) },
         waitMs,
       ),
+    // The controller waits up to 30 s for the start (agent ROOT_DETACH_WAIT).
+    rootStart: (verb, selectors, payload) =>
+      call(
+        'root.run',
+        rootRunOk,
+        {
+          verb,
+          selectors: selectors ?? {},
+          detach: true,
+          ...(payload === undefined ? {} : { payload }),
+        },
+        ROOT_START_MS,
+      ),
+    rootFollow: (run, after) => call('root.follow', rootFollowOk, { run, after: after ?? 0 }),
+    rootRuns: (verb) => call('root.runs', rootRunsOk, { verb }),
     santreeStatus: () => call('santree.status', santreeStatus),
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
     link: () => {

@@ -244,9 +244,8 @@ in
 
     # Restart: the root helper's `reboot` (controller.nix, `root`) — the first
     # verb off the file-drop bridge, so no path unit and no request file. The
-    # helper starts this unit and relays what it prints; a last line
-    # `refused: …` is a refusal and the unit still exits 0, so a refused
-    # restart is not a failed unit.
+    # helper starts this unit and relays what it prints; a refusal (host/lib.sh
+    # `refuse`) still exits 0, so a refused restart is not a failed unit.
     #
     # No network ordering: it asks systemd three questions and calls
     # `systemctl reboot`. Nothing it does needs a resolver.

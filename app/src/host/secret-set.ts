@@ -5,8 +5,8 @@ import { type RootAnswer, rootActor, runRoot } from './root'
 // Asking the host to set or remove ONE key in an app's operator-secrets file
 // (site/vault/apps/<app>-env.sops): the root helper's `secret-set` verb
 // (nix/stacks/daedalus/daedalus-verbs.nix, host/secret-set.sh), through the
-// controller (host/root.ts). The answer is the unit's last line — what it
-// wrote and the commit, or why it refused.
+// controller (host/root.ts). The answer is the unit's outcome — what it wrote
+// and the commit, or why it refused.
 //
 // WHAT CROSSES, AND WHAT CANNOT. The container seals the value first
 // (lib/apps/secrets.ts → core/vault.ts's encrypt-only sops) and sends the

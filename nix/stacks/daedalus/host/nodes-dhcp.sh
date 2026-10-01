@@ -12,13 +12,13 @@
 #
 # Expects SRC, DST and PIHOLE ("1" when the resolver runs on this box).
 
-refuse() {
+reject() {
   echo "not handing $SRC to the resolver: $1" >&2
   exit 1
 }
 
 if [ -L "$SRC" ] || [ -e "$SRC" ]; then
-  body="$(read_request "$SRC")" || refuse "it is not a regular file this agent will read"
+  body="$(read_request "$SRC")" || reject "it is not a regular file this agent will read"
   # `<MAC>,<name>` or `<MAC>,<IPv4>,<name>` (app/src/host/dhcp-hosts.ts), a
   # name being one DNS label. Nothing else is a line this file may carry: a
   # dnsmasq option smuggled in here would be parsed by the resolver.
@@ -27,9 +27,9 @@ if [ -L "$SRC" ] || [ -e "$SRC" ]; then
   label='[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
   if [ -n "$body" ]; then
     if bad="$(printf '%s\n' "$body" | grep -Evx -m1 "$mac,($ip,)?$label")"; then
-      refuse "a line is not <MAC>,[<IPv4>,]<name>: ${bad:0:80}"
+      reject "a line is not <MAC>,[<IPv4>,]<name>: ${bad:0:80}"
     fi
-    [ "$(printf '%s\n' "$body" | wc -l)" -le 1024 ] || refuse "more than 1024 lines"
+    [ "$(printf '%s\n' "$body" | wc -l)" -le 1024 ] || reject "more than 1024 lines"
     body="$body"$'\n'
   fi
   # Root's own directory, so root's direct write is safe; temp and rename so

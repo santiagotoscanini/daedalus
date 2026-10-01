@@ -166,11 +166,17 @@ operator's (`SO_PEERCRED`), reads one line, looks the verb up in a table nix
 rendered from `fleet.daedalus.rootVerbs`, and runs `systemctl start` on the
 verb's existing oneshot unit — each selector a value from a fixed list,
 spliced into the unit name, never a path or a flag. The unit's journal lines
-stream back as `root.progress` events, and they are the answer too: a start
-job that failed is `failed`; otherwise `done`, or `refused` when the unit's
-last line is `refused: <reason>` (the unit exits 0 — a refusal is not a
-failed unit — and the journal, not an exit status, carries the word, because
-systemd forgets a oneshot's exit status once it is inactive).
+stream back as `root.progress` events, and the journal carries the answer too:
+a start job that failed is `failed`; otherwise what the unit's one outcome
+entry says (`host/lib.sh` `outcome`: `DAEDALUS_OUTCOME` `done` or `refused`,
+matched by the unit's invocation id, never by a line's text), or `done` with
+its last line when it wrote none. A refusal exits 0 — it is not a failed unit
+— and the journal, not an exit status, carries the word, because systemd
+forgets a oneshot's exit status once it is inactive. The controller keeps
+every run's lines and outcome for an hour (`root.follow`, `root.runs`), so a
+page opened mid-run reattaches, and a long verb is asked with `detach`: the
+answer comes once its unit has started, and the request is not held for the
+run.
 
 The rules the bridge learned hold here without files: nothing is replayed,
 because nothing but a connection starts a verb (no path unit re-fires at

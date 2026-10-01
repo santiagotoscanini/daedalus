@@ -18,14 +18,9 @@
 # arrives after the build it meant finished and another app's started must not
 # kill an innocent build.
 #
-# Every refusal is exit 0 with a last line `refused: <reason>` (the helper's
-# word for it): a cancel that arrives too late is ordinary, and a failing unit
-# here would mail the operator about nothing.
-
-refuse() {
-  echo "refused: $1"
-  exit 0
-}
+# Every refusal is `refuse` (host/lib.sh), exit 0: a cancel that arrives too
+# late is ordinary, and a failing unit here would mail the operator about
+# nothing.
 
 want="${1-}"
 # The helper passes only a value from BUILDABLE; asked again on the side that
@@ -45,4 +40,4 @@ build_active "$(jq -r '.state // ""' <<<"$status_json" 2>/dev/null || true)" ||
 
 echo "cancelling $want's build at the operator's request"
 systemctl stop daedalus-build.service || true
-echo "stopped"
+verb_done "stopped"

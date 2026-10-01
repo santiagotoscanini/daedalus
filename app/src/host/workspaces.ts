@@ -108,7 +108,7 @@ const CLONE_WAIT_MS = 980_000
  * Clone `repo` (owner/name) into the workspace root, or fast-forward the
  * clone that is already there: the root helper's `workspace-clone`, which
  * holds the slug to its pattern and hands it to the unit in a run file. The
- * answer is the unit's last line: what it did, or why it refused.
+ * answer is the unit's outcome: what it did, or why it refused.
  */
 export async function requestWorkspaceClone(
   ctx: Pick<Ctx, 'controller'>,

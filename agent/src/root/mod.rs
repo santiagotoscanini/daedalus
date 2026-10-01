@@ -39,29 +39,36 @@
 //!
 //! **Running a verb** is `systemctl start <unit>`: the work is the unit's,
 //! so it survives a switch restarting its caller, this helper or the
-//! controller. While it runs, the unit's own journal lines stream back as
-//! progress; when the start job ends, `systemctl start`'s own exit says
-//! how: `failed` when the job failed, else `done` — or `refused` when the
-//! unit's last line starts with `REFUSED_PREFIX` (the rest is the reason;
-//! the unit exits 0, so a refusal is not a failed unit). The journal, not
-//! the exit status, carries the refusal because systemd forgets a
-//! oneshot's exit status once it is inactive (measured: `ExecMainStatus=0`
-//! after an exit 3 listed in `SuccessExitStatus`). A unit already running
-//! is `refused`, never joined: systemd would merge a second start into the
-//! first one's job, and both callers would read its end as their own. So
-//! every verb holds a lock, `<run_dir>/<unit>.lock` (`.service` dropped; a
-//! run-file verb's is its template's, `x@.lock`), from before its busy
-//! check until its answer: a second request while it is held is refused,
-//! never queued, and two helpers (one per connection) cannot both find the
-//! unit idle and both start it. `status` is built in and read-only: every
-//! verb, its unit and that unit's state.
+//! controller. Once the start is asked for, the helper says `started`;
+//! while the unit runs, its own journal lines stream back as progress; when
+//! the start job ends, `systemctl start`'s own exit says how: `failed` when
+//! the job failed, else what the unit's OUTCOME ENTRY says — `refused` (the
+//! unit exits 0, so a refusal is not a failed unit) or `done` — and `done`
+//! with its last line when it wrote none. The outcome entry is one journal
+//! entry carrying `OUTCOME_FIELD` (`done` or `refused`), `DETAIL_FIELD` and
+//! `INVOCATION_FIELD` (the unit's `$INVOCATION_ID`), written by host/lib.sh
+//! `outcome` and matched by its invocation, never by its text: a line a
+//! unit prints cannot pass for a refusal. The journal, not the exit status,
+//! carries the outcome because systemd forgets a oneshot's exit status once
+//! it is inactive (measured: `ExecMainStatus=0` after an exit 3 listed in
+//! `SuccessExitStatus`). A unit already running is `refused`, never joined:
+//! systemd would merge a second start into the first one's job, and both
+//! callers would read its end as their own. So every verb holds a lock,
+//! `<run_dir>/<unit>.lock` (`.service` dropped; a run-file verb's is its
+//! template's, `x@.lock`), from before its busy check until its answer: a
+//! second request while it is held is refused, never queued, and two
+//! helpers (one per connection) cannot both find the unit idle and both
+//! start it. `status` is built in and read-only: every verb, its unit and
+//! that unit's state (a template's: whether an instance runs).
 //!
 //! **Framing.** One JSON object per line. In: `Request`, at most
-//! `MAX_REQUEST` bytes, within `REQUEST_DEADLINE`. Out: `Line` — any number
-//! of `progress`, then exactly one `result` or `error`.
+//! `MAX_REQUEST` bytes, within `REQUEST_DEADLINE`. Out: `Line` — `started`
+//! once the start is asked for, any number of `progress`, then exactly one
+//! `result` or `error` (a refusal before the start has no `started`).
 //!
 //! ```text
 //! → {"verb":"reboot","id":"5f0c9d2e7a1b3c4d","selectors":{}}
+//! ← {"t":"started","unit":"daedalus-power.service"}
 //! ← {"t":"progress","line":"rebooting"}
 //! ← {"t":"result","outcome":"done","detail":"rebooting"}
 //! ```
@@ -77,15 +84,17 @@ use crate::deadline::Deadline;
 use crate::jsonl::LineReader;
 
 pub mod relay;
+pub mod runs;
 
 #[cfg(target_os = "linux")]
 pub mod helper;
 
 /// The longest request line read: the largest payload, JSON-escaped, and
 /// room for the rest.
-pub const MAX_REQUEST: usize = 160 * 1024;
-/// The largest payload any verb may declare (`payload_max`).
-pub const MAX_PAYLOAD: usize = 64 * 1024;
+pub const MAX_REQUEST: usize = 2 * MAX_PAYLOAD + 64 * 1024;
+/// The largest payload any verb may declare (`payload_max`): an Apply's
+/// rendered files are the largest, about 40 KiB on the reference box.
+pub const MAX_PAYLOAD: usize = 256 * 1024;
 /// The longest value a pattern selector may declare (`max_len`).
 pub const MAX_PATTERN_LEN: usize = 256;
 /// What a pattern's regex may be written with: anchors, classes, counts,
@@ -98,9 +107,11 @@ pub const MAX_ANSWER: usize = 1 << 20;
 pub const MAX_PROGRESS: usize = 2048;
 /// How long a connection has to send its request.
 pub const REQUEST_DEADLINE: Duration = Duration::from_secs(10);
-/// How a verb's unit says no: its last line starts with this, the reason
-/// after it (module doc).
-pub const REFUSED_PREFIX: &str = "refused: ";
+/// The outcome entry's fields (module doc): `done` or `refused`, the words,
+/// and the invocation that wrote it.
+pub const OUTCOME_FIELD: &str = "DAEDALUS_OUTCOME";
+pub const DETAIL_FIELD: &str = "DAEDALUS_DETAIL";
+pub const INVOCATION_FIELD: &str = "DAEDALUS_INVOCATION";
 /// The built-in read-only verb; no table entry may take its name.
 pub const STATUS_VERB: &str = "status";
 /// The longest `timeout_secs` a verb may carry: a day.
@@ -216,8 +227,9 @@ pub struct VerbState {
     pub patterns: BTreeMap<String, String>,
     /// The largest payload it takes, if it takes one.
     pub payload_max: Option<usize>,
-    /// The unit's `ActiveState`; null for a template (no one instance) or
-    /// when systemd could not be asked.
+    /// The unit's `ActiveState` — a template's is `activating` while an
+    /// instance runs, else `inactive`; null when systemd could not be asked
+    /// or the unit has a selector in its name.
     pub active_state: Option<String>,
     /// Its `Result` from the last run.
     pub result: Option<String>,
@@ -227,6 +239,11 @@ pub struct VerbState {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "lowercase")]
 pub enum Line {
+    /// The start was asked for: from here the unit's, whatever happens to
+    /// this connection.
+    Started {
+        unit: String,
+    },
     Progress {
         line: String,
     },
@@ -799,6 +816,12 @@ mod tests {
     #[test]
     fn the_lines_on_the_wire() {
         let l = |v: &Line| serde_json::to_string(v).unwrap();
+        assert_eq!(
+            l(&Line::Started {
+                unit: "daedalus-power.service".into()
+            }),
+            r#"{"t":"started","unit":"daedalus-power.service"}"#
+        );
         assert_eq!(
             l(&Line::Progress {
                 line: "rebooting".into()

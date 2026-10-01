@@ -49,7 +49,9 @@ import type {
   NodeTelemetryOk,
   ProviderModelSent,
   Queued,
+  RootFollowOk,
   RootRunOk,
+  RootRunsOk,
   RootVerb,
   SessionHostState,
   SessionQueued,
@@ -59,6 +61,7 @@ import type {
   ClaudeStatus as WireClaudeStatus,
   ControllerInfo as WireControllerInfo,
   ProviderReport as WireProviderReport,
+  RootRunSummary as WireRootRunSummary,
   SantreeStatus as WireSantreeStatus,
   SystemInfo as WireSystemInfo,
   TelemetryGet as WireTelemetryGet,
@@ -862,7 +865,7 @@ export const providerModelSent = (v: unknown): { request: string } => ({
   request: decode(reads<ProviderModelSent>()(obj({ delivered: flag, request: str })), v).request,
 })
 
-// ── the root helper (`root.run`) ────────────────────────────────────────────
+// ── the root helper (`root.run`, `root.follow`, `root.runs`) ────────────────
 
 /** How a root verb ended (agent/src/root/mod.rs `Outcome`). */
 export type RootOutcome = 'done' | 'refused' | 'failed'
@@ -877,19 +880,25 @@ export type RootVerbState = {
   patterns: Record<string, string>
   /** The largest payload it takes, or null when it takes none. */
   payloadMax: number | null
-  /** The unit's ActiveState; null for a template, or when systemd did not answer. */
+  /** The unit's ActiveState (a template's: `activating` while an instance runs); null when unknown. */
   activeState: string | null
   result: string | null
 }
 
-/** `root.run`'s answer: the run's id, how it ended, and for `status` every verb. */
+/**
+ * `root.run`'s answer: the run's id, how it ended, and for `status` every
+ * verb. `outcome` is null only for a detached run (`rootStart`) that started
+ * and goes on: `root.follow` has the rest.
+ */
 export type RootRun = {
   run: string
   verb: string
-  outcome: RootOutcome
+  outcome: RootOutcome | null
   detail: string
   verbs: RootVerbState[]
 }
+
+const rootOutcome = literal('done', 'refused', 'failed')
 
 const rootVerbShape = reads<RootVerb>()(
   obj({
@@ -908,7 +917,7 @@ const rootRunShape = reads<RootRunOk>()(
   obj({
     run: str,
     verb: str,
-    outcome: literal('done', 'refused', 'failed'),
+    outcome: nullable(rootOutcome),
     detail: optional(str, ''),
     verbs: optional(arrayOf(rootVerbShape), []),
   }),
@@ -932,6 +941,74 @@ export function rootRunOk(v: unknown): RootRun {
       result: x.result,
     })),
   }
+}
+
+/** A run the controller holds (agent/src/root/runs.rs); `outcome` null while it runs. */
+export type RootRunSummary = {
+  run: string
+  verb: string
+  startedAt: string
+  finishedAt: string | null
+  /** The helper started the verb's unit. */
+  started: boolean
+  outcome: RootOutcome | null
+  detail: string
+}
+
+/** `root.follow`: a run's lines past the caller's `after`, a page at a time. */
+export type RootFollow = {
+  run: RootRunSummary
+  lines: { seq: number; line: string }[]
+  /** The `after` to ask with next. */
+  next: number
+  /** More lines wait past `next`. */
+  more: boolean
+  /** Lines past `after` were already forgotten (the store keeps the newest 2000). */
+  dropped: boolean
+}
+
+const rootRunSummaryShape = reads<WireRootRunSummary>()(
+  obj({
+    run: str,
+    verb: str,
+    started_at: str,
+    finished_at: nstr,
+    started: flag,
+    outcome: nullable(rootOutcome),
+    detail: optional(str, ''),
+  }),
+)
+
+const summaryOf = (s: WireRootRunSummary): RootRunSummary => ({
+  run: s.run,
+  verb: s.verb,
+  startedAt: s.started_at,
+  finishedAt: s.finished_at,
+  started: s.started,
+  outcome: s.outcome,
+  detail: s.detail,
+})
+
+export function rootFollowOk(v: unknown): RootFollow {
+  const r = decode(
+    reads<RootFollowOk>()(
+      obj({
+        run: rootRunSummaryShape,
+        lines: arrayOf(obj({ seq: int, line: str })),
+        next: int,
+        more: flag,
+        dropped: flag,
+      }),
+    ),
+    v,
+  )
+  return { ...r, run: summaryOf(r.run) }
+}
+
+export function rootRunsOk(v: unknown): RootRunSummary[] {
+  return decode(reads<RootRunsOk>()(obj({ runs: arrayOf(rootRunSummaryShape) })), v).runs.map(
+    summaryOf,
+  )
 }
 
 // ── the session host ─────────────────────────────────────────────────────────
