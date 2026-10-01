@@ -36,7 +36,7 @@ export default async ({ page, snap, log, args }) => {
   }
 
   // What traefik's forward-auth sets; the groups header is a JSON array
-  // (core/auth.ts describeGroups).
+  // (core/auth.ts groupsOf).
   await page.setExtraHTTPHeaders({
     'x-proxy-proof': args[1] ?? '',
     'x-forwarded-email': 'walker@example.test',

@@ -162,8 +162,7 @@ announces itself over the SRV record and waits for Approve.
 
 ### Phase 8 — Auth hardening (one rehearsal remains)
 
-`auth.enforceAdmins` is on: every mutating server function and API route
-refuses a request whose forward-auth groups do not name `admins`. What is
+Every mutating server function refuses a request whose forward-auth groups do not name `admins`. What is
 left is the **break-glass local login**: a setup token plus a local login
 (argon2id, sealed session cookie), built and dormant behind `site.json`
 `auth.localLogin` (absent on this box, so the route 404s; not editable from

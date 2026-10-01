@@ -1,6 +1,5 @@
 import { hash } from '@node-rs/argon2'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ADMIN_GROUP } from './auth'
 import { allow, localAuthorization } from './authz'
 import {
   announceSetupToken,
@@ -274,14 +273,14 @@ describe('signing in', () => {
 })
 
 describe('the identity a session yields', () => {
-  it('is the namespaced actor, and passes the enforced admin gate', async () => {
+  it('is the namespaced actor, and passes the admin gate', async () => {
     const f = fake({ cookieUser: 'op' })
     f.rows.push({ id: 'a-1', username: 'op', passwordHash: 'x', lastLoginAt: null })
     const identity = await localIdentity(f)
     expect(identity).toEqual({ actor: `${LOCAL_ACTOR_PREFIX}op`, username: 'op' })
     if (identity === null) throw new Error('unreachable')
-    const decision = localAuthorization(identity, true)
-    expect(decision.groups).toEqual([ADMIN_GROUP])
+    const decision = localAuthorization(identity)
+    expect(decision.admin).toBe(true)
     expect(allow(decision)).toEqual({ ok: true, value: 'local:op' })
   })
 

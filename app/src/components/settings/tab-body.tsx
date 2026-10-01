@@ -7,7 +7,6 @@ import type { MachinesData } from '../../lib/dashboard/machines'
 import type { ExternalApp } from '../../lib/external-apps'
 import type { ModuleSwitch } from '../../lib/module-switch'
 import type { ThemeChoice } from '../../lib/theme'
-import type { AuthorizationView } from '../../server/settings'
 import { GuardedAwait } from '../error'
 import { BoardsSkeleton } from '../skeleton'
 import { Appearance } from './appearance'
@@ -35,7 +34,6 @@ export type SettingsTabData = {
   timezones: string[]
   externalApps: ExternalApp[]
   mcpTokens: McpTokenRow[]
-  authorization: AuthorizationView | null
   zones: Promise<ZoneList> | null
   integrations: Promise<IntegrationStatus> | null
   site: Promise<SiteState> | null
@@ -77,7 +75,7 @@ export function SettingsTabBody({
   data: SettingsTabData
   github: GithubAppProps
 }) {
-  const { theme, settings, edit, timezones, externalApps, mcpTokens, authorization } = data
+  const { theme, settings, edit, timezones, externalApps, mcpTokens } = data
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   // The choice is held here as well as in the loader so a click repaints the
@@ -157,14 +155,7 @@ export function SettingsTabBody({
           }}
         />
       )}
-      {tab === 'developer' && authorization !== null && (
-        <Developer
-          settings={settings}
-          edit={edit}
-          tokens={mcpTokens}
-          authorization={authorization}
-        />
-      )}
+      {tab === 'developer' && <Developer settings={settings} edit={edit} tokens={mcpTokens} />}
     </>
   )
 }

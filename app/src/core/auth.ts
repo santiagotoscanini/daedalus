@@ -113,54 +113,32 @@ export { ADMIN_GROUP }
 export const NOT_ADMIN_REASON = `Only members of the ${ADMIN_GROUP} group can change this box, so nothing was done.`
 
 /**
- * How the groups header arrived, for the panel that decides whether arming
- * the check is safe. `groups` alone cannot say: an empty list is what every
- * failure degrades to, and "the proxy sent nothing" and "the proxy sent a
- * list that does not name admins" call for different fixes.
- *
- *   absent      — no header at all: the header is not configured in nix, the
- *                 request came in under the gate (shotter dials the
- *                 container directly), or it carried no proxy proof.
- *   blank       — present and empty: the strip middleware ran and the plugin
- *                 never re-set it, which is what a bypassed path looks like.
- *   unparseable — present, not a JSON array (a non-string entry is dropped,
- *                 not refused).
- *   list        — a JSON array, possibly empty, possibly without `admins`.
- */
-export type GroupsHeader = 'absent' | 'blank' | 'unparseable' | 'list'
-
-export type GroupsRead = { state: GroupsHeader; groups: string[] }
-
-/**
  * The groups the forward-auth proxy says this session carries.
  *
  * The header is a JSON array, because Go renders a bare claim list as
  * `[admins family]` — neither JSON nor comma-separated — so daedalus.nix
  * pipes it through the plugin's own `mapToJsonArray`.
  *
- * Every failure is the empty list rather than a throw. An empty list can
- * never satisfy `isAdmin`, so every one of them degrades to "not an admin"
- * rather than to an error page.
+ * Every failure (absent, blank, not a JSON array) is the empty list rather
+ * than a throw, and a non-string entry is dropped. An empty list can never
+ * satisfy `isAdmin`, so every one of them degrades to "not an admin" rather
+ * than to an error page.
  */
-export function describeGroups(header: string | null | undefined): GroupsRead {
-  if (header === null || header === undefined) return { state: 'absent', groups: [] }
-  const raw = header.trim()
-  if (raw === '') return { state: 'blank', groups: [] }
+export function groupsOf(header: string | null | undefined): string[] {
+  const raw = header?.trim() ?? ''
+  if (raw === '') return []
   try {
     const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return { state: 'unparseable', groups: [] }
-    return {
-      state: 'list',
-      groups: parsed.filter((g): g is string => typeof g === 'string' && g.trim() !== ''),
-    }
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((g): g is string => typeof g === 'string' && g.trim() !== '')
   } catch {
-    return { state: 'unparseable', groups: [] }
+    return []
   }
 }
 
-/** The header's arrival state and its groups, over the request this server function is in. */
-export function requireGroupsHeader(): GroupsRead {
-  return describeGroups(forwardedHeader(AUTH_HEADERS.GROUPS))
+/** The groups of the request this server function is running inside. */
+export function requireGroups(): string[] {
+  return groupsOf(forwardedHeader(AUTH_HEADERS.GROUPS))
 }
 
 /** Whether a group list carries the one that may change this box. */

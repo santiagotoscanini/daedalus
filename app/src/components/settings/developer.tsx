@@ -2,9 +2,7 @@ import { FileCodeIcon, GitBranchIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import type { McpTokenRow } from '../../host/mcp/tokens'
-import type { AuthorizationView } from '../../server/settings'
 import { Chip } from '../viz'
-import { Authorization } from './authorization'
 import { McpTokens } from './mcp-tokens'
 import { ASIDE, Line, Mono, NOTE, Section, Value } from './shared'
 import { SiteSwitch, SiteUnwritten } from './site-fields'
@@ -12,10 +10,9 @@ import { SiteSwitch, SiteUnwritten } from './site-fields'
 // How this instance runs, and the credentials that let a machine drive it.
 //
 // The first two sections are inert by design — they state what the flake
-// declared and change nothing. The next three are not: the engine override
-// points every Apply at a local clone instead of the pinned engine,
-// Authorization is the switch that arms the `admins` check, and MCP tokens
-// are the one thing on this tab an operator creates. All of them live here
+// declared and change nothing. The next two are not: the engine override
+// points every Apply at a local clone instead of the pinned engine, and MCP
+// tokens are the one thing on this tab an operator creates. Both live here
 // rather than under Integrations because their subject is who may drive this
 // box and how, not a service the box talks to.
 
@@ -23,12 +20,10 @@ export function Developer({
   settings,
   edit,
   tokens,
-  authorization,
 }: {
   settings: BoxSettings
   edit: SiteEdit
   tokens: McpTokenRow[]
-  authorization: AuthorizationView
 }) {
   const d = settings.developer
   return (
@@ -101,8 +96,6 @@ export function Developer({
           what switches the box back onto the pinned engine.
         </p>
       </Section>
-
-      <Authorization view={authorization} />
 
       <McpTokens tokens={tokens} />
     </div>

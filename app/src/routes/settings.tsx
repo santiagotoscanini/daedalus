@@ -25,7 +25,6 @@ import { fetchModuleSwitches } from '../server/modules'
 import { fetchMachinesFn } from '../server/nodes'
 import { fetchApplyStatus } from '../server/registry'
 import {
-  fetchAuthorization,
   fetchBoxSettings,
   fetchExternalApps,
   fetchGithubAppStatus,
@@ -159,36 +158,25 @@ export const Route = createFileRoute('/settings')({
   // shows them; so does the machine list, which probes the LAN.
   loader: async ({ deps }) => {
     const general = !isTab(deps.tab) || deps.tab === 'general'
-    const [
-      theme,
-      settings,
-      edit,
-      applyStatus,
-      timezones,
-      externalApps,
-      githubApp,
-      mcpTokens,
-      authorization,
-    ] = await Promise.all([
-      known('settings/theme', fetchTheme),
-      known('settings/box', fetchBoxSettings),
-      known('settings/edit', fetchSiteEdit),
-      known('settings/apply', fetchApplyStatus),
-      // A file read; only General has the picker.
-      general ? known('settings/timezones', fetchTimezones) : Promise.resolve<string[]>([]),
-      // One row, and only Projects has the editor.
-      deps.tab === 'projects' ? known('settings/projects', fetchExternalApps) : Promise.resolve([]),
-      // Two file reads and a row, for the tab that shows it.
-      deps.tab === 'integrations'
-        ? known('settings/github', fetchGithubAppStatus)
-        : Promise.resolve(null),
-      // One indexed table read, and only for the tab that lists them.
-      deps.tab === 'developer' ? known('settings/mcp', fetchMcpTokens) : Promise.resolve([]),
-      // The decision for this very request: two headers and one row.
-      deps.tab === 'developer'
-        ? known('settings/authorization', fetchAuthorization)
-        : Promise.resolve(null),
-    ])
+    const [theme, settings, edit, applyStatus, timezones, externalApps, githubApp, mcpTokens] =
+      await Promise.all([
+        known('settings/theme', fetchTheme),
+        known('settings/box', fetchBoxSettings),
+        known('settings/edit', fetchSiteEdit),
+        known('settings/apply', fetchApplyStatus),
+        // A file read; only General has the picker.
+        general ? known('settings/timezones', fetchTimezones) : Promise.resolve<string[]>([]),
+        // One row, and only Projects has the editor.
+        deps.tab === 'projects'
+          ? known('settings/projects', fetchExternalApps)
+          : Promise.resolve([]),
+        // Two file reads and a row, for the tab that shows it.
+        deps.tab === 'integrations'
+          ? known('settings/github', fetchGithubAppStatus)
+          : Promise.resolve(null),
+        // One indexed table read, and only for the tab that lists them.
+        deps.tab === 'developer' ? known('settings/mcp', fetchMcpTokens) : Promise.resolve([]),
+      ])
     return {
       theme,
       settings,
@@ -198,7 +186,6 @@ export const Route = createFileRoute('/settings')({
       externalApps,
       githubApp,
       mcpTokens,
-      authorization,
       // One table read plus a LAN probe of every machine, which can take
       // seconds when one is asleep: streamed, behind a skeleton the first
       // time and in place after.

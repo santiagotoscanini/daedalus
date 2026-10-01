@@ -1,118 +1,46 @@
-import { readSetting, SETTING_KEYS, writeSetting } from '../lib/repo/settings'
 import type { Result } from '../lib/result'
-import {
-  type Actor,
-  ADMIN_GROUP,
-  type GroupsHeader,
-  type GroupsRead,
-  isAdmin,
-  NOT_ADMIN_REASON,
-  requireActor,
-  requireGroupsHeader,
-} from './auth'
+import { type Actor, isAdmin, NOT_ADMIN_REASON, requireActor, requireGroups } from './auth'
 import { type LocalIdentity, localIdentity } from './local-login'
 
 // Who may CHANGE this box, as opposed to who is signed in.
 //
-// core/auth.ts answers "is anyone there" and stays pure — no database, no
-// environment — because the server-function seam static-imports it. This
-// module asks the second question, and cannot be pure: whether the answer is
-// enforced is a stored preference, so the seam reaches it only through
-// server/fn.ts's `adminOnly`, with `await import`.
-//
-// WHY THERE IS A FLAG.
+// core/auth.ts answers "is anyone there" and stays free of the database
+// because the server-function seam static-imports it. This module asks the
+// second question; it reads the break-glass session (core/local-login.ts), so
+// the seam reaches it only through server/fn.ts's `adminOnly`, with
+// `await import`.
 //
 // Authorization already exists one layer earlier: the Pocket ID client
 // daedalus derives allows `authGroups`, which defaults to [ "admins" ], and it
 // is enforced at the IdP — someone outside the group never completes a login,
-// so the app never sees the request. What this module adds is defence in depth
-// at the thing that actually writes, which matters the day a client is
-// widened or a bypass rule grows a path.
+// so the app never sees the request. This module is defence in depth at the
+// thing that actually writes, which matters the day a client is widened or a
+// bypass rule grows a path. It depends on the proxy sending
+// `X-Forwarded-Groups` (daedalus.nix's `auth.headers`); a request without it is
+// not an admin.
 //
-// Refusing depends on the proxy sending `X-Forwarded-Groups` (daedalus.nix's
-// `auth.headers`). Arming before it arrives would read an absent header as
-// "not an admin" and lock the operator out of their own control plane. So
-// refusal is armed by the `auth.enforceAdmins` preference, and arming is
-// itself refused from a request that does not carry `admins`
-// (setEnforcingAdmins). Disarmed, the check still RUNS and still reports; it
-// simply does not refuse. That is what `authorize` returns `enforced` for.
-//
-// MACHINE CALLERS DO NOT USE THE GATE ABOVE. /api/deploy (a shared token,
-// checked in constant time), /api/github/webhook (an HMAC signature) and /mcp
-// (a scoped token) authenticate something that has no person behind it and no
-// session to carry groups — traefik does not even set the header on the paths
-// it bypasses. They keep their own auth; /mcp, whose tools drive the same
-// write flows as the buttons, reaches its own narrow door at the bottom of
-// this file (assertMachineActor) rather than a flag that would weaken this one.
+// MACHINE CALLERS DO NOT USE THE GATE ABOVE. /api/github/webhook (an HMAC
+// signature) and /mcp (a scoped token) authenticate something that has no
+// person behind it and no session to carry groups — traefik does not even set
+// the header on the paths it bypasses. They keep their own auth; /mcp, whose
+// tools drive the same write flows as the buttons, reaches its own narrow door
+// at the bottom of this file (assertMachineActor).
 
-/** What an authorization decision knows. `enforced` is false while the flag is off. */
+/** What an authorization decision knows. */
 export type Authorization = {
   /** The signed-in actor, or the refusal from the identity gate. */
   actor: Actor
-  /**
-   * How the groups header arrived — the fact the arming panel renders, since
-   * `groups: []` alone cannot tell "the proxy sent nothing" from "the proxy
-   * sent a list without admins". `local` is the break-glass session, which
-   * carries no header at all (core/local-login.ts).
-   */
-  header: GroupsHeader | 'local'
-  /** The groups the session carries. `[]` when the header is absent, blank or unparseable. */
-  groups: string[]
-  /** Whether those groups include the admin group. */
+  /** Whether the session carries the admin group. */
   admin: boolean
-  /** Whether a failure here actually refuses, or is only reported. */
-  enforced: boolean
-}
-
-/** Whether refusal is armed. Off unless the preference says otherwise. */
-async function enforcingAdmins(): Promise<boolean> {
-  const on = await readSetting(
-    SETTING_KEYS.authEnforceAdmins,
-    (v): v is boolean => typeof v === 'boolean',
-  )
-  return on ?? false
-}
-
-/**
- * Arm or disarm refusal — Settings › Developer › Authorization's switch.
- *
- * Arming is refused unless the decision being made FROM carries `admins`:
- * the request that flips the switch is the proof that the header has landed,
- * and turning refusal on from a request the check would refuse is the lockout
- * this flag exists to avoid. Nothing is written on a refusal.
- * Disarming is always allowed — it is the way back out, and it can only widen.
- *
- * The write is a parameter so the refusal can be asserted without a database:
- * the seam passes `writeSetting`.
- */
-export async function setEnforcingAdmins(
-  on: boolean,
-  decision: Authorization,
-  write: (key: string, value: unknown) => Promise<void> = writeSetting,
-): Promise<Result<null>> {
-  if (on && !decision.admin) {
-    return {
-      ok: false,
-      reason: `This request does not carry the ${ADMIN_GROUP} group, so arming would refuse this very account. Nothing was changed.`,
-    }
-  }
-  await write(SETTING_KEYS.authEnforceAdmins, on)
-  return { ok: true, value: null }
 }
 
 /**
  * The decision a break-glass local session yields (core/local-login.ts): the
  * same shape the headers produce, with `admins` implied. Pure, so the claim
- * that such a session passes an enforced `assertAdmin()` is one test.
+ * that such a session passes `assertAdmin()` is one test.
  */
-export function localAuthorization(identity: LocalIdentity, enforced: boolean): Authorization {
-  return {
-    actor: { ok: true, value: identity.actor },
-    header: 'local',
-    groups: [ADMIN_GROUP],
-    admin: true,
-    enforced,
-  }
+export function localAuthorization(identity: LocalIdentity): Authorization {
+  return { actor: { ok: true, value: identity.actor }, admin: true }
 }
 
 /**
@@ -123,25 +51,19 @@ export function localAuthorization(identity: LocalIdentity, enforced: boolean): 
  */
 const decide = async (
   actor: Actor,
-  read: GroupsRead,
+  groups: string[],
   local: () => Promise<LocalIdentity | null>,
 ): Promise<Authorization> => {
   if (!actor.ok) {
     const identity = await local()
-    if (identity !== null) return localAuthorization(identity, await enforcingAdmins())
+    if (identity !== null) return localAuthorization(identity)
   }
-  return {
-    actor,
-    header: read.state,
-    groups: read.groups,
-    admin: isAdmin(read.groups),
-    enforced: await enforcingAdmins(),
-  }
+  return { actor, admin: isAdmin(groups) }
 }
 
 /** The decision for the request this server function is running inside. */
 export async function authorize(): Promise<Authorization> {
-  return decide(requireActor(), requireGroupsHeader(), () => localIdentity())
+  return decide(requireActor(), requireGroups(), () => localIdentity())
 }
 
 /**
@@ -154,7 +76,7 @@ export async function authorize(): Promise<Authorization> {
  */
 export function allow(decision: Authorization): Result<string> {
   if (!decision.actor.ok) return decision.actor
-  if (decision.enforced && !decision.admin) return { ok: false, reason: NOT_ADMIN_REASON }
+  if (!decision.admin) return { ok: false, reason: NOT_ADMIN_REASON }
   return decision.actor
 }
 
@@ -193,8 +115,7 @@ export async function assertAdmin(): Promise<string> {
 // headers on that path at all (traefik's plugin only sets them on gated paths,
 // and /mcp is in `authBypassRule` precisely so an agent can reach it), so
 // `assertAdmin()` would read an absent identity as a refusal and turn every
-// tool call into a 500 — armed or not, since `allow` refuses a missing actor
-// before it looks at the flag.
+// tool call into a 500.
 //
 // The answer is NOT to weaken `assertAdmin`. A bypass flag on the human gate
 // is how a gate stops meaning anything: it would be one boolean away from
@@ -205,7 +126,6 @@ export async function assertAdmin(): Promise<string> {
 //
 // WHAT AUTHORISES IT. The scoped token, checked in constant time against a
 // stored digest before any work happens (host/mcp/tokens.ts), exactly as
-// `/api/deploy`'s X-Deploy-Token is the authorization for that path and
 // `/api/github/webhook`'s HMAC is for that one. The token IS the
 // authorization; this function's job is to refuse a proof that does not
 // actually say so, and to name the actor the write will be recorded under.
