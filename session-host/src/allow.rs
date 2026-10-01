@@ -28,7 +28,8 @@
 //! when its key leaves the set, and the daemon closes that node's PTYs.
 
 use std::collections::{HashMap, HashSet};
-use std::os::unix::fs::MetadataExt;
+use std::io::Read as _;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -133,10 +134,26 @@ fn stamp(meta: &std::fs::Metadata) -> Stamp {
     )
 }
 
+/// The file is opened without following a link and without blocking (a FIFO
+/// swapped in must not pin the watch thread, which would freeze the set in
+/// force), and everything is checked and read on that descriptor.
 fn look(path: &Path) -> (Option<Stamp>, Read) {
-    let meta = match std::fs::symlink_metadata(path) {
-        Ok(meta) => meta,
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_NOCTTY)
+        .open(path)
+    {
+        Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (None, Read::Missing),
+        Err(e) => {
+            // A link (ELOOP) or a file that cannot be opened: refused, and
+            // stamped so the next look sees whether it changed.
+            let at = std::fs::symlink_metadata(path).ok().map(|m| stamp(&m));
+            return (at, Read::Refused(e.to_string()));
+        }
+    };
+    let meta = match file.metadata() {
+        Ok(meta) => meta,
         Err(e) => return (None, Read::Refused(e.to_string())),
     };
     let at = Some(stamp(&meta));
@@ -163,8 +180,10 @@ fn look(path: &Path) -> (Option<Stamp>, Read) {
     if meta.len() > MAX_FILE {
         return (at, Read::Refused(format!("over {MAX_FILE} bytes")));
     }
-    match std::fs::read_to_string(path) {
-        Ok(text) => match AllowSet::parse(&text) {
+    let mut text = String::new();
+    match file.take(MAX_FILE + 1).read_to_string(&mut text) {
+        Ok(n) if n as u64 > MAX_FILE => (at, Read::Refused(format!("over {MAX_FILE} bytes"))),
+        Ok(_) => match AllowSet::parse(&text) {
             Ok(set) => (at, Read::Good(set)),
             Err(e) => (at, Read::Malformed(e)),
         },
@@ -405,5 +424,48 @@ mod tests {
             );
             std::thread::sleep(Duration::from_millis(50));
         }
+    }
+    /// The file is checked and read through one non-blocking descriptor: a
+    /// FIFO swapped in between a check and the read never blocks a look (the
+    /// watch thread, and with it every revocation).
+    #[test]
+    fn a_fifo_swapped_in_never_blocks_a_look() {
+        use std::os::unix::ffi::OsStrExt;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("allow.json");
+        let stop = Arc::new(AtomicBool::new(false));
+        let swapper = {
+            let (dir, path, stop) = (dir.path().to_path_buf(), path.clone(), stop.clone());
+            std::thread::spawn(move || {
+                let (file, fifo) = (dir.join("t"), dir.join("f"));
+                let fifo_c = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
+                while !stop.load(Ordering::Relaxed) {
+                    std::fs::write(&file, doc(&[(ID, KEY)])).unwrap();
+                    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600))
+                        .unwrap();
+                    std::fs::rename(&file, &path).unwrap();
+                    // SAFETY: mkfifo(3) on a NUL-terminated path.
+                    assert_eq!(unsafe { libc::mkfifo(fifo_c.as_ptr(), 0o600) }, 0);
+                    std::fs::rename(&fifo, &path).unwrap();
+                }
+            })
+        };
+        let (done, finished) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let until = std::time::Instant::now() + Duration::from_secs(2);
+            let mut fifos = 0;
+            while std::time::Instant::now() < until {
+                if let (_, Read::Refused(_)) = look(&path) {
+                    fifos += 1;
+                }
+            }
+            let _ = done.send(fifos);
+        });
+        let fifos = finished.recv_timeout(Duration::from_secs(10));
+        stop.store(true, Ordering::Relaxed);
+        swapper.join().unwrap();
+        assert!(fifos.is_ok(), "a look blocked on the FIFO");
+        assert!(fifos.unwrap() > 0, "the FIFO was never seen");
     }
 }
