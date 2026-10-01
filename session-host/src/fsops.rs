@@ -19,17 +19,7 @@ use santree_remote_proto::{
     ErrorCode, FsKind, FsReadParams, FsReadResult, FsStat, FsWriteParams, WireError, FS_READ_MAX,
 };
 
-fn err(code: ErrorCode, msg: impl Into<String>) -> WireError {
-    WireError::new(code, msg)
-}
-
-pub fn io_err(e: std::io::Error, what: &str) -> WireError {
-    let code = match e.kind() {
-        std::io::ErrorKind::NotFound => ErrorCode::NotFound,
-        _ => ErrorCode::Io,
-    };
-    err(code, format!("{what}: {e}"))
-}
+use crate::util::{err, io_err};
 
 pub fn absolute(path: &str, what: &str) -> Result<PathBuf, WireError> {
     let path = PathBuf::from(path);

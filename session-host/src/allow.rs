@@ -31,11 +31,13 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read as _;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Deserialize;
 use tokio::sync::watch;
+
+use crate::util::lock;
 
 /// How often the file is looked at.
 pub const POLL: Duration = Duration::from_secs(1);
@@ -189,10 +191,6 @@ fn look(path: &Path) -> (Option<Stamp>, Read) {
         },
         Err(e) => (at, Read::Malformed(e.to_string())),
     }
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// The live set, and the file it comes from.

@@ -31,7 +31,7 @@ mod tests;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use santree_pty::PtyManager;
@@ -41,6 +41,7 @@ use serde_json::value::RawValue;
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
 
 use crate::allow::AllowList;
+use crate::util::{err, lock};
 use crate::{exec, fsops, workspaces};
 
 use conn::Conn;
@@ -115,14 +116,6 @@ pub struct Options {
     pub workspace_icons: PathBuf,
     pub ping_interval: Duration,
     pub hook_queue_cap: usize,
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-fn err(code: ErrorCode, msg: impl Into<String>) -> WireError {
-    WireError::new(code, msg)
 }
 
 type Outcome = Result<Box<RawValue>, WireError>;

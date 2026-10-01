@@ -11,22 +11,12 @@ use santree_remote_proto::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
+use crate::util::{err, io_err};
+
 /// Per-stream cap on `exec.run` output. 8 MiB, as santree's reference
 /// daemon: base64 grows a stream by 4/3, and two capped streams must still fit
 /// one response line under the client's 32 MiB cap.
 pub const EXEC_OUTPUT_CAP: usize = 8 * 1024 * 1024;
-
-fn err(code: ErrorCode, msg: impl Into<String>) -> WireError {
-    WireError::new(code, msg)
-}
-
-fn io_err(e: std::io::Error, what: &str) -> WireError {
-    let code = match e.kind() {
-        std::io::ErrorKind::NotFound => ErrorCode::NotFound,
-        _ => ErrorCode::Io,
-    };
-    err(code, format!("{what}: {e}"))
-}
 
 /// SIGKILL to a process group, unless disarmed. Held from the spawn until the
 /// process has exited AND its output has closed: a drop anywhere before that

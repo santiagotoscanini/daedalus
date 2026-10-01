@@ -17,6 +17,7 @@ pub mod preauth;
 pub mod serve;
 mod status;
 mod sys;
+mod util;
 mod workspaces;
 
 pub use config::Config;

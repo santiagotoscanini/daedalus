@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::util::lock;
+
 /// Connections from the network not yet admitted, in all…
 pub const MAX_PREAUTH: usize = 32;
 /// …and from one address.
@@ -67,7 +69,7 @@ impl Preauth {
                 bucket: None,
             });
         }
-        let mut per = self.per_ip.lock().unwrap_or_else(|e| e.into_inner());
+        let mut per = lock(&self.per_ip);
         let mine = per.get(&bucket).copied().unwrap_or(0);
         if mine >= PREAUTH_PER_IP || self.total.load(Ordering::Acquire) >= MAX_PREAUTH {
             return None;
@@ -87,11 +89,7 @@ impl Drop for Slot {
             self.preauth.loopback.fetch_sub(1, Ordering::AcqRel);
             return;
         };
-        let mut per = self
-            .preauth
-            .per_ip
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut per = lock(&self.preauth.per_ip);
         if let Some(n) = per.get_mut(&bucket) {
             *n -= 1;
             if *n == 0 {
@@ -113,7 +111,7 @@ impl RefusalLog {
     /// Whether to log this one, and how many were held back before it.
     pub(crate) fn admit(&self) -> Option<u64> {
         let now = Instant::now();
-        let mut w = self.window.lock().unwrap_or_else(|e| e.into_inner());
+        let mut w = lock(&self.window);
         let (start, logged, held) = &mut *w;
         if start.is_none_or(|s| now.duration_since(s) >= Duration::from_secs(60)) {
             *start = Some(now);

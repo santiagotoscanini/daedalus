@@ -19,6 +19,7 @@ use serde::Serialize;
 
 use crate::allow::AllowList;
 use crate::daemon::Daemon;
+use crate::util::lock;
 
 /// Never more often than this…
 pub const MIN_INTERVAL: Duration = Duration::from_secs(1);
@@ -138,7 +139,7 @@ impl StatusWriter {
     /// Write one snapshot. `running = false` is the final one: nothing is
     /// written after it.
     pub fn write(&self, running: bool) -> std::io::Result<()> {
-        let mut written = self.written.lock().unwrap_or_else(|e| e.into_inner());
+        let mut written = lock(&self.written);
         if written.stopped {
             return Ok(());
         }

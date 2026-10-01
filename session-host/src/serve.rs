@@ -24,6 +24,7 @@ use crate::config::Config;
 use crate::daemon::{self, Daemon, Options, Peer};
 use crate::preauth::{Preauth, RefusalLog};
 use crate::status::StatusWriter;
+use crate::util::lock;
 use crate::{hostkey, sys};
 
 /// From accept to a finished TLS handshake.
@@ -42,7 +43,7 @@ type ConnTasks = Arc<Mutex<JoinSet<()>>>;
 
 /// Run `task` in `tasks`, forgetting the ones that finished.
 fn track(tasks: &ConnTasks, task: impl Future<Output = ()> + Send + 'static) {
-    let mut tasks = tasks.lock().unwrap_or_else(|e| e.into_inner());
+    let mut tasks = lock(tasks);
     while tasks.try_join_next().is_some() {}
     tasks.spawn(task);
 }
@@ -189,7 +190,7 @@ impl Server {
             let _ = task.await;
         }
         // The accept loops are gone, so nothing adds to it any more.
-        let mut open = std::mem::take(&mut *conns.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut open = std::mem::take(&mut *lock(&conns));
         open.shutdown().await;
         if let Err(e) = std::fs::remove_file(&self.config.hook_socket) {
             log::warn!("removing {}: {e}", self.config.hook_socket.display());
