@@ -14,7 +14,7 @@ import type { ReactNode } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
 import { Measure, PageHead } from '../components/page'
-import { SiteDiff } from '../components/settings/site-fields'
+import { SiteDiff } from '../components/settings/site-diff'
 import { SettingsTabBody } from '../components/settings/tab-body'
 import { useGithubLanding } from '../components/settings/use-github-landing'
 import { TabBar } from '../components/tabs'
