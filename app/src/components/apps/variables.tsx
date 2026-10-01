@@ -4,7 +4,7 @@ import type { AppSecretKey } from '../../lib/apps/secret-keys'
 import { cn } from '../../lib/cn'
 
 import { saveApp } from '../../server/registry'
-import { EMPTY } from '../tokens'
+import { EMPTY, INPUT_ROW } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -28,7 +28,7 @@ import type { AppRecord } from './shared'
 // says so rather than implying a live change, and the Apps bar lights because
 // `driftOf` compares these rows against the nix manifest.
 
-const FIELD = 'h-auto rounded-[6px] bg-(--panel-2) px-[0.5rem] py-[0.25rem] text-[0.8rem]'
+const FIELD = INPUT_ROW
 const SMALL_BTN = 'h-auto px-[0.6rem] py-[0.2rem] text-[0.76rem] text-(--text-muted)'
 const LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-(--dim)'
 // Three columns, not two: the name, the value, and the actions in a column

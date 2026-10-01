@@ -43,7 +43,7 @@ checks). What a component looks like:
    (`BOARD`, `STAT`…) and a directory's `shared.tsx` (`BOARD_FOOT`,
    `SECTION_HEAD`, `GHOST_BTN`…) — reuse before re-spelling.
 2. Reach for a shadcn primitive in `src/components/ui/` before
-   hand-rolling: `Card` for a panel, `Badge` for a pill, `Picker` for
+   hand-rolling: `Card` for a panel, `Chip` (`viz.tsx`) for a pill, `Picker` for
    a closed list (it wraps `Select`; nothing else uses `Select`
    directly), `Field` for a form row, `Alert` (body in
    `AlertDescription`, never bare text — its grid puts bare text in a

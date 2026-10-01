@@ -68,3 +68,11 @@ export const ROW_MAIN = 'min-w-0 flex-auto truncate text-foreground'
 export const ROW_SIDE =
   'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
 export const ROW_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
+
+/* The three densities of `Input` (ui/input.tsx draws the field itself): a
+   form's own field, a compact mono one for a value typed into a row of
+   settings, and the tight one inside a list row. Width is the caller's. */
+export const INPUT_FORM = 'h-auto px-[0.65rem] py-[0.45rem] md:text-[0.87rem]'
+export const INPUT_MONO = 'h-auto px-[0.65rem] py-[0.4rem] font-mono md:text-[0.8rem]'
+export const INPUT_ROW =
+  'h-auto rounded-[6px] px-[0.5rem] py-[0.25rem] text-[0.8rem] md:text-[0.8rem]'

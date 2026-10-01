@@ -1,6 +1,5 @@
 import { GlobeIcon } from 'lucide-react'
 import { useId, useState } from 'react'
-import { cn } from '../../lib/cn'
 import {
   EXTERNAL_DESCRIPTION_MAX,
   EXTERNAL_NAME_MAX,
@@ -12,6 +11,7 @@ import {
   type Platform,
 } from '../../lib/external-apps'
 import { addExternalAppFn, removeExternalAppFn } from '../../server/settings'
+import { INPUT_MONO } from '../tokens'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
@@ -39,10 +39,7 @@ const EMPTY: ExternalAppInput = {
   repo: null,
 }
 
-const INPUT = cn(
-  'h-auto w-full rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.4rem]',
-  'font-mono md:text-[0.8rem] dark:bg-(--panel-2)',
-)
+const INPUT = INPUT_MONO
 const LABEL = 'font-medium text-(--text-muted) text-[0.8rem]'
 const HINT = 'text-(--dim) text-[0.76rem]'
 

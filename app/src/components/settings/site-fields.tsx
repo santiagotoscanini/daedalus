@@ -11,6 +11,7 @@ import {
   foldUnchanged,
 } from '../../lib/text-diff'
 import { saveSiteEditFn } from '../../server/site'
+import { INPUT_MONO } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Field, FieldError } from '../ui/field'
 import { Input } from '../ui/input'
@@ -37,10 +38,7 @@ import { ASIDE, Mono } from './shared'
 // row's `dt` and the input carries it as `aria-label`; the `Field` wrapper
 // groups the control with its error the way the form rows elsewhere do.
 
-const INPUT = cn(
-  'h-auto w-[15rem] max-w-full rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.4rem]',
-  'font-mono md:text-[0.8rem] dark:bg-(--panel-2)',
-)
+const INPUT = cn(INPUT_MONO, 'w-[15rem] max-w-full')
 
 const AFFIX = 'font-mono text-[0.8rem] text-(--dim)'
 

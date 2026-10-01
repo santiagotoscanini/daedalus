@@ -1,7 +1,7 @@
 import { type ReactNode, useId } from 'react'
 import { cn } from '../lib/cn'
 import { GHOST_BTN } from './apps/shared'
-import { MONO } from './tokens'
+import { INPUT_MONO, MONO } from './tokens'
 import { Button, type buttonVariants } from './ui/button'
 import { Input } from './ui/input'
 
@@ -107,10 +107,7 @@ export function TypedConfirm({
       </span>
       <Input
         id={id}
-        className={cn(
-          'h-auto w-[10rem] rounded-[7px] px-[0.5rem] py-[0.2rem] font-mono md:text-[0.8rem]',
-          inputClassName,
-        )}
+        className={cn(INPUT_MONO, 'w-[10rem]', inputClassName)}
         value={value}
         disabled={disabled}
         spellCheck={false}

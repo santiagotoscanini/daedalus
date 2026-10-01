@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { TypedConfirm } from '../../../components/armed-confirm'
 import { RebootRequired } from '../../../components/reboot-required'
 import { usePolledStatus } from '../../../components/status'
@@ -65,6 +65,7 @@ export function VersionBoard({
   initialStatus: VersionUpdateStatus
 }) {
   const router = useRouter()
+  const radioName = useId()
   const [picked, setPicked] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
   const { status, running, refusal, start } = usePolledStatus({
@@ -117,30 +118,42 @@ export function VersionBoard({
           game
         </p>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-[0.3rem] p-0">
+        // One choice out of several: real radios, each option a label that
+        // carries chips and a date a segmented control has no room for.
+        <fieldset className="m-0 flex min-w-0 flex-col gap-[0.3rem] border-0 p-0">
+          <legend className="sr-only">Version to move to</legend>
           {update.options.map((o, i) => (
-            <li key={key(o)}>
-              <button
-                type="button"
-                className={cn(OPTION, chosen !== null && key(o) === key(chosen) && OPTION_ON)}
+            <label
+              key={key(o)}
+              className={cn(
+                OPTION,
+                'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-(--brand-dim)',
+                chosen !== null && key(o) === key(chosen) && OPTION_ON,
+                running && 'cursor-not-allowed opacity-45',
+              )}
+            >
+              <input
+                type="radio"
+                name={radioName}
+                className="sr-only"
+                checked={chosen !== null && key(o) === key(chosen)}
                 disabled={running}
-                onClick={() => {
+                onChange={() => {
                   setPicked(key(o))
                   setTyped('')
                 }}
-              >
-                <span className={cn(MONO, 'text-[0.84rem] text-foreground')}>{o.version}</span>
-                <span className={cn(MONO, 'text-[0.76rem] text-(--text-muted)')}>
-                  build {o.build}
-                </span>
-                <Chip tone={CHANNEL_TONE[o.channel] ?? 'muted'}>{o.channel.toLowerCase()}</Chip>
-                {o.newGame && <Chip tone="info">new game</Chip>}
-                {i === 0 && !o.preRelease && <Chip tone="ok">recommended</Chip>}
-                <span className={cn(NOTE, 'ml-auto')}>{o.date}</span>
-              </button>
-            </li>
+              />
+              <span className={cn(MONO, 'text-[0.84rem] text-foreground')}>{o.version}</span>
+              <span className={cn(MONO, 'text-[0.76rem] text-(--text-muted)')}>
+                build {o.build}
+              </span>
+              <Chip tone={CHANNEL_TONE[o.channel] ?? 'muted'}>{o.channel.toLowerCase()}</Chip>
+              {o.newGame && <Chip tone="info">new game</Chip>}
+              {i === 0 && !o.preRelease && <Chip tone="ok">recommended</Chip>}
+              <span className={cn(NOTE, 'ml-auto')}>{o.date}</span>
+            </label>
           ))}
-        </ul>
+        </fieldset>
       )}
 
       {chosen !== null && (

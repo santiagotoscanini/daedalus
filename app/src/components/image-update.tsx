@@ -10,6 +10,7 @@ import { RebootRequired } from './reboot-required'
 import { usePolledStatus } from './status'
 import { MONO, MONO_FACE } from './tokens'
 import { Button } from './ui/button'
+import { Picker } from './ui/picker'
 import { Chip } from './viz'
 
 // The control that moves a pin.
@@ -52,15 +53,6 @@ const PHASES = [
 ] as const
 
 const NOTE = 'text-[0.76rem] text-muted-foreground'
-
-/* The two small controls keep the legacy field look — monospace at the note's
-   size, the panel fill, a 7px corner — rather than the shadcn field height: they
-   sit inside a disclosure row, where a 36px input is taller than the row that
-   opened it. */
-const FIELD = cn(
-  MONO_FACE,
-  'rounded-[7px] border border-(--border) bg-(--panel) px-[0.4rem] py-[0.25rem] text-[0.76rem] text-foreground',
-)
 
 /* The confirmation gate, drawn as a warning rather than as a form: its job is
    to interrupt, and the blast radius sentence above the input is the reason it
@@ -214,30 +206,28 @@ export function UpdateControl({
       )}
 
       {t.candidates.length > 1 && (
-        <label className={cn(NOTE, 'flex items-center gap-2')}>
+        <span className={cn(NOTE, 'flex items-center gap-2')}>
           <span>Target tag</span>
-          <select
-            className={FIELD}
+          <Picker
+            aria-label="Target tag"
+            mono
+            className="w-auto text-[0.76rem] data-[size=default]:h-8"
             value={to ?? ''}
-            onChange={(e) => {
-              setChosen(e.target.value)
+            onChange={(v) => {
+              setChosen(v)
               // A queued entry holds the tag chosen when it was added, so the
               // picker has to keep it current — otherwise the row shows one
               // tag and the batch would move to another.
               if (queue?.queued === true) {
-                queue.add(e.target.value === t.tag ? null : e.target.value, typed)
+                queue.add(v === t.tag ? null : v, typed)
               }
             }}
-          >
-            {t.candidates.map((c) => (
-              <option key={c} value={c}>
-                {c}
-                {c === t.target ? '  — newest of this shape' : ''}
-                {c === t.tag ? '  — running' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={t.candidates.map((c) => ({
+              value: c,
+              label: `${c}${c === t.target ? ' — newest of this shape' : ''}${c === t.tag ? ' — running' : ''}`,
+            }))}
+          />
+        </span>
       )}
 
       {ceremony !== null && (

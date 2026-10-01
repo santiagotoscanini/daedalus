@@ -8,7 +8,7 @@ import { stageExposed } from '../../lib/stage'
 import { deleteAppFn } from '../../server/registry'
 import { TypedConfirm } from '../armed-confirm'
 import { Segmented, Slider, Toggle } from '../controls'
-import { FOOT } from '../tokens'
+import { FOOT, INPUT_FORM } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
@@ -426,7 +426,7 @@ function TextField({
       <Input
         id={id}
         type="text"
-        className="h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)"
+        className={INPUT_FORM}
         value={draft}
         placeholder={placeholder}
         disabled={disabled}

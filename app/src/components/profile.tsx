@@ -34,9 +34,7 @@ import { Chip } from './viz'
 // that lands at once — no draft, no Apply bar, nothing rebuilds. The one thing
 // about the operator nix owns, the Linux account, keeps its own read-only card.
 
-const INPUT = cn(
-  'h-9 w-full rounded-[8px] bg-(--panel-2) px-3 md:text-[0.86rem] dark:bg-(--panel-2)',
-)
+const INPUT = 'md:text-[0.86rem]'
 
 export function ProfilePage({
   operator,

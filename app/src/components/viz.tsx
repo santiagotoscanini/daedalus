@@ -553,10 +553,25 @@ export function Pulse({ on, tone = 'ok' }: { on: boolean; tone?: Tone }) {
   )
 }
 
-export function Chip({ children, tone = 'muted' }: { children: ReactNode; tone?: Tone }) {
+export function Chip({
+  children,
+  tone = 'muted',
+  className,
+  title,
+}: {
+  children: ReactNode
+  tone?: Tone
+  /** A shape of its own (the apps pages' round pill) or a quieter ink; the colour is `tone`. */
+  className?: string
+  title?: string
+}) {
   return (
     <span
-      className="inline-flex items-center rounded-[5px] border border-[color-mix(in_srgb,var(--tone)_40%,transparent)] bg-(--raise) px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-(--tone) [font-weight:550]"
+      className={cn(
+        'inline-flex items-center rounded-[5px] border border-[color-mix(in_srgb,var(--tone)_40%,transparent)] bg-(--raise) px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-(--tone) font-[550]',
+        className,
+      )}
+      title={title}
       style={toneStyle(tone)}
     >
       {children}

@@ -13,7 +13,7 @@ import { appRepo } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
 import { setBuildSettingsFn } from '../../server/builds'
 import { Segmented, Toggle } from '../controls'
-import { FOOT } from '../tokens'
+import { FOOT, INPUT_MONO } from '../tokens'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
@@ -158,8 +158,7 @@ type Row = { id: number; key: string; value: string }
 const toRows = (m: Record<string, string>): Row[] =>
   Object.entries(m).map(([key, value], id) => ({ id, key, value }))
 
-const INPUT =
-  'h-auto rounded-[8px] bg-(--panel-2) px-[0.6rem] py-[0.4rem] font-mono md:text-[0.8rem] dark:bg-(--panel-2)'
+const INPUT = INPUT_MONO
 
 /** Name–value pairs, edited as a draft and saved together. */
 function EnvMapEditor({

@@ -15,7 +15,7 @@ import { useShown } from '../lib/shown'
 import { useSite } from '../lib/site-context'
 import { fetchModuleSwitchFn, setModuleEnabledFn, setModuleWebFn } from '../server/modules'
 import { GHOST_BTN } from './apps/shared'
-import { FOOT, MONO, NOTE } from './tokens'
+import { FOOT, INPUT_MONO, MONO, NOTE } from './tokens'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Picker } from './ui/picker'
@@ -40,10 +40,7 @@ const PANEL = cn(
   '-translate-x-1/2 -translate-y-1/2 rounded-[12px] border border-(--border) bg-(--panel) p-[1.1rem]',
   'text-foreground shadow-[0_24px_60px_-20px_rgb(0_0_0/0.5)] outline-none',
 )
-const INPUT = cn(
-  'h-auto w-[11rem] max-w-full rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.35rem]',
-  'font-mono md:text-[0.8rem] dark:bg-(--panel-2)',
-)
+const INPUT = cn(INPUT_MONO, 'w-[11rem] max-w-full')
 const AFFIX = 'font-mono text-[0.8rem] text-(--dim)'
 
 const EXPOSURE = [
@@ -342,14 +339,15 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
         {labelPending && <Chip tone="warn">was {w.label}</Chip>}
         {publicPending && <Chip tone="warn">{w.public ? 'was public' : 'was LAN only'}</Chip>}
         {(w.desired.label !== null || w.desired.public !== null) && (
-          <button
+          <Button
             type="button"
-            className="cursor-pointer border-0 bg-transparent p-0 text-[0.72rem] text-(--text-muted) underline underline-offset-2 hover:text-foreground"
+            variant="link"
+            className="h-auto p-0 text-[0.72rem] font-normal text-(--text-muted) underline underline-offset-2 hover:text-foreground"
             disabled={saving}
             onClick={() => write({ label: null, public: null })}
           >
             as the host says
-          </button>
+          </Button>
         )}
       </div>
       {w.aliases.length > 0 && <p className={`${FOOT}`}>also answers at {w.aliases.join(', ')}</p>}

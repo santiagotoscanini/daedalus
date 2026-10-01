@@ -18,9 +18,9 @@ import type { Repo } from '../../host/github-repos'
 import { cn } from '../../lib/cn'
 import { defaultImage } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
-import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { Chip } from '../viz'
 import { CHIP, GHOST_BTN } from './shared'
 
 /* The picker's boxes, exported for `NewAppSkeleton`: the placeholder borrows
@@ -347,21 +347,13 @@ function Cells({ repo, taken }: { repo: Repo; taken: boolean }) {
 function Chips({ repo, taken, className }: { repo: Repo; taken: boolean; className?: string }) {
   return (
     <span className={cn(REPO_CHIPS, className)}>
-      {repo.private && (
-        <Badge variant="outline" className={cn(CHIP, 'text-(--text-muted)')}>
-          private
-        </Badge>
-      )}
+      {repo.private && <Chip className={cn(CHIP, 'text-(--text-muted)')}>private</Chip>}
       {repo.archived && (
-        <Badge variant="warning" className={CHIP}>
+        <Chip tone="warn" className={CHIP}>
           archived
-        </Badge>
+        </Chip>
       )}
-      {taken && (
-        <Badge variant="outline" className={cn(CHIP, 'text-(--dim)')}>
-          already an app
-        </Badge>
-      )}
+      {taken && <Chip className={CHIP}>already an app</Chip>}
     </span>
   )
 }

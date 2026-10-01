@@ -7,7 +7,7 @@ import { Toggle } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { Crumbs, PageHead } from '../components/page'
 import { NewAppSkeleton } from '../components/skeleton'
-import { FOOT } from '../components/tokens'
+import { FOOT, INPUT_FORM } from '../components/tokens'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../components/ui/field'
@@ -444,7 +444,7 @@ function WizardField({
       <Input
         id={id}
         type="text"
-        className="h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)"
+        className={INPUT_FORM}
         value={value}
         placeholder={placeholder}
         disabled={disabled}

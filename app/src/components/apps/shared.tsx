@@ -24,7 +24,7 @@ export const SECTION_HEAD =
 /** The subtitle beside a section head, back in sentence case. */
 export const SECTION_HEAD_SMALL = 'text-[0.76rem] font-normal tracking-normal normal-case'
 
-/** A pill, rounder and smaller than shadcn's Badge. */
+/** The apps pages' pill shape, for `Chip`'s `className`: round rather than 5px. */
 export const CHIP = 'rounded-full border px-[0.48rem] py-[0.1rem] text-[0.68rem]'
 
 /**

@@ -14,16 +14,15 @@ import { LogBoard, type LogNeighbour } from './logs'
 import { Changelog } from './release-notes'
 import { compareOf, ServiceHead, verdictOf } from './service-head'
 import { EMPTY, FOOT, SUB } from './tokens'
-import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 
-/* A repository name as a small monospace pill. Badge's outline shape, taken
+/* A repository name as a small monospace pill: a round `Chip`, taken
    down to the size the list was drawn at: forty of these in a 4-span board
    have to read as a cloud of names, not a row of buttons. */
 const REPOS = 'mb-[0.7rem] flex flex-wrap gap-[0.35rem]'
 const REPO =
-  'gap-[0.35rem] rounded-full border-(--border-soft) bg-(--panel-2) px-[0.55rem] py-[0.2rem] font-mono text-[0.74rem] font-normal'
+  'gap-[0.35rem] rounded-full border-(--border-soft) bg-(--panel-2) px-[0.55rem] py-[0.2rem] font-mono text-[0.74rem] font-normal text-foreground'
 /* Pull-through copies of upstream images: present, but not something built
    here, so they read as background against the app repositories. */
 const REPO_MUTED = 'bg-transparent text-muted-foreground'
@@ -120,9 +119,9 @@ export function ImagesView({ d }: { d: ImagesData }) {
         <Board title="Repositories" icon="◲" span={4}>
           <div className={REPOS}>
             {d.repositories.map((r) => (
-              <Badge key={r} variant="outline" className={REPO}>
+              <Chip key={r} className={REPO}>
                 {r}
-              </Badge>
+              </Chip>
             ))}
             {d.repositories.length === 0 && (
               <p className={EMPTY}>
@@ -133,9 +132,9 @@ export function ImagesView({ d }: { d: ImagesData }) {
           <h4 className={SUB}>Cached from upstream</h4>
           <div className={REPOS}>
             {d.cachedRepos.map((r) => (
-              <Badge key={r} variant="outline" className={cn(REPO, REPO_MUTED)}>
+              <Chip key={r} className={cn(REPO, REPO_MUTED)}>
                 {r}
-              </Badge>
+              </Chip>
             ))}
             {d.cachedRepos.length === 0 && <p className={EMPTY}>none</p>}
           </div>

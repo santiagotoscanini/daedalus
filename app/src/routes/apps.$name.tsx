@@ -16,9 +16,9 @@ import { GrafanaLogs } from '../components/logs'
 import { Crumbs, PageHead } from '../components/page'
 import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
-import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { useAction } from '../components/use-action'
+import { Chip } from '../components/viz'
 // lib/access-window, NOT host/access. The window table is a value the picker
 // and validateSearch both need in the browser; host/access talks to Loki and
 // must never follow it there.
@@ -374,11 +374,7 @@ function AppDetail() {
           <h1 className="m-0 flex flex-wrap items-center gap-[0.65rem] text-[1.45rem] font-semibold tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
             {app.name}
             <StatePill state={state} />
-            {readOnly && (
-              <Badge variant="outline" className={cn(CHIP, 'text-(--text-muted)')}>
-                nix-managed
-              </Badge>
-            )}
+            {readOnly && <Chip className={cn(CHIP, 'text-(--text-muted)')}>nix-managed</Chip>}
           </h1>
           <p className={LEDE}>{app.description || 'No description.'}</p>
           <p className={HERO_LINKS}>

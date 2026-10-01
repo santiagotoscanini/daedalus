@@ -11,7 +11,7 @@ import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '..
 import { removeAppSecretFn, revealEnvVar, setAppSecretFn } from '../../server/registry'
 import { When } from '../ago'
 import { useRootAction } from '../root-action'
-import { EMPTY } from '../tokens'
+import { EMPTY, INPUT_ROW } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -300,7 +300,7 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
        submit, so a password manager, a screenshot and view-source all see the
        same nothing. */
 
-const FIELD = 'h-auto rounded-[6px] bg-(--panel-2) px-[0.5rem] py-[0.25rem] text-[0.8rem]'
+const FIELD = INPUT_ROW
 const SMALL_BTN =
   'h-auto flex-none rounded-[6px] bg-(--panel-2) px-[0.45rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-(--raise) dark:bg-(--panel-2)'
 

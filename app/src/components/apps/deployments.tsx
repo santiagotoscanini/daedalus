@@ -7,8 +7,7 @@ import { toneStyle } from '../../lib/tone'
 import type { AppTabData } from '../../server/registry'
 import { When } from '../ago'
 import { EMPTY, FOOT } from '../tokens'
-import { Badge } from '../ui/badge'
-import { Board, BoardGrid } from '../viz'
+import { Board, BoardGrid, Chip } from '../viz'
 import { BuildsBoard } from './builds'
 import { type AppRecord, CHIP, LEDE, SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
 
@@ -109,20 +108,17 @@ export function Deployments({
                       {d.shortRevision ?? d.digest.slice(0, 12)}
                     </code>
                     {d.isCurrent ? (
-                      <Badge variant="warning" className={cn(CHIP, 'ml-auto')}>
+                      <Chip tone="warn" className={cn(CHIP, 'ml-auto')}>
                         current
-                      </Badge>
+                      </Chip>
                     ) : d.result === 'ok' ? (
-                      <Badge variant="success" className={cn(CHIP, 'ml-auto')}>
+                      <Chip tone="ok" className={cn(CHIP, 'ml-auto')}>
                         success
-                      </Badge>
+                      </Chip>
                     ) : (
-                      <Badge
-                        variant="outline"
-                        className={cn(CHIP, 'ml-auto border-danger/45 text-danger')}
-                      >
+                      <Chip tone="bad" className={cn(CHIP, 'ml-auto')}>
                         failed
-                      </Badge>
+                      </Chip>
                     )}
                     {d.commitUrl ? (
                       <a href={d.commitUrl} target="_blank" rel="noreferrer">

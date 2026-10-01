@@ -9,15 +9,15 @@ import { PageHead } from '../components/page'
 import { ImagesView, PackagesView } from '../components/registries'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
-import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
-import { Spark } from '../components/viz'
+import { Chip, Spark } from '../components/viz'
 import { CloneButton } from '../components/workspace'
 import { cn } from '../lib/cn'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
 import { siteBarFields } from '../lib/module-switch'
 import { type AppStage, isAppStage } from '../lib/stage'
+import type { Tone } from '../lib/tone'
 import { fetchBuilderTab } from '../server/builds'
 import { fetchNodesChangeFn } from '../server/nodes'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
@@ -123,20 +123,17 @@ const CARD_FOOT = 'mt-auto flex items-center gap-[0.6rem] pt-[0.15rem] [&>svg]:m
     app is reachable, not a verdict on it. `declared` is dashed, the same
     visual the aside cards use for "listed here, not one of the things being
     run". */
-const STAGE_CHIP: Record<
-  AppStage,
-  { variant: 'success' | 'outline'; className: string; label: string }
-> = {
-  live: { variant: 'success', className: CHIP, label: 'external' },
+const STAGE_CHIP: Record<AppStage, { tone: Tone; className: string; label: string }> = {
+  live: { tone: 'ok', className: CHIP, label: 'external' },
   lab: {
-    variant: 'outline',
-    className: cn(CHIP, 'border-info/35 bg-info/8 text-info'),
+    tone: 'info',
+    className: cn(CHIP, 'bg-info/8'),
     label: 'internal',
   },
-  off: { variant: 'outline', className: cn(CHIP, 'text-(--dim)'), label: 'not exposed' },
+  off: { tone: 'muted', className: CHIP, label: 'not exposed' },
   declared: {
-    variant: 'outline',
-    className: cn(CHIP, 'border-dashed text-(--dim)'),
+    tone: 'muted',
+    className: cn(CHIP, 'border-dashed'),
     label: 'declared',
   },
 }
@@ -275,9 +272,10 @@ function AppsList({ data }: { data: ListData }) {
             a state most of the fleet is never in. Clicking it filters, because
             the next thing anybody does with this number is go look. */}
         {counts.declared > 0 && (
-          <button
+          <Button
             type="button"
-            className={cn(TALLY, 'cursor-pointer border-0 bg-transparent p-0 text-inherit')}
+            variant="link"
+            className={cn(TALLY, 'h-auto p-0 font-normal text-inherit text-[length:inherit]')}
             title="Declared only: no container, no ingress. Build the repo, then set exposure on the app’s page."
             onClick={() => {
               setExposure('declared')
@@ -287,7 +285,7 @@ function AppsList({ data }: { data: ListData }) {
               ◌
             </span>{' '}
             <b className={TALLY_COUNT}>{counts.declared}</b> declared
-          </button>
+          </Button>
         )}
         {/* The create flow is a page rather than a dialog: it makes a GitHub
             round trip per repo it checks, and a checklist you can leave open
@@ -483,22 +481,18 @@ function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
             <div className={APP_NAME}>
               {row.name}
               {row.managedInNix && (
-                <Badge
-                  variant="outline"
+                <Chip
+                  tone="muted"
                   className={cn(CHIP, 'text-(--text-muted)')}
                   title="Declared by hand in Nix, read-only here"
                 >
                   nix
-                </Badge>
+                </Chip>
               )}
               {!row.managedInNix && row.drift.length > 0 && (
-                <Badge
-                  variant="warning"
-                  className={CHIP}
-                  title={`Changed: ${row.drift.join(', ')}`}
-                >
+                <Chip tone="warn" className={CHIP} title={`Changed: ${row.drift.join(', ')}`}>
                   unapplied
-                </Badge>
+                </Chip>
               )}
             </div>
             <code className={APP_HOST}>{row.hostname}</code>
@@ -509,9 +503,9 @@ function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
         <p className={APP_DESC}>{row.description || '—'}</p>
 
         <div className={CARD_FOOT}>
-          <Badge variant={stage.variant} className={stage.className}>
+          <Chip tone={stage.tone} className={stage.className}>
             {stage.label}
-          </Badge>
+          </Chip>
 
           {/* Neutral unless the app is in trouble: the dot in the head
               already carries state, and a green line on every healthy app

@@ -17,13 +17,13 @@ import { Until, When } from '../ago'
 import { Segmented } from '../controls'
 import { GrafanaLogs } from '../logs'
 import { useRootAction } from '../root-action'
-import { FOOT } from '../tokens'
+import { FOOT, INPUT_FORM } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
-import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
+import { Chip } from '../viz'
 import { type AppRecord, CHIP, GHOST_BTN, LEDE, SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
 
 type TasksData = Extract<AppTabData, { kind: 'tasks' }>
@@ -383,24 +383,20 @@ function TaskCard({
  */
 function Outcome({ task }: { task: TaskRow }) {
   if (task.result === null) {
-    return (
-      <Badge variant="outline" className={cn(CHIP, 'text-(--text-muted)')}>
-        no run yet
-      </Badge>
-    )
+    return <Chip className={cn(CHIP, 'text-(--text-muted)')}>no run yet</Chip>
   }
   if (task.result === 'success') {
     return (
-      <Badge variant="success" className={CHIP}>
+      <Chip tone="ok" className={CHIP}>
         success
-      </Badge>
+      </Chip>
     )
   }
   return (
-    <Badge variant="outline" className={cn(CHIP, 'border-danger/45 text-danger')}>
+    <Chip tone="bad" className={CHIP}>
       {task.result}
       {task.exitStatus === null ? '' : ` · exit ${String(task.exitStatus)}`}
-    </Badge>
+    </Chip>
   )
 }
 
@@ -452,8 +448,7 @@ function RunNowButton({ app, task, running }: { app: string; task: TaskRow; runn
 }
 
 /** The input face the app's other editors use (settings.tsx spells the same string inline). */
-const INPUT =
-  'h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)'
+const INPUT = INPUT_FORM
 
 /** The two presets, plus the escape hatch for a calendar written by hand. */
 type ScheduleMode = SchedulePreset | 'custom'

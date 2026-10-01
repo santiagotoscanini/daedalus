@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { DAY, LocalTime } from '../../../components/ago'
-import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { EMPTY, FOOT, INPUT_MONO, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Switch } from '../../../components/ui/switch'
@@ -33,10 +33,7 @@ const HEAD_BLANK = cn(
 )
 const META = `${NOTE} flex flex-wrap gap-x-[0.6rem] gap-y-[0.1rem]`
 const SIDE = 'flex flex-wrap items-center justify-end gap-[0.5rem]'
-const INPUT = cn(
-  'h-auto w-[13rem] max-w-full rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.35rem]',
-  'font-mono md:text-[0.8rem] dark:bg-(--panel-2)',
-)
+const INPUT = cn(INPUT_MONO, 'w-[13rem] max-w-full')
 
 export function RosterBoard({ rows }: { rows: Row[] }) {
   const allowed = rows.filter((r) => r.state !== 'removing').length

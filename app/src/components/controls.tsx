@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
+import { useId } from 'react'
 import { cn } from '../lib/cn'
 import { bytes } from '../lib/format'
 import { type Tone, toneStyle } from '../lib/tone'
-
-import { Pulse } from './viz'
+import { Switch } from './ui/switch'
+import { Chip, Pulse } from './viz'
 
 export type AppState = 'running' | 'attention' | 'stopped' | 'unknown'
 
@@ -117,18 +118,18 @@ export function StatePill({ state }: { state: AppState }) {
           : 'unknown'
   const toned = isVerdict(state)
   return (
-    <span
+    <Chip
+      tone={toned ? STATE_TONE[state] : 'muted'}
       className={cn(
-        'inline-flex items-center gap-[0.4rem] rounded-full border py-[0.15rem] pr-[0.6rem] pl-[0.5rem] text-[0.74rem] font-medium',
+        'gap-[0.4rem] rounded-full py-[0.15rem] pr-[0.6rem] pl-[0.5rem] text-[0.74rem] font-medium',
         toned
-          ? 'border-[color-mix(in_srgb,var(--tone)_35%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] text-(--tone)'
-          : 'text-(--text-muted)',
+          ? 'border-[color-mix(in_srgb,var(--tone)_35%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)]'
+          : 'border-border bg-transparent text-(--text-muted)',
       )}
-      style={toned ? toneStyle(STATE_TONE[state]) : undefined}
     >
       <StateDot state={state} />
       {label}
-    </span>
+    </Chip>
   )
 }
 
@@ -376,33 +377,21 @@ export function Toggle({
   hint?: string
   disabled?: boolean
 }) {
+  const id = useId()
   return (
     <label
+      htmlFor={id}
       className={cn(
         'flex cursor-pointer items-start gap-[0.7rem] border-b border-b-(color:--border-soft) py-[0.55rem] last:border-b-0',
         disabled === true && 'cursor-not-allowed opacity-50',
       )}
     >
-      <input
-        type="checkbox"
-        className="peer absolute size-0 opacity-0"
+      <Switch
+        id={id}
+        className="mt-[0.15rem] disabled:opacity-100"
         checked={checked}
         disabled={disabled}
-        onChange={(e) => {
-          onChange(e.target.checked)
-        }}
-      />
-      {/* The checkbox is visually hidden, so the focus ring has to be drawn on
-          the track that stands in for it. */}
-      <span
-        className={cn(
-          'relative mt-[0.15rem] h-5 w-[34px] flex-none rounded-full border bg-(--raise) transition-[background] duration-[120ms]',
-          "after:absolute after:top-[2px] after:left-[2px] after:size-[14px] after:rounded-full after:bg-(--text-muted) after:transition-[transform,background] after:duration-[120ms] after:content-['']",
-          'peer-checked:border-(--brand-dim) peer-checked:bg-[color-mix(in_srgb,var(--brand)_30%,transparent)]',
-          'peer-checked:after:translate-x-[14px] peer-checked:after:bg-primary',
-          'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-(--brand-dim)',
-        )}
-        aria-hidden="true"
+        onCheckedChange={onChange}
       />
       <span className="text-[0.9rem]">
         {label}
