@@ -198,6 +198,7 @@ helper holding the template's lock, refuses the next.
 | `github-token` | `daedalus-github-token`, the timer's unit (refuses inside its one-mint-a-minute throttle) | 2026-09-28 |
 | `workspace-clone {repo, actor}` | `daedalus-workspace-clone@<run>` (both patterns): clone, or fast-forward an existing clone, over the operator's SSH identity | 2026-09-28 |
 | `secret-set {app, action, key, actor} + payload` | `daedalus-secret-set@<run>` (`key` and `actor` patterns): merge or drop one key in `vault/apps/<app>-env.sops` and commit; the payload is the value sealed by the container | 2026-09-28 |
+| `session-host-restart` | `daedalus-session-host-restart`, which restarts the session host: how a new build takes over, ending every live terminal | 2026-09-29 |
 
 ---
 

@@ -231,13 +231,8 @@
 #                holds a lock in <rootRunDir> (its unit's, or its template's)
 #                until its answer, so two requests cannot both start it and
 #                share one job.
-#   moved so far reboot (daedalus-verbs.nix `daedalus-power`); deploy and
-#                task-run (the apps' own deploy and task units, values from the
-#                committed registry); build-cancel (build-agent.nix, a template
-#                instance per app); github-token (daedalus-github.nix);
-#                workspace-clone and secret-set (daedalus-verbs.nix, run-file
-#                templates). Each verb that moves here deletes its request
-#                file, path unit and app module.
+#   the verbs   ARCHITECTURE.md's root-helper table lists them, each with its
+#                unit; every one is a `fleet.daedalus.rootVerbs` entry.
 #
 # What nix hands it:
 #

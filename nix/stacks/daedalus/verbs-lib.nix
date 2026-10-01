@@ -1,8 +1,10 @@
-# verbs-lib — the scripts behind the file-drop bridge's verbs: the container
-# writes `<verb>-request.json` into the apply dir, a path unit starts the
-# matching agent (daedalus-verbs.nix, daedalus-github.nix), and the agent is
-# one of these. Each is the env nix hands it followed by the shell under
-# host/. A plain function, imported by path; never a module.
+# verbs-lib — the scripts behind the control plane's host verbs: the file-drop
+# bridge's agents (the container writes `<verb>-request.json` into the apply
+# dir, a path unit starts the matching agent) and the units of the root
+# helper's verbs (ARCHITECTURE.md's root-helper table). Their services are
+# daedalus-verbs.nix and daedalus-github.nix. Each is the env nix hands it
+# followed by the shell under host/. A plain function, imported by path; never
+# a module.
 {
   config,
   lib,

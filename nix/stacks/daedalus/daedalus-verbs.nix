@@ -1,11 +1,9 @@
 # daedalus-verbs — the control plane's host verbs. The file-drop bridge's
 # agents, one verb at a time: each verb's service, the path unit that starts it
 # on `<verb>-request.json`, and whether a failure mails (monitoredJobs) or is
-# shown on the page that asked. And the verbs that have moved to the root
-# helper (controller.nix, `root`): each a `fleet.daedalus.rootVerbs` entry
-# naming a unit with no path unit — here reboot, deploy, task-run,
-# workspace-clone and secret-set (build-cancel and github-token are their
-# own modules').
+# shown on the page that asked. And some of the root helper's verbs
+# (controller.nix, `root`), each a `fleet.daedalus.rootVerbs` entry naming a
+# unit with no path unit — ARCHITECTURE.md's root-helper table lists them all.
 # The scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
 # daedalus stack (daedalus.nix holds the switch); never imports its siblings.
 {
