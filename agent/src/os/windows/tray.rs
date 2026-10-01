@@ -108,8 +108,13 @@ pub fn join() {
     crate::tray::pair_on_a_thread(input_box, message_box);
 }
 
+/// How long the question waits for an answer before it is put away.
+const ASK_FOR: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
 fn input_box() -> Option<String> {
-    let mut cmd = std::process::Command::new("powershell.exe");
+    // Windows PowerShell from the system directory, never one on PATH.
+    let ps = super::system_tool(r"WindowsPowerShell\v1.0\powershell.exe")?;
+    let mut cmd = std::process::Command::new(ps);
     cmd.args([
         "-NoProfile",
         "-NonInteractive",
@@ -120,11 +125,10 @@ fn input_box() -> Option<String> {
     // The words ride the environment, so nothing in them is PowerShell.
     .env("DAEDALUS_PROMPT", crate::tray::PAIR_PROMPT)
     .env("DAEDALUS_TITLE", crate::tray::PAIR_TITLE);
-    super::hide_console(&mut cmd);
-    let out = cmd.output().ok()?;
-    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let text = crate::exec::stdout_or(cmd, ASK_FOR, crate::exec::Text::Lossy).ok()?;
+    let text = text.trim().to_string();
     // Cancel answers an empty string.
-    (out.status.success() && !text.is_empty()).then_some(text)
+    (!text.is_empty()).then_some(text)
 }
 
 fn message_box(text: &str, ok: bool) {

@@ -263,22 +263,12 @@ fn holder_exe() -> Result<PathBuf, String> {
     Ok(copy)
 }
 
-/// `C:\Windows\system32`, as the OS names it (never `%PATH%` or the
-/// working directory): where the `cmd.exe` that runs a `.cmd` shim is.
-fn system_dir() -> Result<String, String> {
-    use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
-    let mut buf = [0u16; 260];
-    // SAFETY: the buffer and its length.
-    let n = unsafe { GetSystemDirectoryW(Some(&mut buf)) } as usize;
-    if n == 0 || n >= buf.len() {
-        return Err("the system directory could not be read".into());
-    }
-    Ok(String::from_utf16_lossy(&buf[..n]))
-}
-
 pub fn start_session(j: &SessionJob) -> Result<(), String> {
     let cli = jobs::check_cli(j.cli)?;
-    let line = jobs::windows_session_command(&system_dir()?, &cli, j.id, j.label)?;
+    // The `cmd.exe` that runs a `.cmd` shim, from the system directory as
+    // the OS names it (never `%PATH%` or the working directory).
+    let system = super::system_dir().ok_or("the system directory could not be read")?;
+    let line = jobs::windows_session_command(&system, &cli, j.id, j.label)?;
     let holder = holder_exe()?;
     spawn(
         j.name,
@@ -369,21 +359,17 @@ pub fn show(name: &str) -> Result<JobState, String> {
     }
 }
 
-/// `taskkill /T /F` on the recorded process — only while it is still that
-/// process — then a moment for it to leave.
 /// `taskkill /T /F` on a recorded process — only while it is still that
 /// process — then a moment for it to leave; whether it is gone.
 fn kill_recorded(r: &JobRecord) -> bool {
     if probe(r) != Some(STILL_ACTIVE) {
         return true;
     }
-    let mut cmd = Command::new("taskkill");
-    cmd.args(["/PID", &r.pid.to_string(), "/T", "/F"]);
-    let _ = crate::os::hide_console(&mut cmd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    if let Some(taskkill) = super::system_tool("taskkill.exe") {
+        let mut cmd = Command::new(taskkill);
+        cmd.args(["/PID", &r.pid.to_string(), "/T", "/F"]);
+        let _ = crate::exec::both(cmd, Duration::from_secs(10));
+    }
     for _ in 0..50 {
         if probe(r) != Some(STILL_ACTIVE) {
             return true;

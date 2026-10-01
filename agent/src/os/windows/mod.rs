@@ -195,14 +195,76 @@ pub fn hide_console(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
-/// Nothing to add on Windows: `hide_console` sets the creation flags.
+/// Nothing to add before the start on Windows: `hide_console` sets the
+/// creation flags, and the tree is contained once the child exists
+/// (`contain`).
 pub fn isolate(cmd: &mut Command) {
     let _ = cmd;
 }
 
-/// The child alone; what it started is left to its own end of the pipes.
-pub fn kill_tree(child: &mut std::process::Child) {
+/// A job object holding a child `exec` runs, and so everything it starts:
+/// what `kill_tree` ends at a deadline. None when the job could not be made
+/// or the child put in it; the child alone is ended then.
+pub struct Tree(Option<windows::Win32::Foundation::HANDLE>);
+
+impl Drop for Tree {
+    fn drop(&mut self) {
+        if let Some(h) = self.0.take() {
+            // SAFETY: the job handle `contain` opened, closed once. No
+            // kill-on-close limit is set: a process the child left running
+            // on purpose outlives a command that finished.
+            unsafe {
+                let _ = windows::Win32::Foundation::CloseHandle(h);
+            }
+        }
+    }
+}
+
+/// The child in a job object of its own; its children are born in it.
+pub fn contain(child: &std::process::Child) -> Tree {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};
+    // SAFETY: an unnamed job, and the child's own handle, valid while the
+    // Child lives.
+    unsafe {
+        let Ok(job) = CreateJobObjectW(None, None) else {
+            return Tree(None);
+        };
+        if AssignProcessToJobObject(job, HANDLE(child.as_raw_handle())).is_err() {
+            let _ = CloseHandle(job);
+            return Tree(None);
+        }
+        Tree(Some(job))
+    }
+}
+
+/// Every process in the child's job, and the child: a grandchild holding
+/// the output pipes open goes with it.
+pub fn kill_tree(child: &mut std::process::Child, tree: &Tree) {
+    if let Some(job) = tree.0 {
+        // SAFETY: the job handle `contain` opened and the Tree still holds.
+        unsafe {
+            let _ = windows::Win32::System::JobObjects::TerminateJobObject(job, 1);
+        }
+    }
     let _ = child.kill();
+}
+
+/// A tool of Windows' own, from the system directory as the OS names it
+/// (never PATH or the working directory, where another `taskkill.exe` or
+/// `reg.exe` could stand). None when that directory cannot be read.
+pub fn system_tool(name: &str) -> Option<std::path::PathBuf> {
+    system_dir().map(|d| std::path::PathBuf::from(d).join(name))
+}
+
+/// `C:\Windows\system32`, as the OS names it.
+pub fn system_dir() -> Option<String> {
+    use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
+    let mut buf = [0u16; 260];
+    // SAFETY: the buffer and its length.
+    let n = unsafe { GetSystemDirectoryW(Some(&mut buf)) } as usize;
+    (n > 0 && n < buf.len()).then(|| String::from_utf16_lossy(&buf[..n]))
 }
 
 pub fn pid_alive(pid: u32) -> bool {

@@ -59,7 +59,7 @@ pub fn relaunch_self() {}
 fn bootout() {
     // SAFETY: no arguments.
     let uid = unsafe { libc::getuid() };
-    let _ = std::process::Command::new("launchctl")
+    let _ = std::process::Command::new("/bin/launchctl")
         .args([
             "bootout",
             &format!("gui/{uid}/{}", super::launchd::TRAY_LABEL),

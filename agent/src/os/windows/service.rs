@@ -277,34 +277,35 @@ pub fn uninstall() -> Result<()> {
 const RUN_KEY: &str = r"HKLM\Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "daedalus-agent-tray";
 
+/// One of Windows' own tools (`system_tool`), with a deadline (exec.rs).
+fn system_command(tool: &str, args: &[&str]) -> Result<String> {
+    let path = super::system_tool(tool)
+        .with_context(|| format!("no system directory to run {tool} from"))?;
+    let mut cmd = std::process::Command::new(path);
+    cmd.args(args);
+    crate::exec::stdout_or(cmd, Duration::from_secs(30), crate::exec::Text::Lossy)
+        .map_err(|e| anyhow::anyhow!("{tool} {}: {e}", args.join(" ")))
+}
+
 fn tray_register(tray: &std::path::Path) -> Result<()> {
-    let out = std::process::Command::new("reg")
-        .args([
-            "add",
-            RUN_KEY,
-            "/v",
-            RUN_VALUE,
-            "/t",
-            "REG_SZ",
-            "/d",
-            &format!("\"{}\"", tray.display()),
-            "/f",
-        ])
-        .output()
-        .context("running reg")?;
-    if !out.status.success() {
-        bail!("reg add: {}", String::from_utf8_lossy(&out.stderr).trim());
-    }
-    Ok(())
+    let value = format!("\"{}\"", tray.display());
+    system_command(
+        "reg.exe",
+        &[
+            "add", RUN_KEY, "/v", RUN_VALUE, "/t", "REG_SZ", "/d", &value, "/f",
+        ],
+    )
+    .map(drop)
+}
+
+/// Every tray ended, whoever runs it.
+fn kill_trays() {
+    let _ = system_command("taskkill.exe", &["/IM", TRAY_EXE, "/F"]);
 }
 
 fn tray_unregister() {
-    let _ = std::process::Command::new("reg")
-        .args(["delete", RUN_KEY, "/v", RUN_VALUE, "/f"])
-        .output();
-    let _ = std::process::Command::new("taskkill")
-        .args(["/IM", TRAY_EXE, "/F"])
-        .output();
+    let _ = system_command("reg.exe", &["delete", RUN_KEY, "/v", RUN_VALUE, "/f"]);
+    kill_trays();
 }
 
 fn tray_start(tray: &std::path::Path) {
@@ -349,10 +350,7 @@ pub fn interactive_user() -> bool {
 /// on the new binary (Claude runs on in its detached jobs). A tray in
 /// another session comes back at its user's next logon.
 pub fn restart_desktop_side() {
-    let mut kill = std::process::Command::new("taskkill");
-    kill.args(["/IM", TRAY_EXE, "/F"]);
-    crate::os::hide_console(&mut kill);
-    let _ = kill.output();
+    kill_trays();
     std::thread::sleep(Duration::from_secs(1));
     match launch_tray_or_session() {
         Ok(()) => tracing::info!("tray restarted on the new version"),

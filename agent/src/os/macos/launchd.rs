@@ -79,16 +79,10 @@ fn is_root() -> bool {
     unsafe { libc::geteuid() == 0 }
 }
 
+/// `launchctl` for install and uninstall: what `launchctl_timeout` does,
+/// with time for a bootstrap of the daemon.
 fn launchctl(args: &[&str]) -> Result<()> {
-    let out = Command::new("launchctl").args(args).output()?;
-    if !out.status.success() {
-        bail!(
-            "launchctl {}: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-    Ok(())
+    launchctl_timeout(args, 30).map(drop)
 }
 
 /// A job's plist. `log` takes its stdout and stderr; the menu bar app has
@@ -474,33 +468,14 @@ pub fn converge_permissions() {
 /// blocks forever (0.5.2 leaked one hung root child per daemon start), and
 /// nothing here is worth waiting on for more than a few seconds.
 fn launchctl_timeout(args: &[&str], secs: u64) -> Result<String> {
-    let mut child = Command::new("launchctl")
-        .args(args)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
-    loop {
-        if let Some(status) = child.try_wait()? {
-            let out = child.wait_with_output()?;
-            let text = String::from_utf8_lossy(&out.stdout).to_string();
-            if status.success() {
-                return Ok(text);
-            }
-            bail!(
-                "launchctl {}: {}",
-                args.join(" "),
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
-        }
-        if std::time::Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            bail!("launchctl {}: no answer in {secs} s", args.join(" "));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+    let mut cmd = Command::new("/bin/launchctl");
+    cmd.args(args);
+    crate::exec::stdout_or(
+        cmd,
+        std::time::Duration::from_secs(secs),
+        crate::exec::Text::Lossy,
+    )
+    .map_err(|e| anyhow::anyhow!("launchctl {}: {e}", args.join(" ")))
 }
 
 /// `os::svc`'s tray start: `kickstart_tray`, whose outcome is logged, not

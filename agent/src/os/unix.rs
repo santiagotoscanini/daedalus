@@ -134,9 +134,19 @@ pub fn isolate(cmd: &mut Command) {
     cmd.process_group(0);
 }
 
+/// What `kill_tree` ends besides the child: here the process group
+/// `isolate` made, which needs nothing kept.
+pub struct Tree;
+
+pub fn contain(child: &Child) -> Tree {
+    let _ = child;
+    Tree
+}
+
 /// SIGKILL to the group the child leads (`isolate`), and to the child: a
 /// grandchild holding the output pipes open goes with it.
-pub fn kill_tree(child: &mut Child) {
+pub fn kill_tree(child: &mut Child, tree: &Tree) {
+    let _ = tree;
     let pid = child.id() as libc::pid_t;
     // SAFETY: a signal to the group the child leads.
     unsafe {

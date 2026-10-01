@@ -1,15 +1,17 @@
 //! Running a command with a deadline and capturing its output: the shared
 //! bounded shell-out of the telemetry tiers (PowerShell on Windows, Apple's
 //! tools on macOS, systemctl, smartctl and the package managers on Linux)
-//! and of Claude Code's version probe and `claude update`.
-//! One deadline command stays outside it: launchd.rs's `launchctl_timeout`,
-//! which polls the child and reads its output only once it has exited.
+//! and of Claude Code's version probe and `claude update`, `launchctl` and
+//! the Windows service's `reg` and `taskkill`.
 //!
 //! Every command starts with a closed stdin, no console window on Windows
 //! (`os::hide_console`), and its output pipes drained on threads of their
 //! own — a child that fills one pipe while nobody reads the other blocks
-//! forever. At the deadline it is killed and reaped. Four shapes over that
-//! one core, each what its caller has always had:
+//! forever. Every wait, for its pipes and then for its exit, is bounded by
+//! the one deadline; at the deadline it is killed and reaped, with what it
+//! started (`os::contain`: its process group on unix, a job object on
+//! Windows), so a grandchild holding a pipe open cannot keep a drain thread
+//! alive. Four shapes over that one core:
 //!
 //! - `stdout_or`: the whole stdout, or why not (`Failed`: not started, no
 //!   answer in time, or a non-zero exit with the first line of stderr).
@@ -81,6 +83,8 @@ enum Stream {
 /// sends its whole stream, once, when the stream closes.
 struct Running {
     child: Child,
+    /// What the child starts, ended with it at the deadline.
+    tree: crate::os::Tree,
     rx: Receiver<(Stream, String)>,
 }
 
@@ -130,6 +134,7 @@ impl Running {
                 Stdio::null()
             })
             .spawn()?;
+        let tree = crate::os::contain(&child);
         let (tx, rx) = mpsc::channel();
         if let Some(out) = child.stdout.take() {
             drain(out, Stream::Out, text, tx.clone());
@@ -137,7 +142,7 @@ impl Running {
         if let Some(err) = child.stderr.take() {
             drain(err, Stream::Err, text, tx);
         }
-        Ok(Self { child, rx })
+        Ok(Self { child, tree, rx })
     }
 
     /// The next stream to close, or None when `until` passes first.
@@ -148,8 +153,26 @@ impl Running {
     }
 
     fn kill(mut self) {
-        crate::os::kill_tree(&mut self.child);
+        crate::os::kill_tree(&mut self.child, &self.tree);
         let _ = self.child.wait();
+    }
+
+    /// Its exit, once the pipes it was read through are closed: waited for
+    /// until `until`, then killed (None). Closed pipes are not an exit — a
+    /// child can close its stdout and run on.
+    fn exit_by(mut self, until: Instant) -> Option<std::process::ExitStatus> {
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(status)) => return Some(status),
+                Ok(None) if Instant::now() < until => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                _ => {
+                    self.kill();
+                    return None;
+                }
+            }
+        }
     }
 }
 
@@ -176,8 +199,7 @@ pub fn stdout_with_status(
     deadline: Duration,
     text: Text,
 ) -> Result<(i32, String, String), Failed> {
-    let started = Instant::now();
-    let mut r = Running::start(&mut cmd, true, text).map_err(|e| Failed::Spawn(e.to_string()))?;
+    let r = Running::start(&mut cmd, true, text).map_err(|e| Failed::Spawn(e.to_string()))?;
     let until = Instant::now() + deadline;
     let mut stderr: Option<String> = None;
     let stdout = loop {
@@ -190,43 +212,31 @@ pub fn stdout_with_status(
             }
         }
     };
-    // stdout is closed; the process is exiting. Give it the rest of the
+    // stdout is closed; the process is exiting. stderr closes with it (a
+    // moment's grace for its thread), and the exit gets the rest of the
     // deadline rather than a blocking wait.
-    loop {
-        match r.child.try_wait() {
-            Ok(Some(status)) => {
-                if status.success() {
-                    return Ok((0, stdout, String::new()));
-                }
-                let stderr = stderr
-                    .or_else(|| {
-                        r.recv(Instant::now() + Duration::from_millis(200))
-                            .map(|(_, s)| s)
-                    })
-                    .unwrap_or_default();
-                let first = stderr
-                    .lines()
-                    .find(|l| !l.trim().is_empty())
-                    .unwrap_or("")
-                    .trim();
-                return Ok((status.code().unwrap_or(-1), stdout, first.to_string()));
-            }
-            Ok(None) if started.elapsed() < deadline => {
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            _ => {
-                r.kill();
-                return Err(Failed::Timeout);
-            }
-        }
+    let stderr = stderr.or_else(|| {
+        r.recv(Instant::now() + Duration::from_millis(200))
+            .map(|(_, s)| s)
+    });
+    let status = r.exit_by(until).ok_or(Failed::Timeout)?;
+    if status.success() {
+        return Ok((0, stdout, String::new()));
     }
+    let stderr = stderr.unwrap_or_default();
+    let first = stderr
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim();
+    Ok((status.code().unwrap_or(-1), stdout, first.to_string()))
 }
 
 /// Run to completion, or kill it and give up after `timeout`: both streams,
 /// trimmed and joined, and whether it exited 0. None when it could not be
 /// started or did not finish.
 pub fn both(mut cmd: Command, timeout: Duration) -> Option<Ran> {
-    let mut r = Running::start(&mut cmd, true, Text::Strict).ok()?;
+    let r = Running::start(&mut cmd, true, Text::Strict).ok()?;
     let until = Instant::now() + timeout;
     let mut text = String::new();
     for _ in 0..2 {
@@ -245,7 +255,7 @@ pub fn both(mut cmd: Command, timeout: Duration) -> Option<Ran> {
             }
         }
     }
-    let status = r.child.wait().ok()?;
+    let status = r.exit_by(until)?;
     Some(Ran {
         ok: status.success(),
         output: text,
@@ -255,15 +265,16 @@ pub fn both(mut cmd: Command, timeout: Duration) -> Option<Ran> {
 /// Run to completion, or give up after `timeout`; the first line of its
 /// stdout, trimmed. stderr is discarded and the exit code ignored.
 pub fn first_line(mut cmd: Command, timeout: Duration) -> Option<String> {
-    let mut r = Running::start(&mut cmd, false, Text::Strict).ok()?;
-    let text = match r.recv(Instant::now() + timeout) {
+    let r = Running::start(&mut cmd, false, Text::Strict).ok()?;
+    let until = Instant::now() + timeout;
+    let text = match r.recv(until) {
         Some((_, t)) => t,
         None => {
             r.kill();
             return None;
         }
     };
-    let _ = r.child.wait();
+    r.exit_by(until)?;
     text.lines()
         .next()
         .map(|l| l.trim().to_string())
@@ -396,6 +407,48 @@ mod tests {
         assert_eq!(first_line(sh("true"), LONG), None);
         assert_eq!(first_line(sh("sleep 5"), Duration::from_millis(300)), None);
     }
+
+    /// A child that closes its pipes and runs on is still held to the
+    /// deadline: closed pipes are not an exit.
+    #[test]
+    fn closed_pipes_do_not_outlast_the_deadline() {
+        let short = Duration::from_millis(300);
+        let t = Instant::now();
+        assert!(both(sh("exec >&- 2>&-; sleep 5"), short).is_none());
+        assert_eq!(first_line(sh("echo 1.0; exec >&-; sleep 5"), short), None);
+        assert_eq!(
+            stdout_or(sh("echo x; exec >&- 2>&-; sleep 5"), short, Text::Strict),
+            Err(Failed::Timeout)
+        );
+        assert!(t.elapsed() < Duration::from_secs(4));
+    }
+
+    /// The deadline ends what the command started too: a grandchild that
+    /// would hold the pipes open goes with it (audit D19).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_deadline_ends_the_whole_process_group() {
+        let marker = format!("31.{}", std::process::id());
+        let t = Instant::now();
+        let r = stdout_or(
+            sh(&format!("sleep {marker} & sleep {marker}")),
+            Duration::from_millis(300),
+            Text::Strict,
+        );
+        assert_eq!(r, Err(Failed::Timeout));
+        assert!(t.elapsed() < Duration::from_secs(2));
+        let alive = || {
+            std::fs::read_dir("/proc").unwrap().flatten().any(|e| {
+                std::fs::read(e.path().join("cmdline"))
+                    .is_ok_and(|c| String::from_utf8_lossy(&c).contains(&marker))
+            })
+        };
+        let until = Instant::now() + Duration::from_secs(3);
+        while alive() {
+            assert!(Instant::now() < until, "a sleep outlived the deadline");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
 }
 
 // The same cases through `cmd /c`, for the Windows CI leg. The script goes
@@ -452,32 +505,5 @@ mod windows_tests {
         );
         assert!(t.elapsed() < Duration::from_secs(4));
         assert!(both(cmd("ping -n 6 127.0.0.1"), Duration::from_millis(300)).is_none());
-    }
-
-    /// The deadline ends what the command started too: a grandchild that
-    /// would hold the pipes open goes with it (audit D19).
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn the_deadline_ends_the_whole_process_group() {
-        let marker = format!("31.{}", std::process::id());
-        let t = Instant::now();
-        let r = stdout_or(
-            sh(&format!("sleep {marker} & sleep {marker}")),
-            Duration::from_millis(300),
-            Text::Strict,
-        );
-        assert_eq!(r, Err(Failed::Timeout));
-        assert!(t.elapsed() < Duration::from_secs(2));
-        let alive = || {
-            std::fs::read_dir("/proc").unwrap().flatten().any(|e| {
-                std::fs::read(e.path().join("cmdline"))
-                    .is_ok_and(|c| String::from_utf8_lossy(&c).contains(&marker))
-            })
-        };
-        let until = Instant::now() + Duration::from_secs(3);
-        while alive() {
-            assert!(Instant::now() < until, "a sleep outlived the deadline");
-            std::thread::sleep(Duration::from_millis(50));
-        }
     }
 }

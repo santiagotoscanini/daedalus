@@ -136,22 +136,26 @@ pub fn requirement(identifier: &str) -> String {
     )
 }
 
+/// One of Apple's tools, by its absolute path, with a deadline (exec.rs): a
+/// copy, an unpack or a signature check of the bundle, which take seconds.
 fn run(program: &str, args: &[&OsStr]) -> Result<()> {
-    let out = Command::new(program)
-        .args(args)
-        .output()
-        .with_context(|| format!("running {program}"))?;
-    if !out.status.success() {
-        bail!(
-            "{program} {}: {}",
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    crate::exec::stdout_or(
+        cmd,
+        std::time::Duration::from_secs(300),
+        crate::exec::Text::Lossy,
+    )
+    .map(drop)
+    .map_err(|e| {
+        anyhow::anyhow!(
+            "{program} {}: {e}",
             args.iter()
                 .map(|a| a.to_string_lossy())
                 .collect::<Vec<_>>()
-                .join(" "),
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-    Ok(())
+                .join(" ")
+        )
+    })
 }
 
 /// A copy of the bundle at `src` in the slot's stage (`ditto` keeps the
