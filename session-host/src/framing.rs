@@ -4,10 +4,15 @@
 //! c9766c4539973e7959287d9fc65dff01c585c575, where `read_line` is
 //! `pub(crate)` and so cannot be imported. The host never passes an idle
 //! bound (the client times a silent link out, and TCP keepalive catches a
-//! vanished peer, serve.rs), so that parameter and its branch are dropped;
+//! vanished peer, serve.rs), so that parameter and its branch are dropped, and
+//! a buffer grown past [`KEEP_CAPACITY`] is shrunk back before the next line;
 //! the rest is unchanged.
 
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
+
+/// The capacity a line buffer keeps between lines: one 32 MiB request must
+/// not pin 32 MiB for the rest of its connection.
+pub const KEEP_CAPACITY: usize = 1024 * 1024;
 
 /// Why a link stopped yielding frames.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +33,7 @@ pub async fn read_line<R: AsyncBufRead + Unpin>(
     max: usize,
 ) -> Result<(), ReadEnd> {
     buf.clear();
+    buf.shrink_to(KEEP_CAPACITY);
     loop {
         let available = reader
             .fill_buf()
@@ -58,5 +64,24 @@ pub async fn read_line<R: AsyncBufRead + Unpin>(
             }
             return Ok(());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_big_line_does_not_keep_its_buffer() {
+        let big = vec![b'x'; 4 * KEEP_CAPACITY];
+        let mut input = big.clone();
+        input.extend_from_slice(b"\nsmall\n");
+        let mut reader = tokio::io::BufReader::new(&input[..]);
+        let mut buf = Vec::new();
+        read_line(&mut reader, &mut buf, usize::MAX).await.unwrap();
+        assert_eq!(buf, big);
+        read_line(&mut reader, &mut buf, usize::MAX).await.unwrap();
+        assert_eq!(buf, b"small");
+        assert!(buf.capacity() <= KEEP_CAPACITY, "kept {}", buf.capacity());
     }
 }
