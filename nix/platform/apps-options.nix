@@ -37,6 +37,18 @@ in
     description = "The apps platform: the self-built apps declared in site/apps.json, deployed from the box's own registry.";
   };
 
+  options.fleet.litellmBaseUrl = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = null;
+    example = "http://litellm:4000";
+    description = ''
+      Where an app's container reaches the LLM gateway (an OpenAI-compatible
+      LiteLLM), as `LITELLM_BASE_URL` for every app with `litellm.enable`.
+      Set by the stack that runs the gateway, inside its own switch; null
+      while none does.
+    '';
+  };
+
   options.fleet.apps = lib.mkOption {
     type = lib.types.attrsOf (
       lib.types.submodule (
@@ -353,9 +365,11 @@ in
               type = lib.types.bool;
               default = false;
               description = ''
-                Opt-in: when true, sets `LITELLM_BASE_URL = http://litellm:4000`
-                in the app's environment. Off by default — apps that don't
-                use the LLM gateway never see the variable.
+                Opt-in: when true, sets `LITELLM_BASE_URL` to
+                `fleet.litellmBaseUrl` in the app's environment, while a
+                stack on this host runs the gateway (null: no variable).
+                Off by default — apps that don't use the LLM gateway never
+                see the variable.
 
                 Does NOT inject the master key. Apps that need it add
                 the litellm sops secret

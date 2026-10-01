@@ -66,6 +66,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # The read-only API key the control plane reads the pantry with.
+    fleet.dashboard.grocy.serviceKeys = [ "GROCY_API_KEY" ];
+
     # linuxserver abc (uid 911) maps to host 100910; the config dir must
     # exist with that ownership or a fresh install fails on first write.
     fleet.statePaths = {

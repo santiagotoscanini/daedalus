@@ -22,7 +22,6 @@
 
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    appsOn
     workspaceIconsDir
     boardsDir
     at
@@ -196,14 +195,6 @@ let
   # The app's version, as the engine at this rev ships it: the published image
   # is tagged with it, so pinning the engine pins the control plane's image.
   appVersion = (builtins.fromJSON (builtins.readFile ../../../app/package.json)).version;
-
-  # Labels under baseDomain that no app may publish. Mirrors RESERVED_LABELS in
-  # the engine's app/src/lib/hostname.ts — the reasons are argued at the
-  # assertion that reads this.
-  reservedLabels = {
-    hooks = "the GitHub App's webhook (stacks/daedalus, hooks-github.yml)";
-    daedalus = "the project's GitHub Pages landing page, a record this box does not own";
-  };
 in
 
 {
@@ -263,6 +254,47 @@ in
     '';
   };
 
+  options.fleet.daedalus.routerAdminUrl = lib.mkOption {
+    type = lib.types.str;
+    default = "https://${config.fleet.gateway}/";
+    defaultText = lib.literalExpression ''"https://${config.fleet.gateway}/"'';
+    example = lib.literalExpression ''"https://${config.fleet.gateway}/login"'';
+    description = ''
+      Where the Network page sends the operator to administer the LAN router:
+      its admin login, over HTTPS (a person about to type a password). Every
+      vendor puts the login somewhere else on the device.
+    '';
+  };
+
+  options.fleet.reservedLabels = lib.mkOption {
+    type = lib.types.attrsOf (
+      lib.types.submodule {
+        options = {
+          reason = lib.mkOption {
+            type = lib.types.str;
+            example = "is the project's landing page, a record this box does not own.";
+            description = "Why, as the rest of a sentence that starts with the label: what the app shows the operator who tried it.";
+          };
+          owners = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "fleet.cloudflareRoutes.daedalus-hooks" ];
+            description = "The entries that publish the label on purpose (`fleet.<registry>.<name>`), which the check leaves alone.";
+          };
+        };
+      }
+    );
+    default = { };
+    description = ''
+      Labels under `fleet.baseDomain` that no app, webApp, route or control
+      plane address may take. The engine reserves `hooks`, the GitHub App's
+      webhook; a host adds the names it publishes outside this box (a record
+      at its DNS provider that no fleet hostname names, which a collision
+      check would never see and the tunnel's route sync would reconcile
+      away). The build asserts them, and the app refuses them at the edit.
+    '';
+  };
+
   options.fleet.daedalus.boardsDir = lib.mkOption {
     type = lib.types.str;
     readOnly = true;
@@ -285,9 +317,7 @@ in
     # The identity headers count only on a request carrying traefik's proof
     # (platform/publishing-options.nix proxyProof; the app's side is
     # core/auth.ts): the app shares bridges, so being dialled proves nothing.
-    # Gated on the apps stack, like every definition under the container that
-    # stack materializes.
-    fleet.webApps.daedalus.proxyProof = lib.mkIf appsOn true;
+    fleet.webApps.daedalus.proxyProof = true;
 
     # The app reads traefik's API container-direct (the network pages), and
     # that API is served to named source ranges only — it prints every
@@ -296,14 +326,13 @@ in
     # where the auto-assigned bridges of a fresh box do not reach, and that
     # subnet is the one reader.
     fleet.bridgeSubnets.iso-daedalus = "10.89.254.0/24";
-    fleet.modules.traefik.apiReaders = lib.mkIf appsOn [ config.fleet.bridgeSubnets.iso-daedalus ];
+    fleet.modules.traefik.apiReaders = [ config.fleet.bridgeSubnets.iso-daedalus ];
 
-    # Two labels under baseDomain are not an app's to take: `hooks`, the GitHub
-    # App's public webhook (daedalus-github.nix), and `daedalus`, the project's
-    # landing page on GitHub Pages, a record this box does not own — no fleet
-    # hostname names it, so nothing else here would notice a claim on it, and
-    # cloudflared-route-sync would reconcile it away. The app refuses both at
-    # the edit (app/src/lib/hostname.ts); this is the build refusing them.
+    # A reserved label is not an app's to take, whatever door the claim comes
+    # through — a webApp, an app's hostname or alias, the control plane's
+    # address, a route — bar the entries that publish it on purpose (its
+    # `owners`). The app refuses the same labels at the edit (it reads them
+    # from the publishing export); this is the build refusing them.
     assertions =
       let
         claims =
@@ -322,29 +351,44 @@ in
           ++ lib.mapAttrsToList (n: r: {
             what = "fleet.cloudflareRoutes.${n}";
             hosts = [ r.hostname ];
-          }) (builtins.removeAttrs config.fleet.cloudflareRoutes [ "daedalus-hooks" ]);
+          }) config.fleet.cloudflareRoutes;
 
         # One assertion per reserved label, naming whoever claimed it.
         reservedAssertions = lib.mapAttrsToList (
-          label: purpose:
+          label: r:
           let
             host = at label;
-            offenders = map (c: c.what) (lib.filter (c: lib.elem host c.hosts) claims);
+            offenders = map (c: c.what) (
+              lib.filter (c: lib.elem host c.hosts && !(lib.elem c.what r.owners)) claims
+            );
           in
           {
             assertion = offenders == [ ];
-            message = "${host} is reserved for ${purpose}: ${lib.concatStringsSep ", " offenders} cannot use it.";
+            message = "${host} is reserved: ${label} ${r.reason} ${lib.concatStringsSep ", " offenders} cannot use it.";
           }
-        ) reservedLabels;
+        ) config.fleet.reservedLabels;
       in
-      [
-        {
-          assertion = cp.label != "daedalus" && cp.previousLabel != "daedalus";
-          message = "fleet.controlPlane: the control plane cannot answer at daedalus.${config.fleet.baseDomain} — that name is the project's GitHub Pages landing page.";
-        }
-      ]
-      ++ reservedAssertions
+      reservedAssertions
       ++ [
+        # The spine the control plane runs on: its container is an app of the
+        # apps platform, pulled from the registry, published by traefik behind
+        # pocket-id, with its database on app-db. Every module here defines
+        # into those without a guard of its own.
+        (
+          let
+            missing = lib.filter (m: !config.fleet.modules.${m}.enable) [
+              "apps"
+              "traefik"
+              "pocket-id"
+              "registry"
+              "app-db"
+            ];
+          in
+          {
+            assertion = missing == [ ];
+            message = "fleet.modules.daedalus needs ${lib.concatStringsSep ", " missing} switched on (fleet.modules.<id>.enable).";
+          }
+        )
         {
           assertion = haveGithubApp -> config.fleet.github.app != null;
           message = "site/vault/github-app.sops is in the flake, but site.json has no github.app. The token minter signs as the App's clientId and finds its installation by ownerId, so the two land together: retry the Apply from Settings › Integrations › GitHub, which writes both in one commit.";
@@ -425,9 +469,7 @@ in
 
     # An image built on the box is built before the container starts
     # (mkLocalImage's `gates`); a host on the published image builds nothing.
-    systemd.services.app-daedalus-image-build = lib.mkIf (
-      appsOn && builtImage != null
-    ) builtImage.service;
+    systemd.services.app-daedalus-image-build = lib.mkIf (builtImage != null) builtImage.service;
 
     # `local` builds BEFORE the switch, as one of the new generation's own
     # pre-switch checks: a failed build refuses the switch with nothing
@@ -437,7 +479,7 @@ in
     # inherited XDG_DATA_HOME or CONTAINERS_* would point podman at another.
     # Checks run in name order, hence the `z`: after the upgrade guard and the
     # inhibitors, so a switch they refuse builds nothing.
-    system.preSwitchChecks.z-daedalus-image = lib.mkIf (appsOn && source == "local") ''
+    system.preSwitchChecks.z-daedalus-image = lib.mkIf (source == "local") ''
       case "''${2:-}" in
         dry-activate) exit 0 ;;
       esac
@@ -449,7 +491,7 @@ in
     # Its base on System › Updates: the Dockerfile's node, every stage of it. A
     # different node pin from the build checks' (build-agent.nix), bumped
     # apart.
-    fleet.manualPins = lib.mkIf (appsOn && builtImage != null) {
+    fleet.manualPins = lib.mkIf (builtImage != null) {
       app-daedalus-node = {
         image = lib.removePrefix "ARG NODE_IMAGE=" nodeImageLine;
         containers = [ "app-daedalus" ];

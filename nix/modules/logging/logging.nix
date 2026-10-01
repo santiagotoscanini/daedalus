@@ -557,6 +557,12 @@ in
       alloy = [ "monitoring" ];
     };
 
+    # The control plane's log panels query Loki container-direct.
+    fleet.dashboard.logging = {
+      env.LOKI_URL = "http://loki:3100";
+      bridges = [ "monitoring" ];
+    };
+
     fleet.logStacks.logging = [
       "loki"
       "alloy"

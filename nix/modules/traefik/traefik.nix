@@ -123,6 +123,10 @@ let
     hash = "sha256-IhAEWiLcR5L4pqa2gE5f1DdtAYeTPWBva3zT1vS3u5U=";
   };
 
+  # The traefik service a route's router sends to: the named one it gives,
+  # or the one its file defines for its `serviceUrl`.
+  routeService = name: route: if route.service != null then route.service else "${name}-svc";
+
   # One structured YAML file per route — no hand-rolled indentation.
   # Edit the attrset (in the owning stack's module), not the rendered
   # file (it lives in /nix/store, read-only).
@@ -139,7 +143,7 @@ let
           entryPoints = [ entry ];
           # One Host() per name (the route's host, then its extraHosts).
           rule = lib.concatMapStringsSep " || " (h: "Host(`${h}`)") ([ route.host ] ++ route.extraHosts);
-          service = if internal then route.service else "${name}-svc";
+          service = routeService name route;
         }
         // lib.optionalAttrs (route.middlewares != [ ]) {
           inherit (route) middlewares;
@@ -149,7 +153,7 @@ let
         };
       }
       // lib.optionalAttrs (!internal) {
-        services."${name}-svc".loadBalancer.servers = [ { url = route.serviceUrl; } ];
+        services.${routeService name route}.loadBalancer.servers = [ { url = route.serviceUrl; } ];
       };
     };
 
@@ -191,6 +195,18 @@ in
         traefik. Pin the reader's bridge subnet (`fleet.bridgeSubnets`) and
         name it here. The dashboard's own route (Pocket ID-gated) is
         unaffected.
+      '';
+    };
+
+    routeServices = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      readOnly = true;
+      default = lib.mapAttrs routeService config.fleet.traefikRoutes;
+      defaultText = lib.literalMD "each route's `service`, or `<route>-svc`, the service its file defines";
+      description = ''
+        The traefik service each `fleet.traefikRoutes.<name>` router sends
+        to (a webApp's route is named after it): what a hand-written router
+        in `fleet.traefikRawRules` names to reach the same upstream.
       '';
     };
 
@@ -428,11 +444,11 @@ in
             # Companion strippers: drop client-supplied copies of each
             # identity header BEFORE the oidc middleware runs, so bypassed
             # (API/ping) requests can't spoof the trusted header.
-            n: w:
-            lib.nameValuePair "oidc-${n}-strip" {
+            _: w:
+            lib.nameValuePair (lib.removeSuffix "@file" w.stripMiddleware) {
               headers.customRequestHeaders = lib.mapAttrs (_: _: "") w.authHeaders;
             }
-          ) (lib.filterAttrs (_: w: w.auth == "oidc" && w.authHeaders != { }) cfg.webApps);
+          ) (lib.filterAttrs (_: w: w.stripMiddleware != null) cfg.webApps);
       };
 
     # Dashboard / API — `api@internal` serves /api/* and /dashboard/*.

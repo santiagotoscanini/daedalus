@@ -66,7 +66,7 @@ in
             extraHosts = w.aliases;
             middlewares =
               lib.optional w.proxyProof "proof-${n}@file"
-              ++ lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
+              ++ lib.optional (w.stripMiddleware != null) w.stripMiddleware
               ++ lib.optional (w.auth == "oidc") "oidc-${n}@file"
               ++ w.extraMiddlewares;
           }

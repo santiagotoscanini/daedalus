@@ -12,7 +12,6 @@
 
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    appsOn
     verbsDir
     workspaceIconsDir
     boardsDir
@@ -42,13 +41,11 @@ in
 
 {
   config = lib.mkIf config.fleet.modules.daedalus.enable {
-    # Reach the monitoring stack: prometheus for liveness/traffic/DB size, loki
-    # for the log panels. Merges with what modules/apps contributes for this
-    # container (app-db, the iso bridge). Bridges are two-way, which is why the
-    # app trusts no request without traefik's proxy proof (daedalus.nix).
-    # Gated on the apps stack, which is what creates the container: a
-    # membership for a container nobody creates fails on its missing image.
-    fleet.bridgeMemberships."app-daedalus" = lib.mkIf appsOn [ "monitoring" ];
+    # The bridges the stacks ask for (fleet.dashboard.<id>.bridges), each
+    # joined once. Merges with what modules/apps contributes for this container
+    # (app-db, the iso bridge). Bridges are two-way, which is why the app
+    # trusts no request without traefik's proxy proof (daedalus.nix).
+    fleet.bridgeMemberships."app-daedalus" = lib.unique (lib.concatMap (d: d.bridges) dashboard);
 
     fleet.apps.daedalus = {
       # The per-service read keys (dashboard-keys.nix), then the env file each
@@ -71,9 +68,6 @@ in
             BUILDER_FACTS_PATH = "/builder/builder.json";
           })
           {
-            # Reached over the `monitoring` bridge added above.
-            PROMETHEUS_URL = "http://prometheus:9090";
-            LOKI_URL = "http://loki:3100";
             # The registry nix last built: a stable path daedalus-registry-snapshot
             # refreshes on every rebuild, so an Apply updates it without
             # restarting this app.
@@ -112,10 +106,9 @@ in
             # Two URLs for one device: the read is a machine fetching an
             # unauthenticated login page over plain HTTP (the router's
             # certificate is self-signed, and the page carries no secret); the
-            # link is a person about to type an admin password, where TLS is
-            # the point.
+            # link is a person about to type an admin password.
             ROUTER_URL = "http://${config.fleet.gateway}";
-            ROUTER_ADMIN_URL = "https://${config.fleet.gateway}/webpages/index.html#/login";
+            ROUTER_ADMIN_URL = config.fleet.daedalus.routerAdminUrl;
             # Snapshots the host publishes into the read-only mounts below.
             IMAGE_LABELS_PATH = "/images/labels.json";
             WORKSPACES_PATH = "/workspaces/workspaces.json";
@@ -138,11 +131,9 @@ in
       );
     };
 
-    # The mounts. Gated on the apps switch at the `containers` level: a `mkIf
-    # false` one level down would still create an `app-daedalus` entry with no
-    # image. Every snapshot is mounted as its DIRECTORY, never a file: each is
+    # The mounts. Every snapshot is mounted as its DIRECTORY, never a file: each is
     # replaced by rename, and a single-file bind would pin the old inode.
-    virtualisation.oci-containers.containers = lib.mkIf appsOn {
+    virtualisation.oci-containers.containers = {
       app-daedalus.volumes = [
         # The fleet.export domains: versioned, stamped JSON per domain at a
         # stable path, so no fact nix hands the app restarts it.

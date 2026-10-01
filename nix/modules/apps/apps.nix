@@ -52,7 +52,7 @@
 # Optional features (opt-in; `false` by default):
 #   - postgres.enable   → injects DATABASE_URL (+ POSTGRES_*)
 #   - storage.enable    → bind-mounts a persistent data dir at /app/data
-#   - litellm.enable    → injects LITELLM_BASE_URL
+#   - litellm.enable    → injects LITELLM_BASE_URL (fleet.litellmBaseUrl)
 #   - prometheus.enable → /metrics scrape + per-app Grafana dashboard
 #   - auth.mode         → SSO against Pocket ID, either shape (below)
 #   - …future features follow the same pattern (off by default,
@@ -92,7 +92,7 @@
 #   ];
 #   environment = {
 #     APP_NAME, APP_HOSTNAME, APP_PUBLIC_URL, PORT     # always
-#     LITELLM_BASE_URL = http://litellm:4000           # when litellm.enable
+#     LITELLM_BASE_URL = fleet.litellmBaseUrl          # when litellm.enable
 #     <user-supplied static env>                       # via .env
 #   };
 #
@@ -482,6 +482,7 @@ let
       publicUrl,
       proxyAuth,
       nativeAuth,
+      running,
       exposed,
       oidcCallback,
       displayName,
@@ -508,7 +509,10 @@ let
             callbackURLs = [ oidcCallback ];
             logoutCallbackURLs = [ oidcCallback ];
             inherit (app.auth) allowedGroups;
-            consumers = [ cName ];
+            # The container, once there is one: clients.nix writes the env
+            # file under each consumer, and cannot ask whether it exists (the
+            # answer would depend on its own definition).
+            consumers = lib.optional running cName;
           };
         }
         // lib.optionalAttrs (proxyAuth && exposed) {
@@ -911,8 +915,8 @@ let
             // (lib.optionalAttrs (app.hostnameAliases != [ ]) {
               APP_HOSTNAME_ALIASES = lib.concatStringsSep "," app.hostnameAliases;
             })
-            // (lib.optionalAttrs app.litellm.enable {
-              LITELLM_BASE_URL = "http://litellm:4000";
+            // (lib.optionalAttrs (app.litellm.enable && config.fleet.litellmBaseUrl != null) {
+              LITELLM_BASE_URL = config.fleet.litellmBaseUrl;
             })
             # Native OIDC. The client secret is NOT here — it arrives as
             # OIDC_CLIENT_SECRET in a rendered env file that

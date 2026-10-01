@@ -123,7 +123,6 @@ error naming it. The template defines every one.
 | `fleet.data` | Name → path of each bulk-data root. `{ }` is a valid answer. |
 | `fleet.mail.smtpHost`, `fleet.mail.passwordSopsFile` | The SMTP relay and its encrypted password. |
 | `fleet.git.sshKeySopsFile` | Encrypted SSH key the box pushes to its forge with. |
-| `fleet.daedalus.serviceKeysSopsFile` | Encrypted dotenv of read-only API keys for the dashboard's panels. |
 | `fleet.gluetun.image`, `.exporterImage` | Only if you build a VPN tunnel with `mkGluetunInstance`: the digest-pinned images. |
 | `fleet.images.<container>` | For every catalog module you switch on: the digest-pinned image of each of its containers. Forgetting one fails evaluation naming the key and the upstream repository. |
 | `fleet.modules.<id>.*SopsFile`, `fleet.modules.gatus.allowedSubjects` | A module's own required inputs, read only while it is on (the catalog table). |
@@ -155,8 +154,14 @@ Optional, null or empty by default: `fleet.hcPing.keySopsFile`,
 `fleet.claude.mcpSopsFile`, `fleet.zfs.datasets` (empty: no ZFS mechanism
 at all), `fleet.zfs.arcMaxBytes`, `fleet.ddns.enable` (ddclient for
 `fleet.wanHost`), `fleet.backup.replications`, `fleet.autoupgrade.inputs`,
-`fleet.daedalus.routerProduct`, `fleet.builder.npmMirrorHost`,
-`fleet.daedalus.source`, `fleet.daedalus.image`, `fleet.upgradeGuard.*`.
+`fleet.daedalus.routerProduct`, `fleet.daedalus.routerAdminUrl` (default
+`https://<gateway>/`), `fleet.builder.npmMirrorHost`, `fleet.daedalus.source`,
+`fleet.daedalus.image`, `fleet.upgradeGuard.*`, `fleet.daedalus.serviceKeysSopsFile`
+(the encrypted dotenv of read-only API keys the stacks name in
+`fleet.dashboard.<id>.serviceKeys`), `fleet.reservedLabels` (labels under
+the domain no app may take: the engine reserves `hooks`; add any you publish
+outside the box), `fleet.litellmBaseUrl` (set by the stack that runs an LLM
+gateway).
 
 ### Reboot-level changes
 

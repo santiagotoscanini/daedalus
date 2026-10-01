@@ -569,7 +569,7 @@ in
     webApps = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (
-          { name, ... }:
+          { name, config, ... }:
           {
             options = {
               hostname = lib.mkOption {
@@ -814,6 +814,20 @@ in
                   header is also STRIPPED from incoming requests by a
                   companion middleware so clients can't spoof it on
                   bypassed paths — apps trust these blindly.
+                '';
+              };
+              stripMiddleware = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                readOnly = true;
+                default =
+                  if config.auth == "oidc" && config.authHeaders != { } then "oidc-${name}-strip@file" else null;
+                defaultText = lib.literalMD "`oidc-<name>-strip@file` for an oidc app with `authHeaders`, else null";
+                description = ''
+                  The traefik middleware that blanks client-sent copies of
+                  `authHeaders`, or null when there is none. Every router
+                  to this app carries it first; a hand-written one
+                  (`fleet.traefikRawRules`) that reaches the same upstream
+                  must too.
                 '';
               };
               proxyProof = lib.mkOption {

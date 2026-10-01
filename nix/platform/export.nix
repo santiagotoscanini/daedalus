@@ -478,6 +478,29 @@ in
                 and a single-file bind would pin the old inode.
               '';
             };
+            serviceKeys = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              example = [ "GROCY_API_KEY" ];
+              description = ''
+                Keys of the host's service-keys file
+                (`fleet.daedalus.serviceKeysSopsFile`) the control plane
+                reads this stack with: read-only credentials minted in the
+                stack's own UI, each rendered into the container as
+                `DASH_<key>`. A key the file lacks renders empty, and its
+                panel shows no data.
+              '';
+            };
+            bridges = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Bridges the control plane's container joins to reach this
+                stack (`fleet.bridgeMemberships` names: `monitoring`, not
+                `monitoring-net`). Two stacks on one bridge both name it; it
+                is joined once.
+              '';
+            };
           };
         }
       );

@@ -11,10 +11,6 @@
 }:
 
 rec {
-  # The apps stack is what turns `fleet.apps.daedalus` into the `app-daedalus`
-  # container. Whatever this module defines UNDER that container is gated on it.
-  appsOn = config.fleet.modules.apps.enable;
-
   # The two directories the container writes, each for a reader that is the
   # operator, never root: the workspace icons the session host serves
   # (session-host.nix) and the vendor pages the box's browser job answers (a
@@ -103,7 +99,7 @@ rec {
     SETPRIV = "${pkgs.util-linux}/bin/setpriv";
   };
   operatorHomeVars = operatorVars // {
-    OPERATOR_HOME = config.users.users.${config.fleet.operator.user}.home;
+    OPERATOR_HOME = config.fleet.operator.home;
     # Absolute, like every binary a setpriv child runs: it does not inherit
     # writeShellApplication's PATH resolution for the command itself.
     ENV_BIN = "${pkgs.coreutils}/bin/env";
@@ -223,7 +219,7 @@ rec {
   #
   # On the reference host the home directory is snapshotted and mirrored, so
   # uncommitted work in these trees survives a disk.
-  workspaceRoot = "${config.users.users.${config.fleet.operator.user}.home}/projects";
+  workspaceRoot = "${config.fleet.operator.home}/projects";
 
   # The engine clone — daedalus's own source, and one of those workspaces.
   #
@@ -232,7 +228,7 @@ rec {
   # this is deliberately not derived from `fleet.workspaces`. Named once here
   # because two places want it now — the dev server's bind of its app/ and the
   # read-only bind of the repo root the MCP server reads its design docs from.
-  engineRoot = "${config.users.users.${config.fleet.operator.user}.home}/projects/daedalus";
+  engineRoot = "${config.fleet.operator.home}/projects/daedalus";
 
   # Where their published snapshot lives — same /run contract as the other
   # snapshot dirs: derived state, republished on every sync, gone on reboot.

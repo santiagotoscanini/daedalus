@@ -241,6 +241,10 @@ in
         WG_EASY_HOST_ALIAS = config.fleet.podman.hostAlias;
       };
       volumes = [ "${credentialsDir}:/wg-easy:ro" ];
+      serviceKeys = [
+        "WGEASY_USER"
+        "WGEASY_PASS"
+      ];
     };
     systemd.services.wg-easy-daedalus-credentials = lib.mkIf controlPlane (mkSecretRender {
       description = "Render wg-easy's API credentials for daedalus";

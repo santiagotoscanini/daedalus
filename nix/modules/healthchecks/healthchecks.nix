@@ -61,6 +61,9 @@
       cfg = config.fleet.modules.healthchecks;
     in
     lib.mkIf cfg.enable {
+      # The read-only API key the control plane reads the checks with.
+      fleet.dashboard.healthchecks.serviceKeys = [ "HEALTHCHECKS_API_KEY" ];
+
       # Its only bridge is iso-healthchecks (from webApps.isolated below): it
       # trusts X-Forwarded-Email, so it shares a bridge with nothing that could
       # forge one. The database comes to it instead — pg joins the private

@@ -405,7 +405,19 @@ in
     # (fleet.dashboard; read at run time and handed to the client bundle too).
     # Absent when this stack is off — the engine then falls back to the
     # conventional name, which is the honest answer for a link to nothing.
-    fleet.dashboard.monitoring.env.GRAFANA_URL = "https://${config.fleet.webApps.grafana.hostname}";
+    fleet.dashboard.monitoring = {
+      env = {
+        GRAFANA_URL = "https://${config.fleet.webApps.grafana.hostname}";
+        # Liveness, traffic and database sizes, read container-direct.
+        PROMETHEUS_URL = "http://prometheus:9090";
+      };
+      bridges = [ "monitoring" ];
+      # A Grafana login the dashboard reads with (the host's service-keys file).
+      serviceKeys = [
+        "GRAFANA_USER"
+        "GRAFANA_PASS"
+      ];
+    };
 
     # Persistent textfile-collector dir. Owned by the operator so the rootless
     # liveness sweep writes it and node-exporter (UID 0 → the operator) reads

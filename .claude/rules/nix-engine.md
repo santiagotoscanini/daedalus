@@ -96,7 +96,6 @@ Defined directly in the host's configuration:
 - `fleet.mail.smtpHost` — the SMTP relay.
 - `fleet.mail.passwordSopsFile` — sops ciphertext (binary) of the relay password.
 - `fleet.git.sshKeySopsFile` — sops ciphertext (binary) of the SSH key the box pushes to its forge with.
-- `fleet.daedalus.serviceKeysSopsFile` — sops dotenv of the read-only API keys the control plane reads other services with.
 - `fleet.gluetun.image`, `fleet.gluetun.exporterImage` — digest-pinned images for `mkGluetunInstance`; forced only when a host builds a tunnel (see §4).
 - `fleet.images.<container>` — the digest-pinned image of every container of every catalog module the host switches on, and every base of an image one builds, keyed by its pin id (§4, §7). `pinnedImage` throws naming the missing key.
 - `fleet.modules.<id>.*SopsFile`, `fleet.modules.gatus.allowedSubjects` — a catalog module's own required inputs, forced only while its switch is on.
@@ -121,7 +120,8 @@ Optional, null/empty by default, host-defined when wanted:
 `fleet.zfs.datasets` (empty switches platform/zfs.nix off), `fleet.zfs.arcMaxBytes`,
 `fleet.backup.replications`, `fleet.ddns.enable` (platform/ddclient),
 `fleet.autoupgrade.inputs`, `fleet.upgradeGuard.*` (checks, criticalContainers,
-minContainers, bootFallback.enable).
+minContainers, bootFallback.enable), `fleet.daedalus.serviceKeysSopsFile`,
+`fleet.reservedLabels`, `fleet.litellmBaseUrl`.
 
 Re-derive the list rather than trusting it:
 
