@@ -68,7 +68,7 @@
 //! control and the service keep running.
 //!
 //! It also keeps itself current: when a poll sees the page report a
-//! version other than its own, an update has swapped the binaries under
+//! release above its own, an update has swapped the binaries under
 //! it, and the tray restarts itself onto the new one. One instance at a
 //! time, and the loop that drives all this, are the OS's
 //! (os/windows/tray.rs: a named mutex and the Win32 message loop;

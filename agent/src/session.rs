@@ -20,8 +20,8 @@
 //! the restart verb, a new directory, the server dying, the machine
 //! coming back — it resumes them by itself (claude/recovery.rs; `recover`).
 //!
-//! It also notices an update of its own: when the page reports a version
-//! other than its own, the binaries were swapped under it, and it says so
+//! It also notices an update of its own: when the page reports a release
+//! above its own, the binaries were swapped under it, and it says so
 //! (`Tick::VersionChanged`) so its runner can leave for the new one.
 //!
 //! Two runners drive the same `tick`: the tray on Windows and macOS
@@ -348,12 +348,9 @@ impl Session {
             return Tick::Idle;
         }
         let page = self.link.page();
-        if let Some(p) = &page {
-            if p.version != VERSION && !p.restart_pending {
-                return Tick::VersionChanged;
-            }
+        if page.as_ref().is_some_and(Page::replaces_this) {
+            return Tick::VersionChanged;
         }
-        self.sup.tick();
         let mut report = self.sup.report();
         self.recover(&report);
         report.recovered = self.sessions.recovered();
@@ -586,10 +583,7 @@ impl Watcher {
         self.next_poll = Instant::now() + POLL;
         let page = read_page();
         if let Some(p) = &page {
-            // Only a NEWER service means this binary was replaced; an older
-            // one (mid-update, or a service not yet restarted) is shown, not
-            // chased — leaving for it would start this same binary again.
-            if !p.restart_pending && newer_than_this(&p.version) {
+            if p.replaces_this() {
                 return Tick::VersionChanged;
             }
             self.wanted = p.policy.claude_remote_control;
@@ -605,6 +599,16 @@ impl Watcher {
             ..Default::default()
         });
         Tick::Polled(Box::new(Poll { page, report }))
+    }
+}
+
+impl Page {
+    /// The service runs a release above this binary's own: an update
+    /// replaced it, and its runner leaves for the new one. Only a NEWER one —
+    /// an older service (mid-update, or one not yet restarted) is shown, not
+    /// chased: leaving for it would start this same binary again, in a loop.
+    pub fn replaces_this(&self) -> bool {
+        !self.restart_pending && newer_than_this(&self.version)
     }
 }
 
@@ -732,6 +736,21 @@ mod tests {
         assert!(!newer_than_this(VERSION));
         assert!(!newer_than_this("0.0.1"));
         assert!(!newer_than_this("not a version"));
+    }
+
+    #[test]
+    fn only_a_newer_service_makes_a_session_leave() {
+        let page = |version: &str, restart_pending| Page {
+            version: version.into(),
+            restart_pending,
+            ..Default::default()
+        };
+        assert!(page("999.0.0", false).replaces_this());
+        assert!(!page("999.0.0", true).replaces_this());
+        assert!(!page(VERSION, false).replaces_this());
+        // An older service: the tray stays, rather than relaunching itself
+        // onto the same binary over and over.
+        assert!(!page("0.0.1", false).replaces_this());
     }
 
     #[test]
