@@ -77,7 +77,7 @@ use super::wire::{
     self, name, Accepted, ClaudeSessionParams, Command, CommandParams, Hello, HelloFacts, Incoming,
     NodeState, Policy, RotateParams, StateEvent, Welcome, PROTO,
 };
-use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT, WRITE_TIMEOUT};
+use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT};
 use crate::config::Config;
 use crate::identity::{digest, format_fingerprint, parse_fingerprint, Identity};
 use crate::rpc::{code, ApiError, Response};
@@ -509,7 +509,6 @@ pub fn connect_once(
         Ok(s) => s,
         Err(e) => return Ended::Failed(e),
     };
-    let _ = sock.set_write_timeout(Some(WRITE_TIMEOUT));
     let mut tls = match client.connect(sock, target.pin, HANDSHAKE_TIMEOUT) {
         Ok(t) => t,
         Err(tls::ConnectError::KeyMismatch {

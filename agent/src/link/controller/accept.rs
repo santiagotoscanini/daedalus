@@ -16,7 +16,7 @@ use crate::link::tls::{Recv, Tls};
 use crate::link::wire::{
     self, name, Command, CommandParams, Hello, Incoming, MAX_HELLO_LINE, PROTO,
 };
-use crate::link::{MAX_LINE, WRITE_TIMEOUT};
+use crate::link::MAX_LINE;
 use crate::rpc::{code, ApiError, Response};
 
 use super::registry::{busy, ip_bucket, Admission, Out, Registry};
@@ -190,8 +190,7 @@ fn serve_connection(
     };
     let limits = registry.limits;
     let deadline = Instant::now() + limits.preauth_budget;
-    if sock.set_nonblocking(false).is_err() || sock.set_write_timeout(Some(WRITE_TIMEOUT)).is_err()
-    {
+    if sock.set_nonblocking(false).is_err() {
         return;
     }
     // The keys as this connection is served them, fixed now: its handshake

@@ -28,7 +28,7 @@
 //! **`Tls`** is one blocking connection driven from one thread: `recv`
 //! waits at most the socket's read timeout (`TICK` once the handshake is
 //! done) and returns a whole line, `Idle` or `Closed`; `send` writes one
-//! line and flushes it, within the socket's write timeout. The loop that
+//! line and flushes it, within `WRITE_TIMEOUT`. The loop that
 //! owns it (node.rs, controller.rs) interleaves the two, so nothing else
 //! ever touches the connection.
 
@@ -45,7 +45,7 @@ use rustls::{
     SignatureScheme,
 };
 
-use super::{cert, crypto, MAX_LINE, TICK};
+use super::{cert, crypto, MAX_LINE, TICK, WRITE_TIMEOUT};
 use crate::deadline::Deadline;
 use crate::identity::{digest, Identity};
 use crate::jsonl::LineBuf;
@@ -453,10 +453,11 @@ impl Tls {
             conn.write_tls(&mut sock)?;
         }
         // Lines up to MAX_LINE go out whole; the peer's pace is the
-        // write timeout's to judge.
+        // write timeout's to judge: `WRITE_TIMEOUT` from here on, whatever
+        // the handshake was given.
         conn.set_buffer_limit(None);
         sock.set_read_timeout(Some(TICK))?;
-        sock.set_write_timeout(Some(timeout))?;
+        sock.set_write_timeout(Some(WRITE_TIMEOUT))?;
         Ok(Self {
             conn,
             sock,
@@ -690,6 +691,23 @@ pub(crate) mod tests {
             assert_eq!(pinned_id_of(Some(other)), None, "{other}");
         }
         assert_eq!(pinned_id_of(None), None);
+    }
+
+    #[test]
+    // A tunnel stream is a second variant on Linux and macOS alone.
+    #[allow(irrefutable_let_patterns)]
+    fn after_the_handshake_a_write_has_write_timeout_not_the_handshake_s_budget() {
+        let (node, ctl) = (id(1), id(2));
+        let client = Client::new(&node).unwrap();
+        let pin = digest(ctl.public_key().as_bytes());
+        // Both sides finished their handshakes within 5 s.
+        let (c, s) = pair(&client, &ctl, pin);
+        for t in [c.unwrap(), s.unwrap()] {
+            let Sock::Tcp(sock) = &t.sock else {
+                panic!("not TCP")
+            };
+            assert_eq!(sock.write_timeout().unwrap(), Some(WRITE_TIMEOUT));
+        }
     }
 
     #[test]
