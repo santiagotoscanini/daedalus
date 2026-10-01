@@ -238,8 +238,7 @@ export type ControllerInfo = {
 /**
  * A key rotation under way (agent/src/link/rotation.rs): the key being
  * retired, when it retires (wall-clock), and how many machines still
- * connect under it — each has been sent the signed statement, so one that
- * stays runs an agent older than 0.19.0.
+ * connect under it — each has been sent the signed statement.
  */
 export type ControllerRotation = {
   fromPublicKey: string

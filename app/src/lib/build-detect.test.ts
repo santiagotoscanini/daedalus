@@ -290,8 +290,8 @@ describe('detectionFromStatus', () => {
       'node start.mjs',
     )
   })
-  it('reads a bare info document', () => {
-    expect(detectionFromStatus(IRIS_INFO)?.framework).toBe('tanstack-start')
+  it('reads nothing from a bare info document', () => {
+    expect(detectionFromStatus(IRIS_INFO)).toBeNull()
   })
 })
 

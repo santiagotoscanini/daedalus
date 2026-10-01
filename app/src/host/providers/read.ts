@@ -44,8 +44,8 @@ export type ProviderReading = {
   base: string
   reachable: boolean
   /**
-   * The machine has pushed a providers document. False for an agent older
-   * than 0.18 or one that has not read yet: the page says "no report yet"
+   * The machine has pushed a providers document. False until its agent has
+   * read them: the page says "no report yet"
    * rather than "not answering". Always true for this box's own.
    */
   reported: boolean
@@ -114,14 +114,7 @@ export function nodeReading(
     )
   }
   if (answer.providers === null) {
-    return silent(
-      kind,
-      base,
-      'no report from this machine yet: its agent reads its providers from 0.18.0',
-      now,
-      undefined,
-      false,
-    )
+    return silent(kind, base, 'no report from this machine yet', now, undefined, false)
   }
   const r = answer.providers.find((p) => p.kind === kind)
   const at = answer.receivedAt === null ? Number.NaN : Date.parse(answer.receivedAt)

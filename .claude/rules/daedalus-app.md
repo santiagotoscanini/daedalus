@@ -67,8 +67,8 @@ here.
   `ctx.gateway` is LiteLLM, or null on a box without one. No
   `process.env` under `src/modules/` — the boundary test refuses it.
   `ctx.modules.enabled(id)` reads `/export/modules.json`
-  (`fleet.modules.<id>.enable`, once the box publishes it; every module
-  counts as enabled until then) and `lib/modules/active.ts` derives
+  (`fleet.modules.<id>.enable`; an id it does not name is a module the
+  box does not import) and `lib/modules/active.ts` derives
   the rail from it: a tab is offered while any of its `nix` modules is
   enabled, a module while it has a tab left.
 - `core/identity/pocket-id.ts` is the Pocket ID reader two modules share

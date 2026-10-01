@@ -31,6 +31,7 @@ const REQUEST: BuildRequest = {
   publish: 'live',
   requestedBy: 'operator',
   at: '2026-09-11T20:00:00.000Z',
+  buildEnv: { placeholders: {}, railpack: {} },
 }
 
 const writeStatus = (body: unknown) =>

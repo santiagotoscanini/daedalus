@@ -39,7 +39,7 @@ export function RotationState({ r }: { r: ControllerRotation }) {
       <span className={cn(ASIDE, old > 0 && 'text-warning')}>
         {old === 0
           ? 'no machine is connected under the old key'
-          : `${String(old)} machine${old === 1 ? '' : 's'} still connected under the old key — each was sent the statement, so one that stays runs an agent older than 0.19.0`}
+          : `${String(old)} machine${old === 1 ? '' : 's'} still connected under the old key — each was sent the statement`}
       </span>
     </span>
   )
@@ -75,12 +75,11 @@ export function RotateKey({ rotating }: { rotating: boolean }) {
   return (
     <div className="flex flex-col gap-3 rounded-md border border-(--border-soft) p-3">
       <p className={NOTE}>
-        The controller makes a new key now and serves both for the grace period. Every machine on
-        agent 0.19.0 or newer that connects in that time is handed the old key's signed statement,
-        re-pins itself and reconnects under the new key — nothing to do on it. A machine older than
-        0.19.0 ignores the statement, and so is one that stays off the whole time: once the old key
-        retires it is refused until you re-run its install line there. The install lines below pin
-        the new key from the moment you confirm.
+        The controller makes a new key now and serves both for the grace period. Every machine that
+        connects in that time is handed the old key's signed statement, re-pins itself and
+        reconnects under the new key — nothing to do on it. A machine that stays off the whole time
+        is refused once the old key retires, until you re-run its install line there. The install
+        lines below pin the new key from the moment you confirm.
       </p>
       <Line>
         <span className={ASIDE}>Both keys served for</span>

@@ -180,12 +180,10 @@ export function readDetection(info: unknown, plan?: unknown): Detection | null {
 }
 
 /**
- * The status's `detected` field: `{ info, plan }` as the host copies it, or a
- * bare info document.
+ * The status's `detected` field: `{ info, plan }` as the host copies it.
  */
 export function detectionFromStatus(detected: unknown): Detection | null {
-  if (isRecord(detected) && 'info' in detected) return readDetection(detected.info, detected.plan)
-  return readDetection(detected)
+  return isRecord(detected) ? readDetection(detected.info, detected.plan) : null
 }
 
 // ── warnings ────────────────────────────────────────────────────────────────

@@ -31,10 +31,10 @@ export const DEPLOY_WAIT_MS = 620_000
  * `/deploy-state/<app>.json`, enveloped, written by publish_state in
  * nix/modules/apps/assets/deploy.sh.
  *
- * Timing fields are null wherever deploy.sh had none to record (a record it
- * synthesised from its older text state, a tick where nothing new was pulled,
- * a failure before the restart finished); `httpCode` is the probe's answer,
- * `"unverified"` for stage=off deploys where there is no ingress to ask.
+ * Timing fields are null wherever deploy.sh had none to record (a tick where
+ * nothing new was pulled, a failure before the restart finished); `httpCode`
+ * is the probe's answer, `"unverified"` for stage=off deploys where there is
+ * no ingress to ask.
  */
 export type DeployRecord = {
   app: string

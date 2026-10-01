@@ -56,9 +56,8 @@ export const sendNodeCommandFn = adminFn
 
 /**
  * Rotate the controller's key (`controller.rotate`): a new key at once, both
- * served for the grace, the old one retired after it. Machines on agent
- * 0.19.0 or newer re-pin themselves when they next connect; an older one is
- * re-pinned by hand. The controller refuses while a rotation runs.
+ * served for the grace, the old one retired after it. Machines re-pin
+ * themselves when they next connect. The controller refuses while a rotation runs.
  */
 export const rotateControllerKeyFn = adminFn
   .validator(

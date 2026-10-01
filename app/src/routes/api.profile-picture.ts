@@ -18,7 +18,6 @@ export const Route = createFileRoute('/api/profile-picture')({
         const header = (name: string) => forwardedHeaderOf(request, name) || null
         const picture = await profilePicture(await makeCtx(), {
           sub: header(AUTH_HEADERS.SUBJECT),
-          email: header(AUTH_HEADERS.EMAIL),
         })
         // A plain 404, not the router's not-found: this answers an <img>.
         if (picture === null) return new Response(null, { status: 404 })

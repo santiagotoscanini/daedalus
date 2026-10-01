@@ -148,7 +148,7 @@ const cases: [string, BuildRow, Parameters<typeof summaryOf>[1]][] = [
       error: 'checking',
       checks: { ran: [], failed: 'li`nt' },
       timings: { cloning: 1_200, checking: 5_000 },
-      detected: DETECTED.info,
+      detected: { info: DETECTED.info },
       warnings: [],
     }),
     null,

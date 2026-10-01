@@ -46,9 +46,8 @@ import type { GhResult } from './github-app'
 
 /**
  * Which nix modules the box runs, as `/export/modules.json` publishes them:
- * `fleet.modules.<id>.enable`, one boolean per id. Until the box publishes
- * the file, every module counts as enabled — a missing export must not empty
- * the rail — and so does an id the file does not mention.
+ * `fleet.modules.<id>.enable`, one boolean per id. An id the file does not
+ * mention is a module this box does not import.
  */
 const MODULES_EXPORT = 'modules.json'
 
@@ -135,11 +134,10 @@ export type Ctx = {
    */
   controller: ControllerClient
   /**
-   * The box's nix modules. `enabled` answers true for anything the export
-   * does not deny; `state` says which of the three a tab's page draws:
-   * `on`, `off` (declared and switched off — the tab stays in the rail,
-   * greyed, with its switch), or `absent` (this box does not import it — the
-   * tab is not offered). Until the export exists everything reads as `on`.
+   * The box's nix modules. `enabled` is `state` being `on`; `state` says which
+   * of the three a tab's page draws: `on`, `off` (declared and switched off —
+   * the tab stays in the rail, greyed, with its switch), or `absent` (this box
+   * does not import it — the tab is not offered).
    */
   modules: {
     enabled: (nixModule: string) => boolean
@@ -164,6 +162,10 @@ export async function makeCtx(): Promise<Ctx> {
       fallback: {} as Record<string, boolean>,
     }),
   ])
+  const moduleState = (id: string): ModuleState => {
+    const on = modules.data[id]
+    return on === undefined ? 'absent' : on ? 'on' : 'off'
+  }
   const ctx: Ctx = {
     env: (name) => env.text(name),
     secret: key,
@@ -204,17 +206,7 @@ export async function makeCtx(): Promise<Ctx> {
     hosts,
     site: readSite(),
     controller: controller(),
-    modules: {
-      enabled: (id) => (modules.available ? (modules.data[id] ?? true) : true),
-      state: (id) =>
-        !modules.available
-          ? 'on'
-          : modules.data[id] === undefined
-            ? 'absent'
-            : modules.data[id]
-              ? 'on'
-              : 'off',
-    },
+    modules: { enabled: (id) => moduleState(id) === 'on', state: moduleState },
   }
   return ctx
 }

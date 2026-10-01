@@ -22,8 +22,7 @@ import type { Account, Profile, ProfilePatch, ProfileRead } from './types'
 //
 // WHICH account is decided by the forward-auth headers of the request, never
 // by the page: X-Forwarded-User carries the OIDC `sub` (Pocket ID's user id,
-// stable across a rename), X-Forwarded-Email the address, kept as the fallback
-// for a session or a configuration older than the `sub` header. Nothing here
+// stable across a rename and an email edit). Nothing here
 // takes an account id from the client, so a request can only ever reach the
 // account it signed in as.
 //
@@ -38,7 +37,7 @@ import type { Account, Profile, ProfilePatch, ProfileRead } from './types'
 // endpoint ignores it.
 
 /** Who a request signed in as, per the forward-auth headers traefik sets. */
-export type Who = { sub: string | null; email: string | null }
+export type Who = { sub: string | null }
 
 type PocketUser = {
   id: string
@@ -57,7 +56,7 @@ type PocketUser = {
 
 /**
  * Why a call to Pocket ID is not an answer. The status is load-bearing, not
- * decoration: `lookUp` reads a 404 as "no such account, try the email" and
+ * decoration: `lookUp` reads a 404 as "no such account" and
  * anything else as "Pocket ID has a problem", and every `new Error` raised
  * from one of these carries the whole reason as its `cause`.
  */
@@ -175,32 +174,19 @@ const NO_ACCOUNT: Found = {
 
 /** The account, asked of Pocket ID now. What every write reads before writing. */
 async function lookUp(ctx: Ctx, who: Who): Promise<Found> {
-  if (who.sub === null && who.email === null) return NO_IDENTITY
-  if (who.sub !== null) {
-    const r = await pocket(ctx, `/api/users/${encodeURIComponent(who.sub)}`)
-    if (r.ok) return { ok: true, value: json<PocketUser>(r.value.bytes) }
-    if (r.reason.status !== 404) return r
-  }
-  if (who.email !== null) {
-    const r = await pocket(ctx, '/api/users?pagination[limit]=100')
-    if (!r.ok) return r
-    const wanted = who.email.toLowerCase()
-    const user = (json<{ data?: PocketUser[] }>(r.value.bytes).data ?? []).find(
-      (u) => typeof u.email === 'string' && u.email.toLowerCase() === wanted,
-    )
-    if (user !== undefined) return { ok: true, value: user }
-  }
-  return NO_ACCOUNT
+  if (who.sub === null) return NO_IDENTITY
+  const r = await pocket(ctx, `/api/users/${encodeURIComponent(who.sub)}`)
+  if (r.ok) return { ok: true, value: json<PocketUser>(r.value.bytes) }
+  return r.reason.status === 404 ? NO_ACCOUNT : r
 }
 
 /** The account for reading: from the cache when it is fresh. */
 async function findUser(ctx: Ctx, who: Who): Promise<Found> {
-  if (who.sub === null && who.email === null) return NO_IDENTITY
-  const key = who.sub !== null ? `sub:${who.sub}` : `email:${(who.email ?? '').toLowerCase()}`
-  const hit = fresh(accounts.get(key), ACCOUNT_TTL_MS)
+  if (who.sub === null) return NO_IDENTITY
+  const hit = fresh(accounts.get(who.sub), ACCOUNT_TTL_MS)
   if (hit !== undefined) return { ok: true, value: hit.user }
   const found = await lookUp(ctx, who)
-  if (found.ok) accounts.set(key, { at: Date.now(), user: found.value })
+  if (found.ok) accounts.set(who.sub, { at: Date.now(), user: found.value })
   return found
 }
 
@@ -309,8 +295,7 @@ export async function updateProfile(ctx: Ctx, who: Who, patch: ProfilePatch): Pr
   })
   if (!r.ok) throw refusal(r.reason)
   accounts.clear()
-  // By id from here: an email edit has just made the email header stale.
-  return readProfile(ctx, { sub: u.id, email: null })
+  return readProfile(ctx, { sub: u.id })
 }
 
 function pictureChanged(id: string): void {

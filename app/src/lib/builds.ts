@@ -360,8 +360,7 @@ export type BuildRequest = {
   publish: BuildPublish
   requestedBy: BuildRequester
   at: string
-  /** Absent in requests from before the field; the host treats that as empty. */
-  buildEnv?: BuildEnv
+  buildEnv: BuildEnv
 }
 
 export type BuildChecks = {
@@ -391,7 +390,7 @@ export type BuildStatus = {
   candidate: boolean
   /**
    * Railpack's own output, copied by the host: `{ info, plan }` (the two
-   * `railpack prepare` files) or the bare info document. Kept undecoded here —
+   * `railpack prepare` files). Kept undecoded here —
    * lib/build-detect.ts reads it, tolerating Railpack's 0.x churn.
    */
   detected: unknown
@@ -399,8 +398,8 @@ export type BuildStatus = {
    * What the agent read out of the clone: `{ hasStartMjs, packageManager,
    * scripts, dependencies, productionDependencies, allowBuilds }`. The half of
    * the warning rules' RepoFacts only the host can see — the other half is the
-   * app's own row. Absent from an agent older than the key; kept undecoded here
-   * and read by lib/build-detect.ts `readRepoFacts`, which tolerates both.
+   * app's own row. Kept undecoded here and read by lib/build-detect.ts
+   * `readRepoFacts`.
    */
   repo: unknown
   /** `{ tags, layers, layerSizes, configSize, mediaType }` — lib/build-facts.ts. */
@@ -495,7 +494,7 @@ const buildEnvDecoder: Decoder<BuildEnv> = obj({
   railpack: envRecord('railpack'),
 })
 
-const buildRequestCore = obj({
+export const buildRequestDecoder: Decoder<BuildRequest> = obj({
   version: versionOne,
   id: matching(BUILD_ID_RE, 'a build id'),
   app: appNameField,
@@ -505,15 +504,8 @@ const buildRequestCore = obj({
   publish: literal(...BUILD_PUBLISH_MODES),
   requestedBy: literal(...BUILD_REQUESTERS),
   at: str,
+  buildEnv: buildEnvDecoder,
 })
-
-/** `buildEnv` stays absent when absent, so an older request round-trips byte for byte. */
-export const buildRequestDecoder: Decoder<BuildRequest> = (v, p) => {
-  const core = buildRequestCore(v, p)
-  const env = (v as Record<string, unknown>).buildEnv
-  if (env === undefined) return core
-  return { ...core, buildEnv: buildEnvDecoder(env, p === '' ? 'buildEnv' : `${p}.buildEnv`) }
-}
 
 export const buildStatusDecoder: Decoder<BuildStatus> = obj({
   version: versionOne,

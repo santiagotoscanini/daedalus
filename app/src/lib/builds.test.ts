@@ -44,6 +44,7 @@ const request = {
   publish: 'live',
   requestedBy: 'webhook',
   at: '2026-09-11T20:00:00.000Z',
+  buildEnv: { placeholders: {}, railpack: {} },
 }
 
 const status = {
@@ -70,6 +71,7 @@ describe('build request', () => {
       publish: 'live',
       requestedBy: 'webhook',
       at: new Date('2026-09-11T20:00:00Z'),
+      buildEnv: { placeholders: {}, railpack: {} },
     })
     expect(r).toEqual(request)
   })
@@ -113,10 +115,9 @@ describe('build request env', () => {
     railpack: { RAILPACK_PRUNE_DEPS: 'true', RAILPACK_NODE_PLAYWRIGHT_INSTALL: '1' },
   }
 
-  it('leaves buildEnv absent when the request has none', () => {
-    const r = decode(buildRequestDecoder, request)
-    expect('buildEnv' in r).toBe(false)
-    expect(JSON.stringify(r)).toBe(JSON.stringify(request))
+  it('refuses a request without one', () => {
+    const { buildEnv: _env, ...bare } = request
+    expect(() => decode(buildRequestDecoder, bare)).toThrow(DecodeError)
   })
 
   it('carries it through the encoder and the decoder', () => {

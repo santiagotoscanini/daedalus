@@ -20,9 +20,9 @@ const PATCH_KEYS = [
 ] as const satisfies readonly (keyof ProfilePatch)[]
 
 /**
- * The account this request is for: the forwarded subject and email, blank as
- * null. Not `context.actor` — that is the label a record carries, which a
- * break-glass session also has; the profile store keys on the two claims themselves.
+ * The account this request is for: the forwarded subject, blank as null. Not
+ * `context.actor` — that is the label a record carries, which a break-glass
+ * session also has; the profile store keys on the claim itself.
  */
 async function who() {
   const { AUTH_HEADERS, forwardedHeader } = await import('../core/auth')
@@ -30,7 +30,7 @@ async function who() {
     const v = forwardedHeader(name)
     return v === undefined || v === null || v === '' ? null : v
   }
-  return { sub: header(AUTH_HEADERS.SUBJECT), email: header(AUTH_HEADERS.EMAIL) }
+  return { sub: header(AUTH_HEADERS.SUBJECT) }
 }
 
 export const fetchProfile = readFn.handler(async ({ context }): Promise<ProfileRead> => {
