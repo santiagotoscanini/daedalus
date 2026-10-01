@@ -1,5 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { webAppHosts } from '../../../host/nix-manifest'
+import { publishingFacts } from '../../../host/contract/domains/publishing'
 import { getJson, getJsonResult, getText } from '../../../lib/http'
 import {
   CF_TUNNEL_READ,
@@ -113,7 +113,7 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
     pihole,
     services,
     router,
-    hosts,
+    publishing,
     tunnel,
   ] = await Promise.all([
     ctx.prom.scalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
@@ -147,7 +147,7 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
     loadAsked(ctx),
     loadServiceTraffic(ctx),
     loadRouter(ctx),
-    webAppHosts(),
+    publishingFacts(),
     // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
     // never learns the WAN address it is dialling out from, and neither does
     // anything else on this box behind NAT — the edge records the address the
@@ -178,7 +178,10 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
       // From the manifest, never derived from the key: the hostname a stack
       // publishes on is a nix fact, and guessing it produces a link that 404s
       // for every app whose name and hostname differ.
-      url: hosts.myspeed === undefined ? null : `https://${hosts.myspeed}`,
+      url:
+        publishing.webApps.myspeed === undefined
+          ? null
+          : `https://${publishing.webApps.myspeed.hostname}`,
       downHistory: speedHistory[0] ?? [],
       upHistory: speedHistory[1] ?? [],
       pingHistory: speedHistory[2] ?? [],

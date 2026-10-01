@@ -1,6 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
 import { publishingFacts } from '../../../host/contract/domains/publishing'
-import { webAppHosts } from '../../../host/nix-manifest'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { imageTag } from '../../../lib/dashboard/images'
 import { localDay, since } from '../../../lib/format'
@@ -37,7 +36,7 @@ type WireguardData = {
    *
    * Not typed out here, and the reason is that typing it out is how this page
    * shipped a link to a hostname that does not exist. Every published name is
-   * already in `webAppHosts`, keyed by the webApp that owns it, so the page
+   * already in the publishing export, keyed by the webApp that owns it, so the page
    * can ask rather than remember — and a rename moves the link with it.
    */
   url: string | null
@@ -225,7 +224,7 @@ async function cfTunnel(ctx: Ctx): Promise<CfTunnelRead> {
 async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
   const version = await imageTag('wg-easy')
 
-  const [counts, peers, peak, hosts] = await Promise.all([
+  const [counts, peers, peak, publishing] = await Promise.all([
     ctx.prom.scalars({
       configured: 'wireguard_configured_peers',
       enabled: 'wireguard_enabled_peers',
@@ -236,7 +235,7 @@ async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
     // "did anyone use it", and a peer connected for twenty minutes averages
     // to nearly nothing over a day while being the entire answer.
     ctx.prom.points(`max_over_time(wireguard_connected_peers[1d])`, DAYS * 24 * 60, 86400),
-    webAppHosts(),
+    publishingFacts(),
   ])
 
   return {
@@ -245,7 +244,10 @@ async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
     counts,
     peers,
     daily: peak.map((p) => ({ date: localDay(p.t * 1000), peers: p.v })),
-    url: hosts['wg-easy'] === undefined ? null : `https://${hosts['wg-easy']}`,
+    url:
+      publishing.webApps['wg-easy'] === undefined
+        ? null
+        : `https://${publishing.webApps['wg-easy'].hostname}`,
   }
 }
 

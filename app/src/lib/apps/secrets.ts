@@ -1,12 +1,11 @@
 import type { Ctx } from '../../core/ctx'
 import { sealAppSecret } from '../../core/vault'
-import { readAppSecrets } from '../../host/app-secrets'
 import { readEnvSnapshot } from '../../host/env-snapshot'
 import { readNixManifest } from '../../host/nix-manifest'
 import type { RootAnswer } from '../../host/root'
 import { requestSecretRemove, requestSecretSet } from '../../host/secret-set'
 import { getApp } from '../repo/apps'
-import { type AppSecretKey, secretKeyError } from './secret-keys'
+import { secretKeyError } from './secret-keys'
 
 // One secret value, on demand.
 //
@@ -54,11 +53,6 @@ export async function revealAppEnvVar(data: { name: string; key: string }) {
 // both again against what Nix generated. The ones that matter are the host's —
 // the others exist so a refusal is a sentence on the page rather than a
 // failed unit.
-
-/** Every key in an app's secrets file, with the git facts for each. */
-export async function loadAppSecrets(name: string): Promise<AppSecretKey[]> {
-  return readAppSecrets(name)
-}
 
 /**
  * The apps whose secrets file this box will write, exactly as Nix sees it.

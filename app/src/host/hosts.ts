@@ -1,7 +1,7 @@
-import { webAppHosts } from './nix-manifest'
+import { publishingFacts } from './contract/domains/publishing'
 
 // Where a dashboard loader dials, and nothing else: two strings' worth of
-// addressing, read from the nix manifest. Loaders receive it as `ctx.hosts`
+// addressing, read from the publishing export. Loaders receive it as `ctx.hosts`
 // (core/ctx.ts builds the `Ctx` with this).
 
 export type Hosts = {
@@ -22,9 +22,9 @@ export type Hosts = {
 }
 
 export async function makeHosts(): Promise<Hosts> {
-  const hosts = await webAppHosts()
+  const { webApps } = await publishingFacts()
   return {
-    base: (app: string) => `https://${hosts[app] ?? app}`,
+    base: (app: string) => `https://${webApps[app]?.hostname ?? app}`,
     hc: 'http://host.containers.internal',
   }
 }

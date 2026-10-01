@@ -71,18 +71,18 @@ type HcCheck = {
   n_pings?: number
 }
 
-/** One entry of the monitoredJobs registry (`host/nix-manifest.ts`). */
+/** One entry of the monitoredJobs registry (`host/contract/domains/jobs.ts`). */
 type RegisteredJob = { unit: string; email: boolean; slug: string | null }
 
 export async function loadJobs(ctx: Ctx): Promise<JobsData> {
-  const { monitoredJobs } = await import('../../../host/nix-manifest')
+  const { monitoredJobsList } = await import('../../../host/contract/domains/jobs')
   const running = await imageVersion('healthchecks')
 
   const [body, registry, gap, facts] = await Promise.all([
     getJson<{ checks?: HcCheck[] }>(`${ctx.hosts.base('healthchecks')}/api/v1/checks/`, {
       headers: { 'X-Api-Key': ctx.secret('HEALTHCHECKS_API_KEY') },
     }),
-    monitoredJobs(),
+    monitoredJobsList(),
     // healthchecks numbers its releases with two segments — `v4.2`, `v4.1.1`
     // — so the default three-segment pattern matches none of them and would
     // report a project with 60 published releases as having none at all.

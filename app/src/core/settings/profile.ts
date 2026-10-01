@@ -1,4 +1,4 @@
-import { webAppHosts } from '../../host/nix-manifest'
+import { publishingFacts } from '../../host/contract/domains/publishing'
 import {
   lengthError,
   MAX_PICTURE_BYTES,
@@ -98,7 +98,7 @@ function fresh<T extends { at: number }>(entry: T | undefined, ttl: number): T |
 }
 
 async function pocketHost(): Promise<string | null> {
-  return (await webAppHosts())['pocket-id'] ?? null
+  return (await publishingFacts()).webApps['pocket-id']?.hostname ?? null
 }
 
 async function pocket(ctx: Ctx, path: string, init: RequestInit = {}): Promise<Call> {

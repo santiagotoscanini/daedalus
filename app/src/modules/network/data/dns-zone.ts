@@ -1,5 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
-import { lanHosts, webAppHosts } from '../../../host/nix-manifest'
+import { networkFacts } from '../../../host/contract/domains/network'
+import { publishingFacts } from '../../../host/contract/domains/publishing'
 import {
   age,
   type CfRecord,
@@ -34,8 +35,8 @@ async function fetchZone(ctx: Ctx, domain: string) {
       auth,
     ),
     getJson<{ result?: CfRecord[] }>(`${CF_API}/zones/${zoneId}/dns_records?per_page=500`, auth),
-    lanHosts(),
-    webAppHosts(),
+    networkFacts().then((n) => n.lanHosts),
+    publishingFacts(),
     servedHosts(),
   ])
   const dnssec = await getJson<{ result?: { status?: string } }>(
@@ -51,7 +52,7 @@ export async function loadZone(ctx: Ctx): Promise<ZoneData> {
 
   const records = (raw ?? []).map(toRecord(domain))
   const lanSet = new Set(lan.map((h) => h.host))
-  const publishedSet = new Set(Object.values(published))
+  const publishedSet = new Set(Object.values(published.webApps).map((w) => w.hostname))
 
   const { tunnel, wan, names, mail, elsewhere, leftovers, unclassified } = classifyRecords(
     records,

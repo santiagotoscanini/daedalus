@@ -1,9 +1,10 @@
 import type { Ctx } from '../../core/ctx'
 import { appIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
+import { publishingFacts } from '../../host/contract/domains/publishing'
 import { siteIdentity } from '../../host/contract/domains/site'
 import { lastDeploy, pullFailing } from '../../host/deploy'
-import { hostnamesTakenBy, manifestEntries, operatorSecretApps } from '../../host/nix-manifest'
+import { manifestEntries } from '../../host/nix-manifest'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
@@ -45,7 +46,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     applyStatus,
     deploy,
     pullBroken,
-    takenHostnames,
+    publishing,
     hasIcon,
     workspaces,
     deployShot,
@@ -57,7 +58,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     pullFailing(name),
     // So the hostname field can reject a collision as it is typed rather
     // than during the rebuild it would otherwise fail.
-    hostnamesTakenBy(hostname),
+    publishingFacts(),
     appIcon(record.name, hostname, stageExposed(record.stage)).then((icon) => icon !== null),
     readWorkspaces(),
     readDeployShot(name),
@@ -75,7 +76,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     // names it (what a removal leaves behind). From the export, so the
     // path is the nix fact rather than a string typed into a component.
     stateRoot: site.data.stateRoot,
-    takenHostnames,
+    takenHostnames: publishing.takenHostnames.filter((h) => h !== hostname),
     // Authoritative record from the app's own deploy unit — a deploy also
     // runs from the timer and from a manual systemctl start, neither of
     // which goes through daedalus.
@@ -103,7 +104,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
       prometheus: record.prometheus,
       // From Nix, not the record: the file's presence is the setting, so
       // there is no column for this and nothing that could drift from it.
-      operatorSecrets: (await operatorSecretApps()).includes(name),
+      operatorSecrets: manifest?.operatorSecrets ?? false,
       limitCpus: record.limitCpus,
       limitMemoryMb: record.limitMemoryMb,
       limitPids: record.limitPids,

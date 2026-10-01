@@ -157,7 +157,8 @@ here.
   `workspaces.ts`), the credential-carrying clients (`keys.ts`,
   `prom.ts`, `loki.ts`, `access.ts`, `registry.ts`,
   `github-token.ts`, `github-repos.ts`, `github-app-crypto.ts`,
-  `app-icon.ts`, `vpn-egress.ts`), and `host/contract/`.
+  `app-icon.ts`), and `host/contract/` (a caller reads a domain there
+  itself; nothing in `host/` re-exports one).
 - **The contract, in two halves.** `src/lib/contract/` is the pure
   half — `decode.ts` (the combinators; `lib/repo` and `lib/dashboard`
   decode with them too), `fields.ts` (the shared request-field

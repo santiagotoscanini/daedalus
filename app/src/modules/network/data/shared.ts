@@ -1,6 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
+import { publishingFacts } from '../../../host/contract/domains/publishing'
 import { siteIdentity } from '../../../host/contract/domains/site'
-import { webAppHosts } from '../../../host/nix-manifest'
 import { getJson, type JsonResult } from '../../../lib/http'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
@@ -86,7 +86,7 @@ export type TraefikRouter = {
  * and 200 on `/settings-dhcp`.
  */
 export async function piholeAdmin(): Promise<string | null> {
-  const host = (await webAppHosts()).pihole
+  const host = (await publishingFacts()).webApps.pihole?.hostname
   return host === undefined ? null : `https://${host}`
 }
 

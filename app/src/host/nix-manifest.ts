@@ -237,41 +237,6 @@ export async function readNixManifest(): Promise<NixManifest> {
   }
 }
 
-/** Scheduled jobs and how each is watched — from /export/jobs.json. */
-export async function monitoredJobs(): Promise<
-  { unit: string; email: boolean; slug: string | null }[]
-> {
-  const { monitoredJobsList } = await import('./contract/domains/jobs')
-  return monitoredJobsList()
-}
-
-/** Apps with a tracked operator-secrets file. See `NixManifest.operatorSecretApps`. */
-export async function operatorSecretApps(): Promise<string[]> {
-  return (await readNixManifest()).operatorSecretApps
-}
-
-/** Published hostnames, keyed by webApp name — from /export/publishing.json. */
-export async function webAppHosts(): Promise<Record<string, string>> {
-  const { publishingFacts } = await import('./contract/domains/publishing')
-  const { webApps } = await publishingFacts()
-  return Object.fromEntries(Object.entries(webApps).map(([name, w]) => [name, w.hostname]))
-}
-
-/** Names pi-hole answers from its own hosts file — from /export/network.json. */
-export async function lanHosts(): Promise<{ ip: string; host: string }[]> {
-  const { networkFacts } = await import('./contract/domains/network')
-  return (await networkFacts()).lanHosts
-}
-
-/**
- * Hostnames already published, minus the one this app currently holds — so an
- * app does not collide with itself. From /export/publishing.json.
- */
-export async function hostnamesTakenBy(others: string): Promise<string[]> {
-  const { publishingFacts } = await import('./contract/domains/publishing')
-  return (await publishingFacts()).takenHostnames.filter((h) => h !== others)
-}
-
 export async function manifestEntries(): Promise<ManifestEntry[]> {
   const m = await readNixManifest()
   const hasSecrets = new Set(m.operatorSecretApps)

@@ -1,5 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { lanHosts } from '../../../host/nix-manifest'
+import { networkFacts } from '../../../host/contract/domains/network'
 import type { VersionGap } from '../../../lib/dashboard/github'
 import type { MailDomain, NameRow, ZoneRecord } from '../../../lib/dns-zone'
 import { stripBaseDomain } from '../../../lib/site'
@@ -170,7 +170,7 @@ export async function loadDns(ctx: Ctx): Promise<DnsData> {
   const [resolver, zone, lanNames, served, admin] = await Promise.all([
     loadResolver(ctx, ctx.hosts.base('pihole')),
     loadZone(ctx),
-    lanHosts(),
+    networkFacts().then((n) => n.lanHosts),
     servedHosts(),
     piholeAdmin(),
   ])

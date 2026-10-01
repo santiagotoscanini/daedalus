@@ -89,11 +89,11 @@ vi.mock('../../host/db', () => ({
   },
 }))
 
-vi.mock('../../host/nix-manifest', () => ({
-  manifestEntries: async () => h.manifest,
-  // The real one filters the caller's own hostname out of the taken list,
-  // which is the whole reason an app can keep the name it already has.
-  hostnamesTakenBy: async (others: string) => h.taken.filter((x) => x !== others),
+vi.mock('../../host/nix-manifest', () => ({ manifestEntries: async () => h.manifest }))
+// Every published hostname, the app's own included: updateApp filters its own
+// out, which is the whole reason an app can keep the name it already has.
+vi.mock('../../host/contract/domains/publishing', () => ({
+  publishingFacts: async () => ({ takenHostnames: h.taken }),
 }))
 
 const { createApp, updateApp } = await import('./apps')

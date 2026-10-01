@@ -46,7 +46,7 @@ import type { ModelPolicies } from '../lib/providers/policy'
 // HAS operator secrets either. That one is decided by a tracked
 // site/vault/apps/<name>-env.sops existing, so a column here could only ever
 // agree or disagree with the filesystem. It arrives from the Nix manifest as a
-// fact instead (`operatorSecretApps`, host/nix-manifest.ts). The ciphertext
+// fact instead (`operatorSecretApps`, host/contract/domains/apps.ts). The ciphertext
 // stays in sops, in git, decrypted at activation — never in Postgres, never in
 // a page render.
 

@@ -1,5 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { declaredVpnEgress, type VpnEgress } from '../../../host/vpn-egress'
+import { type PublishingFacts, publishingFacts } from '../../../host/contract/domains/publishing'
 import {
   type CommitGap,
   commitsSince,
@@ -11,6 +11,9 @@ import {
 import { localDay } from '../../../lib/format'
 import { getJson } from '../../../lib/http'
 import { DAYS } from './shared'
+
+/** One declared tunnel (fleet.vpnEgress), as the publishing export carries it. */
+type VpnEgress = PublishingFacts['vpnEgress'][number]
 
 /**
  * One VPN egress tunnel.
@@ -79,7 +82,7 @@ export type OutboundData = {
  * currently sharing its namespace.
  */
 export async function loadOutbound(ctx: Ctx): Promise<OutboundData> {
-  const declared = await declaredVpnEgress()
+  const declared = (await publishingFacts()).vpnEgress
 
   if (declared.length === 0) {
     return {

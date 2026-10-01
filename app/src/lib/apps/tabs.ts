@@ -1,8 +1,9 @@
 import type { Ctx } from '../../core/ctx'
 import { appAccess, noAccess } from '../../host/access'
+import { readAppSecrets } from '../../host/app-secrets'
+import { nixApps } from '../../host/contract/domains/apps'
 import { lastDeploy } from '../../host/deploy'
 import { readEnvSnapshot } from '../../host/env-snapshot'
-import { operatorSecretApps } from '../../host/nix-manifest'
 import { commitUrl } from '../../host/registry'
 import type { AccessWindow } from '../access-window'
 import type { ActivityRow } from '../activity-lines'
@@ -23,7 +24,6 @@ import {
   NO_VPN,
 } from './metrics'
 import type { AppSecretKey } from './secret-keys'
-import { loadAppSecrets } from './secrets'
 import { loadTasksTab, type TasksPayload } from './tasks'
 
 // The app detail page's tab bodies — one branch per tab, and nothing a tab
@@ -200,7 +200,7 @@ export async function loadAppTab(
     }
 
     case 'variables':
-      return { kind: 'variables', secrets: await loadAppSecrets(name) }
+      return { kind: 'variables', secrets: await readAppSecrets(name) }
 
     case 'secrets': {
       // Secret VALUES are deliberately NOT in this payload (./secrets.ts says
@@ -209,7 +209,7 @@ export async function loadAppTab(
       const snapshot = await readEnvSnapshot(
         name,
         declared,
-        (await operatorSecretApps()).includes(name),
+        (await nixApps()).data.operatorSecretApps.includes(name),
       )
       return {
         kind: 'secrets',
@@ -219,7 +219,7 @@ export async function loadAppTab(
         // nothing else claims this name"; this is the file itself, so it also
         // lists a key the container has not picked up yet (set since its last
         // start) and drops one the file no longer holds.
-        secrets: await loadAppSecrets(name),
+        secrets: await readAppSecrets(name),
         env: {
           available: snapshot.available,
           takenAt: snapshot.takenAt,

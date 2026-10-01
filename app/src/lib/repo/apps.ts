@@ -123,7 +123,8 @@ async function replaceTasks(tx: Tx, appId: string, tasks: ManifestTask[]): Promi
 export async function createApp(input: NewApp): Promise<{ name: string }> {
   const name = input.name.trim().toLowerCase()
 
-  const { manifestEntries, hostnamesTakenBy } = await import('../../host/nix-manifest')
+  const { manifestEntries } = await import('../../host/nix-manifest')
+  const { publishingFacts } = await import('../../host/contract/domains/publishing')
   const existing = await listApps()
   const taken = [
     ...existing.map((a) => a.name),
@@ -141,7 +142,7 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
   const hostErr = hostnameError(
     site,
     hostname ?? effectiveHostname(site, name, null),
-    await hostnamesTakenBy(''),
+    (await publishingFacts()).takenHostnames,
   )
   if (hostErr) throw new Error(`hostname ${hostErr}`)
 
@@ -235,8 +236,8 @@ const nothingToWrite = (
  * inside the rebuild an Apply has already committed.
  */
 async function refuseSecretClash(name: string, env: EnvVar[]): Promise<void> {
-  const { loadAppSecrets } = await import('../apps/secrets')
-  const secretKeys = (await loadAppSecrets(name)).map((s) => s.key)
+  const { readAppSecrets } = await import('../../host/app-secrets')
+  const secretKeys = (await readAppSecrets(name)).map((s) => s.key)
   const clash = env.find((e) => secretKeys.includes(e.key))
   if (clash !== undefined) {
     throw new Error(
@@ -257,10 +258,11 @@ async function normalizeHostname(
   record: AppRecord,
   hostname: string,
 ): Promise<string | null> {
-  const { hostnamesTakenBy } = await import('../../host/nix-manifest')
+  const { publishingFacts } = await import('../../host/contract/domains/publishing')
   const site = readSite()
   const own = effectiveHostname(site, name, record.hostname)
-  const err = hostnameError(site, hostname, await hostnamesTakenBy(own))
+  const taken = (await publishingFacts()).takenHostnames.filter((h) => h !== own)
+  const err = hostnameError(site, hostname, taken)
   if (err) throw new Error(`hostname ${err}`)
   return hostname.trim().toLowerCase() || null
 }
