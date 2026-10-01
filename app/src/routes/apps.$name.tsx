@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { ApplyBar } from '../components/apply-bar'
 import { Access } from '../components/apps/access'
 import { Database } from '../components/apps/database'
@@ -18,10 +18,12 @@ import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skel
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
+import { useAction } from '../components/use-action'
 // lib/access-window, NOT host/access. The window table is a value the picker
 // and validateSearch both need in the browser; host/access talks to Loki and
 // must never follow it there.
 import { type AccessWindow, DEFAULT_WINDOW, isAccessWindow } from '../lib/access-window'
+import type { AppPatch } from '../lib/apps/validate'
 import { cn } from '../lib/cn'
 import { isAppName } from '../lib/hostname'
 import { known } from '../lib/known'
@@ -164,7 +166,6 @@ function AppDetail() {
     stateRoot,
     tabData,
   } = Route.useLoaderData()
-  const router = useRouter()
   const { tab, range } = Route.useSearch()
 
   const readOnly = app.managedInNix
@@ -178,9 +179,11 @@ function AppDetail() {
 
   // Edits go straight to Postgres — the database IS the working copy, and the
   // drift banner is what marks it as not-yet-applied. There is no separate
-  // client-side draft to lose on a refresh.
-  const patch = (p: Record<string, unknown>) => {
-    void saveApp({ data: { name: app.name, patch: p } }).then(() => router.invalidate())
+  // client-side draft to lose on a refresh. A refused edit (a validation
+  // error, a lost session) shows above the sections rather than vanishing.
+  const save = useAction()
+  const patch = (p: AppPatch) => {
+    save.run(() => saveApp({ data: { name: app.name, patch: p } }))
   }
 
   // The sections, as one switch over the tab rather than as independent
@@ -464,6 +467,13 @@ function AppDetail() {
           )}
         </div>
       </section>
+
+      {save.error !== null && (
+        <Alert variant="destructive" className="mb-[1.35rem]">
+          <AlertTitle>The change was not saved</AlertTitle>
+          <AlertDescription>{save.error}</AlertDescription>
+        </Alert>
+      )}
 
       {readOnly && (
         <Alert className="mb-[1.35rem] text-(--text-muted)">

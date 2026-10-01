@@ -9,6 +9,7 @@ import { cn } from '../../lib/cn'
 // imports would be erased and safe.
 import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../../lib/env-groups'
 import { when } from '../../lib/format'
+import { errorText } from '../../lib/redact'
 import { removeAppSecretFn, revealEnvVar, setAppSecretFn } from '../../server/registry'
 import { useRootAction } from '../root-action'
 import { Alert, AlertDescription } from '../ui/alert'
@@ -218,6 +219,7 @@ type EnvRowData = {
 function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
   const [revealed, setRevealed] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const shown = v.secret ? revealed : v.value
 
@@ -262,9 +264,13 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
                   return
                 }
                 setBusy(true)
+                setError(null)
                 void revealEnvVar({ data: { name: app, key: v.key } })
                   .then((r) => {
                     setRevealed(r.value)
+                  })
+                  .catch((e: unknown) => {
+                    setError(errorText(e))
                   })
                   .finally(() => {
                     setBusy(false)
@@ -275,6 +281,9 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
             </Button>
           )}
         </div>
+        {error !== null && (
+          <p className="mt-[0.35rem] mr-0 mb-0 ml-0 text-[0.78rem] text-danger">{error}</p>
+        )}
         {v.note && (
           <p className="mt-[0.35rem] mr-0 mb-0 ml-0 text-[0.78rem] text-(--dim)">{v.note}</p>
         )}

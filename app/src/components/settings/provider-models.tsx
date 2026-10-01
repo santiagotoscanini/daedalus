@@ -230,10 +230,15 @@ export function BoxProvider() {
   const [busy, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    fetchBoxProvidersFn().then((b) => {
-      setBox(b)
-      setAlias(b.policy.subgen?.models?.whisper?.alias ?? '')
-    })
+    fetchBoxProvidersFn().then(
+      (b) => {
+        setBox(b)
+        setAlias(b.policy.subgen?.models?.whisper?.alias ?? '')
+      },
+      (e: unknown) => {
+        setError(errorText(e))
+      },
+    )
   }, [])
   const offered = box?.policy.subgen?.offer ?? false
   const [offer, showOffer] = useShown(offered, busy, error !== null)
@@ -248,7 +253,13 @@ export function BoxProvider() {
       }
     })
   }
-  if (box === null) return <Bar w="50%" h={12} />
+  if (box === null) {
+    return error !== null ? (
+      <span className="text-danger text-[0.78rem]">{error}</span>
+    ) : (
+      <Bar w="50%" h={12} />
+    )
+  }
   if (!box.present) {
     return <span className={ASIDE}>The tv stack is off, so this box runs no provider.</span>
   }

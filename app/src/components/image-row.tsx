@@ -4,6 +4,7 @@ import { cn } from '../lib/cn'
 import type { ManualRow, UpdateRow, UpdateVerdict } from '../lib/dashboard/update-rows'
 import { ENGINE_REPO } from '../lib/engine'
 import { DASH } from '../lib/format'
+import { errorText } from '../lib/redact'
 import { fetchUpdateNotes } from '../server/updates'
 import { UpdateControl } from './image-update'
 import { Changelog } from './release-notes'
@@ -61,11 +62,17 @@ export function ImageRow({
       <details
         className="group overflow-hidden rounded-[9px] border border-(--border-soft) bg-(--panel-2)"
         onToggle={(e) => {
-          if (!e.currentTarget.open || notes !== null || !r.hasNotes) return
-          setNotes({ loading: true, data: null })
-          void fetchUpdateNotes({ data: { container: r.container } }).then((data) => {
-            setNotes({ loading: false, data })
-          })
+          // A failed read is not cached: closing and reopening asks again.
+          if (!e.currentTarget.open || (notes !== null && notes.error === null) || !r.hasNotes)
+            return
+          setNotes({ loading: true, data: null, error: null })
+          void fetchUpdateNotes({ data: { container: r.container } })
+            .then((data) => {
+              setNotes({ loading: false, data, error: null })
+            })
+            .catch((err: unknown) => {
+              setNotes({ loading: false, data: null, error: errorText(err) })
+            })
         }}
       >
         <summary className={SUMMARY}>
@@ -182,7 +189,11 @@ function ManualFacts({ r }: { r: ManualRow }) {
 }
 
 /** What one row has fetched, or is fetching. */
-type Notes = { loading: boolean; data: Awaited<ReturnType<typeof fetchUpdateNotes>> | null }
+type Notes = {
+  loading: boolean
+  data: Awaited<ReturnType<typeof fetchUpdateNotes>> | null
+  error: string | null
+}
 
 function NotesPanel({ notes, hasNotes }: { notes: Notes | null; hasNotes: boolean }) {
   if (!hasNotes) {
@@ -191,6 +202,14 @@ function NotesPanel({ notes, hasNotes }: { notes: Notes | null; hasNotes: boolea
         No release notes: nothing maps this pin to a project whose changelog we can read. The tag
         delta above is still the real answer to what a re-pull would bring. See
         <code> lib/dashboard/image-repos.ts</code> for why a guess is not offered instead.
+      </p>
+    )
+  }
+
+  if (notes?.error != null) {
+    return (
+      <p className={cn(EMPTY, 'text-danger')}>
+        Could not read the release notes (close and reopen this row to retry): {notes.error}
       </p>
     )
   }

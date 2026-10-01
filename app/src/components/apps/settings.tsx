@@ -1,5 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { type ReactNode, useId, useState } from 'react'
+import type { AppPatch } from '../../lib/apps/validate'
 import { hostnameError } from '../../lib/hostname'
 import { errorText } from '../../lib/redact'
 import { defaultImage } from '../../lib/site'
@@ -24,7 +25,7 @@ export function Settings({
 }: {
   app: AppRecord
   readOnly: boolean
-  patch: (p: Record<string, unknown>) => void
+  patch: (p: AppPatch) => void
   takenHostnames: NonNullable<LoaderData>['takenHostnames']
   /** `fleet.stateRoot` on the host, from the site export. */
   stateRoot: string
