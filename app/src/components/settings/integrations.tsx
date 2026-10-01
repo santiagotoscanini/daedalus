@@ -5,7 +5,7 @@ import type { SiteEdit } from '../../core/site'
 import { since, when } from '../../lib/format'
 import { mailAddressError } from '../../lib/site-fields'
 import { Identified, ReplaceToken, Token } from './cloudflare'
-import { Github, GithubApp, type GithubAppProps } from './github-app'
+import { GithubApp, type GithubAppProps } from './github-app'
 import { ExtLink, Mono, Pending, Section, Stack, Unset, Value } from './shared'
 import { SiteText, SiteUnwritten } from './site-fields'
 
@@ -98,7 +98,7 @@ export function Integrations({
         title="GitHub"
         icon="/icon-github.svg"
         mono
-        description="Where the app repos live, and how the box talks to GitHub: the repo-token override below, and its own App once one is created and installed."
+        description="Where the app repos live, and the box’s own App, which is how it talks to GitHub once created and installed."
         rows={[
           {
             k: 'Owner',
@@ -108,21 +108,6 @@ export function Integrations({
               ) : (
                 <ExtLink href={`https://github.com/${gh.owner}`}>{gh.owner}</ExtLink>
               ),
-          },
-          {
-            k: 'Repo token',
-            v: (
-              <Github
-                // A null reason is the check saying there was no token to ask
-                // about — everything else is a token that exists and did not work.
-                configured={
-                  status === null ||
-                  status.github.repoToken.ok ||
-                  status.github.repoToken.reason !== null
-                }
-                check={status === null ? undefined : status.github.repoToken}
-              />
-            ),
           },
         ]}
       >

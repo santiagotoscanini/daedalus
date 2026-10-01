@@ -1,8 +1,6 @@
-import { githubTokenKind } from '../../host/github-token'
 import { swrValue } from '../../lib/cache'
-import { ATTEMPT_MS } from '../../lib/http'
 import type { Ctx } from '../ctx'
-import type { CloudflareStatus, GithubCheck, IntegrationStatus, TokenCheck } from './types'
+import type { CloudflareStatus, IntegrationStatus, TokenCheck } from './types'
 
 // The live half of Settings › Integrations: each credential asked of the
 // service that issued it. Split from the settings reader because these are
@@ -10,9 +8,9 @@ import type { CloudflareStatus, GithubCheck, IntegrationStatus, TokenCheck } fro
 // renders its facts first and these arrive deferred — and because a token
 // that works is a different kind of fact from a token that is configured.
 //
-// Cached for five minutes. A settings page is opened and refreshed, and every
-// refresh spending GitHub's per-token budget (5,000/h authenticated) on a
-// question whose answer changes yearly would be waste for nothing.
+// Cached for five minutes: a settings page is opened and refreshed, and every
+// refresh asking Cloudflare a question whose answer changes yearly would be
+// waste for nothing.
 
 const CF = 'https://api.cloudflare.com/client/v4'
 const TTL_MS = 5 * 60_000
@@ -87,72 +85,6 @@ async function cloudflare(ctx: Ctx): Promise<CloudflareStatus> {
   }
 }
 
-function rateLimitOf(h: Headers): { remaining: number; limit: number; resetAt: string } | null {
-  const remaining = Number(h.get('x-ratelimit-remaining'))
-  const limit = Number(h.get('x-ratelimit-limit'))
-  const reset = Number(h.get('x-ratelimit-reset'))
-  if (!Number.isFinite(remaining) || !Number.isFinite(limit) || limit === 0) return null
-  return {
-    remaining,
-    limit,
-    resetAt: Number.isFinite(reset) && reset > 0 ? new Date(reset * 1000).toISOString() : '',
-  }
-}
-
-/**
- * `GET /user` with the token: who it is, and — from the response headers —
- * what it may do and how much of its hour is left. Hand-rolled fetch rather
- * than getJson because the headers ARE the answer here.
- *
- * Retried on the same ladder as every other first connection off the
- * bridge, and only when the request throws: a 401 is GitHub answering, and
- * asking again would not change its mind.
- */
-async function checkGithub(token: string): Promise<GithubCheck> {
-  if (token === '') return NOT_CONFIGURED
-  // Provisional, from the prefix; settled by the response below. A classic
-  // token minted before GitHub prefixed them is forty hex characters and
-  // says nothing about itself — but only a classic token gets an
-  // X-OAuth-Scopes header back, so the answer is in the reply.
-  let kind = githubTokenKind(token)
-
-  for (const ms of ATTEMPT_MS) {
-    let res: Response
-    let body: { login?: string } = {}
-    try {
-      res = await fetch('https://api.github.com/user', {
-        headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(ms),
-      })
-      // The body is read INSIDE the attempt: the timeout covers it too, and a
-      // body cut off by it would otherwise throw outside this try — rejecting
-      // every integration check at once and taking Settings › Integrations
-      // down with it (seen on the first visit after a container restart).
-      if (res.ok) body = (await res.json()) as { login?: string }
-    } catch {
-      continue
-    }
-    const rateLimit = rateLimitOf(res.headers)
-    if (!res.ok) {
-      return {
-        ok: false,
-        reason:
-          res.status === 401
-            ? 'GitHub rejected the token (401): expired or revoked'
-            : `GitHub answered ${String(res.status)}`,
-      }
-    }
-    const scopeHeader = res.headers.get('x-oauth-scopes')
-    const scopes = (scopeHeader ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s !== '')
-    if (kind === 'unknown') kind = scopeHeader === null ? 'fine-grained' : 'classic'
-    return { ok: true, value: { login: body.login ?? null, kind, scopes, rateLimit } }
-  }
-  return { ok: false, reason: 'GitHub did not answer' }
-}
-
 /**
  * The relay's last successful send, from its own journal line. Anchored at
  * the start of the line: anything that merely QUOTES an msmtp line — a
@@ -199,16 +131,13 @@ const failedCheck = (token: string): { ok: false; reason: string | null } =>
 
 async function load(ctx: Ctx): Promise<IntegrationStatus> {
   const cfToken = ctx.secret('CF_API_TOKEN')
-  const ghRepoToken = ctx.secret('GITHUB_REPO_TOKEN')
-  const [cf, repoToken, m] = await Promise.all([
+  const [cf, m] = await Promise.all([
     settled(cloudflare(ctx), { token: failedCheck(cfToken), zone: null, tunnel: null }),
-    settled(checkGithub(ghRepoToken), failedCheck(ghRepoToken)),
     settled(mail(ctx), { lastSentAt: null, lastRecipient: null }),
   ])
   return {
     checkedAt: new Date().toISOString(),
     cloudflare: cf,
-    github: { repoToken },
     mail: m,
   }
 }

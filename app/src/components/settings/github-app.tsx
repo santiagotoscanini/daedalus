@@ -6,7 +6,6 @@ import type {
   GithubAppStatus,
   GithubCallbackCode,
   GithubCallbackNotice,
-  GithubCheck,
 } from '../../core/settings/types'
 import type { SiteGithubApp } from '../../core/site/file'
 import { until, when } from '../../lib/format'
@@ -24,7 +23,6 @@ import { Chip } from '../viz'
 import { PasteKey } from './github-paste-key'
 import {
   ASIDE,
-  Bad,
   ERROR_NOTE,
   ExtLink,
   FIELD_LABEL,
@@ -36,8 +34,8 @@ import {
   Unset,
 } from './shared'
 
-// The GitHub half of Settings › Integrations: the repo-token cell, and the
-// box's own GitHub App from creation through installation.
+// The GitHub half of Settings › Integrations: the box's own GitHub App from
+// creation through installation.
 //
 // One module because it is one state machine — `GithubAppStatus.state` moves
 // none → created → installed, the callback banner explains how the last
@@ -48,39 +46,6 @@ export type GithubAppProps = {
   app: GithubAppStatus | null
   notice: GithubCallbackNotice | null
   onDismissNotice: () => void
-}
-
-export function Github({
-  configured,
-  check,
-}: {
-  configured: boolean
-  check: GithubCheck | undefined
-}) {
-  if (!configured) return <Chip tone="muted">not configured</Chip>
-  if (check === undefined) return <Pending />
-  if (!check.ok) return <Bad>{check.reason ?? 'rejected'}</Bad>
-  const { kind, login, scopes, rateLimit } = check.value
-  const budget =
-    rateLimit === null
-      ? null
-      : `${String(rateLimit.remaining)} of ${String(rateLimit.limit)} requests left this hour`
-  return (
-    <Stack>
-      <span className="inline-flex items-center gap-2">
-        <Chip tone="ok">{kind}</Chip>
-        {login !== null && <Mono>{login}</Mono>}
-      </span>
-      <span className="text-[0.78rem] text-(--text-muted)">
-        {kind === 'fine-grained'
-          ? 'scopes are per-repository and not reported by the API'
-          : scopes.length === 0
-            ? 'no scopes'
-            : scopes.join(', ')}
-      </span>
-      {budget !== null && <span className={ASIDE}>{budget}</span>}
-    </Stack>
-  )
 }
 
 const APP_STATE: Record<GithubAppState, { tone: Tone; label: string }> = {

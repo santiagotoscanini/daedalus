@@ -19,8 +19,7 @@ import type { NixosRelease } from './types'
 //   endoflife.date   release and end-of-support dates, per release.
 //   GitHub's API     the channel branch's head, and how many commits it is
 //                    past the lock. Two calls an hour, with the GitHub App's
-//                    installation token (or the GITHUB_REPO_TOKEN override)
-//                    when there is one.
+//                    installation token when there is one.
 //   raw.githubusercontent.com
 //                    the release notes as nixpkgs ships them, from each
 //                    release's own `nixos-<release>` branch. Not the API, so

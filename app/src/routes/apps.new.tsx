@@ -233,17 +233,6 @@ function Wizard({ options }: { options: Options }) {
             </AlertDescription>
           </Alert>
         )}
-        {options.error === null && options.source === 'token' && (
-          <Alert className={MUTED_BANNER}>
-            <AlertDescription>
-              Listing the <b>account’s</b> repositories, not the App’s: a{' '}
-              <code>GITHUB_REPO_TOKEN</code> in <code>stacks/daedalus/service-keys.sops</code> is
-              overriding the installation. An app can only be built from a repo the App is installed
-              on.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <RepoPicker
           repos={options.repos}
           taken={options.taken}

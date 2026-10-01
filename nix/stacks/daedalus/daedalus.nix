@@ -912,11 +912,6 @@ in
           "HEALTHCHECKS_API_KEY"
           "WGEASY_USER"
           "WGEASY_PASS"
-          # Optional override for the GitHub reads (the add-an-app repo picker
-          # and the release-notes panels): a narrow read-only PAT, taking
-          # precedence over the App's installation token. Empty by default —
-          # see the note after CF_TOKEN below.
-          "GITHUB_REPO_TOKEN"
         ];
       in
       mkSecretRender {
@@ -936,13 +931,8 @@ in
             # the tunnel panels. It is DNS-edit-capable (lego and route-sync
             # need that); daedalus only ever GETs with it.
             "CF_TOKEN=$(grep -m1 '^CF_DNS_API_TOKEN=' ${config.fleet.cloudflare.tokenEnvFile} | cut -d= -f2- | tr -d '\"' || true)"
-            # No general GitHub token is rendered here, on purpose: the old one
-            # was a classic PAT carrying `repo` — read-WRITE on every
-            # repository on the account. The GitHub reads use the App's
-            # installation token (GITHUB_TOKEN_PATH); GITHUB_REPO_TOKEN above
-            # is only the escape hatch for a picker that must list repos the
-            # App has not been given, and should be a fine-grained read-only
-            # PAT.
+            # No GitHub token is rendered here: the GitHub reads use the App's
+            # installation token (GITHUB_TOKEN_PATH).
           ]
         );
         content = lib.concatStringsSep "\n" (

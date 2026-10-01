@@ -1,7 +1,7 @@
 import type { ApplyStatus } from '../../host/apply'
 import type { RepoFacts } from '../../host/contract/domains/repo'
 import type { GitIdentities } from '../../host/contract/domains/site'
-import type { GithubInstallation, GithubTokenKind } from '../../host/github-token'
+import type { GithubInstallation } from '../../host/github-token'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
 import type { Result } from '../../lib/result'
 import type { SiteGithubApp } from '../site/file'
@@ -95,22 +95,9 @@ export type CloudflareStatus = {
   tunnel: { name: string; status: string } | null
 }
 
-export type GithubCheck = Result<
-  {
-    login: string | null
-    /** From the token's prefix; a fine-grained token reports no scopes header. */
-    kind: GithubTokenKind
-    scopes: string[]
-    rateLimit: { remaining: number; limit: number; resetAt: string } | null
-  },
-  string | null
->
-
 export type IntegrationStatus = {
   checkedAt: string
   cloudflare: CloudflareStatus
-  /** Only the `GITHUB_REPO_TOKEN` override; the App is how the box talks to GitHub. */
-  github: { repoToken: GithubCheck }
   mail: { lastSentAt: string | null; lastRecipient: string | null }
 }
 

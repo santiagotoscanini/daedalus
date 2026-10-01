@@ -23,7 +23,6 @@
 // is lib/cache.ts's two-clock contract.
 
 import { readGithubInstallation, usableToken } from '../../host/github-token'
-import { key } from '../../host/keys'
 import { swrCache } from '../cache'
 import { stripTags } from '../plain-text'
 
@@ -110,17 +109,15 @@ type GhRelease = {
  * the credential buys no access, just headroom: 60 requests an hour per IP
  * unauthenticated against 5000 authenticated. It is the GitHub App's
  * installation token, the same one-hour token the build side uses, read from
- * the minter's file; `GITHUB_REPO_TOKEN` overrides it for anyone who would
- * rather spend a PAT's budget here.
+ * the minter's file.
  *
- * Absent is a supported state, not a misconfiguration: without either this
+ * Absent is a supported state, not a misconfiguration: without it this
  * falls back to the unauthenticated budget, and the stale-serving cache rides
  * out a refusal. So the minter stopping costs little here — it is caught by
  * the builds that actually need a token.
  */
 export async function githubHeaders(): Promise<Record<string, string>> {
-  const override = key('GITHUB_REPO_TOKEN')
-  const token = override === '' ? (usableToken(await readGithubInstallation()) ?? '') : override
+  const token = usableToken(await readGithubInstallation()) ?? ''
   return {
     Accept: 'application/vnd.github+json',
     ...(token === '' ? {} : { Authorization: `Bearer ${token}` }),

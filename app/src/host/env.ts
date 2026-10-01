@@ -414,7 +414,6 @@ export const SCHEMA = {
     'Pocket ID’s admin API key.',
     'stacks/pocket-id fleet.dashboard.pocket-id.envFiles (pocket-id-daedalus-key)',
   ),
-  DASH_GITHUB_REPO_TOKEN: dash('A read-only PAT for the repo picker. Empty by default.'),
   DASH_JELLYFIN_API_KEY: dash('Jellyfin.'),
   DASH_SONARR_API_KEY: dash('Sonarr.'),
   DASH_RADARR_API_KEY: dash('Radarr.'),
