@@ -38,16 +38,9 @@ let
     ;
 
   # What the run-file verbs share — the run file arrives as a credential
-  # (ARCHITECTURE.md "The root helper"): no way back up, and a /tmp of their own.
-  verbSandbox = {
-    NoNewPrivileges = true;
-    PrivateTmp = true;
+  # (ARCHITECTURE.md "The root helper"): the shared hardening, and no devices.
+  verbSandbox = (import ../../platform/lib/hardening-lib.nix).hardening // {
     PrivateDevices = true;
-    ProtectKernelTunables = true;
-    ProtectKernelModules = true;
-    ProtectControlGroups = true;
-    RestrictSUIDSGID = true;
-    LockPersonality = true;
   };
 
   # A run-file verb that runs as the operator, never root.

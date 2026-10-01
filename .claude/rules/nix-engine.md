@@ -139,7 +139,8 @@ host passes).
 ## 3. By-path libraries live in `nix/platform/lib/`
 
 `gluetun-lib.nix`, `fleet-lib.nix`, `registry-lib.nix`,
-`operator-secrets-lib.nix`, and the bodies of two `_module.args` helpers,
+`operator-secrets-lib.nix`, `hardening-lib.nix` (the systemd sandbox the
+box's own units share), and the bodies of two `_module.args` helpers,
 `local-image-lib.nix` (mkLocalImage) and `secret-render-lib.nix`
 (mkSecretRender), which `platform/podman.nix` binds. They are plain functions imported by path,
 never listed in a module import list and never exported as modules.

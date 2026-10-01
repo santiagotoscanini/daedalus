@@ -46,15 +46,13 @@ let
   };
 
   # What both of its units may touch: the kept copy and the resolver's.
-  sandbox = {
+  sandbox = (import ../../platform/lib/hardening-lib.nix).hardening // {
     ProtectSystem = "strict";
     ProtectHome = true;
     ReadWritePaths = [
       verbsDir
       runDir
     ];
-    PrivateTmp = true;
-    NoNewPrivileges = true;
   };
 in
 

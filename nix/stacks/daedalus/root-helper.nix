@@ -21,6 +21,7 @@ let
     ;
 
   agent = pkgs.callPackage ../../pkgs/daedalus-agent.nix { };
+  inherit (import ../../platform/lib/hardening-lib.nix) hardening;
 
   inherit (config.fleet.daedalus) rootVerbs;
   runFileVerb = v: v.patterns != { } || v.payloadMax != null;
@@ -209,7 +210,7 @@ in
       # A refusal exits 0; an instance that crashed is not kept for
       # `systemctl --failed` — its journal says what happened. A [Unit] key, not a [Service] one.
       unitConfig.CollectMode = "inactive-or-failed";
-      serviceConfig = {
+      serviceConfig = hardening // {
         ExecStart = "${lib.getExe agent} root-helper --table ${rootTableChecked}";
         StandardInput = "socket";
         StandardOutput = "journal";
@@ -217,26 +218,15 @@ in
         RuntimeMaxSec = rootRuntimeMax;
         CapabilityBoundingSet = "";
         AmbientCapabilities = "";
-        NoNewPrivileges = true;
         ProtectSystem = "strict";
         ProtectHome = true;
-        PrivateTmp = true;
         PrivateDevices = true;
         PrivateNetwork = true;
         IPAddressDeny = "any";
         RestrictAddressFamilies = "AF_UNIX";
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectKernelLogs = true;
-        ProtectControlGroups = true;
-        ProtectClock = true;
-        ProtectHostname = true;
         ProtectProc = "invisible";
         ProcSubset = "pid";
         RestrictNamespaces = true;
-        RestrictRealtime = true;
-        RestrictSUIDSGID = true;
-        LockPersonality = true;
         MemoryDenyWriteExecute = true;
         SystemCallArchitectures = "native";
         SystemCallFilter = "@system-service";

@@ -30,6 +30,7 @@ let
   sessionHost = config.fleet.daedalus.sessionHost;
 
   agent = pkgs.callPackage ../../pkgs/daedalus-agent.nix { };
+  inherit (import ../../platform/lib/hardening-lib.nix) hardening;
 
   # Its state (state.json, identity.key, a rotation's files), its local socket
   # (run/) and logs: the one place the service writes besides its API
@@ -165,7 +166,7 @@ in
         config.nix.package
       ];
       restartTriggers = [ configFile ];
-      serviceConfig = {
+      serviceConfig = hardening // {
         Type = "simple";
         User = config.fleet.operator.user;
         Group = config.fleet.operator.group;
@@ -193,15 +194,12 @@ in
         # `loginctl`, `nix-store --add-root`, `claude --version`. No
         # MemoryDenyWriteExecute or syscall filter: `claude` (a JIT) runs
         # under it.
-        NoNewPrivileges = true;
-        RestrictSUIDSGID = true;
         ProtectSystem = "strict";
         ProtectHome = "read-only";
         ReadWritePaths = [
           dataDir
           controllerDir
         ];
-        PrivateTmp = true;
         RestrictAddressFamilies = [
           "AF_UNIX"
           "AF_INET"
@@ -210,14 +208,6 @@ in
           "AF_NETLINK"
         ];
         RestrictNamespaces = true;
-        RestrictRealtime = true;
-        LockPersonality = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectKernelLogs = true;
-        ProtectControlGroups = true;
-        ProtectClock = true;
-        ProtectHostname = true;
       };
       unitConfig = {
         StartLimitBurst = 20;

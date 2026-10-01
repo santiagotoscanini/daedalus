@@ -73,15 +73,35 @@ assert lib.assertMsg (!(lib.hasInfix "$(" content || lib.hasInfix "`" content)) 
     pkgs.coreutils
     pkgs.gnugrep
   ];
-  serviceConfig = {
+  serviceConfig = (import ./hardening-lib.nix).hardening // {
     Type = "oneshot";
     RemainAfterExit = true;
     Restart = "on-failure";
     RestartSec = "5s";
+    # The render reads what it must (a decrypted secret, a machine-made file
+    # under the state tree) and writes its own directory, nothing else: made
+    # first, outside the sandbox, which can then write only it. No network,
+    # no devices; root only to read other owners' files and to hand the
+    # result to its owner.
+    ExecStartPre = "+${pkgs.coreutils}/bin/install -d -m 0755 -o ${operator.user} -g ${operator.group} ${dir}";
+    ProtectSystem = "strict";
+    ProtectHome = "read-only";
+    ReadWritePaths = [ dir ];
+    PrivateNetwork = true;
+    PrivateDevices = true;
+    RestrictAddressFamilies = "AF_UNIX";
+    RestrictNamespaces = true;
+    MemoryDenyWriteExecute = true;
+    SystemCallArchitectures = "native";
+    CapabilityBoundingSet = [
+      "CAP_CHOWN"
+      "CAP_FOWNER"
+      "CAP_DAC_OVERRIDE"
+      "CAP_DAC_READ_SEARCH"
+    ];
   };
   script = ''
     set -eu
-    install -d -m 0755 -o ${operator.user} -g ${operator.group} ${dir}
     umask 077
     ${prep}
     for v in ${lib.concatStringsSep " " required}; do

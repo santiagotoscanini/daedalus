@@ -47,16 +47,10 @@ let
   sandboxedOperator =
     writable:
     asOperator
+    // (import ../../platform/lib/hardening-lib.nix).hardening
     // {
-      NoNewPrivileges = true;
-      PrivateTmp = true;
       PrivateDevices = true;
       ProtectSystem = "strict";
-      ProtectKernelTunables = true;
-      ProtectKernelModules = true;
-      ProtectControlGroups = true;
-      RestrictSUIDSGID = true;
-      LockPersonality = true;
       ReadWritePaths = writable;
     };
   workspaceDirs = [

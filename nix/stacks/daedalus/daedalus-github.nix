@@ -168,15 +168,34 @@ in
       description = "Mint the daedalus GitHub App's installation token";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
-      serviceConfig = {
+      serviceConfig = (import ../../platform/lib/hardening-lib.nix).hardening // {
         Type = "oneshot";
         ExecStart = "${githubTokenScript}/bin/daedalus-github-token";
         # Two GitHub calls at 15 s each, plus a revoke at most.
         TimeoutStartSec = "2min";
-        # The JWT, the token answer and the curl configs live in a mktemp dir;
-        # a private /tmp keeps even their names off the shared one.
-        PrivateTmp = true;
+        # The JWT, the token answer and the curl configs live in a mktemp dir
+        # in its private /tmp (the shared hardening), so even their names stay
+        # off the shared one.
         UMask = "0077";
+        # It writes the token's directory and nothing else; it reads the key
+        # (root's), talks to GitHub, and drops to the operator only to ask
+        # whether that directory is theirs (host/lib.sh write_json_atomic).
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ReadWritePaths = [ githubTokenDir ];
+        PrivateDevices = true;
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
+        RestrictNamespaces = true;
+        SystemCallArchitectures = "native";
+        CapabilityBoundingSet = [
+          "CAP_CHOWN"
+          "CAP_SETUID"
+          "CAP_SETGID"
+        ];
       };
     };
 

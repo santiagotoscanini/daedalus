@@ -697,9 +697,22 @@ in
     systemd.services.daedalus-export-publish = {
       description = "Publish fleet export domains for daedalus";
       wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
+      serviceConfig = (import ./lib/hardening-lib.nix).hardening // {
         Type = "oneshot";
         RemainAfterExit = true;
+        # It writes the publish directory and nothing else, offline: made
+        # first, outside the sandbox, which can then write only it.
+        ExecStartPre = "+${pkgs.coreutils}/bin/mkdir -p -m 0755 ${publishDir}";
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ReadWritePaths = [ publishDir ];
+        PrivateDevices = true;
+        PrivateNetwork = true;
+        RestrictAddressFamilies = "AF_UNIX";
+        RestrictNamespaces = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        CapabilityBoundingSet = "";
       };
       # The store paths in this script are the change detector: a domain edit
       # changes the unit, and switch-to-configuration re-runs it.
