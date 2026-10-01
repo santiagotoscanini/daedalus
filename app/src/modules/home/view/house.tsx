@@ -144,7 +144,7 @@ export function HouseView({ data: d }: { data: House }) {
               source: { unit: 'ha-dbus-relay.service' },
               label: 'D-Bus relay',
               role: 'how it reaches the Bluetooth adapter',
-              note: 'The host system bus rejects a connection from container root, so this relay passes the socket through with the uid rewritten. It has to forward SCM_RIGHTS as well, which is why a plain xdg-dbus-proxy does not work. Bluetooth integrations going quiet after a reboot is this unit not having come up. Defined in platform/bluetooth.',
+              note: 'The host system bus rejects a connection from container root, so this relay passes the socket through with the uid rewritten. It has to forward SCM_RIGHTS as well, which is why a plain xdg-dbus-proxy does not work. Bluetooth integrations going quiet after a reboot is this unit not having come up. Defined in the host configuration, not the engine.',
             },
           ]}
         />
