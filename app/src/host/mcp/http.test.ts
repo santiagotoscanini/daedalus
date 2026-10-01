@@ -7,8 +7,7 @@ import { MCP_TOOLS } from '../../lib/mcp'
 // nix/stacks/daedalus/daedalus.nix), because an agent cannot hold a passkey. It
 // carries a scoped token instead — and a write token can start a build, move an
 // image pin and press Apply, which is the widest thing any credential on this
-// box does. So the gate gets the same treatment api.deploy.test.ts gives its
-// sibling, and for the same stated reason:
+// box does. So the gate is tested for what it does, not what it answers:
 //
 // EVERY ASSERTION HERE IS ABOUT THE SIDE EFFECT, not the status code. A 401
 // that still ran the tool would pass a status-only test and would already have

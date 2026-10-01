@@ -27,8 +27,7 @@ here.
   it on — `core/local-login.ts`), and `settings_.github.callback.ts`,
   where GitHub returns the App manifest's `?code&state`. The `api.*.ts`
   server routes are only what an
-  outside caller needs — healthz, the deploy hook (zot's push event),
-  the GitHub push webhook, app-icon,
+  outside caller needs — healthz, the GitHub push webhook, app-icon,
   profile-picture, and the two image servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
   screenshot. No route is a "scriptable twin" of a button: the UI's
@@ -246,8 +245,7 @@ here.
   inside `version-update.ts`. The first three are also what the MCP
   write tools call, so a button and a tool share one body. WHO may call
   stays with each door. `deploy.ts`'s `requestDeploy` is shared the same
-  way by the redeploy button, the MCP tool and zot's push event
-  (`api.deploy.ts`, which does not wait for the answer).
+  way by the redeploy button and the MCP tool.
   `build-request.json` is the one the box's own builder watches:
   `daedalus-build.service` picks it up, writes progress back to
   `/apply/build-status.json` (heartbeated; stale past 90 s) and its log

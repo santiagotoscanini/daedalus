@@ -1,9 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-// The comparisons that check a secret a caller presents: `safeEqual` (the
-// deploy hook's token, MCP tokens, local-login digests, the App manifest's
-// state) and GitHub's webhook signature. Server-side only (it needs
-// node:crypto), but a plain module so both are table-testable.
+// The comparisons that check a secret a caller presents: `safeEqual` (MCP
+// tokens, local-login digests, the App manifest's state, the proxy proof and
+// the reader token) and GitHub's webhook signature. Server-side only (it
+// needs node:crypto), but a plain module so both are table-testable.
 
 /**
  * Constant-time compare. `===` on a secret leaks its length and prefix through

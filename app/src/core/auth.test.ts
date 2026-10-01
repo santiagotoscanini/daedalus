@@ -1,12 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  actorLabelOf,
-  actorOf,
-  forwardedHeaderOf,
-  NO_ACTOR_REASON,
-  provenByProxy,
-  UNKNOWN_ACTOR,
-} from './auth'
+import { actorOf, forwardedHeaderOf, NO_ACTOR_REASON, provenByProxy } from './auth'
 
 // The one identity rule, and the one place it is asserted. The ambient form
 // (requireActor) is the same gate over getRequestHeader, which needs a request
@@ -43,21 +36,6 @@ describe('the gate', () => {
   })
 })
 
-describe('the display label', () => {
-  it('never fails, and says so when nobody is named', () => {
-    expect(actorLabelOf(req())).toBe(UNKNOWN_ACTOR)
-    expect(actorLabelOf(req(), 'api')).toBe('api')
-    expect(actorLabelOf(req(), 'registry')).toBe('registry')
-  })
-
-  it('passes a present header through untouched', () => {
-    // Including a blank one: the label has never trimmed, and a record that
-    // names nobody is what those requests have always written.
-    expect(actorLabelOf(req('op@example.test'))).toBe('op@example.test')
-    expect(actorLabelOf(req(''), 'api')).toBe('')
-  })
-})
-
 describe('the proxy proof', () => {
   // Anything sharing a bridge with the container can dial it and send these
   // headers. Only traefik holds the proof, so without it nobody is named.
@@ -65,7 +43,6 @@ describe('the proxy proof', () => {
 
   it('names nobody on a request without it', () => {
     expect(actorOf(forged(null))).toEqual({ ok: false, reason: NO_ACTOR_REASON })
-    expect(actorLabelOf(forged(null), 'api')).toBe('api')
     expect(forwardedHeaderOf(forged(null), 'x-forwarded-email')).toBeUndefined()
   })
 

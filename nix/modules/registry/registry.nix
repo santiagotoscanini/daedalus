@@ -26,24 +26,6 @@
 #   - apikey extension is on: a logged-in UI user can mint per-purpose
 #     basic-auth API keys if ever needed.
 #
-# Push events: the `events` extension POSTs every registry event to
-# the control plane (https://<its hostname>/api/deploy), which turns an
-# image push into an immediate redeploy instead of waiting up to two
-# minutes for that app's poll timer. Authenticated with
-# DEPLOY_HOOK_TOKEN from env.sops, sent as X-Deploy-Token.
-#
-# Why through traefik rather than a shared podman bridge: putting zot and
-# daedalus on one bridge would give the registry a direct network path to
-# the thing that can rebuild the system. Going via traefik keeps daedalus
-# `isolated` (only traefik reaches it) and narrows the forward-auth
-# bypass to that one path — so a compromised zot gains "can trigger a
-# deploy", nothing more.
-#
-# zot has no event-type filter, so daedalus receives deletes and
-# manifest reads too and decides what to act on. Over-triggering is
-# cheap: app-<name>-deploy.service compares digests and no-ops when
-# nothing moved.
-#
 # Config is RENDERED at boot (mkSecretRender: OIDC id/secret + a
 # bcrypt htpasswd hashed from env.sops) to /run/registry/ — NOT
 # /run/zot: that's the container unit's RuntimeDirectory and systemd
@@ -108,11 +90,10 @@
 #
 # The host brings:
 #   fleet.modules.registry.enable       the switch (default off, as every catalog module)
-#   fleet.modules.registry.envSopsFile  REGISTRY_PROM_PASSWORD + DEPLOY_HOOK_TOKEN
+#   fleet.modules.registry.envSopsFile  REGISTRY_PROM_PASSWORD
 #   fleet.images.zot                    the digest-pinned image (the full variant: ui,
 #                                       search, metrics, scrub — `-minimal` has none)
-# Requires the apps platform (asserted): the registry exists to feed it, and
-# its push events are delivered to the control plane's container.
+# Requires the apps platform (asserted): the registry exists to feed it.
 
 {
   config,
@@ -132,11 +113,6 @@ let
 
   # The box's image builder and its push identity (stacks/daedalus/builder.nix).
   inherit (config.fleet) builder;
-
-  # The control plane's published entry, which the apps stack creates. Read
-  # guardedly so the assertion below, not an attribute error, is what a host
-  # without the apps platform sees.
-  controlPlane = config.fleet.webApps.daedalus or null;
 
   # The host's retirements as zot's FIRST retention policy (it applies the
   # first policy a repository matches — the header explains the order), or
@@ -195,9 +171,7 @@ in
       example = lib.literalExpression "./host/sops/registry/env.sops";
       description = ''
         sops-encrypted dotenv carrying REGISTRY_PROM_PASSWORD (the htpasswd
-        password the metrics scrape authenticates with) and
-        DEPLOY_HOOK_TOKEN (the shared secret zot signs its push events
-        with, verified by the control plane). Host data: the engine carries
+        password the metrics scrape authenticates with). Host data: the engine carries
         no box's ciphertext. Only read while the module is on.
       '';
     };
@@ -206,8 +180,8 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = controlPlane != null;
-        message = "fleet.modules.registry: the registry feeds the apps platform and reports pushes to the control plane's container — enable fleet.modules.apps.";
+        assertion = config.fleet.modules.apps.enable;
+        message = "fleet.modules.registry: the registry feeds the apps platform — enable fleet.modules.apps.";
       }
     ];
 
@@ -235,9 +209,10 @@ in
 
     fleet.logStacks.registry = [ "zot" ];
 
-    # zot prints its whole configuration at INFO on every start — the OIDC
-    # client secret masked, the deploy hook's token NOT. That line would land
-    # in Loki, readable by anything with a Grafana session. Dropped; every
+    # zot prints its whole configuration at INFO on every start, and masks only
+    # the secrets it knows to be secrets (the OIDC client secret). That line
+    # would land in Loki, readable by anything with a Grafana session, so a
+    # credential added to the config later must not reach it. Dropped; every
     # other line zot emits still arrives.
     fleet.logDrops.zot-config-dump = {
       selector = "{container=\"zot\"}";
@@ -291,15 +266,11 @@ in
           REGISTRY_URL=${lib.escapeShellArg "https://${config.fleet.webApps.registry.hostname}"}
           # zot's adminPolicy matches the OIDC e-mail claim: the operator's IdP login.
           OPERATOR_EMAIL=${lib.escapeShellArg config.fleet.operator.email}
-          # The deploy-hook sink, from the app's published hostname rather than a
-          # literal in the asset — a hostname rename must reach zot too.
-          DAEDALUS_DEPLOY_URL=${lib.escapeShellArg "https://${controlPlane.hostname}/api/deploy"}
           # Plain unquoted KEY=value files: the first match, everything after `=`.
           env_get() { grep -m1 "^$2=" "$1" | cut -d= -f2-; }
           registry_env=${config.sops.secrets."registry-env".path}
           sso_env=${config.fleet.ssoClients.zot.envFile}
           REGISTRY_PROM_PASSWORD=$(env_get "$registry_env" REGISTRY_PROM_PASSWORD)
-          DEPLOY_HOOK_TOKEN=$(env_get "$registry_env" DEPLOY_HOOK_TOKEN)
           OIDC_CLIENT_ID=$(env_get "$sso_env" OIDC_CLIENT_ID)
           OIDC_CLIENT_SECRET=$(env_get "$sso_env" OIDC_CLIENT_SECRET)
           for v in REGISTRY_PROM_PASSWORD; do
@@ -349,49 +320,6 @@ in
     # Every restart of the render reaches the container that reads its output.
     systemd.services.podman-zot.partOf = [ "registry-config-render.service" ];
 
-    # The hook's own router, in front of the app's, with a rate limit.
-    #
-    # zot has no event filter and its scheduled CVE scan publishes one event
-    # per manifest, so a pass is ~1 000 POSTs in three minutes (12/s
-    # observed) and they all land here, on the app's forward-auth bypass.
-    # With daedalus up that is a no-op per event. With daedalus DOWN it is
-    # the incident of 2026-09-10: traefik answers 502 and resolves the dead
-    # backend name on every attempt, pi-hole rate-limits 127.0.0.1 (every
-    # container's client address), and image pulls, deploys and the OIDC
-    # gates fail across the box.
-    #
-    # The limit caps the failure path, not the feature: 5/s with a burst of
-    # 20 is well above the trickle a push produces, and a 429 costs zot
-    # nothing (it does not retry). During a scan pass most scanned events
-    # are refused, which is the correct outcome; a push that lands inside a
-    # pass falls back to the app's two-minute poll timer. Keyed by source IP
-    # and matched on the path only, so the UI's own request bursts (a Vite
-    # dev server serves hundreds of modules per page load) are never
-    # limited. The strip middleware stays so a bypassed request cannot
-    # spoof the identity headers, exactly as on the app router.
-    fleet.traefikRawRules."daedalus-deploy-hook.yml" = lib.mkIf (controlPlane != null) (
-      builtins.toJSON {
-        http = {
-          middlewares.deploy-hook-ratelimit.rateLimit = {
-            average = 5;
-            period = "1s";
-            burst = 20;
-          };
-          routers.daedalus-deploy-hook-rtr = {
-            entryPoints = [ "websecure" ];
-            # Longer than the app's `Host(...)` rule, so it wins on traefik's
-            # default rule-length priority.
-            rule = "Host(`${controlPlane.hostname}`) && Path(`/api/deploy`)";
-            middlewares = lib.optional (controlPlane.authHeaders != { }) "oidc-daedalus-strip@file" ++ [
-              "deploy-hook-ratelimit@file"
-            ];
-            service = "daedalus-svc";
-            tls.options = "tls-opts@file";
-          };
-        };
-      }
-    );
-
     # /metrics requires auth once auth is configured (zot >= 2.1.18), so
     # the plain webApps scrape can't be used. Own render dir — the
     # prometheus container must not see /run/registry (htpasswd + OIDC
@@ -426,32 +354,13 @@ in
     # twice under the names the engine reads: REGISTRY_HOST for the
     # site identity (src/host/site.ts), REGISTRY_URL for host/registry.ts —
     # zot over traefik, since daedalus is `isolated` and deliberately not on
-    # a bridge with it. And the deploy-hook token: the shared secret zot
-    # signs its push events with, ONE encrypted source of truth (env.sops
-    # here, where the caller side lives), rendered by THIS stack for the
-    # receiving side so rotation touches a single file. Not
-    # /run/app-daedalus: that is the container unit's RuntimeDirectory,
-    # wiped when the container stops.
+    # a bridge with it.
     fleet.dashboard.registry = {
       env = {
         REGISTRY_HOST = config.fleet.webApps.registry.hostname;
         REGISTRY_URL = "https://${config.fleet.webApps.registry.hostname}";
       };
-      envFiles = [ "/run/registry-daedalus/env" ];
     };
-    systemd.services.registry-daedalus-token =
-      lib.mkIf config.fleet.modules.daedalus.enable
-        (mkSecretRender {
-          description = "Render the registry's deploy-hook token for daedalus to verify";
-          gates = [ "podman-app-daedalus.service" ];
-          dir = "/run/registry-daedalus";
-          file = "/run/registry-daedalus/env";
-          prep = "TOKEN=$(grep '^DEPLOY_HOOK_TOKEN=' ${
-            config.sops.secrets."registry-env".path
-          } | head -1 | cut -d= -f2-)";
-          content = "DEPLOY_HOOK_TOKEN=$TOKEN";
-        });
-
     # Prometheus on traefik-net scrapes zot by container DNS, as the
     # htpasswd `prometheus` user (any authenticated identity may read
     # /metrics).

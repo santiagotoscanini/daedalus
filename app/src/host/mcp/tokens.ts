@@ -20,14 +20,12 @@ import { mcpTokens } from '../schema'
 // that hash, which is already timing-safe in the sense that matters (the
 // database is compared against a digest, and a digest of a wrong guess is
 // uncorrelated with the right one). `safeEqual` then confirms the row it found
-// really is the one, in constant time, for the same reason /api/deploy does:
-// these credentials stand in front of a path that starts privileged units, and
+// really is the one, in constant time: these credentials stand in front of a path that starts privileged units, and
 // the cheap habit is the one worth keeping.
 //
 // FAIL CLOSED, everywhere. No token minted means every call is refused; a
 // revoked token is refused; an unknown one is refused. There is no
-// "unconfigured means open" state, which is the mistake `/api/deploy`'s 503
-// exists to avoid and the one this file must not reintroduce.
+// "unconfigured means open" state.
 
 /** How a token announces itself, so a scanner and a person both recognise one. */
 export const MCP_TOKEN_PREFIX = 'dmcp_'
@@ -133,8 +131,7 @@ export async function identifyMcpToken(presented: string | null): Promise<McpIde
   const digest = hash(token)
   const [row] = await db.select().from(mcpTokens).where(eq(mcpTokens.tokenHash, digest)).limit(1)
   if (row === undefined) return null
-  // Belt and braces, and the same habit as /api/deploy: the row was found by
-  // digest, and this confirms it in constant time rather than by `===`.
+  // Belt and braces: the row was found by digest, and this confirms it in constant time rather than by `===`.
   if (!safeEqual(row.tokenHash, digest)) return null
   if (row.revokedAt !== null) return null
 

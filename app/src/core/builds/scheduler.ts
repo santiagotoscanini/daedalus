@@ -434,6 +434,13 @@ async function foldRows(
     if (row.state === 'superseded' && before.state !== 'superseded') {
       supersededHere.add(`${row.appId} ${row.lane}`)
     }
+    // A live image may ship a new icon, and the icon cache holds answers for
+    // an hour. Dropped when the build lands, before its deploy has the new
+    // container up, so an icon fetched in between re-caches the old one.
+    if (row.state === 'succeeded' && before.state !== 'succeeded' && row.publish === 'live') {
+      const { forgetAppIcon } = await import('../../host/app-icon')
+      forgetAppIcon(row.app)
+    }
     if (row.state !== before.state || row.phase !== before.phase) await report(row)
   }
   return supersededHere

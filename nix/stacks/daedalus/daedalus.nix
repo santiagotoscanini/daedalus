@@ -497,7 +497,7 @@ in
 
       # The dashboard keys this module renders from its own store, then the
       # env file each stack renders for it (fleet.dashboard.<id>.envFiles:
-      # LITELLM_API_KEY, DASH_POCKETID_KEY, DEPLOY_HOOK_TOKEN — every one a
+      # LITELLM_API_KEY, DASH_POCKETID_KEY — every one a
       # copy the owning stack makes of its own secret).
       environmentFiles = [
         "/run/daedalus-dashboard/env"
@@ -538,25 +538,17 @@ in
           # blanks it inbound.
           #
           # NOTE: the plugin only sets headers on gated paths, so every path in
-          # authBypassRule below arrives with this blanked. /api/deploy carries
-          # its own X-Deploy-Token and /mcp its own bearer token; neither must
-          # ever be behind the group check, and neither reads this header — the
-          # MCP writes are authorised by the token and recorded under its label
-          # (core/authz.ts assertMachineActor).
+          # authBypassRule below arrives with this blanked. /mcp carries its own
+          # bearer token; it must never be behind the group check, and it does
+          # not read this header — the MCP writes are authorised by the token
+          # and recorded under its label (core/authz.ts assertMachineActor).
           "X-Forwarded-Groups" = "{{ .claims.groups | mapToJsonArray }}";
         };
         # Five paths skip the Pocket ID gate, for the same reason healthPath
         # does — whatever fetches them cannot hold a passkey:
         #
-        #   /api/deploy — zot's push events (modules/registry). Carries its own
-        #                 auth instead: X-Deploy-Token, checked in the route
-        #                 against DEPLOY_HOOK_TOKEN (the registry's envFiles
-        #                 contribution), and it can do exactly
-        #                 one thing — start an existing app's deploy unit.
-        #
         #   /mcp        — the engine's MCP server, for Claude Code sessions ON
-        #                 THIS BOX. Same posture as /api/deploy and for the same
-        #                 reason: an agent cannot complete a passkey redirect.
+        #                 THIS BOX. An agent cannot complete a passkey redirect.
         #                 The token IS the authentication on this path — a scoped
         #                 credential minted in Settings › Developer, stored only
         #                 as a SHA-256 digest, compared in constant time BEFORE
@@ -596,9 +588,9 @@ in
         #
         # A bypassed path is effectively public on the LAN, so each is written to
         # deserve it: three of these are the app's own artwork and the other
-        # three authenticate themselves. Everything else on this app still needs a
+        # two authenticate themselves. Everything else on this app still needs a
         # passkey.
-        authBypassRule = "Path(`/api/deploy`) || PathPrefix(`/mcp`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`) || Path(`/api/agent/enroll`)";
+        authBypassRule = "PathPrefix(`/mcp`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`) || Path(`/api/agent/enroll`)";
       };
 
       # The build log mount (volumes below) exists only once the App does, like
@@ -859,12 +851,12 @@ in
     # other services' numbers with.
     #
     # `fleet.daedalus.serviceKeysSopsFile` (the host's file) is the store: one encrypted file, all the keys minted by
-    # some OTHER service and handed to the control plane to read with. Three
+    # some OTHER service and handed to the control plane to read with. Two
     # secrets are NOT in it, on purpose, because they already have an encrypted
-    # home in the stack that mints them: pocket-id's read-only API key, the
-    # litellm master key and the registry's deploy-hook token each reach this
-    # container as an env file THAT stack renders (fleet.dashboard.<id>.envFiles
-    # — pocket-id-daedalus-key, litellm-daedalus-key, registry-daedalus-token).
+    # home in the stack that mints them: pocket-id's read-only API key and the
+    # litellm master key each reach this container as an env file THAT stack
+    # renders (fleet.dashboard.<id>.envFiles — pocket-id-daedalus-key,
+    # litellm-daedalus-key).
     # Nothing in this box's secret tree exists twice; rotation always touches
     # exactly one file, and this module never greps another stack's secret.
     #

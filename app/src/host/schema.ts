@@ -448,8 +448,7 @@ export const settings = pgTable('settings', {
 //
 // The one door into this box that no person opens. Everything else the app
 // serves is behind the Pocket ID gate, which authenticates a human with a
-// passkey; an agent cannot hold one, exactly as zot cannot (see
-// routes/api.deploy.ts). So /mcp carries its own credential, and this is where
+// passkey; an agent cannot hold one. So /mcp carries its own credential, and this is where
 // the credential lives.
 //
 // WHAT IS STORED IS A HASH, never the token. The value is shown once, at mint,

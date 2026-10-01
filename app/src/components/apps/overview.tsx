@@ -178,8 +178,7 @@ export function Overview({
               },
               {
                 // A push is the real trigger — the box build starts the deploy
-                // unit itself, and zot POSTs api.deploy for any image pushed —
-                // so an app is live in seconds; the timer is the safety net.
+                // unit itself — so an app is live in seconds; the timer is the safety net.
                 // "Every 2 min" alone had the operator believing the poll was
                 // the mechanism.
                 k: 'auto-deploy',

@@ -750,11 +750,6 @@ by decision), `BUILDS.md`, `CONTRIBUTING.md`, `nix/README.md`,
 
 Known and accepted, not forgotten:
 
-- The deploy hook's token appears in zot's own startup log line. Dropped
-  from Loki by `fleet.logDrops.zot-config-dump`; the journal still holds
-  the line for its retention window, readable by root and the
-  `systemd-journal` group. Rotating the token is `sops
-  host/sops/registry/env.sops`.
 - A build step that escapes its sandbox lands as `buildkit` — the daemon
   user, which can see the zot push credential the buildctl session passes.
   Mitigations: rootless user namespace, the egress fence, `builder` has no

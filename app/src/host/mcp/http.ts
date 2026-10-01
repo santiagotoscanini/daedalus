@@ -3,11 +3,11 @@ import { identifyMcpToken, type McpIdentity, stampMcpTokenUse } from './tokens'
 
 // The door: HTTP in, MCP out.
 //
-// ── the posture, and why it is the same one /api/deploy has ───────────────
+// ── the posture ────────────────────────────────────────────────────────────
 //
 // /mcp is in daedalus's `authBypassRule` (nix/stacks/daedalus/daedalus.nix), so a
 // request arrives here WITHOUT passing Pocket ID — an agent cannot hold a
-// passkey any more than zot can. Three things make that acceptable, and all
+// passkey. Three things make that acceptable, and all
 // three have to stay true:
 //
 //   1. The endpoint is LAN-only. daedalus is `stage = "lab"`: no Cloudflare
@@ -21,8 +21,7 @@ import { identifyMcpToken, type McpIdentity, stampMcpTokenUse } from './tokens'
 //      lookup, no tool registration. Fail-closed: no token, unknown token,
 //      revoked token and malformed header all answer 401 and do nothing.
 //
-// The token IS the authentication on this path, exactly as X-Deploy-Token is
-// on /api/deploy. It is also the AUTHORIZATION for the writes, which is why
+// The token IS the authentication on this path. It is also the AUTHORIZATION for the writes, which is why
 // core/authz.ts has one named function for a machine caller
 // (`assertMachineActor`, called from server.ts) rather than a flag on the
 // human gate.

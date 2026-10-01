@@ -40,8 +40,6 @@ export const EXEMPT: Readonly<Record<string, string>> = {
   '/api/github/webhook':
     'an HMAC over the raw body; GitHub arrives through the hooks router, which sets no proof',
   '/api/agent/enroll': 'a single-use code, redeemed only with the PKCE verifier it was bound to',
-  '/api/deploy':
-    "X-Deploy-Token; zot's push events arrive through their own router, which sets no proof",
 }
 
 /** The header the reader token rides in. */

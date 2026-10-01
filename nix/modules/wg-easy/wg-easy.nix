@@ -70,12 +70,11 @@
 # and Basic auth on every API route (session.ts reads `Authorization:
 # Basic` whenever there is no session cookie) — and the hostname is not
 # behind forward-auth (native OIDC is the gate). So a router beside the
-# webApp's (`wg-easy-deny.yml` below; the traefikRawRules mechanism the
-# registry's deploy hook uses) answers 403 for any request on the
-# hostname whose path starts /api/auth/password or that carries a Basic
-# Authorization header, and never forwards it. The OIDC login and callback,
-# the /cnf/ one-time links, the session-cookie API the UI itself calls and
-# everything else pass untouched. A browser that tries
+# webApp's (`wg-easy-deny.yml` below, through traefikRawRules) answers
+# 403 for any request on the hostname whose path starts /api/auth/password
+# or that carries a Basic Authorization header, and never forwards it. The
+# OIDC login and callback, the /cnf/ one-time links, the session-cookie API
+# the UI itself calls and everything else pass untouched. A browser that tries
 # `/login?auto_launch=false` sees the form and a refused submit.
 #
 # What is left able to try the password is whoever reaches :51821

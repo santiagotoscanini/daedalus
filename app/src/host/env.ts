@@ -325,12 +325,6 @@ export const SCHEMA = {
       'What X-Reader-Token must carry for a GET past the request gate without the proxy proof: pages read with no identity (core/request-gate.ts). Unset, nothing reads that way.',
     source: 'stacks/shotter fleet.dashboard.shotter.envFiles (<machineState>/shotter/reader.env)',
   },
-  DEPLOY_HOOK_TOKEN: {
-    kind: 'string',
-    secret: true,
-    about: 'What the registry’s push event must present at /api/deploy.',
-    source: 'stacks/registry fleet.dashboard.registry.envFiles (registry-daedalus-token)',
-  },
 
   // ── what the box is ──────────────────────────────────────────────────────
   ROUTER_PRODUCT: {

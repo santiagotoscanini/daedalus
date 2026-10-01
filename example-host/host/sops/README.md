@@ -17,7 +17,7 @@ the first switch, replace each with real ciphertext:
    | `service-keys.sops` | dotenv | `DASH_<SERVICE>=<key>` per service; may be empty |
    | `traefik/env.sops` | dotenv | `POCKET_OIDC_COOKIE_SECRET=<32+ random bytes>` |
    | `pocket-id/env.sops` | dotenv | `ENCRYPTION_KEY=<random>` (fixed once set) |
-   | `registry/env.sops` | dotenv | `REGISTRY_PROM_PASSWORD=…`, `DEPLOY_HOOK_TOKEN=…` |
+   | `registry/env.sops` | dotenv | `REGISTRY_PROM_PASSWORD=…` |
    | `monitoring/env.sops` | dotenv | `GF_SECURITY_ADMIN_USER=…`, `GF_SECURITY_ADMIN_PASSWORD=…` |
    | `healthchecks/env.sops` | dotenv | `SECRET_KEY=<random>` |
    | `cloudflared/credentials.json.sops` | binary | the tunnel's credentials JSON, shown once at creation |

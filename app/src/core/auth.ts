@@ -23,17 +23,11 @@ import { ADMIN_GROUP } from './auth-names'
 // closed — a box whose proof never arrived has no signed-in operator, which is
 // the refusal to fix, not a gate to open.
 //
-// One header, but two completely different questions asked of it:
-//
-//   "who should this record say did it"  — a LABEL. Never fails; an absent
-//   header is a placeholder, because a journal line has to say something.
-//   `actorLabelOf`, for the `api.*` routes a machine calls.
-//
-//   "is anyone signed in at all"         — a GATE. An absent header is a
-//   refusal, and a blank one must not match another blank one as the same
-//   person. `requireActor`, which core/authz.ts asks for every `adminFn`
-//   (and hands the answer down as `context.actor`), and `actorOf` for the
-//   GitHub callback, which is handed a Request rather than running inside one.
+// The question asked of it is "is anyone signed in at all" — a GATE. An
+// absent header is a refusal, and a blank one must not match another blank
+// one as the same person. `requireActor`, which core/authz.ts asks for every
+// `adminFn` (and hands the answer down as `context.actor`), and `actorOf` for
+// the GitHub callback, which is handed a Request rather than running inside one.
 //
 // This file reads no file, opens no connection and knows nothing about roles:
 // forward-auth already decided, and the box has one operator. Its one outside
@@ -144,9 +138,6 @@ export function requireGroups(): string[] {
 /** Whether a group list carries the one that may change this box. */
 export const isAdmin = (groups: readonly string[]): boolean => groups.includes(ADMIN_GROUP)
 
-/** What a record says when the request carried no identity to name. */
-export const UNKNOWN_ACTOR = 'unknown operator'
-
 /** The one sentence every gated action answers with when the gate is empty. */
 export const NO_ACTOR_REASON = 'The request carried no signed-in identity, so nothing was done.'
 
@@ -173,19 +164,4 @@ export function actorOf(request: Request): Actor {
 /** The gate, over the request this server function is running inside — core/authz.ts `authorize`. */
 export function requireActor(): Actor {
   return gate(forwardedHeader(HEADER))
-}
-
-/**
- * The display label, over a request a caller is holding. Never fails.
- *
- * The `api.*` routes pass their own fallback — a request that reaches
- * /api/deploy is normally zot's, and "registry" is truer than "unknown
- * operator" for it.
- *
- * Only absence falls back: a header present and blank labels the record with a
- * blank. That is an asymmetry with the gate above, and a known one; closing it
- * is a change to what records say about who wrote them, not to who may act.
- */
-export function actorLabelOf(request: Request, fallback: string = UNKNOWN_ACTOR): string {
-  return forwardedHeaderOf(request, HEADER) ?? fallback
 }

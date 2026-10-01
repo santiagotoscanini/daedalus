@@ -52,6 +52,7 @@ const h = vi.hoisted(() => ({
     store: [] as unknown[][],
   },
   readStatusHook: null as null | (() => Promise<void>),
+  forgotten: [] as string[],
 }))
 
 vi.mock('../../host/build-bridge', () => ({
@@ -111,6 +112,11 @@ vi.mock('../../lib/repo/settings', () => ({
 }))
 vi.mock('../../host/nix-manifest', () => ({ manifestEntries: async () => h.manifest }))
 vi.mock('../../host/github-token', () => ({ tokenUsable: () => h.tokenOk }))
+vi.mock('../../host/app-icon', () => ({
+  forgetAppIcon: (name: string) => {
+    h.forgotten.push(name)
+  },
+}))
 vi.mock('../github-app', () => ({
   installationState: async () => h.installation,
   listInstallationRepos: async () => h.repos,
@@ -252,6 +258,7 @@ beforeEach(() => {
   h.pinResult = true
   h.installation = { available: true, data: { state: 'ok' } }
   h.readStatusHook = null
+  h.forgotten = []
   h.calls = {
     request: [],
     claim: [],
@@ -514,6 +521,19 @@ describe('status', () => {
     await runTick(ctx, new Date(NOW.getTime() + 3_000), state)
     expect(h.calls.update).toHaveLength(1)
     expect(h.calls.report).toHaveLength(1)
+  })
+
+  it('drops the app’s cached icon when a live build lands, and only then', async () => {
+    const landed = async (publish: BuildRow['publish']) => {
+      h.active = [row({ state: 'publishing', phase: 'pushing', startedAt: NOW, publish })]
+      h.update = (id: string, patch: Rec) => ({ ...record(row({ id, publish })), ...patch })
+      setStatus(status({ state: 'succeeded', phase: 'done', candidate: publish === 'candidate' }))
+      await runTick(ctx, NOW, freshState(NOW.getTime()))
+    }
+    await landed('candidate')
+    expect(h.forgotten).toEqual([])
+    await landed('live')
+    expect(h.forgotten).toEqual(['iris'])
   })
 
   it('writes a heartbeat without reporting it', async () => {
