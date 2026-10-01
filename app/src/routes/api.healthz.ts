@@ -3,6 +3,7 @@ import { ensureScheduler } from '../core/builds/scheduler'
 import { sql } from '../host/db'
 import { reportEnvOnce } from '../host/env'
 import { ensureGatewaySync } from '../host/gateway-sync'
+import { ensureIconExport } from '../host/workspace-icons'
 
 // Liveness + readiness. This one path carries three jobs, all following from
 // `auth.healthPath = "/api/healthz"` in nix/stacks/daedalus/self.json:
@@ -26,6 +27,8 @@ export const Route = createFileRoute('/api/healthz')({
         ensureScheduler()
         // And the gateway sync's five-minute run, the same way.
         ensureGatewaySync()
+        // And the workspace icons santree shows (host/workspace-icons.ts), the same way.
+        ensureIconExport()
         // And the controller's minute: re-dial it if it restarted (the dial
         // hands it the desired set again), keep the machines' last-known
         // facts. Not awaited — a probe must not wait on the controller.

@@ -19,7 +19,7 @@
 //! caps ([`MAX_PTYS`], [`MAX_IN_FLIGHT`], [`MAX_CONNS_PER_NODE`],
 //! [`OUT_QUEUE`], [`REAP_AFTER`]); confinement of working directories and
 //! written files to the projects root (fsops.rs); `hooks.push` only on the
-//! local hook socket; `workspaces.list`; and an audit line per connection and
+//! local hook socket; `workspaces.list` and `workspaces.icon`; and an audit line per connection and
 //! per consequential request — never data, file contents or env values.
 
 use std::collections::{HashMap, VecDeque};
@@ -79,7 +79,7 @@ pub const REAP_AFTER: Duration = Duration::from_secs(3600);
 /// How often exited sessions are looked for.
 pub const REAP_EVERY: Duration = Duration::from_secs(60);
 /// What `hello` names in `features`.
-pub const FEATURES: &[&str] = &[m::WorkspacesList::NAME];
+pub const FEATURES: &[&str] = &[m::WorkspacesList::NAME, workspaces::ICON_METHOD];
 
 /// The error code of a request refused for a cap.
 fn busy(msg: impl Into<String>) -> WireError {
@@ -96,6 +96,7 @@ pub struct Options {
     pub projects_root: PathBuf,
     pub hook_bin: String,
     pub workspaces: PathBuf,
+    pub workspace_icons: PathBuf,
     pub ping_interval: Duration,
     pub hook_queue_cap: usize,
 }
@@ -870,6 +871,13 @@ impl Daemon {
                 })
                 .await
             }
+            workspaces::ICON_METHOD => {
+                let p = params!(workspaces::IconParams);
+                blocking(permit!(), move || {
+                    Some(workspaces::icon(&this.opts.workspace_icons, &p.name).and_then(|r| ok(&r)))
+                })
+                .await
+            }
             m::HooksPush::NAME => Some(Err(err(
                 ErrorCode::BadRequest,
                 "hooks.push is served on the local hook socket only",
@@ -1422,6 +1430,7 @@ mod tests {
             projects_root: root.to_path_buf(),
             hook_bin: "/bin/true".into(),
             workspaces: root.join("none.json"),
+            workspace_icons: root.join("icons"),
             ping_interval: Duration::from_secs(15),
             hook_queue_cap: 10,
         }

@@ -43,6 +43,7 @@ unknown keys refused:
 | `hookSocket` | the local hook socket, `/run/daedalus-session-host/hook.sock` |
 | `projectsRoot` | where the checkouts live; confinement's root, `hello.projectsRoot` |
 | `workspaces` | the control plane's workspaces snapshot, `/run/daedalus-workspaces/workspaces.json` |
+| `workspaceIcons` | the workspace icons the control plane exports, `<stateRoot>/apps/daedalus/apply/workspace-icons` |
 | `hookBin` | `hello.hookBin`: `/run/current-system/sw/bin/daedalus-session-host` |
 
 `host.key` is a 32-byte ed25519 seed, made on the first start: written whole to
@@ -135,7 +136,7 @@ check exact wire order with a raw client and conformance with santree's own
 
 `hello` answers `version` (this crate's), `hostname`, `user`/`home` (`$USER`
 / `$HOME`, else the passwd entry), `bootId` (16 hex from `/dev/urandom`, new
-per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list"]`.
+per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list", "workspaces.icon"]`.
 
 ### Deviations from `docs/remote.md` / `fake.rs`
 
@@ -165,7 +166,8 @@ per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list"]`.
    timeout, on output that never closes, and when the request is dropped (its
    connection ended). Output is capped at 8 MiB a stream, as the fake: two
    capped streams in base64 still fit one 32 MiB line.
-7. **`workspaces.list`** serves the control plane's snapshot (below).
+7. **`workspaces.list`** serves the control plane's snapshot (below). **`workspaces.icon`** is this
+   host's own method (below), not in santree-remote-proto at the pinned rev.
 8. **Shutdown closes sessions**; under systemd the cgroup kill would take them
    anyway.
 9. **Framing**: `read_line` is copied from santree's `framing.rs` (it is
@@ -218,6 +220,32 @@ workspaces}`, each workspace with `path` = `<projectsRoot>/<name>`. A name
 that is not one plain component is skipped. No snapshot yet: an empty list
 with `generatedAt: null`. A snapshot of another root serves none; an
 unreadable or malformed one is an `io` error.
+
+### `workspaces.icon`
+
+A workspace's app icon: the one the control plane's Apps page shows for the
+project whose repo is the workspace's `remote` (a registry app, or an off-box
+project with a repo). The app resolves it from the app itself and exports it
+every 15 minutes to `workspaceIcons/<name>.icon`, raw bytes
+(`app/src/host/workspace-icons.ts`); this host only reads that directory.
+Separate from `workspaces.list` so a poll never carries image bytes; a client
+asks once per workspace and keeps the answer.
+
+```
+→ {"id": 7, "m": "workspaces.icon", "p": {"name": "iris"}}
+← {"id": 7, "ok": {"contentType": "image/svg+xml", "data": "PHN2ZyB4bWxucz0i…"}}
+```
+
+- `name`: a workspace's `name` from `workspaces.list`. Not one plain path
+  component, or missing: `bad_request`.
+- `contentType`: `image/png`, `image/svg+xml`, `image/x-icon` or
+  `image/webp`, sniffed from the bytes here (never taken from the file name or
+  the app). `data`: the bytes, standard padded base64, at most 64 KiB decoded.
+- `not_found`: no icon for that workspace — none exported, or a file this host
+  will not serve (a symlink, not a regular file, empty, over 64 KiB, or not one
+  of the four types). The client draws its own mark.
+- **SVG is data, not markup**: a client renders it as an image (an `<img>` /
+  image decoder), never inlined into a document, so a script in it never runs.
 
 ## Hooks
 

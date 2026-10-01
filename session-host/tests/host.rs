@@ -99,6 +99,7 @@ impl Host {
             "hookSocket": dir.join("run/hook.sock"),
             "projectsRoot": dir.join("projects"),
             "workspaces": dir.join("workspaces.json"),
+            "workspaceIcons": dir.join("icons"),
             "hookBin": BIN,
         });
         std::fs::write(dir.join("config.json"), config.to_string()).unwrap();
@@ -368,7 +369,8 @@ fn serve_refuses_a_hook_socket_another_host_answers_on() {
         "listen": ["127.0.0.1:0"], "stateDir": other.path().join("state"),
         "allowList": other.path().join("allow.json"), "hookSocket": first.hook_socket(),
         "projectsRoot": other.path().join("projects"),
-        "workspaces": other.path().join("w.json"), "hookBin": BIN,
+        "workspaces": other.path().join("w.json"),
+        "workspaceIcons": other.path().join("icons"), "hookBin": BIN,
     });
     std::fs::write(other.path().join("config.json"), config.to_string()).unwrap();
     let second = Command::new(BIN)
@@ -428,7 +430,10 @@ async fn handshake_version_refusal_and_the_hello_gate() {
     assert_eq!(hello["home"], dir.path().to_str().unwrap());
     assert_eq!(hello["projectsRoot"], host.root_str());
     assert_eq!(hello["hookBin"], BIN);
-    assert_eq!(hello["features"], json!(["workspaces.list"]));
+    assert_eq!(
+        hello["features"],
+        json!(["workspaces.list", "workspaces.icon"])
+    );
     let boot = hello["bootId"].as_str().unwrap();
     assert_eq!(boot.len(), 16);
     assert!(boot.chars().all(|c| c.is_ascii_hexdigit()));
@@ -1211,6 +1216,45 @@ async fn workspaces_list_serves_the_snapshot() {
     assert_eq!(
         raw.call("workspaces.list", json!({})).await["err"]["code"],
         "io"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn workspaces_icon_serves_the_exported_icon() {
+    let dir = tempdir();
+    let host = Host::start(dir.path());
+    let mut raw = host.greeted().await;
+
+    // No icon directory yet (the app has not exported): not_found.
+    assert_eq!(
+        raw.call("workspaces.icon", json!({"name": "web"})).await["err"]["code"],
+        "not_found"
+    );
+
+    // As the app writes it (app/src/host/workspace-icons.ts).
+    let icons = dir.path().join("icons");
+    std::fs::create_dir_all(&icons).unwrap();
+    let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
+    std::fs::write(icons.join("web.icon"), png).unwrap();
+    use base64::Engine;
+    assert_eq!(
+        raw.ok("workspaces.icon", json!({"name": "web"})).await,
+        json!({"contentType": "image/png",
+               "data": base64::engine::general_purpose::STANDARD.encode(png)})
+    );
+
+    std::fs::write(icons.join("page.icon"), "<html>not an icon</html>").unwrap();
+    assert_eq!(
+        raw.call("workspaces.icon", json!({"name": "page"})).await["err"]["code"],
+        "not_found"
+    );
+    assert_eq!(
+        raw.call("workspaces.icon", json!({"name": "../web"})).await["err"]["code"],
+        "bad_request"
+    );
+    assert_eq!(
+        raw.call("workspaces.icon", json!({})).await["err"]["code"],
+        "bad_request"
     );
 }
 

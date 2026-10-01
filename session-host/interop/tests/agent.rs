@@ -83,6 +83,7 @@ async fn the_agents_client_meets_the_session_host() {
         hook_socket: d.join("hook.sock"),
         projects_root: d.join("projects"),
         workspaces: d.join("workspaces.json"),
+        workspace_icons: d.join("icons"),
         hook_bin: "/bin/true".into(),
         file: None,
     })
@@ -105,7 +106,10 @@ async fn the_agents_client_meets_the_session_host() {
         let hello = call(&mut tls, HELLO).unwrap();
         assert_eq!(hello["id"], 1, "{hello}");
         assert_eq!(hello["ok"]["protocol"], 1, "{hello}");
-        assert_eq!(hello["ok"]["features"], json!(["workspaces.list"]));
+        assert_eq!(
+            hello["ok"]["features"],
+            json!(["workspaces.list", "workspaces.icon"])
+        );
         tls.close();
 
         // Not in the allow-list: the connect succeeds (TLS 1.3), and the

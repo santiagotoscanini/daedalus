@@ -117,6 +117,7 @@ impl Server {
                 projects_root: config.projects_root.clone(),
                 hook_bin: config.hook_bin.clone(),
                 workspaces: config.workspaces.clone(),
+                workspace_icons: config.workspace_icons.clone(),
                 ping_interval: PING_INTERVAL,
                 hook_queue_cap: HOOK_QUEUE_CAP,
             },

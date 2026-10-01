@@ -105,6 +105,7 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
         hook_socket: d.join("hook.sock"),
         projects_root: d.join("projects"),
         workspaces: d.join("workspaces.json"),
+        workspace_icons: d.join("icons"),
         hook_bin: "/bin/true".into(),
         file: None,
     })

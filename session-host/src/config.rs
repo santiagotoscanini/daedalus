@@ -22,6 +22,9 @@ pub struct Config {
     pub projects_root: PathBuf,
     /// The workspaces snapshot `workspaces.list` serves.
     pub workspaces: PathBuf,
+    /// The directory of workspace icons `workspaces.icon` serves, one
+    /// `<name>.icon` each, written by the control plane.
+    pub workspace_icons: PathBuf,
     /// `hello.hookBin`: the path an agent's hook command runs.
     pub hook_bin: String,
     /// The file this was loaded from ([`Config::load`]), which the status
@@ -53,6 +56,7 @@ impl Config {
             ("hookSocket", &self.hook_socket),
             ("projectsRoot", &self.projects_root),
             ("workspaces", &self.workspaces),
+            ("workspaceIcons", &self.workspace_icons),
         ] {
             if !path.is_absolute() {
                 return Err(format!("{what} must be absolute"));
