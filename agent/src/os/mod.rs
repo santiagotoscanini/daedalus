@@ -99,12 +99,10 @@ pub use imp::{operator_allowed, operator_uid};
 pub use imp::{claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NAMES};
 
 /// Claude's jobs: the server and the resumed sessions, outside the agent
-/// (jobs/). The same names on every OS.
+/// (jobs/): this OS's `Jobs`, what it adds to a job's environment, and
+/// what it calls a job. The same names on every OS.
 pub mod jobs {
-    pub use super::imp::jobs::{
-        caveat, clear, cost, running, running_cli, server_env, session_shell, show, start_server,
-        start_session, stop, JOB_KIND,
-    };
+    pub use super::imp::jobs::{server_env, Os, JOB_KIND};
 }
 // telemetry
 pub use imp::{read_updates, Collector};

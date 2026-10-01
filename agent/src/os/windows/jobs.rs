@@ -39,7 +39,7 @@ use windows::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use crate::jobs::{self, JobRecord, JobState, ServerJob, SessionJob};
+use crate::jobs::{self, JobRecord, JobState, Jobs, ServerJob, SessionJob};
 use crate::jobs::{Listed, UnitCost};
 use crate::state::now_rfc3339;
 
@@ -115,7 +115,7 @@ fn caveats() -> &'static Mutex<HashMap<String, String>> {
 }
 
 /// Why a job that runs may not outlive the tray, when that is so.
-pub fn caveat(name: &str) -> Option<String> {
+fn caveat(name: &str) -> Option<String> {
     caveats().lock().ok()?.get(name).cloned()
 }
 
@@ -210,7 +210,7 @@ fn spawn(
     Ok(())
 }
 
-pub fn start_server(j: &ServerJob) -> Result<(), String> {
+fn start_server(j: &ServerJob) -> Result<(), String> {
     spawn(
         j.name,
         j.cli,
@@ -263,7 +263,7 @@ fn holder_exe() -> Result<PathBuf, String> {
     Ok(copy)
 }
 
-pub fn start_session(j: &SessionJob) -> Result<(), String> {
+fn start_session(j: &SessionJob) -> Result<(), String> {
     let cli = jobs::check_cli(j.cli)?;
     // The `cmd.exe` that runs a `.cmd` shim, from the system directory as
     // the OS names it (never `%PATH%` or the working directory).
@@ -322,12 +322,7 @@ pub fn stop_every_users_jobs() {
     }
 }
 
-/// `script` has no counterpart here; the holder is the terminal.
-pub fn session_shell() -> Option<PathBuf> {
-    None
-}
-
-pub fn show(name: &str) -> Result<JobState, String> {
+fn show(name: &str) -> Result<JobState, String> {
     // A process this tray started: its handle answers even after it left.
     if let Ok(mut m) = spawned().lock() {
         if let Some(child) = m.get_mut(name) {
@@ -379,7 +374,7 @@ fn kill_recorded(r: &JobRecord) -> bool {
     false
 }
 
-pub fn stop(name: &str) -> Result<(), String> {
+fn stop(name: &str) -> Result<(), String> {
     let Some(r) = read_record(name) else {
         return Ok(());
     };
@@ -390,7 +385,7 @@ pub fn stop(name: &str) -> Result<(), String> {
     }
 }
 
-pub fn clear(name: &str) {
+fn clear(name: &str) {
     let _ = stop(name);
     let _ = std::fs::remove_file(record_path(name));
     if let Ok(mut c) = caveats().lock() {
@@ -406,7 +401,7 @@ pub fn clear(name: &str) {
 /// The jobs starting with `prefix` that run now, with their pids. One that
 /// ended is collected on the way — its record and its handle let go — as
 /// systemd collects a session's unit: nothing reads it again.
-pub fn running(prefix: &str) -> Result<Vec<Listed>, String> {
+fn running(prefix: &str) -> Result<Vec<Listed>, String> {
     let Ok(entries) = std::fs::read_dir(jobs_dir()) else {
         return Ok(Vec::new());
     };
@@ -434,12 +429,6 @@ pub fn running(prefix: &str) -> Result<Vec<Listed>, String> {
     Ok(out)
 }
 
-/// No accounting of a detached process's memory and CPU is read here.
-pub fn cost(name: &str) -> Option<UnitCost> {
-    let _ = name;
-    None
-}
-
 /// A job inherits the tray's environment, the user's; this adds Claude's
 /// own switch, `.local\bin` on PATH and CLAUDE_CONFIG_DIR — never HOME,
 /// which Git for Windows would then read instead of the profile.
@@ -454,8 +443,31 @@ pub fn server_env(
         .collect()
 }
 
-/// A `claude` on Windows is never a nix store path: nothing to pin.
-pub fn running_cli(name: &str) -> Option<PathBuf> {
-    let _ = name;
-    None
+/// The detached processes, as `Jobs`. No accounting of their memory and CPU
+/// is read; a `claude` here is never a nix store path, so none is pinned;
+/// and the holder, not `script`, is a session's terminal.
+pub struct Os;
+
+impl Jobs for Os {
+    fn show(&self, name: &str) -> Result<JobState, String> {
+        show(name)
+    }
+    fn start_server(&self, j: &ServerJob) -> Result<(), String> {
+        start_server(j)
+    }
+    fn start_session(&self, j: &SessionJob) -> Result<(), String> {
+        start_session(j)
+    }
+    fn stop(&self, name: &str) -> Result<(), String> {
+        stop(name)
+    }
+    fn clear(&self, name: &str) {
+        clear(name)
+    }
+    fn running(&self, prefix: &str) -> Result<Vec<Listed>, String> {
+        running(prefix)
+    }
+    fn caveat(&self, name: &str) -> Option<String> {
+        caveat(name)
+    }
 }

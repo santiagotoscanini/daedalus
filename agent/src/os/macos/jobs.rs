@@ -16,7 +16,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use crate::exec;
-use crate::jobs::{self, JobState, ServerJob, SessionJob, Tools};
+use crate::jobs::{self, JobState, Jobs, ServerJob, SessionJob, Tools};
 use crate::jobs::{Listed, UnitCost};
 
 pub const JOB_KIND: &str = "a launchd job in the user's gui domain";
@@ -84,7 +84,7 @@ fn bootstrap(
     }
 }
 
-pub fn start_server(j: &ServerJob) -> Result<(), String> {
+fn start_server(j: &ServerJob) -> Result<(), String> {
     let program = vec![
         j.cli.display().to_string(),
         "remote-control".into(),
@@ -93,27 +93,35 @@ pub fn start_server(j: &ServerJob) -> Result<(), String> {
     bootstrap(j.name, &program, j.workdir, j.log, j.env)
 }
 
-pub fn start_session(j: &SessionJob) -> Result<(), String> {
+fn start_session(j: &SessionJob) -> Result<(), String> {
     let tools = Tools::locate()?;
     let line = jobs::macos_session_line(j, &tools)?;
     let program = vec![tools.sh.display().to_string(), "-c".into(), line];
     bootstrap(j.name, &program, j.cwd, j.log, j.env)
 }
 
-/// The shell `script` hands the session, for its SHELL.
-pub fn session_shell() -> Option<PathBuf> {
-    Some(PathBuf::from("/bin/sh"))
+/// The shell `script` hands the session, for its SHELL: the account's login
+/// shell when Claude Code runs commands with it (`jobs::runs_commands`),
+/// zsh — every Mac's default — when not. Never `sh`, which Claude Code
+/// does not run commands with.
+fn session_shell() -> Option<PathBuf> {
+    let login =
+        super::super::unix::login_shell(uid()).filter(|s| jobs::runs_commands(s) && s.is_file());
+    Some(login.unwrap_or_else(|| PathBuf::from("/bin/zsh")))
 }
 
-/// How long the job's process has run: `ps -o etime=`.
+/// How long the job's process has run, from its start in the kernel's
+/// table (libproc; no `ps`).
 fn age_of(pid: u32) -> Option<u64> {
-    let mut cmd = Command::new("/bin/ps");
-    cmd.args(["-o", "etime=", "-p", &pid.to_string()]);
-    let out = exec::stdout_or(cmd, Duration::from_secs(5), exec::Text::Lossy).ok()?;
-    jobs::parse_etime(&out)
+    let info = super::pidinfo::<libc::proc_bsdinfo>(pid, libc::PROC_PIDTBSDINFO)?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(now.saturating_sub(info.pbi_start_tvsec))
 }
 
-pub fn show(name: &str) -> Result<JobState, String> {
+fn show(name: &str) -> Result<JobState, String> {
     let (code, text) = launchctl(&["print", &target(name)])?;
     if code != 0 {
         // Only launchd's "no such service" is gone; any other failure is
@@ -159,7 +167,7 @@ fn wait_gone(name: &str) -> Result<(), String> {
 }
 
 /// `bootout`: SIGTERM to the job, its process group with it, then unloaded.
-pub fn stop(name: &str) -> Result<(), String> {
+fn stop(name: &str) -> Result<(), String> {
     match launchctl(&["bootout", &target(name)])? {
         (0, _) => wait_gone(name),
         // Not loaded: nothing to stop.
@@ -168,13 +176,13 @@ pub fn stop(name: &str) -> Result<(), String> {
     }
 }
 
-pub fn clear(name: &str) {
+fn clear(name: &str) {
     let _ = stop(name);
 }
 
 /// The jobs starting with `prefix` that have a process now, with its pid
 /// (`launchctl list` shows the caller's own domain); launchd keeps no cost.
-pub fn running(prefix: &str) -> Result<Vec<Listed>, String> {
+fn running(prefix: &str) -> Result<Vec<Listed>, String> {
     let label_prefix = jobs::launchd_label(prefix);
     let (code, text) = launchctl(&["list"])?;
     if code != 0 {
@@ -191,12 +199,6 @@ pub fn running(prefix: &str) -> Result<Vec<Listed>, String> {
             })
         })
         .collect())
-}
-
-/// launchd keeps no accounting of a job's memory and CPU.
-pub fn cost(name: &str) -> Option<UnitCost> {
-    let _ = name;
-    None
 }
 
 /// launchd hands a job the system's four directories as PATH: the
@@ -216,12 +218,37 @@ pub fn server_env(
 }
 
 /// The `claude` a job runs, from the plist it was bootstrapped from.
-pub fn running_cli(name: &str) -> Option<PathBuf> {
+fn running_cli(name: &str) -> Option<PathBuf> {
     jobs::claude_in_command(&std::fs::read_to_string(plist_path(name)).ok()?)
 }
 
-/// Nothing to add about a launchd job beyond its state.
-pub fn caveat(name: &str) -> Option<String> {
-    let _ = name;
-    None
+/// The launchd jobs, as `Jobs`. launchd keeps no accounting of a job's
+/// memory and CPU.
+pub struct Os;
+
+impl Jobs for Os {
+    fn show(&self, name: &str) -> Result<JobState, String> {
+        show(name)
+    }
+    fn start_server(&self, j: &ServerJob) -> Result<(), String> {
+        start_server(j)
+    }
+    fn start_session(&self, j: &SessionJob) -> Result<(), String> {
+        start_session(j)
+    }
+    fn stop(&self, name: &str) -> Result<(), String> {
+        stop(name)
+    }
+    fn clear(&self, name: &str) {
+        clear(name)
+    }
+    fn running(&self, prefix: &str) -> Result<Vec<Listed>, String> {
+        running(prefix)
+    }
+    fn running_cli(&self, name: &str) -> Option<PathBuf> {
+        running_cli(name)
+    }
+    fn session_shell(&self) -> Option<PathBuf> {
+        session_shell()
+    }
 }

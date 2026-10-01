@@ -69,7 +69,7 @@ use super::profile::{claude_dir, home_dir, read_session_files};
 use super::roster::{self, is_short_id, is_uuid, ActionResult, Agent, Managed, Roster, Scanner};
 use super::workdir::trusted_projects;
 use super::{gcroot, ActionState, Recovered, SessionAction, SessionRequest};
-use crate::jobs::{self as job, JobState, SessionJob};
+use crate::jobs::{self as job, JobState, Jobs, SessionJob};
 use crate::os::jobs;
 use crate::state::now_rfc3339;
 use crate::util::LockExt;
@@ -230,11 +230,13 @@ pub struct Sessions {
 }
 
 impl Sessions {
-    pub fn start(ctx: Context) -> Self {
+    /// The thread, over this OS's jobs (`os::jobs::Os`) or a test's.
+    pub fn start(ctx: Context, jobs: Box<dyn Jobs>) -> Self {
         let (tx, rx) = mpsc::channel();
         let latest = Arc::new(Mutex::new(Latest::default()));
         let worker = Worker {
             ctx,
+            jobs,
             scanner: Scanner::default(),
             actions: VecDeque::new(),
             latest: Arc::clone(&latest),
@@ -287,6 +289,7 @@ impl Sessions {
 
 struct Worker {
     ctx: Context,
+    jobs: Box<dyn Jobs>,
     scanner: Scanner,
     actions: VecDeque<ActionResult>,
     latest: Arc<Mutex<Latest>>,
@@ -447,7 +450,7 @@ impl Worker {
                 roster::unslug(&project)
             ));
         };
-        if let Ok(JobState::Running { .. }) = jobs::show(&name) {
+        if let Ok(JobState::Running { .. }) = self.jobs.show(&name) {
             return refused(format!(
                 "{id} is already running as {name}: resuming it again would start a second process on the same transcript"
             ));
@@ -496,9 +499,9 @@ impl Worker {
                 config_dir.as_deref(),
             ),
             Path::new("/run/wrappers/bin").is_dir(),
-            jobs::session_shell().as_deref(),
+            self.jobs.session_shell().as_deref(),
         );
-        let started = jobs::start_session(&SessionJob {
+        let started = self.jobs.start_session(&SessionJob {
             name: &name,
             id,
             cli: &cli,
@@ -515,7 +518,7 @@ impl Worker {
         // leaving at once (a transcript it will not open, a login that
         // expired, a prompt nobody predicted).
         std::thread::sleep(SETTLE);
-        match jobs::show(&name) {
+        match self.jobs.show(&name) {
             Ok(JobState::Running { .. }) => done(format!(
                 "resumed {id} in {} as {name}; it appears on claude.ai within a few seconds",
                 cwd.display()
@@ -535,19 +538,19 @@ impl Worker {
     fn stop(&self, id: &str) -> Outcome {
         if is_uuid(id) {
             let name = self.job_of(id);
-            if !matches!(jobs::show(&name), Ok(JobState::Running { .. })) {
+            if !matches!(self.jobs.show(&name), Ok(JobState::Running { .. })) {
                 return refused(format!(
                     "{id} is not running as {name}, and a session this agent did not resume has \
                      no stop of its own: a Remote Control session ends with its server"
                 ));
             }
-            if let Err(e) = jobs::stop(&name) {
+            if let Err(e) = self.jobs.stop(&name) {
                 return failed(format!("{name} was not stopped: {e}"));
             }
-            return match jobs::show(&name) {
+            return match self.jobs.show(&name) {
                 Ok(JobState::Running { .. }) => failed(format!("{name} still runs after the stop")),
                 _ => {
-                    jobs::clear(&name);
+                    self.jobs.clear(&name);
                     done(format!(
                         "stopped {id}; its transcript is intact and it can be resumed again"
                     ))
@@ -616,7 +619,7 @@ impl Worker {
     /// The sessions this agent resumed that run now, with their costs.
     fn managed(&self, errors: &mut Vec<String>) -> Vec<Managed> {
         let prefix = &self.ctx.prefix;
-        let names = match jobs::running(prefix) {
+        let names = match self.jobs.running(prefix) {
             Ok(n) => n,
             Err(e) => {
                 errors.push(format!(
@@ -687,7 +690,7 @@ impl Worker {
         // Only a job known to be gone loses its pin: not knowing keeps it.
         let server_runs = || {
             !matches!(
-                jobs::show(&self.ctx.server),
+                self.jobs.show(&self.ctx.server),
                 Ok(JobState::Gone | JobState::Exited(_))
             )
         };
@@ -705,7 +708,7 @@ impl Worker {
         // made) is pinned now, from the claude its job runs.
         for m in managed {
             if std::fs::symlink_metadata(self.ctx.roots.join(&m.job)).is_err() {
-                if let Some(cli) = jobs::running_cli(&m.job) {
+                if let Some(cli) = self.jobs.running_cli(&m.job) {
                     gcroot::pin(&self.ctx.roots, &m.job, &cli);
                 }
             }
@@ -763,7 +766,7 @@ impl Worker {
             truncated: false,
             managed,
             session_stats,
-            server: jobs::cost(&self.ctx.server),
+            server: self.jobs.cost(&self.ctx.server),
             actions: Vec::new(),
             errors,
         };
@@ -813,13 +816,16 @@ mod tests {
     #[test]
     fn the_thread_reads_a_roster_and_refuses_what_it_must() {
         let tag = std::process::id();
-        let s = Sessions::start(Context {
-            server: format!("daedalus-agent-test-rc-{tag}"),
-            prefix: format!("daedalus-agent-test-session-{tag}-"),
-            log_dir: std::env::temp_dir(),
-            label: "test".into(),
-            roots: std::env::temp_dir().join(format!("daedalus-test-roots-{tag}")),
-        });
+        let s = Sessions::start(
+            Context {
+                server: format!("daedalus-agent-test-rc-{tag}"),
+                prefix: format!("daedalus-agent-test-session-{tag}-"),
+                log_dir: std::env::temp_dir(),
+                label: "test".into(),
+                roots: std::env::temp_dir().join(format!("daedalus-test-roots-{tag}")),
+            },
+            Box::new(crate::os::jobs::Os),
+        );
         let wait_for = |pred: &dyn Fn(&Roster) -> bool| {
             let until = std::time::Instant::now() + Duration::from_secs(20);
             loop {

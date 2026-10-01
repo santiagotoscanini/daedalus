@@ -93,8 +93,8 @@ pub fn macos_session_line(job: &SessionJob, tools: &Tools) -> Result<String, Str
 /// skipped by their depth. None when the text is not a service's print at
 /// all: the service is there but unreadable, which the caller takes as
 /// unknown — never as gone (only launchctl's "no such service" is that). The
-/// pid's age comes from `ps` (`parse_etime`), since launchd does not print a
-/// start time.
+/// pid's age is the kernel's (os/macos/jobs.rs), since launchd does not
+/// print a start time.
 pub fn parse_launchctl_print(text: &str) -> Option<JobState> {
     let mut depth = 0usize;
     let mut top: Vec<(&str, &str)> = Vec::new();
@@ -171,23 +171,4 @@ pub fn parse_launchctl_list(text: &str, prefix: &str) -> Vec<(String, u32)> {
             label.starts_with(prefix).then(|| (label.to_string(), pid))
         })
         .collect()
-}
-
-/// `ps -o etime=`: `[[dd-]hh:]mm:ss`, in seconds.
-pub fn parse_etime(s: &str) -> Option<u64> {
-    let s = s.trim();
-    let (days, rest) = match s.split_once('-') {
-        Some((d, r)) => (d.parse::<u64>().ok()?, r),
-        None => (0, s),
-    };
-    let parts: Vec<u64> = rest
-        .split(':')
-        .map(|p| p.parse::<u64>().ok())
-        .collect::<Option<_>>()?;
-    let (h, m, sec) = match parts.as_slice() {
-        [m, s] => (0, *m, *s),
-        [h, m, s] => (*h, *m, *s),
-        _ => return None,
-    };
-    Some(days * 86_400 + h * 3600 + m * 60 + sec)
 }

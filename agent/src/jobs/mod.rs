@@ -77,6 +77,43 @@ impl JobState {
     }
 }
 
+/// Claude's jobs as the OS keeps them: one implementation per OS
+/// (`os::jobs::Os`), which the supervisor and the sessions' thread are
+/// handed, and a fake in their tests. What an OS does not have, it does not
+/// implement: the defaults say so.
+pub trait Jobs: Send {
+    /// The job's state now; Err when the OS could not say — never taken for
+    /// a job that is gone.
+    fn show(&self, name: &str) -> Result<JobState, String>;
+    fn start_server(&self, j: &ServerJob) -> Result<(), String>;
+    fn start_session(&self, j: &SessionJob) -> Result<(), String>;
+    /// End the job, if it runs: its whole tree.
+    fn stop(&self, name: &str) -> Result<(), String>;
+    /// Stop it and clear what is left of it, so the name is free for the
+    /// next start. A job that is not there is not an error.
+    fn clear(&self, name: &str);
+    /// The jobs starting with `prefix` that run now.
+    fn running(&self, prefix: &str) -> Result<Vec<Listed>, String>;
+    /// A job's memory and CPU, where the OS accounts for one (a unit's).
+    fn cost(&self, _name: &str) -> Option<UnitCost> {
+        None
+    }
+    /// The `claude` a running job runs, where it can be read off the job
+    /// (what gcroot.rs pins).
+    fn running_cli(&self, _name: &str) -> Option<PathBuf> {
+        None
+    }
+    /// Why a job that runs may not outlive the session, when that is so.
+    fn caveat(&self, _name: &str) -> Option<String> {
+        None
+    }
+    /// The SHELL a resumed session's terminal hands it, where a terminal
+    /// program (`script`) runs it.
+    fn session_shell(&self) -> Option<PathBuf> {
+        None
+    }
+}
+
 /// The Remote Control server's job.
 #[derive(Clone, Debug)]
 pub struct ServerJob<'a> {

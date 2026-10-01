@@ -487,17 +487,20 @@ pub fn open_sessions(
 /// get the session prefix's names (config.rs), their logs go beside the
 /// server's, and their pins beside the session's state.
 fn start_sessions(places: &Places) -> Sessions {
-    Sessions::start(SessionsContext {
-        server: places.job.clone(),
-        prefix: paths::claude_session_prefix(),
-        log_dir: places
-            .claude_log
-            .parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_default(),
-        label: crate::claude::sessions::label_of(&crate::facts::hostname()),
-        roots: places.state_dir.join("gcroots"),
-    })
+    Sessions::start(
+        SessionsContext {
+            server: places.job.clone(),
+            prefix: paths::claude_session_prefix(),
+            log_dir: places
+                .claude_log
+                .parent()
+                .map(std::path::Path::to_path_buf)
+                .unwrap_or_default(),
+            label: crate::claude::sessions::label_of(&crate::facts::hostname()),
+            roots: places.state_dir.join("gcroots"),
+        },
+        Box::new(crate::os::jobs::Os),
+    )
 }
 
 /// The full report the session last sent the service, as its local socket

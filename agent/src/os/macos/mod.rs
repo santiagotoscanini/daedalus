@@ -169,7 +169,7 @@ pub fn claude_keychain_login() -> bool {
 
 /// One `proc_pidinfo` flavor of a process, whole; None when it is gone or
 /// not this user's to read.
-fn pidinfo<T>(pid: u32, flavor: libc::c_int) -> Option<T> {
+pub(super) fn pidinfo<T>(pid: u32, flavor: libc::c_int) -> Option<T> {
     let size = libc::c_int::try_from(std::mem::size_of::<T>()).ok()?;
     let mut info = std::mem::MaybeUninit::<T>::zeroed();
     // SAFETY: a buffer of exactly `size` bytes for the flavor's struct;

@@ -326,10 +326,6 @@ fn launchctl_print_and_list_read_as_job_states() {
             4242
         )]
     );
-    assert_eq!(parse_etime("05:07"), Some(307));
-    assert_eq!(parse_etime(" 1:00:00"), Some(3600));
-    assert_eq!(parse_etime("2-00:00:01"), Some(172_801));
-    assert_eq!(parse_etime("x"), None);
 }
 
 #[test]
