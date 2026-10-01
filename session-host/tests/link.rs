@@ -110,9 +110,8 @@ async fn an_unlisted_key_gets_access_denied_on_its_first_read() {
     // TLS 1.3: the client's side of the handshake completes…
     let tls = host.tls_as(&stranger).await;
     let mut raw = Raw::over(tls);
-    raw.send_line(r#"{"id":1,"m":"hello","p":{"protocol":1,"client":"x","owner":"o"}}"#)
-        .await;
-    // …and the refusal is the first read.
+    // …and the refusal is the first read. Nothing is written first: the host
+    // may have closed by then, and the write would fail instead.
     let mut line = String::new();
     let e = tokio::time::timeout(WAIT, raw.reader.read_line(&mut line))
         .await
@@ -144,14 +143,17 @@ async fn a_node_removed_from_the_allow_list_loses_its_links_and_ptys() {
     let deadline = Instant::now() + WAIT;
     let mut theirs = loop {
         let mut raw = Raw::over(host.tls_as(&other).await);
-        raw.send_line(r#"{"id":1,"m":"hello","p":{"protocol":1,"client":"x","owner":"o"}}"#)
-            .await;
-        let mut line = String::new();
-        let read = tokio::time::timeout(WAIT, raw.reader.read_line(&mut line))
-            .await
-            .unwrap();
-        if matches!(read, Ok(n) if n > 0) {
-            break raw;
+        // A refused link may break before the refusal is read: the write
+        // then fails, and the next attempt follows.
+        let hello = r#"{"id":1,"m":"hello","p":{"protocol":1,"client":"x","owner":"o"}}"#;
+        if raw.try_send_line(hello).await {
+            let mut line = String::new();
+            let read = tokio::time::timeout(WAIT, raw.reader.read_line(&mut line))
+                .await
+                .unwrap();
+            if matches!(read, Ok(n) if n > 0) {
+                break raw;
+            }
         }
         assert!(Instant::now() < deadline, "their key was never admitted");
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -185,7 +187,6 @@ async fn a_node_removed_from_the_allow_list_loses_its_links_and_ptys() {
     }
     // Their key is now refused outright; mine still works.
     let mut again = Raw::over(host.tls_as(&other).await);
-    again.send_line("{}").await;
     let mut line = String::new();
     let e = again.reader.read_line(&mut line).await.unwrap_err();
     assert_eq!(Refusal::of(&e), Some(Refusal::NotEnrolled));

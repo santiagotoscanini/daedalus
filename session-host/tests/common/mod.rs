@@ -226,6 +226,15 @@ impl Raw {
         self.writer.flush().await.unwrap();
     }
 
+    /// [`send_line`](Self::send_line), false when the write failed.
+    pub async fn try_send_line(&mut self, line: &str) -> bool {
+        self.writer
+            .write_all(format!("{line}\n").as_bytes())
+            .await
+            .is_ok()
+            && self.writer.flush().await.is_ok()
+    }
+
     pub async fn send(&mut self, m: &str, p: Value) -> u64 {
         let id = self.next;
         self.next += 1;
