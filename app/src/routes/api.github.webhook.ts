@@ -5,6 +5,7 @@ import type { Ctx } from '../core/ctx'
 import { verifyWebhookSignature } from '../host/github-app-crypto'
 import { decode } from '../lib/contract/decode'
 import { type GithubPushEvent, pushEventDecoder } from '../lib/github-app'
+import { readCapped } from '../lib/read-capped'
 import {
   alreadyHandled,
   appsPinnedTo,
@@ -310,37 +311,6 @@ async function webhookSecret(env: Ctx['env'], now: number): Promise<string | nul
   if (raw.trim() === '' || raw !== raw.trim()) return null
   cached = { path, secret: raw, readAt: now }
   return raw
-}
-
-/**
- * The exact bytes received, or null past `cap`. HMAC is over the raw body, and
- * a chunked body has no content-length, so the cap is enforced while reading.
- */
-async function readCapped(
-  stream: ReadableStream<Uint8Array> | null,
-  cap: number,
-): Promise<Uint8Array | null> {
-  if (stream === null) return new Uint8Array(0)
-  const reader = stream.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  let chunk = await reader.read()
-  while (!chunk.done) {
-    total += chunk.value.byteLength
-    if (total > cap) {
-      await reader.cancel().catch(() => undefined)
-      return null
-    }
-    chunks.push(chunk.value)
-    chunk = await reader.read()
-  }
-  const bytes = new Uint8Array(total)
-  let offset = 0
-  for (const c of chunks) {
-    bytes.set(c, offset)
-    offset += c.byteLength
-  }
-  return bytes
 }
 
 /** Header values reach the log unsigned-for; keep them to one short, plain token. */

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readCapped } from '../lib/read-capped'
 
 // Where a machine's service redeems its log-in (agent/src/enroll.rs
 // `redeem_https`): `{code, code_verifier}` in, the machine's tunnel and the
@@ -14,12 +15,23 @@ import { createFileRoute } from '@tanstack/react-router'
 
 const NO_STORE = { 'cache-control': 'no-store' }
 
+/** A redeem is two short strings; the cap is in bytes, enforced while reading. */
+const MAX_BODY_BYTES = 4096
+
 export const Route = createFileRoute('/api/agent/enroll')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const text = await request.text()
-        if (text.length > 4096) {
+        let bytes: Uint8Array | null
+        try {
+          bytes = await readCapped(request.body, MAX_BODY_BYTES)
+        } catch {
+          return Response.json(
+            { error: 'the body could not be read' },
+            { status: 400, headers: NO_STORE },
+          )
+        }
+        if (bytes === null) {
           return Response.json(
             { error: 'the body is too large' },
             { status: 413, headers: NO_STORE },
@@ -27,7 +39,7 @@ export const Route = createFileRoute('/api/agent/enroll')({
         }
         let body: unknown
         try {
-          body = JSON.parse(text)
+          body = JSON.parse(new TextDecoder().decode(bytes))
         } catch {
           return Response.json(
             { error: 'the body is not JSON' },
