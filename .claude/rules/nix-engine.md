@@ -156,9 +156,9 @@ cannot see. Add, don't rename.
 
 `flake.nix`'s module lists (`platformModules`, `daedalusModules`,
 `catalogModules`) are explicit, alphabetical, and list FILES — a multi-file
-stack keeps each file its own entry (§6, import order). A new
-platform module is a new line there AND a line in the host's own import
-list (see §6) — a tracked file named in neither is silently absent.
+stack keeps each file its own entry (§6, import order). A new module is a
+new line there — a tracked file not listed is silently absent; a host
+imports `nixosModules.default` whole and gets it with its next lock bump.
 
 ## 4. No oci-container digest pins here
 
@@ -234,19 +234,16 @@ this tree has.)
 
 - **Import order is part of the closure.** List-typed options
   (`prometheusScrapes`, firewall ports, `assertions`) concatenate in
-  module order. The reference host still names every engine module one
-  by one through `enginePath`, with the daedalus stack in its
-  alphabetical slot among that host's own stacks, precisely so the move
-  into this repo reordered nothing. Appending a module is safe;
-  reshuffling `platformModules`/`daedalusModules`, or switching a host to
-  `nixosModules.default`, changes derivations — do it deliberately,
-  alone, and say so. And the order is NOT simply the list: the module
+  module order. A host imports `nixosModules.default` — platform, control
+  plane, catalog, as three nested groups — ahead of its own modules.
+  Appending a module is safe; reshuffling `platformModules`,
+  `daedalusModules` or `catalogModules`, or the groups, changes
+  derivations — do it deliberately, alone, and say so. And the order is NOT simply the list: the module
   system merges a module's own `imports` AHEAD of everything at the level
   above it (measured: a flat list merges in reverse, and nested imports
   bubble to the front), so a module that imported its siblings would
   reorder a host's unit dependencies. A multi-file stack lists each file
-  in `catalogModules` and in the host's list instead, and never imports
-  the others.
+  in `catalogModules` instead, and never imports the others.
 - **`platform/` modules carry no enable switch** — they are the base.
   `stacks/daedalus` is behind `fleet.modules.daedalus.enable`. `options`
   blocks are never gated; only `config` is.
@@ -288,7 +285,8 @@ A stack leaves the operator's configuration for this tree one at a time.
 (`app-db`, `traefik`, `pocket-id`, `registry`, `logging`, `monitoring`,
 `apps`, `pihole`, `cloudflared`, `gatus`, `healthchecks`) moved the same
 way and shows the harder cases. The gate for every move is §5's: the
-reference host's `system` derivation is IDENTICAL before and after, and
+reference host's `system` derivation is IDENTICAL before and after (or
+differs only in the list order **Order** below explains), and
 `nix flake check` — which evaluates the example host as a whole system — stays
 green. When a move honestly changes a derivation (a rendered file now
 generated from a registry, a comment inside a script), say exactly what
@@ -305,10 +303,12 @@ must not get forty services for importing the engine. The host turns it on
 in its own `host/modules.nix`. History does not cross repositories: copy
 the file, `git rm` it there.
 
-**Same slot.** The host imports each moved file through `enginePath` in
-the SAME position of its import list the local file had — list-typed
-options concatenate in import order (§6). A new options-only file can go
-anywhere: declarations contribute no list elements.
+**Order.** A moved file leaves the host's import list and arrives with
+`nixosModules.default`, ahead of every module the host keeps, so what it
+adds to a list-typed option (§6) can land earlier in that list than it
+did. Compare the host's closure before and after; when it moves, read the
+diff and say what changed in the commit. An options-only file contributes
+no list elements and moves nothing.
 
 **The image pin stays with the host.** §4. The module writes
 `image = pinnedImage "<container>" "<registry>/<repo>";` and the host

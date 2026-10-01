@@ -30,7 +30,7 @@ either done or was decided against ("Not in v1").
 | 8 | Auth hardening | armed; the break-glass login has never been tried against a real IdP outage |
 | 9 | Nix: enable surface, literals, state out of the tree | nothing for the engine; two usernames in private stacks become options when those stacks move (Phase 11) |
 | 10 | App module system and a real build | 10a: data files still import some `host/` readers directly; 10b: the first `v*` tag, the operator's call |
-| 11 | The engine becomes importable | 23 stacks are still the reference host's own; the host names the engine's 55 files one by one instead of `nixosModules.default` |
+| 11 | The engine becomes importable | 23 stacks are still the reference host's own |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 The **Features** section lists what the product is missing regardless of
@@ -222,16 +222,10 @@ daedalus and the site-file samples are in. What remains:
    as one group (`litellm` declares `litellmKeys` and `mcpServers`, which
    become platform registries then), `shotter` (whose post-deploy checks are
    a product feature, item 2 below), then the netns owners and their tenants
-   together (`downloads`, `argus-vpn`, `tv`). Each move: closure-neutral,
-   pin to `host/images.nix`, secrets to `host/sops/<id>/` keeping their
+   together (`downloads`, `argus-vpn`, `tv`). Each move: closure diff read and stated (import order moves with
+   the file, nix-engine.md §7), pin to `host/images.nix`, secrets to `host/sops/<id>/` keeping their
    basenames, policy to `host/modules.nix`, a README beside the module,
    `checks.all-modules` green.
-2. **Adopt `nixosModules.default` on the reference host.** Import ORDER is
-   part of the closure (list-typed options concatenate in module order), so
-   the host still names the engine's 55 files one by one in their old
-   positions. Once nothing is left to interleave with, one deliberate,
-   separately-gated rebuild replaces the list with the single import; its
-   closure diff will not be empty and must be read line by line.
 
 Decisions already taken for the moves, so they are not re-litigated: the
 identity interface stays in `platform/identity.nix`; `catalogModules` lists

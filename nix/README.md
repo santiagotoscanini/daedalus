@@ -10,7 +10,7 @@ drives.
 | `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
 | `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), the mover for versions a stack pins as plain strings (`version-update.nix`, fed by `fleet.versionPins`), `self.json`, and the privileged host agents (`host/*.sh` — among them apply, deploy, build, the image, engine and version updates, secret writes, snapshots, workspaces, power). |
 | `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
-| `tests/` | `example-host/` evaluates the example host (below) as a whole system; `all-modules/` the same host with every leaf switched on. All run in `nix flake check`; nothing is built — `tests/README.md` has the table. |
+| `tests/` | `example-host/` evaluates the example host (below) as a whole system; `all-modules/` the same host with every leaf switched on; `daedalus-minimal/` with the catalog off but for what the control plane needs. All run in `nix flake check`; nothing is built — `tests/README.md` has the table. |
 
 The root `flake.nix` exports:
 
@@ -286,11 +286,6 @@ crate's README are the full story.
   this tree could never be moved by the control plane's updater, and two
   sources of truth for one image would drift. The host keeps every pin; a
   future `init` resolves the first set.
-- **The reference host still names the engine's modules one by one** in
-  its import list, interleaved with its own stacks, because list-typed
-  options merge in import order and the identical-closure gate forbade a
-  reorder. It adopts `nixosModules.default` in a deliberate rebuild once
-  nothing of its own is left to interleave.
 - **No `init`.** The template is a start; resolving pins, creating secrets
   and the first switch are by hand.
 
