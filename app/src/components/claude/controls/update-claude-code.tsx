@@ -10,9 +10,9 @@ import { cn } from '../../../lib/cn'
 import { num, text } from '../../../lib/format'
 import { fetchClaudeCodeUpdateStatus, requestClaudeCodeUpdateFn } from '../../../server/claude'
 import { GHOST_BTN } from '../../apps/shared'
+import { RESTART, RESTART_NOTE, RESTART_STATE } from '../../armed-confirm'
 import { usePolledStatus } from '../../status'
 import { Button } from '../../ui/button'
-import { RESTART, RESTART_NOTE, RESTART_STATE } from '../shared'
 
 const CC_IDLE: ClaudeCodeUpdateStatus = {
   id: null,

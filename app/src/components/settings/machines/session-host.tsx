@@ -3,11 +3,12 @@ import { useState } from 'react'
 
 import type { SessionHostLine } from '../../../host/session-host'
 import { fetchSessionHostFn, restartSessionHostFn } from '../../../server/nodes'
+import { ArmedConfirm } from '../../armed-confirm'
 import { useRootAction } from '../../root-action'
 import { Button } from '../../ui/button'
 import { useArmed } from '../../use-armed'
 import { Chip } from '../../viz'
-import { ASIDE, ERROR_NOTE, Line, Mono, NOTE } from '../shared'
+import { ARMED_PANEL, ASIDE, ERROR_NOTE, Line, Mono, NOTE } from '../shared'
 
 // The session host on one line (host/session-host.ts): how it stands, which
 // build runs, the terminals it holds and the machines connected, and the
@@ -38,24 +39,19 @@ export function SessionHost({ line }: { line: SessionHostLine }) {
       </Line>
       {line.error !== null && <span className={ERROR_NOTE}>{line.error}</span>}
       {armed ? (
-        <span className="inline-flex flex-col items-start gap-2">
-          <span className={NOTE}>{(fresh ?? line).confirm}</span>
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => {
-                disarm()
-                start(() => restartSessionHostFn())
-              }}
-            >
-              Restart now
-            </Button>
-            <Button size="sm" variant="ghost" onClick={disarm}>
-              Cancel
-            </Button>
-          </span>
-        </span>
+        <ArmedConfirm
+          ms={ARM_MS}
+          className={ARMED_PANEL}
+          costClassName={NOTE}
+          noteClassName={ASIDE}
+          cost={(fresh ?? line).confirm}
+          confirm="Restart now"
+          onConfirm={() => {
+            disarm()
+            start(() => restartSessionHostFn())
+          }}
+          onCancel={disarm}
+        />
       ) : (
         <span className="inline-flex flex-wrap items-center gap-2">
           <Button

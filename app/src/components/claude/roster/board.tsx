@@ -24,12 +24,12 @@ import {
 } from '../../../lib/claude-roster'
 import { num } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
+import { ARM_MS } from '../../armed-confirm'
 import { EMPTY, FOOT, LIST, MONO, NOTE } from '../../tokens'
 import { useArmedKey } from '../../use-armed'
 import { useVerbRequest } from '../../verb-request'
 import { Board } from '../../viz'
 import { CycleSessionsControl } from '../controls/cycle-sessions'
-import { RC_ARM_MS } from '../shared'
 import { RosterRow } from './row'
 
 /** As many rows as read as a list rather than as a log. The rest are counted. */
@@ -74,7 +74,7 @@ export function RosterBoard({
   // ONE poller and ONE armed row for the whole board: the poller follows one
   // request id at a time, so two rows acting at once would lose one's outcome,
   // and arming a second row must disarm the first.
-  const [armed, arm, disarm] = useArmedKey<string>(RC_ARM_MS)
+  const [armed, arm, disarm] = useArmedKey<string>(ARM_MS)
   const [acted, setActed] = useState<string | null>(null)
   const {
     busy: running,

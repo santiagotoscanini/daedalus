@@ -9,19 +9,13 @@ import type { RosterEntry } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
 import { followRequest } from '../../../lib/follow-request'
 import { num, text } from '../../../lib/format'
+import { errorText } from '../../../lib/redact'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { GHOST_BTN } from '../../apps/shared'
+import { ARM_MS, ArmedConfirm, RESTART, RESTART_NOTE, RESTART_STATE } from '../../armed-confirm'
 import { MONO } from '../../tokens'
 import { Button } from '../../ui/button'
 import { useArmed } from '../../use-armed'
-import {
-  RC_ARM_MS,
-  RESTART,
-  RESTART_ARMED,
-  RESTART_COST,
-  RESTART_NOTE,
-  RESTART_STATE,
-} from '../shared'
 
 /** How long one verb may stay `running` in the roster before the cycle gives up. */
 const VERB_WAIT_MS = 60_000
@@ -73,7 +67,7 @@ export function CycleSessionsControl({
   boardBusy: boolean
 }) {
   const router = useRouter()
-  const [armed, arm, disarm] = useArmed(RC_ARM_MS)
+  const [armed, arm, disarm] = useArmed(ARM_MS)
   const [at, setAt] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -101,9 +95,7 @@ export function CycleSessionsControl({
         await settle('stop', row.id)
         await settle('resume', row.id)
       } catch (e) {
-        setError(
-          `${row.label}: ${e instanceof Error ? e.message : String(e)}. The rest were left alone.`,
-        )
+        setError(`${row.label}: ${errorText(e)}. The rest were left alone.`)
         break
       }
     }
@@ -123,33 +115,24 @@ export function CycleSessionsControl({
 
   if (armed) {
     return (
-      <div className={cn(RESTART, RESTART_ARMED)}>
-        <p className={RESTART_COST}>
-          {stale.length === 1 ? 'This session' : `These ${num(stale.length)} sessions`} stop and
-          resume, one at a time:{' '}
-          <span className={MONO}>{stale.map((r) => r.label).join(', ')}</span>. Each keeps its id
-          and its transcript and is appended to, not branched. Anything mid-turn loses that turn.{' '}
-          <b>If you are reading this from one of them, it is the one that dies</b> — it comes back,
-          but not this page's connection to it.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={() => {
-              disarm()
-              void run()
-            }}
-          >
-            Cycle {num(stale.length)} onto {text(holds)}
-          </Button>
-          <Button type="button" variant="outline" size="sm" className={GHOST_BTN} onClick={disarm}>
-            Cancel
-          </Button>
-          <span className={RESTART_NOTE}>disarms on its own in {RC_ARM_MS / 1000}s</span>
-        </div>
-      </div>
+      <ArmedConfirm
+        cost={
+          <>
+            {stale.length === 1 ? 'This session' : `These ${num(stale.length)} sessions`} stop and
+            resume, one at a time:{' '}
+            <span className={MONO}>{stale.map((r) => r.label).join(', ')}</span>. Each keeps its id
+            and its transcript and is appended to, not branched. Anything mid-turn loses that turn.{' '}
+            <b>If you are reading this from one of them, it is the one that dies</b> — it comes
+            back, but not this page's connection to it.
+          </>
+        }
+        confirm={`Cycle ${num(stale.length)} onto ${text(holds)}`}
+        onConfirm={() => {
+          disarm()
+          void run()
+        }}
+        onCancel={disarm}
+      />
     )
   }
 

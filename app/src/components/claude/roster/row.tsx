@@ -13,10 +13,11 @@ import type { VerbOutcome } from '../../../lib/follow-request'
 import { DASH } from '../../../lib/format'
 import { toneStyle } from '../../../lib/tone'
 import { GHOST_BTN } from '../../apps/shared'
+import { ArmedConfirm } from '../../armed-confirm'
 import { MONO, MONO_FACE, ROW, ROW_MAIN, ROW_SIDE } from '../../tokens'
 import { Button } from '../../ui/button'
 import { Chip } from '../../viz'
-import { NARROW_HIDE, RC_ARM_MS } from '../shared'
+import { NARROW_HIDE } from '../shared'
 import { working } from '../verdicts'
 import { ROW_ACCENT, STATE_ACCENT, STATE_LABEL, STATE_TONE } from './tones'
 
@@ -63,8 +64,8 @@ function FactIconFor({ name }: { name: FactIcon }) {
 
 /* What DOES belong under the row: the armed state. It carries a sentence
    about what the click costs, which is the one thing worth a second line. */
-const CTRL = 'mt-[0.3rem] flex flex-wrap items-center gap-2'
-const CTRL_COST = 'mt-[0.3rem] text-[0.72rem] text-(--text-muted) leading-[1.5]'
+const CTRL = 'mt-[0.3rem] flex flex-col items-start gap-[0.3rem]'
+const CTRL_COST = 'text-[0.72rem] text-(--text-muted) leading-[1.5]'
 const CTRL_NOTE = 'text-[0.68rem] text-muted-foreground leading-[1.5]'
 const CTRL_STATE = 'mt-[0.3rem] text-[0.72rem] leading-[1.5]'
 
@@ -152,37 +153,24 @@ export function RosterRow({
       {mine && outcome !== null && <RowOutcome outcome={outcome} />}
 
       {control.kind !== 'none' && !busy && armed && (
-        <>
-          <p className={CTRL_COST}>
-            <ArmedCost control={control} />
-          </p>
-          <div className={CTRL}>
-            <Button
-              type="button"
-              variant={control.kind === 'resume' ? 'default' : 'destructive'}
-              size="sm"
-              onClick={() => {
-                onConfirm(control)
-              }}
-            >
-              {control.kind === 'resume'
-                ? 'Confirm resume'
-                : control.kind === 'remove-agent'
-                  ? 'Confirm remove'
-                  : 'Confirm stop'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={GHOST_BTN}
-              onClick={onCancel}
-            >
-              Cancel
-            </Button>
-            <span className={CTRL_NOTE}>disarms on its own in {RC_ARM_MS / 1000}s</span>
-          </div>
-        </>
+        <ArmedConfirm
+          className={CTRL}
+          costClassName={CTRL_COST}
+          noteClassName={CTRL_NOTE}
+          cost={<ArmedCost control={control} />}
+          variant={control.kind === 'resume' ? 'default' : 'destructive'}
+          confirm={
+            control.kind === 'resume'
+              ? 'Confirm resume'
+              : control.kind === 'remove-agent'
+                ? 'Confirm remove'
+                : 'Confirm stop'
+          }
+          onConfirm={() => {
+            onConfirm(control)
+          }}
+          onCancel={onCancel}
+        />
       )}
     </li>
   )

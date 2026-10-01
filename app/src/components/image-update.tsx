@@ -5,6 +5,7 @@ import { cn } from '../lib/cn'
 import { ceremonyArmed, ceremonyFor } from '../lib/image-ceremony'
 import { REBOOT_REQUIRED } from '../lib/reboot-required'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../server/updates'
+import { TypedConfirm } from './armed-confirm'
 import { RebootRequired } from './reboot-required'
 import { usePolledStatus } from './status'
 import { MONO, MONO_FACE } from './tokens'
@@ -244,20 +245,7 @@ export function UpdateControl({
           <p className="mb-2 text-[0.78rem] text-(--text-muted)">
             <strong>{t.container}</strong> {ceremony}.
           </p>
-          <label className="flex items-center gap-2 text-[0.74rem] text-muted-foreground">
-            <span>
-              Type <span className={MONO}>{t.container}</span> to confirm
-            </span>
-            <input
-              className={cn(FIELD, 'px-[0.45rem]')}
-              value={typed}
-              onChange={(e) => {
-                setTyped(e.target.value)
-              }}
-              spellCheck={false}
-              autoComplete="off"
-            />
-          </label>
+          <TypedConfirm name={t.container} value={typed} onChange={setTyped} />
         </div>
       )}
 

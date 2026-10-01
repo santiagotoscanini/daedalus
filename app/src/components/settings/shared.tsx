@@ -236,6 +236,9 @@ export const ERROR_NOTE = 'm-0 text-[0.78rem] text-destructive'
 export const FIELD_LABEL = 'font-medium text-[0.8rem]'
 export const PANEL = 'flex flex-col gap-2 rounded-[9px] border border-(--border-soft) p-3'
 
+/** An armed two-step's box (`ArmedConfirm`) on a settings tab. */
+export const ARMED_PANEL = 'flex flex-col gap-3 rounded-md border border-(--border-soft) p-3'
+
 /** A service that answered, but not with a yes. */
 export function Bad({ children }: { children: ReactNode }) {
   return (

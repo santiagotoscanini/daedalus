@@ -6,6 +6,7 @@ import { defaultImage } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
 import { stageExposed } from '../../lib/stage'
 import { deleteAppFn } from '../../server/registry'
+import { TypedConfirm } from '../armed-confirm'
 import { Segmented, Slider, Toggle } from '../controls'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
@@ -324,7 +325,6 @@ function RemovePanel({
   dataDir: string
 }) {
   const router = useRouter()
-  const confirmId = useId()
   const [confirm, setConfirm] = useState('')
   const { run, busy, error } = useAction()
 
@@ -362,20 +362,13 @@ function RemovePanel({
           </p>
         </div>
         <div className="flex flex-col items-stretch gap-[0.6rem]">
-          <Field className="gap-[0.3rem] p-0 has-[:disabled]:opacity-100">
-            <FieldLabel htmlFor={confirmId} className="text-[0.76rem] font-normal text-(--dim)">
-              Type “{name}” to confirm
-            </FieldLabel>
-            <Input
-              id={confirmId}
-              type="text"
-              className="h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)"
-              value={confirm}
-              onChange={(e) => {
-                setConfirm(e.target.value)
-              }}
-            />
-          </Field>
+          <TypedConfirm
+            name={name}
+            value={confirm}
+            onChange={setConfirm}
+            className="flex-col items-stretch gap-[0.3rem]"
+            inputClassName="w-full"
+          />
           {error !== null && (
             <Alert variant="warning" className="mb-[1.35rem] text-foreground">
               <AlertDescription>{error}</AlertDescription>

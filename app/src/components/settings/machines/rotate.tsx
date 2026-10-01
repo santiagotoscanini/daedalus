@@ -5,11 +5,12 @@ import { ROTATION_GRACE, ROTATION_GRACES, type RotationGrace } from '../../../li
 import { cn } from '../../../lib/cn'
 import { until } from '../../../lib/format'
 import { rotateControllerKeyFn } from '../../../server/nodes'
+import { ArmedConfirm } from '../../armed-confirm'
 import { Button } from '../../ui/button'
 import { Picker } from '../../ui/picker'
 import { useAction } from '../../use-action'
 import { useArmed } from '../../use-armed'
-import { ASIDE, ERROR_NOTE, Line, Mono, NOTE } from '../shared'
+import { ARMED_PANEL, ASIDE, ERROR_NOTE, Line, Mono, NOTE } from '../shared'
 
 // The controller's key, handed on: `controller.rotate` through
 // server/nodes.ts. Armed first, because a machine too old to follow the
@@ -73,14 +74,20 @@ export function RotateKey({ rotating }: { rotating: boolean }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-(--border-soft) p-3">
-      <p className={NOTE}>
-        The controller makes a new key now and serves both for the grace period. Every machine that
-        connects in that time is handed the old key's signed statement, re-pins itself and
-        reconnects under the new key — nothing to do on it. A machine that stays off the whole time
-        is refused once the old key retires, until you re-run its install line there. The install
-        lines below pin the new key from the moment you confirm.
-      </p>
+    <ArmedConfirm
+      ms={ARM_MS}
+      className={ARMED_PANEL}
+      costClassName={NOTE}
+      noteClassName={ASIDE}
+      cost="The controller makes a new key now and serves both for the grace period. Every machine that connects in that time is handed the old key's signed statement, re-pins itself and reconnects under the new key — nothing to do on it. A machine that stays off the whole time is refused once the old key retires, until you re-run its install line there. The install lines below pin the new key from the moment you confirm."
+      confirm="Rotate now"
+      disabled={busy}
+      onConfirm={() => {
+        disarm()
+        run(() => rotateControllerKeyFn({ data: { grace } }))
+      }}
+      onCancel={disarm}
+    >
       <Line>
         <span className={ASIDE}>Both keys served for</span>
         <Picker
@@ -90,23 +97,6 @@ export function RotateKey({ rotating }: { rotating: boolean }) {
           className="w-32"
         />
       </Line>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          variant="destructive"
-          disabled={busy}
-          onClick={() => {
-            disarm()
-            run(() => rotateControllerKeyFn({ data: { grace } }))
-          }}
-        >
-          Rotate now
-        </Button>
-        <Button size="sm" variant="ghost" onClick={disarm}>
-          Cancel
-        </Button>
-        <span className={ASIDE}>disarms on its own in {ARM_MS / 1000}s</span>
-      </div>
-    </div>
+    </ArmedConfirm>
   )
 }

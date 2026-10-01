@@ -1,11 +1,11 @@
 import { useRouter } from '@tanstack/react-router'
-import { useId, useState } from 'react'
+import { useState } from 'react'
+import { TypedConfirm } from '../../../components/armed-confirm'
 import { RebootRequired } from '../../../components/reboot-required'
 import { usePolledStatus } from '../../../components/status'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert'
 import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
 import { Board, Chip, type Tone } from '../../../components/viz'
 import type { VersionUpdateStatus } from '../../../host/version-update'
 import { cn } from '../../../lib/cn'
@@ -67,7 +67,6 @@ export function VersionBoard({
   const router = useRouter()
   const [picked, setPicked] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
-  const confirmId = useId()
   const { status, running, refusal, start } = usePolledStatus({
     initial: initialStatus,
     fetch: () => fetchVersionUpdateStatus(),
@@ -166,21 +165,13 @@ export function VersionBoard({
                   plugins.
                 </p>
               )}
-              <label
-                htmlFor={confirmId}
-                className={cn(NOTE, 'mt-[0.45rem] flex items-center gap-[0.5rem]')}
-              >
-                Type <span className={MONO}>{chosen.version}</span> to confirm
-                <Input
-                  id={confirmId}
-                  className="h-auto w-[8rem] rounded-[7px] px-[0.5rem] py-[0.2rem] font-mono md:text-[0.8rem]"
-                  value={typed}
-                  disabled={running}
-                  spellCheck={false}
-                  autoComplete="off"
-                  onChange={(e) => setTyped(e.target.value)}
-                />
-              </label>
+              <TypedConfirm
+                name={chosen.version}
+                value={typed}
+                disabled={running}
+                onChange={setTyped}
+                className="mt-[0.45rem]"
+              />
             </div>
           )}
           <div className="flex flex-wrap items-center gap-[0.6rem]">

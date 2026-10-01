@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { GHOST_BTN } from '../../../components/apps/shared'
+import {
+  ARM_MS,
+  ArmedConfirm,
+  RESTART,
+  RESTART_NOTE,
+  RESTART_STATE,
+} from '../../../components/armed-confirm'
 import { LogBoard } from '../../../components/logs'
+import { usePoll } from '../../../components/poll'
 import { Button } from '../../../components/ui/button'
+import { useArmed } from '../../../components/use-armed'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, duration, num, pct } from '../../../lib/format'
@@ -32,21 +41,10 @@ type Host = Extract<SystemData, { tab: 'host' }>
 
 /* The restart control, under the case photo. Quiet at rest and deliberately
    not primary: it is one ghost button with no colour of its own, because a
-   control that looks important gets clicked to find out what it does. The cost
-   — and the red — appear only once it is armed, which is the step where they
-   can still change the answer. */
-const RESTART =
-  'mt-[0.7rem] flex flex-col items-start gap-[0.55rem] border-(--border-soft) border-t pt-[0.75rem]'
-const RESTART_COST = 'text-[0.78rem] text-(--text-muted) leading-[1.5]'
-const RESTART_STATE = 'text-[0.78rem] leading-[1.5]'
-const RESTART_NOTE = 'text-[0.7rem] text-muted-foreground leading-[1.5]'
-
-/** How long an armed restart stays armed. Short enough that a control left
-    armed by a distraction cannot be finished by an accidental click later. */
-const ARM_MS = 10_000
+   control that looks important gets clicked to find out what it does. */
 const HEALTH_MS = 3_000
 
-type RestartPhase = 'idle' | 'armed' | 'dispatching' | 'refused' | 'down' | 'back'
+type RestartPhase = 'idle' | 'dispatching' | 'refused' | 'down' | 'back'
 
 /**
  * Restart the box.
@@ -71,6 +69,7 @@ function RestartControl({
   uptimeSeconds: number | null
 }) {
   const [phase, setPhase] = useState<RestartPhase>('idle')
+  const [armed, arm, disarm] = useArmed(ARM_MS)
   const [refusal, setRefusal] = useState('')
   // "Back" only means something after a "gone": the first health poll is
   // answered by a container that has not been told to stop yet, and without
@@ -80,108 +79,65 @@ function RestartControl({
   const gone = useRef(false)
   const [sawDown, setSawDown] = useState(false)
 
-  useEffect(() => {
-    if (phase !== 'armed') return
-    const t = setTimeout(() => {
-      setPhase('idle')
-    }, ARM_MS)
-    return () => {
-      clearTimeout(t)
-    }
-  }, [phase])
-
   // Nothing will report the restart finished, so this phase asks the box
   // instead. /api/healthz is the one unauthenticated path (it is the
   // forward-auth bypass gatus uses), which is what makes it answerable the
   // moment the app is serving again.
-  useEffect(() => {
-    if (phase !== 'down') return
-    let stopped = false
-    const t = setInterval(() => {
-      void fetch('/api/healthz', { cache: 'no-store' })
-        .then((r) => {
-          if (stopped) return
-          if (!r.ok) {
-            gone.current = true
-            setSawDown(true)
-            return
-          }
-          if (gone.current) setPhase('back')
-        })
-        .catch(() => {
-          if (stopped) return
-          gone.current = true
-          setSawDown(true)
-        })
-    }, HEALTH_MS)
-    return () => {
-      stopped = true
-      clearInterval(t)
-    }
-  }, [phase])
+  usePoll(
+    async () => {
+      const r = await fetch('/api/healthz', { cache: 'no-store' }).catch(() => null)
+      if (r?.ok !== true) {
+        gone.current = true
+        setSawDown(true)
+        return
+      }
+      if (gone.current) setPhase('back')
+    },
+    HEALTH_MS,
+    phase === 'down',
+  )
 
-  if (phase === 'armed') {
+  if (armed && phase !== 'dispatching' && phase !== 'down') {
     return (
-      <div
-        className={cn(
-          RESTART,
-          'border-t-[color-mix(in_srgb,var(--danger)_40%,var(--border-soft))]',
-        )}
-      >
-        <p className={RESTART_COST}>
-          Everything on this box stops for a couple of minutes.{' '}
-          <strong className="font-medium text-warning">LAN DNS goes down with it</strong>: pi-hole
-          is this machine, so no device in the house resolves a name until it is back.{' '}
-          {containers === null ? 'Every container' : `All ${num(containers)} containers`} stop and
-          start again, and {duration(uptimeSeconds)} of uptime goes back to zero.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={() => {
-              setRefusal('')
-              gone.current = false
-              setSawDown(false)
-              setPhase('dispatching')
-              void requestRebootFn()
-                .then((r) => {
-                  if (r.state === 'rebooting') {
-                    setPhase('down')
-                  } else {
-                    setRefusal(r.reason)
-                    setPhase('refused')
-                  }
-                })
-                .catch((e: unknown) => {
-                  // A fetch that fails outright is the server going down under
-                  // the answer; an error the server wrote is a refusal.
-                  if (e instanceof TypeError) {
-                    setPhase('down')
-                    return
-                  }
-                  setRefusal(errorText(e))
-                  setPhase('refused')
-                })
-            }}
-          >
-            Confirm restart
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={GHOST_BTN}
-            onClick={() => {
-              setPhase('idle')
-            }}
-          >
-            Cancel
-          </Button>
-          <span className={RESTART_NOTE}>disarms on its own in {ARM_MS / 1000}s</span>
-        </div>
-      </div>
+      <ArmedConfirm
+        cost={
+          <>
+            Everything on this box stops for a couple of minutes.{' '}
+            <strong className="font-medium text-warning">LAN DNS goes down with it</strong>: pi-hole
+            is this machine, so no device in the house resolves a name until it is back.{' '}
+            {containers === null ? 'Every container' : `All ${num(containers)} containers`} stop and
+            start again, and {duration(uptimeSeconds)} of uptime goes back to zero.
+          </>
+        }
+        confirm="Confirm restart"
+        onConfirm={() => {
+          disarm()
+          setRefusal('')
+          gone.current = false
+          setSawDown(false)
+          setPhase('dispatching')
+          void requestRebootFn()
+            .then((r) => {
+              if (r.state === 'rebooting') {
+                setPhase('down')
+              } else {
+                setRefusal(r.reason)
+                setPhase('refused')
+              }
+            })
+            .catch((e: unknown) => {
+              // A fetch that fails outright is the server going down under
+              // the answer; an error the server wrote is a refusal.
+              if (e instanceof TypeError) {
+                setPhase('down')
+                return
+              }
+              setRefusal(errorText(e))
+              setPhase('refused')
+            })
+        }}
+        onCancel={disarm}
+      />
     )
   }
 
@@ -217,7 +173,8 @@ function RestartControl({
         size="sm"
         className={GHOST_BTN}
         onClick={() => {
-          setPhase('armed')
+          setPhase('idle')
+          arm()
         }}
       >
         Restart the box
