@@ -1,15 +1,28 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-
-import type { NodeTelemetry } from '../../lib/agent/status'
-import { cn } from '../../lib/cn'
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, cpuName, DASH, num, pct, shortVendor, temp } from '../../lib/format'
-import { type ChosenKind, type Part, partById, partMatching } from '../../lib/hardware/catalog'
-import type { NodeRow } from '../../lib/repo/nodes'
-import { Ago } from '../ago'
-import { PART, PART_DETAIL, PART_ID, PART_NAME, PART_WIDE, PartHead, PartPhoto } from '../part'
-import { Board, BoardGrid, Facts, Measures } from '../viz'
+import { Ago } from '../../../../components/ago'
+import { OS_MARK } from '../../../../components/machine-head'
+import {
+  PART,
+  PART_DETAIL,
+  PART_ID,
+  PART_NAME,
+  PART_WIDE,
+  PartHead,
+  PartPhoto,
+} from '../../../../components/part'
+import { Board, BoardGrid, Facts, Measures } from '../../../../components/viz'
+import type { NodeTelemetry } from '../../../../lib/agent/status'
+import { cn } from '../../../../lib/cn'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, cpuName, DASH, num, pct, shortVendor, temp } from '../../../../lib/format'
+import {
+  type ChosenKind,
+  type Part,
+  partById,
+  partMatching,
+} from '../../../../lib/hardware/catalog'
+import type { NodeRow } from '../../../../lib/repo/nodes'
 import {
   EMPTY,
   FOOT,
@@ -18,7 +31,6 @@ import {
   MONO,
   NOTE,
   NotReadable,
-  OS_MARK,
   ROW,
   ROW_MAIN,
   ROW_SIDE,

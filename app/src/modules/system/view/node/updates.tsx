@@ -1,14 +1,13 @@
 import { Link } from '@tanstack/react-router'
-
-import { cn } from '../../lib/cn'
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num } from '../../lib/format'
-import { linkWords } from '../../lib/node-link'
-import type { Tone } from '../../lib/tone'
-import { Ago } from '../ago'
-import { GHOST_BTN } from '../apps/shared'
-import { NodeCommandButton } from '../node-command'
-import { Board, BoardGrid, Chip, Facts } from '../viz'
+import { Ago } from '../../../../components/ago'
+import { GHOST_BTN } from '../../../../components/apps/shared'
+import { NodeCommandButton } from '../../../../components/node-command'
+import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
+import { cn } from '../../../../lib/cn'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, DASH, num } from '../../../../lib/format'
+import { linkWords } from '../../../../lib/node-link'
+import type { Tone } from '../../../../lib/tone'
 import {
   DetailNote,
   EMPTY,

@@ -1,11 +1,11 @@
-import type { NodeDrive, NodeTelemetry } from '../../lib/agent/status'
-import { cn } from '../../lib/cn'
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num, pct } from '../../lib/format'
-import type { Tone } from '../../lib/tone'
-import { DISK_MODEL } from '../part'
-import { MONO_FACE } from '../tokens'
-import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../viz'
+import { DISK_MODEL } from '../../../../components/part'
+import { MONO_FACE } from '../../../../components/tokens'
+import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../../components/viz'
+import type { NodeDrive, NodeTelemetry } from '../../../../lib/agent/status'
+import { cn } from '../../../../lib/cn'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, DASH, num, pct } from '../../../../lib/format'
+import type { Tone } from '../../../../lib/tone'
 import {
   DetailNote,
   EMPTY,

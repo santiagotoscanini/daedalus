@@ -1,16 +1,7 @@
 import { createFileRoute, notFound, useLoaderData } from '@tanstack/react-router'
-import { NodeClaudeView } from '../components/claude-node'
 import { StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { MachinePicker } from '../components/machine-picker'
-import {
-  BoxHead,
-  MachineHead,
-  MachineSystemView,
-  type NodeTabId,
-  nodeTabsFor,
-  resolveNodeTab,
-} from '../components/machine-system'
 import { ModuleBoards } from '../components/modules/boards'
 import { PageHead } from '../components/page'
 import { ServiceSettingsButton } from '../components/service-settings'
@@ -27,6 +18,15 @@ import type { NodeSystemData } from '../lib/dashboard/node-system'
 import { known } from '../lib/known'
 import { isDotted, nixModulesOf, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
+import {
+  BoxHead,
+  MachineHead,
+  MachineSystemView,
+  type NodeTabId,
+  nodeTabsFor,
+  resolveNodeTab,
+} from '../modules/system/view/node'
+import { NodeClaudeView } from '../modules/system/view/node/claude'
 import { fetchNodeClaudeFn } from '../server/claude'
 import { fetchBoxHeadFn, fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
 import { fetchModuleBoards } from '../server/modules'
@@ -99,7 +99,7 @@ export const Route = createFileRoute('/c/$category')({
     const machine = picker && deps.machine !== 'box' ? (deps.machine ?? null) : null
     // The node list is part of the frame — the picker, and which OS the
     // picked machine runs, which is what shapes its tab row
-    // (components/machine-system/index.tsx) — so it is awaited: from this
+    // (modules/system/view/node/index.tsx) — so it is awaited: from this
     // browser's memory past the first visit (lib/known.ts), compared on
     // what the picker draws, since "last seen" moves on every read.
     const nodes = picker

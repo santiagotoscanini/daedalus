@@ -1,14 +1,13 @@
 import { Link } from '@tanstack/react-router'
-
-import type { BoardInfo } from '../../lib/dashboard/board-info'
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num, shortVendor } from '../../lib/format'
-import { partMatching } from '../../lib/hardware/catalog'
-import { gigabyteRevision } from '../../lib/hardware/gigabyte'
-import type { Tone } from '../../lib/tone'
-import { Ago } from '../ago'
-import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../part'
-import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
+import { Ago } from '../../../../components/ago'
+import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../../../../components/part'
+import { Board, BoardGrid, Chip, Facts, Measures } from '../../../../components/viz'
+import type { BoardInfo } from '../../../../lib/dashboard/board-info'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, DASH, num, shortVendor } from '../../../../lib/format'
+import { partMatching } from '../../../../lib/hardware/catalog'
+import { gigabyteRevision } from '../../../../lib/hardware/gigabyte'
+import type { Tone } from '../../../../lib/tone'
 import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Motherboard ──────────────────────────────────────────────────────── */

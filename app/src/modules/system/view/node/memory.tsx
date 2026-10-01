@@ -1,6 +1,6 @@
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num } from '../../lib/format'
-import { BarList, Board, BoardGrid, Facts, Measures, Progress } from '../viz'
+import { BarList, Board, BoardGrid, Facts, Measures, Progress } from '../../../../components/viz'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, DASH, num } from '../../../../lib/format'
 import {
   DetailNote,
   EMPTY,

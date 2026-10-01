@@ -7,7 +7,7 @@ import type { Tone } from '../../../lib/tone'
 import type { Access, AnonBudget } from '../data/github'
 import { conclusionTone, conclusionWord } from '../data/parse'
 
-export { WipBoard } from '../../../components/machine-system/shared'
+export { WipBoard } from '../../../components/machine-head'
 
 /* ── the small vocabulary every tab shares ────────────────────────────── */
 

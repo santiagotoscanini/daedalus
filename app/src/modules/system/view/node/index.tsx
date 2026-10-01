@@ -1,5 +1,5 @@
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import type { NavIconName } from '../nav-icon'
+import type { NavIconName } from '../../../../components/nav-icon'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { NodeBoardView } from './board'
 import { NodeBrowsersView } from './browsers'
 import { NodeBuildView } from './build'
@@ -61,7 +61,7 @@ const UPDATES: NodeTabSpec = { id: 'updates', label: 'Updates', boardSpans: [4, 
 const MACOS: NodeTabSpec = { id: 'macos', label: 'macOS', boardSpans: [4, 8, 12, 6, 6] }
 const APPS: NodeTabSpec = { id: 'apps', label: 'Apps', boardSpans: [4, 4, 4, 12] }
 // Who maintains it, as on the box: the remote-control server the agent's
-// tray runs there. Drawn by components/claude-node.tsx from the node's
+// tray runs there. Drawn by modules/system/view/node/claude.tsx from the node's
 // Claude report rather than from the telemetry document.
 const CLAUDE: NodeTabSpec = {
   id: 'claude',

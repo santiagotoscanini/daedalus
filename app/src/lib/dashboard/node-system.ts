@@ -8,7 +8,7 @@ import { type BrowserLatest, browserLatest } from './browser-releases'
 import { type MacReleases, macosReleases } from './macos-releases'
 
 // The System page for a machine that is not this box, the same tabs the
-// box draws for itself (components/machine-system/): what the controller
+// box draws for itself (modules/system/view/node/): what the controller
 // holds for the machine — its status document and the full telemetry
 // document it pushed up its link (agent/src/telemetry.rs: drive serials,
 // the heaviest processes, the services that are down, the OS's pending

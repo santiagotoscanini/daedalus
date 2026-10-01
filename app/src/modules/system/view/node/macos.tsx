@@ -1,10 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import type { MacRelease } from '../../lib/dashboard/macos-releases'
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num } from '../../lib/format'
-import type { Tone } from '../../lib/tone'
-import { Ago } from '../ago'
-import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
+import { Ago } from '../../../../components/ago'
+import { Board, BoardGrid, Chip, Facts, Measures } from '../../../../components/viz'
+import type { MacRelease } from '../../../../lib/dashboard/macos-releases'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, DASH, num } from '../../../../lib/format'
+import type { Tone } from '../../../../lib/tone'
 import {
   DetailNote,
   EMPTY,

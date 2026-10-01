@@ -31,7 +31,7 @@ export const manifest = {
   // entry for something this box runs, so the rail draws it below, on its
   // own. A node's System page keeps these tab ids — Host, Memory, Disks,
   // Build, Updates, Claude — over the one document its agent publishes and
-  // its Claude report (components/machine-system/, components/claude-node);
+  // its Claude report (modules/system/view/node/, modules/system/view/node/claude);
   // Pools, Backups and Shotter are the box's alone.
   machinePicker: true,
   tabs: [

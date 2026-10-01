@@ -1,25 +1,14 @@
 import { Link } from '@tanstack/react-router'
 import { type ReactNode, useState } from 'react'
-
-import type { NodeApp } from '../../lib/agent/status'
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num } from '../../lib/format'
-import { Ago } from '../ago'
-import { GHOST_BTN } from '../apps/shared'
-import { Button } from '../ui/button'
-import { Board, BoardGrid, Chip, Facts } from '../viz'
-import {
-  DetailNote,
-  EMPTY,
-  FOOT,
-  LIST,
-  MONO,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-  WipBoard,
-} from './shared'
+import { Ago } from '../../../../components/ago'
+import { GHOST_BTN } from '../../../../components/apps/shared'
+import { WipBoard } from '../../../../components/machine-head'
+import { Button } from '../../../../components/ui/button'
+import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
+import type { NodeApp } from '../../../../lib/agent/status'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, DASH, num } from '../../../../lib/format'
+import { DetailNote, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Software / Apps ──────────────────────────────────────────────────── */
 

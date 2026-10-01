@@ -1,5 +1,5 @@
 import { Link, useSearch } from '@tanstack/react-router'
-import { OS_MARK } from '../../../../components/machine-system/shared'
+import { OS_MARK } from '../../../../components/machine-head'
 import { FOOT } from '../../../../components/tokens'
 import { Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'

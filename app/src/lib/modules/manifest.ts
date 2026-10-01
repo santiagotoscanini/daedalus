@@ -81,7 +81,7 @@ export type ModuleManifest = {
   /**
    * The page has a machine picker above its tabs: this box, then every
    * approved node. Picking a node replaces the tabs with that machine's own
-   * (System's mirror the box's: components/machine-system/); the box's tabs
+   * (System's mirror the box's: modules/system/view/node/); the box's tabs
    * are what the module declares. Only a page whose subject exists on every
    * machine sets it — and the rail draws that module below the directory,
    * on its own, since it is about the fleet rather than this box.

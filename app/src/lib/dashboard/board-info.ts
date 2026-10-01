@@ -4,7 +4,7 @@ import type { BoardReleases } from './board-releases'
 // board as SMBIOS describes it, the firmware it runs, and the maker's list
 // of releases (board-releases.ts). Two readers build it — the host
 // snapshot for the box, the agent's telemetry for a node — and one view
-// draws it (components/machine-system/board.tsx).
+// draws it (modules/system/view/node/board.tsx).
 
 export type BoardInfo = {
   vendor: string | null

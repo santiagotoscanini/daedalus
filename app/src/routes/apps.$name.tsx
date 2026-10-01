@@ -1,20 +1,9 @@
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { ApplyBar } from '../components/apply-bar'
-import { Access } from '../components/apps/access'
-import { Database } from '../components/apps/database'
-import { Deployments } from '../components/apps/deployments'
-import { Overview } from '../components/apps/overview'
-import { Secrets } from '../components/apps/secrets'
-import { Settings } from '../components/apps/settings'
-import { CHIP, LEDE } from '../components/apps/shared'
-import { Tasks } from '../components/apps/tasks'
-import { Variables } from '../components/apps/variables'
-import { Vpn } from '../components/apps/vpn'
+import { type AppRecord, CHIP, LEDE } from '../components/apps/shared'
+import { TabBody } from '../components/apps/tab-views'
 import { AppIcon, type AppState, Segmented, StatePill } from '../components/controls'
-import { GuardedAwait } from '../components/error'
-import { GrafanaLogs } from '../components/logs'
 import { Crumbs, PageHead } from '../components/page'
-import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { useAction } from '../components/use-action'
@@ -150,27 +139,12 @@ type Tab = (typeof TABS)[number]
 type AppSearch = { tab: Tab; range?: AccessWindow }
 
 function AppDetail() {
-  const site = useSite()
-  const {
-    app,
-    drift,
-    status,
-    applyStatus,
-    lastDeploy,
-    pullBroken,
-    deployShot,
-    takenHostnames,
-    repo,
-    workspace,
-    workspaceRoot,
-    stateRoot,
-    tabData,
-  } = Route.useLoaderData()
+  const loaded = Route.useLoaderData()
+  const { app, drift, status, applyStatus, tabData } = loaded
   const { tab, range } = Route.useSearch()
 
   const readOnly = app.managedInNix
   const state = status?.state ?? 'unknown'
-  const iconTone = ICON_TONE[state]
 
   // What un-errors a failed tab body: anything that makes the loader hand
   // over a fresh tabData promise. The range is part of it so widening the
@@ -186,170 +160,6 @@ function AppDetail() {
     save.run(() => saveApp({ data: { name: app.name, patch: p } }))
   }
 
-  // The sections, as one switch over the tab rather than as independent
-  // `{tab === 'x' && …}` siblings. Siblings, a new entry in APP_TABS renders
-  // a blank page and nothing anywhere says so; here it is TS7030 at this
-  // function, because the return type is inferred and noImplicitReturns is on.
-  // Called inline rather than mounted as a <Section/> so each branch stays a
-  // direct child of this component's tree.
-  const section = () => {
-    switch (tab) {
-      case 'overview':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={
-              <>
-                <BlockSkeleton h={86} />
-                <BoardsSkeleton spans={[4, 4, 4]} />
-              </>
-            }
-          >
-            {(d) =>
-              d.kind !== 'overview' ? null : (
-                <Overview
-                  app={app}
-                  status={status}
-                  lastDeploy={lastDeploy}
-                  pullBroken={pullBroken}
-                  deployShot={deployShot}
-                  repo={repo}
-                  workspace={workspace}
-                  workspaceRoot={workspaceRoot}
-                  d={d}
-                />
-              )
-            }
-          </GuardedAwait>
-        )
-      case 'deployments':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={<BlockSkeleton h={420} />}
-          >
-            {(td) => (td.kind !== 'deployments' ? null : <Deployments app={app} td={td} />)}
-          </GuardedAwait>
-        )
-      case 'database':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={
-              <>
-                <StripSkeleton count={6} />
-                <BoardsSkeleton spans={[4, 4, 4]} />
-              </>
-            }
-          >
-            {(td) => (td.kind !== 'database' ? null : <Database app={app} data={td.database} />)}
-          </GuardedAwait>
-        )
-      case 'vpn':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={
-              <>
-                <StripSkeleton count={4} />
-                <BoardsSkeleton spans={[6, 6]} />
-              </>
-            }
-          >
-            {(td) => (td.kind !== 'vpn' ? null : <Vpn app={app} data={td.vpn} />)}
-          </GuardedAwait>
-        )
-      case 'tasks':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={<BlockSkeleton h={300} />}
-          >
-            {(td) => (td.kind !== 'tasks' ? null : <Tasks app={app} td={td} />)}
-          </GuardedAwait>
-        )
-      case 'access':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={
-              <>
-                <StripSkeleton count={4} />
-                <BoardsSkeleton spans={[12, 6, 6]} />
-              </>
-            }
-          >
-            {(td) =>
-              td.kind !== 'access' ? null : (
-                <Access
-                  name={app.name}
-                  hostname={app.effectiveHostname}
-                  stage={app.stage}
-                  access={td.access}
-                  range={range ?? DEFAULT_WINDOW}
-                />
-              )
-            }
-          </GuardedAwait>
-        )
-      case 'settings':
-        return (
-          <Settings
-            app={app}
-            readOnly={readOnly}
-            patch={patch}
-            takenHostnames={takenHostnames}
-            stateRoot={stateRoot}
-          />
-        )
-      case 'variables':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={<BlockSkeleton h={300} />}
-          >
-            {(td) =>
-              td.kind !== 'variables' ? null : (
-                <Variables app={app} readOnly={readOnly} secrets={td.secrets} />
-              )
-            }
-          </GuardedAwait>
-        )
-      case 'secrets':
-        return (
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={tabData}
-            fallback={<BlockSkeleton h={400} />}
-          >
-            {(td) =>
-              td.kind !== 'secrets' ? null : (
-                <Secrets
-                  app={app.name}
-                  env={td.env}
-                  hasSecretsFile={app.operatorSecrets}
-                  secrets={td.secrets}
-                />
-              )
-            }
-          </GuardedAwait>
-        )
-      // Grafana renders these and does its own querying, so tabData is not
-      // read here (lib/apps/tabs.ts says why it is empty). No Panel around
-      // it: you are already on the Logs tab, so a box captioned "Logs" inside
-      // it is a second label for the same thing.
-      case 'logs':
-        return <GrafanaLogs source={{ container: `app-${app.name}` }} title={`${app.name} logs`} />
-    }
-  }
-
   return (
     <>
       <Crumbs>
@@ -359,110 +169,7 @@ function AppDetail() {
         <span aria-hidden="true">›</span> {app.name}
       </Crumbs>
 
-      <section className={HERO}>
-        {/* The app's own icon, in a frame that keeps carrying state. Identity
-            and health are different questions and the frame answers the second
-            without spending the slot that answers the first. */}
-        <div
-          className={cn(HERO_ICON, iconTone !== undefined && HERO_ICON_TONED)}
-          style={iconTone === undefined ? undefined : toneStyle(iconTone)}
-        >
-          <AppIcon name={app.name} hasIcon={app.hasIcon} size={34} />
-        </div>
-
-        <div>
-          <h1 className="m-0 flex flex-wrap items-center gap-[0.65rem] text-[1.45rem] font-semibold tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
-            {app.name}
-            <StatePill state={state} />
-            {readOnly && <Chip className={cn(CHIP, 'text-subdued')}>nix-managed</Chip>}
-          </h1>
-          <p className={LEDE}>{app.description || 'No description.'}</p>
-          <p className={HERO_LINKS}>
-            {app.stage === 'declared' ? (
-              <span className="text-subdued">◌ not running</span>
-            ) : app.stage === 'off' ? (
-              <span className="text-subdued">⏻ not exposed</span>
-            ) : (
-              <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
-                ↗ {app.effectiveHostname}
-              </a>
-            )}
-            {app.sourceMode === 'local' ? (
-              <span className="text-subdued">⎇ stacks/{app.name}/app</span>
-            ) : (
-              <a
-                href={`https://github.com/${appRepo(site, app.name)}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                ⎇ {appRepo(site, app.name)}
-              </a>
-            )}
-          </p>
-        </div>
-
-        <div className={HERO_EXPOSURE}>
-          <span className="mb-[0.4rem] block text-[0.73rem] text-muted-foreground">exposure</span>
-          <Segmented
-            value={app.stage}
-            disabled={readOnly}
-            // The "exposure" text beside this is a bare span, not a <label>,
-            // so the group still needs naming for assistive tech.
-            label="Exposure"
-            onChange={(v) => {
-              patch({ stage: v })
-            }}
-            // Four rungs, each adding to the last. "Declared" runs nothing at
-            // all: the row, its database, its data directory and its secrets,
-            // and no container — where every app sits between being created
-            // and having an image. "Off" adds the container back and withholds
-            // only the ingress: no traefik router, no DNS, no probe, but it
-            // runs and it deploys.
-            options={[
-              {
-                value: 'declared',
-                label: 'Declared',
-                icon: '◌',
-                // Refused like "Off" below, though stricter than the
-                // platform: apps.nix's assertion lets a declared app keep
-                // proxy mode for later, since it has no ingress to lose.
-                disabled: app.authMode === 'proxy',
-                reason:
-                  app.authMode === 'proxy'
-                    ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
-                    : 'Nothing runs: no container, no deploy unit, no ingress. The database, the data directory and the secrets stay.',
-              },
-              {
-                value: 'off',
-                label: 'Off',
-                icon: '⏻',
-                // The forward-auth middleware is generated FROM the ingress,
-                // so an app gated that way has nothing left to gate once the
-                // ingress is gone. The platform asserts this
-                // (nix/modules/apps/apps.nix); catching it here turns a failed
-                // Apply into an explanation.
-                disabled: app.authMode === 'proxy',
-                reason:
-                  app.authMode === 'proxy'
-                    ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
-                    : undefined,
-              },
-              { value: 'lab', label: 'Internal', icon: '⛨' },
-              { value: 'live', label: 'External', icon: '↗' },
-            ]}
-          />
-          {app.stage === 'off' && (
-            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
-              No route, DNS or probe. The container still runs.
-            </p>
-          )}
-          {app.stage === 'declared' && (
-            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
-              Nothing runs. Its database, data directory and secrets exist.
-            </p>
-          )}
-        </div>
-      </section>
+      <AppHero app={app} state={state} patch={patch} />
 
       {save.error !== null && (
         <Alert variant="destructive" className="mb-[1.35rem]">
@@ -522,12 +229,138 @@ function AppDetail() {
           the shell swaps the category nav for the app-scoped one while this
           route is matched (components/shell/app-rail.tsx). */}
 
-      {section()}
+      <TabBody
+        tab={tab}
+        tabData={tabData}
+        resetKey={sectionKey}
+        ctx={{ frame: loaded, range: range ?? DEFAULT_WINDOW, patch }}
+      />
 
       <ApplyBar
         changed={readOnly || drift.length === 0 ? [] : [{ name: app.name, fields: drift }]}
         initialStatus={applyStatus}
       />
     </>
+  )
+}
+
+/** Identity on the left, exposure on the right: the app's icon, name, links and stage. */
+function AppHero({
+  app,
+  state,
+  patch,
+}: {
+  app: AppRecord
+  state: AppState
+  patch: (p: AppPatch) => void
+}) {
+  const site = useSite()
+  const readOnly = app.managedInNix
+  const iconTone = ICON_TONE[state]
+  return (
+    <section className={HERO}>
+      {/* The app's own icon, in a frame that keeps carrying state. Identity
+          and health are different questions and the frame answers the second
+          without spending the slot that answers the first. */}
+      <div
+        className={cn(HERO_ICON, iconTone !== undefined && HERO_ICON_TONED)}
+        style={iconTone === undefined ? undefined : toneStyle(iconTone)}
+      >
+        <AppIcon name={app.name} hasIcon={app.hasIcon} size={34} />
+      </div>
+
+      <div>
+        <h1 className="m-0 flex flex-wrap items-center gap-[0.65rem] text-[1.45rem] font-semibold tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
+          {app.name}
+          <StatePill state={state} />
+          {readOnly && <Chip className={cn(CHIP, 'text-subdued')}>nix-managed</Chip>}
+        </h1>
+        <p className={LEDE}>{app.description || 'No description.'}</p>
+        <p className={HERO_LINKS}>
+          {app.stage === 'declared' ? (
+            <span className="text-subdued">◌ not running</span>
+          ) : app.stage === 'off' ? (
+            <span className="text-subdued">⏻ not exposed</span>
+          ) : (
+            <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
+              ↗ {app.effectiveHostname}
+            </a>
+          )}
+          {app.sourceMode === 'local' ? (
+            <span className="text-subdued">⎇ stacks/{app.name}/app</span>
+          ) : (
+            <a
+              href={`https://github.com/${appRepo(site, app.name)}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              ⎇ {appRepo(site, app.name)}
+            </a>
+          )}
+        </p>
+      </div>
+
+      <div className={HERO_EXPOSURE}>
+        <span className="mb-[0.4rem] block text-[0.73rem] text-muted-foreground">exposure</span>
+        <Segmented
+          value={app.stage}
+          disabled={readOnly}
+          // The "exposure" text beside this is a bare span, not a <label>,
+          // so the group still needs naming for assistive tech.
+          label="Exposure"
+          onChange={(v) => {
+            patch({ stage: v })
+          }}
+          // Four rungs, each adding to the last. "Declared" runs nothing at
+          // all: the row, its database, its data directory and its secrets,
+          // and no container — where every app sits between being created
+          // and having an image. "Off" adds the container back and withholds
+          // only the ingress: no traefik router, no DNS, no probe, but it
+          // runs and it deploys.
+          options={[
+            {
+              value: 'declared',
+              label: 'Declared',
+              icon: '◌',
+              // Refused like "Off" below, though stricter than the
+              // platform: apps.nix's assertion lets a declared app keep
+              // proxy mode for later, since it has no ingress to lose.
+              disabled: app.authMode === 'proxy',
+              reason:
+                app.authMode === 'proxy'
+                  ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
+                  : 'Nothing runs: no container, no deploy unit, no ingress. The database, the data directory and the secrets stay.',
+            },
+            {
+              value: 'off',
+              label: 'Off',
+              icon: '⏻',
+              // The forward-auth middleware is generated FROM the ingress,
+              // so an app gated that way has nothing left to gate once the
+              // ingress is gone. The platform asserts this
+              // (nix/modules/apps/apps.nix); catching it here turns a failed
+              // Apply into an explanation.
+              disabled: app.authMode === 'proxy',
+              reason:
+                app.authMode === 'proxy'
+                  ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
+                  : undefined,
+            },
+            { value: 'lab', label: 'Internal', icon: '⛨' },
+            { value: 'live', label: 'External', icon: '↗' },
+          ]}
+        />
+        {app.stage === 'off' && (
+          <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
+            No route, DNS or probe. The container still runs.
+          </p>
+        )}
+        {app.stage === 'declared' && (
+          <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
+            Nothing runs. Its database, data directory and secrets exist.
+          </p>
+        )}
+      </div>
+    </section>
   )
 }

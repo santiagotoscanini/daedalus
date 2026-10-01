@@ -1,24 +1,13 @@
 import { Link } from '@tanstack/react-router'
-
-import type { NodeApp, NodeTelemetry } from '../../lib/agent/status'
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num, pct } from '../../lib/format'
-import { partMatching } from '../../lib/hardware/catalog'
-import { Ago } from '../ago'
-import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../part'
-import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
-import {
-  DetailNote,
-  EMPTY,
-  FOOT,
-  LIST,
-  MONO,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-  WipBoard,
-} from './shared'
+import { Ago } from '../../../../components/ago'
+import { WipBoard } from '../../../../components/machine-head'
+import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../../../../components/part'
+import { Board, BoardGrid, Chip, Facts, Measures } from '../../../../components/viz'
+import type { NodeApp, NodeTelemetry } from '../../../../lib/agent/status'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { bytes, DASH, num, pct } from '../../../../lib/format'
+import { partMatching } from '../../../../lib/hardware/catalog'
+import { DetailNote, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Graphics ─────────────────────────────────────────────────────────── */
 

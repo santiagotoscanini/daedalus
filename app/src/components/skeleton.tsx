@@ -216,7 +216,7 @@ export function BlockSkeleton({ h = 240 }: { h?: number }) {
 }
 
 /**
- * The strip above the System tabs (components/machine-system HeadStrip):
+ * The strip above the System tabs (components/machine-head.tsx HeadStrip):
  * the OS mark, a name with a chip, one line. The same size as the real
  * one, so the tabs below it do not move when a node's page answers.
  */

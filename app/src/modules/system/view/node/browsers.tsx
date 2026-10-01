@@ -1,12 +1,11 @@
-import type { NodeBrowser } from '../../lib/agent/status'
-
-import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { DASH, num } from '../../lib/format'
-import type { Tone } from '../../lib/tone'
-import { Ago } from '../ago'
-import { PART, PART_DETAIL, PART_ID, PART_NAME } from '../part'
-import { ServiceHead } from '../service-head'
-import { Board, BoardGrid, Chip, Facts } from '../viz'
+import { Ago } from '../../../../components/ago'
+import { PART, PART_DETAIL, PART_ID, PART_NAME } from '../../../../components/part'
+import { ServiceHead } from '../../../../components/service-head'
+import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
+import type { NodeBrowser } from '../../../../lib/agent/status'
+import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
+import { DASH, num } from '../../../../lib/format'
+import type { Tone } from '../../../../lib/tone'
 import { DetailNote, EMPTY, FOOT, MONO, NOTE } from './shared'
 
 /* ── Chromium ─────────────────────────────────────────────────────────── */

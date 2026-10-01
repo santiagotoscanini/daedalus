@@ -1,7 +1,7 @@
 // One machine in full: its head, its actions, its models and what it offers.
 
 import { LogBoard, type LogNeighbour } from '../../../../components/logs'
-import { HeadStrip, OS_MARK, WipBoard } from '../../../../components/machine-system/shared'
+import { HeadStrip, OS_MARK, WipBoard } from '../../../../components/machine-head'
 import { FOOT, MONO } from '../../../../components/tokens'
 import { Button } from '../../../../components/ui/button'
 import { Board, BoardGrid, Measures } from '../../../../components/viz'

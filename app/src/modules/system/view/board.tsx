@@ -1,5 +1,5 @@
-import { BoardView as MachineBoardView } from '../../../components/machine-system/board'
 import type { SystemData } from '../data'
+import { BoardView as MachineBoardView } from './node/board'
 
 /* ── Motherboard ──────────────────────────────────────────────────────── */
 
