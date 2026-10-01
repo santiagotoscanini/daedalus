@@ -13,7 +13,8 @@
 # `release.json` — the product, version and tag, and per asset its target,
 # role, name, SHA-256 and size — signs it once with the release key under
 # its own context, and publishes a GitHub release every installed agent
-# watches (agent/src/update/). Every build is `--locked`, and a tag whose
+# watches (agent/src/update/). Every asset carries a build provenance
+# attestation as well. Every build is `--locked`, and a tag whose
 # commit is not on main publishes nothing. A version whose Cargo.toml says
 # `[package.metadata.release] draft = true` is published as a draft, which
 # no agent and no website link sees until the operator publishes it
@@ -468,6 +469,9 @@ jobs:
     environment: release
     permissions:
       contents: write
+      # The provenance attestation is signed with the run's OIDC identity.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -526,6 +530,17 @@ jobs:
           hex="$(grep -A1 'RELEASE_PUBLIC_KEYS' agent/src/update/mod.rs | grep -o '"[0-9a-f]\{64\}"' | head -1 | tr -d '"')"
           printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
           openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in signed.bin -sigfile dist/release.json.sig
+      # GitHub's build provenance for every asset, the manifest and the
+      # install scripts: which workflow run, commit and tag made them
+      # (`gh attestation verify <file> -R santiagotoscanini/daedalus`). Beside
+      # our signature, which is what an agent checks; this is for people.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/daedalus-agent-*
+            dist/release.json
+            dist/install.ps1
+            dist/install.sh
       # Published as a draft when this version's Cargo.toml says so
       # (`[package.metadata.release] draft = true`): no agent sees a draft
       # (GitHub lists drafts to no one but the repository's writers, and the
