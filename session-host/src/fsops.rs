@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(std::fs::read(root_path.join("web/link")).unwrap(), b"hi");
     }
 
-    /// Review S5: `fs.read` of a FIFO nobody writes to is refused at once
+    /// `fs.read` of a FIFO nobody writes to is refused at once
     /// instead of blocking its thread in `open` forever; so is a device.
     #[test]
     fn reads_refuse_what_is_not_a_regular_file_without_blocking() {
@@ -350,7 +350,7 @@ mod tests {
         assert_eq!(read_of(&dir.path().join("f")).unwrap().data, b"data");
     }
 
-    /// Review S6: the final mode is permission bits only (no setuid, setgid
+    /// The final mode is permission bits only (no setuid, setgid
     /// or sticky), a replaced file's mode is kept the same way, and a new
     /// file without a mode gets the umask's default.
     #[test]

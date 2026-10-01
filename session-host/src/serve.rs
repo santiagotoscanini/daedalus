@@ -283,7 +283,7 @@ async fn accept_tls(
 }
 
 /// A node leaving the allow-list loses the PTYs it opened (its connections
-/// close themselves, daemon.rs). On a thread of its own, never the blocking
+/// close themselves, daemon/conn.rs). On a thread of its own, never the blocking
 /// pool: whatever a node has running there, its revocation does not wait
 /// behind it. The thread lives as long as the process.
 fn revocations(daemon: Arc<Daemon>, allow: Arc<AllowList>) -> Result<(), String> {

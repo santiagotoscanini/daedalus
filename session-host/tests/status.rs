@@ -82,7 +82,7 @@ async fn the_status_file_tracks_the_host_and_says_stopped() {
     );
     assert!(status["startedAt"].as_str().unwrap().ends_with('Z'));
     assert_eq!(status["sessions"], 0);
-    // Review S3: the config it runs on, which the controller compares with
+    // The config it runs on, which the controller compares with
     // the installed one as it does `exe`.
     assert_eq!(
         Path::new(status["config"].as_str().unwrap()),

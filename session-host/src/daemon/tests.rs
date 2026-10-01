@@ -126,7 +126,7 @@ fn a_node_leaving_loses_only_its_sessions_and_opens_no_more() {
     daemon.close_all();
 }
 
-/// Review S4: the hook queue is bounded by bytes as well as count; the
+/// The hook queue is bounded by bytes as well as count; the
 /// oldest go first and are counted as dropped.
 #[test]
 fn the_hook_queue_is_bounded_by_bytes() {
@@ -154,7 +154,7 @@ fn the_hook_queue_is_bounded_by_bytes() {
     assert_eq!((q.items.len(), q.bytes), (0, 0));
 }
 
-/// Review S5: blocking work is counted per node and held until it
+/// Blocking work is counted per node and held until it
 /// returns, not reset by a reconnect.
 #[test]
 fn blocking_work_is_capped_per_node() {
@@ -176,7 +176,7 @@ fn blocking_work_is_capped_per_node() {
     assert!(daemon.permit("a").is_ok());
 }
 
-/// Review S5: a `pty.write` into a terminal that does not read its
+/// A `pty.write` into a terminal that does not read its
 /// input waits on the session's own input thread, never the blocking
 /// pool; a full queue is `busy`; and a revocation closes the session at
 /// once regardless, which ends the stuck write.

@@ -131,7 +131,7 @@ impl RefusalLog {
 mod tests {
     use super::*;
 
-    /// Review S8: loopback has a pool of its own, the network its per-address
+    /// Loopback has a pool of its own, the network its per-address
     /// and total limits, and neither can starve the other.
     #[test]
     fn loopback_and_the_network_have_separate_pre_auth_pools() {

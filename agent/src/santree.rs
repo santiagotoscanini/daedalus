@@ -85,8 +85,9 @@ use crate::rpc::{code, error_line, line_of, ApiError, Body, Response};
 use crate::shared::Shared;
 use crate::util::{LockExt, Rebinding};
 
-/// santree connections served at once: the session host's per-machine cap,
-/// so the refusal is local and says why.
+/// santree connections served at once: the session host's per-machine cap
+/// (`session-host/src/daemon/mod.rs` `MAX_CONNS_PER_NODE`), so the refusal is
+/// local and says why. Change both.
 pub const MAX_CONNECTIONS: usize = 4;
 /// From accept to the pipe: the whole dial fits inside it.
 pub const FIRST_LINE: Duration = Duration::from_secs(15);

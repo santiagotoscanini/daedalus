@@ -1,9 +1,10 @@
 //! Protocol v1, one connection at a time.
 //!
 //! A port of santree's in-process reference daemon (`crates/remote/src/fake.rs`)
-//! onto real connections, by way of the parked 2026-09-27 daemon. Every
-//! behaviour the doc leaves open is decided the way the fake decides it, so
-//! code that passes against the fake passes here:
+//! onto real connections: the dispatch here, one connection in `conn`, PTYs
+//! in `pty`, the hook queue in `hooks`. Every behaviour the doc leaves open is
+//! decided the way the fake decides it, so code that passes against the fake
+//! passes here:
 //!
 //! - the `pty.attach` response is written before any `pty.data` of that
 //!   attach (a gate buffers chunks until the response is queued);
@@ -56,7 +57,10 @@ pub const MAX_REQUEST_LINE: usize = 32 * 1024 * 1024;
 pub const MAX_PTYS: usize = 64;
 /// Requests one connection may have running at once; more get `busy`.
 pub const MAX_IN_FLIGHT: usize = 32;
-/// Connections one node may hold at once; another is closed at once.
+/// Connections one node may hold at once; another is closed at once. The
+/// agent caps its santree connections at the same number
+/// (`agent/src/santree.rs` `MAX_CONNECTIONS`), so a machine is refused
+/// locally, with the reason, before it reaches this one: change both.
 pub const MAX_CONNS_PER_NODE: usize = 4;
 /// Bytes queued for one connection's writer, each line counted with
 /// [`LINE_OVERHEAD`]. A peer that stops reading fills it; the link is then

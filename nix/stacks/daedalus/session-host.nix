@@ -21,10 +21,9 @@
 #                `fleet.modules.wg-easy.tunnelHostPorts`, exactly as the
 #                controller's link is (controller.nix, the header's
 #                `firewall` and `tunnel`): LAN or the system VPN, and the
-#                router forwards nothing to it. A tunnel peer arrives over
-#                loopback, as do containers dialling the host; loopback has
-#                a pre-auth pool of its own, apart from the LAN's (the
-#                crate's serve.rs says what a local client can still do).
+#                router forwards nothing to it. Tunnel peers and containers
+#                arrive over loopback, which has a pre-auth pool of its own
+#                (the crate's README, "The link").
 #   host.key     made by the host on its first start, in `stateDir` (0600),
 #                beside `status.json`; under fleet.stateRoot, so a restore
 #                brings the same key back and no node has to re-pin.

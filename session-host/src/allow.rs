@@ -399,7 +399,7 @@ mod tests {
         assert!(list.current().is_empty(), "a symlink is refused");
     }
 
-    /// Review S2: a file renamed between `open` and the watch's first look
+    /// A file renamed between `open` and the watch's first look
     /// is applied: the watch starts from the stamp `open` read, not from a
     /// fresh one that would record the new file as already seen.
     #[test]

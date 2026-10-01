@@ -128,11 +128,10 @@ the change is refused).
 Protocol v1 as santree's
 [`docs/remote.md`](https://github.com/santree-ai/santree/blob/c9766c4539973e7959287d9fc65dff01c585c575/docs/remote.md)
 specifies it at rev `c9766c45`, with the behaviour the doc leaves open taken
-from santree's reference daemon (`crates/remote/src/fake.rs`) — `src/daemon.rs`
-is a port of it by way of the parked 2026-09-27 daemon. Every wire type comes
-from `santree-remote-proto` at that rev; PTYs are `santree-pty`. The tests
-check exact wire order with a raw client and conformance with santree's own
-`RemoteClient`.
+from santree's reference daemon (`crates/remote/src/fake.rs`) — `src/daemon/`
+is a port of it. Every wire type comes from `santree-remote-proto` at that
+rev; PTYs are `santree-pty`. The tests check exact wire order with a raw
+client and conformance with santree's own `RemoteClient`.
 
 `hello` answers `version` (this crate's), `hostname`, `user`/`home` (`$USER`
 / `$HOME`, else the passwd entry), `bootId` (16 hex from `/dev/urandom`, new
