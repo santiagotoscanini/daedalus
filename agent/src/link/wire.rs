@@ -64,7 +64,7 @@ pub mod name {
     /// controller → node: one verb on one Claude session, acknowledged.
     pub const CLAUDE_SESSION: &str = "claude_session";
     /// controller → node: one residency verb on one model, acknowledged;
-    /// the outcome rides the next `providers` document (providers.rs).
+    /// the outcome rides the next `providers` document (providers/).
     pub const PROVIDER_MODEL: &str = "provider_model";
     /// controller → node: where the machine stands.
     pub const STATE: &str = "state";

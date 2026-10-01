@@ -334,7 +334,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         )
     };
 
-    // The providers' reader (providers.rs), wherever there is a link to
+    // The providers' reader (providers/), wherever there is a link to
     // push what it finds up: on every node, whatever the telemetry level.
     let provider_reader = if role.link {
         Some(

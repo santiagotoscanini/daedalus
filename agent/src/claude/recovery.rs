@@ -8,7 +8,7 @@
 //! set of sessions that are OPEN, and after any start of the server it
 //! performs (never a re-attach, which ended nothing) and once the server
 //! is registered again, it resumes each one that is not running by id,
-//! through the ordinary resume verb (sessions.rs) with every check it
+//! through the ordinary resume verb (sessions/) with every check it
 //! makes: the transcript exists, the directory is trusted, nothing already
 //! runs it. At most `MAX_RECOVER`, the most recently opened first. Each
 //! attempt is a row in the roster's `actions` and in the report's

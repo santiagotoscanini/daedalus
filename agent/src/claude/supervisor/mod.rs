@@ -10,11 +10,9 @@ use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use super::cli::{cli_version, find_cli, install_method, last_meaningful};
+use super::cli::{cli_version, find_cli, install_method};
 use super::profile::{
     claude_dir, forget_keychain, home_dir, read_credentials, read_session_files, read_sessions,
     read_settings,
@@ -24,6 +22,10 @@ use super::{gcroot, Banner, Credentials, Report, Settings, UpdateResult};
 use crate::jobs::{self as job, JobState, Jobs, LogTail, ServerJob};
 use crate::os::jobs;
 use crate::state::{now_rfc3339, rfc3339_ago};
+
+mod update;
+
+use update::Updater;
 
 /// A run shorter than this counts as a failure and grows the backoff.
 const QUICK_EXIT: Duration = Duration::from_secs(60);
@@ -153,9 +155,8 @@ pub struct Supervisor {
     recent_lines: VecDeque<String>,
     /// What the last `claude update` did, kept for the report.
     last_update: Option<UpdateResult>,
-    /// The update running on its own thread right now; `tick` collects its
-    /// result when it ends — or that it panicked, which ends it too.
-    updating: Option<JoinHandle<UpdateResult>>,
+    /// The update running on its own thread, if one is (update.rs).
+    update: Updater,
     /// Why the server is off when it is not wanted, as the report words it:
     /// the box's policy on a node, config.toml on the controller.
     off_reason: &'static str,
@@ -234,7 +235,7 @@ impl Supervisor {
             last_exit: None,
             recent_lines: VecDeque::new(),
             last_update: None,
-            updating: None,
+            update: Updater::default(),
             off_reason: "the box's policy for this machine",
             foreign: None,
             foreign_checked: None,
@@ -424,40 +425,11 @@ impl Supervisor {
         self.next_start = Some(self.now());
     }
 
-    /// Update Claude Code on this machine, and record what happened.
-    ///
-    /// Nothing is stopped; the server keeps the binary it has until
-    /// `restart` moves it (the module doc, claude/mod.rs, says why the two
-    /// are separate).
-    ///
-    /// `claude update` for every install: it is the supported verb for a
-    /// native or npm one, and for a package-manager one it is a documented
-    /// no-op that reports "Claude is up to date!" rather than doing
-    /// something surprising. Those upgrade themselves through
-    /// CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE, which every job gets
-    /// (jobs/ `job_env`): a Homebrew or WinGet install does neither of the
-    /// others, and this is upstream's own mechanism for it — the server runs
-    /// `brew upgrade` / `winget upgrade` in the background when a release
-    /// lands (on WinGet that can fail while Claude Code runs, because
-    /// Windows locks the executable; it then shows the manual command and
-    /// nothing breaks). Run as the session's user, which is right for a
-    /// per-user install and is all the privilege there is here — a
-    /// machine-wide install under an administrator's path is the case this
-    /// cannot serve, and the report's install_method is what says so.
-    ///
-    /// Ten minutes, because this downloads ~80 MB over whatever line the
-    /// machine has. Slow is not stuck; a hung process is killed at the end
-    /// of it and reported as one.
-    ///
-    /// ON ITS OWN THREAD, and that is not an optimisation. This is called
-    /// from the session's loop — the only thing that reports to the service,
-    /// restarts the server and answers the menu's clicks.
-    /// Running the download inline would freeze all of it for up to ten
-    /// minutes — the service would see the tray stop reporting and the box
-    /// would say "nobody logged on", the opposite of what just happened.
-    /// `tick` collects the result when the thread ends (`collect_update`).
+    /// Update Claude Code on this machine, on a thread of its own, and
+    /// record what happened (update.rs says how and why). `tick` collects
+    /// the result when the thread ends (`collect_update`).
     pub fn update_claude(&mut self) {
-        if self.updating.is_some() {
+        if self.update.running() {
             tracing::info!("a claude update is already running; ignoring the request");
             return;
         }
@@ -471,62 +443,15 @@ impl Supervisor {
             });
             return;
         };
-        let before = self.cli_version.clone();
-        let spawned = std::thread::Builder::new()
-            .name("claude-update".into())
-            .spawn(move || {
-                let mut cmd = Command::new(&cli);
-                cmd.arg("update");
-                let ran = crate::exec::both(cmd, Duration::from_secs(600));
-                // Re-probed either way: an update that reported failure may
-                // still have moved the binary, and the version on disk is the
-                // fact — not the command's account of itself.
-                let after = cli_version(&cli);
-                let result = match ran {
-                    Some(r) => UpdateResult {
-                        at: now_rfc3339(),
-                        ok: r.ok,
-                        from: before,
-                        to: after,
-                        detail: last_meaningful(&r.output),
-                    },
-                    None => UpdateResult {
-                        at: now_rfc3339(),
-                        ok: false,
-                        from: before,
-                        to: after,
-                        detail: "`claude update` did not finish within ten minutes and was killed"
-                            .into(),
-                    },
-                };
-                tracing::info!(detail = %result.detail, ok = result.ok, "claude update finished");
-                result
-            });
-        match spawned {
-            Ok(h) => self.updating = Some(h),
-            Err(e) => tracing::warn!(error = %e, "no thread for claude update"),
-        }
+        self.update.start(cli, self.cli_version.clone());
     }
 
-    /// Collect a finished update, if its thread ended since the last tick:
-    /// its result, or — a thread that panicked — that it failed, so a
-    /// later update is never refused as already running.
+    /// A finished update's result, into the report.
     fn collect_update(&mut self) {
-        if !self.updating.as_ref().is_some_and(JoinHandle::is_finished) {
-            return;
+        if let Some(r) = self.update.collect(&self.cli_version) {
+            self.cli_version = r.to.clone();
+            self.last_update = Some(r);
         }
-        let Some(h) = self.updating.take() else {
-            return;
-        };
-        let r = h.join().unwrap_or_else(|_| UpdateResult {
-            at: now_rfc3339(),
-            ok: false,
-            from: self.cli_version.clone(),
-            to: self.cli_version.clone(),
-            detail: "the update's thread failed before it could say what happened".into(),
-        });
-        self.cli_version = r.to.clone();
-        self.last_update = Some(r);
     }
 
     /// Advance: reap, wait, start. Cheap; call it often.
@@ -864,236 +789,4 @@ fn short_duration(d: Duration) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn not_wanted_is_off_and_only_a_wanted_server_without_claude_is_not_installed() {
-        let f = |wanted, installed, foreign| {
-            StateFacts {
-                wanted,
-                installed,
-                foreign,
-                off_reason: "the policy",
-            }
-            .settled()
-        };
-        assert_eq!(
-            f(false, false, None),
-            Some(("off".to_string(), Some("the policy".to_string())))
-        );
-        assert_eq!(f(false, true, None).unwrap().0, "off");
-        assert_eq!(
-            f(false, true, Some("a job runs")).unwrap().1.unwrap(),
-            "the policy — but a job runs"
-        );
-        assert_eq!(f(true, false, None).unwrap().0, "not-installed");
-        assert_eq!(f(true, true, None), None);
-    }
-
-    #[test]
-    fn a_supervisor_that_is_not_wanted_reports_off() {
-        // Whatever this machine has installed, not wanted is off.
-        let dir = std::env::temp_dir().join(format!("daedalus-sup-{}", std::process::id()));
-        let sup = Supervisor::new(
-            Some(dir.display().to_string()),
-            dir.join("claude-rc.log"),
-            false,
-            format!("daedalus-agent-test-{}", std::process::id()),
-            dir.join("gcroots"),
-        );
-        let r = sup.report();
-        assert_eq!(r.state, "off");
-        assert!(sup.server_pid().is_none() && !sup.registered() && sup.starts() == 0);
-        assert_eq!(
-            r.summary().sessions,
-            r.sessions.iter().filter(|s| s.alive).count()
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    // ── the state machine, against fake jobs and a fake clock ────────────
-
-    use crate::jobs::{Listed, SessionJob};
-    use std::sync::{Arc, Mutex};
-
-    /// The jobs as a test sets them: the one state every `show` answers,
-    /// and what was started and cleared.
-    struct Fake {
-        state: Result<JobState, String>,
-        starts: u32,
-        clears: u32,
-    }
-
-    #[derive(Clone)]
-    struct Jobs(Arc<Mutex<Fake>>);
-
-    impl Jobs {
-        fn set(&self, s: Result<JobState, String>) {
-            self.0.lock().unwrap().state = s;
-        }
-        fn starts(&self) -> u32 {
-            self.0.lock().unwrap().starts
-        }
-    }
-
-    fn running(pid: u32) -> Result<JobState, String> {
-        Ok(JobState::Running {
-            pid: Some(pid),
-            age_secs: Some(0),
-            workdir: None,
-        })
-    }
-
-    impl super::Jobs for Jobs {
-        fn show(&self, _: &str) -> Result<JobState, String> {
-            self.0.lock().unwrap().state.clone()
-        }
-        fn start_server(&self, _: &ServerJob) -> Result<(), String> {
-            let mut f = self.0.lock().unwrap();
-            f.starts += 1;
-            f.state = running(100 + f.starts);
-            Ok(())
-        }
-        fn start_session(&self, _: &SessionJob) -> Result<(), String> {
-            Err("no sessions here".into())
-        }
-        fn stop(&self, _: &str) -> Result<(), String> {
-            self.0.lock().unwrap().state = Ok(JobState::Gone);
-            Ok(())
-        }
-        fn clear(&self, _: &str) {
-            let mut f = self.0.lock().unwrap();
-            f.clears += 1;
-            f.state = Ok(JobState::Gone);
-        }
-        fn running(&self, _: &str) -> Result<Vec<Listed>, String> {
-            Ok(Vec::new())
-        }
-    }
-
-    /// A supervisor over fake jobs in `state`, and the clock it reads.
-    fn rig(tag: &str, state: Result<JobState, String>) -> (Supervisor, Jobs, Arc<Mutex<Instant>>) {
-        let dir = std::env::temp_dir().join(format!("daedalus-sup-{tag}-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let jobs = Jobs(Arc::new(Mutex::new(Fake {
-            state,
-            starts: 0,
-            clears: 0,
-        })));
-        let now = Arc::new(Mutex::new(Instant::now()));
-        let clock = {
-            let now = Arc::clone(&now);
-            Box::new(move || *now.lock().unwrap())
-        };
-        let sup = Supervisor::with(
-            Box::new(jobs.clone()),
-            clock,
-            // A claude that is never run: the fake starts nothing.
-            Some(PathBuf::from("daedalus-test-no-claude")),
-            Some(dir.display().to_string()),
-            dir.join("claude-rc.log"),
-            true,
-            format!("daedalus-agent-test-{tag}"),
-            dir.join("gcroots"),
-        );
-        (sup, jobs, now)
-    }
-
-    fn advance(now: &Mutex<Instant>, secs: u64) {
-        *now.lock().unwrap() += Duration::from_secs(secs);
-    }
-
-    #[test]
-    fn a_quick_exit_backs_off_and_a_long_run_does_not() {
-        let (mut sup, jobs, now) = rig("backoff", Ok(JobState::Gone));
-        sup.tick();
-        assert_eq!(jobs.starts(), 1, "the first tick starts it");
-        // It dies within a second, saying why: a failure, five seconds
-        // doubled. Its words are the report's `last_line`, never the
-        // summary's.
-        {
-            use std::io::Write;
-            let mut log = OpenOptions::new().append(true).open(&sup.log_path).unwrap();
-            writeln!(log, "Error: no login in /home/ana/.claude").unwrap();
-        }
-        jobs.set(Ok(JobState::Exited("1".into())));
-        advance(&now, 2);
-        sup.tick();
-        assert!(sup.server_pid().is_none() && sup.failures == 1);
-        let r = sup.report();
-        assert_eq!(r.state, "waiting");
-        assert_eq!(
-            r.last_line.as_deref(),
-            Some("Error: no login in /home/ana/.claude")
-        );
-        assert!(!r.summary().detail.unwrap().contains("/home/ana"));
-        advance(&now, 9);
-        sup.tick();
-        assert_eq!(jobs.starts(), 1, "still backing off");
-        advance(&now, 2);
-        sup.tick();
-        assert_eq!(jobs.starts(), 2);
-        // This one runs past QUICK_EXIT, then exits: no failure, two seconds.
-        advance(&now, 11);
-        sup.tick();
-        assert_eq!(sup.server_pid(), Some(102));
-        advance(&now, 60);
-        jobs.set(Ok(JobState::Exited("0".into())));
-        sup.tick();
-        assert_eq!(sup.failures, 0);
-        advance(&now, 1);
-        sup.tick();
-        assert_eq!(jobs.starts(), 2);
-        advance(&now, 2);
-        sup.tick();
-        assert_eq!(jobs.starts(), 3);
-        assert_eq!(sup.starts(), 3);
-    }
-
-    #[test]
-    fn an_unknown_state_is_never_taken_for_gone() {
-        // At attach: nothing starts while the OS cannot say.
-        let (mut sup, jobs, now) = rig("unknown", Err("launchctl: no answer".into()));
-        sup.tick();
-        advance(&now, 2);
-        sup.tick();
-        assert_eq!(jobs.starts(), 0);
-        advance(&now, 2);
-        sup.tick();
-        assert_eq!(jobs.starts(), 0, "asked again, still unknown");
-        // Gone at last: started the next time it is asked.
-        jobs.set(Ok(JobState::Gone));
-        advance(&now, 4);
-        sup.tick();
-        assert_eq!(jobs.starts(), 1);
-        advance(&now, 2);
-        sup.tick();
-        // While it runs: an unknown answer is not an exit.
-        jobs.set(Err("launchctl: no answer".into()));
-        for _ in 0..5 {
-            advance(&now, 11);
-            sup.tick();
-        }
-        assert_eq!(jobs.starts(), 1);
-        assert_eq!(sup.server_pid(), Some(101));
-        assert_eq!(jobs.0.lock().unwrap().clears, 1, "only the start cleared");
-    }
-
-    #[test]
-    fn a_job_left_running_is_adopted_not_restarted() {
-        let (mut sup, jobs, now) = rig("adopt", running(42));
-        assert_eq!(sup.server_pid(), Some(42));
-        for _ in 0..3 {
-            advance(&now, 11);
-            sup.tick();
-        }
-        assert_eq!((jobs.starts(), sup.starts()), (0, 0));
-        // Not wanted any more: stopped, and nothing starts again.
-        sup.set_wanted(false);
-        advance(&now, 60);
-        sup.tick();
-        assert_eq!(jobs.starts(), 0);
-        assert!(sup.server_pid().is_none());
-    }
-}
+mod tests;

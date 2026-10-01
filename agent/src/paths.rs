@@ -198,7 +198,7 @@ fn claude_unit_for(env_dir: Option<&Path>) -> String {
     }
 }
 
-/// The start of every resumed session's unit name (claude/sessions.rs):
+/// The start of every resumed session's unit name (claude/sessions/):
 /// `claude-session-`, then the session uuid. A process started with
 /// `DAEDALUS_AGENT_DATA_DIR` gets a prefix of its own, as its Claude unit
 /// does, so a development run never lists or stops an installed agent's

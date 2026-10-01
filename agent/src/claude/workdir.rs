@@ -52,7 +52,7 @@ fn trusted_project_in(
 }
 
 /// Every trusted project directory that exists, never the home directory —
-/// where a resumed session may run (sessions.rs), since anywhere else it
+/// where a resumed session may run (sessions/), since anywhere else it
 /// would stop on the trust prompt with nobody to answer it.
 pub fn trusted_projects() -> Vec<PathBuf> {
     let Some(text) = cli_config_path().and_then(|p| std::fs::read_to_string(p).ok()) else {

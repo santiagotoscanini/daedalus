@@ -3,7 +3,7 @@ import type { ActionState } from "./ActionState";
 import type { SessionAction } from "./SessionAction";
 
 /**
- * How one verb request went (sessions.rs).
+ * How one verb request went (sessions/).
  */
 export type ActionResult = { request: string, action: SessionAction, 
 /**

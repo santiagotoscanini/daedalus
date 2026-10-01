@@ -47,10 +47,10 @@
 //! - `claude`, the session's full report, when it changes (its clock
 //!   aside) and every `PUSH_EVERY`;
 //! - `providers`, what the machine's model servers answered on loopback
-//!   (providers.rs), when it changes (its clocks aside) and every
+//!   (providers/), when it changes (its clocks aside) and every
 //!   `PUSH_EVERY`;
 //! - `claude_roster`, the session's roster of Claude sessions
-//!   (claude/roster.rs), when it changes (its clock and ticking costs
+//!   (claude/roster/), when it changes (its clock and ticking costs
 //!   aside) and every `PUSH_EVERY`.
 //!
 //! and takes the controller's `claude_session` requests — one verb on one

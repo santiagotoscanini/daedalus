@@ -12,7 +12,7 @@
 //! (session 0 on Windows, root on macOS and Linux) could do neither.
 //!
 //! Beside the server it keeps the roster of Claude sessions and runs the
-//! three verbs on them (claude/sessions.rs), on a thread of their own: the
+//! three verbs on them (claude/sessions/), on a thread of their own: the
 //! requests arrive with the report's answer, and the roster goes to the
 //! service when it changes and every minute (`claude.roster`, or
 //! straight into the shared state on the controller). And it keeps the set

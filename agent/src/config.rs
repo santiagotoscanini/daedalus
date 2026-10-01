@@ -53,7 +53,7 @@
 //! updates; processes are sampled for the count, but the list is not
 //! reported (`Telemetry::minimal`); `off` reads nothing, so the page's
 //! `telemetry` is null and the controller has no telemetry series for it. The
-//! providers (providers.rs) are read whatever the level: the gateway needs
+//! providers (providers/) are read whatever the level: the gateway needs
 //! them. `updates` decides whether a
 //! newer release is installed: `self` installs it, `report` only says on
 //! the status page that one is available.

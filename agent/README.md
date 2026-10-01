@@ -34,7 +34,7 @@ beside it where there is a desktop. It
   (`nodes.providers`), never from the machine; only the gateway's model
   requests go to the machine directly. Read whatever the telemetry level;
   the box may set the port in the policy, `providers.lemonade.port`
-  (`src/providers.rs`). It also runs the box's two residency verbs —
+  (`src/providers/`). It also runs the box's two residency verbs —
   load a model, put one down — on loopback when the controller asks
   (`provider_model`), and reports each outcome in the next document;
 - **follows the box's policy** once an admin approves the machine on
@@ -273,7 +273,7 @@ verbs, none taking a command, a path or a flag:
 | `nodes.list`       | `{nodes: [{id, fingerprint, state, connected, since, last_seen, hostname, os, arch, agent_version, lan_ip, mac, claude}]}`: every machine known | `nodes` |
 | `nodes.get` `{id}` | the same fields, plus `public_key`, the whole `hello`, `status` (the machine's status page without its telemetry) and `status_at`, `telemetry` (the open page's view) and `telemetry_at`, `providers` and `providers_at` (null until the machine pushed one) | `nodes` |
 | `nodes.telemetry` `{id}` | `{id, telemetry, received_at}`: the full document at the machine's level | `nodes` |
-| `nodes.providers` `{id}` | `{id, connected, providers, received_at}`: the providers document as the machine last pushed it, null until it has (providers.rs) | `nodes` |
+| `nodes.providers` `{id}` | `{id, connected, providers, received_at}`: the providers document as the machine last pushed it, null until it has (providers/) | `nodes` |
 | `nodes.claude` `{id}` | `{id, report, received_at}`: the machine's full Claude report      | `nodes`                 |
 | `nodes.claude_roster` `{id}` | `{id, roster, received_at}`: the machine's roster of Claude sessions | `nodes`      |
 | `nodes.claude_session` `{id, action, session}` | `{delivered: true, request}`: one verb on one of the machine's sessions, acknowledged by it; its roster reports the outcome under `request` | `nodes` |
@@ -1053,7 +1053,7 @@ never holds up the tray. The API has them as `claude.roster` and
 `nodes.claude_session` for the other machines, all behind the
 `claude.sessions` capability, offered wherever Claude may run.
 
-**The roster** (`src/claude/roster.rs`), read every minute and right after
+**The roster** (`src/claude/roster/`), read every minute and right after
 a verb, pushed to the controller when it changes:
 
 - `agents` — `claude agents --json`, the CLI's own view, field by field:
@@ -1090,7 +1090,7 @@ a verb, pushed to the controller when it changes:
 Bounded: 200 transcripts and agents, strings cut, the whole at most
 512 KiB (the oldest transcripts go first, and `truncated` says so).
 
-**The verbs** (`src/claude/sessions.rs`) take a selector and nothing else —
+**The verbs** (`src/claude/sessions/`) take a selector and nothing else —
 never a path, a flag or a directory:
 
 - `resume <uuid>` runs `claude --resume <uuid> --remote-control <hostname>`

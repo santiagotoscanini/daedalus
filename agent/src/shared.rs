@@ -150,10 +150,10 @@ struct Live {
     /// Raised by the controller's command or the local socket's `claude.restart`; the
     /// tray takes it with its next report.
     claude_restart_requested: bool,
-    /// Verb requests for the sessions (claude/sessions.rs), accepted by the
+    /// Verb requests for the sessions (claude/sessions/), accepted by the
     /// API or the link and handed to the session with its next report.
     claude_sessions: Vec<SessionRequest>,
-    /// The session's last roster (claude/roster.rs) and when it landed,
+    /// The session's last roster (claude/roster/) and when it landed,
     /// shared rather than copied: it runs to `roster::MAX_BYTES`.
     claude_roster: Option<(Arc<Roster>, Instant)>,
     /// Moves when a roster says something the last did not (`Roster::moved`).
@@ -167,10 +167,10 @@ struct Live {
     /// OS updates — what the link pushes at once rather than on its
     /// sample cadence (link/node.rs).
     telemetry_tier: u64,
-    /// The providers on this machine, from their reader (providers.rs);
+    /// The providers on this machine, from their reader (providers/);
     /// None until its first read.
     providers: Option<Vec<crate::providers::ProviderReport>>,
-    /// The residency verbs' outcomes (providers.rs), newest last.
+    /// The residency verbs' outcomes (providers/), newest last.
     provider_actions: Vec<crate::providers::ProviderAction>,
     /// A residency verb is running; a second is refused until it ends.
     provider_busy: bool,
@@ -453,7 +453,7 @@ impl Shared {
         self.lock().telemetry.as_deref().cloned()
     }
 
-    /// The providers as their reader last found them (providers.rs).
+    /// The providers as their reader last found them (providers/).
     pub fn set_providers(&self, list: Vec<crate::providers::ProviderReport>) {
         self.lock().providers = Some(list);
     }

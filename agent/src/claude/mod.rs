@@ -75,7 +75,7 @@ pub use roster::Roster;
 pub use sessions::Sessions;
 pub use supervisor::Supervisor;
 
-/// The three verbs on one session (sessions.rs).
+/// The three verbs on one session (sessions/).
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -339,7 +339,7 @@ pub struct ReportAnswer {
     pub restart: bool,
     /// The directory the policy names for the server, if any.
     pub workdir: Option<String>,
-    /// Verb requests for the sessions, each handed out once (sessions.rs).
+    /// Verb requests for the sessions, each handed out once (sessions/).
     pub sessions: Vec<SessionRequest>,
 }
 

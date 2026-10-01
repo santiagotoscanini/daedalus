@@ -206,7 +206,7 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
     out
 }
 
-/// One machine's providers, from their last report (providers.rs):
+/// One machine's providers, from their last report (providers/):
 ///
 /// - `daedalus_agent_provider_up{…,kind,port,version,offered}`: 1 while the
 ///   provider answers and calls itself healthy, 0 while it is installed and

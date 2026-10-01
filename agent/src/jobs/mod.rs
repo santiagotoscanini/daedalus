@@ -150,7 +150,7 @@ pub struct SessionJob<'a> {
 /// session's PATH with `~/.local/bin` first (a user manager's or launchd's
 /// PATH is the system's), HOME and CLAUDE_CONFIG_DIR — the profile the
 /// session reads is the one the server uses — and Claude's own
-/// package-manager auto-update switch (supervisor.rs `update_claude` says
+/// package-manager auto-update switch (claude/supervisor/update.rs says
 /// why). `extra_path` is what the OS adds after the session's own PATH
 /// (Homebrew's two prefixes on macOS).
 pub fn job_env(
