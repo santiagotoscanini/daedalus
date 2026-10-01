@@ -6,9 +6,13 @@
 //! call, on macOS `sw_vers` and `sysctl`, on Linux os-release, cpuinfo and
 //! meminfo.
 
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use serde::Serialize;
 
 use crate::os;
+use crate::util::LockExt;
 
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize)]
@@ -38,12 +42,31 @@ pub fn read() -> Facts {
     }
 }
 
+/// How long the machine's name is kept: on macOS reading it is a command
+/// (`scutil`), and the status page, every report and every resume ask for
+/// it; a rename shows within this.
+const NAME_FOR: Duration = Duration::from_secs(60);
+
 /// The machine's name: `COMPUTERNAME` when the environment has it (always
 /// on Windows); else the OS's own — on macOS the name the user gave it in
 /// System Settings (`scutil --get ComputerName`), which is what Finder and
 /// AirDrop show, else `gethostname` (launchd hands a daemon no HOSTNAME),
-/// without a DHCP or `.local` suffix; else `HOSTNAME`.
+/// without a DHCP or `.local` suffix; else `HOSTNAME`. Read at most once per
+/// `NAME_FOR`.
 pub fn hostname() -> String {
+    static NAME: Mutex<Option<(Instant, String)>> = Mutex::new(None);
+    let mut kept = NAME.lock_ok();
+    if let Some((at, name)) = kept.as_ref() {
+        if at.elapsed() < NAME_FOR {
+            return name.clone();
+        }
+    }
+    let name = read_hostname();
+    *kept = Some((Instant::now(), name.clone()));
+    name
+}
+
+fn read_hostname() -> String {
     if let Ok(n) = std::env::var("COMPUTERNAME") {
         return n;
     }
