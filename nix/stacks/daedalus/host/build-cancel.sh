@@ -9,9 +9,10 @@
 # The engine cannot stop a build itself — the agent is a root unit — so it
 # names the app whose build it means, and this turns that into the one thing
 # that actually stops a run: stopping the unit, whose ExecStopPost reaper
-# (host/build-reaper.sh) then publishes `failed: interrupted`. The engine has
-# already written the row as cancelled-by-operator, and `cancelled` is
-# terminal, so the reaper cannot overwrite it.
+# (host/build-reaper.sh) then publishes `failed: interrupted`. The engine waits
+# for this unit's answer and only on a stop writes the row as
+# cancelled-by-operator, over that `interrupted` (app lib/repo/builds.ts
+# `markCancelled`); a refusal leaves the row to the host.
 #
 # It stops the CURRENT run only, and only when it is that app's: a cancel that
 # arrives after the build it meant finished and another app's started must not

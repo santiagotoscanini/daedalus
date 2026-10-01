@@ -14,6 +14,7 @@ import {
   insertOrSupersedeQueued,
   isQueuedLaneConflict,
   listBuildsQuery,
+  markCancelledQuery,
   toBuildRow,
   UNREPORTED_LIMIT,
   unreportedBuildsQuery,
@@ -185,6 +186,31 @@ describe('claimQueued', () => {
   it('answers a malformed id without querying', async () => {
     // A query would reject with a connection refusal, not resolve.
     await expect(claimQueued('../../etc/passwd', NOW)).resolves.toBeUndefined()
+  })
+})
+
+describe('markCancelled', () => {
+  const NOW = new Date('2026-09-11T20:00:00Z')
+
+  it('takes an open row or the reaper’s interrupted, and no other ending', () => {
+    const { sql, params } = markCancelledQuery(ID, NOW).toSQL()
+    expect(sql).toMatch(
+      /^update "builds" set "state" = \$1, "phase" = \$2, "error" = \$3, "reported" = \$4, "updated_at" = \$5 where \("builds"\."id" = \$6 and \("builds"\."state" not in \(\$7, \$8, \$9, \$10\) or \("builds"\."state" = \$11 and "builds"\."error" = \$12\)\)\) returning "id", /,
+    )
+    expect(params).toEqual([
+      'cancelled',
+      'cancelled',
+      'cancelled by the operator',
+      false,
+      NOW.toISOString(),
+      ID,
+      'succeeded',
+      'failed',
+      'cancelled',
+      'superseded',
+      'failed',
+      'interrupted',
+    ])
   })
 })
 

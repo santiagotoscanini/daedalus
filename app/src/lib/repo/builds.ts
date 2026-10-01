@@ -15,7 +15,13 @@ import {
 } from 'drizzle-orm'
 import { db, type Executor, type Tx } from '../../host/db'
 import { apps, builds } from '../../host/schema'
-import { type BuildLane, type BuildRow, ENGINE_VERDICTS } from '../build-queue'
+import {
+  type BuildLane,
+  type BuildRow,
+  CANCELLED_BY_OPERATOR,
+  ENGINE_VERDICTS,
+  INTERRUPTED,
+} from '../build-queue'
 import {
   ACTIVE_BUILD_STATES,
   type BuildPublish,
@@ -462,6 +468,46 @@ export async function updateFromStatus(
     .set({ updatedAt: new Date(), ...clean, ...(reported === undefined ? {} : { reported }) })
     .where(where)
     .returning(BUILD_LIST_COLUMNS)
+  return row
+}
+
+/** The cancel's write, unexecuted: its SQL is what the tests pin. */
+export function markCancelledQuery(id: string, now: Date, exec: Executor = db) {
+  return exec
+    .update(builds)
+    .set({
+      state: 'cancelled',
+      phase: 'cancelled',
+      error: CANCELLED_BY_OPERATOR,
+      reported: false,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(builds.id, id),
+        or(
+          notInArray(builds.state, [...TERMINAL_BUILD_STATES]),
+          and(eq(builds.state, 'failed'), eq(builds.error, INTERRUPTED)),
+        ),
+      ),
+    )
+    .returning(BUILD_LIST_COLUMNS)
+}
+
+/**
+ * Write the operator's cancel, once the host has said it stopped the build
+ * (core/builds/actions.ts `cancelBuild`). Taken by a row still open, or one
+ * already `failed: interrupted` — the host's word for that very stop, which
+ * cannot tell it from a crash and which a tick may have folded while the stop
+ * was answered. Any other ending — a build that succeeded or failed on its own
+ * before the stop reached it — is the host's truth and stays. `reported`
+ * drops, so GitHub hears the cancel. Undefined when the row was neither.
+ */
+export async function markCancelled(
+  id: string,
+  now: Date = new Date(),
+): Promise<BuildListRecord | undefined> {
+  const [row] = await markCancelledQuery(id, now)
   return row
 }
 

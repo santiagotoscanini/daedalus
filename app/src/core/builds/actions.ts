@@ -114,19 +114,20 @@ export async function buildNow(input: { app: string; actor: string }): Promise<B
 /**
  * Stop a running build.
  *
- * Two writes, row first. The row is marked `cancelled` here, because the host
- * cannot tell a Cancel from a crash — both reach its reaper as `interrupted`
- * (lib/build-queue.ts CANCELLED_BY_OPERATOR); then the root helper's
- * `build-cancel` stops the unit (host/build-bridge.ts), whose reaper publishes
- * the terminal status, and answers once it has.
+ * Ask first, write after. The root helper's `build-cancel` stops the unit
+ * (host/build-bridge.ts), whose reaper publishes the terminal status, and
+ * answers once it has. Only a `done` — the host stopped THIS app's build —
+ * marks the row `cancelled` (`markCancelled`), because the host cannot tell a
+ * Cancel from a crash: its reaper says `failed: interrupted` for both
+ * (lib/build-queue.ts CANCELLED_BY_OPERATOR), and a tick may already have
+ * folded that, so the write takes over exactly that word and nothing else.
  *
- * Row first is what keeps the word: `updateFromStatus` refuses a row that is
- * already final, so the host's `interrupted`, landing while the stop is still
- * being answered, cannot overwrite a `cancelled` row (`applyStatus`), and a
- * build that finished on its own before the click keeps its own ending. A
- * host that refused (no build of this app in flight) leaves nothing running;
- * one that could not be asked is reported. Idempotent: a second call finds
- * the row already terminal.
+ * A row written before the answer would lie twice: `cancelled` is terminal and
+ * no engine verdict, so a build that succeeded before the stop reached it could
+ * never get its own ending back, and a refused stop — no build of this app in
+ * flight — would leave a cancelled row over a build that may still run. So a
+ * refusal and a failure are both returned, with the host's words, and the row
+ * is the host's to finish. Idempotent: a second call finds the row terminal.
  */
 export async function cancelBuild(
   ctx: Pick<Ctx, 'controller'>,
@@ -134,7 +135,7 @@ export async function cancelBuild(
 ): Promise<CancelBuildResult> {
   const { app, id, actor } = input
 
-  const { getBuild, updateFromStatus } = await import('../../lib/repo/builds')
+  const { getBuild, markCancelled } = await import('../../lib/repo/builds')
   const record = await getBuild(id)
   if (!record || record.app !== app) return { ok: false, reason: 'No such build.' }
   const state = record.state as BuildState
@@ -144,25 +145,17 @@ export async function cancelBuild(
   }
 
   const { requestBuildCancel } = await import('../../host/build-bridge')
-  const { CANCELLED_BY_OPERATOR } = await import('../../lib/build-queue')
-  await updateFromStatus(
-    record.id,
-    {
-      state: 'cancelled',
-      phase: 'cancelled',
-      error: CANCELLED_BY_OPERATOR,
-      updatedAt: new Date(),
-    },
-    'engine',
-  )
   const answer = await requestBuildCancel(ctx, app)
   // The actor is in the journal, never on the row: the row's words reach a
   // GitHub check run, and an email address does not belong there.
   console.info(
     `[builds] ${actor} cancelled ${app}@${record.sha.slice(0, 7)} (${record.id}) during ${state}: the host ${answer.outcome} (${answer.detail})`,
   )
-  if (answer.outcome === 'failed') {
+  if (answer.outcome !== 'done') {
     return { ok: false, reason: `The host did not stop the build: ${answer.detail}` }
+  }
+  if ((await markCancelled(record.id)) === undefined) {
+    return { ok: false, reason: 'The build finished before the stop reached it.' }
   }
   return { ok: true, value: null }
 }

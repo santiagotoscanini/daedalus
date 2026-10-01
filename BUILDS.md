@@ -113,8 +113,11 @@ stateDiagram-v2
 `failed` row, written by the engine when the host stopped saying anything — a
 guess, which a later host status for the same id may overturn. Cancellation is
 deliberately not an engine verdict either: the host cannot tell a requested stop
-from a crash, so the row is marked cancelled the moment a person asks, and that
-is terminal so nothing can relabel it afterwards.
+from a crash, so the row is marked cancelled once the host answers that it
+stopped the build — taking over the `interrupted` its reaper published for that
+stop, and nothing else — and that is terminal so nothing can relabel it
+afterwards. A stop the host refused, or a build that finished before the stop
+reached it, keeps the host's word.
 
 GitHub hears `cancelled` for both `cancelled` and `superseded`.
 
