@@ -65,7 +65,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::cli::find_cli;
-use super::profile::{claude_dir, home_dir};
+use super::profile::{claude_dir, home_dir, read_session_files};
 use super::roster::{self, is_short_id, is_uuid, ActionResult, Agent, Managed, Roster, Scanner};
 use super::workdir::trusted_projects;
 use super::{gcroot, ActionState, Recovered, SessionAction, SessionRequest};
@@ -444,7 +444,7 @@ impl Worker {
                 "{id} is already running (claude agents reports it): a resume would start a copy, not attach"
             ));
         }
-        if roster::session_live(&dir, id) {
+        if roster::session_live(&read_session_files(&dir), id) {
             return refused(format!(
                 "{id} already has a live process behind it: a resume would start a copy, not attach"
             ));
@@ -722,7 +722,7 @@ impl Worker {
         self.tend_pins(&managed, jobs_listed);
         let session_stats = dir
             .as_deref()
-            .map(|d| roster::session_stats(d, roster::bridge_dir().as_deref()))
+            .map(|d| roster::session_stats(&read_session_files(d), roster::bridge_dir().as_deref()))
             .unwrap_or_default();
         let r = Roster {
             reported_at: now_rfc3339(),

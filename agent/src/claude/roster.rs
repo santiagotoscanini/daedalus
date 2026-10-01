@@ -45,7 +45,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::profile::SessionFile;
 use super::redact;
+use crate::time::epoch_ms;
 use super::{ActionState, SessionAction};
 use crate::jobs::UnitCost;
 
@@ -65,8 +67,6 @@ const HEAD_BYTES: u64 = 8192;
 const SIDECAR_BYTES: u64 = 4096;
 /// A `last-prompt` or `cost-state` record longer than this is dropped.
 const RECORD_MAX: usize = 128 * 1024;
-/// Session files looked at, at most.
-const MAX_SESSION_FILES: usize = 400;
 
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -282,51 +282,6 @@ pub fn unslug(project: &str) -> String {
         Some(rest) => format!("/{}", rest.replace('-', "/")),
         None => project.to_string(),
     }
-}
-
-/// `YYYY-MM-DDTHH:MM:SS[.fff]Z` as milliseconds since the epoch, whole
-/// seconds (the fraction is dropped, as the snapshot's `fromdateiso8601`
-/// did).
-pub fn epoch_ms(s: &str) -> Option<u64> {
-    let s = s.strip_suffix('Z')?;
-    let s = match s.find('.') {
-        Some(dot) if s[dot + 1..].bytes().all(|b| b.is_ascii_digit()) && dot + 1 < s.len() => {
-            &s[..dot]
-        }
-        Some(_) => return None,
-        None => s,
-    };
-    let b = s.as_bytes();
-    if b.len() != 19
-        || b[4] != b'-'
-        || b[7] != b'-'
-        || b[10] != b'T'
-        || b[13] != b':'
-        || b[16] != b':'
-    {
-        return None;
-    }
-    let n = |r: std::ops::Range<usize>| -> Option<i64> {
-        let t = &s[r];
-        t.bytes()
-            .all(|c| c.is_ascii_digit())
-            .then(|| t.parse().ok())?
-    };
-    let (y, m, d) = (n(0..4)?, n(5..7)?, n(8..10)?);
-    let (hh, mm, ss) = (n(11..13)?, n(14..16)?, n(17..19)?);
-    if !(1..=12).contains(&m) || !(1..=31).contains(&d) || hh > 23 || mm > 59 || ss > 60 {
-        return None;
-    }
-    // Days from civil (Howard Hinnant's algorithm).
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = (m + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146_097 + doe - 719_468;
-    let secs = days * 86_400 + hh * 3600 + mm * 60 + ss;
-    u64::try_from(secs).ok().map(|s| s * 1000)
 }
 
 fn cut(s: &str) -> String {
@@ -731,38 +686,14 @@ pub fn find_transcript(projects: &Path, id: &str) -> Option<String> {
 /// The live session files' costs: each file whose pid still runs the
 /// process that wrote it (`procStart` against the OS's start time — a
 /// recycled pid is not the session), with the bridge log beside it.
-pub fn session_stats(claude_dir: &Path, bridge_dir: Option<&Path>) -> Vec<SessionStat> {
-    let Ok(entries) = std::fs::read_dir(claude_dir.join("sessions")) else {
-        return Vec::new();
-    };
+pub fn session_stats(files: &[SessionFile], bridge_dir: Option<&Path>) -> Vec<SessionStat> {
     let mut out = Vec::new();
-    for e in entries.flatten().take(MAX_SESSION_FILES) {
-        let p = e.path();
-        if p.extension().is_none_or(|x| x != "json") || !regular_file(&p) {
-            continue;
-        }
-        let Some(v) = std::fs::read_to_string(&p)
-            .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        else {
-            continue;
-        };
-        let Some(pid) = v
-            .get("pid")
-            .and_then(Value::as_u64)
-            .and_then(|p| u32::try_from(p).ok())
-        else {
-            continue;
-        };
+    for f in files {
+        let pid = f.pid;
         let Some(st) = crate::os::process_stats(pid) else {
             continue;
         };
-        let recorded = v.get("procStart").and_then(|s| match s {
-            Value::String(s) => s.parse::<u64>().ok(),
-            Value::Number(n) => n.as_u64(),
-            _ => None,
-        });
-        if recorded.zip(st.start_ticks).is_some_and(|(r, s)| r != s) {
+        if f.proc_start.zip(st.start_ticks).is_some_and(|(r, s)| r != s) {
             continue;
         }
         let remote = st.args.iter().find(|a| {
@@ -787,41 +718,10 @@ pub fn session_stats(claude_dir: &Path, bridge_dir: Option<&Path>) -> Vec<Sessio
 /// A session process alive on `id` right now, from the session files
 /// (resume's idempotence check): the pid runs, and — where the OS says
 /// when a process started — it is still the one that wrote the file.
-pub fn session_live(claude_dir: &Path, id: &str) -> bool {
-    let Ok(entries) = std::fs::read_dir(claude_dir.join("sessions")) else {
-        return false;
-    };
-    entries.flatten().any(|e| {
-        let p = e.path();
-        if p.extension().is_none_or(|x| x != "json") || !regular_file(&p) {
-            return false;
-        }
-        let Some(v) = std::fs::read_to_string(&p)
-            .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        else {
-            return false;
-        };
-        if v.get("sessionId").and_then(Value::as_str) != Some(id) {
-            return false;
-        }
-        let Some(pid) = v
-            .get("pid")
-            .and_then(Value::as_u64)
-            .and_then(|p| u32::try_from(p).ok())
-        else {
-            return false;
-        };
-        match crate::os::process_stats(pid) {
-            Some(st) => v
-                .get("procStart")
-                .and_then(Value::as_str)
-                .and_then(|s| s.parse::<u64>().ok())
-                .zip(st.start_ticks)
-                .is_none_or(|(r, s)| r == s),
-            None => false,
-        }
-    })
+pub fn session_live(files: &[SessionFile], id: &str) -> bool {
+    files
+        .iter()
+        .any(|f| f.session_id.as_deref() == Some(id) && f.alive())
 }
 
 /// Where the Remote Control bridge writes its per-session debug logs: the
@@ -852,25 +752,6 @@ mod tests {
         assert_eq!(slug("/home/a/.x_y/p q"), "-home-a--x-y-p-q");
         assert_eq!(unslug("-etc-nixos"), "/etc/nixos");
         assert_eq!(unslug("C--Users-a"), "C--Users-a");
-    }
-
-    #[test]
-    fn timestamps_read_as_the_snapshot_read_them() {
-        assert_eq!(epoch_ms("1970-01-01T00:00:00Z"), Some(0));
-        assert_eq!(
-            epoch_ms("2026-09-27T10:00:00.789Z"),
-            Some(1_790_503_200_000)
-        );
-        assert_eq!(epoch_ms("2000-03-01T00:00:01Z"), Some(951_868_801_000));
-        for bad in [
-            "2026-09-27T10:00:00",
-            "2026-09-27 10:00:00Z",
-            "2026-13-01T00:00:00Z",
-            "x",
-            "2026-09-27T10:00:00.Z",
-        ] {
-            assert_eq!(epoch_ms(bad), None, "{bad}");
-        }
     }
 
     #[test]

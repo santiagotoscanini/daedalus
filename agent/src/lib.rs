@@ -69,6 +69,7 @@ pub mod settings;
 pub mod shared;
 pub mod state;
 pub mod telemetry;
+pub mod time;
 // The machine's own WireGuard tunnel to the box (macOS and Linux: none on
 // Windows in this version).
 #[cfg(any(target_os = "macos", target_os = "linux"))]

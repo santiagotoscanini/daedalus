@@ -15,7 +15,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::cli::{cli_version, find_cli, install_method, last_meaningful};
-use super::profile::{claude_dir, home_dir, read_credentials, read_sessions, read_settings};
+use super::profile::{
+    claude_dir, home_dir, read_credentials, read_session_files, read_sessions, read_settings,
+};
 use super::workdir::pick_workdir;
 use super::{gcroot, Banner, Credentials, Report, Settings, UpdateResult};
 use crate::jobs::{self as job, JobState, LogTail, ServerJob};
@@ -659,7 +661,11 @@ impl Supervisor {
     pub fn report(&self) -> Report {
         let dir = claude_dir();
         let (sessions, credentials, settings) = match dir.as_deref() {
-            Some(d) => (read_sessions(d), read_credentials(d), read_settings(d)),
+            Some(d) => (
+                read_sessions(&read_session_files(d)),
+                read_credentials(d),
+                read_settings(d),
+            ),
             None => (Vec::new(), Credentials::default(), Settings::default()),
         };
         let (state, detail) = self.state();

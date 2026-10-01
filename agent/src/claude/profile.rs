@@ -2,7 +2,10 @@
 //! session files and whether each process lives, the credential clock
 //! (never a token), and the model settings.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Deserializer};
 
 use super::{Credentials, Session, Settings};
 
@@ -23,46 +26,113 @@ pub fn claude_dir() -> Option<PathBuf> {
 /// Sessions reported, at most; a profile with hundreds of stale files
 /// would otherwise make every report the session sends a long one.
 const MAX_SESSIONS: usize = 40;
+/// Session files looked at, at most.
+const MAX_SESSION_FILES: usize = 400;
+/// A session file read, at most: the CLI's are a few hundred bytes.
+const SESSION_FILE_BYTES: u64 = 64 * 1024;
 
-/// The session files, alive ones first, newest first within each.
-pub fn read_sessions(dir: &Path) -> Vec<Session> {
+/// One `~/.claude/sessions/*.json` as the CLI writes it: the fields any
+/// reader here uses, by name, and nothing else.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SessionFile {
+    #[serde(deserialize_with = "pid")]
+    pub pid: u32,
+    pub session_id: Option<String>,
+    pub bridge_session_id: Option<String>,
+    pub cwd: Option<String>,
+    pub name: Option<String>,
+    pub kind: Option<String>,
+    pub entrypoint: Option<String>,
+    pub version: Option<String>,
+    pub started_at: Option<u64>,
+    pub status: Option<String>,
+    pub status_updated_at: Option<u64>,
+    pub updated_at: Option<u64>,
+    /// When its process started, as the CLI records it (a string; a number
+    /// is read too): compared with `ProcStats::start_ticks` to tell the
+    /// process that wrote the file from a later one on a recycled pid.
+    #[serde(deserialize_with = "proc_start")]
+    pub proc_start: Option<u64>,
+}
+
+/// A pid that fits one; anything else (absent, negative, too large) is 0,
+/// which no reader takes for a process.
+fn pid<'de, D: Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    let v = serde_json::Value::deserialize(d)?;
+    Ok(v.as_u64().and_then(|p| u32::try_from(p).ok()).unwrap_or(0))
+}
+
+fn proc_start<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
+    Ok(match serde_json::Value::deserialize(d)? {
+        serde_json::Value::String(s) => s.trim().parse().ok(),
+        serde_json::Value::Number(n) => n.as_u64(),
+        _ => None,
+    })
+}
+
+impl SessionFile {
+    /// Its process runs, and — where the OS says when a process started
+    /// and the file says too — it is still the one that wrote the file.
+    pub fn alive(&self) -> bool {
+        match crate::os::process_stats(self.pid) {
+            Some(st) => self
+                .proc_start
+                .zip(st.start_ticks)
+                .is_none_or(|(r, s)| r == s),
+            None => crate::os::pid_alive(self.pid),
+        }
+    }
+}
+
+/// The session files: regular `.json` files under `<dir>/sessions` (a link
+/// is never followed), each with a pid, at most `MAX_SESSION_FILES`. One
+/// read of the directory serves a whole look.
+pub fn read_session_files(dir: &Path) -> Vec<SessionFile> {
     let Ok(entries) = std::fs::read_dir(dir.join("sessions")) else {
         return Vec::new();
     };
-    let mut out: Vec<Session> = entries
+    entries
         .flatten()
+        .take(MAX_SESSION_FILES)
         .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
-        .filter_map(|e| std::fs::read_to_string(e.path()).ok())
-        .filter_map(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-        .filter_map(|v| session_of(&v))
-        .collect();
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|e| {
+            let mut text = String::new();
+            std::fs::File::open(e.path())
+                .ok()?
+                .take(SESSION_FILE_BYTES)
+                .read_to_string(&mut text)
+                .ok()?;
+            serde_json::from_str::<SessionFile>(&text).ok()
+        })
+        .filter(|f| f.pid > 0)
+        .collect()
+}
+
+/// The report's sessions, alive ones first, newest first within each.
+pub fn read_sessions(files: &[SessionFile]) -> Vec<Session> {
+    let mut out: Vec<Session> = files.iter().map(session_of).collect();
     out.sort_by(|a, b| b.alive.cmp(&a.alive).then(b.started_at.cmp(&a.started_at)));
     out.truncate(MAX_SESSIONS);
     out
 }
 
-fn session_of(v: &serde_json::Value) -> Option<Session> {
-    let pid = v.get("pid")?.as_u64()? as u32;
-    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
-    let n = |k: &str| v.get(k).and_then(|x| x.as_u64());
-    let last = [n("statusUpdatedAt"), n("updatedAt")]
-        .into_iter()
-        .flatten()
-        .max();
-    Some(Session {
-        pid,
-        transcript_id: s("sessionId"),
-        remote_id: s("bridgeSessionId"),
-        cwd: s("cwd"),
-        name: s("name"),
-        kind: s("kind"),
-        entrypoint: s("entrypoint"),
-        version: s("version"),
-        started_at: n("startedAt"),
-        status: s("status"),
-        last_activity_at: last,
-        alive: crate::os::pid_alive(pid),
-    })
+fn session_of(f: &SessionFile) -> Session {
+    Session {
+        pid: f.pid,
+        transcript_id: f.session_id.clone(),
+        remote_id: f.bridge_session_id.clone(),
+        cwd: f.cwd.clone(),
+        name: f.name.clone(),
+        kind: f.kind.clone(),
+        entrypoint: f.entrypoint.clone(),
+        version: f.version.clone(),
+        started_at: f.started_at,
+        status: f.status.clone(),
+        last_activity_at: f.status_updated_at.max(f.updated_at),
+        alive: crate::os::pid_alive(f.pid),
+    }
 }
 
 /// The credential clock from `.credentials.json`: four fields by name, and
@@ -147,7 +217,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("sessions")).unwrap();
         assert!(!read_credentials(&dir).present);
-        assert!(read_sessions(&dir).is_empty());
+        assert!(read_session_files(&dir).is_empty());
 
         std::fs::write(
             dir.join(".credentials.json"),
@@ -182,12 +252,51 @@ mod tests {
             r#"{"pid":4000000000,"sessionId":"v","startedAt":9}"#,
         )
         .unwrap();
-        let s = read_sessions(&dir);
+        let s = read_sessions(&read_session_files(&dir));
         assert_eq!(s.len(), 2);
         assert!(s[0].alive, "own pid is alive and sorts first");
         assert_eq!(s[0].remote_id.as_deref(), Some("session_1"));
         assert_eq!(s[0].last_activity_at, Some(7));
         assert!(!s[1].alive);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// One reader, one set of rules for every use of the session files: a
+    /// pid that does not fit is no pid (never truncated onto another
+    /// process), `procStart` reads as a string or a number, and a link is
+    /// not followed.
+    #[test]
+    fn the_session_files_are_read_one_way() {
+        let dir = std::env::temp_dir().join(format!("daedalus-sfiles-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let sessions = dir.join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        let me = std::process::id();
+        let write = |name: &str, text: String| std::fs::write(sessions.join(name), text).unwrap();
+        write(
+            "a.json",
+            format!(r#"{{"pid":{me},"sessionId":"a","procStart":"42"}}"#),
+        );
+        write(
+            "b.json",
+            format!(r#"{{"pid":{me},"sessionId":"b","procStart":42}}"#),
+        );
+        // 2^32 + this pid: `as u32` would have made it this process.
+        write(
+            "c.json",
+            format!(r#"{{"pid":{},"sessionId":"c"}}"#, (1u64 << 32) + u64::from(me)),
+        );
+        write("d.json", "not json".into());
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(sessions.join("a.json"), sessions.join("e.json")).unwrap();
+        let mut files = read_session_files(&dir);
+        files.sort_by(|x, y| x.session_id.cmp(&y.session_id));
+        let ids: Vec<_> = files.iter().map(|f| f.session_id.as_deref()).collect();
+        assert_eq!(ids, [Some("a"), Some("b")]);
+        assert!(files.iter().all(|f| f.pid == me && f.proc_start == Some(42)));
+        // This process did not start at tick 42: on Linux the file is not
+        // its; elsewhere the start is not compared and the pid runs.
+        assert_eq!(files[0].alive(), cfg!(not(target_os = "linux")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

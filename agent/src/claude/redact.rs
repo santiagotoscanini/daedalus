@@ -16,13 +16,10 @@
 //! not recognisable and stays, up to the 160 characters. The operator took
 //! that trade for the snapshot; the roster keeps it and no more.
 
+use crate::telemetry::parse::collapse_ws;
+
 /// The longest a label or a prompt is, in characters, the ellipsis included.
 pub const CLAMP: usize = 160;
-
-/// Whitespace runs as one space, trimmed.
-pub fn oneline(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
-}
 
 /// At most `CLAMP` characters: 159 and an ellipsis when longer.
 pub fn clamp(s: &str) -> String {
@@ -37,7 +34,7 @@ pub fn clamp(s: &str) -> String {
 
 /// A prompt as the roster carries it: one line, redacted, clamped.
 pub fn prompt(s: &str) -> Option<String> {
-    let s = clamp(&redact(&oneline(s)));
+    let s = clamp(&redact(&collapse_ws(s)));
     (!s.is_empty()).then_some(s)
 }
 
@@ -285,7 +282,7 @@ mod tests {
 
     #[test]
     fn a_prompt_is_one_line_redacted_then_cut() {
-        assert_eq!(oneline("  fix\n\tthe   build \n"), "fix the build");
+        assert_eq!(collapse_ws("  fix\n\tthe   build \n"), "fix the build");
         assert_eq!(prompt("   "), None);
         let long = "a".repeat(200);
         let p = prompt(&long).unwrap();
