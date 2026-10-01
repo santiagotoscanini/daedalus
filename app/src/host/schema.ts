@@ -486,20 +486,25 @@ export const appTasksRelations = relations(appTasks, ({ one }) => ({
   app: one(apps, { fields: [appTasks.appId], references: [apps.id] }),
 }))
 
-// Operator preferences that the NixOS side does not consume.
+// Small keyed state the NixOS side does not consume: the operator's
+// preferences (the theme, the off-box project list, this box's provider
+// policy), drafts on their way to the site repo (site.json's), and the engine's
+// own bookkeeping (the last build sweep, failed GitHub reports, an in-flight
+// App creation, the local login's setup token and cookie secret).
+// lib/repo/settings.ts `SETTING_KEYS` is the complete list.
 //
 // The dividing line matters and is the whole reason this table exists.
 // Anything nix reads — the domain, the network, which modules are on, the app
 // registry — belongs in the site repo, where a change is a commit and a
-// rebuild. Anything nix does NOT read — the theme, UI preferences, onboarding
-// progress — belongs here, where a change is an UPDATE and nothing rebuilds.
+// rebuild. Anything nix does NOT read belongs here, where a change is an
+// UPDATE and nothing rebuilds.
 // Putting the theme in the site repo would mean a NixOS generation per colour
 // swap; putting the domain here would mean a setting the system never obeys.
 //
-// Deliberately a key/value table rather than one column per preference: these
-// are read individually by name, never queried across, and a new preference
-// should not be a migration. The value is jsonb so a preference can be an
-// object (a theme preset is one) without a second encoding to get wrong.
+// Deliberately a key/value table rather than one column per key: these are
+// read individually by name, never queried across, and a new key should not
+// be a migration. The value is jsonb so an entry can be an object (a theme
+// preset is one) without a second encoding to get wrong.
 export const settings = pgTable('settings', {
   key: text('key').primaryKey(),
   value: jsonb('value').notNull(),
