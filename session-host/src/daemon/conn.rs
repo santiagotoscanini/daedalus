@@ -142,7 +142,7 @@ where
     daemon.touch();
 
     let (reader, writer) = tokio::io::split(stream);
-    let (tx, mut out_rx) = mpsc::unbounded_channel::<String>();
+    let (tx, out_rx) = mpsc::unbounded_channel::<String>();
     let close = Arc::new(Notify::new());
     let queued = Arc::new(AtomicUsize::new(0));
     let conn = Arc::new(Conn {
@@ -160,36 +160,8 @@ where
 
     // Stopped by the teardown (`stop`), it ends its write and sends
     // `close_notify` within WRITER_CLOSE, so the peer reads a clean close.
-    let (stop, mut stopped) = oneshot::channel::<()>();
-    let mut writer_task = tokio::spawn(async move {
-        let mut writer = writer;
-        loop {
-            let line = tokio::select! {
-                biased;
-                _ = &mut stopped => break,
-                line = out_rx.recv() => match line {
-                    Some(line) => line,
-                    None => break,
-                },
-            };
-            queued.fetch_sub(queued_cost(&line), Ordering::AcqRel);
-            let mut batch = line;
-            batch.push('\n');
-            // Whatever else is already queued goes in the same flush.
-            while let Ok(mut more) = out_rx.try_recv() {
-                queued.fetch_sub(queued_cost(&more), Ordering::AcqRel);
-                more.push('\n');
-                batch.push_str(&more);
-                if batch.len() > 1024 * 1024 {
-                    break;
-                }
-            }
-            if writer.write_all(batch.as_bytes()).await.is_err() || writer.flush().await.is_err() {
-                break;
-            }
-        }
-        let _ = writer.shutdown().await;
-    });
+    let (stop, stopped) = oneshot::channel::<()>();
+    let mut writer_task = tokio::spawn(write_out(writer, out_rx, queued, stopped));
     let ping_task = {
         let conn = conn.clone();
         let every = daemon.opts.ping_interval;
@@ -286,7 +258,7 @@ where
         let daemon = daemon.clone();
         let conn = conn.clone();
         requests.spawn(async move {
-            if let Some(outcome) = daemon.handle(&conn, &request).await {
+            if let Reply::Answer(outcome) = daemon.handle(&conn, &request).await {
                 reply(&conn, &request, outcome);
             }
         });
@@ -349,4 +321,41 @@ fn reply(conn: &Conn, request: &RawRequest, outcome: Outcome) {
         Ok(result) => encode_ok(request.id, &result).expect("raw results serialize"),
         Err(e) => encode_err(request.id, &e),
     });
+}
+
+/// One connection's writer: every queued line, batched into as few flushes
+/// as what is already waiting allows, until `stopped` or the queue closes;
+/// then TLS `close_notify`.
+async fn write_out<W: AsyncWrite + Unpin>(
+    mut writer: W,
+    mut out_rx: mpsc::UnboundedReceiver<String>,
+    queued: Arc<AtomicUsize>,
+    mut stopped: oneshot::Receiver<()>,
+) {
+    loop {
+        let line = tokio::select! {
+            biased;
+            _ = &mut stopped => break,
+            line = out_rx.recv() => match line {
+                Some(line) => line,
+                None => break,
+            },
+        };
+        queued.fetch_sub(queued_cost(&line), Ordering::AcqRel);
+        let mut batch = line;
+        batch.push('\n');
+        // Whatever else is already queued goes in the same flush.
+        while let Ok(mut more) = out_rx.try_recv() {
+            queued.fetch_sub(queued_cost(&more), Ordering::AcqRel);
+            more.push('\n');
+            batch.push_str(&more);
+            if batch.len() > 1024 * 1024 {
+                break;
+            }
+        }
+        if writer.write_all(batch.as_bytes()).await.is_err() || writer.flush().await.is_err() {
+            break;
+        }
+    }
+    let _ = writer.shutdown().await;
 }

@@ -209,6 +209,26 @@ impl Daemon {
         input.as_ref().expect("just made").queue(data)
     }
 
+    /// `pty.write`: the bytes go through the session's own input thread
+    /// (`Input`); the answer waits at most [`PTY_WRITE_TIMEOUT`] for them to
+    /// go in.
+    pub(super) async fn pty_write(&self, p: PtyWriteParams) -> Outcome {
+        let done = self.pty_input(p.id, p.data)?;
+        match tokio::time::timeout(PTY_WRITE_TIMEOUT, done).await {
+            Ok(Ok(Ok(()))) => ok(&Empty),
+            Ok(Ok(Err(e))) => Err(pty_err(self, p.id, e)),
+            Ok(Err(_)) => Err(err(ErrorCode::Io, "the terminal's input is closed")),
+            Err(_) => Err(err(
+                ErrorCode::Timeout,
+                format!(
+                    "terminal session {} has not read its input for {}s; the bytes stay queued",
+                    p.id,
+                    PTY_WRITE_TIMEOUT.as_secs()
+                ),
+            )),
+        }
+    }
+
     /// Kill every session. Bounded (santree-pty gives up after ~2s).
     pub fn close_all(&self) {
         self.mgr.close_all();
@@ -354,14 +374,9 @@ impl Daemon {
         }
     }
 
-    pub(super) fn pty_attach(
-        &self,
-        conn: &Conn,
-        req_id: u64,
-        p: PtyAttachParams,
-    ) -> Option<Outcome> {
+    pub(super) fn pty_attach(&self, conn: &Conn, req_id: u64, p: PtyAttachParams) -> Reply {
         let Some(sess) = self.session(p.id) else {
-            return Some(Err(err(
+            return Reply::Answer(Err(err(
                 ErrorCode::NotFound,
                 format!("no terminal session {}", p.id),
             )));
@@ -389,7 +404,7 @@ impl Daemon {
         };
         let replay = match self.mgr.attach(p.id, &anchor, sink) {
             Ok(replay) => replay,
-            Err(e) => return Some(Err(pty_err(self, p.id, format!("{e:#}")))),
+            Err(e) => return Reply::Answer(Err(pty_err(self, p.id, format!("{e:#}")))),
         };
         let maybe_lost = {
             let mut live = lock(&sess.live);
@@ -429,7 +444,7 @@ impl Daemon {
         }
         log::debug!("connection {}: pty.attach #{req_id} ok", conn.id);
         self.touch();
-        None
+        Reply::Done
     }
 
     /// Detach a session into the parked state — only when `only_conn` (if

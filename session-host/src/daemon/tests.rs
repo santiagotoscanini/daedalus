@@ -254,18 +254,14 @@ fn a_failed_attach_to_a_known_session_is_io() {
     // Gone from the manager, still in the daemon's map.
     daemon.mgr.close(id).unwrap();
     let attach = |id| {
-        daemon
-            .pty_attach(
-                &conn,
-                7,
-                PtyAttachParams {
-                    id,
-                    anchor: Anchor::Fresh,
-                },
-            )
-            .unwrap()
-            .unwrap_err()
-            .code
+        let params = PtyAttachParams {
+            id,
+            anchor: Anchor::Fresh,
+        };
+        match daemon.pty_attach(&conn, 7, params) {
+            Reply::Answer(Err(e)) => e.code,
+            _ => panic!("the attach did not fail"),
+        }
     };
     assert_eq!(attach(id), ErrorCode::Io);
     lock(&daemon.sessions).remove(&id);

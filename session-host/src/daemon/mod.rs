@@ -250,14 +250,14 @@ impl Daemon {
         Ok((p, result))
     }
 
-    /// `None` = the handler already wrote its response (attach, subscribe:
-    /// both must order it ahead of the events they start).
-    async fn handle(self: &Arc<Self>, conn: &Arc<Conn>, request: &RawRequest) -> Option<Outcome> {
+    /// One request after `hello`. `hello` itself is answered in line by
+    /// [`serve_conn`], so nothing overtakes it.
+    async fn handle(self: &Arc<Self>, conn: &Arc<Conn>, request: &RawRequest) -> Reply {
         macro_rules! params {
             ($ty:ty) => {
                 match request.params::<$ty>() {
                     Ok(p) => p,
-                    Err(e) => return Some(Err(e)),
+                    Err(e) => return Reply::Answer(Err(e)),
                 }
             };
         }
@@ -266,7 +266,7 @@ impl Daemon {
             () => {
                 match self.permit(&conn.node) {
                     Ok(permit) => permit,
-                    Err(e) => return Some(Err(e)),
+                    Err(e) => return Reply::Answer(Err(e)),
                 }
             };
         }
@@ -293,13 +293,13 @@ impl Daemon {
                     p.cwd.as_deref().unwrap_or("-")
                 ));
                 let node = conn.node.clone();
-                blocking(permit!(), move || Some(this.pty_open(p, node))).await
+                blocking(permit!(), move || this.pty_open(p, node)).await
             }
             m::PtyAttach::NAME => {
                 let p = params!(PtyAttachParams);
                 let (conn, id, sid) = (conn.clone(), request.id, p.id);
                 blocking(permit!(), move || {
-                    let outcome = this.pty_attach(&conn, id, p);
+                    let reply = this.pty_attach(&conn, id, p);
                     // Its connection ended while this ran: the teardown's
                     // sweep may have missed the route just set (`Conn`).
                     if conn.closed.load(Ordering::SeqCst) {
@@ -307,7 +307,7 @@ impl Daemon {
                             this.park(sid, &sess, Some(conn.id));
                         }
                     }
-                    outcome
+                    reply
                 })
                 .await
             }
@@ -318,42 +318,19 @@ impl Daemon {
                     if let Some(sess) = this.session(p.id) {
                         this.park(p.id, &sess, Some(conn));
                     }
-                    Some(ok(&Empty))
+                    ok(&Empty)
                 })
                 .await
             }
-            m::PtyWrite::NAME => {
-                // Through the session's own input thread (`Input`), never
-                // the blocking pool; the answer waits at most
-                // PTY_WRITE_TIMEOUT.
-                let p = params!(PtyWriteParams);
-                let done = match self.pty_input(p.id, p.data) {
-                    Ok(done) => done,
-                    Err(e) => return Some(Err(e)),
-                };
-                Some(match tokio::time::timeout(PTY_WRITE_TIMEOUT, done).await {
-                    Ok(Ok(Ok(()))) => ok(&Empty),
-                    Ok(Ok(Err(e))) => Err(pty_err(self, p.id, e)),
-                    Ok(Err(_)) => Err(err(ErrorCode::Io, "the terminal's input is closed")),
-                    Err(_) => Err(err(
-                        ErrorCode::Timeout,
-                        format!(
-                            "terminal session {} has not read its input for {}s; the bytes stay queued",
-                            p.id,
-                            PTY_WRITE_TIMEOUT.as_secs()
-                        ),
-                    )),
-                })
-            }
+            // Through the session's own input thread, never the blocking pool.
+            m::PtyWrite::NAME => Reply::Answer(self.pty_write(params!(PtyWriteParams)).await),
             m::PtyResize::NAME => {
                 let p = params!(PtyResizeParams);
                 blocking(permit!(), move || {
-                    Some(
-                        this.mgr
-                            .resize(p.id, p.cols, p.rows)
-                            .map_err(|e| pty_err(&this, p.id, e))
-                            .and_then(|()| ok(&Empty)),
-                    )
+                    this.mgr
+                        .resize(p.id, p.cols, p.rows)
+                        .map_err(|e| pty_err(&this, p.id, e))
+                        .and_then(|()| ok(&Empty))
                 })
                 .await
             }
@@ -364,20 +341,17 @@ impl Daemon {
                     let _ = this.mgr.close(p.id);
                     lock(&this.sessions).remove(&p.id);
                     this.touch();
-                    Some(ok(&Empty))
+                    ok(&Empty)
                 })
                 .await
             }
             m::PtySessions::NAME => {
-                blocking(permit!(), move || {
-                    Some(ok(&this.infos(this.mgr.sessions())))
-                })
-                .await
+                blocking(permit!(), move || ok(&this.infos(this.mgr.sessions()))).await
             }
             m::PtyAdopt::NAME => {
                 let p = params!(PtyAdoptParams);
                 audit(String::new());
-                blocking(permit!(), move || Some(this.pty_adopt(&p.owner))).await
+                blocking(permit!(), move || this.pty_adopt(&p.owner)).await
             }
             m::ExecRun::NAME => {
                 let p = params!(ExecParams);
@@ -386,101 +360,108 @@ impl Daemon {
                     p.argv.first().map(String::as_str).unwrap_or(""),
                     p.cwd
                 ));
-                let root = self.root.clone();
-                let cwd = p.cwd.clone();
-                let permit = permit!();
-                let cwd = match tokio::task::spawn_blocking(move || {
-                    let _permit = permit;
-                    root.cwd(Some(&cwd))
-                })
-                .await
-                {
-                    Ok(Ok(cwd)) => cwd,
-                    Ok(Err(e)) => return Some(Err(e)),
-                    Err(e) => return Some(Err(err(ErrorCode::Io, e.to_string()))),
-                };
-                Some(exec::run(p, cwd).await.and_then(|r| ok(&r)))
+                Reply::Answer(self.exec_run(permit!(), p).await)
             }
             m::FsRead::NAME => {
                 let p = params!(FsReadParams);
-                blocking(permit!(), move || {
-                    Some(fsops::read(&p).and_then(|r| ok(&r)))
-                })
-                .await
+                blocking(permit!(), move || fsops::read(&p).and_then(|r| ok(&r))).await
             }
             m::FsWrite::NAME => {
                 let p = params!(FsWriteParams);
                 audit(format!("{:?}", p.path));
                 blocking(permit!(), move || {
-                    Some(
-                        this.root
-                            .write_target(&p.path)
-                            .and_then(|target| fsops::write(&p, &target))
-                            .and_then(|()| ok(&Empty)),
-                    )
+                    this.root
+                        .write_target(&p.path)
+                        .and_then(|target| fsops::write(&p, &target))
+                        .and_then(|()| ok(&Empty))
                 })
                 .await
             }
             m::FsStat::NAME => {
                 let p = params!(FsStatParams);
-                blocking(permit!(), move || {
-                    Some(fsops::stat(&p.path).and_then(|r| ok(&r)))
-                })
-                .await
+                blocking(permit!(), move || fsops::stat(&p.path).and_then(|r| ok(&r))).await
             }
             m::HooksSubscribe::NAME => {
                 let p = params!(HooksSubscribeParams);
                 self.subscribe_hooks(conn, request.id, p.after);
                 log::info!("connection {}: subscribed to hooks", conn.id);
                 self.touch();
-                None
+                Reply::Done
             }
             m::HooksAck::NAME => {
                 let p = params!(HooksAckParams);
                 lock(&self.hooks).ack(p.up_to);
                 self.touch();
-                Some(ok(&Empty))
+                Reply::Answer(ok(&Empty))
             }
             m::WorkspacesList::NAME => {
                 blocking(permit!(), move || {
-                    Some(
-                        workspaces::list(&this.opts.workspaces, &this.opts.projects_root)
-                            .map_err(|e| err(ErrorCode::Io, e))
-                            .and_then(|r| ok(&r)),
-                    )
+                    workspaces::list(&this.opts.workspaces, &this.opts.projects_root)
+                        .map_err(|e| err(ErrorCode::Io, e))
+                        .and_then(|r| ok(&r))
                 })
                 .await
             }
             workspaces::ICON_METHOD => {
                 let p = params!(workspaces::IconParams);
                 blocking(permit!(), move || {
-                    Some(workspaces::icon(&this.opts.workspace_icons, &p.name).and_then(|r| ok(&r)))
+                    workspaces::icon(&this.opts.workspace_icons, &p.name).and_then(|r| ok(&r))
                 })
                 .await
             }
-            m::HooksPush::NAME => Some(Err(err(
+            m::HooksPush::NAME => Reply::Answer(Err(err(
                 ErrorCode::BadRequest,
                 "hooks.push is served on the local hook socket only",
             ))),
-            other => Some(Err(err(
+            other => Reply::Answer(Err(err(
                 ErrorCode::BadRequest,
                 format!("unknown method {other}"),
             ))),
         }
+    }
+
+    /// `exec.run`: its `cwd` is resolved on the blocking pool under the
+    /// node's `permit`; the process itself runs on the async side.
+    async fn exec_run(&self, permit: OwnedSemaphorePermit, p: ExecParams) -> Outcome {
+        let root = self.root.clone();
+        let cwd = p.cwd.clone();
+        let cwd = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            root.cwd(Some(&cwd))
+        })
+        .await
+        .map_err(|e| err(ErrorCode::Io, e.to_string()))??;
+        exec::run(p, cwd).await.and_then(|r| ok(&r))
+    }
+}
+
+/// What a request's handler leaves to the connection.
+enum Reply {
+    /// The handler queued its response itself: `pty.attach` and
+    /// `hooks.subscribe` must order it ahead of the events they start.
+    Done,
+    /// The response for the connection to send.
+    Answer(Outcome),
+}
+
+impl From<Outcome> for Reply {
+    fn from(outcome: Outcome) -> Self {
+        Reply::Answer(outcome)
     }
 }
 
 /// Run a blocking handler off the async workers, holding its node's
 /// `permit` until it returns — even when its request is aborted (the
 /// connection ended), which cannot stop a blocking task.
-async fn blocking<F>(permit: OwnedSemaphorePermit, f: F) -> Option<Outcome>
+async fn blocking<F, R>(permit: OwnedSemaphorePermit, f: F) -> Reply
 where
-    F: FnOnce() -> Option<Outcome> + Send + 'static,
+    F: FnOnce() -> R + Send + 'static,
+    R: Into<Reply> + Send + 'static,
 {
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        f()
+        f().into()
     })
     .await
-    .unwrap_or_else(|e| Some(Err(err(ErrorCode::Io, format!("handler panicked: {e}")))))
+    .unwrap_or_else(|e| Reply::Answer(Err(err(ErrorCode::Io, format!("handler panicked: {e}")))))
 }
