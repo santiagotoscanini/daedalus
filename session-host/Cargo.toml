@@ -3,7 +3,8 @@ name = "daedalus-session-host"
 description = "The daedalus session host: santree's protocol v1 (PTYs, exec, files, a hook queue) over pinned TLS, for approved machines."
 version = "0.1.0"
 edition = "2021"
-# The rustc of the nixpkgs the box builds it with (26.05).
+# The rustc of the nixpkgs the box builds it with (26.05); rust-toolchain.toml
+# pins the same release for every other build.
 rust-version = "1.95"
 license = "MIT"
 publish = false

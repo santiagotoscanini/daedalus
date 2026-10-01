@@ -53,10 +53,8 @@ fn parse_softwareupdate(text: &str) -> Vec<Update> {
                 match k.trim() {
                     "Title" => u.title = v.to_string(),
                     "Size" => u.size_bytes = parse_update_size(v),
-                    "Recommended" => {
-                        if v.eq_ignore_ascii_case("yes") {
-                            u.severity = Some("recommended".into());
-                        }
+                    "Recommended" if v.eq_ignore_ascii_case("yes") => {
+                        u.severity = Some("recommended".into());
                     }
                     "Action" => u.restart = Some(v.eq_ignore_ascii_case("restart")),
                     _ => {}

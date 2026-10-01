@@ -47,7 +47,7 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
   -v /tmp/agent-apt:/var/cache/apt/archives \
   -v "$gen":/gen -e DAEDALUS_TS_DIR=/gen \
   -e CARGO_HOME=/tmp/agent-cargo -e CARGO_TARGET_DIR=/tmp/agent-target \
-  docker.io/library/rust:1-bookworm bash -c '
+  docker.io/library/rust:1.95.0-bookworm bash -c '
     set -u
     rm -f /etc/apt/apt.conf.d/docker-clean
     apt-get update -qq >/dev/null 2>&1

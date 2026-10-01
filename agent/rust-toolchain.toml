@@ -1,2 +1,8 @@
+# The rustc of the nixpkgs the box builds the agent with (26.05), and the
+# crate's rust-version: CI, the release builds and gate.sh's image all compile
+# what the box compiles. Moves with that nixpkgs, together with both.
+# `rustup toolchain install`, run here, installs it.
 [toolchain]
-channel = "stable"
+channel = "1.95.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

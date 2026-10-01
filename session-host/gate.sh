@@ -1,9 +1,10 @@
 #!/bin/sh
 # The session host's gate, from a Linux box without Rust on it: fmt, clippy
-# (-D warnings), the tests, a build on the rustc the box builds it with
-# (rust-version, 1.95), and the agent interop test (interop/), in a throwaway
-# rust container. Every cargo step is --locked. Prints one marker per part and
-# "GATE OK" only when every part passed; exits non-zero otherwise.
+# (-D warnings), the tests, a release build, and the agent interop test
+# (interop/), in a throwaway rust container on the rustc the box builds it
+# with (rust-toolchain.toml, rust-version: 1.95). Every cargo step is
+# --locked. Prints one marker per part and "GATE OK" only when every part
+# passed; exits non-zero otherwise.
 # Usage: session-host/gate.sh
 #
 # The tests fork real shells behind real PTYs and run git, so the container's
@@ -18,10 +19,9 @@ podman run --rm -v "$here":/w/session-host -v "$here/../agent":/w/agent:ro -w /w
   -v /tmp/session-host-cargo:/tmp/session-host-cargo \
   -v /tmp/session-host-target:/tmp/session-host-target \
   -e CARGO_HOME=/tmp/session-host-cargo -e CARGO_TARGET_DIR=/tmp/session-host-target \
-  docker.io/library/rust:1-bookworm bash -c '
+  docker.io/library/rust:1.95.0-bookworm bash -c '
     set -u
     rustup component add clippy rustfmt >/dev/null 2>&1
-    rustup toolchain install 1.95.0 --profile minimal >/dev/null 2>&1
     failed=0
     step() {
       name="$1"; shift
@@ -38,7 +38,7 @@ podman run --rm -v "$here":/w/session-host -v "$here/../agent":/w/agent:ro -w /w
     step CLIPPY cargo clippy --locked --all-targets -- -D warnings
     step TEST cargo test --locked
     grep -E "test result" /tmp/step.log
-    step MSRV cargo +1.95.0 build --locked --release
+    step BUILD cargo build --locked --release
     cd interop
     step INTEROP_FMT cargo fmt --check
     step INTEROP_CLIPPY cargo clippy --locked --all-targets -- -D warnings

@@ -1,0 +1,8 @@
+# The rustc of the nixpkgs the box builds the session host with (26.05), and
+# the crate's rust-version: CI and gate.sh compile what the box compiles.
+# interop/ inherits it. Moves with that nixpkgs, together with both.
+# `rustup toolchain install`, run here, installs it.
+[toolchain]
+channel = "1.95.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

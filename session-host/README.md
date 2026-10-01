@@ -339,9 +339,10 @@ contents, hook payloads or env values.
 
 ## Build and test
 
-`gate.sh` runs everything in a throwaway `rust:1` container: fmt, clippy
-`-D warnings`, the tests, a `--locked` build on rustc 1.95 (the box's nixpkgs),
-and `interop/`. CI (`.github/workflows/session-host.yml`) runs the same.
+`gate.sh` runs everything in a throwaway `rust:1.95.0` container — the rustc of
+the box's nixpkgs, which `rust-toolchain.toml` pins and `rust-version` names:
+fmt, clippy `-D warnings`, the tests, a `--locked` release build, and
+`interop/`. CI (`.github/workflows/session-host.yml`) runs the same.
 
 - `tests/host.rs` drives the built binary over TLS on `127.0.0.1:0` with
   throwaway keys. The tests need `sh`, `seq`, `sleep` and `git` on `PATH` and a

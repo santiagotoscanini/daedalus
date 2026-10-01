@@ -184,10 +184,8 @@ pub fn parse_smbios(table: &[u8]) -> Smbios {
     let mut arrays: Vec<(u8, u32, Option<u64>)> = Vec::new();
     for s in smbios_structures(table) {
         match s.ty {
-            3 => {
-                if out.form.is_none() {
-                    out.form = s.body.get(5).copied().and_then(chassis_form);
-                }
+            3 if out.form.is_none() => {
+                out.form = s.body.get(5).copied().and_then(chassis_form);
             }
             16 => {
                 let Some(devices) = u16_at(s.body, 0x0D) else {

@@ -81,12 +81,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The runners ship rustup; stable with the two components is all the
-      # crate needs, and no third-party toolchain action to pin.
+      # The runners ship rustup, so no third-party toolchain action to pin.
+      # With no argument it installs what rust-toolchain.toml names — the
+      # rustc the box builds the agent with, clippy and rustfmt — as every
+      # job here does.
       - name: Toolchain
+        run: rustup toolchain install
+      # rust-toolchain.toml and rust-version name the same release, so every
+      # build here is the MSRV build.
+      - name: The toolchain is rust-version
+        if: runner.os == 'Linux'
         run: |
-          rustup toolchain install stable --profile minimal --component clippy,rustfmt
-          rustup default stable
+          want="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          have="$(rustc --version | cut -d' ' -f2)"
+          case "$have" in "$want" | "$want".*) ;; *) echo "::error::rustc $have, rust-version $want"; exit 1 ;; esac
       # The Linux tray links GTK and loads AppIndicator.
       - name: GTK (Linux)
         if: runner.os == 'Linux'
@@ -174,9 +182,7 @@ jobs:
       # interop test was never run against. session-host.yml's interop step.
       - name: Toolchain
         working-directory: session-host
-        run: |
-          rustup toolchain install stable --profile minimal --component clippy,rustfmt
-          rustup default stable
+        run: rustup toolchain install
       - name: Interop with the session host (format, clippy, test)
         working-directory: session-host/interop
         run: |
@@ -196,9 +202,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Toolchain
-        run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+        run: rustup toolchain install
       - name: Build
         run: cargo build --release --locked --target x86_64-pc-windows-msvc
       - name: Stage
@@ -230,8 +234,7 @@ jobs:
           persist-credentials: false
       - name: Toolchain
         run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          rustup toolchain install
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
       # One universal app rather than two per-arch downloads: Intel Macs
       # are still out there, and the updater's asset table names one file.
@@ -388,8 +391,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends musl-tools
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          rustup toolchain install
           rustup target add ${{ matrix.target }}
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }} --no-default-features --bin daedalus-agent
@@ -435,8 +437,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends libgtk-3-dev libayatana-appindicator3-dev
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          rustup toolchain install
       - name: Build
         run: cargo build --release --locked --target x86_64-unknown-linux-gnu --bin daedalus-agent-tray
       - name: Check the binary starts

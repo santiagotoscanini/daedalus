@@ -2,10 +2,11 @@
 # served on the box; nix builds and runs it, nix/stacks/daedalus/session-host.nix).
 #
 # The same parts as session-host/gate.sh, on Linux (the only OS it runs on):
-# fmt, clippy with warnings denied, the tests, a build on the rustc the box
-# builds it with (its rust-version, 1.95), and the interop test against the
-# daedalus agent's own TLS client (session-host/interop/). An agent change
-# runs it too: that test builds the agent's link.
+# fmt, clippy with warnings denied, the tests and a release build, on the rustc
+# the box builds it with (rust-toolchain.toml; rust-version, 1.95), and the
+# interop test against the daedalus agent's own TLS client
+# (session-host/interop/). An agent change runs it too: that test builds the
+# agent's link.
 #
 # Convention: third-party actions are pinned to full commit SHAs.
 name: Session host
@@ -45,12 +46,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The runners ship rustup; no third-party toolchain action to pin.
-      - name: Toolchains
+      # The runners ship rustup; no third-party toolchain action to pin. With
+      # no argument it installs the release rust-toolchain.toml names
+      # (interop/ inherits it): the rustc the box builds with.
+      - name: Toolchain
+        run: rustup toolchain install
+      - name: The toolchain is rust-version
         run: |
-          rustup toolchain install stable --profile minimal --component clippy,rustfmt
-          rustup toolchain install 1.95.0 --profile minimal
-          rustup default stable
+          want="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          have="$(rustc --version | cut -d' ' -f2)"
+          case "$have" in "$want" | "$want".*) ;; *) echo "::error::rustc $have, rust-version $want"; exit 1 ;; esac
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -58,8 +63,8 @@ jobs:
       # The tests fork shells behind PTYs and run git (both on the runner).
       - name: Test
         run: cargo test --locked
-      - name: Build on rust-version (1.95)
-        run: cargo +1.95.0 build --locked --release
+      - name: Build (release)
+        run: cargo build --locked --release
       - name: Interop with the agent (format, clippy, test)
         working-directory: session-host/interop
         run: |
