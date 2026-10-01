@@ -100,9 +100,12 @@ const stripComments = (src: string) =>
 // from running off the end of a statement and finding some later `from`.
 const FROM = /(?:^|\n)\s*(import|export)(\s+type\b)?([^;=]*?)(?<![.\w])from\s*['"]([^'"]+)['"]/g
 const SIDE_EFFECT = /(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g
+const DYNAMIC = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g
 
 type Module = {
   statics: string[]
+  /** `await import(...)` specifiers: not an edge for the bundle, but still a reach. */
+  dynamics: string[]
   usesProcessEnv: boolean
   inlinesEnv: boolean
   makesController: boolean
@@ -116,6 +119,7 @@ for (const f of files) {
   for (const m of src.matchAll(SIDE_EFFECT)) statics.push(m[1] as string)
   parsed.set(f, {
     statics,
+    dynamics: [...src.matchAll(DYNAMIC)].map((m) => m[1] as string),
     usesProcessEnv: /process\.env/.test(src),
     inlinesEnv: /import\.meta\.env\.VITE_/.test(src),
     makesController: /\bcontroller\(\)/.test(src),
@@ -263,6 +267,24 @@ describe('the host boundary', () => {
       .flatMap((f) =>
         (edges.get(f) ?? []).filter((d) => clients.includes(d)).map((d) => `${f} → ${d}`),
       )
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  it('reaches the database through lib/repo alone', () => {
+    // `lib/repo/**` is the only path to the database: a query written anywhere
+    // else is one no repository test covers and no reader of lib/repo finds.
+    // Static and dynamic imports both count here — `await import('host/db')`
+    // keeps the bundle clean and the layering just as broken. The migrator is
+    // server.mjs's own (migrate.mjs), outside `src`.
+    const db = 'src/host/db.ts'
+    const offenders = files
+      .filter((f) => !f.startsWith('src/lib/repo/'))
+      .filter((f) => {
+        const mod = parsed.get(f)
+        return [...(mod?.statics ?? []), ...(mod?.dynamics ?? [])].some(
+          (s) => resolveSpec(f, s) === db,
+        )
+      })
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

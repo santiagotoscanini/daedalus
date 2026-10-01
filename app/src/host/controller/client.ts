@@ -526,12 +526,12 @@ export function controller(): ControllerClient {
       },
       // A machine that logged out asks to be forgotten, its tunnel with it;
       // one whose user changed a setting from its menu bar asks for it
-      // (lib/repo/nodes.ts `applyNodePolicyRequest`).
+      // (core/nodes.ts `applyNodePolicyRequest`).
       onEvent: (e, p) => {
         const id = nodeLeftId(e, p)
         if (id !== null) {
-          void import('../../lib/repo/nodes')
-            .then((m) => m.forgetNode(id, { left: true }))
+          void Promise.all([import('../../core/nodes'), import('../../core/ctx')])
+            .then(async ([m, c]) => m.forgetNode(await c.makeCtx(), id, { left: true }))
             .catch((err: unknown) => {
               console.warn(`controller: ${id} logged out but was not forgotten: ${String(err)}`)
             })
@@ -539,8 +539,10 @@ export function controller(): ControllerClient {
         }
         const asked = nodePolicyRequest(e, p)
         if (asked !== null) {
-          void import('../../lib/repo/nodes')
-            .then((m) => m.applyNodePolicyRequest(asked.id, asked.changes))
+          void Promise.all([import('../../core/nodes'), import('../../core/ctx')])
+            .then(async ([m, c]) =>
+              m.applyNodePolicyRequest(await c.makeCtx(), asked.id, asked.changes),
+            )
             .catch((err: unknown) => {
               console.warn(
                 `controller: ${asked.id}'s settings request was not applied: ${String(err)}`,

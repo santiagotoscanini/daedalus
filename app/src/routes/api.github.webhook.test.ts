@@ -45,19 +45,17 @@ const h = vi.hoisted(() => ({
   seq: 0,
 }))
 
-vi.mock('../host/db', () => ({
-  db: {
-    transaction: async <T>(fn: (tx: FakeTx) => Promise<T>): Promise<T> => {
-      const tx: FakeTx = {
-        deliveries: new Map(h.deliveries),
-        builds: h.builds.map((b) => ({ ...b })),
-      }
-      h.txs.push(tx)
-      const result = await fn(tx)
-      h.deliveries = tx.deliveries
-      h.builds = tx.builds
-      return result
-    },
+vi.mock('../lib/repo/pool', () => ({
+  transaction: async <T>(fn: (tx: FakeTx) => Promise<T>): Promise<T> => {
+    const tx: FakeTx = {
+      deliveries: new Map(h.deliveries),
+      builds: h.builds.map((b) => ({ ...b })),
+    }
+    h.txs.push(tx)
+    const result = await fn(tx)
+    h.deliveries = tx.deliveries
+    h.builds = tx.builds
+    return result
   },
 }))
 vi.mock('../lib/repo/github-deliveries', () => ({

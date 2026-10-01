@@ -150,14 +150,14 @@ async function handleDelivery(delivery: Delivery, deps: WebhookDeps): Promise<Re
   const plan = await planDelivery(delivery, deps)
   if (plan instanceof Response) return plan
 
-  const [{ db }, { recordDelivery, setDeliveryOutcome }, { insertOrSupersedeQueued }] =
+  const [{ transaction }, { recordDelivery, setDeliveryOutcome }, { insertOrSupersedeQueued }] =
     await Promise.all([
-      import('../host/db'),
+      import('../lib/repo/pool'),
       import('../lib/repo/github-deliveries'),
       import('../lib/repo/builds'),
     ])
 
-  const done = await db.transaction(async (tx): Promise<Reply | null> => {
+  const done = await transaction(async (tx): Promise<Reply | null> => {
     const fresh = await recordDelivery(tx, {
       id: delivery.id,
       event: delivery.event,

@@ -21,7 +21,7 @@ import {
 //
 // So the set is sent whenever it could differ from what the controller holds:
 // on every (re)connection (the client's onConnect, ./client.ts), and after
-// every decision or policy save (lib/repo/nodes.ts). It is idempotent — the
+// every decision or policy save (core/nodes.ts). It is idempotent — the
 // controller applies it as a difference — and serialised here, so two saves
 // in a row never race each other's sets. `ensureControllerLink` runs every
 // minute (from host/background.ts, like the build scheduler) to re-dial a
@@ -116,11 +116,7 @@ function slot(): Slot {
 }
 
 async function decidedRows(): Promise<DecidedRow[]> {
-  const { db } = await import('../db')
-  const { nodes } = await import('../schema')
-  return db
-    .select({ id: nodes.id, publicKey: nodes.publicKey, state: nodes.state, policy: nodes.policy })
-    .from(nodes)
+  return (await import('../../lib/repo/nodes')).decidedRows()
 }
 
 type Rows = () => Promise<DecidedRow[]>
@@ -169,13 +165,11 @@ export function syncDesired(
   return q
 }
 
-/** A sync, not awaited, on its own Ctx: for a decision that must not wait on the controller. */
-export function requestDesiredSync(): void {
-  void import('../../core/ctx')
-    .then(async ({ makeCtx }) => syncDesired(await makeCtx()))
-    .catch((e: unknown) => {
-      console.warn(`controller: no desired sync: ${e instanceof Error ? e.message : String(e)}`)
-    })
+/** A sync, not awaited: for a decision that must not wait on the controller. */
+export function requestDesiredSync(ctx: Pick<Ctx, 'controller'>): void {
+  void syncDesired(ctx).catch((e: unknown) => {
+    console.warn(`controller: no desired sync: ${e instanceof Error ? e.message : String(e)}`)
+  })
 }
 
 export function lastDesiredSync(): DesiredSync | null {
@@ -296,7 +290,7 @@ export async function ensureControllerLink(ctx: Pick<Ctx, 'controller'>): Promis
   try {
     if (ctx.controller.hello() === null) await ctx.controller.systemInfo()
     const seen = await ctx.controller.nodesList()
-    const { recordObserved } = await import('../../lib/repo/nodes')
+    const { recordObserved } = await import('../../core/nodes')
     await recordObserved(seen)
   } catch {
     // Not reachable, or the table: the next minute tries again, and the

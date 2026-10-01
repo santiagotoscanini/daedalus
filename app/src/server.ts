@@ -9,4 +9,4 @@ import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
 export default createServerEntry({ fetch: handler.fetch })
 
 export { start as startBackground, stop as stopBackground } from './host/background'
-export { closeDb } from './host/db'
+export { closeDb } from './lib/repo/pool'

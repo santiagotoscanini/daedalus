@@ -136,7 +136,12 @@ here.
   imports) puts it in the browser chunk of every route that uses the
   function; `host/boundary.test.ts` fails on it.
 - `src/lib/repo/` — drizzle repositories (apps, builds, deployments,
-  github deliveries, nodes, settings);
+  enroll codes, github deliveries, local admins, MCP tokens, nodes,
+  settings, and `pool.ts` for the probe, a cross-repository transaction and
+  shutdown) and the ONLY importer of `host/db.ts` — the boundary test
+  fails on any other, static or dynamic. A repository reads and writes
+  rows; what follows a write (a sync, a DHCP line, a tunnel) is `core/`
+  (`core/nodes.ts` for the machines);
   `src/host/schema.ts` + `host/db.ts` for the database side
   (`pnpm db:generate` / `db:migrate` for schema changes; drizzle.config
   points at `src/host/schema.ts`).

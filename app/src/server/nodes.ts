@@ -18,20 +18,20 @@ const nodeId = asValidator(withMessage(obj({ id: nodeIdField }), 'expected a nod
  * desired set follows, and the controller upgrades the open connection.
  */
 export const approveNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
-  const { approveNode, enrollNode } = await import('../lib/repo/nodes')
-  if (await approveNode(data.id, context.actor)) return { ok: true }
+  const { approveNode, enrollNode } = await import('../core/nodes')
   const ctx = await context.ctx()
-  return { ok: await enrollNode(await ctx.controller.nodesGet(data.id), context.actor) }
+  if (await approveNode(ctx, data.id, context.actor)) return { ok: true }
+  return { ok: await enrollNode(ctx, await ctx.controller.nodesGet(data.id), context.actor) }
 })
 
-export const revokeNodeFn = adminFn.validator(nodeId).handler(async ({ data }) => {
-  const { revokeNode } = await import('../lib/repo/nodes')
-  return { ok: await revokeNode(data.id) }
+export const revokeNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
+  const { revokeNode } = await import('../core/nodes')
+  return { ok: await revokeNode(await context.ctx(), data.id) }
 })
 
-export const forgetNodeFn = adminFn.validator(nodeId).handler(async ({ data }) => {
-  const { forgetNode } = await import('../lib/repo/nodes')
-  return { ok: await forgetNode(data.id) }
+export const forgetNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
+  const { forgetNode } = await import('../core/nodes')
+  return { ok: await forgetNode(await context.ctx(), data.id) }
 })
 
 /**
@@ -84,16 +84,21 @@ export const fetchMachinesFn = readFn.handler(async ({ context }) => {
 export const saveNodePolicyFn = adminFn
   .validator(nodePolicyPatch)
   .handler(async ({ data, context }) => {
-    const { setNodePolicy } = await import('../lib/repo/nodes')
+    const { setNodePolicy } = await import('../core/nodes')
     return {
-      ok: await setNodePolicy(data.id, { set: data.set, unset: data.unset }, context.actor),
+      ok: await setNodePolicy(
+        await context.ctx(),
+        data.id,
+        { set: data.set, unset: data.unset },
+        context.actor,
+      ),
     }
   })
 
 /**
  * Turn santree on for a machine: a shell on the box as its operator, who
  * has root through sudo. The admin confirms on a page that shows the
- * machine and its key, and lib/repo/nodes.ts `grantSantree` checks the key
+ * machine and its key, and core/nodes.ts `grantSantree` checks the key
  * the page showed against the row.
  * The web switch and a Mac's "santree on the box" both arrive here, through
  * the Machines page's confirmation. Answers once the controller has the set.
@@ -105,11 +110,11 @@ export const grantSantreeFn = adminFn
     ),
   )
   .handler(async ({ data, context }) => {
-    const { grantSantree } = await import('../lib/repo/nodes')
+    const { grantSantree } = await import('../core/nodes')
     if (data.fingerprint.length > 100) {
       return { ok: false as const, reason: 'That is not a key.' }
     }
-    return grantSantree({ ...data, by: context.actor })
+    return grantSantree(await context.ctx(), { ...data, by: context.actor })
   })
 
 /**

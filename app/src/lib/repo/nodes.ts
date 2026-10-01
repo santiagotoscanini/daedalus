@@ -1,39 +1,28 @@
-import { and, asc, eq, type SQL, sql } from 'drizzle-orm'
+import { and, asc, eq, ne, or, type SQL, sql } from 'drizzle-orm'
 import type { Ctx } from '../../core/ctx'
-import {
-  enrollValues,
-  observedFacts,
-  requestDesiredSync,
-  syncDesired,
-} from '../../host/controller/nodes'
-import type {
-  ControllerNode,
-  ControllerNodeDetail,
-  NodePolicyChanges,
-} from '../../host/controller/wire'
+import type { DecidedRow } from '../../host/controller/nodes'
+import type { ControllerNode } from '../../host/controller/wire'
 import { db } from '../../host/db'
-import { dhcpHostsMissing, householdMacs, writeDhcpHosts } from '../../host/dhcp-hosts'
-import { fingerprintOf, releaseTunnel } from '../../host/enroll'
-import { requestGatewaySync } from '../../host/gateway-sync'
+import { householdMacs } from '../../host/dhcp-hosts'
+import { fingerprintOf } from '../../host/enroll'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
 import type { NodeClaudeSummary } from '../agent/status'
 import type { NodeForFile } from '../nodes-file'
 import { slugOf } from '../nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
-import { enrollStore } from './enroll'
 
 // The nodes table: the machines the box has decided about, and what it asks
 // of each. A row is born when an admin approves a key the controller holds
-// pending (`enrollNode`), and carries the decision, the policy Settings ›
+// pending (`insertEnrolled`), and carries the decision, the policy Settings ›
 // Machines sets, and the machine's last-known facts — kept from what the
-// controller observed (`recordObserved`), because the controller forgets
+// controller observed (`writeObserved`), because the controller forgets
 // everything when it restarts and the DHCP lines and the pages
 // still need an address and a name. Whether a machine is connected, and its
 // Claude summary, are the controller's word, joined in on every read.
 //
-// Every decision and policy save ends in a desired-state sync
-// (host/controller/nodes.ts), which is how it reaches the machine, and a
-// gateway sync (host/gateway-sync.ts), which is how its providers do.
+// This file is the rows: what a decision, a policy save or a sighting WRITES.
+// What follows each — the desired-state sync, the gateway, the DHCP lines, a
+// tunnel released — is core/nodes.ts.
 
 export type NodeRow = {
   id: string
@@ -135,25 +124,66 @@ async function seenById(ctx: Pick<Ctx, 'controller'>): Promise<Map<string, Contr
   return list === null ? null : new Map(list.map((s) => [s.id, s]))
 }
 
-export async function listNodes(ctx: Pick<Ctx, 'controller'>): Promise<NodeRow[]> {
+/**
+ * Every decided machine, with the controller's word joined in. `seen` is the
+ * controller's list when the caller has already asked for it (null: it could
+ * not be read); left out, it is asked here.
+ */
+export async function listNodes(
+  ctx: Pick<Ctx, 'controller'>,
+  seen?: readonly ControllerNode[] | null,
+): Promise<NodeRow[]> {
   // In the order they joined, and never by when they last spoke: a picker
   // whose pills swap places between two loads because one machine spoke a
   // second later reads as a race, not as a list.
-  const [all, household, seen] = await Promise.all([
+  const [all, household, byId] = await Promise.all([
     db.select().from(nodes).orderBy(asc(nodes.firstSeenAt), asc(nodes.id)),
     householdMacs(),
-    seenById(ctx),
+    seen === undefined ? seenById(ctx) : seen === null ? null : new Map(seen.map((s) => [s.id, s])),
   ])
-  return all.map((n) => row(n, household, seen))
+  return all.map((n) => row(n, household, byId))
 }
 
 export async function getNode(ctx: Pick<Ctx, 'controller'>, id: string): Promise<NodeRow | null> {
-  const [[n], household, seen] = await Promise.all([
-    db.select().from(nodes).where(eq(nodes.id, id)).limit(1),
-    householdMacs(),
-    seenById(ctx),
-  ])
+  const [n, household, seen] = await Promise.all([nodeById(id), householdMacs(), seenById(ctx)])
   return n === undefined ? null : row(n, household, seen)
+}
+
+export type NodeRecord = typeof nodes.$inferSelect
+
+export async function nodeById(id: string): Promise<NodeRecord | undefined> {
+  const [n] = await db.select().from(nodes).where(eq(nodes.id, id)).limit(1)
+  return n
+}
+
+export async function allNodeRows(): Promise<NodeRecord[]> {
+  return db.select().from(nodes)
+}
+
+/** What the controller's desired set is built from (host/controller/nodes.ts `desiredSet`). */
+export async function decidedRows(): Promise<DecidedRow[]> {
+  return db
+    .select({ id: nodes.id, publicKey: nodes.publicKey, state: nodes.state, policy: nodes.policy })
+    .from(nodes)
+}
+
+/**
+ * The hostname of another approved machine already called `name` on the
+ * network, or null. Only the rows whose label is `name`, or who have none and
+ * so go by their hostname's slug, are read.
+ */
+export async function netNameTakenBy(name: string, exceptId: string): Promise<string | null> {
+  const candidates = await db
+    .select()
+    .from(nodes)
+    .where(
+      and(
+        ne(nodes.id, exceptId),
+        eq(nodes.state, 'approved'),
+        or(sql`${nodes.policy}->>'name' = ${name}`, sql`${nodes.policy}->>'name' IS NULL`),
+      ),
+    )
+  return candidates.find((n) => netNameOf(n) === name)?.hostname ?? null
 }
 
 /**
@@ -177,57 +207,29 @@ function patched(p: PolicyPatch, by: string) {
   return { policy: policyPatchSql(p), policyChangedBy: by, policyChangedAt: new Date() }
 }
 
-/**
- * Change a node's policy from the page (`policyPatchSql`), recorded under
- * `by`. santree is turned ON only through `grantSantree`, never here.
- */
-export async function setNodePolicy(id: string, p: PolicyPatch, by: string): Promise<boolean> {
-  if (p.set.santree === true) {
-    throw new Error('santree is turned on through its confirmation, never a policy patch')
-  }
-  // Two machines cannot share a name on the network: the lease, the
-  // nodes.json entry and every consumer dial it.
-  const name = p.set.name
-  if (name !== undefined) {
-    const others = await db.select().from(nodes)
-    const taken = others.find((n) => n.id !== id && n.state === 'approved' && netNameOf(n) === name)
-    if (taken !== undefined) {
-      throw new Error(`"${name}" is already ${taken.hostname}'s name on the network`)
-    }
-  }
+/** Who a change asked for from the machine itself is recorded under. */
+export const byNode = (id: string): string => `node:${id}`
+
+/** Patch a row's policy, recorded under `by`. True when the id named a row. */
+export async function writePolicy(id: string, p: PolicyPatch, by: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
     .set(patched(p, by))
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await afterDecision()
   return updated.length > 0
 }
 
-/** Who a change asked for from the machine itself is recorded under. */
-export const byNode = (id: string): string => `node:${id}`
-
 /**
- * A machine asks for its own settings (the controller's
- * `nodes.policy_request`, decoded by host/controller/wire.ts
- * `nodePolicyRequest`): keep awake, Claude Remote Control, santree OFF. Only
- * the keys it sent are written, only into an approved row, and only when the
- * row does not hold them already; then the desired set goes to the
- * controller, which is what changes the machine. Never the DHCP lines or the
- * gateway: none of these keys moves either, and a DHCP write reloads
- * pi-hole for the whole house. True when the row changed.
+ * Write the keys a machine asked for into its own row, as the machine — only
+ * an approved row, and only when it does not hold them already. The row
+ * written, or undefined when nothing changed.
  */
-export async function applyNodePolicyRequest(
+export async function writePolicyRequest(
   id: string,
-  changes: NodePolicyChanges,
-): Promise<boolean> {
-  // The decoder refused santree ON already; a door is checked where it opens.
-  if ((changes as { santree?: boolean }).santree === true) {
-    throw new Error(`${id} asked to turn santree on, which only an admin does`)
-  }
-  const set: NodePolicy = { ...changes }
-  if (Object.keys(set).length === 0) return false
-  const changed = await db
+  set: NodePolicy,
+): Promise<{ id: string; hostname: string; policy: NodePolicy | null } | undefined> {
+  const [changed] = await db
     .update(nodes)
     .set(patched({ set, unset: [] }, byNode(id)))
     .where(
@@ -238,84 +240,42 @@ export async function applyNodePolicyRequest(
       ),
     )
     .returning({ id: nodes.id, hostname: nodes.hostname, policy: nodes.policy })
-  const row = changed[0]
-  if (row === undefined) return false
-  const name = row.policy?.displayName?.trim() || row.hostname
-  const said = Object.entries(set)
-    .map(([k, v]) => `${k}=${String(v)}`)
-    .join(' ')
-  console.info(`nodes: ${id} (${name}) set ${said} from the machine`)
-  requestDesiredSync()
-  return true
+  return changed
 }
 
-/** How a santree grant ended (`grantSantree`). */
-export type SantreeGrant = { ok: true; already: boolean } | { ok: false; reason: string }
-
-/**
- * Turn santree on for machine `id` — a shell on the box as its operator,
- * who has root through sudo — once an admin confirmed it on a page that
- * showed the machine and its key. Only an approved row, only the key the
- * page showed (`fingerprint`, checked again against the row), only on a box
- * with a session host, recorded under `by`; then the desired set is sent and
- * its answer awaited, so the reply says what the controller took.
- */
-export async function grantSantree(
-  input: { id: string; fingerprint: string; by: string },
-  deps: { sessionHost: () => Promise<boolean>; sync: () => Promise<void> } = {
-    sessionHost: hasSessionHost,
-    sync: syncNow,
-  },
-): Promise<SantreeGrant> {
-  const [n] = await db.select().from(nodes).where(eq(nodes.id, input.id)).limit(1)
-  if (n === undefined || n.state !== 'approved') {
-    return { ok: false, reason: 'This machine is not approved.' }
-  }
-  const fingerprint = fingerprintOf(n.publicKey)
-  if (fingerprint !== input.fingerprint) {
-    return { ok: false, reason: 'This machine has another key now; reload the page.' }
-  }
-  if (n.policy?.santree === true) return { ok: true, already: true }
-  if (!(await deps.sessionHost())) {
-    return { ok: false, reason: 'This box runs no session host, so santree has nowhere to go.' }
-  }
+/** santree on, only while the row is approved and still holds `publicKey`. */
+export async function writeSantreeOn(id: string, publicKey: string, by: string): Promise<boolean> {
   const changed = await db
     .update(nodes)
-    .set(patched({ set: { santree: true }, unset: [] }, input.by))
-    .where(
-      and(eq(nodes.id, input.id), eq(nodes.state, 'approved'), eq(nodes.publicKey, n.publicKey)),
-    )
+    .set(patched({ set: { santree: true }, unset: [] }, by))
+    .where(and(eq(nodes.id, id), eq(nodes.state, 'approved'), eq(nodes.publicKey, publicKey)))
     .returning({ id: nodes.id })
-  if (changed.length === 0) return { ok: false, reason: 'This machine changed; reload the page.' }
-  console.info(`nodes: ${input.id} santree turned on by ${input.by}`)
-  await deps.sync()
-  return { ok: true, already: false }
+  return changed.length > 0
 }
 
-/** Whether this box runs a session host santree can reach. */
-async function hasSessionHost(): Promise<boolean> {
-  const { makeCtx } = await import('../../core/ctx')
-  const { readSessionHost } = await import('../../host/session-host')
-  return (await readSessionHost(await makeCtx())) !== null
-}
-
-/** Approve a row the table already holds (a revoked key, trusted again). */
-export async function approveNode(id: string, by: string): Promise<boolean> {
+export async function setApproved(id: string, by: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
     .set({ state: 'approved', approvedAt: new Date(), approvedBy: by, revokedAt: null })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await afterDecision()
   return updated.length > 0
 }
 
-/**
- * Approve a key the controller holds pending: the row is made from its key
- * and its hello, approved in the same write.
- */
-export async function enrollNode(detail: ControllerNodeDetail, by: string): Promise<boolean> {
-  const v = enrollValues(detail)
+/** A new approved row for a key the controller held pending; false when the key has one. */
+export async function insertEnrolled(
+  v: {
+    id: string
+    publicKey: string
+    hostname: string
+    os: string
+    arch: string
+    agentVersion: string
+    mac: string | null
+    lanIp: string | null
+  },
+  by: string,
+): Promise<boolean> {
   const now = new Date()
   const made = await db
     .insert(nodes)
@@ -329,146 +289,40 @@ export async function enrollNode(detail: ControllerNodeDetail, by: string): Prom
     })
     .onConflictDoNothing()
     .returning({ id: nodes.id })
-  await afterDecision()
   return made.length > 0
 }
 
-export async function revokeNode(id: string): Promise<boolean> {
+export async function setRevoked(id: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
     .set({ state: 'revoked', revokedAt: new Date() })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
-  await afterDecision()
-  if (updated.length > 0 && (await hasTunnel(id))) {
-    // Told first, through the tunnel, so the machine forgets its log-in
-    // rather than dialling a tunnel that is gone.
-    await syncNow()
-    await releaseTunnel({ store: enrollStore, wg: await boxWgEasy() }, id)
-  }
   return updated.length > 0
 }
 
-/**
- * Forget a row entirely — for a machine that is gone, or a key that was a
- * mistake. Left out of the desired set, a key that connects again waits
- * pending, as a stranger's would.
- *
- * A logged-in machine (one with a tunnel) is revoked first and the
- * controller's answer awaited, so it hears `revoked` before its tunnel goes;
- * one that logged out itself (`left`, the controller's `nodes.left`) already
- * forgot, and only its tunnel and row go.
- */
-export async function forgetNode(id: string, opts: { left?: boolean } = {}): Promise<boolean> {
-  if (await hasTunnel(id)) {
-    if (opts.left !== true) {
-      const revoked = await db
-        .update(nodes)
-        .set({ state: 'revoked', revokedAt: new Date() })
-        .where(eq(nodes.id, id))
-        .returning({ id: nodes.id })
-      if (revoked.length > 0) await syncNow()
-    }
-    await releaseTunnel({ store: enrollStore, wg: await boxWgEasy() }, id)
-  }
+export async function deleteNode(id: string): Promise<boolean> {
   const gone = await db.delete(nodes).where(eq(nodes.id, id)).returning({ id: nodes.id })
-  await afterDecision()
   return gone.length > 0
 }
 
-/** Whether the node logged in with a tunnel of its own; a table that cannot be read says no. */
-async function hasTunnel(id: string): Promise<boolean> {
-  try {
-    return (await enrollStore.tunnelOf(id)) !== null
-  } catch (e) {
-    console.warn(`nodes: ${id}'s tunnel not read: ${e instanceof Error ? e.message : String(e)}`)
-    return false
-  }
-}
-
-/** The desired set, sent and answered now (a decision's own sync is not awaited). */
-async function syncNow(): Promise<void> {
-  const { makeCtx } = await import('../../core/ctx')
-  const s = await syncDesired(await makeCtx())
-  if (s.error !== null) console.warn(`nodes: the controller did not take the set: ${s.error}`)
-}
-
-async function boxWgEasy() {
-  const { wgEasy } = await import('../../host/wg-easy')
-  return wgEasy()
-}
-
-/**
- * What follows every decision about a machine and every policy save: its DHCP
- * line, the desired set that tells the controller, and the gateway — a machine
- * trusted, revoked or forgotten is one whose providers are routed or not, now
- * rather than at the next five-minute sync.
- */
-async function afterDecision(): Promise<void> {
-  await publishDhcpHosts()
-  requestDesiredSync()
-  requestGatewaySync()
-}
-
-/**
- * Keep each decided row's last-known facts from what the controller
- * observed (host/controller/nodes.ts `observedFacts`), and re-render the
- * DHCP lines when an address, a MAC or a name moved.
- */
-export async function recordObserved(seen: readonly ControllerNode[]): Promise<void> {
-  if (seen.length === 0) return
-  const byId = new Map(seen.map((s) => [s.id, s]))
-  const all = await db.select().from(nodes)
-  let moved = dhcpHostsMissing()
-  for (const n of all) {
-    const s = byId.get(n.id)
-    if (s === undefined || n.state !== 'approved') continue
-    const facts = observedFacts(n, s)
-    if (facts === null) continue
-    await db.update(nodes).set(facts).where(eq(nodes.id, n.id))
-    if (facts.lanIp !== undefined || facts.mac !== undefined || facts.hostname !== undefined) {
-      moved = true
-    }
-  }
-  if (moved) await publishDhcpHosts()
-}
-
-/**
- * Write the approved nodes' dnsmasq lines (host/dhcp-hosts.ts): how each
- * machine gets its name from pi-hole. A MAC the household file already
- * names is theirs to name, and skipped. Best effort: a failure to write the
- * file is logged and never fails the decision that triggered it — the lines
- * are a consequence, not the act.
- */
-async function publishDhcpHosts(): Promise<void> {
-  try {
-    const all = await db.select().from(nodes)
-    const household = await householdMacs()
-    await writeDhcpHosts(
-      all
-        .filter((n) => n.state === 'approved')
-        .filter((n) => n.mac !== null && !household.has(n.mac.toLowerCase()))
-        .map((n) => ({
-          id: n.id,
-          mac: n.mac ?? '',
-          name: netNameOf(n),
-          lanIp: n.policy?.pinAddress === true ? n.lanIp : null,
-        })),
-    )
-  } catch (e) {
-    console.warn(`dhcp hosts not written: ${e instanceof Error ? e.message : String(e)}`)
-  }
+/** The columns a sighting moved, per row (host/controller/nodes.ts `observedFacts`), in one transaction. */
+export async function writeObserved(
+  moved: readonly { id: string; facts: Partial<NodeRecord> }[],
+): Promise<void> {
+  if (moved.length === 0) return
+  await db.transaction(async (tx) => {
+    for (const m of moved) await tx.update(nodes).set(m.facts).where(eq(nodes.id, m.id))
+  })
 }
 
 /** What an Apply writes to site/nodes.json: the approved nodes, resolved (lib/nodes-file.ts). */
 export async function nodesForFile(): Promise<NodeForFile[]> {
-  const all = await db.select().from(nodes)
-  return all
-    .filter((n) => n.state === 'approved')
-    .map((n) => ({
-      id: n.id,
-      name: netNameOf(n),
-      os: n.os,
-      providers: providersOf(n.policy ?? {}),
-    }))
+  const all = await db.select().from(nodes).where(eq(nodes.state, 'approved'))
+  return all.map((n) => ({
+    id: n.id,
+    name: netNameOf(n),
+    os: n.os,
+    providers: providersOf(n.policy ?? {}),
+  }))
 }

@@ -1,6 +1,7 @@
 import { PgDialect } from 'drizzle-orm/pg-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ControllerNodeDetail } from '../../host/controller/wire'
+import type { ControllerNodeDetail } from '../host/controller/wire'
+import type { Ctx } from './ctx'
 
 // Every decision about a machine reaches the controller AND the gateway. A
 // revoked or forgotten machine whose LiteLLM routes stayed published until the
@@ -19,10 +20,12 @@ const h = vi.hoisted(() => ({
   gateway: 0,
   dhcp: 0,
   rows: [] as unknown[][],
+  synced: 0,
+  sessionHost: true,
   sets: [] as Record<string, unknown>[],
 }))
 
-vi.mock('../../host/db', () => {
+vi.mock('../host/db', () => {
   const chain: Record<string, unknown> = {}
   for (const m of [
     'select',
@@ -47,7 +50,7 @@ vi.mock('../../host/db', () => {
     Promise.resolve(h.rows.shift() ?? [{ id: 'n1' }]).then(ok)
   return { db: chain }
 })
-vi.mock('../../host/dhcp-hosts', () => ({
+vi.mock('../host/dhcp-hosts', () => ({
   householdMacs: async () => new Set<string>(),
   dhcpHostsMissing: () => false,
   writeDhcpHosts: async () => {
@@ -55,23 +58,32 @@ vi.mock('../../host/dhcp-hosts', () => ({
     return true
   },
 }))
-vi.mock('../../host/controller/nodes', () => ({
+vi.mock('../host/controller/nodes', () => ({
   requestDesiredSync: () => {
     h.desired++
+  },
+  syncDesired: async () => {
+    h.synced++
+    return { error: null }
   },
   enrollValues: () => ({ id: 'n1' }),
   observedFacts: () => null,
 }))
 // No machine here logged in with a tunnel of its own.
-vi.mock('./enroll', () => ({ enrollStore: { tunnelOf: async () => null } }))
-vi.mock('../../host/gateway-sync', () => ({
+vi.mock('../lib/repo/enroll', () => ({ enrollStore: { tunnelOf: async () => null } }))
+vi.mock('../host/gateway-sync', () => ({
   requestGatewaySync: () => {
     h.gateway++
   },
 }))
+vi.mock('../host/session-host', () => ({
+  readSessionHost: async () => (h.sessionHost ? {} : null),
+}))
 
-const repo = await import('./nodes')
-const { fingerprintOf } = await import('../../host/enroll')
+const flows = await import('./nodes')
+const repo = await import('../lib/repo/nodes')
+const ctx = {} as Ctx
+const { fingerprintOf } = await import('../host/enroll')
 
 beforeEach(() => {
   h.desired = 0
@@ -79,17 +91,19 @@ beforeEach(() => {
   h.dhcp = 0
   h.rows = []
   h.sets = []
+  h.synced = 0
+  h.sessionHost = true
 })
 
 describe('a decision about a machine', () => {
   it.each([
-    ['approve', () => repo.approveNode('n1', 'alice')],
-    ['enroll', () => repo.enrollNode({} as ControllerNodeDetail, 'alice')],
-    ['revoke', () => repo.revokeNode('n1')],
-    ['forget', () => repo.forgetNode('n1')],
+    ['approve', () => flows.approveNode(ctx, 'n1', 'alice')],
+    ['enroll', () => flows.enrollNode(ctx, {} as ControllerNodeDetail, 'alice')],
+    ['revoke', () => flows.revokeNode(ctx, 'n1')],
+    ['forget', () => flows.forgetNode(ctx, 'n1')],
     [
       'a policy save',
-      () => repo.setNodePolicy('n1', { set: { awakeHold: false }, unset: [] }, 'alice'),
+      () => flows.setNodePolicy(ctx, 'n1', { set: { awakeHold: false }, unset: [] }, 'alice'),
     ],
   ])('%s syncs the desired set, the gateway and the DHCP lines', async (_, act) => {
     expect(await act()).toBe(true)
@@ -110,11 +124,16 @@ describe('a policy patch', () => {
   })
 
   it('records who changed it, and never turns santree on from a page', async () => {
-    await repo.setNodePolicy('n1', { set: { claudeRemoteControl: false }, unset: [] }, 'alice')
+    await flows.setNodePolicy(
+      ctx,
+      'n1',
+      { set: { claudeRemoteControl: false }, unset: [] },
+      'alice',
+    )
     expect(h.sets[0]).toMatchObject({ policyChangedBy: 'alice' })
     expect(h.sets[0]?.policyChangedAt).toBeInstanceOf(Date)
     await expect(
-      repo.setNodePolicy('n1', { set: { santree: true }, unset: [] }, 'alice'),
+      flows.setNodePolicy(ctx, 'n1', { set: { santree: true }, unset: [] }, 'alice'),
     ).rejects.toThrow(/confirmation/)
   })
 })
@@ -122,7 +141,7 @@ describe('a policy patch', () => {
 describe('a machine asking for its settings', () => {
   it('writes only the keys asked for, as the machine, and syncs the controller alone', async () => {
     h.rows = [[{ id: 'n1', hostname: 'mac', policy: {} }]]
-    expect(await repo.applyNodePolicyRequest('n1', { awakeHold: false })).toBe(true)
+    expect(await flows.applyNodePolicyRequest(ctx, 'n1', { awakeHold: false })).toBe(true)
     expect(h.sets[0]).toMatchObject({ policyChangedBy: 'node:n1' })
     expect([h.desired, h.gateway, h.dhcp]).toEqual([1, 0, 0])
   })
@@ -131,15 +150,15 @@ describe('a machine asking for its settings', () => {
     // The UPDATE's own condition (state approved, NOT policy @> patch)
     // matched no row.
     h.rows = [[]]
-    expect(await repo.applyNodePolicyRequest('n1', { claudeRemoteControl: true })).toBe(false)
+    expect(await flows.applyNodePolicyRequest(ctx, 'n1', { claudeRemoteControl: true })).toBe(false)
     expect(h.desired).toBe(0)
   })
 
   it('never turns santree on, whatever reached it', async () => {
-    await expect(repo.applyNodePolicyRequest('n1', { santree: true } as never)).rejects.toThrow(
-      /only an admin/,
-    )
-    expect(await repo.applyNodePolicyRequest('n1', {})).toBe(false)
+    await expect(
+      flows.applyNodePolicyRequest(ctx, 'n1', { santree: true } as never),
+    ).rejects.toThrow(/only an admin/)
+    expect(await flows.applyNodePolicyRequest(ctx, 'n1', {})).toBe(false)
     expect(h.sets).toEqual([])
   })
 })
@@ -155,19 +174,14 @@ describe('turning santree on (the confirmation)', () => {
     policy: {},
     ...over,
   })
-  const deps = (host = true) => {
-    const d = { synced: 0, sessionHost: async () => host, sync: async () => void d.synced++ }
-    return d
-  }
-  const grant = (over: Partial<Parameters<typeof repo.grantSantree>[0]> = {}, d = deps()) =>
-    repo.grantSantree({ id: 'n1', fingerprint, by: 'alice', ...over }, d)
+  const grant = (over: Partial<Parameters<typeof flows.grantSantree>[1]> = {}) =>
+    flows.grantSantree(ctx, { id: 'n1', fingerprint, by: 'alice', ...over })
 
   it('writes santree on under the admin, and answers once the controller has the set', async () => {
-    const d = deps()
     h.rows = [[row()], [{ id: 'n1' }]]
-    expect(await grant({}, d)).toEqual({ ok: true, already: false })
+    expect(await grant()).toEqual({ ok: true, already: false })
     expect(h.sets[0]).toMatchObject({ policyChangedBy: 'alice' })
-    expect(d.synced).toBe(1)
+    expect(h.synced).toBe(1)
     // The controller alone: no DHCP write, no gateway sync.
     expect([h.gateway, h.dhcp]).toEqual([0, 0])
   })
@@ -188,7 +202,8 @@ describe('turning santree on (the confirmation)', () => {
     h.rows = [[row({ policy: { santree: true } })]]
     expect(await grant()).toEqual({ ok: true, already: true })
     h.rows = [[row()]]
-    const none = await grant({}, deps(false))
+    h.sessionHost = false
+    const none = await grant()
     expect(none.ok ? '' : none.reason).toMatch(/no session host/)
     expect(h.sets).toEqual([])
   })

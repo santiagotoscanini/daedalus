@@ -1,9 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { desc, eq } from 'drizzle-orm'
 import type { McpScope } from '../../lib/mcp'
-import { db } from '../db'
+import {
+  findMcpTokenByHash,
+  insertMcpToken,
+  listMcpTokenRows,
+  setMcpTokenRevoked,
+  setMcpTokenUsed,
+} from '../../lib/repo/mcp-tokens'
 import { safeEqual } from '../github-app-crypto'
-import { mcpTokens } from '../schema'
 
 // Minting, verifying and revoking the credentials that reach /mcp.
 //
@@ -69,10 +73,7 @@ export async function mintMcpToken(input: {
   if (label.length > 64) throw new Error('a label is at most 64 characters')
 
   const token = MCP_TOKEN_PREFIX + randomBytes(BYTES).toString('base64url')
-  const [row] = await db
-    .insert(mcpTokens)
-    .values({ label, scope: input.scope, tokenHash: hash(token) })
-    .returning()
+  const row = await insertMcpToken({ label, scope: input.scope, tokenHash: hash(token) })
   if (row === undefined) throw new Error('the token was not stored')
 
   return {
@@ -90,7 +91,7 @@ export async function mintMcpToken(input: {
 
 /** Every token ever minted, newest first. Revoked ones stay, so their labels still explain old records. */
 export async function listMcpTokens(): Promise<McpTokenRow[]> {
-  const rows = await db.select().from(mcpTokens).orderBy(desc(mcpTokens.createdAt))
+  const rows = await listMcpTokenRows()
   return rows.map((r) => ({
     id: r.id,
     label: r.label,
@@ -106,12 +107,7 @@ export async function listMcpTokens(): Promise<McpTokenRow[]> {
  * `revokedAt` with its own time: the token stays refused either way.
  */
 export async function revokeMcpToken(id: string): Promise<boolean> {
-  const updated = await db
-    .update(mcpTokens)
-    .set({ revokedAt: new Date() })
-    .where(eq(mcpTokens.id, id))
-    .returning({ id: mcpTokens.id })
-  return updated.length > 0
+  return setMcpTokenRevoked(id)
 }
 
 /**
@@ -129,7 +125,7 @@ export async function identifyMcpToken(presented: string | null): Promise<McpIde
   if (token === '') return null
 
   const digest = hash(token)
-  const [row] = await db.select().from(mcpTokens).where(eq(mcpTokens.tokenHash, digest)).limit(1)
+  const row = await findMcpTokenByHash(digest)
   if (row === undefined) return null
   // Belt and braces: the row was found by digest, and this confirms it in constant time rather than by `===`.
   if (!safeEqual(row.tokenHash, digest)) return null
@@ -141,7 +137,7 @@ export async function identifyMcpToken(presented: string | null): Promise<McpIde
 /** Record that a token was used. Best-effort: a failed stamp must never fail a call. */
 export async function stampMcpTokenUse(id: string): Promise<void> {
   try {
-    await db.update(mcpTokens).set({ lastUsedAt: new Date() }).where(eq(mcpTokens.id, id))
+    await setMcpTokenUsed(id)
   } catch (err) {
     console.warn('[mcp] could not stamp token use:', err instanceof Error ? err.message : err)
   }

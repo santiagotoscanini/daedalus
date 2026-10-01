@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { sql } from '../host/db'
+import { ping } from '../lib/repo/pool'
 
 // Liveness + readiness. This one path carries three jobs, all following from
 // `auth.healthPath = "/api/healthz"` in nix/stacks/daedalus/self.json:
@@ -20,7 +20,7 @@ export const Route = createFileRoute('/api/healthz')({
     handlers: {
       GET: async () => {
         try {
-          await sql`SELECT 1`
+          await ping()
           return Response.json({ status: 'ok' }, { status: 200 })
         } catch {
           return Response.json({ status: 'db_unreachable' }, { status: 503 })

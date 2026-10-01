@@ -8,12 +8,15 @@ import {
   useSession as sessionManager,
   unsealSession,
 } from '@tanstack/react-start/server'
-import { eq } from 'drizzle-orm'
 import { readCommittedSite } from '../host/contract/domains/site-doc'
-import { db } from '../host/db'
 import { safeEqual } from '../host/github-app-crypto'
-import { localAdmins } from '../host/schema'
 import { isRecord } from '../lib/is-record'
+import {
+  anyLocalAdmin,
+  findLocalAdmin,
+  insertLocalAdmin,
+  stampLocalAdminLogin,
+} from '../lib/repo/local-admins'
 import { deleteSetting, readSetting, SETTING_KEYS, writeSetting } from '../lib/repo/settings'
 import type { Result } from '../lib/result'
 
@@ -165,26 +168,10 @@ export function defaultStore(): LocalLoginStore {
       return site.ok && site.value.doc.auth?.localLogin === true
     },
     admins: {
-      any: async () =>
-        (await db.select({ id: localAdmins.id }).from(localAdmins).limit(1)).length > 0,
-      find: async (username) => {
-        const [row] = await db
-          .select({
-            id: localAdmins.id,
-            username: localAdmins.username,
-            passwordHash: localAdmins.passwordHash,
-          })
-          .from(localAdmins)
-          .where(eq(localAdmins.username, username))
-          .limit(1)
-        return row ?? null
-      },
-      insert: async (username, passwordHash) => {
-        await db.insert(localAdmins).values({ username, passwordHash })
-      },
-      stampLogin: async (id) => {
-        await db.update(localAdmins).set({ lastLoginAt: new Date() }).where(eq(localAdmins.id, id))
-      },
+      any: anyLocalAdmin,
+      find: findLocalAdmin,
+      insert: insertLocalAdmin,
+      stampLogin: stampLocalAdminLogin,
     },
     settings,
     session: {
