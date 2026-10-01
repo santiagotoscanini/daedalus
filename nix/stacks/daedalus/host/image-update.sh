@@ -465,12 +465,17 @@ UPDATE_COMMIT="$COMMIT_SHA"
 # --- roll back ------------------------------------------------------------
 # `git revert`, not `reset --hard`: this repo is shared, and a reset really
 # did eat an unrelated commit the first time an apply's switch failed.
-rollback() {
+revert_update() {
   log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     revert --no-edit "$UPDATE_COMMIT" ||
     log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
-  log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" || true
   COMMIT_SHA=""
+}
+
+# After an activation: the revert, and the system switched back onto it.
+rollback() {
+  revert_update
+  log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" || true
 }
 
 # --- build ----------------------------------------------------------------
@@ -483,7 +488,10 @@ write_status running building ""
 log_reset "$LOGFILE"
 if ! log_run "$LOGFILE" nixos-rebuild build --flake "$FLAKE#$HOSTNAME"; then
   build_error="$(errtail)"
-  rollback
+  # Nothing was activated, so there is nothing to switch back to: revert the
+  # commit and stop. A switch here would only activate whatever else is
+  # uncommitted in the checkout.
+  revert_update
   fail building "$build_error"
 fi
 
@@ -495,10 +503,7 @@ fi
 # `reboot-required`, to be retried after the reboot.
 if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
   log_line "$LOGFILE" "$REBOOT_REASONS"
-  log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
-    revert --no-edit "$UPDATE_COMMIT" ||
-    log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
-  COMMIT_SHA=""
+  revert_update
   write_status "done" "reboot-required" \
     "$(reboot_note "$REBOOT_REASONS" "This box is already waiting for a reboot, so nothing was activated and the pin commit was reverted; update again after the reboot.")"
   exit 0
