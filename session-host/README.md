@@ -158,7 +158,8 @@ per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list", "works
    hook methods runs on tokio's blocking pool; the slot is held by the work
    until it returns, so a reconnect does not reset it). A node's 5th
    connection is closed right after its handshake. An exited session nobody
-   is attached to is closed after an hour.
+   is attached to is closed after an hour. The hook socket serves 16
+   connections at once, each for at most 1 s; more are closed unanswered.
 5. **Output is bounded**: 1024 lines and 128 MiB queued per connection. A
    peer that stops reading fills it; the link is dropped and its sessions
    parked — the ring replays what it missed on the next attach.

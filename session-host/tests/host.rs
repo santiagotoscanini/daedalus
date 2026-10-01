@@ -1759,3 +1759,41 @@ async fn the_status_file_tracks_the_host_and_says_stopped() {
         "the stopped snapshot still names the host key"
     );
 }
+
+// ── 11. hook socket hygiene ───────────────────────────────────────────────
+
+/// Reads until the hook socket connection ends; what was answered.
+async fn hook_answer(mut stream: UnixStream) -> Vec<u8> {
+    let mut answer = Vec::new();
+    let _ = tokio::time::timeout(WAIT, stream.read_to_end(&mut answer))
+        .await
+        .expect("the hook socket kept the connection open");
+    answer
+}
+
+/// The hook socket serves a few connections at once, each for a moment: a
+/// local client holding them open cannot keep hooks out for long.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_hook_socket_caps_its_connections_and_times_them_out() {
+    use daedalus_session_host::serve::{HOOK_CONN_DEADLINE, MAX_HOOK_CONNS};
+    let dir = tempdir();
+    let host = Host::start(dir.path());
+    let socket = host.hook_socket();
+    let mut idle = Vec::new();
+    for _ in 0..MAX_HOOK_CONNS {
+        idle.push(UnixStream::connect(&socket).await.unwrap());
+    }
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    // One more is closed unanswered.
+    let mut over = UnixStream::connect(&socket).await.unwrap();
+    let push = json!({"id": 1, "m": "hooks.push", "p": {"event": "Stop", "env": [], "stdin": ""}});
+    let _ = over.write_all(format!("{push}\n").as_bytes()).await;
+    assert!(hook_answer(over).await.is_empty());
+    // The silent ones are closed at the deadline, and the slots come back.
+    let started = Instant::now();
+    for stream in idle {
+        assert!(hook_answer(stream).await.is_empty());
+    }
+    assert!(started.elapsed() < HOOK_CONN_DEADLINE + Duration::from_secs(1));
+    assert_eq!(push_hook(&socket, "Stop", json!([]), b"").await, 1);
+}

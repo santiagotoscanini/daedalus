@@ -47,6 +47,8 @@ use std::time::{Duration, SystemTime};
 use santree_remote_proto::{HOOK_QUEUE_CAP, PING_INTERVAL};
 use santree_remote_tls::{rustls::ServerConfig, Identity};
 use tokio::net::{TcpListener, TcpStream, UnixListener};
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 use crate::allow::AllowList;
 use crate::config::Config;
@@ -67,6 +69,22 @@ pub const REFUSALS_PER_MINUTE: u32 = 10;
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Unacknowledged data older than this ends the connection.
 pub const USER_TIMEOUT: Duration = Duration::from_secs(30);
+/// Hook socket connections served at once; another is closed unanswered (the
+/// hook command logs it and gives up, as it does after its ~200 ms).
+pub const MAX_HOOK_CONNS: usize = 16;
+/// How long one hook socket connection may stay open.
+pub const HOOK_CONN_DEADLINE: Duration = Duration::from_secs(1);
+
+/// Every connection's task (TLS and hook socket), aborted at shutdown before
+/// the PTYs are closed and the last status written.
+type ConnTasks = Arc<Mutex<JoinSet<()>>>;
+
+/// Run `task` in `tasks`, forgetting the ones that finished.
+fn track(tasks: &ConnTasks, task: impl Future<Output = ()> + Send + 'static) {
+    let mut tasks = tasks.lock().unwrap_or_else(|e| e.into_inner());
+    while tasks.try_join_next().is_some() {}
+    tasks.spawn(task);
+}
 
 /// A bound host, not yet serving.
 pub struct Server {
@@ -172,10 +190,11 @@ impl Server {
             daemon: daemon.clone(),
             written: Default::default(),
         });
+        let conns = ConnTasks::default();
         let mut tasks = vec![
             tokio::spawn(status.clone().run()),
             tokio::spawn(reaper(daemon.clone())),
-            tokio::spawn(accept_hooks(daemon.clone(), self.hooks)),
+            tokio::spawn(accept_hooks(daemon.clone(), self.hooks, conns.clone())),
         ];
         let preauth = Arc::new(Preauth::default());
         for listener in self.listeners {
@@ -185,6 +204,7 @@ impl Server {
                 self.allow.clone(),
                 daemon.clone(),
                 preauth.clone(),
+                conns.clone(),
             )));
         }
         log::info!(
@@ -201,9 +221,15 @@ impl Server {
 
         shutdown.await;
 
-        for task in tasks {
+        for task in &tasks {
             task.abort();
         }
+        for task in tasks {
+            let _ = task.await;
+        }
+        // The accept loops are gone, so nothing adds to it any more.
+        let mut open = std::mem::take(&mut *conns.lock().unwrap_or_else(|e| e.into_inner()));
+        open.shutdown().await;
         if let Err(e) = std::fs::remove_file(&self.config.hook_socket) {
             log::warn!("removing {}: {e}", self.config.hook_socket.display());
         }
@@ -348,6 +374,7 @@ async fn accept_tls(
     allow: Arc<AllowList>,
     daemon: Arc<Daemon>,
     preauth: Arc<Preauth>,
+    conns: ConnTasks,
 ) {
     let refusals = Arc::new(RefusalLog::default());
     loop {
@@ -370,7 +397,7 @@ async fn accept_tls(
         }
         let (tls, allow, daemon) = (tls.clone(), allow.clone(), daemon.clone());
         let refusals = refusals.clone();
-        tokio::spawn(async move {
+        track(&conns, async move {
             let accepted =
                 tokio::time::timeout(HANDSHAKE_TIMEOUT, santree_remote_tls::accept(tls, stream))
                     .await;
@@ -476,9 +503,10 @@ fn bind_hook_socket(path: &Path) -> Result<UnixListener, String> {
     Ok(listener)
 }
 
-async fn accept_hooks(daemon: Arc<Daemon>, listener: UnixListener) {
+async fn accept_hooks(daemon: Arc<Daemon>, listener: UnixListener, conns: ConnTasks) {
     // SAFETY: geteuid(2) cannot fail.
     let me = unsafe { libc::geteuid() };
+    let slots = Arc::new(Semaphore::new(MAX_HOOK_CONNS));
     loop {
         let stream = match listener.accept().await {
             Ok((stream, _)) => stream,
@@ -490,7 +518,24 @@ async fn accept_hooks(daemon: Arc<Daemon>, listener: UnixListener) {
         };
         match stream.peer_cred() {
             Ok(cred) if cred.uid() == me => {
-                tokio::spawn(daemon::serve_hook_conn(daemon.clone(), stream));
+                let Ok(slot) = slots.clone().try_acquire_owned() else {
+                    log::warn!("hook socket: {MAX_HOOK_CONNS} connections open; closed one");
+                    continue;
+                };
+                let daemon = daemon.clone();
+                track(&conns, async move {
+                    let _slot = slot;
+                    let served = daemon::serve_hook_conn(daemon, stream);
+                    if tokio::time::timeout(HOOK_CONN_DEADLINE, served)
+                        .await
+                        .is_err()
+                    {
+                        log::warn!(
+                            "hook socket: a connection open over {}s; closed",
+                            HOOK_CONN_DEADLINE.as_secs()
+                        );
+                    }
+                });
             }
             Ok(cred) => log::warn!("hook socket: refused uid {}", cred.uid()),
             Err(e) => log::warn!("hook socket: no peer credentials: {e}"),
