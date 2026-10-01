@@ -39,9 +39,9 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
     readApplyStatus(),
   ])
   const s = site.data
-  // The one fact about how THIS app is run: fleet.daedalus.dev sets it on the
-  // container (nix/stacks/daedalus/daedalus.nix), and the entrypoint reads the
-  // same variable to decide between the bundle and the dev server.
+  // The one fact about how THIS app is run: fleet.daedalus.source = "dev" sets
+  // it on the container (nix/stacks/daedalus/daedalus.nix), and the entrypoint
+  // reads the same variable to decide between the bundle and the dev server.
   const devServer = ctx.env('DAEDALUS_DEV') === '1'
 
   return {

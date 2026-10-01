@@ -1,22 +1,27 @@
 # daedalus — the box's own control plane, and the only app on the apps
-# platform the box does not build.
+# platform the box does not build through the registry loop.
 #
 # Everything else on the platform rides the registry loop: push to main, the
 # GitHub App webhook reaches daedalus, `daedalus-build.service` builds the
 # image and pushes it to the box's registry, and the deploy that build starts
 # runs it. daedalus is the engine itself — this repository — and comes as ONE
 # image built from the Dockerfile at the repository root (Dockerfile,
-# docker-entrypoint.sh), run one of two ways:
+# docker-entrypoint.sh), from one of three sources (`fleet.daedalus.source`):
 #
-#   the published image (default)   `fleet.daedalus.image`, the engine's own
-#                                   ghcr image at the version this rev ships.
-#                                   Pinning the engine pins the control plane.
-#   dev mode (`fleet.daedalus.dev`)  the image's `runtime` stage, built on the
-#                                   box; the engine checkout's app/ mounted at
-#                                   /app; Vite serving it. Saving a file IS the
-#                                   deploy: no commit, no build, no pull, no
-#                                   rebuild. For the host that develops the
-#                                   engine.
+#   published (default)  `fleet.daedalus.image`, the engine's own ghcr image at
+#                        the version this rev ships. Pinning the engine pins
+#                        the control plane.
+#   local                the whole Dockerfile, built on the box from the
+#                        engine source this rev locks, its npm install going
+#                        through the box's own mirror when it publishes one.
+#                        Pinning the engine pins the control plane, and
+#                        nothing is fetched from a registry outside the house
+#                        but the sops release the Dockerfile names.
+#   dev                  the image's `runtime` stage, built on the box; the
+#                        engine checkout's app/ mounted at /app; Vite serving
+#                        it. Saving a file IS the deploy: no commit, no build,
+#                        no pull, no rebuild. For the host that develops the
+#                        engine.
 #
 # What dev mode buys and what it costs:
 #   + Edit-to-browser in under a second, from anywhere with a shell on the box.
@@ -32,14 +37,24 @@
 #     starting, and the probe is red until it listens. Expected, not a fault.
 #   - A fresh restore needs the checkout before the container will start.
 #
-# Which rebuilds matter, in dev mode:
-#   <clone>/app/**           → nothing. Vite is watching it.
-#   <clone>/app/package.json → `systemctl restart podman-app-daedalus` (re-installs).
-#   Dockerfile, docker-entrypoint.sh, ARCHITECTURE.md, BUILDS.md
-#                            → nixos-rebuild (runtime context hash → new image
-#                              tag → restart). Nothing else in the repository
-#                              reaches that context.
-#   this file                → nixos-rebuild.
+# What `local` costs: every engine rev that touches the image's context is a
+# full image build (install + vite build, minutes) at the switch that brings
+# it. The build runs as a pre-switch check, BEFORE the switch stops anything:
+# a failed build refuses the switch and the running container stays on the
+# previous image, and a good one leaves the container's own build unit a cache
+# hit, so the control plane is down only for its restart.
+#
+# Which rebuilds matter:
+#   dev    <clone>/app/**           → nothing. Vite is watching it.
+#          <clone>/app/package.json → `systemctl restart podman-app-daedalus`
+#                                     (re-installs).
+#          Dockerfile, docker-entrypoint.sh, ARCHITECTURE.md, BUILDS.md
+#                                   → nixos-rebuild (runtime context hash → new
+#                                     image tag → restart). Nothing else in the
+#                                     repository reaches that context.
+#   local  anything in the image's context, at the locked rev → nixos-rebuild
+#          after `nix flake update daedalus` (new tag → build → restart).
+#   all    this file                → nixos-rebuild.
 
 {
   config,
@@ -177,34 +192,86 @@ let
   # ── the control plane's image ──────────────────────────────────────────
   #
   # One Dockerfile at the engine's root builds the one image (its header says
-  # how); the app runs from the bundle inside it. A host that develops the
-  # engine runs it in DEV MODE instead (fleet.daedalus.dev): the image's
-  # `runtime` stage alone — node, sops, the entrypoint, no bundle — built on
-  # the box from a context of exactly the files that stage reads, so the
-  # tag moves when the runtime changes and never when a route is edited; the
-  # checkout's app/ is mounted at /app and the entrypoint runs Vite over it.
-  # Saving a file is the deploy.
-  daedalusDev = config.fleet.daedalus.dev;
+  # how); `fleet.daedalus.source` decides where it comes from (the header
+  # above). The two sources built on the box are both mkLocalImage, tagged by
+  # the hash of exactly the files the build reads, so the tag — and with it the
+  # container — moves when one of those does and never otherwise.
+  source = config.fleet.daedalus.source;
+  daedalusDev = source == "dev";
 
+  # What the runtime stage copies: the entrypoint and the two design documents
+  # the MCP server serves (app/src/host/mcp/docs.ts).
+  runtimeFiles = [
+    ../../../Dockerfile
+    ../../../docker-entrypoint.sh
+    ../../../ARCHITECTURE.md
+    ../../../BUILDS.md
+  ];
+
+  # Dev mode: the `runtime` stage alone — node, sops, the entrypoint, the docs,
+  # no bundle. The checkout's app/ is mounted at /app and the entrypoint runs
+  # Vite over it, so a route edit never moves this tag.
   devRuntime = mkLocalImage {
     name = "app-daedalus-dev";
     tagPrefix = "runtime";
     contextDir = lib.fileset.toSource {
       root = ../../..;
-      fileset = lib.fileset.unions [
-        ../../../Dockerfile
-        ../../../docker-entrypoint.sh
-        ../../../ARCHITECTURE.md
-        ../../../BUILDS.md
-      ];
+      fileset = lib.fileset.unions runtimeFiles;
     };
     file = "Dockerfile";
     target = "runtime";
     gates = [ "podman-app-daedalus.service" ];
   };
 
-  # That image's base: the Dockerfile's `ARG NODE_IMAGE=` default, the one
-  # place it is written (the published image is built from the same line).
+  # `local`: the whole Dockerfile, so the context is app/ as well — minus what a
+  # checkout that runs the dev server holds there (its install, its store, a
+  # previous build, generated routes: the root .gitignore's app/ list). Under
+  # `--override-input daedalus path:<clone>` those are on disk beside the
+  # source and would otherwise be copied in; `maybeMissing` because a git
+  # input has none of them. The .dockerignore is not in it: this set already
+  # is the context, exactly.
+  appJunk = map (p: lib.fileset.maybeMissing (../../../app + "/${p}")) [
+    "node_modules"
+    ".pnpm-store"
+    ".corepack"
+    ".vite"
+    ".tanstack"
+    ".output"
+    "dist"
+    "src/routeTree.gen.ts"
+  ];
+  npmMirror = config.fleet.builder.npmMirrorHost;
+  localImage = mkLocalImage {
+    name = "app-daedalus";
+    tagPrefix = appVersion;
+    contextDir = lib.fileset.toSource {
+      root = ../../..;
+      fileset = lib.fileset.unions (
+        runtimeFiles ++ [ (lib.fileset.difference ../../../app (lib.fileset.unions appJunk)) ]
+      );
+    };
+    file = "Dockerfile";
+    # The install goes through the mirror the box publishes, the same one the
+    # dev container and the app builds use. It is served by the reverse proxy
+    # on the host, which a build container reaches as host-gateway (under
+    # rootless podman the LAN address is the container itself).
+    buildFlags = lib.optionals (npmMirror != null) [
+      "--add-host=${npmMirror}:host-gateway"
+      "--build-arg=NPM_REGISTRY=https://${npmMirror}/"
+    ];
+    gates = [ "podman-app-daedalus.service" ];
+  };
+
+  builtImage =
+    {
+      dev = devRuntime;
+      local = localImage;
+    }
+    .${source} or null;
+
+  # The base of an image built on the box, every stage of it: the
+  # Dockerfile's `ARG NODE_IMAGE=` default, the one place it is written (the
+  # published image is built from the same line).
   # A plain read of a file in this repo — no import-from-derivation.
   nodeImageLine =
     lib.findFirst (lib.hasPrefix "ARG NODE_IMAGE=")
@@ -231,15 +298,28 @@ in
     description = "The box's own control plane, and the builder that turns a push into an image.";
   };
 
-  options.fleet.daedalus.dev = lib.mkOption {
-    type = lib.types.bool;
-    default = false;
+  options.fleet.daedalus.source = lib.mkOption {
+    type = lib.types.enum [
+      "published"
+      "local"
+      "dev"
+    ];
+    default = "published";
     description = ''
-      Run the control plane in DEV MODE: the image's `runtime` stage, built
-      on this box from the engine checkout, with that checkout's `app/`
-      mounted at /app and Vite serving it. Saving a file is the deploy. For
-      the host that develops the engine; every other host runs the published
-      image (`fleet.daedalus.image`).
+      Where the control plane's image comes from.
+
+      - `published`: `fleet.daedalus.image`, the engine's own published image
+        at the version this engine rev ships.
+      - `local`: the engine's whole Dockerfile, built on this box from the
+        engine source the configuration locks, its npm install going through
+        the box's own mirror (`fleet.builder.npmMirrorHost`) when there is
+        one. Pinning the engine pins the control plane and the build needs no
+        outside registry. The build runs before a switch stops anything, and
+        a failed one refuses the switch.
+      - `dev`: DEV MODE — the image's `runtime` stage, built on this box,
+        with the engine checkout's `app/` mounted at /app and Vite serving
+        it. Saving a file is the deploy. For the host that develops the
+        engine.
     '';
   };
 
@@ -248,7 +328,7 @@ in
     default = "ghcr.io/santiagotoscanini/daedalus:${appVersion}";
     defaultText = lib.literalExpression ''"ghcr.io/santiagotoscanini/daedalus:<app/package.json version>"'';
     description = ''
-      The control plane's image, for a host not in dev mode. The default is
+      The control plane's image under `source = "published"`. The default is
       the engine's own published image at the version this engine rev ships
       (app/package.json): pinning the engine pins it, and the engine's update
       path (System › Updates › Engine) is the image's. Override to a digest
@@ -393,17 +473,21 @@ in
         cp.label != null && cp.previousLabel != null && cp.previousLabel != cp.label
       ) (at cp.previousLabel);
 
-      # Dev mode or the published image — the option decides; the entry says
-      # where the checkout is either way (a plain string, not a nix path: a
-      # path literal would be copied into /nix/store and the container would
-      # watch a frozen snapshot). `engineRoot` is a literal rather than derived
-      # from `fleet.workspaces` on purpose: the control plane's own source must
-      # not depend on the workspace feature it manages.
+      # `fleet.daedalus.source` decides. In dev mode the entry says where the
+      # checkout is (a plain string, not a nix path: a path literal would be
+      # copied into /nix/store and the container would watch a frozen
+      # snapshot). `engineRoot` is a literal rather than derived from
+      # `fleet.workspaces` on purpose: the control plane's own source must not
+      # depend on the workspace feature it manages.
       source = {
         dev = daedalusDev;
         path = lib.mkIf daedalusDev "${engineRoot}/app";
       };
-      image = if daedalusDev then devRuntime.image else config.fleet.daedalus.image;
+      image = if builtImage != null then builtImage.image else config.fleet.daedalus.image;
+      # The registry poll redeploys on a moved digest, which only a pulled image
+      # has: an image built on the box moves with the engine rev, through the
+      # rebuild that brings it.
+      deploy.enable = source == "published";
 
       # The dashboard keys this module renders from its own store, then the
       # env file each stack renders for it (fleet.dashboard.<id>.envFiles:
@@ -718,16 +802,50 @@ in
       # reachable without this. The DIRECTORY: git replaces a file on every pull
       # and a single-file bind would pin the old inode.
       ++ lib.optional daedalusDev "${engineRoot}:/engine:ro";
+
+      # Every source runs as container uid 0 — the operator on the host, who
+      # owns /apply (the one writable mount) and the controller's socket
+      # directory; the image's own `node` user owns nothing here. Dev mode
+      # gets the same flag from `source.dev` (modules/apps).
+      app-daedalus.extraOptions = lib.optional (!daedalusDev) "--user=0:0";
     };
 
-    # Dev mode builds the runtime stage on the box before the container starts
+    # An image built on the box is built before the container starts
     # (mkLocalImage's `gates`); a host on the published image builds nothing.
-    systemd.services.app-daedalus-image-build = lib.mkIf (appsOn && daedalusDev) devRuntime.service;
+    systemd.services.app-daedalus-image-build = lib.mkIf (
+      appsOn && builtImage != null
+    ) builtImage.service;
 
-    # Its base on System › Updates. A different node pin from the build
-    # checks' (build-agent.nix), bumped apart.
-    fleet.manualPins = lib.mkIf (appsOn && daedalusDev) {
-      app-daedalus-dev = {
+    # `local` builds BEFORE the switch, as one of the new generation's own
+    # pre-switch checks. Left to the unit above, the build would run in the
+    # switch's start phase, after the stop phase has already taken the old
+    # container down: minutes of no control plane on every engine bump, and
+    # none at all when the build fails, since the new tag would name no image.
+    # Here, a failed build refuses the switch with nothing stopped, the
+    # previous image keeps running, and a good one leaves the unit a cache
+    # hit. Skipped when the tag already exists — it names its context, so an
+    # Apply that does not move the engine costs one lookup. Run for `boot`
+    # too, so the first start after the reboot does not wait on the mirror.
+    # As the operator: the image lives in their rootless store. Checks run in
+    # name order, hence the `z`: after the upgrade guard and the inhibitors, so
+    # a switch they refuse builds nothing.
+    system.preSwitchChecks.z-daedalus-image = lib.mkIf (appsOn && source == "local") ''
+      case "''${2:-}" in
+        dry-activate) exit 0 ;;
+      esac
+      ${pkgs.util-linux}/bin/setpriv --reuid ${config.fleet.operator.user} --regid ${config.fleet.operator.group} --init-groups --inh-caps=-all \
+        ${pkgs.coreutils}/bin/env HOME=${config.fleet.operator.home} XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir} PATH=/run/wrappers/bin \
+        ${pkgs.writeShellScript "app-daedalus-image-prebuild" ''
+          ${pkgs.podman}/bin/podman image exists ${localImage.image} ||
+            exec ${localImage.service.serviceConfig.ExecStart}
+        ''}
+    '';
+
+    # Its base on System › Updates: the Dockerfile's node, every stage of it. A
+    # different node pin from the build checks' (build-agent.nix), bumped
+    # apart.
+    fleet.manualPins = lib.mkIf (appsOn && builtImage != null) {
+      app-daedalus-node = {
         image = lib.removePrefix "ARG NODE_IMAGE=" nodeImageLine;
         containers = [ "app-daedalus" ];
         upstream = "nodejs/node";

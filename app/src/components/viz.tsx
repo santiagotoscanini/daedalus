@@ -2,8 +2,8 @@
 //
 // All hand-rolled SVG and CSS, no charting library: a chart dependency would
 // be the largest thing in node_modules by an order of magnitude, and a host in
-// dev mode (`fleet.daedalus.dev`) serves the app through Vite, so every byte
-// here is parsed on a cold page load.
+// dev mode (`fleet.daedalus.source = "dev"`) serves the app through Vite, so
+// every byte here is parsed on a cold page load.
 //
 // Two rules every component below follows:
 //

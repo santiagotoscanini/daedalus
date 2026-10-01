@@ -63,7 +63,7 @@ export type BoxSettings = {
     git: GitIdentities
   }
   developer: {
-    /** `fleet.daedalus.dev` (DAEDALUS_DEV): the container runs the Vite dev server over a bind mount. */
+    /** `fleet.daedalus.source = "dev"` (DAEDALUS_DEV): the container runs the Vite dev server over a bind mount. */
     devServer: boolean
     node: string
     exportDir: string

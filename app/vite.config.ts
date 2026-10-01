@@ -4,11 +4,11 @@ import viteReact from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
 // One image, two ways to run it (docker-entrypoint.sh picks). In dev mode
-// (`fleet.daedalus.dev`, the host that develops the engine) the container
-// bind-mounts this repository's `app/` at /app and runs `vite dev` against
-// it, so editing a file is the whole deploy; `nixos-rebuild` is only needed
-// for nix/stacks/daedalus/ or the Dockerfile and its entrypoint. Every other
-// host runs the published image: `vite build`, then `server.mjs` as the
+// (`fleet.daedalus.source = "dev"`, the host that develops the engine) the
+// container bind-mounts this repository's `app/` at /app and runs `vite dev`
+// against it, so editing a file is the whole deploy; `nixos-rebuild` is only
+// needed for nix/stacks/daedalus/ or the Dockerfile and its entrypoint. Every
+// other host runs the built image: `vite build`, then `server.mjs` as the
 // listener (its header says why no adapter). There is NO Nitro adapter here
 // either: including it in dev adds a Vite environment that breaks
 // server-function id resolution ("Invalid server function ID" at call time,

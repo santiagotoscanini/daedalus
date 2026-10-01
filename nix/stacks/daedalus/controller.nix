@@ -271,13 +271,9 @@
 #                  the operator's before any unit starts, so the app's bind
 #                  source always exists. The agent refuses a directory that is
 #                  a symlink, not its user's, or group/other-writable; it
-#                  changes none it did not make. 0700 in dev mode — the dev
-#                  container runs `--user=0:0`, the operator on the host, whom
-#                  the socket always serves. The published image runs as
-#                  `node` (container uid 1000 → a subuid on the host): that uid
-#                  goes in `api_allowed_uids`, the agent then makes the socket
-#                  0666 and lets the peer check (SO_PEERCRED) be the gate, and
-#                  the directory needs 0711 so that uid can reach it.
+#                  changes none it did not make. 0700: the app's container
+#                  runs `--user=0:0` whatever its source, the operator on the
+#                  host, whom the socket always serves.
 #
 # restartIfChanged stays at its default: a switch that moves the agent
 # restarts it, which ends nothing — the app reconnects, and the long-lived
@@ -288,7 +284,6 @@
   config,
   lib,
   pkgs,
-  hostUid,
   ...
 }:
 
@@ -299,7 +294,6 @@ let
     rootRunDir
     ;
 
-  daedalusDev = config.fleet.daedalus.dev;
   sessionHost = config.fleet.daedalus.sessionHost;
 
   # The crate, by its own files only (see the header).
@@ -361,10 +355,6 @@ let
   # (see the header). Written into config.toml so the agent and the scrape
   # below agree.
   inherit (config.fleet.daedalus) statusPort;
-
-  # The published image's `node` user, as the host sees it. Dev mode runs the
-  # container as the operator, who needs no listing.
-  allowedUids = lib.optional (!daedalusDev) (hostUid 1000);
 
   # Claude remote control's transient user unit (the header's `the unit`).
   claudeUnit = "daedalus-claude-rc";
@@ -499,7 +489,9 @@ let
     port = statusPort;
     controller = {
       api_socket = "${controllerDir}/api.sock";
-      api_allowed_uids = allowedUids;
+      # The app's container runs as the operator (`--user=0:0`, daedalus.nix),
+      # whom the socket always serves.
+      api_allowed_uids = [ ];
       claude_remote_control = true;
       claude_workdir = config.fleet.config.repo;
       claude_unit = claudeUnit;
@@ -665,9 +657,7 @@ in
       "d ${rootRunDir} 0700 root root 1d"
       "x ${rootRunDir}/*.lock"
       "L+ ${configDir}/config.toml - - - - ${configFile}"
-      "d ${controllerDir} ${
-        if allowedUids == [ ] then "0700" else "0711"
-      } ${config.fleet.operator.user} ${config.fleet.operator.group} -"
+      "d ${controllerDir} 0700 ${config.fleet.operator.user} ${config.fleet.operator.group} -"
     ];
 
     fleet.monitoredJobs.daedalus-controller = { };

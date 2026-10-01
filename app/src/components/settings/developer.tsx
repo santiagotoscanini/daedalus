@@ -46,15 +46,15 @@ export function Developer({
               <Line>
                 <Chip tone="info">dev mode</Chip>
                 <span className={ASIDE}>
-                  fleet.daedalus.dev — Vite over the bind-mounted checkout; saving a file is the
-                  deploy
+                  fleet.daedalus.source = "dev" — Vite over the bind-mounted checkout; saving a file
+                  is the deploy
                 </span>
               </Line>
             ) : (
               <Line>
                 <Chip tone="ok">image</Chip>
                 <span className={ASIDE}>
-                  the published image (fleet.daedalus.image), redeployed on a digest change
+                  the built bundle (fleet.daedalus.source: published, or built on this box)
                 </span>
               </Line>
             ),

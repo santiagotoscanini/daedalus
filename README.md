@@ -56,7 +56,7 @@ to match. The craftsman, not the labyrinth.
 ## Developing
 
 On the machine that develops it, the control plane runs in dev mode
-(`fleet.daedalus.dev`): the container bind-mounts `app/` and runs the
+(`fleet.daedalus.source = "dev"`): the container bind-mounts `app/` and runs the
 Vite dev server against it, so saving a file is the deploy.
 [`CLAUDE.md`](CLAUDE.md) has the loop, the verification commands and
 where everything else lives.

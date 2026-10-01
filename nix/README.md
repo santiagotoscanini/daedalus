@@ -154,7 +154,7 @@ Optional, null or empty by default: `fleet.hcPing.keySopsFile`,
 `fleet.claude.mcpSopsFile`, `fleet.zfs.datasets`, `fleet.zfs.arcMaxBytes`,
 `fleet.backup.replications`, `fleet.autoupgrade.inputs`,
 `fleet.daedalus.routerProduct`, `fleet.builder.npmMirrorHost`,
-`fleet.daedalus.dev`, `fleet.daedalus.image`, `fleet.upgradeGuard.*`.
+`fleet.daedalus.source`, `fleet.daedalus.image`, `fleet.upgradeGuard.*`.
 
 ### Reboot-level changes
 
@@ -208,13 +208,16 @@ copies the directory as it stands.
 
 ### The control plane's image
 
-One Dockerfile at the repository root builds one image; a host runs its
-bundle (`fleet.daedalus.image`, by default the engine's published image at
-the version this rev's `app/package.json` declares — pinning the engine
-pins the control plane). The host that develops the engine sets
-`fleet.daedalus.dev = true`: the image's `runtime` stage is built on the box
-and the engine checkout's `app/` is mounted into it, so saving a file is the
-deploy. `CONTRIBUTING.md` has the image's own story.
+One Dockerfile at the repository root builds one image, and
+`fleet.daedalus.source` says where a host gets it. `"published"` (the
+default) runs `fleet.daedalus.image`, by default the engine's published image
+at the version this rev's `app/package.json` declares. `"local"` builds the
+whole Dockerfile on the box from the engine source the configuration locks,
+through the box's npm mirror when it publishes one, as a pre-switch check: a
+failed build refuses the switch and the old image keeps running. Either way
+pinning the engine pins the control plane. The host that develops the engine
+sets `"dev"`: the image's `runtime` stage is built on the box and the engine
+checkout's `app/` is mounted into it, so saving a file is the deploy. `CONTRIBUTING.md` has the image's own story.
 
 ### The controller
 
@@ -226,8 +229,8 @@ only. Its config.toml is generated and linked at
 logs live under `<stateRoot>/apps/daedalus/controller`. Its local API socket
 is `/run/daedalus-controller/api.sock`, and that directory is mounted into
 the control plane's container at `/controller` (`CONTROLLER_SOCKET`). The
-published image's `node` uid is the one uid it serves beyond the operator;
-in dev mode the container already runs as the operator. It also runs the
+container runs as the operator whatever its source, so the socket serves no
+other uid. It also runs the
 box's Claude remote control and the sessions the app resumes, each a
 transient user unit (the header of `stacks/daedalus/controller.nix`).
 

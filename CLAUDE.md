@@ -46,7 +46,7 @@ path-scoped rules load as you touch files.
 
 ## The dev loop
 
-On the box, the running container is in dev mode (`fleet.daedalus.dev`):
+On the box, the running container is in dev mode (`fleet.daedalus.source = "dev"`):
 it bind-mounts this clone's `app/` at `/app` and runs the Vite dev server
 against it. What a change needs:
 

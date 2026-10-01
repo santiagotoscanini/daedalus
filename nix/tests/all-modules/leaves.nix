@@ -8,6 +8,9 @@
     # Not a catalog module but the control plane's opt-in part: evaluated here
     # beside wg-easy, whose tunnel it joins.
     daedalus.sessionHost.enable = true;
+    # The control plane built on the box, through the npm mirror switched on
+    # below: the source that adds a build, a pre-switch check and build flags.
+    daedalus.source = "local";
     modules = {
       factorio = {
         enable = true;

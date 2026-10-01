@@ -103,7 +103,7 @@ on a failed switch restores the bytes and switches again.
 **The app, end state.** One image, built by CI on GitHub-hosted runners into
 `ghcr.io/santiagotoscanini/daedalus:<semver>@sha256`, pinned by the engine
 (`fleet.daedalus.image` defaults to the version `app/package.json` declares).
-Users run it as-is. Developers set `fleet.daedalus.dev` and the same image's
+Users run it as-is. Developers set `fleet.daedalus.source = "dev"` and the same image's
 `runtime` stage serves their checkout with HMR. Settings forms come from an
 in-house renderer over a constrained JSON-Schema subset (the RJSF spike failed
 on bundle cost).
@@ -327,13 +327,12 @@ priority; each can be done independently unless noted.
    own Actions keep CI going. A new catalog module with the mirror feature
    pointed at each GitHub repo; builds stay on the box's path.
 
-5. **Dev mode from Settings.** `fleet.daedalus.dev` is a nix option the box
+5. **Dev mode from Settings.** `fleet.daedalus.source` is a nix option the box
    sets in `configuration.nix`; Settings › Developer shows a chip that says
    so and nothing flips it. A toggle there writes `site.json`
-   `developer.dev = true|false` and the option reads it (host-set wins), so
-   switching between the dev server and the built image is an Apply, not a
-   hand edit. Waits on Phase 10b's first tag: until an image is published
-   there is nothing to toggle to.
+   `developer.source` and the option reads it (host-set wins), so switching
+   between the dev server and the built image (`local`, or `published` once
+   Phase 10b's first tag exists) is an Apply, not a hand edit.
 
 6. **Machines as adjacent providers — the cluster and what stands beside
    it.** The design of 2026-09-23, from a question the operator asked: the

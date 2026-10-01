@@ -24,6 +24,6 @@
   },
   "notes": {
     "app": "The control plane itself. Declared by hand in stacks/daedalus/self.json rather than in the registry: an Apply that broke this entry would take down the interface you would use to undo it.",
-    "source": "The engine itself: one image from the repository's Dockerfile. A host on the published image runs its bundle; the host that develops the engine runs it in dev mode (fleet.daedalus.dev) over its checkout, where saving a file is the whole deploy."
+    "source": "The engine itself: one image from the repository's Dockerfile. A host runs its bundle, published or built on the box from the locked engine source (fleet.daedalus.source); the host that develops the engine runs it in dev mode over its checkout, where saving a file is the whole deploy."
   }
 }
