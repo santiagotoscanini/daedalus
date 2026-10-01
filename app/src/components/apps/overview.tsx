@@ -1,6 +1,8 @@
 import { useRouter } from '@tanstack/react-router'
-import { DASH, since } from '../../lib/format'
+import { DASH, num, since } from '../../lib/format'
 import { type AppTabData, triggerDeploy } from '../../server/registry'
+import { Ago } from '../ago'
+import { useNow } from '../poll'
 import { useRootAction } from '../root-action'
 import { EMPTY } from '../tokens'
 import { Button } from '../ui/button'
@@ -42,6 +44,7 @@ export function Overview({
   workspaceRoot: NonNullable<LoaderData>['workspaceRoot']
   d: Extract<AppTabData, { kind: 'overview' }>
 }) {
+  const now = useNow(false)
   // `notes` is jsonb, so the database can hand back anything — an array, a
   // nested object, a number. Rendering an unexpected value throws
   // "Objects are not valid as a React child" and takes down the WHOLE page,
@@ -150,7 +153,9 @@ export function Overview({
                 (deployShot.ok
                   ? 'Taken right after the last deploy'
                   : 'The page ERRORED under the camera right after the last deploy') +
-                (deployShot.at === null ? '' : ` — ${since((Date.now() - deployShot.at) / 1000)}`)
+                (deployShot.at === null || now === null
+                  ? ''
+                  : ` — ${since((now - deployShot.at) / 1000)}`)
               }
             >
               <img
@@ -287,8 +292,7 @@ export function Overview({
                       className={workspace.sync.result === 'failed' ? 'text-danger' : undefined}
                       title={workspace.sync.detail || undefined}
                     >
-                      {workspace.sync.result} ·{' '}
-                      {since((Date.now() - Date.parse(workspace.sync.at)) / 1000)}
+                      {workspace.sync.result} · <Ago at={workspace.sync.at} />
                     </span>
                   ) : (
                     'not yet'
@@ -373,5 +377,5 @@ function fmtBool(v: boolean | null | undefined): string {
 
 /** Bytes → whole MB. MiB, matching what --memory takes and cgroup enforces. */
 function fmtMb(bytes: number): string {
-  return Math.round(bytes / (1024 * 1024)).toLocaleString()
+  return num(Math.round(bytes / (1024 * 1024)))
 }

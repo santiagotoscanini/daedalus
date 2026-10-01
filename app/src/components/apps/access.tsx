@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { ACCESS_WINDOWS, type AccessWindow, WINDOW_SPEC } from '../../lib/access-window'
 import { cn } from '../../lib/cn'
+import { num } from '../../lib/format'
 import { useScheme } from '../../lib/scheme'
 import { useSite } from '../../lib/site-context'
 import { type Tone, toneStyle } from '../../lib/tone'
@@ -124,7 +125,7 @@ export function Access({
         <Alert className="mb-[1.35rem] border-info/35 bg-info/7 text-(--text-muted)">
           <AlertDescription>
             More requests than one query can return. The totals below are exact; the breakdowns
-            describe the most recent {access.sampled.toLocaleString()}.
+            describe the most recent {num(access.sampled)}.
           </AlertDescription>
         </Alert>
       )}
@@ -439,7 +440,7 @@ function Bars({
             />
           </span>
           <span className="text-[0.8rem] tabular-nums whitespace-nowrap text-(--text-muted)">
-            {r.count.toLocaleString()}
+            {num(r.count)}
             {total > 0 && (
               <small className="ml-[0.4rem] text-(--dim)">
                 {((r.count / total) * 100).toFixed(0)}%

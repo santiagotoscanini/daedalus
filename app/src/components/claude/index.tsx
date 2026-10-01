@@ -15,8 +15,10 @@
 // restated beside the control that polls it.
 import type { ClaudeData } from '../../lib/dashboard/claude'
 import type { VersionGap } from '../../lib/dashboard/github'
-import { DASH, duration, num, text, until } from '../../lib/format'
+import { DASH, duration, num, text } from '../../lib/format'
+import { Until } from '../ago'
 import { LogBoard } from '../logs'
+import { useNow } from '../poll'
 import { Changelog } from '../release-notes'
 import { ServiceHead } from '../service-head'
 import { EMPTY, FOOT, MONO, NOTE } from '../tokens'
@@ -47,28 +49,20 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
   const { facts } = data
   const live = liveSessions(facts).length
   const verdict = versionVerdict(data)
-  const refreshIn =
-    facts.credentials.refreshExpiresAt === null
-      ? null
-      : (facts.credentials.refreshExpiresAt - Date.now()) / 1000
 
   return (
     <>
       <ClaudeHead data={data} verdict={verdict} />
       <ControllerNotice data={data} />
-      <ClaudeStats data={data} live={live} refreshIn={refreshIn} />
+      <ClaudeStats data={data} live={live} />
 
       <BoardGrid>
-        <RemoteControlBoard data={data} live={live} refreshIn={refreshIn} />
+        <RemoteControlBoard data={data} live={live} />
 
         {/* Sign-in comes up beside Remote control. The two are one subject —
             what this server is, and whether it can still reach Anthropic —
             and row 1 is where the page's standing facts belong. */}
-        <SignInBoard
-          credentials={facts.credentials}
-          refreshIn={refreshIn}
-          reporting={data.reporting}
-        />
+        <SignInBoard credentials={facts.credentials} reporting={data.reporting} />
 
         <ConnectionBoard events={data.events} />
 
@@ -165,17 +159,13 @@ function ControllerNotice({ data }: { data: ClaudeData }) {
   return <p className={EMPTY}>{data.facts.server.detail}.</p>
 }
 
-function ClaudeStats({
-  data,
-  live,
-  refreshIn,
-}: {
-  data: ClaudeData
-  live: number
-  refreshIn: number | null
-}) {
+function ClaudeStats({ data, live }: { data: ClaudeData; live: number }) {
   const { facts } = data
   const up = facts.server.state === 'running'
+  // Mount-time only: the server's clock and the browser's would render two
+  // different durations (components/ago.tsx).
+  const now = useNow(false)
+  const refreshAt = facts.credentials.refreshExpiresAt
   return (
     <StatStrip>
       <Stat
@@ -183,9 +173,9 @@ function ClaudeStats({
         value={up ? 'up' : text(facts.server.state)}
         tone={up ? undefined : data.reporting ? 'bad' : 'muted'}
         sub={
-          facts.server.startedAt === null
+          facts.server.startedAt === null || now === null
             ? undefined
-            : `${duration((Date.now() - facts.server.startedAt) / 1000)} without a restart`
+            : `${duration((now - facts.server.startedAt) / 1000)} without a restart`
         }
         title="The controller's report on its daedalus-claude-rc unit."
       />
@@ -210,12 +200,14 @@ function ClaudeStats({
       />
       <Stat
         label="Login"
-        value={refreshIn === null ? DASH : until(refreshIn)}
+        value={refreshAt === null ? DASH : <Until at={refreshAt} />}
         // Six days out is the point at which the fix (SSH in, `/login`,
         // restart the unit) stops being a thing you can do at leisure.
-        tone={refreshIn !== null && refreshIn < 6 * 86400 ? 'warn' : undefined}
+        tone={
+          now !== null && refreshAt !== null && refreshAt - now < 6 * 86400_000 ? 'warn' : undefined
+        }
         sub={
-          refreshIn !== null
+          refreshAt !== null
             ? 'until re-login'
             : data.reporting
               ? 'no credentials found'

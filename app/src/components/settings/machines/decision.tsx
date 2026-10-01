@@ -1,8 +1,8 @@
 import { cn } from '../../../lib/cn'
 import type { Machine } from '../../../lib/dashboard/machines'
-import { since } from '../../../lib/format'
 import { linkWords } from '../../../lib/node-link'
 import { approveNodeFn, forgetNodeFn, revokeNodeFn } from '../../../server/nodes'
+import { Ago } from '../../ago'
 import { NodeCommandButton } from '../../node-command'
 import { Button } from '../../ui/button'
 import { useAction } from '../../use-action'
@@ -24,11 +24,25 @@ export function Decision({ m }: { m: Machine }) {
   const node = m.node
 
   const line =
-    node === null
-      ? `Connected to the controller${m.pending?.since != null ? ` ${since((Date.now() - Date.parse(m.pending.since)) / 1000)}` : ''} and waiting for a decision. Approve it if this is your machine and the fingerprints match.`
-      : node.state === 'approved'
-        ? `Approved ${node.approvedAt !== null ? since((Date.now() - Date.parse(node.approvedAt)) / 1000) : ''}${node.approvedBy !== null ? ` by ${node.approvedBy}` : ''}; ${linkWords(node)}.`
-        : 'Revoked; the controller turns its key away. Approve to trust it again, or forget it.'
+    node === null ? (
+      <>
+        Connected to the controller
+        {m.pending?.since != null && (
+          <>
+            {' '}
+            <Ago at={m.pending.since} />
+          </>
+        )}{' '}
+        and waiting for a decision. Approve it if this is your machine and the fingerprints match.
+      </>
+    ) : node.state === 'approved' ? (
+      <>
+        Approved {node.approvedAt !== null && <Ago at={node.approvedAt} />}
+        {node.approvedBy !== null && ` by ${node.approvedBy}`}; {linkWords(node)}.
+      </>
+    ) : (
+      'Revoked; the controller turns its key away. Approve to trust it again, or forget it.'
+    )
 
   return (
     <div className="flex flex-col gap-2">

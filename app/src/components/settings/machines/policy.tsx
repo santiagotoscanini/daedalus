@@ -103,10 +103,10 @@ function changedBy(
 function clockOf(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   return d.toDateString() === new Date().toDateString()
     ? time
-    : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`
+    : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${time}`
 }
 
 /** What the pages call the machine, and what the LAN does. */

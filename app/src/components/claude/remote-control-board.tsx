@@ -1,7 +1,8 @@
 // The Remote control board: what the server is, what it holds, and the two
 // verbs that act on it.
 import type { ClaudeData } from '../../lib/dashboard/claude'
-import { bytes, DASH, duration, num, text, until } from '../../lib/format'
+import { bytes, DASH, duration, num, text } from '../../lib/format'
+import { Until } from '../ago'
 import { FOOT, MONO, NOTE, ROW_SIDE } from '../tokens'
 import { Board, Chip, Facts, type Tone } from '../viz'
 import { RestartServerControl } from './controls/restart-server'
@@ -10,13 +11,10 @@ import { UpdateClaudeCodeControl } from './controls/update-claude-code'
 export function RemoteControlBoard({
   data,
   live,
-  refreshIn,
 }: {
   data: ClaudeData
   /** Sessions connected right now. */
   live: number
-  /** Seconds until the refresh token runs out, or null with no credentials. */
-  refreshIn: number | null
 }) {
   const { facts } = data
   const envId = facts.remote.environmentId
@@ -48,7 +46,12 @@ export function RemoteControlBoard({
           { k: 'Plan', v: text(facts.credentials.subscriptionType) },
           {
             k: 'Re-login due',
-            v: refreshIn === null ? DASH : until(refreshIn),
+            v:
+              facts.credentials.refreshExpiresAt === null ? (
+                DASH
+              ) : (
+                <Until at={facts.credentials.refreshExpiresAt} />
+              ),
           },
           {
             k: 'Memory',

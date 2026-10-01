@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { NixosRelease } from '../core/settings/types'
 import type { NixosFacts } from '../host/contract/domains/site'
-import { num, since } from '../lib/format'
+import { num } from '../lib/format'
 import { builtOn, type Support } from '../lib/nixos'
 import { fetchNixosRelease } from '../server/updates'
+import { Ago } from './ago'
 import { ReleaseNotes, UpgradeChain } from './release-notes'
 import { FOOT, MONO, NOTE } from './tokens'
 import { Skeleton } from './ui/skeleton'
@@ -136,8 +137,7 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
           <p className={FOOT}>
             {release.note !== null && `${release.note}. `}
             From the NixOS manual's release notes in nixpkgs, first paragraphs only; open one for
-            the full list. Asked {since((Date.now() - Date.parse(release.checkedAt)) / 1000)}, at
-            most hourly.
+            the full list. Asked <Ago at={release.checkedAt} />, at most hourly.
           </p>
         </div>
       )}

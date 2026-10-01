@@ -1,9 +1,9 @@
 import { KeyRoundIcon } from 'lucide-react'
 import { useId, useState } from 'react'
 import type { McpTokenRow } from '../../host/mcp/tokens'
-import { when } from '../../lib/format'
 import { MCP_TOOLS, type McpScope } from '../../lib/mcp'
 import { mintMcpTokenFn, revokeMcpTokenFn } from '../../server/settings'
+import { When } from '../ago'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
@@ -147,8 +147,14 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
                   </Chip>
                 </span>
                 <span className="text-[0.72rem] text-(--dim)">
-                  minted {when(t.createdAt)} ·{' '}
-                  {t.lastUsedAt === null ? 'never used' : `last used ${when(t.lastUsedAt)}`}
+                  minted {<When at={t.createdAt} />} ·{' '}
+                  {t.lastUsedAt === null ? (
+                    'never used'
+                  ) : (
+                    <>
+                      last used <When at={t.lastUsedAt} />
+                    </>
+                  )}
                 </span>
               </span>
               {t.revokedAt === null ? (
@@ -156,7 +162,13 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
                   Revoke
                 </Button>
               ) : (
-                <Unset label={`revoked ${when(t.revokedAt)}`} />
+                <Unset
+                  label={
+                    <>
+                      revoked <When at={t.revokedAt} />
+                    </>
+                  }
+                />
               )}
             </li>
           ))}

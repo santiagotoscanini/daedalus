@@ -10,6 +10,7 @@ import {
   runGatewaySyncFn,
   saveBoxProvidersFn,
 } from '../../server/nodes'
+import { Ago } from '../ago'
 import { Bar } from '../skeleton'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -201,7 +202,7 @@ export function GatewaySync() {
         </Button>
         {line !== null && (
           <span className={ASIDE}>
-            last sync {last?.at !== undefined ? new Date(last.at).toLocaleTimeString() : ''}: {line}
+            last sync {last?.at !== undefined && <Ago at={last.at} />}: {line}
           </span>
         )}
       </span>

@@ -8,13 +8,14 @@ import type {
   GithubCallbackNotice,
 } from '../../core/settings/types'
 import type { SiteGithubApp } from '../../core/site/file'
-import { until, when } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
 import {
   discardGithubPendingApplyFn,
   retryGithubApplyFn,
   startGithubAppFn,
 } from '../../server/settings'
+import { Until, When } from '../ago'
+import { useNow } from '../poll'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -367,9 +368,12 @@ function installNote(inst: Installation | undefined): string {
 }
 
 function TokenFreshness({ installation: i }: { installation: Installation }) {
+  // Before mount the server's clock would decide "expired" and the browser's
+  // could disagree: read as fresh until the browser's own clock says.
+  const now = useNow(false)
   const expires = i.expiresAt === null ? Number.NaN : Date.parse(i.expiresAt)
   if (!i.hasToken || !Number.isFinite(expires)) return <Chip tone="bad">no token</Chip>
-  const left = (expires - Date.now()) / 1000
+  const left = now === null ? Number.POSITIVE_INFINITY : (expires - now) / 1000
   return (
     <Stack>
       <span className="inline-flex items-center gap-2">
@@ -377,10 +381,12 @@ function TokenFreshness({ installation: i }: { installation: Installation }) {
           {left <= 0 ? 'expired' : i.stale ? 'stale' : 'fresh'}
         </Chip>
         {left > 0 && (
-          <span className="text-[0.78rem] text-(--text-muted)">expires in {until(left)}</span>
+          <span className="text-[0.78rem] text-(--text-muted)">
+            expires in <Until at={expires} />
+          </span>
         )}
       </span>
-      {i.mintedAt !== '' && <span className={ASIDE}>minted {when(i.mintedAt)}</span>}
+      {i.mintedAt !== '' && <span className={ASIDE}>minted {<When at={i.mintedAt} />}</span>}
     </Stack>
   )
 }
@@ -454,8 +460,8 @@ function PendingApply({
       <AlertDescription>
         <p className="m-0">{pending.reason}</p>
         <p className="m-0">
-          Its key and secrets are kept here, encrypted, since {when(pending.at)}. Retry once nothing
-          else is waiting to be applied, or discard them if this App is not the one to keep.
+          Its key and secrets are kept here, encrypted, since {<When at={pending.at} />}. Retry once
+          nothing else is waiting to be applied, or discard them if this App is not the one to keep.
         </p>
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={retry}>

@@ -1,10 +1,11 @@
 import { rollUp } from '../../lib/activity-lines'
 import { cn } from '../../lib/cn'
-import { ms, when } from '../../lib/format'
+import { ms } from '../../lib/format'
 import { appRepo } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
 import { toneStyle } from '../../lib/tone'
 import type { AppTabData } from '../../server/registry'
+import { When } from '../ago'
 import { EMPTY, FOOT } from '../tokens'
 import { Badge } from '../ui/badge'
 import { Board, BoardGrid } from '../viz'
@@ -134,7 +135,7 @@ export function Deployments({
                     )}
                   </div>
                   <div className="mt-[0.4rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-(--dim)">
-                    <span>{when(d.startedAt)}</span>
+                    <span>{<When at={d.startedAt} />}</span>
                     <span>{ms(d.durationMs)}</span>
                     <code>{d.digest.slice(0, 12)}</code>
                     {d.httpCode && <span>HTTP {d.httpCode}</span>}

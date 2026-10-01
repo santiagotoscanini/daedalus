@@ -2,8 +2,8 @@ import { ServerIcon } from 'lucide-react'
 
 import type { BoxSettings, IntegrationStatus } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
-import { since, when } from '../../lib/format'
 import { mailAddressError } from '../../lib/site-fields'
+import { Ago, When } from '../ago'
 import { Identified, ReplaceToken, Token } from './cloudflare'
 import { GithubApp, type GithubAppProps } from './github-app'
 import { ExtLink, Mono, Pending, Section, Stack, Unset, Value } from './shared'
@@ -150,7 +150,7 @@ export function Integrations({
                 <Unset label="nothing in the last 30 days" />
               ) : (
                 <Stack>
-                  <Mono>{when(status.mail.lastSentAt)}</Mono>
+                  <Mono>{<When at={status.mail.lastSentAt} />}</Mono>
                   {status.mail.lastRecipient !== null && (
                     <span className="text-[0.78rem] text-(--text-muted)">
                       to {status.mail.lastRecipient}
@@ -189,8 +189,7 @@ export function Integrations({
 
       {status !== null && (
         <p className="m-0 text-[0.74rem] text-(--dim)">
-          Checked {since((Date.now() - Date.parse(status.checkedAt)) / 1000)}; each service is asked
-          at most every five minutes.
+          Checked <Ago at={status.checkedAt} />; each service is asked at most every five minutes.
         </p>
       )}
     </div>

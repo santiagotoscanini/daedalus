@@ -4,7 +4,8 @@
 import { cn } from '../../lib/cn'
 import type { ClaudeData } from '../../lib/dashboard/claude'
 import type { ShotRun } from '../../lib/dashboard/shotter'
-import { bytes, DASH, ms, num, since } from '../../lib/format'
+import { bytes, DASH, ms, num } from '../../lib/format'
+import { Ago } from '../ago'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { ServiceHead } from '../service-head'
@@ -112,7 +113,7 @@ export function ShotterView({ data }: { data: ClaudeData }) {
         />
         <Stat
           label="Last run"
-          value={sh.updatedAt === null ? 'never' : since((Date.now() - sh.updatedAt) / 1000)}
+          value={sh.updatedAt === null ? 'never' : <Ago at={sh.updatedAt} />}
           // Deliberately never a warning tone: runs happen when an agent
           // needs eyes, and a quiet week is a true reading, not staleness.
           sub="quiet is a reading"
@@ -248,9 +249,7 @@ function ShotRunRow({ run }: { run: ShotRun }) {
       <span className={cn(ROW_SIDE, NARROW_HIDE)}>
         {run.durationMs === null ? DASH : ms(run.durationMs)}
       </span>
-      <span className={ROW_SIDE}>
-        {run.at === null ? DASH : since((Date.now() - run.at) / 1000)}
-      </span>
+      <span className={ROW_SIDE}>{run.at === null ? DASH : <Ago at={run.at} />}</span>
     </li>
   )
 }

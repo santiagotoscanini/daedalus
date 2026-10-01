@@ -153,18 +153,6 @@ export function until(seconds: number | null | undefined): string {
 }
 
 /**
- * A moment, absolutely and relatively at once.
- *
- * Absolute first, relative second: "3d ago" alone is useless when you are
- * trying to correlate a deploy with something else that happened.
- */
-export function when(iso: string): string {
-  const then = Date.parse(iso)
-  if (!Number.isFinite(then)) return DASH
-  return `${new Date(then).toISOString().slice(0, 16).replace('T', ' ')} · ${since((Date.now() - then) / 1000)}`
-}
-
-/**
  * A log line's timestamp: "14:22:09.214" for today, "Jul 31 23:22:09" for
  * anything older. In the BOX'S timezone (TZ is bound into the container),
  * not UTC — these lines are read to correlate with "what was I doing at
@@ -176,8 +164,8 @@ export function when(iso: string): string {
  * for the choice between them. A browser in another zone — or simply on the
  * far side of midnight from the box — formats the same instant differently,
  * so calling this during a render that is also server-rendered is a hydration
- * mismatch. (`when`, `localDay` and `since`'s callers that pass `Date.now()`
- * share the hazard to a lesser degree.)
+ * mismatch. (`localDay` shares the hazard; a relative time in a render is
+ * components/ago.tsx.)
  *
  * "The box's timezone" is the intent anyway, and the server is the only place
  * that knows it. Both callers format at the source and hand the component a

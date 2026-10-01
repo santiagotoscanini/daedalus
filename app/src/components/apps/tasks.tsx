@@ -1,7 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useId, useState } from 'react'
 import { cn } from '../../lib/cn'
-import { until, when } from '../../lib/format'
 
 import {
   DEFAULT_TASK_TIMEOUT_SEC,
@@ -14,6 +13,7 @@ import {
   taskTimeoutError,
 } from '../../lib/tasks'
 import { type AppTabData, runTaskNow, saveApp } from '../../server/registry'
+import { Until, When } from '../ago'
 import { Segmented } from '../controls'
 import { GrafanaLogs } from '../logs'
 import { useRootAction } from '../root-action'
@@ -355,12 +355,9 @@ function TaskCard({
       </p>
 
       <div className="mt-[0.5rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-(--dim)">
-        <span>last run {task.lastRunAt === null ? 'never' : when(task.lastRunAt)}</span>
+        <span>last run {task.lastRunAt === null ? 'never' : <When at={task.lastRunAt} />}</span>
         <span>
-          next{' '}
-          {task.nextRunAt === null
-            ? 'not scheduled'
-            : until((Date.parse(task.nextRunAt) - Date.now()) / 1000)}
+          next {task.nextRunAt === null ? 'not scheduled' : <Until at={task.nextRunAt} />}
         </span>
         <span>timeout {task.timeoutSec}s</span>
         <code>{task.unit}</code>

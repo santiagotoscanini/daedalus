@@ -3,9 +3,10 @@ import { useState } from 'react'
 import type { ControllerRotation } from '../../../host/controller/wire'
 import { ROTATION_GRACE, ROTATION_GRACES, type RotationGrace } from '../../../lib/agent/policy'
 import { cn } from '../../../lib/cn'
-import { until } from '../../../lib/format'
 import { rotateControllerKeyFn } from '../../../server/nodes'
+import { Until } from '../../ago'
 import { ArmedConfirm } from '../../armed-confirm'
+import { useNow } from '../../poll'
 import { Button } from '../../ui/button'
 import { Picker } from '../../ui/picker'
 import { useAction } from '../../use-action'
@@ -24,7 +25,8 @@ const GRACE_OPTIONS = ROTATION_GRACES.map((g) => ({ value: g, label: ROTATION_GR
 
 /** The rotation under way, as one row value: from which key, when it retires, who still uses it. */
 export function RotationState({ r }: { r: ControllerRotation }) {
-  const left = (Date.parse(r.retiresAt) - Date.now()) / 1000
+  const now = useNow(false)
+  const left = now === null ? null : (Date.parse(r.retiresAt) - now) / 1000
   const old = r.oldKeyConnections
   return (
     <span className="inline-flex flex-col items-start gap-1">
@@ -33,8 +35,15 @@ export function RotationState({ r }: { r: ControllerRotation }) {
           from <Mono>{r.fromFingerprint}</Mono>
         </span>
         <span className={ASIDE}>
-          the old key retires {left > 0 ? `in ${until(left)}` : 'at the next start'} (
-          {r.retiresAt.slice(0, 16).replace('T', ' ')} UTC)
+          the old key retires{' '}
+          {left === null || left > 0 ? (
+            <>
+              in <Until at={r.retiresAt} />
+            </>
+          ) : (
+            'at the next start'
+          )}{' '}
+          ({r.retiresAt.slice(0, 16).replace('T', ' ')} UTC)
         </span>
       </Line>
       <span className={cn(ASIDE, old > 0 && 'text-warning')}>

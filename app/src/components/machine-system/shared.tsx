@@ -6,6 +6,7 @@ import type { BoxHead as BoxHeadData } from '../../lib/dashboard/box-head'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, since } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
+import { Ago } from '../ago'
 import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN } from '../tokens'
 import { Board, Chip } from '../viz'
 
@@ -72,7 +73,7 @@ export function HeadStrip({
   mark: { src: string; invert: boolean } | undefined
   name: string
   chip?: { label: string; tone: Tone }
-  aside?: string
+  aside?: ReactNode
   line: ReactNode
 }) {
   return (
@@ -147,7 +148,11 @@ export function MachineHead({
       name={node.name}
       chip={awake}
       aside={
-        t === null ? undefined : `sampled ${since((Date.now() - Date.parse(t.sampledAt)) / 1000)}`
+        t === null ? undefined : (
+          <>
+            sampled <Ago at={t.sampledAt} />
+          </>
+        )
       }
       line={
         <>

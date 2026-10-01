@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useNow } from '../../../components/poll'
 import { Board, Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, duration } from '../../../lib/format'
@@ -100,13 +101,14 @@ export function GrantBoard({
   budget?: AnonBudget
   span?: 4 | 6 | 8 | 12
 }) {
+  const now = useNow(false)
   if (unreadable.length === 0 && publicRepos === 0) return null
   const private_ = unreadable.filter((u) => u.access === 'needs-actions')
   const other = unreadable.filter((u) => u.access !== 'needs-actions')
   const resetIn =
-    budget === undefined || budget.resetAt === 0
+    budget === undefined || budget.resetAt === 0 || now === null
       ? null
-      : Math.max(0, Math.round((budget.resetAt - Date.now()) / 60_000))
+      : Math.max(0, Math.round((budget.resetAt - now) / 60_000))
   return (
     <Board
       title="What the box reads as anyone"

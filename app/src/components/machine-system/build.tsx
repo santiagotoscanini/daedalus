@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import type { NodeTelemetry } from '../../lib/agent/status'
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, cpuName, DASH, num, pct, shortVendor, since, temp } from '../../lib/format'
+import { bytes, cpuName, DASH, num, pct, shortVendor, temp } from '../../lib/format'
 import { type ChosenKind, type Part, partById, partMatching } from '../../lib/hardware/catalog'
 import type { NodeRow } from '../../lib/repo/nodes'
 import { Ago } from '../ago'
@@ -339,7 +339,12 @@ export function NodeBuildView({ d }: { d: NodeSystemData }) {
                       },
                       {
                         k: 'Agent',
-                        v: `${status?.version ?? node.agentVersion} · approved ${node.approvedAt === null ? DASH : since((Date.now() - Date.parse(node.approvedAt)) / 1000)}`,
+                        v: (
+                          <>
+                            {status?.version ?? node.agentVersion} · approved{' '}
+                            {node.approvedAt === null ? DASH : <Ago at={node.approvedAt} />}
+                          </>
+                        ),
                       },
                     ]}
                   />

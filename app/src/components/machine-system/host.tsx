@@ -2,10 +2,11 @@ import { Link } from '@tanstack/react-router'
 
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { DASH, duration, num, pct, rate, since, temp, text } from '../../lib/format'
+import { DASH, duration, num, pct, rate, temp, text } from '../../lib/format'
 import { partMatching } from '../../lib/hardware/catalog'
 import { linkWords } from '../../lib/node-link'
 import { PROVIDER_NAME, type ProviderKind } from '../../lib/providers/kinds'
+import { Ago } from '../ago'
 import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../part'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
 import {
@@ -252,10 +253,7 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
             { k: 'Uptime', v: duration(status.osUptimeSecs) },
             {
               k: 'Booted',
-              v:
-                status.bootedAt === null
-                  ? DASH
-                  : since((Date.now() - Date.parse(status.bootedAt)) / 1000),
+              v: status.bootedAt === null ? DASH : <Ago at={status.bootedAt} />,
             },
             {
               k: 'Kernel',

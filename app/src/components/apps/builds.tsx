@@ -104,7 +104,8 @@ export function BuildsBoard({
       ) : (
         <ol className="m-0 list-none p-0">
           {builds.map((b) => {
-            const took = buildDurationMs(b, now ?? Date.now())
+            // An open build's running time waits for the browser's clock.
+            const took = isOpenBuild(b.state) && now === null ? null : buildDurationMs(b, now ?? 0)
             return (
               <li key={b.id}>
                 <Link

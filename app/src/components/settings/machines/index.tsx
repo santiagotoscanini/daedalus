@@ -6,6 +6,7 @@ import { cn } from '../../../lib/cn'
 import type { Machine, MachinesData } from '../../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
+import { Ago } from '../../ago'
 import { Chip } from '../../viz'
 import { BoxProvider, GatewaySync } from '../provider-models'
 import { ASIDE, ERROR_NOTE, Line, Mono, NOTE, Rows, Section } from '../shared'
@@ -214,8 +215,12 @@ function MachineSection({
         ) : (
           <span className={ASIDE}>
             {s.lastUpdateResult ?? 'not checked yet'}
-            {s.lastUpdateCheck !== null &&
-              ` · ${since((Date.now() - Date.parse(s.lastUpdateCheck)) / 1000)}`}
+            {s.lastUpdateCheck !== null && (
+              <>
+                {' · '}
+                <Ago at={s.lastUpdateCheck} />
+              </>
+            )}
           </span>
         ),
     },
@@ -415,15 +420,14 @@ export function Machines({ d }: { d: MachinesData }) {
                     ) : sync.error !== null ? (
                       <span className="inline-flex flex-col items-start gap-1">
                         <span className="text-[0.78rem] text-destructive">
-                          not delivered {since((Date.now() - Date.parse(sync.at)) / 1000)}:{' '}
-                          {sync.error}
+                          not delivered <Ago at={sync.at} />: {sync.error}
                         </span>
                         <span className={ASIDE}>{BACK}</span>
                       </span>
                     ) : (
                       <span className={ASIDE}>
                         {String(sync.sent.length)} key{sync.sent.length === 1 ? '' : 's'} handed
-                        over {since((Date.now() - Date.parse(sync.at)) / 1000)}
+                        over <Ago at={sync.at} />
                         {sync.skipped.length > 0 && ` · ${String(sync.skipped.length)} left out`}
                       </span>
                     ),

@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react'
+import { DAY, LocalTime } from '../../../components/ago'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -36,9 +37,6 @@ const INPUT = cn(
   'h-auto w-[13rem] max-w-full rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.35rem]',
   'font-mono md:text-[0.8rem] dark:bg-(--panel-2)',
 )
-
-const day = (at: number) =>
-  new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 export function RosterBoard({ rows }: { rows: Row[] }) {
   const allowed = rows.filter((r) => r.state !== 'removing').length
@@ -101,7 +99,13 @@ function PlayerRow({ r }: { r: Row }) {
           <span className={MONO}>{r.uuid}</span>
           {r.renamed !== null && <span>now {r.renamed} on Mojang</span>}
           <span>
-            {r.lastSeen === null ? 'not seen in 30 days' : `last joined ${day(r.lastSeen)}`}
+            {r.lastSeen === null ? (
+              'not seen in 30 days'
+            ) : (
+              <>
+                last joined <LocalTime at={r.lastSeen} opts={DAY} />
+              </>
+            )}
           </span>
           {(r.model !== null || r.cape) && (
             <span>

@@ -1,3 +1,4 @@
+import { DAY_TIME, LocalTime } from '../../../components/ago'
 import { ImageRow } from '../../../components/image-row'
 import { LogBoard } from '../../../components/logs'
 import { Changelog, ReleaseNotes, UpgradeChain } from '../../../components/release-notes'
@@ -202,12 +203,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
                   </Chip>
                   <span className={NEWS_TITLE}>{e.who}</span>
                   <span className={NEWS_DATE}>
-                    {new Date(e.at).toLocaleString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    <LocalTime at={e.at} opts={DAY_TIME} />
                   </span>
                 </li>
               ))}
@@ -358,14 +354,13 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           value={live.game === null ? '—' : live.game}
           tone={live.game === 'stopped' ? 'warn' : undefined}
           sub={
-            live.since === null
-              ? 'nothing in the log for 30 days'
-              : `since ${new Date(live.since).toLocaleString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}`
+            live.since === null ? (
+              'nothing in the log for 30 days'
+            ) : (
+              <>
+                since <LocalTime at={live.since} opts={DAY_TIME} />
+              </>
+            )
           }
           title="The newest start/stop line in the server’s own log. The manager keeps running either way."
         />
@@ -460,12 +455,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
                   </Chip>
                   <span className={NEWS_TITLE}>{e.who}</span>
                   <span className={NEWS_DATE}>
-                    {new Date(e.at).toLocaleString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    <LocalTime at={e.at} opts={DAY_TIME} />
                   </span>
                 </li>
               ))}

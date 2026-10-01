@@ -8,8 +8,8 @@ import { cn } from '../../lib/cn'
 // builtins into the browser bundle and the page throws on load. Type-only
 // imports would be erased and safe.
 import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../../lib/env-groups'
-import { when } from '../../lib/format'
 import { removeAppSecretFn, revealEnvVar, setAppSecretFn } from '../../server/registry'
+import { When } from '../ago'
 import { useRootAction } from '../root-action'
 import { EMPTY } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
@@ -90,7 +90,7 @@ export function Secrets({
           aside={
             env.takenAt ? (
               <span className="text-[0.72rem] tracking-normal text-(--dim) normal-case">
-                read from the container {when(env.takenAt)}
+                read from the container {<When at={env.takenAt} />}
               </span>
             ) : null
           }
@@ -382,9 +382,13 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[0.76rem] text-(--dim)">
-                    {k.history === null
-                      ? 'not in a commit yet'
-                      : `set ${when(k.history.setAt)} by ${k.history.actor}`}
+                    {k.history === null ? (
+                      'not in a commit yet'
+                    ) : (
+                      <>
+                        set <When at={k.history.setAt} /> by {k.history.actor}
+                      </>
+                    )}
                   </span>
                   <Button
                     type="button"

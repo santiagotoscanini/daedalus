@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import type { SourceMeta } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
-import { since, when } from '../../lib/format'
+import { Ago, When } from '../ago'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Skeleton } from '../ui/skeleton'
 import { Chip } from '../viz'
@@ -146,7 +146,7 @@ export function Pending({ className }: { className?: string }) {
   return <Skeleton className={cn('inline-block h-4 w-28 align-middle', className)} />
 }
 
-export function Unset({ label = 'not set' }: { label?: string }) {
+export function Unset({ label = 'not set' }: { label?: ReactNode }) {
   return <span className="text-[0.82rem] text-(--dim)">{label}</span>
 }
 
@@ -169,7 +169,7 @@ export function Commit({ rev, subject, at }: { rev: string; subject?: string; at
         </span>
       )}
       {at !== undefined && at !== '' && (
-        <span className="text-[0.72rem] text-(--dim)">{when(at)}</span>
+        <span className="text-[0.72rem] text-(--dim)">{<When at={at} />}</span>
       )}
     </Stack>
   )
@@ -194,8 +194,6 @@ export function SourceNote({
   /** Who writes it, for the reader who goes looking. */
   producer: string
 }) {
-  const age =
-    meta.generatedAt === null ? null : since((Date.now() - Date.parse(meta.generatedAt)) / 1000)
   return (
     <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.74rem] text-(--dim)">
       {meta.error !== null ? (
@@ -217,7 +215,12 @@ export function SourceNote({
           {meta.stale && <Chip tone="warn">stale</Chip>}
           <span>
             From <Mono>{file}</Mono>, written by {producer}
-            {age !== null && ` ${age}`}
+            {meta.generatedAt !== null && (
+              <>
+                {' '}
+                <Ago at={meta.generatedAt} />
+              </>
+            )}
             {meta.stale && ' — older than its timer promises; the producer has stopped.'}
           </span>
         </>

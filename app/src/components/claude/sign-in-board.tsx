@@ -1,18 +1,16 @@
 // The Sign-in board: the login this server connects with, and the one date on
 // it worth acting on.
 import type { ClaudeFacts } from '../../lib/dashboard/claude'
-import { DASH, text, until } from '../../lib/format'
+import { DASH, text } from '../../lib/format'
+import { Until } from '../ago'
 import { EMPTY, FOOT, MONO } from '../tokens'
 import { Board, Facts } from '../viz'
 
 export function SignInBoard({
   credentials,
-  refreshIn,
   reporting,
 }: {
   credentials: ClaudeFacts['credentials']
-  /** Seconds until the refresh token runs out, or null with no credentials. */
-  refreshIn: number | null
   /** Whether the controller reported: the login's dates are in its report. */
   reporting: boolean
 }) {
@@ -40,12 +38,17 @@ export function SignInBoard({
               },
               {
                 k: 'Access token',
-                v:
-                  credentials.expiresAt === null
-                    ? DASH
-                    : until((credentials.expiresAt - Date.now()) / 1000),
+                v: credentials.expiresAt === null ? DASH : <Until at={credentials.expiresAt} />,
               },
-              { k: 'Refresh token', v: refreshIn === null ? DASH : until(refreshIn) },
+              {
+                k: 'Refresh token',
+                v:
+                  credentials.refreshExpiresAt === null ? (
+                    DASH
+                  ) : (
+                    <Until at={credentials.refreshExpiresAt} />
+                  ),
+              },
               {
                 k: 'Scopes',
                 v: (

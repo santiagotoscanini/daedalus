@@ -1,3 +1,4 @@
+import { Ago } from '../../../components/ago'
 import { LogBoard } from '../../../components/logs'
 import {
   EMPTY,
@@ -13,7 +14,7 @@ import {
 } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { bytes, DASH, duration, num, pct, since } from '../../../lib/format'
+import { bytes, DASH, duration, num, pct } from '../../../lib/format'
 import type { SystemData } from '../data'
 import { SYSTEM_SNAPSHOT } from './shared'
 
@@ -83,7 +84,7 @@ export function PoolsView({ d }: { d: Pools }) {
                 },
                 {
                   k: 'Finished',
-                  v: p.scrub.endedAt === null ? DASH : since(Date.now() / 1000 - p.scrub.endedAt),
+                  v: p.scrub.endedAt === null ? DASH : <Ago at={p.scrub.endedAt * 1000} />,
                 },
                 {
                   k: 'Took',
