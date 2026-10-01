@@ -31,9 +31,24 @@ pub use workers::Workers;
 /// the tray.
 const TICK: Duration = Duration::from_millis(500);
 
-/// The instance lock: one service per data directory.
+/// The instance lock: one service per data directory, held for as long as
+/// it runs.
 pub fn instance_lock_path() -> PathBuf {
     paths::data_dir().join("agent.lock")
+}
+
+/// Take the instance lock: Ok(None) while an agent holds it, an error when
+/// it cannot be opened. `private`: the lock is made so no other user can
+/// open it when it is first made (audit D6) — the service's, and a verb's
+/// that stands in for it (`update --apply`); a `serve` in a terminal is
+/// its user's, and keeps its files.
+pub fn take_instance_lock(private: bool) -> std::io::Result<Option<std::fs::File>> {
+    let path = instance_lock_path();
+    let _ = std::fs::create_dir_all(paths::data_dir());
+    if private && !path.exists() {
+        let _ = os::create_private(&path);
+    }
+    os::try_lock_exclusive(&path)
 }
 
 /// The agent's work, shared by `run` (as a service) and `serve` (in a
@@ -61,20 +76,16 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     );
 
     // One service per data directory (a port another process holds is
-    // waited out, metrics_page.rs `Page`). The service's lock is never one
-    // another user can open (audit D6): made private when it is first made.
-    // A `serve` in a terminal is its user's, and keeps its files.
+    // waited out, metrics_page.rs `Page`).
     let lock_path = instance_lock_path();
-    let _ = std::fs::create_dir_all(paths::data_dir());
-    if !foreground && !lock_path.exists() {
-        let _ = os::create_private(&lock_path);
-    }
-    let Some(_instance) = os::lock_exclusive(&lock_path) else {
-        anyhow::bail!(
+    let _instance = match take_instance_lock(!foreground) {
+        Ok(Some(lock)) => lock,
+        Ok(None) => anyhow::bail!(
             "another agent already runs on {} ({} is held)",
             paths::data_dir().display(),
             lock_path.display()
-        );
+        ),
+        Err(e) => return Err(e).with_context(|| format!("opening {}", lock_path.display())),
     };
 
     let state = state::State::load();

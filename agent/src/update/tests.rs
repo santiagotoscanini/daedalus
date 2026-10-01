@@ -512,3 +512,117 @@ fn a_mac_updates_to_the_bundle_and_ignores_the_disk_image() {
     };
     assert!(offer(&old).is_err());
 }
+
+/// A state store in a scratch file, and the state as that file holds it.
+fn scratch_store(name: &str) -> (crate::state::StateStore, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("daedalus-install-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let path = dir.join("state.json");
+    (
+        crate::state::StateStore::at(path.clone(), crate::state::State::default()),
+        path,
+    )
+}
+
+fn on_disk(path: &std::path::Path) -> crate::state::State {
+    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+}
+
+/// The one install the service and `update --apply` share: the probation
+/// on disk before anything is swapped, and undone — on disk too — when the
+/// swap fails or the binary in place says another version, which is then
+/// recorded as rolled back.
+#[test]
+fn an_install_records_its_probation_first_and_undoes_it_on_disk() {
+    let v = semver::Version::new(9, 9, 9);
+    let ok = |swapped: bool| -> anyhow::Result<()> {
+        if swapped {
+            Ok(())
+        } else {
+            anyhow::bail!("the swap failed")
+        }
+    };
+
+    // It holds: on probation, from this version.
+    let (store, path) = scratch_store("ok");
+    let rolled = std::cell::Cell::new(false);
+    install_staged(
+        &v,
+        &store,
+        "t",
+        Binaries {
+            swap_in: || {
+                // The probation is on disk before anything is replaced.
+                assert_eq!(on_disk(&path).probation.unwrap().version, "9.9.9");
+                ok(true)
+            },
+            installed_version: || Ok(v.clone()),
+            roll_back: || {
+                rolled.set(true);
+                Ok(())
+            },
+        },
+    )
+    .unwrap();
+    let s = on_disk(&path);
+    assert_eq!(s.probation.unwrap().from, crate::VERSION);
+    assert_eq!(s.updated_from.as_deref(), Some(crate::VERSION));
+    assert!(s.rolled_back.is_none() && !rolled.get());
+
+    // The swap fails: no probation left on disk, nothing rolled back.
+    let (store, path) = scratch_store("swap");
+    let e = install_staged(
+        &v,
+        &store,
+        "t",
+        Binaries {
+            swap_in: || ok(false),
+            installed_version: || Ok(v.clone()),
+            roll_back: || panic!("nothing was swapped"),
+        },
+    )
+    .unwrap_err();
+    assert!(e.to_string().contains("the swap failed"), "{e}");
+    let s = on_disk(&path);
+    assert!(s.probation.is_none() && s.rolled_back.is_none());
+
+    // Another version in place: rolled back, the probation cleared, and
+    // the version refused from then on.
+    let (store, path) = scratch_store("mismatch");
+    let rolled = std::cell::Cell::new(false);
+    let e = install_staged(
+        &v,
+        &store,
+        "t",
+        Binaries {
+            swap_in: || ok(true),
+            installed_version: || Ok(semver::Version::new(1, 0, 0)),
+            roll_back: || {
+                rolled.set(true);
+                Ok(())
+            },
+        },
+    )
+    .unwrap_err();
+    assert!(rolled.get());
+    assert!(e.to_string().contains("says 1.0.0, not 9.9.9"), "{e}");
+    let s = on_disk(&path);
+    assert!(s.probation.is_none());
+    assert_eq!(s.rolled_back.unwrap().version, "9.9.9");
+
+    // The probation cannot be recorded: nothing is swapped.
+    let (store, path) = scratch_store("unrecorded");
+    std::fs::create_dir_all(&path).unwrap();
+    let e = install_staged(
+        &v,
+        &store,
+        "t",
+        Binaries {
+            swap_in: || panic!("nothing may be replaced"),
+            installed_version: || Ok(v.clone()),
+            roll_back: || panic!("nothing was swapped"),
+        },
+    )
+    .unwrap_err();
+    assert!(e.to_string().contains("nothing was replaced"), "{e}");
+}

@@ -32,8 +32,8 @@ pub mod tray;
 pub use super::unix::{
     claude_holder, connect_local, contain, create_private, ensure_private, file_owner,
     hide_console, isolate, kill_tree, local_socket_path, lock_exclusive, mark_executable,
-    monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_api_socket, serve_local, unseal,
-    LocalSocket, Tree, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
+    monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_api_socket, serve_local,
+    try_lock_exclusive, unseal, LocalSocket, Tree, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;

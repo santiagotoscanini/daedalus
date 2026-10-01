@@ -84,7 +84,7 @@ pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 // processes, a single-instance lock, the monotonic clock
 pub use imp::{
     contain, hide_console, isolate, kill_tree, lock_exclusive, monotonic_usec, on_interrupt,
-    pid_alive, process_table, Tree,
+    pid_alive, process_table, try_lock_exclusive, Tree,
 };
 // the local sockets: the controller's API (api/) and the agent's own door (local.rs)
 pub use imp::{

@@ -46,9 +46,13 @@ fn main() {
             println!("daedalus-agent {VERSION}");
             Ok(())
         }
-        _ => {
+        "help" | "--help" | "-h" => {
             print_help();
             Ok(())
+        }
+        other => {
+            print_help();
+            Err(anyhow::anyhow!("unknown verb {other:?}"))
         }
     };
 
@@ -282,44 +286,39 @@ fn status_cmd() -> Result<()> {
 }
 
 fn update_cmd(args: &[String]) -> Result<()> {
-    let apply = args.iter().any(|a| a == "--apply");
+    let apply = match args {
+        [] => false,
+        [a] if a == "--apply" => true,
+        _ => bail!("usage: daedalus-agent update [--apply]"),
+    };
     if apply && !role().self_update {
         bail!("`update --apply` refuses in controller mode: nix moves this agent");
     }
     // The running service keeps the state `--apply` writes (the probation
-    // the new binary counts its starts against) and would save over it.
-    if apply && daedalus_agent::local::call::<serde_json::Value>(&LocalRequest::Status).is_ok() {
-        bail!(
-            "the service is running: stop it first, or let it install the release itself (`updates = \"self\"`)"
-        );
-    }
-    let mut state = daedalus_agent::state::State::load();
-    let refused = state.rolled_back.as_ref().map(|r| r.version.clone());
+    // the new binary counts its starts against) and would save over it: its
+    // instance lock says whether it runs, and held here it cannot start
+    // half way through the install.
+    let _instance = if apply {
+        match daedalus_agent::service::take_instance_lock(true) {
+            Ok(Some(lock)) => Some(lock),
+            Ok(None) => bail!(
+                "the service is running: stop it first, or let it install the release itself (`updates = \"self\"`)"
+            ),
+            Err(e) => {
+                return Err(e).context("the service's lock could not be opened (run as an administrator)")
+            }
+        }
+    } else {
+        None
+    };
+    let store = daedalus_agent::state::StateStore::load();
+    let refused = store.get().rolled_back.map(|r| r.version);
     match update::check(refused.as_deref())? {
         None => println!("no newer release than {VERSION}"),
         Some(rel) => {
             println!("newer release: {} ({})", rel.version, rel.tag);
             if apply {
-                let staged = update::download_and_verify(&rel)?;
-                // As the service does it (update::install): the probation on
-                // disk before anything is replaced, the version checked after.
-                update::begin_probation(
-                    &mut state,
-                    &rel.version.to_string(),
-                    &daedalus_agent::state::now_rfc3339(),
-                );
-                state
-                    .try_save()
-                    .context("the probation could not be recorded; nothing was replaced")?;
-                update::swap_in(&staged)?;
-                let said = update::installed_version()?;
-                if said != rel.version {
-                    update::roll_back()?;
-                    bail!(
-                        "the installed binary says {said}, not {}; put the previous one back",
-                        rel.version
-                    );
-                }
+                update::install(&rel, &store, &daedalus_agent::state::now_rfc3339())?;
                 println!(
                     "installed {}; start the service to run it (on probation: the previous binaries stay until it proves itself)",
                     rel.version

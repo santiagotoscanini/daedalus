@@ -205,11 +205,18 @@ pub fn monotonic_usec() -> Option<u64> {
 }
 
 /// An exclusive lock on `path` (created if absent), held while the returned
-/// file is open; None when another process holds it. The file is the
-/// owner's alone (0600, never through a symlink): `flock` works on a
-/// read-only descriptor, so a lock file others can open is one any local
-/// user can hold to keep the agent from starting (audit D6).
+/// file is open; None when another process holds it, or it cannot be
+/// opened (`try_lock_exclusive` tells the two apart).
 pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
+    try_lock_exclusive(path).ok().flatten()
+}
+
+/// The same: Ok(None) when another process holds it, an error when it
+/// cannot be opened. The file is the owner's alone (0600, never through a
+/// symlink): `flock` works on a read-only descriptor, so a lock file others
+/// can open is one any local user can hold to keep the agent from starting
+/// (audit D6).
+pub fn try_lock_exclusive(path: &Path) -> std::io::Result<Option<std::fs::File>> {
     use std::os::fd::AsRawFd;
     use std::os::unix::fs::OpenOptionsExt;
     let f = std::fs::OpenOptions::new()
@@ -218,11 +225,15 @@ pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
         .write(true)
         .mode(0o600)
         .custom_flags(libc::O_NOFOLLOW)
-        .open(path)
-        .ok()?;
+        .open(path)?;
     // SAFETY: flock on a descriptor this function owns.
-    let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    (rc == 0).then_some(f)
+    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+        return Ok(Some(f));
+    }
+    match std::io::Error::last_os_error() {
+        e if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+        e => Err(e),
+    }
 }
 
 // ── the local sockets: the API's and the agent's own ───────────────────────
@@ -721,6 +732,23 @@ mod tests {
 
     fn scratch(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("daedalus-sock-{name}-{}", std::process::id()))
+    }
+
+    /// `update --apply` judges whether the service runs by its lock: one
+    /// held is told apart from one that cannot be opened.
+    #[test]
+    fn a_held_lock_is_told_apart_from_one_that_cannot_be_opened() {
+        let dir = scratch("lock");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("agent.lock");
+        let held = try_lock_exclusive(&path).unwrap().unwrap();
+        assert!(try_lock_exclusive(&path).unwrap().is_none());
+        assert!(lock_exclusive(&path).is_none());
+        drop(held);
+        assert!(try_lock_exclusive(&path).unwrap().is_some());
+        assert!(try_lock_exclusive(&dir.join("missing").join("agent.lock")).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn limits() -> Policy {

@@ -101,16 +101,29 @@ pub fn hostname() -> Option<String> {
 // ── processes: locks and clocks ───────────────────────────────────────────
 
 /// An exclusive lock on `path` (created if absent): the file opened with no
-/// sharing, held while it is open; None when another process has it open.
+/// sharing, held while it is open; None when another process has it open,
+/// or it cannot be opened (`try_lock_exclusive` tells the two apart).
 pub fn lock_exclusive(path: &Path) -> Option<std::fs::File> {
+    try_lock_exclusive(path).ok().flatten()
+}
+
+/// The same: Ok(None) when another process has it open (a sharing
+/// violation), an error when it cannot be opened.
+pub fn try_lock_exclusive(path: &Path) -> std::io::Result<Option<std::fs::File>> {
     use std::os::windows::fs::OpenOptionsExt;
-    std::fs::OpenOptions::new()
+    /// `ERROR_SHARING_VIOLATION`.
+    const SHARING_VIOLATION: i32 = 32;
+    match std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .share_mode(0)
         .open(path)
-        .ok()
+    {
+        Ok(f) => Ok(Some(f)),
+        Err(e) if e.raw_os_error() == Some(SHARING_VIOLATION) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 /// systemd's monotonic clock has no meaning here (no Claude unit on

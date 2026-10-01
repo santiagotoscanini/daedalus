@@ -64,7 +64,7 @@ use std::time::Duration;
 
 use crate::config::Config;
 use crate::shared::Shared;
-use crate::state::now_rfc3339;
+use crate::state::{now_rfc3339, StateStore};
 
 /// The ed25519 public keys a release manifest may be signed with (32 bytes
 /// each, hex). The first is the current key, whose private half signs every
@@ -143,7 +143,7 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
                     });
                     continue;
                 }
-                match install(&rel, &shared, &now) {
+                match install(&rel, &shared.state, &now) {
                     Ok(()) => {
                         shared.update.set_restart_pending();
                         tracing::info!(
@@ -171,19 +171,52 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
     }
 }
 
-/// Install `rel`: every asset downloaded and verified beside the binaries;
-/// its probation recorded — and kept on disk — BEFORE anything running is
-/// touched, so a crash from here on still counts its starts (audit D11);
-/// the binaries swapped in; then the service binary now in place asked
-/// its version, which must be the manifest's (audit D3). A swap that does
-/// not hold is undone: the probation cleared, and a binary that says
-/// another version rolled back and refused from then on.
-pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> {
-    use anyhow::Context;
-    let label = rel.version.to_string();
+/// Install `rel` — the service's updater and `update --apply` alike: every
+/// asset downloaded and verified beside the binaries, then `install_staged`
+/// with the real swap.
+pub fn install(rel: &Release, store: &StateStore, now: &str) -> anyhow::Result<()> {
     let staged = download_and_verify(rel)?;
-    shared
-        .state
+    install_staged(
+        &rel.version,
+        store,
+        now,
+        Binaries {
+            swap_in: || swap_in(&staged),
+            installed_version,
+            roll_back,
+        },
+    )
+}
+
+/// What `install_staged` does to the binaries: put the staged ones in
+/// place, ask the one now in place its version, put the previous ones back.
+pub struct Binaries<S, V, R> {
+    pub swap_in: S,
+    pub installed_version: V,
+    pub roll_back: R,
+}
+
+/// The staged release `version` put in place: its probation recorded — and
+/// kept on disk — BEFORE anything running is touched, so a crash from here
+/// on still counts its starts (audit D11); the binaries swapped in; then
+/// the service binary now in place asked its version, which must be the
+/// manifest's (audit D3). A swap that does not hold is undone: the
+/// probation cleared, and a binary that says another version rolled back
+/// and refused from then on (`State::rolled_back`).
+pub fn install_staged<S, V, R>(
+    version: &semver::Version,
+    store: &StateStore,
+    now: &str,
+    bin: Binaries<S, V, R>,
+) -> anyhow::Result<()>
+where
+    S: FnOnce() -> anyhow::Result<()>,
+    V: FnOnce() -> anyhow::Result<semver::Version>,
+    R: FnOnce() -> anyhow::Result<()>,
+{
+    use anyhow::Context;
+    let label = version.to_string();
+    store
         .edit_saved(|s| {
             s.last_update_check = Some(now.to_string());
             s.last_update_result = Some(format!("installed {label}; restarting"));
@@ -192,34 +225,28 @@ pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> 
             begin_probation(s, &label, now);
         })
         .context("the probation could not be recorded; nothing was replaced")?;
-    if let Err(e) = swap_in(&staged) {
-        shared.state.edit(|s| s.probation = None);
+    if let Err(e) = (bin.swap_in)() {
+        store.edit(|s| s.probation = None);
         return Err(e);
     }
-    match installed_version() {
-        Ok(v) if v == rel.version => Ok(()),
-        said => {
-            let why = match said {
-                Ok(v) => format!("the installed binary says {v}, not {label}"),
-                Err(e) => format!("the installed binary does not run: {e:#}"),
-            };
-            let back = roll_back();
-            shared.state.edit(|s| {
-                s.probation = None;
-                s.rolled_back = Some(crate::state::RolledBack {
-                    version: label.clone(),
-                    to: crate::VERSION.into(),
-                    starts: 0,
-                    at: now.to_string(),
-                });
-            });
-            match back {
-                Ok(()) => anyhow::bail!("{why}; put the previous binaries back"),
-                Err(e) => {
-                    anyhow::bail!("{why}; and the previous binaries could not be put back: {e:#}")
-                }
-            }
-        }
+    let why = match (bin.installed_version)() {
+        Ok(v) if v == *version => return Ok(()),
+        Ok(v) => format!("the installed binary says {v}, not {label}"),
+        Err(e) => format!("the installed binary does not run: {e:#}"),
+    };
+    let back = (bin.roll_back)();
+    store.edit(|s| {
+        s.probation = None;
+        s.rolled_back = Some(crate::state::RolledBack {
+            version: label.clone(),
+            to: crate::VERSION.into(),
+            starts: 0,
+            at: now.to_string(),
+        });
+    });
+    match back {
+        Ok(()) => anyhow::bail!("{why}; put the previous binaries back"),
+        Err(e) => anyhow::bail!("{why}; and the previous binaries could not be put back: {e:#}"),
     }
 }
 
