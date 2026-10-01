@@ -1,10 +1,16 @@
 # Set or remove ONE key in an app's operator-secrets file, on request from
 # daedalus: the root helper's `secret-set` (daedalus-verbs.nix), started as
-# `daedalus-secret-set@<run id>` as the operator, with the request as its
-# `request` credential (host/lib.sh take_request) — the app, the action, the
-# key and the actor as selectors, the sealed value as the payload — and the
-# host's SSH key as its `hostkey` credential, the one thing it needs root's
-# files for.
+# `daedalus-secret-set@<run id>`, with the request as its `request` credential
+# (host/lib.sh take_request) — the app, the action, the key and the actor as
+# selectors, the sealed value as the payload.
+#
+# Runs as root, like apply.sh, because it needs the host's SSH key — which
+# opens every sops secret on the box — and that key must never sit anywhere
+# the operator (or the container, whose root is the operator) can read, not
+# even a unit's credentials directory for the length of a run. Root reads it
+# by its own path; every write into the site directory, its git and the
+# rollback copies drops to the operator through host/site-lib.sh, and every
+# read of an operator-writable file goes through read_as_operator.
 #
 # The host half of the write-only secrets editor. daedalus holds an
 # encrypt-only sops identity — a static sops binary and the PUBLIC recipients
@@ -66,39 +72,42 @@ fail() {
   exit 1
 }
 
-# sops with the host's identity, standing in the site directory.
+# sops with the host's identity.
 #
 # The identity is derived from the SSH host key by ssh-to-age through
 # SOPS_AGE_KEY_CMD, so it lives in a pipe for the length of one call and is
 # never written to a file or an environment variable — sops-nix derives the
 # same identity the same way at activation, which is why this box's own
-# recipient in .sops.yaml matches it. The key is the unit's `hostkey`
-# credential: systemd reads it as root and hands this operator-run unit a
-# private read-only copy. HOME is an empty private directory, so sops finds
-# no other identity (the operator's own SSH key, an age keys.txt) to try.
+# recipient in .sops.yaml matches it. $HOSTKEY is read by root, at its own
+# path, and by nothing else. HOME is an empty private directory, so sops
+# finds no other identity (root's, an age keys.txt) to try.
 #
-# The cwd is what makes `--filename-override vault/apps/…` match .sops.yaml's
-# creation rule: sops resolves that regex against the path RELATIVE to where it
-# stands. --config names the file explicitly so the walk-up never finds
-# another.
+# sops runs as root, so it opens nothing in the operator's tree by name: it
+# stands in $SOPS_DIR, a root-private directory holding a copy of the site's
+# .sops.yaml (read as the operator, never through a link), and works only on
+# the root-private temps below. The cwd is what makes `--filename-override
+# vault/apps/…` match the creation rule: sops resolves that regex against the
+# path RELATIVE to where it stands. --config names the copy so the walk-up
+# never finds another.
 sops_host() {
   (
-    cd "$SITE_DIR" &&
-      SOPS_AGE_KEY_CMD="$SSH_TO_AGE -private-key -i $CREDENTIALS_DIRECTORY/hostkey" HOME="$SOPS_HOME" \
-        "$SOPS" --config "$SITE_DIR/.sops.yaml" "$@"
+    cd "$SOPS_DIR" &&
+      SOPS_AGE_KEY_CMD="$SSH_TO_AGE -private-key -i $HOSTKEY" HOME="$SOPS_HOME" \
+        "$SOPS" --config "$SOPS_DIR/.sops.yaml" "$@"
   )
 }
 
-# Temps in the unit's private /tmp (PrivateTmp): nothing else can reach them.
-# The request (its payload is the sealed value) is kept in one rather than in
-# a variable, so it never reaches a command line.
+# Temps in the unit's private /tmp (PrivateTmp), root's: nothing else can
+# reach them. The request (its payload is the sealed value) is kept in one
+# rather than in a variable, so it never reaches a command line.
 REQ="$(mktemp)"
 WORK="$(mktemp)"
 SEALED="$(mktemp)"
 SOPS_HOME="$(mktemp -d)"
-trap 'rm -rf "$REQ" "$WORK" "$SEALED" "$SOPS_HOME"' EXIT
+SOPS_DIR="$(mktemp -d)"
+trap 'rm -rf "$REQ" "$WORK" "$SEALED" "$SOPS_HOME" "$SOPS_DIR"' EXIT
 
-[ -r "${CREDENTIALS_DIRECTORY:-}/hostkey" ] || fail "no hostkey credential: this unit is started by the root helper"
+[ -r "$HOSTKEY" ] || fail "cannot read the host key $HOSTKEY"
 take_request >"$REQ" || exit 1
 
 APP="$(jq -r '.selectors.app // ""' "$REQ")"
@@ -147,6 +156,15 @@ else
 fi
 
 FILE="vault/apps/$APP-env.sops"
+
+# One writer in the site directory (host/site-lib.sh site_lock). An Apply
+# holds it for its whole rebuild, which is longer than this unit may wait,
+# so a busy site is a refusal to retry, not a failure.
+site_lock 60 || refuse "an Apply is writing the site directory right now — try again when it is done"
+
+if [ -L "$SITE_DIR/.sops.yaml" ] || ! read_as_operator "$SITE_DIR/.sops.yaml" >"$SOPS_DIR/.sops.yaml"; then
+  fail "could not read $SITE_DIR/.sops.yaml as $OPERATOR_USER (or it is a symlink)"
+fi
 
 echo "reading $FILE"
 
@@ -204,12 +222,11 @@ fi
 # is unrecoverable. So it is always staged and always committed.
 echo "committing"
 site_stage "$FILE" || fail "git add failed for $FILE"
-COMMIT="$(site_commit "secrets: $APP $ACTION $KEY" "$ACTOR")" || fail "git commit failed"
+COMMIT="$(site_commit "secrets: $APP $ACTION $KEY" "$ACTOR" "$FILE")" || fail "git commit failed"
 
 # The repository facts, where the page reads "set <when> by <who>" from (the
 # git history of this file IS the audit trail), refresh when this unit is done:
-# its ExecStartPost starts the repo snapshot as root (daedalus-verbs.nix), a
-# thing the operator this runs as may not ask systemd for.
+# its ExecStartPost starts the repo snapshot (daedalus-verbs.nix).
 
 if [ "$ACTION" = set ]; then
   DETAIL="sealed $KEY into $FILE"

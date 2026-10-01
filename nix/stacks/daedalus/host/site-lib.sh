@@ -2,7 +2,7 @@
 # daedalus owns inside the operator's configuration repository. Inlined by the
 # apply and secret-set wrappers after lib.sh; expects SITE_DIR,
 # PREV_DIR, OPERATOR_USER, OPERATOR_GROUP, OPERATOR_HOME, SETPRIV, ENV_BIN,
-# GIT and GIT_EMAIL in the environment, and GIT_OPERATOR_NAME / GIT_OPERATOR_EMAIL
+# GIT, GIT_EMAIL and SITE_LOCK in the environment, and GIT_OPERATOR_NAME / GIT_OPERATOR_EMAIL
 # for lib.sh's commit_name / commit_email.
 #
 # Source control is the operator's business, with one exception this code
@@ -144,7 +144,7 @@ site_restore() {
     echo "site: no rollback state for $SITE_DIR/$name under $PREV_DIR — check it by hand" >&2
   fi
   if [ -n "$(site_toplevel)" ]; then
-    site_git add -A -- "$SITE_DIR" >/dev/null 2>&1 || true
+    site_git add -A -- "$SITE_DIR/$name" >/dev/null 2>&1 || true
   fi
 }
 
@@ -157,20 +157,41 @@ site_stage() {
   done
 }
 
-# Commit whatever is staged UNDER $SITE_DIR — and only that. The index is
-# shared with a person; a bare commit would sweep in whatever they had
-# staged elsewhere. Prints the short hash, or nothing when there was no
-# change. Push is best-effort and only when an upstream exists.
+# Commit the named site files ($3…), and nothing else. The index and the work
+# tree are shared with a person and with the other agents that write here: a
+# commit of everything under $SITE_DIR swept an uncommitted Apply's
+# apps.json into a secret's commit and pushed it. Of the named files, only
+# those with a staged change are committed; prints the short hash, or
+# nothing when none had one. Push is best-effort and only when an upstream
+# exists.
 site_commit() {
-  local summary="$1" actor="$2"
-  [ -n "$(site_toplevel)" ] || return 0
-  if site_git diff --cached --quiet -- "$SITE_DIR"; then
-    return 0
-  fi
-  site_git -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
-    commit -q -m "$summary" -m "Applied from daedalus by $actor." -- "$SITE_DIR"
+  local summary="$1" actor="$2" top f
+  shift 2
+  top="$(site_toplevel)"
+  [ -n "$top" ] || return 0
+  local -a paths=() changed=()
+  for f in "$@"; do paths+=("$SITE_DIR/$f"); done
+  [ "${#paths[@]}" -gt 0 ] || return 0
+  # Toplevel-relative names, committed from the toplevel: the pathspec then
+  # names only what git knows, so a file that was added and removed again
+  # cannot fail the commit.
+  mapfile -t changed < <(site_git diff --cached --name-only -- "${paths[@]}")
+  [ "${#changed[@]}" -gt 0 ] || return 0
+  site_git -C "$top" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+    commit -q -m "$summary" -m "Applied from daedalus by $actor." -- "${changed[@]}"
   site_git rev-parse --short HEAD
   if site_git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
     site_git push -q >/dev/null 2>&1 || echo "site: push failed (the commit is local only)" >&2
   fi
+}
+
+# One writer in the site directory at a time. Apply and secret-set both keep
+# previous bytes in $PREV_DIR under the same names, stage, commit and
+# restore; interleaved, one's rollback would put back the other's bytes or
+# commit them. Taken on fd 7 and held until exit. $SITE_LOCK is under
+# /run/lock, which only root can write, and both agents run as root. $1 is
+# how many seconds to wait.
+site_lock() {
+  exec 7>"$SITE_LOCK"
+  flock -w "$1" 7
 }

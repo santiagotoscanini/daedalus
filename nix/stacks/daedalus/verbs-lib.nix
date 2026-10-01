@@ -13,6 +13,7 @@ let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
     prevDir
+    siteLock
     registryApps
     engineRoot
     mkUpdateReaper
@@ -66,14 +67,16 @@ let
       pkgs.gnugrep
       pkgs.jq
       pkgs.openssh # git push over ssh, as the operator
-      pkgs.util-linux # setpriv
+      pkgs.util-linux # setpriv, flock
     ];
     vars =
       operatorHomeVars
       // commitVars
-      // operatorUnitVars
       // {
         PREV_DIR = prevDir;
+        SITE_LOCK = siteLock;
+        # The identity sops opens the sealed value with, read by root alone.
+        HOSTKEY = lib.head config.sops.age.sshKeyPaths;
         SITE_DIR = config.fleet.site.path;
         SECRET_APPS = lib.concatStringsSep " " secretApps;
         GIT = "${pkgs.git}/bin/git";
@@ -97,7 +100,7 @@ let
     runtimeInputs = [
       pkgs.jq
       pkgs.git
-      pkgs.util-linux # setpriv
+      pkgs.util-linux # setpriv, flock
       pkgs.coreutils
       pkgs.gnugrep
       pkgs.gawk # lib.sh log_errtail
@@ -111,6 +114,7 @@ let
       // {
         APPLY_DIR = applyDir;
         PREV_DIR = prevDir;
+        SITE_LOCK = siteLock;
         FLAKE = config.fleet.config.repo;
         SITE_DIR = config.fleet.site.path;
         # The one tree the engine override may build from (host/lib.sh

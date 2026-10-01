@@ -39,12 +39,9 @@ let
     imageUpdateReaper
     ;
 
-  # What the two run-file verbs share: the operator's, never root's — the run
-  # file arrives as a credential (the controller's header, `run file`) — with
-  # no way back up and a /tmp of their own.
-  operatorVerb = {
-    User = config.fleet.operator.user;
-    Group = config.fleet.operator.group;
+  # What the run-file verbs share — the run file arrives as a credential (the
+  # controller's header, `run file`): no way back up, and a /tmp of their own.
+  verbSandbox = {
     NoNewPrivileges = true;
     PrivateTmp = true;
     PrivateDevices = true;
@@ -53,6 +50,12 @@ let
     ProtectControlGroups = true;
     RestrictSUIDSGID = true;
     LockPersonality = true;
+  };
+
+  # A run-file verb that runs as the operator, never root.
+  operatorVerb = verbSandbox // {
+    User = config.fleet.operator.user;
+    Group = config.fleet.operator.group;
   };
 in
 
@@ -280,32 +283,45 @@ in
     # It deliberately does NOT rebuild — the write is a committed file, and
     # making it running state is the Apply's job (which holds the rebuild lock
     # and knows how to roll back). So no rebuild lock is taken here either: the
-    # only thing it contends for is the site directory's git index, and
-    # site_commit already scopes its commit to site/.
+    # only thing it contends for is the site directory, under the site lock
+    # both take (host/site-lib.sh site_lock), and it commits only its file.
+    #
+    # Root, not the operator: it reads the host's SSH key, which opens every
+    # sops secret on the box, and a credential would put a copy of it in a
+    # directory the operator can read for the length of the run. Every write
+    # into the operator's tree still drops to them (host/secret-set.sh).
     #
     # Not monitoredJobs: a refusal is shown on the page that asked and exits
     # 0; the only mailable event is the agent itself breaking, which
     # `systemctl --failed` and the failed-units alert already carry.
     systemd.services."daedalus-secret-set@" = {
       description = "Set or remove one key in an app's operator-secrets file on daedalus's behalf";
-      serviceConfig = operatorVerb // {
+      serviceConfig = verbSandbox // {
         Type = "oneshot";
         ExecStart = "${secretSetScript}/bin/daedalus-secret-set";
-        LoadCredential = [
-          "request:${rootRunDir}/%i.json"
-          # The identity sops opens the sealed value with (host/secret-set.sh).
-          "hostkey:${lib.head config.sops.age.sshKeyPaths}"
+        LoadCredential = "request:${rootRunDir}/%i.json";
+        # Root only to become the operator (setpriv) and to read the host key,
+        # which it owns.
+        CapabilityBoundingSet = [
+          "CAP_SETUID"
+          "CAP_SETGID"
         ];
-        # The configuration checkout (site/ and its git) and the rollback
-        # copies are its to write; nothing else of the filesystem.
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+          "AF_NETLINK"
+        ];
+        # The configuration checkout (site/ and its git), the rollback copies
+        # and the site lock are its to write; nothing else of the filesystem.
         ProtectSystem = "strict";
         ReadWritePaths = [
           config.fleet.config.repo
           prevDir
+          "/run/lock"
         ];
         # The repository facts, where the page reads "set <when> by <who>",
-        # refreshed once it is done — as root (`+`): the operator may not ask
-        # systemd to start a unit.
+        # refreshed once it is done — outside the sandbox (`+`).
         ExecStartPost = "+${config.systemd.package}/bin/systemctl start --no-block daedalus-repo-snapshot.service";
         ExecStopPost = dropRunFile;
         # Two sops runs, a git commit and a push. Two minutes is generous; past it

@@ -170,6 +170,11 @@ rec {
   # nothing else on the box has a reason to read it. host/site-lib.sh.
   prevDir = "${config.fleet.stateRoot}/apps/daedalus/prev";
 
+  # The one-writer lock of the site directory, taken by both agents that
+  # write into it (apply, secret-set; host/site-lib.sh site_lock). Under
+  # /run/lock, which only root can write — both run as root.
+  siteLock = "/run/lock/daedalus-site.lock";
+
   # The committed registry, read from the same file declarations.nix reads
   # rather than from `config.fleet.apps` (see the note on `self` in daedalus.nix).
   # `fleet.registry.file` is safe to read here: it depends only on

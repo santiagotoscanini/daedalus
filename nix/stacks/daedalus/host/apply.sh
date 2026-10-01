@@ -128,6 +128,11 @@ write_status running waiting ""
 if ! flock -w 1200 9; then
   fail waiting "another rebuild held $LOCKFILE for 20 minutes (flake-autoupgrade, or a manual nixos-rebuild). Nothing was changed."
 fi
+# And the site directory's own lock (host/site-lib.sh site_lock), which a
+# secret write holds for seconds.
+if ! site_lock 120; then
+  fail waiting "a secret write held $SITE_LOCK for 2 minutes. Nothing was changed."
+fi
 
 write_status running validating ""
 
@@ -238,20 +243,44 @@ rebuild() {
   nixos-rebuild "$1" --flake "$FLAKE#$HOSTNAME" "${REBUILD_FLAGS[@]}"
 }
 
-# --- stage, and commit if asked -----------------------------------------
+# --- stage ----------------------------------------------------------------
 # A flake only sees git-tracked files, so staging is not bookkeeping — an
-# unstaged new file is invisible to the rebuild below. Committing is the
-# operator's switch, carried in the request; when it is on, the commit is
-# scoped to site/ because this index is shared with a person (a bare commit
-# once swept a human's staged work into an "apps:" commit and pushed it).
+# unstaged new file is invisible to the rebuild below.
 write_status running committing ""
 site_stage "${WRITTEN[@]}" || fail committing "git add failed"
 
-if [ -n "$(site_toplevel)" ] && site_git diff --quiet HEAD -- "$SITE_DIR" 2>/dev/null; then
+WRITTEN_PATHS=()
+for w in "${WRITTEN[@]}"; do WRITTEN_PATHS+=("$SITE_DIR/$w"); done
+if [ -n "$(site_toplevel)" ] && site_git diff --quiet HEAD -- "${WRITTEN_PATHS[@]}" 2>/dev/null; then
   write_status "done" "no-change" ""
   exit 0
 fi
 
+# --- build ----------------------------------------------------------------
+# `build` first, before anything is committed: it catches eval errors and
+# build failures without touching the running system, which is the
+# difference between a rejected change and a broken box. A malformed
+# registry dies here — and then only the written files are put back. Nothing
+# was activated and nothing committed, so there is nothing to switch back
+# to; a switch here would only activate whatever else is uncommitted in the
+# checkout.
+#
+# The log lives in the container's directory, so it is emptied and appended
+# as the operator (log_reset / log_run in host/lib.sh) — born theirs, no chown
+# by name afterwards.
+write_status running building ""
+log_reset "$LOGFILE"
+if ! log_run "$LOGFILE" rebuild build; then
+  build_error="$(errtail)"
+  for w in "${WRITTEN[@]}"; do site_restore "$w"; done
+  fail building "$build_error"
+fi
+
+# --- commit, if asked -----------------------------------------------------
+# Committing is the operator's switch, carried in the request; when it is on,
+# the commit names exactly the files this run wrote, because this index is
+# shared with a person (a bare commit once swept a human's staged work into
+# an "apps:" commit and pushed it).
 WANT_COMMIT="$(jq -r 'if .commit == true then "yes" else "no" end' <<<"$REQ_JSON")"
 # The subject names what was written: `apps:` for the registry, `site:` for
 # the document, `vault:` for a secret, `apply:` for any other mix.
@@ -288,20 +317,21 @@ vault/*) PREFIX=vault ;;
 *) PREFIX=apply ;;
 esac
 if [ "$WANT_COMMIT" = "yes" ]; then
-  COMMIT_SHA="$(site_commit "$PREFIX: $SUMMARY" "$ACTOR")" || fail committing "git commit failed"
+  COMMIT_SHA="$(site_commit "$PREFIX: $SUMMARY" "$ACTOR" "${WRITTEN[@]}")" || fail committing "git commit failed"
 fi
 
 # --- roll back ------------------------------------------------------------
-# Put the previous bytes of every file this run wrote back, re-stage, commit
-# the restore if we committed, and put the running system back on the result.
-# Bytes, not `git revert`: the same mechanism whether or not the directory is
-# versioned or the switch is on, and it cannot eat a commit somebody else
-# made meanwhile — it touches only what it wrote.
+# For an activation that failed: put the previous bytes of every file this
+# run wrote back, re-stage, commit the restore if we committed, and put the
+# running system back on the result. Bytes, not `git revert`: the same
+# mechanism whether or not the directory is versioned or the switch is on,
+# and it cannot eat a commit somebody else made meanwhile — it touches only
+# what it wrote.
 rollback() {
   local f
   for f in "${WRITTEN[@]}"; do site_restore "$f"; done
   if [ "$WANT_COMMIT" = "yes" ] && [ -n "$COMMIT_SHA" ]; then
-    log_run "$LOGFILE" site_commit "$PREFIX: revert — $SUMMARY (the rebuild failed)" "$ACTOR" ||
+    log_run "$LOGFILE" site_commit "$PREFIX: revert — $SUMMARY (the rebuild failed)" "$ACTOR" "${WRITTEN[@]}" ||
       log_line "$LOGFILE" "the restore is in the tree but could not be committed — commit it by hand"
   fi
   # The same activation as the run: under an override that is `test` again,
@@ -309,22 +339,6 @@ rollback() {
   log_run "$LOGFILE" rebuild "$ACTIVATE" || true
   COMMIT_SHA=""
 }
-
-# --- build ----------------------------------------------------------------
-# `build` first: it catches eval errors and build failures without touching
-# the running system, which is the difference between a rejected change and a
-# broken box. A malformed registry dies here.
-#
-# The log lives in the container's directory, so it is emptied and appended
-# as the operator (log_reset / log_run in host/lib.sh) — born theirs, no chown
-# by name afterwards.
-write_status running building ""
-log_reset "$LOGFILE"
-if ! log_run "$LOGFILE" rebuild build; then
-  build_error="$(errtail)"
-  rollback
-  fail building "$build_error"
-fi
 
 # --- switch (or test, under an engine override) ---------------------------
 # Retried once before giving up. `switch` exits non-zero if ANY unit fails to
