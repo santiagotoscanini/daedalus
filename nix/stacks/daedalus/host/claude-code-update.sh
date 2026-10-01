@@ -10,9 +10,9 @@
 #
 # Only (1) is this script's. (2) is `daedalus-engine-update` — already
 # written, already proven, already holding the rebuild lock and the revert —
-# so the last thing this does is publish an `engine-request.json`, exactly
-# the file System › Updates writes, and stop. Two small agents composed beat
-# one that re-implements a switch-and-verify it would drift from.
+# so the last thing this does is start that verb's unit, exactly as the
+# root helper would for System › Updates, and stop. Two small agents composed
+# beat one that re-implements a switch-and-verify it would drift from.
 #
 # ── what "latest" means, and why the signature is checked ─────────────────
 #
@@ -315,19 +315,31 @@ fi
 exec 8<&-
 
 # --- hand off -------------------------------------------------------------
-# The same file System › Updates writes. From here the engine verb owns the
-# rebuild: it takes the rebuild lock, re-resolves the input, builds, commits
-# the configuration's flake.lock, switches, verifies that the control plane
-# answers, reverts if it does not, and pushes.
+# The engine update's own unit, started the way the root helper starts it: a
+# run file in the helper's directory (root's, and this unit is root) under a
+# run id of its own, then that instance of the template, which reads the file
+# as its credential and drops it when it stops. From here the engine verb owns
+# the rebuild: it takes the rebuild lock, re-resolves the input, builds,
+# commits the configuration's flake.lock, switches, verifies that the control
+# plane answers, reverts if it does not, and pushes. One engine update at a
+# time, as through the helper: one already running refuses the handoff.
 write_status "running" "handing-off" ""
 
-handoff="$(
-  jq -nc --arg id "$(cat /proc/sys/kernel/random/uuid)" --arg at "$(date -Is)" --arg a "$ACTOR" \
-    '{id: $id, requestedAt: $at, actor: $a}'
-)"
-if ! printf '%s\n' "$handoff" | write_json_atomic "$APPLY_DIR/engine-request.json"; then
-  fail handing-off "pinned $TO_VERSION and pushed it, but could not ask for an engine update. Press Update daedalus on System › Updates to finish the move."
+finish_by_hand="Press Update daedalus on System › Updates to finish the move."
+if [ -n "$(systemctl list-units --all --plain --no-legend --state=activating,active,deactivating 'daedalus-engine-update@*.service' 2>/dev/null)" ]; then
+  fail handing-off "pinned $TO_VERSION and pushed it, but an engine update is already running. $finish_by_hand"
+fi
+ENGINE_RUN="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"
+ENGINE_RUN_FILE="$ROOT_RUN_DIR/$ENGINE_RUN.json"
+if ! jq -nc --arg id "$ENGINE_RUN" --arg a "$ACTOR" \
+  '{id: $id, verb: "engine-update", selectors: {}, payload: ({actor: $a} | tojson)}' |
+  (umask 077 && set -o noclobber && cat >"$ENGINE_RUN_FILE"); then
+  fail handing-off "pinned $TO_VERSION and pushed it, but could not write the engine update's run file. $finish_by_hand"
+fi
+if ! systemctl start --no-block "daedalus-engine-update@$ENGINE_RUN.service"; then
+  rm -f -- "$ENGINE_RUN_FILE"
+  fail handing-off "pinned $TO_VERSION and pushed it, but could not start the engine update. $finish_by_hand"
 fi
 
 write_status "done" "complete" ""
-echo "claude-code update: pinned $FROM_VERSION → $TO_VERSION ($COMMIT_SHA), engine update requested"
+verb_done "pinned $FROM_VERSION → $TO_VERSION ($COMMIT_SHA); engine update $ENGINE_RUN started"

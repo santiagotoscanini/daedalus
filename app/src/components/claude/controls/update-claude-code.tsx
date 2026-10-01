@@ -38,7 +38,7 @@ const CC_IDLE: ClaudeCodeUpdateStatus = {
  *
  * Two agents do it. `daedalus-claude-code-update` fetches the release,
  * verifies its signature, commits the manifest into the engine and pushes —
- * then asks for an engine update, which is the half that builds and
+ * then starts an engine update, which is the half that builds and
  * switches. So this control's `done` means PINNED, not installed.
  *
  * It does NOT narrate the engine half, and that is deliberate. The engine's

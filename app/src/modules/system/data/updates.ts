@@ -110,12 +110,12 @@ function engineVerdict(pinned: EngineLock | null, clone: Workspace | null): Engi
   return 'current'
 }
 
-async function loadEngine(): Promise<EngineFacts> {
+async function loadEngine(ctx: Ctx): Promise<EngineFacts> {
   const [repo, workspaces, site, status] = await Promise.all([
     repoFacts(),
     readWorkspaces(),
     readCommittedSite(),
-    readEngineUpdateStatus(),
+    readEngineUpdateStatus(ctx),
   ])
   // Stale means the producer stopped, and a head from an unknown number of
   // hours ago is exactly the plausible-looking wrong answer "unknown" exists
@@ -137,7 +137,7 @@ export async function loadUpdates(ctx: Ctx): Promise<UpdatesData> {
     updateRows(),
     manualRows(),
     readImageUpdateStatus(ctx),
-    loadEngine(),
+    loadEngine(ctx),
     siteIdentity(),
   ])
 

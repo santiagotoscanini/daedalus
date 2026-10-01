@@ -1,22 +1,24 @@
+import type { Ctx } from '../core/ctx'
 import { type Decoder, literal, nullable, obj, optional, str } from '../lib/contract/decode'
-import { defineBridge } from './bridge'
+import { defineRootVerb } from './root-verb'
 
-// The app half of an engine update. It writes one file and reads another.
+// The app half of an engine update: the root helper's `engine-update` verb
+// (host/root-verb.ts has the mechanics).
 //
 // The engine is a flake input of the configuration — `daedalus`, pinned by
 // rev in its flake.lock — so "update daedalus" is the same act as moving an
 // image pin (host/image-update.ts), aimed at the lock instead of a `.nix`
 // file: resolve what "latest" is, move the pin, build, switch, verify, revert
 // if the control plane does not come back, push. Everything privileged is the
-// host's: a systemd.path unit watches engine-request.json and starts
-// daedalus-engine-update.service (nix/stacks/daedalus/host/engine-update.sh),
-// which also does the one thing this container must never do — fast-forward
-// the engine clone that this very process is running out of.
+// host's: `daedalus-engine-update@<run>`
+// (nix/stacks/daedalus/host/engine-update.sh), which also does the one thing
+// this container must never do — fast-forward the engine clone that this very
+// process is running out of.
 //
-// No payload and nothing to choose. An image update names a container and a
-// tag; the engine has one input and one branch (`main`, always), so the
-// request carries only the actor. What "latest" resolves to is the host's
-// answer, published in the status as `to`.
+// Nothing to choose. An image update names a container and a tag; the engine
+// has one input and one branch (`main`, always), so the payload carries only
+// the actor. What "latest" resolves to is the host's answer, published in the
+// status as `to`.
 
 type EngineUpdateState = 'idle' | 'running' | 'done' | 'failed'
 
@@ -48,39 +50,19 @@ const ENGINE_STATUS: Decoder<EngineUpdateStatus> = obj({
   commit: optional(nullable(str), null),
 })
 
-const bridge = defineBridge<EngineUpdateStatus>({
-  requestFile: 'engine-request.json',
-  statusFile: 'engine-status.json',
+const verb = defineRootVerb<EngineUpdateStatus>({
+  verb: 'engine-update',
   status: ENGINE_STATUS,
+  ended: (s) =>
+    `The host agent ended during "${s.phase}" without reporting a result. ` +
+    "The rebuild may or may not have completed — check `journalctl -u 'daedalus-engine-update@*'` " +
+    'and `git log` in the configuration checkout before retrying.',
 })
 
-/**
- * How long a `running` status may go unrefreshed before it is a corpse.
- *
- * host/image-update.ts's rule, against this unit's TimeoutStartSec of 60
- * minutes (nix/stacks/daedalus/engine-update.nix); the two move together.
- */
-const RUNNING_MAX_MS = 65 * 60_000
+/** The status, with a run that ended without its last word reported as dead (host/root-verb.ts). */
+export const readEngineUpdateStatus = (ctx: Pick<Ctx, 'controller'>): Promise<EngineUpdateStatus> =>
+  verb.readStatus(ctx)
 
-/** The status, with a dead run reported as dead. */
-export async function readEngineUpdateStatus(): Promise<EngineUpdateStatus> {
-  const s = await bridge.readStatus()
-  if (s.state !== 'running') return s
-
-  const last = Date.parse(s.finishedAt ?? '')
-  if (Number.isFinite(last) && Date.now() - last < RUNNING_MAX_MS) return s
-
-  return {
-    ...s,
-    state: 'failed',
-    error:
-      `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
-      'The rebuild may or may not have completed — check `journalctl -u daedalus-engine-update` ' +
-      'and `git log` in the configuration checkout before retrying.',
-  }
-}
-
-/** Publish an update request. Nothing to choose: one input, one branch. */
-export async function requestEngineUpdate(input: { actor: string }): Promise<string> {
-  return bridge.request({ actor: input.actor })
-}
+/** Start an update. Nothing to choose: one input, one branch. */
+export const startEngineUpdate = (ctx: Pick<Ctx, 'controller'>, input: { actor: string }) =>
+  verb.start(ctx, JSON.stringify({ actor: input.actor }))

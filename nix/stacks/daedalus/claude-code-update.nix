@@ -7,8 +7,8 @@
 # bump starts in the ENGINE — `nix/platform/claude-code/manifest.zst.json`, which
 # the packaged expression takes as its `manifest` argument — and only then
 # reaches the configuration's lock. So this verb does the first half and hands
-# the second to `daedalus-engine-update` by publishing the very request file
-# System › Updates writes. host/claude-code-update.sh opens with what "latest"
+# the second to `daedalus-engine-update` by starting it as the root helper
+# would for System › Updates. host/claude-code-update.sh opens with what "latest"
 # means, why the signature is checked, and what makes it refuse.
 #
 # Its own module beside engine-update.nix, and for the same reason: a verb
@@ -21,7 +21,7 @@
 #               it and the lock is what actually decides.
 #   GIT_EMAIL,
 #   HOSTNAME    the identity of the commit it makes in the engine.
-#   applyDir    where the engine update's request goes (the handoff).
+#   rootRunDir  where the handoff writes the engine update's run file.
 
 {
   config,
@@ -32,7 +32,7 @@
 
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    applyDir
+    rootRunDir
     workspacesDir
     mkUpdateReaper
     mkAgent
@@ -54,14 +54,16 @@ let
       pkgs.coreutils
       pkgs.gawk # lib.sh log_errtail
       pkgs.openssh # git push, as the operator
+      config.systemd.package # systemctl, for the handoff
     ];
     vars =
       operatorHomeVars
       // commitVars
       // {
-        # The engine update it hands to is still a bridge verb.
-        APPLY_DIR = applyDir;
         VERBS_DIR = verbsDir;
+        # Where the handoff writes the engine update's run file (the helper's
+        # directory, root's, which this unit is).
+        ROOT_RUN_DIR = rootRunDir;
         FLAKE = config.fleet.config.repo;
         SITE_DIR = config.fleet.site.path;
         HOSTNAME = config.networking.hostName;

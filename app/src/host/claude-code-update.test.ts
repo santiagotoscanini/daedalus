@@ -11,7 +11,6 @@ import type { Ctx } from '../core/ctx'
 // records the starts; the status files are real, in temp directories.
 
 let verbs: string
-let apply: string
 let site: string
 let started: unknown[][]
 let follow: unknown
@@ -29,11 +28,9 @@ const ctx = {
 
 beforeEach(async () => {
   verbs = await mkdtemp(join(tmpdir(), 'ccupd-'))
-  apply = await mkdtemp(join(tmpdir(), 'ccupd-apply-'))
   site = await mkdtemp(join(tmpdir(), 'ccupd-site-'))
-  for (const k of ['VERBS_DIR', 'APPLY_DIR', 'SITE_PATH']) previous[k] = process.env[k]
+  for (const k of ['VERBS_DIR', 'SITE_PATH']) previous[k] = process.env[k]
   process.env.VERBS_DIR = verbs
-  process.env.APPLY_DIR = apply
   process.env.SITE_PATH = site
   started = []
   follow = { run: { outcome: null, detail: '' } }
@@ -44,7 +41,7 @@ afterEach(async () => {
     if (v === undefined) delete process.env[k]
     else process.env[k] = v
   }
-  for (const d of [verbs, apply, site]) await rm(d, { recursive: true, force: true })
+  for (const d of [verbs, site]) await rm(d, { recursive: true, force: true })
 })
 
 const status = (state: string, phase = 'committing') =>
@@ -114,13 +111,8 @@ describe('runClaudeCodeUpdate', () => {
     })
     await rm(join(verbs, 'claude-code-update-status.json'))
     await writeFile(
-      join(apply, 'engine-status.json'),
-      JSON.stringify({
-        id: 'e1',
-        state: 'running',
-        phase: 'building',
-        finishedAt: new Date().toISOString(),
-      }),
+      join(verbs, 'engine-update-status.json'),
+      JSON.stringify({ id: 'e1', state: 'running', phase: 'building' }),
     )
     m = await modules()
     expect(await m.runClaudeCodeUpdate({ ctx, actor: 'op' })).toMatchObject({

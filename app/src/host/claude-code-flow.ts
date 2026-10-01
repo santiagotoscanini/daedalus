@@ -44,7 +44,7 @@ export const runClaudeCodeUpdate: (input: Input) => Promise<ClaudeCodeUpdateOutc
           'clear the engine override first — the running system is built from the engine clone, not from the pinned engine',
       }
     }
-    const engine = await readEngineUpdateStatus()
+    const engine = await readEngineUpdateStatus(input.ctx)
     if (engine.state === 'running') {
       return {
         ok: false,

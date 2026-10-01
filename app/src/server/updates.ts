@@ -80,9 +80,9 @@ export const requestImageUpdateFn = adminFn
 // the Updates page is the only page either is on, and the button is the same
 // gesture one card up.
 
-export const fetchEngineUpdateStatus = readFn.handler(async () => {
+export const fetchEngineUpdateStatus = readFn.handler(async ({ context }) => {
   const { readEngineUpdateStatus } = await import('../host/engine-update')
-  return readEngineUpdateStatus()
+  return readEngineUpdateStatus(await context.ctx())
 })
 
 /**
@@ -95,7 +95,7 @@ export const fetchEngineUpdateStatus = readFn.handler(async () => {
  */
 export const requestEngineUpdateFn = adminFn.handler(async ({ context }) => {
   const { runEngineUpdate } = await import('../host/engine-flow')
-  return runEngineUpdate({ actor: context.actor })
+  return runEngineUpdate({ ctx: await context.ctx(), actor: context.actor })
 })
 
 /**

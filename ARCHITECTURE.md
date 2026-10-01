@@ -119,7 +119,6 @@ the same directory:
 | request | agent unit | status |
 |---|---|---|
 | `apply-request.json` | `daedalus-apply` | `apply-status.json` + `apply-last.log` + `payload-<id>.json` |
-| `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
 
 Five rules make this safe, and each of them was learned the hard way:
 
@@ -205,6 +204,7 @@ helper holding the template's lock, refuses the next.
 | `image-update` + payload, detached | `daedalus-image-update@<run>` (daedalus-verbs.nix): `{targets, actor}` is the payload; one commit, one rebuild, verify, revert on failure; progress in `/verbs/image-update-status.json` under the run's id. A `running` file whose run the controller says has ended reads as failed — no clock | 2026-10-01 |
 | `version-update` + payload, detached | `daedalus-version-update@<run>` (version-update.nix): `{target, values, actor}`; rewrite a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure; `/verbs/version-update-status.json` | 2026-10-01 |
 | `claude-code-update` + payload, detached | `daedalus-claude-code-update@<run>` (claude-code-update.nix): `{actor}`; fetch upstream's latest release manifest, verify its signature, commit and push it in the engine, then hand the rebuild to the engine update; `/verbs/claude-code-update-status.json` | 2026-10-01 |
+| `engine-update` + payload, detached | `daedalus-engine-update@<run>` (engine-update.nix): `{actor}`; fast-forward the engine clone, move the configuration's lock onto it, build, switch, verify the control plane answers, revert if not, push; `/verbs/engine-update-status.json`. The Claude Code pin starts it too, the way the helper would: a run file of its own, then the instance | 2026-10-01 |
 
 ---
 

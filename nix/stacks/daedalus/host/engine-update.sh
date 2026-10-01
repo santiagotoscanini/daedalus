@@ -6,7 +6,9 @@
 # re-resolve ONE input, and rebuilds. Everything else is the same shape, on
 # purpose: build before anything is committed, one retry on the switch, verify
 # that the thing being updated actually came back, revert rather than reset
-# when it did not, push last and best-effort.
+# when it did not, push last and best-effort. The root helper's `engine-update`
+# verb (engine-update.nix), one run at a time; claude-code-update.sh starts it
+# directly too, for the rebuild half of a Claude Code pin.
 #
 # ── what "latest" means ───────────────────────────────────────────────────
 #
@@ -52,15 +54,14 @@
 # Runs as root, because only root can `nixos-rebuild switch`. Every git call —
 # in the configuration and in the clone — and `nix flake update` drop to the
 # operator with setpriv: both trees are theirs, and one root-owned object
-# under .git is the "unable to open loose object" push failure. Everything in
-# $APPLY_DIR is read and written as the operator and never through a link;
-# host/lib.sh has the argument.
+# under .git is the "unable to open loose object" push failure. The status
+# and the log are root's, in $VERBS_DIR, which the container reads and cannot
+# write.
 
 set -euo pipefail
 
-REQ="$APPLY_DIR/engine-request.json"
-STATUS="$APPLY_DIR/engine-status.json"
-LOGFILE="$APPLY_DIR/engine-last.log"
+STATUS="$VERBS_DIR/engine-update-status.json"
+LOGFILE="$VERBS_DIR/engine-update-last.log"
 
 # The flake input this agent moves. The lock is read for it by name, so a
 # configuration that calls the engine something else fails validating with
@@ -92,26 +93,11 @@ errtail() {
   log_errtail "$LOGFILE"
 }
 
-[ -f "$REQ" ] || exit 0
-
-# Read once, as the operator, never through a link (host/lib.sh); a symlinked
-# request is refused with a failed unit — the app never writes one.
-REQ_JSON="$(read_request "$REQ")" || exit 1
-
-REQ_ID="$(jq -r '.id // ""' <<<"$REQ_JSON")"
-[ -n "$REQ_ID" ] || exit 0
-# Same UUID constraint as every other bridge: the id lands in a status file
-# and a log line.
-[[ "$REQ_ID" =~ ^[0-9a-fA-F-]+$ ]] || exit 0
+# The run (host/lib.sh run_id, run_payload).
+REQ_ID="$(run_id)" || exit 1
+REQ_JSON="$(run_payload)"
 STARTED_AT="$(date -Is)"
 COMMIT_SHA=""
-
-# Replay guard: the path unit fires on a daemon-reload at boot as well as on a
-# write, and without this a completed update would rebuild the box on every
-# reboot.
-if [ -f "$STATUS" ] && [ "$(published_id "$STATUS")" = "$REQ_ID" ]; then
-  exit 0
-fi
 
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 

@@ -1,19 +1,19 @@
-# daedalus-engine-update — the host side of daedalus's `engine-update` bridge
+# daedalus-engine-update — the host side of the root helper's `engine-update`
 # verb: the engine's own upgrade path.
 #
 # The engine reaches a box as the configuration's `daedalus` flake input,
 # pinned by rev in its flake.lock, and nothing moves that pin on its own: the
 # weekly upgrade names the inputs it touches and the engine is not one of
 # them (platform/autoupgrade). This is the deliberate move, done the way
-# System › Updates moves an image — the app drops `engine-request.json` into
-# the apply dir, this unit fast-forwards the engine clone, asks nix to
-# re-resolve the input, builds, commits the lock, switches, verifies that the
-# control plane answers again, reverts if it does not, and pushes.
+# System › Updates moves an image — the app asks the root helper, and this
+# unit fast-forwards the engine clone, asks nix to re-resolve the input,
+# builds, commits the lock, switches, verifies that the control plane answers
+# again, reverts if it does not, and pushes.
 # host/engine-update.sh opens with what "latest" means and what it refuses.
 #
 # Its own module beside daedalus.nix, like build-agent.nix: a verb with a
-# script, a unit, a path unit and a reaper is a page of nix, and daedalus.nix
-# is long enough. Gated like the control plane itself.
+# script, a unit and a reaper is a page of nix, and daedalus.nix is long
+# enough. Gated like the control plane itself.
 #
 # What it reads from elsewhere, and why each is a derivation rather than a copy:
 #   FLAKE, SITE_DIR   fleet.config.repo and fleet.site.path — where the lock
@@ -25,7 +25,6 @@
 #                     fleet.apps.daedalus — the address and health path the
 #                     control plane publishes, which is what "came back" is
 #                     checked against, through the proxy on fleet.lanIp.
-#   applyDir          daedalus-lib.nix's, like every other bridge agent's.
 
 {
   config,
@@ -36,11 +35,11 @@
 
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    applyDir
+    verbsDir
     workspacesDir
     mkUpdateReaper
     mkAgent
-    bridgeAgent
+    mkRootVerb
     operatorHomeVars
     commitVars
     ;
@@ -63,7 +62,7 @@ let
       operatorHomeVars
       // commitVars
       // {
-        APPLY_DIR = applyDir;
+        VERBS_DIR = verbsDir;
         FLAKE = config.fleet.config.repo;
         SITE_DIR = config.fleet.site.path;
         LOCKFILE = config.fleet.rebuildLock;
@@ -84,54 +83,40 @@ let
   # rebuilding verb.
   updateReaper = mkUpdateReaper {
     name = "daedalus-engine-update-reaper";
-    statusFile = "engine-status.json";
-    nextSteps = "Nothing was necessarily committed — check `journalctl -u daedalus-engine-update` and `git log` in ${config.fleet.config.repo}";
+    dir = verbsDir;
+    statusFile = "engine-update-status.json";
+    nextSteps = "Nothing was necessarily committed — check `journalctl -u 'daedalus-engine-update@*'` and `git log` in ${config.fleet.config.repo}";
   };
 in
 
 {
-  config = lib.mkIf config.fleet.modules.daedalus.enable {
-    # The sibling of daedalus-image-update: it takes the shared rebuild lock,
-    # commits to the flake, and switches the system. What is different is the
-    # file it moves — flake.lock — and the second tree it touches, the engine
-    # clone the control plane runs out of.
-    systemd.services.daedalus-engine-update = bridgeAgent // {
-      description = "Move the engine's flake pin and rebuild, on daedalus's behalf";
+  # The sibling of the image update: it takes the shared rebuild lock, commits
+  # to the flake, and switches the system. What is different is the file it
+  # moves — flake.lock — and the second tree it touches, the engine clone the
+  # control plane runs out of. It moves the whole engine input, so its own
+  # ExecStart changes on exactly the commits it applies: mkRootVerb's
+  # `restartIfChanged = false` is what keeps that switch from SIGTERMing the
+  # run before its verify and push. A failed update means the box may have
+  # been rolled back without anyone watching the page that started it — the
+  # page it restarts, no less — so it mails.
+  config = lib.mkIf config.fleet.modules.daedalus.enable (mkRootVerb {
+    verb = "engine-update";
+    unit = "daedalus-engine-update";
+    description = "Move the engine's flake pin and rebuild, on daedalus's behalf";
+    verbDescription = "Fast-forward the engine clone, move the configuration's lock onto it and rebuild";
+    script = updateScript;
+    # A fetch, a build of the whole system against a new engine, two switch
+    # attempts and a verify that may wait ten minutes for the control plane.
+    timeoutStartSec = 60 * 60;
+    # `{actor}`: nothing to choose — one input, one branch.
+    payloadMax = 1024;
+    execStopPost = [ "${updateReaper}/bin/daedalus-engine-update-reaper" ];
+    unitAttrs = {
       after = [
         "network-online.target"
         "linger-users.service"
       ];
       wants = [ "network-online.target" ];
-
-      # A unit that runs `nixos-rebuild switch` must not be restarted BY that
-      # switch — and this one moves the whole engine input, so its own
-      # ExecStart (the script text this file embeds) changes on exactly the
-      # commits it applies. Without this, switch-to-configuration restarts it
-      # mid-run, and the update loses its verify and push phases with the
-      # status stuck on "running". The next request gets the new definition.
-      restartIfChanged = false;
-
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${updateScript}/bin/daedalus-engine-update";
-        ExecStopPost = "${updateReaper}/bin/daedalus-engine-update-reaper";
-        # A fetch, a build of the whole system against a new engine, two
-        # switch attempts and a verify that may wait ten minutes for a dev
-        # server to reinstall. RUNNING_MAX_MS in app/src/host/engine-update.ts
-        # is this plus slack; the two move together.
-        TimeoutStartSec = "60min";
-      };
     };
-
-    systemd.paths.daedalus-engine-update = {
-      description = "Watch for a daedalus engine update request";
-      wantedBy = [ "multi-user.target" ];
-      # Fires on the rename the app publishes the request with.
-      pathConfig.PathChanged = "${applyDir}/engine-request.json";
-    };
-
-    # A failed update means the box may have been rolled back without anyone
-    # watching the page that started it — the page it restarts, no less.
-    fleet.monitoredJobs.daedalus-engine-update = { };
-  };
+  });
 }

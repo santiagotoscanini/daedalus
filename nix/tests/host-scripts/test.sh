@@ -280,6 +280,35 @@ CREDENTIALS_DIRECTORY="$V/creds" bash "$T/version.sh" >/dev/null 2>&1 || rc=$?
 check "a payload that is not a request fails in validating, under the run's id" \
   '[ "$rc" -eq 1 ] && jq -e ".id == \"b2c3d4e5f6071829\" and .state == \"failed\" and .phase == \"validating\" and (.error | test(\"no well-formed target\"))" "$V/verbs/version-update-status.json" >/dev/null'
 
+# ── 10. a pushed Claude Code pin hands the rebuild to the engine update ────
+# As the root helper would start it: a run file of its own in the helper's
+# directory, then that instance of the engine update's template.
+echo "# claude-code-update: the handoff"
+rm -f "$O/hooks/pre-receive"
+R2="$T/root-runs"
+mkdir -p "$R2"
+: >"$CALLS"
+rc=0
+CREDENTIALS_DIRECTORY="$T/apply/creds" VERBS_DIR="$T/apply" ROOT_RUN_DIR="$R2" FLAKE="$F" \
+  SITE_DIR="$T/site" WORKSPACES_DIR="$T/workspaces" bash "$T/cc.sh" >"$T/cc2.out" 2>&1 || rc=$?
+run="$(sed -n 's/^start --no-block daedalus-engine-update@\([0-9a-f]\{16\}\)\.service$/\1/p' "$CALLS")"
+check "the pin is done, and the engine update started" \
+  '[ "$rc" -eq 0 ] && [ -n "$run" ] && jq -e ".state == \"done\"" "$T/apply/claude-code-update-status.json" >/dev/null'
+check "with a run file carrying the actor" \
+  '[ "$(jq -r "[.id, .verb, (.payload | fromjson | .actor)] | join(\" \")" "$R2/$run.json")" = "$run engine-update test" ]'
+[ "$fails" -eq 0 ] || cat "$T/cc2.out"
+
+# ── 11. the engine update it started reads that run file ──────────────────
+echo "# engine-update: the request is the run file's payload"
+E="$T/engine-run"
+mkdir -p "$E/creds" "$E/verbs"
+cp "$R2/$run.json" "$E/creds/request"
+agent "$T/engine.sh" "VERBS_DIR=$E/verbs FLAKE=$T/none SITE_DIR=$T/none" lib.sh engine-update.sh
+rc=0
+CREDENTIALS_DIRECTORY="$E/creds" bash "$T/engine.sh" >/dev/null 2>&1 || rc=$?
+check "a configuration without the input fails in validating, under the run's id" \
+  '[ "$rc" -eq 1 ] && jq -e ".id == \"$run\" and .state == \"failed\" and .phase == \"validating\"" "$E/verbs/engine-update-status.json" >/dev/null'
+
 if [ "$fails" -ne 0 ]; then
   cat "$T/apply.out"
   echo "$fails check(s) failed"
