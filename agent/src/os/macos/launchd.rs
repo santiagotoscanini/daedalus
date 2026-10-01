@@ -71,7 +71,7 @@ pub fn run_service() -> Result<()> {
             kickstart_tray();
         });
     }
-    crate::agent_main(stop, false)
+    crate::service::agent_main(stop, false)
 }
 
 fn is_root() -> bool {

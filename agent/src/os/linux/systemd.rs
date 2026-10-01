@@ -188,7 +188,7 @@ pub fn run_service() -> Result<()> {
     let stop = Shutdown::new();
     let relay = stop.clone();
     super::on_interrupt(move || relay.stop());
-    crate::agent_main(stop, false)
+    crate::service::agent_main(stop, false)
 }
 
 /// The session, the tray and the watchdog are systemd's and autostart's;

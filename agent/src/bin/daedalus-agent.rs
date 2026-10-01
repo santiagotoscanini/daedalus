@@ -9,7 +9,8 @@ use daedalus_agent::util::Shutdown;
 
 use anyhow::{bail, Context, Result};
 use daedalus_agent::local::LocalRequest;
-use daedalus_agent::{agent_main, config, os, role, update, VERSION};
+use daedalus_agent::service::agent_main;
+use daedalus_agent::{config, os, role, update, VERSION};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

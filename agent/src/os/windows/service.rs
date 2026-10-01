@@ -75,7 +75,7 @@ fn serve_under_scm() -> Result<()> {
     };
 
     report(ServiceState::Running, 0);
-    let outcome = crate::agent_main(stop, false);
+    let outcome = crate::service::agent_main(stop, false);
     report(ServiceState::Stopped, if outcome.is_ok() { 0 } else { 1 });
     outcome
 }
@@ -321,8 +321,8 @@ fn tray_start(tray: &std::path::Path) {
 // with no menu and no Claude server until the next login. The service can
 // put it back: it runs as LocalSystem, which may take the console user's
 // token and start a process in that session on the interactive desktop.
-// This is what agent_main calls when the tray has not reported for a while
-// (`ClaudeHub::reporting`, shared/claude.rs) — `WATCHES_TRAY` below is what
+// This is what the service starts when the tray has not reported for a while
+// (service/watchdog.rs) — `WATCHES_TRAY` below is what
 // turns that watchdog on; on macOS launchd's KeepAlive and
 // `launchd::kickstart_tray` (os/macos/launchd.rs) do the same.
 

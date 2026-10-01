@@ -1,7 +1,7 @@
 //! Keeping the machine awake.
 //!
 //! Two lines of defence, both taken whenever the policy turns the hold on
-//! (`agent_main`, lib.rs):
+//! (service/hold.rs):
 //!
 //! 1. A power request, held until the policy turns it off or the process
 //!    ends. On Windows that is
