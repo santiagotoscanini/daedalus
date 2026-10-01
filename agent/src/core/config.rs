@@ -9,7 +9,6 @@
 //! The knobs, with their defaults:
 //!
 //! ```toml
-//! port = 7787                 # the controller's metrics page's port (no page on a node)
 //! update_check_secs = 600     # how often the release feed is asked
 //! log_level = "info"
 //! search_domains = []         # more domains to ask for `_daedalus-controller._tcp`
@@ -28,6 +27,7 @@
 //! api_socket = "…"            # the local API socket; absent = see below
 //! api_allowed_uids = []       # host uids served besides the agent's own
 //! listen = "0.0.0.0:7788"     # where machines' links are accepted; absent = none are
+//! metrics_listen = "192.168.0.2:7787"  # the metrics page (metrics_page.rs); absent = none
 //! advertise = ["box.lan:7788"]  # what machines should dial (one or a list), for the app
 //! ```
 //!
@@ -134,9 +134,6 @@ pub const DEFAULT_REPO: &str = "santiagotoscanini/daedalus";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    /// The port the controller's metrics page answers on (metrics_page.rs);
-    /// a node listens on nothing.
-    pub port: u16,
     /// How often the feed is asked, in seconds. GitHub allows 60 unauthenticated
     /// requests an hour from one address; the default spends six.
     pub update_check_secs: u64,
@@ -204,6 +201,10 @@ pub struct ControllerConfig {
     /// the controller listens for no machine.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<std::net::SocketAddr>,
+    /// Where the metrics page answers (controller/metrics_page.rs),
+    /// `address:port`; absent means there is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics_listen: Option<std::net::SocketAddr>,
     /// The `host:port`s machines should dial, as `system.info` names them
     /// to the app; one, or a list.
     #[serde(
@@ -392,7 +393,6 @@ fn is_default<T: Default + PartialEq>(v: &T) -> bool {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            port: 7787,
             update_check_secs: 600,
             log_level: LogLevel::default(),
             search_domains: Vec::new(),
@@ -463,6 +463,15 @@ impl Config {
     pub fn controller_listen(&self) -> Option<std::net::SocketAddr> {
         match self.mode {
             Mode::Controller => self.controller.listen,
+            Mode::Node => None,
+        }
+    }
+
+    /// Where the controller's metrics page answers; None when `[controller]
+    /// metrics_listen` names nothing (or this is not the controller).
+    pub fn metrics_listen(&self) -> Option<std::net::SocketAddr> {
+        match self.mode {
+            Mode::Controller => self.controller.metrics_listen,
             Mode::Node => None,
         }
     }
@@ -764,8 +773,8 @@ mod tests {
     use crate::core::paths::env_dir;
 
     /// What `install` writes without `--controller` or `--pin`, byte for byte.
-    const WRITTEN_BY_INSTALL: &str = "port = 7787\nupdate_check_secs = 600\n\
-                                      log_level = \"info\"\nsearch_domains = []\nupdates = \"self\"\n";
+    const WRITTEN_BY_INSTALL: &str =
+        "update_check_secs = 600\nlog_level = \"info\"\nsearch_domains = []\nupdates = \"self\"\n";
 
     #[test]
     fn install_writes_the_defaults_and_they_parse_back() {
@@ -792,7 +801,6 @@ mod tests {
         assert_eq!(
             cfg,
             Config {
-                port: 7790,
                 update_check_secs: 1200,
                 log_level: "debug".to_string().try_into().unwrap(),
                 search_domains: vec!["lan".into()],
@@ -1032,7 +1040,6 @@ mod tests {
             "{out}"
         );
         let cfg: Config = toml::from_str(&out).unwrap();
-        assert_eq!(cfg.port, 7790);
         assert_eq!(cfg.controller_address.as_deref(), Some("box.lan:7788"));
         assert_eq!(cfg.controller_pin.as_deref(), Some("aa:bb"));
         assert_eq!(cfg.controller.claude_unit.as_deref(), Some("x"));
@@ -1103,9 +1110,24 @@ mod tests {
             cfg.controller.advertise,
             ["box.lan:7788".try_into().unwrap()]
         );
+        // The metrics page: an address and port, like `listen`.
+        assert!(check("metrics_listen = \"192.168.0.2:7787\"").is_ok());
+        assert!(check("metrics_listen = \"box.lan:7787\"").is_err());
+        let page: Config = toml::from_str(
+            "mode = \"controller\"\n[controller]\nmetrics_listen = \"192.168.0.2:7787\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            page.metrics_listen(),
+            Some("192.168.0.2:7787".parse().unwrap())
+        );
+        assert_eq!(cfg.metrics_listen(), None);
         // A node never listens, whatever the table says.
         let node: Config = toml::from_str("[controller]\nlisten = \"127.0.0.1:7788\"\n").unwrap();
         assert_eq!(node.controller_listen(), None);
+        let node: Config =
+            toml::from_str("[controller]\nmetrics_listen = \"192.168.0.2:7787\"\n").unwrap();
+        assert_eq!(node.metrics_listen(), None);
     }
 
     #[test]

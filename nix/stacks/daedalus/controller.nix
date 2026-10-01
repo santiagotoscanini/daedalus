@@ -51,7 +51,6 @@ let
     # The box already has node-exporter and its own snapshots; minimal is the
     # machine and how it is doing, no drives, services or package lists.
     telemetry = "minimal";
-    port = statusPort;
     controller = {
       api_socket = "${controllerDir}/api.sock";
       # The app's container runs as the operator (`--user=0:0`, container.nix),
@@ -62,6 +61,10 @@ let
       claude_unit = claudeUnit;
       root_socket = rootSocket;
       listen = "0.0.0.0:${toString port}";
+      # The metrics page, on the LAN address alone: what the Prometheus
+      # container's connections arrive at (pasta's host alias), and the
+      # upgrade guard's checks dial.
+      metrics_listen = "${config.fleet.lanIp}:${toString statusPort}";
       advertise = [ "${config.fleet.wanHost}:${toString port}" ];
     }
     // lib.optionalAttrs sessionHost.enable {
@@ -81,10 +84,10 @@ in
     type = lib.types.port;
     default = 7787;
     description = ''
-      The TCP port of the controller's status page (`/healthz`,
-      `/nodes/metrics`): bound on every interface, opened on none, and
-      scraped by the `nodes` job through the containers' host alias. The
-      agent's own default, so a machine and the box agree without saying so.
+      The TCP port of the controller's metrics page (`/healthz`,
+      `/nodes/metrics`): bound on `fleet.lanIp` alone, opened on none, and
+      scraped by the `nodes` job through the containers' host alias, whose
+      connections arrive at that address.
     '';
   };
 

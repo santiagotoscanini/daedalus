@@ -1,10 +1,10 @@
 //! The controller's metrics page. No HTTP answers on a node: a machine
 //! listens on nothing, loopback included. The controller keeps one small
-//! page on `port` (role.rs `metrics_page`), on every interface, for one
-//! reader — the box's Prometheus, whose container reaches the host through
-//! pasta's host alias, so its connections arrive at the host's LAN address,
-//! not loopback — while the host firewall keeps the port closed to the LAN
-//! (nix):
+//! page (core/role.rs `metrics_page`) on the address `[controller]
+//! metrics_listen` names, for one reader — the box's Prometheus, whose
+//! container reaches the host through pasta's host alias, so its
+//! connections arrive at the host's LAN address: nix names that address
+//! and no other, and the host firewall keeps the port closed to the LAN:
 //!
 //!   GET  /healthz         `ok`
 //!   GET  /nodes/metrics   the telemetry of every machine connected to the
@@ -16,6 +16,7 @@
 //! and 404 for anything else. The app's door on the controller is the API
 //! socket (controller/api/), which reads the same `Shared`.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,12 +29,13 @@ use crate::util::Rebinding;
 /// How often a metrics page that could not bind its port tries again.
 pub const BIND_RETRY: Duration = Duration::from_secs(15);
 
-/// The controller's metrics page, bound now or later: a port another
-/// process holds does
-/// not stop the service — the link, the telemetry and the awake hold go on
+/// The controller's metrics page, bound now or later: an address not
+/// there yet or a port another process holds does not stop the service — the link, the telemetry and the awake hold go on
 /// — it is tried again every `BIND_RETRY`, and whoever holds it is logged
 /// where the OS says (`os::port_holder`).
-pub struct Page(Rebinding<Bound>);
+pub struct Page {
+    _bound: Rebinding<Bound>,
+}
 
 /// The page's server while it answers; dropping it ends the thread.
 struct Bound(Arc<Server>);
@@ -45,38 +47,32 @@ impl Drop for Bound {
 }
 
 impl Page {
-    pub fn start(port: u16, shared: Arc<Shared>) -> Self {
-        Self(Rebinding::start(
-            "metrics-bind",
-            BIND_RETRY,
-            move || match serve_metrics(port, Arc::clone(&shared)) {
-                Ok(s) => Some(Bound(s)),
-                Err(e) => {
-                    tracing::error!(
-                        error = format!("{e:#}"),
-                        port,
-                        held_by = crate::os::port_holder(port).as_deref().unwrap_or("unknown"),
-                        "the metrics page could not bind its port; the service runs on and tries again"
-                    );
-                    None
+    pub fn start(addr: SocketAddr, shared: Arc<Shared>) -> Self {
+        Self {
+            _bound: Rebinding::start("metrics-bind", BIND_RETRY, move || {
+                match serve_metrics(addr, Arc::clone(&shared)) {
+                    Ok(s) => Some(Bound(s)),
+                    Err(e) => {
+                        tracing::error!(
+                            error = format!("{e:#}"),
+                            %addr,
+                            held_by = crate::os::port_holder(addr.port()).as_deref().unwrap_or("unknown"),
+                            "the metrics page could not bind its address; the service runs on and tries again"
+                        );
+                        None
+                    }
                 }
-            },
-        ))
-    }
-
-    /// How long the page has answered; None while it is not bound.
-    pub fn up_for(&self) -> Option<Duration> {
-        self.0.up_for()
+            }),
+        }
     }
 }
 
-/// Answer the controller's metrics page on every interface's `port`
-/// (module doc) from a thread until `unblock` is called on the returned
+/// Answer the controller's metrics page on `addr` (module doc) from a thread until `unblock` is called on the returned
 /// server.
-pub fn serve_metrics(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
-    let server = Server::http(("0.0.0.0", port))
+pub fn serve_metrics(addr: SocketAddr, shared: Arc<Shared>) -> Result<Arc<Server>> {
+    let server = Server::http(addr)
         .map_err(|e| anyhow::anyhow!("{e}"))
-        .with_context(|| format!("binding the metrics page on 0.0.0.0:{port}"))?;
+        .with_context(|| format!("binding the metrics page on {addr}"))?;
     // `incoming_requests` takes `&self` and `Server` is `Send + Sync`, so the
     // thread and the caller share one through an Arc; `unblock` from the
     // caller ends the loop in the thread.
@@ -116,7 +112,7 @@ pub fn serve_metrics(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
             }
         })
         .context("spawning the metrics page")?;
-    tracing::info!(port, "metrics page answering");
+    tracing::info!(%addr, "metrics page answering");
     Ok(server)
 }
 
@@ -176,12 +172,13 @@ mod tests {
     #[test]
     fn the_metrics_page_answers_the_scrape_alone() {
         let shared = controller_shared();
-        let port = std::net::TcpListener::bind("0.0.0.0:0")
+        // Bound to the one address it is named, as nix names the LAN's.
+        let addr = std::net::TcpListener::bind("127.0.0.1:0")
             .unwrap()
             .local_addr()
-            .unwrap()
-            .port();
-        let server = serve_metrics(port, shared).unwrap();
+            .unwrap();
+        let port = addr.port();
+        let server = serve_metrics(addr, shared).unwrap();
         let get = |path: &str| -> Option<u16> {
             match ureq::get(&format!("http://127.0.0.1:{port}{path}"))
                 .timeout(Duration::from_secs(3))

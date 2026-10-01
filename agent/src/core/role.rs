@@ -5,7 +5,7 @@
 //! | part                                | node                          | controller                      |
 //! |-------------------------------------|-------------------------------|---------------------------------|
 //! | the local socket (ipc/local/), telemetry | yes                        | yes                             |
-//! | metrics page (`/healthz`, `/nodes/metrics`) | no — a node listens on nothing | yes, on every interface |
+//! | metrics page (`/healthz`, `/nodes/metrics`) | no — a node listens on nothing | yes, on `metrics_listen` |
 //! | the local API socket (controller/api/)         | no                            | yes — the app's one door        |
 //! | link to the controller (node/link.rs) | yes                         | no — it is the controller       |
 //! | listener for the machines' links    | no                            | yes, where `listen` names one   |
@@ -53,11 +53,10 @@ pub struct Role {
     pub claude_update: bool,
     /// A tray may run (where the OS has one and a desktop is present).
     pub tray: bool,
-    /// The metrics page answers on every interface's `port`: `/healthz`
-    /// and `/nodes/metrics` (metrics_page.rs) — the box's Prometheus container
-    /// reaches it through pasta's host alias, and the host firewall keeps
-    /// the port closed to the LAN. A node has no page: it listens on
-    /// nothing, loopback included.
+    /// The metrics page answers on `[controller] metrics_listen`: `/healthz`
+    /// and `/nodes/metrics` (controller/metrics_page.rs), for the box's
+    /// Prometheus. A node has no page: it listens on nothing, loopback
+    /// included.
     pub metrics_page: bool,
     /// The local API socket is served (controller/api/).
     pub api_socket: bool,

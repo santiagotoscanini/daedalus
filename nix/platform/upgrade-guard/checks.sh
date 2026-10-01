@@ -250,7 +250,7 @@ check_controller() {
     return 2
   }
   local h
-  h="$(curl -s --max-time 5 "http://127.0.0.1:$STATUS_PORT/healthz" 2>/dev/null || true)"
+  h="$(curl -s --max-time 5 "http://$LAN_IP:$STATUS_PORT/healthz" 2>/dev/null || true)"
   echo "controller /healthz: ${h:-no answer}"
   [ "$h" = ok ]
 }
@@ -262,7 +262,7 @@ check_node_links() {
     return 2
   }
   local m up="" down=""
-  m="$(curl -s --max-time 5 "http://127.0.0.1:$STATUS_PORT/nodes/metrics" 2>/dev/null || true)"
+  m="$(curl -s --max-time 5 "http://$LAN_IP:$STATUS_PORT/nodes/metrics" 2>/dev/null || true)"
   # NODES: "<id> <name>" per line; the metric carries the id as `node`.
   while read -r id name; do
     [ -n "$id" ] || continue

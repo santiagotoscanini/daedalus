@@ -110,9 +110,15 @@ impl ControllerDoors {
             None
         };
         let listener = listen_for_machines(listen, shared)?;
-        let metrics = role
-            .metrics_page
-            .then(|| metrics_page::Page::start(cfg.port, Arc::clone(shared)));
+        let metrics = match cfg.metrics_listen() {
+            Some(addr) if role.metrics_page => {
+                Some(metrics_page::Page::start(addr, Arc::clone(shared)))
+            }
+            _ => {
+                tracing::info!("no [controller] metrics_listen: no metrics page");
+                None
+            }
+        };
         Ok(Self {
             _listener: listener,
             _api: api,

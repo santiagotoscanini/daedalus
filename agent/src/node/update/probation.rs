@@ -140,12 +140,12 @@ pub const REPORT_WINDOW: Duration = Duration::from_secs(300);
 /// session (`user_present`, asked only then) — a report from it lately
 /// (`reporting`). Past `REPORT_WINDOW` without that, the run failed.
 pub fn judge_proof(
-    page_up_for: Option<Duration>,
+    local_up_for: Option<Duration>,
     running_for: Duration,
     user_present: impl FnOnce() -> bool,
     reporting: bool,
 ) -> Proof {
-    if page_up_for.is_some_and(|u| u >= PROBATION) {
+    if local_up_for.is_some_and(|u| u >= PROBATION) {
         if reporting {
             return Proof::Proven("the local socket served 120 s and the tray/session reported");
         }
@@ -158,7 +158,7 @@ pub fn judge_proof(
     if running_for < REPORT_WINDOW {
         return Proof::Wait;
     }
-    Proof::Failed(match page_up_for {
+    Proof::Failed(match local_up_for {
         None => "the local socket was never served",
         Some(_) => "someone is logged on and no tray or session reported",
     })
