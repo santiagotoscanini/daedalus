@@ -20,28 +20,8 @@
     "started_at": null,
     "signed_in": true
   },
-  "public_key": "abababababababababababababababababababababababababababababababab",
-  "hello": {
-    "proto": 1,
-    "node_id": "0123456789abcdef",
-    "agent_version": "0.14.0",
-    "os": "windows",
-    "arch": "x86_64",
-    "hostname": "PC",
-    "mac": "aa:bb:cc:dd:ee:ff",
-    "lan_ip": "192.168.0.120",
-    "facts": {
-      "os_name": "Windows 11 Pro",
-      "os_version": "24H2",
-      "cpu": "AMD Ryzen 9",
-      "memory_bytes": 64
-    },
-    "capabilities": [
-      "claude.remote_control",
-      "telemetry.full"
-    ],
-    "telemetry": "full"
-  },
+  "form": "desktop",
+  "model": "B650 AORUS ELITE AX",
   "status": {
     "agent": "daedalus-agent",
     "version": "0.25.0",
@@ -113,6 +93,28 @@
     "rolled_back": null
   },
   "status_at": "2026-09-27T10:00:15Z",
+  "public_key": "abababababababababababababababababababababababababababababababab",
+  "hello": {
+    "proto": 1,
+    "node_id": "0123456789abcdef",
+    "agent_version": "0.14.0",
+    "os": "windows",
+    "arch": "x86_64",
+    "hostname": "PC",
+    "mac": "aa:bb:cc:dd:ee:ff",
+    "lan_ip": "192.168.0.120",
+    "facts": {
+      "os_name": "Windows 11 Pro",
+      "os_version": "24H2",
+      "cpu": "AMD Ryzen 9",
+      "memory_bytes": 64
+    },
+    "capabilities": [
+      "claude.remote_control",
+      "telemetry.full"
+    ],
+    "telemetry": "full"
+  },
   "telemetry": {
     "sampled_at": "2026-09-27T10:00:15Z",
     "machine": {

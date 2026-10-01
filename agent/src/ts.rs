@@ -42,7 +42,6 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     Subscribed::export_all(cfg)?;
     NodesList::export_all(cfg)?;
     NodeDetail::export_all(cfg)?;
-    NodeTelemetry::export_all(cfg)?;
     NodeProviders::export_all(cfg)?;
     NodeClaude::export_all(cfg)?;
     NodeClaudeRoster::export_all(cfg)?;
@@ -61,6 +60,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     HelloParams::export_all(cfg)?;
     ClaudeSession::export_all(cfg)?;
     NodeId::export_all(cfg)?;
+    NodeGet::export_all(cfg)?;
     ActionQuery::export_all(cfg)?;
     NodeClaudeSession::export_all(cfg)?;
     NodeProviderModel::export_all(cfg)?;

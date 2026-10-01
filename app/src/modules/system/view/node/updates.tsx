@@ -8,18 +8,7 @@ import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../../../lib/format'
 import { linkWords } from '../../../../lib/node-link'
 import type { Tone } from '../../../../lib/tone'
-import {
-  DetailNote,
-  EMPTY,
-  FOOT,
-  LIST,
-  MONO,
-  NOTE,
-  NotReadable,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-} from './shared'
+import { EMPTY, FOOT, LIST, MONO, NOTE, NotReadable, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Updates ──────────────────────────────────────────────────────────── */
 
@@ -210,7 +199,7 @@ function AgentBoard({ f }: { f: NodeUpdatesFacts }) {
 }
 
 function Panel({ f }: { f: NodeUpdatesFacts }) {
-  const { d, u, pending } = f
+  const { u, pending } = f
   return (
     <Board
       title={
@@ -232,9 +221,7 @@ function Panel({ f }: { f: NodeUpdatesFacts }) {
         ) : undefined
       }
     >
-      {!d.full ? (
-        <p className={EMPTY}>On the full document.</p>
-      ) : u === null ? (
+      {u === null ? (
         <p className={EMPTY}>
           The agent has not finished its first search yet; it asks Windows Update within a minute of
           starting and hourly after.
@@ -272,7 +259,6 @@ function Panel({ f }: { f: NodeUpdatesFacts }) {
           })}
         </ul>
       )}
-      <DetailNote d={d} />
       <p className={FOOT}>
         {u !== null && u.checked_at !== null && (
           <>
@@ -288,7 +274,7 @@ function Panel({ f }: { f: NodeUpdatesFacts }) {
 }
 
 function InstalledLatelyBoard({ f }: { f: NodeUpdatesFacts }) {
-  const { d, u } = f
+  const { u } = f
   return (
     <Board
       title="Installed lately"
@@ -296,8 +282,8 @@ function InstalledLatelyBoard({ f }: { f: NodeUpdatesFacts }) {
       span={6}
       aside={u !== null && <span className={NOTE}>{num(u.installed.length)} newest</span>}
     >
-      {!d.full || u === null ? (
-        <p className={EMPTY}>{d.full ? 'not read yet' : 'on the full document'}</p>
+      {u === null ? (
+        <p className={EMPTY}>not read yet</p>
       ) : u.installed.length === 0 ? (
         <p className={EMPTY}>Nothing on record.</p>
       ) : (

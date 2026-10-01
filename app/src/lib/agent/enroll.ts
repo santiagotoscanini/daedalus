@@ -1,4 +1,5 @@
 import type { WireguardConfig } from '../../host/controller/generated'
+import { MAX_HOSTNAME } from '../../host/controller/generated/constants'
 import { hasControlChar } from './policy'
 
 // A Mac's log-in (agent/src/enroll.rs), the pure half: what the enroll page
@@ -49,7 +50,6 @@ const STATE = /^[A-Za-z0-9_-]{43,128}$/
 /** SHA-256 as base64url, unpadded: exactly 43 characters. */
 const CHALLENGE = /^[A-Za-z0-9_-]{43}$/
 const PORT = /^[1-9][0-9]{3,4}$/
-export const NAME_MAX = 64
 
 export type Checked<T> = { ok: true; value: T } | { ok: false; reason: string }
 
@@ -70,9 +70,10 @@ export function parseEnrollQuery(search: string): Checked<EnrollQuery> {
   const v = (f: (typeof FIELDS)[number]) => got.get(f) ?? ''
 
   if (!HEX64.test(v('key'))) return bad('key is not 64 lowercase hex characters')
+  // The machine's hostname, which its hello carries: at most MAX_HOSTNAME bytes.
   const name = v('name').trim()
-  if (name === '' || name.length > NAME_MAX || hasControlChar(name)) {
-    return bad(`name is not a machine name of 1 to ${String(NAME_MAX)} printable characters`)
+  if (name === '' || new TextEncoder().encode(name).length > MAX_HOSTNAME || hasControlChar(name)) {
+    return bad(`name is not a machine name of 1 to ${String(MAX_HOSTNAME)} bytes of printable text`)
   }
   for (const f of ['os', 'arch'] as const) {
     if (!WORD.test(v(f))) return bad(`${f} is not one short word`)

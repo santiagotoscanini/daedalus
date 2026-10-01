@@ -9,7 +9,7 @@ import { DASH, duration, num, rate, text } from '../../../../lib/format'
 import { linkWords } from '../../../../lib/node-link'
 import { PROVIDER_NAME, type ProviderKind } from '../../../../lib/providers/kinds'
 import type { HostFacts } from './host'
-import { DetailNote, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 import { AgentUpdate } from './updates'
 
 export function MachineBoard({ f }: { f: HostFacts }) {
@@ -54,7 +54,7 @@ export function MachineBoard({ f }: { f: HostFacts }) {
 }
 
 export function RunningBoard({ f }: { f: HostFacts }) {
-  const { d, node, t, status } = f
+  const { node, t, status } = f
   return (
     <Board title="Running" icon="▣" span={4}>
       <Facts
@@ -71,13 +71,12 @@ export function RunningBoard({ f }: { f: HostFacts }) {
           { k: 'Processes', v: num(t.process_count) },
           {
             k: node.os === 'macos' ? 'Jobs failing' : 'Services down',
-            v: !d.full ? (
-              DASH
-            ) : t.services.length > 0 ? (
-              <Chip tone="bad">{num(t.services.length)}</Chip>
-            ) : (
-              <Chip tone="ok">none</Chip>
-            ),
+            v:
+              t.services.length > 0 ? (
+                <Chip tone="bad">{num(t.services.length)}</Chip>
+              ) : (
+                <Chip tone="ok">none</Chip>
+              ),
           },
         ]}
       />
@@ -86,35 +85,29 @@ export function RunningBoard({ f }: { f: HostFacts }) {
 }
 
 export function ServicesBoard({ f }: { f: HostFacts }) {
-  const { d, node, t } = f
+  const { node, t } = f
   return (
     <Board
       title={
-        !d.full
+        t.services.length === 0
           ? node.os === 'macos'
+            ? 'No failing jobs'
+            : 'No services down'
+          : node.os === 'macos'
             ? 'Failing jobs'
             : 'Services down'
-          : t.services.length === 0
-            ? node.os === 'macos'
-              ? 'No failing jobs'
-              : 'No services down'
-            : node.os === 'macos'
-              ? 'Failing jobs'
-              : 'Services down'
       }
       icon="⚑"
       span={t.battery === null ? 8 : 4}
       aside={
-        !d.full ? undefined : t.services.length === 0 ? (
+        t.services.length === 0 ? (
           <Chip tone="ok">none</Chip>
         ) : (
           <Chip tone="bad">{num(t.services.length)}</Chip>
         )
       }
     >
-      {!d.full ? (
-        <p className={EMPTY}>On the full document.</p>
-      ) : t.services.length === 0 ? (
+      {t.services.length === 0 ? (
         <p className={EMPTY}>
           {node.os === 'macos'
             ? `Nothing outside Apple's own launchd jobs exited with an error${t.service_count === null ? '' : `, of ${num(t.service_count)} loaded`}.`
@@ -134,7 +127,6 @@ export function ServicesBoard({ f }: { f: HostFacts }) {
           ))}
         </ul>
       )}
-      <DetailNote d={d} />
       <p className={FOOT}>
         {node.os === 'macos'
           ? 'launchd jobs in the system domain whose last exit was not zero, Apple’s own left out because half of them exit non-zero by design. The box’s equivalent is its failed units.'

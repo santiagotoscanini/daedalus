@@ -4,7 +4,7 @@ import { Board, Chip, Facts, Measures } from '../../../../components/viz'
 import type { MacRelease } from '../../../../lib/dashboard/macos-releases'
 import { bytes, DASH, num } from '../../../../lib/format'
 import type { NodeMacosFacts } from './macos'
-import { DetailNote, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 export function ThisMacRunsBoard({ f }: { f: NodeMacosFacts }) {
   const { status, t, m, verdict, lastInstalled } = f
@@ -181,7 +181,7 @@ export function Panel({ f }: { f: NodeMacosFacts }) {
 }
 
 export function Panel2({ f }: { f: NodeMacosFacts }) {
-  const { d, u, pending, behind } = f
+  const { u, pending, behind } = f
   return (
     <Board
       title={
@@ -201,9 +201,7 @@ export function Panel2({ f }: { f: NodeMacosFacts }) {
         ) : undefined
       }
     >
-      {!d.full ? (
-        <p className={EMPTY}>On the full document.</p>
-      ) : u === null ? (
+      {u === null ? (
         <p className={EMPTY}>
           The agent has not finished its first search yet; it asks within a minute of starting and
           hourly after.
@@ -229,7 +227,6 @@ export function Panel2({ f }: { f: NodeMacosFacts }) {
           ))}
         </ul>
       )}
-      <DetailNote d={d} />
       <p className={FOOT}>
         {u !== null && u.checked_at !== null && (
           <>
@@ -245,7 +242,7 @@ export function Panel2({ f }: { f: NodeMacosFacts }) {
 }
 
 export function InstalledLatelyBoard({ f }: { f: NodeMacosFacts }) {
-  const { d, u } = f
+  const { u } = f
   return (
     <Board
       title="Installed lately"
@@ -253,8 +250,8 @@ export function InstalledLatelyBoard({ f }: { f: NodeMacosFacts }) {
       span={6}
       aside={u !== null && <span className={NOTE}>{num(u.installed.length)} newest</span>}
     >
-      {!d.full || u === null ? (
-        <p className={EMPTY}>{d.full ? 'not read yet' : 'on the full document'}</p>
+      {u === null ? (
+        <p className={EMPTY}>not read yet</p>
       ) : u.installed.length === 0 ? (
         <p className={EMPTY}>Nothing on record.</p>
       ) : (

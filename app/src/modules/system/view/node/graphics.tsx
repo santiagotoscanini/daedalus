@@ -7,7 +7,7 @@ import type { App, Telemetry } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../../../lib/format'
 import { partMatching } from '../../../../lib/hardware/catalog'
-import { DetailNote, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Graphics ─────────────────────────────────────────────────────────── */
 
@@ -130,7 +130,6 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
             ))}
           </ul>
         )}
-        <DetailNote d={d} />
         <p className={FOOT}>
           Visual C++ and .NET redistributables, Vulkan, OpenAL, PhysX: what a game&rsquo;s installer
           puts on the machine so the game can find its libraries. Several versions of the same one

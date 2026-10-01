@@ -2,7 +2,6 @@ import { BarList, Board, BoardGrid, Facts, Measures, Progress } from '../../../.
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../../../lib/format'
 import {
-  DetailNote,
   EMPTY,
   FOOT,
   LIST,
@@ -214,11 +213,11 @@ function Panel({ f }: { f: NodeMemoryFacts }) {
 }
 
 function HeaviestProcessesBoard({ f }: { f: NodeMemoryFacts }) {
-  const { d, t, heaviest } = f
+  const { t, heaviest } = f
   return (
     <Board title="Heaviest processes" icon="grid" span={8}>
       {t.processes.length === 0 ? (
-        <p className={EMPTY}>{d.full ? 'nothing reporting' : 'on the full document'}</p>
+        <p className={EMPTY}>nothing reporting</p>
       ) : (
         <BarList
           items={heaviest.map((p) => ({
@@ -230,7 +229,6 @@ function HeaviestProcessesBoard({ f }: { f: NodeMemoryFacts }) {
           empty="nothing reporting"
         />
       )}
-      <DetailNote d={d} />
       <p className={FOOT}>
         Resident memory — the working set on Windows, RSS on a Mac — which counts shared libraries
         against every process that maps them, so the bars add up to more than the bar above. The

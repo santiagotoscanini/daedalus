@@ -21,7 +21,80 @@
         "sessions": 2,
         "started_at": null,
         "signed_in": true
-      }
+      },
+      "form": "desktop",
+      "model": "B650 AORUS ELITE AX",
+      "status": {
+        "agent": "daedalus-agent",
+        "version": "0.25.0",
+        "hostname": "PC",
+        "os": "windows",
+        "os_name": "",
+        "os_version": "",
+        "arch": "",
+        "cpu": "",
+        "memory_bytes": null,
+        "uptime_secs": 0,
+        "os_uptime_secs": null,
+        "booted_at": null,
+        "awake_hold": true,
+        "hold_error": null,
+        "power_requests": null,
+        "update_available": null,
+        "restart_pending": false,
+        "policy": {
+          "awake_hold": true,
+          "claude_remote_control": true
+        },
+        "claude": {
+          "state": "running",
+          "detail": null,
+          "cli_version": null,
+          "server_version": null,
+          "sessions": 0,
+          "started_at": null,
+          "signed_in": false
+        },
+        "tray": {
+          "reporting": false,
+          "last_report": null
+        },
+        "claude_update_requested": false,
+        "claude_restart_requested": false,
+        "settings": {
+          "node": null,
+          "fingerprint": null,
+          "fingerprint_short": null,
+          "linked": false,
+          "awake_hold": false,
+          "claude_remote_control": false,
+          "santree": false,
+          "pending": [],
+          "failed": [],
+          "operator_uid": null,
+          "operator": null
+        },
+        "santree": null,
+        "controller": {
+          "address": "box.lan:7788",
+          "found_via": "config",
+          "state": "approved",
+          "connected": true,
+          "since": null,
+          "fingerprint": "0123:4567",
+          "controller_fingerprint": null,
+          "rotated": null,
+          "error": null,
+          "tunnel": null
+        },
+        "last_update_check": "2026-09-27T10:00:00Z",
+        "last_update_result": null,
+        "updated_from": null,
+        "updated_at": null,
+        "probation": null,
+        "rolled_back": null
+      },
+      "status_at": "2026-09-27T10:00:15Z"
     }
   ]
 }

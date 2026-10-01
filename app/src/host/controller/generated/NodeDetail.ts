@@ -7,16 +7,12 @@ import type { Summary } from "./Summary";
 import type { Telemetry } from "./Telemetry";
 
 /**
- * `nodes.get`'s answer: the summary, the whole hello, the status document
- * (what the machine's `/status` carries, without its telemetry), the
- * telemetry as the open page shows it (`Telemetry::public`), and the
- * providers document (null until the machine has pushed one).
+ * `nodes.get`'s answer: the summary, the key and the whole hello; with
+ * `full`, the telemetry the machine last pushed (the full document, at its
+ * level) and its providers document — null otherwise, and null until the
+ * machine has pushed one.
  */
-export type NodeDetail = { public_key: string, hello: Hello | null, 
-/**
- * The machine's status document, as it last pushed it.
- */
-status: StatusDocument | null, status_at: string | null, telemetry: Telemetry | null, telemetry_at: string | null, providers: Array<ProviderReport> | null, providers_at: string | null, id: string, fingerprint: string, state: NodeState, connected: boolean, 
+export type NodeDetail = { public_key: string, hello: Hello | null, telemetry: Telemetry | null, telemetry_at: string | null, providers: Array<ProviderReport> | null, providers_at: string | null, id: string, fingerprint: string, state: NodeState, connected: boolean, 
 /**
  * When the current connection opened; null while disconnected.
  */
@@ -28,4 +24,14 @@ last_seen: string | null, hostname: string | null, os: string | null, arch: stri
 /**
  * Claude Code there, from its last report; null without one.
  */
-claude: Summary | null, };
+claude: Summary | null, 
+/**
+ * What shape the machine is ("laptop", "desktop", …) and its model —
+ * the board's product where the firmware names one, else the
+ * machine's — from its last telemetry; null without one.
+ */
+form: string | null, model: string | null, 
+/**
+ * Its status document, as it last pushed it, and when.
+ */
+status: StatusDocument | null, status_at: string | null, };

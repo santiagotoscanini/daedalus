@@ -30,7 +30,8 @@ export async function loadNodeClaude(
   ctx: Pick<Ctx, 'controller'>,
   id: string,
 ): Promise<NodeClaudeData | null> {
-  const node = await getNode(ctx, id)
+  const read = await readNode(ctx, id)
+  const node = await getNode(id, read)
   if (node === null) return null
   const none = {
     node,
@@ -40,7 +41,6 @@ export async function loadNodeClaude(
     roster: null,
     rosterMissing: null,
   }
-  const read = await readNode(ctx, id)
   const d = read.detail
   if (d === null) return { ...none, error: read.error }
   if (d.status === null) {

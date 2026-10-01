@@ -252,23 +252,37 @@ export function enrollValues(d: NodeDetail): {
 }
 
 /**
- * One machine as the controller holds it, or why not in words a page can
- * print after the machine's name.
+ * One machine as the controller holds it — with `full`, its telemetry and
+ * providers document too — or why not, in words a page can print after the
+ * machine's name. `answered` says the controller was asked: a machine it has
+ * not heard of is one it answered about.
  */
+export type NodeRead = { detail: NodeDetail | null; error: string | null; answered: boolean }
+
 export async function readNode(
   ctx: Pick<Ctx, 'controller'>,
   id: string,
-): Promise<{ detail: NodeDetail | null; error: string | null }> {
+  full = false,
+): Promise<NodeRead> {
   try {
-    return { detail: await ctx.controller.call('nodes.get', { id }), error: null }
+    return {
+      detail: await ctx.controller.call('nodes.get', { id, full }),
+      error: null,
+      answered: true,
+    }
   } catch (e) {
     if (e instanceof ControllerError && e.code === 'not_found') {
       return {
         detail: null,
         error: 'not connected, and the controller has not heard from it since it started',
+        answered: true,
       }
     }
-    return { detail: null, error: `the controller: ${e instanceof Error ? e.message : String(e)}` }
+    return {
+      detail: null,
+      error: `the controller: ${e instanceof Error ? e.message : String(e)}`,
+      answered: false,
+    }
   }
 }
 

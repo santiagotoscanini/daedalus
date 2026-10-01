@@ -200,7 +200,7 @@ fn an_approved_machine_connects_and_pushes() {
 
     wait_for("the pushes", 5, || {
         ctl.registry
-            .telemetry(&nid.node_id())
+            .get(&nid.node_id(), true)
             .is_ok_and(|t| t.telemetry.is_some())
             && ctl
                 .registry
@@ -208,18 +208,18 @@ fn an_approved_machine_connects_and_pushes() {
                 .is_ok_and(|c| c.report.is_some())
             && ctl
                 .registry
-                .get(&nid.node_id())
-                .is_ok_and(|d| d.status.is_some())
+                .get(&nid.node_id(), false)
+                .is_ok_and(|d| d.node.status.is_some())
     });
     let s = summary(&ctl, &nid).unwrap();
     assert_eq!((s.state, s.connected), (NodeState::Approved, true));
     assert_eq!(s.claude.unwrap().state, crate::claude::ClaudeState::Running);
-    let d = ctl.registry.get(&nid.node_id()).unwrap();
+    let d = ctl.registry.get(&nid.node_id(), false).unwrap();
     assert_eq!(d.public_key, nid.public_key_hex());
     assert_eq!(d.hello.unwrap().node_id, nid.node_id());
     // The status document is the machine's page, without its telemetry,
     // with its view of the link.
-    let status = d.status.unwrap();
+    let status = d.node.status.unwrap();
     let link = status.controller.unwrap();
     assert_eq!(
         link.state,
@@ -232,7 +232,7 @@ fn an_approved_machine_connects_and_pushes() {
     assert_eq!(node.shared.policy(), claude_policy());
     assert_eq!(
         ctl.registry
-            .telemetry(&nid.node_id())
+            .get(&nid.node_id(), true)
             .unwrap()
             .telemetry
             .unwrap()
@@ -242,7 +242,13 @@ fn an_approved_machine_connects_and_pushes() {
     // /nodes/metrics: the machine's series, with the four labels; no
     // name from the app, so `machine` is the hostname.
     let m = ctl.registry.metrics();
-    let os = ctl.registry.get(&nid.node_id()).unwrap().hello.unwrap().os;
+    let os = ctl
+        .registry
+        .get(&nid.node_id(), false)
+        .unwrap()
+        .hello
+        .unwrap()
+        .os;
     let host = crate::telemetry::escape_label(&crate::facts::hostname());
     let labels = format!(
         "host=\"{host}\",machine=\"{host}\",node=\"{}\",os=\"{os}\"",
@@ -309,8 +315,15 @@ fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
     let p = ctl.registry.providers(&nid.node_id()).unwrap();
     assert!(p.connected && p.received_at.is_some());
     assert_eq!(p.providers.as_ref().unwrap()[0].models[0].id, "Gemma-4");
-    let d = ctl.registry.get(&nid.node_id()).unwrap();
+    // The full read carries them; the plain one does not.
+    let d = ctl.registry.get(&nid.node_id(), true).unwrap();
     assert_eq!(d.providers, p.providers);
+    assert!(ctl
+        .registry
+        .get(&nid.node_id(), false)
+        .unwrap()
+        .providers
+        .is_none());
     let m = ctl.registry.metrics();
     assert!(
         m.contains("kind=\"lemonade\",port=\"13305\",version=\"\",offered=\"1\"} 1\n"),
@@ -365,7 +378,13 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     assert_eq!(link.controller_fingerprint, Some(ctl.id.fingerprint()));
     // A pending machine pushes nothing, and nothing it sends is kept.
     std::thread::sleep(Duration::from_millis(300));
-    assert!(ctl.registry.get(&nid.node_id()).unwrap().status.is_none());
+    assert!(ctl
+        .registry
+        .get(&nid.node_id(), false)
+        .unwrap()
+        .node
+        .status
+        .is_none());
     let since = summary(&ctl, &nid).unwrap().since;
 
     let ok = approve(&ctl.registry, &nid, claude_policy());
@@ -373,8 +392,8 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     wait_for("the policy", 5, || node.shared.policy() == claude_policy());
     wait_for("the pushes after approval", 5, || {
         ctl.registry
-            .get(&nid.node_id())
-            .is_ok_and(|d| d.status.is_some())
+            .get(&nid.node_id(), false)
+            .is_ok_and(|d| d.node.status.is_some())
     });
     // The same connection, upgraded in place.
     assert_eq!(summary(&ctl, &nid).unwrap().since, since);
@@ -720,7 +739,13 @@ fn claude_sessions_travel_the_link() {
 
     // The machine's Claude in /nodes/metrics, with the four labels.
     let m = ctl.registry.metrics();
-    let os = ctl.registry.get(&nid.node_id()).unwrap().hello.unwrap().os;
+    let os = ctl
+        .registry
+        .get(&nid.node_id(), false)
+        .unwrap()
+        .hello
+        .unwrap()
+        .os;
     let host = crate::telemetry::escape_label(&crate::facts::hostname());
     let labels = format!(
         "host=\"{host}\",machine=\"{host}\",node=\"{}\",os=\"{os}\"",
@@ -895,8 +920,8 @@ fn connections_and_pending_keys_are_capped() {
     });
     assert_eq!(ctl.registry.open_connections(), 2);
     // Gone, an unknown key keeps its id, fingerprint and hostname only.
-    let d = ctl.registry.get(&id(10).node_id()).unwrap();
-    assert!(d.hello.is_none() && d.status.is_none());
+    let d = ctl.registry.get(&id(10).node_id(), false).unwrap();
+    assert!(d.hello.is_none() && d.node.status.is_none());
     assert_eq!(d.node.hostname, Some(crate::facts::hostname()));
     assert_eq!(d.node.fingerprint, id(10).fingerprint());
     assert_eq!(ctl.registry.preauth_connections(), 0);
@@ -1241,11 +1266,11 @@ fn the_api_steers_the_machines_through_the_socket() {
     );
     wait_for("telemetry", 5, || {
         registry
-            .telemetry(&n)
+            .get(&n, true)
             .is_ok_and(|t| t.telemetry.is_some_and(|t| t.sampled_at == "t9"))
     });
     let t = call(format!(
-        r#"{{"id":8,"m":"nodes.telemetry","p":{{"id":"{n}"}}}}"#
+        r#"{{"id":8,"m":"nodes.get","p":{{"id":"{n}","full":true}}}}"#
     ));
     assert_eq!(t["ok"]["telemetry"]["sampled_at"], "t9");
     // /nodes/metrics names the machine as the app does.
@@ -1254,7 +1279,7 @@ fn the_api_steers_the_machines_through_the_socket() {
         m.contains(&format!(
             "daedalus_agent_link_up{{host=\"{}\",machine=\"Gaming PC\",node=\"{n}\",os=\"{}\"}} 1\n",
             crate::telemetry::escape_label(&crate::facts::hostname()),
-            registry.get(&n).unwrap().hello.unwrap().os
+            registry.get(&n, false).unwrap().hello.unwrap().os
         )),
         "{m}"
     );

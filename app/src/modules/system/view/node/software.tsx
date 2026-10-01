@@ -8,7 +8,7 @@ import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
 import type { App } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../../../lib/format'
-import { DetailNote, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Software / Apps ──────────────────────────────────────────────────── */
 
@@ -39,7 +39,6 @@ export function NodeSoftwareView({ d }: { d: NodeSystemData }) {
       <BoardGrid>
         <Board title={mac ? 'Apps' : 'Software'} icon="⧉" span={12}>
           <p className={EMPTY}>The inventory is on the full document.</p>
-          <DetailNote d={d} />
         </Board>
       </BoardGrid>
     )
@@ -165,7 +164,6 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: App[] }) {
           }}
           fold={16}
         />
-        <DetailNote d={d} />
         <p className={FOOT}>
           Everything in Programs and Features that is not a game, a launcher, a driver or a runtime,
           from the registry&rsquo;s uninstall keys — the machine&rsquo;s and the signed-in
@@ -266,7 +264,6 @@ function MacApps({ d, apps }: { d: NodeSystemData; apps: App[] }) {
           </p>
         </Board>
       )}
-      <DetailNote d={d} />
       <p className={FOOT}>
         {num(t?.app_count ?? apps.length)} apps in all, from the Applications folder, one level of
         subfolders, and the signed-in user&rsquo;s own; read every ten minutes.

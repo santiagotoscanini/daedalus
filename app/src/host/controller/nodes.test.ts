@@ -183,6 +183,10 @@ describe('what the controller observed', () => {
     lan_ip: '192.168.0.121',
     mac: 'aa:bb:cc:dd:ee:ff',
     claude: null,
+    form: null,
+    model: null,
+    status: null,
+    status_at: null,
   }
 
   it('names what moved', () => {
@@ -221,6 +225,8 @@ describe('enrolment', () => {
     lan_ip: '192.168.0.120',
     mac: 'aa:bb:cc:dd:ee:ff',
     claude: null,
+    form: null,
+    model: null,
     public_key: KEY_A.toUpperCase(),
     hello: {
       proto: 1,

@@ -42,6 +42,8 @@ describe('the enroll query', () => {
     })
     // A name with spaces and an apostrophe, as macOS names a machine.
     expect(parseEnrollQuery(query({ name: 'Santiago’s MacBook Pro' })).ok).toBe(true)
+    // As long as the machine's own hostname may be: the controller takes 253 bytes.
+    expect(parseEnrollQuery(query({ name: 'm'.repeat(253) })).ok).toBe(true)
   })
 
   const refused: [string, Record<string, string | undefined>][] = [
@@ -51,7 +53,7 @@ describe('the enroll query', () => {
     ['a missing key', { key: undefined }],
     ['an empty name', { name: '  ' }],
     ['a name with a control character', { name: 'mac\nbook' }],
-    ['a name too long', { name: 'm'.repeat(65) }],
+    ['a name longer than a hello may carry', { name: 'm'.repeat(254) }],
     ['an os with a space', { os: 'mac os' }],
     ['an arch too long', { arch: 'a'.repeat(33) }],
     ['a version with a slash', { version: '0.23/0' }],

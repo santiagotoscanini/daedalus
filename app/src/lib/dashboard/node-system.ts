@@ -23,14 +23,8 @@ import { type MacReleases, macosReleases } from './macos-releases'
 export type NodeSystemData = {
   node: NodeRow
   status: StatusDocument | null
-  /** Null before the machine's first sample reached the controller. */
+  /** The full document; null before the machine's first sample reached the controller. */
   telemetry: Telemetry | null
-  /**
-   * Whether `telemetry` is the full document. False when only the summary
-   * `nodes.get` carries has arrived, and `detailError` says why.
-   */
-  full: boolean
-  detailError: string | null
   /**
    * What the machine's agent read from its providers (agent/src/providers.rs),
    * as it last reported them; null until it has.
@@ -55,23 +49,21 @@ export async function loadNodeSystem(
   id: string,
   opts: { board?: boolean; browsers?: boolean; macos?: boolean } = {},
 ): Promise<NodeSystemData | null> {
-  const node = await getNode(ctx, id)
-  if (node === null) return null
-  const client = ctx.controller
+  // One read: the machine, its status, its full telemetry and its providers.
   // The spark does not need the machine: it is what the box has scraped,
   // and a machine that is asleep still has a history.
   const [read, cpuSpark] = await Promise.all([
-    readNode(ctx, id),
+    readNode(ctx, id, true),
     ctx.prom
-      .series(`daedalus_agent_cpu_usage_percent{node=${ctx.prom.quote(node.id)}}`, 6 * 60, 120)
+      .series(`daedalus_agent_cpu_usage_percent{node=${ctx.prom.quote(id)}}`, 6 * 60, 120)
       .catch(() => []),
   ])
+  const node = await getNode(id, read)
+  if (node === null) return null
   const none = {
     node,
     status: null,
     telemetry: null,
-    full: false,
-    detailError: null,
     providers: null,
     releases: null,
     browserLatest: null,
@@ -86,28 +78,10 @@ export async function loadNodeSystem(
       error: d.connected ? 'connected, but no status has arrived yet' : 'not connected',
     }
   }
-  const status = d.status
-
-  let t = d.telemetry
-  let full = false
-  let detailError: string | null = null
-  const providersRead = client
-    .call('nodes.providers', { id })
-    .then((a) => a.providers)
-    .catch(() => null)
-  try {
-    const answer = await client.call('nodes.telemetry', { id })
-    if (answer.telemetry !== null) {
-      t = answer.telemetry
-      full = true
-    } else {
-      detailError = 'the full document has not arrived yet'
-    }
-  } catch (e) {
-    detailError = e instanceof Error ? e.message : String(e)
+  const { status, telemetry: t, providers } = d
+  if (t === null) {
+    return { ...none, status, providers, error: null }
   }
-  const providers = await providersRead
-  if (t === null) return { ...none, status, detailError, providers, error: null }
 
   const releases =
     opts.board === true
@@ -136,8 +110,6 @@ export async function loadNodeSystem(
     ...none,
     status,
     telemetry: t,
-    full,
-    detailError,
     providers,
     releases,
     browserLatest: browsers,

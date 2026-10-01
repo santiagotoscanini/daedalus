@@ -188,6 +188,10 @@ const nodeSummaryShape = {
   lan_ip: nstr,
   mac: nstr,
   claude: nullable(summary),
+  form: nstr,
+  model: nstr,
+  status: nullable(statusDocument),
+  status_at: nstr,
 }
 
 const nodeSummary = reads<NodeSummary>()(obj(nodeSummaryShape))
@@ -317,16 +321,11 @@ export const ANSWERS: { [M in keyof Methods]: Decoder<Methods[M][1]> } = {
       ...nodeSummaryShape,
       public_key: str,
       hello: nullable(hello),
-      status: nullable(statusDocument),
-      status_at: nstr,
       telemetry: nullable(telemetry),
       telemetry_at: nstr,
       providers: nullable(arrayOf(providerReport)),
       providers_at: nstr,
     }),
-  ),
-  'nodes.telemetry': reads<Methods['nodes.telemetry'][1]>()(
-    obj({ id: str, telemetry: nullable(telemetry), received_at: nstr }),
   ),
   'nodes.providers': reads<Methods['nodes.providers'][1]>()(
     obj({

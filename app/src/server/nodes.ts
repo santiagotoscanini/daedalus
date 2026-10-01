@@ -24,7 +24,7 @@ export const approveNodeFn = adminFn.validator(nodeId).handler(async ({ data, co
   return {
     ok: await enrollNode(
       ctx,
-      await ctx.controller.call('nodes.get', { id: data.id }),
+      await ctx.controller.call('nodes.get', { id: data.id, full: false }),
       context.actor,
     ),
   }
@@ -178,13 +178,13 @@ export const fetchProviderModelsFn = readFn
     const { fleetProviders } = await import('../host/providers/fleet')
     const { nodeReading } = await import('../host/providers/read')
     const { resolveModel } = await import('../lib/providers/policy')
-    const { getNode } = await import('../lib/repo/nodes')
+    const { nodeById } = await import('../lib/repo/nodes')
     const ctx = await context.ctx()
-    const node = await getNode(ctx, data.id)
+    const node = await nodeById(data.id)
     const provider = (await fleetProviders(ctx)).find(
       (p) => p.machine === data.id && p.kind === data.kind,
     )
-    if (provider === undefined || node === null) {
+    if (provider === undefined || node === undefined) {
       return { reachable: false, error: 'no provider on this machine', version: null, models: [] }
     }
     const reading = nodeReading(
@@ -194,7 +194,7 @@ export const fetchProviderModelsFn = readFn
         .call('nodes.providers', { id: data.id })
         .catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))),
     )
-    const policies = node.policy.providers?.[data.kind]?.models
+    const policies = node.policy?.providers?.[data.kind]?.models
     return {
       reachable: reading.reachable,
       error: reading.error,

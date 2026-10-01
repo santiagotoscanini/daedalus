@@ -1,7 +1,7 @@
 import type { Ctx } from '../../core/ctx'
 import type { ControllerClient } from '../../host/controller/client'
 import type { NodeSummary, RotationInfo, StatusDocument } from '../../host/controller/generated'
-import { type DesiredSync, lastDesiredSync, readNode } from '../../host/controller/nodes'
+import { type DesiredSync, lastDesiredSync } from '../../host/controller/nodes'
 import { lanDomain } from '../../host/providers/fleet'
 import { readSessionHost, type SessionHostLine } from '../../host/session-host'
 import { listNodes, type NodeRow } from '../repo/nodes'
@@ -122,23 +122,18 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
     readSessionHost(ctx),
     listed,
   ])
-  const machines = await Promise.all(
-    joinMachines(rows, seen.list).map(async (m) => {
-      // Only a machine the box acts on is read further: a waiting key has
-      // no status to show until it is approved.
-      if (m.node === null || m.node.state !== 'approved' || !m.node.connected) return m
-      const d = (await readNode(ctx, m.node.id)).detail
-      const t = d?.telemetry ?? null
-      return {
-        ...m,
-        status: d?.status ?? null,
-        shape:
-          t === null
-            ? null
-            : { form: t.machine.form, model: t.machine.board_product ?? t.machine.model },
-      }
-    }),
-  )
+  // The list carries what a card shows; only a machine the box acts on
+  // shows it — a waiting key has no status until it is approved.
+  const byId = new Map(seen.list.map((s) => [s.id, s]))
+  const machines = joinMachines(rows, seen.list).map((m) => {
+    const s = m.node === null ? undefined : byId.get(m.node.id)
+    if (m.node?.state !== 'approved' || !m.node.connected || s === undefined) return m
+    return {
+      ...m,
+      status: s.status,
+      shape: s.form === null && s.model === null ? null : { form: s.form, model: s.model },
+    }
+  })
   return {
     lanDomain: domain.domain,
     controller: view,

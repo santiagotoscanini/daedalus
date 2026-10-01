@@ -62,9 +62,8 @@
 //! | `claude.session`   | `SessionQueued`: one verb `{action, id}` queued for the session; its roster's `actions` reports it under `request` | `claude.sessions` |
 //! | `telemetry.get`    | `TelemetryGet`: the document at the configured level   | —                       |
 //! | `actions.get`      | `ActionOutcome` or null: how one verb request `{request, node?}` stands — the roster's `actions` (a session verb) or the providers' (a residency verb) of that machine, or of the controller's own session | `nodes`, or `claude.sessions` without `node` |
-//! | `nodes.list`       | `NodesList`: every machine known, its standing and connection | `nodes`          |
-//! | `nodes.get`        | `NodeDetail`: one machine's hello, status and open telemetry `{id}` | `nodes`     |
-//! | `nodes.telemetry`  | `NodeTelemetry`: its full telemetry `{id}`             | `nodes`                 |
+//! | `nodes.list`       | `NodesList`: every machine known, its standing, connection, shape and status document | `nodes` |
+//! | `nodes.get`        | `NodeDetail`: one machine's key and hello; with `full`, its telemetry and providers document too `{id, full?}` | `nodes` |
 //! | `nodes.providers`  | `NodeProviders`: its providers document `{id}`        | `nodes`                 |
 //! | `nodes.claude`     | `NodeClaude`: its full Claude report `{id}`            | `nodes`                 |
 //! | `nodes.claude_roster` | `NodeClaudeRoster`: its roster of Claude sessions `{id}` | `nodes`             |
@@ -492,8 +491,7 @@ impl Api {
             R::NodesList => to_value(&wire::NodesList {
                 nodes: self.nodes()?.list(),
             }),
-            R::NodesGet(p) => to_value(&self.nodes()?.get(checked_id(&p.id)?)?),
-            R::NodesTelemetry(p) => to_value(&self.nodes()?.telemetry(checked_id(&p.id)?)?),
+            R::NodesGet(p) => to_value(&self.nodes()?.get(checked_id(&p.id)?, p.full)?),
             R::NodesProviders(p) => to_value(&self.nodes()?.providers(checked_id(&p.id)?)?),
             R::NodesClaude(p) => to_value(&self.nodes()?.claude(checked_id(&p.id)?)?),
             R::NodesClaudeRoster(p) => to_value(&self.nodes()?.claude_roster(checked_id(&p.id)?)?),

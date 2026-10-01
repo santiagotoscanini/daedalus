@@ -6,7 +6,7 @@ import type { Browser } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { DASH, num } from '../../../../lib/format'
 import type { Tone } from '../../../../lib/tone'
-import { DetailNote, EMPTY, FOOT, MONO, NOTE } from './shared'
+import { EMPTY, FOOT, MONO, NOTE } from './shared'
 
 /* ── Chromium ─────────────────────────────────────────────────────────── */
 
@@ -81,7 +81,6 @@ export function NodeBrowsersView({ d }: { d: NodeSystemData }) {
               The agent found no Chromium-based browser: none of Chrome, Edge, Brave, Arc, Vivaldi,
               Opera or a bare Chromium is installed where the OS registers applications.
             </p>
-            <DetailNote d={d} />
           </Board>
         ) : (
           t.browsers.map((b) => (

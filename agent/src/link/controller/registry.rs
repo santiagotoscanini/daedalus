@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::api::wire::{
     ActionOutcome, ApiEvent, Capability, ClaudeSessionSent, CommandOk, DesiredState, NodeClaude,
     NodeClaudeRoster, NodeDetail, NodeLeft, NodePolicyRequest, NodeProviders, NodeSummary,
-    NodeTelemetry, ProviderModelSent, SetDesiredOk,
+    ProviderModelSent, SetDesiredOk,
 };
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of};
@@ -271,6 +271,9 @@ impl Reg {
             .or_else(|| self.desired.get(id).map(|d| d.public_key))
             .unwrap_or([0; 32]);
         let h = e.and_then(|e| e.hello.as_ref());
+        let machine = e
+            .and_then(|e| e.telemetry.as_ref())
+            .map(|(t, _)| &t.machine);
         NodeSummary {
             id: id.to_string(),
             fingerprint: fingerprint(&key),
@@ -288,6 +291,10 @@ impl Reg {
                 .and_then(|e| e.claude.as_ref())
                 .and_then(|(r, _)| r.as_ref())
                 .map(Report::summary),
+            form: machine.and_then(|m| m.form.clone()),
+            model: machine.and_then(|m| m.board_product.clone().or_else(|| m.model.clone())),
+            status: e.and_then(|e| e.status.as_ref()).map(|(s, _)| s.clone()),
+            status_at: e.and_then(|e| e.status.as_ref()).map(|(_, at)| at.clone()),
         }
     }
 
@@ -1012,7 +1019,8 @@ impl Registry {
         }
     }
 
-    pub fn get(&self, id: &str) -> Result<NodeDetail, ApiError> {
+    /// One machine; with `full`, its telemetry and providers document too.
+    pub fn get(&self, id: &str, full: bool) -> Result<NodeDetail, ApiError> {
         let reg = self.lock();
         Self::known(&reg, id)?;
         let node = reg.summary(id);
@@ -1025,17 +1033,21 @@ impl Registry {
             node,
             public_key: hex::encode(key),
             hello: e.and_then(|e| e.hello.clone()),
-            status: e.and_then(|e| e.status.as_ref()).map(|(v, _)| v.clone()),
-            status_at: e.and_then(|e| e.status.as_ref()).map(|(_, at)| at.clone()),
             telemetry: e
                 .and_then(|e| e.telemetry.as_ref())
-                .map(|(t, _)| t.public()),
+                .filter(|_| full)
+                .map(|(t, _)| t.clone()),
             telemetry_at: e
                 .and_then(|e| e.telemetry.as_ref())
+                .filter(|_| full)
                 .map(|(_, at)| at.clone()),
-            providers: e.and_then(|e| e.providers.as_ref()).map(|(p, _)| p.clone()),
+            providers: e
+                .and_then(|e| e.providers.as_ref())
+                .filter(|_| full)
+                .map(|(p, _)| p.clone()),
             providers_at: e
                 .and_then(|e| e.providers.as_ref())
+                .filter(|_| full)
                 .map(|(_, at)| at.clone()),
         })
     }
@@ -1051,17 +1063,6 @@ impl Registry {
             connected: e.is_some_and(|e| e.conn.is_some()),
             received_at: p.as_ref().map(|(_, at)| at.clone()),
             providers: p.map(|(p, _)| p),
-        })
-    }
-
-    pub fn telemetry(&self, id: &str) -> Result<NodeTelemetry, ApiError> {
-        let reg = self.lock();
-        Self::known(&reg, id)?;
-        let t = reg.nodes.get(id).and_then(|e| e.telemetry.clone());
-        Ok(NodeTelemetry {
-            id: id.to_string(),
-            received_at: t.as_ref().map(|(_, at)| at.clone()),
-            telemetry: t.map(|(t, _)| t),
         })
     }
 

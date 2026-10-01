@@ -1,7 +1,7 @@
 import { and, asc, eq, ne, or, type SQL, sql } from 'drizzle-orm'
 import type { Ctx } from '../../core/ctx'
 import type { NodeSummary, Summary } from '../../host/controller/generated'
-import type { DecidedRow } from '../../host/controller/nodes'
+import type { DecidedRow, NodeRead } from '../../host/controller/nodes'
 import { db } from '../../host/db'
 import { householdMacs } from '../../host/dhcp-hosts'
 import { fingerprintOf } from '../../host/enroll'
@@ -143,9 +143,17 @@ export async function listNodes(
   return all.map((n) => row(n, household, byId))
 }
 
-export async function getNode(ctx: Pick<Ctx, 'controller'>, id: string): Promise<NodeRow | null> {
-  const [n, household, seen] = await Promise.all([nodeById(id), householdMacs(), seenById(ctx)])
-  return n === undefined ? null : row(n, household, seen)
+/**
+ * One decided machine, with what the controller said of it (host/controller/
+ * nodes.ts `readNode`): one it has not heard of is not connected, one it
+ * could not be asked about is unknown.
+ */
+export async function getNode(id: string, read: NodeRead): Promise<NodeRow | null> {
+  const [n, household] = await Promise.all([nodeById(id), householdMacs()])
+  if (n === undefined) return null
+  const seen =
+    read.detail !== null ? new Map([[id, read.detail]]) : read.answered ? new Map() : null
+  return row(n, household, seen)
 }
 
 export type NodeRecord = typeof nodes.$inferSelect

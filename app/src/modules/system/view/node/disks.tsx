@@ -7,7 +7,6 @@ import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../../../lib/format'
 import type { Tone } from '../../../../lib/tone'
 import {
-  DetailNote,
   EMPTY,
   FOOT,
   hours,
@@ -177,7 +176,6 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
           ) : (
             <VolumeRows volumes={loose} />
           )}
-          <DetailNote d={d} />
           <p className={FOOT}>
             {t.drives.length === 0
               ? 'What the OS mounts, without the drives behind them: the agent reads the physical drives every ten minutes and has reported none.'

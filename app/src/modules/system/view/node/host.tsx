@@ -11,7 +11,7 @@ import {
   RunningBoard,
   ServicesBoard,
 } from './host-boards'
-import { DetailNote, EMPTY, FOOT, MONO, NOTE, NotReadable } from './shared'
+import { EMPTY, FOOT, MONO, NOTE, NotReadable } from './shared'
 
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
@@ -131,11 +131,11 @@ function LoadBoard({ f }: { f: HostFacts }) {
 }
 
 function BusiestBoard({ f }: { f: HostFacts }) {
-  const { d, t, busiest } = f
+  const { t, busiest } = f
   return (
     <Board title="Busiest now" icon="⌁" span={4}>
       {t.processes.length === 0 ? (
-        <p className={EMPTY}>{d.full ? 'nothing busy' : 'processes are on the full document'}</p>
+        <p className={EMPTY}>nothing busy</p>
       ) : (
         <BarList
           items={busiest.map((p) => ({
@@ -147,7 +147,6 @@ function BusiestBoard({ f }: { f: HostFacts }) {
           empty="everything idle"
         />
       )}
-      <DetailNote d={d} />
       <p className={FOOT}>
         Percent of ONE core each, over the last sample, so a process can read above a hundred on a
         machine with many. The memory side of this list is on <b>Memory</b>.

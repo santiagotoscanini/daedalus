@@ -3,7 +3,6 @@ import { HeadStrip, OS_MARK } from '../../../../components/machine-head'
 import { EMPTY, FOOT, LIST, MONO, ROW, ROW_MAIN } from '../../../../components/tokens'
 import { Board } from '../../../../components/viz'
 import type { Telemetry } from '../../../../host/controller/generated'
-import { cn } from '../../../../lib/cn'
 import type { BoxHead as BoxHeadData } from '../../../../lib/dashboard/box-head'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, since } from '../../../../lib/format'
@@ -148,15 +147,6 @@ export function NoDocument({ d }: { d: NodeSystemData }) {
       after the agent starts.
     </p>
   )
-}
-
-/**
- * The line under a board that only the full document can fill: why this
- * page is reading the summary, when it is.
- */
-export function DetailNote({ d }: { d: NodeSystemData }) {
-  if (d.full || d.detailError === null) return null
-  return <p className={cn(FOOT, 'text-warning')}>Summary only: {d.detailError}.</p>
 }
 
 /** The agent's own list of what this OS would not let it read. */

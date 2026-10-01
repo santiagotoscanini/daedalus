@@ -112,8 +112,7 @@ api_methods! {
     /// How a verb request stands, from the document that reports it.
     "actions.get" => ActionsGet(ActionQuery): Option<ActionOutcome>,
     "nodes.list" => NodesList: NodesList,
-    "nodes.get" => NodesGet(NodeId): NodeDetail,
-    "nodes.telemetry" => NodesTelemetry(NodeId): NodeTelemetry,
+    "nodes.get" => NodesGet(NodeGet): NodeDetail,
     "nodes.providers" => NodesProviders(NodeId): NodeProviders,
     "nodes.claude" => NodesClaude(NodeId): NodeClaude,
     "nodes.claude_roster" => NodesClaudeRoster(NodeId): NodeClaudeRoster,
@@ -249,6 +248,14 @@ pub struct NodeSummary {
     pub mac: Option<String>,
     /// Claude Code there, from its last report; null without one.
     pub claude: Option<Summary>,
+    /// What shape the machine is ("laptop", "desktop", …) and its model —
+    /// the board's product where the firmware names one, else the
+    /// machine's — from its last telemetry; null without one.
+    pub form: Option<String>,
+    pub model: Option<String>,
+    /// Its status document, as it last pushed it, and when.
+    pub status: Option<StatusDocument>,
+    pub status_at: Option<String>,
 }
 
 /// `nodes.list`'s answer.
@@ -258,10 +265,10 @@ pub struct NodesList {
     pub nodes: Vec<NodeSummary>,
 }
 
-/// `nodes.get`'s answer: the summary, the whole hello, the status document
-/// (what the machine's `/status` carries, without its telemetry), the
-/// telemetry as the open page shows it (`Telemetry::public`), and the
-/// providers document (null until the machine has pushed one).
+/// `nodes.get`'s answer: the summary, the key and the whole hello; with
+/// `full`, the telemetry the machine last pushed (the full document, at its
+/// level) and its providers document — null otherwise, and null until the
+/// machine has pushed one.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]
 pub struct NodeDetail {
@@ -269,9 +276,6 @@ pub struct NodeDetail {
     pub node: NodeSummary,
     pub public_key: String,
     pub hello: Option<Hello>,
-    /// The machine's status document, as it last pushed it.
-    pub status: Option<StatusDocument>,
-    pub status_at: Option<String>,
     pub telemetry: Option<Telemetry>,
     pub telemetry_at: Option<String>,
     pub providers: Option<Vec<ProviderReport>>,
@@ -289,16 +293,6 @@ pub struct NodeProviders {
     /// that left is what it said before it went.
     pub connected: bool,
     pub providers: Option<Vec<ProviderReport>>,
-    pub received_at: Option<String>,
-}
-
-/// `nodes.telemetry`'s answer: the full document at the machine's level.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[cfg_attr(test, ts(rename = "NodeTelemetryOk"))]
-pub struct NodeTelemetry {
-    pub id: String,
-    pub telemetry: Option<Telemetry>,
     pub received_at: Option<String>,
 }
 
@@ -374,7 +368,19 @@ pub struct ProviderModelSent {
     pub request: String,
 }
 
-/// The parameters of `nodes.get`, `nodes.telemetry`, `nodes.claude` and
+/// `nodes.get`'s parameters: the machine, and whether its telemetry and
+/// providers document ride along (`full`).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "NodeGetParams"))]
+pub struct NodeGet {
+    pub id: String,
+    #[serde(default)]
+    pub full: bool,
+}
+
+/// The parameters of `nodes.providers`, `nodes.claude` and
 /// `nodes.claude_roster`.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -923,6 +929,13 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
     };
     status.facts.os = "windows".into();
     status.state.last_update_check = Some("2026-09-27T10:00:00Z".into());
+    let listed = NodeSummary {
+        form: Some("desktop".into()),
+        model: Some("B650 AORUS ELITE AX".into()),
+        status: Some(status),
+        status_at: Some("2026-09-27T10:00:15Z".into()),
+        ..summary()
+    };
     let telemetry = crate::telemetry::Telemetry {
         sampled_at: "2026-09-27T10:00:15Z".into(),
         ..Default::default()
@@ -988,29 +1001,19 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
         (
             "nodes.list",
             v(&NodesList {
-                nodes: vec![summary()],
+                nodes: vec![listed.clone()],
             }),
         ),
         (
             "nodes.get",
             v(&NodeDetail {
-                node: summary(),
+                node: listed,
                 public_key: "ab".repeat(32),
                 hello: Some(crate::link::wire::tests::hello()),
-                status: Some(status),
-                status_at: Some("2026-09-27T10:00:15Z".into()),
-                telemetry: Some(telemetry.public()),
+                telemetry: Some(telemetry.clone()),
                 telemetry_at: Some("2026-09-27T10:00:15Z".into()),
                 providers: Some(vec![provider_report()]),
                 providers_at: Some("2026-09-28T10:00:01Z".into()),
-            }),
-        ),
-        (
-            "nodes.telemetry",
-            v(&NodeTelemetry {
-                id: id.clone(),
-                telemetry: Some(telemetry),
-                received_at: Some("2026-09-27T10:00:15Z".into()),
             }),
         ),
         (
@@ -1364,6 +1367,10 @@ mod tests {
                 signed_in: true,
                 ..Default::default()
             }),
+            form: None,
+            model: None,
+            status: None,
+            status_at: None,
         }
     }
 
@@ -1372,7 +1379,8 @@ mod tests {
         r#""since":"2026-09-27T10:00:00Z","last_seen":"2026-09-27T10:00:15Z","hostname":"PC","#,
         r#""os":"windows","arch":"x86_64","agent_version":"0.14.0","lan_ip":"192.168.0.120","#,
         r#""mac":"aa:bb:cc:dd:ee:ff","claude":{"state":"running","detail":null,"cli_version":null,"#,
-        r#""server_version":null,"sessions":2,"started_at":null,"signed_in":true}"#
+        r#""server_version":null,"sessions":2,"started_at":null,"signed_in":true},"#,
+        r#""form":null,"model":null,"status":null,"status_at":null"#
     );
 
     #[test]
@@ -1402,15 +1410,13 @@ mod tests {
             concat!(
                 r#"{"id":"0123456789abcdef","fingerprint":"0123:4567","state":"unknown","connected":false,"#,
                 r#""since":null,"last_seen":null,"hostname":null,"os":null,"arch":null,"agent_version":null,"#,
-                r#""lan_ip":null,"mac":null,"claude":null}"#
+                r#""lan_ip":null,"mac":null,"claude":null,"form":null,"model":null,"status":null,"status_at":null}"#
             )
         );
         let detail = NodeDetail {
             node: summary(),
             public_key: "ab".repeat(32),
             hello: None,
-            status: None,
-            status_at: None,
             telemetry: None,
             telemetry_at: None,
             providers: None,
@@ -1422,18 +1428,10 @@ mod tests {
                 "{{{SUMMARY},{}}}",
                 concat!(
                     r#""public_key":"abababababababababababababababababababababababababababababababab","#,
-                    r#""hello":null,"status":null,"status_at":null,"#,
+                    r#""hello":null,"#,
                     r#""telemetry":null,"telemetry_at":null,"providers":null,"providers_at":null"#
                 )
             )
-        );
-        assert_eq!(
-            wire(&NodeTelemetry {
-                id: "0123456789abcdef".into(),
-                telemetry: None,
-                received_at: None
-            }),
-            r#"{"id":"0123456789abcdef","telemetry":null,"received_at":null}"#
         );
         assert_eq!(
             wire(&NodeClaude {

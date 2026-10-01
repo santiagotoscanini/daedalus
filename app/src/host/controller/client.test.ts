@@ -336,8 +336,13 @@ describe('the controller client', () => {
             return answer(req.id, { nodes: 1, approved: [], revoked: [], pending: [], policy: [] })
           case 'nodes.command':
             return answer(req.id, { delivered: false, queued: true })
-          case 'nodes.telemetry':
-            return answer(req.id, { id: '0123456789abcdef', telemetry: null, received_at: null })
+          case 'nodes.providers':
+            return answer(req.id, {
+              id: '0123456789abcdef',
+              connected: false,
+              providers: null,
+              received_at: null,
+            })
           default:
             return fail(req.id, 'not_found', 'no machine')
         }
@@ -360,16 +365,16 @@ describe('the controller client', () => {
       delivered: false,
       queued: true,
     })
-    expect((await c.call('nodes.telemetry', { id: '0123456789abcdef' })).telemetry).toBeNull()
-    expect((await rejection(c.call('nodes.get', { id: '0123456789abcdef' }))).code).toBe(
-      'not_found',
-    )
+    expect((await c.call('nodes.providers', { id: '0123456789abcdef' })).providers).toBeNull()
+    expect(
+      (await rejection(c.call('nodes.get', { id: '0123456789abcdef', full: true }))).code,
+    ).toBe('not_found')
     expect(seen.slice(1).map((r) => [r.m, r.p])).toEqual([
       ['nodes.list', undefined],
       ['nodes.set_desired', { nodes: set }],
       ['nodes.command', { id: '0123456789abcdef', command: 'check_update' }],
-      ['nodes.telemetry', { id: '0123456789abcdef' }],
-      ['nodes.get', { id: '0123456789abcdef' }],
+      ['nodes.providers', { id: '0123456789abcdef' }],
+      ['nodes.get', { id: '0123456789abcdef', full: true }],
     ])
   })
 

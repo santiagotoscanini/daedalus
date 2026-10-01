@@ -17,6 +17,10 @@ const seen = (id: string, state: NodeState, hostname: string | null = null): Nod
   lan_ip: null,
   mac: null,
   claude: null,
+  form: null,
+  model: null,
+  status: null,
+  status_at: null,
 })
 
 const node = (id: string, state: NodeRow['state'], name: string) =>

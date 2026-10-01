@@ -17,10 +17,10 @@ import type { NodeClaudeRosterOk } from './NodeClaudeRosterOk'
 import type { NodeClaudeSessionParams } from './NodeClaudeSessionParams'
 import type { NodeCommandParams } from './NodeCommandParams'
 import type { NodeDetail } from './NodeDetail'
+import type { NodeGetParams } from './NodeGetParams'
 import type { NodeIdParams } from './NodeIdParams'
 import type { NodeProviderModelParams } from './NodeProviderModelParams'
 import type { NodeProvidersOk } from './NodeProvidersOk'
-import type { NodeTelemetryOk } from './NodeTelemetryOk'
 import type { NodesList } from './NodesList'
 import type { ProviderModelSent } from './ProviderModelSent'
 import type { Queued } from './Queued'
@@ -50,8 +50,7 @@ export type Methods = {
   'telemetry.get': [null, TelemetryGet]
   'actions.get': [ActionQueryParams, ActionOutcome | null]
   'nodes.list': [null, NodesList]
-  'nodes.get': [NodeIdParams, NodeDetail]
-  'nodes.telemetry': [NodeIdParams, NodeTelemetryOk]
+  'nodes.get': [NodeGetParams, NodeDetail]
   'nodes.providers': [NodeIdParams, NodeProvidersOk]
   'nodes.claude': [NodeIdParams, NodeClaudeOk]
   'nodes.claude_roster': [NodeIdParams, NodeClaudeRosterOk]
