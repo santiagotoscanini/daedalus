@@ -595,7 +595,7 @@ let
       # (webApps below). `auth.isolated` swaps the shared bridge for a private
       # one whose membership comes from webApps.isolated; listing "traefik"
       # here as well would re-open the shared path (assertion in
-      # platform/publishing.nix).
+      # platform/isolation.nix).
       fleet.bridgeMemberships = lib.optionalAttrs running {
         "${cName}" =
           lib.optional (exposed && !egressEnabled && !isolatedAuth) "traefik"

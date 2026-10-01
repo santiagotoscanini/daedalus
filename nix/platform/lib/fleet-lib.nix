@@ -2,7 +2,7 @@
 # as a by-path library (`*-lib.nix` files are never listed in a module
 # import list; consumers import this by path). Owner of the
 # bridge-membership spec syntax, consumed by podman.nix (flag
-# injection) and publishing.nix (isolation assertions), and of the
+# injection) and isolation.nix (isolation assertions), and of the
 # image-pin parse (podman.nix, export.nix).
 
 { lib }:

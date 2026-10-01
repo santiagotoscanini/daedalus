@@ -21,7 +21,7 @@
 # container restarts on rebuild (same pattern as monitoring's
 # prometheus.yml). No hand-maintained config file.
 #
-# `fleet.logStacks` (declared by the platform, publishing.nix) maps
+# `fleet.logStacks` (declared by the platform, publishing-options.nix) maps
 # stack name -> list of container names; each stack contributes its own
 # entry and the entries merge across modules like every fleet option.
 # Each entry becomes one relabel rule assigning the `stack` label.
@@ -44,7 +44,7 @@
 #     `--group-add=keep-groups` to inherit the operator's supplementary
 #     groups (notably systemd-journal) inside its userns.
 #
-# What other stacks contribute, all declared by the platform (publishing.nix):
+# What other stacks contribute, all declared by the platform (publishing-options.nix):
 #   fleet.logStacks.<stack>   container names → the `stack` label
 #   fleet.logDrops.<name>     lines to keep out of Loki, with the reason
 #   fleet.logFiles.<name>     files outside the journal, with their parse stages

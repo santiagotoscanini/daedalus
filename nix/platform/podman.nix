@@ -18,7 +18,7 @@
 #     state-paths.service, and the 1:1 registry assertion.
 #
 # The publishing layer (webApps, logStacks and the other registries)
-# lives in platform/publishing.nix; monitoredJobs is declared in
+# is declared in platform/publishing-options.nix; monitoredJobs is declared in
 # platform/mail, appDatabases in modules/app-db.
 
 {
@@ -32,7 +32,7 @@ let
   cfg = config.fleet;
 
   # Bridge-membership spec parsing lives in fleet-lib (shared with
-  # publishing.nix — one parser, no hand-synced mirror).
+  # isolation.nix — one parser, no hand-synced mirror).
   inherit (import ./lib/fleet-lib.nix { inherit lib; })
     bridgeOf
     networkFlag

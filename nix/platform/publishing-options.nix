@@ -1,0 +1,909 @@
+# platform/publishing-options.nix — the declarations of the fleet's "publish
+# this service" layer: webApps (the primary one-block interface), the
+# lower-level traefikRoutes / traefikRawRules / cloudflareRoutes / dnsHosts /
+# dnsSrv escape hatches, directIngress and vpnEgress, the observability
+# registries (prometheusScrapes, grafanaDashboardsByFolder, logStacks,
+# logDrops, logFiles) and the network constants they are built from (lanIp,
+# baseDomain, wanHost, cloudflare.*; defined by platform/site.nix).
+# platform/publishing.nix materializes them; platform/isolation.nix is the
+# routed half of `isolated`.
+
+{
+  config,
+  lib,
+  ...
+}:
+
+let
+  cfg = config.fleet;
+in
+{
+  options.fleet = {
+    lanIp = lib.mkOption {
+      type = lib.types.str;
+      description = ''
+        The box's static LAN IPv4 — single source of truth, defined from
+        site.json's `network.lanIp` by platform/site.nix. Consumed by the
+        dnsHosts generator and any stack that must dial the host by IP.
+      '';
+      example = "10.0.0.2";
+    };
+
+    baseDomain = lib.mkOption {
+      type = lib.types.str;
+      description = ''
+        Apex domain every published hostname sits one level under
+        (`<app>.<baseDomain>`) — the shape the traefik wildcard cert
+        and the CF-tunnel CNAMEs assume.
+      '';
+      example = "example.com";
+    };
+
+    wanHost = lib.mkOption {
+      type = lib.types.str;
+      description = ''
+        The name that resolves to this house's WAN address, kept current
+        by platform/ddclient. Anything a client outside the LAN dials
+        DIRECTLY rather than through the Cloudflare tunnel uses this:
+        WireGuard, and the game servers.
+
+        pi-hole also answers it with `lanIp`, so the same name works from
+        the sofa without hairpinning back out through the router and in
+        again. That short-circuit is declared in platform/ddclient, beside
+        the record it mirrors, so the two cannot disagree.
+      '';
+      example = "home.example.com";
+    };
+
+    traefikRoutes = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (_: {
+          options = {
+            host = lib.mkOption {
+              type = lib.types.str;
+              description = "FQDN matched by the `Host(...)` rule.";
+            };
+            extraHosts = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                More FQDNs the same router answers, OR-ed into its rule
+                beside `host`. webApps materializes this from `aliases`.
+              '';
+            };
+            serviceUrl = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Full upstream URL traefik dials. No implicit
+                `host.containers.internal` fallback; every route
+                declares its upstream explicitly (exactly one of
+                `serviceUrl` / `traefikService`, enforced by an assertion).
+
+                Typical shape: `http://<container-name>:<in-container-port>`
+                for stacks attached to `traefik-net`. Use `https://`
+                for the rare image that listens TLS internally; use
+                `http://host.containers.internal:<host-port>` for the
+                must-keep stacks that cannot ride `traefik-net`
+                (gluetun-shared netns containers; pi-hole, which is a
+                native NixOS service, not a container).
+
+                webApps materializes this automatically from either
+                `serviceName` (preferred) or `serviceUrl`.
+              '';
+              example = "http://grocy:80";
+            };
+            service = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Named traefik service instead of a URL upstream — for
+                built-ins like `api@internal` (the dashboard). No
+                loadBalancer block is emitted.
+              '';
+              example = "api@internal";
+            };
+            middlewares = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Middleware refs attached to the generated router,
+                e.g. [ "oidc-auth@file" ]. webApps materializes this
+                from its `auth` option; set directly only on
+                hand-declared routes.
+              '';
+            };
+            entrypoint = lib.mkOption {
+              type = lib.types.enum [
+                "websecure"
+                "cfweb"
+              ];
+              default = "websecure";
+              description = ''
+                Traefik entrypoint. `websecure` (default) is HTTPS with
+                TLS via tls-opts@file; `cfweb` is plain HTTP on :8888
+                for routes reached through the Cloudflare tunnel.
+              '';
+            };
+          };
+        })
+      );
+      default = { };
+      description = ''
+        `Host(...) -> serviceUrl` routes, rendered by
+        modules/traefik/traefik.nix into one YAML per route under a
+        /nix/store-backed rules dir bind-mounted into the traefik
+        container. Every published hostname sits one level under
+        baseDomain, so the entrypoint-level wildcard cert covers all
+        routers — no per-route cert options exist.
+      '';
+    };
+
+    traefikRawRules = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = ''
+        Raw YAML rule contents keyed by filename. For Traefik dynamic
+        configs that don't fit the `traefikRoutes` shape: named TLS
+        options, entrypoint-default middlewares, the oidc middleware file,
+        app-db's TCP/SNI postgres router, and per-route middlewares or
+        routers a stack needs beside its webApp.
+      '';
+    };
+
+    cloudflare = {
+      accountId = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          Cloudflare account id owning the tunnel. Not a secret — it is
+          in every dash.cloudflare.com URL — but it is an identifier
+          used in more than one place, so it gets a single home. Read
+          from site/site.json by platform/site.nix like `zoneId`; the
+          tunnel (modules/cloudflared) consumes it and, while it runs,
+          hands the tunnel's ids to daedalus's Network page through
+          `fleet.dashboard`.
+        '';
+      };
+      tunnelId = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          The locally-managed tunnel's id. Same reasoning and same
+          source as `accountId` — one binding, several consumers.
+        '';
+      };
+      zoneId = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          The `baseDomain` zone, as Cloudflare ids it. Read from
+          site/site.json together with the domain (platform/site.nix). The one zone
+          CF_DNS_API_TOKEN is scoped to, which is what makes it a
+          single value rather than a set: every published hostname is
+          one label under `baseDomain` (see the assertion on
+          `fleet.apps.*.hostname`), so a second zone would need its own
+          token, cert and tunnel config before it needed an option.
+        '';
+      };
+      tokenEnvFile = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          A dotenv file carrying `CF_DNS_API_TOKEN=<token>` (the variable
+          name lego reads), the one path every consumer takes: traefik's
+          env file, route-sync's EnvironmentFile, the ddclient and daedalus
+          renders. Set by platform/site.nix, which renders it from the
+          box's one Cloudflare API token and its only home,
+          `site/vault/cloudflare-api-token.sops` — the file Settings ›
+          Integrations replaces. Platform rather than the tunnel stack
+          because three of its four readers need it with the tunnel off.
+        '';
+      };
+    };
+
+    cloudflareRoutes = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (_: {
+          options = {
+            hostname = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                Public hostname exposed via the Cloudflare tunnel
+                (e.g. `nextcloud.example.com`). The
+                cloudflared-route-sync oneshot creates/updates the
+                proxied CNAME → `<tunnel-id>.cfargotunnel.com`.
+              '';
+            };
+            service = lib.mkOption {
+              type = lib.types.str;
+              default = "http://traefik:8888";
+              description = ''
+                Origin URL cloudflared dials when this hostname is hit.
+                Default `http://traefik:8888` reaches the cfweb (plain
+                HTTP) entrypoint via the bridge.
+              '';
+            };
+          };
+        })
+      );
+      default = { };
+      description = ''
+        Public hostnames published through the Cloudflare tunnel.
+        modules/cloudflared renders these into the tunnel's config.yml
+        ingress block (with the mandatory `http_status:404` catch-all
+        appended).
+
+        Pairs with `fleet.traefikRoutes.<name>.entrypoint = "cfweb"`
+        on the same hostname so traefik accepts the inbound request.
+      '';
+      example = lib.literalExpression ''
+        {
+          nextcloud = { hostname = "nextcloud.example.com"; };
+        }
+      '';
+    };
+
+    dnsHosts = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Lines appended to `services.pihole-ftl.settings.dns.hosts`.
+        Format: `"<IP> <hostname>"`. Per-stack modules add their
+        LAN-resolvable hostnames here so the resolver (modules/pihole)
+        doesn't need a hand-maintained list.
+      '';
+      example = [ "10.0.0.2 foo.example.com" ];
+    };
+
+    dnsSrv = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            service = lib.mkOption {
+              type = lib.types.str;
+              example = "_daedalus-controller._tcp";
+              description = "The service label pair, without the domain.";
+            };
+            target = lib.mkOption {
+              type = lib.types.str;
+              example = "control.example.org";
+              description = "The host the record points at.";
+            };
+            port = lib.mkOption {
+              type = lib.types.port;
+              example = 443;
+            };
+          };
+        }
+      );
+      default = [ ];
+      description = ''
+        SRV records the LAN resolver answers under the LAN's own domain
+        (`fleet.lanDomain`, the search domain DHCP hands out). How a thing on the network finds a service the box runs
+        without being told: it asks for `<service>.<search domain>` and gets
+        a host and a port. The control plane announces itself this way for
+        the agent on other machines.
+      '';
+    };
+
+    prometheusScrapes = lib.mkOption {
+      type = lib.types.listOf (lib.types.attrsOf lib.types.unspecified);
+      default = [ ];
+      description = ''
+        Scrape jobs merged into the generated prometheus.yml's
+        scrape_configs. Each entry is the raw attrset shape that
+        prometheus YAML expects:
+          { job_name = "foo";
+            static_configs = [ { targets = [ "foo:1234" ]; } ];
+            metrics_path = "/metrics";  # optional
+          }
+      '';
+    };
+
+    directIngress = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            port = lib.mkOption {
+              type = lib.types.port;
+              description = "The port the router forwards to this box.";
+            };
+            proto = lib.mkOption {
+              type = lib.types.enum [
+                "tcp"
+                "udp"
+              ];
+              default = "udp";
+            };
+            note = lib.mkOption {
+              type = lib.types.str;
+              description = "Why this one cannot ride the tunnel, in a sentence.";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Services reachable from outside at this house's WAN address,
+        rather than through the Cloudflare tunnel.
+
+        The tunnel carries HTTP and nothing else, so anything speaking
+        another protocol needs the address itself — which is what
+        `platform/ddclient` keeps current, and the whole reason that job
+        exists. In the catalog, wg-easy and factorio register one each
+        (both UDP); a host's own stacks add theirs (a game server on TCP,
+        say).
+
+        This is the ONE registry here that records a fact nix does not
+        own: the router's port-forward table lives in the router. It is
+        declared beside the service that needs it because that is the
+        only place a reader would think to look, and because a service
+        removed from the box should take its forwarding note with it.
+        Opening the firewall is still the owning stack's job — this does
+        not do it, it says why it was done.
+      '';
+      example = lib.literalExpression ''
+        { wireguard = { port = 51820; note = "a WireGuard socket ignores unauthenticated packets"; }; }
+      '';
+    };
+
+    vpnEgress = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              container = lib.mkOption {
+                type = lib.types.str;
+                default = name;
+                description = "The gluetun container that OWNS the netns.";
+              };
+              exporter = lib.mkOption {
+                type = lib.types.str;
+                description = "Its gluetun-exporter sibling, in the same netns.";
+              };
+              job = lib.mkOption {
+                type = lib.types.str;
+                description = "Prometheus job_name, which is how every series here is keyed.";
+              };
+              controlPort = lib.mkOption {
+                type = lib.types.port;
+                description = ''
+                  HOST port the in-netns control API (:8000) is published on.
+                  Only the netns owner can publish, so this is on the gluetun
+                  container; daedalus dials host.containers.internal:<this>.
+                '';
+              };
+              subject = lib.mkOption {
+                type = lib.types.str;
+                description = "What this tunnel is for, in words. Also the reminder-mail subject.";
+              };
+              provider = lib.mkOption {
+                type = lib.types.str;
+                default = "ProtonVPN";
+                description = ''
+                  Whose network this comes out on. Defaults to ProtonVPN
+                  because the whole library is shaped around it — gluetun
+                  runs in `custom` mode against a Proton wg0.conf, and
+                  `keyExpiry` exists because Proton's keys expire. A
+                  different provider sets this and keeps the rest.
+                '';
+              };
+              keyExpiry = lib.mkOption {
+                type = lib.types.str;
+                description = "YYYY-MM-DD the ProtonVPN WireGuard key stops working.";
+              };
+              runbook = lib.mkOption {
+                type = lib.types.str;
+                description = "File whose header holds the renewal runbook.";
+              };
+              portForwarding = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Whether this instance asks the provider for a forwarded port.";
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = ''
+        The box's VPN EGRESS tunnels — one entry per gluetun instance.
+
+        Written by `mkGluetunInstance` itself rather than by hand: every
+        field here is an argument that call already takes, so a third
+        tunnel registers by existing. Read by daedalus (exported as the
+        publishing domain's `vpnEgress`, stacks/daedalus/daedalus.nix),
+        which is why facts that live only
+        in nix — the key expiry date, the renewal runbook, what the
+        tunnel is FOR — belong in it. The rest of what that page shows is
+        fetched live from the control API and prometheus.
+
+        Deliberately not a list of tenants: which containers ride a
+        tunnel is already stated by their `--network=container:<owner>`,
+        and daedalus derives it from there rather than from a second
+        list that could disagree.
+      '';
+    };
+
+    grafanaDashboardsByFolder = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.lines);
+      default = { };
+      description = ''
+        Per-stack dashboards organized into Grafana sidebar folders.
+        Outer key is folder name (rendered via Grafana's
+        `foldersFromFilesStructure` provisioner mode); inner is
+        dashboard JSON keyed by filename (without `.json`).
+        modules/monitoring combines these with the static dashboards under
+        its assets/dashboards/ and bind-mounts the resulting derivation
+        into grafana.
+
+        Use this when a stack emits multiple related dashboards
+        (e.g. the apps platform's per-app dashboards, all under "Apps").
+      '';
+      example = lib.literalExpression ''
+        {
+          "Apps" = {
+            "app-example" = builtins.readFile ./dashboard.json;
+          };
+        }
+      '';
+    };
+
+    logStacks = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+      default = { };
+      description = ''
+        Map: stack name -> container names whose logs get
+        `stack = <name>` in Loki. Rendered into the log shipper's relabel
+        rules by the logging stack. Each stack contributes its own entry;
+        lists merge across modules like every fleet option.
+
+        Containers covered by no entry fall back to
+        `stack = <container name>` (still queryable, just ungrouped), so
+        registration is optional for single-container stacks and only
+        adds grouping for multi-container ones.
+      '';
+      example = lib.literalExpression ''
+        {
+          tv = [ "gluetun" "qbittorrent" "sonarr" "radarr" ];
+        }
+      '';
+    };
+
+    logDrops = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            selector = lib.mkOption {
+              type = lib.types.str;
+              description = "Stream selector the rule applies to, e.g. `{container=\"foo\"}`.";
+              example = ''{container="foo"}'';
+            };
+            expression = lib.mkOption {
+              type = lib.types.str;
+              description = "RE2 regex; a matching line is dropped before it reaches Loki.";
+              example = "GET /metrics HTTP";
+            };
+            reason = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The `reason` label on loki_process_dropped_lines_total, so the
+                drop stays observable. One word or snake_case.
+              '';
+              example = "foo_metrics_access";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Lines a stack asks the log shipper to keep out of Loki: a third-party
+        emitter's flood that cannot be silenced at the source. The owning
+        stack contributes the entry with the reason beside it. Journald
+        still retains everything (it rotates); this only spares Loki and
+        keeps real logs legible.
+      '';
+      example = lib.literalExpression ''
+        {
+          foo-metrics = {
+            selector = "{container=\"foo\"}";
+            expression = "GET /metrics HTTP";
+            reason = "foo_metrics_access";
+          };
+        }
+      '';
+    };
+
+    logFiles = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            path = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The file to tail: an exact path, or a glob that names one
+                family of files and none of their rotated copies (`foo-*.log`,
+                never `foo*`). A looser pattern swallows a chatty neighbour or
+                a rotated copy in the same directory whole.
+              '';
+              example = "/var/log/foo/foo.log";
+            };
+            mountDir = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The directory the shipper's container mounts read-only to
+                reach the file — the DIRECTORY, so rotation does not pin a
+                stale inode.
+              '';
+              example = "/var/log/foo";
+            };
+            labels = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              description = ''
+                Labels on every line, applied at the source (relabel rules on
+                the journal do not reach a file). Set the ones the rest of
+                the fleet queries by: `unit`, `stack`, `host`, `service_name`.
+              '';
+            };
+            stages = lib.mkOption {
+              type = lib.types.lines;
+              default = "";
+              description = ''
+                Alloy `stage.*` blocks for this file's lines, verbatim,
+                indented two spaces: the timestamp and the level are the
+                usual ones, since neither the journal's parse nor the
+                container level parse applies to a file.
+              '';
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Log files outside the journal, tailed by the log shipper. For the
+        rare service that writes its own files and sends nothing to journald
+        — the owning stack contributes the entry. The attr name is the alloy
+        component label: `[a-z_][a-z0-9_]*`.
+      '';
+    };
+
+    webApps = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              hostname = lib.mkOption {
+                type = lib.types.str;
+                default = "${name}.${cfg.baseDomain}";
+                defaultText = lib.literalExpression ''"''${name}.''${fleet.baseDomain}"'';
+                description = ''
+                  Canonical FQDN clients hit (e.g. "immich.example.com").
+                  Same hostname for LAN HTTPS (pi-hole answers
+                  `fleet.lanIp`; traefik websecure with the wildcard cert)
+                  and, if `exposeRemotely`, the CF tunnel (CNAME →
+                  cfweb traefik router → same upstream).
+
+                  Must fall under one of the wildcards traefik already
+                  has ACME-issued (`*.<baseDomain>`) for HTTPS without
+                  extra cert config.
+                '';
+              };
+              aliases = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = ''
+                  More hostnames that serve exactly this app — a rename in
+                  progress, where the old address must keep working until
+                  the new one is confirmed. Each alias joins the router's
+                  rule, pi-hole's records, the tunnel (when
+                  `exposeRemotely`), the derived Pocket ID client's
+                  callbacks and the taken-hostname list. Same one-label
+                  rule as `hostname` (asserted). gatus probes `hostname`
+                  only.
+                '';
+                example = [ "daedalus-app.example.com" ];
+              };
+              port = lib.mkOption {
+                type = lib.types.nullOr lib.types.port;
+                default = null;
+                description = ''
+                  Upstream port traefik dials — required with
+                  `serviceName` (dials `http://''${serviceName}:''${port}`
+                  over bridge DNS), meaningless with `serviceUrl` (the
+                  URL already carries the port; leave null).
+                '';
+              };
+              serviceName = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Preferred upstream shape. When set, traefik dials via
+                  container DNS on traefik-net — materializes
+                  `traefikRoutes.<name>.serviceUrl =
+                  "http://''${serviceName}:''${port}"`.
+
+                  Requires the upstream container on `traefik-net`
+                  (`fleet.bridgeMemberships.<x>` lists "traefik";
+                  multi-bridge stacks list it after their primary).
+
+                  For stacks that can't ride `traefik-net` (gluetun-shared
+                  netns, native NixOS services), leave null and set
+                  `serviceUrl` instead. Exactly one of the two must be set.
+                '';
+                example = "grocy";
+              };
+              serviceUrl = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Escape-hatch upstream URL — for cases `serviceName` can't fit:
+
+                  - gluetun-shared netns (TV stack): only gluetun publishes
+                    ports; UIs reached via `host.containers.internal:<port>`.
+                  - Native NixOS services (pi-hole): no container/bridge.
+                  - TLS-internal upstreams: `https://name:port`.
+
+                  Exactly one of `serviceName` / `serviceUrl` / `traefikService`
+                  must be set — enforced by an assertion.
+                '';
+                example = "http://host.containers.internal:8989";
+              };
+              traefikService = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Named traefik service instead of a URL upstream — for
+                  built-ins like `api@internal` (the dashboard). The full
+                  webApps surface (auth gate, healthPath probe, dnsHosts)
+                  applies; only the upstream shape differs.
+                '';
+                example = "api@internal";
+              };
+              exposeRemotely = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  When true: publish the hostname through the CF tunnel
+                  too. Emits a `cfweb` traefik router + a
+                  `cloudflareRoutes` entry → cloudflared-route-sync turns
+                  it into a proxied CNAME. LAN exposure is unconditional;
+                  no `exposeLocally` knob.
+                '';
+              };
+
+              auth = lib.mkOption {
+                type = lib.types.enum [
+                  "none"
+                  "oidc"
+                ];
+                default = "none";
+                description = ''
+                  "oidc" gates the generated router(s) — websecure AND
+                  the cfweb twin when `exposeRemotely` — behind the
+                  generated `oidc-<name>@file` forward-auth middleware.
+                  Each gated app is its OWN Pocket ID client (consent +
+                  audit log name the service), derived automatically by
+                  modules/pocket-id/clients.nix with a machine-generated
+                  secret — no operator step; `authGroups` says who may
+                  pass. "none" for apps that authenticate against Pocket
+                  ID natively or keep their own auth.
+                '';
+              };
+              authGroups = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ "admins" ];
+                description = ''
+                  Pocket ID group names allowed on the client this
+                  webApp auto-derives (modules/pocket-id/clients.nix)
+                  when `auth = "oidc"` — authorization enforced at the
+                  IdP, before the middleware forwards anything.
+                  Admin-only by default; a household app adds the
+                  household's group.
+                  `[ ]` leaves the client unrestricted, i.e. any account
+                  with a passkey gets in.
+                '';
+                example = [
+                  "admins"
+                  "family"
+                ];
+              };
+              authBypassRule = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Traefik rule-syntax expression; matching requests skip
+                  the oidc middleware entirely. For machine endpoints
+                  that carry their own auth (API keys, ping UUIDs), e.g.
+                  "PathPrefix(`/api`) || HeaderRegexp(`X-Api-Key`, `.+`)".
+                '';
+              };
+              healthPath = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Path gatus probes (`https://<hostname><healthPath>`)
+                  to assert the real upstream answers. Mandatory for
+                  `auth = "oidc"` apps (assertion): without it the
+                  forward-auth middleware 302s every probe to Pocket ID
+                  and gatus certifies the IdP, not the app. The path is
+                  appended to the oidc bypass rule (exact `Path()`
+                  match), so pick an endpoint that is harmless
+                  unauthenticated — an app health/version endpoint or
+                  /favicon.ico; a 401/403 from the app still passes the
+                  probe ([STATUS] < 500) and proves the upstream is up.
+                '';
+                example = "/api/health";
+              };
+              healthHeaders = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = ''
+                  Extra HTTP headers gatus sends with the healthPath
+                  probe (e.g. an API key), upgrading it from a liveness
+                  check (a 401 passes [STATUS] < 500) to an
+                  authenticated health check. Values may use gatus
+                  ''${ENV_VAR} placeholders resolved from gatus's env at
+                  config load — keep real secrets in gatus's env.sops,
+                  never literal in the store-rendered YAML.
+                '';
+                example = lib.literalExpression ''
+                  { "X-API-KEY" = "''${BAZARR_API_KEY}"; }
+                '';
+              };
+              extraMiddlewares = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = ''
+                  Extra traefik middleware refs appended to this app's
+                  router(s), after the generated auth ones. For response
+                  policy an app needs and the entrypoint default does
+                  not carry — currently only grafana's `frame-ancestors`
+                  CSP, which has to be per-route because grafana is the
+                  one service here that is allowed to be framed at all.
+
+                  Applies to the websecure router AND the cfweb one when
+                  `exposeRemotely` is set: a header policy that held on
+                  the LAN but not through the tunnel would be backwards.
+
+                  Declare the middleware itself in the owning stack via
+                  `fleet.traefikRawRules`, so the policy and the reason
+                  for it live in one file.
+                '';
+                example = [ "grafana-embed@file" ];
+              };
+              isolated = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Put the upstream on a private `iso-<name>-net` bridge
+                  with traefik as the only other member, instead of the
+                  shared traefik-net. For apps that blindly trust
+                  reverse-proxy identity headers (authHeaders): on the
+                  shared bridge any container could dial them directly
+                  and forge the header; isolation makes traefik the only
+                  possible caller. Requires `serviceName`.
+
+                  Two halves, both enforced. Switched: the container
+                  shares no other bridge — every peer on a shared bridge
+                  can dial it — unless the app itself verifies
+                  `proxyProof` (assertion). A backend it needs (pg) joins
+                  the private bridge instead. Routed: the FLEET_ISO chain
+                  in the rootless namespace drops every NEW connection
+                  forwarded into the private subnet from anywhere else
+                  (isoGuard above, loaded before the container starts), so
+                  no other bridge and no VPN peer reaches it by address.
+                  The private bridge's subnet must be pinned
+                  (`fleet.bridgeSubnets.iso-<name>`). Probes reach it on
+                  the public hostname, since gatus is not on the private
+                  bridge either.
+
+                  Which layer is the control: for a header-trusting app
+                  that cannot verify `proxyProof`, the bridge and the guard
+                  are, and nothing behind them checks again. For an app
+                  that verifies the proof, the proof is, and these two are
+                  defence in depth.
+                '';
+              };
+              authHeaders = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = ''
+                  Identity headers the oidc middleware forwards upstream
+                  (name -> Go-template over claims), e.g.
+                  "X-Forwarded-Email" = "{{ .claims.email }}". Each named
+                  header is also STRIPPED from incoming requests by a
+                  companion middleware so clients can't spoof it on
+                  bypassed paths — apps trust these blindly.
+                '';
+              };
+              proxyProof = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Prove to the upstream that a request came through
+                  traefik. Every request on this app's routers carries
+                  `X-Proxy-Proof: <secret>` (set by traefik, overwriting
+                  any copy a client sent), and the container gets the
+                  same secret as `PROXY_PROOF`. An app that checks it —
+                  constant-time, on every request — honours its
+                  `authHeaders` only when the proof matches, so a peer
+                  that can dial the container some other way (a bridge it
+                  shares, a path the network rules miss) cannot forge an
+                  identity. The secret is minted per app and per boot by
+                  modules/traefik (one unit, `traefik-proxy-proof`, on
+                  tmpfs), which writes both sides' env files; it is never
+                  in the store or on a disk, and the traefik API that would
+                  show it is closed to everything but
+                  `fleet.modules.traefik.apiReaders`.
+
+                  Only for an app that verifies it; a third-party image
+                  does not, and relies on `isolated` alone. Requires
+                  `serviceName`.
+
+                  Which layer is the control: for an app that verifies the
+                  proof, the proof is, and `isolated`'s bridge and routed
+                  guard are defence in depth. For a header-trusting app
+                  that cannot verify it, the bridge and the guard are the
+                  control, and nothing behind them checks again.
+                '';
+              };
+
+              metrics = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                  description = ''
+                    Emit a prometheus scrape for this app:
+                    `<serviceName>:<metrics.port><metrics.path>`, job
+                    named after the attr key. Requires `serviceName`
+                    (prometheus scrapes over traefik-net by container
+                    DNS). Scrapes that need auth or non-webApp targets
+                    use `fleet.prometheusScrapes` directly.
+                  '';
+                };
+                port = lib.mkOption {
+                  type = lib.types.nullOr lib.types.port;
+                  default = null;
+                  description = "Scrape port. Default: the webApp `port`.";
+                };
+                path = lib.mkOption {
+                  type = lib.types.str;
+                  default = "/metrics";
+                  description = "Scrape metrics_path.";
+                };
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = ''
+        High-level "publish this web app" abstraction. Materializes
+        into the right combination of `traefikRoutes`, `dnsHosts`, and
+        `cloudflareRoutes` for the common case.
+
+        For custom shapes (HSTS middleware, dual-entrypoint sharing,
+        per-route wildcard certs outside *.<baseDomain>), use
+        `traefikRoutes` / `traefikRawRules` / `cloudflareRoutes`
+        directly.
+      '';
+      example = lib.literalExpression ''
+        {
+          # Split-horizon (LAN HTTPS + CF tunnel on the same name).
+          immich = {
+            hostname = "immich.example.com";
+            serviceName = "immich";
+            port = 2283;
+            exposeRemotely = true;
+          };
+          # LAN-only (e.g. admin UIs).
+          grafana = {
+            hostname = "grafana.example.com";
+            serviceName = "grafana";
+            port = 3000;
+          };
+        }
+      '';
+    };
+  };
+}

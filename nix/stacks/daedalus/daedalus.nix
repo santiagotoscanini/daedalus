@@ -407,7 +407,7 @@ in
     fleet.bridgeMemberships."app-daedalus" = lib.mkIf appsOn [ "monitoring" ];
 
     # The identity headers count only on a request carrying traefik's proof
-    # (platform/publishing.nix proxyProof; the app's side is core/auth.ts). The
+    # (platform/publishing-options.nix proxyProof; the app's side is core/auth.ts). The
     # webApp itself comes from fleet.apps.daedalus through the apps stack.
     fleet.webApps.daedalus.proxyProof = lib.mkIf appsOn true;
 

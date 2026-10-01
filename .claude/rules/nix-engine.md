@@ -373,14 +373,14 @@ stack's rendered config carried knowledge about OTHER stacks — a drop rule
 for one container's noise, a file another service writes, a repository
 to retire — that knowledge is theirs, not the module's: declare a
 registry the owners write (`fleet.logDrops`, `fleet.logFiles` are the
-precedent, in `platform/publishing.nix` beside `logStacks`), render from
+precedent, in `platform/publishing-options.nix` beside `logStacks`), render from
 it, and move each entry to its owner. What the module needs from the
 CONTROL PLANE (its hostname, its auth headers) it reads guardedly
 (`config.fleet.webApps.daedalus or null`) and either asserts the apps
 platform is on, or does without.
 
 **Registries: interface in the platform, implementation in the module.**
-A registry with several readers is the platform's (`publishing.nix`:
+A registry with several readers is the platform's (`publishing-options.nix`:
 `webApps`, the observability registries; `identity.nix`: `fleet.sso.*`,
 `ssoClients`; `apps-options.nix`: `fleet.apps`). One with a single
 consumer is declared in the module that consumes it (`fleet.appDatabases`

@@ -7,7 +7,7 @@
 # apps that speak OIDC themselves, the probes that fetch its discovery
 # document at start. What they all share is declared HERE, in the platform,
 # and implemented by whichever stack runs the provider (the catalog's
-# pocket-id) — the same split as publishing.nix, where `webApps` is the
+# pocket-id) — the same split as publishing-options.nix, where `webApps` is the
 # interface and the proxy, the resolver and the tunnel are its readers.
 #
 #   sso.issuerUrl            where the provider is, for every client's config
