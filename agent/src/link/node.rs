@@ -549,8 +549,8 @@ pub fn connect_once(
                 Ok(Incoming::Answer { result: Err(e), .. }) => {
                     tls.close();
                     return match e.code.as_str() {
-                        "version" => Ended::Version(e.msg),
-                        "forbidden" => Ended::Revoked,
+                        code::VERSION => Ended::Version(e.msg),
+                        code::REVOKED => Ended::Revoked,
                         _ => Ended::Failed(format!("refused: {}", e.msg)),
                     };
                 }
@@ -562,10 +562,6 @@ pub fn connect_once(
             Err(e) => return Ended::Failed(format!("hello: {e}")),
         }
     };
-    if welcome.state == NodeState::Revoked {
-        tls.close();
-        return Ended::Revoked;
-    }
     tracing::info!(
         address = %target.address,
         state = welcome.state.as_str(),

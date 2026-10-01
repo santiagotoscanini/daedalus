@@ -1099,8 +1099,15 @@ fn a_decision_is_for_a_key_not_an_id() {
     }]);
     let (_t, line) = raw(&ctl, &nid).unwrap();
     assert!(
-        line.contains("forbidden") && line.contains("another key"),
+        line.contains(r#""code":"forbidden""#) && line.contains("another key"),
         "{line}"
+    );
+    // Refused, not revoked: the machine keeps its log-in and tries again.
+    let t = target(&ctl, pin_of(&ctl.id));
+    let node = spawn_node(t, nid, node_shared(), "another-key");
+    assert!(
+        matches!(node.thread.join().unwrap(), Ended::Failed(ref e) if e.contains("another key")),
+        "a refusal for another key is not a revocation"
     );
 }
 

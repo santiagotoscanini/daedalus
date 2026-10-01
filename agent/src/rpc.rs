@@ -105,6 +105,8 @@ pub mod code {
     pub const TOO_LARGE: &str = "too_large";
     /// The peer is not this agent's user; the connection is closed after it.
     pub const FORBIDDEN: &str = "forbidden";
+    /// The link: the box revoked this machine's key.
+    pub const REVOKED: &str = "revoked";
     /// The agent could not write its own answer.
     pub const INTERNAL: &str = "internal";
     /// No machine by that id is known to the controller.

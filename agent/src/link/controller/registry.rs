@@ -535,7 +535,7 @@ impl Registry {
             }
             Some(d) if d.state == DesiredState::Revoked => {
                 return Admission::Refuse(ApiError::new(
-                    code::FORBIDDEN,
+                    code::REVOKED,
                     "revoked: the box has turned this machine's key away",
                 ))
             }
