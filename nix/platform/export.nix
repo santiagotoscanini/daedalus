@@ -495,11 +495,6 @@ in
         name, a rendered secret, a mount).
       '';
     };
-
-    github.owner = lib.mkOption {
-      type = lib.types.str;
-      description = "GitHub account the app repos and CI live under. The host defines it.";
-    };
   };
 
   config = {

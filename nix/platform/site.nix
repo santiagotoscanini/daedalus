@@ -258,63 +258,6 @@ in
       };
     };
 
-    # The daedalus GitHub App — who it is, never its secrets (those are
-    # site/vault/github-app.sops). Written by the App's manifest callback
-    # together with the vault file, and read by stacks/daedalus: the token
-    # minter signs as `clientId` and finds the installation on `ownerId`.
-    github.app = lib.mkOption {
-      type = lib.types.nullOr (
-        lib.types.submodule {
-          options = {
-            id = lib.mkOption {
-              type = lib.types.ints.positive;
-              description = "The App's numeric id.";
-            };
-            # slug and owner are held to GitHub's own charset for slugs and
-            # logins: they reach shell variables and journal lines (the
-            # minter's "not installed on <owner>"), where a newline could
-            # forge a log line.
-            slug = lib.mkOption {
-              type = lib.types.strMatching "[A-Za-z0-9-]+";
-              description = "The App's URL name (`github.com/apps/<slug>`).";
-            };
-            clientId = lib.mkOption {
-              type = lib.types.strMatching "[A-Za-z0-9._-]+";
-              description = "The App's client id — the JWT issuer the token minter signs as.";
-            };
-            htmlUrl = lib.mkOption {
-              type = lib.types.strMatching "https://github\\.com/.+";
-              description = "The App's settings page on GitHub.";
-            };
-            owner = lib.mkOption {
-              type = lib.types.strMatching "[A-Za-z0-9-]+";
-              description = "Login of the account that owns the App.";
-            };
-            ownerId = lib.mkOption {
-              type = lib.types.ints.positive;
-              description = "Numeric id of that account — what the minter matches the installation on, because a login can be renamed.";
-            };
-          };
-        }
-      );
-      default = null;
-      description = ''
-        The GitHub App as site.json records it (`github.app`), or null when
-        none has been created. Present if and only if
-        site/vault/github-app.sops is (asserted in stacks/daedalus).
-      '';
-    };
-
-    # The account the box trusts to own the App and every repository it
-    # builds. A constant of this box, NOT sourced from site.json: the daedalus
-    # container writes site.json through Apply, and a planted `ownerId` there
-    # must not steer the token minter or the build agent to another account's
-    # installation. The assertion below holds site.json's copy to it.
-    github.expectedOwnerId = lib.mkOption {
-      type = lib.types.ints.positive;
-      description = "Numeric GitHub account id that must own the daedalus GitHub App and the repositories it builds. The HOST defines it, in nix: the one copy the control plane cannot rewrite.";
-    };
-
     # The control plane's own address, as a label under the domain. Sourced
     # here and consumed by stacks/daedalus: the label is the only part a person
     # edits — the scheme is always https and the domain is `baseDomain`.

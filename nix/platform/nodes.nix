@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  options,
+  ...
+}:
 
 # The nodes — the other machines on this network that run the agent, as the
 # nix side sees them.
@@ -109,11 +114,12 @@ in
       default = node: "${node.name}.${cfg.lanDomain}";
       description = "A node's LAN name: `<name>.<lanDomain>`.";
     };
-    lemonadeNodes = lib.mkOption {
-      type = lib.types.listOf lib.types.attrs;
+    nodesOffering = lib.mkOption {
+      type = lib.types.functionTo options.fleet.nodes.type;
       readOnly = true;
-      default = lib.filter (n: n.providers ? lemonade) cfg.nodes;
-      description = "The nodes that offer a Lemonade model server.";
+      default = provider: lib.filter (n: n.providers ? ${provider}) cfg.nodes;
+      defaultText = lib.literalExpression "provider: lib.filter (n: n.providers ? \${provider}) config.fleet.nodes";
+      description = "The nodes that offer a provider of that kind (`nodesOffering \"lemonade\"`), as `fleet.nodes` lists them.";
     };
   };
 

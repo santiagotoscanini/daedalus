@@ -116,13 +116,14 @@ in
       inherit (lib) types;
     in
     {
-      # A default, unlike the rest (and so not readOnly — a default counts as
-      # a definition there): modules/registry reads this to decide whether the
-      # builder gets an htpasswd user, and must get "no" rather than an eval
-      # error when the control plane is switched off.
+      # Computed, not set: modules/registry reads this to decide whether the
+      # builder gets an htpasswd user, and gets "no" rather than an eval error
+      # when the control plane is switched off.
       enable = lib.mkOption {
         type = types.bool;
-        default = false;
+        readOnly = true;
+        default = config.fleet.modules.daedalus.enable && haveGithubApp;
+        defaultText = lib.literalMD "the control plane is on and the GitHub App's vault file is in the flake";
         description = "Whether the builder exists (the GitHub App's vault file is in the flake, and the control plane is on).";
       };
       socket = ro types.str "buildctl --addr for the daemon; group daedalus-build, 0660.";
@@ -163,7 +164,6 @@ in
       # ── Always: the contract values, and the fence's teardown ─────────────
       {
         fleet.builder = {
-          enable = haveGithubApp;
           socket = "unix://${daemon.socketPath}";
           buildkitPackage = buildkit;
           dockerConfigDir = "/run/daedalus-build";
