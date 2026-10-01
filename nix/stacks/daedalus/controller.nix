@@ -203,7 +203,7 @@
 #                helper's own `--check-table` holds the table to the rules it
 #                applies at every start, at build time; the evaluation asserts
 #                only what the helper cannot see (each unit exists, is enabled,
-#                is a oneshot, has no path unit). `status` is the helper's own
+#                is a oneshot, not RemainAfterExit, has no path unit). `status` is the helper's own
 #                read: the verbs and their units' state.
 #   run file     a value no list can hold is a PATTERN (`patterns.<name>`: an
 #                anchored regex over a small character set, a length cap),
@@ -419,8 +419,9 @@ let
         lib.foldl' (u: k: lib.replaceStrings [ "{${k}}" ] [ combo.${k} ] u) v.unit (lib.attrNames combo)
       ) (lib.cartesianProduct v.selectors);
   # What only the evaluation can see, and the helper cannot: each unit a verb
-  # can start exists on this system, is enabled, is a oneshot, and has no path
-  # unit left — the file-drop door a verb leaves behind when it moves here.
+  # can start exists on this system, is enabled, is a oneshot that does not
+  # RemainAfterExit, and has no path unit left — the file-drop door a verb
+  # leaves behind when it moves here.
   rootVerbAssertions = lib.concatLists (
     lib.mapAttrsToList (
       verb: v:
@@ -441,8 +442,17 @@ let
           && cfgOf u != null
           && (cfgOf u).enable
           && (cfgOf u).serviceConfig.Type or null == "oneshot"
+          # A start on an active RemainAfterExit oneshot is a no-op that
+          # exits 0: the helper would answer `done` for a run that never was.
+          && !(lib.elem ((cfgOf u).serviceConfig.RemainAfterExit or false) [
+            true
+            "yes"
+            "true"
+            "on"
+            "1"
+          ])
           && !(config.systemd.paths ? ${svc u});
-        message = "fleet.daedalus.rootVerbs.${verb}: ${u} must be an enabled oneshot service of this system with no path unit";
+        message = "fleet.daedalus.rootVerbs.${verb}: ${u} must be an enabled oneshot service of this system, not RemainAfterExit, with no path unit";
       }) (expansions v)
     ) rootVerbs
   );
