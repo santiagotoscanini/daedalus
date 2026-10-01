@@ -62,7 +62,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::cli::find_cli;
 use super::profile::{claude_dir, home_dir, read_session_files};
@@ -80,6 +80,8 @@ pub const REFRESH: Duration = Duration::from_secs(60);
 const SETTLE: Duration = Duration::from_secs(5);
 /// `claude agents --json`.
 const AGENTS_TIMEOUT: Duration = Duration::from_secs(10);
+/// The longest an unchanged profile keeps the last `claude agents` answer.
+const AGENTS_MAX_AGE: Duration = Duration::from_secs(10 * 60);
 /// `claude stop` and `claude rm`.
 const VERB_TIMEOUT: Duration = Duration::from_secs(30);
 /// Results kept in the roster: room for a whole recovery and the requests
@@ -181,6 +183,19 @@ fn claude_verb(cli: &Path, verb: &str, id: &str) {
     }
 }
 
+/// The profile's `sessions` and `jobs` directories' mtimes: they move when
+/// a session or a background agent comes or goes, which is when `claude
+/// agents` would say something new.
+type AgentsStamp = [Option<std::time::SystemTime>; 2];
+
+fn agents_stamp(dir: Option<&Path>) -> AgentsStamp {
+    let at = |sub: &str| {
+        dir.and_then(|d| std::fs::metadata(d.join(sub)).ok())
+            .and_then(|m| m.modified().ok())
+    };
+    [at("sessions"), at("jobs")]
+}
+
 fn background<'a>(agents: &'a [Agent], id: &str) -> Option<&'a Agent> {
     agents
         .iter()
@@ -224,6 +239,7 @@ impl Sessions {
             actions: VecDeque::new(),
             latest: Arc::clone(&latest),
             last: None,
+            agents_read: None,
         };
         if let Err(e) = std::thread::Builder::new()
             .name("claude-sessions".into())
@@ -275,6 +291,9 @@ struct Worker {
     actions: VecDeque<ActionResult>,
     latest: Arc<Mutex<Latest>>,
     last: Option<Roster>,
+    /// The last `claude agents --json`, when, and the profile's two
+    /// directories' mtimes then (`agents_now`).
+    agents_read: Option<(AgentsStamp, Instant, Option<Vec<Agent>>)>,
 }
 
 /// A verb's outcome before it is recorded.
@@ -294,18 +313,18 @@ fn done(what: impl Into<String>) -> Outcome {
 
 impl Worker {
     fn run(mut self, rx: Receiver<Msg>) {
-        self.refresh();
+        self.refresh(true);
         loop {
             match rx.recv_timeout(REFRESH) {
                 Ok(Msg::Request(r, wanted)) => {
                     self.handle(r, wanted);
-                    self.refresh();
+                    self.refresh(true);
                 }
                 Ok(Msg::Recover(ids, wanted)) => {
                     self.recover(&ids, wanted);
-                    self.refresh();
+                    self.refresh(true);
                 }
-                Err(RecvTimeoutError::Timeout) => self.refresh(),
+                Err(RecvTimeoutError::Timeout) => self.refresh(false),
                 Err(RecvTimeoutError::Disconnected) => return,
             }
         }
@@ -608,24 +627,19 @@ impl Worker {
         };
         names
             .into_iter()
-            .filter_map(|name| {
-                let id = name.strip_prefix(prefix.as_str())?.to_string();
-                is_uuid(&id).then_some((name, id))
+            .filter_map(|j| {
+                let id = j.name.strip_prefix(prefix.as_str())?.to_string();
+                is_uuid(&id).then_some((j, id))
             })
-            .map(|(name, id)| {
-                let cost = jobs::cost(&name).unwrap_or_default();
-                let pid = match jobs::show(&name) {
-                    Ok(JobState::Running { pid, .. }) => pid,
-                    _ => None,
-                };
-                let log = self.ctx.log_dir.join(format!("{name}.log"));
+            .map(|(j, id)| {
+                let log = self.ctx.log_dir.join(format!("{}.log", j.name));
                 Managed {
                     log_bytes: std::fs::metadata(&log).ok().map(|m| m.len()),
                     log: log.display().to_string(),
-                    pid,
-                    memory_bytes: cost.memory_bytes,
-                    cpu_nsec: cost.cpu_nsec,
-                    job: name,
+                    pid: j.pid,
+                    memory_bytes: j.cost.memory_bytes,
+                    cpu_nsec: j.cost.cpu_nsec,
+                    job: j.name,
                     id,
                 }
             })
@@ -698,11 +712,26 @@ impl Worker {
         }
     }
 
-    fn refresh(&mut self) {
+    /// `claude agents --json` — a Node start, the heaviest thing a refresh
+    /// does — or what it last said, while `~/.claude/sessions` and
+    /// `~/.claude/jobs` have not moved since and it is younger than
+    /// `AGENTS_MAX_AGE`. A verb's refresh (`fresh`) always asks.
+    fn agents_now(&mut self, dir: Option<&Path>, fresh: bool) -> Option<Vec<Agent>> {
+        let stamp = agents_stamp(dir);
+        if let Some((s, at, listed)) = &self.agents_read {
+            if !fresh && *s == stamp && at.elapsed() < AGENTS_MAX_AGE {
+                return listed.clone();
+            }
+        }
+        let listed = agents(find_cli().as_deref());
+        self.agents_read = Some((stamp, Instant::now(), listed.clone()));
+        listed
+    }
+
+    fn refresh(&mut self, fresh_agents: bool) {
         let mut errors = Vec::new();
         let dir = claude_dir();
-        let cli = find_cli();
-        let listed = agents(cli.as_deref());
+        let listed = self.agents_now(dir.as_deref(), fresh_agents);
         let found = match &dir {
             Some(d) => self.scanner.transcripts(&d.join("projects"), &mut errors),
             None => {

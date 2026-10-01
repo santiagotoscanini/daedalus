@@ -16,8 +16,8 @@ use std::process::Command;
 use std::time::Duration;
 
 use crate::exec;
-use crate::jobs::UnitCost;
 use crate::jobs::{self, JobState, ServerJob, SessionJob, Tools};
+use crate::jobs::{Listed, UnitCost};
 
 pub const JOB_KIND: &str = "a launchd job in the user's gui domain";
 
@@ -172,9 +172,9 @@ pub fn clear(name: &str) {
     let _ = stop(name);
 }
 
-/// The jobs starting with `prefix` that have a process now (`launchctl
-/// list` shows the caller's own domain).
-pub fn running(prefix: &str) -> Result<Vec<String>, String> {
+/// The jobs starting with `prefix` that have a process now, with its pid
+/// (`launchctl list` shows the caller's own domain); launchd keeps no cost.
+pub fn running(prefix: &str) -> Result<Vec<Listed>, String> {
     let label_prefix = jobs::launchd_label(prefix);
     let (code, text) = launchctl(&["list"])?;
     if code != 0 {
@@ -183,7 +183,13 @@ pub fn running(prefix: &str) -> Result<Vec<String>, String> {
     let strip = jobs::launchd_label("");
     Ok(jobs::parse_launchctl_list(&text, &label_prefix)
         .into_iter()
-        .filter_map(|l| l.strip_prefix(&strip).map(str::to_string))
+        .filter_map(|(label, pid)| {
+            Some(Listed {
+                name: label.strip_prefix(&strip)?.to_string(),
+                pid: Some(pid),
+                cost: UnitCost::default(),
+            })
+        })
         .collect())
 }
 

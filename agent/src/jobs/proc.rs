@@ -64,19 +64,40 @@ pub fn parse_unit_cost(text: &str) -> UnitCost {
     }
 }
 
-/// `systemctl --user list-units --type=service --all --no-legend --plain
-/// '<prefix>*.service'`: the names (without `.service`) of the units that
-/// are active or activating.
-pub fn parse_running_units(text: &str, prefix: &str) -> Vec<String> {
-    text.lines()
-        .filter_map(|l| {
-            let f: Vec<&str> = l.split_whitespace().collect();
-            let (unit, active) = (*f.first()?, *f.get(2)?);
-            if !matches!(active, "active" | "activating") {
+/// A job that runs, as one listing of them says: its name, its main pid,
+/// and its cost where the OS accounts for it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Listed {
+    pub name: String,
+    pub pid: Option<u32>,
+    pub cost: UnitCost,
+}
+
+/// `systemctl --user show -p Id,ActiveState,MainPID,MemoryCurrent,CPUUsageNSec
+/// '<prefix>*.service'`: one block of `Key=value` lines per loaded unit, the
+/// blocks apart by an empty line. The units whose name starts with `prefix`
+/// that are active or activating, with their pid and cost: one call for
+/// every resumed session.
+pub fn parse_systemd_units(text: &str, prefix: &str) -> Vec<Listed> {
+    text.split("\n\n")
+        .filter_map(|block| {
+            let get = |k: &str| {
+                block
+                    .lines()
+                    .find_map(|l| l.strip_prefix(k)?.strip_prefix('='))
+                    .map(str::trim)
+            };
+            if !matches!(get("ActiveState")?, "active" | "activating") {
                 return None;
             }
-            let name = unit.strip_suffix(".service")?;
-            name.starts_with(prefix).then(|| name.to_string())
+            let name = get("Id")?.strip_suffix(".service")?;
+            name.starts_with(prefix).then(|| Listed {
+                name: name.to_string(),
+                pid: get("MainPID")
+                    .and_then(|p| p.parse::<u32>().ok())
+                    .filter(|p| *p > 0),
+                cost: parse_unit_cost(block),
+            })
         })
         .collect()
 }
@@ -106,16 +127,29 @@ mod tests {
             parse_unit_cost("MemoryCurrent=18446744073709551615\n").memory_bytes,
             None
         );
-        let units = "claude-session-abdda3a9-0cb2-43f1-b13e-37f25a755fce.service loaded active running Claude\n\
-                     claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce.service loaded failed failed Claude\n\
-                     claude-session-x.service loaded active running Claude\n\
-                     claude-session-cbdda3a9-0cb2-43f1-b13e-37f25a755fce.service loaded activating start Claude\n";
+        let units = "Id=claude-session-a.service\nActiveState=active\nMainPID=4242\nMemoryCurrent=1048576\nCPUUsageNSec=[not set]\n\n\
+                     Id=claude-session-b.service\nActiveState=failed\nMainPID=0\n\n\
+                     MainPID=17\nId=claude-session-c.service\nCPUUsageNSec=5\nActiveState=activating\n\n\
+                     Id=other.service\nActiveState=active\nMainPID=9\n";
         assert_eq!(
-            parse_running_units(units, "claude-session-"),
+            parse_systemd_units(units, "claude-session-"),
             [
-                "claude-session-abdda3a9-0cb2-43f1-b13e-37f25a755fce",
-                "claude-session-x",
-                "claude-session-cbdda3a9-0cb2-43f1-b13e-37f25a755fce"
+                Listed {
+                    name: "claude-session-a".into(),
+                    pid: Some(4242),
+                    cost: UnitCost {
+                        memory_bytes: Some(1_048_576),
+                        cpu_nsec: None
+                    }
+                },
+                Listed {
+                    name: "claude-session-c".into(),
+                    pid: Some(17),
+                    cost: UnitCost {
+                        memory_bytes: None,
+                        cpu_nsec: Some(5)
+                    }
+                },
             ]
         );
     }

@@ -39,8 +39,8 @@ use windows::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use crate::jobs::UnitCost;
 use crate::jobs::{self, JobRecord, JobState, ServerJob, SessionJob};
+use crate::jobs::{Listed, UnitCost};
 use crate::state::now_rfc3339;
 
 pub const JOB_KIND: &str = "a process detached from the tray";
@@ -403,10 +403,10 @@ pub fn clear(name: &str) {
     }
 }
 
-/// The jobs starting with `prefix` that run now. One that ended is
-/// collected on the way — its record and its handle let go — as systemd
-/// collects a session's unit: nothing reads it again.
-pub fn running(prefix: &str) -> Result<Vec<String>, String> {
+/// The jobs starting with `prefix` that run now, with their pids. One that
+/// ended is collected on the way — its record and its handle let go — as
+/// systemd collects a session's unit: nothing reads it again.
+pub fn running(prefix: &str) -> Result<Vec<Listed>, String> {
     let Ok(entries) = std::fs::read_dir(jobs_dir()) else {
         return Ok(Vec::new());
     };
@@ -422,7 +422,11 @@ pub fn running(prefix: &str) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     for n in names {
         match show(&n) {
-            Ok(s) if s.running() => out.push(n),
+            Ok(JobState::Running { pid, .. }) => out.push(Listed {
+                name: n,
+                pid,
+                cost: UnitCost::default(),
+            }),
             Ok(_) => clear(&n),
             Err(_) => {}
         }

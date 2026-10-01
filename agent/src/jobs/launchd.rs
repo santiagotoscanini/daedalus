@@ -161,14 +161,14 @@ pub fn launchctl_says_gone(code: i32, output: &str) -> bool {
 }
 
 /// `launchctl list`: `PID\tStatus\tLabel` lines; the labels that start with
-/// `prefix` and have a process now.
-pub fn parse_launchctl_list(text: &str, prefix: &str) -> Vec<String> {
+/// `prefix` and have a process now, with its pid.
+pub fn parse_launchctl_list(text: &str, prefix: &str) -> Vec<(String, u32)> {
     text.lines()
         .filter_map(|l| {
             let mut f = l.split('\t');
             let (pid, _status, label) = (f.next()?, f.next()?, f.next()?.trim());
-            (pid.trim().parse::<u32>().is_ok() && label.starts_with(prefix))
-                .then(|| label.to_string())
+            let pid = pid.trim().parse::<u32>().ok()?;
+            label.starts_with(prefix).then(|| (label.to_string(), pid))
         })
         .collect()
 }

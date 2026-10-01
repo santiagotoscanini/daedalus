@@ -321,7 +321,10 @@ fn launchctl_print_and_list_read_as_job_states() {
                     17\t0\tcom.apple.x\n";
     assert_eq!(
         parse_launchctl_list(list, "me.toscanini.daedalus-agent.claude-session-"),
-        ["me.toscanini.daedalus-agent.claude-session-a"]
+        [(
+            "me.toscanini.daedalus-agent.claude-session-a".to_string(),
+            4242
+        )]
     );
     assert_eq!(parse_etime("05:07"), Some(307));
     assert_eq!(parse_etime(" 1:00:00"), Some(3600));

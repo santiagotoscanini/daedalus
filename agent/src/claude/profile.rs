@@ -284,7 +284,10 @@ mod tests {
         // 2^32 + this pid: `as u32` would have made it this process.
         write(
             "c.json",
-            format!(r#"{{"pid":{},"sessionId":"c"}}"#, (1u64 << 32) + u64::from(me)),
+            format!(
+                r#"{{"pid":{},"sessionId":"c"}}"#,
+                (1u64 << 32) + u64::from(me)
+            ),
         );
         write("d.json", "not json".into());
         #[cfg(unix)]
@@ -293,7 +296,9 @@ mod tests {
         files.sort_by(|x, y| x.session_id.cmp(&y.session_id));
         let ids: Vec<_> = files.iter().map(|f| f.session_id.as_deref()).collect();
         assert_eq!(ids, [Some("a"), Some("b")]);
-        assert!(files.iter().all(|f| f.pid == me && f.proc_start == Some(42)));
+        assert!(files
+            .iter()
+            .all(|f| f.pid == me && f.proc_start == Some(42)));
         // This process did not start at tick 42: on Linux the file is not
         // its; elsewhere the start is not compared and the pid runs.
         assert_eq!(files[0].alive(), cfg!(not(target_os = "linux")));

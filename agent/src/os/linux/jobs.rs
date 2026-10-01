@@ -8,8 +8,8 @@ use std::process::Command;
 use std::time::Duration;
 
 use crate::exec;
-use crate::jobs::UnitCost;
 use crate::jobs::{self, JobState, ServerJob, SessionJob, Tools};
+use crate::jobs::{Listed, UnitCost};
 
 /// What the jobs are here, for the logs and the report.
 pub const JOB_KIND: &str = "a transient systemd user unit";
@@ -91,18 +91,17 @@ pub fn clear(name: &str) {
     let _ = systemctl(&["reset-failed", &service(name)]);
 }
 
-/// The names of the jobs starting with `prefix` that run now.
-pub fn running(prefix: &str) -> Result<Vec<String>, String> {
+/// The jobs starting with `prefix` that run now, each with its pid and
+/// cost: one `systemctl show` over the pattern.
+pub fn running(prefix: &str) -> Result<Vec<Listed>, String> {
     let pattern = format!("{prefix}*.service");
     let text = systemctl(&[
-        "list-units",
-        "--type=service",
-        "--all",
-        "--no-legend",
-        "--plain",
+        "show",
+        "-p",
+        "Id,ActiveState,MainPID,MemoryCurrent,CPUUsageNSec",
         &pattern,
     ])?;
-    Ok(crate::jobs::parse_running_units(&text, prefix))
+    Ok(crate::jobs::parse_systemd_units(&text, prefix))
 }
 
 /// A unit's memory and CPU from the user manager.

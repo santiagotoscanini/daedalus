@@ -281,7 +281,10 @@ mod tests {
     fn the_process_table_and_stats_read_proc() {
         let me = std::process::id();
         let table = process_table();
-        assert_eq!(table.get(&me).copied(), Some(std::os::unix::process::parent_id()));
+        assert_eq!(
+            table.get(&me).copied(),
+            Some(std::os::unix::process::parent_id())
+        );
         assert!(table.len() > 1);
         let st = process_stats(me).expect("this process");
         assert!(st.start_ticks.is_some() && st.rss_bytes > 0 && !st.args.is_empty());

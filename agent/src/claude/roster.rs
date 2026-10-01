@@ -47,9 +47,9 @@ use serde_json::Value;
 
 use super::profile::SessionFile;
 use super::redact;
-use crate::time::epoch_ms;
 use super::{ActionState, SessionAction};
 use crate::jobs::UnitCost;
+use crate::time::epoch_ms;
 
 /// Transcripts listed, newest first.
 pub const MAX_TRANSCRIPTS: usize = 200;
@@ -426,7 +426,10 @@ impl Scan {
         self.thinking += count(&blocks, "thinking");
         // Images in the message, and in the tool results it carries.
         self.images += count(&blocks, "image")
-            + blocks.iter().map(|b| count(&b.content, "image")).sum::<u64>();
+            + blocks
+                .iter()
+                .map(|b| count(&b.content, "image"))
+                .sum::<u64>();
         if r.attachment.is_some_and(|a| a.is("file")) {
             self.attached += 1;
         }
@@ -481,7 +484,11 @@ pub fn scan(r: impl Read) -> Meta {
     let mut buf = Vec::new();
     loop {
         buf.clear();
-        match r.by_ref().take(LINE_MAX as u64 + 1).read_until(b'\n', &mut buf) {
+        match r
+            .by_ref()
+            .take(LINE_MAX as u64 + 1)
+            .read_until(b'\n', &mut buf)
+        {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
         }
@@ -742,7 +749,10 @@ pub fn session_stats(files: &[SessionFile], bridge_dir: Option<&Path>) -> Vec<Se
         let Some(st) = crate::os::process_stats(pid) else {
             continue;
         };
-        if f.proc_start.zip(st.start_ticks).is_some_and(|(r, s)| r != s) {
+        if f.proc_start
+            .zip(st.start_ticks)
+            .is_some_and(|(r, s)| r != s)
+        {
             continue;
         }
         let remote = st.args.iter().find(|a| {
@@ -859,7 +869,10 @@ mod tests {
         let mut text = lines.join("\n");
         text.push('\n');
         // An oversized record in the middle.
-        text.push_str(&format!("{{\"type\":\"user\",\"x\":\"{}\"}}\n", "a".repeat(LINE_MAX)));
+        text.push_str(&format!(
+            "{{\"type\":\"user\",\"x\":\"{}\"}}\n",
+            "a".repeat(LINE_MAX)
+        ));
         text.push_str(r#"{"type":"assistant","timestamp":"2026-09-27T10:02:00Z"}"#);
         let m = scan(text.as_bytes());
         assert_eq!(m.cli_version.as_deref(), Some("2.1.283"));
