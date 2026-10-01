@@ -318,6 +318,13 @@ export const SCHEMA = {
       'What traefik sends as X-Proxy-Proof on every request it forwards here. Without it no forwarded identity is honoured (core/auth.ts).',
     source: 'modules/traefik, webApps.daedalus.proxyProof (/run/proxy-proof/app-daedalus.env)',
   },
+  READER_TOKEN: {
+    kind: 'string',
+    secret: true,
+    about:
+      'What X-Reader-Token must carry for a GET past the request gate without the proxy proof: pages read with no identity (core/request-gate.ts). Unset, nothing reads that way.',
+    source: 'stacks/shotter fleet.dashboard.shotter.envFiles (<machineState>/shotter/reader.env)',
+  },
   DEPLOY_HOOK_TOKEN: {
     kind: 'string',
     secret: true,
