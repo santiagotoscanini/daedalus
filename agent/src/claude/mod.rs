@@ -36,10 +36,10 @@
 //! nix/stacks/daedalus/controller.nix lists them); a job gets the user's
 //! environment as the OS gives it one, plus
 //! `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE`, HOME, PATH and
-//! CLAUDE_CONFIG_DIR (job.rs `job_env`, `os::jobs::server_env`).
+//! CLAUDE_CONFIG_DIR (jobs/ `job_env`, `os::jobs::server_env`).
 //!
 //! On every OS the server and each resumed session are jobs of the OS, not
-//! children of the agent (`job`): a systemd user unit on Linux and the
+//! children of the agent (jobs/): a systemd user unit on Linux and the
 //! controller, a launchd job on macOS, a detached process on Windows. An
 //! agent update or restart — or quitting the tray — never ends a Claude
 //! session, and the next start re-attaches.
@@ -48,7 +48,7 @@
 //! the `claude` command and probes its version (exec.rs runs it, as it
 //! runs `claude update`), `profile` reads `~/.claude` (sessions, credential
 //! clock, settings), `workdir` picks the directory the server runs in,
-//! `job` is what a job is on each OS (the calls are `os::jobs`), and
+//! jobs/ is what a job is on each OS (the calls are `os::jobs`), and
 //! `supervisor` keeps the server running. The sessions beside the server:
 //! `roster` reads every one this machine could still be asked about,
 //! `sessions` holds the three verbs on them (resume, stop, remove) and the
@@ -140,7 +140,7 @@ pub struct Banner {
 
 impl Banner {
     /// Note one output line; the four banner lines set their fields, the
-    /// rest are ignored. Prefixes are literal, as the box's snapshot uses.
+    /// rest are ignored. Prefixes are literal.
     pub fn note(&mut self, line: &str) {
         let line = line.trim();
         if let Some(v) = line.strip_prefix("Remote Control v") {
@@ -276,7 +276,7 @@ pub struct Report {
     pub workdir_via: Option<String>,
     pub log: Option<String>,
     /// The server's job: a unit's name, a launchd label's last part, a
-    /// detached process's record (job.rs).
+    /// detached process's record (jobs/).
     pub job: Option<String>,
     pub reported_at: String,
 }

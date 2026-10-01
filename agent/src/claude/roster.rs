@@ -23,7 +23,7 @@
 //!   into). The one line of conversation that leaves the file is
 //!   `meta.last_prompt`, redacted and cut (redact.rs).
 //! - `managed`: the sessions this agent resumed (sessions.rs), running as
-//!   jobs of their own, `claude-session-<uuid>` (job.rs) — the only live
+//!   jobs of their own, `claude-session-<uuid>` (jobs/) — the only live
 //!   ones it can end with a stop of their own.
 //!
 //! Beside them: `session_stats`, per live session file whose process is
@@ -820,7 +820,7 @@ mod tests {
     }
 
     #[test]
-    fn a_scan_counts_what_the_snapshot_counted() {
+    fn a_scan_counts_each_kind_of_record() {
         let lines = [
             r#"{"type":"queue-operation","content":"secret prompt","timestamp":"2026-09-27T10:00:00.100Z"}"#,
             r#"{"type":"user","message":{"content":"hi"},"isSidechain":false,"gitBranch":"","version":"2.1.281","timestamp":"2026-09-27T10:00:01Z"}"#,

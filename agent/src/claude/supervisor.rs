@@ -1,7 +1,7 @@
 //! The supervisor: one `claude remote-control` kept running while the box
 //! wants it, restarted with backoff, its output logged and its banner
 //! read, and the report the session (session.rs) sends the service. The
-//! server is always a job of the OS (job.rs, `os::jobs`), never the
+//! server is always a job of the OS (jobs/, `os::jobs`), never the
 //! session's child: the session starts it, watches it, stops it, and when
 //! the session itself restarts — an agent update, a crash, the tray quit —
 //! it finds the job still running and re-attaches (`Supervisor::new`).
@@ -435,7 +435,7 @@ impl Supervisor {
     /// no-op that reports "Claude is up to date!" rather than doing
     /// something surprising. Those upgrade themselves through
     /// CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE, which every job gets
-    /// (job.rs `job_env`): a Homebrew or WinGet install does neither of the
+    /// (jobs/ `job_env`): a Homebrew or WinGet install does neither of the
     /// others, and this is upstream's own mechanism for it — the server runs
     /// `brew upgrade` / `winget upgrade` in the background when a release
     /// lands (on WinGet that can fail while Claude Code runs, because

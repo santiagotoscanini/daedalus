@@ -4,17 +4,15 @@
 //! first could leave half a token where the pattern would have taken it
 //! all).
 //!
-//! The patterns are the box snapshot's, which were the app's
-//! `lib/redact.ts` plus the API-key prefixes that file had no reason to
-//! carry, hand-written here because the agent carries no regex engine. Each
-//! rule is a scanner that, at a position, says how far a match runs and how
-//! much of its start is kept; the rules run one after another over the whole
-//! text, leftmost and non-overlapping, as a chain of `gsub`s does.
+//! The patterns are the app's `lib/redact.ts` plus the API-key prefixes.
+//! Each rule is a scanner that, at a position, says how far a match runs and
+//! how much of its start is kept; the rules run one after another over the
+//! whole text, leftmost and non-overlapping, as a chain of `gsub`s does.
 //!
 //! BEST EFFORT, and nothing more: a secret with no shape — a password, a
 //! passphrase, a bare hex string, a sentence about something private — is
-//! not recognisable and stays, up to the 160 characters. The operator took
-//! that trade for the snapshot; the roster keeps it and no more.
+//! not recognisable and stays, up to the 160 characters: the trade the
+//! operator took.
 
 use crate::telemetry::parse::collapse_ws;
 

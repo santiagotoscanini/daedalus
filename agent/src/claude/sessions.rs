@@ -2,10 +2,8 @@
 //! automatic recovery that resumes what a server restart ended, and the
 //! thread that runs them and keeps the roster (roster.rs) fresh.
 //!
-//! This replaces the box's `claude-session` bridge verb and its
-//! `claude-session@` template, and keeps their rules. The caller supplies a
-//! SELECTOR and nothing else: never a path, a flag or a directory. Three
-//! layers, in the order they run:
+//! The caller supplies a SELECTOR and nothing else: never a path, a flag or
+//! a directory. Three layers, in the order they run:
 //!
 //! 1. SYNTAX (`check_selector`): a canonical lowercase uuid, or eight
 //!    lowercase hex digits (a background agent's short id), before the value
@@ -26,7 +24,7 @@
 //! with the environment the server's job gets plus TERM (and on NixOS
 //! `/run/wrappers/bin`, for sudo) — under a terminal, which is not optional:
 //! with pipes the CLI falls back to --print mode and exits in a second. What
-//! the terminal is, is the OS's (job.rs): `script` on Linux and macOS, with
+//! the terminal is, is the OS's (jobs/): `script` on Linux and macOS, with
 //! the output filtered on the way to the job's log; a pseudo-console the
 //! agent's own binary holds on Windows. The job outlives the agent: a
 //! restart or an update of the agent ends nothing, and the next start finds

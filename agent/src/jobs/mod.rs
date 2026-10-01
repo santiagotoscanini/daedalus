@@ -40,11 +40,18 @@ mod proc;
 mod systemd;
 mod windows;
 
-pub use launchd::*;
-pub use line_filter::*;
-pub use proc::*;
-pub use systemd::*;
-pub use windows::*;
+pub use launchd::{
+    launchctl_says_gone, launchd_label, launchd_plist, macos_session_line, parse_launchctl_list,
+    parse_launchctl_print,
+};
+pub use line_filter::LineFilter;
+pub use proc::{
+    parse_procargs2, parse_systemd_units, parse_unit_cost, Listed, ProcStats, UnitCost,
+};
+pub use systemd::{parse_systemd_show, systemd_server_args, systemd_session_args, SYSTEMD_PROPS};
+pub use windows::{
+    holder_file, stale_holders, windows_absolute, windows_quote, windows_session_command, JobRecord,
+};
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};

@@ -64,6 +64,6 @@ user: string | null, home: string | null, workdir: string | null,
 workdir_via: string | null, log: string | null, 
 /**
  * The server's job: a unit's name, a launchd label's last part, a
- * detached process's record (job.rs).
+ * detached process's record (jobs/).
  */
 job: string | null, reported_at: string, };
