@@ -344,7 +344,8 @@ the box's nixpkgs, which `rust-toolchain.toml` pins and `rust-version` names:
 fmt, clippy `-D warnings`, the tests, a `--locked` release build, and
 `interop/`. CI (`.github/workflows/session-host.yml`) runs the same.
 
-- `tests/host.rs` drives the built binary over TLS on `127.0.0.1:0` with
+- `tests/` (`link`, `pty`, `exec`, `fs`, `hooks`, `status`; helpers in
+  `common/`) drives the built binary over TLS on `127.0.0.1:0` with
   throwaway keys. The tests need `sh`, `seq`, `sleep` and `git` on `PATH` and a
   writable `/tmp` (socket paths must fit 108 bytes). The first ping's
   timing is a unit test on paused time.
