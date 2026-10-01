@@ -11,18 +11,8 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Board, BoardGrid } from '../viz'
 import { CancelBuildButton, RetryReportButton } from './actions'
-import {
-  at,
-  Checks,
-  CommitBoard,
-  Detection,
-  ImageBoard,
-  LogBoard,
-  PhasesBoard,
-  RailpackSaid,
-  ResultBoard,
-  Tools,
-} from './boards'
+import { at, Checks, CommitBoard, LogBoard, PhasesBoard, ResultBoard } from './boards'
+import { Detection, ImageBoard, RailpackSaid, Tools } from './detection'
 import { useLiveBuild } from './use-live-build'
 
 // One build, as the build page draws it: the crumbs and head, the row of links

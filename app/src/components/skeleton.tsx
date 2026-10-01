@@ -1,5 +1,5 @@
 import { cn } from '../lib/cn'
-import { APP_LIST } from '../routes/apps.index'
+import { APP_LIST } from './apps/apps-list'
 import { FIRST_STEP_HEAD, WIZARD, WIZARD_STEP } from './apps/new-wizard'
 import {
   PICKER_BOX,
