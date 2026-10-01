@@ -1,29 +1,21 @@
 # Daedalus — what is missing, and how to do it
 
 Daedalus is the box's control plane: a TanStack Start app that writes JSON
-under `site/` in the operator's NixOS config, a root helper that
-starts a fixed list of host verbs on its behalf, the nix modules that read the
-JSON back, and a Rust agent that makes the other machines on the network (a
-Windows PC, a Mac) part of the same page. Today it runs this one box
-(`s2-server`) from a dev server against a bind-mounted checkout, builds the seven first-party apps on
-the box with Railpack, reports to GitHub as a check run and a Deployment, and
-draws a System page for each enrolled machine from the document its agent
-publishes.
+under `site/` in the operator's NixOS config, a root helper that starts a
+fixed list of host verbs on its behalf, the nix modules that read the JSON
+back, and a Rust agent that makes the other machines on the network (a
+Windows PC, a Mac) part of the same page. Today it runs one box from an image
+built on the box, builds the seven first-party apps there with Railpack,
+reports to GitHub as a check run and a Deployment, and draws a System page
+for each enrolled machine from the document its agent publishes.
 
-This file is the **forward-looking** plan only: what is not built yet, why it
-matters, and how to build it. What already landed is not recorded here — it is
-in git history (the version of this file at `7451bc0` carried every phase
-outcome up to 2026-09-15, and the version at `049333c` the state of every
-phase and feature on 2026-09-22), in `ARCHITECTURE.md` and `BUILDS.md` for the
-design as built, in `agent/README.md` for the agent, and in
-`~/.claude/plans/piped-gathering-meerkat.md` for the GitHub App + Railpack
-build-out (closed 2026-09-13).
-
-Every item below was checked against the code and the running box on
-2026-09-23. An item that is here is missing; an item that is not here is
+This file is **forward-looking** only: what is not built yet, why it
+matters, and how to build it. What landed is in git history, in
+`ARCHITECTURE.md` and `BUILDS.md` (the design as built) and in the
+component READMEs. An item that is here is missing; an item that is not is
 either done or was decided against ("Not in v1").
 
-## Where things stand (2026-09-23)
+## Where things stand
 
 | Phase | What | What remains |
 |---|---|---|
@@ -34,9 +26,7 @@ either done or was decided against ("Not in v1").
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 The **Features** section lists what the product is missing regardless of
-phase — previews, feature flags, the rest of the app secrets editor, the app
-contract as packages, the rest of the machines story — each with its
-mechanism.
+phase, each with its mechanism.
 
 ---
 
@@ -49,22 +39,19 @@ own config and rebuilds. The engine exposes a single NixOS module; that module
 *reads* the JSON and the sops ciphertext at evaluation time. Daedalus never
 generates nix files and never edits nix text: JSON in, system out. The import
 has to exist before the web UI does (the UI is a container the module
-declares), so the order is import → rebuild → UI, not UI → import. A "web UI
-first" installer mode of the same app is a later refinement of `init`.
-
-Two pieces:
+declares), so the order is import → rebuild → UI. A "web UI first" installer
+mode of the same app is a later refinement of `init`.
 
 ```
 ENGINE  github.com/santiagotoscanini/daedalus   (public; one branch, main)
-  flake.nix           nixosModules.default (the whole engine), lib.path, templates.config; packages.init is Phase 12
+  flake.nix           nixosModules.default, lib.path, templates.config, packages; packages.init is Phase 12
   nix/{platform,modules/<id>,stacks/daedalus}   every catalog stack gated by fleet.modules.<id>.enable
   app/                the TanStack Start app; src/core + src/modules/<id> (manifest, loaders, views)
-  agent/              the Rust agent for the other machines (Windows service, macOS LaunchDaemon, tray)
-  nix/stacks/daedalus/host/*.sh   the root verbs (apply, build, deploy, image-update, engine-update, power, secrets, workspaces)
+  agent/              the Rust agent (controller on the box; Windows service, macOS LaunchDaemon, tray)
 
-CONFIG  the user's own NixOS config at /etc/nixos   (theirs; this box keeps its flake + hardware here)
+CONFIG  the user's own NixOS config at /etc/nixos   (theirs; hardware and host specifics stay here)
   flake.nix           inputs.daedalus (pinned by tag, or a local clone for a box that develops it)
-  configuration.nix   imports daedalus.nixosModules.default; fleet.site.source = ./site; hardware; host specifics
+  configuration.nix   imports daedalus.nixosModules.default; fleet.site.source = ./site
   host/               the host's DATA for the options the engine declares (datasets, pins, policy, sops)
   site/               THE ONE DIRECTORY DAEDALUS WRITES. Data, not code:
     site.json         UI-WRITTEN: schemaVersion, identity, network, modules{enabled, settings}, integrations
@@ -76,8 +63,8 @@ CONFIG  the user's own NixOS config at /etc/nixos   (theirs; this box keeps its 
 Daedalus is a guest in the user's config, fenced to one directory — how every
 other NixOS tool (home-manager, disko, sops-nix) integrates: your flake, their
 input. `fleet.site.source` is the eval-time path the module reads JSON from;
-`fleet.site.path` is the run-time disk path the host agents WRITE to (default
-`/etc/nixos/site`). v1 targets flake configs only.
+`fleet.site.path` is the run-time disk path the root verbs WRITE to. v1
+targets flake configs only.
 
 **Source control is the user's business, with one exception.** A flake only
 sees git-TRACKED files, so a `site/apps.json` written but never `git add`ed
@@ -87,7 +74,7 @@ with the commit switch OFF (writes and `git add`s, leaves committing to the
 human); a work tree with the switch ON (one commit scoped to `-- site/` per
 Apply, push best-effort).
 
-**Rollback does not depend on git.** The agent keeps the previous bytes of
+**Rollback does not depend on git.** The verb keeps the previous bytes of
 every file it overwrites, builds FIRST, switches only if the build passed, and
 on a failed switch restores the bytes and switches again.
 
@@ -103,10 +90,8 @@ on a failed switch restores the bytes and switches again.
 **The app, end state.** One image, built by CI on GitHub-hosted runners into
 `ghcr.io/santiagotoscanini/daedalus:<semver>@sha256`, pinned by the engine
 (`fleet.daedalus.image` defaults to the version `app/package.json` declares).
-Users run it as-is. Developers set `fleet.daedalus.source = "dev"` and the same image's
-`runtime` stage serves their checkout with HMR. Settings forms come from an
-in-house renderer over a constrained JSON-Schema subset (the RJSF spike failed
-on bundle cost).
+Users run it as-is. Settings forms come from an in-house renderer over a
+constrained JSON-Schema subset (the RJSF spike failed on bundle cost).
 
 **Secrets, end state.** One value per sops file, encrypted **in the container
 with public recipients only** (static `sops` binary in the image); no private
@@ -137,8 +122,9 @@ announces itself over the SRV record and waits for Approve.
   behaviour; the phase ends by flipping the default once verified, and the
   old path is deleted one phase later. Rollback is a NixOS generation plus
   `git revert`.
-- **App-only phases carry zero rebuild risk.** The box runs the app in dev
-  mode, so saving a file is the deploy and `git revert` is the rollback.
+- **App changes ride the lock bump.** The box builds the control plane's
+  image as a pre-switch check, so a change that fails to build changes
+  nothing, and a bad one rolls back with its generation.
 - **Gate before switch** for nix phases: `nixos-rebuild build` → `nix store
   diff-closures /run/current-system ./result` (the diff must list only what
   the phase intends) → `nixos-rebuild test` → the container census
@@ -162,15 +148,15 @@ announces itself over the SRV record and waits for Approve.
 
 ### Phase 8 — Auth hardening (one rehearsal remains)
 
-Every mutating server function refuses a request whose forward-auth groups do not name `admins`. What is
-left is the **break-glass local login**: a setup token plus a local login
-(argon2id, sealed session cookie), built and dormant behind `site.json`
-`auth.localLogin` (absent on this box, so the route 404s; not editable from
-Settings on purpose; the onboarding wizard turns it on for new installs). It
-has never been exercised against a real IdP outage. Phase 12's rehearsal is
-where that happens: stop Pocket ID, reach the login with the token, apply
-something, start Pocket ID, confirm the session survives the gate coming
-back.
+Every mutating server function refuses a request whose forward-auth groups do
+not name `admins`. What is left is the **break-glass local login**: a setup
+token plus a local login (argon2id, sealed session cookie), built and dormant
+behind `site.json` `auth.localLogin` (absent on this box, so the route 404s;
+not editable from Settings on purpose; the onboarding wizard turns it on for
+new installs). It has never been exercised against a real IdP outage. Phase
+12's rehearsal is where that happens: stop Pocket ID, reach the login with the
+token, apply something, start Pocket ID, confirm the session survives the
+gate coming back.
 
 ### Phase 9 — Nix literals (nothing left for the engine)
 
@@ -179,12 +165,11 @@ private stacks are still a person's handles with no option — `calibre-web`'s
 `Remote-User` and LiteLLM's `PROXY_ADMIN_ID` — and get one on the day each
 of those stacks moves into the catalog (Phase 11), not before.
 
-Design notes the split produced, for the moves still to make: option
-DESCRIPTIONS do not enter the closure but comments inside shell heredocs do;
-`fleet.data` names are an informal contract (`tv`, `books`, `photos`,
-`minecraft` are read by stacks, and `books` by three of them); the dataset
-table and `fleet.data` spell each mount twice; `builder.nix` silently
-requires a dataset mounted at its root.
+Design notes for the moves still to make: option DESCRIPTIONS do not enter
+the closure but comments inside shell heredocs do; `fleet.data` names are an
+informal contract (`tv`, `books`, `photos`, `minecraft` are read by stacks,
+and `books` by three of them); the dataset table and `fleet.data` spell each
+mount twice; `builder.nix` silently requires a dataset mounted at its root.
 
 ### Phase 10 — App module system and build
 
@@ -193,23 +178,19 @@ requires a dataset mounted at its root.
   `src/modules/*/data/`. What a data file still imports from `host/`
   directly — nix-manifest, hosts, workspaces, the contract domains — is the
   rest of the seam (the test's own comment names them).
-- **10b, the first tag.** The image builds, walks (`release/image-walk.sh`
-  is run before a tag) and runs a box in dev mode as its `runtime` stage;
-  `.github/workflows/image.yml` publishes to ghcr on a `v*` tag and has never
-  run. Publishing the first public image is the operator's decision: bump
-  `app/package.json`, add `LICENSE`, tag `v<version>`, push the tag. The
-  ghcr package is private until its visibility is changed by hand. amd64
-  only — the run stage holds the build platform's argon2 binary.
+- **10b, the first tag.** The image builds on every push to `main`, walks
+  (`release/image-walk.sh` is run before a tag) and runs this box;
+  `.github/workflows/image.yml` publishes to ghcr on a `v*` tag and has
+  never published. Publishing the first public image is the operator's
+  decision: bump `app/package.json`, add `LICENSE`, tag `v<version>`, push
+  the tag. The ghcr package is private until its visibility is changed by
+  hand. amd64 only — the run stage holds the build platform's argon2 binary.
 
 ### Phase 11 — The engine becomes importable (the leaves remain)
 
-The spine is in the catalog (19 modules: `app-db`, `apps`, `cloudflared`,
-`gatus`, `healthchecks`, `logging`, `monitoring`, `pihole`, `pocket-id`,
-`registry`, `traefik`, and the leaves `factorio`, `grocy`,
-`intel-gpu-exporter`, `metube`, `myspeed`, `stirling-pdf`, `verdaccio`,
-`wg-easy`); a host made from `templates.config` evaluates to a whole system
-with a control plane to log in to; `developer.engineOverride`, Update
-daedalus and the site-file samples are in. What remains:
+The spine is in the catalog with eight leaves beside it (`nix/README.md`'s
+catalog table); a host made from `templates.config` evaluates to a whole
+system with a control plane to log in to. What remains:
 
 1. **The other 23 stacks, one by one**, none of them needed for a box to
    run: `argus-vpn`, `calibre-web`, `cleanuparr`, `downloads`, `grocy-mcp`,
@@ -222,9 +203,10 @@ daedalus and the site-file samples are in. What remains:
    as one group (`litellm` declares `litellmKeys` and `mcpServers`, which
    become platform registries then), `shotter` (whose post-deploy checks are
    a product feature, item 2 below), then the netns owners and their tenants
-   together (`downloads`, `argus-vpn`, `tv`). Each move: closure diff read and stated (import order moves with
-   the file, nix-engine.md §7), pin to `host/images.nix`, secrets to `host/sops/<id>/` keeping their
-   basenames, policy to `host/modules.nix`, a README beside the module,
+   together (`downloads`, `argus-vpn`, `tv`). Each move: closure diff read
+   and stated (import order moves with the file, nix-engine.md §7), pin to
+   `host/images.nix`, secrets to `host/sops/<id>/` keeping their basenames,
+   policy to `host/modules.nix`, a README beside the module,
    `checks.all-modules` green.
 
 Decisions already taken for the moves, so they are not re-litigated: the
@@ -233,12 +215,12 @@ files, not stacks; what other stacks contributed to a rendered config is a
 registry (`fleet.logDrops`, `fleet.logFiles`, `fleet.builder.npmMirrorHost`);
 policy without a narrow default has no default (`gatus.allowedSubjects` is
 required); no engine-shipped image pins; the reference box pins the engine
-through a local clone because `app/` is a runtime dependency, everyone else
-through `github:` and a tag.
+through a local clone because it develops it, everyone else through
+`github:` and a tag.
 
 ### Phase 12 — Onboarding, init, catalog, release (1–2 weeks)
 
-Wizard over the Phases 3–8 pieces (each step re-runnable from Settings);
+Wizard over the existing pieces (each step re-runnable from Settings);
 `packages.init` (`nix run github:santiagotoscanini/daedalus#init`: asks
 hostname + admin user, writes the CONFIG flake from `templates.config`, runs
 `nixos-generate-config`, creates `site/` in the config with `.sops.yaml` from
@@ -258,7 +240,8 @@ way.
 ## Features
 
 What the product is missing regardless of phase. Grouped by kind, not
-priority; each can be done independently unless noted.
+priority; each can be done independently unless noted. The numbers are
+stable — code cites them.
 
 1. **Preview deployments — a URL per branch, for vibecoding, testing and
    play.** Push a branch of plutus and a minute later
@@ -266,9 +249,8 @@ priority; each can be done independently unless noted.
    updates in place; delete the branch (or close the PR) and it is gone.
    Main-only builds today; the seams are in place (`builds.lane`,
    `prNumber`, the `candidate` publish mode, `pull_requests:write` granted).
-   The four-stage design (P1 checks → P2 required check → P3 previews → P4
-   fork policy) is in `~/.claude/plans/piped-gathering-meerkat.md`; the
-   decisions that plan left open:
+   Four stages: P1 checks → P2 required check → P3 previews → P4 fork
+   policy. The decisions:
    - **Hostname keyed by branch, not by sha.** `plutus-<branch>.<d>` is one
      label (the wildcard certificate matches one label only), stays stable
      across pushes so bookmarks and the derived Pocket ID client's redirect
@@ -320,119 +302,21 @@ priority; each can be done independently unless noted.
    own Actions keep CI going. A new catalog module with the mirror feature
    pointed at each GitHub repo; builds stay on the box's path.
 
-5. **Dev mode from Settings.** `fleet.daedalus.source` is a nix option the box
-   sets in `configuration.nix`; Settings › Developer shows a chip that says
-   so and nothing flips it. A toggle there writes `site.json`
-   `developer.source` and the option reads it (host-set wins), so switching
-   between the dev server and the built image (`local`, or `published` once
-   Phase 10b's first tag exists) is an Apply, not a hand edit.
+5. **The image source from Settings.** `fleet.daedalus.source` is a nix
+   option the box sets in `configuration.nix`; Settings › Developer shows it
+   and nothing flips it. A control there writes `site.json`
+   `developer.source` and the option reads it (host-set wins), so moving
+   between `local`, `dev` and `published` (once Phase 10b's first tag
+   exists) is an Apply, not a hand edit.
 
-6. **Machines as adjacent providers — the cluster and what stands beside
-   it.** The design of 2026-09-23, from a question the operator asked: the
-   agent reports a MAC, so why is the gaming PC a hand-typed name and
-   address in `configuration.nix`, copied into LiteLLM, gatus and the log
-   bridge? The answer is the pattern this section builds: a box is the
-   cluster; the other machines on its network are **providers** that join
-   by approval, are named by the box, and offer things the cluster's
-   services consume — a model server today, a runner later — with the
-   wiring generated, never typed.
-
-   **Landed 2026-09-23** (engine `21941db`, `f5165fa`, `819d394`; config
-   `6196f54`): agent 0.11.0 reports a provider's presence; a node's policy
-   carries its network name and offered providers (Settings › Machines);
-   the control plane writes the dnsmasq line per MAC that pi-hole's
-   `dhcp-hostsdir` reads (`macbook-pro.lan` resolves from that line alone);
-   `site/nodes.json` is rendered at Apply and read into `fleet.nodes`;
-   LiteLLM, gatus, the log bridge and the dashboard derive the model
-   server from the first lemonade node; `fleet.gpuHost` is gone. What
-   remains is the order of work below; the reasoning between here and
-   there is kept because the next steps rest on it.
-
-   **The rule that sorts every piece.** What nix builds from goes in
-   `site/` as JSON; what the host needs at runtime and must not be in git
-   (a MAC) is a payload the control plane hands a root verb;
-   what a service manages through its own API (LiteLLM's model table) is
-   driven through that API. Three kinds of change, three costs: an Apply, a
-   file write, a request.
-
-   **The name comes from the MAC, not the address.** A node gets a slug
-   (`gaming-pc`; default the hostname slugified, editable on Settings ›
-   Machines, unique). The control plane writes one dnsmasq line per
-   approved node, `<MAC>,<slug>`, as the `nodes-dhcp` verb's payload; the
-   verb keeps it in `/verbs` and copies it into the pihole-readable
-   `/run/daedalus-nodes/` (the pihole module's `dhcp-hostsdir` and
-   `hostsdir`, `misc.dnsmasq_lines`), then sends FTL a SIGHUP
-   (`pihole reloaddns`: dnsmasq re-reads its hosts files without dropping
-   a query — new files are read on their own, a changed or removed line
-   needs the HUP). dnsmasq gives the lease that hostname, overriding what
-   the client sent, so `gaming-pc.lan` follows the machine whatever
-   address the pool hands it; "pin the address" is a per-node toggle that
-   adds the IP to the line. No rebuild, no MAC in git, and the household
-   file loses the line it carries for the PC (the operator's one sops
-   edit, or a `reservation-set` root verb later). Verify on the box
-   before relying on it: a `dhcp-host=MAC,name` line with no address,
-   FTL honouring `dhcp-hostsdir` through `dnsmasq_lines`, and a HUP
-   landing without a gap in DNS.
-
-   **`site/nodes.json` is what nix needs, and only that.** Written by the
-   control plane on approve, rename and provider change (the same
-   Apply as `apps.json`), read by
-   `platform/site.nix` into `fleet.nodes`:
-   ```
-   { "schemaVersion": 1, "nodes": [
-     { "id": "a2272f1b0bdac468", "name": "gaming-pc", "os": "windows",
-       "providers": { "lemonade": { "port": 13305 } } } ] }
-   ```
-   No MAC, no address: consumers dial `<name>.<lanDomain>`. Consumers
-   then derive themselves — the log
-   bridge scrapes each lemonade node, prometheus reads every machine from the controller — and
-   `fleet.gpuHost`/`gpuHostIp` go: litellm's `@gpuHost@` becomes the
-   first lemonade node's name as a bridge, then nothing once the routes
-   move (below). This is the one step that is an Apply, and it happens
-   when a provider joins or leaves, not when a model does.
-
-   **The agent reads the provider; the box reads the controller.** Since
-   agent 0.18.0 the node's agent reads its Lemonade on loopback (catalog,
-   health, downloads, backends, per-model figures) and pushes it up the
-   link; the app reads `nodes.providers` and runs load/unload through
-   `nodes.provider_model`, never dialling the machine. Only LiteLLM's
-   routes go to `<name>.<lanDomain>:<port>`. Ollama is deliberately not a
-   kind (`app/src/lib/providers/kinds.ts`). Future idea, not scheduled: a
-   provider on a machine with no agent, added by address and port.
-
-   **Models reach LiteLLM through LiteLLM, not through nix.** A model
-   comes and goes with a click in Lemonade's window; a rebuild and a
-   gateway restart per click is the wrong cost, and the catalog is the
-   provider's state, not the box's. So a sync in the control plane
-   reconciles LiteLLM's model table with every offered provider's catalog,
-   read from the provider on each telemetry tick and on Apply: for each downloaded
-   model, `/model/new` with `model_name` the alias, `litellm_params`
-   `{ model: openai/<id>, api_base: http://<name>.<lanDomain>:<port>/api/v1,
-   api_key, timeout }`, and `model_info` derived from the labels (mode:
-   chat, embedding, rerank, audio_transcription, audio_speech,
-   image_generation; `supports_function_calling`, `supports_vision`;
-   context from the catalog where it says; cost 0) tagged
-   `daedalus: { node, provider }` so the sync owns exactly what it made;
-   `/model/delete` for a model that left. The operator's curation — the
-   alias (`gemma-4-12b` for `Gemma-4-12B-it-MTP-GGUF`), a mode the labels
-   got wrong, "do not offer this one" — is per-model policy in Postgres,
-   read by the sync. `config.yaml` keeps what is not a node's: SearXNG,
-   the pass-throughs, the MCP registry. Open WebUI sees a new model within
-   a tick. Recovery is free: the models are in LiteLLM's database on the
-   shared cluster, and the sync rebuilds them from the next telemetry
-   anyway. Rejected: nodes.json carrying the model list for nix to render
-   `config.yaml` (an Apply per download) and a LiteLLM wildcard route per
-   node (`openai/*`: no per-model mode, so every embedding and image model
-   would present as chat).
-
-   **Also landed 2026-09-23**: the AI page is Providers → Gateway →
-   Consumers with a machine picker; the box reads each provider's catalog
-   and health (from the controller since 0.18.0); the gateway sync writes a route per offered
-   model into LiteLLM's table and removes it when the model leaves, so
-   every Lemonade route left `config.yaml`; a node's policy can offer any
-   `ProviderKind`; `lanDomain` is published in the network export rather
-   than assumed.
-
+6. **Machines as providers.** A box is the cluster; the other machines on
+   its network are **providers** that join by approval, are named by the
+   box, and offer things the cluster's services consume — a model server
+   today, a runner later — with the wiring generated, never typed. The rule
+   that sorts every piece: what nix builds from goes in `site/` as JSON;
+   what the host needs at runtime and must not be in git (a MAC) is a
+   payload the control plane hands a root verb; what a service manages
+   through its own API (LiteLLM's model table) is driven through that API.
    **Order of work**, each step usable on its own:
    1. Providers as declared services: start, stop, install and update
       Lemonade from the box through the agent.
@@ -442,15 +326,13 @@ priority; each can be done independently unless noted.
       and the `MAC,IP,name` line exist; no UI yet).
    4. Power verbs (sleep, restart, shut down, wake by magic packet),
       dashboards and sleep-aware alerts, the WIP boards (die temperatures,
-      GPU live figures, the AMD driver feed, Homebrew formulae), signing
-      (Apple once the `release` environment holds the six santree
-      secrets; Authenticode when the download button goes live), and the
-      small noted items (the EVGA photo, Arc's ProgId, a `powermetrics`
-      deadline). Runners on the nodes are feature 11's, and wait.
-   - **Docs.** `ARCHITECTURE.md` has no section on the agent, the
-     controller link, the telemetry document or the provider pattern;
-     `agent/README.md` is the only doc. One section in the architecture
-     that points at it, once step 3 has landed the shape.
+      GPU live figures, the AMD driver feed, Homebrew formulae), Authenticode
+      when the Windows download button goes live, and the small noted items
+      (the EVGA photo, Arc's ProgId, a `powermetrics` deadline).
+   5. macOS telemetry from native APIs: a Mac's agent still spawns about ten
+      tools every 15 s.
+   Not scheduled: a provider on a machine with no agent, added by address
+   and port. Runners on the nodes are feature 11's.
 
 7. **Git commit attribution from the signed-in user.** Every `site/` commit
    is authored by "daedalus" regardless of who pressed Apply (no `--author`
@@ -471,8 +353,8 @@ priority; each can be done independently unless noted.
    The app page shows the app's flags with a link into Flipt's UI.
 
 9. **App variables and secrets: convert, rotate, scope.** The editor sets
-   and removes one secret at a time through the `secret-set` verb and shows "set
-   <date> by <actor>" from git. Still missing:
+   and removes one secret at a time through the `secret-set` verb and shows
+   "set <date> by <actor>" from git. Still missing:
    - **Convert to secret.** The value moves from `apps.json` into the sops
      file in one Apply; the old plaintext remains in git history, and the
      UI says so. Convert to variable stays deliberately absent — the
@@ -513,17 +395,13 @@ priority; each can be done independently unless noted.
     Verdaccio. **Not this:** a UI kit.
 
 11. **Self-hosted GitHub Actions runners, managed from daedalus.** The
-    Actions page exists (rail entry, four tabs, engine `f6d74ad` and after):
-    Runs, Workflows, Minutes and Runners read every repository the box
-    watches — its apps, Settings › Projects, the engine — as the App where
-    it may and as anyone where the repository is public. What the page
-    still lacks, in order:
-    - **The App reads runs.** The build App was registered without
-      `actions: read` (the manifest carries it now for new Apps); until the
-      operator grants it by hand and accepts it on the installation, private
-      repositories show "needs actions: read" and public ones are read out
-      of the address's sixty-an-hour anonymous budget, which the page
-      meters and stops at. Owed to the operator, below.
+    Actions page reads every repository the box watches — its apps,
+    Settings › Projects, the engine — as the App where it may and as anyone
+    where the repository is public. What it still lacks, in order:
+    - **The App reads runs.** Until the operator grants `actions: read`
+      (Owed, below), private repositories show "needs actions: read" and
+      public ones are read out of the address's sixty-an-hour anonymous
+      budget, which the page meters and stops at.
     - **Runners themselves.** Runners run CI, never fleet images — the
       box's build path stays the only way an image reaches zot. Ephemeral,
       on demand, per job: subscribe to `workflow_job`; on `queued` with a
@@ -546,56 +424,20 @@ priority; each can be done independently unless noted.
       the `user` scope; a vault entry for one, and the Minutes tab's plan
       board reads the real cycle instead of assuming Free.
 
+12. **Switching a service off: its dependents.** Settings › Modules and each
+    module's page switch a module off through `site.json`
+    `modules.enabled`, and refuse a structural one by name. Nothing explains
+    a module's *dependents* — `app-db` is impossible to switch off, while
+    something fifteen stacks read from is merely discouraged.
 
-12. **Switching a service off — built 2026-09-23.** `site.json` carries
-    `modules.enabled`; `platform/site.nix` defines each
-    `fleet.modules.<id>.enable` from it above a host's own definition;
-    `fleet.structuralModules` and `/export/switches.json` name the ones a
-    box may not switch off; Settings › Modules and a control on each
-    module's page write it. n8n was the first, switched off through the UI
-    with its data left in place. What remains: the page refuses a
-    structural module by name, but nothing explains a module's
-    *dependents* — `app-db` is impossible to switch off, while something
-    fifteen stacks read from is merely discouraged.
-
-13. **One agent on every machine, a controller on the box.** The box's
-    agent is the controller; every other machine's is a node on one
-    outbound, pinned TLS link to it (TLS 1.3 with each side pinning the
-    other's ed25519 key; a node pins the controller at install with
-    `--pin`, else on first use; a changed key is refused, and re-pinned
-    only by a rotation the trusted key signed). The app reaches every
-    machine only through the controller's unix socket; capabilities, not
-    "is this the box", draw the tabs. What remains:
-    - **Proof of 0.19 and 0.20 on the real machines.** Only the box runs
-      them. On the Windows PC and the Mac: the update from 0.17 lands and
-      proves itself (probation cleared, trays and sessions restarted onto
-      the new binary), the tray, the session and `status` reach the service
-      over the local socket (the named pipe on Windows) and another user is
-      refused, and a controller key rotation re-pins both without a hand on
-      either. The Mac has not been through 0.17's proof either (Claude
-      surviving agent and tray restarts and updates, resume, the recovery
-      set after a reboot).
+13. **One agent on every machine, a controller on the box.** What remains:
     - **Deferred: staged updates.** Every agent fetches, verifies and stages
       the newest signed release; applying is a restart the operator triggers
       per machine or for all (System › Machines or an MCP write tool), naming
       a version, never bytes, refusing a downgrade; on the box the lock bump
       is the stage step. The last self-updating release has to carry it.
-    - **santree through the agent.** The session host, the controller's
-      allow-list and `santree.status`, and the agent's santree socket exist
-      (agent 0.22.0, untagged). Left: the box running that controller
-      (lock bump, switch); Settings › Machines' `santree` toggle (sent only
-      when on) and one host line from `santree.status` (state, "restart to
-      apply", Restart naming the live PTY count, a desired set the
-      controller did not take); the `agent-v0.22.0` release; the MacBook
-      reinstalled onto it and approved; santree moving to the agent socket;
-      then the proof on the MacBook, at home and over the VPN.
-    - **Separate:** the power verbs (feature 6), and the box's System page
-      drawn from capabilities instead of the root snapshots.
-    - **Risks.** The controller is critical (down means no machines on the
-      pages and no Apply): small, restarts cleanly, holds nothing it cannot
-      rebuild. Version skew between the live-on-save app and the lock-bumped
-      controller. The release signing key covers three OSes and has no
-      recovery path.
+    - **The box's System page drawn from capabilities** instead of the root
+      snapshots, like every other machine's.
     - **Costs.** A santree session host on a machine other than the box
       would be a port, not a recompile — Windows above all (ConPTY, pwsh,
       paths, hook callbacks).
@@ -608,126 +450,107 @@ priority; each can be done independently unless noted.
    contain secrets a session read. The claude-rc journal keeps its own copy
    ≤1 month (root-only). Open question: exclude or prune them from ZFS
    snapshots/backups.
-2. **License for the engine.** No `LICENSE` file exists. MIT or Apache-2.0;
-   default MIT. Needed before the first `v*` tag.
+2. **License for the engine.** No `LICENSE` file exists; the Rust crates
+   already declare MIT in `Cargo.toml`. Needed before the first `v*` tag.
 3. **`--init` as the default in `mkRootlessContainer`.** node as PID 1
    never reaps orphaned grandchildren (yazio leaked a pid per session to
    the 2048 ceiling; plutus had 35 chromium zombies). The apps platform has
    it; the other sixty containers do not, and the general fix is one line
    touching all of them.
-4. **Rewriting published history** for the three commits (2026-09-21) that
-   carried the router's retail name in the public engine. Low sensitivity;
-   it is an option now.
+4. **Rewriting published history** for the three commits that carried the
+   router's retail name in the public engine. Low sensitivity; it is an
+   option.
 
 ## Owed to the operator
 
 Hand edits the UI cannot make for itself:
 
-00. **Drop the PC's line from the household reservations.**
-   `host/sops/pihole/dhcp-hosts.sops` still names the gaming PC's MAC
-   `gaming-pc` at .120, which is why the control plane skips that MAC in
-   its own file ("named by the household file" on Settings › Machines).
-   `sops host/sops/pihole/dhcp-hosts.sops`, delete that line, rebuild:
-   the runtime line takes over on the next policy save, and the PC's
-   address becomes the pool's (or pin it, once `pinAddress` has a
-   switch).
-0. **Grant the build App `actions: read`.** GitHub → Settings → Developer
-   settings → GitHub Apps → the box's App → Permissions & events →
-   Repository permissions → Actions: Read-only → Save; then open the App's
-   installation on the account and accept. The Actions page reads every
-   private repository's runs from then on and stops spending the anonymous
-   budget on the public ones.
-1. **The MCP server's credentials — opt-in, not owed.** The server is built
-   and reachable at `/mcp`; nothing calls it until the operator wants a
-   Claude session driving daedalus through it. Then three edits: mint a
-   write token in Settings › Developer (shown once); add a `daedalus` entry
-   to `.claude/mcp.json.sops` in `/etc/nixos` carrying that token as a
-   bearer header; add `"daedalus"` to `enabledMcpjsonServers` in
-   `.claude/settings.json`. Not done as of 2026-09-23.
-2. **The first tag and the license** (Phase 10b, open decision 2) — one act,
-   when the operator chooses.
-3. **The six santree secrets** into the engine repo's `release` environment,
-   so the macOS agent ships signed and notarized (feature 6).
-4. **TODO(operator): the spare release key.** The agent trusts a list of
-   release keys (`RELEASE_PUBLIC_KEYS`, `agent/src/update/mod.rs`) and
-   lists one. Make the spare OFFLINE, never on the box or a runner:
+1. **Tag the next agent release** (`agent-v*`), carrying the node-side
+   changes merged since `agent-v0.25.0`; the machines self-update from it.
+2. **Lock down the `release` environment.** GitHub → the engine repo →
+   Settings → Environments → `release`: required reviewer the operator; add
+   `AGENT_SIGNING_KEY` there and delete the repository-level secret
+   (`.github/workflows/agent.yml` reads whichever exists); and a tag ruleset
+   so only the operator creates `agent-v*` tags.
+3. **The spare release key.** The agent trusts a list of release keys
+   (`RELEASE_PUBLIC_KEYS`, `agent/src/update/mod.rs`) and lists one. Make the
+   spare OFFLINE, never on the box or a runner:
    `openssl genpkey -algorithm ed25519 -out spare.pem`; keep `spare.pem`
    in the password manager only; its public half, as hex, is
    `openssl pkey -in spare.pem -pubout -outform DER | tail -c 32 | xxd -p -c 64`.
    Add that hex as the list's second entry in a release signed with the
    current key; from then on a release signed with the spare that drops
    the first is the way out of a lost or leaked current key.
-5. **`AGENT_SIGNING_KEY` into the `release` environment.** The release job
-   now runs in it (`.github/workflows/agent.yml`). GitHub → the engine repo
-   → Settings → Environments → `release`: deployment branches and tags
-   limited to `agent-v*`, required reviewer the operator; add
-   `AGENT_SIGNING_KEY` there, then delete the repository-level secret; and
-   a tag ruleset so only the operator creates `agent-v*` tags. Until it is
-   moved the job still reads the repository secret.
+4. **Grant the build App `actions: read`.** GitHub → Settings → Developer
+   settings → GitHub Apps → the box's App → Permissions & events →
+   Repository permissions → Actions: Read-only → Save; then open the App's
+   installation on the account and accept.
+5. **Drop the PC's line from the household reservations.**
+   `host/sops/pihole/dhcp-hosts.sops` still names the gaming PC, which is
+   why the control plane skips that MAC in its own file ("named by the
+   household file" on Settings › Machines). Delete that line and rebuild:
+   the runtime line takes over on the next policy save.
+6. **Drop `DEPLOY_HOOK_TOKEN`** from `host/sops/registry/env.sops`: nothing
+   reads it.
+7. **The first tag and the license** (Phase 10b, open decision 2) — one
+   act, when the operator chooses.
 
 ## Engine polish
 
-TypeScript, identified but not acted on (`noUncheckedIndexedAccess` and
-`verbatimModuleSyntax` are on):
-
-- Audit for places where `as` casts hide real type narrowing opportunities.
-- `satisfies` where appropriate (config objects, exhaustive checks).
-- Template literal types for the root verb names.
-- Branded types for app names, sha hashes, build ids and node ids.
-- `using` declarations for locks and cleanup — check the Vite plugin
-  supports them first.
-- `exactOptionalPropertyTypes` and `isolatedDeclarations` — assess
-  viability.
-- The agent's telemetry contract is typed twice: Rust structs in
-  `agent/src/telemetry.rs` and hand-written decoders in
-  `app/src/lib/agent/status.ts`. Generate the TypeScript side from the Rust
-  side (ts-rs) at agent release time.
-
-Small items:
-
+- **Local development behind the request gate.** A laptop run answers 403
+  to anything without `X-Proxy-Proof` (CONTRIBUTING.md "The request gate"),
+  so a plain browser needs a header extension. A dev-server-only way in —
+  say, `pnpm dev` binding a local proxy that adds the proof — would make
+  the documented local run work in any browser.
+- **The migration history squashed to one baseline.** drizzle's generated
+  baseline orders columns differently from the live tables; reorder
+  `src/host/schema.ts` to match the live order first, so the squash is a
+  no-op against the box.
+- **The long forms.** Over 150 lines and worth splitting by section: the
+  create Wizard, AppsList, Settings › Network, OperatorSecrets,
+  ExternalApps, Tasks, McpTokens; and `modules/system/view/updates.tsx`
+  (411 lines, allowlisted in `src/file-size.test.ts` until it splits).
+- **CodeQL for Rust** (`agent/`, `session-host/`) beside the
+  JavaScript/TypeScript and Actions queries in `ci.yml`.
+- TypeScript (`noUncheckedIndexedAccess` and `verbatimModuleSyntax` are
+  on): `as` casts that hide narrowing; `satisfies` for config objects and
+  exhaustive checks; branded types for app names, sha hashes, build ids and
+  node ids; `using` for locks and cleanup (check the Vite plugin supports
+  it); assess `exactOptionalPropertyTypes` and `isolatedDeclarations`.
 - The engine logs nothing when it re-adopts a running build after a restart.
-- The webhook log line omits the superseded count.
+- The webhook's log line omits the superseded count (the response has it).
 - Build-page live log during long checks may appear empty (markers arrive at
   stage boundaries, not mid-stage).
-- The lab drivers under `<stateRoot>/shotter/drivers/` (78 of them, most
+- The lab drivers under `<stateRoot>/shotter/drivers/` (over a hundred, most
   one-off verification scripts) belong in the repo or in the bin, not in app
-  state; `polish-walk.mjs` there has a stale "Runner" heuristic.
-- Dev mode's first paint waits on ~280 unbundled module requests before
-  React is wired; the production image bundles them. Nothing to fix in the
-  app; worth knowing when a "slow" report comes from a dev-mode box.
+  state.
 
 ## Documentation
 
-What exists: `ARCHITECTURE.md` (5 Mermaid diagrams; Mermaid stays in the repo
-by decision), `BUILDS.md`, `CONTRIBUTING.md`, `nix/README.md`,
-`agent/README.md`, and the website's boundary document. Missing:
-
 - **Root verb payload reference.** The payload shapes of the verbs in
-  `ARCHITECTURE.md`'s root helper table have no standalone doc beyond the code
-  and `apply.sh`'s subject cases.
+  `ARCHITECTURE.md`'s root helper table have no standalone doc beyond the
+  code and each verb script's validation.
 - **Operational runbook** for the build pipeline beyond what `BUILDS.md`
   covers — what to do when a build hangs, how to force-rebuild, how to read
   the build log, how to cancel.
-- **An agent section in `ARCHITECTURE.md`** (feature 6); today it has the
-  node's trust boundary and the `nodes` table, nothing more.
 - **An install guide** for a stranger's box (Phase 12).
 
-## Verification owed (cross-cutting)
+## Verification owed
 
 - A `just census` target in the config repo: `podman ps` census,
   `systemctl --failed`, every `healthPath` curl, and a `diff-closures`
-  helper. The justfile has fmt/check/lint/boot/switch/engine-* today.
+  helper; it would also restart pocket-id after a pg bounce, which nothing
+  re-checks today.
 - The no-secret-in-logs test: `lib/redact.test.ts` covers error text and
   the `secret-set` verb; nothing asserts that no vault value or verb
   secret appears in status files, build logs or the app's stdout. Write it
   as a fixture-driven test and add it to CI.
 - The break-glass drill (Phase 8) and the fresh-box rehearsal (Phase 12).
 - Standing practice: closure diffs and the census after every nix phase;
-  container truth, not unit state; `shot run` drivers with `events.json`
-  read before pictures; an authz test beside every new mutation; the tab
-  timing driver before and after any change to a loader.
+  container truth, not unit state; `shot` drivers with `events.json`
+  read before pictures; an authz test beside every new mutation.
 
-## Security residuals (from the adversarial reviews)
+## Security residuals
 
 Known and accepted, not forgotten:
 
@@ -738,15 +561,18 @@ Known and accepted, not forgotten:
 - A repo's own mise cache can carry files into its next `railpack prepare`
   (per-build cache copy or a throwaway uid are the candidates).
 - A hostile base image's ONBUILD cache mounts are invisible to the scan (all
-  seven apps are Railpack now, so this is theoretical).
+  seven apps are Railpack, so this is theoretical).
 - Repo rename should be carried by id, not name (the clone and three GitHub
   hyperlinks still resolve by name).
 - Dataset mount failure alert is silent — `daedalus-builds-mounted` checks
   hourly and mails, but the mount itself is `nofail`.
+- The container writes two directories the operator's units read
+  (`/workspace-icons` for the session host, `/boards` for a host job);
+  each could be a controller call instead, leaving the container no
+  writable host path.
 - A stolen node key is a stolen link: its holder can report as that
   machine and receive its commands, not run arbitrary ones, as long as "no
-  shell" holds (feature 6, declared services). Revoking the key in Settings ›
-  Machines ends it.
+  shell" holds. Revoking the key in Settings › Machines ends it.
 
 ---
 
@@ -758,12 +584,12 @@ Cloudflare Access; Cloudflare account/Zero Trust org creation (no public API);
 Registrar API (beta); generated-secrets-as-sops (Clan-vars style) — later;
 `fetchPnpmDeps` nix package as an alternative to the image; non-flake configs;
 engine-shipped image pins; a site repository separate from the config; Mermaid
-rendered on the website. Decided after evaluating Coolify (2026-09-15): no
-second container engine, no control plane whose state lives outside git, no
-one-container-per-database model. Decided 2026-09-23: no Rust rewrite of the
-app's backend — the app holds no privilege and does no OS work in-process, so
-its latency is I/O and hydration, not JavaScript; Rust belongs in the
-agent, where the OS layer is.
+rendered on the website. After evaluating Coolify: no second container
+engine, no control plane whose state lives outside git, no
+one-container-per-database model. No Rust rewrite of the app's backend — the
+app holds no privilege and does no OS work in-process, so its latency is I/O
+and hydration, not JavaScript; Rust belongs in the agent, where the OS layer
+is.
 
 ## Risks
 
@@ -771,15 +597,15 @@ agent, where the OS layer is.
   is stricter than its dev server: a client file that reaches
   `@tanstack/react-start/server` through any import is refused at build and
   never in dev, so `pnpm build` belongs in the check every change runs.
-- Two-commit Apply (site commit + lock commit): a crash between them leaves
-  the lock behind the site; `apply.sh` reconciles on the next run and
-  Settings shows "site ahead of lock".
+- The controller is critical (down means no machines on the pages and no
+  Apply): small, restarts cleanly, holds nothing it cannot rebuild.
 - Previews (feature 1) run branch code with a copy of production data on the
   same box: the preview env allowlist and the fork-approval gate are what
   keep that safe, and both must exist before previews are on by default.
 - The weekly `flake.lock` bump can move nixfmt and leave `/etc/nixos`
   treefmt-dirty, which fails `nix flake check`; check after every
   autoupgrade. `nix fmt -- --ci` writes before it fails.
-- The agent's release signing key has no recovery path but the operator's
-  copies; losing it means every machine must be re-enrolled with a new
-  compiled-in key.
+- The agent's release signing key covers three OSes and has no recovery path
+  but the operator's copies; losing it means every machine must be
+  re-enrolled with a new compiled-in key (the spare key, Owed 3, closes
+  this).
