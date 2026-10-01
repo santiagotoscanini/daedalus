@@ -42,7 +42,7 @@ mod metrics;
 mod model;
 pub mod parse;
 
-pub use metrics::{claude_text, escape_label, metrics_text, providers_text, Labels};
+pub use metrics::{claude_text, escape_label, metrics_text, providers_text, typed, Labels};
 pub use model::{
     App, Battery, Browser, Cpu, Disk, Drive, Gpu, GpuSample, Installed, Machine, Memory,
     MemoryModule, Network, Os, Process, Sample, Service, Slow, Static, Telemetry, Temperature,

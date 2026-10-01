@@ -91,7 +91,11 @@ pub fn serve_metrics(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                     (&Method::Get, "/nodes/metrics") => match shared.nodes() {
                         Some(r) => (
                             200,
-                            format!("{}{}", shared.own_claude_metrics(), r.metrics()),
+                            crate::telemetry::typed(&format!(
+                                "{}{}",
+                                shared.own_claude_metrics(),
+                                r.metrics()
+                            )),
                             "text/plain; version=0.0.4",
                         ),
                         None => (

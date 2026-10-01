@@ -48,10 +48,9 @@ pub fn escape_label(s: &str) -> String {
 }
 
 /// Prometheus text exposition of one machine's document, every series
-/// labelled with `labels`. No `# TYPE` lines: every series goes through
-/// the one `gauge` writer, so Prometheus stores them untyped. The OS's own
-/// counters (network bytes) carry a counter's `_total` suffix, and a query
-/// `rate()`s them.
+/// labelled with `labels`; the page types each family once (`typed`). The
+/// OS's own counters (network bytes) carry a counter's `_total` suffix,
+/// and a query `rate()`s them.
 pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> String {
     let mut out = String::new();
     let esc = escape_label;
@@ -276,6 +275,39 @@ pub fn claude_text(report: Option<&crate::claude::Report>, labels: &Labels) -> S
     out
 }
 
+/// The page's series as the exposition format wants them: each family's
+/// lines together under one `# TYPE` — `counter` for a `_total` name (the
+/// OS's byte counts, Claude's restarts), `gauge` for every other. The
+/// writers above emit one machine at a time; this runs once over the page,
+/// so a family every machine reports is typed once, not once per machine.
+pub fn typed(text: &str) -> String {
+    let mut families: Vec<(&str, Vec<&str>)> = Vec::new();
+    for line in text
+        .lines()
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+    {
+        let name = line.split(['{', ' ']).next().unwrap_or(line);
+        match families.iter_mut().find(|(n, _)| *n == name) {
+            Some((_, lines)) => lines.push(line),
+            None => families.push((name, vec![line])),
+        }
+    }
+    let mut out = String::with_capacity(text.len() + 48 * families.len());
+    for (name, lines) in families {
+        let kind = if name.ends_with("_total") {
+            "counter"
+        } else {
+            "gauge"
+        };
+        out.push_str(&format!("# TYPE {name} {kind}\n"));
+        for l in lines {
+            out.push_str(l);
+            out.push('\n');
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,6 +320,18 @@ mod tests {
         os: "windows",
     };
     const BASE: &str = "host=\"PC\",machine=\"Gaming PC\",node=\"0123456789abcdef\",os=\"windows\"";
+
+    /// Two machines' text, typed: each family once, its lines together.
+    #[test]
+    fn the_page_types_each_family_once() {
+        let two = "a_up{node=\"1\"} 1\nb_bytes_total{node=\"1\"} 5\na_up{node=\"2\"} 0\nb_bytes_total{node=\"2\"} 7\n";
+        assert_eq!(
+            typed(two),
+            "# TYPE a_up gauge\na_up{node=\"1\"} 1\na_up{node=\"2\"} 0\n\
+             # TYPE b_bytes_total counter\nb_bytes_total{node=\"1\"} 5\nb_bytes_total{node=\"2\"} 7\n"
+        );
+        assert_eq!(typed(""), "");
+    }
 
     #[test]
     fn metrics_render_with_labels_escaped() {
