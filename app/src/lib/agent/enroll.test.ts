@@ -4,6 +4,7 @@ import {
   navigationAllowed,
   parseEnrollQuery,
   parseWgQuick,
+  TYPED_LENGTH,
   typedMatches,
 } from './enroll'
 
@@ -100,15 +101,20 @@ describe('the enroll query', () => {
 
 describe('the typed fingerprint', () => {
   const fp = '6668:7aad:f862:bd77:6c8f:c18b:8e9f:8e20:0897:1485:6ee2:33b3:902a:591d:0d5f:2925'
-  it('is the first four hex characters, in either case', () => {
-    expect(typedMatches(fp, '6668')).toBe(true)
-    expect(typedMatches('abcd:ef01', 'ABCD')).toBe(true)
-    expect(typedMatches(fp, ' 66 68 ')).toBe(true)
+  // Eight: the first two groups, 32 bits. Four (16 bits) could be ground out
+  // of key generations in under a second.
+  it('is the first two groups, eight hex characters, in either case', () => {
+    expect(TYPED_LENGTH).toBe(8)
+    expect(typedMatches(fp, '6668:7aad')).toBe(true)
+    expect(typedMatches(fp, '66687aad')).toBe(true)
+    expect(typedMatches('abcd:ef01', 'ABCD:EF01')).toBe(true)
+    expect(typedMatches(fp, ' 6668 7aad ')).toBe(true)
   })
   it('is refused short, long or wrong', () => {
-    expect(typedMatches(fp, '666')).toBe(false)
-    expect(typedMatches(fp, '6668:7')).toBe(false)
-    expect(typedMatches(fp, '6669')).toBe(false)
+    expect(typedMatches(fp, '6668')).toBe(false)
+    expect(typedMatches(fp, '6668:7aa')).toBe(false)
+    expect(typedMatches(fp, '6668:7aad:f')).toBe(false)
+    expect(typedMatches(fp, '6668:7aae')).toBe(false)
     expect(typedMatches('', '')).toBe(false)
   })
 })

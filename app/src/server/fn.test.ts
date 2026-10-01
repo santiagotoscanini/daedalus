@@ -98,3 +98,30 @@ describe('the builders', () => {
     expect(chain(publicFn)).not.toContain(adminOnly)
   })
 })
+
+// Cross-site POSTs. TanStack Start puts its CSRF middleware in front of every
+// server function when the app declares no start instance (src/start.ts):
+// a request whose Sec-Fetch-Site is not same-origin — or, with none, whose
+// Origin or Referer is not this origin — is answered 403 before any
+// middleware here runs. Checked against the running app on 2026-10-01: a
+// server-function request marked `cross-site`, or carrying none of the
+// three, got 403; `same-origin` got 200. An adminFn's admin gate is not a
+// CSRF defence (the admin's own browser carries the session), so this is
+// what keeps a page on another *.toscanini.me host from POSTing the santree
+// grant or a policy patch. A start.ts that drops the middleware fails here.
+describe('server functions refuse cross-site requests', () => {
+  it('keeps TanStack Start’s default CSRF middleware, or declares its own', () => {
+    const start = ['start.ts', 'start.tsx']
+      .map((f) => join(import.meta.dirname, '..', f))
+      .find((p) => {
+        try {
+          readFileSync(p)
+          return true
+        } catch {
+          return false
+        }
+      })
+    if (start === undefined) return
+    expect(readFileSync(start, 'utf8')).toMatch(/createCsrfMiddleware/)
+  })
+})

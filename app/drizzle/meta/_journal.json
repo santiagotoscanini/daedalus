@@ -162,6 +162,13 @@
       "when": 1790775166034,
       "tag": "0022_slippery_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790815620331,
+      "tag": "0023_polite_betty_ross",
+      "breakpoints": true
     }
   ]
 }

@@ -169,7 +169,7 @@ function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> })
             ref={field}
             className="max-w-[10rem] font-mono"
             value={typed}
-            maxLength={9}
+            maxLength={12}
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}

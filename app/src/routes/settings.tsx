@@ -116,6 +116,8 @@ export const Route = createFileRoute('/settings')({
     github?: Exclude<GithubCallbackNotice['github'], 'installed'>
     reason?: string
     setup_action?: 'install' | 'update'
+    node?: string
+    santree?: 'on'
   } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
     // What /settings/github/callback redirected with. Read once, then dropped.
@@ -136,6 +138,14 @@ export const Route = createFileRoute('/settings')({
       search.setup_action === 'install' || search.setup_action === 'update'
         ? search.setup_action
         : undefined,
+    // A machine's "santree on the box" (agent settings.rs `confirm_url`): the
+    // Machines tab opens that machine's confirmation. A node id and the one
+    // word; anything else is dropped.
+    node:
+      typeof search.node === 'string' && /^[0-9a-f]{16}$/.test(search.node)
+        ? search.node
+        : undefined,
+    santree: search.santree === 'on' ? 'on' : undefined,
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   // The facts are awaited: files and one database row, no upstream to wait

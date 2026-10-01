@@ -542,6 +542,11 @@ export const nodes = pgTable('nodes', {
   /// keys mean the agent's own defaults. Postgres, not site/: nothing nix
   /// builds reads it, so changing it is an UPDATE and nothing rebuilds.
   policy: jsonb('policy').$type<NodePolicy>().notNull().default({}),
+  /// Who changed the policy last — an admin's label from a page, or
+  /// `node:<id>` when the machine asked from its menu bar or santree — and
+  /// when: the Machines card's "Last changed by" line.
+  policyChangedBy: text('policy_changed_by'),
+  policyChangedAt: timestamp('policy_changed_at', { withTimezone: true }),
 })
 
 // A logged-in machine's WireGuard client of the box's wg-easy (host/enroll.ts):

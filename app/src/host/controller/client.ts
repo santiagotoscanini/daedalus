@@ -29,6 +29,7 @@ import {
   nodeClaudeRosterAnswer,
   nodeDetail,
   nodeLeftId,
+  nodePolicyRequest,
   nodeProvidersAnswer,
   nodesList,
   nodeTelemetryAnswer,
@@ -514,15 +515,29 @@ export function controller(): ControllerClient {
       onConnect: (c) => {
         void import('./nodes').then((m) => m.syncDesired({ controller: c }))
       },
-      // A machine that logged out asks to be forgotten, its tunnel with it.
+      // A machine that logged out asks to be forgotten, its tunnel with it;
+      // one whose user changed a setting from its menu bar asks for it
+      // (lib/repo/nodes.ts `applyNodePolicyRequest`).
       onEvent: (e, p) => {
         const id = nodeLeftId(e, p)
-        if (id === null) return
-        void import('../../lib/repo/nodes')
-          .then((m) => m.forgetNode(id, { left: true }))
-          .catch((err: unknown) => {
-            console.warn(`controller: ${id} logged out but was not forgotten: ${String(err)}`)
-          })
+        if (id !== null) {
+          void import('../../lib/repo/nodes')
+            .then((m) => m.forgetNode(id, { left: true }))
+            .catch((err: unknown) => {
+              console.warn(`controller: ${id} logged out but was not forgotten: ${String(err)}`)
+            })
+          return
+        }
+        const asked = nodePolicyRequest(e, p)
+        if (asked !== null) {
+          void import('../../lib/repo/nodes')
+            .then((m) => m.applyNodePolicyRequest(asked.id, asked.changes))
+            .catch((err: unknown) => {
+              console.warn(
+                `controller: ${asked.id}'s settings request was not applied: ${String(err)}`,
+              )
+            })
+        }
       },
     })
     slot.path = path

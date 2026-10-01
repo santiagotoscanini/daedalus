@@ -11,13 +11,34 @@ import { saveNodePolicyFn } from '../../../server/nodes'
 import { useAction } from '../../use-action'
 
 // The state behind an approved machine's Policy card: the typed fields, the
-// switches shown optimistically, and one save per edit — every save built on
-// the policy the page last saved, never on the row as it was loaded. The card
+// switches shown optimistically, and one save per edit. A save is a change
+// by key (lib/repo/nodes.ts `PolicyPatch`): the key the edit is about, and
+// nothing else, so a change the machine asked for from its menu bar while
+// this page was open is never undone by an edit of another key here. The
+// two keys whose value is a whole object — providers, hardware — are built
+// on the policy the page last saved, so two quick edits of the same object
+// chain. santree ON is not a save: the switch opens the confirmation
+// (./santree-grant.tsx), as the Mac's "santree on the box" does. The card
 // itself (./policy.tsx) only draws what this holds.
 
 export type PolicyEditor = ReturnType<typeof usePolicyEditor>
 
-export function usePolicyEditor(n: NodeRow) {
+/** A change by key: the keys to set, the keys to clear. */
+type Patch = { set: NodePolicy; unset: (keyof NodePolicy)[] }
+
+/** `p` with `patch` applied, as the row will hold it. */
+function applied(p: NodePolicy, patch: Patch): NodePolicy {
+  const next: NodePolicy = { ...p, ...patch.set }
+  for (const k of patch.unset) delete next[k]
+  return next
+}
+
+/** One key set, or cleared when `value` is undefined. */
+function only<K extends keyof NodePolicy>(key: K, value: NodePolicy[K] | undefined): Patch {
+  return value === undefined ? { set: {}, unset: [key] } : { set: { [key]: value }, unset: [] }
+}
+
+export function usePolicyEditor(n: NodeRow, opts: { askSantree?: boolean } = {}) {
   const { run, busy, error } = useAction()
   // The name is typed, so it is held here and saved on blur or Enter; the
   // switches save on click.
@@ -32,23 +53,21 @@ export function usePolicyEditor(n: NodeRow) {
   )
   const [workdir, setWorkdir] = useState(n.policy.claudeWorkdir ?? '')
 
-  // The policy the next save builds on: what the page last saved, until the
-  // reload brings the row back. Two quick edits — a name, then a switch —
-  // would otherwise each start from the row as it was before both, and the
-  // second would silently undo the first.
+  // The policy as the page last saved it, until the reload brings the row
+  // back: what the whole-object keys build on, and what the typed fields
+  // compare against.
   const base = useRef<NodePolicy>(n.policy)
   useEffect(() => {
     base.current = n.policy
   }, [n.policy])
-  const save = (policy: NodePolicy) => {
-    base.current = policy
-    run(() => saveNodePolicyFn({ data: { id: n.id, policy } }))
+  const save = (patch: Patch) => {
+    base.current = applied(base.current, patch)
+    run(() => saveNodePolicyFn({ data: { id: n.id, set: patch.set, unset: patch.unset } }))
   }
   const saveName = () => {
     const trimmed = name.trim()
     if (trimmed === (base.current.displayName ?? '')) return
-    const { displayName: _old, ...rest } = base.current
-    save(trimmed === '' ? rest : { ...rest, displayName: trimmed })
+    save(only('displayName', trimmed === '' ? undefined : trimmed))
   }
   // The network name: a label, or empty for the hostname's slug. Checked
   // here so a bad one never leaves the field, and again on the server.
@@ -59,8 +78,7 @@ export function usePolicyEditor(n: NodeRow) {
     if (trimmed === (base.current.name ?? '') || (trimmed !== '' && !NODE_NAME_RE.test(trimmed))) {
       return
     }
-    const { name: _old, ...rest } = base.current
-    save(trimmed === '' ? rest : { ...rest, name: trimmed })
+    save(only('name', trimmed === '' ? undefined : trimmed))
   }
   const providerOf = (kind: ProviderKind): { port: number; offer: boolean } => {
     const p = n.policy.providers?.[kind]
@@ -68,16 +86,15 @@ export function usePolicyEditor(n: NodeRow) {
   }
   const saveProvider = (kind: ProviderKind, next: { port: number; offer: boolean }) => {
     const models = base.current.providers?.[kind]?.models
-    save({
-      ...base.current,
-      providers: {
+    save(
+      only('providers', {
         ...base.current.providers,
         [kind]: models === undefined ? next : { ...next, models },
-      },
-    })
+      }),
+    )
   }
-  // The per-model curation rides the same policy: one model's change, merged
-  // into `base` like every other save.
+  // The per-model curation rides the same key: one model's change, merged
+  // into the providers the page last saved.
   const changeModel = (kind: ProviderKind, id: string, patch: ModelPolicy) => {
     const stored = base.current.providers?.[kind]
     const current = { ...providerOf(kind), ...stored }
@@ -89,13 +106,12 @@ export function usePolicyEditor(n: NodeRow) {
     const { [id]: _old, ...others } = models
     const merged = Object.keys(next).length === 0 ? others : { ...others, [id]: next }
     const { models: _m, ...rest } = current
-    save({
-      ...base.current,
-      providers: {
+    save(
+      only('providers', {
         ...base.current.providers,
         [kind]: Object.keys(merged).length === 0 ? rest : { ...rest, models: merged },
-      },
-    })
+      }),
+    )
   }
   const setPort = (kind: ProviderKind, v: string) => {
     setPorts((was) => ({ ...was, [kind]: v }))
@@ -115,14 +131,12 @@ export function usePolicyEditor(n: NodeRow) {
   ) => {
     const { [key]: _old, ...rest } = base.current.hardware ?? {}
     const hardware = value === undefined ? rest : { ...rest, [key]: value }
-    const { hardware: _h, ...policy } = base.current
-    save(Object.keys(hardware).length === 0 ? policy : { ...policy, hardware })
+    save(only('hardware', Object.keys(hardware).length === 0 ? undefined : hardware))
   }
   const saveWorkdir = () => {
     const trimmed = workdir.trim()
     if (trimmed === (base.current.claudeWorkdir ?? '')) return
-    const { claudeWorkdir: _old, ...rest } = base.current
-    save(trimmed === '' ? rest : { ...rest, claudeWorkdir: trimmed })
+    save(only('claudeWorkdir', trimmed === '' ? undefined : trimmed))
   }
 
   // Shown as flipped the moment they are, while the save runs (lib/shown.ts).
@@ -136,15 +150,24 @@ export function usePolicyEditor(n: NodeRow) {
   const [santree, showSantree] = useShown(n.policy.santree ?? POLICY_DEFAULTS.santree, busy, failed)
   const setAwake = (v: boolean) => {
     showAwake(v)
-    save({ ...base.current, awakeHold: v })
+    save(only('awakeHold', v))
   }
   const setClaude = (v: boolean) => {
     showClaude(v)
-    save({ ...base.current, claudeRemoteControl: v })
+    save(only('claudeRemoteControl', v))
   }
+  // ON asks first (the confirmation); OFF is a save like the others.
+  const [askingSantree, setAskingSantree] = useState(
+    opts.askSantree === true && n.policy.santree !== true,
+  )
   const setSantree = (v: boolean) => {
-    showSantree(v)
-    save({ ...base.current, santree: v })
+    if (v) {
+      setAskingSantree(true)
+      return
+    }
+    setAskingSantree(false)
+    showSantree(false)
+    save(only('santree', false))
   }
 
   return {
@@ -174,5 +197,7 @@ export function usePolicyEditor(n: NodeRow) {
     setClaude,
     santree,
     setSantree,
+    askingSantree,
+    closeSantree: () => setAskingSantree(false),
   }
 }

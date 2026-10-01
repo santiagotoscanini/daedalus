@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, type SQL, sql } from 'drizzle-orm'
 import type { Ctx } from '../../core/ctx'
 import {
   enrollValues,
@@ -6,12 +6,17 @@ import {
   requestDesiredSync,
   syncDesired,
 } from '../../host/controller/nodes'
-import type { ControllerNode, ControllerNodeDetail } from '../../host/controller/wire'
+import type {
+  ControllerNode,
+  ControllerNodeDetail,
+  NodePolicyChanges,
+} from '../../host/controller/wire'
 import { db } from '../../host/db'
 import { dhcpHostsMissing, householdMacs, writeDhcpHosts } from '../../host/dhcp-hosts'
-import { releaseTunnel } from '../../host/enroll'
+import { fingerprintOf, releaseTunnel } from '../../host/enroll'
 import { requestGatewaySync } from '../../host/gateway-sync'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
+import { TYPED_LENGTH, typedMatches } from '../agent/enroll'
 import type { NodeClaudeSummary } from '../agent/status'
 import type { NodeForFile } from '../nodes-file'
 import { slugOf } from '../nodes-file'
@@ -34,6 +39,8 @@ import { enrollStore } from './enroll'
 export type NodeRow = {
   id: string
   publicKey: string
+  /** The key as people compare it: what the machine's menu bar and santree show. */
+  fingerprint: string
   state: NodeState
   hostname: string
   /** The policy's display name, or the hostname. */
@@ -56,6 +63,9 @@ export type NodeRow = {
   approvedBy: string | null
   revokedAt: string | null
   policy: NodePolicy
+  /** Who changed the policy last (an admin's label, or `node:<id>` for the machine itself), and when. */
+  policyChangedBy: string | null
+  policyChangedAt: string | null
   /**
    * Its link is up at the controller right now; null when the controller
    * could not be asked. Unknown is not "not connected": the box cannot see
@@ -95,6 +105,7 @@ function row(
   return {
     id: n.id,
     publicKey: n.publicKey,
+    fingerprint: fingerprintOf(n.publicKey),
     state: n.state,
     hostname: n.hostname,
     name: policy.displayName?.trim() || n.hostname,
@@ -111,6 +122,8 @@ function row(
     approvedBy: n.approvedBy,
     revokedAt: n.revokedAt?.toISOString() ?? null,
     policy,
+    policyChangedBy: n.policyChangedBy,
+    policyChangedAt: n.policyChangedAt?.toISOString() ?? null,
     connected: seen === null ? null : s?.connected === true,
     claude: s?.claude ?? null,
     lastSeenAgo: (Date.now() - lastSeen) / 1000,
@@ -145,28 +158,154 @@ export async function getNode(ctx: Pick<Ctx, 'controller'>, id: string): Promise
 }
 
 /**
- * Replace the node's policy. The whole object, so a key the page cleared
- * goes back to the agent's default rather than lingering.
+ * One change to a policy, by key: the keys in `set` take their values, the
+ * keys in `unset` go back to the agent's defaults, and every other key is
+ * left as it is in the row. A key's value is replaced whole (`providers`,
+ * `hardware` included). Every writer patches — the page, a machine asking
+ * from its menu bar, the santree grant — so two of them changing different
+ * keys at once never undo each other: per key, the last writer wins.
  */
-export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boolean> {
+export type PolicyPatch = { set: NodePolicy; unset: readonly (keyof NodePolicy)[] }
+
+/** The SQL a patch writes: `(policy - unset…) || set`, the row's other keys kept. */
+export function policyPatchSql(p: PolicyPatch): SQL {
+  const removed = p.unset.map((k) => sql` - ${k}::text`)
+  return sql`(${nodes.policy}${sql.join(removed, sql``)}) || ${JSON.stringify(p.set)}::jsonb`
+}
+
+/** The columns a patch writes: the policy, and who changed it when. */
+function patched(p: PolicyPatch, by: string) {
+  return { policy: policyPatchSql(p), policyChangedBy: by, policyChangedAt: new Date() }
+}
+
+/**
+ * Change a node's policy from the page (`policyPatchSql`), recorded under
+ * `by`. santree is turned ON only through `grantSantree`, never here.
+ */
+export async function setNodePolicy(id: string, p: PolicyPatch, by: string): Promise<boolean> {
+  if (p.set.santree === true) {
+    throw new Error('santree is turned on through its confirmation, with the key typed')
+  }
   // Two machines cannot share a name on the network: the lease, the
   // nodes.json entry and every consumer dial it.
-  if (policy.name !== undefined) {
+  const name = p.set.name
+  if (name !== undefined) {
     const others = await db.select().from(nodes)
-    const taken = others.find(
-      (n) => n.id !== id && n.state === 'approved' && netNameOf(n) === policy.name,
-    )
+    const taken = others.find((n) => n.id !== id && n.state === 'approved' && netNameOf(n) === name)
     if (taken !== undefined) {
-      throw new Error(`"${policy.name}" is already ${taken.hostname}'s name on the network`)
+      throw new Error(`"${name}" is already ${taken.hostname}'s name on the network`)
     }
   }
   const updated = await db
     .update(nodes)
-    .set({ policy })
+    .set(patched(p, by))
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   await afterDecision()
   return updated.length > 0
+}
+
+/** Who a change asked for from the machine itself is recorded under. */
+export const byNode = (id: string): string => `node:${id}`
+
+/**
+ * A machine asks for its own settings (the controller's
+ * `nodes.policy_request`, decoded by host/controller/wire.ts
+ * `nodePolicyRequest`): keep awake, Claude Remote Control, santree OFF. Only
+ * the keys it sent are written, only into an approved row, and only when the
+ * row does not hold them already; then the desired set goes to the
+ * controller, which is what changes the machine. Never the DHCP lines or the
+ * gateway: none of these keys moves either, and a DHCP write reloads
+ * pi-hole for the whole house. True when the row changed.
+ */
+export async function applyNodePolicyRequest(
+  id: string,
+  changes: NodePolicyChanges,
+): Promise<boolean> {
+  // The decoder refused santree ON already; a door is checked where it opens.
+  if ((changes as { santree?: boolean }).santree === true) {
+    throw new Error(`${id} asked to turn santree on, which only an admin does`)
+  }
+  const set: NodePolicy = { ...changes }
+  if (Object.keys(set).length === 0) return false
+  const changed = await db
+    .update(nodes)
+    .set(patched({ set, unset: [] }, byNode(id)))
+    .where(
+      and(
+        eq(nodes.id, id),
+        eq(nodes.state, 'approved'),
+        sql`NOT (${nodes.policy} @> ${JSON.stringify(set)}::jsonb)`,
+      ),
+    )
+    .returning({ id: nodes.id, hostname: nodes.hostname, policy: nodes.policy })
+  const row = changed[0]
+  if (row === undefined) return false
+  const name = row.policy?.displayName?.trim() || row.hostname
+  const said = Object.entries(set)
+    .map(([k, v]) => `${k}=${String(v)}`)
+    .join(' ')
+  console.info(`nodes: ${id} (${name}) set ${said} from the machine`)
+  requestDesiredSync()
+  return true
+}
+
+/** How a santree grant ended (`grantSantree`). */
+export type SantreeGrant = { ok: true; already: boolean } | { ok: false; reason: string }
+
+/**
+ * Turn santree on for machine `id` — a shell on the box as its operator,
+ * who has root through sudo — once `typed` is the first `TYPED_LENGTH`
+ * characters of the machine's key (lib/agent/enroll.ts `typedMatches`): what
+ * the admin read off that machine's menu bar or santree, so the grant lands
+ * on the machine in front of them. Only an approved row, only the key the
+ * page showed (`fingerprint`, checked again against the row), recorded under
+ * `by`; then the desired set is sent and its answer awaited, so the reply
+ * says what the controller took.
+ */
+export async function grantSantree(
+  input: { id: string; fingerprint: string; typed: string; by: string },
+  deps: { sessionHost: () => Promise<boolean>; sync: () => Promise<void> } = {
+    sessionHost: hasSessionHost,
+    sync: syncNow,
+  },
+): Promise<SantreeGrant> {
+  const [n] = await db.select().from(nodes).where(eq(nodes.id, input.id)).limit(1)
+  if (n === undefined || n.state !== 'approved') {
+    return { ok: false, reason: 'This machine is not approved.' }
+  }
+  const fingerprint = fingerprintOf(n.publicKey)
+  if (fingerprint !== input.fingerprint) {
+    return { ok: false, reason: 'This machine has another key now; reload the page.' }
+  }
+  if (!typedMatches(fingerprint, input.typed)) {
+    return {
+      ok: false,
+      reason: `Those are not the first ${String(TYPED_LENGTH)} characters of this machine's key.`,
+    }
+  }
+  if (n.policy?.santree === true) return { ok: true, already: true }
+  if (!(await deps.sessionHost())) {
+    return { ok: false, reason: 'This box runs no session host, so santree has nowhere to go.' }
+  }
+  const changed = await db
+    .update(nodes)
+    .set(patched({ set: { santree: true }, unset: [] }, input.by))
+    .where(
+      and(eq(nodes.id, input.id), eq(nodes.state, 'approved'), eq(nodes.publicKey, n.publicKey)),
+    )
+    .returning({ id: nodes.id })
+  if (changed.length === 0) return { ok: false, reason: 'This machine changed; reload the page.' }
+  console.info(`nodes: ${input.id} santree turned on by ${input.by}`)
+  await deps.sync()
+  return { ok: true, already: false }
+}
+
+/** Whether this box runs a session host santree can reach. */
+async function hasSessionHost(): Promise<boolean> {
+  const { makeCtx } = await import('../../core/ctx')
+  const { readSessionHost } = await import('../../host/session-host')
+  return (await readSessionHost(await makeCtx())) !== null
 }
 
 /** Approve a row the table already holds (a revoked key, trusted again). */

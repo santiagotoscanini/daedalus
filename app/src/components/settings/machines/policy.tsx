@@ -19,6 +19,7 @@ import { Picker } from '../../ui/picker'
 import { Switch } from '../../ui/switch'
 import { ProviderModels } from '../provider-models'
 import { ASIDE, ERROR_NOTE, FIELD_LABEL, Mono, Rows, Stack } from '../shared'
+import { SantreeGrant } from './santree-grant'
 import { type PolicyEditor, usePolicyEditor } from './use-policy-editor'
 
 // What the box asks of an approved machine, one row per thing it can ask:
@@ -41,12 +42,20 @@ export function Policy({
   n,
   shape,
   lanDomain,
+  os,
+  agentVersion,
+  askSantree = false,
 }: {
   n: NodeRow
   shape: MachineShape | null
   lanDomain: string
+  /** What the santree confirmation shows of the machine. */
+  os: string
+  agentVersion: string
+  /** Opened from the machine's own "santree on the box" (the page's link). */
+  askSantree?: boolean
 }) {
-  const ed = usePolicyEditor(n)
+  const ed = usePolicyEditor(n, { askSantree })
   return (
     <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
       <h3 className={cn(FIELD_LABEL, 'm-0')}>Policy</h3>
@@ -56,13 +65,41 @@ export function Policy({
           ...policyProviders(ed, n, lanDomain),
           ...policyAwake(ed),
           ...policyClaude(ed, n),
-          ...policySantree(ed),
+          ...policySantree(ed, n, os, agentVersion),
           ...policyHardware(ed, n, shape),
         ]}
       />
       {ed.error !== null && <p className={ERROR_NOTE}>{ed.error}</p>}
+      {n.policyChangedBy !== null && <p className={ASIDE}>Last changed {changedBy(n)}</p>}
     </div>
   )
+}
+
+/**
+ * "by this Mac · 12:03", "by santiago · 12:03": who changed the policy last —
+ * the machine itself from its menu bar or santree, or a person here.
+ */
+export function changedBy(
+  n: Pick<NodeRow, 'id' | 'os' | 'policyChangedBy' | 'policyChangedAt'>,
+): string {
+  const who =
+    n.policyChangedBy === `node:${n.id}`
+      ? n.os === 'macos'
+        ? 'this Mac'
+        : 'this machine'
+      : (n.policyChangedBy ?? 'someone')
+  const at = n.policyChangedAt === null ? '' : ` · ${clockOf(n.policyChangedAt)}`
+  return `by ${who}${at}`
+}
+
+/** `HH:MM`, local, of an ISO stamp; the date too when it is not today. */
+function clockOf(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return d.toDateString() === new Date().toDateString()
+    ? time
+    : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`
 }
 
 /** What the pages call the machine, and what the LAN does. */
@@ -300,28 +337,33 @@ function policyClaude(ed: PolicyEditor, n: NodeRow): Row[] {
 }
 
 /** Whether santree on the machine may open the box's projects, through the session host. */
-function policySantree(ed: PolicyEditor): Row[] {
+function policySantree(ed: PolicyEditor, n: NodeRow, os: string, agentVersion: string): Row[] {
   return [
     {
       k: 'santree',
       v: (
-        <Stack>
+        <Stack className="w-full max-w-[34rem]">
           <span className="inline-flex items-center gap-3">
             <Switch
-              checked={ed.santree}
+              checked={ed.santree || ed.askingSantree}
               disabled={ed.busy}
-              onCheckedChange={ed.setSantree}
+              onCheckedChange={(v) =>
+                v || !ed.askingSantree ? ed.setSantree(v) : ed.closeSantree()
+              }
               aria-label="santree"
             />
             <span className="text-[0.82rem]">
-              {ed.santree ? "opens the box's projects" : 'off'}
+              {ed.santree ? "opens the box's projects" : ed.askingSantree ? 'confirm below' : 'off'}
             </span>
           </span>
           <span className={ASIDE}>
             On, santree on this machine can open terminals and run commands in the box's projects,
-            through its agent: a shell on the box. Off closes its connections and ends its
-            terminals.
+            through its agent: a shell on the box. Turning it on asks for the first characters of
+            the machine's key. Off closes its connections and ends its terminals.
           </span>
+          {ed.askingSantree && !ed.santree && (
+            <SantreeGrant n={n} os={os} agentVersion={agentVersion} onClose={ed.closeSantree} />
+          )}
         </Stack>
       ),
     },

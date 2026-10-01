@@ -42,6 +42,7 @@ import type {
   NodeClaudeRosterOk,
   NodeDetail,
   NodeLeft,
+  NodePolicyRequest,
   NodeProvidersOk,
   NodeState,
   NodeSummary,
@@ -985,4 +986,50 @@ export function nodeLeftId(event: string, payload: unknown): string | null {
   if (event !== 'nodes.left') return null
   const id = (payload as Partial<NodeLeft> | null)?.id
   return typeof id === 'string' && /^[0-9a-f]{16}$/.test(id) ? id : null
+}
+
+/** What a machine may ask for its own policy, in the app's words (lib/repo/nodes.ts). */
+export type NodePolicyChanges = {
+  awakeHold?: boolean
+  claudeRemoteControl?: boolean
+  /** Only ever `false`: santree ON is an admin's, in the browser. */
+  santree?: false
+}
+
+/**
+ * A `nodes.policy_request` event (wire.rs `NodePolicyRequest`): an approved
+ * machine's user asks to change its keep-awake, Claude Remote Control or
+ * santree OFF. Exactly those keys, booleans, at least one, and santree never
+ * `true` — the controller refuses that already, and this refuses it again,
+ * since a decoder is the app's own door. Null for any other event and for a
+ * payload that is not exactly that.
+ */
+export function nodePolicyRequest(
+  event: string,
+  payload: unknown,
+): { id: string; changes: NodePolicyChanges } | null {
+  if (event !== 'nodes.policy_request') return null
+  if (typeof payload !== 'object' || payload === null) return null
+  const p = payload as Partial<NodePolicyRequest> & Record<string, unknown>
+  if (Object.keys(p).some((k) => k !== 'id' && k !== 'changes')) return null
+  if (typeof p.id !== 'string' || !/^[0-9a-f]{16}$/.test(p.id)) return null
+  const c = p.changes as Record<string, unknown> | null | undefined
+  if (typeof c !== 'object' || c === null) return null
+  const names: Record<string, keyof NodePolicyChanges> = {
+    awake_hold: 'awakeHold',
+    claude_remote_control: 'claudeRemoteControl',
+    santree: 'santree',
+  }
+  const changes: NodePolicyChanges = {}
+  for (const [k, v] of Object.entries(c)) {
+    const name = names[k]
+    if (name === undefined || typeof v !== 'boolean') return null
+    if (name === 'santree') {
+      if (v) return null
+      changes.santree = false
+    } else {
+      changes[name] = v
+    }
+  }
+  return Object.keys(changes).length === 0 ? null : { id: p.id, changes }
 }

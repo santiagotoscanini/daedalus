@@ -1,9 +1,7 @@
-import type { NodePolicy } from '../host/schema'
-import { hasControlChar, NODE_COMMANDS, ROTATION_GRACE, ROTATION_GRACES } from '../lib/agent/policy'
-import { asValidator, is, literal, obj, withMessage } from '../lib/contract/decode'
+import { NODE_COMMANDS, ROTATION_GRACE, ROTATION_GRACES } from '../lib/agent/policy'
+import { nodePolicyPatch } from '../lib/agent/policy-patch'
+import { asValidator, is, literal, obj, str, withMessage } from '../lib/contract/decode'
 import { nodeIdField } from '../lib/contract/fields'
-import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
-import { NODE_NAME_RE } from '../lib/nodes-file'
 import { isProviderKind } from '../lib/providers/kinds'
 import { modelPolicies } from '../lib/providers/policy'
 import { adminFn, readFn } from './fn'
@@ -83,107 +81,40 @@ export const fetchMachinesFn = readFn.handler(async ({ context }) => {
   return loadMachines(await context.ctx())
 })
 
-const NAME_MAX = 40
-/** A Windows path; MAX_PATH is 260 and nothing here needs longer. */
-const PATH_MAX = 260
+/** A change to a policy, recorded under who made it (the card's "Last changed by"). */
+export const saveNodePolicyFn = adminFn
+  .validator(nodePolicyPatch)
+  .handler(async ({ data, context }) => {
+    const { setNodePolicy } = await import('../lib/repo/nodes')
+    return {
+      ok: await setNodePolicy(data.id, { set: data.set, unset: data.unset }, context.actor()),
+    }
+  })
 
 /**
- * A policy from the page. Every key optional and every value checked — text
- * bounded and on one line, switches booleans, providers by known kind,
- * hardware from the catalog. Unknown keys are dropped rather than stored, so
- * the row never carries what the agent would not understand.
+ * Turn santree on for a machine: a shell on the box as its operator, who
+ * has root through sudo. The admin types the first characters of the
+ * machine's key, read off its menu bar or santree, and lib/repo/nodes.ts
+ * `grantSantree` checks them, and the key the page showed, against the row.
+ * The web switch and a Mac's "santree on the box" both arrive here, through
+ * the Machines page's confirmation. Answers once the controller has the set.
  */
-const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
-  const { id } = nodeId(data)
-  const p = (data as { policy?: unknown }).policy
-  if (typeof p !== 'object' || p === null) throw new Error('expected a policy')
-  const o = p as Record<string, unknown>
-  const policy: NodePolicy = {}
-  if (o.displayName !== undefined) {
-    if (typeof o.displayName !== 'string') throw new Error('displayName must be text')
-    const name = o.displayName.trim().replace(/\s+/g, ' ')
-    if (name.length > NAME_MAX) throw new Error(`displayName is longer than ${String(NAME_MAX)}`)
-    // The controller labels the machine's metrics with it and refuses a
-    // control character (lib/agent/policy.ts `wireName`).
-    if (hasControlChar(name)) throw new Error('displayName has a control character')
-    if (name !== '') policy.displayName = name
-  }
-  if (o.name !== undefined) {
-    if (typeof o.name !== 'string') throw new Error('name must be text')
-    const label = o.name.trim().toLowerCase()
-    if (label !== '') {
-      if (!NODE_NAME_RE.test(label)) {
-        throw new Error('name must be a DNS label: letters, digits and hyphens, 1 to 32 long')
-      }
-      policy.name = label
+export const grantSantreeFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ id: nodeIdField, fingerprint: str, typed: str }),
+        'expected a node id, its key and the characters typed',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }) => {
+    const { grantSantree } = await import('../lib/repo/nodes')
+    if (data.typed.length > 32 || data.fingerprint.length > 100) {
+      return { ok: false as const, reason: 'That is not a key.' }
     }
-  }
-  if (o.pinAddress !== undefined) {
-    if (typeof o.pinAddress !== 'boolean') throw new Error('pinAddress must be true or false')
-    if (o.pinAddress) policy.pinAddress = true
-  }
-  if (o.providers !== undefined) {
-    if (typeof o.providers !== 'object' || o.providers === null) {
-      throw new Error('providers must be an object')
-    }
-    // By kind, so a machine can offer whatever the gateway knows how to read
-    // — a name that is not a kind is refused rather than stored and ignored.
-    const providers: NonNullable<NodePolicy['providers']> = {}
-    for (const [kind, raw] of Object.entries(o.providers as Record<string, unknown>)) {
-      if (!isProviderKind(kind)) throw new Error(`providers.${kind} is not a provider kind`)
-      if (typeof raw !== 'object' || raw === null) {
-        throw new Error(`providers.${kind} must be an object`)
-      }
-      const { port, offer, models } = raw as Record<string, unknown>
-      if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new Error(`providers.${kind}.port must be a port number`)
-      }
-      if (typeof offer !== 'boolean') {
-        throw new Error(`providers.${kind}.offer must be true or false`)
-      }
-      providers[kind] =
-        models === undefined ? { port, offer } : { port, offer, models: modelPolicies(models) }
-    }
-    if (Object.keys(providers).length > 0) policy.providers = providers
-  }
-  if (o.claudeWorkdir !== undefined) {
-    if (typeof o.claudeWorkdir !== 'string') throw new Error('claudeWorkdir must be text')
-    const dir = o.claudeWorkdir.trim()
-    if (dir.length > PATH_MAX) throw new Error(`claudeWorkdir is longer than ${String(PATH_MAX)}`)
-    if (/[\r\n]/.test(dir)) throw new Error('claudeWorkdir must be one line')
-    if (dir !== '') policy.claudeWorkdir = dir
-  }
-  if (o.hardware !== undefined) {
-    if (typeof o.hardware !== 'object' || o.hardware === null) {
-      throw new Error('hardware must be an object')
-    }
-    const h = o.hardware as Record<string, unknown>
-    const hardware: NonNullable<NodePolicy['hardware']> = {}
-    for (const kind of CHOSEN_KINDS) {
-      const id = h[kind]
-      if (id === undefined || id === null || id === '') continue
-      if (!isChosenPart(kind, id)) throw new Error(`${kind}: not a part the catalog knows`)
-      hardware[kind] = id
-    }
-    if (h.finish !== undefined && h.finish !== null && h.finish !== '') {
-      if (!isFinish(h.finish)) throw new Error('finish: not a colour the catalog knows')
-      hardware.finish = h.finish
-    }
-    if (Object.keys(hardware).length > 0) policy.hardware = hardware
-  }
-  for (const k of ['awakeHold', 'claudeRemoteControl', 'santree'] as const) {
-    if (o[k] !== undefined) {
-      if (typeof o[k] !== 'boolean') throw new Error(`${k} must be true or false`)
-      policy[k] = o[k]
-    }
-  }
-  return { id, policy }
-}
-
-export const saveNodePolicyFn = adminFn.validator(nodePolicy).handler(async ({ data }) => {
-  const { setNodePolicy } = await import('../lib/repo/nodes')
-  return { ok: await setNodePolicy(data.id, data.policy) }
-})
+    return grantSantree({ ...data, by: context.actor() })
+  })
 
 /**
  * What an Apply would do about the machines: the fields the bar shows

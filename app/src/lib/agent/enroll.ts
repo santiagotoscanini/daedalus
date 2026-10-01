@@ -108,7 +108,7 @@ function bad(reason: string): { ok: false; reason: string } {
 }
 
 /** How many characters of the fingerprint the admin types back before Confirm opens. */
-export const TYPED_LENGTH = 4
+export const TYPED_LENGTH = 8
 
 /**
  * Whether `typed` is the start of `fingerprint`, as the menu bar shows it: the

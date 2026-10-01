@@ -13,9 +13,10 @@ import { env } from './env'
 // reloads FTL (a HUP, no restart), and no rebuild is involved — a join must
 // not cost one, and a MAC must not enter git.
 //
-// Rewritten whole on every change that could move a line: approve, revoke,
+// Rendered whole on every change that could move a line: approve, revoke,
 // forget, a policy change, and an address or a MAC the controller saw move
-// (lib/repo/nodes.ts `publishDhcpHosts`).
+// (lib/repo/nodes.ts `publishDhcpHosts`) — and written only when the bytes
+// differ, since each write reloads pi-hole (`writeDhcpHosts`).
 //
 // The household's own reservations (the encrypted dhcp-hostsfile, which the
 // network page reads a copy of at DHCP_HOSTS_PATH) win: a MAC that file
@@ -43,10 +44,23 @@ export function dhcpHostsDocument(hosts: readonly DhcpHost[]): string {
   return lines.length === 0 ? '' : `${lines.join('\n')}\n`
 }
 
-export async function writeDhcpHosts(hosts: readonly DhcpHost[]): Promise<void> {
-  const dir = join(applyDir(), 'nodes')
+/**
+ * Write the lines, unless the file already holds exactly them: every write
+ * is a path change nix watches, and its unit reloads pi-hole (a HUP to FTL,
+ * which resolves for the whole house), so a save that moves no line — a
+ * switch, a display name — must not touch the file. True when it wrote.
+ */
+export async function writeDhcpHosts(
+  hosts: readonly DhcpHost[],
+  dir: string = join(applyDir(), 'nodes'),
+): Promise<boolean> {
+  const path = join(dir, 'dhcp-hosts')
+  const body = dhcpHostsDocument(hosts)
+  const held = await readFile(path, 'utf8').catch(() => null)
+  if (held === body) return false
   await mkdir(dir, { recursive: true })
-  await writeAtomic(join(dir, 'dhcp-hosts'), dhcpHostsDocument(hosts))
+  await writeAtomic(path, body)
+  return true
 }
 
 const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/

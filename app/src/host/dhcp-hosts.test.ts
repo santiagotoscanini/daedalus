@@ -18,3 +18,33 @@ describe('the dnsmasq lines', () => {
     expect([...macs].sort()).toEqual(['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:03'])
   })
 })
+
+describe('writing the file', () => {
+  it('never rewrites an unchanged file: each write reloads pi-hole', async () => {
+    const { mkdtemp, readFile, stat, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { writeDhcpHosts } = await import('./dhcp-hosts')
+    const dir = await mkdtemp(join(tmpdir(), 'dhcp-hosts-'))
+    try {
+      const one = [{ id: 'a', mac: 'aa:bb:cc:dd:ee:01', name: 'gaming-pc', lanIp: null }]
+      expect(await writeDhcpHosts(one, dir)).toBe(true)
+      const first = await stat(join(dir, 'dhcp-hosts'))
+      // The same lines again — a switch saved, a name that did not move.
+      expect(await writeDhcpHosts([...one], dir)).toBe(false)
+      const again = await stat(join(dir, 'dhcp-hosts'))
+      expect(again.ino).toBe(first.ino)
+      expect(again.mtimeMs).toBe(first.mtimeMs)
+      // A line that moved is written.
+      expect(await writeDhcpHosts([{ ...one[0], name: 'renamed' } as (typeof one)[0]], dir)).toBe(
+        true,
+      )
+      expect(await readFile(join(dir, 'dhcp-hosts'), 'utf8')).toBe('aa:bb:cc:dd:ee:01,renamed\n')
+      // An empty set over an empty file is no write either.
+      expect(await writeDhcpHosts([], dir)).toBe(true)
+      expect(await writeDhcpHosts([], dir)).toBe(false)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})

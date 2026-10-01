@@ -1,3 +1,4 @@
+import { useSearch } from '@tanstack/react-router'
 import { MonitorSmartphoneIcon, NetworkIcon } from 'lucide-react'
 
 import type { AgentLink, AgentTunnel } from '../../../lib/agent/status'
@@ -173,7 +174,16 @@ function TrustNote({ link }: { link: AgentLink | null }) {
 }
 
 /** One decided machine: the head, the facts, the decision, and — once approved — the policy. */
-function MachineSection({ m, lanDomain }: { m: Machine; lanDomain: string }) {
+function MachineSection({
+  m,
+  lanDomain,
+  askSantree,
+}: {
+  m: Machine
+  lanDomain: string
+  /** The page was opened to turn santree on for this machine. */
+  askSantree: boolean
+}) {
   const n = m.node
   if (n === null) return null
   const s = m.status
@@ -257,7 +267,16 @@ function MachineSection({ m, lanDomain }: { m: Machine; lanDomain: string }) {
       {s?.holdError != null && <p className={NOTE}>The hold failed: {s.holdError}</p>}
       <TrustNote link={s?.link ?? null} />
       <Decision m={m} />
-      {n.state === 'approved' && <Policy n={n} shape={m.shape} lanDomain={lanDomain} />}
+      {n.state === 'approved' && (
+        <Policy
+          n={n}
+          shape={m.shape}
+          lanDomain={lanDomain}
+          os={edition}
+          agentVersion={s?.version ?? n.agentVersion}
+          askSantree={askSantree}
+        />
+      )}
     </Section>
   )
 }
@@ -326,6 +345,9 @@ function PendingSection({
 }
 
 export function Machines({ d }: { d: MachinesData }) {
+  // A machine's own "santree on the box" opens this page at
+  // `?tab=machines&node=<id>&santree=on` (agent settings.rs `confirm_url`).
+  const search = useSearch({ from: '/settings' })
   const c = d.controller
   const sync = d.sync
   return (
@@ -351,7 +373,12 @@ export function Machines({ d }: { d: MachinesData }) {
               controllerFingerprint={c.reachable ? c.fingerprint : null}
             />
           ) : (
-            <MachineSection key={m.node.id} m={m} lanDomain={d.lanDomain} />
+            <MachineSection
+              key={m.node.id}
+              m={m}
+              lanDomain={d.lanDomain}
+              askSantree={search.santree === 'on' && search.node === m.node.id}
+            />
           ),
         )
       )}

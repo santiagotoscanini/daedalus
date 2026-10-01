@@ -10,6 +10,7 @@ import {
   nodeClaudeAnswer,
   nodeClaudeRosterAnswer,
   nodeDetail,
+  nodePolicyRequest,
   nodeProvidersAnswer,
   nodesList,
   nodeTelemetryAnswer,
@@ -573,5 +574,35 @@ describe('the controller wire', () => {
       ),
     ).toMatchObject({ state: 'missing', version: null, error: 'allow-list: denied' })
     expect(() => santreeStatus({ state: 'gone' })).toThrow()
+  })
+})
+
+describe('a machine asking for its settings (nodes.policy_request)', () => {
+  const id = '0123456789abcdef'
+  it('takes exactly the three keys, as booleans, santree only off', () => {
+    expect(
+      nodePolicyRequest('nodes.policy_request', { id, changes: { awake_hold: false } }),
+    ).toEqual({ id, changes: { awakeHold: false } })
+    expect(
+      nodePolicyRequest('nodes.policy_request', {
+        id,
+        changes: { awake_hold: true, claude_remote_control: false, santree: false },
+      }),
+    ).toEqual({ id, changes: { awakeHold: true, claudeRemoteControl: false, santree: false } })
+  })
+  it('refuses santree on, a bad id, extra keys and anything else', () => {
+    const no = (p: unknown) => expect(nodePolicyRequest('nodes.policy_request', p)).toBeNull()
+    no({ id, changes: { santree: true } })
+    no({ id, changes: { awake_hold: false, santree: true } })
+    no({ id: 'not-an-id', changes: { awake_hold: false } })
+    no({ id: id.toUpperCase(), changes: { awake_hold: false } })
+    no({ id, changes: { awake_hold: false, providers: {} } })
+    no({ id, changes: { name: 'evil' } })
+    no({ id, changes: { awake_hold: 'no' } })
+    no({ id, changes: {} })
+    no({ id, changes: { awake_hold: false }, extra: 1 })
+    no({ id })
+    no(null)
+    expect(nodePolicyRequest('nodes.left', { id, changes: { awake_hold: false } })).toBeNull()
   })
 })

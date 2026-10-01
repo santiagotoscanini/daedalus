@@ -230,7 +230,7 @@ function deps(over: Partial<EnrollDeps> & { store: EnrollStore; wg: WgEasy }): E
 
 const tokenFor = (actor = 'santi', q: EnrollQuery = QUERY, now?: number) =>
   mintFormToken({ query: q, fingerprint: fingerprintOf(q.key), actor }, now)
-const typed = fingerprintOf(KEY).slice(0, 4)
+const typed = fingerprintOf(KEY).slice(0, 9)
 
 describe('keys and PKCE', () => {
   it('fingerprints a key as the agent does (SHA-256, hex in fours)', () => {
@@ -504,7 +504,7 @@ describe('Confirm', () => {
       (
         await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
           token: t,
-          typed: '0000',
+          typed: '0000:0000',
           actor: 'santi',
         })
       ).ok,
