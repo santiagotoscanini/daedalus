@@ -44,6 +44,8 @@ ensure_dirs() {
 # timer, the deploy-triggered sync and a clone button can all fire inside the
 # same minute, and two git processes in one half-cloned directory is how a
 # workspace becomes neither the old state nor the new one.
+# The engine and Claude Code updaters take it too, from root, around their git
+# in the engine clone (lib.sh lock_workspaces_root).
 lock_workspaces() {
   exec 9>"$OUT_DIR/.lock"
   flock -w 600 9

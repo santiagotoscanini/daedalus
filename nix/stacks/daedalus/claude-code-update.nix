@@ -32,6 +32,7 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
+    workspacesDir
     mkUpdateReaper
     mkAgent
     operatorHomeVars
@@ -46,7 +47,7 @@ let
       pkgs.curl
       pkgs.gnupg # the release manifest's detached signature
       pkgs.gnugrep
-      pkgs.util-linux # setpriv
+      pkgs.util-linux # setpriv, flock
       pkgs.coreutils
       pkgs.gawk # lib.sh log_errtail
       pkgs.openssh # git push, as the operator
@@ -60,6 +61,8 @@ let
         SITE_DIR = config.fleet.site.path;
         HOSTNAME = config.networking.hostName;
         GIT = "${pkgs.git}/bin/git";
+        # The workspace lock the clone is mutated under (host/lib.sh).
+        WORKSPACES_DIR = workspacesDir;
       };
     files = [
       ./host/lib.sh

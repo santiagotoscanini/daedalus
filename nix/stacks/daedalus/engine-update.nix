@@ -37,6 +37,7 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
+    workspacesDir
     mkUpdateReaper
     mkAgent
     bridgeAgent
@@ -71,6 +72,8 @@ let
         HEALTH_PATH = config.fleet.apps.daedalus.auth.healthPath;
         LAN_IP = config.fleet.lanIp;
         GIT = "${pkgs.git}/bin/git";
+        # The workspace lock the clone is mutated under (host/lib.sh).
+        WORKSPACES_DIR = workspacesDir;
       };
     files = [
       ./host/lib.sh

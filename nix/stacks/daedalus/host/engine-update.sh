@@ -203,8 +203,15 @@ log_reset "$LOGFILE"
 # The clone's branch, brought up to origin — fast-forward only. Nothing here
 # checks out, resets or merges: a dirty tree is left as found, and git refuses
 # the fast-forward itself if an incoming commit would touch a dirty file.
+#
+# Under the workspace lock (host/lib.sh lock_workspaces_root): the clone is
+# also a workspace, which the 30-minute sync and the clone verb move under it.
+# Released once the branch is where it is going.
 write_status running fetching ""
 if [ -n "$CLONE" ]; then
+  lock_workspaces_root ||
+    fail fetching "the workspace lock under $WORKSPACES_DIR was held for 10 minutes (a workspace sync or clone) — nothing was changed"
+
   current="$(git_clone rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   [ "$current" = "$REF" ] ||
     fail fetching "the clone $CLONE is on '${current:-?}', not '$REF' (the branch the '$INPUT' input names) — check it out first"
@@ -223,6 +230,7 @@ if [ -n "$CLONE" ]; then
   if ! log_run "$LOGFILE" git_clone merge --ff-only --quiet "origin/$REF"; then
     fail fetching "could not fast-forward $REF in $CLONE — $(errtail)"
   fi
+  exec 8<&-
 fi
 
 # --- resolve --------------------------------------------------------------

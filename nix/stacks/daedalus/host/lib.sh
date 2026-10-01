@@ -298,6 +298,31 @@ site_engine_override() {
     jq -r 'if .developer.engineOverride == true then "on" else empty end' 2>/dev/null || true
 }
 
+# ── the workspace lock, from root ─────────────────────────────────────────
+#
+# The engine clone is also a workspace, and the 30-minute sync and the clone
+# verb run git in every workspace under `$WORKSPACES_DIR/.lock`
+# (workspace-lib.sh lock_workspaces). A root agent that fetches, merges or
+# commits in the clone takes the same lock, on fd 8, so two git processes
+# never work one tree at once. Released by `exec 8<&-`, or at exit.
+#
+# The directory is the operator's (mounted read-only into the container). The
+# file is created as the operator — the workspace units open it for writing,
+# as the operator — and root opens it READ-ONLY, which is all flock needs:
+# a link or anything but a regular file is refused, and a read-only open
+# changes nothing about whatever might sit at the name. Expects
+# WORKSPACES_DIR; waits up to ten minutes, like the workspace units.
+lock_workspaces_root() {
+  local f="$WORKSPACES_DIR/.lock"
+  as_operator dd if=/dev/null of="$f" oflag=append,nofollow,nonblock conv=notrunc status=none 2>/dev/null || true
+  if [ -L "$f" ] || [ ! -f "$f" ]; then
+    echo "refusing the workspace lock $f: it is not a regular file" >&2
+    return 1
+  fi
+  exec 8<"$f"
+  flock -w 600 8
+}
+
 # ── who the box's commits are made as ─────────────────────────────────────
 #
 # site.json's `commits.author` picks one of the git identities nix baked into
