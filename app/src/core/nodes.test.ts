@@ -131,7 +131,7 @@ describe('a policy patch', () => {
     expect(q({ santree: false }, []).sql).toBe('("nodes"."policy") || $1::jsonb')
   })
 
-  it('records who changed it, and never turns santree on from a page', async () => {
+  it('records who changed it', async () => {
     await flows.setNodePolicy(
       ctx,
       'n1',
@@ -140,9 +140,6 @@ describe('a policy patch', () => {
     )
     expect(h.sets[0]).toMatchObject({ policyChangedBy: 'alice' })
     expect(h.sets[0]?.policyChangedAt).toBeInstanceOf(Date)
-    await expect(
-      flows.setNodePolicy(ctx, 'n1', { set: { santree: true }, unset: [] }, 'alice'),
-    ).rejects.toThrow(/confirmation/)
   })
 })
 
@@ -164,10 +161,7 @@ describe('a machine asking for its settings', () => {
     expect(h.desired).toBe(0)
   })
 
-  it('never turns santree on, whatever reached it', async () => {
-    await expect(flows.applyNodePolicyRequest(ctx, 'n1', { santree: true })).rejects.toThrow(
-      /only an admin/,
-    )
+  it('asks nothing of the row for an empty request', async () => {
     expect(await flows.applyNodePolicyRequest(ctx, 'n1', {})).toBe(false)
     expect(h.sets).toEqual([])
   })

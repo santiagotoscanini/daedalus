@@ -39,7 +39,8 @@ import type { Ctx } from './ctx'
 
 /**
  * Change a node's policy from the page, recorded under `by`. santree is
- * turned ON only through `grantSantree`, never here.
+ * turned ON only through `grantSantree`: the page's patch refuses it
+ * (lib/agent/policy-patch.ts, the one gate a web patch passes).
  */
 export async function setNodePolicy(
   ctx: Ctx,
@@ -47,9 +48,6 @@ export async function setNodePolicy(
   p: PolicyPatch,
   by: string,
 ): Promise<boolean> {
-  if (p.set.santree === true) {
-    throw new Error('santree is turned on through its confirmation, never a policy patch')
-  }
   // Two machines cannot share a name on the network: the lease, the
   // nodes.json entry and every consumer dial it.
   const name = p.set.name
@@ -64,8 +62,9 @@ export async function setNodePolicy(
 
 /**
  * A machine asks for its own settings (the controller's
- * `nodes.policy_request`, decoded by host/controller/wire.ts
- * `nodePolicyRequest`): keep awake, Claude Remote Control, santree OFF. Only
+ * `nodes.policy_request`): keep awake, Claude Remote Control, santree OFF —
+ * never santree ON, which the controller refuses where the request enters
+ * (link/wire.rs `PolicyRequest::check`). Only
  * the keys it sent are written, only into an approved row, and only when the
  * row does not hold them already; then the desired set goes to the
  * controller, which is what changes the machine. Never the DHCP lines or the
@@ -77,10 +76,6 @@ export async function applyNodePolicyRequest(
   id: string,
   changes: PolicyRequest,
 ): Promise<boolean> {
-  // The decoder refused santree ON already; a door is checked where it opens.
-  if (changes.santree === true) {
-    throw new Error(`${id} asked to turn santree on, which only an admin does`)
-  }
   const set: NodePolicy = {
     ...(changes.awake_hold === undefined ? {} : { awakeHold: changes.awake_hold }),
     ...(changes.claude_remote_control === undefined

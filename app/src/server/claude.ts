@@ -1,5 +1,4 @@
 import type { ActionOutcome, SessionAction } from '../host/controller/generated'
-import { selectorError } from '../lib/claude-roster'
 import {
   asValidator,
   nullable,
@@ -36,9 +35,8 @@ export const restartClaudeFn = adminFn.handler(async ({ context }) => {
  * roster reports the outcome under it (`fetchClaudeActionFn`).
  *
  * The selector is the whole request: no path, no directory, no flag. Its
- * shape is checked here so a malformed one never leaves the app, and again by
- * the controller, the machine and its session, which also decide whether
- * anything answers to it (agent/src/claude/sessions.rs).
+ * shape is checked by the controller, the machine and its session, which
+ * also decide whether anything answers to it (agent/src/claude/sessions/).
  */
 export const claudeSessionFn = adminFn
   .validator(
@@ -54,8 +52,6 @@ export const claudeSessionFn = adminFn
     ),
   )
   .handler(async ({ data, context }) => {
-    const why = selectorError(data.action, data.session)
-    if (why !== null) throw new Error(`not a session id: ${why}`)
     const ctx = await context.ctx()
     return data.node === null
       ? ctx.controller.call('claude.session', { action: data.action, id: data.session })

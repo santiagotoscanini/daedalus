@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { Agent, Roster, Transcript } from '../host/controller/generated'
 import {
   countByState,
-  isAgentId,
-  isSessionId,
   type LiveSession,
   type RosterEntry,
   rowControl,
-  selectorError,
   sessionRows,
 } from './claude-roster'
 
@@ -613,44 +610,5 @@ describe('which verb a row is offered', () => {
     expect(row.state).toBe('alive')
     expect(row.canResume).toBe(false)
     expect(rowControl(row)).toEqual({ kind: 'stop-unit', session: 'fresh' })
-  })
-})
-
-describe('the selector charset, which is the first of the host agent three layers', () => {
-  it('accepts exactly the shape every transcript on this box has', () => {
-    expect(isSessionId('11111111-2222-4333-8444-555555555555')).toBe(true)
-    expect(isSessionId('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')).toBe(true)
-  })
-
-  it.each([
-    '../../etc/shadow',
-    '$(id)',
-    '11111111-2222-4333-8444-555555555555; rm -rf /',
-    '11111111-2222-4333-8444-555555555555.service',
-    '11111111-2222-4333-8444-55555555555',
-    'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE',
-    '',
-  ])('refuses %s', (v) => {
-    expect(isSessionId(v)).toBe(false)
-  })
-
-  it('knows a background agent id from a session id', () => {
-    expect(isAgentId('deadbeef')).toBe(true)
-    expect(isAgentId('DEADBEEF')).toBe(false)
-    expect(isAgentId('deadbee')).toBe(false)
-    expect(isAgentId('11111111-2222-4333-8444-555555555555')).toBe(false)
-  })
-})
-
-describe('the selector each verb takes', () => {
-  const uuid = '11111111-2222-4333-8444-555555555555'
-  it('resume a uuid, stop either, remove a short id alone', () => {
-    expect(selectorError('resume', uuid)).toBeNull()
-    expect(selectorError('resume', 'deadbeef')).not.toBeNull()
-    expect(selectorError('stop', uuid)).toBeNull()
-    expect(selectorError('stop', 'deadbeef')).toBeNull()
-    expect(selectorError('stop', '../x')).not.toBeNull()
-    expect(selectorError('remove', 'deadbeef')).toBeNull()
-    expect(selectorError('remove', uuid)).not.toBeNull()
   })
 })

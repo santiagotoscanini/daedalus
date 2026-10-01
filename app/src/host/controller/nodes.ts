@@ -55,9 +55,9 @@ function approvedEntry(id: string, key: string, policy: NodePolicy): DesiredNode
  * The complete set `nodes.set_desired` takes: every approved key with its
  * policy and display name, every revoked key without either, sorted by id.
  * The name is the `machine` label of the machine's series in the
- * controller's `/nodes/metrics`. A row whose id is not
- * its key's is left out and named — the controller checks every entry before
- * applying any, so one bad row would refuse the lot.
+ * controller's `/nodes/metrics`. A row whose stored key is not hex is left
+ * out and named; the controller checks every entry (an id is its key's)
+ * before applying any.
  */
 export function desiredSet(rows: readonly DecidedRow[]): {
   nodes: DesiredNode[]
@@ -69,10 +69,6 @@ export function desiredSet(rows: readonly DecidedRow[]): {
     const key = r.publicKey.toLowerCase()
     if (!HEX32.test(key)) {
       skipped.push({ id: r.id, reason: 'the stored key is not 64 hex characters' })
-      continue
-    }
-    if (nodeIdOf(key) !== r.id) {
-      skipped.push({ id: r.id, reason: 'the id is not the key’s' })
       continue
     }
     nodes.push(
@@ -232,9 +228,7 @@ export function enrollValues(d: NodeDetail): {
     throw new Error(`the controller holds ${d.id} as ${d.state}, not waiting for a decision`)
   }
   const key = d.public_key.toLowerCase()
-  if (!HEX32.test(key) || nodeIdOf(key) !== d.id) {
-    throw new Error(`the controller's key for ${d.id} is not that id's`)
-  }
+  if (!HEX32.test(key)) throw new Error(`the controller's key for ${d.id} is not 64 hex characters`)
   const h = d.hello
   if (h === null || h.hostname === '') {
     throw new Error(`the controller has no hello from ${d.id}; wait for it to connect`)

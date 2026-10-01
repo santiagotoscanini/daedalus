@@ -92,14 +92,13 @@ describe('the desired set', () => {
     expect(nodes.map((n) => n.id)).toEqual([...nodes.map((n) => n.id)].sort())
   })
 
-  it('leaves out a row whose id is not its key’s, or whose key is not hex, and says so', () => {
+  it('leaves out a row whose key is not hex, and says so', () => {
     const { nodes, skipped } = desiredSet([
-      { ...row(KEY_A, 'approved'), id: nodeIdOf(KEY_B) },
       { id: '0123456789abcdef', publicKey: 'not-a-key', state: 'approved', policy: {} },
       row(KEY_C, 'revoked'),
     ])
     expect(nodes.map((n) => n.id)).toEqual([nodeIdOf(KEY_C)])
-    expect(skipped.map((s) => s.id).sort()).toEqual(['0123456789abcdef', nodeIdOf(KEY_B)].sort())
+    expect(skipped.map((s) => s.id)).toEqual(['0123456789abcdef'])
   })
 
   it('sends the whole set, records the answer, and never throws', async () => {
@@ -265,7 +264,7 @@ describe('enrolment', () => {
 
   it('refuses what is not a waiting key the app may take', () => {
     expect(() => enrollValues(detail({ state: 'revoked' }))).toThrow(/not waiting/)
-    expect(() => enrollValues(detail({ id: nodeIdOf(KEY_B) }))).toThrow(/not that id/)
+    expect(() => enrollValues(detail({ public_key: 'not-a-key' }))).toThrow(/64 hex/)
     expect(() => enrollValues(detail({ hello: null }))).toThrow(/no hello/)
   })
 })

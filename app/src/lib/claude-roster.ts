@@ -107,41 +107,6 @@ export type LiveSession = LiveFacts & {
 }
 
 /**
- * A canonical lowercase session uuid — what `--resume` takes, and what a
- * `claude-session-<uuid>` unit is named for.
- *
- * The same charset the agent applies as its first layer (sessions.rs
- * `check_selector`), restated here so a malformed selector never leaves the
- * app. This side is not the only guard and must not be the only guard.
- */
-export const isSessionId = (v: string): boolean =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)
-
-/** A background agent's SHORT id — what `claude attach` and `claude stop` take. */
-export const isAgentId = (v: string): boolean => /^[0-9a-f]{8}$/.test(v)
-
-/**
- * Why a verb's selector is refused before it is sent, or null: `resume` takes
- * a uuid, `stop` a uuid or a short id, `remove` a short id only — `claude rm`
- * is the CLI's verb for its own job records, and a uuid arriving there would
- * mean the board had confused a transcript with a job.
- */
-export function selectorError(
-  action: 'resume' | 'stop' | 'remove',
-  session: string,
-): string | null {
-  if (action === 'resume') {
-    return isSessionId(session) ? null : 'a resume takes a canonical lowercase session uuid'
-  }
-  if (action === 'stop') {
-    return isSessionId(session) || isAgentId(session)
-      ? null
-      : 'a stop takes a canonical lowercase uuid or an eight-digit agent id'
-  }
-  return isAgentId(session) ? null : 'a remove takes an eight-digit background-agent id'
-}
-
-/**
  * What a row IS, which is the one thing the board must not blur.
  *
  * - `alive` — a session process is running it now. Nothing to press.
