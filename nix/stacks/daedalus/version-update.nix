@@ -31,6 +31,7 @@ let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
     mkUpdateReaper
+    bridgeAgent
     mkAgent
     operatorHomeVars
     commitVars
@@ -153,15 +154,13 @@ in
   };
 
   config = lib.mkIf config.fleet.modules.daedalus.enable {
-    systemd.services.daedalus-version-update = {
+    systemd.services.daedalus-version-update = bridgeAgent // {
       description = "Move a stack's pinned version and rebuild, on daedalus's behalf";
       after = [
         "network-online.target"
         "linger-users.service"
       ];
       wants = [ "network-online.target" ];
-      # daedalus-lib.nix's bridgeAgent: a path unit makes each request a start.
-      startLimitIntervalSec = 0;
       # PINS embeds the values it just moved, so the switch changes this unit;
       # restarted by that switch it would lose its verify and push phases.
       restartIfChanged = false;

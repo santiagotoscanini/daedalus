@@ -34,6 +34,7 @@ let
     applyDir
     workspacesDir
     mkUpdateReaper
+    bridgeAgent
     mkAgent
     operatorHomeVars
     commitVars
@@ -81,18 +82,13 @@ in
 
 {
   config = lib.mkIf config.fleet.modules.daedalus.enable {
-    systemd.services.daedalus-claude-code-update = {
+    systemd.services.daedalus-claude-code-update = bridgeAgent // {
       description = "Pin a newer Claude Code release in the engine, on daedalus's behalf";
       after = [
         "network-online.target"
         "linger-users.service"
       ];
       wants = [ "network-online.target" ];
-
-      # Every bridge agent's one property (daedalus-lib.nix, bridgeAgent): a path
-      # unit makes each request a start, and systemd's default start limit
-      # would silently drop the next request after a burst.
-      startLimitIntervalSec = 0;
 
       # This one does NOT rebuild — it hands that to daedalus-engine-update —
       # so it never runs inside the switch it caused. It still carries the
