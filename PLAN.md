@@ -473,7 +473,7 @@ Hand edits the UI cannot make for itself:
    (`.github/workflows/agent.yml` reads whichever exists); and a tag ruleset
    so only the operator creates `agent-v*` tags.
 3. **The spare release key.** The agent trusts a list of release keys
-   (`RELEASE_PUBLIC_KEYS`, `agent/src/update/mod.rs`) and lists one. Make the
+   (`RELEASE_PUBLIC_KEYS`, `agent/src/node/update/mod.rs`) and lists one. Make the
    spare OFFLINE, never on the box or a runner:
    `openssl genpkey -algorithm ed25519 -out spare.pem`; keep `spare.pem`
    in the password manager only; its public half, as hex, is

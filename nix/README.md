@@ -256,8 +256,8 @@ directory is mounted into the control plane's container at `/controller`
 (`CONTROLLER_SOCKET`). The container runs as the operator whatever its
 source, so the socket serves no other uid.
 
-The metrics page (`/healthz`, `/nodes/metrics`) binds every interface on
-`fleet.daedalus.statusPort` (default 7787) and is opened on none: the
+The metrics page (`/healthz`, `/nodes/metrics`) binds the LAN address only,
+`fleet.lanIp:fleet.daedalus.statusPort` (default 7787), and is opened on none: the
 Prometheus container reaches it through the containers' host alias, which
 arrives at the host's own address rather than loopback. The `nodes` job
 scrapes every connected machine's telemetry from it as one target.
