@@ -1,11 +1,11 @@
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { KeyRoundIcon } from 'lucide-react'
-import { useId, useState, useTransition } from 'react'
+import { useId, useState } from 'react'
 import { PageHead } from '../components/page'
 import { ERROR_NOTE, FIELD_LABEL, Mono, NOTE, PANEL } from '../components/settings/shared'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
-import { errorText } from '../lib/redact'
+import { useAction } from '../components/use-action'
 import {
   fetchLocalLoginState,
   localLoginFn,
@@ -41,34 +41,26 @@ function LoginPage() {
   const [token, setToken] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, start] = useTransition()
+  const { run, busy, error } = useAction()
 
   const submit = () => {
-    setError(null)
-    start(async () => {
-      try {
-        const r =
-          state.mode === 'setup'
-            ? await localSetupFn({ data: { token, username, password } })
-            : await localLoginFn({ data: { username, password } })
-        if (!r.ok) {
-          setError(r.reason)
-          return
-        }
-        setPassword('')
-        await router.navigate({ to: '/apps' })
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+    run(
+      () =>
+        state.mode === 'setup'
+          ? localSetupFn({ data: { token, username, password } })
+          : localLoginFn({ data: { username, password } }),
+      {
+        invalidate: false,
+        onDone: () => {
+          setPassword('')
+          return router.navigate({ to: '/apps' })
+        },
+      },
+    )
   }
 
   const signOut = () => {
-    start(async () => {
-      await localLogoutFn()
-      await router.invalidate()
-    })
+    run(() => localLogoutFn())
   }
 
   return (

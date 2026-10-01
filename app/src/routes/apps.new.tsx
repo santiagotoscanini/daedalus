@@ -11,12 +11,12 @@ import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../components/ui/field'
 import { Input } from '../components/ui/input'
+import { useAction } from '../components/use-action'
 import { Board, BoardGrid } from '../components/viz'
 import type { Repo } from '../host/github-repos'
 import { cn } from '../lib/cn'
 import { appNameError, hostnameError } from '../lib/hostname'
 import { readiness } from '../lib/readiness'
-import { errorText } from '../lib/redact'
 import { defaultImage } from '../lib/site'
 import { useSite } from '../lib/site-context'
 import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/registry'
@@ -112,8 +112,7 @@ function Wizard({ options }: { options: Options }) {
 
   const [preflight, setPreflight] = useState<Preflight | null>(null)
   const [checking, setChecking] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
 
   // The manual re-run trigger for the check below.
   const [recheck, setRecheck] = useState(0)
@@ -183,32 +182,31 @@ function Wizard({ options }: { options: Options }) {
 
   const create = () => {
     if (!repo) return
-    setBusy(true)
-    setError(null)
-    void createAppFn({
-      data: {
-        app: {
-          name,
-          description: description.trim(),
-          postgres,
-          storage,
-          litellm,
-          prometheus,
-          image: image.trim() || null,
-          hostname: hostname.trim() || null,
-        },
-      },
-    })
-      .then(() => {
+    run(
+      () =>
+        createAppFn({
+          data: {
+            app: {
+              name,
+              description: description.trim(),
+              postgres,
+              storage,
+              litellm,
+              prometheus,
+              image: image.trim() || null,
+              hostname: hostname.trim() || null,
+            },
+          },
+        }),
+      {
+        invalidate: false,
         // Straight to the app's own page: the entry exists in the database as
         // `declared`, and that page is where the Apply that makes it real
         // lives — and, after the first build, the promotion off `declared`.
-        void router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'settings' } })
-      })
-      .catch((e: unknown) => {
-        setError(errorText(e))
-        setBusy(false)
-      })
+        onDone: () =>
+          router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'settings' } }),
+      },
+    )
   }
 
   return (

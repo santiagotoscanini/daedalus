@@ -1,4 +1,4 @@
-import { Link, useRouter } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   ChevronsUpDownIcon,
   ExternalLinkIcon,
@@ -10,7 +10,7 @@ import {
   SunIcon,
   UserIcon,
 } from 'lucide-react'
-import { type ReactNode, useTransition } from 'react'
+import type { ReactNode } from 'react'
 
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
@@ -32,6 +32,7 @@ import {
   MENU_ITEM,
   MENU_PANEL,
 } from './ui/dropdown-menu'
+import { useAction } from './use-action'
 
 // The foot of the rail: who is signed in, and the few things that are about
 // that person rather than about the box — their profile (a page of its own,
@@ -150,13 +151,9 @@ function Menu({
   activeClassName,
   labelClassName,
 }: Omit<Props, 'account'> & { account: Account | null; loading: boolean }) {
-  const router = useRouter()
-  const [, start] = useTransition()
+  const { run } = useAction()
   const pick = (scheme: Scheme) => {
-    start(async () => {
-      await saveTheme({ data: { presetId: theme.presetId, scheme } })
-      await router.invalidate()
-    })
+    run(() => saveTheme({ data: { presetId: theme.presetId, scheme } }))
   }
   const label = account?.name ?? 'Account'
 

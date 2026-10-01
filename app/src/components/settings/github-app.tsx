@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { ExternalLinkIcon } from 'lucide-react'
-import { type ReactNode, useEffect, useId, useRef, useState, useTransition } from 'react'
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import type {
   GithubAppState,
   GithubAppStatus,
@@ -9,7 +9,6 @@ import type {
 } from '../../core/settings/types'
 import type { SiteGithubApp } from '../../core/site/file'
 import { until, when } from '../../lib/format'
-import { errorText } from '../../lib/redact'
 import type { Tone } from '../../lib/tone'
 import {
   discardGithubPendingApplyFn,
@@ -19,6 +18,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import { PasteKey } from './github-paste-key'
 import {
@@ -193,8 +193,7 @@ type Launch = { action: string; manifest: string; state: string }
 function CreateApp({ app }: { app: GithubAppStatus }) {
   const id = useId()
   const [name, setName] = useState(app.defaultName)
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
   const [launch, setLaunch] = useState<Launch | null>(null)
   const launcher = useRef<HTMLFormElement>(null)
 
@@ -222,15 +221,11 @@ function CreateApp({ app }: { app: GithubAppStatus }) {
 
   const create = () => {
     if (!canCreate) return
-    setError(null)
-    start(async () => {
-      try {
-        const r = await startGithubAppFn({ data: { name: trimmed } })
-        if (r.ok) setLaunch(r.value)
-        else setError(r.reason)
-      } catch (e) {
-        setError(errorText(e))
-      }
+    run(() => startGithubAppFn({ data: { name: trimmed } }), {
+      invalidate: false,
+      onDone: (r) => {
+        setLaunch(r.value)
+      },
     })
   }
 
@@ -400,20 +395,15 @@ function PendingApply({
   appsUrl: string
 }) {
   const router = useRouter()
-  const [busy, start] = useTransition()
-  const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
+  const { run, busy, error, notice } = useAction()
   const [discarded, setDiscarded] = useState<string | null>(null)
 
   const discard = () => {
-    setOutcome(null)
-    start(async () => {
-      try {
-        const r = await discardGithubPendingApplyFn()
-        if (r.ok) setDiscarded(r.value.slug)
-        else setOutcome({ ok: false, text: r.reason })
-      } catch (e) {
-        setOutcome({ ok: false, text: errorText(e) })
-      }
+    run(() => discardGithubPendingApplyFn(), {
+      invalidate: false,
+      onDone: (r) => {
+        setDiscarded(r.value.slug)
+      },
     })
   }
 
@@ -453,19 +443,8 @@ function PendingApply({
   }
 
   const retry = () => {
-    setOutcome(null)
-    start(async () => {
-      try {
-        const r = await retryGithubApplyFn()
-        if (r.ok) {
-          setOutcome({ ok: true, text: 'Applying. Install the App once the rebuild finishes.' })
-          await router.invalidate()
-        } else {
-          setOutcome({ ok: false, text: r.reason })
-        }
-      } catch (e) {
-        setOutcome({ ok: false, text: errorText(e) })
-      }
+    run(() => retryGithubApplyFn(), {
+      notice: 'Applying. Install the App once the rebuild finishes.',
     })
   }
 
@@ -485,8 +464,8 @@ function PendingApply({
           <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={discard}>
             Discard
           </Button>
-          {outcome !== null && (
-            <span className={outcome.ok ? NOTE : ERROR_NOTE}>{outcome.text}</span>
+          {(error ?? notice) !== null && (
+            <span className={error !== null ? ERROR_NOTE : NOTE}>{error ?? notice}</span>
           )}
         </div>
       </AlertDescription>

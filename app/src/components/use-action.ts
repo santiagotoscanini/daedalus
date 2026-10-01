@@ -1,33 +1,60 @@
 import { useRouter } from '@tanstack/react-router'
 import { useCallback, useState, useTransition } from 'react'
+import { isRecord } from '../lib/is-record'
 import { errorText } from '../lib/redact'
 
-// The common life of a button that asks the server for something: clear the
-// last error, run the call, reload the page's loader so what it changed
-// shows, or put the failure (through `errorText`) where the button can say
-// it. `busy` is the transition's pending flag, so it stays up through the
-// reload as well as the call.
+// The one life of a button that asks the server for something: clear the
+// last error and notice, run the call, then either show what went wrong or
+// finish — the caller's `onDone` step (close an editor, clear a field,
+// navigate), a success `notice`, and a reload of the page's loader so what it
+// changed shows. `busy` is the transition's pending flag, so it stays up
+// through the reload and the render it causes as well as the call.
 //
-// Deliberately NOT here, so those sites stay hand-written: a result's
-// `{ ok: false, reason }` shown as the error, a success notice, a step
-// between the call and the reload (closing an editor, clearing a field), a
-// busy flag held in state and reset in `.finally` rather than a transition's
-// pending flag (not interchangeable: a transition also holds through the
-// render its updates cause), and any other error wording. Folding one of
-// those in would change what that site does.
+// What counts as failure: a throw, shown through `errorText`, and a
+// Result-shaped refusal (`{ ok: false, reason }`, lib/result.ts), shown as
+// its reason. A refusal still reloads — the box answered, and what it
+// refused against may be newer than the page — but skips `onDone` and the
+// notice. `invalidate: false` is for a call that changes nothing the loader
+// reads (a reveal) or that leaves the page (`onDone` navigates).
+
+type Refused = { ok: false; reason: string }
+
+export type ActionOptions<T> = {
+  /** A step after success and before the reload. */
+  onDone?: (value: Exclude<T, Refused>) => unknown
+  /** Said in `notice` once the call has succeeded. */
+  notice?: string | ((value: Exclude<T, Refused>) => string)
+  /** Reload the page's loader afterwards. Default true. */
+  invalidate?: boolean
+}
+
+const refusal = (v: unknown): string | null =>
+  isRecord(v) && v.ok === false && typeof v.reason === 'string' ? v.reason : null
 
 export function useAction() {
   const router = useRouter()
   const [busy, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const run = useCallback(
-    (fn: () => Promise<unknown>) => {
+    <T>(fn: () => Promise<T>, opts: ActionOptions<T> = {}) => {
       setError(null)
+      setNotice(null)
       start(async () => {
         try {
-          await fn()
-          await router.invalidate()
+          const out = await fn()
+          const refused = refusal(out)
+          if (refused !== null) {
+            setError(refused)
+          } else {
+            const value = out as Exclude<T, Refused>
+            await opts.onDone?.(value)
+            if (opts.notice !== undefined) {
+              setNotice(typeof opts.notice === 'string' ? opts.notice : opts.notice(value))
+            }
+          }
+          if (opts.invalidate !== false) await router.invalidate()
         } catch (e) {
           setError(errorText(e))
         }
@@ -35,9 +62,10 @@ export function useAction() {
     },
     [router],
   )
-  const clearError = useCallback(() => {
+  const clear = useCallback(() => {
     setError(null)
+    setNotice(null)
   }, [])
 
-  return { run, busy, error, clearError }
+  return { run, busy, error, notice, clear }
 }

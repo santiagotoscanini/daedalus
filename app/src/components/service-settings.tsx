@@ -1,4 +1,3 @@
-import { useRouter } from '@tanstack/react-router'
 import { SettingsIcon, XIcon } from 'lucide-react'
 import { Dialog } from 'radix-ui'
 import { type ReactNode, useCallback, useEffect, useId, useState } from 'react'
@@ -11,6 +10,7 @@ import {
   webLabelAfter,
   webPublicAfter,
 } from '../lib/module-switch'
+import { errorText } from '../lib/redact'
 import { useShown } from '../lib/shown'
 import { useSite } from '../lib/site-context'
 import { fetchModuleSwitchFn, setModuleEnabledFn, setModuleWebFn } from '../server/modules'
@@ -20,6 +20,7 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Picker } from './ui/picker'
 import { Switch } from './ui/switch'
+import { useAction } from './use-action'
 import { Chip } from './viz'
 
 // The cog on a service: one dialog that holds everything the operator may
@@ -96,15 +97,23 @@ function ServiceSettingsDialog({
 }) {
   const key = ids.join(',')
   const [rows, setRows] = useState<ModuleSwitch[] | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const moved = useCallback(() => setTick((t) => t + 1), [])
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` is the refetch trigger, on purpose
   useEffect(() => {
     if (!open || key === '') return
     let live = true
-    void fetchModuleSwitchFn({ data: { ids: key.split(',') } }).then((r) => {
-      if (live) setRows(r)
-    })
+    fetchModuleSwitchFn({ data: { ids: key.split(',') } }).then(
+      (r) => {
+        if (!live) return
+        setRows(r)
+        setFailed(null)
+      },
+      (e: unknown) => {
+        if (live) setFailed(errorText(e))
+      },
+    )
     return () => {
       live = false
     }
@@ -139,7 +148,9 @@ function ServiceSettingsDialog({
               </Button>
             </Dialog.Close>
           </div>
-          {rows === null ? (
+          {failed !== null ? (
+            <p className={`${NOTE} text-danger`}>{failed}</p>
+          ) : rows === null ? (
             <p className={NOTE}>Reading the box…</p>
           ) : rows.length === 0 ? (
             <p className={NOTE}>This box declares none of {ids.join(', ')}.</p>
@@ -160,24 +171,20 @@ function ServiceSettingsDialog({
   )
 }
 
-type Draft = 'idle' | 'asking' | 'saving'
-
 function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
-  const router = useRouter()
-  const [draft, setDraft] = useState<Draft>('idle')
-  const [refused, setRefused] = useState<string | null>(null)
-  const [desired, show] = useShown(m.desired, draft === 'saving', refused !== null)
+  const [asking, setAsking] = useState(false)
+  const { run, busy: saving, error: refused } = useAction()
+  const [desired, show] = useShown(m.desired, saving, refused !== null)
   const pending = m.desired !== m.running
 
-  const move = async (enabled: boolean) => {
-    setDraft('saving')
-    setRefused(null)
+  const move = (enabled: boolean) => {
+    setAsking(false)
     show(enabled)
-    const r = await setModuleEnabledFn({ data: { id: m.id, enabled } })
-    if (!r.ok) setRefused(r.reason)
-    setDraft('idle')
-    onMoved()
-    await router.invalidate()
+    run(async () => {
+      const r = await setModuleEnabledFn({ data: { id: m.id, enabled } })
+      onMoved()
+      return r
+    })
   }
 
   return (
@@ -198,8 +205,8 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
             <Switch
               aria-label={`${m.id} on`}
               checked={desired}
-              disabled={draft === 'saving'}
-              onCheckedChange={(v) => (v ? void move(true) : setDraft('asking'))}
+              disabled={saving}
+              onCheckedChange={(v) => (v ? move(true) : setAsking(true))}
             />
           )}
         </span>
@@ -208,7 +215,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
         {m.containers.length} {m.containers.length === 1 ? 'container' : 'containers'}
         {m.structural && ` · ${STRUCTURAL_WHY[m.id] ?? 'a running box cannot do without it'}`}
       </p>
-      {draft === 'asking' && (
+      {asking && (
         <div className="mt-[0.6rem] rounded-md border border-(--border-soft) bg-(--panel) p-[0.7rem]">
           <p className="m-0 text-[0.8rem] leading-[1.5]">
             Switching <b>{m.id}</b> off stops{' '}
@@ -228,7 +235,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
             and the switch is one Apply away from on again.
           </p>
           <div className="mt-[0.5rem] flex gap-2">
-            <Button type="button" size="sm" onClick={() => void move(false)}>
+            <Button type="button" size="sm" onClick={() => move(false)}>
               Switch {m.id} off
             </Button>
             <Button
@@ -236,7 +243,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
               variant="outline"
               size="sm"
               className={GHOST_BTN}
-              onClick={() => setDraft('idle')}
+              onClick={() => setAsking(false)}
             >
               Keep it
             </Button>
@@ -261,11 +268,9 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
  * what it is changing FROM while the change waits for an Apply.
  */
 function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => void }) {
-  const router = useRouter()
   const site = useSite()
   const [text, setText] = useState(webLabelAfter(w))
-  const [saving, setSaving] = useState(false)
-  const [refused, setRefused] = useState<string | null>(null)
+  const { run, busy: saving, error: refused } = useAction()
   const [exposure, showExposure] = useShown(
     webPublicAfter(w) ? 'public' : 'lan',
     saving,
@@ -285,20 +290,18 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
       ? null
       : hostnameError(site, `${text.trim().toLowerCase()}.${site.baseDomain}`, [])
 
-  const write = async (patch: { label?: string | null; public?: boolean | null }) => {
-    setSaving(true)
-    setRefused(null)
-    const r = await setModuleWebFn({ data: { id, name: w.name, ...patch } })
-    if (!r.ok) setRefused(r.reason)
-    setSaving(false)
-    onMoved()
-    await router.invalidate()
+  const write = (patch: { label?: string | null; public?: boolean | null }) => {
+    run(async () => {
+      const r = await setModuleWebFn({ data: { id, name: w.name, ...patch } })
+      onMoved()
+      return r
+    })
   }
 
   const saveLabel = () => {
     const v = text.trim().toLowerCase()
     if (v === after || local !== null) return
-    void write({ label: v === '' ? null : v })
+    write({ label: v === '' ? null : v })
   }
 
   return (
@@ -333,7 +336,7 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
           failed={refused !== null}
           onChange={(v) => {
             showExposure(v)
-            void write({ public: v === 'public' })
+            write({ public: v === 'public' })
           }}
         />
         {labelPending && <Chip tone="warn">was {w.label}</Chip>}
@@ -343,7 +346,7 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
             type="button"
             className="cursor-pointer border-0 bg-transparent p-0 text-[0.72rem] text-(--text-muted) underline underline-offset-2 hover:text-foreground"
             disabled={saving}
-            onClick={() => void write({ label: null, public: null })}
+            onClick={() => write({ label: null, public: null })}
           >
             as the host says
           </button>

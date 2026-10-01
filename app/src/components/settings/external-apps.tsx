@@ -1,6 +1,5 @@
-import { useRouter } from '@tanstack/react-router'
 import { GlobeIcon } from 'lucide-react'
-import { useId, useState, useTransition } from 'react'
+import { useId, useState } from 'react'
 import { cn } from '../../lib/cn'
 import {
   EXTERNAL_DESCRIPTION_MAX,
@@ -12,12 +11,12 @@ import {
   PLATFORMS,
   type Platform,
 } from '../../lib/external-apps'
-import { errorText } from '../../lib/redact'
 import { addExternalAppFn, removeExternalAppFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
 import { Picker } from '../ui/picker'
+import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import { ERROR_NOTE, Mono, NOTE, PANEL, Section } from './shared'
 
@@ -55,11 +54,9 @@ export function ExternalApps({ rows }: { rows: ExternalApp[] }) {
     description: useId(),
     repo: useId(),
   }
-  const router = useRouter()
   const [draft, setDraft] = useState<ExternalAppInput>(EMPTY)
   const [touched, setTouched] = useState(false)
-  const [busy, start] = useTransition()
-  const [refused, setRefused] = useState<string | null>(null)
+  const { run, busy, error: refused, clear } = useAction()
 
   // The form's own verdict, over the rows it can see; shown once the operator
   // has started typing, so an empty form is not a wall of red.
@@ -70,7 +67,7 @@ export function ExternalApps({ rows }: { rows: ExternalApp[] }) {
   const error = touched ? (local ?? refused) : refused
   const patch = (p: Partial<ExternalAppInput>) => {
     setTouched(true)
-    setRefused(null)
+    clear()
     setDraft((d) => ({ ...d, ...p }))
   }
 
@@ -79,32 +76,16 @@ export function ExternalApps({ rows }: { rows: ExternalApp[] }) {
       setTouched(true)
       return
     }
-    setRefused(null)
-    start(async () => {
-      try {
-        const r = await addExternalAppFn({ data: draft })
-        if (r.ok) {
-          setDraft(EMPTY)
-          setTouched(false)
-          await router.invalidate()
-        } else setRefused(r.reason)
-      } catch (e) {
-        setRefused(errorText(e))
-      }
+    run(() => addExternalAppFn({ data: draft }), {
+      onDone: () => {
+        setDraft(EMPTY)
+        setTouched(false)
+      },
     })
   }
 
   const remove = (id: string) => {
-    setRefused(null)
-    start(async () => {
-      try {
-        const r = await removeExternalAppFn({ data: { id } })
-        if (!r.ok) setRefused(r.reason)
-        await router.invalidate()
-      } catch (e) {
-        setRefused(errorText(e))
-      }
-    })
+    run(() => removeExternalAppFn({ data: { id } }))
   }
 
   return (

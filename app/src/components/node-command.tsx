@@ -1,9 +1,7 @@
-import { useState, useTransition } from 'react'
-
 import type { Command } from '../host/controller/generated'
-import { errorText } from '../lib/redact'
 import { sendNodeCommandFn } from '../server/nodes'
 import { Button } from './ui/button'
+import { useAction } from './use-action'
 
 // One button that sends a machine one instruction through the controller
 // (server/nodes.ts `sendNodeCommandFn`), and says what became of it: taken
@@ -30,17 +28,12 @@ export function NodeCommandButton({
   note?: string
   className?: string
 }) {
-  const [busy, start] = useTransition()
-  const [said, setSaid] = useState<{ text: string; failed: boolean } | null>(null)
+  const { run, busy, error, notice } = useAction()
+  const said = error ?? notice
   const send = () => {
-    setSaid(null)
-    start(async () => {
-      try {
-        const r = await sendNodeCommandFn({ data: { id, command } })
-        setSaid({ text: r.delivered ? OUTCOME.delivered : OUTCOME.queued, failed: false })
-      } catch (e) {
-        setSaid({ text: errorText(e), failed: true })
-      }
+    run(() => sendNodeCommandFn({ data: { id, command } }), {
+      invalidate: false,
+      notice: (r) => (r.delivered ? OUTCOME.delivered : OUTCOME.queued),
     })
   }
   return (
@@ -51,10 +44,10 @@ export function NodeCommandButton({
       {said !== null ? (
         <span
           className={
-            said.failed ? 'text-[0.74rem] text-destructive' : 'text-[0.74rem] text-(--dim)'
+            error !== null ? 'text-[0.74rem] text-destructive' : 'text-[0.74rem] text-(--dim)'
           }
         >
-          {said.text}
+          {said}
         </span>
       ) : (
         note !== undefined && <span className="text-[0.74rem] text-(--dim)">{note}</span>

@@ -1,9 +1,8 @@
-import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { errorText } from '../../lib/redact'
 import { cancelBuildFn, retryReportFn } from '../../server/builds'
 import { GHOST_BTN } from '../apps/shared'
 import { Button } from '../ui/button'
+import { useAction } from '../use-action'
 
 // The build page's two buttons that ask the box for something: stop this
 // build, and send its failed GitHub report again. Both reload the page's
@@ -19,26 +18,12 @@ import { Button } from '../ui/button'
  * a guard.
  */
 export function CancelBuildButton({ app, id }: { app: string; id: string }) {
-  const router = useRouter()
   const [armed, setArmed] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run: act, busy, error } = useAction()
 
   const run = () => {
-    setBusy(true)
-    setError(null)
-    void cancelBuildFn({ data: { app, id } })
-      .then(async (r) => {
-        if (!r.ok) setError(r.reason)
-        await router.invalidate()
-      })
-      .catch((e: unknown) => {
-        setError(errorText(e))
-      })
-      .finally(() => {
-        setBusy(false)
-        setArmed(false)
-      })
+    setArmed(false)
+    act(() => cancelBuildFn({ data: { app, id } }))
   }
 
   return (
@@ -65,24 +50,10 @@ export function CancelBuildButton({ app, id }: { app: string; id: string }) {
 
 /** Send a failed GitHub report again now; the page reloads to show what GitHub said. */
 export function RetryReportButton({ app, id }: { app: string; id: string }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run: act, busy, error } = useAction()
 
   const run = () => {
-    setBusy(true)
-    setError(null)
-    void retryReportFn({ data: { app, id } })
-      .then(async (r) => {
-        if (!r.ok) setError(r.reason)
-        await router.invalidate()
-      })
-      .catch((e: unknown) => {
-        setError(errorText(e))
-      })
-      .finally(() => {
-        setBusy(false)
-      })
+    act(() => retryReportFn({ data: { app, id } }))
   }
 
   return (

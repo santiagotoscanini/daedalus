@@ -2,7 +2,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useId, useState } from 'react'
 import { cn } from '../../lib/cn'
 import { until, when } from '../../lib/format'
-import { errorText } from '../../lib/redact'
+
 import {
   DEFAULT_TASK_TIMEOUT_SEC,
   describeSchedule,
@@ -22,6 +22,7 @@ import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import {
   type AppRecord,
   BOARD_FOOT,
@@ -47,14 +48,12 @@ type TaskDraft = AppRecord['tasks'][number]
  */
 export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
   const { tasks, running } = td.tasks
-  const router = useRouter()
   const readOnly = app.managedInNix
 
   // What the form is doing, as one value rather than two booleans that can
   // both be true: nothing, adding, or editing exactly one existing task.
   const [editor, setEditor] = useState<{ kind: 'add' } | { kind: 'edit'; id: string } | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy: saving, error } = useAction()
 
   /**
    * Write the WHOLE list back, the way every other edit on this page writes a
@@ -68,19 +67,11 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
    * the form shows while you type.
    */
   const write = (next: TaskDraft[]) => {
-    setSaving(true)
-    setError(null)
-    void saveApp({ data: { name: app.name, patch: { tasks: next } } })
-      .then(async () => {
+    run(() => saveApp({ data: { name: app.name, patch: { tasks: next } } }), {
+      onDone: () => {
         setEditor(null)
-        await router.invalidate()
-      })
-      .catch((e: unknown) => {
-        setError(errorText(e))
-      })
-      .finally(() => {
-        setSaving(false)
-      })
+      },
+    })
   }
 
   const remove = (id: string) => {

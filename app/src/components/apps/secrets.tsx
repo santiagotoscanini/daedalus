@@ -9,12 +9,12 @@ import { cn } from '../../lib/cn'
 // imports would be erased and safe.
 import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../../lib/env-groups'
 import { when } from '../../lib/format'
-import { errorText } from '../../lib/redact'
 import { removeAppSecretFn, revealEnvVar, setAppSecretFn } from '../../server/registry'
 import { useRootAction } from '../root-action'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import { Board, BoardGrid } from '../viz'
 import { VIZ_EMPTY } from './shared'
 
@@ -218,8 +218,7 @@ type EnvRowData = {
  */
 function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
   const [revealed, setRevealed] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
 
   const shown = v.secret ? revealed : v.value
 
@@ -263,18 +262,12 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
                   setRevealed(null)
                   return
                 }
-                setBusy(true)
-                setError(null)
-                void revealEnvVar({ data: { name: app, key: v.key } })
-                  .then((r) => {
+                run(() => revealEnvVar({ data: { name: app, key: v.key } }), {
+                  invalidate: false,
+                  onDone: (r) => {
                     setRevealed(r.value)
-                  })
-                  .catch((e: unknown) => {
-                    setError(errorText(e))
-                  })
-                  .finally(() => {
-                    setBusy(false)
-                  })
+                  },
+                })
               }}
             >
               {revealed === null ? '👁' : '🙈'}

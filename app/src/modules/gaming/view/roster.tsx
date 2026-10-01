@@ -1,9 +1,9 @@
-import { useRouter } from '@tanstack/react-router'
 import { type FormEvent, useState } from 'react'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Switch } from '../../../components/ui/switch'
+import { useAction } from '../../../components/use-action'
 import { Board, Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { useShown } from '../../../lib/shown'
@@ -74,24 +74,8 @@ export function RosterBoard({ rows }: { rows: Row[] }) {
 }
 
 function PlayerRow({ r }: { r: Row }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
   const [op, showOp] = useShown(r.op, busy, error !== null)
-
-  async function run(write: () => Promise<{ ok: true } | { ok: false; reason: string }>) {
-    setBusy(true)
-    setError(null)
-    try {
-      const out = await write()
-      if (!out.ok) setError(out.reason)
-      await router.invalidate()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const removing = r.state === 'removing'
   return (
@@ -141,7 +125,7 @@ function PlayerRow({ r }: { r: Row }) {
               disabled={busy}
               onCheckedChange={(v) => {
                 showOp(v)
-                void run(() => setPlayerOpFn({ data: { id: 'minecraft', uuid: r.uuid, op: v } }))
+                run(() => setPlayerOpFn({ data: { id: 'minecraft', uuid: r.uuid, op: v } }))
               }}
             />
           </span>
@@ -153,7 +137,7 @@ function PlayerRow({ r }: { r: Row }) {
             size="sm"
             disabled={busy}
             onClick={() =>
-              void run(() =>
+              run(() =>
                 addPlayerFn({ data: { id: 'minecraft', name: r.renamed ?? r.name, op: r.op } }),
               )
             }
@@ -166,9 +150,7 @@ function PlayerRow({ r }: { r: Row }) {
             variant="ghost"
             size="sm"
             disabled={busy}
-            onClick={() =>
-              void run(() => removePlayerFn({ data: { id: 'minecraft', uuid: r.uuid } }))
-            }
+            onClick={() => run(() => removePlayerFn({ data: { id: 'minecraft', uuid: r.uuid } }))}
           >
             Remove
           </Button>
@@ -179,39 +161,26 @@ function PlayerRow({ r }: { r: Row }) {
 }
 
 function AddPlayer() {
-  const router = useRouter()
   const [name, setName] = useState('')
   const [op, setOp] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [said, setSaid] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
+  const { run, busy, error, notice } = useAction()
 
-  async function submit(e: FormEvent) {
+  function submit(e: FormEvent) {
     e.preventDefault()
     if (name.trim() === '' || busy) return
-    setBusy(true)
-    setSaid(null)
-    try {
-      const out = await addPlayerFn({ data: { id: 'minecraft', name, op } })
-      if (out.ok) {
-        const got = out.player?.name ?? name.trim()
-        setSaid({
-          tone: 'ok',
-          text:
-            got === name.trim()
-              ? `${got} found on Mojang; they get in after the next Apply`
-              : `found on Mojang as ${got}; they get in after the next Apply`,
-        })
+    const typed = name.trim()
+    run(() => addPlayerFn({ data: { id: 'minecraft', name, op } }), {
+      notice: (out) => {
+        const got = out.player?.name ?? typed
+        return got === typed
+          ? `${got} found on Mojang; they get in after the next Apply`
+          : `found on Mojang as ${got}; they get in after the next Apply`
+      },
+      onDone: () => {
         setName('')
         setOp(false)
-        await router.invalidate()
-      } else {
-        setSaid({ tone: 'bad', text: out.reason })
-      }
-    } catch (err) {
-      setSaid({ tone: 'bad', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setBusy(false)
-    }
+      },
+    })
   }
 
   return (
@@ -235,8 +204,8 @@ function AddPlayer() {
       <Button type="submit" size="sm" disabled={busy || name.trim() === ''}>
         {busy ? 'Checking with Mojang…' : 'Add'}
       </Button>
-      {said !== null && (
-        <span className={cn(NOTE, said.tone === 'bad' && 'text-danger')}>{said.text}</span>
+      {(error ?? notice) !== null && (
+        <span className={cn(NOTE, error !== null && 'text-danger')}>{error ?? notice}</span>
       )}
     </form>
   )

@@ -1,12 +1,11 @@
-import { useRouter } from '@tanstack/react-router'
 import { ExternalLinkIcon } from 'lucide-react'
-import { useId, useState, useTransition } from 'react'
-import { errorText } from '../../lib/redact'
+import { useId, useState } from 'react'
 
 import { pasteAppKeyFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
+import { useAction } from '../use-action'
 import { ERROR_NOTE, FIELD_LABEL, NOTE, PANEL } from './shared'
 
 // The GitHub App's recovery form, and only that.
@@ -25,13 +24,11 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
   const pemId = useId()
   const webhookId = useId()
   const clientId = useId()
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pem, setPem] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
   const [clientSecret, setClientSecret] = useState('')
-  const [busy, start] = useTransition()
-  const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
+  const { run, busy, error, notice, clear: forget } = useAction()
 
   const clear = () => {
     setPem('')
@@ -44,23 +41,11 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
     if (!ready) return
     const data = { pem, webhookSecret, clientSecret }
     clear()
-    setOutcome(null)
-    start(async () => {
-      try {
-        const r = await pasteAppKeyFn({ data })
-        if (r.ok) {
-          setOpen(false)
-          setOutcome({
-            ok: true,
-            text: 'Encrypted and applying. The new webhook secret has to be saved on GitHub too.',
-          })
-          await router.invalidate()
-        } else {
-          setOutcome({ ok: false, text: r.reason })
-        }
-      } catch (e) {
-        setOutcome({ ok: false, text: errorText(e) })
-      }
+    run(() => pasteAppKeyFn({ data }), {
+      onDone: () => {
+        setOpen(false)
+      },
+      notice: 'Encrypted and applying. The new webhook secret has to be saved on GitHub too.',
     })
   }
 
@@ -74,12 +59,16 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
           className="-ml-2"
           onClick={() => {
             setOpen(true)
-            setOutcome(null)
+            forget()
           }}
         >
           Paste a private key…
         </Button>
-        {outcome !== null && <span className={outcome.ok ? NOTE : ERROR_NOTE}>{outcome.text}</span>}
+        {error !== null ? (
+          <span className={ERROR_NOTE}>{error}</span>
+        ) : (
+          notice !== null && <span className={NOTE}>{notice}</span>
+        )}
       </div>
     )
   }
@@ -147,9 +136,9 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
           />
         </div>
       </div>
-      {outcome !== null && !outcome.ok && (
+      {error !== null && (
         <p role="alert" className={ERROR_NOTE}>
-          {outcome.text}
+          {error}
         </p>
       )}
       <div className="flex flex-wrap gap-2">

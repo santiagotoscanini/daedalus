@@ -1,5 +1,4 @@
-import { useRouter } from '@tanstack/react-router'
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit, SiteFileView, SiteState } from '../../core/site'
 import type { RepoFacts, SiteDir } from '../../host/contract/domains/repo'
@@ -8,6 +7,7 @@ import { setSiteCommit } from '../../server/site'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Skeleton } from '../ui/skeleton'
 import { Switch } from '../ui/switch'
+import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import { Commit, Mono, NOTE, Section, SourceNote, Unset, Value } from './shared'
 import { type SelectGroupSpec, SiteSelect } from './site-fields'
@@ -200,8 +200,7 @@ function AgainstOrigin({ upstream }: { upstream: RepoFacts['upstream'] }) {
  * operator should know about before pressing anything.
  */
 function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
-  const router = useRouter()
-  const [pending, start] = useTransition()
+  const { run, busy: pending } = useAction()
   const [commit, setCommit] = useState(site?.commit ?? false)
   const versioned = dir.toplevel !== null
 
@@ -254,10 +253,7 @@ function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) 
             disabled={site === null || pending}
             onCheckedChange={(v) => {
               setCommit(v)
-              start(async () => {
-                await setSiteCommit({ data: v })
-                await router.invalidate()
-              })
+              run(() => setSiteCommit({ data: v }))
             }}
           />
           Commit after every write

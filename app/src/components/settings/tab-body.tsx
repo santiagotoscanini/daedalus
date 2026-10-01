@@ -1,5 +1,4 @@
-import { useRouter } from '@tanstack/react-router'
-import { type ReactNode, useState, useTransition } from 'react'
+import { type ReactNode, useState } from 'react'
 import type { BoxSettings, IntegrationStatus, ZoneList } from '../../core/settings/types'
 import type { SiteEdit, SiteState } from '../../core/site'
 import type { McpTokenRow } from '../../host/mcp/tokens'
@@ -9,6 +8,7 @@ import type { ModuleSwitch } from '../../lib/module-switch'
 import type { ThemeChoice } from '../../lib/theme'
 import { GuardedAwait } from '../error'
 import { BoardsSkeleton } from '../skeleton'
+import { useAction } from '../use-action'
 import { Appearance } from './appearance'
 import { Developer } from './developer'
 import { ExternalApps } from './external-apps'
@@ -76,8 +76,7 @@ export function SettingsTabBody({
   github: GithubAppProps
 }) {
   const { theme, settings, edit, timezones, externalApps, mcpTokens } = data
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
+  const { run, busy: pending } = useAction()
   // The choice is held here as well as in the loader so a click repaints the
   // page immediately. The save is what makes it durable; the router
   // invalidation below is what makes the SERVER agree, which matters because
@@ -147,10 +146,9 @@ export function SettingsTabBody({
           saving={pending}
           onChange={(next) => {
             setChoice(next)
-            startTransition(async () => {
+            run(async () => {
               const { saveTheme } = await import('../../server/settings')
               await saveTheme({ data: next })
-              await router.invalidate()
             })
           }}
         />

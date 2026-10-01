@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { LaptopIcon } from 'lucide-react'
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { Measure, PageHead } from '../components/page'
 import { ERROR_NOTE, Mono, NOTE, Section } from '../components/settings/shared'
 import { Button } from '../components/ui/button'
+import { useAction } from '../components/use-action'
 import type { EnrollPage } from '../host/enroll'
-import { errorText } from '../lib/redact'
 import { confirmEnrollFn, fetchEnrollPageFn } from '../server/enroll'
 
 // A Mac logs in (agent/README.md "Logging in (macOS)"; host/enroll.ts is the
@@ -97,32 +97,29 @@ const STANDING: Record<Extract<EnrollPage, { kind: 'ready' }>['standing'], strin
 
 function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> }) {
   const m = page.machine
-  const [error, setError] = useState<string | null>(null)
   const [spent, setSpent] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const [busy, start] = useTransition()
+  const { run, busy, error } = useAction()
 
   const confirm = () => {
     if (busy || spent) return
-    setError(null)
-    start(async () => {
-      try {
+    run(
+      async () => {
+        // Spent unless the box refused before it looked at the token: a
+        // second try then starts from the menu bar.
+        setSpent(true)
         const r = await confirmEnrollFn({ data: { token: page.token } })
-        if (!r.ok) {
-          // Spent unless the box refused before it looked at the token: a
-          // second try then starts from the menu bar.
-          setSpent(r.retry !== true)
-          setError(r.reason)
-          return
-        }
-        setSpent(true)
-        setLeaving(true)
-        goTo(r.value.callback)
-      } catch (e) {
-        setSpent(true)
-        setError(errorText(e))
-      }
-    })
+        if (!r.ok && r.retry === true) setSpent(false)
+        return r
+      },
+      {
+        invalidate: false,
+        onDone: (r) => {
+          setLeaving(true)
+          goTo(r.value.callback)
+        },
+      },
+    )
   }
 
   return (

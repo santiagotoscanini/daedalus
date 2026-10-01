@@ -1,10 +1,8 @@
-import { useRouter } from '@tanstack/react-router'
-import { useEffect, useId, useRef, useState, useTransition } from 'react'
-
-import { errorText } from '../../../lib/redact'
+import { useEffect, useId, useRef } from 'react'
 import type { NodeRow } from '../../../lib/repo/nodes'
 import { grantSantreeFn } from '../../../server/nodes'
 import { Button } from '../../ui/button'
+import { useAction } from '../../use-action'
 import { ERROR_NOTE, Mono, NOTE, Rows } from '../shared'
 
 // "Turn on santree": the one way santree is turned on for a machine, from
@@ -30,12 +28,9 @@ export function SantreeGrant({
   agentVersion: string
   onClose: () => void
 }) {
-  const router = useRouter()
   const titleId = useId()
   const box = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<string | null>(null)
-  const [busy, start] = useTransition()
+  const { run, busy, error, notice: done } = useAction()
 
   // Opened from a link: brought into view.
   useEffect(() => {
@@ -44,23 +39,11 @@ export function SantreeGrant({
 
   const confirm = () => {
     if (busy) return
-    setError(null)
-    start(async () => {
-      try {
-        const r = await grantSantreeFn({ data: { id: n.id, fingerprint: n.fingerprint } })
-        if (!r.ok) {
-          setError(r.reason)
-          return
-        }
-        setDone(
-          r.already
-            ? `santree was already on for ${n.name}.`
-            : `santree is on for ${n.name}. Its menu bar and santree show it within seconds.`,
-        )
-        await router.invalidate()
-      } catch (e) {
-        setError(errorText(e))
-      }
+    run(() => grantSantreeFn({ data: { id: n.id, fingerprint: n.fingerprint } }), {
+      notice: (r) =>
+        r.already
+          ? `santree was already on for ${n.name}.`
+          : `santree is on for ${n.name}. Its menu bar and santree show it within seconds.`,
     })
   }
 

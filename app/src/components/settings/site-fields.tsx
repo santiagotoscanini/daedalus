@@ -1,8 +1,6 @@
-import { useRouter } from '@tanstack/react-router'
-import { type ReactNode, useId, useState, useTransition } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import type { SiteEdit, SiteField } from '../../core/site'
 import { cn } from '../../lib/cn'
-import { errorText } from '../../lib/redact'
 import { useShown } from '../../lib/shown'
 import { getSiteField, parseUpstreams } from '../../lib/site-fields'
 import {
@@ -19,6 +17,7 @@ import { Input } from '../ui/input'
 import { Picker, type PickerGroup } from '../ui/picker'
 import { Switch } from '../ui/switch'
 import { Textarea } from '../ui/textarea'
+import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import { ASIDE, Mono } from './shared'
 
@@ -46,21 +45,11 @@ const INPUT = cn(
 const AFFIX = 'font-mono text-[0.8rem] text-(--dim)'
 
 function useSiteSave() {
-  const router = useRouter()
-  const [saving, start] = useTransition()
-  // Why the server refused — a type the decoder would not take. Distinct from
-  // the local validator, which answers before a request is made.
-  const [refused, setRefused] = useState<string | null>(null)
+  // `refused` is why the server refused — a type the decoder would not take.
+  // Distinct from the local validator, which answers before a request is made.
+  const { run, busy: saving, error: refused } = useAction()
   const save = (patch: Partial<Record<SiteField, unknown>>) => {
-    setRefused(null)
-    start(async () => {
-      try {
-        await saveSiteEditFn({ data: patch })
-        await router.invalidate()
-      } catch (e) {
-        setRefused(errorText(e))
-      }
-    })
+    run(() => saveSiteEditFn({ data: patch }))
   }
   return { save, saving, refused }
 }

@@ -1,13 +1,13 @@
-import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ENV_NOTE_MAX, type EnvVar, envKeyError, envValueError } from '../../lib/apps/env-vars'
 import type { AppSecretKey } from '../../lib/apps/secret-keys'
 import { cn } from '../../lib/cn'
-import { errorText } from '../../lib/redact'
+
 import { saveApp } from '../../server/registry'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import { Board, BoardGrid } from '../viz'
 import type { AppRecord } from './shared'
 import { VIZ_EMPTY } from './shared'
@@ -52,7 +52,6 @@ export function Variables({
   /** The KEYS of the sops file. A variable may not take one of these names. */
   secrets: AppSecretKey[]
 }) {
-  const router = useRouter()
   const vars = app.envVars
   const secretKeys = secrets.map((s) => s.key)
 
@@ -60,8 +59,7 @@ export function Variables({
   // neither — so "adding while editing" is not representable.
   const [form, setForm] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy: saving, error } = useAction()
 
   const close = () => {
     setForm(null)
@@ -75,19 +73,7 @@ export function Variables({
    * those sentences are the ones the form shows while you type.
    */
   const write = (next: EnvVar[]) => {
-    setSaving(true)
-    setError(null)
-    void saveApp({ data: { name: app.name, patch: { env: next } } })
-      .then(async () => {
-        close()
-        await router.invalidate()
-      })
-      .catch((e: unknown) => {
-        setError(errorText(e))
-      })
-      .finally(() => {
-        setSaving(false)
-      })
+    run(() => saveApp({ data: { name: app.name, patch: { env: next } } }), { onDone: close })
   }
 
   const upsert = (draft: EnvVar, replacing: string | null) => {

@@ -10,11 +10,11 @@ import {
 } from '../../lib/build-display'
 import type { BuildState } from '../../lib/builds'
 import { DASH, ms, since } from '../../lib/format'
-import { errorText } from '../../lib/redact'
 import type { Tone } from '../../lib/tone'
 import { buildNowFn, fetchBuilds } from '../../server/builds'
 import { useNow, usePoll } from '../poll'
 import { Button } from '../ui/button'
+import { useAction } from '../use-action'
 import { Board, Chip } from '../viz'
 import { BOARD_FOOT, GHOST_BTN, VIZ_EMPTY } from './shared'
 
@@ -167,29 +167,14 @@ export function BuildNowButton({
   reason?: string
 }) {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run: act, busy, error } = useAction()
 
   const run = () => {
-    setBusy(true)
-    setError(null)
-    void buildNowFn({ data: { app } })
-      .then(async (r) => {
-        if (r.ok) {
-          await router.navigate({
-            to: '/apps/$name/builds/$id',
-            params: { name: app, id: r.value.id },
-          })
-        } else {
-          setError(r.reason)
-        }
-      })
-      .catch((e: unknown) => {
-        setError(errorText(e))
-      })
-      .finally(() => {
-        setBusy(false)
-      })
+    act(() => buildNowFn({ data: { app } }), {
+      invalidate: false,
+      onDone: (r) =>
+        router.navigate({ to: '/apps/$name/builds/$id', params: { name: app, id: r.value.id } }),
+    })
   }
 
   return (

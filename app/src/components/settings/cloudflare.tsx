@@ -1,11 +1,10 @@
-import { useRouter } from '@tanstack/react-router'
-import { useId, useState, useTransition } from 'react'
+import { useId, useState } from 'react'
 import type { TokenCheck } from '../../core/settings/types'
 import { tokenShapeError } from '../../lib/cloudflare-token'
-import { errorText } from '../../lib/redact'
 import { replaceCloudflareTokenFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import { ASIDE, Bad, ERROR_NOTE, Mono, NOTE, Pending, Stack, Unset } from './shared'
 
@@ -81,34 +80,21 @@ export function Token({
  */
 export function ReplaceToken() {
   const id = useId()
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [token, setToken] = useState('')
-  const [busy, start] = useTransition()
-  const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
+  const { run, busy, error, notice, clear } = useAction()
 
   const local = token === '' ? null : tokenShapeError(token)
   const submit = () => {
     if (token === '' || local !== null) return
     const value = token
     setToken('')
-    setOutcome(null)
-    start(async () => {
-      try {
-        const r = await replaceCloudflareTokenFn({ data: { token: value } })
-        if (r.ok) {
-          setOpen(false)
-          setOutcome({
-            ok: true,
-            text: `Checked and applying. It sees ${r.value.zones.join(', ')}; the rebuild restarts everything that reads the token.`,
-          })
-          await router.invalidate()
-        } else {
-          setOutcome({ ok: false, text: r.reason })
-        }
-      } catch (e) {
-        setOutcome({ ok: false, text: errorText(e) })
-      }
+    run(() => replaceCloudflareTokenFn({ data: { token: value } }), {
+      onDone: () => {
+        setOpen(false)
+      },
+      notice: (r) =>
+        `Checked and applying. It sees ${r.value.zones.join(', ')}; the rebuild restarts everything that reads the token.`,
     })
   }
 
@@ -120,12 +106,16 @@ export function ReplaceToken() {
           size="sm"
           onClick={() => {
             setOpen(true)
-            setOutcome(null)
+            clear()
           }}
         >
           Replace token…
         </Button>
-        {outcome !== null && <span className={outcome.ok ? NOTE : ERROR_NOTE}>{outcome.text}</span>}
+        {error !== null ? (
+          <span className={ERROR_NOTE}>{error}</span>
+        ) : (
+          notice !== null && <span className={NOTE}>{notice}</span>
+        )}
       </div>
     )
   }
@@ -158,9 +148,9 @@ export function ReplaceToken() {
         removed, the tunnel. Then it is encrypted here, saved to site/vault/ and applied, and
         everything that reads it restarts on its own.
       </p>
-      {(local ?? (outcome !== null && !outcome.ok ? outcome.text : null)) !== null && (
+      {(local ?? error) !== null && (
         <p role="alert" className={ERROR_NOTE}>
-          {local ?? outcome?.text}
+          {local ?? error}
         </p>
       )}
       <div className="flex gap-2">

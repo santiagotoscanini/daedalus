@@ -2,7 +2,6 @@ import { useRouter } from '@tanstack/react-router'
 import { type ReactNode, useId, useState } from 'react'
 import type { AppPatch } from '../../lib/apps/validate'
 import { hostnameError } from '../../lib/hostname'
-import { errorText } from '../../lib/redact'
 import { defaultImage } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
 import { stageExposed } from '../../lib/stage'
@@ -12,6 +11,7 @@ import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import { Board, BoardGrid, Facts } from '../viz'
 import { BuildSettings } from './build-settings'
 import { type AppRecord, BOARD_FOOT, type LoaderData } from './shared'
@@ -326,18 +326,13 @@ function RemovePanel({
   const router = useRouter()
   const confirmId = useId()
   const [confirm, setConfirm] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { run, busy, error } = useAction()
 
   const remove = () => {
-    setBusy(true)
-    setError(null)
-    void deleteAppFn({ data: { name } })
-      .then(() => router.navigate({ to: '/apps' }))
-      .catch((e: unknown) => {
-        setError(errorText(e))
-        setBusy(false)
-      })
+    run(() => deleteAppFn({ data: { name } }), {
+      invalidate: false,
+      onDone: () => router.navigate({ to: '/apps' }),
+    })
   }
 
   return (

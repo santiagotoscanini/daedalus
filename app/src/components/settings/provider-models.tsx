@@ -1,4 +1,4 @@
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import type { ProviderKind } from '../../lib/providers/kinds'
 import { MODE_WORD, MODEL_MODES, type ModelPolicy } from '../../lib/providers/policy'
 import { errorText } from '../../lib/redact'
@@ -15,6 +15,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Picker } from '../ui/picker'
 import { Switch } from '../ui/switch'
+import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import { ASIDE, Mono, Stack } from './shared'
 
@@ -177,20 +178,12 @@ export function ProviderModels({
 export function GatewaySync() {
   type Summary = Awaited<ReturnType<typeof fetchGatewaySyncFn>>
   const [last, setLast] = useState<Summary | undefined>(undefined)
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { run: act, busy, error } = useAction()
   useEffect(() => {
     fetchGatewaySyncFn().then(setLast, () => setLast(null))
   }, [])
   const run = () => {
-    setError(null)
-    start(async () => {
-      try {
-        setLast(await runGatewaySyncFn())
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+    act(() => runGatewaySyncFn(), { invalidate: false, onDone: setLast })
   }
   const line =
     last === undefined
@@ -227,8 +220,9 @@ export function BoxProvider() {
   type Box = Awaited<ReturnType<typeof fetchBoxProvidersFn>>
   const [box, setBox] = useState<Box | null>(null)
   const [alias, setAlias] = useState('')
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const { run, busy, error: saveError } = useAction()
+  const error = saveError ?? loadError
   useEffect(() => {
     fetchBoxProvidersFn().then(
       (b) => {
@@ -236,22 +230,20 @@ export function BoxProvider() {
         setAlias(b.policy.subgen?.models?.whisper?.alias ?? '')
       },
       (e: unknown) => {
-        setError(errorText(e))
+        setLoadError(errorText(e))
       },
     )
   }, [])
   const offered = box?.policy.subgen?.offer ?? false
   const [offer, showOffer] = useShown(offered, busy, error !== null)
   const save = (next: { offer: boolean; alias: string }) => {
-    setError(null)
-    start(async () => {
-      try {
+    run(
+      async () => {
         await saveBoxProvidersFn({ data: { subgen: next } })
-        setBox(await fetchBoxProvidersFn())
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+        return fetchBoxProvidersFn()
+      },
+      { invalidate: false, onDone: setBox },
+    )
   }
   if (box === null) {
     return error !== null ? (

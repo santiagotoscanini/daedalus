@@ -1,4 +1,3 @@
-import { useRouter } from '@tanstack/react-router'
 import { useEffect, useId, useState } from 'react'
 import {
   boxBuildRefusal,
@@ -9,13 +8,14 @@ import {
   envMapError,
 } from '../../lib/build-settings'
 import { type BuildPublish, type BuildStrategy, RAILPACK_KNOB_NAMES } from '../../lib/builds'
-import { errorText } from '../../lib/redact'
+
 import { appRepo } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
-import { type BuildSettingsResult, setBuildSettingsFn } from '../../server/builds'
+import { setBuildSettingsFn } from '../../server/builds'
 import { Segmented, Toggle } from '../controls'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import { Board, Facts } from '../viz'
 import { type AppRecord, BOARD_FOOT, GHOST_BTN } from './shared'
 
@@ -27,31 +27,12 @@ const FIELD_LABEL = 'text-[0.76rem] text-(--dim)'
 
 export function BuildSettings({ app }: { app: AppRecord }) {
   const repo = appRepo(useSite(), app.name)
-  const router = useRouter()
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { run, busy: saving, error } = useAction()
   // Only blocks turning it on: an app already building can still turn it off.
   const nameRefusal = app.buildOnBox ? null : boxBuildRefusal(app.name)
 
-  const save = async (patch: Record<string, unknown>): Promise<boolean> => {
-    setSaving(true)
-    setError(null)
-    try {
-      const r: BuildSettingsResult = await setBuildSettingsFn({
-        data: { app: app.name, ...patch },
-      })
-      if (!r.ok) {
-        setError(r.reason)
-        return false
-      }
-      await router.invalidate()
-      return true
-    } catch (e) {
-      setError(errorText(e))
-      return false
-    } finally {
-      setSaving(false)
-    }
+  const save = (patch: Record<string, unknown>) => {
+    run(() => setBuildSettingsFn({ data: { app: app.name, ...patch } }))
   }
 
   return (
@@ -62,7 +43,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
             checked={app.buildOnBox}
             disabled={saving || nameRefusal !== null}
             onChange={(v) => {
-              void save({ buildOnBox: v })
+              save({ buildOnBox: v })
             }}
             label="Build on this box"
             hint={
@@ -77,7 +58,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
               disabled={saving}
               label="Build strategy"
               onChange={(v) => {
-                void save({ buildStrategy: v })
+                save({ buildStrategy: v })
               }}
               options={[
                 { value: 'auto', label: 'Auto' },
@@ -97,7 +78,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
               disabled={saving}
               label="Publish mode"
               onChange={(v) => {
-                void save({ buildPublish: v })
+                save({ buildPublish: v })
               }}
               options={[
                 { value: 'live', label: 'Live' },
@@ -152,6 +133,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
             other={app.railpackEnv}
             keyPlaceholder="VITE_PUBLIC_URL"
             help="Env names the build needs set but never uses for real: a build that reads DATABASE_URL at import time, say. Dummy values only, never secrets. The build sees them in the clear, and so does anyone with its log. Names the builder’s own tools read are refused: PATH, HOME, GIT_*, NODE_*, NPM_CONFIG_*, PNPM_* and the like."
+            busy={saving}
             onSave={(v) => save({ buildEnvPlaceholders: v })}
           />
           <EnvMapEditor
@@ -161,6 +143,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
             other={app.buildEnvPlaceholders}
             keyPlaceholder="RAILPACK_PRUNE_DEPS"
             help={`The Railpack switches this box passes on: ${RAILPACK_KNOB_NAMES.join(', ')}. Start, build and install commands are not switches here: they belong in the repo’s railpack.json, where they are reviewed with the code. Ignored when the build uses the Dockerfile.`}
+            busy={saving}
             onSave={(v) => save({ railpackEnv: v })}
           />
         </div>
@@ -185,6 +168,7 @@ function EnvMapEditor({
   other,
   keyPlaceholder,
   help,
+  busy,
   onSave,
 }: {
   kind: EnvMapKind
@@ -194,7 +178,8 @@ function EnvMapEditor({
   other: Record<string, string>
   keyPlaceholder: string
   help: string
-  onSave: (v: Record<string, string>) => Promise<boolean>
+  busy: boolean
+  onSave: (v: Record<string, string>) => void
 }) {
   const headId = useId()
   const [rows, setRows] = useState<Row[]>(() => toRows(value))
@@ -214,7 +199,6 @@ function EnvMapEditor({
   const problem =
     envMapError(kind, entries) ??
     (kind === 'placeholders' ? buildEnvSizeError(draft, other) : buildEnvSizeError(other, draft))
-  const [busy, setBusy] = useState(false)
 
   const set = (id: number, patch: Partial<Row>) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
@@ -300,10 +284,7 @@ function EnvMapEditor({
               size="sm"
               disabled={busy || problem !== null}
               onClick={() => {
-                setBusy(true)
-                void onSave(Object.fromEntries(entries)).finally(() => {
-                  setBusy(false)
-                })
+                onSave(Object.fromEntries(entries))
               }}
             >
               {busy ? 'Saving…' : 'Save'}

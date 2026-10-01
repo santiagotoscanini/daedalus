@@ -1,11 +1,10 @@
-import { useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
 import { type ModuleSwitch, STRUCTURAL_WHY } from '../../lib/module-switch'
 import { useShown } from '../../lib/shown'
 import { setModuleEnabledFn } from '../../server/modules'
 import { ServiceSettingsButton } from '../service-settings'
 import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../tokens'
 import { Switch } from '../ui/switch'
+import { useAction } from '../use-action'
 import { Board, BoardGrid, Chip } from '../viz'
 
 // Settings › Modules: every switch the box declares, in one list. The same
@@ -13,9 +12,7 @@ import { Board, BoardGrid, Chip } from '../viz'
 // without the walk there; a structural module is a row that says why it stays.
 
 function Row({ m }: { m: ModuleSwitch }) {
-  const router = useRouter()
-  const [saving, setSaving] = useState(false)
-  const [refused, setRefused] = useState<string | null>(null)
+  const { run, busy: saving, error: refused } = useAction()
   const [on, show] = useShown(m.desired, saving, refused !== null)
   const pending = m.desired !== m.running
   return (
@@ -50,14 +47,8 @@ function Row({ m }: { m: ModuleSwitch }) {
           checked={on}
           disabled={saving}
           onCheckedChange={(v) => {
-            setSaving(true)
-            setRefused(null)
             show(v)
-            void setModuleEnabledFn({ data: { id: m.id, enabled: v } }).then(async (r) => {
-              if (!r.ok) setRefused(r.reason)
-              setSaving(false)
-              await router.invalidate()
-            })
+            run(() => setModuleEnabledFn({ data: { id: m.id, enabled: v } }))
           }}
         />
       )}

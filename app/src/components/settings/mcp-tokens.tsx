@@ -1,13 +1,12 @@
-import { useRouter } from '@tanstack/react-router'
 import { KeyRoundIcon } from 'lucide-react'
-import { useId, useState, useTransition } from 'react'
+import { useId, useState } from 'react'
 import type { McpTokenRow } from '../../host/mcp/tokens'
 import { when } from '../../lib/format'
 import { MCP_TOOLS, type McpScope } from '../../lib/mcp'
-import { errorText } from '../../lib/redact'
 import { mintMcpTokenFn, revokeMcpTokenFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import { ERROR_NOTE, FIELD_LABEL, Mono, NOTE, PANEL, Section, Unset } from './shared'
 
@@ -34,41 +33,23 @@ const WRITES = MCP_TOOLS.filter((t) => t.scope === 'write').length
 
 export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
   const labelId = useId()
-  const router = useRouter()
   const [label, setLabel] = useState('')
   const [scope, setScope] = useState<McpScope>('read')
-  const [busy, start] = useTransition()
+  const { run, busy, error } = useAction()
   const [minted, setMinted] = useState<{ label: string; token: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const mint = () => {
     if (label.trim() === '') return
-    setError(null)
-    start(async () => {
-      try {
-        const r = await mintMcpTokenFn({ data: { label: label.trim(), scope } })
-        if (r.ok) {
-          setMinted({ label: r.value.row.label, token: r.value.token })
-          setLabel('')
-          await router.invalidate()
-        } else setError(r.reason)
-      } catch (e) {
-        setError(errorText(e))
-      }
+    run(() => mintMcpTokenFn({ data: { label: label.trim(), scope } }), {
+      onDone: (r) => {
+        setMinted({ label: r.value.row.label, token: r.value.token })
+        setLabel('')
+      },
     })
   }
 
   const revoke = (id: string) => {
-    setError(null)
-    start(async () => {
-      try {
-        const r = await revokeMcpTokenFn({ data: { id } })
-        if (!r.ok) setError(r.reason)
-        await router.invalidate()
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
+    run(() => revokeMcpTokenFn({ data: { id } }))
   }
 
   const live = tokens.filter((t) => t.revokedAt === null)

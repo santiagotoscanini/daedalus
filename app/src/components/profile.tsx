@@ -1,6 +1,5 @@
-import { useRouter } from '@tanstack/react-router'
 import { ExternalLinkIcon, KeyRoundIcon, LogOutIcon } from 'lucide-react'
-import { useId, useRef, useState, useTransition } from 'react'
+import { useId, useRef, useState } from 'react'
 import type { OperatorAccount, Profile, ProfilePatch, ProfileRead } from '../core/settings/types'
 import { cn } from '../lib/cn'
 import {
@@ -9,7 +8,7 @@ import {
   pictureFileError,
   usernameError,
 } from '../lib/profile-fields'
-import { errorText } from '../lib/redact'
+
 import { mailAddressError } from '../lib/site-fields'
 import { resetProfilePictureFn, saveProfileFn, uploadProfilePictureFn } from '../server/profile'
 import { ASIDE, Mono, NOTE, Pending, Section, Stack, Unset } from './settings/shared'
@@ -201,32 +200,18 @@ function Identity({
   name: string
   locked: boolean
 }) {
-  const router = useRouter()
   const fileInput = useRef<HTMLInputElement>(null)
-  const [busy, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
-
   // The picture's URL carries `pictureVersion`, which the server bumps on a
-  // change; invalidating the router is what fetches it, here and in the rail.
-  const run = (work: () => Promise<unknown>) => {
-    setError(null)
-    start(async () => {
-      try {
-        await work()
-        await router.invalidate()
-      } catch (e) {
-        setError(errorText(e))
-      }
-    })
-  }
+  // change; the reload after each call is what fetches it, here and in the rail.
+  const { run, busy, error: refused } = useAction()
+  const [problem, setProblem] = useState<string | null>(null)
+  const error = problem ?? refused
 
   const onFile = (file: File | undefined) => {
     if (file === undefined) return
-    const problem = pictureFileError(file.type, file.size)
-    if (problem !== null) {
-      setError(problem)
-      return
-    }
+    const bad = pictureFileError(file.type, file.size)
+    setProblem(bad)
+    if (bad !== null) return
     run(async () =>
       uploadProfilePictureFn({
         data: { contentType: file.type as PictureType, base64: await toBase64(file) },
@@ -288,6 +273,7 @@ function Identity({
               size="sm"
               disabled={locked || busy}
               onClick={() => {
+                setProblem(null)
                 run(() => resetProfilePictureFn())
               }}
             >
