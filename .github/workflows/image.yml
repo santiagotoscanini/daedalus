@@ -1,9 +1,11 @@
 # Builds the engine image and, for a release tag, publishes it to ghcr.
 #
-# Publishing happens on ONE event: a pushed tag matching `v*`. Nothing here
-# runs on a push to main, and there is no manual dispatch, so until the first
-# such tag exists the only thing this file does is build the image on a pull
-# request that touches it — no login, no push, a read-only token.
+# Publishing happens on ONE event: a pushed tag matching `v*`. A push to main
+# or a pull request that changes what goes into the image (the paths below:
+# the Dockerfile, its context, the app's build inputs) builds it with no
+# login, no push and a read-only token, so an image that stops building is
+# found on the commit that broke it, not on the next release tag. There is no
+# manual dispatch.
 #
 # On GitHub-hosted runners for the same reason as ci.yml, and one more: the
 # image is what a box that is not this one installs, so it has to build where
@@ -22,26 +24,48 @@
 name: Image
 
 on:
+  # Path filters are not evaluated for a tag push: every `v*` tag runs.
   push:
+    branches: [main]
     tags: ["v*"]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "docker-entrypoint.sh"
+      - ".github/workflows/image.yml"
+      - "app/package.json"
+      - "app/pnpm-lock.yaml"
+      - "app/pnpm-workspace.yaml"
+      - "app/scripts/**"
+      - "app/server.mjs"
+      - "app/drizzle/**"
+      - "app/src/**"
   pull_request:
     paths:
       - "Dockerfile"
       - ".dockerignore"
       - "docker-entrypoint.sh"
       - ".github/workflows/image.yml"
+      - "app/package.json"
+      - "app/pnpm-lock.yaml"
+      - "app/pnpm-workspace.yaml"
+      - "app/scripts/**"
+      - "app/server.mjs"
+      - "app/drizzle/**"
+      - "app/src/**"
 
 permissions:
   contents: read
 
 concurrency:
   group: image-${{ github.ref }}
-  cancel-in-progress: false
+  # A newer push to the same ref supersedes a check build; a release runs out.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
     name: Build (no push)
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
