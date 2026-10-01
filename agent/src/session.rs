@@ -66,6 +66,23 @@ pub enum Tick {
     VersionChanged,
 }
 
+/// What a tray stands over (tray/): the session it runs (`Session`, on
+/// Windows and macOS) or one it watches through the service (`Watcher`, on
+/// Linux).
+pub trait Backing: Send {
+    /// Whether the box wants the server running.
+    fn claude_wanted(&self) -> bool;
+    /// Ask the service's updater to look now, and poll soon after.
+    fn check_updates_now(&mut self);
+    /// Restart the Claude server, and poll soon after.
+    fn restart_claude(&mut self);
+    /// Read the page at the next tick: a setting was just asked for.
+    fn poll_now(&mut self);
+    /// When due, read the page (and where it runs the session, report and
+    /// apply the answer). Cheap when not due; call it often.
+    fn tick(&mut self) -> Tick;
+}
+
 /// One poll: the page (None when the service did not answer) and the
 /// report that was sent.
 pub struct Poll {
@@ -281,32 +298,34 @@ impl Session {
             _lock: lock,
         })
     }
+}
 
+impl Backing for Session {
     /// Whether the box wants the server running.
-    pub fn claude_wanted(&self) -> bool {
+    fn claude_wanted(&self) -> bool {
         self.sup.wanted()
     }
 
     /// Ask the service's updater to look now, and poll soon after.
-    pub fn check_updates_now(&mut self) {
+    fn check_updates_now(&mut self) {
         request_check();
         self.next_poll = Instant::now() + Duration::from_secs(2);
     }
 
     /// Restart the Claude server now, and poll soon after.
-    pub fn restart_claude(&mut self) {
+    fn restart_claude(&mut self) {
         self.sup.restart();
         self.next_poll = Instant::now() + Duration::from_secs(1);
     }
 
     /// Read the page at the next tick: a setting was just asked for.
-    pub fn poll_now(&mut self) {
+    fn poll_now(&mut self) {
         self.next_poll = Instant::now();
     }
 
     /// Advance the supervisor and, when due, read the page, report, and
     /// apply the answer. Cheap when not due; call it often.
-    pub fn tick(&mut self) -> Tick {
+    fn tick(&mut self) -> Tick {
         self.sup.tick();
         if Instant::now() < self.next_poll && !self.link.instruction_waiting() {
             return Tick::Idle;
@@ -345,7 +364,9 @@ impl Session {
         self.next_poll = Instant::now() + POLL;
         Tick::Polled(Box::new(Poll { page, report }))
     }
+}
 
+impl Session {
     /// Keep the set of open sessions, and after a start of the server this
     /// session performed — once the server has registered — resume the
     /// ones it ended (claude/recovery.rs).
@@ -527,30 +548,32 @@ impl Watcher {
             binary: BinaryStamp::now(),
         }
     }
+}
 
+impl Backing for Watcher {
     /// Whether the box wants the server running, as the page last said.
-    pub fn claude_wanted(&self) -> bool {
+    fn claude_wanted(&self) -> bool {
         self.wanted
     }
 
-    pub fn check_updates_now(&mut self) {
+    fn check_updates_now(&mut self) {
         request_check();
         self.next_poll = Instant::now() + Duration::from_secs(2);
     }
 
     /// Ask the session, through the service, to restart the server.
-    pub fn restart_claude(&mut self) {
+    fn restart_claude(&mut self) {
         let _ = crate::local::call::<String>(&LocalRequest::ClaudeRestart);
         self.next_poll = Instant::now() + POLL;
     }
 
     /// Read the page at the next tick.
-    pub fn poll_now(&mut self) {
+    fn poll_now(&mut self) {
         self.next_poll = Instant::now();
     }
 
     /// When due, read the page and the session's report.
-    pub fn tick(&mut self) -> Tick {
+    fn tick(&mut self) -> Tick {
         if Instant::now() < self.next_poll {
             return Tick::Idle;
         }

@@ -207,7 +207,7 @@ enum Elevated {
 /// `prompt` (tray.rs `osascript_argv`).
 fn elevated(exe: &Path, args: &[String], prompt: &str) -> Elevated {
     let out = match std::process::Command::new("/usr/bin/osascript")
-        .args(crate::tray::osascript_argv(exe, args, prompt))
+        .args(crate::tray::elevate::osascript_argv(exe, args, prompt))
         .output()
     {
         Ok(o) => o,
@@ -360,7 +360,7 @@ fn log_in() -> Result<Option<String>, String> {
         Err(e) => return Err(format!("Not logged in: {e}")),
     };
     *NOTE.lock_ok() = Some("Logging in — confirm with this Mac's password".into());
-    let exe = crate::tray::agent_exe()?;
+    let exe = crate::tray::elevate::agent_exe()?;
     match elevated(
         &exe,
         &["enroll-finish".to_string(), code],

@@ -134,7 +134,7 @@ fn run_gtk() -> Result<()> {
 pub fn join() {
     use gtk::prelude::*;
     let dialog = gtk::Dialog::with_buttons(
-        Some(crate::tray::PAIR_TITLE),
+        Some(crate::tray::elevate::PAIR_TITLE),
         None::<&gtk::Window>,
         gtk::DialogFlags::empty(),
         &[
@@ -144,7 +144,7 @@ pub fn join() {
     );
     dialog.set_default_response(gtk::ResponseType::Accept);
     dialog.set_keep_above(true);
-    let label = gtk::Label::new(Some(crate::tray::PAIR_PROMPT));
+    let label = gtk::Label::new(Some(crate::tray::elevate::PAIR_PROMPT));
     label.set_line_wrap(true);
     label.set_xalign(0.0);
     let entry = gtk::Entry::new();
@@ -163,7 +163,7 @@ pub fn join() {
             let spawned = std::thread::Builder::new()
                 .name("pair".into())
                 .spawn(move || {
-                    let said = crate::tray::pair_pasted(&text);
+                    let said = crate::tray::elevate::pair_pasted(&text);
                     gtk::glib::MainContext::default().invoke(move || tell(said));
                 });
             if let Err(e) = spawned {
@@ -190,7 +190,7 @@ fn tell(said: Result<String, String>) {
         gtk::ButtonsType::Ok,
         &said,
     );
-    answer.set_title(crate::tray::PAIR_TITLE);
+    answer.set_title(crate::tray::elevate::PAIR_TITLE);
     answer.set_keep_above(true);
     // SAFETY: the dialog is ours and nothing else holds it.
     answer.connect_response(|m, _| unsafe { m.destroy() });
@@ -218,7 +218,7 @@ pub fn pair_elevated(
             by_hand()
         ));
     };
-    let argv = crate::tray::pkexec_argv(&pkexec, exe, args);
+    let argv = crate::tray::elevate::pkexec_argv(&pkexec, exe, args);
     let out = std::process::Command::new(&argv[0])
         .args(&argv[1..])
         .stdin(std::process::Stdio::null())

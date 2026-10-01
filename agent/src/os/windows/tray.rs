@@ -105,7 +105,7 @@ pub fn run() -> Result<()> {
 /// Windows) asks, on a thread of its own, with no console; the answer is a
 /// plain message box (tray.rs `pair_on_a_thread`).
 pub fn join() {
-    crate::tray::pair_on_a_thread(input_box, message_box);
+    crate::tray::elevate::pair_on_a_thread(input_box, message_box);
 }
 
 /// How long the question waits for an answer before it is put away.
@@ -123,8 +123,8 @@ fn input_box() -> Option<String> {
          [Microsoft.VisualBasic.Interaction]::InputBox($env:DAEDALUS_PROMPT, $env:DAEDALUS_TITLE, '')",
     ])
     // The words ride the environment, so nothing in them is PowerShell.
-    .env("DAEDALUS_PROMPT", crate::tray::PAIR_PROMPT)
-    .env("DAEDALUS_TITLE", crate::tray::PAIR_TITLE);
+    .env("DAEDALUS_PROMPT", crate::tray::elevate::PAIR_PROMPT)
+    .env("DAEDALUS_TITLE", crate::tray::elevate::PAIR_TITLE);
     let text = crate::exec::stdout_or(cmd, ASK_FOR, crate::exec::Text::Lossy).ok()?;
     let text = text.trim().to_string();
     // Cancel answers an empty string.
@@ -146,7 +146,7 @@ fn message_box(text: &str, ok: bool) {
         MessageBoxW(
             None,
             &HSTRING::from(text),
-            &HSTRING::from(crate::tray::PAIR_TITLE),
+            &HSTRING::from(crate::tray::elevate::PAIR_TITLE),
             MB_OK | MB_SETFOREGROUND | icon,
         );
     }
@@ -179,7 +179,7 @@ pub fn pair_elevated(
         )
     };
     let file = HSTRING::from(exe.as_os_str());
-    let params = HSTRING::from(crate::tray::windows_parameters(args));
+    let params = HSTRING::from(crate::tray::elevate::windows_parameters(args));
     let mut info = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
         fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
