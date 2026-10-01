@@ -110,7 +110,7 @@ function nodeUpdatesFacts({ d }: { d: NodeSystemData }) {
   if (t === null || status === null) return null
   const u = t.updates
   const pending = u?.pending ?? []
-  const wv = windowsVersion(status.osVersion)
+  const wv = windowsVersion(status.os_version)
   const lastCumulative = u?.installed.find((x) => /cumulative|security update/i.test(x.title))
   return { d, node, status, t, u, pending, wv, lastCumulative }
 }
@@ -125,7 +125,7 @@ function WindowsBoard({ f }: { f: NodeUpdatesFacts }) {
       icon="▣"
       span={4}
       aside={
-        u === null ? undefined : u.rebootPending === true ? (
+        u === null ? undefined : u.reboot_pending === true ? (
           <Chip tone="warn">restart owed</Chip>
         ) : pending.length === 0 && u.error === null ? (
           <Chip tone="ok">up to date</Chip>
@@ -136,7 +136,7 @@ function WindowsBoard({ f }: { f: NodeUpdatesFacts }) {
     >
       <Facts
         rows={[
-          { k: 'Edition', v: status.osName },
+          { k: 'Edition', v: status.os_name },
           { k: 'Release', v: <span className={MONO}>{wv.release}</span> },
           {
             k: 'Build',
@@ -144,7 +144,7 @@ function WindowsBoard({ f }: { f: NodeUpdatesFacts }) {
           },
           {
             k: 'Installed',
-            v: t.os.installedAt === null ? DASH : <Ago at={t.os.installedAt} />,
+            v: t.os.installed_at === null ? DASH : <Ago at={t.os.installed_at} />,
           },
           {
             k: 'Last patch',
@@ -176,10 +176,10 @@ function AgentBoard({ f }: { f: NodeUpdatesFacts }) {
       icon="◎"
       span={8}
       aside={
-        status.restartPending ? (
+        status.restart_pending ? (
           <Chip tone="ok">installed, restarting</Chip>
-        ) : status.updateAvailable !== null ? (
-          <Chip tone="warn">{status.updateAvailable}</Chip>
+        ) : status.update_available !== null ? (
+          <Chip tone="warn">{status.update_available}</Chip>
         ) : (
           <Chip tone="ok">current</Chip>
         )
@@ -190,7 +190,7 @@ function AgentBoard({ f }: { f: NodeUpdatesFacts }) {
           { k: 'Running', v: <span className={MONO}>{status.version}</span> },
           {
             k: 'Last check',
-            v: status.lastUpdateResult ?? 'not checked yet',
+            v: status.last_update_result ?? 'not checked yet',
           },
           {
             k: 'Link',
@@ -225,7 +225,7 @@ function Panel({ f }: { f: NodeUpdatesFacts }) {
       icon="⇣"
       span={12}
       aside={
-        u === null ? undefined : u.rebootPending === true ? (
+        u === null ? undefined : u.reboot_pending === true ? (
           <Chip tone="warn">restart owed</Chip>
         ) : pending.length === 0 && u.error === null ? (
           <Chip tone="ok">up to date</Chip>
@@ -264,7 +264,7 @@ function Panel({ f }: { f: NodeUpdatesFacts }) {
                       {' · '}
                     </>
                   )}
-                  {p.sizeBytes !== null && `${bytes(p.sizeBytes)} · `}
+                  {p.size_bytes !== null && `${bytes(p.size_bytes)} · `}
                   {p.restart === true ? 'restarts' : p.restart === false ? 'no restart' : ''}
                 </span>
               </li>
@@ -274,9 +274,9 @@ function Panel({ f }: { f: NodeUpdatesFacts }) {
       )}
       <DetailNote d={d} />
       <p className={FOOT}>
-        {u !== null && u.checkedAt !== null && (
+        {u !== null && u.checked_at !== null && (
           <>
-            Asked <Ago at={u.checkedAt} />.{' '}
+            Asked <Ago at={u.checked_at} />.{' '}
           </>
         )}
         What the Windows Update agent answers when searched for what is not installed, which is the
@@ -351,13 +351,13 @@ function ClaudeCodeBoard({ f }: { f: NodeUpdatesFacts }) {
           rows={[
             {
               k: 'CLI',
-              v: <span className={MONO}>{status.claude.cliVersion ?? DASH}</span>,
+              v: <span className={MONO}>{status.claude.cli_version ?? DASH}</span>,
             },
             {
               k: 'Server',
-              v: <span className={MONO}>{status.claude.serverVersion ?? DASH}</span>,
+              v: <span className={MONO}>{status.claude.server_version ?? DASH}</span>,
             },
-            { k: 'Signed in', v: status.claude.signedIn ? 'yes' : 'no' },
+            { k: 'Signed in', v: status.claude.signed_in ? 'yes' : 'no' },
           ]}
         />
       )}

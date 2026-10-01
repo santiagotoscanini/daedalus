@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ControllerClient } from './controller/client'
-import type { RootRun } from './controller/wire'
+import type { RootRunOk as RootRun } from './controller/generated'
 import { requestSecretRemove, requestSecretSet, SECRET_PAYLOAD_MAX } from './secret-set'
 
 // What reaches the controller for each action: the verb, its selectors, and
@@ -9,7 +9,7 @@ import { requestSecretRemove, requestSecretSet, SECRET_PAYLOAD_MAX } from './sec
 function fake() {
   const asked: unknown[][] = []
   const client = {
-    rootRun: (...args: unknown[]) => {
+    call: (...args: unknown[]) => {
       asked.push(args)
       return Promise.resolve<RootRun>({
         run: 'r1',
@@ -34,10 +34,13 @@ describe('requestSecretSet', () => {
     expect(r).toEqual({ outcome: 'done', detail: 'sealed K' })
     expect(asked).toEqual([
       [
-        'secret-set',
-        { app: 'hermes', action: 'set', key: 'K', actor: 'op@example.test' },
-        200_000,
-        doc,
+        'root.run',
+        {
+          verb: 'secret-set',
+          selectors: { app: 'hermes', action: 'set', key: 'K', actor: 'op@example.test' },
+          payload: doc,
+        },
+        { waitMs: 200_000 },
       ],
     ])
   })
@@ -59,10 +62,12 @@ describe('requestSecretRemove', () => {
     await requestSecretRemove({ controller: client }, { actor: 'José', app: 'hermes', key: 'K' })
     expect(asked).toEqual([
       [
-        'secret-set',
-        { app: 'hermes', action: 'remove', key: 'K', actor: 'Jos_' },
-        200_000,
-        undefined,
+        'root.run',
+        {
+          verb: 'secret-set',
+          selectors: { app: 'hermes', action: 'remove', key: 'K', actor: 'Jos_' },
+        },
+        { waitMs: 200_000 },
       ],
     ])
   })

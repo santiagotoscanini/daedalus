@@ -93,7 +93,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
 function ClaudeHead({ data, verdict }: { data: ClaudeData; verdict: Verdict }) {
   const { facts } = data
   const up = facts.server.state === 'running'
-  const envId = facts.remote.environmentId
+  const envId = facts.remote.environment_id
   return (
     <ServiceHead
       logo="/icon-claude.svg"
@@ -165,7 +165,7 @@ function ClaudeStats({ data, live }: { data: ClaudeData; live: number }) {
   // Mount-time only: the server's clock and the browser's would render two
   // different durations (components/ago.tsx).
   const now = useNow(false)
-  const refreshAt = facts.credentials.refreshExpiresAt
+  const refreshAt = facts.credentials.refresh_expires_at
   return (
     <StatStrip>
       <Stat
@@ -183,9 +183,9 @@ function ClaudeStats({ data, live }: { data: ClaudeData; live: number }) {
         label="Sessions"
         value={live}
         sub={
-          facts.remote.maxSessions === null
+          facts.remote.max_sessions === null
             ? 'connected now'
-            : `of ${num(facts.remote.maxSessions)}`
+            : `of ${num(facts.remote.max_sessions)}`
         }
         title="Session processes alive right now, not sessions this server has ever served."
       />

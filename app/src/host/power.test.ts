@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ControllerClient } from './controller/client'
-import { ControllerError, type RootRun } from './controller/wire'
+import type { RootRunOk as RootRun } from './controller/generated'
+import { ControllerError } from './controller/wire'
 import { requestReboot } from './power'
 
 // The restart against a fake controller: what it asks for, and how each of the
@@ -9,7 +10,7 @@ import { requestReboot } from './power'
 function fake(answer: () => Promise<RootRun>) {
   const asked: unknown[][] = []
   const client = {
-    rootRun: (...args: unknown[]) => {
+    call: (...args: unknown[]) => {
       asked.push(args)
       return answer()
     },
@@ -33,9 +34,10 @@ describe('requestReboot', () => {
       detail: 'rebooting',
     })
     expect(asked).toHaveLength(1)
-    expect(asked[0]?.[0]).toBe('reboot')
-    expect(asked[0]?.[1]).toEqual({})
-    expect(asked[0]?.[2]).toBeGreaterThan(90_000)
+    expect(asked[0]?.[0]).toBe('root.run')
+    expect(asked[0]?.[1]).toEqual({ verb: 'reboot', selectors: {} })
+    const [, , o] = asked[0] as [string, unknown, { waitMs: number }]
+    expect(o.waitMs).toBeGreaterThan(90_000)
   })
 
   it("carries the unit's refusal, and a failure, as the reason", async () => {

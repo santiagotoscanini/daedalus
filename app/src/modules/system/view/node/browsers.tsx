@@ -2,7 +2,7 @@ import { Ago } from '../../../../components/ago'
 import { PART, PART_DETAIL, PART_ID, PART_NAME } from '../../../../components/part'
 import { ServiceHead } from '../../../../components/service-head'
 import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
-import type { NodeBrowser } from '../../../../lib/agent/status'
+import type { Browser } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { DASH, num } from '../../../../lib/format'
 import type { Tone } from '../../../../lib/tone'
@@ -30,7 +30,7 @@ export function NodeBrowsersView({ d }: { d: NodeSystemData }) {
     (b) => browserBehind(b.version, latest.get(b.kind)?.latest ?? null) === true,
   ).length
   const checked = t.browsers.filter((b) => latest.get(b.kind)?.latest != null).length
-  const defaultOne = t.browsers.find((b) => b.defaultBrowser) ?? null
+  const defaultOne = t.browsers.find((b) => b.default_browser) ?? null
 
   return (
     <>
@@ -55,7 +55,7 @@ export function NodeBrowsersView({ d }: { d: NodeSystemData }) {
         compare={t.browsers.map((b) => ({
           k: b.name,
           v: b.version,
-          note: `${b.channel ?? 'stable'} · ${b.running ? 'open' : 'closed'}${b.defaultBrowser ? ' · default' : ''}`,
+          note: `${b.channel ?? 'stable'} · ${b.running ? 'open' : 'closed'}${b.default_browser ? ' · default' : ''}`,
         }))}
         lede={
           <>
@@ -131,7 +131,7 @@ function BrowserBoard({
   os,
   span,
 }: {
-  b: NodeBrowser
+  b: Browser
   latest: { latest: string | null; publishedAt: string | null; error: string | null } | null
   asked: boolean
   os: string
@@ -163,7 +163,7 @@ function BrowserBoard({
       span={span}
       aside={
         <span className="flex items-center gap-2">
-          {b.defaultBrowser && <Chip tone="info">default</Chip>}
+          {b.default_browser && <Chip tone="info">default</Chip>}
           <Chip tone={b.running ? 'ok' : 'muted'}>{b.running ? 'open' : 'closed'}</Chip>
         </span>
       }
@@ -236,7 +236,7 @@ function BrowserBoard({
             ? 'Open right now, so an update it has fetched waits until it is quit.'
             : 'Open right now, so an update it has fetched waits until it is closed.'
           : 'Not running.'}
-        {b.defaultBrowser && ' Links from other apps open here.'}
+        {b.default_browser && ' Links from other apps open here.'}
       </p>
     </Board>
   )

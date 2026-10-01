@@ -17,7 +17,7 @@ export function RemoteControlBoard({
   live: number
 }) {
   const { facts } = data
-  const envId = facts.remote.environmentId
+  const envId = facts.remote.environment_id
   return (
     <Board
       title="Remote control"
@@ -25,7 +25,7 @@ export function RemoteControlBoard({
       span={6}
       aside={
         <span className={NOTE}>
-          {facts.remote.spawnMode === null ? 'not announced' : facts.remote.spawnMode}
+          {facts.remote.spawn_mode === null ? 'not announced' : facts.remote.spawn_mode}
         </span>
       }
     >
@@ -39,18 +39,18 @@ export function RemoteControlBoard({
           },
           {
             k: 'Capacity',
-            v: `${num(live)} / ${facts.remote.maxSessions === null ? DASH : num(facts.remote.maxSessions)}`,
+            v: `${num(live)} / ${facts.remote.max_sessions === null ? DASH : num(facts.remote.max_sessions)}`,
           },
           { k: 'Default model', v: <span className={MONO}>{text(facts.settings.model)}</span> },
-          { k: 'Effort', v: text(facts.settings.effortLevel) },
-          { k: 'Plan', v: text(facts.credentials.subscriptionType) },
+          { k: 'Effort', v: text(facts.settings.effort_level) },
+          { k: 'Plan', v: text(facts.credentials.subscription_type) },
           {
             k: 'Re-login due',
             v:
-              facts.credentials.refreshExpiresAt === null ? (
+              facts.credentials.refresh_expires_at === null ? (
                 DASH
               ) : (
-                <Until at={facts.credentials.refreshExpiresAt} />
+                <Until at={facts.credentials.refresh_expires_at} />
               ),
           },
           {

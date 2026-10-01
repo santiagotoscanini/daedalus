@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ControllerClient } from './controller/client'
-import { ControllerError, type RootRun } from './controller/wire'
+import type { RootRunOk as RootRun } from './controller/generated'
+import { ControllerError } from './controller/wire'
 import { rootActor, rootAnswerText, runRoot } from './root'
 
 // runRoot against a fake controller: what it asks, and how each answer — and
@@ -9,7 +10,7 @@ import { rootActor, rootAnswerText, runRoot } from './root'
 function fake(answer: () => Promise<RootRun>) {
   const asked: unknown[][] = []
   const client = {
-    rootRun: (...args: unknown[]) => {
+    call: (...args: unknown[]) => {
       asked.push(args)
       return answer()
     },
@@ -32,13 +33,21 @@ describe('runRoot', () => {
       outcome: 'refused',
       detail: 'already running',
     })
-    expect(asked).toEqual([['deploy', { app: 'blog' }, 1234, undefined]])
+    expect(asked).toEqual([
+      ['root.run', { verb: 'deploy', selectors: { app: 'blog' } }, { waitMs: 1234 }],
+    ])
   })
 
   it('hands a payload on beside the selectors', async () => {
     const { client, asked } = fake(() => Promise.resolve(run('done', 'sealed')))
     await runRoot({ controller: client }, 'secret-set', { app: 'blog' }, 5, '{"data":"ENC[x]"}')
-    expect(asked).toEqual([['secret-set', { app: 'blog' }, 5, '{"data":"ENC[x]"}']])
+    expect(asked).toEqual([
+      [
+        'root.run',
+        { verb: 'secret-set', selectors: { app: 'blog' }, payload: '{"data":"ENC[x]"}' },
+        { waitMs: 5 },
+      ],
+    ])
   })
 
   it('reads a call that got no answer as failed, with why', async () => {

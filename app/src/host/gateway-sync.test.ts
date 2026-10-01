@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LitellmRoute, ProviderModel } from '../lib/providers/kinds'
+import type { ProviderReport } from './controller/generated'
 import {
   type GatewayClient,
   type GatewayModel,
@@ -29,6 +30,15 @@ const model = (id: string, over: Partial<ProviderModel> = {}): ProviderModel => 
   sizeGb: null,
   recipe: null,
   ...over,
+})
+
+/** A catalog entry as a machine's agent writes it. */
+const wireModel = (id: string): ProviderReport['models'][number] => ({
+  id,
+  labels: [],
+  downloaded: true,
+  size_gb: null,
+  recipe: null,
 })
 
 const reading = (
@@ -313,12 +323,13 @@ describe('a node its agent has not reported for', () => {
       tag: o.tag,
     }))
 
-  it('keeps every route: an agent older than 0.18 sends no document', async () => {
+  it('keeps every route while the machine has sent no document', async () => {
     const gw = fakeGateway(held())
     const none = nodeReading('lemonade', pc.base, {
+      id: 'pc',
       connected: true,
       providers: null,
-      receivedAt: null,
+      received_at: null,
     })
     expect(none).toMatchObject({ reachable: false, reported: false })
     const s = await reconcile(gw, [{ provider: pc, reading: none }], () => undefined, 1)
@@ -331,8 +342,9 @@ describe('a node its agent has not reported for', () => {
     const gw = fakeGateway(held())
     const down = nodeReading('lemonade', pc.base, new Error('connect ENOENT'))
     const away = nodeReading('lemonade', pc.base, {
+      id: 'pc',
       connected: false,
-      receivedAt: '2026-09-28T10:00:00Z',
+      received_at: '2026-09-28T10:00:00Z',
       providers: [
         {
           kind: 'lemonade',
@@ -341,11 +353,11 @@ describe('a node its agent has not reported for', () => {
           running: true,
           healthy: true,
           loaded: [],
-          models: [model('G')],
+          models: [wireModel('G')],
           downloads: [],
           backends: [],
-          figures: {},
-          readAt: '2026-09-28T10:00:00Z',
+          figures: [],
+          read_at: '2026-09-28T10:00:00Z',
           error: null,
           actions: [],
         },
@@ -362,25 +374,25 @@ describe('a node its agent has not reported for', () => {
 
   it('reads a connected, fresh report as the provider answering', () => {
     const now = Date.parse('2026-09-28T10:01:00Z')
-    const report = {
+    const report: ProviderReport = {
       kind: 'lemonade',
       port: 13305,
       version: '10.8.1',
       running: true,
       healthy: false,
-      loaded: [{ id: 'G', device: 'gpu', maxContext: 65536, pinned: false }],
-      models: [model('G')],
+      loaded: [{ id: 'G', device: 'gpu', max_context: 65536, pinned: false }],
+      models: [wireModel('G')],
       downloads: [{ model: 'K', percent: 12, status: 'downloading' }],
       backends: [],
-      figures: {},
-      readAt: '2026-09-28T10:00:30Z',
+      figures: [],
+      read_at: '2026-09-28T10:00:30Z',
       error: 'did not answer /metrics',
       actions: [],
     }
     const r = nodeReading(
       'lemonade',
       pc.base,
-      { connected: true, receivedAt: '2026-09-28T10:00:31Z', providers: [report] },
+      { id: 'pc', connected: true, received_at: '2026-09-28T10:00:31Z', providers: [report] },
       now,
     )
     expect(r).toMatchObject({
@@ -393,7 +405,7 @@ describe('a node its agent has not reported for', () => {
     const stale = nodeReading(
       'lemonade',
       pc.base,
-      { connected: true, receivedAt: '2026-09-28T10:00:31Z', providers: [report] },
+      { id: 'pc', connected: true, received_at: '2026-09-28T10:00:31Z', providers: [report] },
       now + 10 * 60_000,
     )
     expect(stale.reachable).toBe(false)

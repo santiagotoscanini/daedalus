@@ -1,7 +1,6 @@
 import type { Ctx } from '../../core/ctx'
+import type { ProviderReport, StatusDocument, Telemetry } from '../../host/controller/generated'
 import { readNode } from '../../host/controller/nodes'
-import type { NodeProviderReport } from '../../host/controller/wire'
-import type { AgentStatus, NodeTelemetry } from '../agent/status'
 import { getNode, type NodeRow } from '../repo/nodes'
 import { type BoardReleases, boardReleases } from './board-releases'
 import { type BrowserLatest, browserLatest } from './browser-releases'
@@ -23,9 +22,9 @@ import { type MacReleases, macosReleases } from './macos-releases'
 
 export type NodeSystemData = {
   node: NodeRow
-  status: AgentStatus | null
+  status: StatusDocument | null
   /** Null before the machine's first sample reached the controller. */
-  telemetry: NodeTelemetry | null
+  telemetry: Telemetry | null
   /**
    * Whether `telemetry` is the full document. False when only the summary
    * `nodes.get` carries has arrived, and `detailError` says why.
@@ -36,7 +35,7 @@ export type NodeSystemData = {
    * What the machine's agent read from its providers (agent/src/providers.rs),
    * as it last reported them; null until it has.
    */
-  providers: NodeProviderReport[] | null
+  providers: ProviderReport[] | null
   /**
    * The maker's BIOS releases, read only for the Motherboard tab (it asks a
    * download host on the internet, which the other tabs have no use for).
@@ -93,11 +92,11 @@ export async function loadNodeSystem(
   let full = false
   let detailError: string | null = null
   const providersRead = client
-    .nodesProviders(id)
+    .call('nodes.providers', { id })
     .then((a) => a.providers)
     .catch(() => null)
   try {
-    const answer = await client.nodesTelemetry(id)
+    const answer = await client.call('nodes.telemetry', { id })
     if (answer.telemetry !== null) {
       t = answer.telemetry
       full = true
@@ -113,10 +112,10 @@ export async function loadNodeSystem(
   const releases =
     opts.board === true
       ? await boardReleases({
-          vendor: t.machine.boardManufacturer ?? t.machine.manufacturer,
-          product: t.machine.boardProduct ?? t.machine.model,
-          biosVersion: t.machine.biosVersion,
-          biosDate: t.machine.biosDate,
+          vendor: t.machine.board_manufacturer ?? t.machine.manufacturer,
+          product: t.machine.board_product ?? t.machine.model,
+          biosVersion: t.machine.bios_version,
+          biosDate: t.machine.bios_date,
         })
       : null
   const browsers =
@@ -131,7 +130,7 @@ export async function loadNodeSystem(
   // not need the full one either.
   const macos =
     opts.macos === true && node.os === 'macos'
-      ? await macosReleases(status.osVersion, t.machine.target)
+      ? await macosReleases(status.os_version, t.machine.target)
       : null
   return {
     ...none,

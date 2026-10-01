@@ -1,14 +1,10 @@
+import type { NodeDetail, NodeSummary, PolicyRequest } from '../host/controller/generated'
 import {
   enrollValues,
   observedFacts,
   requestDesiredSync,
   syncDesired,
 } from '../host/controller/nodes'
-import type {
-  ControllerNode,
-  ControllerNodeDetail,
-  NodePolicyChanges,
-} from '../host/controller/wire'
 import { dhcpHostsMissing, householdMacs, writeDhcpHosts } from '../host/dhcp-hosts'
 import { fingerprintOf, releaseTunnel } from '../host/enroll'
 import { requestGatewaySync } from '../host/gateway-sync'
@@ -79,13 +75,19 @@ export async function setNodePolicy(
 export async function applyNodePolicyRequest(
   ctx: Ctx,
   id: string,
-  changes: NodePolicyChanges,
+  changes: PolicyRequest,
 ): Promise<boolean> {
   // The decoder refused santree ON already; a door is checked where it opens.
-  if ((changes as { santree?: boolean }).santree === true) {
+  if (changes.santree === true) {
     throw new Error(`${id} asked to turn santree on, which only an admin does`)
   }
-  const set: NodePolicy = { ...changes }
+  const set: NodePolicy = {
+    ...(changes.awake_hold === undefined ? {} : { awakeHold: changes.awake_hold }),
+    ...(changes.claude_remote_control === undefined
+      ? {}
+      : { claudeRemoteControl: changes.claude_remote_control }),
+    ...(changes.santree === undefined ? {} : { santree: changes.santree }),
+  }
   if (Object.keys(set).length === 0) return false
   const row = await writePolicyRequest(id, set)
   if (row === undefined) return false
@@ -143,11 +145,7 @@ export async function approveNode(ctx: Ctx, id: string, by: string): Promise<boo
  * Approve a key the controller holds pending: the row is made from its key
  * and its hello, approved in the same write.
  */
-export async function enrollNode(
-  ctx: Ctx,
-  detail: ControllerNodeDetail,
-  by: string,
-): Promise<boolean> {
+export async function enrollNode(ctx: Ctx, detail: NodeDetail, by: string): Promise<boolean> {
   const made = await insertEnrolled(enrollValues(detail), by)
   await afterDecision(ctx)
   return made
@@ -229,7 +227,7 @@ async function afterDecision(ctx: Ctx): Promise<void> {
  */
 export async function recordObserved(
   ctx: Pick<Ctx, 'controller'>,
-  seen: readonly ControllerNode[],
+  seen: readonly NodeSummary[],
 ): Promise<void> {
   if (seen.length === 0) return
   const byId = new Map(seen.map((s) => [s.id, s]))

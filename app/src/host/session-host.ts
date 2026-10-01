@@ -1,6 +1,7 @@
 import type { Ctx } from '../core/ctx'
 import type { Tone } from '../lib/tone'
-import { ControllerError, type SessionHostStatus } from './controller/wire'
+import type { SantreeStatus } from './controller/generated'
+import { ControllerError } from './controller/wire'
 import { type RootAnswer, runRoot } from './root'
 
 // The session host (session-host/, nix/stacks/daedalus/session-host.nix): the
@@ -27,7 +28,7 @@ export type SessionHostLine = {
   error: string | null
 }
 
-const CHIP: Record<SessionHostStatus['state'], { chip: string; tone: Tone }> = {
+const CHIP: Record<SantreeStatus['state'], { chip: string; tone: Tone }> = {
   running: { chip: 'running', tone: 'ok' },
   stale: { chip: 'not answering', tone: 'warn' },
   stopped: { chip: 'stopped', tone: 'bad' },
@@ -36,11 +37,11 @@ const CHIP: Record<SessionHostStatus['state'], { chip: string; tone: Tone }> = {
 
 const plural = (n: number, one: string) => `${String(n)} ${one}${n === 1 ? '' : 's'}`
 
-export function sessionHostLine(s: SessionHostStatus): SessionHostLine {
+export function sessionHostLine(s: SantreeStatus): SessionHostLine {
   const up = s.state === 'running' || s.state === 'stale'
   const facts: string[] = []
   if (up) {
-    facts.push(plural(s.livePtys, 'live terminal'))
+    facts.push(plural(s.live_ptys, 'live terminal'))
     facts.push(
       s.connections.length === 0
         ? 'no machine connected'
@@ -51,8 +52,8 @@ export function sessionHostLine(s: SessionHostStatus): SessionHostLine {
     ...CHIP[s.state],
     version: s.version,
     facts,
-    restartPending: s.restartPending,
-    confirm: restartConfirm(up ? s.livePtys : 0),
+    restartPending: s.restart_pending,
+    confirm: restartConfirm(up ? s.live_ptys : 0),
     error: s.error,
   }
 }
@@ -72,7 +73,7 @@ export async function readSessionHost(
   ctx: Pick<Ctx, 'controller'>,
 ): Promise<SessionHostLine | null> {
   try {
-    return sessionHostLine(await ctx.controller.santreeStatus())
+    return sessionHostLine(await ctx.controller.call('santree.status'))
   } catch (e) {
     if (e instanceof ControllerError && e.code === 'unsupported') return null
     return {

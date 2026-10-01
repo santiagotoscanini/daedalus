@@ -32,6 +32,7 @@
 // Neither layer is a guarantee. Redaction of prose recognises credentials by
 // shape; a password or a passphrase has no shape.
 
+import type { Meta } from '../host/controller/generated'
 import { bytes, ms } from './format'
 import { redactSecrets } from './redact'
 
@@ -73,6 +74,35 @@ export const NO_META: TranscriptMeta = {
   cliVersion: null,
   lastPrompt: null,
   cost: null,
+}
+
+/**
+ * A transcript's scan as the agent wrote it, as the page reads it: a file it
+ * could not read (null) is `NO_META`, every field not known.
+ */
+export function metaOf(m: Meta | null): TranscriptMeta {
+  if (m === null) return NO_META
+  return {
+    exchanges: m.exchanges,
+    replies: m.replies,
+    thinking: m.thinking,
+    images: m.images,
+    attached: m.attached,
+    subagents: m.subagents,
+    spanMs: m.span_ms,
+    branch: m.branch,
+    cliVersion: m.cli_version,
+    lastPrompt: m.last_prompt,
+    cost:
+      m.cost === null
+        ? null
+        : {
+            usd: m.cost.usd,
+            linesAdded: m.cost.lines_added,
+            linesRemoved: m.cost.lines_removed,
+            durationMs: m.cost.duration_ms,
+          },
+  }
 }
 
 /**
@@ -156,16 +186,16 @@ export type FactGroup = {
  */
 export type LiveFacts = {
   /** When the PROCESS started — not when the conversation did. */
-  startedAt: number | null
+  started_at: number | null
   /**
    * The later of the session file's own clock and the bridge debug log's
    * mtime. A better reading than the transcript's mtime and it replaces it
    * on a live row: two idle readings on one line is the repetition this
    * whole grouping exists to remove.
    */
-  lastActivityAt: number | null
-  cpuMs: number | null
-  rssBytes: number | null
+  last_activity_at: number | null
+  cpu_ms: number | null
+  rss_bytes: number | null
   /**
    * The CLI version this PROCESS is running, as the session file reports it.
    *
@@ -313,7 +343,7 @@ export function factGroups(row: RowShape, now: number): FactGroup[] {
   // printing both would put two idle readings a few seconds apart on one
   // line, which is exactly the repetition this grouping exists to remove.
   const live = row.live ?? null
-  const clock = live?.lastActivityAt ?? null
+  const clock = live?.last_activity_at ?? null
   const parts: string[] = []
   if (meta.spanMs !== null && meta.spanMs > 0) parts.push(span(meta.spanMs))
   if (clock !== null) parts.push(seen(Math.max(0, now - clock)))
@@ -340,9 +370,9 @@ export function factGroups(row: RowShape, now: number): FactGroup[] {
     // `ago`, not `span`: this one is measured from now too, so a session
     // started in the last minute would tick across the hydration boundary
     // exactly as its activity clock would.
-    if (live.startedAt !== null) bits.push(`up ${ago(Math.max(0, now - live.startedAt))}`)
-    if (live.rssBytes !== null) bits.push(bytes(live.rssBytes))
-    if (live.cpuMs !== null) bits.push(`${ms(live.cpuMs)} cpu`)
+    if (live.started_at !== null) bits.push(`up ${ago(Math.max(0, now - live.started_at))}`)
+    if (live.rss_bytes !== null) bits.push(bytes(live.rss_bytes))
+    if (live.cpu_ms !== null) bits.push(`${ms(live.cpu_ms)} cpu`)
     if (bits.length > 0) {
       out.push({
         key: 'proc',

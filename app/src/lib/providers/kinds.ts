@@ -19,12 +19,15 @@
 // operator never chose. `git show 8410e1f` has the mapping if a machine ever
 // runs Ollama on its own.
 
+import { LEMONADE_DEFAULT_PORT } from '../../host/controller/generated/constants'
+
 export type ProviderKind = 'lemonade' | 'subgen'
 
 const PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade', 'subgen']
 
+/** Where each kind answers unless a policy names another port: the agent's own for lemonade. */
 export const DEFAULT_PORT: Record<ProviderKind, number> = {
-  lemonade: 13305,
+  lemonade: LEMONADE_DEFAULT_PORT,
   subgen: 9000,
 }
 

@@ -8,10 +8,9 @@ import {
   parseWgQuick,
 } from '../lib/agent/enroll'
 import type { Result } from '../lib/result'
-import type { EnrollRedeemed } from './controller/generated'
+import type { EnrollRedeemed, SystemInfo } from './controller/generated'
 import type { DesiredSync } from './controller/nodes'
 import { nodeIdOf } from './controller/nodes'
-import type { SystemInfo } from './controller/wire'
 import type { WgEasy } from './wg-easy'
 
 // A Mac's log-in, the app's half (agent/src/enroll.rs is the machine's; the

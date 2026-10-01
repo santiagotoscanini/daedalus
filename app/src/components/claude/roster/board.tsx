@@ -14,14 +14,9 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 // Pure: lib/agent/roster decodes the agent's roster; nothing here needs the machine.
-import type { SessionAction } from '../../../host/controller/generated'
+import type { Roster, SessionAction } from '../../../host/controller/generated'
 import { type ClaudeSession, sessionOutcome } from '../../../lib/agent/roster'
-import {
-  type ClaudeRoster,
-  countByState,
-  type RosterEntry,
-  sessionRows,
-} from '../../../lib/claude-roster'
+import { countByState, type RosterEntry, sessionRows } from '../../../lib/claude-roster'
 import { num } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { ARM_MS } from '../../armed-confirm'
@@ -53,7 +48,7 @@ export function RosterBoard({
   missing,
   errors,
 }: {
-  roster: ClaudeRoster
+  roster: Roster | null
   sessions: ClaudeSession[]
   /** The machine; null is the box's own controller. */
   node: string | null
@@ -149,13 +144,13 @@ export function RosterBoard({
       {rows.length > shown.length && (
         <p className={FOOT}>
           {num(rows.length - shown.length)} older transcript
-          {rows.length - shown.length === 1 ? '' : 's'} not listed, of {num(roster.transcriptTotal)}{' '}
-          on disk.
-          {roster.emptyCount > 0 && (
+          {rows.length - shown.length === 1 ? '' : 's'} not listed, of{' '}
+          {num(roster?.transcript_total ?? 0)} on disk.
+          {(roster?.empty_count ?? 0) > 0 && (
             <>
               {' '}
-              {num(roster.emptyCount)} more {roster.emptyCount === 1 ? 'is' : 'are'} empty — opened
-              and never spoken to, so there is nothing in them to resume.
+              {num(roster?.empty_count ?? 0)} more {roster?.empty_count === 1 ? 'is' : 'are'} empty
+              — opened and never spoken to, so there is nothing in them to resume.
             </>
           )}
         </p>

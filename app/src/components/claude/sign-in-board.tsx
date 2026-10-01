@@ -31,22 +31,22 @@ export function SignInBoard({
           <Facts
             list
             rows={[
-              { k: 'Plan', v: text(credentials.subscriptionType) },
+              { k: 'Plan', v: text(credentials.subscription_type) },
               {
                 k: 'Rate limit tier',
-                v: <span className={MONO}>{text(credentials.rateLimitTier)}</span>,
+                v: <span className={MONO}>{text(credentials.rate_limit_tier)}</span>,
               },
               {
                 k: 'Access token',
-                v: credentials.expiresAt === null ? DASH : <Until at={credentials.expiresAt} />,
+                v: credentials.expires_at === null ? DASH : <Until at={credentials.expires_at} />,
               },
               {
                 k: 'Refresh token',
                 v:
-                  credentials.refreshExpiresAt === null ? (
+                  credentials.refresh_expires_at === null ? (
                     DASH
                   ) : (
-                    <Until at={credentials.refreshExpiresAt} />
+                    <Until at={credentials.refresh_expires_at} />
                   ),
               },
               {

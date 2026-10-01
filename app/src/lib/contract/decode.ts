@@ -216,25 +216,47 @@ export function asValidator<T>(d: Decoder<T>): (value: unknown) => T {
 // (agent/src/ts.rs → host/controller/generated/): the decoders stay the
 // runtime half, and these make the compiler hold them to the generated type.
 
-/** `W` with every optional key present (a decoder reads an absent key to its fallback). */
-type Present<W> = W extends readonly (infer E)[]
-  ? Present<E>[]
+/** `W` with every optional key present (`absent` reads one to undefined). */
+type Present<W> = W extends readonly unknown[]
+  ? { [K in keyof W]: Present<W[K]> }
   : W extends object
-    ? { [K in keyof W]-?: Present<Exclude<W[K], undefined>> }
+    ? { [K in keyof W]-?: Present<Exclude<W[K], undefined>> | Extract<W[K], undefined> }
     : W
 
 /**
- * The decoder as it is, held to the producer's type `W`: the argument does
- * not type-check unless `W` carries every field the decoder reads, with a
- * type the decoder takes — a field the Rust side renamed, dropped or made
- * nullable, or a word it added to a union a `literal` reads, is a compile
- * error here. A decoder may read less than `W` has, never what `W` lacks.
+ * The decoder held to the producer's type `W`, both ways, and answering a
+ * `W`: it reads every field `W` has with exactly its type — a field the Rust
+ * side adds, renames, drops or makes nullable, or a word it adds to a union
+ * a `oneOf` reads, is a compile error here — so a loader takes the generated
+ * type itself and no copy of it is kept by hand.
  *
- *     const rosterShape = reads<Roster>()(obj({ … }))
+ *     const roster = reads<Roster>()(obj({ … }))
  */
 export function reads<W>() {
   return <T>(
     d: Decoder<T> &
-      ([Present<W>] extends [T] ? unknown : 'the agent does not write what this decoder reads'),
-  ): Decoder<T> => d
+      ([Present<W>] extends [T]
+        ? [T] extends [W]
+          ? unknown
+          : 'this decoder answers what the agent does not write'
+        : 'the agent writes what this decoder does not read'),
+  ): Decoder<W> => d as unknown as Decoder<W>
 }
+
+/** A key the producer leaves out when it has nothing to say (`skip_serializing_if`). */
+export function absent<T>(d: Decoder<T>): Decoder<T | undefined> {
+  return (v, p) => (v === undefined ? undefined : d(v, p))
+}
+
+/** Exactly three numbers (a load average). */
+export const triple: Decoder<[number, number, number]> = (v, p) => {
+  const a = arrayOf(num)(v, p)
+  if (a.length !== 3) throw new DecodeError(p, `expected three numbers, got ${String(a.length)}`)
+  return [a[0] ?? 0, a[1] ?? 0, a[2] ?? 0]
+}
+
+/** The nullable scalars a producer's documents are made of. */
+export const nstr = nullable(str)
+export const nint = nullable(int)
+export const nnum = nullable(num)
+export const nbool = nullable(bool)

@@ -24,7 +24,7 @@ export function ThisMacRunsBoard({ f }: { f: NodeMacosFacts }) {
                 {m?.running.name !== null && m?.running.name !== undefined
                   ? `${m.running.name} `
                   : ''}
-                <span className={MONO}>{m?.running.version ?? status.osVersion}</span>
+                <span className={MONO}>{m?.running.version ?? status.os_version}</span>
               </>
             ),
           },
@@ -39,15 +39,15 @@ export function ThisMacRunsBoard({ f }: { f: NodeMacosFacts }) {
           {
             k: 'Firmware',
             v:
-              t.machine.biosVersion === null ? (
+              t.machine.bios_version === null ? (
                 DASH
               ) : (
-                <span className={MONO}>{t.machine.biosVersion}</span>
+                <span className={MONO}>{t.machine.bios_version}</span>
               ),
           },
           {
             k: 'Installed',
-            v: t.os.installedAt === null ? DASH : <Ago at={t.os.installedAt} />,
+            v: t.os.installed_at === null ? DASH : <Ago at={t.os.installed_at} />,
           },
           {
             k: 'Last update',
@@ -194,7 +194,7 @@ export function Panel2({ f }: { f: NodeMacosFacts }) {
       icon="◎"
       span={6}
       aside={
-        u === null ? undefined : u.rebootPending === true ? (
+        u === null ? undefined : u.reboot_pending === true ? (
           <Chip tone="warn">restart owed</Chip>
         ) : pending.length === 0 && u.error === null ? (
           <Chip tone="ok">nothing pending</Chip>
@@ -222,7 +222,7 @@ export function Panel2({ f }: { f: NodeMacosFacts }) {
               {p.severity !== null && <Chip tone="warn">{p.severity}</Chip>}
               <span className={ROW_MAIN}>{p.title}</span>
               <span className={ROW_SIDE}>
-                {p.sizeBytes !== null && `${bytes(p.sizeBytes)} · `}
+                {p.size_bytes !== null && `${bytes(p.size_bytes)} · `}
                 {p.restart === true ? 'restarts' : p.restart === false ? 'no restart' : ''}
               </span>
             </li>
@@ -231,9 +231,9 @@ export function Panel2({ f }: { f: NodeMacosFacts }) {
       )}
       <DetailNote d={d} />
       <p className={FOOT}>
-        {u !== null && u.checkedAt !== null && (
+        {u !== null && u.checked_at !== null && (
           <>
-            Asked <Ago at={u.checkedAt} />.{' '}
+            Asked <Ago at={u.checked_at} />.{' '}
           </>
         )}
         What <span className={MONO}>softwareupdate</span> lists from the Mac&rsquo;s own last scan,

@@ -85,104 +85,25 @@
 
 // Type only, and the dependency points this way on purpose: claude-meta.ts
 // knows nothing about rosters, so it can be tested against a bare meta block.
+import type { Agent, Roster } from '../host/controller/generated'
 import type { LiveFacts, TranscriptMeta } from './claude-meta'
-import { NO_META } from './claude-meta'
+import { metaOf, NO_META } from './claude-meta'
 
 /**
- * A connected session, as this module needs it.
- *
- * Declared structurally rather than imported from lib/agent/roster.ts, which
- * imports this module's types: `ClaudeSession` there satisfies this shape, so
- * the loader's array passes straight in.
+ * A connected session, as this module needs it: a session of the report
+ * with its cost joined on (lib/agent/roster.ts `withStats` answers these).
  */
 export type LiveSession = LiveFacts & {
-  transcriptId: string | null
+  transcript_id: string | null
   alive: boolean
   pid: number
   /** `cse_…` — the id claude.ai shows. Only bridge-started sessions have one. */
-  remoteId: string | null
+  remote_id: string | null
   /** The CLI's derived short label, e.g. `nixos-7a`. What claude.ai shows. */
   name: string | null
   /** `busy` while it is mid-turn. The CLI's word, which no clock can infer. */
   status: string | null
   cwd: string | null
-}
-
-/** One `claude agents --json` entry, as the agent copies it out. */
-export type ClaudeAgent = {
-  /** The SHORT id — what `claude attach`/`stop` take. Background agents only. */
-  id: string | null
-  sessionId: string | null
-  pid: number | null
-  /** `background` (claude --bg) or `interactive`. */
-  kind: string | null
-  /** A background agent's lifecycle word: blocked, running… */
-  state: string | null
-  /** An interactive session's: busy. Deliberately not the same field. */
-  status: string | null
-  name: string | null
-  cwd: string | null
-  startedAt: number | null
-}
-
-/**
- * One transcript on disk.
- *
- * Labels and counts — and exactly one line of content, `meta.lastPrompt`,
- * which the operator asked for and which the agent redacts and cuts before it
- * leaves the machine. Nothing else from the conversation is here; the titles
- * are still derived labels.
- */
-export type ClaudeTranscript = {
-  id: string
-  /** The `~/.claude/projects/` directory name. */
-  project: string
-  cwd: string
-  /** False = `cwd` was un-slugged from `project` and a dash may be wrong. */
-  cwdExact: boolean
-  title: string | null
-  titleSource: string | null
-  /** First timestamp in the file's opening bytes. Null is normal — see below. */
-  startedAt: number | null
-  modifiedAt: number
-  sizeBytes: number
-  /**
-   * What the agent's scan counted in this file — see lib/claude-meta.ts.
-   * Always an object: a file it could not read is `NO_META`, every field
-   * null, so neither side invents a zero.
-   */
-  meta: TranscriptMeta
-}
-
-export type ClaudeRoster = {
-  /** False = the CLI did not answer, so every row below is disk-only. */
-  agentsAvailable: boolean
-  agents: ClaudeAgent[]
-  transcripts: ClaudeTranscript[]
-  /** Non-empty transcripts on disk, before the agent's own cap. */
-  transcriptTotal: number
-  /** Opened and never spoken to. Counted, not listed: nothing to resume. */
-  emptyCount: number
-  /**
-   * Session uuids the agent resumed, running now as its
-   * `claude-session-<uuid>` user units — the only live ones it can end.
-   *
-   * A third source, because neither of the two above can answer this: a
-   * session the Remote Control server spawned looks identical in
-   * `claude agents` and has no per-session kill at all. Without this the board
-   * would have to offer every live row the same button and be wrong about half
-   * of them.
-   */
-  managedIds: string[]
-}
-
-export const NO_ROSTER: ClaudeRoster = {
-  agentsAvailable: false,
-  agents: [],
-  transcripts: [],
-  transcriptTotal: 0,
-  emptyCount: 0,
-  managedIds: [],
 }
 
 /**
@@ -364,28 +285,30 @@ const shortId = (id: string): string => id.slice(0, 8)
  * promises.
  */
 export function sessionRows(
-  roster: ClaudeRoster,
+  roster: Roster | null,
   live: readonly LiveSession[] = [],
 ): RosterEntry[] {
-  const byId = new Map<string, ClaudeAgent>()
-  for (const a of roster.agents) {
-    if (a.sessionId !== null) byId.set(a.sessionId, a)
+  const agents = roster?.agents ?? []
+  const transcripts = roster?.transcripts ?? []
+  const byId = new Map<string, Agent>()
+  for (const a of agents) {
+    if (a.session_id !== null) byId.set(a.session_id, a)
   }
 
   // The live sessions, by the transcript each one is writing. Kept as the
   // whole session rather than as a set of ids: the row carries its facts.
   const liveById = new Map<string, LiveSession>()
   for (const s of live) {
-    if (s.alive && s.transcriptId !== null) liveById.set(s.transcriptId, s)
+    if (s.alive && s.transcript_id !== null) liveById.set(s.transcript_id, s)
   }
 
   // A third way to be running, and the earliest to know it: a session this box
   // resumed has its unit up the moment the CLI execs, well before the session
   // file exists or `claude agents` has it. Without this a Resume pressed twice
   // inside a minute would look resumable the second time.
-  const managed = new Set(roster.managedIds)
+  const managed = new Set((roster?.managed ?? []).map((m) => m.id))
 
-  const rows: RosterEntry[] = roster.transcripts.map((t) => {
+  const rows: RosterEntry[] = transcripts.map((t) => {
     const agent = byId.get(t.id) ?? null
     const background = agent !== null && agent.kind === 'background'
     // The pid, not the lifecycle word: `blocked` is a background agent waiting
@@ -406,8 +329,8 @@ export function sessionRows(
       shortId(t.id)
     const labelSource: RosterEntry['labelSource'] =
       t.title !== null
-        ? t.titleSource === 'custom-title' || t.titleSource === 'sidecar'
-          ? t.titleSource
+        ? t.title_source === 'custom-title' || t.title_source === 'sidecar'
+          ? t.title_source
           : 'ai-title'
         : agent?.name != null
           ? 'agent'
@@ -420,39 +343,39 @@ export function sessionRows(
       label,
       labelSource,
       cwd: agent?.cwd ?? t.cwd,
-      cwdExact: agent?.cwd != null ? true : t.cwdExact,
+      cwdExact: agent?.cwd != null ? true : t.cwd_exact,
       state: dormant ? 'dormant' : background ? 'background' : running ? 'alive' : 'resumable',
       lifecycle: background ? agent.state : (agent?.status ?? null),
       pid: agent?.pid ?? null,
-      startedAt: t.startedAt ?? agent?.startedAt ?? null,
-      modifiedAt: t.modifiedAt,
-      sizeBytes: t.sizeBytes,
+      startedAt: t.started_at ?? agent?.started_at ?? null,
+      modifiedAt: t.modified_at,
+      sizeBytes: t.size_bytes,
       onDisk: true,
-      meta: t.meta,
+      meta: metaOf(t.meta),
       canResume: !running,
       managed: managed.has(t.id),
       live: session,
     }
   })
 
-  const seenRows = new Set(roster.transcripts.map((t) => t.id))
-  for (const a of roster.agents) {
-    if (a.sessionId !== null && seenRows.has(a.sessionId)) continue
-    if (a.sessionId !== null) seenRows.add(a.sessionId)
+  const seenRows = new Set(transcripts.map((t) => t.id))
+  for (const a of agents) {
+    if (a.session_id !== null && seenRows.has(a.session_id)) continue
+    if (a.session_id !== null) seenRows.add(a.session_id)
     const background = a.kind === 'background'
     const dormant = background && a.pid === null
     rows.push({
-      key: a.sessionId ?? a.id ?? `agent-${String(a.pid ?? 0)}`,
-      id: a.sessionId,
+      key: a.session_id ?? a.id ?? `agent-${String(a.pid ?? 0)}`,
+      id: a.session_id,
       shortId: background ? a.id : null,
-      label: a.name ?? a.sessionId ?? a.id ?? 'unnamed',
+      label: a.name ?? a.session_id ?? a.id ?? 'unnamed',
       labelSource: a.name != null ? 'agent' : 'id',
       cwd: a.cwd,
       cwdExact: true,
       state: dormant ? 'dormant' : background ? 'background' : 'orphan',
       lifecycle: background ? a.state : a.status,
       pid: a.pid,
-      startedAt: a.startedAt,
+      startedAt: a.started_at,
       modifiedAt: null,
       sizeBytes: null,
       onDisk: false,
@@ -463,8 +386,8 @@ export function sessionRows(
       canResume: false,
       // Our own units are named by the transcript uuid, so this is normally
       // false for a row with no transcript in the scanned tree.
-      managed: a.sessionId !== null && managed.has(a.sessionId),
-      live: a.sessionId === null ? null : (liveById.get(a.sessionId) ?? null),
+      managed: a.session_id !== null && managed.has(a.session_id),
+      live: a.session_id === null ? null : (liveById.get(a.session_id) ?? null),
     })
   }
 
@@ -473,19 +396,19 @@ export function sessionRows(
   // it would vanish, and it is exactly the row a reader opens this page for.
   for (const s of live) {
     if (!s.alive) continue
-    if (s.transcriptId !== null && seenRows.has(s.transcriptId)) continue
+    if (s.transcript_id !== null && seenRows.has(s.transcript_id)) continue
     rows.push({
       key: `live-${String(s.pid)}`,
-      id: s.transcriptId,
+      id: s.transcript_id,
       shortId: null,
-      label: s.name ?? s.transcriptId ?? `pid ${String(s.pid)}`,
+      label: s.name ?? s.transcript_id ?? `pid ${String(s.pid)}`,
       labelSource: s.name != null ? 'agent' : 'id',
       cwd: s.cwd,
       cwdExact: true,
       state: 'alive',
       lifecycle: s.status,
       pid: s.pid,
-      startedAt: s.startedAt,
+      startedAt: s.started_at,
       modifiedAt: null,
       sizeBytes: null,
       onDisk: false,
@@ -493,7 +416,7 @@ export function sessionRows(
       // A resume needs a transcript, and the reason this row exists at all is
       // that no transcript for it was found.
       canResume: false,
-      managed: s.transcriptId !== null && managed.has(s.transcriptId),
+      managed: s.transcript_id !== null && managed.has(s.transcript_id),
       live: s,
     })
   }

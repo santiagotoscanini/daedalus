@@ -15,7 +15,7 @@ import {
   PartPhoto,
 } from '../../../../components/part'
 import { Board, Facts, Measures } from '../../../../components/viz'
-import type { NodeTelemetry } from '../../../../lib/agent/status'
+import type { Telemetry } from '../../../../host/controller/generated'
 import { cn } from '../../../../lib/cn'
 import { bytes, DASH, num, pct, shortVendor, temp } from '../../../../lib/format'
 import { type ChosenKind, type Part, partMatching } from '../../../../lib/hardware/catalog'
@@ -48,21 +48,21 @@ export function GraphicsPanel({ f }: { f: BuildFacts }) {
               <strong className={PART_NAME}>{g.name}</strong>
               <span className={PART_DETAIL}>
                 {gpuPart?.detail ??
-                  (g.vramTotalBytes === null
+                  (g.vram_total_bytes === null
                     ? soldered
                       ? 'shares the unified memory'
                       : 'memory unread'
-                    : `${bytes(g.vramTotalBytes)} of its own`)}
+                    : `${bytes(g.vram_total_bytes)} of its own`)}
                 {g.driver !== null && ` · driver ${g.driver}`}
               </span>
             </div>
           </div>
           <Measures
             items={[
-              { k: 'busy', v: pct(g.usagePct), tone: loadTone(g.usagePct) },
-              { k: 'memory', v: bytes(g.vramUsedBytes) },
-              { k: 'temp', v: temp(g.temperatureC) },
-              { k: 'power', v: g.powerW === null ? DASH : `${g.powerW.toFixed(1)} W` },
+              { k: 'busy', v: pct(g.usage_pct), tone: loadTone(g.usage_pct) },
+              { k: 'memory', v: bytes(g.vram_used_bytes) },
+              { k: 'temp', v: temp(g.temperature_c) },
+              { k: 'power', v: g.power_w === null ? DASH : `${g.power_w.toFixed(1)} W` },
             ]}
           />
           <p className={FOOT}>
@@ -100,7 +100,7 @@ export function PowerPanel({ f }: { f: BuildFacts }) {
           <Measures
             items={[
               { k: 'charge', v: pct(t.battery.percent) },
-              { k: 'health', v: pct(t.battery.healthPct) },
+              { k: 'health', v: pct(t.battery.health_pct) },
               {
                 k: 'source',
                 v: t.battery.charging === null ? DASH : t.battery.charging ? 'adapter' : 'battery',
@@ -142,11 +142,11 @@ export function CasePanel({ f }: { f: BuildFacts }) {
         rows={[
           {
             k: 'System',
-            v: `${status?.osName ?? node.os}${status?.osVersion ? ` ${status.osVersion}` : ''}`,
+            v: `${status?.os_name ?? node.os}${status?.os_version ? ` ${status.os_version}` : ''}`,
           },
           { k: 'Kernel', v: <span className={MONO}>{t.os.kernel ?? DASH}</span> },
           ...(t.os.build ? [{ k: 'Build', v: <span className={MONO}>{t.os.build}</span> }] : []),
-          { k: 'Installed', v: <Ago at={t.os.installedAt} /> },
+          { k: 'Installed', v: <Ago at={t.os.installed_at} /> },
           { k: 'Hardware address', v: <span className={MONO}>{node.mac ?? DASH}</span> },
         ]}
       />
@@ -212,8 +212,8 @@ export function MemoryFacts({
   soldered,
   memPart,
 }: {
-  m: NodeTelemetry['memory']
-  first: NodeTelemetry['memory']['modules'][number] | undefined
+  m: Telemetry['memory']
+  first: Telemetry['memory']['modules'][number] | undefined
   soldered: boolean
   memPart: Part | null
 }) {
@@ -222,12 +222,12 @@ export function MemoryFacts({
       {memPart !== null && <PartHead part={memPart} />}
       <Facts
         rows={[
-          { k: 'Installed', v: bytes(m.totalBytes) },
+          { k: 'Installed', v: bytes(m.total_bytes) },
           { k: 'Type', v: first?.kind ?? DASH },
-          { k: 'Speed', v: first?.speedMts == null ? DASH : `${num(first.speedMts)} MT/s` },
+          { k: 'Speed', v: first?.speed_mts == null ? DASH : `${num(first.speed_mts)} MT/s` },
           { k: 'Maker', v: first?.manufacturer ?? DASH },
-          { k: 'Part', v: <span className={MONO}>{first?.partNumber ?? DASH}</span> },
-          { k: 'Ceiling', v: soldered ? 'as bought' : bytes(m.maxCapacityBytes) },
+          { k: 'Part', v: <span className={MONO}>{first?.part_number ?? DASH}</span> },
+          { k: 'Ceiling', v: soldered ? 'as bought' : bytes(m.max_capacity_bytes) },
         ]}
       />
       {m.modules.length > 1 && (
@@ -237,7 +237,7 @@ export function MemoryFacts({
             {m.modules.map((x, i) => (
               <li key={`${x.locator ?? '?'}-${String(i)}`} className={ROW}>
                 <span className={ROW_MAIN}>{x.locator ?? `#${String(i + 1)}`}</span>
-                <span className={ROW_SIDE}>{bytes(x.sizeBytes)}</span>
+                <span className={ROW_SIDE}>{bytes(x.size_bytes)}</span>
                 <span className={ROW_SIDE}>{x.kind ?? DASH}</span>
               </li>
             ))}

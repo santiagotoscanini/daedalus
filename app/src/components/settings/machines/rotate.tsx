@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import type { ControllerRotation } from '../../../host/controller/wire'
+import type { RotationInfo } from '../../../host/controller/generated'
 import { ROTATION_GRACE, ROTATION_GRACES, type RotationGrace } from '../../../lib/agent/policy'
 import { cn } from '../../../lib/cn'
 import { rotateControllerKeyFn } from '../../../server/nodes'
@@ -24,26 +24,26 @@ const ARM_MS = 60_000
 const GRACE_OPTIONS = ROTATION_GRACES.map((g) => ({ value: g, label: ROTATION_GRACE[g].label }))
 
 /** The rotation under way, as one row value: from which key, when it retires, who still uses it. */
-export function RotationState({ r }: { r: ControllerRotation }) {
+export function RotationState({ r }: { r: RotationInfo }) {
   const now = useNow(false)
-  const left = now === null ? null : (Date.parse(r.retiresAt) - now) / 1000
-  const old = r.oldKeyConnections
+  const left = now === null ? null : (Date.parse(r.retires_at) - now) / 1000
+  const old = r.old_key_connections
   return (
     <span className="inline-flex flex-col items-start gap-1">
       <Line>
         <span>
-          from <Mono>{r.fromFingerprint}</Mono>
+          from <Mono>{r.from_fingerprint}</Mono>
         </span>
         <span className={ASIDE}>
           the old key retires{' '}
           {left === null || left > 0 ? (
             <>
-              in <Until at={r.retiresAt} />
+              in <Until at={r.retires_at} />
             </>
           ) : (
             'at the next start'
           )}{' '}
-          ({r.retiresAt.slice(0, 16).replace('T', ' ')} UTC)
+          ({r.retires_at.slice(0, 16).replace('T', ' ')} UTC)
         </span>
       </Line>
       <span className={cn(ASIDE, old > 0 && 'text-warning')}>

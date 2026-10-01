@@ -37,10 +37,9 @@
 
 import type { Ctx } from '../../core/ctx'
 import type { ControllerClient } from '../../host/controller/client'
+import type { Banner, Report, Roster, Settings } from '../../host/controller/generated'
 import { ControllerError } from '../../host/controller/wire'
-import { type AgentRoster, type ClaudeSession, withStats } from '../agent/roster'
-import type { NodeClaude } from '../agent/status'
-import { type ClaudeRoster, NO_ROSTER } from '../claude-roster'
+import { type ClaudeSession, withStats } from '../agent/roster'
 import { type VersionGap, versionGap } from './github'
 import { loadShotter, playwrightInstalled, type ShotterData } from './shotter'
 
@@ -68,26 +67,13 @@ export type ClaudeFacts = {
     cpuNsec: number | null
   }
   /** What the server printed about itself at start. All-null before it has. */
-  remote: {
-    version: string | null
-    spawnMode: string | null
-    maxSessions: number | null
-    environmentId: string | null
-  }
+  remote: Banner
   sessions: ClaudeSession[]
-  /** Every session this box could still be asked about. */
-  roster: ClaudeRoster
-  credentials: {
-    present: boolean
-    subscriptionType: string | null
-    rateLimitTier: string | null
-    /** The access token's clock. Moves hourly; nothing to watch. */
-    expiresAt: number | null
-    /** The one that ends in a re-login. */
-    refreshExpiresAt: number | null
-    scopes: string[]
-  }
-  settings: { model: string | null; effortLevel: string | null }
+  /** Every session this box could still be asked about; null before a roster came. */
+  roster: Roster | null
+  /** The login's plan and clocks (`expires_at` moves hourly; `refresh_expires_at` ends in a re-login). */
+  credentials: Report['credentials']
+  settings: Settings
   /** The `claude` the controller would start: the flake's pin. */
   cli: { version: string | null }
 }
@@ -156,13 +142,13 @@ export type ClaudeData = {
 }
 
 type ControllerRead =
-  | { report: NodeClaude; state: null; detail: null }
+  | { report: Report; state: null; detail: null }
   | { report: null; state: 'not-run' | 'no-report' | 'unreachable'; detail: string }
 
 /** Exported for its test. */
 export async function readControllerClaude(client: ControllerClient): Promise<ControllerRead> {
   try {
-    const s = await client.claudeStatus()
+    const s = await client.call('claude.status')
     if (s.report !== null) return { report: s.report, state: null, detail: null }
     return {
       report: null,
@@ -187,14 +173,14 @@ export async function readControllerClaude(client: ControllerClient): Promise<Co
   }
 }
 
-export type RosterRead = { roster: AgentRoster; missing: null } | { roster: null; missing: string }
+export type RosterRead = { roster: Roster; missing: null } | { roster: null; missing: string }
 
 /**
  * A roster, or why there is none, in a line the board prints. Shared with the
  * node page, which reads its machine's the same way.
  */
 export async function readRoster(
-  read: () => Promise<{ roster: AgentRoster | null }>,
+  read: () => Promise<{ roster: Roster | null }>,
   none: string,
 ): Promise<RosterRead> {
   try {
@@ -212,7 +198,7 @@ function epochMs(iso: string | null): number | null {
 }
 
 /** Exported for its test: the controller's report and its roster, as one. */
-export function mergeFacts(read: ControllerRead, roster: AgentRoster | null): ClaudeFacts {
+export function mergeFacts(read: ControllerRead, roster: Roster | null): ClaudeFacts {
   const r = read.report
   return {
     server:
@@ -230,24 +216,30 @@ export function mergeFacts(read: ControllerRead, roster: AgentRoster | null): Cl
             state: r.state,
             detail: r.detail,
             pid: r.pid,
-            startedAt: epochMs(r.startedAt),
+            startedAt: epochMs(r.started_at),
             restarts: r.restarts,
-            memoryBytes: roster?.server?.memoryBytes ?? null,
-            cpuNsec: roster?.server?.cpuNsec ?? null,
+            memoryBytes: roster?.server?.memory_bytes ?? null,
+            cpuNsec: roster?.server?.cpu_nsec ?? null,
           },
-    remote: r?.server ?? { version: null, spawnMode: null, maxSessions: null, environmentId: null },
-    sessions: withStats(r?.sessions ?? [], roster?.sessionStats ?? []),
-    roster: roster?.roster ?? NO_ROSTER,
-    credentials: {
-      present: r?.credentials.present ?? false,
-      subscriptionType: r?.credentials.subscriptionType ?? null,
-      rateLimitTier: r?.credentials.rateLimitTier ?? null,
-      expiresAt: r?.credentials.expiresAt ?? null,
-      refreshExpiresAt: r?.credentials.refreshExpiresAt ?? null,
-      scopes: r?.credentials.scopes ?? [],
+    remote: r?.server ?? {
+      version: null,
+      spawn_mode: null,
+      max_sessions: null,
+      environment_id: null,
     },
-    settings: r?.settings ?? { model: null, effortLevel: null },
-    cli: { version: r?.cliVersion ?? null },
+    sessions: withStats(r?.sessions ?? [], roster?.session_stats ?? []),
+    roster,
+    credentials: r?.credentials ?? {
+      present: false,
+      store: null,
+      subscription_type: null,
+      rate_limit_tier: null,
+      expires_at: null,
+      refresh_expires_at: null,
+      scopes: [],
+    },
+    settings: r?.settings ?? { model: null, effort_level: null },
+    cli: { version: r?.cli_version ?? null },
   }
 }
 
@@ -255,7 +247,7 @@ export async function loadClaude(ctx: Pick<Ctx, 'controller' | 'loki'>): Promise
   const [read, roster] = await Promise.all([
     readControllerClaude(ctx.controller),
     readRoster(
-      () => ctx.controller.claudeRoster(),
+      () => ctx.controller.call('claude.roster'),
       'the controller’s Claude session has not reported a roster yet',
     ),
   ])

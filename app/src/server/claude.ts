@@ -1,10 +1,10 @@
-import type { SessionActionResult } from '../lib/agent/roster'
+import type { ActionResult, SessionAction } from '../host/controller/generated'
 import { selectorError } from '../lib/claude-roster'
 import {
   asValidator,
-  literal,
   nullable,
   obj,
+  oneOf,
   optional,
   str,
   withMessage,
@@ -26,7 +26,7 @@ import { adminFn, readFn } from './fn'
  */
 export const restartClaudeFn = adminFn.handler(async ({ context }) => {
   const ctx = await context.ctx()
-  return ctx.controller.claudeRestart()
+  return ctx.controller.call('claude.restart')
 })
 
 /**
@@ -46,7 +46,7 @@ export const claudeSessionFn = adminFn
       withMessage(
         obj({
           node: optional(nullable(nodeIdField), null),
-          action: literal('resume', 'stop', 'remove'),
+          action: oneOf<SessionAction>({ resume: true, stop: true, remove: true }),
           session: str,
         }),
         'expected a session verb',
@@ -58,8 +58,12 @@ export const claudeSessionFn = adminFn
     if (why !== null) throw new Error(`not a session id: ${why}`)
     const ctx = await context.ctx()
     return data.node === null
-      ? ctx.controller.claudeSession(data.action, data.session)
-      : ctx.controller.nodesClaudeSession(data.node, data.action, data.session)
+      ? ctx.controller.call('claude.session', { action: data.action, id: data.session })
+      : ctx.controller.call('nodes.claude_session', {
+          id: data.node,
+          action: data.action,
+          session: data.session,
+        })
   })
 
 /**
@@ -75,12 +79,12 @@ export const fetchClaudeActionFn = readFn
       ),
     ),
   )
-  .handler(async ({ data, context }): Promise<SessionActionResult | null> => {
+  .handler(async ({ data, context }): Promise<ActionResult | null> => {
     const ctx = await context.ctx()
     const answer =
       data.node === null
-        ? await ctx.controller.claudeRoster()
-        : await ctx.controller.nodesClaudeRoster(data.node)
+        ? await ctx.controller.call('claude.roster')
+        : await ctx.controller.call('nodes.claude_roster', { id: data.node })
     return answer.roster?.actions.find((a) => a.request === data.request) ?? null
   })
 

@@ -2,13 +2,8 @@ import { createHash } from 'node:crypto'
 import type { Ctx } from '../../core/ctx'
 import { wireName, wirePolicy } from '../../lib/agent/policy'
 import type { NodePolicy, NodeState } from '../schema'
-import {
-  ControllerError,
-  type ControllerNode,
-  type ControllerNodeDetail,
-  type DesiredNode,
-  type SetDesiredOk,
-} from './wire'
+import type { DesiredNode, NodeDetail, NodeSummary, SetDesiredOk } from './generated'
+import { ControllerError } from './wire'
 
 // The machines, as the app handles them through the controller: the agent on
 // the box, which every other machine keeps one link to (agent/README.md "The
@@ -130,7 +125,7 @@ async function runSync(ctx: Pick<Ctx, 'controller'>, rows: Rows): Promise<Desire
     const set = desiredSet(await rows())
     sent = set.nodes.map((n) => ({ id: n.id, state: n.state }))
     skipped = set.skipped
-    const answer = await ctx.controller.nodesSetDesired(set.nodes)
+    const answer = await ctx.controller.call('nodes.set_desired', { nodes: set.nodes })
     result = { at, sent, skipped, answer, error: null }
   } catch (e) {
     result = { at, sent, skipped, answer: null, error: e instanceof Error ? e.message : String(e) }
@@ -193,7 +188,7 @@ export function observedFacts(
     lanIp: string | null
     lastSeenAt: Date
   },
-  seen: ControllerNode,
+  seen: NodeSummary,
 ): {
   hostname?: string
   os?: string
@@ -208,12 +203,12 @@ export function observedFacts(
   if (seen.hostname !== row.hostname) out.hostname = seen.hostname
   if (seen.os !== null && seen.os !== row.os) out.os = seen.os
   if (seen.arch !== null && seen.arch !== row.arch) out.arch = seen.arch
-  if (seen.agentVersion !== null && seen.agentVersion !== row.agentVersion) {
-    out.agentVersion = seen.agentVersion
+  if (seen.agent_version !== null && seen.agent_version !== row.agentVersion) {
+    out.agentVersion = seen.agent_version
   }
   if (seen.mac !== null && seen.mac !== row.mac) out.mac = seen.mac
-  if (seen.lanIp !== null && seen.lanIp !== row.lanIp) out.lanIp = seen.lanIp
-  const last = seen.lastSeen === null ? Number.NaN : Date.parse(seen.lastSeen)
+  if (seen.lan_ip !== null && seen.lan_ip !== row.lanIp) out.lanIp = seen.lan_ip
+  const last = seen.last_seen === null ? Number.NaN : Date.parse(seen.last_seen)
   if (Number.isFinite(last) && last > row.lastSeenAt.getTime()) out.lastSeenAt = new Date(last)
   return Object.keys(out).length === 0 ? null : out
 }
@@ -223,7 +218,7 @@ export function observedFacts(
  * key and what its hello said. Throws, in words the page can show, when the
  * controller's answer is not a waiting key the app may take.
  */
-export function enrollValues(d: ControllerNodeDetail): {
+export function enrollValues(d: NodeDetail): {
   id: string
   publicKey: string
   hostname: string
@@ -236,7 +231,7 @@ export function enrollValues(d: ControllerNodeDetail): {
   if (d.state !== 'pending') {
     throw new Error(`the controller holds ${d.id} as ${d.state}, not waiting for a decision`)
   }
-  const key = d.publicKey.toLowerCase()
+  const key = d.public_key.toLowerCase()
   if (!HEX32.test(key) || nodeIdOf(key) !== d.id) {
     throw new Error(`the controller's key for ${d.id} is not that id's`)
   }
@@ -250,9 +245,9 @@ export function enrollValues(d: ControllerNodeDetail): {
     hostname: h.hostname,
     os: h.os,
     arch: h.arch,
-    agentVersion: h.agentVersion,
+    agentVersion: h.agent_version,
     mac: h.mac,
-    lanIp: h.lanIp,
+    lanIp: h.lan_ip,
   }
 }
 
@@ -263,9 +258,9 @@ export function enrollValues(d: ControllerNodeDetail): {
 export async function readNode(
   ctx: Pick<Ctx, 'controller'>,
   id: string,
-): Promise<{ detail: ControllerNodeDetail | null; error: string | null }> {
+): Promise<{ detail: NodeDetail | null; error: string | null }> {
   try {
-    return { detail: await ctx.controller.nodesGet(id), error: null }
+    return { detail: await ctx.controller.call('nodes.get', { id }), error: null }
   } catch (e) {
     if (e instanceof ControllerError && e.code === 'not_found') {
       return {
@@ -288,8 +283,8 @@ export async function ensureControllerLink(ctx: Pick<Ctx, 'controller'>): Promis
   if (ticking) return
   ticking = true
   try {
-    if (ctx.controller.hello() === null) await ctx.controller.systemInfo()
-    const seen = await ctx.controller.nodesList()
+    if (ctx.controller.hello() === null) await ctx.controller.call('system.info')
+    const { nodes: seen } = await ctx.controller.call('nodes.list')
     const { recordObserved } = await import('../../core/nodes')
     await recordObserved(ctx, seen)
   } catch {

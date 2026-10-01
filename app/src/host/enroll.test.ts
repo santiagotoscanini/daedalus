@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { EnrollQuery } from '../lib/agent/enroll'
+import type { SystemInfo } from './controller/generated'
 import type { DesiredSync } from './controller/nodes'
 import { nodeIdOf } from './controller/nodes'
-import type { SystemInfo } from './controller/wire'
 import {
   CODE_MS,
   type CodeRow,

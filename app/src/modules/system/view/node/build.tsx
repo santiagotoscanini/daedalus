@@ -56,13 +56,13 @@ function buildFacts(d: NodeSystemData) {
   const soldered = m.slots === 0
   const mac = node.os === 'macos'
   const laptop = mk.form === 'laptop' || mac
-  const boardPart = partMatching('board', mk.boardProduct ?? mk.model)
+  const boardPart = partMatching('board', mk.board_product ?? mk.model)
   const cpuPart = partMatching('cpu', t.cpu.model ?? status?.cpu)
   const memPart =
-    partMatching('memory', first?.partNumber) ?? partMatching('memory', first?.manufacturer)
+    partMatching('memory', first?.part_number) ?? partMatching('memory', first?.manufacturer)
   const machinePart = partMatching(
     'machine',
-    mk.boardProduct ?? mk.model,
+    mk.board_product ?? mk.model,
     node.policy.hardware?.finish,
   )
   const chosenCase = partById(node.policy.hardware?.case)
@@ -101,18 +101,18 @@ function BoardPanel({ f }: { f: BuildFacts }) {
       span={4}
       aside={
         <span className={NOTE}>
-          {mk.biosVersion === null
+          {mk.bios_version === null
             ? 'no firmware reading'
-            : `${mac ? 'firmware' : 'BIOS'} ${mk.biosVersion}`}
+            : `${mac ? 'firmware' : 'BIOS'} ${mk.bios_version}`}
         </span>
       }
     >
       <div className={PART}>
         {boardPart !== null && <PartPhoto part={boardPart} />}
         <div className={PART_ID}>
-          <strong className={PART_NAME}>{mk.boardProduct ?? mk.model ?? DASH}</strong>
+          <strong className={PART_NAME}>{mk.board_product ?? mk.model ?? DASH}</strong>
           <span className={PART_DETAIL}>
-            {boardPart?.detail ?? shortVendor(mk.boardManufacturer ?? mk.manufacturer)}
+            {boardPart?.detail ?? shortVendor(mk.board_manufacturer ?? mk.manufacturer)}
           </span>
         </div>
       </div>
@@ -120,10 +120,10 @@ function BoardPanel({ f }: { f: BuildFacts }) {
         rows={[
           {
             k: mac ? 'Firmware' : 'BIOS',
-            v: <span className={MONO}>{mk.biosVersion ?? DASH}</span>,
+            v: <span className={MONO}>{mk.bios_version ?? DASH}</span>,
           },
-          { k: 'Built', v: mk.biosDate ?? DASH },
-          { k: 'Vendor', v: shortVendor(mk.biosVendor) },
+          { k: 'Built', v: mk.bios_date ?? DASH },
+          { k: 'Vendor', v: shortVendor(mk.bios_vendor) },
           ...(mk.chip !== null ? [{ k: 'Chip', v: mk.chip }] : []),
           ...(boardPart?.specs ?? []),
         ]}
@@ -144,7 +144,7 @@ function ProcessorPanel({ f }: { f: BuildFacts }) {
       title="Processor"
       icon="◈"
       span={4}
-      aside={<span className={NOTE}>{temp(t.cpu.temperatureC)}</span>}
+      aside={<span className={NOTE}>{temp(t.cpu.temperature_c)}</span>}
     >
       <div className={PART}>
         {cpuPart !== null && <PartPhoto part={cpuPart} />}
@@ -154,17 +154,17 @@ function ProcessorPanel({ f }: { f: BuildFacts }) {
             {t.cpu.cores === null || t.cpu.threads === null
               ? 'core count unread'
               : `${num(t.cpu.cores)} cores, ${num(t.cpu.threads)} threads`}
-            {t.cpu.frequencyMhz !== null && ` · ${(t.cpu.frequencyMhz / 1000).toFixed(1)} GHz`}
+            {t.cpu.frequency_mhz !== null && ` · ${(t.cpu.frequency_mhz / 1000).toFixed(1)} GHz`}
           </span>
         </div>
       </div>
       <Measures
         items={[
-          { k: 'package', v: temp(t.cpu.temperatureC) },
-          { k: 'busy', v: pct(t.cpu.usagePct, 1) },
+          { k: 'package', v: temp(t.cpu.temperature_c) },
+          { k: 'busy', v: pct(t.cpu.usage_pct, 1) },
           {
             k: 'clock',
-            v: t.cpu.frequencyMhz === null ? DASH : `${num(t.cpu.frequencyMhz)} MHz`,
+            v: t.cpu.frequency_mhz === null ? DASH : `${num(t.cpu.frequency_mhz)} MHz`,
           },
           { k: 'arch', v: status?.arch ?? DASH },
         ]}

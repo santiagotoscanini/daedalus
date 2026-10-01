@@ -1,6 +1,7 @@
 import type { Ctx } from '../../core/ctx'
 import {
   type ModelFigures,
+  modelOf,
   type ProviderBackend,
   type ProviderDownload,
   type ProviderHealth,
@@ -8,7 +9,7 @@ import {
   type ProviderModel,
   SUBGEN_MODEL,
 } from '../../lib/providers/kinds'
-import type { NodeProviderReport, NodeProvidersAnswer } from '../controller/wire'
+import type { NodeProvidersOk, ProviderReport } from '../controller/generated'
 
 // Reading a provider: its catalog, its health and the page's detail.
 //
@@ -59,7 +60,7 @@ export type ProviderReading = {
   /** When it was read, ms since the epoch (the agent's clock, for a node). */
   readAt: number
   /** The residency verbs' outcomes on the machine, newest last. */
-  actions: NodeProviderReport['actions']
+  actions: ProviderReport['actions']
 }
 
 /**
@@ -75,7 +76,7 @@ function silent(
   base: string,
   error: string,
   now: number,
-  last: NodeProviderReport | undefined,
+  last: ProviderReport | undefined,
   reported: boolean,
 ): ProviderReading {
   return {
@@ -85,12 +86,25 @@ function silent(
     reported,
     presence: last === undefined ? null : { running: last.running, version: last.version },
     health: DOWN,
-    models: last?.models ?? [],
+    models: last === undefined ? [] : modelsOf(last),
     detail: NO_DETAIL,
     error,
     readAt: now,
     actions: last?.actions ?? [],
   }
+}
+
+/** A report's catalog as the page's models: modes from the labels. */
+function modelsOf(r: ProviderReport): ProviderModel[] {
+  return r.models.map((m) =>
+    modelOf({
+      id: m.id,
+      labels: m.labels,
+      downloaded: m.downloaded,
+      sizeGb: m.size_gb,
+      recipe: m.recipe,
+    }),
+  )
 }
 
 /**
@@ -100,7 +114,7 @@ function silent(
 export function nodeReading(
   kind: ProviderKind,
   base: string,
-  answer: NodeProvidersAnswer | Error,
+  answer: NodeProvidersOk | Error,
   now: number = Date.now(),
 ): ProviderReading {
   if (answer instanceof Error) {
@@ -117,7 +131,7 @@ export function nodeReading(
     return silent(kind, base, 'no report from this machine yet', now, undefined, false)
   }
   const r = answer.providers.find((p) => p.kind === kind)
-  const at = answer.receivedAt === null ? Number.NaN : Date.parse(answer.receivedAt)
+  const at = answer.received_at === null ? Number.NaN : Date.parse(answer.received_at)
   if (r === undefined) {
     return silent(kind, base, 'the agent finds none on this machine', now, undefined, true)
   }
@@ -131,16 +145,42 @@ export function nodeReading(
   if (!r.running) {
     return silent(kind, base, r.error ?? 'installed, not running', now, r, true)
   }
-  const readAt = Date.parse(r.readAt)
+  const readAt = Date.parse(r.read_at)
   return {
     kind,
     base,
     reachable: true,
     reported: true,
     presence: { running: true, version: r.version },
-    health: { ok: r.healthy, version: r.version, loaded: r.loaded },
-    models: r.models,
-    detail: { downloads: r.downloads, backends: r.backends, figures: r.figures },
+    health: {
+      ok: r.healthy,
+      version: r.version,
+      loaded: r.loaded.map((l) => ({
+        id: l.id,
+        device: l.device,
+        maxContext: l.max_context,
+        pinned: l.pinned,
+      })),
+    },
+    models: modelsOf(r),
+    detail: {
+      downloads: r.downloads,
+      backends: r.backends,
+      figures: Object.fromEntries(
+        r.figures.map((f) => [
+          f.model,
+          {
+            requests: f.requests,
+            inputTokens: f.input_tokens,
+            outputTokens: f.output_tokens,
+            tps: f.tps,
+            ttftMs: f.ttft_ms,
+            device: f.device,
+            checkpoint: f.checkpoint,
+          },
+        ]),
+      ),
+    },
     error: r.error,
     readAt: Number.isFinite(readAt) ? readAt : now,
     actions: r.actions,

@@ -1,6 +1,6 @@
 import { PgDialect } from 'drizzle-orm/pg-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ControllerNodeDetail } from '../host/controller/wire'
+import type { NodeDetail } from '../host/controller/generated'
 import type { Ctx } from './ctx'
 
 // Every decision about a machine reaches the controller AND the gateway. A
@@ -106,7 +106,7 @@ beforeEach(() => {
 describe('a decision about a machine', () => {
   it.each([
     ['approve', () => flows.approveNode(ctx, 'n1', 'alice')],
-    ['enroll', () => flows.enrollNode(ctx, {} as ControllerNodeDetail, 'alice')],
+    ['enroll', () => flows.enrollNode(ctx, {} as NodeDetail, 'alice')],
     ['revoke', () => flows.revokeNode(ctx, 'n1')],
     ['forget', () => flows.forgetNode(ctx, 'n1')],
     [
@@ -149,7 +149,7 @@ describe('a policy patch', () => {
 describe('a machine asking for its settings', () => {
   it('writes only the keys asked for, as the machine, and syncs the controller alone', async () => {
     h.rows = [[{ id: 'n1', hostname: 'mac', policy: {} }]]
-    expect(await flows.applyNodePolicyRequest(ctx, 'n1', { awakeHold: false })).toBe(true)
+    expect(await flows.applyNodePolicyRequest(ctx, 'n1', { awake_hold: false })).toBe(true)
     expect(h.sets[0]).toMatchObject({ policyChangedBy: 'node:n1' })
     expect([h.desired, h.gateway, h.dhcp]).toEqual([1, 0, 0])
   })
@@ -158,14 +158,16 @@ describe('a machine asking for its settings', () => {
     // The UPDATE's own condition (state approved, NOT policy @> patch)
     // matched no row.
     h.rows = [[]]
-    expect(await flows.applyNodePolicyRequest(ctx, 'n1', { claudeRemoteControl: true })).toBe(false)
+    expect(await flows.applyNodePolicyRequest(ctx, 'n1', { claude_remote_control: true })).toBe(
+      false,
+    )
     expect(h.desired).toBe(0)
   })
 
   it('never turns santree on, whatever reached it', async () => {
-    await expect(
-      flows.applyNodePolicyRequest(ctx, 'n1', { santree: true } as never),
-    ).rejects.toThrow(/only an admin/)
+    await expect(flows.applyNodePolicyRequest(ctx, 'n1', { santree: true })).rejects.toThrow(
+      /only an admin/,
+    )
     expect(await flows.applyNodePolicyRequest(ctx, 'n1', {})).toBe(false)
     expect(h.sets).toEqual([])
   })

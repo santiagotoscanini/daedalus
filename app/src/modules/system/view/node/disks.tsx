@@ -1,7 +1,7 @@
 import { DISK_MODEL } from '../../../../components/part'
 import { MONO_FACE } from '../../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../../components/viz'
-import type { NodeDrive, NodeTelemetry } from '../../../../lib/agent/status'
+import type { Drive, Telemetry } from '../../../../host/controller/generated'
 import { cn } from '../../../../lib/cn'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../../../lib/format'
@@ -44,15 +44,15 @@ function healthChip(h: string | null): { tone: Tone; label: string } {
 }
 
 /** The volumes on a drive, matched by the mounts the agent listed on it. */
-function volumesOf(drive: NodeDrive, t: NodeTelemetry) {
+function volumesOf(drive: Drive, t: Telemetry) {
   return t.disks.filter((v) => drive.volumes.includes(v.mount))
 }
 
-function VolumeRows({ volumes }: { volumes: NodeTelemetry['disks'] }) {
+function VolumeRows({ volumes }: { volumes: Telemetry['disks'] }) {
   return (
     <ul className={LIST}>
       {volumes.map((v) => {
-        const p = share(v.usedBytes, v.totalBytes)
+        const p = share(v.used_bytes, v.total_bytes)
         return (
           <li key={v.mount} className={`${ROW} flex-wrap`}>
             <span className={cn(ROW_MAIN, 'flex items-baseline gap-2')}>
@@ -64,7 +64,7 @@ function VolumeRows({ volumes }: { volumes: NodeTelemetry['disks'] }) {
                 <Progress pct={p} tone={loadTone(p)} />
               </span>
               <span className="tabular-nums">
-                {ofTotal(v.usedBytes, v.totalBytes)}
+                {ofTotal(v.used_bytes, v.total_bytes)}
                 {p !== null && ` · ${pct(p)}`}
               </span>
             </span>
@@ -116,7 +116,7 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
                   : drive.kind === 'ssd'
                     ? 'solid state'
                     : 'hard disk'}
-                {drive.sizeBytes !== null && ` · ${bytes(drive.sizeBytes)}`}
+                {drive.size_bytes !== null && ` · ${bytes(drive.size_bytes)}`}
                 {drive.removable === true && ' · removable'}
                 {drive.firmware !== null && ` · fw ${drive.firmware}`}
               </span>
@@ -133,12 +133,12 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
               items={[
                 {
                   k: 'temperature',
-                  v: drive.temperatureC === null ? DASH : `${drive.temperatureC.toFixed(0)}°`,
+                  v: drive.temperature_c === null ? DASH : `${drive.temperature_c.toFixed(0)}°`,
                 },
-                { k: 'powered on', v: hours(drive.powerOnHours) },
+                { k: 'powered on', v: hours(drive.power_on_hours) },
                 {
                   k: ssd ? 'endurance used' : 'wear',
-                  v: pct(drive.wearPct),
+                  v: pct(drive.wear_pct),
                 },
               ]}
             />
@@ -146,8 +146,8 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
             <h4 className={SUB}>What would fail first</h4>
             <Facts
               rows={[
-                { k: 'Read errors', v: num(drive.readErrors) },
-                { k: 'Write errors', v: num(drive.writeErrors) },
+                { k: 'Read errors', v: num(drive.read_errors) },
+                { k: 'Write errors', v: num(drive.write_errors) },
                 {
                   k: 'Verdict',
                   v: drive.health === null ? DASH : drive.health,

@@ -1,4 +1,5 @@
 import type { Command, DesiredPolicy } from '../../host/controller/generated'
+import { MAX_NODE_NAME } from '../../host/controller/generated/constants'
 import type { NodePolicy } from '../../host/schema'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
 
@@ -60,9 +61,6 @@ export function wirePolicy(p: NodePolicy): DesiredPolicy {
   }
 }
 
-/** The longest `name` the controller takes in `nodes.set_desired` (wire.rs `MAX_NODE_NAME`). */
-export const WIRE_NAME_MAX = 64
-
 /** A Unicode control character (Cc), which the controller refuses in a name. */
 export function hasControlChar(s: string): boolean {
   for (const ch of s) {
@@ -82,7 +80,7 @@ export function hasControlChar(s: string): boolean {
  */
 export function wireName(p: NodePolicy): string | undefined {
   const name = p.displayName?.trim() ?? ''
-  if (name === '' || [...name].length > WIRE_NAME_MAX || hasControlChar(name)) return undefined
+  if (name === '' || [...name].length > MAX_NODE_NAME || hasControlChar(name)) return undefined
   return name
 }
 

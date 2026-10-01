@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { BuildRequest } from '../lib/builds'
 import { readBuildLogTail, readBuildStatus, requestBuildCancel, startBuild } from './build-verb'
 import type { ControllerClient } from './controller/client'
-import { ControllerError, type RootRun } from './controller/wire'
+import type { RootRunOk as RootRun } from './controller/generated'
+import { ControllerError } from './controller/wire'
 
 let dir: string
 let env: (name: string) => string | undefined
@@ -38,11 +39,11 @@ const REQUEST: BuildRequest = {
 const writeStatus = (body: unknown) =>
   writeFile(join(dir, 'build-status.json'), JSON.stringify(body), 'utf8')
 
-/** A controller whose rootStart answers `answer`, recording what it was asked. */
+/** A controller whose `root.run` answers `answer`, recording what it was asked. */
 function controller(answer: () => Promise<RootRun>) {
   const asked: unknown[][] = []
   const client = {
-    rootStart: (...args: unknown[]) => {
+    call: (...args: unknown[]) => {
       asked.push(args)
       return answer()
     },
@@ -62,8 +63,9 @@ describe('startBuild', () => {
   it('asks the root helper’s build, detached, with the request as the payload', async () => {
     const { ctx, asked } = controller(() => Promise.resolve(run(null)))
     expect(await startBuild(ctx, REQUEST)).toEqual({ started: true, run: 'a1b2c3d4e5f60718' })
-    expect(asked[0]?.slice(0, 2)).toEqual(['build', {}])
-    expect(JSON.parse(String(asked[0]?.[2]))).toEqual(REQUEST)
+    const p = asked[0]?.[1] as { verb: string; selectors: object; detach: boolean; payload: string }
+    expect([asked[0]?.[0], p.verb, p.selectors, p.detach]).toEqual(['root.run', 'build', {}, true])
+    expect(JSON.parse(p.payload)).toEqual(REQUEST)
   })
 
   it('carries a refusal before the start, and a call that could not be made', async () => {
@@ -210,7 +212,7 @@ describe('requestBuildCancel', () => {
   it("asks the root helper's build-cancel for the app, and carries its word", async () => {
     const asked: unknown[][] = []
     const client = {
-      rootRun: (...args: unknown[]) => {
+      call: (...args: unknown[]) => {
         asked.push(args)
         return Promise.resolve({
           run: 'r1',
@@ -225,6 +227,9 @@ describe('requestBuildCancel', () => {
       outcome: 'refused',
       detail: 'the build in flight is not blog’s',
     })
-    expect(asked[0]?.slice(0, 2)).toEqual(['build-cancel', { app: 'blog' }])
+    expect(asked[0]?.slice(0, 2)).toEqual([
+      'root.run',
+      { verb: 'build-cancel', selectors: { app: 'blog' } },
+    ])
   })
 })

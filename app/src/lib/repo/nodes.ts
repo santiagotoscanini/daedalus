@@ -1,12 +1,11 @@
 import { and, asc, eq, ne, or, type SQL, sql } from 'drizzle-orm'
 import type { Ctx } from '../../core/ctx'
+import type { NodeSummary, Summary } from '../../host/controller/generated'
 import type { DecidedRow } from '../../host/controller/nodes'
-import type { ControllerNode } from '../../host/controller/wire'
 import { db } from '../../host/db'
 import { householdMacs } from '../../host/dhcp-hosts'
 import { fingerprintOf } from '../../host/enroll'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
-import type { NodeClaudeSummary } from '../agent/status'
 import type { NodeForFile } from '../nodes-file'
 import { slugOf } from '../nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
@@ -61,7 +60,7 @@ export type NodeRow = {
    */
   connected: boolean | null
   /** Claude Code there, from the controller's summary; null without one. */
-  claude: NodeClaudeSummary | null
+  claude: Summary | null
   /** Seconds since the controller last heard from it (resolved on the server; the page streams). */
   lastSeenAgo: number
 }
@@ -84,11 +83,11 @@ export function providersOf(p: NodePolicy): Record<ProviderKind, { port: number;
 function row(
   n: typeof nodes.$inferSelect,
   household: ReadonlySet<string>,
-  seen: Map<string, ControllerNode> | null,
+  seen: Map<string, NodeSummary> | null,
 ): NodeRow {
   const s = seen?.get(n.id)
   const policy = n.policy ?? {}
-  const heard = s?.lastSeen == null ? Number.NaN : Date.parse(s.lastSeen)
+  const heard = s?.last_seen == null ? Number.NaN : Date.parse(s.last_seen)
   const lastSeen = Math.max(n.lastSeenAt.getTime(), Number.isFinite(heard) ? heard : 0)
   return {
     id: n.id,
@@ -101,9 +100,9 @@ function row(
     namedByHousehold: n.mac !== null && household.has(n.mac.toLowerCase()),
     os: n.os,
     arch: n.arch,
-    agentVersion: s?.agentVersion ?? n.agentVersion,
+    agentVersion: s?.agent_version ?? n.agentVersion,
     mac: n.mac,
-    lanIp: s?.lanIp ?? n.lanIp,
+    lanIp: s?.lan_ip ?? n.lanIp,
     firstSeenAt: n.firstSeenAt.toISOString(),
     lastSeenAt: new Date(lastSeen).toISOString(),
     approvedAt: n.approvedAt?.toISOString() ?? null,
@@ -119,9 +118,9 @@ function row(
 }
 
 /** The controller's list by id; null when it cannot be read, and every link is then unknown. */
-async function seenById(ctx: Pick<Ctx, 'controller'>): Promise<Map<string, ControllerNode> | null> {
-  const list = await ctx.controller.nodesList().catch(() => null)
-  return list === null ? null : new Map(list.map((s) => [s.id, s]))
+async function seenById(ctx: Pick<Ctx, 'controller'>): Promise<Map<string, NodeSummary> | null> {
+  const list = await ctx.controller.call('nodes.list').catch(() => null)
+  return list === null ? null : new Map(list.nodes.map((s) => [s.id, s]))
 }
 
 /**
@@ -131,7 +130,7 @@ async function seenById(ctx: Pick<Ctx, 'controller'>): Promise<Map<string, Contr
  */
 export async function listNodes(
   ctx: Pick<Ctx, 'controller'>,
-  seen?: readonly ControllerNode[] | null,
+  seen?: readonly NodeSummary[] | null,
 ): Promise<NodeRow[]> {
   // In the order they joined, and never by when they last spoke: a picker
   // whose pills swap places between two loads because one machine spoke a

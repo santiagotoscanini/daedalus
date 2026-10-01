@@ -309,14 +309,14 @@ export function NodeBoardView({ d }: { d: NodeSystemData }) {
   return (
     <BoardView
       info={{
-        vendor: t.machine.boardManufacturer ?? t.machine.manufacturer,
-        model: t.machine.boardProduct ?? t.machine.model,
+        vendor: t.machine.board_manufacturer ?? t.machine.manufacturer,
+        model: t.machine.board_product ?? t.machine.model,
         revision: null,
         form: t.machine.form,
         bios: {
-          vendor: t.machine.biosVendor,
-          version: t.machine.biosVersion,
-          date: t.machine.biosDate,
+          vendor: t.machine.bios_vendor,
+          version: t.machine.bios_version,
+          date: t.machine.bios_date,
         },
         releases: d.releases,
       }}

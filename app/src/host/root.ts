@@ -1,5 +1,5 @@
 import type { Ctx } from '../core/ctx'
-import type { RootOutcome } from './controller/wire'
+import type { RootOutcome } from './controller/generated'
 
 // One root verb, the way a page wants it: the root helper's word (agent
 // src/root/, nix/stacks/daedalus/controller.nix `root`), asked through the
@@ -10,7 +10,7 @@ import type { RootOutcome } from './controller/wire'
 // could not be made at all (no controller, a timeout) is `failed` with why.
 //
 // There is no status file to poll: the answer IS the outcome, and while the
-// verb runs its lines go out as `root.progress` events.
+// verb runs the controller keeps its lines (`root.follow`).
 
 export type RootAnswer = { outcome: RootOutcome; detail: string }
 
@@ -22,7 +22,11 @@ export async function runRoot(
   payload?: string,
 ): Promise<RootAnswer> {
   try {
-    const r = await ctx.controller.rootRun(verb, selectors, waitMs, payload)
+    const r = await ctx.controller.call(
+      'root.run',
+      { verb, selectors, ...(payload === undefined ? {} : { payload }) },
+      { waitMs },
+    )
     // Null only for a detached run, which this call never asks for.
     return { outcome: r.outcome ?? 'failed', detail: r.detail }
   } catch (e) {

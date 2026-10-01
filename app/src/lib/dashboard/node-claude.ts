@@ -1,7 +1,6 @@
 import type { Ctx } from '../../core/ctx'
+import type { Report, Roster, StatusDocument } from '../../host/controller/generated'
 import { readNode } from '../../host/controller/nodes'
-import type { AgentRoster } from '../agent/roster'
-import type { AgentStatus, NodeClaude } from '../agent/status'
 import { getNode, type NodeRow } from '../repo/nodes'
 import { readRoster } from './claude'
 
@@ -14,13 +13,13 @@ import { readRoster } from './claude'
 export type NodeClaudeData = {
   node: NodeRow
   /** The status document, when the controller holds one. */
-  status: AgentStatus | null
+  status: StatusDocument | null
   /** The full report, when the machine's session has sent one. */
-  report: NodeClaude | null
+  report: Report | null
   /** Why there is no report, when the controller could not say. */
   reportError: string | null
   /** The roster, when the machine's session has sent one. */
-  roster: AgentRoster | null
+  roster: Roster | null
   /** Why there is no roster, or null. */
   rosterMissing: string | null
   /** Why there is no status document, when there is none. */
@@ -51,12 +50,12 @@ export async function loadNodeClaude(
     }
   }
   const [report, roster] = await Promise.all([
-    ctx.controller.nodesClaude(id).then(
+    ctx.controller.call('nodes.claude', { id }).then(
       (a) => ({ report: a.report, reportError: null }),
       (e: unknown) => ({ report: null, reportError: e instanceof Error ? e.message : String(e) }),
     ),
     readRoster(
-      () => ctx.controller.nodesClaudeRoster(id),
+      () => ctx.controller.call('nodes.claude_roster', { id }),
       'the machine has not sent a roster since the controller started',
     ),
   ])

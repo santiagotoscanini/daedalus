@@ -169,7 +169,7 @@ const ctx = {
     },
   },
   controller: {
-    rootFollow: async (run: string) => {
+    call: async (_: string, { run }: { run: string }) => {
       h.calls.follow.push(run)
       if (h.follow instanceof Error) throw h.follow
       return h.follow

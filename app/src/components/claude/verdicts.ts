@@ -12,16 +12,16 @@ import { num } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
 
 /** Mid-turn now, by the session's own word or by its clock. */
-export function working(session: Pick<ClaudeSession, 'status' | 'lastActivityAt'>): boolean {
+export function working(session: Pick<ClaudeSession, 'status' | 'last_activity_at'>): boolean {
   if (session.status === 'busy') return true
-  return session.lastActivityAt !== null && Date.now() - session.lastActivityAt < 60_000
+  return session.last_activity_at !== null && Date.now() - session.last_activity_at < 60_000
 }
 
 /** Sessions actually connected, newest first. */
 export function liveSessions(facts: ClaudeFacts): ClaudeSession[] {
   return facts.sessions
     .filter((s) => s.alive)
-    .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
+    .sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0))
 }
 
 export type Verdict = { label: string; tone: Tone; note: string }

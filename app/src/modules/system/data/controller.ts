@@ -23,16 +23,16 @@ export type ControllerData =
 
 export async function loadController(ctx: Ctx): Promise<ControllerData> {
   try {
-    const info = await ctx.controller.systemInfo()
+    const info = await ctx.controller.call('system.info')
     const claude = info.capabilities.includes('claude.remote_control')
-      ? await ctx.controller.claudeStatus().catch(() => null)
+      ? await ctx.controller.call('claude.status').catch(() => null)
       : null
     return {
       reachable: true,
       version: info.version,
       mode: info.mode,
       api: info.api,
-      uptimeSecs: info.uptimeSecs,
+      uptimeSecs: info.uptime_secs,
       telemetry: info.telemetry,
       capabilities: info.capabilities,
       claude:

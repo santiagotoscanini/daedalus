@@ -21,7 +21,13 @@ export const approveNodeFn = adminFn.validator(nodeId).handler(async ({ data, co
   const { approveNode, enrollNode } = await import('../core/nodes')
   const ctx = await context.ctx()
   if (await approveNode(ctx, data.id, context.actor)) return { ok: true }
-  return { ok: await enrollNode(ctx, await ctx.controller.nodesGet(data.id), context.actor) }
+  return {
+    ok: await enrollNode(
+      ctx,
+      await ctx.controller.call('nodes.get', { id: data.id }),
+      context.actor,
+    ),
+  }
 })
 
 export const revokeNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
@@ -51,7 +57,7 @@ export const sendNodeCommandFn = adminFn
   )
   .handler(async ({ data, context }) => {
     const ctx = await context.ctx()
-    return ctx.controller.nodesCommand(data.id, data.command)
+    return ctx.controller.call('nodes.command', { id: data.id, command: data.command })
   })
 
 /**
@@ -67,8 +73,10 @@ export const rotateControllerKeyFn = adminFn
   )
   .handler(async ({ data, context }) => {
     const ctx = await context.ctx()
-    const c = await ctx.controller.controllerRotate({ grace_secs: ROTATION_GRACE[data.grace].secs })
-    return { fingerprint: c.fingerprint, retiresAt: c.rotation?.retiresAt ?? null }
+    const c = await ctx.controller.call('controller.rotate', {
+      grace_secs: ROTATION_GRACE[data.grace].secs,
+    })
+    return { fingerprint: c.fingerprint, retiresAt: c.rotation?.retires_at ?? null }
   })
 
 /**
@@ -183,7 +191,7 @@ export const fetchProviderModelsFn = readFn
       provider.kind,
       provider.base,
       await ctx.controller
-        .nodesProviders(data.id)
+        .call('nodes.providers', { id: data.id })
         .catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))),
     )
     const policies = node.policy.providers?.[data.kind]?.models

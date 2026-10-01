@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ControllerClient } from './client'
+import { fakeController as fake } from './fake'
+import type { NodeDetail, NodeSummary } from './generated'
 import {
   type DecidedRow,
   desiredSet,
@@ -11,7 +12,7 @@ import {
   readNode,
   syncDesired,
 } from './nodes'
-import { ControllerError, type ControllerNode, type ControllerNodeDetail } from './wire'
+import { ControllerError } from './wire'
 
 // The app's machine handling over the controller, against fakes: the live
 // controller is never asked anything here, and no command is ever sent.
@@ -26,44 +27,6 @@ const row = (key: string, state: DecidedRow['state'], policy: DecidedRow['policy
   state,
   policy,
 })
-
-/** A client that answers what a test gives it and fails everything else. */
-function fake(over: Partial<ControllerClient>): ControllerClient & { calls: string[] } {
-  const calls: string[] = []
-  const no = (m: string) => () => {
-    calls.push(m)
-    return Promise.reject(new ControllerError('unreachable', `fake: ${m}`))
-  }
-  const c = {
-    systemInfo: no('system.info'),
-    claudeStatus: no('claude.status'),
-    claudeRestart: no('claude.restart'),
-    claudeRoster: no('claude.roster'),
-    claudeSession: no('claude.session'),
-    telemetryGet: no('telemetry.get'),
-    nodesList: no('nodes.list'),
-    nodesGet: no('nodes.get'),
-    nodesTelemetry: no('nodes.telemetry'),
-    nodesProviders: no('nodes.providers'),
-    nodesProviderModel: no('nodes.provider_model'),
-    nodesClaude: no('nodes.claude'),
-    nodesClaudeRoster: no('nodes.claude_roster'),
-    nodesClaudeSession: no('nodes.claude_session'),
-    nodesSetDesired: no('nodes.set_desired'),
-    nodesCommand: no('nodes.command'),
-    controllerRotate: no('controller.rotate'),
-    rootRun: no('root.run'),
-    rootStart: no('root.run'),
-    rootFollow: no('root.follow'),
-    rootRuns: no('root.runs'),
-    santreeStatus: no('santree.status'),
-    hello: () => null,
-    link: () => ({ state: 'idle' as const }),
-    close: () => undefined,
-    ...over,
-  }
-  return Object.assign(c, { calls })
-}
 
 describe('the desired set', () => {
   it('ids are sixteen hex characters of the key’s SHA-256', () => {
@@ -142,7 +105,7 @@ describe('the desired set', () => {
   it('sends the whole set, records the answer, and never throws', async () => {
     const sent: unknown[] = []
     const client = fake({
-      nodesSetDesired: (nodes) => {
+      'nodes.set_desired': ({ nodes }) => {
         sent.push(nodes)
         return Promise.resolve({
           nodes: nodes.length,
@@ -170,7 +133,7 @@ describe('the desired set', () => {
   it('runs one sync at a time: a call while one is queued shares it', async () => {
     let n = 0
     const client = fake({
-      nodesSetDesired: () => {
+      'nodes.set_desired': () => {
         n += 1
         return Promise.resolve({ nodes: 0, approved: [], revoked: [], pending: [], policy: [] })
       },
@@ -189,10 +152,7 @@ describe('the desired set', () => {
 describe('the minute’s tick', () => {
   it('re-dials a controller whose connection is gone', async () => {
     const client = fake({
-      systemInfo: () => {
-        client.calls.push('system.info')
-        return Promise.reject(new ControllerError('unreachable', 'down'))
-      },
+      'system.info': () => Promise.reject(new ControllerError('unreachable', 'down')),
     })
     await ensureControllerLink({ controller: client })
     expect(client.calls).toEqual(['system.info'])
@@ -209,18 +169,18 @@ describe('what the controller observed', () => {
     lanIp: '192.168.0.120',
     lastSeenAt: new Date('2026-09-27T10:00:00Z'),
   }
-  const seen: ControllerNode = {
+  const seen: NodeSummary = {
     id: '0123456789abcdef',
     fingerprint: '',
     state: 'approved',
     connected: true,
     since: null,
-    lastSeen: '2026-09-27T10:05:00Z',
+    last_seen: '2026-09-27T10:05:00Z',
     hostname: 'PC',
     os: 'windows',
     arch: 'x86_64',
-    agentVersion: '0.14.0',
-    lanIp: '192.168.0.121',
+    agent_version: '0.14.0',
+    lan_ip: '192.168.0.121',
     mac: 'aa:bb:cc:dd:ee:ff',
     claude: null,
   }
@@ -236,42 +196,51 @@ describe('what the controller observed', () => {
   it('keeps the row when the controller has not heard from the machine, or nothing moved', () => {
     expect(observedFacts(r, { ...seen, hostname: null })).toBeNull()
     expect(
-      observedFacts(r, { ...seen, agentVersion: '0.13.0', lanIp: '192.168.0.120', lastSeen: null }),
+      observedFacts(r, {
+        ...seen,
+        agent_version: '0.13.0',
+        lan_ip: '192.168.0.120',
+        last_seen: null,
+      }),
     ).toBeNull()
   })
 })
 
 describe('enrolment', () => {
-  const detail = (over: Partial<ControllerNodeDetail> = {}): ControllerNodeDetail => ({
+  const detail = (over: Partial<NodeDetail> = {}): NodeDetail => ({
     id: nodeIdOf(KEY_A),
     fingerprint: '',
     state: 'pending',
     connected: true,
     since: null,
-    lastSeen: null,
+    last_seen: null,
     hostname: 'PC',
     os: 'windows',
     arch: 'x86_64',
-    agentVersion: '0.14.0',
-    lanIp: '192.168.0.120',
+    agent_version: '0.14.0',
+    lan_ip: '192.168.0.120',
     mac: 'aa:bb:cc:dd:ee:ff',
     claude: null,
-    publicKey: KEY_A.toUpperCase(),
+    public_key: KEY_A.toUpperCase(),
     hello: {
-      agentVersion: '0.14.0',
+      proto: 1,
+      node_id: nodeIdOf(KEY_A),
+      agent_version: '0.14.0',
       os: 'windows',
       arch: 'x86_64',
       hostname: 'PC',
       mac: 'aa:bb:cc:dd:ee:ff',
-      lanIp: '192.168.0.120',
-      facts: { osName: '', osVersion: '', cpu: '', memoryBytes: null },
+      lan_ip: '192.168.0.120',
+      facts: { os_name: '', os_version: '', cpu: '', memory_bytes: null },
       capabilities: [],
       telemetry: 'full',
     },
     status: null,
-    statusAt: null,
+    status_at: null,
     telemetry: null,
-    telemetryAt: null,
+    telemetry_at: null,
+    providers: null,
+    providers_at: null,
     ...over,
   })
 
@@ -300,7 +269,7 @@ describe('reading one machine', () => {
     const r = await readNode(
       {
         controller: fake({
-          nodesGet: () => Promise.reject(new ControllerError('not_found', 'no machine')),
+          'nodes.get': () => Promise.reject(new ControllerError('not_found', 'no machine')),
         }),
       },
       '0123456789abcdef',

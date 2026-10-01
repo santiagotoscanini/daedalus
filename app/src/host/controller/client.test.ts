@@ -3,37 +3,19 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { type ControllerClient, createControllerClient, MACHINE_ACK_MS } from './client'
-import { ControllerError, nodeLeftId } from './wire'
+import { type ControllerClient, createControllerClient } from './client'
+import type { ApiEvent } from './generated'
+import { ControllerError } from './wire'
 
 // The client against a fake controller on a real unix socket: the framing,
 // the hello, id matching, the error codes, the timeout and the reconnect are
 // what the socket does, so they are tested over one.
 
-const HELLO = {
-  api: 1,
-  version: '0.13.0',
-  mode: 'controller',
-  hostname: 'box',
-  capabilities: ['claude.remote_control', 'telemetry.minimal'],
-}
-
-const INFO = {
-  ...HELLO,
-  os: {
-    os: 'linux',
-    name: 'NixOS',
-    version: '25.11',
-    arch: 'x86_64',
-    cpu: 'cpu',
-    memory_bytes: 64,
-  },
-  uptime_secs: 5,
-  os_uptime_secs: 100,
-  booted_at: '2026-09-27T10:00:00Z',
-  role: { mode: 'controller', session: true, api_socket: true },
-  telemetry: 'minimal',
-}
+// The agent's own answers (agent/src/api/wire.rs `fixtures`).
+const fixture = (name: string): Record<string, unknown> =>
+  JSON.parse(readFileSync(new URL(`./generated/fixtures/${name}.json`, import.meta.url), 'utf8'))
+const HELLO = fixture('hello')
+const INFO = fixture('system.info')
 
 type Req = { id: number; m: string; p?: unknown }
 /** What the fake does with one request: a line to write back, or nothing. */
@@ -98,7 +80,7 @@ function client(
     timeoutMs?: number
     backoffMs?: number
     onConnect?: (c: ControllerClient) => void
-    onEvent?: (e: string, p: unknown) => void
+    onEvent?: (e: ApiEvent) => void
   } = {},
 ): ControllerClient {
   const c = createControllerClient({ path, client: 'daedalus/test', ...opts })
@@ -136,13 +118,13 @@ describe('the controller client', () => {
   it('says hello first, with the api version and its name, then asks', async () => {
     await serve(agent())
     const c = client()
-    const info = await c.systemInfo()
+    const info = await c.call('system.info')
     expect(seen.map((r) => r.m)).toEqual(['hello', 'system.info'])
     expect(seen[0]?.p).toEqual({ api: 1, client: 'daedalus/test' })
     expect(seen[1]?.p).toBeUndefined()
     expect(info.version).toBe('0.13.0')
-    expect(info.role.apiSocket).toBe(true)
-    expect(c.hello()?.capabilities).toEqual(['claude.remote_control', 'telemetry.minimal'])
+    expect(info.role.api_socket).toBe(true)
+    expect(c.hello()?.capabilities).toEqual(['claude.remote_control', 'telemetry.full'])
   })
 
   it('keeps one connection for many calls, and matches answers that come back out of order', async () => {
@@ -161,10 +143,10 @@ describe('the controller client', () => {
       }),
     )
     const c = client()
-    const [a, b] = await Promise.all([c.claudeStatus(), c.claudeStatus()])
+    const [a, b] = await Promise.all([c.call('claude.status'), c.call('claude.status')])
     expect(a.wanted).toBe(true)
     expect(b.wanted).toBe(false)
-    await c.systemInfo()
+    await c.call('system.info')
     expect(connections).toBe(1)
     expect(seen.filter((r) => r.m === 'hello')).toHaveLength(1)
   })
@@ -180,12 +162,12 @@ describe('the controller client', () => {
       }),
     )
     const c = client()
-    const e = await rejection(c.claudeRestart())
+    const e = await rejection(c.call('claude.restart'))
     expect(e.code).toBe('unavailable')
     expect(e.message).toMatch(/off on this machine/)
-    expect((await rejection(c.telemetryGet())).code).toBe('unsupported')
+    expect((await rejection(c.call('telemetry.get'))).code).toBe('unsupported')
     // An error answer is not a broken connection.
-    expect((await c.systemInfo()).api).toBe(1)
+    expect((await c.call('system.info')).api).toBe(1)
     expect(connections).toBe(1)
   })
 
@@ -200,11 +182,11 @@ describe('the controller client', () => {
       }),
     )
     const c = client({ timeoutMs: 150 })
-    const e = await rejection(c.claudeStatus())
+    const e = await rejection(c.call('claude.status'))
     expect(e.code).toBe('timeout')
     ;(late as (() => void) | null)?.()
     await tick(20)
-    expect((await c.systemInfo()).api).toBe(1)
+    expect((await c.call('system.info')).api).toBe(1)
   })
 
   it('waits out a machine’s acknowledgement on the calls the controller relays', async () => {
@@ -223,32 +205,33 @@ describe('the controller client', () => {
     await serve(agent(slow))
     const c = client({ timeoutMs: 150 })
     const node = '0123456789abcdef'
-    expect(await c.nodesCommand(node, 'check_update')).toEqual({ delivered: true, queued: false })
-    expect(await c.nodesClaudeSession(node, 'resume', 's-1')).toEqual({ request: 'r-1' })
+    expect(await c.call('nodes.command', { id: node, command: 'check_update' })).toEqual({
+      delivered: true,
+      queued: false,
+    })
     expect(
-      await c.nodesProviderModel(node, { kind: 'lemonade', action: 'load', model: 'm' }),
-    ).toEqual({ request: 'r-1' })
+      await c.call('nodes.claude_session', { id: node, action: 'resume', session: 's-1' }),
+    ).toEqual({ delivered: true, request: 'r-1' })
+    expect(
+      await c.call('nodes.provider_model', {
+        id: node,
+        kind: 'lemonade',
+        action: 'load',
+        model: 'm',
+      }),
+    ).toEqual({ delivered: true, request: 'r-1' })
     // A call the controller answers itself keeps the short timeout.
-    expect((await rejection(c.claudeStatus())).code).toBe('timeout')
-  })
-
-  it('restates the agent’s ACK_TIMEOUT', () => {
-    const rust = readFileSync(
-      new URL('../../../../agent/src/link/controller/registry.rs', import.meta.url),
-      'utf8',
-    )
-    const secs = /pub const ACK_TIMEOUT: Duration = Duration::from_secs\((\d+)\);/.exec(rust)?.[1]
-    expect(Number(secs) * 1000).toBe(MACHINE_ACK_MS)
+    expect((await rejection(c.call('claude.status'))).code).toBe('timeout')
   })
 
   it('dials again after the controller closes the connection', async () => {
     await serve(agent())
     const c = client()
-    await c.systemInfo()
+    await c.call('system.info')
     for (const s of sockets) s.destroy()
     await tick(30)
     expect(c.hello()).toBeNull()
-    expect((await c.systemInfo()).api).toBe(1)
+    expect((await c.call('system.info')).api).toBe(1)
     expect(connections).toBe(2)
   })
 
@@ -260,21 +243,21 @@ describe('the controller client', () => {
       }),
     )
     const c = client()
-    await c.systemInfo()
-    expect((await rejection(c.claudeStatus())).code).toBe('closed')
+    await c.call('system.info')
+    expect((await rejection(c.call('claude.status'))).code).toBe('closed')
   })
 
   it('says unreachable when there is no socket, and backs off before dialling again', async () => {
     const c = client({ backoffMs: 200 })
-    const first = await rejection(c.systemInfo())
+    const first = await rejection(c.call('system.info'))
     expect(first.code).toBe('unreachable')
     expect(first.message).toMatch(/no socket at .*api\.sock/)
     await serve(agent())
     // Inside the backoff: answered from the last failure, no dial.
-    expect((await rejection(c.systemInfo())).code).toBe('unreachable')
+    expect((await rejection(c.call('system.info'))).code).toBe('unreachable')
     expect(connections).toBe(0)
     await tick(250)
-    expect((await c.systemInfo()).api).toBe(1)
+    expect((await c.call('system.info')).api).toBe(1)
     expect(connections).toBe(1)
   })
 
@@ -284,7 +267,7 @@ describe('the controller client', () => {
         ? fail(req.id, 'version', 'this agent speaks api 2, not 1', { supported: 2 })
         : null,
     )
-    const e = await rejection(client().systemInfo())
+    const e = await rejection(client().call('system.info'))
     expect(e.code).toBe('version')
     expect(e.supported).toBe(2)
   })
@@ -296,7 +279,7 @@ describe('the controller client', () => {
         sock.end(fail(null, 'forbidden', 'uid 100999 may not use this socket'))
       },
     )
-    const e = await rejection(client().systemInfo())
+    const e = await rejection(client().call('system.info'))
     expect(e.code).toBe('forbidden')
   })
 
@@ -309,10 +292,10 @@ describe('the controller client', () => {
       }),
     )
     const c = client()
-    await c.systemInfo()
-    expect((await rejection(c.telemetryGet())).code).toBe('too_large')
+    await c.call('system.info')
+    expect((await rejection(c.call('telemetry.get'))).code).toBe('too_large')
     // And the next call starts over on a new connection.
-    expect((await c.systemInfo()).api).toBe(1)
+    expect((await c.call('system.info')).api).toBe(1)
     expect(connections).toBe(2)
   })
 
@@ -326,21 +309,21 @@ describe('the controller client', () => {
         return null
       }),
     )
-    expect(await client().claudeRestart()).toEqual({ queued: true })
+    expect(await client().call('claude.restart')).toEqual({ queued: true })
   })
 
   it('refuses every call once closed, and never dials for them', async () => {
     await serve(agent())
     const c = client()
-    await c.systemInfo()
+    await c.call('system.info')
     c.close()
-    expect((await rejection(c.systemInfo())).code).toBe('closed')
+    expect((await rejection(c.call('system.info'))).code).toBe('closed')
     expect(connections).toBe(1)
   })
 
   it('answers not_configured when the box binds no socket', async () => {
     const c = createControllerClient({ path: undefined, client: 'daedalus/test' })
-    expect((await rejection(c.systemInfo())).code).toBe('not_configured')
+    expect((await rejection(c.call('system.info'))).code).toBe('not_configured')
   })
 
   it('asks the nodes methods with their selectors, and decodes the answers', async () => {
@@ -361,7 +344,7 @@ describe('the controller client', () => {
       }),
     )
     const c = client()
-    expect(await c.nodesList()).toEqual([])
+    expect(await c.call('nodes.list')).toEqual({ nodes: [] })
     const set = [
       {
         id: '0123456789abcdef',
@@ -369,14 +352,18 @@ describe('the controller client', () => {
         state: 'revoked' as const,
       },
     ]
-    expect((await c.nodesSetDesired(set)).nodes).toBe(1)
+    expect((await c.call('nodes.set_desired', { nodes: set })).nodes).toBe(1)
     // Only ever against this fake: a command never reaches a real controller in a test.
-    expect(await c.nodesCommand('0123456789abcdef', 'check_update')).toEqual({
+    expect(
+      await c.call('nodes.command', { id: '0123456789abcdef', command: 'check_update' }),
+    ).toEqual({
       delivered: false,
       queued: true,
     })
-    expect((await c.nodesTelemetry('0123456789abcdef')).telemetry).toBeNull()
-    expect((await rejection(c.nodesGet('0123456789abcdef'))).code).toBe('not_found')
+    expect((await c.call('nodes.telemetry', { id: '0123456789abcdef' })).telemetry).toBeNull()
+    expect((await rejection(c.call('nodes.get', { id: '0123456789abcdef' }))).code).toBe(
+      'not_found',
+    )
     expect(seen.slice(1).map((r) => [r.m, r.p])).toEqual([
       ['nodes.list', undefined],
       ['nodes.set_desired', { nodes: set }],
@@ -393,16 +380,16 @@ describe('the controller client', () => {
       onConnect: (self) => {
         connects += 1
         // The hook's own call rides the connection that just opened.
-        void self.systemInfo()
+        void self.call('system.info')
       },
     })
-    await c.systemInfo()
+    await c.call('system.info')
     await tick(30)
     expect(connects).toBe(1)
     expect(connections).toBe(1)
     for (const s of sockets) s.destroy()
     await tick(30)
-    await c.systemInfo()
+    await c.call('system.info')
     await tick(30)
     expect(connects).toBe(2)
     expect(connections).toBe(2)
@@ -415,7 +402,7 @@ describe('how the link stands', () => {
     const c = client()
     expect(c.link()).toEqual({ state: 'idle' })
     expect(connections).toBe(0)
-    await c.systemInfo()
+    await c.call('system.info')
     const up = c.link()
     expect(up.state).toBe('connected')
     expect(connections).toBe(1)
@@ -423,26 +410,26 @@ describe('how the link stands', () => {
 
   it('is down from the first failure, through every failed re-dial, until one holds', async () => {
     const c = client({ backoffMs: 20 })
-    await rejection(c.systemInfo())
+    await rejection(c.call('system.info'))
     const first = c.link()
     expect(first.state).toBe('down')
     if (first.state !== 'down') return
     expect(first.error).toMatch(/no socket at/)
     await tick(30)
-    await rejection(c.systemInfo())
+    await rejection(c.call('system.info'))
     const again = c.link()
     // The same outage: its start does not move with each attempt.
     expect(again.state === 'down' && again.since).toBe(first.since)
     await serve(agent())
     await tick(50)
-    await c.systemInfo()
+    await c.call('system.info')
     expect(c.link().state).toBe('connected')
   })
 
   it('is down when a connection that held drops, with why', async () => {
     await serve(agent())
     const c = client()
-    await c.systemInfo()
+    await c.call('system.info')
     for (const s of sockets) s.destroy()
     await tick(30)
     const l = c.link()
@@ -462,41 +449,38 @@ describe('the controller’s events', () => {
       agent((req, sock) => {
         if (req.m !== 'events.subscribe') return null
         sock.write(answer(req.id, {}))
+        const left = (id: string) =>
+          sock.write(`${JSON.stringify({ e: 'nodes.left', p: { id } })}\n`)
+        left('0123456789abcdef')
+        // An event this app does not know is not handed over.
         sock.write(`${JSON.stringify({ e: 'telemetry.updated', p: {} })}\n`)
-        sock.write(`${JSON.stringify({ e: 'nodes.left', p: { id: '0123456789abcdef' } })}\n`)
+        left('fedcba9876543210')
         return null
       }),
     )
-    const got: [string, unknown][] = []
+    const got: ApiEvent[] = []
     const c = client({
-      onEvent: (e, p) => {
-        got.push([e, p])
-        if (e === 'telemetry.updated') throw new Error('a handler that fails')
+      onEvent: (e) => {
+        got.push(e)
+        if (got.length === 1) throw new Error('a handler that fails')
       },
     })
-    await c.systemInfo()
+    await c.call('system.info')
     await tick(50)
     // Subscribed as the connection opens, beside the first call.
     expect(seen.map((r) => r.m).sort()).toEqual(['events.subscribe', 'hello', 'system.info'])
     expect(got).toEqual([
-      ['telemetry.updated', {}],
-      ['nodes.left', { id: '0123456789abcdef' }],
+      { e: 'nodes.left', p: { id: '0123456789abcdef' } },
+      { e: 'nodes.left', p: { id: 'fedcba9876543210' } },
     ])
     // The connection outlived the handler's throw.
-    expect((await c.systemInfo()).version).toBe('0.13.0')
+    expect((await c.call('system.info')).version).toBe('0.13.0')
   })
 
   it('are not asked for by a client with no handler', async () => {
     await serve(agent())
-    await client().systemInfo()
+    await client().call('system.info')
     await tick(20)
     expect(seen.map((r) => r.m)).toEqual(['hello', 'system.info'])
-  })
-
-  it('name the machine that logged out, and nothing else', () => {
-    expect(nodeLeftId('nodes.left', { id: '0123456789abcdef' })).toBe('0123456789abcdef')
-    expect(nodeLeftId('nodes.changed', { id: '0123456789abcdef' })).toBeNull()
-    expect(nodeLeftId('nodes.left', { id: '../../etc' })).toBeNull()
-    expect(nodeLeftId('nodes.left', null)).toBeNull()
   })
 })

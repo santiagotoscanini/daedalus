@@ -27,17 +27,17 @@ export function RemoteControlBoard({ f }: { f: ClaudeFacts }) {
                 <span>
                   {c.state}
                   {c.detail !== null && <span className="text-subdued"> — {c.detail}</span>}
-                  {c.lastLine !== null && (
-                    <span className="text-subdued"> · last line: {c.lastLine}</span>
+                  {c.last_line !== null && (
+                    <span className="text-subdued"> · last line: {c.last_line}</span>
                   )}
                 </span>
               ),
             },
             { k: 'Environment', v: <span className={MONO}>{text(envId)}</span> },
-            { k: 'Spawn mode', v: text(c.server.spawnMode) },
+            { k: 'Spawn mode', v: text(c.server.spawn_mode) },
             {
               k: 'Capacity',
-              v: `${num(alive.length)} / ${c.server.maxSessions === null ? DASH : num(c.server.maxSessions)}`,
+              v: `${num(alive.length)} / ${c.server.max_sessions === null ? DASH : num(c.server.max_sessions)}`,
             },
             {
               k: 'Process',
@@ -52,14 +52,16 @@ export function RemoteControlBoard({ f }: { f: ClaudeFacts }) {
                 ),
             },
             { k: 'Restarts', v: `${num(c.restarts)} since the tray came up` },
-            { k: 'Last exit', v: text(c.lastExit) },
+            { k: 'Last exit', v: text(c.last_exit) },
             { k: 'Runs as', v: <span className={MONO}>{text(c.user)}</span> },
             {
               k: 'Working dir',
               v: (
                 <span>
                   <span className={MONO}>{text(c.workdir)}</span>
-                  {c.workdirVia !== null && <span className="text-subdued"> · {c.workdirVia}</span>}
+                  {c.workdir_via !== null && (
+                    <span className="text-subdued"> · {c.workdir_via}</span>
+                  )}
                 </span>
               ),
             },
@@ -71,14 +73,14 @@ export function RemoteControlBoard({ f }: { f: ClaudeFacts }) {
                   {/* How Claude Code got here, as the agent read it off
                       the path (agent/src/claude/cli.rs) — it decides
                       which verb updates it. */}
-                  {c.installMethod !== null && (
-                    <span className="text-subdued"> · {c.installMethod}</span>
+                  {c.install_method !== null && (
+                    <span className="text-subdued"> · {c.install_method}</span>
                   )}
                 </span>
               ),
             },
             { k: 'Default model', v: <span className={MONO}>{text(c.settings.model)}</span> },
-            { k: 'Effort', v: text(c.settings.effortLevel) },
+            { k: 'Effort', v: text(c.settings.effort_level) },
           ]}
         />
       )}
@@ -124,14 +126,19 @@ export function SignInBoard({ f }: { f: ClaudeFacts }) {
           <Facts
             list
             rows={[
-              { k: 'Plan', v: text(c.credentials.subscriptionType) },
+              { k: 'Plan', v: text(c.credentials.subscription_type) },
               {
                 k: 'Rate limit tier',
-                v: <span className={MONO}>{text(c.credentials.rateLimitTier)}</span>,
+                v: <span className={MONO}>{text(c.credentials.rate_limit_tier)}</span>,
               },
               {
                 k: 'Access token',
-                v: c.credentials.expiresAt === null ? DASH : <Until at={c.credentials.expiresAt} />,
+                v:
+                  c.credentials.expires_at === null ? (
+                    DASH
+                  ) : (
+                    <Until at={c.credentials.expires_at} />
+                  ),
               },
               {
                 k: 'Refresh token',
@@ -163,7 +170,7 @@ export function MachineBoard({ f }: { f: ClaudeFacts }) {
           { k: 'Hostname', v: <span className={MONO}>{node.hostname}</span> },
           {
             k: 'Runs',
-            v: `${status?.osName || node.os}${status?.osVersion ? ` · ${status.osVersion}` : ''}`,
+            v: `${status?.os_name || node.os}${status?.os_version ? ` · ${status.os_version}` : ''}`,
           },
           {
             k: 'Agent',
@@ -174,10 +181,10 @@ export function MachineBoard({ f }: { f: ClaudeFacts }) {
             v:
               status === null
                 ? DASH
-                : status.awakeHold
+                : status.awake_hold
                   ? 'held awake'
-                  : status.policy.awakeHold
-                    ? `hold OFF${status.holdError !== null ? ` — ${status.holdError}` : ''}`
+                  : status.policy.awake_hold
+                    ? `hold OFF${status.hold_error !== null ? ` — ${status.hold_error}` : ''}`
                     : 'may sleep (policy)',
           },
           {
@@ -219,10 +226,10 @@ const CONTROL = 'mt-[0.7rem] flex flex-wrap items-center gap-3 border-subtle bor
  * ends every session here.
  */
 function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData['report'] }) {
-  const method = claude?.installMethod ?? null
-  const last = claude?.lastUpdate ?? null
+  const method = claude?.install_method ?? null
+  const last = claude?.last_update ?? null
   const running = claude?.server.version ?? null
-  const installed = claude?.cliVersion ?? null
+  const installed = claude?.cli_version ?? null
   // The gap this button is for: the CLI on disk has moved and the server is
   // still on what it started with. Only stated when both are known — two
   // nulls are not a disagreement.

@@ -2,7 +2,7 @@ import { Ago } from '../../../../components/ago'
 import { HeadStrip, OS_MARK } from '../../../../components/machine-head'
 import { EMPTY, FOOT, LIST, MONO, ROW, ROW_MAIN } from '../../../../components/tokens'
 import { Board } from '../../../../components/viz'
-import type { NodeTelemetry } from '../../../../lib/agent/status'
+import type { Telemetry } from '../../../../host/controller/generated'
 import { cn } from '../../../../lib/cn'
 import type { BoxHead as BoxHeadData } from '../../../../lib/dashboard/box-head'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
@@ -82,11 +82,11 @@ export function BoxHead({ h }: { h: BoxHeadData }) {
 export function MachineHead({
   d,
 }: {
-  d: Pick<NodeSystemData, 'node' | 'status'> & { telemetry?: NodeTelemetry | null }
+  d: Pick<NodeSystemData, 'node' | 'status'> & { telemetry?: Telemetry | null }
 }) {
   const { node, status } = d
   const t = d.telemetry ?? null
-  const edition = status?.osName || node.os
+  const edition = status?.os_name || node.os
   const awake =
     node.connected === null
       ? { label: 'link unknown', tone: 'muted' as Tone }
@@ -94,9 +94,9 @@ export function MachineHead({
         ? { label: 'not connected', tone: 'muted' as Tone }
         : status === null
           ? { label: 'no status yet', tone: 'muted' as Tone }
-          : status.awakeHold
+          : status.awake_hold
             ? { label: 'held awake', tone: 'ok' as Tone }
-            : status.policy.awakeHold
+            : status.policy.awake_hold
               ? { label: 'hold OFF', tone: 'bad' as Tone }
               : { label: 'may sleep', tone: 'muted' as Tone }
 
@@ -108,14 +108,14 @@ export function MachineHead({
       aside={
         t === null ? undefined : (
           <>
-            sampled <Ago at={t.sampledAt} />
+            sampled <Ago at={t.sampled_at} />
           </>
         )
       }
       line={
         <>
           {edition}
-          {status?.osVersion ? ` · ${status.osVersion}` : ''}
+          {status?.os_version ? ` · ${status.os_version}` : ''}
           {status?.arch ? ` · ${status.arch}` : ''}
           {t?.machine.model ? ` · ${t.machine.model}` : ''}
           {' · '}
@@ -160,7 +160,7 @@ export function DetailNote({ d }: { d: NodeSystemData }) {
 }
 
 /** The agent's own list of what this OS would not let it read. */
-export function NotReadable({ t }: { t: NodeTelemetry }) {
+export function NotReadable({ t }: { t: Telemetry }) {
   if (t.errors.length === 0) return null
   return (
     <Board title="Not readable here" icon="⊘" span={12}>

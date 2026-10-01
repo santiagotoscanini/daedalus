@@ -27,9 +27,9 @@ const h = vi.hoisted(() => ({
 
 const ctx = {
   controller: {
-    rootFollow: async () => ({ run: { outcome: null, detail: '' } }),
-    rootStart: async (...args: unknown[]) => {
-      h.started.push(args)
+    call: async (m: string, p: { verb: string; selectors: object; payload?: string }) => {
+      if (m === 'root.follow') return { run: { outcome: null, detail: '' } }
+      h.started.push([p.verb, p.selectors, p.payload])
       const next = h.start.shift()
       if (next instanceof Error) throw next
       return next ?? { run: 'r1', verb: 'image-update', outcome: null, detail: '', verbs: [] }

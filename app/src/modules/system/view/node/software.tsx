@@ -5,7 +5,7 @@ import { GHOST_BTN } from '../../../../components/apps/shared'
 import { WipBoard } from '../../../../components/machine-head'
 import { Button } from '../../../../components/ui/button'
 import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
-import type { NodeApp } from '../../../../lib/agent/status'
+import type { App } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../../../lib/format'
 import { DetailNote, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
@@ -32,7 +32,7 @@ export function NodeSoftwareView({ d }: { d: NodeSystemData }) {
   if (t === null) return null
   const mac = d.node.os === 'macos'
   const apps = t.apps.flatMap(tidy)
-  const none = t.appCount === null
+  const none = t.app_count === null
 
   if (none) {
     return (
@@ -48,7 +48,7 @@ export function NodeSoftwareView({ d }: { d: NodeSystemData }) {
   return mac ? <MacApps d={d} apps={apps} /> : <WindowsSoftware d={d} apps={apps} />
 }
 
-function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
+function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: App[] }) {
   const t = d.telemetry
   const games = apps.filter((a) => a.kind === 'game')
   const launchers = apps.filter((a) => a.kind === 'launcher')
@@ -56,7 +56,7 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
   const runtimes = apps.filter((a) => a.kind === 'runtime')
   const store = apps.filter((a) => a.kind === 'app' && a.source === 'store')
   const rest = apps.filter((a) => a.kind === 'app' && a.source !== 'store')
-  const gameBytes = games.reduce((s, g) => s + (g.sizeBytes ?? 0), 0)
+  const gameBytes = games.reduce((s, g) => s + (g.size_bytes ?? 0), 0)
 
   return (
     <BoardGrid>
@@ -69,7 +69,7 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
         <AppList
           apps={[...games].sort(bySize)}
           empty="No game is registered with Windows. Steam and Epic register each install; a game from elsewhere may not."
-          side={(a) => (a.sizeBytes === null ? sourceName(a.source) : bytes(a.sizeBytes))}
+          side={(a) => (a.size_bytes === null ? sourceName(a.source) : bytes(a.size_bytes))}
           fold={12}
         />
         <p className={FOOT}>
@@ -148,18 +148,18 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
         title={rest.length === 0 ? 'Programs' : `${num(rest.length)} programs`}
         icon="▣"
         span={12}
-        aside={<span className={NOTE}>{num(t?.appCount ?? apps.length)} registered in all</span>}
+        aside={<span className={NOTE}>{num(t?.app_count ?? apps.length)} registered in all</span>}
       >
         <AppList
           apps={[...rest].sort(byName)}
           empty="Nothing else is registered."
           side={(a) => {
             const text = [a.version, a.publisher].filter((x): x is string => x !== null).join(' · ')
-            if (a.installedAt === null) return text
+            if (a.installed_at === null) return text
             return (
               <>
                 {text === '' ? '' : `${text} · `}
-                <Ago at={a.installedAt} />
+                <Ago at={a.installed_at} />
               </>
             )
           }}
@@ -177,7 +177,7 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
   )
 }
 
-function MacApps({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
+function MacApps({ d, apps }: { d: NodeSystemData; apps: App[] }) {
   const t = d.telemetry
   const appStore = apps.filter((a) => a.source === 'app-store')
   const brew = apps.filter((a) => a.source === 'homebrew')
@@ -268,7 +268,7 @@ function MacApps({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
       )}
       <DetailNote d={d} />
       <p className={FOOT}>
-        {num(t?.appCount ?? apps.length)} apps in all, from the Applications folder, one level of
+        {num(t?.app_count ?? apps.length)} apps in all, from the Applications folder, one level of
         subfolders, and the signed-in user&rsquo;s own; read every ten minutes.
       </p>
     </BoardGrid>
@@ -281,9 +281,9 @@ function AppList({
   side,
   fold = 40,
 }: {
-  apps: NodeApp[]
+  apps: App[]
   empty: string
-  side: (a: NodeApp) => ReactNode
+  side: (a: App) => ReactNode
   /** Past this many, the rest wait behind a button. */
   fold?: number
 }) {
@@ -336,7 +336,7 @@ const MICROSOFT_KEEP =
  * Xbox app, the Xbox app's own helper packages are not apps at all, and
  * Microsoft's own Store packages are kept only where they are apps.
  */
-function tidy(a: NodeApp): NodeApp[] {
+function tidy(a: App): App[] {
   if (XBOX_PARTS.test(a.name)) return []
   if (
     a.source === 'store' &&
@@ -350,17 +350,17 @@ function tidy(a: NodeApp): NodeApp[] {
   return [name === a.name && kind === a.kind ? a : { ...a, name, kind }]
 }
 
-const version = (a: NodeApp): ReactNode =>
+const version = (a: App): ReactNode =>
   a.version === null ? DASH : <span className={MONO}>{a.version}</span>
 
 function sourceName(s: string | null): string {
   return s === 'steam' ? 'Steam' : s === 'epic' ? 'Epic' : s === 'store' ? 'Store' : DASH
 }
 
-function byName(a: NodeApp, b: NodeApp): number {
+function byName(a: App, b: App): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
 }
 
-function bySize(a: NodeApp, b: NodeApp): number {
-  return (b.sizeBytes ?? -1) - (a.sizeBytes ?? -1) || byName(a, b)
+function bySize(a: App, b: App): number {
+  return (b.size_bytes ?? -1) - (a.size_bytes ?? -1) || byName(a, b)
 }

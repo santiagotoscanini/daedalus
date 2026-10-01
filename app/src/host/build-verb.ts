@@ -51,7 +51,12 @@ export async function startBuild(
   const checked = buildRequestDecoder(req, '')
   try {
     // The same bytes core/builds/dispatch.ts measured against BUILD_REQUEST_MAX_BYTES.
-    const r = await ctx.controller.rootStart('build', {}, serializeBuildRequest(checked))
+    const r = await ctx.controller.call('root.run', {
+      verb: 'build',
+      selectors: {},
+      detach: true,
+      payload: serializeBuildRequest(checked),
+    })
     if (r.outcome === null) return { started: true, run: r.run }
     return { started: false, detail: r.detail === '' ? `the build was ${r.outcome}` : r.detail }
   } catch (e) {

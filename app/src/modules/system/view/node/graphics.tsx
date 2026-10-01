@@ -3,7 +3,7 @@ import { Ago } from '../../../../components/ago'
 import { WipBoard } from '../../../../components/machine-head'
 import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../../../../components/part'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../../../../components/viz'
-import type { NodeApp, NodeTelemetry } from '../../../../lib/agent/status'
+import type { App, Telemetry } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../../../lib/format'
 import { partMatching } from '../../../../lib/hardware/catalog'
@@ -29,7 +29,7 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
   const t = d.telemetry
   if (t === null) return null
   // The discrete card first; an APU's own graphics is a footnote beside it.
-  const gpus = [...t.gpus].sort((a, b) => (b.vramTotalBytes ?? 0) - (a.vramTotalBytes ?? 0))
+  const gpus = [...t.gpus].sort((a, b) => (b.vram_total_bytes ?? 0) - (a.vram_total_bytes ?? 0))
   const main = gpus[0] ?? null
   const second = gpus[1] ?? null
   // Battle.net is not a .NET; the Software tab makes the same correction.
@@ -108,7 +108,7 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
         span={12}
         aside={<span className={NOTE}>what games load</span>}
       >
-        {t.appCount === null ? (
+        {t.app_count === null ? (
           <p className={EMPTY}>On the full document.</p>
         ) : runtimes.length === 0 ? (
           <p className={EMPTY}>No redistributable runtime is registered on this machine.</p>
@@ -119,10 +119,10 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
                 <span className={ROW_MAIN}>{a.name}</span>
                 <span className={ROW_SIDE}>
                   {a.version !== null && <span className={MONO}>{a.version}</span>}
-                  {a.installedAt !== null && (
+                  {a.installed_at !== null && (
                     <>
                       {' · '}
-                      <Ago at={a.installedAt} />
+                      <Ago at={a.installed_at} />
                     </>
                   )}
                 </span>
@@ -150,19 +150,11 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
   )
 }
 
-function GpuBoard({
-  g,
-  span,
-  main,
-}: {
-  g: NodeTelemetry['gpus'][number]
-  span: 4 | 8
-  main: boolean
-}) {
+function GpuBoard({ g, span, main }: { g: Telemetry['gpus'][number]; span: 4 | 8; main: boolean }) {
   const part = partMatching('gpu', g.name)
   const used =
-    g.vramUsedBytes !== null && g.vramTotalBytes !== null
-      ? (g.vramUsedBytes / g.vramTotalBytes) * 100
+    g.vram_used_bytes !== null && g.vram_total_bytes !== null
+      ? (g.vram_used_bytes / g.vram_total_bytes) * 100
       : null
   return (
     <Board
@@ -170,8 +162,8 @@ function GpuBoard({
       icon="▦"
       span={span}
       aside={
-        g.driverBrand !== null ? (
-          <Chip tone="info">{g.driverBrand}</Chip>
+        g.driver_brand !== null ? (
+          <Chip tone="info">{g.driver_brand}</Chip>
         ) : (
           <span className={NOTE}>{g.vendor ?? DASH}</span>
         )
@@ -183,7 +175,7 @@ function GpuBoard({
           <strong className={PART_NAME}>{cleanGpu(g.name)}</strong>
           <span className={PART_DETAIL}>
             {g.vendor ?? 'vendor unread'}
-            {g.vramTotalBytes !== null && ` · ${bytes(g.vramTotalBytes)} VRAM`}
+            {g.vram_total_bytes !== null && ` · ${bytes(g.vram_total_bytes)} VRAM`}
             {!main && ' · on the processor'}
           </span>
         </div>
@@ -191,9 +183,9 @@ function GpuBoard({
       {main && (
         <Measures
           items={[
-            { k: 'busy', v: pct(g.usagePct, 0) },
-            { k: 'vram used', v: g.vramUsedBytes === null ? DASH : bytes(g.vramUsedBytes) },
-            { k: 'of', v: g.vramTotalBytes === null ? DASH : bytes(g.vramTotalBytes) },
+            { k: 'busy', v: pct(g.usage_pct, 0) },
+            { k: 'vram used', v: g.vram_used_bytes === null ? DASH : bytes(g.vram_used_bytes) },
+            { k: 'of', v: g.vram_total_bytes === null ? DASH : bytes(g.vram_total_bytes) },
             { k: 'share', v: pct(used, 0) },
           ]}
         />
@@ -202,13 +194,13 @@ function GpuBoard({
         rows={[
           {
             k: 'Driver',
-            v: g.driverBrand === null ? DASH : g.driverBrand,
+            v: g.driver_brand === null ? DASH : g.driver_brand,
           },
           {
             k: 'Windows calls it',
             v: g.driver === null ? DASH : <span className={MONO}>{g.driver}</span>,
           },
-          { k: 'Built', v: g.driverDate === null ? DASH : <Ago at={g.driverDate} /> },
+          { k: 'Built', v: g.driver_date === null ? DASH : <Ago at={g.driver_date} /> },
         ]}
       />
       <p className={FOOT}>
@@ -229,8 +221,8 @@ function cleanGpu(name: string): string {
 }
 
 /** Visual C++ together, newest first; then .NET; then the rest by name. */
-function byFamily(a: NodeApp, b: NodeApp): number {
-  const fam = (x: NodeApp) =>
+function byFamily(a: App, b: App): number {
+  const fam = (x: App) =>
     /visual c\+\+/i.test(x.name)
       ? 0
       : /\.net/i.test(x.name)

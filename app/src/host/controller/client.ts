@@ -1,66 +1,19 @@
 import { readFileSync } from 'node:fs'
 import { createConnection, type Socket } from 'node:net'
 import { join } from 'node:path'
+import { decode } from '../../lib/contract/decode'
 import { env } from '../env'
-import type { Command, ControllerRotateParams, ModelAction, SessionAction } from './generated'
-import {
-  API_VERSION,
-  type ClaudeRosterGet,
-  type ClaudeStatus,
-  type CommandOk,
-  ControllerError,
-  type ControllerInfo,
-  type ControllerNode,
-  type ControllerNodeDetail,
-  claudeRosterGet,
-  claudeSessionSent,
-  claudeStatus,
-  commandOk,
-  controllerRotated,
-  type DesiredNode,
-  type HelloOk,
-  helloOk,
-  MAX_LINE,
-  type NodeClaudeAnswer,
-  type NodeClaudeRosterAnswer,
-  type NodeProvidersAnswer,
-  type NodeTelemetryAnswer,
-  nodeClaudeAnswer,
-  nodeClaudeRosterAnswer,
-  nodeDetail,
-  nodeLeftId,
-  nodePolicyRequest,
-  nodeProvidersAnswer,
-  nodesList,
-  nodeTelemetryAnswer,
-  parseLine,
-  providerModelSent,
-  type Queued,
-  queued,
-  type RootFollow,
-  type RootRun,
-  type RootRunSummary,
-  requestLine,
-  rootFollowOk,
-  rootRunOk,
-  rootRunsOk,
-  type SessionHostStatus,
-  type SessionSent,
-  type SetDesiredOk,
-  type SystemInfo,
-  santreeStatus,
-  sessionQueued,
-  setDesiredOk,
-  systemInfo,
-  type TelemetryGet,
-  telemetryGet,
-} from './wire'
+import type { ApiEvent, HelloOk, Methods } from './generated'
+import { ACK_TIMEOUT_MS, API_VERSION, MAX_LINE, ROOT_DETACH_WAIT_MS } from './generated/constants'
+import { ANSWERS, ControllerError, eventOf, parseLine, requestLine } from './wire'
 
 // The app's one door to the controller: the agent on the box, over the unix
 // socket nix mounts into this container (CONTROLLER_SOCKET). The protocol is
 // agent/README.md "Controller mode" and agent/src/api/: newline-delimited
 // JSON, `hello` first, answers matched by `id` because the agent runs
-// requests concurrently.
+// requests concurrently. Every method is `call(method, params)`, typed by
+// the generated `Methods` map and decoded by its answer's decoder (./wire.ts
+// `ANSWERS`): an answer that does not decode fails the call as `protocol`.
 //
 // ONE connection per process. The agent serves at most 16 at once and turns
 // the seventeenth away, so a connection per request — or one leaked per Vite
@@ -79,18 +32,19 @@ import {
 /** One call, and the hello, answer within this long or fail `timeout`. */
 const TIMEOUT_MS = 3_000
 /**
- * How long the controller waits for a machine to acknowledge a verb it relays
- * (`nodes.command`, `nodes.claude_session`, `nodes.provider_model`): the
- * agent's `ACK_TIMEOUT` in agent/src/link/controller/registry.rs, restated.
- * Those calls wait this plus the client's own timeout, so the controller's
- * answer — the ack, or its own `timeout` — is what the caller hears.
+ * The verbs the controller relays to a machine and waits for it to
+ * acknowledge: those wait the controller's `ACK_TIMEOUT_MS` plus the
+ * client's own timeout, so the controller's answer — the ack, or its own
+ * `timeout` — is what the caller hears.
  */
-export const MACHINE_ACK_MS = 5_000
+const RELAYED: ReadonlySet<keyof Methods> = new Set([
+  'nodes.command',
+  'nodes.claude_session',
+  'nodes.provider_model',
+])
 /** The first wait after a failed dial; doubled per failure, up to the max. */
 const BACKOFF_MS = 250
 const BACKOFF_MAX_MS = 10_000
-/** A detached `root.run` answers once its unit starts: the controller's 30 s, and slack. */
-const ROOT_START_MS = 35_000
 
 /**
  * How the one connection stands, for the shell's banner and the boards that
@@ -105,75 +59,20 @@ export type ControllerLink =
   | { state: 'connected'; since: string }
   | { state: 'down'; since: string; error: string }
 
+/** The methods a caller asks: `hello` and `events.subscribe` belong to the connection. */
+export type CallMethod = Exclude<keyof Methods, 'hello' | 'events.subscribe'>
+
+/** A call's own wait, for a verb that runs longer than a request (`root.run`). */
+export type CallOptions = { waitMs?: number }
+
+/** A method's arguments: none for one that takes no parameters. */
+export type CallArgs<M extends keyof Methods> = Methods[M][0] extends null
+  ? [p?: null, opts?: CallOptions]
+  : [p: Methods[M][0], opts?: CallOptions]
+
 export type ControllerClient = {
-  systemInfo: () => Promise<SystemInfo>
-  claudeStatus: () => Promise<ClaudeStatus>
-  claudeRestart: () => Promise<Queued>
-  claudeRoster: () => Promise<ClaudeRosterGet>
-  /** One verb on one of the controller's sessions; the roster reports how it went. */
-  claudeSession: (action: SessionAction, id: string) => Promise<SessionSent>
-  telemetryGet: () => Promise<TelemetryGet>
-  nodesList: () => Promise<ControllerNode[]>
-  nodesGet: (id: string) => Promise<ControllerNodeDetail>
-  nodesTelemetry: (id: string) => Promise<NodeTelemetryAnswer>
-  /** What the machine's agent read from its providers, as it last pushed it. */
-  nodesProviders: (id: string) => Promise<NodeProvidersAnswer>
-  /**
-   * One residency verb on a machine's provider, run by its agent on its own
-   * loopback: only ever from an admin's click. The outcome rides the next
-   * providers document under the returned `request`.
-   */
-  nodesProviderModel: (
-    id: string,
-    verb: {
-      kind: string
-      action: ModelAction
-      model: string
-      pinned?: boolean
-      replacing?: string
-    },
-  ) => Promise<{ request: string }>
-  nodesClaude: (id: string) => Promise<NodeClaudeAnswer>
-  nodesClaudeRoster: (id: string) => Promise<NodeClaudeRosterAnswer>
-  /** One verb on one of a machine's sessions: only ever from an admin's click. */
-  nodesClaudeSession: (id: string, action: SessionAction, session: string) => Promise<SessionSent>
-  /** The app's COMPLETE set of decided keys (./nodes.ts builds it). */
-  nodesSetDesired: (nodes: DesiredNode[]) => Promise<SetDesiredOk>
-  /** A one-shot instruction to one machine: only ever from an admin's click. */
-  nodesCommand: (id: string, command: Command) => Promise<CommandOk>
-  /**
-   * A new controller key, the old one retired after the grace: only ever from
-   * an admin's confirmed click. `unavailable` while a rotation runs.
-   */
-  controllerRotate: (p: ControllerRotateParams) => Promise<ControllerInfo>
-  /**
-   * One root verb, run by the root helper through the controller (agent
-   * src/root/): only ever from an admin's click. Answers when the verb's unit
-   * has finished, so it takes its own wait; `status` is the read-only one.
-   */
-  rootRun: (
-    verb: string,
-    selectors?: Record<string, string>,
-    waitMs?: number,
-    payload?: string,
-  ) => Promise<RootRun>
-  /**
-   * The same, answered as soon as the verb's unit has started (`detach`):
-   * outcome null, the run's lines and its end `rootFollow`'s. A refusal before
-   * the start (the verb already running) is the answer itself. For the long
-   * verbs, which must hold no request of this connection for their length.
-   */
-  rootStart: (
-    verb: string,
-    selectors?: Record<string, string>,
-    payload?: string,
-  ) => Promise<RootRun>
-  /** A run's lines past `after` and how it stands; `not_found` once the controller forgot it. */
-  rootFollow: (run: string, after?: number) => Promise<RootFollow>
-  /** The runs of one verb the controller holds, newest first. */
-  rootRuns: (verb: string) => Promise<RootRunSummary[]>
-  /** The session host (`santree.status`); `unavailable` on a box without one. */
-  santreeStatus: () => Promise<SessionHostStatus>
+  /** One method: its generated parameters in, its generated answer out. */
+  call: <M extends CallMethod>(m: M, ...args: CallArgs<M>) => Promise<Methods[M][1]>
   /** The last hello's answer, or null while not connected. */
   hello: () => HelloOk | null
   /** How the connection stands. Read from memory: it never dials. */
@@ -198,10 +97,9 @@ type Options = {
   onConnect?: (client: ControllerClient) => void
   /**
    * Given, every connection subscribes to the controller's events
-   * (`events.subscribe`) and hands each here: best effort, as the agent sends
-   * them — an event says what moved, and a method reads the picture.
+   * (`events.subscribe`) and hands each here, decoded.
    */
-  onEvent?: (event: string, payload: unknown) => void
+  onEvent?: (event: ApiEvent) => void
 }
 
 type Pending = {
@@ -213,13 +111,23 @@ type Pending = {
 /** An open, hello'd connection. */
 type Live = { socket: Socket; hello: HelloOk }
 
+/** How long `m` may take to answer, before the caller's own wait. */
+function waitFor(m: keyof Methods, p: unknown, timeoutMs: number): number {
+  if (RELAYED.has(m)) return ACK_TIMEOUT_MS + timeoutMs
+  // A detached run answers once its unit has started: the controller waits
+  // up to ROOT_DETACH_WAIT_MS for that.
+  if (m === 'root.run' && (p as { detach?: boolean } | null)?.detach === true) {
+    return ROOT_DETACH_WAIT_MS + 5_000
+  }
+  return timeoutMs
+}
+
 /**
  * A client over one socket path. The process's own is `controller()`; the
  * tests make theirs against a fake server.
  */
 export function createControllerClient(opts: Options): ControllerClient {
   const timeoutMs = opts.timeoutMs ?? TIMEOUT_MS
-  const relayedMs = MACHINE_ACK_MS + timeoutMs
   const backoffMs = opts.backoffMs ?? BACKOFF_MS
   const backoffMaxMs = opts.backoffMaxMs ?? BACKOFF_MAX_MS
 
@@ -244,11 +152,11 @@ export function createControllerClient(opts: Options): ControllerClient {
     }
   }
 
-  /** Write one request on `socket` and wait for its answer. */
-  const send = (
+  /** Write one request on `socket` and wait for its answer, undecoded. */
+  const send = <M extends keyof Methods>(
     socket: Socket,
-    m: string,
-    p?: Record<string, unknown>,
+    m: M,
+    p: Methods[M][0],
     waitMs: number = timeoutMs,
   ): Promise<unknown> =>
     new Promise((resolve, reject) => {
@@ -300,11 +208,12 @@ export function createControllerClient(opts: Options): ControllerClient {
           return
         }
         if (msg.kind === 'event') {
-          // A handler's failure is its own; it never costs the connection.
+          // An event this app cannot read, or a handler that fails, is its
+          // own business; it never costs the connection.
           try {
-            opts.onEvent?.(msg.e, msg.p)
+            opts.onEvent?.(eventOf(msg.e, msg.p))
           } catch (e) {
-            console.warn(`controller: the ${msg.e} event's handler failed: ${String(e)}`)
+            console.warn(`controller: the ${msg.e} event: ${String(e)}`)
           }
           return
         }
@@ -372,12 +281,12 @@ export function createControllerClient(opts: Options): ControllerClient {
           .then((ok) => {
             if (settled) return
             settled = true
-            const l = { socket, hello: helloOk(ok) }
+            const l = { socket, hello: decode(ANSWERS.hello, ok) }
             live = l
             resolve(l)
             // The events belong to the connection, so each one subscribes.
             if (opts.onEvent !== undefined) {
-              send(socket, 'events.subscribe').catch((e: unknown) => {
+              send(socket, 'events.subscribe', null).catch((e: unknown) => {
                 console.warn(`controller: no events on this connection: ${String(e)}`)
               })
             }
@@ -431,59 +340,22 @@ export function createControllerClient(opts: Options): ControllerClient {
     return dialing
   }
 
-  const call = async <T>(
-    m: string,
-    decodeAnswer: (v: unknown) => T,
-    p?: Record<string, unknown>,
-    waitMs?: number,
-  ): Promise<T> => {
+  const call = async <M extends CallMethod>(
+    m: M,
+    ...[p, o]: CallArgs<M>
+  ): Promise<Methods[M][1]> => {
+    const params = (p ?? null) as Methods[M][0]
     const l = await connection()
-    return decodeAnswer(await send(l.socket, m, p, waitMs))
+    const answer = await send(l.socket, m, params, o?.waitMs ?? waitFor(m, params, timeoutMs))
+    try {
+      return decode(ANSWERS[m] as (v: unknown, path: string) => Methods[M][1], answer)
+    } catch (e) {
+      throw new ControllerError('protocol', `the controller's answer to ${m}: ${String(e)}`)
+    }
   }
 
   const self: ControllerClient = {
-    systemInfo: () => call('system.info', systemInfo),
-    claudeStatus: () => call('claude.status', claudeStatus),
-    claudeRestart: () => call('claude.restart', queued),
-    claudeRoster: () => call('claude.roster', claudeRosterGet),
-    claudeSession: (action, id) => call('claude.session', sessionQueued, { action, id }),
-    telemetryGet: () => call('telemetry.get', telemetryGet),
-    nodesList: () => call('nodes.list', nodesList),
-    nodesGet: (id) => call('nodes.get', nodeDetail, { id }),
-    nodesTelemetry: (id) => call('nodes.telemetry', nodeTelemetryAnswer, { id }),
-    nodesProviders: (id) => call('nodes.providers', nodeProvidersAnswer, { id }),
-    nodesProviderModel: (id, verb) =>
-      call('nodes.provider_model', providerModelSent, { id, ...verb }, relayedMs),
-    nodesClaude: (id) => call('nodes.claude', nodeClaudeAnswer, { id }),
-    nodesClaudeRoster: (id) => call('nodes.claude_roster', nodeClaudeRosterAnswer, { id }),
-    nodesClaudeSession: (id, action, session) =>
-      call('nodes.claude_session', claudeSessionSent, { id, action, session }, relayedMs),
-    nodesSetDesired: (nodes) => call('nodes.set_desired', setDesiredOk, { nodes }),
-    nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }, relayedMs),
-    controllerRotate: (p) => call('controller.rotate', controllerRotated, p),
-    rootRun: (verb, selectors, waitMs, payload) =>
-      call(
-        'root.run',
-        rootRunOk,
-        { verb, selectors: selectors ?? {}, ...(payload === undefined ? {} : { payload }) },
-        waitMs,
-      ),
-    // The controller waits up to 30 s for the start (agent ROOT_DETACH_WAIT).
-    rootStart: (verb, selectors, payload) =>
-      call(
-        'root.run',
-        rootRunOk,
-        {
-          verb,
-          selectors: selectors ?? {},
-          detach: true,
-          ...(payload === undefined ? {} : { payload }),
-        },
-        ROOT_START_MS,
-      ),
-    rootFollow: (run, after) => call('root.follow', rootFollowOk, { run, after: after ?? 0 }),
-    rootRuns: (verb) => call('root.runs', rootRunsOk, { verb }),
-    santreeStatus: () => call('santree.status', santreeStatus),
+    call,
     hello: () => (live !== null && !live.socket.destroyed ? live.hello : null),
     link: () => {
       const at = (ms: number) => new Date(ms).toISOString()
@@ -563,28 +435,17 @@ export function controller(): ControllerClient {
       // A machine that logged out asks to be forgotten, its tunnel with it;
       // one whose user changed a setting from its menu bar asks for it
       // (core/nodes.ts `applyNodePolicyRequest`).
-      onEvent: (e, p) => {
-        const id = nodeLeftId(e, p)
-        if (id !== null) {
-          void Promise.all([import('../../core/nodes'), import('../../core/ctx')])
-            .then(async ([m, c]) => m.forgetNode(await c.makeCtx(), id, { left: true }))
-            .catch((err: unknown) => {
-              console.warn(`controller: ${id} logged out but was not forgotten: ${String(err)}`)
-            })
-          return
-        }
-        const asked = nodePolicyRequest(e, p)
-        if (asked !== null) {
-          void Promise.all([import('../../core/nodes'), import('../../core/ctx')])
-            .then(async ([m, c]) =>
-              m.applyNodePolicyRequest(await c.makeCtx(), asked.id, asked.changes),
-            )
-            .catch((err: unknown) => {
-              console.warn(
-                `controller: ${asked.id}'s settings request was not applied: ${String(err)}`,
-              )
-            })
-        }
+      onEvent: (event) => {
+        const id = event.p.id
+        void Promise.all([import('../../core/nodes'), import('../../core/ctx')])
+          .then(async ([m, c]) =>
+            event.e === 'nodes.left'
+              ? m.forgetNode(await c.makeCtx(), id, { left: true })
+              : m.applyNodePolicyRequest(await c.makeCtx(), id, event.p.changes),
+          )
+          .catch((err: unknown) => {
+            console.warn(`controller: ${event.e} for ${id} was not acted on: ${String(err)}`)
+          })
       },
     })
     slot.path = path

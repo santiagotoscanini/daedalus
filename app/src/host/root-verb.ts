@@ -65,14 +65,18 @@ async function runEnded(
 ): Promise<{ detail: string } | null> {
   const c = ctx.controller
   try {
-    const f = await c.rootFollow(id, Number.MAX_SAFE_INTEGER)
+    const f = await c.call('root.follow', { run: id, after: Number.MAX_SAFE_INTEGER })
     return f.run.outcome === null ? null : { detail: f.run.detail }
   } catch (e) {
     if (!(e instanceof Error && 'code' in e && e.code === 'not_found')) return null
   }
   try {
-    const s = await c.rootRun('status', {}, STATUS_WAIT_MS)
-    const state = s.verbs.find((v) => v.verb === verb)?.activeState
+    const s = await c.call(
+      'root.run',
+      { verb: 'status', selectors: {} },
+      { waitMs: STATUS_WAIT_MS },
+    )
+    const state = s.verbs?.find((v) => v.verb === verb)?.active_state
     return state === 'inactive' || state === 'failed' ? { detail: '' } : null
   } catch {
     return null
@@ -128,7 +132,12 @@ export function defineRootVerb<S extends RootVerbStatus>(opts: {
 
     async start(ctx, payload) {
       try {
-        const r = await ctx.controller.rootStart(opts.verb, {}, payload)
+        const r = await ctx.controller.call('root.run', {
+          verb: opts.verb,
+          selectors: {},
+          detach: true,
+          ...(payload === undefined ? {} : { payload }),
+        })
         if (r.outcome === null) return { ok: true, id: r.run }
         const reason = r.detail === '' ? `the ${opts.verb} was ${r.outcome}` : r.detail
         return { ok: false, code: r.outcome === 'refused' ? 'busy' : 'unavailable', reason }

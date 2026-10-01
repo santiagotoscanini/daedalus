@@ -1,10 +1,9 @@
 import type { Ctx } from '../../core/ctx'
 import type { ControllerClient } from '../../host/controller/client'
+import type { NodeSummary, RotationInfo, StatusDocument } from '../../host/controller/generated'
 import { type DesiredSync, lastDesiredSync, readNode } from '../../host/controller/nodes'
-import type { ControllerNode, ControllerRotation } from '../../host/controller/wire'
 import { lanDomain } from '../../host/providers/fleet'
 import { readSessionHost, type SessionHostLine } from '../../host/session-host'
-import type { AgentStatus } from '../agent/status'
 import { listNodes, type NodeRow } from '../repo/nodes'
 
 // The other machines, as Settings › Machines lists them — here rather than
@@ -23,9 +22,9 @@ export type Machine = {
   /** The decided row, once there is one. */
   node: NodeRow | null
   /** A key the controller holds pending, with no row yet. */
-  pending: ControllerNode | null
+  pending: NodeSummary | null
   /** The machine's status document, while the controller holds one. */
-  status: AgentStatus | null
+  status: StatusDocument | null
   /** What it is, from its telemetry; null without one. */
   shape: MachineShape | null
 }
@@ -48,7 +47,7 @@ export type ControllerView =
       /** The key to pin: during a rotation, already the new one. */
       fingerprint: string
       /** The rotation under way, or null. */
-      rotation: ControllerRotation | null
+      rotation: RotationInfo | null
     }
   | { reachable: false; error: string }
 
@@ -75,7 +74,7 @@ const RANK: Record<string, number> = { pending: 0, approved: 1, revoked: 2 }
  * forgotten while it was connected) is not offered: it is pending again at
  * its next connection.
  */
-export function joinMachines(rows: readonly NodeRow[], seen: readonly ControllerNode[]): Machine[] {
+export function joinMachines(rows: readonly NodeRow[], seen: readonly NodeSummary[]): Machine[] {
   const decided = new Set(rows.map((n) => n.id))
   const out: Machine[] = [
     ...rows.map((node) => ({ node, pending: null, status: null, shape: null })),
@@ -90,7 +89,7 @@ export function joinMachines(rows: readonly NodeRow[], seen: readonly Controller
 
 async function controllerView(client: ControllerClient): Promise<ControllerView> {
   try {
-    const info = await client.systemInfo()
+    const info = await client.call('system.info')
     if (info.controller === null) {
       return { reachable: false, error: `the agent on the box runs as ${info.mode}` }
     }
@@ -109,10 +108,10 @@ async function controllerView(client: ControllerClient): Promise<ControllerView>
 export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   const client = ctx.controller
   // Asked once: the rows join it in, and so do the cards.
-  const listed = client.nodesList().then(
-    (list) => ({ list, error: null }),
+  const listed = client.call('nodes.list').then(
+    ({ nodes }) => ({ list: nodes, error: null }),
     (e: unknown) => ({
-      list: [] as ControllerNode[],
+      list: [] as NodeSummary[],
       error: e instanceof Error ? e.message : String(e),
     }),
   )
@@ -136,7 +135,7 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
         shape:
           t === null
             ? null
-            : { form: t.machine.form, model: t.machine.boardProduct ?? t.machine.model },
+            : { form: t.machine.form, model: t.machine.board_product ?? t.machine.model },
       }
     }),
   )

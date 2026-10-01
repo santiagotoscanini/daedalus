@@ -1,6 +1,6 @@
 import { MonitorSmartphoneIcon } from 'lucide-react'
 
-import type { AgentLink, AgentTunnel } from '../../../lib/agent/status'
+import type { LinkStatus, TunnelStatus } from '../../../host/controller/generated'
 import { cn } from '../../../lib/cn'
 import type { Machine } from '../../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../../lib/format'
@@ -48,11 +48,11 @@ function updateBadges(s: Machine['status']): { chip: string; tone: Tone; title: 
       title: `${s.probation.version} replaced ${s.probation.from}; started ${String(s.probation.starts)} time${s.probation.starts === 1 ? '' : 's'} since, and kept on probation until it proves itself`,
     })
   }
-  if (s.rolledBack !== null) {
+  if (s.rolled_back !== null) {
     out.push({
-      chip: `rolled back from ${s.rolledBack.version}`,
+      chip: `rolled back from ${s.rolled_back.version}`,
       tone: 'bad',
-      title: `${s.rolledBack.version} started ${String(s.rolledBack.starts)} times without lasting; ${s.rolledBack.to} was put back at ${s.rolledBack.at}`,
+      title: `${s.rolled_back.version} started ${String(s.rolled_back.starts)} times without lasting; ${s.rolled_back.to} was put back at ${s.rolled_back.at}`,
     })
   }
   return out
@@ -68,9 +68,9 @@ function verdict(m: Machine): Verdict {
   if (!n.connected) return { chip: 'not connected', tone: 'muted' }
   if (s === null) return { chip: 'connected', tone: 'muted' }
   // Off because the box said so is a state, not a fault.
-  if (!s.awakeHold && !s.policy.awakeHold) return { chip: 'may sleep', tone: 'muted' }
-  if (!s.awakeHold) return { chip: 'hold OFF', tone: 'bad' }
-  if (s.updateAvailable !== null || s.restartPending) return { chip: 'updating', tone: 'warn' }
+  if (!s.awake_hold && !s.policy.awake_hold) return { chip: 'may sleep', tone: 'muted' }
+  if (!s.awake_hold) return { chip: 'hold OFF', tone: 'bad' }
+  if (s.update_available !== null || s.restart_pending) return { chip: 'updating', tone: 'warn' }
   return { chip: 'held awake', tone: 'ok' }
 }
 
@@ -83,7 +83,7 @@ function ClaudeCell({ m }: { m: Machine }) {
   const s = m.status
   const c = s?.claude ?? m.node?.claude ?? null
   if (c !== null) {
-    const version = c.serverVersion ?? c.cliVersion
+    const version = c.server_version ?? c.cli_version
     return c.state === 'running' || c.state === 'starting' ? (
       <Line>
         <Chip tone="ok">remote control {c.state}</Chip>
@@ -99,10 +99,10 @@ function ClaudeCell({ m }: { m: Machine }) {
       </Line>
     )
   }
-  if (s !== null && !s.trayReporting) {
+  if (s !== null && !s.tray.reporting) {
     return (
       <span className={ASIDE}>
-        {s.policy.claudeRemoteControl ? 'nobody logged on — the session is not reporting' : '—'}
+        {s.policy.claude_remote_control ? 'nobody logged on — the session is not reporting' : '—'}
       </span>
     )
   }
@@ -116,19 +116,19 @@ const TUNNEL_STALE_SECS = 180
  * A logged-in machine's own tunnel, as the machine reports it: up while its
  * handshakes are fresh, and why not when they are not.
  */
-function TunnelCell({ t }: { t: AgentTunnel }) {
+function TunnelCell({ t }: { t: TunnelStatus }) {
   const up =
-    t.error === null && t.lastHandshakeSecs !== null && t.lastHandshakeSecs < TUNNEL_STALE_SECS
+    t.error === null && t.last_handshake_secs !== null && t.last_handshake_secs < TUNNEL_STALE_SECS
   return (
     <span className="inline-flex flex-col items-start gap-1">
       <Line>
         <Chip tone={up ? 'ok' : 'warn'}>{up ? 'up' : 'down'}</Chip>
         {t.address !== '' && <Mono>{t.address}</Mono>}
         <span className={ASIDE}>
-          {t.lastHandshakeSecs === null
+          {t.last_handshake_secs === null
             ? 'no handshake yet'
-            : `handshake ${since(t.lastHandshakeSecs)}`}
-          {` · ${bytes(t.rxBytes)} in · ${bytes(t.txBytes)} out`}
+            : `handshake ${since(t.last_handshake_secs)}`}
+          {` · ${bytes(t.rx_bytes)} in · ${bytes(t.tx_bytes)} out`}
         </span>
       </Line>
       {t.endpoint !== '' && <span className={ASIDE}>through {t.endpoint}</span>}
@@ -141,7 +141,7 @@ function TunnelCell({ t }: { t: AgentTunnel }) {
  * The machine's side of the link, when it refuses the controller: the key it
  * met is not the one its install line pinned.
  */
-function TrustNote({ link }: { link: AgentLink | null }) {
+function TrustNote({ link }: { link: LinkStatus | null }) {
   if (link === null || link.error === null || link.state !== 'key-changed') return null
   return <p className={ERROR_NOTE}>{link.error}</p>
 }
@@ -161,18 +161,18 @@ export function MachineSection({
   if (n === null) return null
   const s = m.status
   const mark = osMark(n.os)
-  const edition = s?.osName || (n.os ? n.os.charAt(0).toUpperCase() + n.os.slice(1) : 'unknown OS')
-  const version = s?.osVersion ?? ''
+  const edition = s?.os_name || (n.os ? n.os.charAt(0).toUpperCase() + n.os.slice(1) : 'unknown OS')
+  const version = s?.os_version ?? ''
   const arch = s?.arch || n.arch
   const v = verdict(m)
 
   const facts = [
     { k: 'Agent', v: <Mono>{s?.version ?? n.agentVersion}</Mono> },
     ...(s?.cpu ? [{ k: 'Processor', v: <Mono>{s.cpu}</Mono> }] : []),
-    ...(s?.memoryBytes != null ? [{ k: 'Memory', v: <Mono>{bytes(s.memoryBytes)}</Mono> }] : []),
+    ...(s?.memory_bytes != null ? [{ k: 'Memory', v: <Mono>{bytes(s.memory_bytes)}</Mono> }] : []),
     {
       k: 'Machine up',
-      v: <Mono>{s?.osUptimeSecs == null ? '—' : duration(s.osUptimeSecs)}</Mono>,
+      v: <Mono>{s?.os_uptime_secs == null ? '—' : duration(s.os_uptime_secs)}</Mono>,
     },
     { k: 'Claude', v: <ClaudeCell m={m} /> },
     {
@@ -180,17 +180,17 @@ export function MachineSection({
       v:
         s === null ? (
           <span className={ASIDE}>—</span>
-        ) : s.restartPending ? (
+        ) : s.restart_pending ? (
           <Chip tone="warn">installed, restarting</Chip>
-        ) : s.updateAvailable !== null ? (
-          <Chip tone="warn">{s.updateAvailable} available</Chip>
+        ) : s.update_available !== null ? (
+          <Chip tone="warn">{s.update_available} available</Chip>
         ) : (
           <span className={ASIDE}>
-            {s.lastUpdateResult ?? 'not checked yet'}
-            {s.lastUpdateCheck !== null && (
+            {s.last_update_result ?? 'not checked yet'}
+            {s.last_update_check !== null && (
               <>
                 {' · '}
-                <Ago at={s.lastUpdateCheck} />
+                <Ago at={s.last_update_check} />
               </>
             )}
           </span>
@@ -201,10 +201,14 @@ export function MachineSection({
       v: n.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{n.lanIp}</Mono>,
     },
     ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
-    ...(s?.link?.tunnel != null ? [{ k: 'Tunnel', v: <TunnelCell t={s.link.tunnel} /> }] : []),
-    ...(s?.link != null ? [{ k: 'Its key', v: <Mono>{s.link.fingerprint}</Mono> }] : []),
-    ...(s?.link?.rotated != null
-      ? [{ k: 'Controller key', v: <span className={ASIDE}>{s.link.rotated}</span> }]
+    ...(s?.controller?.tunnel != null
+      ? [{ k: 'Tunnel', v: <TunnelCell t={s.controller.tunnel} /> }]
+      : []),
+    ...(s?.controller != null
+      ? [{ k: 'Its key', v: <Mono>{s.controller.fingerprint}</Mono> }]
+      : []),
+    ...(s?.controller?.rotated != null
+      ? [{ k: 'Controller key', v: <span className={ASIDE}>{s.controller.rotated}</span> }]
       : []),
   ]
 
@@ -241,8 +245,8 @@ export function MachineSection({
       }
       rows={facts}
     >
-      {s?.holdError != null && <p className={NOTE}>The hold failed: {s.holdError}</p>}
-      <TrustNote link={s?.link ?? null} />
+      {s?.hold_error != null && <p className={NOTE}>The hold failed: {s.hold_error}</p>}
+      <TrustNote link={s?.controller ?? null} />
       <Decision m={m} />
       {n.state === 'approved' && (
         <Policy
@@ -291,7 +295,7 @@ export function PendingSection({
           <span>
             {p.os ?? 'unknown OS'}
             {p.arch !== null && ` · ${p.arch}`}
-            {p.agentVersion !== null && ` · agent ${p.agentVersion}`}
+            {p.agent_version !== null && ` · agent ${p.agent_version}`}
           </span>
         </span>
       }
@@ -308,7 +312,7 @@ export function PendingSection({
         },
         {
           k: 'Address',
-          v: p.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{p.lanIp}</Mono>,
+          v: p.lan_ip === null ? <span className={ASIDE}>—</span> : <Mono>{p.lan_ip}</Mono>,
         },
       ]}
     >

@@ -23,7 +23,7 @@ const IDLE: Status = { id: null, state: 'idle', phase: '', error: '' }
 
 /** A run the controller says goes on: a `running` file is believed as it is. */
 const ctx = {
-  controller: { rootFollow: async () => ({ run: { outcome: null, detail: '' } }) },
+  controller: { call: async () => ({ run: { outcome: null, detail: '' } }) },
 } as unknown as Pick<Ctx, 'controller'>
 
 let dir: string

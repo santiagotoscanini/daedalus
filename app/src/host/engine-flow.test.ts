@@ -25,9 +25,9 @@ const previous: Record<string, string | undefined> = {}
 
 const ctx = {
   controller: {
-    rootFollow: async () => ({ run: { outcome: null, detail: '' } }),
-    rootStart: async (...args: unknown[]) => {
-      started.push(args)
+    call: async (m: string, p: { verb: string; selectors: object; payload?: string }) => {
+      if (m === 'root.follow') return { run: { outcome: null, detail: '' } }
+      started.push([p.verb, p.selectors, p.payload])
       return (
         answers.shift() ?? {
           run: 'r1',

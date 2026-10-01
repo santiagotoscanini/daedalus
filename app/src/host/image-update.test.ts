@@ -21,16 +21,19 @@ const h = vi.hoisted(() => ({
 
 const ctx = {
   controller: {
-    rootFollow: async () => {
-      if (h.follow instanceof Error) throw h.follow
-      return h.follow
-    },
-    rootRun: async () => {
-      if (h.status instanceof Error) throw h.status
-      return h.status
-    },
-    rootStart: async (...args: unknown[]) => {
-      h.started.push(args)
+    call: async (
+      m: string,
+      p: { verb: string; selectors: object; payload?: string; detach?: boolean },
+    ) => {
+      if (m === 'root.follow') {
+        if (h.follow instanceof Error) throw h.follow
+        return h.follow
+      }
+      if (p.detach !== true) {
+        if (h.status instanceof Error) throw h.status
+        return h.status
+      }
+      h.started.push([p.verb, p.selectors, p.payload])
       if (h.start instanceof Error) throw h.start
       return h.start
     },
@@ -43,7 +46,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'imgupd-'))
   process.env.VERBS_DIR = dir
   h.follow = { run: { outcome: null, detail: '' } }
-  h.status = { verbs: [{ verb: 'image-update', activeState: 'activating' }] }
+  h.status = { verbs: [{ verb: 'image-update', active_state: 'activating' }] }
   h.started = []
   h.start = { run: 'r1', verb: 'image-update', outcome: null, detail: '', verbs: [] }
 })
@@ -95,7 +98,7 @@ describe('a running status', () => {
     await status('running')
     h.follow = notFound
     expect((await readImageUpdateStatus(ctx)).state).toBe('running')
-    h.status = { verbs: [{ verb: 'image-update', activeState: 'inactive' }] }
+    h.status = { verbs: [{ verb: 'image-update', active_state: 'inactive' }] }
     expect((await readImageUpdateStatus(ctx)).state).toBe('failed')
   })
 

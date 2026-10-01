@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import type { ControllerNode, NodeState } from '../../host/controller/wire'
+import type { NodeState, NodeSummary } from '../../host/controller/generated'
 import type { NodeRow } from '../repo/nodes'
 import { joinMachines } from './machines'
 
-const seen = (id: string, state: NodeState, hostname: string | null = null): ControllerNode => ({
+const seen = (id: string, state: NodeState, hostname: string | null = null): NodeSummary => ({
   id,
   fingerprint: `${id.slice(0, 4)}:…`,
   state,
   connected: state === 'pending',
   since: null,
-  lastSeen: null,
+  last_seen: null,
   hostname,
   os: null,
   arch: null,
-  agentVersion: null,
-  lanIp: null,
+  agent_version: null,
+  lan_ip: null,
   mac: null,
   claude: null,
 })

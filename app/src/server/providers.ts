@@ -102,8 +102,11 @@ async function send(
 ): Promise<ModelActionResult> {
   const ok = await checked(t, ctx)
   if (!ok.ok) return ok
+  // A machine's agent drives lemonade alone (`checked` refused the rest).
+  if (t.kind !== 'lemonade') return { ok: false, reason: `a ${t.kind} provider is not a machine's` }
   try {
-    const { request } = await ctx.controller.nodesProviderModel(t.machine, {
+    const { request } = await ctx.controller.call('nodes.provider_model', {
+      id: t.machine,
       kind: t.kind,
       model: t.model,
       ...verb,
@@ -179,7 +182,7 @@ export const fetchProviderActionFn = readFn
   )
   .handler(async ({ data, context }): Promise<VerbOutcome | null> => {
     const ctx = await context.ctx()
-    const answer = await ctx.controller.nodesProviders(data.machine)
+    const answer = await ctx.controller.call('nodes.providers', { id: data.machine })
     const a = answer.providers?.flatMap((p) => p.actions).find((x) => x.request === data.request)
     return a === undefined ? null : { state: a.ok ? 'done' : 'failed', detail: a.message }
   })

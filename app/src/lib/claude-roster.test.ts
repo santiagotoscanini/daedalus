@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { NO_META } from './claude-meta'
+import type { Agent, Roster, Transcript } from '../host/controller/generated'
 import {
-  type ClaudeAgent,
-  type ClaudeRoster,
-  type ClaudeTranscript,
   countByState,
   isAgentId,
   isSessionId,
   type LiveSession,
-  NO_ROSTER,
   type RosterEntry,
   rowControl,
   selectorError,
@@ -21,7 +17,7 @@ import {
 //   - a transcript whose opening bytes carry no timestamp at all (one starts
 //     with a multi-megabyte base64 image; others open with `custom-title`,
 //     `ai-title` or `mode` records, none of which are timestamped). The
-//     snapshot reports startedAt: null rather than guessing.
+//     snapshot reports started_at: null rather than guessing.
 //   - a 0-byte transcript. Counted by the snapshot, never listed: there is
 //     nothing in it to resume.
 //   - a title that came from the `<uuid>/custom-title.json` sidecar rather
@@ -32,59 +28,85 @@ import {
 //     now, which on disk looks exactly as resumable as anything else and
 //     is one: `--resume` continues whichever id it is handed.
 
-const transcript = (over: Partial<ClaudeTranscript> & { id: string }): ClaudeTranscript => ({
+const transcript = (over: Partial<Transcript> & { id: string }): Transcript => ({
   project: '-etc-nixos',
   cwd: '/etc/nixos',
-  cwdExact: true,
+  cwd_exact: true,
   title: null,
-  titleSource: null,
-  startedAt: 1_789_000_000_000,
-  modifiedAt: 1_789_100_000_000,
-  sizeBytes: 1024,
-  // The join does not read the scan, so every case here gets the block the
-  // host publishes when it has nothing. claude-meta.test.ts is where the
+  title_source: null,
+  started_at: 1_789_000_000_000,
+  modified_at: 1_789_100_000_000,
+  size_bytes: 1024,
+  // The join does not read the scan, so every case here gets what the agent
+  // writes for a file it could not read. claude-meta.test.ts is where the
   // populated shapes are exercised.
-  meta: NO_META,
+  meta: null,
   ...over,
 })
 
-const agent = (over: Partial<ClaudeAgent>): ClaudeAgent => ({
+const agent = (over: Partial<Agent>): Agent => ({
   id: null,
-  sessionId: null,
+  session_id: null,
   pid: null,
   kind: 'interactive',
   state: null,
   status: null,
   name: null,
   cwd: null,
-  startedAt: null,
+  started_at: null,
   ...over,
 })
 
 /** A connected session, as ~/.claude/sessions + /proc report one. */
 const session = (over: Partial<LiveSession>): LiveSession => ({
-  transcriptId: null,
+  transcript_id: null,
   alive: true,
   pid: 1234,
-  remoteId: null,
+  remote_id: null,
   name: null,
   status: null,
   cwd: '/etc/nixos',
-  startedAt: 1_789_000_000_000,
-  lastActivityAt: 1_789_100_000_000,
-  cpuMs: null,
-  rssBytes: null,
+  started_at: 1_789_000_000_000,
+  last_activity_at: 1_789_100_000_000,
+  cpu_ms: null,
+  rss_bytes: null,
   ...over,
 })
 
-const roster = (over: Partial<ClaudeRoster>): ClaudeRoster => ({ ...NO_ROSTER, ...over })
+/** The managed sessions, by the uuid each runs. */
+const managed = (ids: string[]): Roster['managed'] =>
+  ids.map((id) => ({
+    id,
+    job: 'claude-session',
+    pid: null,
+    memory_bytes: null,
+    cpu_nsec: null,
+    log: '/l',
+    log_bytes: null,
+  }))
+
+const roster = (over: Partial<Roster>): Roster => ({
+  reported_at: 't',
+  agents_available: false,
+  agents: [],
+  transcripts: [],
+  transcript_total: 0,
+  empty_count: 0,
+  truncated: false,
+  managed: [],
+  session_stats: [],
+  server: null,
+  actions: [],
+  errors: [],
+  ...over,
+})
 
 describe('what a row IS', () => {
   it('a transcript with an interactive agent behind it is alive, and offers no resume', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
-        agents: [agent({ sessionId: 'abc', pid: 91660, status: 'busy', name: 'nixos-45' })],
+        agents_available: true,
+        agents: [agent({ session_id: 'abc', pid: 91660, status: 'busy', name: 'nixos-45' })],
         transcripts: [transcript({ id: 'abc' })],
       }),
     )
@@ -98,7 +120,7 @@ describe('what a row IS', () => {
 
   it('a transcript with nothing behind it is resumable, and a resume continues that same session', () => {
     const rows = sessionRows(
-      roster({ agentsAvailable: true, transcripts: [transcript({ id: 'x' })] }),
+      roster({ agents_available: true, transcripts: [transcript({ id: 'x' })] }),
     )
     expect(rows[0]?.state).toBe('resumable')
     expect(rows[0]?.canResume).toBe(true)
@@ -113,11 +135,11 @@ describe('what a row IS', () => {
   it('a background agent with a pid keeps its own lifecycle word and its short id', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
           agent({
             id: '6913d790',
-            sessionId: '6913d790-159e-4c03-81e2-93d6bd729bfa',
+            session_id: '6913d790-159e-4c03-81e2-93d6bd729bfa',
             kind: 'background',
             state: 'running',
             pid: 4021,
@@ -139,11 +161,11 @@ describe('what a row IS', () => {
   it('an agent whose project directory is gone still gets a row', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
           agent({
             id: '3ab35c23',
-            sessionId: '3ab35c23-d56d-4f8d-a5f6-a4f56ec384ee',
+            session_id: '3ab35c23-d56d-4f8d-a5f6-a4f56ec384ee',
             kind: 'background',
             state: 'running',
             pid: 8813,
@@ -163,7 +185,7 @@ describe('what a row IS', () => {
 
   it('an interactive agent with no transcript is marked as such rather than dropped', () => {
     const rows = sessionRows(
-      roster({ agentsAvailable: true, agents: [agent({ sessionId: 'ghost', pid: 4 })] }),
+      roster({ agents_available: true, agents: [agent({ session_id: 'ghost', pid: 4 })] }),
     )
     expect(rows[0]?.state).toBe('orphan')
     expect(rows[0]?.onDisk).toBe(false)
@@ -174,7 +196,7 @@ describe('what a row IS', () => {
     // either source saying it is running must win, because a resume of a
     // session already in progress starts a second copy of it.
     const rows = sessionRows(roster({ transcripts: [transcript({ id: 'live' })] }), [
-      session({ transcriptId: 'live' }),
+      session({ transcript_id: 'live' }),
     ])
     expect(rows[0]?.state).toBe('alive')
     expect(rows[0]?.canResume).toBe(false)
@@ -185,11 +207,11 @@ describe('what a row IS', () => {
     // population. They arrive on the row now, and nothing that was only on
     // that board may be lost on the way.
     const rows = sessionRows(roster({ transcripts: [transcript({ id: 'live' })] }), [
-      session({ transcriptId: 'live', remoteId: 'cse_abc', name: 'nixos-7a', rssBytes: 4_096 }),
+      session({ transcript_id: 'live', remote_id: 'cse_abc', name: 'nixos-7a', rss_bytes: 4_096 }),
     ])
-    expect(rows[0]?.live?.remoteId).toBe('cse_abc')
+    expect(rows[0]?.live?.remote_id).toBe('cse_abc')
     expect(rows[0]?.live?.name).toBe('nixos-7a')
-    expect(rows[0]?.live?.rssBytes).toBe(4_096)
+    expect(rows[0]?.live?.rss_bytes).toBe(4_096)
   })
 
   it('draws a connected session neither source knows about rather than dropping it', () => {
@@ -197,7 +219,7 @@ describe('what a row IS', () => {
     // outside ~/.claude/projects, or one running while `claude agents` is
     // unavailable. The Sessions board drew every live session
     // unconditionally, so folding it in here must not lose this one.
-    const rows = sessionRows(roster({}), [session({ transcriptId: 'elsewhere', pid: 77 })])
+    const rows = sessionRows(roster({}), [session({ transcript_id: 'elsewhere', pid: 77 })])
     expect(rows).toHaveLength(1)
     expect(rows[0]?.state).toBe('alive')
     expect(rows[0]?.onDisk).toBe(false)
@@ -208,17 +230,17 @@ describe('what a row IS', () => {
   it('does not draw a session file whose process is gone', () => {
     // A stale file in ~/.claude/sessions is counted in the board's foot, not
     // drawn as a row: there is no process left to describe.
-    expect(sessionRows(roster({}), [session({ transcriptId: 'dead', alive: false })])).toEqual([])
+    expect(sessionRows(roster({}), [session({ transcript_id: 'dead', alive: false })])).toEqual([])
   })
 
   it('an older session of a directory someone is working in now is resumable like any other', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
-        agents: [agent({ sessionId: 'current', pid: 91660 })],
+        agents_available: true,
+        agents: [agent({ session_id: 'current', pid: 91660 })],
         transcripts: [
-          transcript({ id: 'current', modifiedAt: 2_000 }),
-          transcript({ id: 'earlier', modifiedAt: 1_000 }),
+          transcript({ id: 'current', modified_at: 2_000 }),
+          transcript({ id: 'earlier', modified_at: 1_000 }),
         ],
       }),
     )
@@ -236,7 +258,7 @@ describe('labels, and never content', () => {
   it('prefers a title the operator typed over one the model wrote', () => {
     const rows = sessionRows(
       roster({
-        transcripts: [transcript({ id: 'a', title: 's2-server', titleSource: 'custom-title' })],
+        transcripts: [transcript({ id: 'a', title: 's2-server', title_source: 'custom-title' })],
       }),
     )
     expect(rows[0]?.label).toBe('s2-server')
@@ -246,7 +268,7 @@ describe('labels, and never content', () => {
   it('carries a sidecar title through as a sidecar title', () => {
     const rows = sessionRows(
       roster({
-        transcripts: [transcript({ id: 'a', title: 's2-server', titleSource: 'sidecar' })],
+        transcripts: [transcript({ id: 'a', title: 's2-server', title_source: 'sidecar' })],
       }),
     )
     expect(rows[0]?.labelSource).toBe('sidecar')
@@ -255,8 +277,8 @@ describe('labels, and never content', () => {
   it("falls back to the CLI's derived name, and marks it as one", () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
-        agents: [agent({ sessionId: 'a', name: 'nixos-ac', pid: 7 })],
+        agents_available: true,
+        agents: [agent({ session_id: 'a', name: 'nixos-ac', pid: 7 })],
         transcripts: [transcript({ id: 'a' })],
       }),
     )
@@ -278,7 +300,7 @@ describe('what the snapshot could not read', () => {
     // One transcript on this box opens with a multi-megabyte base64 image, so
     // the first 8 KB holds no parseable record at all. Every other field is
     // still a fact, and the row is worth drawing.
-    const rows = sessionRows(roster({ transcripts: [transcript({ id: 'a', startedAt: null })] }))
+    const rows = sessionRows(roster({ transcripts: [transcript({ id: 'a', started_at: null })] }))
     expect(rows[0]?.startedAt).toBeNull()
     expect(rows[0]?.modifiedAt).toBe(1_789_100_000_000)
   })
@@ -286,9 +308,9 @@ describe('what the snapshot could not read', () => {
   it("borrows the agent's start time when the transcript has none", () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
-        agents: [agent({ sessionId: 'a', pid: 3, startedAt: 1_789_230_820_836 })],
-        transcripts: [transcript({ id: 'a', startedAt: null })],
+        agents_available: true,
+        agents: [agent({ session_id: 'a', pid: 3, started_at: 1_789_230_820_836 })],
+        transcripts: [transcript({ id: 'a', started_at: null })],
       }),
     )
     expect(rows[0]?.startedAt).toBe(1_789_230_820_836)
@@ -297,9 +319,13 @@ describe('what the snapshot could not read', () => {
   it('does not list a 0-byte transcript, and does not lose the count either', () => {
     // The snapshot never puts an empty transcript in `transcripts`; it counts
     // it. A session opened and never spoken to has nothing to resume.
-    const r = roster({ transcripts: [transcript({ id: 'a' })], transcriptTotal: 1, emptyCount: 2 })
+    const r = roster({
+      transcripts: [transcript({ id: 'a' })],
+      transcript_total: 1,
+      empty_count: 2,
+    })
     expect(sessionRows(r)).toHaveLength(1)
-    expect(r.emptyCount).toBe(2)
+    expect(r.empty_count).toBe(2)
   })
 
   it('marks an un-slugged cwd as approximate, unless an agent supplied a real one', () => {
@@ -309,7 +335,7 @@ describe('what the snapshot could not read', () => {
           transcript({
             id: 'a',
             cwd: '/home/santiago/projects/personal/portfolio',
-            cwdExact: false,
+            cwd_exact: false,
           }),
         ],
       }),
@@ -318,15 +344,15 @@ describe('what the snapshot could not read', () => {
 
     const withAgent = sessionRows(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
-          agent({ sessionId: 'a', pid: 1, cwd: '/home/santiago/projects/personal-portfolio' }),
+          agent({ session_id: 'a', pid: 1, cwd: '/home/santiago/projects/personal-portfolio' }),
         ],
         transcripts: [
           transcript({
             id: 'a',
             cwd: '/home/santiago/projects/personal/portfolio',
-            cwdExact: false,
+            cwd_exact: false,
           }),
         ],
       }),
@@ -336,7 +362,8 @@ describe('what the snapshot could not read', () => {
   })
 
   it('renders nothing rather than throwing when the CLI did not answer', () => {
-    expect(sessionRows(NO_ROSTER)).toEqual([])
+    expect(sessionRows(null)).toEqual([])
+    expect(sessionRows(roster({}))).toEqual([])
     expect(countByState([])).toEqual({
       alive: 0,
       background: 0,
@@ -351,12 +378,12 @@ describe('order', () => {
   it('puts what is running first, then the most recently written', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
-        agents: [agent({ sessionId: 'now', pid: 1 })],
+        agents_available: true,
+        agents: [agent({ session_id: 'now', pid: 1 })],
         transcripts: [
-          transcript({ id: 'old', modifiedAt: 1_000, sizeBytes: 70_000_000 }),
-          transcript({ id: 'now', modifiedAt: 500 }),
-          transcript({ id: 'mid', modifiedAt: 900 }),
+          transcript({ id: 'old', modified_at: 1_000, size_bytes: 70_000_000 }),
+          transcript({ id: 'now', modified_at: 500 }),
+          transcript({ id: 'mid', modified_at: 900 }),
         ],
       }),
     )
@@ -372,7 +399,7 @@ describe('order', () => {
 // the wrong thing, or claim to kill something it cannot.
 
 describe('which verb a row is offered', () => {
-  const rowFor = (r: ClaudeRoster, id: string) => {
+  const rowFor = (r: Roster, id: string) => {
     const row = sessionRows(r).find((x) => x.key === id)
     if (row === undefined) throw new Error(`no row ${id}`)
     return row
@@ -389,11 +416,11 @@ describe('which verb a row is offered', () => {
   it('offers Stop to a RUNNING background agent, with the SHORT id as the selector', () => {
     const row = rowFor(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
           agent({
             id: 'dead',
-            sessionId: 'deadbeef-1',
+            session_id: 'deadbeef-1',
             kind: 'background',
             state: 'running',
             pid: 2211,
@@ -410,10 +437,10 @@ describe('which verb a row is offered', () => {
   it('offers Stop to a session this box started, as its unit', () => {
     const row = rowFor(
       roster({
-        agentsAvailable: true,
-        agents: [agent({ sessionId: 'ours', pid: 42, status: 'busy' })],
+        agents_available: true,
+        agents: [agent({ session_id: 'ours', pid: 42, status: 'busy' })],
         transcripts: [transcript({ id: 'ours' })],
-        managedIds: ['ours'],
+        managed: managed(['ours']),
       }),
       'ours',
     )
@@ -427,8 +454,8 @@ describe('which verb a row is offered', () => {
   it('offers nothing to a session the Remote Control server spawned', () => {
     const row = rowFor(
       roster({
-        agentsAvailable: true,
-        agents: [agent({ sessionId: 'theirs', pid: 7, status: 'busy' })],
+        agents_available: true,
+        agents: [agent({ session_id: 'theirs', pid: 7, status: 'busy' })],
         transcripts: [transcript({ id: 'theirs' })],
       }),
       'theirs',
@@ -439,7 +466,7 @@ describe('which verb a row is offered', () => {
 
   it('offers nothing to a row with no transcript to resume and no unit to stop', () => {
     const rows = sessionRows(
-      roster({ agentsAvailable: true, agents: [agent({ sessionId: 'gone', pid: 3 })] }),
+      roster({ agents_available: true, agents: [agent({ session_id: 'gone', pid: 3 })] }),
     )
     expect(rows[0]?.state).toBe('orphan')
     expect(rowControl(rows[0] as RosterEntry)).toEqual({ kind: 'none', why: 'orphan' })
@@ -462,11 +489,11 @@ describe('which verb a row is offered', () => {
     // cliVersion from three releases ago, and no pid anywhere.
     const row = rowFor(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
           agent({
             id: '6913d790',
-            sessionId: '6913d790-159e-4c03-81e2-93d6bd729bfa',
+            session_id: '6913d790-159e-4c03-81e2-93d6bd729bfa',
             kind: 'background',
             state: 'blocked',
             pid: null,
@@ -489,11 +516,11 @@ describe('which verb a row is offered', () => {
   it('draws a dormant agent the same way when its transcript is not on disk', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
           agent({
             id: '3ab35c23',
-            sessionId: '3ab35c23-d56d-4f8d-a5f6-a4f56ec384ee',
+            session_id: '3ab35c23-d56d-4f8d-a5f6-a4f56ec384ee',
             kind: 'background',
             state: 'blocked',
             name: 'Adversarial security assessment of s2-server',
@@ -515,9 +542,9 @@ describe('which verb a row is offered', () => {
   it('offers a dormant record no Resume — attach is the verb, and rm is the button', () => {
     const row = rowFor(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
-          agent({ id: 'e1875e75', sessionId: 'dorm', kind: 'background', state: 'blocked' }),
+          agent({ id: 'e1875e75', session_id: 'dorm', kind: 'background', state: 'blocked' }),
         ],
         transcripts: [transcript({ id: 'dorm' })],
       }),
@@ -533,11 +560,11 @@ describe('which verb a row is offered', () => {
   it('counts dormant records apart from both running and resumable', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
-          agent({ id: 'aaaaaaaa', sessionId: 'a', kind: 'background', state: 'blocked' }),
-          agent({ id: 'bbbbbbbb', sessionId: 'b', kind: 'background', state: 'running', pid: 12 }),
-          agent({ sessionId: 'c', pid: 13, status: 'busy' }),
+          agent({ id: 'aaaaaaaa', session_id: 'a', kind: 'background', state: 'blocked' }),
+          agent({ id: 'bbbbbbbb', session_id: 'b', kind: 'background', state: 'running', pid: 12 }),
+          agent({ session_id: 'c', pid: 13, status: 'busy' }),
         ],
         transcripts: [
           transcript({ id: 'a' }),
@@ -559,16 +586,16 @@ describe('which verb a row is offered', () => {
   it('sorts dormant records above the resumable tail, and below what is running', () => {
     const rows = sessionRows(
       roster({
-        agentsAvailable: true,
+        agents_available: true,
         agents: [
-          agent({ id: 'aaaaaaaa', sessionId: 'dorm', kind: 'background', state: 'blocked' }),
+          agent({ id: 'aaaaaaaa', session_id: 'dorm', kind: 'background', state: 'blocked' }),
         ],
         transcripts: [
           // The newest transcript by a wide margin, and still below the
           // dormant row: a record with a verb waiting on it must not be
           // buried under fifty transcripts, which is how it hid for weeks.
-          transcript({ id: 'fresh', modifiedAt: 9_000 }),
-          transcript({ id: 'dorm', modifiedAt: 1 }),
+          transcript({ id: 'fresh', modified_at: 9_000 }),
+          transcript({ id: 'dorm', modified_at: 1 }),
         ],
       }),
     )
@@ -580,7 +607,7 @@ describe('which verb a row is offered', () => {
 
   it('treats a managed uuid as running even when no other source has caught up', () => {
     const row = rowFor(
-      roster({ transcripts: [transcript({ id: 'fresh' })], managedIds: ['fresh'] }),
+      roster({ transcripts: [transcript({ id: 'fresh' })], managed: managed(['fresh']) }),
       'fresh',
     )
     expect(row.state).toBe('alive')

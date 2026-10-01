@@ -27,7 +27,7 @@ export const fetchShell = readFn.handler(async () => {
 export const fetchControllerLinkFn = readFn.handler(async ({ context }) => {
   const { controller } = await context.ctx()
   if (controller.link().state !== 'connected') {
-    await controller.systemInfo().catch(() => undefined)
+    await controller.call('system.info').catch(() => undefined)
   }
   return controller.link()
 })

@@ -87,7 +87,7 @@ export const confirmEnrollFn = adminFn
       {
         store: enrollStore,
         wg,
-        systemInfo: () => ctx.controller.systemInfo(),
+        systemInfo: () => ctx.controller.call('system.info'),
         sync: () => syncDesired(ctx),
         lanIp: (await siteIdentity()).data.lanIp,
         hostAlias: ctx.env('WG_EASY_HOST_ALIAS') ?? '',

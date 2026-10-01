@@ -302,10 +302,10 @@ describe('the time group across the hydration boundary', () => {
    here is also a case about the forty-eight that have none. */
 
 const live = (over: Partial<LiveFacts> = {}): LiveFacts => ({
-  startedAt: NOW - 3 * 3_600_000,
-  lastActivityAt: NOW - 9 * 60_000,
-  cpuMs: 407_000,
-  rssBytes: 587_202_560,
+  started_at: NOW - 3 * 3_600_000,
+  last_activity_at: NOW - 9 * 60_000,
+  cpu_ms: 407_000,
+  rss_bytes: 587_202_560,
   ...over,
 })
 
@@ -333,11 +333,11 @@ describe('a row with a process behind it', () => {
   })
 
   it('omits a figure the snapshot did not carry rather than drawing a zero', () => {
-    expect(byKey(row({ live: live({ rssBytes: null, cpuMs: null }) })).proc).toBe('up 3h')
+    expect(byKey(row({ live: live({ rss_bytes: null, cpu_ms: null }) })).proc).toBe('up 3h')
     // And a block with nothing measurable in it draws no group at all — the
     // same rule the counts follow, applied to the process.
     expect(
-      byKey(row({ live: live({ startedAt: null, rssBytes: null, cpuMs: null }) })).proc,
+      byKey(row({ live: live({ started_at: null, rss_bytes: null, cpu_ms: null }) })).proc,
     ).toBeUndefined()
   })
 })
@@ -351,7 +351,7 @@ describe('every reading measured from now sits in a band', () => {
     factGroups(r, NOW).find((g) => g.key === 'time')?.text
 
   it('flattens the seconds a connected session would tick through', () => {
-    const at = (msAgo: number) => timeOf(row({ live: live({ lastActivityAt: NOW - msAgo }) }))
+    const at = (msAgo: number) => timeOf(row({ live: live({ last_activity_at: NOW - msAgo }) }))
     expect(at(3_000)).toBe('last seen <1m')
     expect(at(44_000)).toBe(at(3_000))
     // The 45–90s window, where `span` alone would still be printing seconds.
@@ -368,7 +368,7 @@ describe('every reading measured from now sits in a band', () => {
 
   it('flattens the process uptime, which is measured from now as well', () => {
     const upAt = (msAgo: number) =>
-      byKey(row({ live: live({ startedAt: NOW - msAgo, rssBytes: null, cpuMs: null }) })).proc
+      byKey(row({ live: live({ started_at: NOW - msAgo, rss_bytes: null, cpu_ms: null }) })).proc
     expect(upAt(10_000)).toBe('up <1m')
     expect(upAt(60_000)).toBe('up 1m')
     expect(upAt(3 * 3_600_000)).toBe('up 3h')

@@ -6,7 +6,6 @@ import { EMPTY } from '../../../../components/tokens'
 import { Button } from '../../../../components/ui/button'
 import { BoardGrid, Chip, Stat, StatStrip } from '../../../../components/viz'
 import { withStats } from '../../../../lib/agent/roster'
-import { NO_ROSTER } from '../../../../lib/claude-roster'
 import type { NodeClaudeData } from '../../../../lib/dashboard/node-claude'
 import { DASH, duration, num, since } from '../../../../lib/format'
 import { LINK_UNKNOWN } from '../../../../lib/node-link'
@@ -44,7 +43,7 @@ function verdict(d: NodeClaudeData): Verdict {
   // The report when there is one, else the status document's summary.
   const c = d.report ?? s.claude
   if (c === null) {
-    return s.trayReporting
+    return s.tray.reporting
       ? { label: 'no report yet', tone: 'muted' }
       : { label: 'nobody logged on', tone: 'muted' }
   }
@@ -88,9 +87,9 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
         </p>
       ) : c === null ? (
         <p className={EMPTY}>
-          {status.trayReporting
+          {status.tray.reporting
             ? 'The tray is up but has not reported Claude Code yet; give it a few seconds.'
-            : status.policy.claudeRemoteControl
+            : status.policy.claude_remote_control
               ? `The agent is up but its tray is not reporting, which means nobody is logged on to ${node.hostname}. The server runs in the desktop session because that is where the Claude login is; a machine that reboots unattended needs automatic sign-in for it to come back.`
               : 'Claude remote control is off for this machine (Settings › Machines).'}
         </p>
@@ -104,8 +103,8 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
         <SignInBoard f={f} />
 
         <RosterBoard
-          roster={d.roster?.roster ?? NO_ROSTER}
-          sessions={withStats(c?.sessions ?? [], d.roster?.sessionStats ?? [])}
+          roster={d.roster}
+          sessions={withStats(c?.sessions ?? [], d.roster?.session_stats ?? [])}
           node={node.id}
           holds={null}
           missing={status === null ? (d.error ?? 'not connected') : d.rosterMissing}
@@ -124,11 +123,11 @@ function claudeFacts(d: NodeClaudeData, now: number | null) {
   const c = d.report
   const v = verdict(d)
   const alive = c?.sessions.filter((s) => s.alive) ?? []
-  const running = c?.server.version ?? c?.cliVersion ?? node.claude?.serverVersion ?? null
-  const envId = c?.server.environmentId ?? null
+  const running = c?.server.version ?? c?.cli_version ?? node.claude?.server_version ?? null
+  const envId = c?.server.environment_id ?? null
   const startedAgo =
-    now === null || c?.startedAt == null ? null : (now - Date.parse(c.startedAt)) / 1000
-  const refreshAt = c?.credentials.refreshExpiresAt ?? null
+    now === null || c?.started_at == null ? null : (now - Date.parse(c.started_at)) / 1000
+  const refreshAt = c?.credentials.refresh_expires_at ?? null
   return { d, node, status, c, v, alive, running, envId, startedAgo, refreshAt, now }
 }
 
@@ -144,7 +143,7 @@ function ClaudeHead({ f }: { f: ClaudeFacts }) {
       versionNote={
         c?.server.version != null
           ? "printed at start by the node's remote-control server"
-          : c?.cliVersion != null
+          : c?.cli_version != null
             ? 'claude --version on the node'
             : 'from the controller’s summary'
       }
@@ -157,7 +156,7 @@ function ClaudeHead({ f }: { f: ClaudeFacts }) {
         },
         {
           k: 'CLI on the node',
-          v: c?.cliVersion ?? null,
+          v: c?.cli_version ?? null,
           note: 'the installed command; Update Claude Code below is what moves it',
         },
       ]}
@@ -207,7 +206,7 @@ function ClaudeStats({ f }: { f: ClaudeFacts }) {
       <Stat
         label="Sessions"
         value={c === null ? DASH : alive.length}
-        sub={c?.server.maxSessions == null ? 'alive now' : `of ${num(c.server.maxSessions)}`}
+        sub={c?.server.max_sessions == null ? 'alive now' : `of ${num(c.server.max_sessions)}`}
         title="Session processes alive on the node right now."
       />
       <Stat
@@ -216,13 +215,13 @@ function ClaudeStats({ f }: { f: ClaudeFacts }) {
         sub={
           status === null
             ? 'last known'
-            : status.awakeHold
+            : status.awake_hold
               ? 'held awake'
-              : status.policy.awakeHold
+              : status.policy.awake_hold
                 ? 'hold OFF'
                 : 'may sleep'
         }
-        tone={status !== null && !status.awakeHold && status.policy.awakeHold ? 'bad' : undefined}
+        tone={status !== null && !status.awake_hold && status.policy.awake_hold ? 'bad' : undefined}
       />
       <Stat
         label="Login"

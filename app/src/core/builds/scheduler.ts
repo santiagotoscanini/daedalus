@@ -24,6 +24,7 @@
 //
 // Server-only in effect: everything with a side effect is imported dynamically.
 
+import type { RootFollowOk } from '../../host/controller/generated'
 import type { DetectionWarning } from '../../lib/build-detect'
 import { readBuildFacts } from '../../lib/build-facts'
 import {
@@ -377,9 +378,9 @@ async function settleDispatched(
     state.dispatched = null
     return
   }
-  let run: Awaited<ReturnType<Ctx['controller']['rootFollow']>>
+  let run: RootFollowOk
   try {
-    run = await ctx.controller.rootFollow(d.run, Number.MAX_SAFE_INTEGER)
+    run = await ctx.controller.call('root.follow', { run: d.run, after: Number.MAX_SAFE_INTEGER })
   } catch (e) {
     // The controller restarted and forgot the run: nothing left to ask.
     if (isRecord(e) && e.code === 'not_found') state.dispatched = null

@@ -57,12 +57,12 @@ function nodeMemoryFacts({ d }: { d: NodeSystemData }) {
   if (t === null) return null
   const m = t.memory
   const heaviest = [...t.processes]
-    .filter((p) => p.memoryBytes !== null)
-    .sort((a, b) => (b.memoryBytes ?? 0) - (a.memoryBytes ?? 0))
+    .filter((p) => p.memory_bytes !== null)
+    .sort((a, b) => (b.memory_bytes ?? 0) - (a.memory_bytes ?? 0))
     .slice(0, 10)
   const first = m.modules[0]
   const soldered = m.slots === 0
-  const usedPct = share(m.usedBytes, m.totalBytes)
+  const usedPct = share(m.used_bytes, m.total_bytes)
   return { d, node, t, m, heaviest, first, soldered, usedPct }
 }
 
@@ -75,15 +75,15 @@ function MemoryBoard({ f }: { f: NodeMemoryFacts }) {
       title="Memory"
       icon="rows"
       span={8}
-      aside={<span className={NOTE}>{bytes(m.totalBytes)} total</span>}
+      aside={<span className={NOTE}>{bytes(m.total_bytes)} total</span>}
     >
       <Progress pct={usedPct} tone={loadTone(usedPct)} />
       <Measures
         items={[
-          { k: 'used', v: bytes(m.usedBytes) },
-          { k: 'available', v: bytes(m.availableBytes) },
-          { k: 'file cache', v: bytes(m.cachedBytes) },
-          { k: 'compressed', v: bytes(m.compressedBytes) },
+          { k: 'used', v: bytes(m.used_bytes) },
+          { k: 'available', v: bytes(m.available_bytes) },
+          { k: 'file cache', v: bytes(m.cached_bytes) },
+          { k: 'compressed', v: bytes(m.compressed_bytes) },
         ]}
       />
       <p className={FOOT}>
@@ -118,23 +118,24 @@ function TheModulesBoard({ f }: { f: NodeMemoryFacts }) {
         rows={[
           {
             k: 'Installed',
-            v: m.totalBytes === null ? DASH : `${bytes(m.totalBytes)} ${first?.kind ?? ''}`.trim(),
+            v:
+              m.total_bytes === null ? DASH : `${bytes(m.total_bytes)} ${first?.kind ?? ''}`.trim(),
           },
           {
             k: 'Speed',
-            v: first?.speedMts == null ? DASH : `${num(first.speedMts)} MT/s`,
+            v: first?.speed_mts == null ? DASH : `${num(first.speed_mts)} MT/s`,
           },
           {
             k: 'Part',
-            v: <span className={MONO}>{first?.partNumber ?? first?.manufacturer ?? DASH}</span>,
+            v: <span className={MONO}>{first?.part_number ?? first?.manufacturer ?? DASH}</span>,
           },
           {
             k: 'Room left',
             v: soldered
               ? 'none: soldered'
-              : m.maxCapacityBytes === null || m.totalBytes === null || m.slots === null
+              : m.max_capacity_bytes === null || m.total_bytes === null || m.slots === null
                 ? DASH
-                : `${bytes(m.maxCapacityBytes - m.totalBytes)} in ${num(m.slots - m.modules.length)} slots`,
+                : `${bytes(m.max_capacity_bytes - m.total_bytes)} in ${num(m.slots - m.modules.length)} slots`,
           },
         ]}
       />
@@ -145,9 +146,9 @@ function TheModulesBoard({ f }: { f: NodeMemoryFacts }) {
             {m.modules.map((x, i) => (
               <li key={`${x.locator ?? '?'}-${String(i)}`} className={ROW}>
                 <span className={ROW_MAIN}>{x.locator ?? `#${String(i + 1)}`}</span>
-                <span className={ROW_SIDE}>{bytes(x.sizeBytes)}</span>
+                <span className={ROW_SIDE}>{bytes(x.size_bytes)}</span>
                 <span className={ROW_SIDE}>
-                  {x.speedMts === null ? DASH : `${num(x.speedMts)} MT/s`}
+                  {x.speed_mts === null ? DASH : `${num(x.speed_mts)} MT/s`}
                 </span>
               </li>
             ))}
@@ -172,14 +173,14 @@ function Panel({ f }: { f: NodeMemoryFacts }) {
       {node.os === 'windows' ? (
         <>
           <Progress
-            pct={share(m.committedBytes, m.commitLimitBytes)}
-            tone={loadTone(share(m.committedBytes, m.commitLimitBytes))}
+            pct={share(m.committed_bytes, m.commit_limit_bytes)}
+            tone={loadTone(share(m.committed_bytes, m.commit_limit_bytes))}
           />
           <Measures
             items={[
-              { k: 'charge', v: bytes(m.committedBytes) },
-              { k: 'limit', v: bytes(m.commitLimitBytes) },
-              { k: 'pagefile', v: bytes(m.swapTotalBytes) },
+              { k: 'charge', v: bytes(m.committed_bytes) },
+              { k: 'limit', v: bytes(m.commit_limit_bytes) },
+              { k: 'pagefile', v: bytes(m.swap_total_bytes) },
             ]}
           />
           <p className={FOOT}>
@@ -192,13 +193,13 @@ function Panel({ f }: { f: NodeMemoryFacts }) {
       ) : (
         <>
           <Progress
-            pct={share(m.swapUsedBytes, m.swapTotalBytes)}
-            tone={(m.swapUsedBytes ?? 0) > 0 ? 'warn' : 'ok'}
+            pct={share(m.swap_used_bytes, m.swap_total_bytes)}
+            tone={(m.swap_used_bytes ?? 0) > 0 ? 'warn' : 'ok'}
           />
           <Measures
             items={[
-              { k: 'in use', v: bytes(m.swapUsedBytes) },
-              { k: 'size', v: bytes(m.swapTotalBytes) },
+              { k: 'in use', v: bytes(m.swap_used_bytes) },
+              { k: 'size', v: bytes(m.swap_total_bytes) },
             ]}
           />
           <p className={FOOT}>
@@ -222,8 +223,8 @@ function HeaviestProcessesBoard({ f }: { f: NodeMemoryFacts }) {
         <BarList
           items={heaviest.map((p) => ({
             label: p.name,
-            value: p.memoryBytes ?? 0,
-            display: bytes(p.memoryBytes),
+            value: p.memory_bytes ?? 0,
+            display: bytes(p.memory_bytes),
           }))}
           tone="info"
           empty="nothing reporting"
@@ -233,7 +234,7 @@ function HeaviestProcessesBoard({ f }: { f: NodeMemoryFacts }) {
       <p className={FOOT}>
         Resident memory — the working set on Windows, RSS on a Mac — which counts shared libraries
         against every process that maps them, so the bars add up to more than the bar above. The
-        twelve heaviest of {num(t.processCount)}. The busiest by processor are on <b>Host</b>.
+        twelve heaviest of {num(t.process_count)}. The busiest by processor are on <b>Host</b>.
       </p>
     </Board>
   )

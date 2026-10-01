@@ -1,249 +1,75 @@
 import type {
+  App,
+  Battery,
+  Browser,
+  ClaudeState,
+  CredentialStore,
+  Disk,
+  Drive,
+  Gpu,
+  InstallMethod,
   LinkStatus,
-  Probation,
+  Machine,
+  MachineSettings,
+  MemoryModule,
+  Network,
+  Policy,
   Report,
-  RolledBack,
+  SantreeDoor,
   Session,
   StatusDocument,
   Summary,
   Telemetry,
   TunnelStatus,
+  Updates,
 } from '../../host/controller/generated'
 import {
+  absent,
   arrayOf,
   bool,
-  decode,
+  type Decoder,
   int,
+  nbool,
+  nint,
+  nnum,
+  nstr,
   nullable,
   num,
   obj,
-  optional,
+  oneOf,
   reads,
   str,
+  triple,
 } from '../contract/decode'
 
-// A machine's status document, as the box reads it (agent/src/status.rs is
-// the writer): what the machine pushes up its link and the controller hands
-// back in `nodes.get` (host/controller/), with the telemetry and the Claude
-// report beside it. This is the half of it the box acts on. Fields the agent
-// adds later are ignored until a reader here wants them, and a field a
-// document lacks decodes to its fallback rather than failing the page.
+// A machine's documents as the box reads them — its status document, its
+// Claude report and summary, its telemetry — exactly as the agent writes
+// them (agent/src/shared.rs, claude/, telemetry/). Each decoder is held to
+// the generated type both ways (`reads`), so the loaders take the generated
+// types themselves; the controller hands these documents over in its
+// answers (host/controller/wire.ts).
 
-/** What the box asked of the machine, as the agent holds it. */
-type AgentPolicy = {
-  awakeHold: boolean
-  claudeRemoteControl: boolean
-}
+export const claudeState = oneOf<ClaudeState>({
+  off: true,
+  'not-installed': true,
+  starting: true,
+  running: true,
+  waiting: true,
+  stopped: true,
+  'no-session': true,
+  unknown: true,
+})
 
-/** One session on the node, from its `~/.claude/sessions` (agent/src/claude/). */
-export type NodeClaudeSession = {
-  pid: number
-  transcriptId: string | null
-  remoteId: string | null
-  cwd: string | null
-  name: string | null
-  kind: string | null
-  entrypoint: string | null
-  version: string | null
-  startedAt: number | null
-  status: string | null
-  lastActivityAt: number | null
-  alive: boolean
-}
-
-/**
- * Claude Code on the node, as its tray reported it: the supervised
- * `claude remote-control`, the sessions, the credential clock (dates and a
- * plan name, never a token) and the model settings. Mirrors the box's own
- * ClaudeFacts where the two can agree.
- */
-export type NodeClaude = {
-  path: string | null
-  /**
-   * native | npm | homebrew | winget | path, as the agent reads it off the
-   * path it found. Decides which verb updates it, so the page shows it
-   * beside the button that runs one. Null while the agent has not found it.
-   */
-  installMethod: string | null
-  cliVersion: string | null
-  /** What the last `claude update` here did. Null until one was asked for. */
-  lastUpdate: {
-    at: string
-    ok: boolean
-    from: string | null
-    to: string | null
-    detail: string
-  } | null
-  /** not-installed | off | starting | running | waiting | stopped */
-  state: string
-  detail: string | null
-  /** What the server printed last, while it waits to start again. */
-  lastLine: string | null
-  pid: number | null
-  startedAt: string | null
-  restarts: number
-  lastExit: string | null
-  server: {
-    version: string | null
-    environmentId: string | null
-    spawnMode: string | null
-    maxSessions: number | null
-  }
-  sessions: NodeClaudeSession[]
-  credentials: {
-    present: boolean
-    /** "file" or "keychain" (macOS: present, but the dates are not readable). */
-    store: string | null
-    subscriptionType: string | null
-    rateLimitTier: string | null
-    expiresAt: number | null
-    refreshExpiresAt: number | null
-    /** What the login may do (`user:inference`, …); never the tokens. */
-    scopes: string[]
-  }
-  settings: { model: string | null; effortLevel: string | null }
-  user: string | null
-  home: string | null
-  workdir: string | null
-  /** "named", "most recent trusted project", or the home fallback with its reason. */
-  workdirVia: string | null
-  log: string | null
-  reportedAt: string
-}
-
-/**
- * Claude Code on the node in a line (agent/src/claude/mod.rs `Summary`): a
- * state, versions, a count. The full report — sessions, paths, the login's
- * dates — is `nodeClaudeReport` below.
- */
-export type NodeClaudeSummary = {
-  state: string
-  detail: string | null
-  cliVersion: string | null
-  serverVersion: string | null
-  sessions: number
-  startedAt: string | null
-  signedIn: boolean
-}
-
-const nstr = optional(nullable(str), null)
-const nint = optional(nullable(int), null)
-const nnum = optional(nullable(num), null)
-
-const summary = reads<Summary>()(
+export const summary = reads<Summary>()(
   obj({
-    state: optional(str, 'stopped'),
+    state: claudeState,
     detail: nstr,
     cli_version: nstr,
     server_version: nstr,
-    sessions: optional(int, 0),
+    sessions: int,
     started_at: nstr,
-    signed_in: optional(bool, false),
+    signed_in: bool,
   }),
-)
-
-export type AgentStatus = {
-  version: string
-  hostname: string
-  os: string
-  /** "Windows 11 Pro", "macOS". */
-  osName: string
-  /** "24H2 (26100.4652)", "15.1". */
-  osVersion: string
-  arch: string
-  cpu: string
-  memoryBytes: number | null
-  /** The agent process's uptime. */
-  uptimeSecs: number
-  /** The machine's; null when the agent could not read it. */
-  osUptimeSecs: number | null
-  bootedAt: string | null
-  awakeHold: boolean
-  holdError: string | null
-  updateAvailable: string | null
-  restartPending: boolean
-  lastUpdateCheck: string | null
-  lastUpdateResult: string | null
-  /** The agent's policy. */
-  policy: AgentPolicy
-  /** Null when the tray has not reported lately (nobody logged on). */
-  claude: NodeClaudeSummary | null
-  /** Whether the tray — the user's session — is reporting to the service. */
-  trayReporting: boolean
-  /** The machine's side of its link to the controller (agent/src/link/mod.rs `LinkStatus`). */
-  link: AgentLink | null
-  /**
-   * A version just installed that has not proved itself yet (agent/src/update.rs):
-   * its `.old` binaries wait until it does, and nothing newer is installed over it.
-   */
-  probation: { version: string; from: string; starts: number; installedAt: string } | null
-  /** The last version the machine rolled back from; it is never installed again. */
-  rolledBack: { version: string; to: string; starts: number; at: string } | null
-}
-
-/**
- * How the machine holds the controller: both fingerprints — the controller's
- * being the pin its install line wrote, the only key it trusts.
- */
-export type AgentLink = {
-  state: string | null
-  connected: boolean
-  fingerprint: string
-  controllerFingerprint: string | null
-  /** The last signed rotation that moved the trusted controller key, in the agent's words. */
-  rotated: string | null
-  error: string | null
-  /** The machine's own WireGuard tunnel to the box, while a log-in governs it; null without one. */
-  tunnel: AgentTunnel | null
-}
-
-/** A logged-in machine's tunnel (agent/src/tunnel/ `status`), as the machine sees it. */
-export type AgentTunnel = {
-  /** `host:port` of the box's WireGuard socket. */
-  endpoint: string
-  /** The machine inside the tunnel. */
-  address: string
-  /** Seconds since the last handshake; null without one. */
-  lastHandshakeSecs: number | null
-  rxBytes: number
-  txBytes: number
-  error: string | null
-}
-
-const tunnel = reads<TunnelStatus>()(
-  obj({
-    endpoint: optional(str, ''),
-    address: optional(str, ''),
-    last_handshake_secs: nnum,
-    rx_bytes: optional(num, 0),
-    tx_bytes: optional(num, 0),
-    error: nstr,
-  }),
-)
-
-const link = reads<LinkStatus>()(
-  obj({
-    state: nstr,
-    connected: optional(bool, false),
-    fingerprint: optional(str, ''),
-    controller_fingerprint: nstr,
-    rotated: nstr,
-    error: nstr,
-    tunnel: optional(nullable(tunnel), null),
-  }),
-)
-
-const probation = reads<Probation>()(
-  obj({
-    version: str,
-    from: optional(str, ''),
-    starts: optional(int, 0),
-    installed_at: optional(str, ''),
-  }),
-)
-
-const rolledBack = reads<RolledBack>()(
-  obj({ version: str, to: optional(str, ''), starts: optional(int, 0), at: optional(str, '') }),
 )
 
 const session = reads<Session>()(
@@ -256,856 +82,365 @@ const session = reads<Session>()(
     kind: nstr,
     entrypoint: nstr,
     version: nstr,
-    started_at: nnum,
+    started_at: nint,
     status: nstr,
-    last_activity_at: nnum,
-    alive: optional(bool, false),
+    last_activity_at: nint,
+    alive: bool,
   }),
 )
 
-const claude = reads<Report>()(
+const actionState = oneOf({ running: true, done: true, refused: true, failed: true })
+
+export const report: Decoder<Report> = reads<Report>()(
   obj({
     path: nstr,
-    install_method: nstr,
-    last_update: optional(
-      nullable(
-        obj({
-          at: optional(str, ''),
-          ok: optional(bool, false),
-          from: nstr,
-          to: nstr,
-          detail: optional(str, ''),
-        }),
-      ),
-      null,
+    install_method: nullable(
+      oneOf<InstallMethod>({
+        native: true,
+        npm: true,
+        homebrew: true,
+        winget: true,
+        path: true,
+        unknown: true,
+      }),
     ),
     cli_version: nstr,
-    state: optional(str, 'stopped'),
+    last_update: nullable(obj({ at: str, ok: bool, from: nstr, to: nstr, detail: str })),
+    state: claudeState,
     detail: nstr,
-    last_line: nstr,
+    last_line: absent(str),
     pid: nint,
     started_at: nstr,
-    restarts: optional(int, 0),
+    restarts: int,
     last_exit: nstr,
-    server: optional(
-      obj({
-        version: nstr,
-        environment_id: nstr,
-        spawn_mode: nstr,
-        max_sessions: nint,
-      }),
-      { version: null, environment_id: null, spawn_mode: null, max_sessions: null },
-    ),
-    sessions: optional(arrayOf(session), []),
-    credentials: optional(
-      obj({
-        present: optional(bool, false),
-        store: nstr,
-        subscription_type: nstr,
-        rate_limit_tier: nstr,
-        expires_at: nnum,
-        refresh_expires_at: nnum,
-        scopes: optional(arrayOf(str), []),
-      }),
-      {
-        present: false,
-        store: null,
-        subscription_type: null,
-        rate_limit_tier: null,
-        expires_at: null,
-        refresh_expires_at: null,
-        scopes: [],
-      },
-    ),
-    settings: optional(obj({ model: nstr, effort_level: nstr }), {
-      model: null,
-      effort_level: null,
+    server: obj({ version: nstr, environment_id: nstr, spawn_mode: nstr, max_sessions: nint }),
+    sessions: arrayOf(session),
+    recovered: arrayOf(obj({ id: str, result: actionState, detail: str, at: str })),
+    credentials: obj({
+      present: bool,
+      store: nullable(oneOf<CredentialStore>({ file: true, keychain: true, unknown: true })),
+      subscription_type: nstr,
+      rate_limit_tier: nstr,
+      expires_at: nint,
+      refresh_expires_at: nint,
+      scopes: arrayOf(str),
     }),
+    settings: obj({ model: nstr, effort_level: nstr }),
     user: nstr,
     home: nstr,
     workdir: nstr,
     workdir_via: nstr,
     log: nstr,
-    reported_at: optional(str, ''),
+    job: nstr,
+    reported_at: str,
   }),
 )
 
-const shape = reads<StatusDocument>()(
+const tunnel = reads<TunnelStatus>()(
   obj({
+    endpoint: str,
+    resolved: nstr,
+    address: str,
+    last_handshake_secs: nint,
+    rx_bytes: num,
+    tx_bytes: num,
+    error: nstr,
+  }),
+)
+
+const link = reads<LinkStatus>()(
+  obj({
+    address: nstr,
+    found_via: nullable(oneOf({ config: true, dns: true, unknown: true })),
+    state: nullable(
+      oneOf({
+        unpaired: true,
+        connecting: true,
+        pending: true,
+        approved: true,
+        revoked: true,
+        refused: true,
+        'key-changed': true,
+        unknown: true,
+      }),
+    ),
+    connected: bool,
+    since: nstr,
+    fingerprint: str,
+    controller_fingerprint: nstr,
+    rotated: nstr,
+    error: nstr,
+    tunnel: nullable(tunnel),
+  }),
+)
+
+/** The box's policy as the machine holds it (link/wire.rs `Policy`). */
+export const policy = reads<Policy>()(
+  obj({
+    awake_hold: bool,
+    claude_remote_control: bool,
+    claude_workdir: absent(nstr),
+    providers: absent(obj({ lemonade: absent(nullable(obj({ port: absent(nint) }))) })),
+    santree: absent(bool),
+    session_host: absent(nullable(obj({ address: str, public_key: str }))),
+  }),
+)
+
+const settingKey = oneOf({ awake_hold: true, claude_remote_control: true, santree: true })
+
+const machineSettings = reads<MachineSettings>()(
+  obj({
+    node: nstr,
+    fingerprint: nstr,
+    fingerprint_short: nstr,
+    linked: bool,
+    awake_hold: bool,
+    claude_remote_control: bool,
+    santree: bool,
+    pending: arrayOf(
+      obj({ key: settingKey, want: bool, via: oneOf({ box: true, browser: true }) }),
+    ),
+    failed: arrayOf(obj({ key: settingKey, want: bool, why: str })),
+    operator_uid: nint,
+    operator: nstr,
+    may_change: absent(bool),
+  }),
+)
+
+const errorCode = oneOf({
+  bad_request: true,
+  version: true,
+  unknown_method: true,
+  unsupported: true,
+  unavailable: true,
+  busy: true,
+  too_large: true,
+  forbidden: true,
+  revoked: true,
+  internal: true,
+  not_found: true,
+  santree_off: true,
+  host_key_changed: true,
+  unknown: true,
+})
+
+const santreeDoor = reads<SantreeDoor>()(
+  obj({
+    open: int,
+    max: int,
+    last_refused: nullable(obj({ at: str, code: errorCode })),
+  }),
+)
+
+/** The status document (shared.rs `StatusDocument`). */
+export const statusDocument = reads<StatusDocument>()(
+  obj({
+    agent: str,
     version: str,
-    hostname: optional(str, ''),
-    os: optional(str, ''),
-    os_name: optional(str, ''),
-    os_version: optional(str, ''),
-    arch: optional(str, ''),
-    cpu: optional(str, ''),
+    hostname: str,
+    os: str,
+    os_name: str,
+    os_version: str,
+    arch: str,
+    cpu: str,
     memory_bytes: nint,
-    uptime_secs: optional(int, 0),
+    uptime_secs: int,
     os_uptime_secs: nint,
     booted_at: nstr,
-    awake_hold: optional(bool, false),
+    awake_hold: bool,
     hold_error: nstr,
+    power_requests: nstr,
     update_available: nstr,
-    restart_pending: optional(bool, false),
+    restart_pending: bool,
+    policy,
+    claude: nullable(summary),
+    tray: obj({ reporting: bool, last_report: nstr }),
+    claude_update_requested: bool,
+    claude_restart_requested: bool,
+    settings: machineSettings,
+    santree: nullable(santreeDoor),
+    controller: nullable(link),
     last_update_check: nstr,
     last_update_result: nstr,
-    policy: optional(
-      obj({
-        awake_hold: optional(bool, true),
-        claude_remote_control: optional(bool, false),
-      }),
-      { awake_hold: true, claude_remote_control: false },
-    ),
-    claude: optional(nullable(summary), null),
-    tray: optional(obj({ reporting: optional(bool, false) }), { reporting: false }),
-    controller: optional(nullable(link), null),
-    probation: optional(nullable(probation), null),
-    rolled_back: optional(nullable(rolledBack), null),
+    updated_from: nstr,
+    updated_at: nstr,
+    probation: nullable(obj({ version: str, from: str, starts: int, installed_at: str })),
+    rolled_back: nullable(obj({ version: str, to: str, starts: int, at: str })),
   }),
 )
-
-function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
-  return {
-    path: c.path,
-    installMethod: c.install_method,
-    lastUpdate: c.last_update,
-    cliVersion: c.cli_version,
-    state: c.state,
-    detail: c.detail,
-    lastLine: c.last_line,
-    pid: c.pid,
-    startedAt: c.started_at,
-    restarts: c.restarts,
-    lastExit: c.last_exit,
-    server: {
-      version: c.server.version,
-      environmentId: c.server.environment_id,
-      spawnMode: c.server.spawn_mode,
-      maxSessions: c.server.max_sessions,
-    },
-    sessions: c.sessions.map((s) => ({
-      pid: s.pid,
-      transcriptId: s.transcript_id,
-      remoteId: s.remote_id,
-      cwd: s.cwd,
-      name: s.name,
-      kind: s.kind,
-      entrypoint: s.entrypoint,
-      version: s.version,
-      startedAt: s.started_at,
-      status: s.status,
-      lastActivityAt: s.last_activity_at,
-      alive: s.alive,
-    })),
-    credentials: {
-      present: c.credentials.present,
-      store: c.credentials.store,
-      subscriptionType: c.credentials.subscription_type,
-      rateLimitTier: c.credentials.rate_limit_tier,
-      expiresAt: c.credentials.expires_at,
-      refreshExpiresAt: c.credentials.refresh_expires_at,
-      scopes: c.credentials.scopes,
-    },
-    settings: { model: c.settings.model, effortLevel: c.settings.effort_level },
-    user: c.user,
-    home: c.home,
-    workdir: c.workdir,
-    workdirVia: c.workdir_via,
-    log: c.log,
-    reportedAt: c.reported_at,
-  }
-}
-
-/** Decode a status document; throws on a body that is not one. */
-export function agentStatus(body: unknown): AgentStatus {
-  const s = decode(shape, body)
-  return {
-    version: s.version,
-    hostname: s.hostname,
-    os: s.os,
-    osName: s.os_name,
-    osVersion: s.os_version,
-    arch: s.arch,
-    cpu: s.cpu,
-    memoryBytes: s.memory_bytes,
-    uptimeSecs: s.uptime_secs,
-    osUptimeSecs: s.os_uptime_secs,
-    bootedAt: s.booted_at,
-    awakeHold: s.awake_hold,
-    holdError: s.hold_error,
-    updateAvailable: s.update_available,
-    restartPending: s.restart_pending,
-    lastUpdateCheck: s.last_update_check,
-    lastUpdateResult: s.last_update_result,
-    policy: { awakeHold: s.policy.awake_hold, claudeRemoteControl: s.policy.claude_remote_control },
-    claude: s.claude === null ? null : summaryOf(s.claude),
-    trayReporting: s.tray.reporting,
-    link:
-      s.controller === null
-        ? null
-        : {
-            state: s.controller.state,
-            connected: s.controller.connected,
-            fingerprint: s.controller.fingerprint,
-            controllerFingerprint: s.controller.controller_fingerprint,
-            rotated: s.controller.rotated,
-            error: s.controller.error,
-            tunnel:
-              s.controller.tunnel === null
-                ? null
-                : {
-                    endpoint: s.controller.tunnel.endpoint,
-                    address: s.controller.tunnel.address,
-                    lastHandshakeSecs: s.controller.tunnel.last_handshake_secs,
-                    rxBytes: s.controller.tunnel.rx_bytes,
-                    txBytes: s.controller.tunnel.tx_bytes,
-                    error: s.controller.tunnel.error,
-                  },
-          },
-    probation:
-      s.probation === null
-        ? null
-        : {
-            version: s.probation.version,
-            from: s.probation.from,
-            starts: s.probation.starts,
-            installedAt: s.probation.installed_at,
-          },
-    rolledBack: s.rolled_back,
-  }
-}
-
-function summaryOf(s: ReturnType<typeof summary>): NodeClaudeSummary {
-  return {
-    state: s.state,
-    detail: s.detail,
-    cliVersion: s.cli_version,
-    serverVersion: s.server_version,
-    sessions: s.sessions,
-    startedAt: s.started_at,
-    signedIn: s.signed_in,
-  }
-}
-
-/** Decode a Claude summary (`nodes.list`'s `claude`); null for a null one. */
-export function nodeClaudeSummary(body: unknown): NodeClaudeSummary | null {
-  if (body === null || body === undefined) return null
-  return summaryOf(decode(summary, body))
-}
-
-/**
- * Decode the machine's full Claude report (`nodes.claude`, the controller's
- * `claude.status`). Null when its session has not reported lately.
- */
-export function nodeClaudeReport(body: unknown): NodeClaude | null {
-  if (body === null) return null
-  return nodeClaude(decode(claude, body))
-}
 
 // ── telemetry ───────────────────────────────────────────────────────────────
 //
 // What the machine is and how it is doing, sampled by the agent every 15 s
-// (agent/src/telemetry.rs). Every field the agent could not read is null or
-// an empty list, and `errors` says why, so a page draws a reason rather than
-// a dash. Decoded loosely on purpose: a field the document lacks is null.
+// (agent/src/telemetry/). Every field the agent could not read is null or an
+// empty list, and `errors` says why, so a page draws a reason rather than a
+// dash.
 
-export type NodeTelemetry = {
-  sampledAt: string
-  machine: {
-    manufacturer: string | null
-    model: string | null
-    chip: string | null
-    biosVendor: string | null
-    biosVersion: string | null
-    biosDate: string | null
-    boardManufacturer: string | null
-    boardProduct: string | null
-    /** "laptop" | "desktop" | "tower" | "mini" | "all-in-one" | "server" | "tablet". */
-    form: string | null
-    /** Apple's board target ("J516sAP"), which its version feed keys on; null elsewhere. */
-    target: string | null
-  }
-  os: { kernel: string | null; build: string | null; installedAt: string | null }
-  cpu: {
-    model: string | null
-    cores: number | null
-    threads: number | null
-    frequencyMhz: number | null
-    usagePct: number | null
-    load: [number, number, number] | null
-    temperatureC: number | null
-  }
-  memory: {
-    totalBytes: number | null
-    usedBytes: number | null
-    availableBytes: number | null
-    /** File cache the OS would drop under pressure. */
-    cachedBytes: number | null
-    /** Held compressed rather than swapped. */
-    compressedBytes: number | null
-    /** Windows: commit charge and its limit. */
-    committedBytes: number | null
-    commitLimitBytes: number | null
-    swapTotalBytes: number | null
-    swapUsedBytes: number | null
-    /** Slots on the board (0 = soldered) and the firmware's ceiling. */
-    slots: number | null
-    maxCapacityBytes: number | null
-    modules: NodeMemoryModule[]
-  }
-  disks: {
-    mount: string
-    name: string | null
-    fs: string | null
-    totalBytes: number | null
-    usedBytes: number | null
-    freeBytes: number | null
-    kind: string | null
-  }[]
-  gpus: {
-    name: string
-    vendor: string | null
-    /** The OS's driver version ("32.0.31041.1004" on Windows). */
-    driver: string | null
-    /** The vendor's own name for it: "Adrenalin 25.9.2", "GeForce 566.14". */
-    driverBrand: string | null
-    /** ISO date the driver package was built. */
-    driverDate: string | null
-    vramTotalBytes: number | null
-    vramUsedBytes: number | null
-    usagePct: number | null
-    temperatureC: number | null
-    powerW: number | null
-  }[]
-  temperatures: { label: string; celsius: number }[]
-  network: {
-    interface: string
-    rxBytes: number | null
-    txBytes: number | null
-    rxBps: number | null
-    txBps: number | null
-  }[]
-  battery: {
-    percent: number | null
-    charging: boolean | null
-    healthPct: number | null
-    cycles: number | null
-    /** Apple's word: "Normal", "Service Recommended". */
-    condition: string | null
-  } | null
-  /** The physical drives; serials only in the full document. */
-  drives: NodeDrive[]
-  /** The heaviest by memory; empty in the summary. */
-  processes: NodeProcess[]
-  processCount: number | null
-  /** Should be running and are not; empty in the summary. */
-  services: NodeService[]
-  serviceCount: number | null
-  /** The Chromium-based browsers installed; paths only in the full document. */
-  browsers: NodeBrowser[]
-  /** Null until the agent's first search, and in the summary. */
-  updates: NodeUpdates | null
-  /** What is installed; empty in the summary. */
-  apps: NodeApp[]
-  appCount: number | null
-  errors: string[]
-}
-
-export type NodeApp = {
-  name: string
-  version: string | null
-  publisher: string | null
-  /** "YYYY-MM-DD" where the OS records it. */
-  installedAt: string | null
-  sizeBytes: number | null
-  /** "app" | "game" | "launcher" | "runtime" | "driver" */
-  kind: string
-  /** "registry" | "store" | "steam" | "epic" | "applications" | "app-store" | "homebrew" | "setapp" | "apple" */
-  source: string | null
-  /** Install location; only in the full document. */
-  path: string | null
-}
-
-type NodeMemoryModule = {
-  locator: string | null
-  sizeBytes: number | null
-  speedMts: number | null
-  kind: string | null
-  manufacturer: string | null
-  partNumber: string | null
-}
-
-export type NodeDrive = {
-  name: string
-  serial: string | null
-  firmware: string | null
-  sizeBytes: number | null
-  bus: string | null
-  kind: string | null
-  /** "healthy" | "warning" | "unhealthy" | "verified" | "failing" | "not supported". */
-  health: string | null
-  temperatureC: number | null
-  powerOnHours: number | null
-  wearPct: number | null
-  readErrors: number | null
-  writeErrors: number | null
-  removable: boolean | null
-  volumes: string[]
-}
-
-type NodeProcess = {
-  name: string
-  pid: number
-  memoryBytes: number | null
-  /** Percent of one core. */
-  cpuPct: number | null
-}
-
-export type NodeBrowser = {
-  name: string
-  /** "chrome" | "edge" | "brave" | "arc" | "chromium" | "vivaldi" | "opera". */
-  kind: string
-  version: string | null
-  channel: string | null
-  path: string | null
-  running: boolean
-  defaultBrowser: boolean
-}
-
-type NodeService = {
-  name: string
-  display: string | null
-  state: string
-  exitCode: number | null
-}
-
-type NodeUpdates = {
-  checkedAt: string | null
-  pending: {
-    title: string
-    id: string | null
-    sizeBytes: number | null
-    severity: string | null
-    restart: boolean | null
-  }[]
-  installed: { title: string; at: string | null }[]
-  rebootPending: boolean | null
-  error: string | null
-}
-
-const nbool = optional(nullable(bool), null)
-
-const telemetryShape = reads<Telemetry>()(
+const machine = reads<Machine>()(
   obj({
-    sampled_at: optional(str, ''),
-    machine: optional(
-      obj({
-        manufacturer: nstr,
-        model: nstr,
-        chip: nstr,
-        bios_vendor: nstr,
-        bios_version: nstr,
-        bios_date: nstr,
-        board_manufacturer: nstr,
-        board_product: nstr,
-        form: nstr,
-        target: nstr,
-      }),
-      {
-        manufacturer: null,
-        model: null,
-        chip: null,
-        bios_vendor: null,
-        bios_version: null,
-        bios_date: null,
-        board_manufacturer: null,
-        board_product: null,
-        form: null,
-        target: null,
-      },
-    ),
-    os: optional(obj({ kernel: nstr, build: nstr, installed_at: nstr }), {
-      kernel: null,
-      build: null,
-      installed_at: null,
-    }),
-    cpu: optional(
-      obj({
-        model: nstr,
-        cores: nint,
-        threads: nint,
-        frequency_mhz: nnum,
-        usage_pct: nnum,
-        load: optional(nullable(arrayOf(num)), null),
-        temperature_c: nnum,
-      }),
-      {
-        model: null,
-        cores: null,
-        threads: null,
-        frequency_mhz: null,
-        usage_pct: null,
-        load: null,
-        temperature_c: null,
-      },
-    ),
-    memory: optional(
-      obj({
-        total_bytes: nnum,
-        used_bytes: nnum,
-        available_bytes: nnum,
-        cached_bytes: nnum,
-        compressed_bytes: nnum,
-        committed_bytes: nnum,
-        commit_limit_bytes: nnum,
-        swap_total_bytes: nnum,
-        swap_used_bytes: nnum,
-        slots: nint,
-        max_capacity_bytes: nnum,
-        modules: optional(
-          arrayOf(
-            obj({
-              locator: nstr,
-              size_bytes: nnum,
-              speed_mts: nnum,
-              kind: nstr,
-              manufacturer: nstr,
-              part_number: nstr,
-            }),
-          ),
-          [],
-        ),
-      }),
-      {
-        total_bytes: null,
-        used_bytes: null,
-        available_bytes: null,
-        cached_bytes: null,
-        compressed_bytes: null,
-        committed_bytes: null,
-        commit_limit_bytes: null,
-        swap_total_bytes: null,
-        swap_used_bytes: null,
-        slots: null,
-        max_capacity_bytes: null,
-        modules: [],
-      },
-    ),
-    disks: optional(
-      arrayOf(
-        obj({
-          mount: optional(str, ''),
-          name: nstr,
-          fs: nstr,
-          total_bytes: nnum,
-          used_bytes: nnum,
-          free_bytes: nnum,
-          kind: nstr,
-        }),
-      ),
-      [],
-    ),
-    gpus: optional(
-      arrayOf(
-        obj({
-          name: optional(str, ''),
-          vendor: nstr,
-          driver: nstr,
-          driver_brand: nstr,
-          driver_date: nstr,
-          vram_total_bytes: nnum,
-          vram_used_bytes: nnum,
-          usage_pct: nnum,
-          temperature_c: nnum,
-          power_w: nnum,
-        }),
-      ),
-      [],
-    ),
-    temperatures: optional(arrayOf(obj({ label: optional(str, ''), celsius: num })), []),
-    network: optional(
-      arrayOf(
-        obj({
-          interface: optional(str, ''),
-          rx_bytes: nnum,
-          tx_bytes: nnum,
-          rx_bps: nnum,
-          tx_bps: nnum,
-        }),
-      ),
-      [],
-    ),
-    battery: optional(
-      nullable(
-        obj({ percent: nnum, charging: nbool, health_pct: nnum, cycles: nnum, condition: nstr }),
-      ),
-      null,
-    ),
-    drives: optional(
-      arrayOf(
-        obj({
-          name: optional(str, ''),
-          serial: nstr,
-          firmware: nstr,
-          size_bytes: nnum,
-          bus: nstr,
-          kind: nstr,
-          health: nstr,
-          temperature_c: nnum,
-          power_on_hours: nnum,
-          wear_pct: nnum,
-          read_errors: nnum,
-          write_errors: nnum,
-          removable: nbool,
-          volumes: optional(arrayOf(str), []),
-        }),
-      ),
-      [],
-    ),
-    processes: optional(
-      arrayOf(
-        obj({
-          name: optional(str, ''),
-          pid: optional(int, 0),
-          memory_bytes: nnum,
-          cpu_pct: nnum,
-        }),
-      ),
-      [],
-    ),
-    process_count: nint,
-    services: optional(
-      arrayOf(
-        obj({
-          name: optional(str, ''),
-          display: nstr,
-          state: optional(str, ''),
-          exit_code: nnum,
-        }),
-      ),
-      [],
-    ),
-    service_count: nint,
-    browsers: optional(
-      arrayOf(
-        obj({
-          name: optional(str, ''),
-          kind: optional(str, ''),
-          version: nstr,
-          channel: nstr,
-          path: nstr,
-          running: optional(bool, false),
-          default_browser: optional(bool, false),
-        }),
-      ),
-      [],
-    ),
-    updates: optional(
-      nullable(
-        obj({
-          checked_at: nstr,
-          pending: optional(
-            arrayOf(
-              obj({
-                title: optional(str, ''),
-                id: nstr,
-                size_bytes: nnum,
-                severity: nstr,
-                restart: nbool,
-              }),
-            ),
-            [],
-          ),
-          installed: optional(arrayOf(obj({ title: optional(str, ''), at: nstr })), []),
-          reboot_pending: nbool,
-          error: nstr,
-        }),
-      ),
-      null,
-    ),
-    apps: optional(
-      arrayOf(
-        obj({
-          name: optional(str, ''),
-          version: nstr,
-          publisher: nstr,
-          installed_at: nstr,
-          size_bytes: nnum,
-          kind: optional(str, 'app'),
-          source: nstr,
-          path: nstr,
-        }),
-      ),
-      [],
-    ),
-    app_count: nnum,
-    errors: optional(arrayOf(str), []),
+    manufacturer: nstr,
+    model: nstr,
+    chip: nstr,
+    bios_vendor: nstr,
+    bios_version: nstr,
+    bios_date: nstr,
+    board_manufacturer: nstr,
+    board_product: nstr,
+    form: nstr,
+    target: nstr,
   }),
 )
 
-function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
-  const load = t.cpu.load
-  return {
-    sampledAt: t.sampled_at,
-    machine: {
-      manufacturer: t.machine.manufacturer,
-      model: t.machine.model,
-      chip: t.machine.chip,
-      biosVendor: t.machine.bios_vendor,
-      biosVersion: t.machine.bios_version,
-      biosDate: t.machine.bios_date,
-      boardManufacturer: t.machine.board_manufacturer,
-      boardProduct: t.machine.board_product,
-      form: t.machine.form,
-      target: t.machine.target,
-    },
-    os: { kernel: t.os.kernel, build: t.os.build, installedAt: t.os.installed_at },
-    cpu: {
-      model: t.cpu.model,
-      cores: t.cpu.cores,
-      threads: t.cpu.threads,
-      frequencyMhz: t.cpu.frequency_mhz,
-      usagePct: t.cpu.usage_pct,
-      load: load !== null && load.length === 3 ? [load[0] ?? 0, load[1] ?? 0, load[2] ?? 0] : null,
-      temperatureC: t.cpu.temperature_c,
-    },
-    memory: {
-      totalBytes: t.memory.total_bytes,
-      usedBytes: t.memory.used_bytes,
-      availableBytes: t.memory.available_bytes,
-      cachedBytes: t.memory.cached_bytes,
-      compressedBytes: t.memory.compressed_bytes,
-      committedBytes: t.memory.committed_bytes,
-      commitLimitBytes: t.memory.commit_limit_bytes,
-      swapTotalBytes: t.memory.swap_total_bytes,
-      swapUsedBytes: t.memory.swap_used_bytes,
-      slots: t.memory.slots,
-      maxCapacityBytes: t.memory.max_capacity_bytes,
-      modules: t.memory.modules.map((m) => ({
-        locator: m.locator,
-        sizeBytes: m.size_bytes,
-        speedMts: m.speed_mts,
-        kind: m.kind,
-        manufacturer: m.manufacturer,
-        partNumber: m.part_number,
-      })),
-    },
-    disks: t.disks.map((d) => ({
-      mount: d.mount,
-      name: d.name,
-      fs: d.fs,
-      totalBytes: d.total_bytes,
-      usedBytes: d.used_bytes,
-      freeBytes: d.free_bytes,
-      kind: d.kind,
-    })),
-    gpus: t.gpus.map((g) => ({
-      name: g.name,
-      vendor: g.vendor,
-      driver: g.driver,
-      driverBrand: g.driver_brand,
-      driverDate: g.driver_date,
-      vramTotalBytes: g.vram_total_bytes,
-      vramUsedBytes: g.vram_used_bytes,
-      usagePct: g.usage_pct,
-      temperatureC: g.temperature_c,
-      powerW: g.power_w,
-    })),
-    temperatures: t.temperatures.map((x) => ({ label: x.label, celsius: x.celsius })),
-    network: t.network.map((n) => ({
-      interface: n.interface,
-      rxBytes: n.rx_bytes,
-      txBytes: n.tx_bytes,
-      rxBps: n.rx_bps,
-      txBps: n.tx_bps,
-    })),
-    battery:
-      t.battery === null
-        ? null
-        : {
-            percent: t.battery.percent,
-            charging: t.battery.charging,
-            healthPct: t.battery.health_pct,
-            cycles: t.battery.cycles,
-            condition: t.battery.condition,
-          },
-    drives: t.drives.map((d) => ({
-      name: d.name,
-      serial: d.serial,
-      firmware: d.firmware,
-      sizeBytes: d.size_bytes,
-      bus: d.bus,
-      kind: d.kind,
-      health: d.health,
-      temperatureC: d.temperature_c,
-      powerOnHours: d.power_on_hours,
-      wearPct: d.wear_pct,
-      readErrors: d.read_errors,
-      writeErrors: d.write_errors,
-      removable: d.removable,
-      volumes: d.volumes,
-    })),
-    processes: t.processes.map((p) => ({
-      name: p.name,
-      pid: p.pid,
-      memoryBytes: p.memory_bytes,
-      cpuPct: p.cpu_pct,
-    })),
-    processCount: t.process_count,
-    services: t.services.map((s) => ({
-      name: s.name,
-      display: s.display,
-      state: s.state,
-      exitCode: s.exit_code,
-    })),
-    serviceCount: t.service_count,
-    browsers: t.browsers.map((b) => ({
-      name: b.name,
-      kind: b.kind,
-      version: b.version,
-      channel: b.channel,
-      path: b.path,
-      running: b.running,
-      defaultBrowser: b.default_browser,
-    })),
-    updates:
-      t.updates === null
-        ? null
-        : {
-            checkedAt: t.updates.checked_at,
-            pending: t.updates.pending.map((u) => ({
-              title: u.title,
-              id: u.id,
-              sizeBytes: u.size_bytes,
-              severity: u.severity,
-              restart: u.restart,
-            })),
-            installed: t.updates.installed.map((i) => ({ title: i.title, at: i.at })),
-            rebootPending: t.updates.reboot_pending,
-            error: t.updates.error,
-          },
-    apps: t.apps.map((a) => ({
-      name: a.name,
-      version: a.version,
-      publisher: a.publisher,
-      installedAt: a.installed_at,
-      sizeBytes: a.size_bytes,
-      kind: a.kind,
-      source: a.source,
-      path: a.path,
-    })),
-    appCount: t.app_count,
-    errors: t.errors,
-  }
-}
+const memoryModule = reads<MemoryModule>()(
+  obj({
+    locator: nstr,
+    size_bytes: nnum,
+    speed_mts: nnum,
+    kind: nstr,
+    manufacturer: nstr,
+    part_number: nstr,
+  }),
+)
+
+const disk = reads<Disk>()(
+  obj({
+    mount: str,
+    name: nstr,
+    fs: nstr,
+    total_bytes: nnum,
+    used_bytes: nnum,
+    free_bytes: nnum,
+    kind: nstr,
+  }),
+)
+
+const drive = reads<Drive>()(
+  obj({
+    name: str,
+    serial: nstr,
+    firmware: nstr,
+    size_bytes: nnum,
+    bus: nstr,
+    kind: nstr,
+    health: nstr,
+    temperature_c: nnum,
+    power_on_hours: nnum,
+    wear_pct: nnum,
+    read_errors: nnum,
+    write_errors: nnum,
+    removable: nbool,
+    volumes: arrayOf(str),
+  }),
+)
+
+const gpu = reads<Gpu>()(
+  obj({
+    name: str,
+    vendor: nstr,
+    driver: nstr,
+    driver_brand: nstr,
+    driver_date: nstr,
+    vram_total_bytes: nnum,
+    vram_used_bytes: nnum,
+    usage_pct: nnum,
+    temperature_c: nnum,
+    power_w: nnum,
+  }),
+)
+
+const network = reads<Network>()(
+  obj({ interface: str, rx_bytes: nnum, tx_bytes: nnum, rx_bps: nnum, tx_bps: nnum }),
+)
+
+const battery = reads<Battery>()(
+  obj({ percent: nnum, charging: nbool, health_pct: nnum, cycles: nnum, condition: nstr }),
+)
+
+const browser = reads<Browser>()(
+  obj({
+    name: str,
+    kind: str,
+    version: nstr,
+    channel: nstr,
+    path: nstr,
+    running: bool,
+    default_browser: bool,
+  }),
+)
+
+const updates = reads<Updates>()(
+  obj({
+    checked_at: nstr,
+    pending: arrayOf(
+      obj({ title: str, id: nstr, size_bytes: nnum, severity: nstr, restart: nbool }),
+    ),
+    installed: arrayOf(obj({ title: str, at: nstr })),
+    reboot_pending: nbool,
+    error: nstr,
+  }),
+)
+
+const app = reads<App>()(
+  obj({
+    name: str,
+    version: nstr,
+    publisher: nstr,
+    installed_at: nstr,
+    size_bytes: nnum,
+    kind: str,
+    source: nstr,
+    path: nstr,
+  }),
+)
 
 /**
  * A telemetry document: the full one (`nodes.telemetry`, the controller's
  * own `telemetry.get`) with drive serials, the heaviest processes, the
- * services that are down and the OS's updates, or the summary `nodes.get`
- * carries without them. Null for a null one.
+ * services that are down and the OS's updates, or the open one `nodes.get`
+ * carries without them.
  */
-export function nodeTelemetry(body: unknown): NodeTelemetry | null {
-  if (typeof body !== 'object' || body === null) return null
-  return telemetryOf(decode(telemetryShape, body))
-}
+export const telemetry = reads<Telemetry>()(
+  obj({
+    sampled_at: str,
+    machine,
+    os: obj({ kernel: nstr, build: nstr, installed_at: nstr }),
+    cpu: obj({
+      model: nstr,
+      cores: nint,
+      threads: nint,
+      frequency_mhz: nnum,
+      usage_pct: nnum,
+      load: nullable(triple),
+      temperature_c: nnum,
+    }),
+    memory: obj({
+      total_bytes: nnum,
+      used_bytes: nnum,
+      available_bytes: nnum,
+      cached_bytes: nnum,
+      compressed_bytes: nnum,
+      committed_bytes: nnum,
+      commit_limit_bytes: nnum,
+      swap_total_bytes: nnum,
+      swap_used_bytes: nnum,
+      slots: nint,
+      max_capacity_bytes: nnum,
+      modules: arrayOf(memoryModule),
+    }),
+    disks: arrayOf(disk),
+    drives: arrayOf(drive),
+    gpus: arrayOf(gpu),
+    temperatures: arrayOf(obj({ label: str, celsius: num })),
+    network: arrayOf(network),
+    battery: nullable(battery),
+    processes: arrayOf(obj({ name: str, pid: int, memory_bytes: nnum, cpu_pct: nnum })),
+    process_count: nint,
+    services: arrayOf(obj({ name: str, display: nstr, state: str, exit_code: nint })),
+    service_count: nint,
+    browsers: arrayOf(browser),
+    apps: arrayOf(app),
+    app_count: nint,
+    updates: nullable(updates),
+    errors: arrayOf(str),
+  }),
+)

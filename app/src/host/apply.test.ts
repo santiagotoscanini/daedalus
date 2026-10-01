@@ -37,7 +37,7 @@ describe('the Apply status', () => {
   let follow: unknown
 
   const ctx = {
-    controller: { rootFollow: async () => follow },
+    controller: { call: async () => follow },
   } as unknown as Pick<Ctx, 'controller'>
 
   beforeEach(async () => {

@@ -40,7 +40,7 @@ export function MachineBoard({ f }: { f: HostFacts }) {
             {t.os.kernel === null
               ? 'kernel unread'
               : `${node.os === 'macos' ? 'Darwin' : 'NT'} ${t.os.kernel}`}
-            , up {duration(status.osUptimeSecs)}.
+            , up {duration(status.os_uptime_secs)}.
           </span>
         </div>
       </div>
@@ -59,16 +59,16 @@ export function RunningBoard({ f }: { f: HostFacts }) {
     <Board title="Running" icon="▣" span={4}>
       <Facts
         rows={[
-          { k: 'Uptime', v: duration(status.osUptimeSecs) },
+          { k: 'Uptime', v: duration(status.os_uptime_secs) },
           {
             k: 'Booted',
-            v: status.bootedAt === null ? DASH : <Ago at={status.bootedAt} />,
+            v: status.booted_at === null ? DASH : <Ago at={status.booted_at} />,
           },
           {
             k: 'Kernel',
             v: t.os.kernel === null ? DASH : <span className={MONO}>{t.os.kernel}</span>,
           },
-          { k: 'Processes', v: num(t.processCount) },
+          { k: 'Processes', v: num(t.process_count) },
           {
             k: node.os === 'macos' ? 'Jobs failing' : 'Services down',
             v: !d.full ? (
@@ -117,8 +117,8 @@ export function ServicesBoard({ f }: { f: HostFacts }) {
       ) : t.services.length === 0 ? (
         <p className={EMPTY}>
           {node.os === 'macos'
-            ? `Nothing outside Apple's own launchd jobs exited with an error${t.serviceCount === null ? '' : `, of ${num(t.serviceCount)} loaded`}.`
-            : `Every Automatic service is running or stopped cleanly${t.serviceCount === null ? '' : `, of ${num(t.serviceCount)} installed`}.`}
+            ? `Nothing outside Apple's own launchd jobs exited with an error${t.service_count === null ? '' : `, of ${num(t.service_count)} loaded`}.`
+            : `Every Automatic service is running or stopped cleanly${t.service_count === null ? '' : `, of ${num(t.service_count)} installed`}.`}
         </p>
       ) : (
         <ul className={LIST}>
@@ -128,7 +128,7 @@ export function ServicesBoard({ f }: { f: HostFacts }) {
               <span className={cn(ROW_MAIN, MONO)}>{s.name}</span>
               <span className={ROW_SIDE}>
                 {s.display ?? ''}
-                {s.exitCode !== null && ` · exit ${String(s.exitCode)}`}
+                {s.exit_code !== null && ` · exit ${String(s.exit_code)}`}
               </span>
             </li>
           ))}
@@ -162,7 +162,7 @@ export function NetworkBoard({ f }: { f: HostFacts }) {
             <li key={n.interface} className={`${ROW} flex-wrap`}>
               <span className={cn(ROW_MAIN, MONO)}>{n.interface}</span>
               <span className={`${ROW_SIDE} tabular-nums`}>
-                ↓ {rate(n.rxBps)} · ↑ {rate(n.txBps)}
+                ↓ {rate(n.rx_bps)} · ↑ {rate(n.tx_bps)}
               </span>
             </li>
           ))}
@@ -170,8 +170,8 @@ export function NetworkBoard({ f }: { f: HostFacts }) {
       )}
       <p className={FOOT}>
         Bytes per second since the previous sample, on the interfaces that are up. Since boot:{' '}
-        {t.network.reduce((s, n) => s + (n.rxBytes ?? 0), 0) > 0
-          ? `${num(Math.round(t.network.reduce((s, n) => s + (n.rxBytes ?? 0), 0) / 1e9))} GB in, ${num(Math.round(t.network.reduce((s, n) => s + (n.txBytes ?? 0), 0) / 1e9))} GB out`
+        {t.network.reduce((s, n) => s + (n.rx_bytes ?? 0), 0) > 0
+          ? `${num(Math.round(t.network.reduce((s, n) => s + (n.rx_bytes ?? 0), 0) / 1e9))} GB in, ${num(Math.round(t.network.reduce((s, n) => s + (n.tx_bytes ?? 0), 0) / 1e9))} GB out`
           : DASH}
         .
       </p>
@@ -248,10 +248,10 @@ export function AgentBoard({ f }: { f: HostFacts }) {
       icon="◎"
       span={12}
       aside={
-        status.restartPending ? (
+        status.restart_pending ? (
           <Chip tone="ok">installed, restarting</Chip>
-        ) : status.updateAvailable !== null ? (
-          <Chip tone="warn">{status.updateAvailable}</Chip>
+        ) : status.update_available !== null ? (
+          <Chip tone="warn">{status.update_available}</Chip>
         ) : (
           <span className={MONO}>{status.version}</span>
         )
@@ -262,20 +262,20 @@ export function AgentBoard({ f }: { f: HostFacts }) {
           { k: 'Running', v: <span className={MONO}>{status.version}</span> },
           {
             k: 'Updates',
-            v: status.restartPending
+            v: status.restart_pending
               ? 'installed, restarting'
-              : (status.updateAvailable ?? status.lastUpdateResult ?? 'not checked yet'),
+              : (status.update_available ?? status.last_update_result ?? 'not checked yet'),
           },
           {
             k: 'Box',
             v: `approved · ${linkWords(node)}`,
           },
-          { k: 'Tray', v: status.trayReporting ? 'reporting' : 'not reporting' },
+          { k: 'Tray', v: status.tray.reporting ? 'reporting' : 'not reporting' },
           {
             k: 'Claude',
             v:
               status.claude != null
-                ? `${status.claude.state}${status.claude.serverVersion !== null ? ` ${status.claude.serverVersion}` : ''} · ${String(status.claude.sessions)} session${status.claude.sessions === 1 ? '' : 's'}`
+                ? `${status.claude.state}${status.claude.server_version !== null ? ` ${status.claude.server_version}` : ''} · ${String(status.claude.sessions)} session${status.claude.sessions === 1 ? '' : 's'}`
                 : DASH,
           },
         ]}

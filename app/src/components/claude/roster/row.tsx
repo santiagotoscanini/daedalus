@@ -220,8 +220,8 @@ function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl 
       {/* The id claude.ai shows, which is NOT the transcript uuid beside
           it — the thing you match a row here against a session over there
           by. */}
-      {row.live?.remoteId != null && (
-        <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{row.live.remoteId}</span>
+      {row.live?.remote_id != null && (
+        <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{row.live.remote_id}</span>
       )}
       {shownId !== null && <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{shownId}</span>}
       {/* No button, and the reason in its place. A session the Remote

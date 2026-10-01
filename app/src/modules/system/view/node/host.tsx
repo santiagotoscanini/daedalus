@@ -70,13 +70,13 @@ function hostFacts(d: NodeSystemData) {
   if (t === null || status === null) return null
   const mark = OS_MARK[node.os]
   const busiest = [...t.processes]
-    .filter((p) => p.cpuPct !== null && p.cpuPct > 0)
-    .sort((a, b) => (b.cpuPct ?? 0) - (a.cpuPct ?? 0))
+    .filter((p) => p.cpu_pct !== null && p.cpu_pct > 0)
+    .sort((a, b) => (b.cpu_pct ?? 0) - (a.cpu_pct ?? 0))
     .slice(0, 6)
   const threads = t.cpu.threads ?? t.cpu.cores
   const machinePart = partMatching(
     'machine',
-    t.machine.boardProduct ?? t.machine.model,
+    t.machine.board_product ?? t.machine.model,
     node.policy.hardware?.finish,
   )
   return { d, node, t, status, providers, mark, busiest, threads, machinePart }
@@ -100,7 +100,7 @@ function LoadBoard({ f }: { f: HostFacts }) {
       <Trend values={d.cpuSpark} tone="accent" height={90} empty="no history yet" />
       <Measures
         items={[
-          { k: 'cpu now', v: pct(t.cpu.usagePct, 1) },
+          { k: 'cpu now', v: pct(t.cpu.usage_pct, 1) },
           ...(t.cpu.load !== null
             ? [
                 { k: 'load 1m', v: num(t.cpu.load[0], 2) },
@@ -108,12 +108,12 @@ function LoadBoard({ f }: { f: HostFacts }) {
                 { k: 'load 15m', v: num(t.cpu.load[2], 2) },
               ]
             : [
-                { k: 'processes', v: num(t.processCount) },
+                { k: 'processes', v: num(t.process_count) },
                 {
                   k: 'clock',
-                  v: t.cpu.frequencyMhz === null ? DASH : `${num(t.cpu.frequencyMhz)} MHz`,
+                  v: t.cpu.frequency_mhz === null ? DASH : `${num(t.cpu.frequency_mhz)} MHz`,
                 },
-                { k: 'package', v: temp(t.cpu.temperatureC) },
+                { k: 'package', v: temp(t.cpu.temperature_c) },
               ]),
         ]}
       />
@@ -140,8 +140,8 @@ function BusiestBoard({ f }: { f: HostFacts }) {
         <BarList
           items={busiest.map((p) => ({
             label: p.name,
-            value: p.cpuPct ?? 0,
-            display: pct(p.cpuPct, 0),
+            value: p.cpu_pct ?? 0,
+            display: pct(p.cpu_pct, 0),
           }))}
           tone="accent"
           empty="everything idle"
@@ -227,7 +227,7 @@ function BatteryBoard({ f }: { f: HostFacts }) {
         <Measures
           items={[
             { k: 'charge', v: pct(t.battery.percent, 0) },
-            { k: 'health', v: pct(t.battery.healthPct, 0) },
+            { k: 'health', v: pct(t.battery.health_pct, 0) },
             {
               k: 'cycles',
               v: t.battery.cycles === null ? DASH : num(t.battery.cycles),

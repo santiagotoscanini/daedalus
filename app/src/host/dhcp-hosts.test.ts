@@ -32,8 +32,12 @@ describe('handing the lines over', () => {
     let outcome = 'done'
     const ctx = {
       controller: {
-        rootRun: async (...args: unknown[]) => {
-          asked.push(args)
+        call: async (
+          _: string,
+          p: { verb: string; selectors: object; payload?: string },
+          o: { waitMs: number },
+        ) => {
+          asked.push([p.verb, p.selectors, o.waitMs, p.payload])
           return { run: 'r', verb: 'nodes-dhcp', outcome, detail: 'a line is not', verbs: [] }
         },
       },

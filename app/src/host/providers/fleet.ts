@@ -3,7 +3,7 @@ import { DEFAULT_PORT, type ProviderKind } from '../../lib/providers/kinds'
 import { BOX_PROVIDERS_KEY, isBoxProviderPolicy } from '../../lib/providers/policy'
 import { listNodes, type NodeRow, netNameOf, providersOf } from '../../lib/repo/nodes'
 import { networkFacts } from '../contract/domains/network'
-import type { NodeProvidersAnswer } from '../controller/wire'
+import type { NodeProvidersOk } from '../controller/generated'
 import { nodeReading, type ProviderReading, readSubgen } from './read'
 
 // Every provider on the network, as one list: this box's own, and each
@@ -111,12 +111,12 @@ export async function readFleetProviders(
 ): Promise<{ provider: FleetProvider; reading: ProviderReading }[]> {
   const providers = await fleetProviders(ctx)
   const now = Date.now()
-  const answers = new Map<string, Promise<NodeProvidersAnswer | Error>>()
+  const answers = new Map<string, Promise<NodeProvidersOk | Error>>()
   const answerOf = (machine: string) => {
     let a = answers.get(machine)
     if (a === undefined) {
       a = ctx.controller
-        .nodesProviders(machine)
+        .call('nodes.providers', { id: machine })
         .catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
       answers.set(machine, a)
     }

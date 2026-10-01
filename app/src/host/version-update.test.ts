@@ -16,9 +16,9 @@ let follow: unknown
 
 const ctx = {
   controller: {
-    rootFollow: async () => follow,
-    rootStart: async (...args: unknown[]) => {
-      started.push(args)
+    call: async (m: string, p: { verb: string; selectors: object; payload?: string }) => {
+      if (m === 'root.follow') return follow
+      started.push([p.verb, p.selectors, p.payload])
       return { run: 'r1', verb: 'version-update', outcome: null, detail: '', verbs: [] }
     },
   },
