@@ -24,9 +24,11 @@
 //!   is binary on disk) for which one opens `http`; then every `.app` in
 //!   the same folders for the installed applications (apps.rs).
 //! - SAMPLED (every 15 s): the Mach calls, `sysctl` for memory and swap,
-//!   `vm_stat`, `df` + `mount`, `ioreg` for the GPU, `powermetrics`,
-//!   `route` + `netstat`, `pmset`, and `ps` for the heaviest processes;
-//!   every `SLOW_EVERY` samples also `diskutil info /` for the root
+//!   `vm_stat`, `df` + `mount`, `route` + `netstat`, `pmset`, and `ps` for
+//!   the heaviest processes; every `GPU_EVERY` samples `ioreg` for the GPU
+//!   and `powermetrics` for the die temperatures and power (the heaviest
+//!   reads, which hold the last reading between); every `SLOW_EVERY` samples
+//!   also `diskutil info /` for the root
 //!   volume's name and `SPPowerDataType` for the battery's health.
 //! - UPDATES (hourly, on its own thread): `softwareupdate -l` for what is
 //!   pending and the install-history plist for what was installed.
@@ -107,6 +109,11 @@ const APPLICATIONS: &str = "/Applications";
 /// samples, not telemetry.rs's `SLOW_EVERY` duration.
 const SLOW_EVERY: u32 = 100;
 
+/// The GPU's usage and the die temperatures and power (`ioreg`,
+/// `powermetrics`, which samples for half a second) are read once per this
+/// many samples — a minute at 15 s — and the last reading stands between.
+const GPU_EVERY: u32 = 4;
+
 /// What the collector keeps between samples.
 #[derive(Default)]
 pub struct Collector {
@@ -120,6 +127,10 @@ pub struct Collector {
     battery_health: Option<BatteryHealth>,
     /// The root volume's name and kind, from `diskutil info /`.
     root_volume: (Option<String>, Option<String>),
+    /// Samples since the GPU and the temperatures were last read, and that
+    /// reading (`GPU_EVERY`).
+    gpu_age: Option<u32>,
+    gpu: Sample,
 }
 
 // ── the collector ───────────────────────────────────────────────────────────
@@ -278,7 +289,21 @@ impl Collect for Collector {
         self.sample_cpu(&mut s);
         self.sample_memory(&mut s);
         self.sample_disks(&mut s, refresh_slow);
-        self.sample_gpus(&mut s, apple_silicon);
+        let gpu_due = self.gpu_age.is_none_or(|n| n + 1 >= GPU_EVERY);
+        self.gpu_age = Some(if gpu_due {
+            0
+        } else {
+            self.gpu_age.unwrap_or(0) + 1
+        });
+        if gpu_due {
+            let mut g = Sample::default();
+            self.sample_gpus(&mut g, apple_silicon);
+            self.gpu = g;
+        }
+        s.gpu_usage.clone_from(&self.gpu.gpu_usage);
+        s.cpu_temperature_c = self.gpu.cpu_temperature_c;
+        s.temperatures.extend(self.gpu.temperatures.iter().cloned());
+        s.errors.extend(self.gpu.errors.iter().cloned());
         self.sample_network(&mut s);
         self.sample_battery(&mut s, refresh_slow);
         self.sample_processes(&mut s);
