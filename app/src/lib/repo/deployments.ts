@@ -1,4 +1,4 @@
-import { and, desc, eq, gte } from 'drizzle-orm'
+import { and, desc, eq, gte, lt } from 'drizzle-orm'
 import { db } from '../../host/db'
 import { deployments } from '../../host/schema'
 
@@ -48,4 +48,13 @@ export async function listDeployments(appId: string, limit = 25) {
     .where(eq(deployments.appId, appId))
     .orderBy(desc(deployments.startedAt))
     .limit(limit)
+}
+
+/** Retention: delete deploys that started before `olderThan`. Returns how many went. */
+export async function pruneDeployments(olderThan: Date): Promise<number> {
+  const rows = await db
+    .delete(deployments)
+    .where(lt(deployments.startedAt, olderThan))
+    .returning({ id: deployments.id })
+  return rows.length
 }

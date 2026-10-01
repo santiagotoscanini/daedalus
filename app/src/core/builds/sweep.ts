@@ -1,5 +1,6 @@
-// The scheduler's hourly sweep, run out of band from the tick: prune old
-// webhook deliveries, pin each registry app to its GitHub repository by name,
+// The scheduler's hourly sweep, run out of band from the tick: retention (old
+// webhook deliveries, finished builds' heavy columns, year-old deploys,
+// expired enroll codes), pin each registry app to its GitHub repository by name,
 // and enqueue a default-branch HEAD that no push delivered (tunnel down, a
 // lost delivery, a container restart). scheduler.ts decides when it runs; the
 // record it leaves is stored as `builds.lastSweep` (no page reads it yet).
@@ -17,7 +18,11 @@ import { enqueueChecked } from './dispatch'
 import type { SchedulerState } from './scheduler'
 import { logOnce, quietly } from './scheduler-log'
 
-const DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60_000
+const DAY_MS = 24 * 60 * 60_000
+const DELIVERY_RETENTION_MS = 7 * DAY_MS
+/** A finished build keeps its row for good; its detection, checks, timings, warnings and facts this long. */
+const BUILD_DETAIL_RETENTION_MS = 30 * DAY_MS
+const DEPLOYMENT_RETENTION_MS = 365 * DAY_MS
 
 export type SweepRecord = {
   at: string
@@ -40,7 +45,7 @@ const publishOf = (v: string): BuildPublish =>
 
 const segments = (s: string): string => s.split('/').map(encodeURIComponent).join('/')
 
-/** Pin repos, enqueue unbuilt HEADs, prune deliveries. Never throws for GitHub. */
+/** Retention, then pin repos and enqueue unbuilt HEADs. Never throws for GitHub. */
 export async function runSweep(ctx: Ctx, now: Date, state: SchedulerState): Promise<SweepRecord> {
   const at = now.getTime()
   const record: SweepRecord = { at: now.toISOString(), pinned: [], enqueued: [], skipped: null }
@@ -49,6 +54,20 @@ export async function runSweep(ctx: Ctx, now: Date, state: SchedulerState): Prom
     const { pruneDeliveries } = await import('../../lib/repo/github-deliveries')
     const n = await pruneDeliveries(new Date(at - DELIVERY_RETENTION_MS))
     if (n > 0) console.info(`[builds] pruned ${String(n)} webhook deliveries older than 7 days`)
+  })
+
+  await quietly(state, 'retention', async () => {
+    const { slimFinishedBuilds } = await import('../../lib/repo/builds')
+    const { pruneDeployments } = await import('../../lib/repo/deployments')
+    const { pruneExpiredEnrollCodes } = await import('../../lib/repo/enroll')
+    const slimmed = await slimFinishedBuilds(new Date(at - BUILD_DETAIL_RETENTION_MS))
+    const deploys = await pruneDeployments(new Date(at - DEPLOYMENT_RETENTION_MS))
+    const codes = await pruneExpiredEnrollCodes(now)
+    if (slimmed + deploys + codes > 0) {
+      console.info(
+        `[builds] retention: ${String(slimmed)} builds slimmed, ${String(deploys)} deploys and ${String(codes)} enroll codes deleted`,
+      )
+    }
   })
 
   record.skipped = await sweepGithub(ctx, now, state, record)

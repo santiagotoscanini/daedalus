@@ -48,6 +48,7 @@ const h = vi.hoisted(() => ({
     reportTick: 0,
     readStatus: 0,
     prune: [] as unknown[],
+    retention: [] as [string, Date][],
     gh: [] as string[],
     store: [] as unknown[][],
   },
@@ -91,6 +92,10 @@ vi.mock('../../lib/repo/builds', async (importOriginal) => {
       h.calls.insert.push(input)
       return { row: input, superseded: [], alreadyQueued: false }
     },
+    slimFinishedBuilds: async (d: Date) => {
+      h.calls.retention.push(['builds', d])
+      return 0
+    },
     pinGithubRepoId: async (appId: string, repoId: number) => {
       h.calls.pin.push([appId, repoId])
       return h.pinResult
@@ -104,6 +109,18 @@ vi.mock('../../lib/repo/apps', () => ({
 vi.mock('../../lib/repo/github-deliveries', () => ({
   pruneDeliveries: async (d: Date) => {
     h.calls.prune.push(d)
+    return 0
+  },
+}))
+vi.mock('../../lib/repo/deployments', () => ({
+  pruneDeployments: async (d: Date) => {
+    h.calls.retention.push(['deployments', d])
+    return 0
+  },
+}))
+vi.mock('../../lib/repo/enroll', () => ({
+  pruneExpiredEnrollCodes: async (d: Date) => {
+    h.calls.retention.push(['enroll', d])
     return 0
   },
 }))
@@ -269,6 +286,7 @@ beforeEach(() => {
     reportTick: 0,
     readStatus: 0,
     prune: [],
+    retention: [],
     gh: [],
     store: [],
   }
@@ -799,6 +817,12 @@ describe('sweep', () => {
     expect(h.calls.gh).toEqual([])
     expect(h.calls.store[0]?.[0]).toBe('builds.lastSweep')
     expect((h.calls.prune[0] as Date).getTime()).toBe(NOW.getTime() - 7 * 24 * 3_600_000)
+    // Retention: build detail after 30 days, deploys after a year, codes once expired.
+    expect(h.calls.retention.map(([what, d]) => [what, NOW.getTime() - d.getTime()])).toEqual([
+      ['builds', 30 * 24 * 3_600_000],
+      ['deployments', 365 * 24 * 3_600_000],
+      ['enroll', 0],
+    ])
   })
 
   it('enqueues a HEAD that differs from the last successful build', async () => {

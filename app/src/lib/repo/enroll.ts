@@ -97,3 +97,12 @@ export const enrollStore: EnrollStore = {
     return row ?? null
   },
 }
+
+/** Retention: delete the codes past their expiry nobody redeemed. Returns how many went. */
+export async function pruneExpiredEnrollCodes(now: Date): Promise<number> {
+  const rows = await db
+    .delete(enrollCodes)
+    .where(lt(enrollCodes.expiresAt, now))
+    .returning({ hash: enrollCodes.codeHash })
+  return rows.length
+}

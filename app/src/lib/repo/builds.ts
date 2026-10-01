@@ -6,7 +6,9 @@ import {
   getTableColumns,
   gte,
   inArray,
+  isNotNull,
   isNull,
+  lt,
   ne,
   notInArray,
   or,
@@ -548,4 +550,31 @@ export async function markReported(
   if (report.reported !== undefined) set.reported = report.reported
   if (Object.keys(set).length === 0) return
   await db.update(builds).set(set).where(eq(builds.id, id))
+}
+
+/**
+ * Retention: a finished build updated before `olderThan` keeps its row — the
+ * history, the digest, the error — and loses the heavy jsonb its build page
+ * draws (detection, checks, timings, warnings, facts). Returns how many rows
+ * were slimmed.
+ */
+export async function slimFinishedBuilds(olderThan: Date): Promise<number> {
+  const rows = await db
+    .update(builds)
+    .set({ detected: null, checks: null, timings: null, warnings: null, facts: null })
+    .where(
+      and(
+        inArray(builds.state, [...TERMINAL_BUILD_STATES]),
+        lt(builds.updatedAt, olderThan),
+        or(
+          isNotNull(builds.detected),
+          isNotNull(builds.checks),
+          isNotNull(builds.timings),
+          isNotNull(builds.warnings),
+          isNotNull(builds.facts),
+        ),
+      ),
+    )
+    .returning({ id: builds.id })
+  return rows.length
 }
