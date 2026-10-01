@@ -56,7 +56,11 @@ export type ControllerLink =
   | { state: 'idle' }
   | { state: 'not_configured' }
   | { state: 'connecting'; since: string }
-  | { state: 'connected'; since: string }
+  | {
+      state: 'connected'
+      since: string /** The controller's agent, as its hello said. */
+      version: string
+    }
   | { state: 'down'; since: string; error: string }
 
 /** The methods a caller asks: `hello` and `events.subscribe` belong to the connection. */
@@ -361,7 +365,7 @@ export function createControllerClient(opts: Options): ControllerClient {
       const at = (ms: number) => new Date(ms).toISOString()
       if (opts.path === undefined) return { state: 'not_configured' }
       if (live !== null && !live.socket.destroyed)
-        return { state: 'connected', since: at(connectedAt) }
+        return { state: 'connected', since: at(connectedAt), version: live.hello.version }
       if (down !== null) return { state: 'down', since: at(down.since), error: down.error.message }
       if (dialing !== null) return { state: 'connecting', since: at(dialStartedAt) }
       return { state: 'idle' }

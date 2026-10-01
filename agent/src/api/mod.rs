@@ -41,8 +41,10 @@
 //! `hello`, and unknown fields there and in the envelope are ignored, so a
 //! newer client always gets that answer (wire.rs); anything before a
 //! `hello` gets `bad_request`.
-//! The app deploys on save and the controller moves with a lock bump, so
-//! the two meet at different versions as a matter of course.
+//! The app and the controller ship from one engine rev, but the app moves
+//! on save (dev mode) and the controller with a lock bump: the app compares
+//! `hello`'s version with the release its engine builds and says so when
+//! they differ, rather than reading a contract it does not share.
 //!
 //! **Fixed verbs.** The "no shell" rule: each method is a fixed verb with
 //! typed parameters (wire.rs `ApiRequest`, one list with each method's

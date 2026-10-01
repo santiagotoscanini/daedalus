@@ -1,6 +1,8 @@
 // Generated from agent/src (src/ts.rs). Do not edit: change the Rust type,
 // then run agent/gate.sh gen.
 
+/** The agent release this engine builds (Cargo.toml); the box's controller runs it, with the build's `+<id>`, once the engine is applied. */
+export const AGENT_VERSION = '0.25.0'
 
 /** The API version (api/mod.rs). */
 export const API_VERSION = 1

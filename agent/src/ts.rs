@@ -142,6 +142,11 @@ fn constants() -> String {
     let mut out = String::from(HEADER);
     for (doc, name, value) in [
         (
+            "The agent release this engine builds (Cargo.toml); the box's controller runs it, with the build's `+<id>`, once the engine is applied.",
+            "AGENT_VERSION",
+            format!("'{}'", env!("CARGO_PKG_VERSION")),
+        ),
+        (
             "The API version (api/mod.rs).",
             "API_VERSION",
             crate::api::API_VERSION.to_string(),
@@ -177,8 +182,9 @@ fn constants() -> String {
             crate::providers::LEMONADE_DEFAULT_PORT.to_string(),
         ),
     ] {
-        out.push_str(&format!("\n/** {doc} */\nexport const {name} = {value}\n"));
+        out.push_str(&format!("/** {doc} */\nexport const {name} = {value}\n\n"));
     }
+    out.pop();
     out
 }
 
