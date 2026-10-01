@@ -993,7 +993,7 @@ impl Daemon {
         };
         let replay = match self.mgr.attach(p.id, &anchor, sink) {
             Ok(replay) => replay,
-            Err(e) => return Some(Err(err(ErrorCode::NotFound, format!("{e:#}")))),
+            Err(e) => return Some(Err(pty_err(self, p.id, format!("{e:#}")))),
         };
         let maybe_lost = {
             let mut live = lock(&sess.live);
@@ -1640,6 +1640,51 @@ mod tests {
         // it is counted against MAX_INPUT_THREADS, never the pool.
         assert!(daemon.inputs.load(Ordering::Acquire) <= 1);
         let _ = stuck.try_recv();
+        daemon.close_all();
+    }
+
+    /// An attach that fails on a session this host still holds is `io`, not
+    /// `not_found`: the client would forget a session that is still there.
+    #[test]
+    fn a_failed_attach_to_a_known_session_is_io() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = Identity::generate().unwrap();
+        let list = dir.path().join("allow.json");
+        write_allow(&list, &[&a]);
+        let daemon = Daemon::new(options(dir.path()), "b".into(), AllowList::open(list));
+        let id = id_of(open(&daemon, dir.path(), &node(&a), &["sleep", "30"]));
+        let (tx, _rx) = mpsc::channel(8);
+        let conn = Conn {
+            id: 1,
+            node: node(&a),
+            out: Out {
+                tx,
+                conn: 1,
+                queued: Default::default(),
+                full: Default::default(),
+                close: Default::default(),
+            },
+            closed: AtomicBool::new(false),
+        };
+        // Gone from the manager, still in the daemon's map.
+        daemon.mgr.close(id).unwrap();
+        let attach = |id| {
+            daemon
+                .pty_attach(
+                    &conn,
+                    7,
+                    PtyAttachParams {
+                        id,
+                        anchor: Anchor::Fresh,
+                    },
+                )
+                .unwrap()
+                .unwrap_err()
+                .code
+        };
+        assert_eq!(attach(id), ErrorCode::Io);
+        lock(&daemon.sessions).remove(&id);
+        assert_eq!(attach(id), ErrorCode::NotFound);
         daemon.close_all();
     }
 }
