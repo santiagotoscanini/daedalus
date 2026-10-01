@@ -907,19 +907,7 @@ describe('sweep', () => {
 
 describe('ensureScheduler', () => {
   const SLOT = 'daedalusBuildSchedulerV2'
-  const V1 = 'daedalusBuildSchedulerV1'
   const g = globalThis as unknown as Record<string, unknown>
-
-  /** A scheduler as the previous version of the module left it running. */
-  function plantV1(state: unknown) {
-    const tick = vi.fn(async () => undefined)
-    const handle = setInterval(() => {
-      const v = g[V1] as { tick?: () => unknown } | undefined
-      void v?.tick?.()
-    }, 3_000)
-    g[V1] = { handle, tick, state }
-    return { tick, handle }
-  }
 
   it('starts one interval, ticks at 30 s idle, and sweeps a minute after start', async () => {
     vi.useFakeTimers({ now: NOW })
@@ -1026,47 +1014,5 @@ describe('ensureScheduler', () => {
     await import('./scheduler')
     expect(g[SLOT]).toBeUndefined()
     expect(vi.getTimerCount()).toBe(0)
-  })
-
-  it('retires the scheduler the previous key runs, carrying its state over in place', async () => {
-    vi.useFakeTimers({ now: NOW })
-    const { detectedSeen: _seen, ...v1State } = freshState(NOW.getTime())
-    const planted: Rec = { ...v1State, pending: { id: ID, at: NOW.getTime() } }
-    const old = plantV1(planted)
-    const clear = vi.spyOn(globalThis, 'clearInterval')
-
-    // What a Vite save does: the new module evaluates while the old interval runs.
-    vi.resetModules()
-    await import('./scheduler')
-    expect(g[V1]).toBeUndefined()
-    expect(clear).toHaveBeenCalledWith(old.handle)
-    const slot = g[SLOT] as { state: unknown }
-    expect(slot.state).toBe(planted)
-    expect(planted).toMatchObject({ detectedSeen: null, pending: { id: ID } })
-
-    await vi.advanceTimersByTimeAsync(9_000)
-    expect(old.tick).not.toHaveBeenCalled()
-    expect(h.calls.readStatus).toBeGreaterThan(0)
-    expect(vi.getTimerCount()).toBe(1)
-  })
-
-  it('starts afresh when the previous key held a state of another shape', async () => {
-    vi.useFakeTimers({ now: NOW })
-    plantV1({ busy: 'yes' })
-    scheduler.ensureScheduler()
-    expect(g[V1]).toBeUndefined()
-    expect((g[SLOT] as { state: unknown }).state).toMatchObject({ busy: null, detectedSeen: null })
-    expect(vi.getTimerCount()).toBe(1)
-  })
-
-  it('stops an old scheduler that comes back after the takeover, within a tick', async () => {
-    vi.useFakeTimers({ now: NOW })
-    scheduler.ensureScheduler()
-    await vi.advanceTimersByTimeAsync(1_000)
-    plantV1(freshState(NOW.getTime()))
-    expect(vi.getTimerCount()).toBe(2)
-    await vi.advanceTimersByTimeAsync(2_000)
-    expect(g[V1]).toBeUndefined()
-    expect(vi.getTimerCount()).toBe(1)
   })
 })

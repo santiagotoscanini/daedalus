@@ -17,9 +17,7 @@
 // the outage that taught it). A re-evaluation swaps the tick and re-arms the
 // interval in place — never a second one — and keeps the busy flag and the
 // pickup guard. No closure but `tick` is stored, and nothing awaits the slot.
-// When the state's shape changes the key moves on, and the keys earlier
-// versions ran under are retired on sight: their interval cleared, their state
-// carried over when it still fits.
+// When the state's shape changes the key moves on.
 //
 // This file holds the slot, the tick and the fold; the queue's half of a tick
 // is dispatch.ts, the sweep is sweep.ts, and neither touches the slot key.
@@ -65,8 +63,6 @@ const SWEEP_JITTER_SPAN_MS = 60_000
 // ── the slot ───────────────────────────────────────────────────────────────
 
 const SLOT_KEY = 'daedalusBuildSchedulerV2'
-/** Keys earlier versions of this module ran under. */
-const RETIRED_SLOT_KEYS = ['daedalusBuildSchedulerV1'] as const
 
 type Hold = { since: number }
 
@@ -170,40 +166,6 @@ function disarm(handle: unknown): void {
   }
 }
 
-/**
- * An earlier version's state, brought to this shape in place — the same
- * object, so a tick of that version still running shares its busy flag — or
- * null when it does not fit.
- */
-function carryState(v: unknown): SchedulerState | null {
-  if (!isRecord(v)) return null
-  if (!('detectedSeen' in v)) v.detectedSeen = null
-  return isState(v) ? v : null
-}
-
-/**
- * Stop every scheduler an earlier version of this module left running, and
- * hand back whether one was and the first state that still fits. The slot is
- * deleted before its interval is cleared, so a callback already queued finds
- * nothing to run.
- */
-function retireOld(): { running: boolean; state: SchedulerState | null } {
-  let running = false
-  let state: SchedulerState | null = null
-  for (const key of RETIRED_SLOT_KEYS) {
-    const old = g[key]
-    if (old === undefined) continue
-    delete g[key]
-    if (!isRecord(old)) continue
-    if ('handle' in old) {
-      running = true
-      disarm(old.handle)
-    }
-    state ??= carryState(old.state)
-  }
-  return { running, state }
-}
-
 /** Start the scheduler once per process. Idempotent, synchronous and cheap. */
 export function ensureScheduler(): void {
   const current = g[SLOT_KEY]
@@ -212,20 +174,15 @@ export function ensureScheduler(): void {
 }
 
 /**
- * Take over whatever the slot holds, and whatever an earlier version left: this
- * module's tick, a new interval in place of the old ones, the old state when it
- * still has the right shape. `start` false only re-arms a scheduler that is
+ * Take over whatever the slot holds: this module's tick, a new interval in
+ * place of the old one, the old state when it still has the right shape. `start` false only re-arms a scheduler that is
  * already running.
  */
 function adopt(current: unknown, start: boolean): void {
-  const retired = retireOld()
   const here = isRecord(current) && 'handle' in current
-  if (!here && !retired.running && !start) return
+  if (!here && !start) return
   if (here) disarm(current.handle)
-  const state =
-    isRecord(current) && isState(current.state)
-      ? current.state
-      : (retired.state ?? freshState(Date.now()))
+  const state = isRecord(current) && isState(current.state) ? current.state : freshState(Date.now())
   const slot: Slot = { handle: arm(), tick, state }
   g[SLOT_KEY] = slot
 }
@@ -247,15 +204,11 @@ export function stopScheduler(): void {
   const current = g[SLOT_KEY]
   if (isRecord(current)) disarm(current.handle)
   delete g[SLOT_KEY]
-  retireOld()
 }
 
 // ── the tick ───────────────────────────────────────────────────────────────
 
 async function tick(): Promise<void> {
-  // An older module instance that outlived a re-evaluation can start its own
-  // scheduler again; this one stops it within a tick.
-  if (RETIRED_SLOT_KEYS.some((k) => g[k] !== undefined)) retireOld()
   const slot = readSlot()
   if (slot === null) return
   const state = slot.state
