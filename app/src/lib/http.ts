@@ -57,19 +57,25 @@ import type { Result } from './result'
 export const ATTEMPT_MS = [400, 800, 1_500, 2_500]
 
 /**
- * One patient attempt: for every origin the stall cannot reach — a shared
- * bridge (prometheus), traefik on its published hostname, the internet. There
- * a slow answer is the service being slow, and asking again only queues
- * another request behind the first.
+ * One patient attempt: for a peer on a shared bridge, dialled by its bare
+ * container name (prometheus, loki). The stall cannot reach it, so a slow
+ * answer is the service being slow, and asking again only queues another
+ * request behind the first.
  */
 export const PATIENT_MS = [8_000]
 
-/** The budget an origin gets: the ladder for a rootless-published host port, else one patient try. */
+/**
+ * The budget an origin gets: one patient try for a bridge peer (a bare
+ * container name), the ladder for everything else — `host.containers.internal`
+ * and any dotted hostname, which resolves to the host and so reaches traefik
+ * or a service through a rootless-published port, where the stall lives.
+ */
 export function attemptsFor(url: string): number[] {
   try {
-    return new URL(url).hostname === 'host.containers.internal' ? ATTEMPT_MS : PATIENT_MS
+    const host = new URL(url).hostname
+    return host !== 'host.containers.internal' && !host.includes('.') ? PATIENT_MS : ATTEMPT_MS
   } catch {
-    return PATIENT_MS
+    return ATTEMPT_MS
   }
 }
 
