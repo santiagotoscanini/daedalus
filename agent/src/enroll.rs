@@ -6,7 +6,7 @@
 //! ```text
 //! tray ─ enroll.begin {app_url} ─▶ service: the machine's key and fingerprint, a PKCE challenge
 //! tray ─ opens https://<app>/agent/enroll?key&name&os&arch&version&port&state&code_challenge…
-//! admin ─ Pocket ID ─ the app: types the fingerprint's first 4 characters, Confirm
+//! admin ─ Pocket ID ─ the app: a consent page naming the machine and its key, Confirm
 //!   app ─ approves the node, makes its wg-easy client ─▶ browser ─▶ http://127.0.0.1:<port>/callback?state&code
 //! tray ─ administrator prompt ─ `enroll-finish CODE` as root ─ enroll.finish ─▶ service
 //!   service ─ POST https://<app>/api/agent/enroll {code, code_verifier} ─▶ the client config, the pin

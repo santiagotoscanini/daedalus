@@ -16,7 +16,7 @@
 //! grants a shell on the box, so it is an admin's, in the browser — the
 //! service sends nothing and answers the page to open
 //! (`<app_url>/settings?tab=machines&node=<id>&santree=on`), where the
-//! admin types the first characters of this machine's key and confirms.
+//! admin checks this machine and its key on a consent page and confirms.
 //! The policy event that follows is the answer.
 //!
 //! **Over the link** (link/node.rs): a pending request is sent as one

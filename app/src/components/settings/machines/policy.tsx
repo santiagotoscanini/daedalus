@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { cn } from '../../../lib/cn'
 import type { MachineShape } from '../../../lib/dashboard/machines'
 import { CHOSEN_KINDS, finishesFor, partsOfKind } from '../../../lib/hardware/catalog'
+import { useHydrated } from '../../../lib/hydrated'
 import { slugOf } from '../../../lib/nodes-file'
 import {
   DEFAULT_PORT,
@@ -56,6 +57,9 @@ export function Policy({
   askSantree?: boolean
 }) {
   const ed = usePolicyEditor(n, { askSantree })
+  // The time is the browser's clock and zone, which the server render does not
+  // share: it joins the line once hydration is done (lib/hydrated.ts).
+  const hydrated = useHydrated()
   return (
     <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
       <h3 className={cn(FIELD_LABEL, 'm-0')}>Policy</h3>
@@ -70,7 +74,7 @@ export function Policy({
         ]}
       />
       {ed.error !== null && <p className={ERROR_NOTE}>{ed.error}</p>}
-      {n.policyChangedBy !== null && <p className={ASIDE}>Last changed {changedBy(n)}</p>}
+      {n.policyChangedBy !== null && <p className={ASIDE}>Last changed {changedBy(n, hydrated)}</p>}
     </div>
   )
 }
@@ -78,9 +82,12 @@ export function Policy({
 /**
  * "by this Mac · 12:03", "by santiago · 12:03": who changed the policy last —
  * the machine itself from its menu bar or santree, or a person here.
+ * `withTime` false leaves the time out: the server and the hydration pass
+ * render without it, since only the browser knows its own timezone.
  */
 export function changedBy(
   n: Pick<NodeRow, 'id' | 'os' | 'policyChangedBy' | 'policyChangedAt'>,
+  withTime = true,
 ): string {
   const who =
     n.policyChangedBy === `node:${n.id}`
@@ -88,7 +95,7 @@ export function changedBy(
         ? 'this Mac'
         : 'this machine'
       : (n.policyChangedBy ?? 'someone')
-  const at = n.policyChangedAt === null ? '' : ` · ${clockOf(n.policyChangedAt)}`
+  const at = !withTime || n.policyChangedAt === null ? '' : ` · ${clockOf(n.policyChangedAt)}`
   return `by ${who}${at}`
 }
 
