@@ -45,10 +45,12 @@
 //! the job failed, else what the unit's OUTCOME ENTRY says — `refused` (the
 //! unit exits 0, so a refusal is not a failed unit) or `done` — and `done`
 //! with its last line when it wrote none. The outcome entry is one journal
-//! entry carrying `OUTCOME_FIELD` (`done` or `refused`), `DETAIL_FIELD` and
-//! `INVOCATION_FIELD` (the unit's `$INVOCATION_ID`), written by host/lib.sh
-//! `outcome` and matched by its invocation, never by its text: a line a
-//! unit prints cannot pass for a refusal. The journal, not the exit status,
+//! entry carrying `OUTCOME_FIELD` (`done` or `refused`) and `DETAIL_FIELD`,
+//! written by host/lib.sh `outcome` and taken only when journald's own
+//! fields vouch for it (helper.rs `vouched`: the unit run's
+//! `_SYSTEMD_INVOCATION_ID`, a root or operator `_UID`), never by its text:
+//! a line a unit prints, or an entry another process journals, cannot pass
+//! for a refusal. The journal, not the exit status,
 //! carries the outcome because systemd forgets a oneshot's exit status once
 //! it is inactive (measured: `ExecMainStatus=0` after an exit 3 listed in
 //! `SuccessExitStatus`). A unit already running is `refused`, never joined:
@@ -107,11 +109,9 @@ pub const MAX_ANSWER: usize = 1 << 20;
 pub const MAX_PROGRESS: usize = 2048;
 /// How long a connection has to send its request.
 pub const REQUEST_DEADLINE: Duration = Duration::from_secs(10);
-/// The outcome entry's fields (module doc): `done` or `refused`, the words,
-/// and the invocation that wrote it.
+/// The outcome entry's fields (module doc): `done` or `refused`, and the words.
 pub const OUTCOME_FIELD: &str = "DAEDALUS_OUTCOME";
 pub const DETAIL_FIELD: &str = "DAEDALUS_DETAIL";
-pub const INVOCATION_FIELD: &str = "DAEDALUS_INVOCATION";
 /// The built-in read-only verb; no table entry may take its name.
 pub const STATUS_VERB: &str = "status";
 /// The longest `timeout_secs` a verb may carry: a day.

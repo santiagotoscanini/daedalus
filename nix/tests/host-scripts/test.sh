@@ -2,7 +2,7 @@
 # (check() evaluates its condition, so the variables in it are single-quoted
 # on purpose and read there.)
 #
-# The bridge agents' git and rollback behaviour, run for real against temp
+# The root verbs' git and rollback behaviour, run for real against temp
 # repositories. Nothing here is root: the agents' privilege drop (setpriv) is
 # stubbed to run the command as the caller, and nixos-rebuild, curl and gpg
 # are stubs that record or fake what they would have done. Each case is the
@@ -206,11 +206,11 @@ export LOGGED="$T/logged"
 agent "$T/refuse.sh" 'set -euo pipefail' lib.sh
 printf '%s\n' 'refuse "an apply is running' 'twice over"' 'echo "not reached"' >>"$T/refuse.sh"
 rc=0
-out="$(INVOCATION_ID=inv1 bash "$T/refuse.sh" 2>&1)" || rc=$?
+out="$(bash "$T/refuse.sh" 2>&1)" || rc=$?
 check "a refusal exits 0" '[ "$rc" -eq 0 ]'
 check "and stops the run" '! grep -q "not reached" <<<"$out"'
-check "the entry says refused, for this invocation, on one line" \
-  'grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && grep -qx "DAEDALUS_INVOCATION=inv1" "$LOGGED" && grep -qx "DAEDALUS_DETAIL=an apply is running twice over" "$LOGGED"'
+check "the entry says refused, on one line" \
+  'grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && grep -qx "DAEDALUS_DETAIL=an apply is running twice over" "$LOGGED"'
 : >"$LOGGED"
 agent "$T/done.sh" 'set -euo pipefail' lib.sh
 echo 'verb_done "rebooting"; echo after' >>"$T/done.sh"

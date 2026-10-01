@@ -148,8 +148,9 @@ it was the container's to choose. The file goes when the unit stops.
 **The answer.** The unit's journal lines stream back as `root.progress`
 events, and the journal carries the outcome too: a start job that failed is
 `failed`; otherwise what the unit's one outcome entry says (`host/lib.sh`
-`verb_done` / `refuse`: `DAEDALUS_OUTCOME` `done` or `refused`, matched by the
-unit's invocation id, never by a line's text), or `done` with its last line
+`verb_done` / `refuse`: `DAEDALUS_OUTCOME` `done` or `refused`, taken only
+when journald's own fields say the unit's run wrote it as root or the
+operator, never by a line's text), or `done` with its last line
 when it wrote none. A refusal exits 0 — it is not a failed unit — and the
 journal, not an exit status, carries the word, because systemd forgets a
 oneshot's exit status once it is inactive. The controller keeps every run's

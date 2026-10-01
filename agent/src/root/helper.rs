@@ -17,7 +17,7 @@ use anyhow::{bail, Context, Result};
 
 use super::{
     code, peer_allowed, progress_text, read_line, Line, Outcome, Request, Resolved, RunFile, Table,
-    VerbState, DETAIL_FIELD, INVOCATION_FIELD, MAX_REQUEST, OUTCOME_FIELD, REQUEST_DEADLINE,
+    VerbState, DETAIL_FIELD, MAX_REQUEST, OUTCOME_FIELD, REQUEST_DEADLINE,
 };
 
 /// A write the controller does not take within this long ends the run
@@ -298,24 +298,32 @@ fn journal_cursor(table: &Table) -> Option<String> {
         .map(str::to_string)
 }
 
-/// One journal entry: its cursor, the unit invocation that wrote it, its
-/// message, and — for an outcome entry (root/mod.rs, "Running a verb") —
-/// what it says.
+/// One journal entry: its cursor, the unit invocation and uid that wrote it
+/// (journald's own fields, which no sender can set), its message, and — for
+/// an outcome entry (root/mod.rs, "Running a verb") — what it says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Entry {
     cursor: String,
     invocation: Option<String>,
+    uid: Option<u32>,
     message: String,
     said: Option<Said>,
 }
 
-/// An outcome entry's word: `done` or `refused`, the detail, and the
-/// invocation it names (`INVOCATION_FIELD`).
+/// An outcome entry's word: `done` or `refused`, and the detail. Its fields
+/// are the sender's; whether it is the run's is `vouched`'s question.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Said {
     outcome: Outcome,
     detail: String,
-    invocation: Option<String>,
+}
+
+/// Is `e` the word of run `invocation`? Only journald's fields decide:
+/// `_SYSTEMD_INVOCATION_ID` names the unit run the sender was in, and `_UID`
+/// (the kernel's credentials) is root's or the operator's — never a build
+/// user's process inside the same unit, never a process outside it.
+fn vouched(e: &Entry, invocation: &str, allow_uid: u32) -> bool {
+    e.invocation.as_deref() == Some(invocation) && e.uid.is_some_and(|u| u == 0 || u == allow_uid)
 }
 
 /// A field's text; a value that is not UTF-8 arrives as an array of bytes.
@@ -347,11 +355,11 @@ fn entry(line: &str) -> Option<Entry> {
     .map(|outcome| Said {
         outcome,
         detail: progress_text(&text(DETAIL_FIELD).unwrap_or_default()),
-        invocation: text(INVOCATION_FIELD),
     });
     Some(Entry {
         cursor,
         invocation: text("_SYSTEMD_INVOCATION_ID"),
+        uid: text("_UID").and_then(|u| u.parse().ok()),
         message: text("MESSAGE")?,
         said,
     })
@@ -373,25 +381,27 @@ fn journal(table: &Table, unit: &str, cursor: Option<&str>, follow: bool) -> Com
     cmd
 }
 
-/// The outcome entry of `invocation`, asked of the journal by its own field
-/// rather than by unit: journald attributes an entry to a unit by the
-/// sender's cgroup, which a short-lived `logger` may have left before
-/// journald looked. Polled for up to `OUTCOME_WAIT`; None when it never
-/// came.
+/// The outcome entry of `invocation`, asked of the journal by journald's own
+/// invocation field once the run has ended: the follower may have stopped
+/// before journald stored it. Polled for up to `OUTCOME_WAIT`; None when it
+/// never came.
 fn await_outcome(table: &Table, invocation: &str) -> Option<Said> {
     let deadline = Instant::now() + OUTCOME_WAIT;
     loop {
         let mut cmd = Command::new(&table.journalctl);
         cmd.args(["-q", "--no-pager", "-o", "json"])
-            .arg(format!("{INVOCATION_FIELD}={invocation}"))
+            .arg(format!("_SYSTEMD_INVOCATION_ID={invocation}"))
             .stdin(Stdio::null())
             .stderr(Stdio::null());
         if let Ok(text) = crate::exec::stdout_or(cmd, QUICK, crate::exec::Text::Lossy) {
+            // The last word: a run may say more than once (a Claude Code pin, then
+            // its rebuild — host/engine-update.sh).
             let said = text
                 .lines()
                 .filter_map(entry)
+                .filter(|e| vouched(e, invocation, table.allow_uid))
                 .filter_map(|e| e.said)
-                .find(|s| s.invocation.as_deref() == Some(invocation));
+                .next_back();
             if said.is_some() {
                 return said;
             }
@@ -418,6 +428,8 @@ struct Relay<'a> {
     out: &'a mut UnixStream,
     last_cursor: Option<String>,
     invocation: Option<String>,
+    /// The operator's uid: `vouched` takes its outcome entries beside root's.
+    allow_uid: u32,
     last_line: String,
     said: Option<Said>,
     /// The controller still takes lines. When it goes, the unit does not
@@ -427,17 +439,21 @@ struct Relay<'a> {
 
 impl Relay<'_> {
     fn take(&mut self, e: Entry) {
-        self.last_cursor = Some(e.cursor);
-        match (&self.invocation, e.invocation) {
-            (Some(mine), Some(theirs)) if *mine != theirs => return,
-            (None, Some(first)) => self.invocation = Some(first),
+        self.last_cursor = Some(e.cursor.clone());
+        match (&self.invocation, &e.invocation) {
+            (Some(mine), Some(theirs)) if mine != theirs => return,
+            (None, Some(first)) => self.invocation = Some(first.clone()),
             _ => {}
         }
-        // The outcome is the run's answer, not a line of its progress; one
-        // naming another invocation is not this run's.
-        if let Some(s) = e.said {
-            if self.invocation.is_none() || s.invocation == self.invocation {
-                self.said = Some(s);
+        // The outcome is the run's answer, not a line of its progress, and
+        // only journald's fields make it this run's.
+        if e.said.is_some() {
+            if self
+                .invocation
+                .as_deref()
+                .is_some_and(|inv| vouched(&e, inv, self.allow_uid))
+            {
+                self.said = e.said;
             }
             return;
         }
@@ -676,6 +692,7 @@ fn run_unit(
         out,
         last_cursor: cursor.clone(),
         invocation: None,
+        allow_uid: table.allow_uid,
         last_line: String::new(),
         said: None,
         listening,
@@ -803,7 +820,6 @@ mod tests {
         Some(Said {
             outcome,
             detail: detail.into(),
-            invocation: Some("i1".into()),
         })
     }
 
@@ -863,6 +879,7 @@ mod tests {
         let plain = |cursor: &str, invocation: Option<&str>, message: &str| Entry {
             cursor: cursor.into(),
             invocation: invocation.map(str::to_string),
+            uid: None,
             message: message.into(),
             said: None,
         };
@@ -877,13 +894,12 @@ mod tests {
         assert_eq!(entry(r#"{"MESSAGE":"no cursor"}"#), None);
         assert_eq!(
             entry(
-                r#"{"__CURSOR":"s=3","MESSAGE":"outcome","DAEDALUS_OUTCOME":"refused","DAEDALUS_DETAIL":"busy\u001b[0m","DAEDALUS_INVOCATION":"i1"}"#
+                r#"{"__CURSOR":"s=3","MESSAGE":"outcome","DAEDALUS_OUTCOME":"refused","DAEDALUS_DETAIL":"busy\u001b[0m","_UID":"0"}"#
             )
             .and_then(|e| e.said),
             Some(Said {
                 outcome: Outcome::Refused,
                 detail: "busy[0m".into(),
-                invocation: Some("i1".into())
             })
         );
         // Only `done` and `refused` are outcomes.
@@ -938,16 +954,22 @@ mod tests {
         serde_json::json!({"__CURSOR": cursor, "_SYSTEMD_INVOCATION_ID": "i1", "MESSAGE": message})
     }
 
-    /// An outcome entry, as host/lib.sh `outcome` writes it, of invocation
-    /// `invocation`.
+    /// An outcome entry, as host/lib.sh `outcome` writes it, as journald
+    /// stores it from a process of uid `uid` in unit run `invocation` (None:
+    /// a sender outside every unit).
     fn outcome_entry(
         cursor: &str,
         outcome: &str,
         detail: &str,
-        invocation: &str,
+        invocation: Option<&str>,
+        uid: u32,
     ) -> serde_json::Value {
-        serde_json::json!({"__CURSOR": cursor, "MESSAGE": "outcome", "DAEDALUS_OUTCOME": outcome,
-                           "DAEDALUS_DETAIL": detail, "DAEDALUS_INVOCATION": invocation})
+        let mut e = serde_json::json!({"__CURSOR": cursor, "MESSAGE": "outcome", "DAEDALUS_OUTCOME": outcome,
+                           "DAEDALUS_DETAIL": detail, "_UID": uid.to_string()});
+        if let Some(i) = invocation {
+            e["_SYSTEMD_INVOCATION_ID"] = i.into();
+        }
+        e
     }
 
     /// A table whose tools are shell scripts standing in for systemd: the
@@ -986,7 +1008,7 @@ mod tests {
         let journalctl = script(
             "journalctl",
             &format!(
-                "for a in \"$@\"; do case \"$a\" in\n --show-cursor) echo '-- cursor: c0'; exit 0;;\n -f) {}exec sleep 30;;\n DAEDALUS_INVOCATION=i1) {}exit 0;;\n esac; done",
+                "for a in \"$@\"; do case \"$a\" in\n --show-cursor) echo '-- cursor: c0'; exit 0;;\n -f) {}exec sleep 30;;\n _SYSTEMD_INVOCATION_ID=i1) {}exit 0;;\n esac; done",
                 lines(follow),
                 lines(&by_invocation.into_iter().collect::<Vec<_>>())
             ),
@@ -1010,7 +1032,7 @@ mod tests {
             allow_uid,
             &[
                 line_of("c1", message),
-                outcome_entry("c2", "done", "", "i1"),
+                outcome_entry("c2", "done", "", Some("i1"), 0),
             ],
             None,
         )
@@ -1023,6 +1045,7 @@ mod tests {
             out: &mut out,
             last_cursor: None,
             invocation: None,
+            allow_uid: 1000,
             last_line: String::new(),
             said: None,
             listening: true,
@@ -1030,12 +1053,16 @@ mod tests {
         let at = |cursor: &str, invocation: &str, message: &str| Entry {
             cursor: cursor.into(),
             invocation: Some(invocation.into()),
+            uid: Some(0),
             message: message.into(),
             said: None,
         };
         r.take(at("c1", "mine", "rebooting"));
         // An outcome entry naming another invocation is not this run's.
-        r.take(entry(&outcome_entry("c2", "refused", "not mine", "next").to_string()).unwrap());
+        r.take(
+            entry(&outcome_entry("c2", "refused", "not mine", Some("next"), 0).to_string())
+                .unwrap(),
+        );
         // The next run of the same unit, caught before the follower stopped.
         r.take(at("c3", "next", "starting again"));
         assert_eq!(r.last_line, "rebooting");
@@ -1088,7 +1115,7 @@ mod tests {
             me,
             &[
                 line_of("c1", "checking"),
-                outcome_entry("c2", "refused", "the reason", "i1"),
+                outcome_entry("c2", "refused", "the reason", Some("i1"), 0),
             ],
             None,
         );
@@ -1155,7 +1182,7 @@ mod tests {
             &dir,
             me,
             &[line_of("c1", "checking")],
-            Some(outcome_entry("c9", "refused", "found late", "i1")),
+            Some(outcome_entry("c9", "refused", "found late", Some("i1"), 0)),
         );
         let lines = converse(&table, "{\"verb\":\"reboot\",\"id\":\"r6\"}\n");
         assert_eq!(
@@ -1163,6 +1190,37 @@ mod tests {
             Some(&Line::Result {
                 outcome: Outcome::Refused,
                 detail: "found late".into(),
+                verbs: None
+            }),
+            "{lines:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    // DAEDALUS_* are fields any process may journal. An entry naming the run
+    // from outside the unit (no journald invocation), or from a build user's
+    // process inside it, is not the run's word: the run ends on its last
+    // line, `done`.
+    #[test]
+    fn an_outcome_journald_does_not_vouch_for_is_ignored() {
+        let me = unsafe { libc::geteuid() };
+        let dir = scratch("forged");
+        let table = fake_with(
+            &dir,
+            me,
+            &[
+                line_of("c1", "checking"),
+                outcome_entry("c2", "refused", "from outside", None, me),
+                outcome_entry("c3", "refused", "from the build user", Some("i1"), 351),
+            ],
+            Some(outcome_entry("c9", "done", "late, from outside", None, 0)),
+        );
+        let lines = converse(&table, "{\"verb\":\"reboot\",\"id\":\"r7\"}\n");
+        assert_eq!(
+            lines.last(),
+            Some(&Line::Result {
+                outcome: Outcome::Done,
+                detail: "checking".into(),
                 verbs: None
             }),
             "{lines:?}"

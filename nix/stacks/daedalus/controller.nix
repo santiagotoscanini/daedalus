@@ -226,8 +226,8 @@
 #                journal lines stream back; a failed start job is `failed`,
 #                else what the unit's outcome entry says (host/lib.sh
 #                `outcome`: `done`, or `refused` with the unit exiting 0, so
-#                no failed unit), matched by its invocation and never by a
-#                line's text. Not an exit status: systemd forgets a oneshot's
+#                no failed unit), taken only when journald's own fields
+#                vouch for it, never by a line's text. Not an exit status: systemd forgets a oneshot's
 #                once it is inactive. The controller keeps each run's lines
 #                and outcome for an hour (`root.follow`), so a long verb is
 #                asked with `detach` and answered once it starts.

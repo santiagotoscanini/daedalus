@@ -352,9 +352,10 @@ was asked for, the unit's journal lines stream back as
 `{"t":"progress","line":…}`, then one `{"t":"result","outcome":…,
 "detail":…}`: `failed` when the start job failed, else what the unit's
 outcome entry says — one journal entry with `DAEDALUS_OUTCOME` `done` or
-`refused`, `DAEDALUS_DETAIL` and `DAEDALUS_INVOCATION`, written by
-`nix/stacks/daedalus/host/lib.sh` `verb_done` / `refuse` and matched by its invocation,
-never by a line's text (a refusal exits 0, so no failed unit; systemd
+`refused` and `DAEDALUS_DETAIL`, written by
+`nix/stacks/daedalus/host/lib.sh` `verb_done` / `refuse` and taken only
+when journald's own fields vouch for it (the unit run's
+`_SYSTEMD_INVOCATION_ID`, a root or operator `_UID`), never by a line's text (a refusal exits 0, so no failed unit; systemd
 forgets a oneshot's exit status once it is inactive, so the journal
 carries the word) — and `done` with the last line when it wrote none. A
 unit already running is refused, never joined. The controller keeps every
