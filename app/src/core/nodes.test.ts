@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   synced: 0,
   sessionHost: true,
   sets: [] as Record<string, unknown>[],
+  transactions: 0,
+  facts: null as Record<string, unknown> | null,
 }))
 
 vi.mock('../host/db', () => {
@@ -48,6 +50,10 @@ vi.mock('../host/db', () => {
   // biome-ignore lint/suspicious/noThenProperty: a drizzle statement is awaited as a thenable
   chain.then = (ok: (rows: unknown[]) => unknown) =>
     Promise.resolve(h.rows.shift() ?? [{ id: 'n1' }]).then(ok)
+  chain.transaction = async (fn: (tx: unknown) => Promise<unknown>) => {
+    h.transactions++
+    return fn(chain)
+  }
   return { db: chain }
 })
 vi.mock('../host/dhcp-hosts', () => ({
@@ -67,7 +73,7 @@ vi.mock('../host/controller/nodes', () => ({
     return { error: null }
   },
   enrollValues: () => ({ id: 'n1' }),
-  observedFacts: () => null,
+  observedFacts: () => h.facts,
 }))
 // No machine here logged in with a tunnel of its own.
 vi.mock('../lib/repo/enroll', () => ({ enrollStore: { tunnelOf: async () => null } }))
@@ -91,6 +97,8 @@ beforeEach(() => {
   h.dhcp = 0
   h.rows = []
   h.sets = []
+  h.transactions = 0
+  h.facts = null
   h.synced = 0
   h.sessionHost = true
 })
@@ -206,5 +214,22 @@ describe('turning santree on (the confirmation)', () => {
     const none = await grant()
     expect(none.ok ? '' : none.reason).toMatch(/no session host/)
     expect(h.sets).toEqual([])
+  })
+})
+
+describe('keeping what the controller observed', () => {
+  it('writes every moved row in one transaction, and re-renders the DHCP lines once', async () => {
+    const seen = (id: string) => ({ id }) as never
+    h.rows = [
+      [
+        { id: 'n1', state: 'approved' },
+        { id: 'n2', state: 'approved' },
+      ],
+    ]
+    h.facts = { lanIp: '192.0.2.7' }
+    await flows.recordObserved([seen('n1'), seen('n2')])
+    expect(h.transactions).toBe(1)
+    expect(h.sets).toEqual([{ lanIp: '192.0.2.7' }, { lanIp: '192.0.2.7' }])
+    expect(h.dhcp).toBe(1)
   })
 })

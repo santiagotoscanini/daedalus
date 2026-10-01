@@ -259,8 +259,8 @@ async function afterInstallationChange(delivery: Delivery, deps: WebhookDeps): P
     const move = repoMove(delivery.event, delivery.action)
     const repoId = repositoryId(delivery.payload)
     if (move === null || repoId === null) return
-    const { listApps } = await import('../lib/repo/apps')
-    const pinned = appsPinnedTo(await listApps(), repoId)
+    const { listAppsLight } = await import('../lib/repo/apps')
+    const pinned = appsPinnedTo(await listAppsLight(), repoId)
     // Never unpinned here: a renamed repo's pushes still reach the app by id
     // (and fail closed at the host until the names match again), and
     // classifyPush already refuses a transferred or recreated repo.

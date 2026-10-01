@@ -10,7 +10,7 @@ import {
   type ProviderModel,
 } from '../../../lib/providers/kinds'
 import { type ModelPolicies, resolveModel } from '../../../lib/providers/policy'
-import { listApps } from '../../../lib/repo/apps'
+import { listAppsLight } from '../../../lib/repo/apps'
 import { listNodes } from '../../../lib/repo/nodes'
 
 // The Providers tab: every machine on the network that offers models, read
@@ -112,7 +112,7 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
   const [read, gateway, apps, nodes] = await Promise.all([
     readFleetProviders(ctx),
     gatewayRoutes(ctx),
-    listApps().catch(() => []),
+    listAppsLight().catch(() => []),
     listNodes(ctx).catch(() => []),
   ])
   // The same policy the gateway sync resolves against, so the alias this

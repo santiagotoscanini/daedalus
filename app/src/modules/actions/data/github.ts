@@ -2,7 +2,7 @@ import type { Ctx } from '../../../core/ctx'
 import { listExternalApps } from '../../../core/settings/external-apps'
 import { type Decoder, decode } from '../../../lib/contract/decode'
 import { ENGINE_REPO } from '../../../lib/engine'
-import { listApps } from '../../../lib/repo/apps'
+import { listAppNames } from '../../../lib/repo/apps'
 
 // How the Actions page reads GitHub: which repositories, with which voice,
 // and remembered for how long.
@@ -179,14 +179,14 @@ export async function knownRepos(ctx: Ctx): Promise<RepoRef[]> {
       url: `https://github.com/${fullName}`,
     })
   }
-  let apps: { name: string }[] = []
+  let names: string[] = []
   try {
-    apps = await listApps()
+    names = await listAppNames()
   } catch {
     // The database down leaves the registry empty; the page still reads the
     // projects and the engine.
   }
-  for (const a of apps) add(`${owner}/${a.name}`, 'app')
+  for (const name of names) add(`${owner}/${name}`, 'app')
   for (const p of await listExternalApps(ctx)) {
     if (p.repo !== null && /^[\w.-]+\/[\w.-]+$/.test(p.repo)) add(p.repo, 'project')
   }

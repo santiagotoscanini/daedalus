@@ -32,7 +32,7 @@ const BASE_DOMAIN = 'box.test'
 vi.stubEnv('BASE_DOMAIN', BASE_DOMAIN)
 
 const h = vi.hoisted(() => ({
-  /** listApps — the names already in the registry. */
+  /** listAppNames — the names already in the registry. */
   apps: [] as { name: string }[],
   /** getApp — the one record under test. */
   record: null as Row | null,
@@ -80,6 +80,11 @@ vi.mock('../../host/db', () => ({
         findFirst: async () => h.record ?? undefined,
       },
     },
+    select: () => ({
+      from: () => ({
+        orderBy: async () => h.apps.map((a) => ({ name: a.name })),
+      }),
+    }),
     insert: () => ({
       values: async (row: Row) => {
         h.inserted.push(row)

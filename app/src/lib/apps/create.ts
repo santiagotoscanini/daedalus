@@ -5,7 +5,7 @@ import { manifestEntries } from '../../host/nix-manifest'
 import { imageInfo } from '../../host/registry'
 import { swrCache } from '../cache'
 import type { RepoBuild } from '../readiness'
-import { listApps } from '../repo/apps'
+import { listAppNames } from '../repo/apps'
 import { appRepo, defaultImage, registryHostPattern } from '../site'
 
 // The reads behind the create form: what it can be pointed at, whether the
@@ -22,13 +22,17 @@ import { appRepo, defaultImage, registryHostPattern } from '../site'
  * itself, since picking a repo is what every later step keys off.
  */
 export async function loadNewAppOptions() {
-  const [repos, records, manifest] = await Promise.all([listRepos(), listApps(), manifestEntries()])
+  const [repos, names, manifest] = await Promise.all([
+    listRepos(),
+    listAppNames(),
+    manifestEntries(),
+  ])
 
   // A name is taken if EITHER source knows it: the database holds what
   // daedalus manages, the manifest additionally holds the hand-written
   // entries. The picker greys those repos out rather than letting the create
   // fail at the last step.
-  const taken = [...new Set([...records.map((r) => r.name), ...manifest.map((m) => m.name)])]
+  const taken = [...new Set([...names, ...manifest.map((m) => m.name)])]
 
   return { taken, ...repos }
 }

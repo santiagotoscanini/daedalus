@@ -5,7 +5,7 @@ import {
   externalAppFrom,
   isExternalAppList,
 } from '../../lib/external-apps'
-import { listApps } from '../../lib/repo/apps'
+import { listAppNames } from '../../lib/repo/apps'
 import { SETTING_KEYS } from '../../lib/repo/settings'
 import type { Result } from '../../lib/result'
 import type { Ctx } from '../ctx'
@@ -44,8 +44,8 @@ export async function addExternalApp(
   ctx: Ctx,
   input: ExternalAppInput,
 ): Promise<Result<ExternalApp>> {
-  const [rows, apps] = await Promise.all([listExternalApps(ctx), listApps()])
-  const taken = [...rows.map((r) => r.id), ...apps.map((a) => a.name)]
+  const [rows, names] = await Promise.all([listExternalApps(ctx), listAppNames()])
+  const taken = [...rows.map((r) => r.id), ...names]
   const reason = externalAppError(input, taken)
   if (reason !== null) return { ok: false, reason }
   const row = externalAppFrom(input)

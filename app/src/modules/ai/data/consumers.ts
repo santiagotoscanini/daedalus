@@ -1,5 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { listApps } from '../../../lib/repo/apps'
+import { listAppsLight } from '../../../lib/repo/apps'
 import { loadN8n, type N8nData } from './n8n'
 import { loadOpenWebUi, type OpenWebUiData } from './open-webui'
 
@@ -17,7 +17,7 @@ export async function loadConsumers(ctx: Ctx): Promise<ConsumersData> {
   const [openWebui, n8n, apps] = await Promise.all([
     ctx.modules.enabled('open-webui') ? loadOpenWebUi(ctx) : Promise.resolve(null),
     ctx.modules.enabled('n8n') ? loadN8n(ctx) : Promise.resolve(null),
-    listApps().catch(() => []),
+    listAppsLight().catch(() => []),
   ])
   return { openWebui, n8n, apps: apps.filter((a) => a.litellm).map((a) => ({ name: a.name })) }
 }

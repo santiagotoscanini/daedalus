@@ -108,18 +108,20 @@ async function controllerView(client: ControllerClient): Promise<ControllerView>
 
 export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   const client = ctx.controller
+  // Asked once: the rows join it in, and so do the cards.
+  const listed = client.nodesList().then(
+    (list) => ({ list, error: null }),
+    (e: unknown) => ({
+      list: [] as ControllerNode[],
+      error: e instanceof Error ? e.message : String(e),
+    }),
+  )
   const [rows, domain, view, sessionHost, seen] = await Promise.all([
-    listNodes(ctx),
+    listed.then((s) => listNodes(ctx, s.error === null ? s.list : null)),
     lanDomain(),
     controllerView(client),
     readSessionHost(ctx),
-    client.nodesList().then(
-      (list) => ({ list, error: null }),
-      (e: unknown) => ({
-        list: [] as ControllerNode[],
-        error: e instanceof Error ? e.message : String(e),
-      }),
-    ),
+    listed,
   ])
   const machines = await Promise.all(
     joinMachines(rows, seen.list).map(async (m) => {

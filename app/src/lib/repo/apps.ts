@@ -43,6 +43,22 @@ export async function listApps(): Promise<AppRecord[]> {
   })
 }
 
+/** Every app's name, sorted — for the callers that need nothing else (a taken-name check, a repo list). */
+export async function listAppNames(): Promise<string[]> {
+  const rows = await db.select({ name: apps.name }).from(apps).orderBy(asc(apps.name))
+  return rows.map((r) => r.name)
+}
+
+/** The registry without its children: the few flat columns a cross-cutting read keys on. */
+export async function listAppsLight(): Promise<
+  { name: string; litellm: boolean; githubRepoId: number | null }[]
+> {
+  return db
+    .select({ name: apps.name, litellm: apps.litellm, githubRepoId: apps.githubRepoId })
+    .from(apps)
+    .orderBy(asc(apps.name))
+}
+
 export async function getApp(name: string): Promise<AppRecord | undefined> {
   return db.query.apps.findFirst({
     where: eq(apps.name, name),
@@ -125,9 +141,8 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
 
   const { manifestEntries } = await import('../../host/nix-manifest')
   const { publishingFacts } = await import('../../host/contract/domains/publishing')
-  const existing = await listApps()
   const taken = [
-    ...existing.map((a) => a.name),
+    ...(await listAppNames()),
     // Hand-written entries (daedalus itself) are not rows here but absolutely
     // are names on the box — creating a second `daedalus` would collide on the
     // container name and the hostname, and Nix would find out mid-Apply.

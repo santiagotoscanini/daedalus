@@ -118,7 +118,7 @@ vi.mock('../lib/repo/builds', () => ({
       ),
 }))
 vi.mock('../lib/repo/apps', () => ({
-  listApps: async () => h.apps,
+  listAppsLight: async () => h.apps,
   // The id-first, name-fallback rule itself is lib/repo/apps-lookup.test.ts's.
   appForRepository: async (repoId: number, repoName: string) =>
     h.apps.find((a) => a.githubRepoId === repoId) ??
