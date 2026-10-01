@@ -1,0 +1,15 @@
+{
+  "public_key": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+  "fingerprint": "77aa:0102",
+  "listen": "0.0.0.0:7788",
+  "advertise": [
+    "box.lan:7788"
+  ],
+  "rotation": {
+    "from_public_key": "abababababababababababababababababababababababababababababababab",
+    "from_fingerprint": "3f2a:9c01",
+    "started_at": "2026-09-28T10:00:00Z",
+    "retires_at": "2026-10-05T10:00:00Z",
+    "old_key_connections": 2
+  }
+}

@@ -4,8 +4,12 @@
 //! telemetry, a machine's hello and status page — as serde writes them
 //! (ts-rs reads the serde attributes: `rename_all`, `skip`, `flatten`,
 //! `default` with `skip_serializing_if` for an optional key). One file per
-//! type, and an `index.ts` naming them all, in
-//! `app/src/host/controller/generated/`, which nothing but this writes.
+//! type, an `index.ts` naming them all, `Methods.ts` (each method's
+//! parameters and answer, from `ApiRequest`'s one list), `constants.ts` (the
+//! numbers the app must agree with) and `fixtures/` (one answer of each
+//! method and each event, the golden tests' values, which the app's tests
+//! decode), in `app/src/host/controller/generated/`, which nothing but this
+//! writes.
 //!
 //! This is a test, so ts-rs is a dev-dependency and no release binary
 //! carries it. It compares what the types generate with the files there and
@@ -95,7 +99,96 @@ fn files(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     out
 }
 
-/// The generated tree, in memory: each type's file, and `index.ts`.
+/// `Methods.ts`: each method's parameters and answer, from the one list
+/// (api/wire.rs `ApiRequest`), its types imported from the files beside it.
+fn methods(cfg: &Config, generated: &BTreeMap<String, Vec<u8>>) -> String {
+    let sigs = crate::api::wire::signatures(cfg);
+    let known: std::collections::BTreeSet<&str> = generated
+        .keys()
+        .filter_map(|f| f.strip_suffix(".ts"))
+        .collect();
+    let mut used = std::collections::BTreeSet::new();
+    for (_, p, a) in &sigs {
+        for ty in p.iter().chain([a]) {
+            for word in ty.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
+                if known.contains(word) {
+                    used.insert(word.to_string());
+                }
+            }
+        }
+    }
+    let mut out = String::from(HEADER);
+    for ty in &used {
+        out.push_str(&format!("import type {{ {ty} }} from './{ty}'\n"));
+    }
+    out.push_str(
+        "\n/** Each method of the controller's API: its parameters (null: it takes none) and its answer. */\n\
+         export type Methods = {\n",
+    );
+    for (m, p, a) in &sigs {
+        out.push_str(&format!(
+            "  '{m}': [{}, {a}]\n",
+            p.as_deref().unwrap_or("null")
+        ));
+    }
+    out.push_str("}\n");
+    out
+}
+
+/// `constants.ts`: the numbers the app must agree with, from where the agent
+/// keeps them.
+fn constants() -> String {
+    let ms = |d: std::time::Duration| d.as_millis();
+    let mut out = String::from(HEADER);
+    for (doc, name, value) in [
+        (
+            "The API version (api/mod.rs).",
+            "API_VERSION",
+            crate::api::API_VERSION.to_string(),
+        ),
+        (
+            "The longest line either side writes, in bytes (api/mod.rs).",
+            "MAX_LINE",
+            crate::api::MAX_LINE.to_string(),
+        ),
+        (
+            "How long the controller waits for a machine to acknowledge a verb it relays, in ms (link/controller/registry.rs).",
+            "ACK_TIMEOUT_MS",
+            ms(crate::link::controller::ACK_TIMEOUT).to_string(),
+        ),
+        (
+            "How long a detached `root.run` may take to start before the controller answers, in ms (api/mod.rs).",
+            "ROOT_DETACH_WAIT_MS",
+            ms(crate::api::ROOT_DETACH_WAIT).to_string(),
+        ),
+        (
+            "The longest name `nodes.set_desired` takes, in characters (api/wire.rs).",
+            "MAX_NODE_NAME",
+            crate::api::wire::MAX_NODE_NAME.to_string(),
+        ),
+        (
+            "The longest hostname a machine's hello carries, in bytes (link/wire.rs).",
+            "MAX_HOSTNAME",
+            crate::link::wire::MAX_HOSTNAME.to_string(),
+        ),
+        (
+            "The port a lemonade answers on unless its policy names another (providers/lemonade.rs).",
+            "LEMONADE_DEFAULT_PORT",
+            crate::providers::LEMONADE_DEFAULT_PORT.to_string(),
+        ),
+    ] {
+        out.push_str(&format!("\n/** {doc} */\nexport const {name} = {value}\n"));
+    }
+    out
+}
+
+const HEADER: &str =
+    "// Generated from agent/src (src/ts.rs). Do not edit: change the Rust type,\n\
+                      // then run agent/gate.sh gen.\n\n";
+
+/// The generated tree, in memory: each type's file, `index.ts`, `Methods.ts`,
+/// `constants.ts`, and one fixture per answer and event (api/wire.rs
+/// `fixtures`).
 fn generate() -> BTreeMap<String, Vec<u8>> {
     let tmp = std::env::temp_dir().join(format!("daedalus-ts-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
@@ -103,16 +196,21 @@ fn generate() -> BTreeMap<String, Vec<u8>> {
     export_all(&cfg).expect("the wire types export");
     let mut out = files(&tmp);
     let _ = std::fs::remove_dir_all(&tmp);
-    let mut index = String::from(
-        "// Generated from agent/src (src/ts.rs). Do not edit: change the Rust type,\n\
-         // then run agent/gate.sh gen.\n\n",
-    );
+    let mut index = String::from(HEADER);
     for name in out.keys() {
         let module = name.strip_suffix(".ts").unwrap_or(name);
         let ty = module.rsplit('/').next().unwrap_or(module);
         index.push_str(&format!("export type {{ {ty} }} from './{module}'\n"));
     }
+    index.push_str("export type { Methods } from './Methods'\n");
+    let methods = methods(&cfg, &out);
     out.insert("index.ts".into(), index.into_bytes());
+    out.insert("Methods.ts".into(), methods.into_bytes());
+    out.insert("constants.ts".into(), constants().into_bytes());
+    for (name, mut json) in crate::api::wire::fixtures() {
+        json.push('\n');
+        out.insert(format!("fixtures/{name}.json"), json.into_bytes());
+    }
     out
 }
 

@@ -1,0 +1,13 @@
+{
+  "runs": [
+    {
+      "run": "00112233445566ff",
+      "verb": "build",
+      "started_at": "2026-09-27T10:00:00Z",
+      "finished_at": "2026-09-27T10:01:00Z",
+      "started": true,
+      "outcome": "failed",
+      "detail": "fence"
+    }
+  ]
+}

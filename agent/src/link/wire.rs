@@ -181,6 +181,8 @@ pub struct Hello {
 
 /// The longest `hello` line the controller reads before a key is admitted.
 pub const MAX_HELLO_LINE: usize = 16 * 1024;
+/// The longest hostname a `hello` may carry, in bytes.
+pub const MAX_HOSTNAME: usize = 253;
 
 /// A token: letters, digits and `.`, `_`, `+`, `-`, at most `max` bytes.
 fn token(what: &str, s: &str, max: usize) -> Result<(), String> {
@@ -218,12 +220,13 @@ impl Hello {
     /// The bounds the controller holds an unauthenticated `hello` to — what
     /// it keeps in memory and what the app renders. A hostname may be a
     /// Mac's own name ("Santiago’s MacBook Pro"), so it is text, not an RFC
-    /// 1123 label: at most 253 bytes, trimmed, without control characters.
+    /// 1123 label: at most `MAX_HOSTNAME` bytes, trimmed, without control
+    /// characters.
     pub fn check(&self) -> Result<(), String> {
         if self.node_id.len() != 16 || !self.node_id.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err("node_id is not sixteen hex characters".into());
         }
-        text("hostname", &self.hostname, 253)?;
+        text("hostname", &self.hostname, MAX_HOSTNAME)?;
         if self.hostname.trim().is_empty() || self.hostname.trim() != self.hostname {
             return Err("hostname is empty or padded".into());
         }
@@ -452,7 +455,7 @@ pub fn event<P: Serialize>(e: &str, p: &P) -> String {
 pub const HB_LINE: &str = r#"{"e":"hb"}"#;
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::claude::Roster;
     use crate::rpc::Response;

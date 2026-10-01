@@ -1,0 +1,8 @@
+{
+  "id": 1,
+  "err": {
+    "code": "version",
+    "msg": "this agent speaks api 1",
+    "supported": 1
+  }
+}

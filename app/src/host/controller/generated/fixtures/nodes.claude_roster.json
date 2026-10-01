@@ -1,0 +1,91 @@
+{
+  "id": "0123456789abcdef",
+  "roster": {
+    "reported_at": "2026-09-27T10:00:00Z",
+    "agents_available": true,
+    "agents": [
+      {
+        "id": "0a1b2c3d",
+        "session_id": "abdda3a9-0cb2-43f1-b13e-37f25a755fce",
+        "pid": null,
+        "kind": "background",
+        "state": "blocked",
+        "status": null,
+        "name": "nixos-7a",
+        "cwd": "/etc/nixos",
+        "started_at": 1
+      }
+    ],
+    "transcripts": [
+      {
+        "id": "abdda3a9-0cb2-43f1-b13e-37f25a755fce",
+        "project": "-etc-nixos",
+        "cwd": "/etc/nixos",
+        "cwd_exact": true,
+        "title": "Fix the build",
+        "title_source": "custom-title",
+        "started_at": 2,
+        "modified_at": 3000,
+        "size_bytes": 4,
+        "meta": {
+          "exchanges": 5,
+          "replies": 6,
+          "thinking": 7,
+          "images": 0,
+          "attached": 1,
+          "subagents": null,
+          "span_ms": 8,
+          "branch": "main",
+          "cli_version": "2.1.281",
+          "last_prompt": "ship it",
+          "cost": {
+            "usd": 1.5,
+            "lines_added": 9,
+            "lines_removed": null,
+            "duration_ms": null
+          }
+        }
+      }
+    ],
+    "transcript_total": 1,
+    "empty_count": 2,
+    "truncated": false,
+    "managed": [
+      {
+        "id": "bbdda3a9-0cb2-43f1-b13e-37f25a755fce",
+        "job": "claude-session-bbdda3a9-0cb2-43f1-b13e-37f25a755fce",
+        "pid": 42,
+        "memory_bytes": 10,
+        "cpu_nsec": null,
+        "log": "/l",
+        "log_bytes": 11
+      }
+    ],
+    "session_stats": [
+      {
+        "pid": 42,
+        "cpu_ms": 12,
+        "rss_bytes": 13,
+        "log_bytes": null,
+        "bridge_at": null
+      }
+    ],
+    "server": {
+      "memory_bytes": 14,
+      "cpu_nsec": 15
+    },
+    "actions": [
+      {
+        "request": "00112233445566ff",
+        "action": "stop",
+        "id": "0a1b2c3d",
+        "state": "done",
+        "detail": "stopped",
+        "started_at": "t0",
+        "finished_at": "t1"
+      }
+    ],
+    "errors": []
+  },
+  "received_at": "t"
+}

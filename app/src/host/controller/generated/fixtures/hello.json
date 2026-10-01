@@ -1,0 +1,10 @@
+{
+  "api": 1,
+  "version": "0.13.0",
+  "mode": "controller",
+  "hostname": "box",
+  "capabilities": [
+    "claude.remote_control",
+    "telemetry.full"
+  ]
+}

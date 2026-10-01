@@ -1,0 +1,46 @@
+{
+  "api": 1,
+  "version": "0.13.0",
+  "mode": "controller",
+  "hostname": "box",
+  "os": {
+    "os": "linux",
+    "name": "NixOS",
+    "version": "25.11",
+    "arch": "x86_64",
+    "cpu": "AMD Ryzen 7",
+    "memory_bytes": 64
+  },
+  "uptime_secs": 5,
+  "os_uptime_secs": 100,
+  "booted_at": "2026-09-27T10:00:00Z",
+  "role": {
+    "mode": "controller",
+    "link": false,
+    "self_update": false,
+    "keep_awake": false,
+    "installer": false,
+    "session": true,
+    "session_in_service": true,
+    "claude_update": false,
+    "tray": false,
+    "status_on_lan": true,
+    "api_socket": true,
+    "node_listener": true
+  },
+  "telemetry": "minimal",
+  "capabilities": [
+    "claude.remote_control",
+    "telemetry.minimal",
+    "nodes"
+  ],
+  "controller": {
+    "public_key": "abababababababababababababababababababababababababababababababab",
+    "fingerprint": "3f2a:9c01",
+    "listen": "0.0.0.0:7788",
+    "advertise": [
+      "box.lan:7788"
+    ],
+    "rotation": null
+  }
+}

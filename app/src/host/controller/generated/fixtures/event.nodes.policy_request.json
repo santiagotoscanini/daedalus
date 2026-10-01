@@ -1,0 +1,9 @@
+{
+  "e": "nodes.policy_request",
+  "p": {
+    "id": "0123456789abcdef",
+    "changes": {
+      "santree": false
+    }
+  }
+}

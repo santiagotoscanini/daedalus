@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   ControllerError,
@@ -654,5 +655,50 @@ describe('the root helper’s answers', () => {
     const done = { ...summary, outcome: 'refused', detail: 'busy' }
     expect(rootRunsOk({ runs: [done] })[0]).toMatchObject({ outcome: 'refused', detail: 'busy' })
     expect(() => rootRunsOk({ runs: [{ ...summary, outcome: 'maybe' }] })).toThrow()
+  })
+})
+
+// The agent's own answers (agent/src/api/wire.rs `fixtures`, written beside
+// the generated types by its gate): every one decodes with its method's
+// decoder, so a reader that stops understanding the writer fails here.
+describe('the answers the agent writes', () => {
+  const dir = new URL('./generated/fixtures/', import.meta.url)
+  const fixture = (name: string): unknown =>
+    JSON.parse(readFileSync(new URL(`${name}.json`, dir), 'utf8'))
+  const decoders: Record<string, (v: unknown) => unknown> = {
+    hello: helloOk,
+    'system.info': systemInfo,
+    'claude.status': claudeStatus,
+    'claude.restart': queued,
+    'claude.roster': claudeRosterGet,
+    'claude.session': sessionQueued,
+    'telemetry.get': telemetryGet,
+    'nodes.list': nodesList,
+    'nodes.get': nodeDetail,
+    'nodes.telemetry': nodeTelemetryAnswer,
+    'nodes.providers': nodeProvidersAnswer,
+    'nodes.claude': nodeClaudeAnswer,
+    'nodes.claude_roster': nodeClaudeRosterAnswer,
+    'nodes.claude_session': claudeSessionSent,
+    'nodes.provider_model': providerModelSent,
+    'nodes.set_desired': setDesiredOk,
+    'nodes.command': commandOk,
+    'controller.rotate': controllerRotated,
+    'root.run': rootRunOk,
+    'root.follow': rootFollowOk,
+    'root.runs': rootRunsOk,
+    'santree.status': santreeStatus,
+  }
+  const answers = readdirSync(dir)
+    .map((f) => f.replace(/\.json$/, ''))
+    .filter((f) => !f.startsWith('event.') && !f.startsWith('error.') && f !== 'events.subscribe')
+  it.each(answers)('decodes %s', (m) => {
+    const decode = decoders[m]
+    expect(decode, `no decoder for ${m}`).toBeDefined()
+    expect(() => decode?.(fixture(m))).not.toThrow()
+  })
+  it('reads the error line', () => {
+    const e = parseLine(JSON.stringify(fixture('error.version')))
+    expect(e.kind === 'err' && e.error.code === 'version' && e.error.supported === 1).toBe(true)
   })
 })

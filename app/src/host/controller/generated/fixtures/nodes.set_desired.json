@@ -1,0 +1,9 @@
+{
+  "nodes": 2,
+  "approved": [
+    "0123456789abcdef"
+  ],
+  "revoked": [],
+  "pending": [],
+  "policy": []
+}

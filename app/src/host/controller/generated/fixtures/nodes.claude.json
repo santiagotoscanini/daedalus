@@ -1,0 +1,66 @@
+{
+  "id": "0123456789abcdef",
+  "report": {
+    "path": null,
+    "install_method": null,
+    "cli_version": null,
+    "last_update": null,
+    "state": "running",
+    "detail": null,
+    "pid": 4242,
+    "started_at": null,
+    "restarts": 0,
+    "last_exit": null,
+    "server": {
+      "version": null,
+      "environment_id": null,
+      "spawn_mode": null,
+      "max_sessions": null
+    },
+    "sessions": [
+      {
+        "pid": 42,
+        "transcript_id": "abdda3a9-0cb2-43f1-b13e-37f25a755fce",
+        "remote_id": null,
+        "cwd": null,
+        "name": null,
+        "kind": null,
+        "entrypoint": null,
+        "version": null,
+        "started_at": null,
+        "status": null,
+        "last_activity_at": null,
+        "alive": true
+      }
+    ],
+    "recovered": [
+      {
+        "id": "abdda3a9-0cb2-43f1-b13e-37f25a755fce",
+        "result": "done",
+        "detail": "resumed",
+        "at": "t"
+      }
+    ],
+    "credentials": {
+      "present": false,
+      "store": null,
+      "subscription_type": null,
+      "rate_limit_tier": null,
+      "expires_at": null,
+      "refresh_expires_at": null,
+      "scopes": []
+    },
+    "settings": {
+      "model": null,
+      "effort_level": null
+    },
+    "user": null,
+    "home": null,
+    "workdir": null,
+    "workdir_via": null,
+    "log": null,
+    "job": "daedalus-claude-rc",
+    "reported_at": "2026-09-27T10:00:00Z"
+  },
+  "received_at": "t"
+}

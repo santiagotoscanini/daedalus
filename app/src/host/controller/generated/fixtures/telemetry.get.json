@@ -1,0 +1,61 @@
+{
+  "level": "minimal",
+  "telemetry": {
+    "sampled_at": "2026-09-27T10:00:15Z",
+    "machine": {
+      "manufacturer": null,
+      "model": null,
+      "chip": null,
+      "bios_vendor": null,
+      "bios_version": null,
+      "bios_date": null,
+      "board_manufacturer": null,
+      "board_product": null,
+      "form": null,
+      "target": null
+    },
+    "os": {
+      "kernel": null,
+      "build": null,
+      "installed_at": null
+    },
+    "cpu": {
+      "model": null,
+      "cores": null,
+      "threads": null,
+      "frequency_mhz": null,
+      "usage_pct": null,
+      "load": null,
+      "temperature_c": null
+    },
+    "memory": {
+      "total_bytes": null,
+      "used_bytes": null,
+      "available_bytes": null,
+      "cached_bytes": null,
+      "compressed_bytes": null,
+      "committed_bytes": null,
+      "commit_limit_bytes": null,
+      "swap_total_bytes": null,
+      "swap_used_bytes": null,
+      "slots": null,
+      "max_capacity_bytes": null,
+      "modules": []
+    },
+    "disks": [],
+    "drives": [],
+    "gpus": [],
+    "temperatures": [],
+    "network": [],
+    "battery": null,
+    "processes": [],
+    "process_count": null,
+    "services": [],
+    "service_count": null,
+    "browsers": [],
+    "apps": [],
+    "app_count": null,
+    "updates": null,
+    "errors": []
+  }
+}

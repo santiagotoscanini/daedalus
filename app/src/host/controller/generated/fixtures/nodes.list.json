@@ -1,0 +1,27 @@
+{
+  "nodes": [
+    {
+      "id": "0123456789abcdef",
+      "fingerprint": "0123:4567",
+      "state": "approved",
+      "connected": true,
+      "since": "2026-09-27T10:00:00Z",
+      "last_seen": "2026-09-27T10:00:15Z",
+      "hostname": "PC",
+      "os": "windows",
+      "arch": "x86_64",
+      "agent_version": "0.14.0",
+      "lan_ip": "192.168.0.120",
+      "mac": "aa:bb:cc:dd:ee:ff",
+      "claude": {
+        "state": "running",
+        "detail": null,
+        "cli_version": null,
+        "server_version": null,
+        "sessions": 2,
+        "started_at": null,
+        "signed_in": true
+      }
+    }
+  ]
+}

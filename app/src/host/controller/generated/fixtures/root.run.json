@@ -1,0 +1,22 @@
+{
+  "run": "00112233445566ff",
+  "verb": "status",
+  "outcome": "done",
+  "detail": "1 verb",
+  "verbs": [
+    {
+      "verb": "deploy",
+      "unit": "app-%i-deploy.service",
+      "description": "Deploy one app",
+      "selectors": {
+        "app": [
+          "iris"
+        ]
+      },
+      "patterns": {},
+      "payload_max": null,
+      "active_state": "inactive",
+      "result": "success"
+    }
+  ]
+}

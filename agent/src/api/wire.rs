@@ -818,6 +818,256 @@ impl Drop for WireguardConfig {
     }
 }
 
+/// One answer of each method, each event and an error, as the agent writes
+/// them — the golden tests' own values. ts.rs writes them beside the
+/// generated types (`fixtures/<name>.json`), where the app's tests decode
+/// every one with the decoder its method names.
+#[cfg(test)]
+pub(crate) fn fixtures() -> Vec<(String, String)> {
+    use crate::claude::Session;
+    use crate::root::{Outcome, VerbState};
+    use tests::{provider_report, report, roster, summary};
+    fn v<T: Serialize>(x: &T) -> String {
+        serde_json::to_string_pretty(x).expect("a fixture serialises")
+    }
+    let id = "0123456789abcdef".to_string();
+    let rotating = ControllerInfo {
+        public_key: "cd".repeat(32),
+        fingerprint: "77aa:0102".into(),
+        listen: Some("0.0.0.0:7788".into()),
+        advertise: vec!["box.lan:7788".into()],
+        rotation: Some(crate::link::rotation::RotationInfo {
+            from_public_key: "ab".repeat(32),
+            from_fingerprint: "3f2a:9c01".into(),
+            started_at: "2026-09-28T10:00:00Z".into(),
+            retires_at: "2026-10-05T10:00:00Z".into(),
+            old_key_connections: 2,
+        }),
+    };
+    let mut status = StatusDocument {
+        agent: crate::SERVICE_NAME.into(),
+        version: "0.25.0".into(),
+        hostname: "PC".into(),
+        awake_hold: true,
+        claude: Some(report().summary()),
+        controller: Some(crate::link::LinkStatus {
+            address: Some("box.lan:7788".into()),
+            found_via: Some(crate::link::FoundVia::Config),
+            state: Some(crate::link::LinkState::Approved),
+            connected: true,
+            fingerprint: "0123:4567".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    status.facts.os = "windows".into();
+    status.state.last_update_check = Some("2026-09-27T10:00:00Z".into());
+    let telemetry = crate::telemetry::Telemetry {
+        sampled_at: "2026-09-27T10:00:15Z".into(),
+        ..Default::default()
+    };
+    let mut live = report();
+    live.sessions = vec![Session {
+        pid: 42,
+        transcript_id: Some("abdda3a9-0cb2-43f1-b13e-37f25a755fce".into()),
+        alive: true,
+        ..Default::default()
+    }];
+    let run = RootRunSummary {
+        run: "00112233445566ff".into(),
+        verb: "build".into(),
+        started_at: "2026-09-27T10:00:00Z".into(),
+        finished_at: Some("2026-09-27T10:01:00Z".into()),
+        started: true,
+        outcome: Some(Outcome::Failed),
+        detail: "fence".into(),
+    };
+    let answers = vec![
+        ("hello", v(&tests::hello_ok())),
+        ("events.subscribe", v(&Subscribed {})),
+        ("system.info", v(&tests::system_info())),
+        (
+            "claude.status",
+            v(&ClaudeStatus {
+                reporting: true,
+                wanted: true,
+                report: Some(live.clone()),
+            }),
+        ),
+        ("claude.restart", v(&Queued { queued: true })),
+        (
+            "claude.roster",
+            v(&ClaudeRosterGet {
+                reporting: true,
+                roster: Some(roster()),
+            }),
+        ),
+        (
+            "claude.session",
+            v(&SessionQueued {
+                queued: true,
+                request: "00112233445566ff".into(),
+            }),
+        ),
+        (
+            "telemetry.get",
+            v(&TelemetryGet {
+                level: TelemetryLevel::Minimal,
+                telemetry: Some(telemetry.minimal()),
+            }),
+        ),
+        (
+            "nodes.list",
+            v(&NodesList {
+                nodes: vec![summary()],
+            }),
+        ),
+        (
+            "nodes.get",
+            v(&NodeDetail {
+                node: summary(),
+                public_key: "ab".repeat(32),
+                hello: Some(crate::link::wire::tests::hello()),
+                status: Some(status),
+                status_at: Some("2026-09-27T10:00:15Z".into()),
+                telemetry: Some(telemetry.public()),
+                telemetry_at: Some("2026-09-27T10:00:15Z".into()),
+                providers: Some(vec![provider_report()]),
+                providers_at: Some("2026-09-28T10:00:01Z".into()),
+            }),
+        ),
+        (
+            "nodes.telemetry",
+            v(&NodeTelemetry {
+                id: id.clone(),
+                telemetry: Some(telemetry),
+                received_at: Some("2026-09-27T10:00:15Z".into()),
+            }),
+        ),
+        (
+            "nodes.providers",
+            v(&NodeProviders {
+                id: id.clone(),
+                connected: true,
+                providers: Some(vec![provider_report()]),
+                received_at: Some("2026-09-28T10:00:01Z".into()),
+            }),
+        ),
+        (
+            "nodes.claude",
+            v(&NodeClaude {
+                id: id.clone(),
+                report: Some(live),
+                received_at: Some("t".into()),
+            }),
+        ),
+        (
+            "nodes.claude_roster",
+            v(&NodeClaudeRoster {
+                id: id.clone(),
+                roster: Some(roster()),
+                received_at: Some("t".into()),
+            }),
+        ),
+        (
+            "nodes.claude_session",
+            v(&ClaudeSessionSent {
+                delivered: true,
+                request: "00112233445566ff".into(),
+            }),
+        ),
+        (
+            "nodes.provider_model",
+            v(&ProviderModelSent {
+                delivered: true,
+                request: "00112233445566ff".into(),
+            }),
+        ),
+        (
+            "nodes.set_desired",
+            v(&SetDesiredOk {
+                nodes: 2,
+                approved: vec![id.clone()],
+                ..Default::default()
+            }),
+        ),
+        (
+            "nodes.command",
+            v(&CommandOk {
+                delivered: true,
+                queued: false,
+            }),
+        ),
+        ("controller.rotate", v(&rotating)),
+        (
+            "root.run",
+            v(&RootRunOk {
+                run: "00112233445566ff".into(),
+                verb: "status".into(),
+                outcome: Some(Outcome::Done),
+                detail: "1 verb".into(),
+                verbs: Some(vec![VerbState {
+                    verb: "deploy".into(),
+                    unit: "app-%i-deploy.service".into(),
+                    description: "Deploy one app".into(),
+                    selectors: [("app".to_string(), vec!["iris".to_string()])].into(),
+                    patterns: Default::default(),
+                    payload_max: None,
+                    active_state: Some("inactive".into()),
+                    result: Some("success".into()),
+                }]),
+            }),
+        ),
+        (
+            "root.follow",
+            v(&RootFollowOk {
+                run: run.clone(),
+                lines: vec![RootLine {
+                    seq: 2,
+                    line: "two".into(),
+                }],
+                next: 2,
+                more: false,
+                dropped: false,
+            }),
+        ),
+        ("root.runs", v(&RootRunsOk { runs: vec![run] })),
+        ("santree.status", v(&tests::santree_status())),
+    ];
+    let mut out: Vec<(String, String)> = answers
+        .into_iter()
+        .map(|(m, a)| (m.to_string(), a))
+        .collect();
+    out.push((
+        "event.nodes.left".into(),
+        v(&ApiEvent::NodesLeft(NodeLeft { id: id.clone() })),
+    ));
+    out.push((
+        "event.nodes.policy_request".into(),
+        v(&ApiEvent::NodesPolicyRequest(NodePolicyRequest {
+            id,
+            changes: PolicyRequest {
+                santree: Some(false),
+                ..Default::default()
+            },
+        })),
+    ));
+    out.push((
+        "error.version".into(),
+        v(&crate::rpc::Response::err(
+            Some(1),
+            crate::rpc::ApiError {
+                supported: Some(crate::api::API_VERSION),
+                ..crate::rpc::ApiError::new(
+                    crate::rpc::ErrorCode::Version,
+                    "this agent speaks api 1",
+                )
+            },
+        )),
+    ));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -921,24 +1171,27 @@ mod tests {
         );
     }
 
-    #[test]
-    fn hello_on_the_wire() {
-        let ok = HelloOk {
+    pub fn hello_ok() -> HelloOk {
+        HelloOk {
             api: 1,
             version: "0.13.0".into(),
             mode: Mode::Controller,
             hostname: "box".into(),
             capabilities: vec![Capability::ClaudeRemoteControl, Capability::TelemetryFull],
-        };
+        }
+    }
+
+    #[test]
+    fn hello_on_the_wire() {
+        let ok = hello_ok();
         assert_eq!(
             wire(&ok),
             r#"{"api":1,"version":"0.13.0","mode":"controller","hostname":"box","capabilities":["claude.remote_control","telemetry.full"]}"#
         );
     }
 
-    #[test]
-    fn system_info_on_the_wire() {
-        let info = SystemInfo {
+    pub fn system_info() -> SystemInfo {
+        SystemInfo {
             api: 1,
             version: "0.13.0".into(),
             mode: Mode::Controller,
@@ -968,7 +1221,12 @@ mod tests {
                 listen: Some("0.0.0.0:7788".into()),
                 advertise: vec!["box.lan:7788".into()],
             }),
-        };
+        }
+    }
+
+    #[test]
+    fn system_info_on_the_wire() {
+        let info = system_info();
         assert_eq!(
             wire(&info),
             concat!(
@@ -1017,7 +1275,7 @@ mod tests {
         );
     }
 
-    fn summary() -> NodeSummary {
+    pub fn summary() -> NodeSummary {
         NodeSummary {
             id: "0123456789abcdef".into(),
             fingerprint: "0123:4567".into(),
@@ -1125,52 +1383,7 @@ mod tests {
             }),
             r#"{"id":"0123456789abcdef","connected":false,"providers":null,"received_at":null}"#
         );
-        let report = crate::providers::ProviderReport {
-            kind: crate::providers::ProviderKind::Lemonade,
-            port: 13305,
-            version: Some("9.1.2".into()),
-            running: true,
-            healthy: true,
-            loaded: vec![crate::providers::LoadedModel {
-                id: "Gemma-4".into(),
-                device: Some("gpu".into()),
-                max_context: Some(65536),
-                pinned: true,
-            }],
-            models: vec![crate::providers::ProviderModel {
-                id: "Gemma-4".into(),
-                labels: vec!["tool-calling".into()],
-                downloaded: true,
-                size_gb: Some(7.5),
-                recipe: Some("llamacpp".into()),
-            }],
-            downloads: vec![crate::providers::ProviderDownload {
-                model: "Qwen".into(),
-                percent: Some(12.5),
-                status: "downloading".into(),
-            }],
-            backends: vec![crate::providers::ProviderBackend {
-                recipe: "llamacpp".into(),
-                backend: "vulkan".into(),
-                version: Some("b6000".into()),
-                url: None,
-            }],
-            figures: vec![crate::providers::ModelFigures {
-                model: "Gemma-4".into(),
-                requests: Some(3.0),
-                tps: Some(40.0),
-                ..Default::default()
-            }],
-            read_at: "2026-09-28T10:00:00Z".into(),
-            error: None,
-            actions: vec![crate::providers::ProviderAction {
-                request: "00112233445566ff".into(),
-                model: "Gemma-4".into(),
-                ok: true,
-                message: "Loaded".into(),
-                at: "2026-09-28T09:59:00Z".into(),
-            }],
-        };
+        let report = provider_report();
         assert_eq!(
             wire(&NodeProviders {
                 id: "0123456789abcdef".into(),
@@ -1306,19 +1519,7 @@ mod tests {
             wire(&silent),
             r#"{"reporting":false,"wanted":true,"report":null}"#
         );
-        let r = Report {
-            state: crate::claude::ClaudeState::Running,
-            pid: Some(4242),
-            recovered: vec![crate::claude::Recovered {
-                id: "abdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
-                result: crate::claude::ActionState::Done,
-                detail: "resumed".into(),
-                at: "t".into(),
-            }],
-            job: Some("daedalus-claude-rc".into()),
-            reported_at: "2026-09-27T10:00:00Z".into(),
-            ..Default::default()
-        };
+        let r = report();
         let live = ClaudeStatus {
             reporting: true,
             wanted: true,
@@ -1340,6 +1541,73 @@ mod tests {
                 r#""reported_at":"2026-09-27T10:00:00Z"}}"#
             )
         );
+    }
+
+    /// A provider with one of everything.
+    pub fn provider_report() -> crate::providers::ProviderReport {
+        crate::providers::ProviderReport {
+            kind: crate::providers::ProviderKind::Lemonade,
+            port: 13305,
+            version: Some("9.1.2".into()),
+            running: true,
+            healthy: true,
+            loaded: vec![crate::providers::LoadedModel {
+                id: "Gemma-4".into(),
+                device: Some("gpu".into()),
+                max_context: Some(65536),
+                pinned: true,
+            }],
+            models: vec![crate::providers::ProviderModel {
+                id: "Gemma-4".into(),
+                labels: vec!["tool-calling".into()],
+                downloaded: true,
+                size_gb: Some(7.5),
+                recipe: Some("llamacpp".into()),
+            }],
+            downloads: vec![crate::providers::ProviderDownload {
+                model: "Qwen".into(),
+                percent: Some(12.5),
+                status: "downloading".into(),
+            }],
+            backends: vec![crate::providers::ProviderBackend {
+                recipe: "llamacpp".into(),
+                backend: "vulkan".into(),
+                version: Some("b6000".into()),
+                url: None,
+            }],
+            figures: vec![crate::providers::ModelFigures {
+                model: "Gemma-4".into(),
+                requests: Some(3.0),
+                tps: Some(40.0),
+                ..Default::default()
+            }],
+            read_at: "2026-09-28T10:00:00Z".into(),
+            error: None,
+            actions: vec![crate::providers::ProviderAction {
+                request: "00112233445566ff".into(),
+                model: "Gemma-4".into(),
+                ok: true,
+                message: "Loaded".into(),
+                at: "2026-09-28T09:59:00Z".into(),
+            }],
+        }
+    }
+
+    /// A running server's report.
+    pub fn report() -> Report {
+        Report {
+            state: crate::claude::ClaudeState::Running,
+            pid: Some(4242),
+            recovered: vec![crate::claude::Recovered {
+                id: "abdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
+                result: crate::claude::ActionState::Done,
+                detail: "resumed".into(),
+                at: "t".into(),
+            }],
+            job: Some("daedalus-claude-rc".into()),
+            reported_at: "2026-09-27T10:00:00Z".into(),
+            ..Default::default()
+        }
     }
 
     /// A roster with one of everything: every field the app reads, pinned.
@@ -1563,6 +1831,21 @@ mod tests {
         );
     }
 
+    pub fn santree_status() -> SantreeStatus {
+        SantreeStatus {
+            state: SessionHostState::Running,
+            version: Some("0.1.0".into()),
+            restart_pending: false,
+            live_ptys: 3,
+            connections: vec![SantreeConnections {
+                node: "0123456789abcdef".into(),
+                name: Some("MacBook".into()),
+                count: 2,
+            }],
+            error: None,
+        }
+    }
+
     #[test]
     fn santree_in_the_desired_set_and_the_status_on_the_wire() {
         let entry = |policy: Value| json!({"nodes":[{"id":"0123456789abcdef","public_key":"ab","state":"approved","policy":{"policy":policy}}]});
@@ -1588,18 +1871,7 @@ mod tests {
         ))
         .is_err());
 
-        let status = SantreeStatus {
-            state: SessionHostState::Running,
-            version: Some("0.1.0".into()),
-            restart_pending: false,
-            live_ptys: 3,
-            connections: vec![SantreeConnections {
-                node: "0123456789abcdef".into(),
-                name: Some("MacBook".into()),
-                count: 2,
-            }],
-            error: None,
-        };
+        let status = santree_status();
         assert_eq!(
             wire(&status),
             concat!(

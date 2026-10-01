@@ -1,0 +1,14 @@
+{
+  "state": "running",
+  "version": "0.1.0",
+  "restart_pending": false,
+  "live_ptys": 3,
+  "connections": [
+    {
+      "node": "0123456789abcdef",
+      "name": "MacBook",
+      "count": 2
+    }
+  ],
+  "error": null
+}
