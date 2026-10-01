@@ -120,8 +120,11 @@ pub fn systemd_session_args(job: &SessionJob, tools: &Tools) -> Result<Vec<Strin
         job.cwd,
         job.log,
     );
-    // A stop is a requested end: SIGTERM's exit is a success.
+    // A stop is a requested end: SIGTERM's exit is a success. Once it has
+    // ended, however it ended, the unit is unloaded (`--collect`), so a
+    // failed one never holds the name; what it printed is in its log.
     a.insert(4, "--property=SuccessExitStatus=143".into());
+    a.insert(5, "--collect".into());
     a.extend(job.env.iter().map(|(k, v)| format!("--setenv={k}={v}")));
     a.push("--".into());
     a.push(tools.sh.display().to_string());

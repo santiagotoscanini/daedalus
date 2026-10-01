@@ -403,11 +403,14 @@ pub fn clear(name: &str) {
     }
 }
 
+/// The jobs starting with `prefix` that run now. One that ended is
+/// collected on the way — its record and its handle let go — as systemd
+/// collects a session's unit: nothing reads it again.
 pub fn running(prefix: &str) -> Result<Vec<String>, String> {
     let Ok(entries) = std::fs::read_dir(jobs_dir()) else {
         return Ok(Vec::new());
     };
-    Ok(entries
+    let names: Vec<String> = entries
         .flatten()
         .filter_map(|e| {
             let n = e.file_name().to_string_lossy().into_owned();
@@ -415,8 +418,16 @@ pub fn running(prefix: &str) -> Result<Vec<String>, String> {
                 .filter(|s| s.starts_with(prefix))
                 .map(str::to_string)
         })
-        .filter(|n| show(n).is_ok_and(|s| s.running()))
-        .collect())
+        .collect();
+    let mut out = Vec::new();
+    for n in names {
+        match show(&n) {
+            Ok(s) if s.running() => out.push(n),
+            Ok(_) => clear(&n),
+            Err(_) => {}
+        }
+    }
+    Ok(out)
 }
 
 /// No accounting of a detached process's memory and CPU is read here.

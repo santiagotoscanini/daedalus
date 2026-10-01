@@ -45,8 +45,6 @@ pub fn start_server(j: &ServerJob) -> Result<(), String> {
 pub fn start_session(j: &SessionJob) -> Result<(), String> {
     let tools = Tools::locate()?;
     let args = jobs::systemd_session_args(j, &tools)?;
-    // A previous run that failed leaves the name taken.
-    let _ = systemctl(&["reset-failed", &service(j.name)]);
     command("systemd-run", &args).map(|_| ())
 }
 

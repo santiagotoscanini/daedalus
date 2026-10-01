@@ -175,6 +175,7 @@ fn a_systemd_resume_is_one_fixed_command_line() {
                 format!("--description=Claude Code session {ID}, resumed by daedalus-agent"),
                 "--property=TimeoutStopSec=15".into(),
                 "--property=SuccessExitStatus=143".into(),
+                "--collect".into(),
                 "--property=StandardOutput=append:/logs/claude-session.log".into(),
                 "--property=StandardError=append:/logs/claude-session.log".into(),
                 "--working-directory=/etc/nixos".into(),
