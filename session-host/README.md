@@ -160,9 +160,12 @@ per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list", "works
    connection is closed right after its handshake. An exited session nobody
    is attached to is closed after an hour. The hook socket serves 16
    connections at once, each for at most 1 s; more are closed unanswered.
-5. **Output is bounded**: 1024 lines and 128 MiB queued per connection. A
+5. **Output is bounded**: 128 MiB queued per connection, each line counted
+   with 64 bytes of overhead (no line count: a whole hook backlog fits). A
    peer that stops reading fills it; the link is dropped and its sessions
-   parked — the ring replays what it missed on the next attach.
+   parked — the ring replays what it missed on the next attach. A link the
+   host ends (a revocation, an overflow, the peer's EOF) ends with TLS
+   `close_notify`, given at most 1 s.
 6. **`exec.run` runs in a process group of its own**, killed whole on a
    timeout, on output that never closes, and when the request is dropped (its
    connection ended). Output is capped at 8 MiB a stream, as the fake: two

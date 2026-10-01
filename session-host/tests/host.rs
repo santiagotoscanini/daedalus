@@ -1760,7 +1760,52 @@ async fn the_status_file_tracks_the_host_and_says_stopped() {
     );
 }
 
-// ── 11. hook socket hygiene ───────────────────────────────────────────────
+// ── 11. hook backlog, link close, hook socket hygiene ─────────────────────
+
+/// A subscriber that was away while more events queued than any line count
+/// would hold (a Mac asleep overnight) gets the whole backlog, in order, and
+/// keeps its link.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_backlog_of_thousands_of_hooks_is_delivered_whole() {
+    let dir = tempdir();
+    let host = Host::start(dir.path());
+    let socket = host.hook_socket();
+    const QUEUED: u64 = 3000;
+    for _ in 0..QUEUED {
+        push_hook(
+            &socket,
+            "Stop",
+            json!([["SANTREE_REPO", "/srv/web"]]),
+            b"{}",
+        )
+        .await;
+    }
+    let mut sub = host.greeted().await;
+    sub.ok("hooks.subscribe", json!({})).await;
+    for seq in 1..=QUEUED {
+        let hook = sub.next().await;
+        assert_eq!(hook["p"]["seq"], seq, "{hook}");
+    }
+    // Live events follow the backlog on the same link.
+    push_hook(&socket, "Stop", json!([]), b"").await;
+    assert_eq!(sub.next().await["p"]["seq"], QUEUED + 1);
+    sub.ok("hooks.ack", json!({"upTo": QUEUED + 1})).await;
+}
+
+/// The host ends a link with TLS `close_notify`, so the node reads a close
+/// (here, a revocation) rather than a cut.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_link_the_host_closes_ends_with_close_notify() {
+    let dir = tempdir();
+    let host = Host::start(dir.path());
+    let mut raw = host.greeted().await;
+    write_allow(&host.allow_list(), &[]);
+    let mut rest = Vec::new();
+    let read = tokio::time::timeout(WAIT, raw.reader.read_to_end(&mut rest))
+        .await
+        .expect("the host did not close the link");
+    assert!(read.is_ok(), "the link was cut, not closed: {read:?}");
+}
 
 /// Reads until the hook socket connection ends; what was answered.
 async fn hook_answer(mut stream: UnixStream) -> Vec<u8> {

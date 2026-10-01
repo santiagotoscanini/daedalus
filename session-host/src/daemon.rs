@@ -17,7 +17,7 @@
 //! proved by its TLS key, and every PTY is tagged with the node that opened
 //! it, so a node leaving the allow-list loses its links and its PTYs; the
 //! caps ([`MAX_PTYS`], [`MAX_IN_FLIGHT`], [`MAX_CONNS_PER_NODE`],
-//! [`OUT_QUEUE`], [`REAP_AFTER`]); confinement of working directories and
+//! [`OUT_QUEUE_BYTES`], [`REAP_AFTER`]); confinement of working directories and
 //! written files to the projects root (fsops.rs); `hooks.push` only on the
 //! local hook socket; `workspaces.list` and `workspaces.icon`; and an audit line per connection and
 //! per consequential request — never data, file contents or env values.
@@ -49,13 +49,21 @@ pub const MAX_PTYS: usize = 64;
 pub const MAX_IN_FLIGHT: usize = 32;
 /// Connections one node may hold at once; another is closed at once.
 pub const MAX_CONNS_PER_NODE: usize = 4;
-/// Lines queued for one connection's writer. A peer that stops reading fills
-/// it; the link is then dropped and its sessions parked — nothing is lost, the
-/// ring replays it on the next attach.
-pub const OUT_QUEUE: usize = 1024;
-/// …and bytes: a few `exec.run` replies (up to ~22 MiB each) are enough to
-/// fill memory long before 1024 lines.
+/// Bytes queued for one connection's writer, each line counted with
+/// [`LINE_OVERHEAD`]. A peer that stops reading fills it; the link is then
+/// dropped and its sessions parked — nothing is lost, the ring replays it on
+/// the next attach. Bytes only, no line count: a whole hook backlog (up to
+/// [`HOOK_QUEUE_BYTES`], ~4/3 of it in base64) must fit, however many events
+/// it holds.
 pub const OUT_QUEUE_BYTES: usize = 128 * 1024 * 1024;
+/// What one queued line costs besides its text (its allocation and its
+/// slot), so a flood of tiny lines still fills the queue.
+pub const LINE_OVERHEAD: usize = 64;
+/// Hook events cloned from the queue per lock while a backlog is sent.
+const BACKLOG_CHUNK: usize = 256;
+/// How long a closing connection's writer may take to finish its last write
+/// and send TLS `close_notify`, so the peer can tell a close from a cut.
+const WRITER_CLOSE: Duration = Duration::from_secs(1);
 /// Blocking work (the handlers that run on tokio's blocking pool) one node
 /// may have running at once; more get `busy`. Counted per node, not per
 /// connection, and held by the work itself until it returns: a reconnect
@@ -124,48 +132,45 @@ fn ok<T: Serialize>(value: &T) -> Outcome {
 
 // ── connections ───────────────────────────────────────────────────────────
 
-/// One connection's outgoing queue, bounded ([`OUT_QUEUE`]). A send that
-/// finds it full closes the connection (`close`) instead of waiting.
+/// One connection's outgoing queue, bounded by bytes ([`OUT_QUEUE_BYTES`]).
+/// A send that finds it full closes the connection (`close`) instead of
+/// waiting.
 #[derive(Clone)]
 struct Out {
-    tx: mpsc::Sender<String>,
+    tx: mpsc::UnboundedSender<String>,
     conn: u64,
-    /// Bytes queued and not yet taken by the writer ([`OUT_QUEUE_BYTES`]).
+    /// Bytes queued and not yet taken by the writer ([`queued_cost`]).
     queued: Arc<AtomicUsize>,
     full: Arc<AtomicBool>,
     close: Arc<Notify>,
+}
+
+/// What a queued line counts against [`OUT_QUEUE_BYTES`].
+fn queued_cost(line: &str) -> usize {
+    line.len() + LINE_OVERHEAD
 }
 
 impl Out {
     /// Queue one line; false when it was not (the queue is full, and the
     /// connection is closing, or already gone).
     fn send(&self, line: String) -> bool {
-        let len = line.len();
-        if self.queued.fetch_add(len, Ordering::AcqRel) + len > OUT_QUEUE_BYTES {
-            self.queued.fetch_sub(len, Ordering::AcqRel);
-            self.overflow("bytes");
+        let cost = queued_cost(&line);
+        if self.queued.fetch_add(cost, Ordering::AcqRel) + cost > OUT_QUEUE_BYTES {
+            self.queued.fetch_sub(cost, Ordering::AcqRel);
+            if !self.full.swap(true, Ordering::AcqRel) {
+                log::warn!(
+                    "connection {}: too much queued and unread; dropping the link",
+                    self.conn
+                );
+                self.close.notify_one();
+            }
             return false;
         }
-        match self.tx.try_send(line) {
-            Ok(()) => true,
-            Err(e) => {
-                self.queued.fetch_sub(len, Ordering::AcqRel);
-                if let mpsc::error::TrySendError::Full(_) = e {
-                    self.overflow("lines");
-                }
-                false
-            }
+        if self.tx.send(line).is_err() {
+            self.queued.fetch_sub(cost, Ordering::AcqRel);
+            return false;
         }
-    }
-
-    fn overflow(&self, what: &str) {
-        if !self.full.swap(true, Ordering::AcqRel) {
-            log::warn!(
-                "connection {}: too many {what} queued and unread; dropping the link",
-                self.conn
-            );
-            self.close.notify_one();
-        }
+        true
     }
 }
 
@@ -835,22 +840,7 @@ impl Daemon {
             }
             m::HooksSubscribe::NAME => {
                 let p = params!(HooksSubscribeParams);
-                {
-                    let mut hooks = lock(&self.hooks);
-                    conn.out
-                        .send(encode_ok(request.id, &Empty).expect("empty serializes"));
-                    hooks.subscriber = Some((conn.id, conn.out.clone()));
-                    hooks.report_dropped();
-                    let backlog: Vec<HookEvent> = hooks
-                        .items
-                        .iter()
-                        .filter(|h| p.after.is_none_or(|after| h.seq > after))
-                        .cloned()
-                        .collect();
-                    for hook in backlog {
-                        hooks.notify(Event::Hook(hook).encode());
-                    }
-                }
+                self.subscribe_hooks(conn, request.id, p.after);
                 log::info!("connection {}: subscribed to hooks", conn.id);
                 self.touch();
                 None
@@ -886,6 +876,53 @@ impl Daemon {
                 ErrorCode::BadRequest,
                 format!("unknown method {other}"),
             ))),
+        }
+    }
+
+    /// `hooks.subscribe`: the response, the dropped report, the backlog
+    /// after `after`, then live events. The backlog is cloned
+    /// [`BACKLOG_CHUNK`] events at a time under the queue's lock and encoded
+    /// outside it; `conn` becomes the subscriber under the lock that finds
+    /// nothing more to send, so no event is missed, repeated or reordered.
+    fn subscribe_hooks(&self, conn: &Conn, req_id: u64, mut after: Option<u64>) {
+        if !conn
+            .out
+            .send(encode_ok(req_id, &Empty).expect("empty serializes"))
+        {
+            return;
+        }
+        loop {
+            let (dropped, chunk) = {
+                let mut hooks = lock(&self.hooks);
+                let start = hooks
+                    .items
+                    .partition_point(|h| after.is_some_and(|after| h.seq <= after));
+                let chunk: Vec<HookEvent> = hooks
+                    .items
+                    .range(start..)
+                    .take(BACKLOG_CHUNK)
+                    .cloned()
+                    .collect();
+                if chunk.is_empty() {
+                    hooks.subscriber = Some((conn.id, conn.out.clone()));
+                    hooks.report_dropped();
+                    return;
+                }
+                (std::mem::take(&mut hooks.dropped), chunk)
+            };
+            if dropped > 0
+                && !conn
+                    .out
+                    .send(Event::HooksDropped(HooksDropped { count: dropped }).encode())
+            {
+                return;
+            }
+            for hook in chunk {
+                after = Some(hook.seq);
+                if !conn.out.send(Event::Hook(hook).encode()) {
+                    return;
+                }
+            }
         }
     }
 
@@ -1171,7 +1208,7 @@ where
     daemon.touch();
 
     let (reader, writer) = tokio::io::split(stream);
-    let (tx, mut out_rx) = mpsc::channel::<String>(OUT_QUEUE);
+    let (tx, mut out_rx) = mpsc::unbounded_channel::<String>();
     let close = Arc::new(Notify::new());
     let queued = Arc::new(AtomicUsize::new(0));
     let conn = Arc::new(Conn {
@@ -1187,15 +1224,26 @@ where
         closed: AtomicBool::new(false),
     });
 
-    let writer_task = tokio::spawn(async move {
+    // Stopped by the teardown (`stop`), it ends its write and sends
+    // `close_notify` within WRITER_CLOSE, so the peer reads a clean close.
+    let (stop, mut stopped) = oneshot::channel::<()>();
+    let mut writer_task = tokio::spawn(async move {
         let mut writer = writer;
-        while let Some(line) = out_rx.recv().await {
-            queued.fetch_sub(line.len(), Ordering::AcqRel);
+        loop {
+            let line = tokio::select! {
+                biased;
+                _ = &mut stopped => break,
+                line = out_rx.recv() => match line {
+                    Some(line) => line,
+                    None => break,
+                },
+            };
+            queued.fetch_sub(queued_cost(&line), Ordering::AcqRel);
             let mut batch = line;
             batch.push('\n');
             // Whatever else is already queued goes in the same flush.
             while let Ok(mut more) = out_rx.try_recv() {
-                queued.fetch_sub(more.len(), Ordering::AcqRel);
+                queued.fetch_sub(queued_cost(&more), Ordering::AcqRel);
                 more.push('\n');
                 batch.push_str(&more);
                 if batch.len() > 1024 * 1024 {
@@ -1339,7 +1387,13 @@ where
     lock(&daemon.conns).remove(&id);
     guard_task.abort();
     ping_task.abort();
-    writer_task.abort();
+    let _ = stop.send(());
+    if tokio::time::timeout(WRITER_CLOSE, &mut writer_task)
+        .await
+        .is_err()
+    {
+        writer_task.abort();
+    }
     log::info!("node {} connection {id}: closed", peer.node);
     daemon.touch();
 }
@@ -1642,7 +1696,6 @@ mod tests {
         let _ = stuck.try_recv();
         daemon.close_all();
     }
-
     /// An attach that fails on a session this host still holds is `io`, not
     /// `not_found`: the client would forget a session that is still there.
     #[test]
@@ -1653,7 +1706,7 @@ mod tests {
         write_allow(&list, &[&a]);
         let daemon = Daemon::new(options(dir.path()), "b".into(), AllowList::open(list));
         let id = id_of(open(&daemon, dir.path(), &node(&a), &["sleep", "30"]));
-        let (tx, _rx) = mpsc::channel(8);
+        let (tx, _rx) = mpsc::unbounded_channel();
         let conn = Conn {
             id: 1,
             node: node(&a),
