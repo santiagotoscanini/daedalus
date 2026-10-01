@@ -96,7 +96,7 @@ export async function loadBuilder(ctx: Ctx): Promise<BuilderData> {
     builderNow(),
     buildsSince(since),
     manualRows(),
-    readImageUpdateStatus(),
+    readImageUpdateStatus(ctx),
     readBuilderFacts(),
     loadGithub(ctx),
   ])

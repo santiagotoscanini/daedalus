@@ -127,7 +127,7 @@ export async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
     minecraftRoster(ctx),
     readVersionUpdateStatus(),
     updateRows(MINECRAFT_CONTAINERS),
-    readImageUpdateStatus(),
+    readImageUpdateStatus(ctx),
   ])
   // After the rest: it needs Mojang's newest release, which the batch above read.
   const update = await loadMinecraftUpdate(ctx, { version, build }, latestVersion)

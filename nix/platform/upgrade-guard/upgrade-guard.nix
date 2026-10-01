@@ -92,16 +92,20 @@ let
     POOLS = lib.concatStringsSep " " pools;
     ESP = config.boot.loader.efi.efiSysMountPoint;
     LOCKFILE = config.fleet.rebuildLock;
-    REBUILD_UNITS = lib.concatStringsSep " " (
-      lib.filter (u: config.systemd.services ? ${lib.removeSuffix ".service" u}) [
-        "flake-autoupgrade.service"
-        "daedalus-apply.service"
-        "daedalus-engine-update.service"
-        "daedalus-image-update.service"
-        "daedalus-version-update.service"
-        "daedalus-claude-code-update.service"
-      ]
-    );
+    # A root verb's template (`x@`) is asked as the glob of its instances:
+    # `systemctl is-active` takes a pattern, and names no unit while none runs.
+    REBUILD_UNITS =
+      lib.concatMapStringsSep " " (n: if lib.hasSuffix "@" n then "${n}*.service" else "${n}.service")
+        (
+          lib.filter (n: config.systemd.services ? ${n}) [
+            "flake-autoupgrade"
+            "daedalus-apply"
+            "daedalus-engine-update"
+            "daedalus-image-update@"
+            "daedalus-version-update"
+            "daedalus-claude-code-update"
+          ]
+        );
     AGE_KEYS = lib.concatStringsSep " " (
       config.sops.age.sshKeyPaths
       ++ lib.optional (config.sops.age.keyFile != null) config.sops.age.keyFile

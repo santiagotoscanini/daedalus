@@ -30,15 +30,15 @@ export const fetchUpdateNotes = readFn
     return loadUpdateNotes(data.container)
   })
 
-export const fetchImageUpdateStatus = readFn.handler(async () => {
+export const fetchImageUpdateStatus = readFn.handler(async ({ context }) => {
   const { readImageUpdateStatus } = await import('../host/image-update')
-  return readImageUpdateStatus()
+  return readImageUpdateStatus(await context.ctx())
 })
 
 /**
  * Ask the host to move one or more pins and rebuild onto them.
  *
- * Returns as soon as the request is published, which is before the host has
+ * Returns as soon as the host's update has started, which is before it has
  * validated anything: a container may not be pinned, may be declared not
  * updatable, or the registry may refuse its tag. All three are reported
  * through the status file, which the caller polls — the same contract Apply
@@ -65,7 +65,12 @@ export const requestImageUpdateFn = adminFn
   )
   .handler(async ({ data, context }) => {
     const { runImageUpdate } = await import('../host/update-flow')
-    return runImageUpdate({ targets: data.targets, confirm: data.confirm, actor: context.actor })
+    return runImageUpdate({
+      ctx: await context.ctx(),
+      targets: data.targets,
+      confirm: data.confirm,
+      actor: context.actor,
+    })
   })
 
 // ── the engine ────────────────────────────────────────────────────────────

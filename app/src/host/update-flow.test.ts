@@ -1,61 +1,75 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Ctx } from '../core/ctx'
 import type { UpdateOutcome } from './update-flow'
 
 // What this request makes the host do is the reason to test it: rewrite a
 // flake pin, commit, `nixos-rebuild switch`, verify the container came back on
 // the new image, and revert when it did not. A queued batch is ONE commit and
-// ONE switch, so a request that should never have been published takes every
+// ONE switch, so a request that should never have been started takes every
 // container in it down and back with whatever else was queued beside it.
 //
-// So the assertions below are all about what is NOT written: a malformed
-// request, a second one racing the first, or one arriving while the host is
-// mid-rebuild must leave image-request.json exactly as it was. The bridge is
-// real, pointed at a temp APPLY_DIR (host/bridge.test.ts's archetype) — a
-// refusal that returned the right object and still dropped the file would pass
-// a test that only read the return value.
+// So the assertions below are all about what is NOT asked: a malformed
+// request, or one arriving while the host is mid-rebuild, must never reach the
+// root helper. The controller is a fake Ctx's, recording every start; the status
+// file is real, in a temp VERBS_DIR. A second caller racing the first is the
+// helper's to refuse (one run at a time), and its refusal is the answer.
 //
-// `pending` and `chain` are module-scoped with no reset hook, so every test
-// takes a FRESH module: `vi.resetModules()` then `await import`.
+// `chain` is module-scoped with no reset hook, so every test takes a FRESH
+// module: `vi.resetModules()` then `await import`.
+
+const h = vi.hoisted(() => ({
+  started: [] as unknown[][],
+  start: [] as unknown[],
+}))
+
+const ctx = {
+  controller: {
+    rootFollow: async () => ({ run: { outcome: null, detail: '' } }),
+    rootStart: async (...args: unknown[]) => {
+      h.started.push(args)
+      const next = h.start.shift()
+      if (next instanceof Error) throw next
+      return next ?? { run: 'r1', verb: 'image-update', outcome: null, detail: '', verbs: [] }
+    },
+  },
+} as unknown as Pick<Ctx, 'controller'>
 
 let dir: string
-let previousApplyDir: string | undefined
+let previousVerbsDir: string | undefined
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'update-flow-'))
-  previousApplyDir = process.env.APPLY_DIR
-  process.env.APPLY_DIR = dir
+  previousVerbsDir = process.env.VERBS_DIR
+  process.env.VERBS_DIR = dir
+  h.started = []
+  h.start = []
 })
 
 afterEach(async () => {
-  vi.useRealTimers()
-  if (previousApplyDir === undefined) delete process.env.APPLY_DIR
-  else process.env.APPLY_DIR = previousApplyDir
+  if (previousVerbsDir === undefined) delete process.env.VERBS_DIR
+  else process.env.VERBS_DIR = previousVerbsDir
   await rm(dir, { recursive: true, force: true })
 })
 
-/** A fresh module, so the previous test's `pending` and `chain` are gone. */
+/** A fresh module, so the previous test's `chain` is gone. */
 async function flow() {
   vi.resetModules()
   return import('./update-flow')
 }
 
-/** `finishedAt` is rewritten at every phase, so a live run's is recent. */
 const hostStatus = (status: Record<string, unknown>) =>
-  writeFile(
-    join(dir, 'image-status.json'),
-    JSON.stringify({ finishedAt: new Date().toISOString(), ...status }),
-    'utf8',
-  )
+  writeFile(join(dir, 'image-update-status.json'), JSON.stringify(status), 'utf8')
 
-const REQUEST = 'image-request.json'
-const NOT_PICKED_UP = {
-  ok: false,
-  code: 'busy',
-  reason: 'the previous update request has not been picked up by the host yet',
-}
+/** The containers each start asked for. */
+const startedTargets = () =>
+  h.started.map((a) =>
+    (JSON.parse(String(a[2])) as { targets: { container: string }[] }).targets.map(
+      (t) => t.container,
+    ),
+  )
 
 function idOf(outcome: UpdateOutcome): string {
   if (!outcome.ok) throw new Error(`expected an update, got ${outcome.code}: ${outcome.reason}`)
@@ -63,17 +77,17 @@ function idOf(outcome: UpdateOutcome): string {
 }
 
 describe('a request naming no container', () => {
-  it('is refused before anything is written', async () => {
+  it('is refused before anything is asked', async () => {
     const { runImageUpdate } = await flow()
 
     for (const targets of [[], [{ container: '' }], [{ container: 'iris' }, { container: '' }]]) {
-      expect(await runImageUpdate({ targets, confirm: [], actor: 'santiago' })).toEqual({
+      expect(await runImageUpdate({ ctx, targets, confirm: [], actor: 'santiago' })).toEqual({
         ok: false,
         code: 'refused',
         reason: 'no container named',
       })
     }
-    expect(await readdir(dir)).toEqual([])
+    expect(h.started).toEqual([])
   })
 })
 
@@ -83,22 +97,23 @@ describe('a container named twice in one batch', () => {
   // A duplicate is neither — it is a malformed request, and one commit that
   // moves the same pin twice is not something the host should be asked to
   // interpret.
-  it('is refused before anything is written', async () => {
+  it('is refused before anything is asked', async () => {
     const { runImageUpdate } = await flow()
 
     expect(
       await runImageUpdate({
+        ctx,
         targets: [{ container: 'immich' }, { container: 'iris' }, { container: 'immich' }],
         confirm: [],
         actor: 'santiago',
       }),
     ).toEqual({ ok: false, code: 'refused', reason: 'immich is in this request twice' })
-    expect(await readdir(dir)).toEqual([])
+    expect(h.started).toEqual([])
   })
 })
 
 describe('an update the host is already running', () => {
-  it('is refused, and does not replace the request it is reading', async () => {
+  it('is refused without asking the helper', async () => {
     await hostStatus({
       id: 'abc',
       targets: ['intel-gpu-exporter'],
@@ -108,45 +123,62 @@ describe('an update the host is already running', () => {
     const { runImageUpdate } = await flow()
 
     expect(
-      await runImageUpdate({ targets: [{ container: 'iris' }], confirm: [], actor: 'santiago' }),
+      await runImageUpdate({
+        ctx,
+        targets: [{ container: 'iris' }],
+        confirm: [],
+        actor: 'santiago',
+      }),
     ).toEqual({
       ok: false,
       code: 'busy',
       reason: 'an update of intel-gpu-exporter is already running (pull)',
     })
-    expect(await readdir(dir)).toEqual(['image-status.json'])
+    expect(h.started).toEqual([])
   })
 })
 
 describe('two callers at once', () => {
-  it('publish exactly one request', async () => {
+  it('start one run: the helper refuses the other, and its words are the answer', async () => {
     const { runImageUpdate } = await flow()
+    h.start = [
+      { run: 'r1', verb: 'image-update', outcome: null, detail: '', verbs: [] },
+      {
+        run: 'r2',
+        verb: 'image-update',
+        outcome: 'refused',
+        detail: 'daedalus-image-update@r1 is still running; wait for it to finish',
+        verbs: [],
+      },
+    ]
 
-    // Un-awaited on purpose: both enter before either has written anything.
-    // The status file cannot separate them — it still says idle — so this is
-    // `pending` plus the chain doing the work.
+    // Un-awaited on purpose: both enter before either has started. The status
+    // file cannot separate them — the unit has not written it yet — so this is
+    // the helper's one-run-at-a-time doing the work.
     const [a, b] = await Promise.all([
-      runImageUpdate({ targets: [{ container: 'iris' }], confirm: [], actor: 'one' }),
+      runImageUpdate({ ctx, targets: [{ container: 'iris' }], confirm: [], actor: 'one' }),
       runImageUpdate({
+        ctx,
         targets: [{ container: 'anansi', toTag: 'v2' }],
         confirm: [],
         actor: 'two',
       }),
     ])
+    expect(idOf(a)).toBe('r1')
+    expect(b).toEqual({
+      ok: false,
+      code: 'busy',
+      reason: 'daedalus-image-update@r1 is still running; wait for it to finish',
+    })
+    expect(startedTargets()).toEqual([['iris'], ['anansi']])
+  })
 
-    const applied = [a, b].filter((o): o is Extract<UpdateOutcome, { ok: true }> => o.ok)
-    expect([a, b].filter((o) => !o.ok)).toEqual([NOT_PICKED_UP])
-    const only = applied[0]
-    if (applied.length !== 1 || !only) throw new Error('both callers published')
-
-    expect(await readdir(dir)).toEqual([REQUEST])
-    const request = JSON.parse(await readFile(join(dir, REQUEST), 'utf8')) as {
-      id: string
-      targets: { container: string }[]
-    }
-    expect(request.id).toBe(idOf(only))
-    // The surviving request is one caller's, not a blend of the two.
-    expect(request.targets.map((t) => t.container)).toEqual(only.targets.map((t) => t.container))
+  it('no controller is unavailable, with why', async () => {
+    const { runImageUpdate } = await flow()
+    h.start = [new Error('no socket at /controller/api.sock')]
+    expect(
+      await runImageUpdate({ ctx, targets: [{ container: 'iris' }], confirm: [], actor: 'one' }),
+    ).toEqual({ ok: false, code: 'unavailable', reason: 'no socket at /controller/api.sock' })
   })
 })
 
@@ -191,13 +223,13 @@ describe('a pin that owes a ceremony', () => {
     else process.env.EXPORT_DIR = previousExportDir
   })
 
-  const requests = async () => (await readdir(dir)).filter((f) => f === REQUEST)
+  const requests = () => startedTargets()
 
-  it('is refused unless its name was typed, and nothing is written', async () => {
+  it('is refused unless its name was typed, and nothing is asked', async () => {
     const { runImageUpdate } = await flow()
     for (const confirm of [[], ['PG'], ['iris']]) {
       expect(
-        await runImageUpdate({ targets: [{ container: 'pg' }], confirm, actor: 'santiago' }),
+        await runImageUpdate({ ctx, targets: [{ container: 'pg' }], confirm, actor: 'santiago' }),
       ).toEqual({
         ok: false,
         code: 'refused',
@@ -205,34 +237,37 @@ describe('a pin that owes a ceremony', () => {
           'Updating pg restarts every tenant of the shared cluster. Pass confirm: "pg" to proceed.',
       })
     }
-    expect(await requests()).toEqual([])
+    expect(requests()).toEqual([])
   })
 
   it('is refused in a batch when only the other pin was typed', async () => {
     const { runImageUpdate } = await flow()
     const outcome = await runImageUpdate({
+      ctx,
       targets: [{ container: 'iris' }, { container: 'pg' }],
       confirm: ['iris'],
       actor: 'santiago',
     })
     expect(outcome.ok).toBe(false)
-    expect(await requests()).toEqual([])
+    expect(requests()).toEqual([])
   })
 
   it('goes ahead with the name typed', async () => {
     const { runImageUpdate } = await flow()
     const outcome = await runImageUpdate({
+      ctx,
       targets: [{ container: 'iris' }, { container: 'pg' }],
       confirm: [' pg '],
       actor: 'santiago',
     })
     idOf(outcome)
-    expect(await requests()).toEqual([REQUEST])
+    expect(requests()).toEqual([['iris', 'pg']])
   })
 
   it('owes a major ceremony only for a move to a new major', async () => {
     const { runImageUpdate } = await flow()
     const major = await runImageUpdate({
+      ctx,
       targets: [{ container: 'immich', toTag: '2.0' }],
       confirm: [],
       actor: 'santiago',
@@ -240,6 +275,7 @@ describe('a pin that owes a ceremony', () => {
     expect(major).toMatchObject({ ok: false, code: 'refused' })
     idOf(
       await runImageUpdate({
+        ctx,
         targets: [{ container: 'immich', toTag: '1.1' }],
         confirm: [],
         actor: 'santiago',

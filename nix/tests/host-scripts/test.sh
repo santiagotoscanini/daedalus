@@ -250,6 +250,22 @@ check "another app's build is refused, exit 0, nothing stopped" \
 bash "$T/cancel.sh" blog >/dev/null 2>&1
 check "its own is stopped, whatever run it is" '[ "$(cat "$CALLS")" = "stop daedalus-build@*.service" ]'
 
+# ── 8. an image update reads its request from the run file ────────────────
+# The run's id is the status's id (the page waits for it); a request naming
+# nothing is refused in `validating`, before anything is pulled or edited.
+echo "# image-update: the request is the run file's payload"
+I="$T/image"
+mkdir -p "$I/creds" "$I/verbs"
+echo '{}' >"$I/pins.json"
+agent "$T/image.sh" "VERBS_DIR=$I/verbs FLAKE=$T/none SITE_DIR=$T/none PINS=$I/pins.json" \
+  lib.sh image-update.sh
+jq -n '{id: "a1b2c3d4e5f60718", verb: "image-update", selectors: {}, payload: ({targets: [], actor: "t"} | tojson)}' \
+  >"$I/creds/request"
+rc=0
+CREDENTIALS_DIRECTORY="$I/creds" bash "$T/image.sh" >/dev/null 2>&1 || rc=$?
+check "an empty request fails in validating, under the run's id" \
+  '[ "$rc" -eq 1 ] && jq -e ".id == \"a1b2c3d4e5f60718\" and .state == \"failed\" and .phase == \"validating\" and (.error | test(\"no container\"))" "$I/verbs/image-update-status.json" >/dev/null'
+
 if [ "$fails" -ne 0 ]; then
   cat "$T/apply.out"
   echo "$fails check(s) failed"

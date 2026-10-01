@@ -14,6 +14,7 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     applyDir
+    verbsDir
     prevDir
     siteLock
     registryApps
@@ -165,7 +166,7 @@ let
     ];
   };
 
-  # Move a pin and rebuild onto it — the one bridge verb here that edits nix
+  # Move a pin and rebuild onto it — the one root verb here that edits nix
   # source rather than copying bytes the app rendered.
   #
   # `PINS` is the same registry the freshness probe reads, plus the update
@@ -196,7 +197,7 @@ let
       operatorHomeVars
       // commitVars
       // {
-        APPLY_DIR = applyDir;
+        VERBS_DIR = verbsDir;
         FLAKE = config.fleet.config.repo;
         # For lib.sh's site_engine_override: the agent refuses while one is set.
         SITE_DIR = config.fleet.site.path;
@@ -251,8 +252,9 @@ let
   # bounds the wedge a crash leaves to seconds.
   imageUpdateReaper = mkUpdateReaper {
     name = "daedalus-image-update-reaper";
-    statusFile = "image-status.json";
-    nextSteps = "Nothing was necessarily committed — check `journalctl -u daedalus-image-update` and `git log` in ${config.fleet.config.repo}";
+    dir = verbsDir;
+    statusFile = "image-update-status.json";
+    nextSteps = "Nothing was necessarily committed — check `journalctl -u 'daedalus-image-update@*'` and `git log` in ${config.fleet.config.repo}";
   };
 
   # sops for the host-side secrets editor (host/secret-set.sh): a value the

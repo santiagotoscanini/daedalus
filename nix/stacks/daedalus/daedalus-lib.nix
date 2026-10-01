@@ -89,6 +89,8 @@ rec {
       name,
       statusFile,
       nextSteps,
+      # The bridge's directory, or a root verb's (verbsDir).
+      dir ? applyDir,
     }:
     mkAgent {
       inherit name;
@@ -100,7 +102,7 @@ rec {
       # literal text in single quotes, which is what SC2016 warns about.
       excludeShellChecks = [ "SC2016" ];
       vars = operatorVars // {
-        STATUS = "${applyDir}/${statusFile}";
+        STATUS = "${dir}/${statusFile}";
         NEXT_STEPS = nextSteps;
       };
       files = [

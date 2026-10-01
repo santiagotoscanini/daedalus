@@ -1,3 +1,4 @@
+import type { Ctx } from '../../../core/ctx'
 import { type EngineLock, repoFacts } from '../../../host/contract/domains/repo'
 import { type NixosFacts, siteIdentity } from '../../../host/contract/domains/site'
 import { readCommittedSite } from '../../../host/contract/domains/site-doc'
@@ -131,11 +132,11 @@ async function loadEngine(): Promise<EngineFacts> {
   }
 }
 
-export async function loadUpdates(): Promise<UpdatesData> {
+export async function loadUpdates(ctx: Ctx): Promise<UpdatesData> {
   const [rows, manual, status, engine, site] = await Promise.all([
     updateRows(),
     manualRows(),
-    readImageUpdateStatus(),
+    readImageUpdateStatus(ctx),
     loadEngine(),
     siteIdentity(),
   ])

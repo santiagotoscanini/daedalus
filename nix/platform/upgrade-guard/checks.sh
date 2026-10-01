@@ -110,8 +110,11 @@ check_boot_entries() {
 check_rebuild_idle() {
   local busy=""
   if pgrep -f '(^|/)(nixos-rebuild|switch-to-configuration)( |$)' >/dev/null 2>&1; then busy="$busy a nixos-rebuild/switch process;"; fi
-  local u
-  for u in $REBUILD_UNITS; do
+  local u units
+  # Read, not split: an entry may be a glob (a root verb's instances), which
+  # the shell must not expand against the working directory.
+  read -ra units <<<"$REBUILD_UNITS"
+  for u in "${units[@]}"; do
     case "$(systemctl is-active "$u" 2>/dev/null || true)" in
     active | activating | reloading) busy="$busy $u running;" ;;
     esac

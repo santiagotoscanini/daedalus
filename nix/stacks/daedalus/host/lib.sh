@@ -195,20 +195,47 @@ write_json_atomic() {
   mv "$tmp" "$dest"
 }
 
-# ── logs in an operator-writable directory ────────────────────────────────
+# ── the verbs' logs ───────────────────────────────────────────────────────
 #
-# Created, truncated and appended as the operator through op_append, so root
-# never opens them by name and never needs to chown one afterwards.
+# A log in a directory only root can write (a root verb's, in the verbs
+# directory) root writes by name, as write_json_atomic does there; nothing
+# else can plant anything at the name. A log in a directory the operator can
+# write (the bridge's) is created, truncated and appended as the operator
+# through op_append, so root never opens it by name and never needs to chown
+# one afterwards.
 
-# Empty log $1 (creating it), as the operator. Best-effort: a log that cannot
-# be reset is a worse log, never a failed rebuild.
+# Is $1's directory root's alone: root's, and writable by nobody else?
+log_root_only() {
+  local d m
+  d="$(dirname -- "$1")"
+  [ -d "$d" ] && [ ! -L "$d" ] && [ "$EUID" -eq 0 ] || return 1
+  m="$(stat -c '%u %a' -- "$d")" || return 1
+  [ "${m%% *}" = 0 ] && [ $((8#${m#* } & 8#022)) -eq 0 ]
+}
+
+# stdin appended to log $1, never failing and never stopping early: the
+# writer may be `nixos-rebuild switch` (see op_append).
+log_sink() {
+  if log_root_only "$1"; then
+    cat >>"$1" 2>/dev/null || cat >/dev/null
+  else
+    as_operator_fn op_append "$1"
+  fi
+}
+
+# Empty log $1 (creating it). Best-effort: a log that cannot be reset is a
+# worse log, never a failed rebuild.
 log_reset() {
-  as_operator dd if=/dev/null of="$1" oflag=nofollow,nonblock status=none 2>/dev/null || true
+  if log_root_only "$1"; then
+    : >"$1" 2>/dev/null || true
+  else
+    as_operator dd if=/dev/null of="$1" oflag=nofollow,nonblock status=none 2>/dev/null || true
+  fi
 }
 
 # Append one line ($2) to log $1.
 log_line() {
-  printf '%s\n' "$2" | as_operator_fn op_append "$1"
+  printf '%s\n' "$2" | log_sink "$1"
 }
 
 # Run a command with stdout and stderr appended to log $1; returns the
@@ -219,7 +246,7 @@ log_line() {
 log_run() {
   local log="$1"
   shift
-  if "$@" 2>&1 | as_operator_fn op_append "$log"; then
+  if "$@" 2>&1 | log_sink "$log"; then
     return 0
   fi
   return "${PIPESTATUS[0]}"

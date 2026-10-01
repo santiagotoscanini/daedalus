@@ -1,3 +1,4 @@
+import type { Ctx } from '../core/ctx'
 import {
   arrayOf,
   bool,
@@ -8,21 +9,19 @@ import {
   optional,
   str,
 } from '../lib/contract/decode'
-import { defineBridge } from './bridge'
+import { defineRootVerb } from './root-verb'
 
-// The app half of an image update. It writes one file and reads another.
+// The app half of an image update: the root helper's `image-update` verb
+// (host/root-verb.ts has the mechanics).
 //
-// Everything privileged happens on the host: a systemd.path unit watches
-// image-request.json and starts daedalus-image-update.service, which resolves
-// the new digest, rewrites the pin in the flake, commits, and runs
-// nixos-rebuild (nix/stacks/daedalus/host/image-update.sh). This container cannot
-// rebuild anything and holds no credential that would let it — host/bridge.ts
-// has the mechanics and the trust boundary.
+// Everything privileged happens on the host: `daedalus-image-update@<run>`
+// resolves the new digest, rewrites the pin in the flake, commits, and runs
+// nixos-rebuild (nix/stacks/daedalus/host/image-update.sh). This container
+// cannot rebuild anything and holds no credential that would let it.
 //
-// No payload file, unlike Apply. Apply ships bytes because the app renders the
-// whole registry and the host copies it verbatim; here the app has nothing to
-// render — the host reads the pin out of the nix-generated registry, which is
-// also the allowlist. What crosses is a list of container names and tags.
+// What crosses is a list of container names and tags, as the payload: the app
+// has nothing to render — the host reads the pin out of the nix-generated
+// registry, which is also the allowlist.
 //
 // ── a request carries several containers ──────────────────────────────────
 //
@@ -96,73 +95,45 @@ const IMAGE_STATUS: Decoder<ImageUpdateStatus> = obj({
   commit: optional(nullable(str), null),
 })
 
-const bridge = defineBridge<ImageUpdateStatus>({
-  requestFile: 'image-request.json',
-  statusFile: 'image-status.json',
+const verb = defineRootVerb<ImageUpdateStatus>({
+  verb: 'image-update',
   status: IMAGE_STATUS,
+  ended: (s) =>
+    `The host agent ended during "${s.phase}" without reporting a result. ` +
+    "The rebuild may or may not have completed — check `journalctl -u 'daedalus-image-update@*'` " +
+    'and `git log` in the configuration checkout before retrying.',
 })
 
 /**
- * How long a `running` status may go unrefreshed before it is a corpse.
- *
- * The host rewrites the whole status file — `finishedAt` included — at every
- * phase transition, so that field is really "last written". Past the unit's
- * own `TimeoutStartSec` of 60 minutes (nix/stacks/daedalus/daedalus-verbs.nix),
- * systemd has killed the run and no further write is coming; five minutes of
- * slack keeps a slow switch from being declared dead while it is still going.
- * The two move together — a queue makes long runs ordinary, and declaring one
- * dead while it is still pulling would put a failure on the page over a
- * rebuild that then succeeds.
- */
-const RUNNING_MAX_MS = 65 * 60_000
-
-/**
- * The status, with a dead run reported as dead.
- *
- * A run CAN end without writing its terminal state. The unit's ExecStopPost
- * reaper marks a killed run failed within seconds, but nothing runs it when
- * the box itself goes down mid-run — and because the flow refuses to start
- * while one is running, a status stuck on "running" would disable every
- * Update button until something cleared it. This clock is that something.
+ * The status, with a run that ended without its last word reported as dead
+ * (host/root-verb.ts). The unit's ExecStopPost reaper marks a killed run
+ * failed within seconds, but nothing runs it when the box itself goes down
+ * mid-run — and because the flow refuses to start while one is running, a
+ * status stuck on "running" would disable every Update button.
  *
  * Sanitising here rather than at the call sites, because the status file has
  * several readers (the flow's busy check, the Updates and Minecraft loaders,
  * the status server function) and a rule only some of them applied is a rule
  * that gets it wrong somewhere.
  */
-export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
-  const s = await bridge.readStatus()
-
-  if (s.state !== 'running') return s
-
-  const last = Date.parse(s.finishedAt ?? '')
-  if (Number.isFinite(last) && Date.now() - last < RUNNING_MAX_MS) return s
-
-  return {
-    ...s,
-    state: 'failed',
-    error:
-      `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
-      'The rebuild may or may not have completed — check `journalctl -u daedalus-image-update` ' +
-      'and `git log` in the configuration checkout before retrying.',
-  }
-}
+export const readImageUpdateStatus = (ctx: Pick<Ctx, 'controller'>): Promise<ImageUpdateStatus> =>
+  verb.readStatus(ctx)
 
 /**
- * Publish an update request.
+ * Start an update: its id, or why the helper would not start it.
  *
  * `toTag` absent means "re-resolve the tag this container is already on",
- * which is the entire update for a channel pin like `:latest` — the tag has
- * moved and the pin has not. For a release pin it is the tag the operator
- * chose off the candidate list after reading what changed.
+ * which is the entire update for a channel pin like `:latest`. For a release
+ * pin it is the tag the operator chose off the candidate list after reading
+ * what changed.
  */
-export async function requestImageUpdate(input: {
-  targets: ImageTarget[]
-  actor: string
-}): Promise<string> {
+export function startImageUpdate(
+  ctx: Pick<Ctx, 'controller'>,
+  input: { targets: ImageTarget[]; actor: string },
+) {
   const targets = input.targets.map((t) => ({
     container: t.container,
     ...(t.toTag === undefined ? {} : { toTag: t.toTag }),
   }))
-  return bridge.request({ targets, actor: input.actor })
+  return verb.start(ctx, JSON.stringify({ targets, actor: input.actor }))
 }

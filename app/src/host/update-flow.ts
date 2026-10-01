@@ -1,11 +1,12 @@
+import type { Ctx } from '../core/ctx'
 import { ceremonyArmed, ceremonyFor, ceremonyRefusal } from '../lib/image-ceremony'
 import { imagePins, manualPins } from './contract/domains/images'
-import { defineFlow, defineGate, type FlowOutcome } from './flow'
+import { defineFlow, defineRootGate, type FlowOutcome } from './flow'
 import {
   type ImageTarget,
   type ImageUpdateStatus,
   readImageUpdateStatus,
-  requestImageUpdate,
+  startImageUpdate,
 } from './image-update'
 
 // The one image-update implementation.
@@ -13,8 +14,8 @@ import {
 // Both doors — the Update button's server function (server/updates.ts) and
 // the MCP `image.update` tool (host/mcp/server.ts) — call runImageUpdate and
 // only translate its outcome into their own response shape: two hand-copied
-// bodies are two bodies that drift. The lock, the pickup window and the order
-// of the steps are host/flow.ts's, shared with Apply and the engine update.
+// bodies are two bodies that drift. The lock and the order of the steps are
+// host/flow.ts's; the root helper runs one update at a time.
 //
 // The typed-name ceremony (lib/image-ceremony.ts) is checked here too, for the
 // same reason: a gate each door enforces for itself is a gate one door forgets,
@@ -30,9 +31,8 @@ type Moved = { targets: { container: string; toTag: string | null }[] }
 
 export type UpdateOutcome = FlowOutcome<Moved, 'refused'>
 
-const gate = defineGate({
-  noun: 'update',
-  readStatus: readImageUpdateStatus,
+const gate = defineRootGate({
+  readStatus: (input: UpdateInput) => readImageUpdateStatus(input.ctx),
   running: (inFlight) => {
     const what =
       inFlight.targets.length > 1
@@ -43,6 +43,7 @@ const gate = defineGate({
 })
 
 type UpdateInput = {
+  ctx: Pick<Ctx, 'controller'>
   targets: ImageTarget[]
   /** The names the caller typed out. A target whose move owes a ceremony must be among them. */
   confirm: readonly string[]
@@ -110,7 +111,13 @@ export const runImageUpdate: (input: UpdateInput) => Promise<UpdateOutcome> = de
       value: {
         targets: input.targets.map((t) => ({ container: t.container, toTag: t.toTag ?? null })),
       },
-      publish: () => requestImageUpdate({ targets: input.targets, actor: input.actor }),
+      publish: async () => {
+        const started = await startImageUpdate(input.ctx, {
+          targets: input.targets,
+          actor: input.actor,
+        })
+        return started.ok ? started.id : started
+      },
     }
   },
 })

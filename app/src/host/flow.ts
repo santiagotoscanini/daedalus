@@ -41,11 +41,12 @@ export type FlowRefusal<C extends string> = { ok: false; code: C; reason: string
  * machine caller branches on `code` (the MCP tool prefixes it to the refusal;
  * the buttons show only the reason) — see lib/result.ts for why that is not a
  * nested `reason.code`.
- * `busy` is the gate's own code and every flow can answer it.
+ * `busy` is the gate's own code and every flow can answer it; `unavailable`
+ * is a root verb's start that could not be asked (no controller, no helper).
  */
 export type FlowOutcome<T extends object, C extends string = never> =
   | ({ ok: true; id: string } & T)
-  | FlowRefusal<C | 'busy'>
+  | FlowRefusal<C | 'busy' | 'unavailable'>
 
 /**
  * How long a published request may sit unclaimed before a new one is allowed
@@ -56,16 +57,46 @@ export type FlowOutcome<T extends object, C extends string = never> =
  */
 export const PICKUP_MS = 120_000
 
-export type FlowGate = {
+export type FlowGate<I = unknown> = {
   /**
-   * Why a new request may not be published now, or null when it may. A read,
-   * apart from forgetting a `pending` the host has acknowledged or abandoned.
+   * Why a new request may not be published now, or null when it may — asked
+   * of the flow's input where the gate needs it (a root verb's, for its
+   * Ctx). A read, apart from forgetting a `pending` the host has acknowledged
+   * or abandoned.
    */
-  blocked: () => Promise<FlowRefusal<'busy'> | null>
+  blocked: (input?: I) => Promise<FlowRefusal<'busy'> | null>
   /** Run `work` after every earlier caller's: check-then-write must not interleave. */
   serialised: <O>(work: () => Promise<O>) => Promise<O>
   /** Record a request just published, which opens its pickup window. */
   published: (id: string) => void
+}
+
+/**
+ * The gate of a root verb (host/root-verb.ts): the `running` check alone. No
+ * pickup window — the start is answered once the verb's unit has started,
+ * and the helper refuses a second run while one is under way, so a request
+ * can never sit unclaimed.
+ */
+export function defineRootGate<I, S extends { state: string }>(opts: {
+  readStatus: (input: I) => Promise<S>
+  running: (status: S) => string
+}): FlowGate<I> {
+  let chain: Promise<unknown> = Promise.resolve()
+  return {
+    async blocked(input) {
+      if (input === undefined) return null
+      const inFlight = await opts.readStatus(input)
+      return inFlight.state === 'running'
+        ? { ok: false, code: 'busy', reason: opts.running(inFlight) }
+        : null
+    },
+    serialised(work) {
+      const outcome = chain.then(work)
+      chain = outcome.catch(() => undefined)
+      return outcome
+    },
+    published() {},
+  }
 }
 
 export function defineGate<S extends BridgeStatus>(opts: {
@@ -132,13 +163,21 @@ export function defineGate<S extends BridgeStatus>(opts: {
   }
 }
 
-/** What `prepare` hands back: a refusal, or the write and what to report beside its id. */
+/**
+ * What `prepare` hands back: a refusal, or the write and what to report beside
+ * its id. A root verb's `publish` is its start, which the helper may still
+ * refuse (one run at a time) — that refusal is the flow's answer.
+ */
 export type FlowPlan<T extends object, C extends string> =
   | FlowRefusal<C>
-  | { ok: true; publish: () => Promise<string>; value: T }
+  | {
+      ok: true
+      publish: () => Promise<string | FlowRefusal<'busy' | 'unavailable'>>
+      value: T
+    }
 
 export function defineFlow<I, T extends object, C extends string = never>(
-  gate: FlowGate,
+  gate: FlowGate<I>,
   opts: {
     /**
      * Refusals that need nothing but the input. Asked BEFORE the busy check, so
@@ -158,13 +197,14 @@ export function defineFlow<I, T extends object, C extends string = never>(
       const malformed = opts.check?.(input) ?? null
       if (malformed !== null) return malformed
 
-      const busy = await gate.blocked()
+      const busy = await gate.blocked(input)
       if (busy !== null) return busy
 
       const plan = await opts.prepare(input)
       if (!plan.ok) return plan
 
       const id = await plan.publish()
+      if (typeof id !== 'string') return id
       gate.published(id)
       return { ok: true, id, ...plan.value }
     })

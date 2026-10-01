@@ -1,8 +1,9 @@
-# Move a container's image pin, and rebuild onto it.
+# Move a container's image pin, and rebuild onto it: the root helper's
+# `image-update` verb (daedalus-verbs.nix), one run at a time, the request its
+# run file's payload (host/lib.sh take_request).
 #
-# The fifth file-drop bridge, and the only one that EDITS the flake. Apply
-# copies bytes daedalus rendered (host/apply.sh); this one rewrites nix source
-# in place, so almost all of the care here is about making that rewrite
+# The one verb that EDITS the flake. Apply copies bytes daedalus rendered
+# (host/apply.sh); this one rewrites nix source in place, so almost all of the care here is about making that rewrite
 # something a machine is allowed to do unattended.
 #
 # ── what makes the edit safe ──────────────────────────────────────────────
@@ -73,16 +74,15 @@
 # Runs as root, because only root can `nixos-rebuild switch`. Every git call
 # drops to the operator with setpriv so the repo never acquires root-owned
 # objects; podman drops the same way because the images live in the operator's
-# rootless store. So do the reads and edits of the flake, and everything in
-# $APPLY_DIR — the request, the status, the log: both are directories the
-# operator can write, and host/lib.sh spells out why root touches no file by
-# name in one.
+# rootless store. So do the reads and edits of the flake, a directory the
+# operator can write: host/lib.sh spells out why root touches no file by name
+# in one. The status and the log are root's, in $VERBS_DIR, which the
+# container reads and cannot write.
 
 set -euo pipefail
 
-REQ="$APPLY_DIR/image-request.json"
-STATUS="$APPLY_DIR/image-status.json"
-LOGFILE="$APPLY_DIR/image-last.log"
+STATUS="$VERBS_DIR/image-update-status.json"
+LOGFILE="$VERBS_DIR/image-update-last.log"
 
 # Every move this run intends, as a JSON array — published in the status so
 # the page can name what is changing while it changes, including the lockstep
@@ -109,34 +109,22 @@ fail() {
 # Captured BEFORE rollback runs, for the reason apply.sh spells out: rollback
 # appends its own successful switch to this same log, so a tail taken
 # afterwards shows a success and the real error scrolled out of the window.
-# Read as the operator and never through a link, and never failing, for the
-# reasons on apply.sh's errtail: the log is in the container's directory, and
-# an errexit here would skip the rollback it runs right before.
+# Never failing, for the reason on apply.sh's errtail: an errexit here would
+# skip the rollback it runs right before.
 errtail() {
   log_errtail "$LOGFILE"
 }
 
-[ -f "$REQ" ] || exit 0
-
-# Read once, as the operator, never through a link (host/lib.sh); a symlinked
-# request is refused with a failed unit — the app never writes one.
-REQ_JSON="$(read_request "$REQ")" || exit 1
-
-REQ_ID="$(jq -r '.id // ""' <<<"$REQ_JSON")"
-[ -n "$REQ_ID" ] || exit 0
-# The id names nothing on disk here, but it is still written by the container
-# and lands in a status file and a log line. Same UUID constraint as the other
-# bridges rather than a different rule per verb.
-[[ "$REQ_ID" =~ ^[0-9a-fA-F-]+$ ]] || exit 0
+# The run file: its id (the helper's run id, which the status carries and the
+# page waits on) and the payload, the request the app built.
+RUN_JSON="$(take_request)" || exit 1
+REQ_ID="$(jq -r '.id' <<<"$RUN_JSON")"
+REQ_JSON="$(jq -r 'if (.payload | type) == "string" then .payload else "{}" end' <<<"$RUN_JSON")"
+# Not an object (the app never sends one): the validation below names no
+# container and says so in the status.
+jq -e 'type == "object"' <<<"$REQ_JSON" >/dev/null 2>&1 || REQ_JSON='{}'
 STARTED_AT="$(date -Is)"
 COMMIT_SHA=""
-
-# Replay guard: the path unit fires on a daemon-reload at boot as well as on a
-# write, and without this a completed update would rebuild the box on every
-# reboot.
-if [ -f "$STATUS" ] && [ "$(published_id "$STATUS")" = "$REQ_ID" ]; then
-  exit 0
-fi
 
 TARGETS="$(jq -c '
   if (.targets | type) == "array"

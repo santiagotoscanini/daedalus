@@ -368,6 +368,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       // with the Updates panel: an agent is exactly the caller it exists for.
       const { runImageUpdate } = await import('../update-flow')
       const outcome = await runImageUpdate({
+        ctx: await ctx(),
         targets: targets.map((t) => ({
           container: t.container,
           ...(t.toTag === undefined ? {} : { toTag: t.toTag }),
