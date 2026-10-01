@@ -656,14 +656,25 @@ impl Registry {
 
     /// An approved machine logged out (enroll.rs, the link's `leave`): the
     /// app hears `nodes.left`, deletes its tunnel's client and forgets it;
-    /// its next set is what removes the machine here.
-    pub(super) fn left(&self, id: &str) {
+    /// its next set is what removes the machine here. Refused as
+    /// `unavailable` when no subscriber's queue took the event, as
+    /// `policy_request` is: nobody heard it, so it is not acknowledged.
+    pub(super) fn left(&self, id: &str) -> Result<(), ApiError> {
+        let told = self
+            .events
+            .publish(event::NODES_LEFT, &NodeLeft { id: id.to_string() });
         tracing::info!(
             node = id,
+            told,
             "link: the machine logged out and asks to be forgotten"
         );
-        self.events
-            .publish(event::NODES_LEFT, &NodeLeft { id: id.to_string() });
+        if told == 0 {
+            return Err(ApiError::new(
+                code::UNAVAILABLE,
+                "Daedalus is not listening (the app is down); the log-out was not heard",
+            ));
+        }
+        Ok(())
     }
 
     /// An approved machine's user asks the box to change one of its

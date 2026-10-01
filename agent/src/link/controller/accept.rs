@@ -379,12 +379,15 @@ fn converse(
                     Ok(Incoming::Request { id: rid, m, .. })
                         if m == name::LEAVE && registry.is_approved(id) =>
                     {
-                        // Heard and acknowledged; the machine closes once it
-                        // has the answer.
-                        registry.left(id);
-                        let ok = Response::ok(rid, &serde_json::json!({}));
+                        // Heard and acknowledged, and the machine closes once
+                        // it has the answer; or nobody heard it, and the
+                        // machine is told so.
+                        let line = match registry.left(id) {
+                            Ok(()) => Response::ok(rid, &serde_json::json!({})),
+                            Err(e) => Response::err(Some(rid), e),
+                        };
                         if tls
-                            .send(&serde_json::to_string(&ok).unwrap_or_default())
+                            .send(&serde_json::to_string(&line).unwrap_or_default())
                             .is_err()
                         {
                             return "a write failed";

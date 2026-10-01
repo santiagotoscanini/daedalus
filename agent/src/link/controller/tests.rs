@@ -1857,6 +1857,16 @@ fn santree_machines_are_told_the_session_host_and_the_allow_list_leads() {
 }
 
 #[test]
+fn a_leave_nobody_heard_is_not_acknowledged() {
+    let ctl = controller(fast());
+    let refused = ctl.registry.left("n1").unwrap_err();
+    assert_eq!(refused.code, code::UNAVAILABLE);
+    let app = ctl.events.subscribe();
+    ctl.registry.left("n1").unwrap();
+    assert!(app.try_iter().any(|l| l.contains("\"nodes.left\"")));
+}
+
+#[test]
 fn a_machine_that_logs_out_is_heard_and_a_revoked_one_hears_it_first() {
     let ctl = controller(fast());
     let subscribed = ctl.events.subscribe();
