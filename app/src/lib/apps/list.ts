@@ -8,7 +8,7 @@ import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { effectiveHostname } from '../hostname'
 import { listApps } from '../repo/apps'
 import { stageExposed } from '../stage'
-import { driftOf } from './manifest-map'
+import { asDeclared, driftOf } from './manifest-map'
 
 // Everything the Apps list page shows: the registry rows, the off-box
 // projects beside them, and the three live facts a row draws — whether the
@@ -23,8 +23,9 @@ import { driftOf } from './manifest-map'
 export async function loadAppList() {
   // Independent reads — the registry rows and the manifest file — fetched
   // together rather than one behind the other.
-  const [records, entries] = await Promise.all([listApps(), manifestEntries()])
+  const [rows, entries] = await Promise.all([listApps(), manifestEntries()])
   const manifest = new Map(entries.map((m) => [m.name, m]))
+  const records = rows.map((r) => asDeclared(r, manifest.get(r.name)))
   const ctx = await makeCtx()
   const EXTERNAL_APPS = await listExternalApps(ctx)
   const [statuses, applyStatus, icons, externalIcons, workspaces] = await Promise.all([

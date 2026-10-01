@@ -10,7 +10,7 @@ import type { AppRecord } from '../repo/apps'
 //
 // Pure — types only from host/ and lib/repo — so the round trip
 // export → render → parse → toRow → export is testable without a database
-// (lib/repo/apps.test.ts, today `toRow`'s only caller). Kept in one file
+// (lib/repo/apps.test.ts). Kept in one file
 // because the three must agree field for field: a field exported but not
 // compared is an edit that never ships.
 
@@ -50,6 +50,16 @@ export function toRow(entry: ManifestEntry) {
     description: entry.presentation.description,
     notes: entry.notes ?? {},
   }
+}
+
+/**
+ * A record as the pages show it. A nix-declared app's row is a mirror of its
+ * manifest entry that nothing refreshes, so the entry's values replace the
+ * row's; every other record is its own truth and passes through.
+ */
+export function asDeclared(record: AppRecord, manifest: ManifestEntry | undefined): AppRecord {
+  if (!record.managedInNix || manifest === undefined) return record
+  return { ...record, ...toRow(manifest) }
 }
 
 /**
@@ -99,8 +109,12 @@ const taskOf = (t: typeof appTasks.$inferSelect): ManifestTask => ({
  * `toRegistryExport` emits must be compared here. A field exported but not
  * compared is an edit that never lights the bar and silently never ships —
  * asserted by the field-coverage test in apps.test.ts.
+ *
+ * A nix-declared app never drifts: nothing here edits or exports it, and its
+ * manifest is its truth (`asDeclared`).
  */
 export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined): string[] {
+  if (record.managedInNix) return []
   if (!manifest) return ['not in the last Nix build']
 
   const fromDb = {

@@ -12,7 +12,7 @@ import { effectiveHostname } from '../hostname'
 import { getApp } from '../repo/apps'
 import { appRepo, defaultImage } from '../site'
 import { stageExposed } from '../stage'
-import { driftOf } from './manifest-map'
+import { asDeclared, driftOf } from './manifest-map'
 
 // The app detail page's frame: the record, whether it has drifted from nix,
 // and the live signals the hero draws. Null for a name the registry does not
@@ -26,10 +26,11 @@ import { driftOf } from './manifest-map'
 export async function loadAppDetail(data: { name: string }) {
   const { name } = data
 
-  const [record, entries] = await Promise.all([getApp(name), manifestEntries()])
-  if (!record) return null
+  const [row, entries] = await Promise.all([getApp(name), manifestEntries()])
+  if (!row) return null
 
   const manifest = entries.find((m) => m.name === name)
+  const record = asDeclared(row, manifest)
 
   const box = readSite()
   const hostname = effectiveHostname(box, record.name, record.hostname)

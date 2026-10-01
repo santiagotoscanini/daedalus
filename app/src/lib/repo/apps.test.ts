@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ManifestEntry } from '../../host/nix-manifest'
-import { driftOf, toRegistryExport, toRow } from '../apps/manifest-map'
+import { asDeclared, driftOf, toRegistryExport, toRow } from '../apps/manifest-map'
 import { validateAppPatch, validateNewApp } from '../apps/validate'
 import { renderRegistryFile } from '../registry-file'
 import type { AppRecord } from './apps'
@@ -190,6 +190,35 @@ describe('driftOf', () => {
 
   it('flags an app nix has not built yet', () => {
     expect(driftOf(recordOf(RICH), undefined)).toEqual(['not in the last Nix build'])
+  })
+
+  it('never reports a nix-declared app, and shows it as its manifest says', () => {
+    // daedalus's own row: a hand-made mirror nothing refreshes, behind its
+    // manifest on exactly the fields the live box showed.
+    const entry: ManifestEntry = {
+      ...RICH,
+      name: 'daedalus',
+      managedInNix: true,
+      sourceMode: 'local',
+      deploy: { enable: false },
+      notes: { source: 'the engine clone' },
+    }
+    const stale: AppRecord = {
+      ...recordOf(entry),
+      sourceMode: 'registry',
+      deployEnable: true,
+      notes: {},
+    }
+    expect(driftOf(stale, entry)).toEqual([])
+    expect(driftOf(stale, undefined)).toEqual([])
+    expect(asDeclared(stale, entry)).toMatchObject({
+      sourceMode: 'local',
+      deployEnable: false,
+      notes: { source: 'the engine clone' },
+    })
+    // Everything else is its own truth.
+    const plain = { ...recordOf(RICH), description: 'edited here' }
+    expect(asDeclared(plain, RICH)).toBe(plain)
   })
 
   it('flags every field the export emits — the coverage guard', () => {
