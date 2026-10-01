@@ -533,6 +533,14 @@ older queued build" correct under concurrency. And `github_deliveries`' primary
 key *is* the replay guard: inserting the delivery id and enqueueing the build
 happen in one transaction, so a redelivered webhook collides and is ignored.
 
+Every text column with a fixed vocabulary — a stage, a mode, a build state, a
+scope — carries a CHECK built from the tuple in `lib/` that the decoders and
+validators read too, so a value no reader understands cannot be stored. And the
+tables are bounded by the scheduler's hourly sweep (`core/builds/sweep.ts`):
+deliveries go after 7 days, a finished build's detection, checks, timings,
+warnings and facts after 30 (the row stays), deploys after a year, and enroll
+codes once expired.
+
 ---
 
 ## Trust boundaries

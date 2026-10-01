@@ -1,5 +1,6 @@
 import type { ManifestTask } from '../../host/nix-manifest'
 import type { apps } from '../../host/schema'
+import { AUTH_MODES } from '../app-modes'
 import { APP_STAGES, isAppStage, stageExposed } from '../stage'
 import { taskCommandError, taskIdError, taskScheduleError, taskTimeoutError } from '../tasks'
 import { type EnvVar, validateEnvVars } from './env-vars'
@@ -222,7 +223,7 @@ export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
         clean.stage = v as AppPatch['stage']
         break
       case 'authMode':
-        if (v !== 'none' && v !== 'proxy' && v !== 'native') bad(k, 'none | proxy | native')
+        if (!(AUTH_MODES as readonly unknown[]).includes(v)) bad(k, AUTH_MODES.join(' | '))
         clean.authMode = v as AppPatch['authMode']
         break
       case 'image':

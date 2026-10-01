@@ -169,6 +169,13 @@
       "when": 1790815620331,
       "tag": "0023_polite_betty_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790868635393,
+      "tag": "0024_typical_domino",
+      "breakpoints": true
     }
   ]
 }

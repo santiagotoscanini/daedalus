@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { AUTH_MODES, type AuthMode, SOURCE_MODES, type SourceMode } from '../lib/app-modes'
 import {
   arrayOf,
   bool,
@@ -72,7 +73,7 @@ export type ManifestTask = {
 
 export type ManifestApp = {
   stage: AppStage
-  sourceMode?: 'registry' | 'local'
+  sourceMode?: SourceMode
   postgres: boolean
   storage: boolean
   litellm: boolean
@@ -90,7 +91,7 @@ export type ManifestApp = {
   egress: { container: string; hostPort: number } | null
   env: ManifestEnvVar[]
   auth: {
-    mode: 'none' | 'proxy' | 'native'
+    mode: AuthMode
     healthPath?: string | null
     isolated?: boolean
     allowedGroups?: string[] | null
@@ -142,7 +143,7 @@ export const manifestApp: Decoder<ManifestApp> = obj({
   // From the tuple, so a rung added to the ladder is decodable here without a
   // second edit — and a file Nix accepts can never fail to parse here.
   stage: literal(...APP_STAGES),
-  sourceMode: optional(literal('registry', 'local'), 'registry'),
+  sourceMode: optional(literal(...SOURCE_MODES), 'registry'),
   postgres: bool,
   storage: bool,
   litellm: bool,
@@ -153,7 +154,7 @@ export const manifestApp: Decoder<ManifestApp> = obj({
   egress: optional(nullable(obj({ container: str, hostPort: num })), null),
   env: optional(arrayOf(obj({ key: str, value: str, note: ns })), []),
   auth: obj({
-    mode: literal('none', 'proxy', 'native'),
+    mode: literal(...AUTH_MODES),
     healthPath: ns,
     isolated: optional(bool, false),
     allowedGroups: optional(nullable(arrayOf(str)), null),

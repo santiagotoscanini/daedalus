@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Ctx } from '../../core/ctx'
 import { imageInfo } from '../../host/registry'
-import { decode, num, obj, optional, str } from '../contract/decode'
+import { DEPLOY_RESULTS } from '../app-modes'
+import { decode, literal, num, obj, optional, str } from '../contract/decode'
 import {
   deploymentKey,
   deploymentKeysSince,
@@ -18,7 +19,7 @@ const journalLine = obj({
   app: str,
   digest: str,
   previousDigest: optional(str, ''),
-  result: str,
+  result: literal(...DEPLOY_RESULTS),
   durationMs: optional(num, 0),
   http: optional(str, ''),
 })

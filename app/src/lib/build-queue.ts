@@ -1,6 +1,7 @@
 import type { DetectionWarning } from './build-detect'
 import { type BuildFacts, readBuildFacts } from './build-facts'
 import {
+  type BUILD_LANES,
   BUILD_STATUS_MAX_AGE_MS,
   type BuildChecks,
   type BuildPublish,
@@ -24,7 +25,7 @@ import {
 // what lets the next push queue without touching the build the host is
 // already running.
 
-export type BuildLane = 'main' | 'pr'
+export type BuildLane = (typeof BUILD_LANES)[number]
 
 /** Past this since dispatch, a build is failed whatever its status says. */
 const BUILD_HARD_CAP_MS = 100 * 60_000

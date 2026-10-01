@@ -1,7 +1,9 @@
 import { relations, sql } from 'drizzle-orm'
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -12,23 +14,48 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-// TYPE-ONLY, every one, and they have to stay that way: `import type` is erased
-// whole (verbatimModuleSyntax), so naming the build vocabulary here costs the
-// schema no import edge at all — see host/boundary.test.ts on why the
-// one-keyword difference between this and `import { type X }` matters.
+// Types, plus the vocabulary tuples the CHECK constraints below are built from.
+// Each value import is a pure leaf of lib/ (no node builtin, no database), so
+// drizzle-kit loads it with the schema and the boundary test has nothing to
+// say; keep it that way — a tuple that moved into a module needing the machine
+// would drag that module into every reader of this file.
+import {
+  AUTH_MODES,
+  type AuthMode,
+  DEPLOY_RESULTS,
+  type DeployResult,
+  SOURCE_MODES,
+  type SourceMode,
+} from '../lib/app-modes'
 import type { DetectionWarning } from '../lib/build-detect'
 import type { BuildFacts } from '../lib/build-facts'
 import type { BuildLane } from '../lib/build-queue'
-import type {
-  BuildChecks,
-  BuildPublish,
-  BuildRequester,
-  BuildState,
-  BuildStrategy,
+import {
+  BUILD_LANES,
+  BUILD_PUBLISH_MODES,
+  BUILD_REQUESTERS,
+  BUILD_STATES,
+  BUILD_STRATEGIES,
+  type BuildChecks,
+  type BuildPublish,
+  type BuildRequester,
+  type BuildState,
+  type BuildStrategy,
+  TERMINAL_BUILD_STATES,
 } from '../lib/builds'
-import type { McpScope } from '../lib/mcp'
+import { MCP_SCOPES, type McpScope } from '../lib/mcp'
 import type { ProviderKind } from '../lib/providers/kinds'
 import type { ModelPolicies } from '../lib/providers/policy'
+import { APP_STAGES, type AppStage } from '../lib/stage'
+
+/**
+ * `<column> IN ('a', 'b', …)` from a vocabulary tuple. The values are written
+ * into the SQL rather than bound: drizzle-kit cannot put a bound parameter into
+ * DDL (the same reason `builds_one_queued_per_lane` spells its literal), and
+ * every tuple here is a compile-time constant of plain words.
+ */
+const oneOf = (column: AnyPgColumn, values: readonly string[]) =>
+  sql`${column} IN (${sql.raw(values.map((v) => `'${v}'`).join(', '))})`
 
 // The app registry — daedalus's authoritative copy of what nix/modules/apps
 // runs. It mirrors the `fleet.apps` submodule (nix/platform/apps-options.nix)
@@ -61,7 +88,8 @@ export const apps = pgTable(
     name: text('name').notNull(),
 
     // One rung of APP_STAGES (lib/stage.ts): declared → off → lab → live.
-    stage: text('stage').notNull().default('lab'),
+    // A new row is `declared` (createApp), so the default says so too.
+    stage: text('stage').$type<AppStage>().notNull().default('declared'),
 
     // True for apps declared by hand in Nix rather than managed here —
     // currently only daedalus itself. Shown read-only in the UI: an Apply that
@@ -74,7 +102,7 @@ export const apps = pgTable(
     // nix/stacks/daedalus/{build-agent,verbs-lib}.nix; dev mode itself is the
     // `source.dev` option (nix/platform/apps-options.nix), which apps.json
     // does not carry.
-    sourceMode: text('source_mode').notNull().default('registry'),
+    sourceMode: text('source_mode').$type<SourceMode>().notNull().default('registry'),
 
     // null = the platform default, <registryHost>/<name>:latest.
     // A value here is an override: a fork, a placeholder, or a pinned digest.
@@ -100,7 +128,7 @@ export const apps = pgTable(
 
     // "none" | "proxy" (traefik forward-auth) | "native" (the app is the
     // OIDC client). See AUTH.md for the order of preference.
-    authMode: text('auth_mode').notNull().default('none'),
+    authMode: text('auth_mode').$type<AuthMode>().notNull().default('none'),
     // Unauthenticated path proving the app itself serves. Mandatory under
     // "proxy": it is the gatus probe, the forward-auth bypass and the deploy
     // health check all at once.
@@ -148,9 +176,9 @@ export const apps = pgTable(
     // matched on it rather than on the name, which a rename or transfer moves.
     githubRepoId: bigint('github_repo_id', { mode: 'number' }),
     // "auto" | "railpack" | "dockerfile" — what each build is asked to use.
-    buildStrategy: text('build_strategy').notNull().default('auto'),
+    buildStrategy: text('build_strategy').$type<BuildStrategy>().notNull().default('auto'),
     // "live" | "candidate" — a candidate is pushed but never deployed.
-    buildPublish: text('build_publish').notNull().default('live'),
+    buildPublish: text('build_publish').$type<BuildPublish>().notNull().default('live'),
     // Build-time env names the app needs set but not real, name → placeholder
     // value. Never secrets: they reach the build in the clear.
     buildEnvPlaceholders: jsonb('build_env_placeholders')
@@ -168,7 +196,14 @@ export const apps = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('apps_name_idx').on(t.name)],
+  (t) => [
+    uniqueIndex('apps_name_idx').on(t.name),
+    check('apps_stage_check', oneOf(t.stage, APP_STAGES)),
+    check('apps_source_mode_check', oneOf(t.sourceMode, SOURCE_MODES)),
+    check('apps_auth_mode_check', oneOf(t.authMode, AUTH_MODES)),
+    check('apps_build_strategy_check', oneOf(t.buildStrategy, BUILD_STRATEGIES)),
+    check('apps_build_publish_check', oneOf(t.buildPublish, BUILD_PUBLISH_MODES)),
+  ],
 )
 
 // Static env vars merged into the container's `environment`. A table rather
@@ -256,7 +291,7 @@ export const deployments = pgTable(
 
     // "ok" | "failed" — deploy.sh's own verdict, from a real health check
     // through traefik rather than from `systemctl` having returned 0.
-    result: text('result').notNull(),
+    result: text('result').$type<DeployResult>().notNull(),
     httpCode: text('http_code'),
 
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
@@ -272,7 +307,10 @@ export const deployments = pgTable(
   // A deploy is identified by which image landed and when it started. Makes
   // ingest idempotent: the journal is re-read on every Deployments tab load
   // and by the build reporter, and the same line must not become a second row.
-  (t) => [uniqueIndex('deployments_app_digest_started_idx').on(t.appId, t.digest, t.startedAt)],
+  (t) => [
+    uniqueIndex('deployments_app_digest_started_idx').on(t.appId, t.digest, t.startedAt),
+    check('deployments_result_check', oneOf(t.result, DEPLOY_RESULTS)),
+  ],
 )
 
 // Builds run by the box's own builder (BuildKit + Railpack, driven by the
@@ -380,6 +418,30 @@ export const builds = pgTable(
   (t) => [
     index('builds_app_created_idx').on(t.appId, t.createdAt),
     uniqueIndex('builds_one_queued_per_lane').on(t.appId, t.lane).where(sql`${t.state} = 'queued'`),
+    // The scheduler's every-tick reads: the open builds (queued and active),
+    // and the finished ones not yet reported. Both sets are a handful of rows
+    // in a table that only grows.
+    index('builds_open_idx')
+      .on(t.state, t.createdAt)
+      .where(
+        oneOf(
+          t.state,
+          BUILD_STATES.filter((s) => !TERMINAL_BUILD_STATES.includes(s)),
+        ),
+      ),
+    index('builds_unreported_idx').on(t.updatedAt).where(sql`${t.reported} = false`),
+    check('builds_lane_check', oneOf(t.lane, BUILD_LANES)),
+    check('builds_strategy_check', oneOf(t.strategy, BUILD_STRATEGIES)),
+    check(
+      'builds_resolved_strategy_check',
+      oneOf(
+        t.resolvedStrategy,
+        BUILD_STRATEGIES.filter((s) => s !== 'auto'),
+      ),
+    ),
+    check('builds_publish_check', oneOf(t.publish, BUILD_PUBLISH_MODES)),
+    check('builds_requested_by_check', oneOf(t.requestedBy, BUILD_REQUESTERS)),
+    check('builds_state_check', oneOf(t.state, BUILD_STATES)),
   ],
 )
 
@@ -480,7 +542,10 @@ export const mcpTokens = pgTable(
   },
   // Unique, and the lookup index: a call hashes what it was given and selects
   // on this column exactly once.
-  (t) => [uniqueIndex('mcp_tokens_hash_idx').on(t.tokenHash)],
+  (t) => [
+    uniqueIndex('mcp_tokens_hash_idx').on(t.tokenHash),
+    check('mcp_tokens_scope_check', oneOf(t.scope, MCP_SCOPES)),
+  ],
 )
 
 // The break-glass local admins (core/local-login.ts).
@@ -517,36 +582,41 @@ export const localAdmins = pgTable('local_admins', {
 // `revoked` a key it has turned away, kept rather than deleted so its
 // history still explains itself. The facts beside the key are the last the
 // controller observed, kept because the controller forgets on a restart.
-export type NodeState = 'approved' | 'revoked'
+export const NODE_STATES = ['approved', 'revoked'] as const
+export type NodeState = (typeof NODE_STATES)[number]
 
-export const nodes = pgTable('nodes', {
-  id: text('id').primaryKey(),
-  publicKey: text('public_key').notNull().unique(),
-  state: text('state').$type<NodeState>().notNull(),
-  hostname: text('hostname').notNull(),
-  os: text('os').notNull(),
-  arch: text('arch').notNull(),
-  agentVersion: text('agent_version').notNull(),
-  mac: text('mac'),
-  lanIp: text('lan_ip'),
-  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
-  approvedAt: timestamp('approved_at', { withTimezone: true }),
-  approvedBy: text('approved_by'),
-  revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  /// What the box wants of this machine, set on Settings › Machines and
-  /// handed to the controller in the desired set. A JSON object rather than
-  /// columns because it holds the agent's vocabulary (agent/src/api/wire.rs
-  /// `DesiredPolicy`, cut down by lib/agent/policy.ts) beside the box's own; absent
-  /// keys mean the agent's own defaults. Postgres, not site/: nothing nix
-  /// builds reads it, so changing it is an UPDATE and nothing rebuilds.
-  policy: jsonb('policy').$type<NodePolicy>().notNull().default({}),
-  /// Who changed the policy last — an admin's label from a page, or
-  /// `node:<id>` when the machine asked from its menu bar or santree — and
-  /// when: the Machines card's "Last changed by" line.
-  policyChangedBy: text('policy_changed_by'),
-  policyChangedAt: timestamp('policy_changed_at', { withTimezone: true }),
-})
+export const nodes = pgTable(
+  'nodes',
+  {
+    id: text('id').primaryKey(),
+    publicKey: text('public_key').notNull().unique(),
+    state: text('state').$type<NodeState>().notNull(),
+    hostname: text('hostname').notNull(),
+    os: text('os').notNull(),
+    arch: text('arch').notNull(),
+    agentVersion: text('agent_version').notNull(),
+    mac: text('mac'),
+    lanIp: text('lan_ip'),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    approvedBy: text('approved_by'),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /// What the box wants of this machine, set on Settings › Machines and
+    /// handed to the controller in the desired set. A JSON object rather than
+    /// columns because it holds the agent's vocabulary (agent/src/api/wire.rs
+    /// `DesiredPolicy`, cut down by lib/agent/policy.ts) beside the box's own; absent
+    /// keys mean the agent's own defaults. Postgres, not site/: nothing nix
+    /// builds reads it, so changing it is an UPDATE and nothing rebuilds.
+    policy: jsonb('policy').$type<NodePolicy>().notNull().default({}),
+    /// Who changed the policy last — an admin's label from a page, or
+    /// `node:<id>` when the machine asked from its menu bar or santree — and
+    /// when: the Machines card's "Last changed by" line.
+    policyChangedBy: text('policy_changed_by'),
+    policyChangedAt: timestamp('policy_changed_at', { withTimezone: true }),
+  },
+  (t) => [check('nodes_state_check', oneOf(t.state, NODE_STATES))],
+)
 
 // A logged-in machine's WireGuard client of the box's wg-easy (host/enroll.ts):
 // which client is whose, so a log-out, a revoke or a forget deletes the right

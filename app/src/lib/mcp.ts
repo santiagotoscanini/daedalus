@@ -22,7 +22,7 @@
  * every write ends at a bridge verb the host agent guards on its own, so
  * splitting the token would be a security story the mechanism does not back.
  */
-const MCP_SCOPES = ['read', 'write'] as const
+export const MCP_SCOPES = ['read', 'write'] as const
 export type McpScope = (typeof MCP_SCOPES)[number]
 
 export function isMcpScope(v: unknown): v is McpScope {

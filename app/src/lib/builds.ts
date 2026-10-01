@@ -39,7 +39,8 @@ export const BUILD_SHA_RE = /^[0-9a-f]{40}$/
 
 export const BUILD_STRATEGIES = ['auto', 'railpack', 'dockerfile'] as const
 export const BUILD_PUBLISH_MODES = ['live', 'candidate'] as const
-const BUILD_REQUESTERS = ['webhook', 'sweep', 'operator'] as const
+export const BUILD_LANES = ['main', 'pr'] as const
+export const BUILD_REQUESTERS = ['webhook', 'sweep', 'operator'] as const
 export const BUILD_STATES = [
   'queued',
   'cloning',
