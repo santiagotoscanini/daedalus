@@ -55,14 +55,12 @@ to match. The craftsman, not the labyrinth.
 
 ## Developing
 
-On the machine that develops it, the control plane runs in dev mode
-(`fleet.daedalus.source = "dev"`): the container bind-mounts `app/` and runs the
-Vite dev server against it, so saving a file is the deploy.
-[`CLAUDE.md`](CLAUDE.md) has the loop, the verification commands and
-where everything else lives.
+A box runs the control plane as an image built from the engine rev its
+configuration pins, so a change reaches it as a commit and a lock bump;
+[`CLAUDE.md`](CLAUDE.md) has that loop and the verification commands.
 
 None of that is needed to work on it. Node 24, a throwaway Postgres and
-one environment variable are enough, and the checks need nothing at all:
+two environment variables are enough, and the checks need nothing at all:
 [CONTRIBUTING.md](CONTRIBUTING.md) — every command in it was run from a
 fresh clone with no host present.
 

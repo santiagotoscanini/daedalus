@@ -7,8 +7,8 @@ drives.
 | Path | What it is |
 |---|---|
 | `platform/` | The base every stack rides on, with no enable switches: the rootless-podman runtime and its helpers (`mkRootlessContainer`, `mkDotenvSecret`, `mkSecretRender`, `mkLocalImage`, `pinnedImage`), the publish layer (`fleet.webApps` → reverse-proxy routes, LAN DNS, tunnel routes, health probes; the observability registries), the single-sign-on interface (`identity.nix`: `fleet.sso.*`, `fleet.ssoClients`), the apps registry (`apps-options.nix`: `fleet.apps`), the site constants read from the host's `site/` directory, sops wiring, ZFS and replication mechanisms, mail, git identity, dead-man pings, the nodes (`nodes.nix`: `fleet.nodes`, `fleet.lanDomain`), the weekly lock upgrade, and the export domains the app reads its facts from. |
-| `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
-| `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix` (the switch, the entry, the image), `container.nix` (its env and mounts), `dashboard-keys.nix`, the controller (`controller.nix`, `root-helper.nix`, `claude-logs.nix`), the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), the mover for versions a stack pins as plain strings (`version-update.nix`, fed by `fleet.versionPins`), `self.json`, and the root verbs' scripts (`host/*.sh` — among them apply, deploy, build, the image, engine and version updates, secret writes, snapshots, workspaces, power). |
+| `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`, `hardening-lib.nix` (the shared systemd sandbox), and the bodies of `mkLocalImage` and `mkSecretRender` (`local-image-lib.nix`, `secret-render-lib.nix`), which `podman.nix` binds. |
+| `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix` (the switch, the entry, the image), `container.nix` (its env and mounts), `dashboard-keys.nix`, the controller (`controller.nix`, `root-helper.nix`, `claude-logs.nix`), the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), the mover for versions a stack pins as plain strings (`version-update.nix`, fed by `fleet.versionPins`), `self.json`, and the root verbs' scripts (`host/*.sh` — among them apply, build, the image, engine and version updates, secret writes, the nodes' DHCP lines, snapshots, workspaces, power). |
 | `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
 | `tests/` | `example-host/` evaluates the example host (below) as a whole system; `all-modules/` the same host with every leaf switched on; `daedalus-minimal/` with the catalog off but for what the control plane needs. All run in `nix flake check`; nothing is built — `tests/README.md` has the table. |
 
@@ -21,7 +21,9 @@ The root `flake.nix` exports:
   github:santiagotoscanini/daedalus#config`), which is also the host the
   checks evaluate;
 - `lib.path` — this directory as a path, for a host that keeps stacks of
-  its own and needs the libraries.
+  its own and needs the libraries;
+- `packages.x86_64-linux.{daedalus-agent,session-host}` — the two Rust
+  binaries the box runs, as the modules build them (`nix/pkgs/`).
 
 Its **modules take nothing from the flake's inputs**, on purpose. The
 engine is modules and libraries; the host chooses the nixpkgs they are
@@ -59,7 +61,7 @@ evaluation with the option's name.
 | `myspeed` | Internet speed tracker. | `authGroups`, `fleet.images.myspeed` |
 | `stirling-pdf` | A PDF toolbox — the first leaf, and the template for one. | `authGroups`, `fleet.images.stirling-pdf` |
 | `traefik` | The reverse proxy: every published hostname, the forward-auth middlewares, the wildcard certificate. | `envSopsFile`, `fleet.images.traefik` |
-| `verdaccio` | A private npm mirror; the box's builds and the control plane's dev container install through it. | `fleet.images.{verdaccio-openid,verdaccio-openid-builder}` — the two bases its image is built on |
+| `verdaccio` | A private npm mirror; the box's app builds and the control plane's image install through it. | `fleet.images.{verdaccio-openid,verdaccio-openid-builder}` — the two bases its image is built on |
 | `wg-easy` | A WireGuard server and its admin UI; the tunnel port is forwarded by the router, and a peer reaches the forwarded ports and `tunnelHostPorts` at the LAN address. | `envSopsFile`, `fleet.images.wg-easy`; `tunnelHostPorts` (optional) |
 
 The spine — everything above but the leaves (factorio, grocy,
@@ -222,15 +224,15 @@ at the version this rev's `app/package.json` declares. `"local"` builds the
 whole Dockerfile on the box from the engine source the configuration locks,
 through the box's npm mirror when it publishes one, as a pre-switch check: a
 failed build refuses the switch and the old image keeps running. Either way
-pinning the engine pins the control plane. The host that develops the engine
-sets `"dev"`: the image's `runtime` stage is built on the box and the engine
-checkout's `app/` is mounted into it, so saving a file is the deploy. What dev
-mode costs: no production build (dev-server performance, for a
-single-operator admin UI); `pnpm install --frozen-lockfile` at every
-container start, so the npm registry (the box's mirror when it publishes one)
-is a hard startup dependency and a first boot after a restore takes minutes,
-the unit green while Vite is still starting; and a restore needs the checkout
-before the container will start. `CONTRIBUTING.md` has the image's own story.
+pinning the engine pins the control plane. `"dev"` builds the image's
+`runtime` stage on the box and mounts an engine checkout's `app/` into it
+under `vite dev`, so saving a file is the deploy. What dev mode costs: no
+production build (dev-server performance, for a single-operator admin UI);
+`pnpm install --frozen-lockfile` at every container start, so the npm
+registry (the box's mirror when it publishes one) is a hard startup
+dependency and a first boot after a restore takes minutes, the unit green
+while Vite is still starting; and a restore needs the checkout before the
+container will start. `CONTRIBUTING.md` has the image's own story.
 
 ### The controller
 

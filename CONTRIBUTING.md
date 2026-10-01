@@ -1,12 +1,12 @@
 # Contributing
 
 Daedalus runs on the machine it manages, and the rest of this repository
-describes it that way: the container bind-mounts `app/`, the NixOS module
-hands it a database and two dozen host snapshots, and saving a file is the
-deploy. None of that is needed to work on it.
+describes it that way: the NixOS module builds its image, hands it a
+database and two dozen host snapshots, and puts traefik in front of it.
+None of that is needed to work on it.
 
-The app runs on a laptop with Node 24, a throwaway Postgres and one
-environment variable. Every command below was run from a fresh clone with
+The app runs on a laptop with Node 24, a throwaway Postgres and two
+environment variables. Every command below was run from a fresh clone with
 no host present — inside a `node:24` container against a `postgres:17`
 container, because the box itself has no node. On a machine with Node 24
 they are the same commands.
@@ -45,13 +45,14 @@ docker run -d --name daedalus-dev-db -p 127.0.0.1:5432:5432 \
 
 cd app
 export DATABASE_URL=postgres://daedalus:devpass@127.0.0.1:5432/daedalus
+export PROXY_PROOF=local     # what traefik would send; see "The request gate"
 pnpm db:migrate    # the schema into an empty database
 pnpm dev           # http://localhost:3000
 ```
 
 (Verified with podman; the flags are identical.)
 
-`DATABASE_URL` is the only variable you must set. `src/host/db.ts` reads it
+`DATABASE_URL` is the only variable the server needs to start. `src/host/db.ts` reads it
 at module scope, so without it every route — `/api/healthz` included —
 answers 500 with `DATABASE_URL is not set`. The dev server does not exit;
 it serves 500s until you give it one. Every other row of the schema in
@@ -72,7 +73,8 @@ After which `/apps` renders its empty state — 0 running, and Add an app.
 
 ## What a laptop sees
 
-Every other route answers 200 with no further setup. The category pages
+With the proof sent (below), every other route answers 200 with no further
+setup. The category pages
 (`/c/<id>`, one per directory under `src/modules/`), `/apps/new`,
 `/settings` and `/claude` all render whole:
 the rail, the panels, the prose. What is missing is the readings. Those
@@ -87,24 +89,29 @@ to distinguish "no" from "couldn't ask". It also means a local run cannot
 tell you whether a host reading is right — only that the page holds
 together without one.
 
-## There is no login locally
+## The request gate
 
-The deployed app has no auth of its own beyond a break-glass password
+The deployed app answers only what traefik sent: every request must carry
+`X-Proxy-Proof` equal to the container's `PROXY_PROOF`, a per-app secret
+only traefik holds (`webApps.<n>.proxyProof`), or be one of the
+self-authenticating paths (`core/request-gate.ts` lists them), or a GET
+with the headless browser's reader token. Anything else is a bare 403 —
+locally too. So locally, send `X-Proxy-Proof: local` with every request: a
+header-setting browser extension does it for a browser, `-H` for `curl`.
+
+Beside that proof the app trusts traefik's forward-auth headers
+(`X-Forwarded-User`, `X-Forwarded-Email`, `X-Forwarded-Groups`;
+`core/auth.ts`); it has no auth of its own beyond a break-glass password
 login that stays off unless site.json turns it on (`core/local-login.ts`).
-Traefik's forward-auth sits in front of it and passes `X-Forwarded-User`
-and `X-Forwarded-Email`; the app trusts them only on a request that also
-carries `X-Proxy-Proof` equal to its `PROXY_PROOF` — a per-app secret only
-traefik holds (`webApps.<n>.proxyProof`, `core/auth.ts`). Locally nothing sets those headers
-and nothing blocks you — every route answers. The one visible difference is the account button at the foot
-of the rail, which reads `Account` with no name: `fetchAccount` catches the
-lookup failure and returns null, because a shell that cannot say who you
-are still has to render. Setting the headers by hand buys nothing without a
-Pocket ID to read them against.
+Without them the account button at the foot of the rail reads `Account`
+with no name, and every write refuses: mutations need the `admins` group.
+Setting them by hand (`X-Forwarded-Groups: ["admins"]`) is how
+`release/image-walk.mjs` makes its one write.
 
 ## HMR does not connect
 
 `vite.config.ts` pins the HMR socket to `wss://$APP_HOSTNAME:443`, because
-on the box the browser reaches Vite through traefik and would otherwise dial
+on a dev-mode host the browser reaches Vite through traefik and would otherwise dial
 a port nothing listens on. On a laptop nothing listens on that either, so
 the browser logs `failed to connect to websocket` and never live-reloads.
 The server half is unaffected — a saved file is picked up on the next
@@ -121,8 +128,8 @@ contract logic without a host.
 
 ## Building and running the built server
 
-The developing box runs `vite dev`; this is the other way to run the same
-app, and what the published image does.
+`pnpm dev` is one way to run it; this is the other, and what the image
+does.
 
 ```
 cd app
@@ -173,10 +180,9 @@ The box's identity is not decided at build time: `src/host/site.ts` reads
 `BASE_DOMAIN`, `GITHUB_OWNER`, `REGISTRY_HOST` and `GRAFANA_URL` from the
 container env per request, and the browser gets the same value in the root
 loader's data (`useSite()`). Unset, they read `localhost` /
-`unknown-owner` — at run time, on that box, not baked into the image. One
-thing is still not right for an image run somewhere without the box's proxy:
-forward-auth headers are the only identity, and they count only beside the
-proxy proof, so without a proxy in front every write refuses. Server functions also require a same-origin request: a `curl`
+`unknown-owner` — at run time, on that box, not baked into the image. An image
+run without a proxy in front answers nothing but its exempt paths: see
+"The request gate". Server functions also require a same-origin request: a `curl`
 needs `-H 'Sec-Fetch-Site: same-origin'` or it gets a bare 403.
 
 ## The image
@@ -223,6 +229,7 @@ pinned by version and sha256 in the Dockerfile (`SOPS_VERSION`,
 podman run -d --init --name daedalus --network <net> \
   -e DATABASE_URL=postgres://… \
   -e BASE_DOMAIN=example.test -e GITHUB_OWNER=someone \
+  -e PROXY_PROOF=<what your proxy sends> \
   daedalus
 ```
 
@@ -255,8 +262,8 @@ is 1000. `NPM_REGISTRY` overrides the registry `pnpm-workspace.yaml` names;
 
 `.github/workflows/image.yml` publishes `ghcr.io/<owner>/daedalus:<version>`
 and `:sha-<short sha>` when a `v*` tag is pushed, and only then; the tag
-must match `app/package.json`'s version. On a pull request that touches the
-image files it builds and pushes nothing.
+must match `app/package.json`'s version. A push to `main` or a pull request
+that touches the image files builds it and pushes nothing.
 
 `release/image-walk.sh` is the proof to run before a tag: it builds the
 image, checks the `sops` it carries, starts it against a throwaway

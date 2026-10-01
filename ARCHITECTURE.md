@@ -90,7 +90,7 @@ does goes through it.
 flowchart TB
   subgraph unpriv["app-daedalus: rootless podman, container root maps to an unprivileged host user"]
     Engine["the engine<br/>TanStack Start + drizzle"]
-    Rd[/"reads, all ro: /export /repo /site /system /images /verbs<br/>/workspaces /deploy-state /env-snapshot<br/>/builds /github /github-token /registry<br/>(dev mode: /engine)<br/>and what stacks contribute: /dhcp /shotter"/]
+    Rd[/"reads, all ro: /export /repo /site /system /images /verbs<br/>/workspaces /deploy-state /env-snapshot<br/>/builds /builder /github /github-token<br/>(dev mode: /engine)<br/>and what stacks contribute: /dhcp /wg-easy /shotter"/]
     Wr[/"writes, for the operator's readers only:<br/>/workspace-icons /boards"/]
     Sops["/usr/local/bin/sops: static, holds no age identity<br/>so it can encrypt and never decrypt"]
   end
@@ -292,7 +292,7 @@ flowchart TB
 
   subgraph edge["server only — the doors"]
     Srv["src/server/**  createServerFn via fn.ts<br/>readFn, adminFn, publicFn<br/>registry, builds, settings, site, modules, updates, ..."]
-    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook<br/>and the image servers (icons, shots)"]
+    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/agent/enroll<br/>and the image servers (icons, shots)"]
     Mcp["src/routes/mcp.ts → src/host/mcp/**<br/>/mcp — Streamable HTTP, 16 tools, 2 resources<br/>a scoped token, not a session"]
   end
 
@@ -382,10 +382,8 @@ directly.
 ## The MCP server
 
 The third door, beside the pages and the `api.*` routes: `POST /mcp`, Streamable
-HTTP, served by the app itself. It exists because before it the only way to
-press "Build now" from outside a browser was to *drive* a browser — a
-headless-Chromium script clicking a button — and a control plane an agent
-cannot reach is a control plane an agent works around.
+HTTP, served by the app itself, so an agent acts through the control plane
+rather than around it.
 
 **It is an adapter, not a second implementation.** Every read tool calls the
 loader the corresponding page calls; every write tool calls the same
@@ -446,6 +444,31 @@ box's `fleet.mcpServers` gateway registry — fronting a write-capable control
 plane with LiteLLM would hand it to Open WebUI, to every virtual key, and
 potentially to an off-box model key, which is a wider blast radius than the
 control plane's own UI has.
+
+---
+
+## The other machines
+
+One Rust agent (`agent/`) runs on every machine. On the box it is the
+controller (`daedalus-controller.service`, as the operator): the app's one
+socket to the host — `root.run`, above — and the end every other
+machine's agent links to: one outbound TLS 1.3 connection per machine,
+each side pinning the other's ed25519 key (the trust boundaries below). A
+machine reports its status document and telemetry up that link; the app
+hands the controller the desired set — every approved or revoked key, with
+its policy — and reads the machines through `nodes.*` calls. It never dials
+a machine. A provider a machine offers (a Lemonade model server) is read by
+that machine's agent and reported the same way, and the app keeps
+LiteLLM's routes in step with it through LiteLLM's own API.
+
+The app↔controller contract is defined once, in Rust: `agent/gate.sh gen`
+generates the TypeScript types, the `Methods` map, the constants and golden
+fixtures into `app/src/host/controller/generated/`, and the app's decoders
+are held to those types both ways (its tests decode every fixture). A
+controller running another agent release than the engine builds is said
+above every page. [agent/README.md](agent/README.md) is the agent's own
+mechanics; [session-host/README.md](session-host/README.md) is santree's
+remote projects, which ride the same keys.
 
 ---
 

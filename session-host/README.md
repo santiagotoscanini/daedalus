@@ -106,9 +106,8 @@ the change is refused).
     addresses can fill it — an accepted home-LAN risk.
   - **loopback**: 64 of its own. A wg-easy tunnel peer and every container
     dialling the host arrive from `127.0.0.1` (the DNAT and pasta reach the
-    host over loopback), and so will every agent once the tunnel moves into
-    the agent: a per-address limit there would be one bucket for all of
-    them. A buggy local client leaves ample room for the real handshakes
+    host over loopback) — a Mac agent's own WireGuard tunnel among them: a
+    per-address limit there would be one bucket for all of them. A buggy local client leaves ample room for the real handshakes
     (one round trip each). **Residual risk**: a process on the box that
     deliberately holds 64 silent connections, re-opened every 5 s, locks
     out loopback clients until it stops (the LAN pool is unaffected). It
