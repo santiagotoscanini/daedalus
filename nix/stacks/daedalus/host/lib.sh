@@ -26,7 +26,14 @@
 
 # setpriv, not runuser/sudo: no PAM session per call, and some of these run
 # every minute. --inh-caps=-all so nothing root held rides into the child.
+# An agent whose unit already runs as the operator (`User=`) has nothing to
+# drop — and setpriv's --init-groups would fail without CAP_SETGID — so there
+# the command runs as it is.
 as_operator() {
+  if [ "$EUID" -ne 0 ]; then
+    "$@"
+    return
+  fi
   "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all "$@"
 }
 

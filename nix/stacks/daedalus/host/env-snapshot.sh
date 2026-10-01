@@ -13,8 +13,8 @@
 # reboot, exactly like /run/secrets.
 #
 # Runs as the operator (daedalus-snapshots.nix), whose rootless store the
-# containers live in; podman_ below still reads as a drop, which the unit's
-# setpriv-or-self turns into the command itself.
+# containers live in; podman_ below goes through as_operator (host/lib.sh),
+# which runs the command as it is when the unit is not root.
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ install -d -m 0750 -o "$OPERATOR_USER" -g "$OPERATOR_GROUP" "$OUT_DIR"
 # this wrong fails silently: podman is simply not found and the snapshot
 # directory stays empty with no error.
 podman_() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
+  as_operator \
     "$ENV_BIN" HOME="$OPERATOR_HOME" XDG_RUNTIME_DIR="$OPERATOR_RUNTIME_DIR" \
     "$PODMAN" "$@"
 }

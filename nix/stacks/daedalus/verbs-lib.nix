@@ -20,7 +20,6 @@ let
     mkAgent
     operatorVars
     operatorHomeVars
-    operatorUnitVars
     commitVars
     workspaceVars
     workspaceRuntimeInputs
@@ -155,7 +154,7 @@ let
   workspaceCloneScript = mkAgent {
     name = "daedalus-workspace-clone";
     runtimeInputs = workspaceRuntimeInputs;
-    vars = workspaceVars // operatorUnitVars;
+    vars = workspaceVars;
     files = [
       ./host/lib.sh
       ./host/workspace-lib.sh

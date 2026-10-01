@@ -179,6 +179,19 @@ check "apps.json is back, index and work tree" \
   '[ "$(cat "$R/site/apps.json")" = "{\"apps\":\"old\"}" ] && git -C "$R" diff --quiet HEAD -- site'
 check "the unrelated edit is untouched" '[ "$(cat "$R/other.nix")" = "{ edited = true; }" ]'
 
+# ── 4. as_operator under a unit that already runs as the operator ─────────
+# Not root, so nothing to drop: the command runs as it is, setpriv never
+# (the real one's --init-groups fails without CAP_SETGID).
+echo "# as_operator: not root"
+stub setpriv-refuses <<'EOF'
+echo "setpriv called" >&2
+exit 1
+EOF
+agent "$T/as-op.sh" 'set -euo pipefail' lib.sh
+echo 'as_operator "$BASH" -c "echo ran"; as_operator false || echo "status kept"' >>"$T/as-op.sh"
+out="$(SETPRIV="$T/bin/setpriv-refuses" bash "$T/as-op.sh" 2>&1)" || true
+check "the command runs, setpriv does not" '[ "$out" = "$(printf "ran\nstatus kept")" ]'
+
 if [ "$fails" -ne 0 ]; then
   cat "$T/apply.out"
   echo "$fails check(s) failed"

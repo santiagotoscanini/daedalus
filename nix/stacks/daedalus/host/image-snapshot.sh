@@ -25,8 +25,8 @@
 # survive a reboot or ride the ZFS snapshots.
 #
 # Runs as the operator (daedalus-snapshots.nix), whose rootless store the
-# containers live in; podman_ below still reads as a drop, which the unit's
-# setpriv-or-self turns into the command itself.
+# containers live in; podman_ below goes through as_operator (host/lib.sh),
+# which runs the command as it is when the unit is not root.
 
 set -euo pipefail
 
@@ -36,7 +36,7 @@ install -d -m 0755 -o "$OPERATOR_USER" -g "$OPERATOR_GROUP" "$OUT_DIR"
 # writeShellApplication's PATH — the same trap deploy.sh and env-snapshot.sh
 # both document. Getting it wrong fails silently.
 podman_() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
+  as_operator \
     "$ENV_BIN" HOME="$OPERATOR_HOME" XDG_RUNTIME_DIR="$OPERATOR_RUNTIME_DIR" \
     "$PODMAN" "$@"
 }

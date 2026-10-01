@@ -17,7 +17,6 @@ let
     mkAgent
     operatorVars
     operatorHomeVars
-    operatorUnitVars
     workspaceVars
     workspaceRuntimeInputs
     envDir
@@ -35,12 +34,9 @@ let
     mkAgent {
       name = "daedalus-workspace-${if doSync then "sync" else "publish"}";
       runtimeInputs = workspaceRuntimeInputs;
-      vars =
-        workspaceVars
-        // operatorUnitVars
-        // {
-          DO_SYNC = if doSync then "1" else "0";
-        };
+      vars = workspaceVars // {
+        DO_SYNC = if doSync then "1" else "0";
+      };
       files = [
         ./host/lib.sh
         ./host/workspace-lib.sh
@@ -60,19 +56,16 @@ let
       pkgs.gnugrep
       pkgs.jq # write_json_atomic validates before publishing
     ];
-    vars =
-      operatorHomeVars
-      // operatorUnitVars
-      // {
-        OUT_DIR = envDir;
-        OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
-        # The registry's apps plus daedalus itself — exactly the set with a page
-        # in the UI. Derived from apps.json, so an Apply keeps it current. ALL
-        # registry apps, not just the deployable ones: a frozen app still has a
-        # page, and that page still shows its environment.
-        APPS = lib.concatStringsSep " " (lib.attrNames registryApps ++ [ "daedalus" ]);
-        PODMAN = "${pkgs.podman}/bin/podman";
-      };
+    vars = operatorHomeVars // {
+      OUT_DIR = envDir;
+      OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
+      # The registry's apps plus daedalus itself — exactly the set with a page
+      # in the UI. Derived from apps.json, so an Apply keeps it current. ALL
+      # registry apps, not just the deployable ones: a frozen app still has a
+      # page, and that page still shows its environment.
+      APPS = lib.concatStringsSep " " (lib.attrNames registryApps ++ [ "daedalus" ]);
+      PODMAN = "${pkgs.podman}/bin/podman";
+    };
     files = [
       ./host/lib.sh
       ./host/env-snapshot.sh
@@ -93,15 +86,12 @@ let
     # quotes is jq's variable, not the shell's. Letting the shell near it is
     # the bug SC2016 is warning about, in reverse.
     excludeShellChecks = [ "SC2016" ];
-    vars =
-      operatorHomeVars
-      // operatorUnitVars
-      // {
-        OUT_DIR = imageDir;
-        OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
-        PODMAN = "${pkgs.podman}/bin/podman";
-        JQ = "${pkgs.jq}/bin/jq";
-      };
+    vars = operatorHomeVars // {
+      OUT_DIR = imageDir;
+      OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
+      PODMAN = "${pkgs.podman}/bin/podman";
+      JQ = "${pkgs.jq}/bin/jq";
+    };
     files = [
       ./host/lib.sh
       ./host/image-snapshot.sh
@@ -150,13 +140,10 @@ let
       pkgs.gnused
       pkgs.coreutils
     ];
-    vars =
-      operatorVars
-      // operatorUnitVars
-      // {
-        OUT_DIR = imageDir;
-        PINNED = pkgs.writeText "daedalus-pinned-images.json" (builtins.toJSON pinnedImages);
-      };
+    vars = operatorVars // {
+      OUT_DIR = imageDir;
+      PINNED = pkgs.writeText "daedalus-pinned-images.json" (builtins.toJSON pinnedImages);
+    };
     files = [
       ./host/lib.sh
       ./host/image-freshness.sh
@@ -272,18 +259,15 @@ let
       pkgs.jq
       pkgs.util-linux # setpriv
     ];
-    vars =
-      operatorHomeVars
-      // operatorUnitVars
-      // {
-        OUT_DIR = repoDir;
-        REPO_DIR = config.fleet.config.repo;
-        SITE_DIR = config.fleet.site.path;
-        GIT = "${pkgs.git}/bin/git";
-        JQ = "${pkgs.jq}/bin/jq";
-        AWK = "${pkgs.gawk}/bin/awk";
-        DATE = "${pkgs.coreutils}/bin/date";
-      };
+    vars = operatorHomeVars // {
+      OUT_DIR = repoDir;
+      REPO_DIR = config.fleet.config.repo;
+      SITE_DIR = config.fleet.site.path;
+      GIT = "${pkgs.git}/bin/git";
+      JQ = "${pkgs.jq}/bin/jq";
+      AWK = "${pkgs.gawk}/bin/awk";
+      DATE = "${pkgs.coreutils}/bin/date";
+    };
     files = [
       ./host/lib.sh
       ./host/repo-snapshot.sh

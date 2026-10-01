@@ -28,7 +28,7 @@ install -d -m 0755 -o "$OPERATOR_USER" -g "$OPERATOR_GROUP" "$OUT_DIR"
 git_() {
   local dir="$1"
   shift
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
+  as_operator \
     "$ENV_BIN" HOME="$OPERATOR_HOME" \
     "$GIT" --no-optional-locks -C "$dir" "$@"
 }

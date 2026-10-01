@@ -35,8 +35,8 @@ let
 
   # The snapshots that only ever did the operator's work — podman in the
   # rootless store, git in the operator's trees, a registry probe — run as the
-  # operator rather than as root dropping to them per call (host/lib.sh's
-  # drops go through daedalus-lib's setpriv-or-self there). Their /run
+  # operator rather than as root dropping to them per call (host/lib.sh
+  # as_operator runs a command as it is there). Their /run
   # directories are the operator's, made by tmpfiles below. The two that read
   # the rootless store keep no further sandbox: podman may have to create
   # the user namespace (newuidmap is setuid) and writes its own runtime state.
