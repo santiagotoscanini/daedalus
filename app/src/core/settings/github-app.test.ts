@@ -2,7 +2,6 @@ import { createHash, generateKeyPairSync } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_APP_EVENTS, GITHUB_APP_PERMISSIONS } from '../../lib/github-app'
 import { siteFrom } from '../../lib/site'
-import { NO_ACTOR_REASON } from '../auth'
 import type { Ctx } from '../ctx'
 import type { SiteDocument, SiteGithubApp } from '../site/file'
 
@@ -306,29 +305,9 @@ describe('the disabled flag', () => {
 })
 
 describe('the signed-in identity', () => {
-  // The header rule itself is core/auth.test.ts's; this is what it gates.
-  it('refuses every mutation without one', async () => {
-    const { ctx, store } = fakeCtx()
-    h.site = committed(APP)
-    const refused = { ok: false, reason: NO_ACTOR_REASON }
-    expect(await startAppCreation(ctx, null, { name: 'daedalus-example' })).toEqual(refused)
-    expect(
-      await pasteAppKey(ctx, null, {
-        pem: PEM,
-        webhookSecret: WEBHOOK,
-        clientSecret: CLIENT_SECRET,
-      }),
-    ).toEqual(refused)
-    store.set(PENDING, pendingRecord())
-    expect(await retryPendingApply(ctx, null)).toEqual(refused)
-    expect(await discardPendingApply(ctx, null)).toEqual(refused)
-    expect(store.has(PENDING)).toBe(true)
-    expect(store.has(CREATION)).toBe(false)
-    expect(calls).toEqual([])
-    expect(h.sealCalls).toEqual([])
-    expect(h.applyCalls).toEqual([])
-  })
-
+  // The header rule itself is core/auth.test.ts's; this is what it gates. The
+  // buttons' mutations are handed the actor server/fn.ts `adminOnly` admitted,
+  // so the callback is the one door here that reads the header itself.
   it('refuses a callback without one, leaving the creation for the real callback', async () => {
     const { ctx, store } = fakeCtx()
     const state = await begin(ctx)
@@ -337,7 +316,6 @@ describe('the signed-in identity', () => {
       const r = await githubCallback(ctx, request(`code=${CODE}&state=${state}`, email))
       expect(location(r)).toBe('/settings?tab=integrations&github=failed&reason=other-actor')
     }
-    expect(await finishAppCreation(ctx, null, CODE, state)).toMatchObject({ code: 'other-actor' })
     expect(store.has(CREATION)).toBe(true)
     expect(conversions()).toBe(0)
 

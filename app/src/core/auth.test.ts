@@ -2,17 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   actorLabelOf,
   actorOf,
-  actorOrNull,
   forwardedHeaderOf,
   NO_ACTOR_REASON,
   provenByProxy,
   UNKNOWN_ACTOR,
 } from './auth'
 
-// The one identity rule, and the one place it is asserted. The ambient forms
-// (requireActor, actorLabel) are these same two functions over
-// getRequestHeader, which needs a request to be running inside — what is worth
-// pinning is the rule, not which of the two readers found the header.
+// The one identity rule, and the one place it is asserted. The ambient form
+// (requireActor) is the same gate over getRequestHeader, which needs a request
+// to be running inside — what is worth pinning is the rule, not which of the
+// two readers found the header.
 
 const PROOF = 'a'.repeat(64)
 
@@ -36,13 +35,11 @@ describe('the gate', () => {
   it('reads a missing or blank header as no one', () => {
     for (const email of [undefined, '', '   ']) {
       expect(actorOf(req(email))).toEqual({ ok: false, reason: NO_ACTOR_REASON })
-      expect(actorOrNull(actorOf(req(email)))).toBeNull()
     }
   })
 
   it('trims the identity it does find', () => {
     expect(actorOf(req(' op@example.test '))).toEqual({ ok: true, value: 'op@example.test' })
-    expect(actorOrNull(actorOf(req(' op@example.test ')))).toBe('op@example.test')
   })
 })
 

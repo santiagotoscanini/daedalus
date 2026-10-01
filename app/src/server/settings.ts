@@ -65,7 +65,7 @@ export const replaceCloudflareTokenFn = adminFn
   .validator(asValidator(withMessage(obj({ token: str }), 'expected a token')))
   .handler(async ({ data, context }): Promise<TokenReplaceOutcome> => {
     const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
-    return replaceCloudflareToken(await context.ctx(), context.actor(), data.token)
+    return replaceCloudflareToken(await context.ctx(), context.actor, data.token)
   })
 
 /**
@@ -92,10 +92,7 @@ export const startGithubAppFn = adminFn
   .validator(asValidator(githubAppStart))
   .handler(async ({ data, context }): Promise<GithubAppStart> => {
     const { startAppCreation } = await import('../core/settings/github-app')
-    // No fallback name: a missing identity is null, and every App mutation refuses it.
-    const { actorOrNull, requireActor } = await import('../core/auth')
-    const actor = actorOrNull(requireActor())
-    return startAppCreation(await context.ctx(), actor, data)
+    return startAppCreation(await context.ctx(), context.actor, data)
   })
 
 // The messages name the field, never its value.
@@ -112,28 +109,22 @@ export const pasteAppKeyFn = adminFn
   .validator(asValidator(githubAppKey))
   .handler(async ({ data, context }): Promise<GithubAppApply> => {
     const { pasteAppKey } = await import('../core/settings/github-app')
-    const { actorOrNull, requireActor } = await import('../core/auth')
-    const actor = actorOrNull(requireActor())
-    return pasteAppKey(await context.ctx(), actor, data)
+    return pasteAppKey(await context.ctx(), context.actor, data)
   })
 
 export const retryGithubApplyFn = adminFn.handler(async ({ context }): Promise<GithubAppApply> => {
   const { retryPendingApply } = await import('../core/settings/github-app')
-  const { actorOrNull, requireActor } = await import('../core/auth')
-  const actor = actorOrNull(requireActor())
-  return retryPendingApply(await context.ctx(), actor)
+  return retryPendingApply(await context.ctx(), context.actor)
 })
 
 /**
- * Forget a created App's pending Apply. The enabled flag and the actor are
- * checked in core/settings/github-app.ts, like every other App mutation.
+ * Forget a created App's pending Apply. The enabled flag is checked in
+ * core/settings/github-app.ts, like every other App mutation.
  */
 export const discardGithubPendingApplyFn = adminFn.handler(
   async ({ context }): Promise<GithubAppDiscard> => {
     const { discardPendingApply } = await import('../core/settings/github-app')
-    const { actorOrNull, requireActor } = await import('../core/auth')
-    const actor = actorOrNull(requireActor())
-    return discardPendingApply(await context.ctx(), actor)
+    return discardPendingApply(await context.ctx(), context.actor)
   },
 )
 
@@ -144,9 +135,6 @@ export const discardGithubPendingApplyFn = adminFn.handler(
  * now; the minter finds the installation on its own.
  */
 export const githubInstallLandedFn = adminFn.handler(async ({ context }): Promise<Result<null>> => {
-  const { requireActor } = await import('../core/auth')
-  const gate = requireActor()
-  if (!gate.ok) return gate
   const { requestTokenRefresh } = await import('../core/github-app')
   await requestTokenRefresh(await context.ctx())
   return { ok: true, value: null }

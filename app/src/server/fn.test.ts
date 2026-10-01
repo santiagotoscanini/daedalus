@@ -8,8 +8,12 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { adminFn, adminOnly, publicFn, readFn } from './fn'
+
+// The admin gate's verdict, steered per test: an actor, or the throw.
+const authz = vi.hoisted(() => ({ assertAdmin: vi.fn<() => Promise<string>>() }))
+vi.mock('../core/authz', () => authz)
 
 const DIR = 'src/server'
 
@@ -60,6 +64,13 @@ describe('server functions come from server/fn.ts', () => {
 
       it('leaves the admin check to adminFn', () => {
         expect(text).not.toMatch(/\bassertAdmin\b/)
+      })
+
+      it('records under the actor adminFn admitted, never one read again from the headers', () => {
+        // A second read sees only the forwarded header, so a break-glass
+        // session would pass the gate and then be refused, or be recorded as
+        // nobody.
+        expect(text).not.toMatch(/\b(requireActor|actorOf|actorLabel)\b/)
       })
 
       it('defines every handler on a builder', () => {
@@ -123,5 +134,38 @@ describe('server functions refuse cross-site requests', () => {
       })
     if (start === undefined) return
     expect(readFileSync(start, 'utf8')).toMatch(/createCsrfMiddleware/)
+  })
+})
+
+describe('adminOnly', () => {
+  type Next = (opts?: { context?: Record<string, unknown> }) => Promise<unknown>
+  const server = (adminOnly as unknown as { options: { server: (o: unknown) => Promise<unknown> } })
+    .options.server
+  const call = (next: Next) => server({ next, serverFnMeta: { name: 'revealEnvVar' } })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('hands the handler the actor the gate admitted, and audits the call', async () => {
+    // `local:` is the break-glass session: no forwarded header at all, which a
+    // second read from the headers would have taken for nobody.
+    authz.assertAdmin.mockResolvedValue('local:ops')
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const next = vi.fn<Next>(async () => 'ran')
+
+    expect(await call(next)).toBe('ran')
+    expect(next).toHaveBeenCalledWith({ context: { actor: 'local:ops' } })
+    expect(info).toHaveBeenCalledWith('[audit] local:ops revealEnvVar')
+  })
+
+  it('throws before the handler when the gate refuses, and audits nothing', async () => {
+    authz.assertAdmin.mockRejectedValue(new Error('not an admin'))
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const next = vi.fn<Next>(async () => 'ran')
+
+    await expect(call(next)).rejects.toThrow('not an admin')
+    expect(next).not.toHaveBeenCalled()
+    expect(info).not.toHaveBeenCalled()
   })
 })

@@ -113,5 +113,5 @@ export const fetchClaudeCodeUpdateStatus = readFn.handler(async () => {
  */
 export const requestClaudeCodeUpdateFn = adminFn.handler(async ({ context }) => {
   const { runClaudeCodeUpdate } = await import('../host/claude-code-flow')
-  return runClaudeCodeUpdate({ actor: context.actor() })
+  return runClaudeCodeUpdate({ actor: context.actor })
 })

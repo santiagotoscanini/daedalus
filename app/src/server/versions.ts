@@ -19,5 +19,5 @@ export const requestVersionUpdateFn = adminFn
   )
   .handler(async ({ data, context }) => {
     const { runVersionUpdate } = await import('../host/version-update')
-    return runVersionUpdate({ ...data, actor: context.actor() })
+    return runVersionUpdate({ ...data, actor: context.actor })
   })

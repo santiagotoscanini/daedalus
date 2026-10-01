@@ -65,7 +65,7 @@ export const requestImageUpdateFn = adminFn
   )
   .handler(async ({ data, context }) => {
     const { runImageUpdate } = await import('../host/update-flow')
-    return runImageUpdate({ targets: data.targets, confirm: data.confirm, actor: context.actor() })
+    return runImageUpdate({ targets: data.targets, confirm: data.confirm, actor: context.actor })
   })
 
 // ── the engine ────────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ export const fetchEngineUpdateStatus = readFn.handler(async () => {
  */
 export const requestEngineUpdateFn = adminFn.handler(async ({ context }) => {
   const { runEngineUpdate } = await import('../host/engine-flow')
-  return runEngineUpdate({ actor: context.actor() })
+  return runEngineUpdate({ actor: context.actor })
 })
 
 /**

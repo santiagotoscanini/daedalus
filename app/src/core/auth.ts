@@ -26,20 +26,14 @@ import { ADMIN_GROUP } from './auth-names'
 // One header, but two completely different questions asked of it:
 //
 //   "who should this record say did it"  — a LABEL. Never fails; an absent
-//   header is a placeholder, because a commit message or a journal line has
-//   to say something. `actorLabel`.
+//   header is a placeholder, because a journal line has to say something.
+//   `actorLabelOf`, for the `api.*` routes a machine calls.
 //
 //   "is anyone signed in at all"         — a GATE. An absent header is a
 //   refusal, and a blank one must not match another blank one as the same
-//   person. `requireActor`.
-//
-// Reviewing what is gated and what is merely labelled means reading the
-// imports at the top of a file.
-//
-// Both questions come in two forms: the ambient one (`getRequestHeader`, which
-// reads the request the server function is running inside) and the `…Of(request)`
-// one, for the `api.*` route handlers and the GitHub callback, which are handed
-// a Request rather than running inside one.
+//   person. `requireActor`, which core/authz.ts asks for every `adminFn`
+//   (and hands the answer down as `context.actor`), and `actorOf` for the
+//   GitHub callback, which is handed a Request rather than running inside one.
 //
 // This file reads no file, opens no connection and knows nothing about roles:
 // forward-auth already decided, and the box has one operator. Its one outside
@@ -198,20 +192,10 @@ export function actorOf(request: Request): Actor {
   return gate(forwardedHeaderOf(request, HEADER))
 }
 
-/** The gate, over the request this server function is running inside. */
+/** The gate, over the request this server function is running inside — core/authz.ts `authorize`. */
 export function requireActor(): Actor {
   return gate(forwardedHeader(HEADER))
 }
-
-/**
- * The gate's answer as the nullable actor the core mutations take.
- *
- * They check it themselves and shape their own refusal (github-app.ts), so
- * they want the null rather than this module's sentence.
- */
-export const actorOrNull = (a: Actor): string | null => (a.ok ? a.value : null)
-
-const label = (header: string | null | undefined, fallback: string): string => header ?? fallback
 
 /**
  * The display label, over a request a caller is holding. Never fails.
@@ -225,16 +209,5 @@ const label = (header: string | null | undefined, fallback: string): string => h
  * is a change to what records say about who wrote them, not to who may act.
  */
 export function actorLabelOf(request: Request, fallback: string = UNKNOWN_ACTOR): string {
-  return label(forwardedHeaderOf(request, HEADER), fallback)
-}
-
-/**
- * The display label, over the request this server function is running inside.
- *
- * Deliberately NOT the gate: every caller writes the result into a commit
- * message, a request file or a journal line, and none of them refuses. A
- * caller that should refuse wants `requireActor`.
- */
-export function actorLabel(fallback: string = UNKNOWN_ACTOR): string {
-  return label(forwardedHeader(HEADER), fallback)
+  return forwardedHeaderOf(request, HEADER) ?? fallback
 }

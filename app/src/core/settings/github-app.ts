@@ -12,7 +12,7 @@ import {
 import { getJsonResult } from '../../lib/http'
 import { isRecord } from '../../lib/is-record'
 import type { Result } from '../../lib/result'
-import { actorOf, actorOrNull, NO_ACTOR_REASON } from '../auth'
+import { actorOf } from '../auth'
 import type { Ctx } from '../ctx'
 import { GITHUB_API, GITHUB_API_VERSION, installationState } from '../github-app'
 import { renderSiteFile, type SiteDocument, type SiteGithubApp } from '../site/file'
@@ -50,8 +50,8 @@ import type {
 // Every mutation refuses unless the host can take the vault file
 // (GITHUB_APP_ENABLED=1, which nix sets where apply.sh and the sops rules know
 // it): otherwise a created App would lose its key in the Apply. Every mutation
-// also refuses without a signed-in identity — the actor its caller read with
-// core/auth's `requireActor` (server/settings.ts) or `actorOf` (the callback).
+// takes the actor its caller admitted: server/fn.ts `adminOnly` for the
+// buttons, `actorOf` for the callback, which refuses without one.
 
 const APP_NAME_MAX = 34
 const CREATION_TTL_MS = 60 * 60_000
@@ -261,12 +261,11 @@ async function controlPlaneHost(doc: SiteDocument): Promise<string | null> {
 
 export async function startAppCreation(
   ctx: Ctx,
-  actor: string | null,
+  actor: string,
   input: { replace?: boolean; name: string },
 ): Promise<GithubAppStart> {
   const refuse = (reason: string): GithubAppStart => ({ ok: false, reason })
   if (!enabled(ctx)) return refuse(DISABLED_REASON)
-  if (actor === null) return refuse(NO_ACTOR_REASON)
 
   const name = input.name.trim()
   const badName = appNameError(name)
@@ -531,7 +530,7 @@ const SUPERSEDED: GithubAppFinish = {
 
 export async function finishAppCreation(
   ctx: Ctx,
-  actor: string | null,
+  actor: string,
   code: string,
   state: string,
 ): Promise<GithubAppFinish> {
@@ -553,7 +552,7 @@ type FailCode = Exclude<GithubCallbackCode, 'apply-refused'>
 
 async function finish(
   ctx: Ctx,
-  actor: string | null,
+  actor: string,
   code: string,
   state: string,
   owns: () => boolean,
@@ -566,7 +565,6 @@ async function finish(
     reason,
   })
   if (!enabled(ctx)) return failed('disabled', DISABLED_REASON)
-  if (actor === null) return failed('other-actor', 'the callback carried no identity header')
 
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
 
@@ -653,9 +651,8 @@ async function finish(
 
 // ── retry, discard, paste ──────────────────────────────────────────────────
 
-export async function retryPendingApply(ctx: Ctx, actor: string | null): Promise<GithubAppApply> {
+export async function retryPendingApply(ctx: Ctx, actor: string): Promise<GithubAppApply> {
   if (!enabled(ctx)) return { ok: false, reason: DISABLED_REASON }
-  if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
   const pending = await ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply)
   if (pending === undefined) return { ok: false, reason: 'No created App is waiting for an Apply.' }
@@ -677,12 +674,8 @@ export async function retryPendingApply(ctx: Ctx, actor: string | null): Promise
  * way for the box to use that App. The App itself stays on GitHub until the
  * operator deletes it there, which the page says.
  */
-export async function discardPendingApply(
-  ctx: Ctx,
-  actor: string | null,
-): Promise<GithubAppDiscard> {
+export async function discardPendingApply(ctx: Ctx, actor: string): Promise<GithubAppDiscard> {
   if (!enabled(ctx)) return { ok: false, reason: DISABLED_REASON }
-  if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
   const pending = await ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply)
   if (pending === undefined) return { ok: false, reason: 'No created App is waiting for an Apply.' }
@@ -700,12 +693,11 @@ export async function discardPendingApply(
  */
 export async function pasteAppKey(
   ctx: Ctx,
-  actor: string | null,
+  actor: string,
   input: { pem: string; webhookSecret: string; clientSecret: string },
 ): Promise<GithubAppApply> {
   const refuse = (reason: string): GithubAppApply => ({ ok: false, reason })
   if (!enabled(ctx)) return refuse(DISABLED_REASON)
-  if (actor === null) return refuse(NO_ACTOR_REASON)
 
   const site = await readCommittedSite()
   const app = site.ok ? (site.value.doc.github?.app ?? null) : null
@@ -836,7 +828,7 @@ function callbackResponse(result: GithubAppFinish): Response {
 /** GET /settings/github/callback?code&state, behind the gate like every page. */
 export async function githubCallback(ctx: Ctx, request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams
-  const actor = actorOrNull(actorOf(request))
+  const gate = actorOf(request)
   const code = params.get('code') ?? ''
   const state = params.get('state') ?? ''
   // Neither the code nor the state reaches a log line, even inside an error.
@@ -846,17 +838,25 @@ export async function githubCallback(ctx: Ctx, request: Request): Promise<Respon
       .reduce((acc, s) => acc.replaceAll(s, '[redacted]'), shortReason(text))
 
   let result: GithubAppFinish
-  try {
-    result = await finishAppCreation(ctx, actor, code, state)
-  } catch (e) {
+  if (!gate.ok) {
     result = {
       outcome: 'failed',
-      code: 'unknown',
-      reason: e instanceof Error ? `${e.name}: ${e.message}` : 'non-Error thrown',
+      code: 'other-actor',
+      reason: 'the callback carried no identity header',
+    }
+  } else {
+    try {
+      result = await finishAppCreation(ctx, gate.value, code, state)
+    } catch (e) {
+      result = {
+        outcome: 'failed',
+        code: 'unknown',
+        reason: e instanceof Error ? `${e.name}: ${e.message}` : 'non-Error thrown',
+      }
     }
   }
 
-  const who = actor ?? '(no identity)'
+  const who = gate.ok ? gate.value : '(no identity)'
   if (result.outcome === 'created') {
     console.info(`[github-app] callback created; apply ${result.id} requested by ${who}`)
   } else {

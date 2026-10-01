@@ -94,6 +94,6 @@ export const confirmEnrollFn = adminFn
         hostAlias: env.get('WG_EASY_HOST_ALIAS') ?? '',
         sessionHostPort: env.get('SESSION_HOST_PORT'),
       },
-      { token: data.token, actor: context.actor() },
+      { token: data.token, actor: context.actor },
     )
   })

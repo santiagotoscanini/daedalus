@@ -19,9 +19,9 @@ const nodeId = asValidator(withMessage(obj({ id: nodeIdField }), 'expected a nod
  */
 export const approveNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
   const { approveNode, enrollNode } = await import('../lib/repo/nodes')
-  if (await approveNode(data.id, context.actor())) return { ok: true }
+  if (await approveNode(data.id, context.actor)) return { ok: true }
   const ctx = await context.ctx()
-  return { ok: await enrollNode(await ctx.controller.nodesGet(data.id), context.actor()) }
+  return { ok: await enrollNode(await ctx.controller.nodesGet(data.id), context.actor) }
 })
 
 export const revokeNodeFn = adminFn.validator(nodeId).handler(async ({ data }) => {
@@ -87,7 +87,7 @@ export const saveNodePolicyFn = adminFn
   .handler(async ({ data, context }) => {
     const { setNodePolicy } = await import('../lib/repo/nodes')
     return {
-      ok: await setNodePolicy(data.id, { set: data.set, unset: data.unset }, context.actor()),
+      ok: await setNodePolicy(data.id, { set: data.set, unset: data.unset }, context.actor),
     }
   })
 
@@ -110,7 +110,7 @@ export const grantSantreeFn = adminFn
     if (data.fingerprint.length > 100) {
       return { ok: false as const, reason: 'That is not a key.' }
     }
-    return grantSantree({ ...data, by: context.actor() })
+    return grantSantree({ ...data, by: context.actor })
   })
 
 /**
@@ -139,7 +139,7 @@ export const fetchSessionHostFn = readFn.handler(async ({ context }) => {
  */
 export const restartSessionHostFn = adminFn.handler(async ({ context }) => {
   const { restartSessionHost } = await import('../host/session-host')
-  return restartSessionHost(await context.ctx(), { actor: context.actor() })
+  return restartSessionHost(await context.ctx(), { actor: context.actor })
 })
 
 /* ── the gateway: providers' models and the sync ──────────────────────── */

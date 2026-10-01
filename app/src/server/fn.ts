@@ -42,35 +42,33 @@ const withCtx = createMiddleware({ type: 'function' }).server(async ({ next }) =
 })
 
 /**
- * `context.actor()`: the label a record written by this request carries —
- * exactly `actorLabel()` (core/auth.ts), read when asked. The forward-auth
- * middleware forwards the Pocket ID claim as a header (auth.headers in
- * nix/stacks/daedalus/daedalus.nix), so a commit, request file or journal
- * line written with it names a person rather than "daedalus". A label, never
- * a gate: it answers a placeholder rather than refusing. A function that must
- * refuse an absent identity still calls `requireActor()` itself.
+ * The admin gate, `assertAdmin()` (core/authz.ts): passes, or throws before the
+ * validator and handler run.
+ *
+ * What it passes with is `context.actor`: the operator the gate admitted — the
+ * forwarded email, or `local:<name>` for a break-glass session — and every
+ * record the mutation writes (a commit, a request file, a journal line) is made
+ * under it. Handed down rather than read again from the headers, so a mutation
+ * cannot admit one identity and record another, and nothing below the gate
+ * has an absent identity left to handle.
+ *
+ * One `[audit]` line per call, naming the actor and the function: a mutation
+ * is audited by being one, not by remembering to log.
  */
-const withActor = createMiddleware({ type: 'function' }).server(async ({ next }) => {
-  const { actorLabel } = await import('../core/auth')
-  return next({ context: { actor: (): string => actorLabel() } })
-})
-
-/** The admin gate, `assertAdmin()` (core/authz.ts): passes, or throws before the validator and handler run. */
-export const adminOnly = createMiddleware({ type: 'function' }).server(async ({ next }) => {
-  const { assertAdmin } = await import('../core/authz')
-  await assertAdmin()
-  return next()
-})
+export const adminOnly = createMiddleware({ type: 'function' }).server(
+  async ({ next, serverFnMeta }) => {
+    const { assertAdmin } = await import('../core/authz')
+    const actor = await assertAdmin()
+    console.info(`[audit] ${actor} ${serverFnMeta.name}`)
+    return next({ context: { actor } })
+  },
+)
 
 /** A read (GET). No check added: reads are open to anyone past the proxy's gate. */
-export const readFn = createServerFn().middleware([withActor, withCtx])
+export const readFn = createServerFn().middleware([withCtx])
 
 /** A mutation (POST), refused unless `assertAdmin()` passes — before the validator runs. */
-export const adminFn = createServerFn({ method: 'POST' }).middleware([
-  adminOnly,
-  withActor,
-  withCtx,
-])
+export const adminFn = createServerFn({ method: 'POST' }).middleware([adminOnly, withCtx])
 
 /**
  * A POST with NO admin check. Only for a door a caller must pass through
@@ -78,4 +76,4 @@ export const adminFn = createServerFn({ method: 'POST' }).middleware([
  * comment saying why, and `server/fn.test.ts` holds the list — adding one
  * means editing that list in the same review.
  */
-export const publicFn = createServerFn({ method: 'POST' }).middleware([withActor, withCtx])
+export const publicFn = createServerFn({ method: 'POST' }).middleware([withCtx])

@@ -183,7 +183,7 @@ export const saveApp = adminFn
 
 /**
  * Publish an apply request — an adapter over host/apply-flow.ts, which owns
- * the whole check-and-write. The commit is recorded under `context.actor()`
+ * the whole check-and-write. The commit is recorded under `context.actor`
  * (server/fn.ts).
  */
 export const applyRegistry = adminFn.handler(
@@ -194,7 +194,7 @@ export const applyRegistry = adminFn.handler(
     context,
   }): Promise<Result<{ id: string; changed: { name: string; fields: string[] }[] }>> => {
     const { runApply } = await import('../host/apply-flow')
-    const outcome = await runApply(context.actor())
+    const outcome = await runApply(context.actor)
     return outcome.ok
       ? { ok: true, value: { id: outcome.id, changed: outcome.changed } }
       : { ok: false, reason: outcome.reason }
@@ -218,7 +218,7 @@ export const triggerDeploy = adminFn
   .validator(asValidator(appNameField))
   .handler(async ({ data: name, context }) => {
     const { requestManualDeploy } = await import('../lib/apps/deploy')
-    return requestManualDeploy(await context.ctx(), name, context.actor())
+    return requestManualDeploy(await context.ctx(), name, context.actor)
   })
 
 export const revealEnvVar = adminFn
@@ -263,7 +263,7 @@ export const setAppSecretFn = adminFn
   )
   .handler(async ({ data, context }): Promise<RootAnswer> => {
     const { setAppSecret } = await import('../lib/apps/secrets')
-    return setAppSecret(await context.ctx(), { ...data, actor: context.actor() })
+    return setAppSecret(await context.ctx(), { ...data, actor: context.actor })
   })
 
 export const removeAppSecretFn = adminFn
@@ -277,7 +277,7 @@ export const removeAppSecretFn = adminFn
   )
   .handler(async ({ data, context }): Promise<RootAnswer> => {
     const { removeAppSecret } = await import('../lib/apps/secrets')
-    return removeAppSecret(await context.ctx(), { ...data, actor: context.actor() })
+    return removeAppSecret(await context.ctx(), { ...data, actor: context.actor })
   })
 
 export const cloneWorkspaceFn = adminFn
@@ -287,7 +287,7 @@ export const cloneWorkspaceFn = adminFn
   .validator(asValidator(withMessage(obj({ repo: str }), 'expected a repo')))
   .handler(async ({ data, context }) => {
     const { cloneOfferedWorkspace } = await import('../lib/apps/workspaces')
-    return cloneOfferedWorkspace(await context.ctx(), { ...data, actor: context.actor() })
+    return cloneOfferedWorkspace(await context.ctx(), { ...data, actor: context.actor })
   })
 
 /**
@@ -308,5 +308,5 @@ export const runTaskNow = adminFn
   )
   .handler(async ({ data, context }) => {
     const { runAppTaskNow } = await import('../lib/apps/tasks')
-    return runAppTaskNow(await context.ctx(), { ...data, actor: context.actor() })
+    return runAppTaskNow(await context.ctx(), { ...data, actor: context.actor })
   })

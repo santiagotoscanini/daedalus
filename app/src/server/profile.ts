@@ -21,8 +21,8 @@ const PATCH_KEYS = [
 
 /**
  * The account this request is for: the forwarded subject and email, blank as
- * null. Not `context.actor()` — that is one display label with a
- * placeholder; the profile store keys on the two claims themselves.
+ * null. Not `context.actor` — that is the label a record carries, which a
+ * break-glass session also has; the profile store keys on the two claims themselves.
  */
 async function who() {
   const { AUTH_HEADERS, forwardedHeader } = await import('../core/auth')

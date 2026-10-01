@@ -248,34 +248,23 @@ export type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
 /**
  * Build now, as the button's door onto `core/builds/actions.ts buildNow`.
  *
- * Everything this adds is WHO: the admin gate, then the signed-in identity the
+ * Everything this adds is WHO: the identity the admin gate admitted, which the
  * row and the journal line are recorded under. What to build and what to
  * refuse is one implementation, shared with the MCP tool of the same name.
  */
 export const buildNowFn = adminFn
   .validator(asValidator(appRequest))
-  .handler(async ({ data }): Promise<BuildNowResult> => {
-    // adminFn's check runs before this identity gate, not instead of it: its
-    // refusal is a broken gate rather than an answer, so it throws where
-    // requireActor returns.
-    const { requireActor } = await import('../core/auth')
-    const gate = requireActor()
-    if (!gate.ok) return gate
-
+  .handler(async ({ data, context }): Promise<BuildNowResult> => {
     const { buildNow } = await import('../core/builds/actions')
-    return buildNow({ app: data.app, actor: gate.value })
+    return buildNow({ app: data.app, actor: context.actor })
   })
 
 /** Cancel, as the button's door onto `core/builds/actions.ts cancelBuild`. */
 export const cancelBuildFn = adminFn
   .validator(asValidator(buildRequest))
   .handler(async ({ data, context }): Promise<CancelBuildResult> => {
-    const { requireActor } = await import('../core/auth')
-    const gate = requireActor()
-    if (!gate.ok) return gate
-
     const { cancelBuild } = await import('../core/builds/actions')
-    return cancelBuild(await context.ctx(), { app: data.app, id: data.id, actor: gate.value })
+    return cancelBuild(await context.ctx(), { app: data.app, id: data.id, actor: context.actor })
   })
 
 export type RetryReportResult = Result<null>
@@ -288,10 +277,7 @@ export type RetryReportResult = Result<null>
 export const retryReportFn = adminFn
   .validator(asValidator(buildRequest))
   .handler(async ({ data, context }): Promise<RetryReportResult> => {
-    const { requireActor } = await import('../core/auth')
-    const gate = requireActor()
-    if (!gate.ok) return gate
-    const actor = gate.value
+    const { actor } = context
 
     const { getBuild } = await import('../lib/repo/builds')
     const record = await getBuild(data.id)
@@ -323,11 +309,8 @@ export const setBuildSettingsFn = adminFn
     (input: { app: string } & BuildSettingsPatch): { app: string; patch: BuildSettingsPatch } =>
       validateBuildSettings(input),
   )
-  .handler(async ({ data }): Promise<BuildSettingsResult> => {
-    const { requireActor } = await import('../core/auth')
-    const gate = requireActor()
-    if (!gate.ok) return gate
-    const actor = gate.value
+  .handler(async ({ data, context }): Promise<BuildSettingsResult> => {
+    const { actor } = context
 
     const { getApp } = await import('../lib/repo/apps')
     const record = await getApp(data.app)
