@@ -290,17 +290,7 @@ fn update_cmd(args: &[String]) -> Result<()> {
     let refused = state.rolled_back.as_ref().map(|r| r.version.clone());
     match update::check(refused.as_deref())? {
         None => println!("no newer release than {VERSION}"),
-        // Never applied, `--apply` or not: this version cannot install it.
-        Some(update::Offer::Reinstall { version, tag }) => {
-            println!("newer release: {version} ({tag})");
-            println!("{}", update::reinstall_line(&version.to_string()));
-            if apply {
-                bail!(
-                    "{version} is a macOS app bundle, which this agent cannot apply: re-install it"
-                );
-            }
-        }
-        Some(update::Offer::Install(rel)) => {
+        Some(rel) => {
             println!("newer release: {} ({})", rel.version, rel.tag);
             if apply {
                 let staged = update::download_and_verify(&rel)?;

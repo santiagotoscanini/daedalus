@@ -128,8 +128,6 @@ struct Live {
     awake_hold: bool,
     hold_error: Option<String>,
     update_available: Option<String>,
-    /// A newer release this machine is re-installed with (update/).
-    reinstall_required: Option<crate::update::ReinstallRequired>,
     restart_pending: bool,
     /// Raised by the local socket's `update.check` or by the controller's command; the
     /// updater clears it when it looks.
@@ -207,9 +205,6 @@ pub(crate) struct Document<'a> {
     hold_error: Option<&'a str>,
     power_requests: Option<String>,
     update_available: Option<&'a str>,
-    /// A newer release this machine cannot update to and is re-installed
-    /// with (a Mac's app bundle, from 0.24); null otherwise.
-    reinstall_required: Option<&'a crate::update::ReinstallRequired>,
     restart_pending: bool,
     /// What the box asked of this machine.
     policy: &'a Policy,
@@ -260,7 +255,6 @@ impl Shared {
                 awake_hold: false,
                 hold_error: None,
                 update_available: None,
-                reinstall_required: None,
                 restart_pending: false,
                 check_requested: false,
                 policy,
@@ -834,10 +828,6 @@ impl Shared {
         self.lock().update_available = v;
     }
 
-    pub fn set_reinstall_required(&self, v: Option<crate::update::ReinstallRequired>) {
-        self.lock().reinstall_required = v;
-    }
-
     pub fn set_restart_pending(&self) {
         self.lock().restart_pending = true;
     }
@@ -920,7 +910,6 @@ impl Shared {
             hold_error: l.hold_error.as_deref(),
             power_requests,
             update_available: l.update_available.as_deref(),
-            reinstall_required: l.reinstall_required.as_ref(),
             restart_pending: l.restart_pending,
             policy: &l.policy,
             claude: l

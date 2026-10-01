@@ -325,9 +325,6 @@ fn update_line(p: &Page) -> String {
     if p.restart_pending {
         return "Update installed — restarting".to_string();
     }
-    if let Some(r) = &p.reinstall_required {
-        return format!("{}: re-install from the website", r.version);
-    }
     match (
         &p.update_available,
         &p.last_update_result,
@@ -1607,16 +1604,6 @@ mod tests {
             ..Page::default()
         };
         assert_eq!(update_line(&restarting), "Update installed — restarting");
-        let reinstall = Page {
-            reinstall_required: Some(crate::update::ReinstallRequired {
-                version: "0.26.0".into(),
-            }),
-            ..checked
-        };
-        assert_eq!(
-            update_line(&reinstall),
-            "0.26.0: re-install from the website"
-        );
         assert_eq!(update_line(&Page::default()), "Updates: not checked yet");
     }
 

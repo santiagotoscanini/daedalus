@@ -244,8 +244,6 @@ fn bundled(version: &str, bare: bool) -> Manifest {
     m
 }
 
-const MAC: &[&str] = &["universal-apple-darwin"];
-
 #[test]
 fn a_manifest_with_a_bundle_or_an_unknown_role_parses() {
     let m: Manifest = serde_json::from_str(&format!(
@@ -264,93 +262,16 @@ fn a_manifest_with_a_bundle_or_an_unknown_role_parses() {
 
 #[cfg(not(target_os = "macos"))]
 #[test]
-fn a_newer_bundle_only_release_is_a_re_install_never_an_install() {
-    let running = semver::Version::parse("0.23.0").unwrap();
-    let offer = |m: &Manifest, r: &ApiRelease, refused: Option<&semver::Version>| {
-        offer_of(m, r, &running, refused, |_| true, MAC)
-    };
-    // Bundle only, newer: a re-install of its version, with nothing to
-    // download or swap.
-    let b = bundled("0.24.0", false);
-    assert_eq!(
-        offer(&b, &listed(&b), None).unwrap(),
-        Offered::Reinstall(semver::Version::parse("0.24.0").unwrap())
-    );
-    // Bare binaries for this target: the ordinary update, a bundle and a
-    // DMG beside them changing nothing.
-    let bare = bundled("0.24.0", true);
-    let Offered::Assets(v, got) = offer(&bare, &listed(&bare), None).unwrap() else {
-        panic!("bare binaries are installed");
-    };
-    assert_eq!(v.to_string(), "0.24.0");
-    assert_eq!(got.len(), ASSETS.len() + OPTIONAL_ASSETS.len());
-    assert!(got.iter().all(|a| !a.url.ends_with(".app.zip")));
-    // The same, when the manifest is the old form alone.
-    let m = manifest("0.24.0", true, b"bin");
-    assert!(matches!(
-        offer(&m, &listed(&m), None).unwrap(),
-        Offered::Assets(..)
-    ));
-    // Older or the same, rolled back from, another product, another tag:
-    // nothing, bundle or not.
-    for old in ["0.23.0", "0.22.0"] {
-        let o = bundled(old, false);
-        assert!(offer(&o, &listed(&o), None).is_err(), "{old}");
-    }
-    let refused = semver::Version::parse("0.24.0").unwrap();
-    assert!(offer(&b, &listed(&b), Some(&refused)).is_err());
-    let theirs = Manifest {
-        product: "santree".into(),
-        ..b.clone()
-    };
-    assert!(offer(&theirs, &listed(&theirs), None).is_err());
-    let r = ApiRelease {
-        tag_name: "agent-v0.25.0".into(),
-        ..listed(&b)
-    };
-    assert!(offer(&b, &r, None).is_err());
-    // A bundle the release does not carry, or one for another target:
-    // skipped as before.
-    let mut short = listed(&b);
-    short.assets.retain(|a| !a.name.ends_with(".app.zip"));
-    assert!(offer(&b, &short, None).is_err());
-    let mut elsewhere = b.clone();
-    elsewhere.assets[0].target = "x86_64-unknown-freebsd".into();
-    assert!(offer(&elsewhere, &listed(&elsewhere), None).is_err());
-    // A bare binary for this target that is broken is its refusal, not a
-    // re-install.
-    let mut broken = bundled("0.24.0", true);
-    broken.assets[0].sha256 = "zz".into();
-    assert!(offer(&broken, &listed(&broken), None).is_err());
-}
-
-#[test]
-fn no_target_is_a_re_install_in_this_version() {
-    // 0.24 applies the Mac's bundle itself: nothing is left to re-install.
-    assert!(BUNDLE_TARGETS.is_empty());
-}
-
-#[cfg(not(target_os = "macos"))]
-#[test]
 fn windows_and_linux_never_see_a_bundle() {
     let running = semver::Version::parse("0.23.0").unwrap();
-    let offer = |m: &Manifest| offer_of(m, &listed(m), &running, None, |_| true, &[]);
-    // A Mac-only release is skipped, as it always was.
+    let offer = |m: &Manifest| assets_of(m, &listed(m), &running, None, |_| true);
+    // A Mac-only release is skipped.
     assert!(offer(&bundled("0.24.0", false)).is_err());
-    // A release with this target's binaries is installed exactly as the
-    // old form of it is: the Mac's bundle and DMG beside them are ignored.
+    // A release with this target's binaries is installed whatever else it
+    // carries: the Mac's bundle and DMG beside them are ignored.
     let with = bundled("0.24.0", true);
     let without = manifest("0.24.0", true, b"bin");
-    let (Offered::Assets(_, a), Offered::Assets(_, b)) =
-        (offer(&with).unwrap(), offer(&without).unwrap())
-    else {
-        panic!("both are installed");
-    };
-    assert_eq!(a, b);
-    assert_eq!(
-        assets_of(&with, &listed(&with), &running, None, |_| true).unwrap(),
-        assets_of(&without, &listed(&without), &running, None, |_| true).unwrap()
-    );
+    assert_eq!(offer(&with).unwrap(), offer(&without).unwrap());
 }
 
 #[test]
@@ -565,11 +486,9 @@ fn a_probation_run_proves_itself_by_its_page_and_a_report_when_someone_is_there(
 #[test]
 fn a_mac_updates_to_the_bundle_and_ignores_the_disk_image() {
     let running = semver::Version::parse("0.23.1").unwrap();
-    let offer = |m: &Manifest| offer_of(m, &listed(m), &running, None, |_| true, MAC);
+    let offer = |m: &Manifest| assets_of(m, &listed(m), &running, None, |_| true);
     let b = bundled("0.24.0", false);
-    let Offered::Assets(v, got) = offer(&b).unwrap() else {
-        panic!("the bundle is installed");
-    };
+    let (v, got) = offer(&b).unwrap();
     assert_eq!(v.to_string(), "0.24.0");
     assert_eq!(got.len(), 1);
     assert!(got[0]
@@ -582,7 +501,7 @@ fn a_mac_updates_to_the_bundle_and_ignores_the_disk_image() {
             ("tray", "daedalus-agent-tray-universal-apple-darwin"),
         ]
         .map(|(role, name)| ManifestAsset {
-            target: MAC[0].into(),
+            target: "universal-apple-darwin".into(),
             role: role.into(),
             name: name.into(),
             sha256: "ab".repeat(32),

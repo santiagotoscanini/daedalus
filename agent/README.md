@@ -874,10 +874,7 @@ except `controller_address` and `controller_pin`, which `--controller` and
 site serves both scripts from `main`, so neither command names a version.
 Neither installs a release older than 0.21.0 (`MIN_VERSION`), newest or
 named: older agents trusted the first controller that answered — and on a
-Mac nothing older than 0.24.0, the first that is an app. A Mac on 0.23
-says a newer release needs a re-install, and one re-install — the disk
-image or install.sh — moves it to the app: the old `bin/` goes, and the
-data directory, the identity, the log-in and the tunnel stay as they are.
+Mac nothing older than 0.24.0, the first that is an app.
 Trust at install is HTTPS to GitHub; every update after that is verified by
 the agent against the release key it carries.
 

@@ -214,8 +214,6 @@ pub const ASSETS: &[(&str, &str, &str)] = &[(
 )];
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
-/// No release is an app bundle here (the macOS table says what one is).
-pub const BUNDLE_TARGETS: &[&str] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 

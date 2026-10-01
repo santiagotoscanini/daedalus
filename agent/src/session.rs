@@ -62,9 +62,6 @@ pub struct Page {
     pub awake_hold: bool,
     pub hold_error: Option<String>,
     pub update_available: Option<String>,
-    /// A newer release this machine is re-installed with, not updated to.
-    #[serde(default)]
-    pub reinstall_required: Option<crate::update::ReinstallRequired>,
     pub restart_pending: bool,
     pub last_update_check: Option<String>,
     pub last_update_result: Option<String>,
@@ -785,20 +782,6 @@ mod tests {
         let l = p.controller.unwrap();
         assert_eq!(l.state.as_deref(), Some("approved"));
         assert!(l.connected);
-        // A page from before 0.23 has no `reinstall_required`: none.
-        assert!(p.reinstall_required.is_none());
-        let p: Page = serde_json::from_str(
-            r#"{"version":"0.23.0","awake_hold":true,"hold_error":null,
-                "update_available":null,"reinstall_required":{"version":"0.24.0"},
-                "restart_pending":false,"last_update_check":null,"last_update_result":null}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            p.reinstall_required,
-            Some(crate::update::ReinstallRequired {
-                version: "0.24.0".into()
-            })
-        );
     }
 
     #[test]

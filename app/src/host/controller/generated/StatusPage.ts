@@ -3,7 +3,6 @@ import type { LinkStatus } from "./LinkStatus";
 import type { MachineSettings } from "./MachineSettings";
 import type { Policy } from "./Policy";
 import type { Probation } from "./Probation";
-import type { ReinstallRequired } from "./ReinstallRequired";
 import type { RolledBack } from "./RolledBack";
 import type { SantreeDoor } from "./SantreeDoor";
 import type { StatusTray } from "./StatusTray";
@@ -18,12 +17,7 @@ os_uptime_secs: number | null,
 /**
  * When the machine booted, RFC 3339 UTC, derived from the OS uptime.
  */
-booted_at: string | null, awake_hold: boolean, hold_error: string | null, power_requests: string | null, update_available: string | null, 
-/**
- * A newer release this machine cannot update to and is re-installed
- * with (a Mac's app bundle, from 0.24); null otherwise.
- */
-reinstall_required: ReinstallRequired | null, restart_pending: boolean, 
+booted_at: string | null, awake_hold: boolean, hold_error: string | null, power_requests: string | null, update_available: string | null, restart_pending: boolean, 
 /**
  * What the box asked of this machine.
  */

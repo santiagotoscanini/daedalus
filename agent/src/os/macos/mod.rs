@@ -155,9 +155,6 @@ pub const ASSETS: &[(&str, &str, &str)] = &[(
 )];
 /// Nothing optional: the bundle carries the service and the menu bar app.
 pub const OPTIONAL_ASSETS: &[(&str, &str, &str)] = &[];
-/// No release form this version cannot apply: 0.24 installs the bundle that
-/// 0.23 could only report as a re-install (`update::Offer::Reinstall`).
-pub const BUNDLE_TARGETS: &[&str] = &[];
 
 // ── Claude Code ───────────────────────────────────────────────────────────
 

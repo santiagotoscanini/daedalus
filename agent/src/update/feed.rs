@@ -63,7 +63,7 @@ pub struct Asset {
 }
 
 /// The role of a macOS app bundle: one `.app.zip` for its target, in place
-/// of the bare service and tray (agent 0.24 on; `os::ASSETS` on a Mac).
+/// of the bare service and tray (`os::ASSETS` on a Mac).
 pub const ROLE_BUNDLE: &str = "bundle";
 
 #[derive(Debug, Clone)]
@@ -71,29 +71,6 @@ pub struct Release {
     pub tag: String,
     pub version: semver::Version,
     pub assets: Vec<Asset>,
-}
-
-/// What the newest signed release newer than this agent is to this machine.
-#[derive(Debug, Clone)]
-pub enum Offer {
-    /// Its assets for this target, to install.
-    Install(Release),
-    /// Packaged in a form this version cannot apply — a bundle for one of
-    /// `os::BUNDLE_TARGETS` with no bare binaries beside it (0.23 on a Mac,
-    /// meeting 0.24's app): reported, never applied; the machine is
-    /// re-installed from the website or install.sh. No target is listed in
-    /// this version, which applies the Mac's bundle itself.
-    Reinstall {
-        tag: String,
-        version: semver::Version,
-    },
-}
-
-/// [`offer_of`]'s answer for one release.
-#[derive(Debug, Clone, PartialEq)]
-pub(super) enum Offered {
-    Assets(semver::Version, Vec<Asset>),
-    Reinstall(semver::Version),
 }
 
 #[derive(Deserialize)]
@@ -234,57 +211,14 @@ pub(super) fn assets_of(
     Ok((version, out))
 }
 
-/// What a signed manifest offers this machine: its assets for this target
-/// ([`assets_of`]); else, when it carries an app bundle for one of
-/// `bundle_targets` (`os::BUNDLE_TARGETS`: none in this version) that
-/// GitHub lists too, a re-install of its version; else `assets_of`'s
-/// refusal. Any bare binary for this target rules the bundle out. The same checks
-/// of product, tag and version hold either way: an old or refused release
-/// is nothing, bundle or not.
-pub(super) fn offer_of(
-    m: &Manifest,
-    r: &ApiRelease,
-    running: &semver::Version,
-    refused: Option<&semver::Version>,
-    installed: impl Fn(&str) -> bool,
-    bundle_targets: &[&str],
-) -> Result<Offered> {
-    let refusal = match assets_of(m, r, running, refused, installed) {
-        Ok((version, assets)) => return Ok(Offered::Assets(version, assets)),
-        Err(e) => e,
-    };
-    let version = checked_version(m, r, running, refused)?;
-    // Any bare binary for this target makes it a release of the old form,
-    // whole or broken — `assets_of` has said which — and a bundle beside it
-    // changes nothing.
-    let bare = m.assets.iter().any(|a| {
-        ASSETS
-            .iter()
-            .any(|(target, _, local)| a.target == *target && a.role == role_of(local))
-    });
-    let bundled = !bare
-        && m.assets.iter().any(|a| {
-            a.role == ROLE_BUNDLE
-                && bundle_targets.contains(&a.target.as_str())
-                && r.assets.iter().any(|l| l.name == a.name)
-        });
-    if bundled {
-        Ok(Offered::Reinstall(version))
-    } else {
-        Err(refusal)
-    }
-}
-
 /// Ask the feed. `Ok(None)` is "nothing newer"; an error is the feed not
 /// answering, which the caller reports and retries later. The newest
-/// release this machine can install is offered; one newer still that it
-/// can only be re-installed with ([`Offer::Reinstall`]) is offered when
-/// there is nothing to install.
+/// release this machine can install is offered.
 /// `refused` is a version this machine rolled back from
 /// (`State::rolled_back`), which is never offered again; a newer one is.
 /// A release whose manifest is missing, unsigned or wrong is skipped, and
 /// the next older one is looked at.
-pub fn check(refused: Option<&str>) -> Result<Option<Offer>> {
+pub fn check(refused: Option<&str>) -> Result<Option<Release>> {
     let url = format!(
         "https://api.github.com/repos/{}/releases?per_page=20",
         crate::config::DEFAULT_REPO
@@ -297,9 +231,8 @@ pub fn check(refused: Option<&str>) -> Result<Option<Offer>> {
     let refused = refused.and_then(|v| semver::Version::parse(v).ok());
     let dir = install_dir().ok();
     let installed = |local: &str| dir.as_ref().is_some_and(|d| d.join(local).exists());
-    let mut reinstall = None;
     for (_, r) in candidates(releases, &running, refused.as_ref()) {
-        let checked = (|| -> Result<Offered> {
+        let checked = (|| -> Result<(semver::Version, Vec<Asset>)> {
             let url_of = |name: &str| {
                 r.assets
                     .iter()
@@ -311,32 +244,15 @@ pub fn check(refused: Option<&str>) -> Result<Option<Offer>> {
             let sig = fetch_capped(&url_of(MANIFEST_SIG)?, MAX_MANIFEST)?;
             verify_manifest(&manifest, &sig, &keys)?;
             let m: Manifest = serde_json::from_slice(&manifest).context("the manifest")?;
-            offer_of(
-                &m,
-                &r,
-                &running,
-                refused.as_ref(),
-                installed,
-                BUNDLE_TARGETS,
-            )
+            assets_of(&m, &r, &running, refused.as_ref(), installed)
         })();
         match checked {
-            Ok(Offered::Assets(version, assets)) => {
-                return Ok(Some(Offer::Install(Release {
+            Ok((version, assets)) => {
+                return Ok(Some(Release {
                     tag: r.tag_name.clone(),
                     version,
                     assets,
-                })))
-            }
-            Ok(Offered::Reinstall(version)) => {
-                tracing::info!(
-                    tag = r.tag_name,
-                    "release is a macOS app bundle: this agent is re-installed, not updated"
-                );
-                reinstall.get_or_insert(Offer::Reinstall {
-                    tag: r.tag_name.clone(),
-                    version,
-                });
+                }))
             }
             Err(e) => tracing::warn!(
                 tag = r.tag_name,
@@ -345,7 +261,7 @@ pub fn check(refused: Option<&str>) -> Result<Option<Offer>> {
             ),
         }
     }
-    Ok(reinstall)
+    Ok(None)
 }
 
 /// A small download, whole, refused past `cap` bytes.

@@ -81,7 +81,7 @@ pub use imp::{
     CONFIG_ACCESS,
 };
 // update
-pub use imp::{mark_executable, ASSETS, BUNDLE_TARGETS, OPTIONAL_ASSETS};
+pub use imp::{mark_executable, ASSETS, OPTIONAL_ASSETS};
 // processes, a single-instance lock, the monotonic clock
 pub use imp::{
     hide_console, isolate, kill_tree, lock_exclusive, monotonic_usec, on_interrupt, parent_pid,
