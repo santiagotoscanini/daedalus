@@ -62,7 +62,10 @@ here.
   decision, and the pages read `nodes.*` from it. `ctx.prom` and `ctx.loki` are the only way a module
   reads PromQL or LogQL, and `ctx.github.app` / `ctx.github.anon` the
   only way it reads GitHub — the boundary test refuses a value import of
-  `host/prom`, `host/loki` or `host/keys` under a module's `data/`.
+  `host/prom`, `host/loki` or `host/keys` under a module's `data/`,
+  `lib/dashboard/` or `lib/apps/`, and a Ctx built there (`core/ctx`):
+  a loader is handed its caller's. A server function gets the request's
+  from `context.ctx()` and reaches for none of those itself (the same test).
   `ctx.env` and `ctx.secret` take only names `host/env.ts` declares;
   `ctx.gateway` is LiteLLM, or null on a box without one. No
   `process.env` under `src/modules/` — the boundary test refuses it.
@@ -152,7 +155,7 @@ here.
   (`mcp/`), the database (`db.ts`, `schema.ts`), the env schema and the snapshot
   readers (`env.ts`, `env-snapshot.ts`, `nix-manifest.ts`,
   `workspaces.ts`), the credential-carrying clients (`keys.ts`,
-  `prom.ts`, `loki.ts`, `metrics.ts`, `access.ts`, `registry.ts`,
+  `prom.ts`, `loki.ts`, `access.ts`, `registry.ts`,
   `github-token.ts`, `github-repos.ts`, `github-app-crypto.ts`,
   `app-icon.ts`, `vpn-egress.ts`), and `host/contract/`.
 - **The contract, in two halves.** `src/lib/contract/` is the pure

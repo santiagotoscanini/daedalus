@@ -1,4 +1,4 @@
-import { promVector } from '../../host/prom'
+import type { Ctx } from '../../core/ctx'
 
 // Is anything down, in one answer.
 //
@@ -39,8 +39,10 @@ export type HealthData = {
   unavailable: boolean
 }
 
-export async function loadHealth(): Promise<HealthData> {
-  const results = await promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`)
+export async function loadHealth(ctx: Pick<Ctx, 'prom'>): Promise<HealthData> {
+  const results = await ctx.prom.vector(
+    `max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`,
+  )
 
   // The `name` label, not `key`: `key` is `<group>_<name>`, so reading it means
   // knowing which list an endpoint was declared in — the same reason

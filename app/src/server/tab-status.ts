@@ -1,3 +1,4 @@
+import type { Ctx } from '../core/ctx'
 import { asValidator, obj, withMessage } from '../lib/contract/decode'
 import { moduleIdField } from '../lib/contract/fields'
 import { moduleById } from '../lib/modules/registry'
@@ -41,22 +42,24 @@ const PROBE_WINDOW = '3m'
 
 export const fetchTabStatus = readFn
   .validator(asValidator(withMessage(obj({ module: moduleIdField }), 'expected a module')))
-  .handler(async ({ data }): Promise<TabStatus> => {
+  .handler(async ({ data, context }): Promise<TabStatus> => {
     const spec = moduleById(data.module)
     if (spec === undefined) return {}
 
-    const { promVector } = await import('../host/prom')
+    const { prom } = await context.ctx()
     const [probes, egress, uplink, logs, minecraft] = await Promise.all([
-      promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
+      prom.vector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
       // Each only when a tab actually asks for it — they are more prometheus
       // queries, and every module pays for this handler.
-      spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
-      spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth() : Promise.resolve(null),
+      spec.tabs.some((t) => t.health === 'vpn-egress')
+        ? vpnEgressHealth(prom)
+        : Promise.resolve(null),
+      spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth(prom) : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'log-pipeline')
-        ? logPipelineHealth()
+        ? logPipelineHealth(prom)
         : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'minecraft-ping')
-        ? minecraftHealth()
+        ? minecraftHealth(prom)
         : Promise.resolve(null),
     ])
     // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
@@ -102,11 +105,10 @@ export const fetchTabStatus = readFn
  * The exporter's own `up` beside it: a dead exporter leaves the gauge
  * absent, and absent is "cannot tell" (grey), never "down".
  */
-async function minecraftHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../host/prom')
+async function minecraftHealth(prom: Ctx['prom']): Promise<boolean | null> {
   const [answered, exporter] = await Promise.all([
-    promScalar(`max(max_over_time(minecraft_status_healthy[${PROBE_WINDOW}]))`),
-    promScalar('max(up{job="minecraft"})'),
+    prom.scalar(`max(max_over_time(minecraft_status_healthy[${PROBE_WINDOW}]))`),
+    prom.scalar('max(up{job="minecraft"})'),
   ])
   if (answered === null || exporter !== 1) return null
   return answered >= 1
@@ -125,20 +127,19 @@ async function minecraftHealth(): Promise<boolean | null> {
  * so a third tunnel called something else still counts. Null when the registry
  * is unreadable or prometheus has no answer — "cannot tell", not "down".
  */
-async function vpnEgressHealth(): Promise<boolean | null> {
-  const { promEscape, promScalar } = await import('../host/prom')
-  const { declaredVpnEgress } = await import('../host/vpn-egress')
+async function vpnEgressHealth(prom: Ctx['prom']): Promise<boolean | null> {
+  const { publishingFacts } = await import('../host/contract/domains/publishing')
 
-  const declared = await declaredVpnEgress()
+  const declared = (await publishingFacts()).vpnEgress
   if (declared.length === 0) return null
 
   const names = declared.flatMap((d) => [d.container, d.exporter])
   const [tunnels, containers, seen] = await Promise.all([
     // `min` over the set, and `count` beside it: min alone would report
     // healthy if prometheus had lost a tunnel's series entirely.
-    promScalar(`min(gluetun_vpn_status)`),
-    promScalar(`min(container_up{name=~"${names.map(promEscape).join('|')}"})`),
-    promScalar(`count(gluetun_vpn_status)`),
+    prom.scalar(`min(gluetun_vpn_status)`),
+    prom.scalar(`min(container_up{name=~"${names.map((n) => prom.escape(n)).join('|')}"})`),
+    prom.scalar(`count(gluetun_vpn_status)`),
   ])
 
   if (tunnels === null || containers === null || seen === null) return null
@@ -157,11 +158,10 @@ async function vpnEgressHealth(): Promise<boolean | null> {
  * an empty set is not a failure, it is no answer, and those must not render
  * the same.
  */
-async function uplinkHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../host/prom')
+async function uplinkHealth(prom: Ctx['prom']): Promise<boolean | null> {
   const [worst, seen] = await Promise.all([
-    promScalar('min(network_hop_up)'),
-    promScalar('count(network_hop_up)'),
+    prom.scalar('min(network_hop_up)'),
+    prom.scalar('count(network_hop_up)'),
   ])
   if (worst === null || seen === null || seen < 2) return null
   return worst === 1
@@ -185,11 +185,10 @@ async function uplinkHealth(): Promise<boolean | null> {
  * `count` beside `min` for the reason the other two computed checks have it:
  * min over an empty set is not a failure, it is no answer.
  */
-async function logPipelineHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../host/prom')
+async function logPipelineHealth(prom: Ctx['prom']): Promise<boolean | null> {
   const [worst, seen] = await Promise.all([
-    promScalar('min(up{job=~"loki|alloy"})'),
-    promScalar('count(up{job=~"loki|alloy"})'),
+    prom.scalar('min(up{job=~"loki|alloy"})'),
+    prom.scalar('count(up{job=~"loki|alloy"})'),
   ])
   if (worst === null || seen === null || seen < 2) return null
   return worst === 1

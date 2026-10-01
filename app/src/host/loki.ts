@@ -83,7 +83,7 @@ export type LokiStream = { stream: Record<string, string>; values: [string, stri
 /**
  * Raw matching streams from a range query, newest first per Loki's
  * `direction=backward`. The primitive under `lokiLatest` / `lokiEntries` and
- * under metrics.ts's level-tagged log reader — exposed because stream labels
+ * under lib/apps/metrics.ts's level-tagged log reader — exposed because stream labels
  * (level, unit) only exist at this layer; every derived shape throws them
  * away.
  */

@@ -1,9 +1,8 @@
-import { lokiScalar, lokiStreams } from './loki'
-import { type MatrixResult, promEscape, promMatrix, promVector, type VectorResult } from './prom'
+import type { Ctx } from '../../core/ctx'
+import type { MatrixResult, VectorResult } from '../../host/prom'
 
-// The app pages' readings from Prometheus + Loki, over the shared clients in
-// host/prom.ts / host/loki.ts (which carry the retry ladder and the one-patient-
-// attempt Loki rule).
+// The app pages' readings from Prometheus + Loki, through the `Ctx` the
+// caller hands in (`ctx.prom` / `ctx.loki`, which carry the retry rules).
 //
 // Per-container CPU/memory/pids come from the textfile exporter in
 // nix/modules/monitoring/monitoring.nix, which reads cgroup v2 directly under
@@ -22,6 +21,9 @@ import { type MatrixResult, promEscape, promMatrix, promVector, type VectorResul
 //   perfectly healthy — the cache is reclaimed on pressure. The signal that a
 //   limit is genuinely too tight is container_oom_kills_total moving, not
 //   usage touching the ceiling.
+
+/** What these readers use of the Ctx. */
+type Reads = Pick<Ctx, 'prom' | 'loki'>
 
 export type AppStatus = {
   /** "running" | "attention" | "stopped" | "unknown" */
@@ -57,19 +59,19 @@ const firstSeries = (m: MatrixResult[]): number[] =>
  * probe is the interesting case ("needs attention") and a single boolean
  * would hide it.
  */
-export async function appStatuses(names: string[]): Promise<Record<string, AppStatus>> {
+export async function appStatuses(ctx: Reads, names: string[]): Promise<Record<string, AppStatus>> {
   const out: Record<string, AppStatus> = Object.fromEntries(names.map((n) => [n, { ...EMPTY }]))
   if (names.length === 0) return out
 
-  const alt = names.map(promEscape).join('|')
+  const alt = names.map((n) => ctx.prom.escape(n)).join('|')
 
   const [up, health, rpm, spark] = await Promise.all([
-    promVector(`container_up{name=~"app-(${alt})"}`),
-    promVector(`gatus_results_endpoint_success{key=~"web-apps_(${alt})"}`),
-    promVector(
+    ctx.prom.vector(`container_up{name=~"app-(${alt})"}`),
+    ctx.prom.vector(`gatus_results_endpoint_success{key=~"web-apps_(${alt})"}`),
+    ctx.prom.vector(
       `sum by (service) (rate(traefik_service_requests_total{service=~"(${alt})-svc@file"}[5m])) * 60`,
     ),
-    promMatrix(
+    ctx.prom.matrix(
       `sum by (service) (rate(traefik_service_requests_total{service=~"(${alt})-svc@file"}[5m])) * 60`,
       60,
       120,
@@ -136,20 +138,20 @@ const NO_GAUGE: ResourceGauge = { used: null, limit: null, spark: [] }
  * unapplied, and a gauge captioned "512 MB" while the kernel is enforcing
  * something else would be a lie at the only moment it matters.
  */
-export async function appResources(name: string): Promise<AppResources> {
-  const c = `{name="app-${promEscape(name)}"}`
+export async function appResources(ctx: Reads, name: string): Promise<AppResources> {
+  const c = `{name="app-${ctx.prom.escape(name)}"}`
 
   const [cpu, cpuLimit, mem, memLimit, pids, pidsLimit, oom, cpuSpark, memSpark] =
     await Promise.all([
-      promVector(`rate(container_cpu_usage_seconds_total${c}[5m])`),
-      promVector(`container_cpu_limit_cores${c}`),
-      promVector(`container_memory_usage_bytes${c}`),
-      promVector(`container_memory_limit_bytes${c}`),
-      promVector(`container_pids${c}`),
-      promVector(`container_pids_limit${c}`),
-      promVector(`container_oom_kills_total${c}`),
-      promMatrix(`rate(container_cpu_usage_seconds_total${c}[5m])`, 60, 120),
-      promMatrix(`container_memory_usage_bytes${c}`, 60, 120),
+      ctx.prom.vector(`rate(container_cpu_usage_seconds_total${c}[5m])`),
+      ctx.prom.vector(`container_cpu_limit_cores${c}`),
+      ctx.prom.vector(`container_memory_usage_bytes${c}`),
+      ctx.prom.vector(`container_memory_limit_bytes${c}`),
+      ctx.prom.vector(`container_pids${c}`),
+      ctx.prom.vector(`container_pids_limit${c}`),
+      ctx.prom.vector(`container_oom_kills_total${c}`),
+      ctx.prom.matrix(`rate(container_cpu_usage_seconds_total${c}[5m])`, 60, 120),
+      ctx.prom.matrix(`container_memory_usage_bytes${c}`, 60, 120),
     ])
 
   return {
@@ -170,8 +172,10 @@ export const NO_RESOURCES: AppResources = {
 }
 
 /** Bytes on disk for an app's database on the shared cluster. */
-export async function databaseSize(name: string): Promise<number | null> {
-  return firstNum(await promVector(`pg_database_size_bytes{datname="${promEscape(name)}"}`))
+export async function databaseSize(ctx: Reads, name: string): Promise<number | null> {
+  return firstNum(
+    await ctx.prom.vector(`pg_database_size_bytes{datname="${ctx.prom.escape(name)}"}`),
+  )
 }
 
 /**
@@ -216,8 +220,8 @@ export type AppDatabase = {
   cluster: { label: string; value: number }[]
 }
 
-export async function appDatabase(name: string): Promise<AppDatabase> {
-  const d = `{datname="${promEscape(name)}"}`
+export async function appDatabase(ctx: Reads, name: string): Promise<AppDatabase> {
+  const d = `{datname="${ctx.prom.escape(name)}"}`
 
   const [
     size,
@@ -237,22 +241,22 @@ export async function appDatabase(name: string): Promise<AppDatabase> {
     tempBytes,
     cluster,
   ] = await Promise.all([
-    promVector(`pg_database_size_bytes${d}`),
-    promMatrix(`pg_database_size_bytes${d}`, 30 * 24 * 60, 43200),
-    promVector(`pg_stat_database_numbackends${d}`),
-    promVector('pg_settings_max_connections'),
-    promVector(`pg_database_connection_limit${d}`),
-    promVector(`rate(pg_stat_database_xact_commit${d}[10m])`),
-    promVector(`rate(pg_stat_database_xact_rollback${d}[10m])`),
-    promVector(`rate(pg_stat_database_blks_hit${d}[10m])`),
-    promVector(`rate(pg_stat_database_blks_read${d}[10m])`),
-    promVector(`rate(pg_stat_database_tup_fetched${d}[10m])`),
-    promVector(`rate(pg_stat_database_tup_inserted${d}[10m])`),
-    promVector(`rate(pg_stat_database_tup_updated${d}[10m])`),
-    promVector(`rate(pg_stat_database_tup_deleted${d}[10m])`),
-    promVector(`pg_stat_database_deadlocks${d}`),
-    promVector(`pg_stat_database_temp_bytes${d}`),
-    promVector('topk(10, pg_database_size_bytes)'),
+    ctx.prom.vector(`pg_database_size_bytes${d}`),
+    ctx.prom.matrix(`pg_database_size_bytes${d}`, 30 * 24 * 60, 43200),
+    ctx.prom.vector(`pg_stat_database_numbackends${d}`),
+    ctx.prom.vector('pg_settings_max_connections'),
+    ctx.prom.vector(`pg_database_connection_limit${d}`),
+    ctx.prom.vector(`rate(pg_stat_database_xact_commit${d}[10m])`),
+    ctx.prom.vector(`rate(pg_stat_database_xact_rollback${d}[10m])`),
+    ctx.prom.vector(`rate(pg_stat_database_blks_hit${d}[10m])`),
+    ctx.prom.vector(`rate(pg_stat_database_blks_read${d}[10m])`),
+    ctx.prom.vector(`rate(pg_stat_database_tup_fetched${d}[10m])`),
+    ctx.prom.vector(`rate(pg_stat_database_tup_inserted${d}[10m])`),
+    ctx.prom.vector(`rate(pg_stat_database_tup_updated${d}[10m])`),
+    ctx.prom.vector(`rate(pg_stat_database_tup_deleted${d}[10m])`),
+    ctx.prom.vector(`pg_stat_database_deadlocks${d}`),
+    ctx.prom.vector(`pg_stat_database_temp_bytes${d}`),
+    ctx.prom.vector('topk(10, pg_database_size_bytes)'),
   ])
 
   const commit = firstNum(commits)
@@ -329,15 +333,15 @@ export type AppVpn = {
   history: number[]
 }
 
-export async function appVpn(container: string): Promise<AppVpn> {
-  const j = `{job="${promEscape(container)}"}`
+export async function appVpn(ctx: Reads, container: string): Promise<AppVpn> {
+  const j = `{job="${ctx.prom.escape(container)}"}`
 
   const [status, info, port, uptime, history] = await Promise.all([
-    promVector(`gluetun_vpn_status${j}`),
-    promVector(`gluetun_vpn_infos${j}`),
-    promVector(`gluetun_forwarded_ports${j}`),
-    promVector(`100 * avg_over_time(gluetun_vpn_status${j}[24h])`),
-    promMatrix(`gluetun_vpn_status${j}`, 24 * 60, 300),
+    ctx.prom.vector(`gluetun_vpn_status${j}`),
+    ctx.prom.vector(`gluetun_vpn_infos${j}`),
+    ctx.prom.vector(`gluetun_forwarded_ports${j}`),
+    ctx.prom.vector(`100 * avg_over_time(gluetun_vpn_status${j}[24h])`),
+    ctx.prom.matrix(`gluetun_vpn_status${j}`, 24 * 60, 300),
   ])
 
   const up = status[0]
@@ -374,8 +378,8 @@ export type LogLine = { ts: Date; level: string | null; line: string }
  * Log lines in the last hour. LogQL, so this goes to Loki's own instant-query
  * endpoint — Prometheus would reject the stream selector outright.
  */
-export async function logVolume(name: string): Promise<number | null> {
-  return lokiScalar(`sum(count_over_time({service_name="${name}"}[1h]))`)
+export async function logVolume(ctx: Reads, name: string): Promise<number | null> {
+  return ctx.loki.scalar(`sum(count_over_time({service_name="${name}"}[1h]))`)
 }
 
 /**
@@ -386,14 +390,24 @@ export async function logVolume(name: string): Promise<number | null> {
  * Deploys only: builds are recorded as rows (lib/repo/builds.ts), with their
  * full output on the build's own page.
  */
-export async function activityLog(name: string, limit = 60, hours = 6): Promise<LogLine[]> {
-  const lines = await lokiLines(`{unit="app-${name}-deploy.service"}`, limit, hours)
+export async function activityLog(
+  ctx: Reads,
+  name: string,
+  limit = 60,
+  hours = 6,
+): Promise<LogLine[]> {
+  const lines = await lokiLines(ctx, `{unit="app-${name}-deploy.service"}`, limit, hours)
   return lines.sort((a, b) => a.ts.getTime() - b.ts.getTime()).slice(-limit)
 }
 
 /** Lines with their stream's `level` label — which only exists on raw streams. */
-async function lokiLines(selector: string, limit: number, hours: number): Promise<LogLine[]> {
-  const streams = await lokiStreams(selector, { minutes: hours * 60, limit })
+async function lokiLines(
+  ctx: Reads,
+  selector: string,
+  limit: number,
+  hours: number,
+): Promise<LogLine[]> {
+  const streams = await ctx.loki.streams(selector, { minutes: hours * 60, limit })
   return streams.flatMap((s) =>
     s.values.map(([ns, line]) => ({
       ts: new Date(Number(BigInt(ns) / 1_000_000n)),

@@ -100,7 +100,8 @@ const stripComments = (src: string) =>
 // from running off the end of a statement and finding some later `from`.
 const FROM = /(?:^|\n)\s*(import|export)(\s+type\b)?([^;=]*?)(?<![.\w])from\s*['"]([^'"]+)['"]/g
 const SIDE_EFFECT = /(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g
-const DYNAMIC = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g
+// A call, not a type: `import('y').Shape` names a type and loads nothing.
+const DYNAMIC = /\bimport\(\s*['"]([^'"]+)['"]\s*\)(?!\s*\.\s*[A-Z])/g
 
 type Module = {
   statics: string[]
@@ -144,6 +145,13 @@ function resolveSpec(from: string, spec: string): string | null {
     }
   }
   return null
+}
+
+/** Which of `targets` `f` imports by value, statically or with `await import`. */
+function reaches(f: string, targets: readonly string[]): string[] {
+  const mod = parsed.get(f)
+  const specs = [...(mod?.statics ?? []), ...(mod?.dynamics ?? [])]
+  return targets.filter((t) => specs.some((s) => resolveSpec(f, s) === t))
 }
 
 const isNodeBuiltin = (s: string) => s.startsWith('node:')
@@ -213,6 +221,8 @@ describe('the host boundary', () => {
     // pass for the wrong reason.
     expect(files.length).toBeGreaterThan(250)
     expect([...reason.keys()].filter((f) => f.startsWith('src/host/')).length).toBeGreaterThan(30)
+    // And the dynamic-import reader: fn.ts builds the Ctx behind `await import`.
+    expect(reaches('src/server/fn.ts', ['src/core/ctx.ts'])).toEqual(['src/core/ctx.ts'])
   })
 
   it('never lets client code reach a module that needs the machine', () => {
@@ -261,12 +271,41 @@ describe('the host boundary', () => {
     // stays allowed. The other host imports a data file still makes
     // (nix-manifest, hosts, workspaces, the contract domains) are the next
     // seam, not this rule's.
+    //
+    // The cross-module readers (`lib/dashboard`) and the Apps page's loaders
+    // (`lib/apps`) are loaders too, held to the same rule — and none of the
+    // three builds a Ctx of its own (`core/ctx`, static or dynamic): it is
+    // handed the caller's.
     const clients = ['src/host/prom.ts', 'src/host/loki.ts', 'src/host/keys.ts']
+    const loader = (f: string) =>
+      /^src\/modules\/[^/]+\/data\//.test(f) ||
+      f.startsWith('src/lib/dashboard/') ||
+      f.startsWith('src/lib/apps/')
     const offenders = files
-      .filter((f) => /^src\/modules\/[^/]+\/data\//.test(f))
-      .flatMap((f) =>
-        (edges.get(f) ?? []).filter((d) => clients.includes(d)).map((d) => `${f} → ${d}`),
-      )
+      .filter(loader)
+      .flatMap((f) => [
+        ...(edges.get(f) ?? []).filter((d) => clients.includes(d)).map((d) => `${f} → ${d}`),
+        ...reaches(f, ['src/core/ctx.ts']).map((d) => `${f} → ${d}`),
+      ])
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  it('gives a server function the request Ctx, not its own reach', () => {
+    // A server function is a door: what it reads of the box comes from
+    // `context.ctx()` (server/fn.ts, the one place that builds it), so the
+    // loader it calls can be handed a fake and the door adds no second path.
+    // Dynamic imports count — they are how every seam file imports.
+    const own = [
+      'src/core/ctx.ts',
+      'src/host/env.ts',
+      'src/host/hosts.ts',
+      'src/host/keys.ts',
+      'src/host/loki.ts',
+      'src/host/prom.ts',
+    ]
+    const offenders = files
+      .filter((f) => isSeam(f) && f !== 'src/server/fn.ts')
+      .flatMap((f) => reaches(f, own).map((d) => `${f} → ${d}`))
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 
@@ -276,15 +315,9 @@ describe('the host boundary', () => {
     // Static and dynamic imports both count here — `await import('host/db')`
     // keeps the bundle clean and the layering just as broken. The migrator is
     // server.mjs's own (migrate.mjs), outside `src`.
-    const db = 'src/host/db.ts'
     const offenders = files
       .filter((f) => !f.startsWith('src/lib/repo/'))
-      .filter((f) => {
-        const mod = parsed.get(f)
-        return [...(mod?.statics ?? []), ...(mod?.dynamics ?? [])].some(
-          (s) => resolveSpec(f, s) === db,
-        )
-      })
+      .filter((f) => reaches(f, ['src/host/db.ts']).length > 0)
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

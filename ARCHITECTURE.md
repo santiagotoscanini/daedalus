@@ -304,7 +304,7 @@ flowchart TB
     Bridges["bridge.ts + one module per verb"]
     Contract["contract/**: one reader per host file"]
     Dbm["db, schema"]
-    Clients["env, keys, prom, loki, metrics, registry<br/>nix-manifest, env-snapshot, workspaces<br/>github-token, github-repos, app-icon"]
+    Clients["env, keys, prom, loki, registry<br/>nix-manifest, env-snapshot, workspaces<br/>github-token, github-repos, app-icon"]
   end
 
   DB[("Postgres: apps, builds, deployments, nodes, settings, ...<br/>(The data model, below)")]

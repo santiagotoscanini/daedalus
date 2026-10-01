@@ -18,8 +18,8 @@ import { adminFn, readFn } from './fn'
 export const fetchEnrollPageFn = readFn.handler(async ({ context }): Promise<EnrollPage> => {
   const { enrollPage } = await import('../host/enroll')
   const { enrollStore } = await import('../lib/repo/enroll')
-  const { env } = await import('../host/env')
   const { wgEasy } = await import('../host/wg-easy')
+  const ctx = await context.ctx()
   const request = getRequest()
   const url = new URL(request.url)
   const h = (n: string) => request.headers.get(n)
@@ -32,11 +32,11 @@ export const fetchEnrollPageFn = readFn.handler(async ({ context }): Promise<Enr
   } catch {
     // Not a response of our own to set them on (a router fetch): nothing to keep.
   }
-  const available = wgEasy() !== null && (env.get('WG_EASY_HOST_ALIAS') ?? '') !== ''
+  const available = wgEasy() !== null && (ctx.env('WG_EASY_HOST_ALIAS') ?? '') !== ''
   let idpOrigin: string | null = null
   if (available) {
     try {
-      idpOrigin = new URL((await context.ctx()).hosts.base('pocket-id')).origin
+      idpOrigin = new URL(ctx.hosts.base('pocket-id')).origin
     } catch {
       idpOrigin = null
     }
@@ -71,7 +71,6 @@ export const confirmEnrollFn = adminFn
   .handler(async ({ data, context }) => {
     const { confirmEnroll } = await import('../host/enroll')
     const { enrollStore } = await import('../lib/repo/enroll')
-    const { env } = await import('../host/env')
     const { wgEasy } = await import('../host/wg-easy')
     const { syncDesired } = await import('../host/controller/nodes')
     const { siteIdentity } = await import('../host/contract/domains/site')
@@ -91,8 +90,8 @@ export const confirmEnrollFn = adminFn
         systemInfo: () => ctx.controller.systemInfo(),
         sync: () => syncDesired(ctx),
         lanIp: (await siteIdentity()).data.lanIp,
-        hostAlias: env.get('WG_EASY_HOST_ALIAS') ?? '',
-        sessionHostPort: env.get('SESSION_HOST_PORT'),
+        hostAlias: ctx.env('WG_EASY_HOST_ALIAS') ?? '',
+        sessionHostPort: Number(ctx.env('SESSION_HOST_PORT')),
       },
       { token: data.token, actor: context.actor },
     )

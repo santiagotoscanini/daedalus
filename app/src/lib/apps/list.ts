@@ -1,14 +1,14 @@
-import { makeCtx } from '../../core/ctx'
+import type { Ctx } from '../../core/ctx'
 import { listExternalApps } from '../../core/settings/external-apps'
 import { appIcon, siteIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
-import { appStatuses } from '../../host/metrics'
 import { manifestEntries } from '../../host/nix-manifest'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { effectiveHostname } from '../hostname'
 import { listApps } from '../repo/apps'
 import { stageExposed } from '../stage'
 import { asDeclared, driftOf } from './manifest-map'
+import { appStatuses } from './metrics'
 
 // Everything the Apps list page shows: the registry rows, the off-box
 // projects beside them, and the three live facts a row draws — whether the
@@ -20,18 +20,20 @@ import { asDeclared, driftOf } from './manifest-map'
 // browser, and the whole module is loaded by one `await import` in
 // server/registry.ts.
 
-export async function loadAppList() {
+export async function loadAppList(ctx: Ctx) {
   // Independent reads — the registry rows and the manifest file — fetched
   // together rather than one behind the other.
   const [rows, entries] = await Promise.all([listApps(), manifestEntries()])
   const manifest = new Map(entries.map((m) => [m.name, m]))
   const records = rows.map((r) => asDeclared(r, manifest.get(r.name)))
-  const ctx = await makeCtx()
   const EXTERNAL_APPS = await listExternalApps(ctx)
   const [statuses, applyStatus, icons, externalIcons, workspaces] = await Promise.all([
     // Degrades per-app rather than rejecting, so a prometheus outage costs
     // the status column, not the page.
-    appStatuses(records.map((r) => r.name)),
+    appStatuses(
+      ctx,
+      records.map((r) => r.name),
+    ),
     readApplyStatus(),
     // Resolved per app, in parallel, and cached for an hour in that module —
     // so this costs one round of probes after a restart and nothing after.

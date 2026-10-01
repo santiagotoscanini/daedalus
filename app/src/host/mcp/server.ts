@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import type { Ctx } from '../../core/ctx'
 import { MCP_TOOLS, type McpToolSpec, scopeRefusal } from '../../lib/mcp'
 import { MCP_DOCS, readMcpDoc } from './docs'
 import type { McpIdentity } from './tokens'
@@ -125,6 +126,13 @@ const limitArg = {
  */
 export function buildMcpServer(identity: McpIdentity): McpServer {
   const caller: Caller = { identity, actor: `mcp:${identity.label}` }
+  // The request's Ctx, built on first use and shared by every tool after it —
+  // the same lazy rule as server/fn.ts `context.ctx()`.
+  let made: Promise<Ctx> | undefined
+  const ctx = (): Promise<Ctx> => {
+    made ??= import('../../core/ctx').then((m) => m.makeCtx())
+    return made
+  }
 
   const server = new McpServer(
     { name: 'daedalus', version: '1' },
@@ -182,12 +190,12 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
 
   read('apps.list', {}, async () => {
     const { loadAppList } = await import('../../lib/apps/list')
-    return loadAppList()
+    return loadAppList(await ctx())
   })
 
   read('apps.get', appArg, async (args) => {
     const { loadAppDetail } = await import('../../lib/apps/detail')
-    const detail = await loadAppDetail({ name: String(args.app) })
+    const detail = await loadAppDetail(await ctx(), { name: String(args.app) })
     if (detail === null) throw new Error(`No app named ${String(args.app)}.`)
     return detail
   })
@@ -275,16 +283,14 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
   )
 
   read('dns.records', {}, async () => {
-    const { makeCtx } = await import('../../core/ctx')
     const { loadDns } = await import('../../modules/network/data/dns')
-    return loadDns(await makeCtx())
+    return loadDns(await ctx())
   })
 
   read('site.get', {}, async () => {
-    const { makeCtx } = await import('../../core/ctx')
     const { siteState, runningSite } = await import('../../core/site')
-    const ctx = await makeCtx()
-    const [state, document] = await Promise.all([siteState(ctx), runningSite(ctx)])
+    const c = await ctx()
+    const [state, document] = await Promise.all([siteState(c), runningSite(c)])
     return { state, document }
   })
 
@@ -295,7 +301,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
 
   read('health', {}, async () => {
     const { loadHealth } = await import('../../lib/dashboard/health')
-    return loadHealth()
+    return loadHealth(await ctx())
   })
 
   // ── writes ──────────────────────────────────────────────────────────────
@@ -311,8 +317,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
     { ...appArg, id: z.string().min(1).describe('The build id.') },
     async (args, actor) => {
       const { cancelBuild } = await import('../../core/builds/actions')
-      const { makeCtx } = await import('../../core/ctx')
-      const outcome = await cancelBuild(await makeCtx(), {
+      const outcome = await cancelBuild(await ctx(), {
         app: String(args.app),
         id: String(args.id),
         actor,
@@ -325,8 +330,7 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
     const { requestManualDeploy } = await import('../../lib/apps/deploy')
     // Answers when the deploy unit has finished: its last line on success,
     // its reason otherwise (already running, a failed pull).
-    const { makeCtx } = await import('../../core/ctx')
-    const answer = await requestManualDeploy(await makeCtx(), String(args.app), actor)
+    const answer = await requestManualDeploy(await ctx(), String(args.app), actor)
     return answer.outcome === 'done'
       ? ok({ deployed: String(args.app), detail: answer.detail })
       : refuse(`the deploy ${answer.outcome}: ${answer.detail}`)

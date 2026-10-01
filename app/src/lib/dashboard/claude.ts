@@ -35,9 +35,9 @@
 // — a substring filter would have to guess at what a transcript never
 // contains, and be wrong the first time somebody pasted a log into a session.
 
+import type { Ctx } from '../../core/ctx'
 import type { ControllerClient } from '../../host/controller/client'
 import { ControllerError } from '../../host/controller/wire'
-import { lokiStreams } from '../../host/loki'
 import { type AgentRoster, type ClaudeSession, withStats } from '../agent/roster'
 import type { NodeClaude } from '../agent/status'
 import { type ClaudeRoster, NO_ROSTER } from '../claude-roster'
@@ -115,8 +115,8 @@ function classify(text: string): RcEventKind {
   return 'other'
 }
 
-async function events(): Promise<RcEvent[]> {
-  const streams = await lokiStreams(EVENT_LINE, { minutes: EVENT_DAYS * 24 * 60, limit: 400 })
+async function events(ctx: Pick<Ctx, 'loki'>): Promise<RcEvent[]> {
+  const streams = await ctx.loki.streams(EVENT_LINE, { minutes: EVENT_DAYS * 24 * 60, limit: 400 })
   return (
     streams
       .flatMap((s) => s.values)
@@ -251,7 +251,7 @@ export function mergeFacts(read: ControllerRead, roster: AgentRoster | null): Cl
   }
 }
 
-export async function loadClaude(ctx: { controller: ControllerClient }): Promise<ClaudeData> {
+export async function loadClaude(ctx: Pick<Ctx, 'controller' | 'loki'>): Promise<ClaudeData> {
   const [read, roster] = await Promise.all([
     readControllerClaude(ctx.controller),
     readRoster(
@@ -271,7 +271,7 @@ export async function loadClaude(ctx: { controller: ControllerClient }): Promise
   // No cache of its own: `versionGap` already holds one, for the rate limit.
   const [gap, log, shotter, shotterGap] = await Promise.all([
     versionGap('anthropics/claude-code', installed),
-    events(),
+    events(ctx),
     loadShotter(),
     versionGap('microsoft/playwright', playwrightInstalled()),
   ])

@@ -55,9 +55,9 @@ import { adminFn, readFn } from './fn'
 /** The tab payload union. Re-exported so components name it from the seam. */
 export type { AppTabData } from '../lib/apps/tabs'
 
-export const fetchApps = readFn.handler(async () => {
+export const fetchApps = readFn.handler(async ({ context }) => {
   const { loadAppList } = await import('../lib/apps/list')
-  return loadAppList()
+  return loadAppList(await context.ctx())
 })
 
 /**
@@ -68,24 +68,22 @@ export const fetchApps = readFn.handler(async () => {
  * nix manifest rather than being derived from the service name — daedalus
  * sits on a private bridge (auth.isolated) and reaches both through traefik.
  */
-export const fetchImagesTab = readFn.handler(async () => {
+export const fetchImagesTab = readFn.handler(async ({ context }) => {
   const { loadImages } = await import('../lib/apps/registries')
-  const { makeHosts } = await import('../host/hosts')
-  return loadImages(await makeHosts())
+  return loadImages(await context.ctx())
 })
 
 /** The npm registry tab. See above for why it is not folded into that one. */
-export const fetchPackagesTab = readFn.handler(async () => {
+export const fetchPackagesTab = readFn.handler(async ({ context }) => {
   const { loadPackages } = await import('../lib/apps/registries')
-  const { makeHosts } = await import('../host/hosts')
-  return loadPackages(await makeHosts())
+  return loadPackages(await context.ctx())
 })
 
 export const fetchApp = readFn
   .validator(asValidator(withMessage(obj({ name: appNameField }), 'expected an app name')))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { loadAppDetail } = await import('../lib/apps/detail')
-    return loadAppDetail(data)
+    return loadAppDetail(await context.ctx(), data)
   })
 
 export const fetchAppTab = readFn
@@ -110,9 +108,9 @@ export const fetchAppTab = readFn
       ),
     ),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { loadAppTab } = await import('../lib/apps/tabs')
-    return loadAppTab(data)
+    return loadAppTab(await context.ctx(), data)
   })
 
 export const fetchNewAppOptions = readFn.handler(async () => {
@@ -138,9 +136,9 @@ export const fetchAppPreflight = readFn
       ),
     ),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { appPreflight } = await import('../lib/apps/create')
-    return appPreflight(data)
+    return appPreflight(await context.ctx(), data)
   })
 
 export const createAppFn = adminFn

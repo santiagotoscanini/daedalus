@@ -15,12 +15,10 @@
 // usual reason — it is one round trip for a number the box is collecting
 // anyway.
 
-import type { Hosts } from '../../host/hosts'
-import { promBars, promScalar, promVector } from '../../host/prom'
+import type { Ctx } from '../../core/ctx'
 import { type VersionGap, versionGap } from '../dashboard/github'
 import { imageVersion, type RunningVersion } from '../dashboard/images'
 import { bytes } from '../format'
-import { getJson } from '../http'
 
 export type ImagesData = {
   /** Repositories that are apps built here, `cache/*` excluded. */
@@ -57,18 +55,21 @@ export type PackagesData = {
   url: string
 }
 
-export async function loadImages(hosts: Hosts): Promise<ImagesData> {
-  const base = hosts.base
+/** What these loaders use of the Ctx. */
+type Reads = Pick<Ctx, 'hosts' | 'http' | 'prom'>
+
+export async function loadImages(ctx: Reads): Promise<ImagesData> {
+  const base = ctx.hosts.base
   const [catalog, storage, pulls, pushes, requests, errors, info] = await Promise.all([
     // Anonymous read is deliberately allowed on zot (nix/modules/registry), which is
     // what lets this work with no credential at all.
-    getJson<{ repositories?: string[] }>(`${base('registry')}/v2/_catalog`),
-    promVector('zot_repo_storage_bytes'),
-    promBars('sum by (repo) (zot_repo_downloads_total)', 'repo'),
-    promScalar('sum(zot_repo_uploads_total)'),
-    promScalar('sum(rate(zot_http_requests_total[1h])) * 3600'),
-    promScalar('sum(rate(zot_http_requests_total{code=~"5.."}[1h])) * 3600'),
-    promVector('zot_info'),
+    ctx.http.getJson<{ repositories?: string[] }>(`${base('registry')}/v2/_catalog`),
+    ctx.prom.vector('zot_repo_storage_bytes'),
+    ctx.prom.bars('sum by (repo) (zot_repo_downloads_total)', 'repo'),
+    ctx.prom.scalar('sum(zot_repo_uploads_total)'),
+    ctx.prom.scalar('sum(rate(zot_http_requests_total[1h])) * 3600'),
+    ctx.prom.scalar('sum(rate(zot_http_requests_total{code=~"5.."}[1h])) * 3600'),
+    ctx.prom.vector('zot_info'),
   ])
 
   const repos = catalog?.repositories ?? []
@@ -100,13 +101,13 @@ export async function loadImages(hosts: Hosts): Promise<ImagesData> {
   }
 }
 
-export async function loadPackages(hosts: Hosts): Promise<PackagesData> {
-  const base = hosts.base
+export async function loadPackages(ctx: Reads): Promise<PackagesData> {
+  const base = ctx.hosts.base
   const [npm, requests, errors, running] = await Promise.all([
     // Served by the cached-packages plugin (nix/modules/verdaccio/assets):
     // verdaccio's own /-/v1/search saturates at that endpoint's 250-result cap
     // and cannot tell a package published here from one pulled off npmjs.
-    getJson<{
+    ctx.http.getJson<{
       published?: number
       cached?: number
       cachedVersions?: number
@@ -116,8 +117,8 @@ export async function loadPackages(hosts: Hosts): Promise<PackagesData> {
     // From traefik, not from verdaccio: it has no prometheus endpoint at all
     // (upstream #1815, stale since 2020), which is also why its Grafana
     // dashboard is built out of proxy metrics.
-    promScalar('sum(rate(traefik_service_requests_total{service=~"verdaccio.*"}[1h])) * 3600'),
-    promScalar(
+    ctx.prom.scalar('sum(rate(traefik_service_requests_total{service=~"verdaccio.*"}[1h])) * 3600'),
+    ctx.prom.scalar(
       'sum(rate(traefik_service_requests_total{service=~"verdaccio.*",code=~"5.."}[1h])) * 3600',
     ),
     // The image is built here (mkLocalImage), so the running version is the

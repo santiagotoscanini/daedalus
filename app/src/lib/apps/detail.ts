@@ -1,11 +1,9 @@
+import type { Ctx } from '../../core/ctx'
 import { appIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
 import { siteIdentity } from '../../host/contract/domains/site'
 import { lastDeploy, pullFailing } from '../../host/deploy'
-import { env } from '../../host/env'
-import { appStatuses } from '../../host/metrics'
 import { hostnamesTakenBy, manifestEntries, operatorSecretApps } from '../../host/nix-manifest'
-import { readSite } from '../../host/site'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
@@ -13,6 +11,7 @@ import { getApp } from '../repo/apps'
 import { appRepo, defaultImage } from '../site'
 import { stageExposed } from '../stage'
 import { asDeclared, driftOf } from './manifest-map'
+import { appStatuses } from './metrics'
 
 // The app detail page's frame: the record, whether it has drifted from nix,
 // and the live signals the hero draws. Null for a name the registry does not
@@ -23,7 +22,7 @@ import { asDeclared, driftOf } from './manifest-map'
 // cannot render at all without it, since the tab bar depends on whether the
 // app has a database or an egress container. The expensive part is the tab.
 
-export async function loadAppDetail(data: { name: string }) {
+export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
   const { name } = data
 
   const [row, entries] = await Promise.all([getApp(name), manifestEntries()])
@@ -32,7 +31,7 @@ export async function loadAppDetail(data: { name: string }) {
   const manifest = entries.find((m) => m.name === name)
   const record = asDeclared(row, manifest)
 
-  const box = readSite()
+  const box = ctx.site
   const hostname = effectiveHostname(box, record.name, record.hostname)
 
   // Every app repo lives under the box's owner, keyed by the app's name — the same
@@ -52,7 +51,7 @@ export async function loadAppDetail(data: { name: string }) {
     deployShot,
     site,
   ] = await Promise.all([
-    appStatuses([name]),
+    appStatuses(ctx, [name]),
     readApplyStatus(),
     lastDeploy(name),
     pullFailing(name),
@@ -71,7 +70,7 @@ export async function loadAppDetail(data: { name: string }) {
     workspace: workspaceFor(repo, workspaces.data),
     // From the snapshot when it has published, from the env binding before
     // the first publish — same value, different freshness.
-    workspaceRoot: workspaces.data.root || (env.get('WORKSPACE_ROOT') ?? ''),
+    workspaceRoot: workspaces.data.root || (ctx.env('WORKSPACE_ROOT') ?? ''),
     // Where an app's data dir lives on the host, for the one panel that
     // names it (what a removal leaves behind). From the export, so the
     // path is the nix fact rather than a string typed into a component.

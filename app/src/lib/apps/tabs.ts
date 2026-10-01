@@ -1,6 +1,16 @@
+import type { Ctx } from '../../core/ctx'
 import { appAccess, noAccess } from '../../host/access'
 import { lastDeploy } from '../../host/deploy'
 import { readEnvSnapshot } from '../../host/env-snapshot'
+import { operatorSecretApps } from '../../host/nix-manifest'
+import { commitUrl } from '../../host/registry'
+import type { AccessWindow } from '../access-window'
+import type { ActivityRow } from '../activity-lines'
+import { logTime } from '../format'
+import { effectiveHostname } from '../hostname'
+import { getApp } from '../repo/apps'
+import { overviewBuild, recentBuilds } from '../repo/build-views'
+import { ingestDeployments, listDeployments } from '../repo/deployments'
 import {
   activityLog,
   appDatabase,
@@ -11,17 +21,7 @@ import {
   NO_DATABASE,
   NO_RESOURCES,
   NO_VPN,
-} from '../../host/metrics'
-import { operatorSecretApps } from '../../host/nix-manifest'
-import { commitUrl } from '../../host/registry'
-import { readSite } from '../../host/site'
-import type { AccessWindow } from '../access-window'
-import type { ActivityRow } from '../activity-lines'
-import { logTime } from '../format'
-import { effectiveHostname } from '../hostname'
-import { getApp } from '../repo/apps'
-import { overviewBuild, recentBuilds } from '../repo/build-views'
-import { ingestDeployments, listDeployments } from '../repo/deployments'
+} from './metrics'
 import type { AppSecretKey } from './secret-keys'
 import { loadAppSecrets } from './secrets'
 import { loadTasksTab, type TasksPayload } from './tasks'
@@ -31,7 +31,7 @@ import { loadTasksTab, type TasksPayload } from './tasks'
 //
 // Split from ./detail.ts because the two have completely different costs. The
 // frame is cheap and the page cannot draw without it; these are rounds of
-// prometheus queries (overview, database — host/metrics.ts) or a wide Loki
+// prometheus queries (overview, database — ./metrics.ts) or a wide Loki
 // scan (access — host/access.ts), and every one of them streams in behind a
 // skeleton.
 //
@@ -122,11 +122,14 @@ type DeployRow = {
  * so the page frame is on screen while this runs and each tab streams in
  * behind a skeleton. Switching tabs re-runs exactly one of these branches.
  */
-export async function loadAppTab(data: {
-  name: string
-  tab: string
-  accessWindow: AccessWindow
-}): Promise<AppTabData> {
+export async function loadAppTab(
+  ctx: Ctx,
+  data: {
+    name: string
+    tab: string
+    accessWindow: AccessWindow
+  },
+): Promise<AppTabData> {
   const { name, tab, accessWindow } = data
 
   const record = await getApp(name)
@@ -135,9 +138,9 @@ export async function loadAppTab(data: {
   switch (tab) {
     case 'overview': {
       const [resources, dbSize, logs1h, build] = await Promise.all([
-        appResources(name).catch(() => NO_RESOURCES),
-        record.postgres ? databaseSize(name) : Promise.resolve(null),
-        logVolume(name),
+        appResources(ctx, name).catch(() => NO_RESOURCES),
+        record.postgres ? databaseSize(ctx, name) : Promise.resolve(null),
+        logVolume(ctx, name),
         // The detection line is not worth the overview.
         overviewBuild(record.id).catch(() => null),
       ])
@@ -152,7 +155,7 @@ export async function loadAppTab(data: {
       await ingestDeployments(record.id, name)
       const [deploys, activity, deploy, builds] = await Promise.all([
         listDeployments(record.id),
-        activityLog(name, 60),
+        activityLog(ctx, name, 60),
         lastDeploy(name),
         record.sourceMode === 'local' ? Promise.resolve([]) : recentBuilds(record.id, 10),
       ])
@@ -189,7 +192,7 @@ export async function loadAppTab(data: {
       const access =
         record.stage === 'live'
           ? await appAccess(
-              effectiveHostname(readSite(), record.name, record.hostname),
+              effectiveHostname(ctx.site, record.name, record.hostname),
               accessWindow,
             ).catch(() => noAccess(accessWindow))
           : noAccess(accessWindow)
@@ -244,7 +247,9 @@ export async function loadAppTab(data: {
       // `pg_database_size_bytes{datname="…"}` matches nothing.
       return {
         kind: 'database',
-        database: record.postgres ? await appDatabase(name).catch(() => NO_DATABASE) : NO_DATABASE,
+        database: record.postgres
+          ? await appDatabase(ctx, name).catch(() => NO_DATABASE)
+          : NO_DATABASE,
       }
     }
 
@@ -264,7 +269,7 @@ export async function loadAppTab(data: {
         vpn:
           record.egressContainer === null
             ? NO_VPN
-            : await appVpn(record.egressContainer).catch(() => NO_VPN),
+            : await appVpn(ctx, record.egressContainer).catch(() => NO_VPN),
       }
     }
 

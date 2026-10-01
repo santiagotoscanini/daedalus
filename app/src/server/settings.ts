@@ -146,12 +146,14 @@ export const fetchTimezones = readFn.handler(async (): Promise<string[]> => {
   return readTimezones()
 })
 
-export const fetchTheme = readFn.handler(async (): Promise<ThemeChoice> => {
-  const { readSetting, SETTING_KEYS } = await import('../lib/repo/settings')
+export const fetchTheme = readFn.handler(async ({ context }): Promise<ThemeChoice> => {
+  const { SETTING_KEYS } = await import('../lib/repo/settings')
   // A control plane that will not render because its theme row is
   // unreadable is worse than one rendering in the default palette.
   try {
-    return (await readSetting(SETTING_KEYS.theme, isThemeChoice)) ?? DEFAULT_THEME
+    return (
+      (await (await context.ctx()).store.read(SETTING_KEYS.theme, isThemeChoice)) ?? DEFAULT_THEME
+    )
   } catch {
     return DEFAULT_THEME
   }
@@ -168,9 +170,9 @@ export const saveTheme = adminFn
     if (presetById(data.presetId).id !== data.presetId) throw new Error('unknown preset')
     return { presetId: data.presetId, scheme: data.scheme }
   })
-  .handler(async ({ data }) => {
-    const { writeSetting, SETTING_KEYS } = await import('../lib/repo/settings')
-    await writeSetting(SETTING_KEYS.theme, data)
+  .handler(async ({ data, context }) => {
+    const { SETTING_KEYS } = await import('../lib/repo/settings')
+    await (await context.ctx()).store.write(SETTING_KEYS.theme, data)
     return data
   })
 

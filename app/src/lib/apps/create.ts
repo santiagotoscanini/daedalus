@@ -1,9 +1,8 @@
-import { makeCtx } from '../../core/ctx'
+import type { Ctx } from '../../core/ctx'
 import { repoFileExists } from '../../core/github-app'
 import { listRepos } from '../../host/github-repos'
 import { manifestEntries } from '../../host/nix-manifest'
 import { imageInfo } from '../../host/registry'
-import { readSite } from '../../host/site'
 import { swrCache } from '../cache'
 import type { RepoBuild } from '../readiness'
 import { listApps } from '../repo/apps'
@@ -54,11 +53,10 @@ const REPO_BUILD = swrCache({ ttlMs: 15_000 })
  * repo with neither file is a warning on the form, because Railpack CAN build
  * one.
  */
-async function repoBuild(name: string): Promise<RepoBuild> {
+async function repoBuild(ctx: Ctx, name: string): Promise<RepoBuild> {
   return REPO_BUILD.get(name, async () => {
     // `<owner>/<app name>` — the same assumption the build service, the detail
     // page and the default image all make: an app is its repository's name.
-    const ctx = await makeCtx()
     const fullName = appRepo(ctx.site, name)
     const railpack = await repoFileExists(ctx, fullName, 'railpack.json')
     if (railpack === 'present') return 'railpack'
@@ -74,8 +72,8 @@ async function repoBuild(name: string): Promise<RepoBuild> {
  *
  * Neither is a gate; lib/readiness.ts says why.
  */
-export async function appPreflight(data: { name: string; image: string | null }) {
-  const site = readSite()
+export async function appPreflight(ctx: Ctx, data: { name: string; image: string | null }) {
+  const site = ctx.site
   const effectiveImage = data.image?.trim() || defaultImage(site, data.name)
 
   // Only images on the box's own zot can be verified from here — an override
@@ -95,7 +93,7 @@ export async function appPreflight(data: { name: string; image: string | null })
       : imageInfo(local.groups.repo, (local.groups.ref ?? ':latest').slice(1)).then((info) =>
           info.digest === null ? ('missing' as const) : ('present' as const),
         ),
-    repoBuild(data.name),
+    repoBuild(ctx, data.name),
   ])
 
   return { effectiveImage, imageState, repoBuild: build }
