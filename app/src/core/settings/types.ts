@@ -68,7 +68,7 @@ export type BoxSettings = {
     node: string
     exportDir: string
     stateRoot: string
-    applyDir: string
+    verbsDir: string
   }
   sources: { site: SourceMeta; network: SourceMeta }
 }

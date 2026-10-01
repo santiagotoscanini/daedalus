@@ -69,8 +69,9 @@
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     appsOn
-    applyDir
     verbsDir
+    workspaceIconsDir
+    boardsDir
     at
     hooksHost
     haveGithubApp
@@ -366,7 +367,25 @@ in
     '';
   };
 
+  options.fleet.daedalus.boardsDir = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = boardsDir;
+    description = ''
+      Where the System › Motherboard tab asks for the vendor pages it cannot
+      read itself and finds them answered: it writes `request.json` (the pages
+      it wants), and a host's own job, run as the operator, answers each as
+      `<id>.json` (app/src/lib/dashboard/board-releases.ts has the shapes).
+      Container-writable, so nothing root reads lives here.
+    '';
+  };
+
   config = lib.mkIf config.fleet.modules.daedalus.enable {
+    # The container's two writable directories (daedalus-lib.nix): the
+    # operator's, made before the container mounts them.
+    fleet.statePaths.${workspaceIconsDir} = { };
+    fleet.statePaths.${boardsDir} = { };
+
     # Reach the monitoring stack: prometheus for liveness/traffic/DB size, loki
     # for the log panels. Both live on `monitoring`. This list MERGES with the
     # one modules/apps/apps.nix contributes for this container (app-db, plus the
@@ -629,10 +648,12 @@ in
             # dangling address here.
             BASE_DOMAIN = config.fleet.baseDomain;
             GITHUB_OWNER = config.fleet.github.owner;
-            # Where apply requests are dropped for the host agent.
-            APPLY_DIR = "/apply";
-            # Where the root verbs publish their status (the mount below).
+            # Where the root verbs publish their status, and the two
+            # directories this app writes for the operator's readers (the
+            # mounts below).
             VERBS_DIR = "/verbs";
+            WORKSPACE_ICONS_DIR = "/workspace-icons";
+            BOARDS_DIR = "/boards";
 
             # The GitHub App. hooks.<baseDomain> is the webhook's public name: Vite
             # 403s any Host it was not told about (vite.config.ts allowedHosts,
@@ -743,11 +764,15 @@ in
         # container just reads new bytes, so no fact nix hands the app
         # restarts it.
         "/run/daedalus-export:/export:ro"
-        "${applyDir}:/apply"
         # The root verbs' status files (daedalus-lib.nix verbsDir): root writes
         # them, so the container can read and never write them. The
         # DIRECTORY: each is replaced by rename.
         "${verbsDir}:/verbs:ro"
+        # What this app writes for the operator's readers, never root's
+        # (daedalus-lib.nix): the session host's workspace icons, and the
+        # vendor pages a host job reads with the box's browser.
+        "${workspaceIconsDir}:/workspace-icons"
+        "${boardsDir}:/boards"
         # Last deploy result per app, written by app-<name>-deploy.service
         # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
         # files, so a rewritten state file is picked up without pinning an inode.
@@ -769,7 +794,7 @@ in
         "${repoDir}:/repo:ro"
         # site/ — the one directory daedalus writes — read-only here: the app
         # reads the committed site.json to edit against; the writes go through
-        # the bridge as ever.
+        # the root helper (`apply`, `secret-set`).
         "${config.fleet.site.path}:/site:ro"
         # The project workspaces snapshot — live git facts for every clone under
         # ~/projects plus each one's last sync outcome. The DIRECTORY, not the
@@ -814,7 +839,7 @@ in
       ++ lib.optional daedalusDev "${engineRoot}:/engine:ro";
 
       # Every source runs as container uid 0 — the operator on the host, who
-      # owns /apply (the one writable mount) and the controller's socket
+      # owns the two writable directories above and the controller's socket
       # directory; the image's own `node` user owns nothing here. Dev mode
       # gets the same flag from `source.dev` (modules/apps).
       app-daedalus.extraOptions = lib.optional (!daedalusDev) "--user=0:0";

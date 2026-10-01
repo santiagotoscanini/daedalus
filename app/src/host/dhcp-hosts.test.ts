@@ -19,31 +19,42 @@ describe('the dnsmasq lines', () => {
   })
 })
 
-describe('writing the file', () => {
-  it('never rewrites an unchanged file: each write reloads pi-hole', async () => {
-    const { mkdtemp, readFile, stat, rm } = await import('node:fs/promises')
+describe('handing the lines over', () => {
+  it('never starts a run for the lines the host keeps: each run reloads pi-hole', async () => {
+    const { mkdtemp, rm, writeFile } = await import('node:fs/promises')
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
-    const { writeDhcpHosts } = await import('./dhcp-hosts')
+    const { writeDhcpHosts, dhcpHostsMissing } = await import('./dhcp-hosts')
     const dir = await mkdtemp(join(tmpdir(), 'dhcp-hosts-'))
+    const previous = process.env.VERBS_DIR
+    process.env.VERBS_DIR = dir
+    const asked: unknown[][] = []
+    let outcome = 'done'
+    const ctx = {
+      controller: {
+        rootRun: async (...args: unknown[]) => {
+          asked.push(args)
+          return { run: 'r', verb: 'nodes-dhcp', outcome, detail: 'a line is not', verbs: [] }
+        },
+      },
+    } as unknown as Parameters<typeof writeDhcpHosts>[0]
     try {
       const one = [{ id: 'a', mac: 'aa:bb:cc:dd:ee:01', name: 'gaming-pc', lanIp: null }]
-      expect(await writeDhcpHosts(one, dir)).toBe(true)
-      const first = await stat(join(dir, 'dhcp-hosts'))
-      // The same lines again — a switch saved, a name that did not move.
-      expect(await writeDhcpHosts([...one], dir)).toBe(false)
-      const again = await stat(join(dir, 'dhcp-hosts'))
-      expect(again.ino).toBe(first.ino)
-      expect(again.mtimeMs).toBe(first.mtimeMs)
-      // A line that moved is written.
-      expect(await writeDhcpHosts([{ ...one[0], name: 'renamed' } as (typeof one)[0]], dir)).toBe(
-        true,
-      )
-      expect(await readFile(join(dir, 'dhcp-hosts'), 'utf8')).toBe('aa:bb:cc:dd:ee:01,renamed\n')
-      // An empty set over an empty file is no write either.
-      expect(await writeDhcpHosts([], dir)).toBe(true)
-      expect(await writeDhcpHosts([], dir)).toBe(false)
+      expect(await dhcpHostsMissing()).toBe(true)
+      expect(await writeDhcpHosts(ctx, one)).toBe(true)
+      expect(asked[0]?.slice(0, 2)).toEqual(['nodes-dhcp', {}])
+      expect(asked[0]?.[3]).toBe('aa:bb:cc:dd:ee:01,gaming-pc\n')
+      // The host kept them: the same lines again start nothing.
+      await writeFile(join(dir, 'nodes-dhcp-hosts'), 'aa:bb:cc:dd:ee:01,gaming-pc\n')
+      expect(await dhcpHostsMissing()).toBe(false)
+      expect(await writeDhcpHosts(ctx, [...one])).toBe(false)
+      expect(asked).toHaveLength(1)
+      // A refusal is the caller's to log.
+      outcome = 'refused'
+      await expect(writeDhcpHosts(ctx, [])).rejects.toThrow('a line is not')
     } finally {
+      if (previous === undefined) delete process.env.VERBS_DIR
+      else process.env.VERBS_DIR = previous
       await rm(dir, { recursive: true, force: true })
     }
   })

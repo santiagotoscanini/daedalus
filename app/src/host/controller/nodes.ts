@@ -291,7 +291,7 @@ export async function ensureControllerLink(ctx: Pick<Ctx, 'controller'>): Promis
     if (ctx.controller.hello() === null) await ctx.controller.systemInfo()
     const seen = await ctx.controller.nodesList()
     const { recordObserved } = await import('../../core/nodes')
-    await recordObserved(seen)
+    await recordObserved(ctx, seen)
   } catch {
     // Not reachable, or the table: the next minute tries again, and the
     // pages say what the controller answered.

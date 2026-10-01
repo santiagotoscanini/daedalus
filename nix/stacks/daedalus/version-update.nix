@@ -85,7 +85,6 @@ let
   # rebuilding verb.
   updateReaper = mkUpdateReaper {
     name = "daedalus-version-update-reaper";
-    dir = verbsDir;
     statusFile = "version-update-status.json";
     nextSteps = "Check `journalctl -u 'daedalus-version-update@*'`, `git log` in ${config.fleet.config.repo}";
   };

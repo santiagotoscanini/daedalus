@@ -58,7 +58,7 @@ vi.mock('../host/db', () => {
 })
 vi.mock('../host/dhcp-hosts', () => ({
   householdMacs: async () => new Set<string>(),
-  dhcpHostsMissing: () => false,
+  dhcpHostsMissing: async () => false,
   writeDhcpHosts: async () => {
     h.dhcp++
     return true
@@ -227,7 +227,7 @@ describe('keeping what the controller observed', () => {
       ],
     ]
     h.facts = { lanIp: '192.0.2.7' }
-    await flows.recordObserved([seen('n1'), seen('n2')])
+    await flows.recordObserved(ctx, [seen('n1'), seen('n2')])
     expect(h.transactions).toBe(1)
     expect(h.sets).toEqual([{ lanIp: '192.0.2.7' }, { lanIp: '192.0.2.7' }])
     expect(h.dhcp).toBe(1)

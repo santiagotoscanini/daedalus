@@ -149,16 +149,22 @@ export const SCHEMA = {
     about: 'The versioned fleet.export domains.',
     source: DAEDALUS,
   },
-  APPLY_DIR: {
-    kind: 'path',
-    fallback: '/apply',
-    about: 'The file-drop bridge: the one writable mount.',
-    source: DAEDALUS,
-  },
   VERBS_DIR: {
     kind: 'path',
     fallback: '/verbs',
     about: 'The status files of the root verbs: written by root, read-only here.',
+    source: DAEDALUS,
+  },
+  WORKSPACE_ICONS_DIR: {
+    kind: 'path',
+    fallback: '/workspace-icons',
+    about: 'The icon of each workspace, for the session host to serve.',
+    source: DAEDALUS,
+  },
+  BOARDS_DIR: {
+    kind: 'path',
+    fallback: '/boards',
+    about: 'The vendor pages the Motherboard tab asks a host job for, and its answers.',
     source: DAEDALUS,
   },
   SITE_PATH: {

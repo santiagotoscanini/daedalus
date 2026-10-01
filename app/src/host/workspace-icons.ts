@@ -10,10 +10,10 @@ import type { Workspace } from './workspaces'
 // only through the session host, never this app over HTTP, and the icons are
 // not stored anywhere: they are resolved from each app at runtime
 // (host/app-icon.ts). So the app writes what it resolved to
-// `<apply dir>/workspace-icons/<workspace>.icon` — the Apps list's own icon,
-// through the same cache — and the session host reads the file. Each process
-// writes only its own directory: this one is under the app's apply dir, and
-// the session host (the operator, like this container's root) only reads it.
+// `/workspace-icons/<workspace>.icon` — the Apps list's own icon, through the
+// same cache — and the session host reads the file. That directory is the
+// app's to write (nix daedalus-lib.nix `workspaceIconsDir`), and the session
+// host (the operator, like this container's root) only reads it.
 //
 // A workspace gets an icon when its remote is a project the Apps page shows:
 // a registry app (`<owner>/<name>`) or an off-box project with a repo. One
@@ -36,7 +36,7 @@ export const MAX_ICON_BYTES = 64 * 1024
 const SUFFIX = '.icon'
 const TMP = '.tmp'
 
-const iconDir = (): string => join(env.get('APPLY_DIR') ?? '/apply', 'workspace-icons')
+const iconDir = (): string => env.get('WORKSPACE_ICONS_DIR') ?? '/workspace-icons'
 
 /** One plain path component, as the session host's `workspaces.list` holds them. */
 function plainName(name: string): boolean {

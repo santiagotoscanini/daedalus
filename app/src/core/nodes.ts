@@ -217,7 +217,7 @@ async function boxWgEasy() {
  * rather than at the next five-minute sync.
  */
 async function afterDecision(ctx: Ctx): Promise<void> {
-  await publishDhcpHosts()
+  await publishDhcpHosts(ctx)
   requestDesiredSync(ctx)
   requestGatewaySync()
 }
@@ -227,11 +227,14 @@ async function afterDecision(ctx: Ctx): Promise<void> {
  * observed (host/controller/nodes.ts `observedFacts`), and re-render the
  * DHCP lines when an address, a MAC or a name moved.
  */
-export async function recordObserved(seen: readonly ControllerNode[]): Promise<void> {
+export async function recordObserved(
+  ctx: Pick<Ctx, 'controller'>,
+  seen: readonly ControllerNode[],
+): Promise<void> {
   if (seen.length === 0) return
   const byId = new Map(seen.map((s) => [s.id, s]))
   const moved: { id: string; facts: Partial<NodeRecord> }[] = []
-  let dhcp = dhcpHostsMissing()
+  let dhcp = await dhcpHostsMissing()
   for (const n of await allNodeRows()) {
     const s = byId.get(n.id)
     if (s === undefined || n.state !== 'approved') continue
@@ -243,20 +246,21 @@ export async function recordObserved(seen: readonly ControllerNode[]): Promise<v
     }
   }
   await writeObserved(moved)
-  if (dhcp) await publishDhcpHosts()
+  if (dhcp) await publishDhcpHosts(ctx)
 }
 
 /**
  * Write the approved nodes' dnsmasq lines (host/dhcp-hosts.ts): how each
  * machine gets its name from pi-hole. A MAC the household file already
- * names is theirs to name, and skipped. Best effort: a failure to write the
- * file is logged and never fails the decision that triggered it — the lines
+ * names is theirs to name, and skipped. Best effort: a failure to hand them
+ * over is logged and never fails the decision that triggered it — the lines
  * are a consequence, not the act.
  */
-async function publishDhcpHosts(): Promise<void> {
+async function publishDhcpHosts(ctx: Pick<Ctx, 'controller'>): Promise<void> {
   try {
     const [all, household] = await Promise.all([allNodeRows(), householdMacs()])
     await writeDhcpHosts(
+      ctx,
       all
         .filter((n) => n.state === 'approved')
         .filter((n) => n.mac !== null && !household.has(n.mac.toLowerCase()))

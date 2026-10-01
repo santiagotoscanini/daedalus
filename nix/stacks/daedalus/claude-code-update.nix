@@ -80,7 +80,6 @@ let
   # rebuilding verb.
   updateReaper = mkUpdateReaper {
     name = "daedalus-claude-code-update-reaper";
-    dir = verbsDir;
     statusFile = "claude-code-update-status.json";
     nextSteps = "Check `journalctl -u 'daedalus-claude-code-update@*'` and `git log` in the engine clone before retrying";
   };

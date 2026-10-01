@@ -197,7 +197,7 @@
 #   verbs        `fleet.daedalus.rootVerbs`, contributed by the module that
 #                owns each unit, rendered into the helper's table (with the
 #                operator's uid and the systemctl/journalctl paths): a name, an
-#                EXISTING oneshot unit with no path unit left, a timeout, and
+#                EXISTING oneshot unit with no path unit, a timeout, and
 #                selectors that are fixed lists spliced in as `{name}` — never
 #                a path, a flag or a free unit name from the caller. The
 #                helper's own `--check-table` holds the table to the rules it
@@ -409,8 +409,8 @@ let
       ) (lib.cartesianProduct v.selectors);
   # What only the evaluation can see, and the helper cannot: each unit a verb
   # can start exists on this system, is enabled, is a oneshot that does not
-  # RemainAfterExit, and has no path unit left — the file-drop door a verb
-  # leaves behind when it moves here.
+  # RemainAfterExit, and has no path unit — a second door to the same unit,
+  # which the helper's one-run-at-a-time could not see.
   rootVerbAssertions = lib.concatLists (
     lib.mapAttrsToList (
       verb: v:

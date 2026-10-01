@@ -37,9 +37,10 @@
 #                RuntimeDirectory, 0700; the socket 0600 and served to this
 #                uid alone). The package is on the system PATH so `hookBin`
 #                outlives any one build.
-#   icons        `workspaces.icon` reads `<applyDir>/workspace-icons/<name>.icon`,
-#                which the app exports (the Apps page's icon for the workspace's
-#                repo). The app writes, this host reads; nothing is stored.
+#   icons        `workspaces.icon` reads `<workspaceIconsDir>/<name>.icon`, which
+#                the app exports (the Apps page's icon for the workspace's
+#                repo; daedalus-lib.nix). The app writes, this host reads;
+#                nothing is stored.
 #
 # restartIfChanged = false is load-bearing: every live terminal and agent is
 # a child of this unit, so a restart kills them all. A switch installs the new
@@ -73,8 +74,8 @@ let
   cfg = config.fleet.daedalus.sessionHost;
   op = config.fleet.operator;
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    applyDir
     controllerDataDir
+    workspaceIconsDir
     workspaceRoot
     workspacesDir
     ;
@@ -110,10 +111,10 @@ let
   runtimeName = "daedalus-session-host";
   hookBin = "/run/current-system/sw/bin/daedalus-session-host";
 
-  # The app writes each workspace's icon here (app/src/host/workspace-icons.ts),
-  # under its own apply dir, through the /apply mount it already has; this
-  # host only reads it (`workspaces.icon`).
-  workspaceIcons = "${applyDir}/workspace-icons";
+  # The app writes each workspace's icon here (app/src/host/workspace-icons.ts,
+  # through its /workspace-icons mount, daedalus.nix); this host only reads it
+  # (`workspaces.icon`).
+  workspaceIcons = workspaceIconsDir;
 
   configFile = pkgs.writeText "daedalus-session-host.json" (
     builtins.toJSON {
@@ -203,10 +204,6 @@ in
     environment.systemPackages = [ package ];
 
     systemd.tmpfiles.rules = [ "d ${stateDir} 0700 ${op.user} ${op.group} -" ];
-    # The app's to write, pre-made like its other apply dirs (the app also
-    # makes it): the operator's (container root), 0755, so this host reads it.
-    fleet.statePaths.${workspaceIcons} = { };
-
     # LAN only, and through the tunnel: the controller's own pattern
     # (controller.nix).
     networking.firewall.interfaces.${config.fleet.lanInterface}.allowedTCPPorts = [ cfg.port ];

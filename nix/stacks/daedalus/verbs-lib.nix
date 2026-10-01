@@ -242,7 +242,6 @@ let
   # button refused.
   applyReaper = mkUpdateReaper {
     name = "daedalus-apply-reaper";
-    dir = verbsDir;
     statusFile = "apply-status.json";
     nextSteps = "The rebuild may or may not have completed — check `journalctl -u 'daedalus-apply@*'` and `git log` in ${config.fleet.config.repo} before applying again";
   };
@@ -252,7 +251,6 @@ let
   # bounds the wedge a crash leaves to seconds.
   imageUpdateReaper = mkUpdateReaper {
     name = "daedalus-image-update-reaper";
-    dir = verbsDir;
     statusFile = "image-update-status.json";
     nextSteps = "Nothing was necessarily committed — check `journalctl -u 'daedalus-image-update@*'` and `git log` in ${config.fleet.config.repo}";
   };

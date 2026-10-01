@@ -14,14 +14,19 @@ rec {
   # container. Whatever this module defines UNDER that container is gated on it.
   appsOn = config.fleet.modules.apps.enable;
 
-  # Where the container drops an apply request and reads back status. A bind
-  # mount, deliberately, rather than an API the host calls: the container has
-  # no privilege to lose, and the host agent never has to authenticate to the
-  # app or reach into Postgres. The app produces the artifact; the host moves
-  # it into the flake and rebuilds.
-  # Under apps/ — daedalus is an app on its own platform, so its host-side
-  # state sits with the other apps' dirs rather than as a root-level stack.
-  applyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
+  # The two directories the container writes, each for a reader that is the
+  # operator, never root: the workspace icons the session host serves
+  # (session-host.nix) and the vendor pages the box's browser job answers (a
+  # host's own stack, through `fleet.daedalus.boardsDir`). Everything root
+  # does for the container goes through the root helper instead. Under apps/
+  # — daedalus is an app on its own platform, so its host-side state sits with
+  # the other apps' dirs rather than as a root-level stack.
+  workspaceIconsDir = "${config.fleet.stateRoot}/apps/daedalus/workspace-icons";
+  boardsDir = "${config.fleet.stateRoot}/apps/daedalus/boards";
+
+  # Where the container dropped requests for root before the root helper:
+  # emptied once, as the operator (daedalus-verbs.nix).
+  retiredApplyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
 
   # Mixed into every bridge agent (daedalus-verbs.nix, daedalus-github.nix,
   # the workspace sync in daedalus-snapshots.nix). One property, one argument, written
@@ -89,8 +94,6 @@ rec {
       name,
       statusFile,
       nextSteps,
-      # The bridge's directory, or a root verb's (verbsDir).
-      dir ? applyDir,
     }:
     mkAgent {
       inherit name;
@@ -102,7 +105,7 @@ rec {
       # literal text in single quotes, which is what SC2016 warns about.
       excludeShellChecks = [ "SC2016" ];
       vars = operatorVars // {
-        STATUS = "${dir}/${statusFile}";
+        STATUS = "${verbsDir}/${statusFile}";
         NEXT_STEPS = nextSteps;
       };
       files = [
@@ -135,11 +138,10 @@ rec {
   };
 
   # The previous bytes of every site file an Apply (or a secret-set) replaces,
-  # which a failed Apply's rollback puts back, commits and pushes. A SIBLING of
-  # applyDir and deliberately never mounted: rollback state is trusted for a
-  # decision, and in the container-writable apply dir the container could plant
-  # the "was absent" marker or swap the bytes between a failed build and the
-  # rollback. Operator-owned so the agents' setpriv writes land; 0700 because
+  # which a failed Apply's rollback puts back, commits and pushes. Deliberately
+  # never mounted: rollback state is trusted for a decision, and in a
+  # container-writable directory the container could plant the "was absent"
+  # marker or swap the bytes between a failed build and the rollback. Operator-owned so the agents' setpriv writes land; 0700 because
   # nothing else on the box has a reason to read it. host/site-lib.sh.
   prevDir = "${config.fleet.stateRoot}/apps/daedalus/prev";
 

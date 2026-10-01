@@ -61,10 +61,10 @@ export function Developer({
       <Section
         title="Paths inside the container"
         icon={<FileCodeIcon />}
-        description="Where the host publishes what this app reads, and where the app drops what the host acts on."
+        description="Where the host publishes what this app reads."
         rows={[
           { k: 'Exports', v: <Value v={d.exportDir} /> },
-          { k: 'Apply bridge', v: <Value v={d.applyDir} /> },
+          { k: 'Root verbs’ status', v: <Value v={d.verbsDir} /> },
           { k: 'State root (host)', v: <Value v={d.stateRoot} /> },
         ]}
       />

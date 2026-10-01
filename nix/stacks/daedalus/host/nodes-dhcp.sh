@@ -1,45 +1,50 @@
 # Hand the nodes' DHCP name bindings to the resolver (daedalus-nodes.nix).
 #
-# The app writes `$SRC` (<apply dir>/nodes/dhcp-hosts) — one dnsmasq
-# `dhcp-host` line per approved node — into a directory the container can
-# write. This agent runs as root and copies it where pi-hole reads it, so it
-# is held to host/lib.sh's rule: root never touches a file there by name. The
-# bytes are read with read_request (a link at the name is refused, the read
-# runs as the operator with O_NOFOLLOW), every line is checked against the
-# only two shapes the app writes, and root writes the validated bytes into its
-# own directory. A file that fails any check changes nothing: the resolver
-# keeps the last good copy, and the journal says why.
+# Two ways in. The root helper's `nodes-dhcp` (daedalus-nodes-dhcp@<run>)
+# brings the lines as its run file's payload (host/lib.sh take_request): one
+# dnsmasq `dhcp-host` line per approved node, which the app rendered. They are
+# held to the only two shapes the app writes, kept in $STORE (root's, in the
+# verbs directory, which outlives a reboot and which the app reads back to
+# know what it last handed over), then copied to $DST, where the resolver
+# reads them. At boot, daedalus-nodes-dhcp copies $STORE to $DST again,
+# checked again. A body that fails a check changes nothing: the resolver
+# keeps the last good copy, and the outcome says why.
 #
-# Expects SRC, DST and PIHOLE ("1" when the resolver runs on this box).
+# Expects STORE, DST and PIHOLE ("1" when the resolver runs on this box).
 
-reject() {
-  echo "not handing $SRC to the resolver: $1" >&2
-  exit 1
-}
+set -euo pipefail
 
-if [ -L "$SRC" ] || [ -e "$SRC" ]; then
-  body="$(read_request "$SRC")" || reject "it is not a regular file this agent will read"
-  # `<MAC>,<name>` or `<MAC>,<IPv4>,<name>` (app/src/host/dhcp-hosts.ts), a
-  # name being one DNS label. Nothing else is a line this file may carry: a
-  # dnsmasq option smuggled in here would be parsed by the resolver.
-  mac='[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}'
-  ip='[0-9]{1,3}(\.[0-9]{1,3}){3}'
-  label='[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
-  if [ -n "$body" ]; then
-    if bad="$(printf '%s\n' "$body" | grep -Evx -m1 "$mac,($ip,)?$label")"; then
-      reject "a line is not <MAC>,[<IPv4>,]<name>: ${bad:0:80}"
-    fi
-    [ "$(printf '%s\n' "$body" | wc -l)" -le 1024 ] || reject "more than 1024 lines"
-    body="$body"$'\n'
-  fi
-  # Root's own directory, so root's direct write is safe; temp and rename so
-  # the resolver never reads half a file.
-  printf '%s' "$body" | install -m 0644 -o root -g root /dev/stdin "$DST.tmp"
-  mv -f -- "$DST.tmp" "$DST"
+if [ -n "${CREDENTIALS_DIRECTORY:-}" ]; then
+  body="$(take_request | jq -r 'if (.payload | type) == "string" then .payload else "" end')"
+  from="the request"
 else
-  # No file at all: the app removed it. The resolver's copy goes too.
-  rm -f -- "$DST"
+  body="$(cat -- "$STORE")"
+  from="$STORE"
 fi
+
+# `<MAC>,<name>` or `<MAC>,<IPv4>,<name>` (app/src/host/dhcp-hosts.ts), a
+# name being one DNS label. Nothing else is a line this file may carry: a
+# dnsmasq option smuggled in here would be parsed by the resolver.
+mac='[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}'
+ip='[0-9]{1,3}(\.[0-9]{1,3}){3}'
+label='[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
+if [ -n "$body" ]; then
+  if bad="$(printf '%s\n' "$body" | grep -Evx -m1 "$mac,($ip,)?$label")"; then
+    refuse "not handing $from to the resolver: a line is not <MAC>,[<IPv4>,]<name>: ${bad:0:80}"
+  fi
+  [ "$(printf '%s\n' "$body" | wc -l)" -le 1024 ] ||
+    refuse "not handing $from to the resolver: more than 1024 lines"
+  body="$body"$'\n'
+fi
+
+# Root's own directories, so root's direct writes are safe; temp and rename
+# so neither the app nor the resolver ever reads half a file.
+put() {
+  printf '%s' "$body" | install -m 0644 -o root -g root /dev/stdin "$1.tmp"
+  mv -f -- "$1.tmp" "$1"
+}
+[ -z "${CREDENTIALS_DIRECTORY:-}" ] || put "$STORE"
+put "$DST"
 
 if [ "$PIHOLE" = 1 ]; then
   # A HUP is only safe once FTL is up: in its first moments no handler is
@@ -62,3 +67,4 @@ if [ "$PIHOLE" = 1 ]; then
     fi
   fi
 fi
+verb_done "$(printf '%s' "$body" | grep -c . || true) node name(s) handed to the resolver"

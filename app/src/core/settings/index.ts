@@ -87,7 +87,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       node: process.version,
       exportDir: ctx.env('EXPORT_DIR') ?? '/export',
       stateRoot: s.stateRoot,
-      applyDir: ctx.env('APPLY_DIR') ?? '',
+      verbsDir: ctx.env('VERBS_DIR') ?? '/verbs',
     },
     sources: { site: meta(site), network: meta(network) },
   }

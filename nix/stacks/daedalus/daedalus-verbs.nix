@@ -15,7 +15,7 @@
 
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    applyDir
+    retiredApplyDir
     prevDir
     verbsDir
     deployableApps
@@ -63,7 +63,21 @@ in
   config = lib.mkIf config.fleet.modules.daedalus.enable (
     lib.mkMerge [
       {
-        fleet.statePaths.${applyDir} = { };
+        # The directory the container dropped requests into before the root
+        # helper, emptied of its dead files once: as the operator, who owns it
+        # and everything in it, never through a link. Delete this unit once
+        # the box has run it.
+        systemd.services.daedalus-apply-retire = {
+          description = "Remove the retired daedalus apply directory";
+          wantedBy = [ "multi-user.target" ];
+          unitConfig.ConditionPathIsDirectory = retiredApplyDir;
+          serviceConfig = {
+            Type = "oneshot";
+            User = config.fleet.operator.user;
+            Group = config.fleet.operator.group;
+            ExecStart = "${pkgs.coreutils}/bin/rm -rf --one-file-system -- ${retiredApplyDir}";
+          };
+        };
         # The root verbs' status files (daedalus-lib.nix verbsDir): root's, read
         # by everyone, mounted read-only into the container.
         systemd.tmpfiles.rules = [ "d ${verbsDir} 0755 root root -" ];

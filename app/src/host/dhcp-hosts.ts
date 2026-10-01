@@ -1,32 +1,36 @@
-import { existsSync } from 'node:fs'
-import { mkdir, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { writeAtomic } from './bridge'
+import type { Ctx } from '../core/ctx'
 import { env } from './env'
+import { rootAnswerText, runRoot } from './root'
 
 // How a machine gets its name on the network. pi-hole's dnsmasq gives a
 // lease the hostname a `dhcp-host=<MAC>,<name>` line names, over whatever
 // the client sent, so `<name>.<lanDomain>` follows the machine to any address
-// the pool hands it. The box writes one line per approved node to
-// `<apply dir>/nodes/dhcp-hosts`, nix/stacks/daedalus/daedalus-nodes.nix
-// copies the file into the directory pi-hole reads as `dhcp-hostsdir` and
-// reloads FTL (a HUP, no restart), and no rebuild is involved — a join must
-// not cost one, and a MAC must not enter git.
+// the pool hands it. The box hands one line per approved node to the root
+// helper's `nodes-dhcp` (nix/stacks/daedalus/daedalus-nodes.nix), which keeps
+// them in the verbs directory, copies them into the directory pi-hole reads
+// as `dhcp-hostsdir` and reloads FTL (a HUP, no restart), and no rebuild is
+// involved — a join must not cost one, and a MAC must not enter git.
 //
 // Rendered whole on every change that could move a line: approve, revoke,
 // forget, a policy change, and an address or a MAC the controller saw move
-// (lib/repo/nodes.ts `publishDhcpHosts`) — and written only when the bytes
-// differ, since each write reloads pi-hole (`writeDhcpHosts`).
+// (core/nodes.ts `publishDhcpHosts`) — and handed over only when the lines
+// differ from the kept copy, since each run reloads pi-hole (`writeDhcpHosts`).
 //
 // The household's own reservations (the encrypted dhcp-hostsfile, which the
 // network page reads a copy of at DHCP_HOSTS_PATH) win: a MAC that file
 // names gets no line here, so dnsmasq never sees the same machine twice.
 
-const applyDir = (): string => env.get('APPLY_DIR') ?? '/apply'
+/** The lines the host kept from the last run: root's, read-only here. */
+const keptPath = (): string => join(env.get('VERBS_DIR') ?? '/verbs', 'nodes-dhcp-hosts')
 
-/** Whether the file has ever been written; the minute's observation seeds it when not. */
-export function dhcpHostsMissing(): boolean {
-  return !existsSync(join(applyDir(), 'nodes', 'dhcp-hosts'))
+/** The helper waits a minute for the unit (daedalus-nodes.nix); this is that and slack. */
+const NODES_DHCP_WAIT_MS = 130_000
+
+/** Whether the lines were ever handed over; the minute's observation seeds them when not. */
+export async function dhcpHostsMissing(): Promise<boolean> {
+  return (await readFile(keptPath(), 'utf8').catch(() => null)) === null
 }
 
 export type DhcpHost = {
@@ -45,21 +49,21 @@ export function dhcpHostsDocument(hosts: readonly DhcpHost[]): string {
 }
 
 /**
- * Write the lines, unless the file already holds exactly them: every write
- * is a path change nix watches, and its unit reloads pi-hole (a HUP to FTL,
- * which resolves for the whole house), so a save that moves no line — a
- * switch, a display name — must not touch the file. True when it wrote.
+ * Hand the lines to the host, unless it already keeps exactly them: every
+ * run reloads pi-hole (a HUP to FTL, which resolves for the whole house), so
+ * a save that moves no line — a switch, a display name — must not start one.
+ * True when it handed them over; throws with the helper's words when the
+ * host would not take them.
  */
 export async function writeDhcpHosts(
+  ctx: Pick<Ctx, 'controller'>,
   hosts: readonly DhcpHost[],
-  dir: string = join(applyDir(), 'nodes'),
 ): Promise<boolean> {
-  const path = join(dir, 'dhcp-hosts')
   const body = dhcpHostsDocument(hosts)
-  const held = await readFile(path, 'utf8').catch(() => null)
+  const held = await readFile(keptPath(), 'utf8').catch(() => null)
   if (held === body) return false
-  await mkdir(dir, { recursive: true })
-  await writeAtomic(path, body)
+  const answer = await runRoot(ctx, 'nodes-dhcp', {}, NODES_DHCP_WAIT_MS, body)
+  if (answer.outcome !== 'done') throw new Error(rootAnswerText(answer, 'nodes-dhcp'))
   return true
 }
 

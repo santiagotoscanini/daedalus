@@ -310,6 +310,38 @@ CREDENTIALS_DIRECTORY="$E/creds" bash "$T/engine.sh" >/dev/null 2>&1 || rc=$?
 check "a configuration without the input fails in validating, under the run's id" \
   '[ "$rc" -eq 1 ] && jq -e ".id == \"$run\" and .state == \"failed\" and .phase == \"validating\"" "$E/verbs/engine-update-status.json" >/dev/null'
 
+# ── 12. the nodes' DHCP lines: kept, copied, and nothing else let through ──
+echo "# nodes-dhcp"
+N="$T/nodes"
+mkdir -p "$N/creds" "$N/verbs" "$N/run"
+agent "$T/nodes.sh" "STORE=$N/verbs/nodes-dhcp-hosts DST=$N/run/dhcp-hosts PIHOLE=0" \
+  lib.sh nodes-dhcp.sh
+nodes_run() {
+  jq -n --arg b "$1" '{id: "n1", verb: "nodes-dhcp", selectors: {}, payload: $b}' >"$N/creds/request"
+  CREDENTIALS_DIRECTORY="$N/creds" bash "$T/nodes.sh" >/dev/null 2>&1
+}
+: >"$LOGGED"
+stub install <<'EOF'
+# Without the root to chown: drop -o/-g, keep the rest.
+args=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in -o | -g) shift 2 ;; *) args+=("$1"); shift ;; esac
+done
+exec "$(dirname "$(command -v cat)")/install" "${args[@]}"
+EOF
+nodes_run "aa:bb:cc:dd:ee:01,gaming-pc"$'\n'"aa:bb:cc:dd:ee:02,192.168.0.9,mac" || true
+check "the lines are kept and handed to the resolver" \
+  '[ "$(cat "$N/run/dhcp-hosts")" = "$(printf "aa:bb:cc:dd:ee:01,gaming-pc\naa:bb:cc:dd:ee:02,192.168.0.9,mac")" ] && cmp -s "$N/run/dhcp-hosts" "$N/verbs/nodes-dhcp-hosts"'
+: >"$LOGGED"
+rc=0
+nodes_run "aa:bb:cc:dd:ee:01,gaming-pc"$'\n'"dhcp-option=3,10.0.0.1" || rc=$?
+check "a dnsmasq option is refused, and the last good copy stays" \
+  '[ "$rc" -eq 0 ] && grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && grep -q "192.168.0.9" "$N/run/dhcp-hosts"'
+rm -f "$N/run/dhcp-hosts"
+bash "$T/nodes.sh" >/dev/null 2>&1
+check "at boot the kept copy goes back to the resolver" 'cmp -s "$N/run/dhcp-hosts" "$N/verbs/nodes-dhcp-hosts"'
+rm -f "$T/bin/install"
+
 if [ "$fails" -ne 0 ]; then
   cat "$T/apply.out"
   echo "$fails check(s) failed"

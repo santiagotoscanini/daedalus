@@ -287,11 +287,11 @@
             host.config.fleet.daedalus.rootVerbs ? workspace-clone
             || throw "the example host has no workspace-clone verb";
           assert failing { } == [ ] || throw "the example host fails: ${toString (failing { })}";
-          # A unit that does not exist, one with its path unit still there, a
+          # A unit that does not exist, one a path unit starts too, a
           # template instance with no template, and one whose template is not
           # a oneshot.
           assert refused "nope" { unit = "no-such-unit.service"; };
-          assert refused "dhcp" { unit = "daedalus-nodes-dhcp.service"; };
+          assert refused "sync" { unit = "daedalus-workspace-sync.service"; };
           assert refused "tpl" {
             unit = "no-such-template@{app}.service";
             selectors.app = [ "a" ];

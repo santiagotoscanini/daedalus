@@ -1,8 +1,7 @@
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 
-import { writeAtomic } from '../../host/bridge'
 import { env } from '../../host/env'
 import { swrCache } from '../cache'
 import { gigabytePageSlug, gigabytePageUrl } from '../hardware/gigabyte'
@@ -289,11 +288,11 @@ function dateOnly(httpDate: string): string {
 // opaque per-board token in their names, so neither the site nor the
 // download host can be read from here. A real browser gets in — the box's
 // shotter Chromium with a browser's fingerprint does — so the list is read
-// by a box-side job (the host's stacks/shotter) and published under the
-// apply dir, the way the system snapshot is: this reader writes the pages
-// it wants to `boards/request.json`, the job reads each page and writes
-// `boards/<id>.json`, and this reader draws it. A host without that job
-// leaves the request unanswered, and the tab says so.
+// by a box-side job (the host's stacks/shotter, run as the operator) in a
+// directory of its own (nix `fleet.daedalus.boardsDir`, mounted at /boards):
+// this reader writes the pages it wants to `request.json`, the job reads each
+// page and writes `<id>.json`, and this reader draws it. A host without that
+// job leaves the request unanswered, and the tab says so.
 
 type BoardPageRequest = { version: 1; pages: { id: string; url: string }[] }
 
@@ -311,8 +310,7 @@ type BoardPageSnapshot = {
   error: string | null
 }
 
-const applyDir = (): string => env.get('APPLY_DIR') ?? '/apply'
-const boardsDir = (): string => join(applyDir(), 'boards')
+const boardsDir = (): string => env.get('BOARDS_DIR') ?? '/boards'
 
 async function readPageSnapshot(id: string): Promise<BoardPageSnapshot | null> {
   try {
@@ -352,7 +350,9 @@ async function requestPage(id: string, url: string): Promise<void> {
   if (current.pages.some((p) => p.id === id && p.url === url)) return
   const pages = [...current.pages.filter((p) => p.id !== id), { id, url }]
   await mkdir(boardsDir(), { recursive: true })
-  await writeAtomic(path, `${JSON.stringify({ version: 1, pages }, null, 2)}\n`)
+  // Temp and rename: the job may read it at any moment.
+  await writeFile(`${path}.tmp`, `${JSON.stringify({ version: 1, pages }, null, 2)}\n`, 'utf8')
+  await rename(`${path}.tmp`, path)
 }
 
 async function gigabyteReleases(id: BoardIdentity): Promise<BoardReleases> {
