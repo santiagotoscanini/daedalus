@@ -94,11 +94,17 @@ let
       ];
     };
 
-  # Container-UID -> host-UID under the operator's subuid range
-  # (100000:65536) for uids >= 1: www-data 33 -> 100032, linuxserver
-  # abc 911 -> 100910. NOT for uid 0 (container root is the operator's
-  # own uid, outside the subuid range). Exposed via _module.args below.
-  hostUid = containerUid: 99999 + containerUid;
+  # The operator's subordinate id range, set explicitly below rather than
+  # left to NixOS's allocator: every uid this tree writes to disk is derived
+  # from its start.
+  subIdStart = 100000;
+  subIdCount = 65536;
+
+  # Container-UID -> host-UID under the operator's subuid range for uids
+  # >= 1: www-data 33 -> 100032, linuxserver abc 911 -> 100910. NOT for
+  # uid 0 (container root is the operator's own uid, outside the subuid
+  # range). Exposed via _module.args below.
+  hostUid = containerUid: subIdStart - 1 + containerUid;
 
   # Shared shell for "run rootless podman as the operator at boot" oneshots
   # (bridge creation, local image builds): ordered after the
@@ -423,6 +429,23 @@ in
   };
 
   config = {
+    # The range hostUid maps into. Explicit, so a host whose operator is not
+    # the first auto-allocated normal user still gets the same mapping.
+    users.users.${cfg.operator.user} = {
+      subUidRanges = [
+        {
+          startUid = subIdStart;
+          count = subIdCount;
+        }
+      ];
+      subGidRanges = [
+        {
+          startGid = subIdStart;
+          count = subIdCount;
+        }
+      ];
+    };
+
     # Container runtime for the whole fleet: rootless podman as the operator
     # (subuid 100000:65536). dockerCompat installs a `docker` shim.
     virtualisation.podman = {
