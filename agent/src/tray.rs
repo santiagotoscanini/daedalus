@@ -1,15 +1,53 @@
-//! The tray icon: the daedalus mark in the taskbar's corner, showing what
-//! the service reports — a UI over the session (session.rs).
+//! The tray icon: the daedalus mark in the taskbar's corner (a Mac's menu
+//! bar), showing what the service reports — a UI over the session
+//! (session.rs).
 //!
 //! A separate, windowless program in the desktop session, because the
 //! service runs in session 0 where there is no taskbar to draw on. The
 //! session reads the status document through the local socket (local.rs)
-//! every `session::POLL`; the
-//! tray reflects each read: the icon (ember when all is well, an amber dot
-//! when something wants attention, grey when the service does not answer),
-//! the tooltip, and a menu whose first lines are the state and whose rest
-//! are the few things worth a click — the status document, a check for
-//! updates, a Claude restart, the two logs, quit.
+//! every `session::POLL`; the tray reflects each read: the icon (ember when
+//! all is well, an amber dot when something wants attention, grey when the
+//! service does not answer), the tooltip, and the menu.
+//!
+//! **The menu** has one fixed structure — nothing is inserted or removed
+//! while it lives, so it redraws in place even while it is open (tao's timer
+//! runs in the menu's run-loop mode): a row that does not apply says so
+//! ("—") rather than vanishing.
+//!
+//! ```text
+//! ● Daedalus Agent is connected          the header: a status dot and one line (click: Open Daedalus)
+//!   Daedalus Agent 0.25.0                what runs here
+//! ───
+//!   Open Daedalus                        the app
+//!   This Mac in Daedalus…   ⌘,           Settings › Machines, at this machine
+//! ───
+//! ✓ Keep awake                           the settings this machine may ask for (settings.rs)
+//! ✓ Claude Remote Control
+//!   santree on the box                   (not on Windows: santree has no door there)
+//!   —                                    who may change them, or why not now
+//! ───
+//!   Connection · VPN up ▸                the link, the tunnel, both keys (shortened; Copy in each key's submenu)
+//!   Claude · 2 sessions ▸                Claude Code's facts and verbs
+//!   santree · 1 open ▸                   santree's door (not on Windows)
+//!   Updates: up to date · 10:00 ▸        Check for updates now
+//!   Troubleshoot ▸                       the status document, the logs
+//! ───
+//!   Log out of the box… / Log in…        (Pair with the box… off a Mac)
+//!   Uninstall Daedalus Agent…            (a Mac)
+//!   Quit menu bar app       ⌘Q
+//! ```
+//!
+//! On a Mac each row carries a Lucide glyph (`ICONS`), a template image the
+//! bundle carries in Resources (macos/icons/), and the header AppKit's own
+//! status dot: green, amber, red, and a grey one drawn here (`Dot`). Windows
+//! draws neither: the header's words carry the state there.
+//!
+//! **A switch** asks the service (`settings.set`) and reads the page again at
+//! once: the check shows the box's value, or the value on its way while the
+//! box has not answered ("— sending…"), or the box's value again with why
+//! when it did not take ("— not changed: …"). santree ON opens the page in
+//! Daedalus where an admin confirms it; a click while that page waits opens
+//! it again.
 //!
 //! What the tray stands over is the OS's choice (`os::TRAY_OWNS_SESSION`),
 //! named here as `Backing`:
@@ -26,7 +64,8 @@
 //!   shows it, through the service (`session::Watcher`), and its restart
 //!   goes to the session by way of the service.
 //!
-//! Either way quitting the tray stops nothing but the tray.
+//! Either way quitting the tray stops nothing but the tray: Claude remote
+//! control and the service keep running.
 //!
 //! It also keeps itself current: when a poll sees the page report a
 //! version other than its own, an update has swapped the binaries under
@@ -39,13 +78,17 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::menu::{
+    CheckMenuItem, IconMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
+};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 use crate::claude::Report;
+use crate::link::wire::Policy;
 use crate::os::tray::{open, relaunch_self};
 use crate::paths;
-use crate::session::{Page, Places, Session, Tick, Watcher};
+use crate::session::{LinkPage, Page, Places, Session, Tick, Watcher};
+use crate::settings::{short, short_fingerprint, Key, Via, View};
 use crate::{config, DISPLAY_NAME, VERSION};
 
 /// What the tray stands over; the module doc says which OS has which.
@@ -79,6 +122,13 @@ impl Backing {
         }
     }
 
+    fn poll_now(&mut self) {
+        match self {
+            Backing::Owns(s) => s.poll_now(),
+            Backing::Watches(w) => w.poll_now(),
+        }
+    }
+
     fn tick(&mut self) -> Tick {
         match self {
             Backing::Owns(s) => s.tick(),
@@ -87,8 +137,11 @@ impl Backing {
     }
 }
 
-/// What quitting the tray does, for the menu: nothing but the tray.
-const QUIT_LABEL: &str = "Quit tray (Claude remote control and the service keep running)";
+/// What quitting does: the tray alone (module doc).
+#[cfg(target_os = "macos")]
+const QUIT_LABEL: &str = "Quit menu bar app";
+#[cfg(not(target_os = "macos"))]
+const QUIT_LABEL: &str = "Quit tray icon";
 
 const ICON_OK: &[u8] = include_bytes!("../assets/tray-ok.png");
 const ICON_WARN: &[u8] = include_bytes!("../assets/tray-warn.png");
@@ -124,6 +177,8 @@ fn decode(png: &[u8]) -> Result<Icon> {
     Icon::from_rgba(rgba, info.width, info.height).context("tray icon pixels")
 }
 
+// ── what the menu says: pure, and tested ──────────────────────────────────
+
 /// `HH:MM` of an RFC 3339 stamp, left in UTC: converting to the local clock
 /// is more than the tray needs, and the hour and minute say "recent" well
 /// enough in the date-less menu.
@@ -131,24 +186,542 @@ fn clock(ts: &str) -> &str {
     ts.get(11..16).unwrap_or(ts)
 }
 
-/// The menu's update line. A release this agent cannot apply (a Mac's app
-/// bundle, update/) says how to get it instead of "up to date".
-fn update_line(p: &crate::session::Page) -> String {
+/// At most `max` characters of `s`, an ellipsis when cut.
+fn brief(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
+/// A count of bytes as people read it: `12.4 MB`.
+fn bytes(n: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut v = n as f64;
+    let mut u = 0;
+    while v >= 1000.0 && u < UNITS.len() - 1 {
+        v /= 1000.0;
+        u += 1;
+    }
+    if u == 0 {
+        format!("{n} B")
+    } else {
+        format!("{v:.1} {}", UNITS[u])
+    }
+}
+
+/// The header's dot (module doc): AppKit's own status images on a Mac, and
+/// a grey one drawn here (`grey_dot`); none on Windows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dot {
+    Green,
+    Amber,
+    Red,
+    Grey,
+}
+
+/// The header: its dot and its line, and whether a click opens Login Items
+/// (the service switched off there) rather than Daedalus.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Header {
+    pub dot: Dot,
+    pub text: String,
+    pub login_items: bool,
+}
+
+/// A session older than this without a new handshake is gone (WireGuard's
+/// REJECT_AFTER_TIME); the tunnel's keepalive handshakes every two minutes.
+const HANDSHAKE_STALE_SECS: u64 = 180;
+
+/// Whether the machine has not joined the box: unpaired — on a Mac, no
+/// tunnel config (it logs in rather than pairs, enroll.rs).
+fn logged_out(p: &Page) -> bool {
+    if cfg!(target_os = "macos") {
+        p.controller.as_ref().is_some_and(|l| l.tunnel.is_none())
+    } else {
+        p.controller
+            .as_ref()
+            .is_some_and(|l| l.state.as_deref() == Some("unpaired"))
+    }
+}
+
+/// The header for one read of the page (None: the service did not answer),
+/// `switched_off` when Login Items has the service off, and Claude as the
+/// session last saw it. Red when the box cannot be reached or refuses this
+/// machine, grey when nothing is joined, amber when something wants a look,
+/// green otherwise.
+pub fn header(
+    page: Option<&Page>,
+    switched_off: bool,
+    claude: &Report,
+    claude_wanted: bool,
+) -> Header {
+    let h = |dot, text: &str| Header {
+        dot,
+        text: text.to_string(),
+        login_items: false,
+    };
+    let Some(p) = page else {
+        return if switched_off {
+            Header {
+                login_items: true,
+                ..h(Dot::Grey, "The service is off in Login Items")
+            }
+        } else {
+            h(Dot::Red, "The service is not answering")
+        };
+    };
+    if logged_out(p) {
+        return h(Dot::Grey, UNJOINED_HEADER);
+    }
+    if let Some(l) = &p.controller {
+        match l.state.as_deref() {
+            Some("key-changed") => return h(Dot::Red, "The box's key changed — refused"),
+            Some("revoked") => return h(Dot::Red, "Revoked by the box"),
+            Some("pending") => return h(Dot::Amber, "Waiting for approval in Daedalus"),
+            _ if !l.connected => {
+                return match &l.error {
+                    Some(e) => h(Dot::Red, &format!("Disconnected — {}", brief(e, 40))),
+                    None => h(Dot::Amber, "Connecting…"),
+                }
+            }
+            _ => {}
+        }
+        if let Some(t) = &l.tunnel {
+            if t.error.is_some()
+                || t.last_handshake_secs
+                    .is_none_or(|s| s >= HANDSHAKE_STALE_SECS)
+            {
+                return h(Dot::Amber, "VPN handshake is stale");
+            }
+        }
+    }
     if p.restart_pending {
-        return "Updates: installed, restarting".to_string();
+        return h(Dot::Amber, "Update installed — restarting");
+    }
+    if p.policy.awake_hold && !p.awake_hold {
+        return h(Dot::Amber, "Keep awake is not holding");
+    }
+    if claude_wanted && !matches!(claude.state.as_str(), "running" | "starting") {
+        return h(Dot::Amber, "Claude remote control is not running");
+    }
+    if p.settings.as_ref().is_some_and(|s| !s.failed.is_empty()) {
+        return h(Dot::Amber, "A setting was not applied");
+    }
+    h(Dot::Green, &format!("{DISPLAY_NAME} is connected"))
+}
+
+/// The header for a machine that has not joined the box.
+#[cfg(target_os = "macos")]
+const UNJOINED_HEADER: &str = "Logged out — choose Log in…";
+#[cfg(not(target_os = "macos"))]
+const UNJOINED_HEADER: &str = "Not paired — choose Pair with the box…";
+
+/// The top-level Updates row (the updater applies an offered release by
+/// itself, update/: there is nothing to click but a check).
+fn update_line(p: &Page) -> String {
+    if p.restart_pending {
+        return "Update installed — restarting".to_string();
     }
     if let Some(r) = &p.reinstall_required {
-        return crate::update::reinstall_line(&r.version);
+        return format!("{}: re-install from the website", r.version);
     }
     match (
         &p.update_available,
         &p.last_update_result,
         &p.last_update_check,
     ) {
-        (Some(v), _, _) => format!("Updates: {v} available"),
-        (None, Some(r), Some(t)) => format!("Updates: {r} · {}", clock(t)),
-        (None, Some(r), None) => format!("Updates: {r}"),
+        (Some(v), _, _) => format!("Updating to {v}…"),
+        (None, Some(r), Some(t)) => format!("Updates: {} · {}", brief(r, 32), clock(t)),
+        (None, Some(r), None) => format!("Updates: {}", brief(r, 32)),
         _ => "Updates: not checked yet".to_string(),
+    }
+}
+
+/// One of the switches, as the menu draws it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Switch {
+    pub text: String,
+    pub checked: bool,
+    pub enabled: bool,
+}
+
+/// `key`'s switch from the settings block (module doc): the box's value, or
+/// the one on its way; why one did not take; enabled for the operator while
+/// the box can be asked.
+pub fn switch(key: Key, s: &View, may_change: bool) -> Switch {
+    let kept = match key {
+        Key::AwakeHold => s.awake_hold,
+        Key::ClaudeRemoteControl => s.claude_remote_control,
+        Key::Santree => s.santree,
+    };
+    let label = key.label();
+    let pending = s.pending.iter().find(|p| p.key == key);
+    let failed = s.failed.iter().find(|f| f.key == key);
+    let (text, checked) = match (pending, failed) {
+        (Some(p), _) if p.via == Via::Browser => {
+            (format!("{label} — confirm in the browser…"), p.want)
+        }
+        (Some(p), _) => (format!("{label} — sending…"), p.want),
+        (None, Some(f)) => (
+            format!("{label} — not changed: {}", brief(&f.why, 40)),
+            kept,
+        ),
+        (None, None) => (label.to_string(), kept),
+    };
+    Switch {
+        text,
+        checked,
+        enabled: may_change && s.linked,
+    }
+}
+
+/// The row under the switches: who may change them, or why they cannot be
+/// changed now; "—" when they can.
+pub fn switches_note(s: &View, may_change: bool) -> String {
+    if !may_change {
+        return match &s.operator {
+            Some(name) => format!("Only {name} can change these"),
+            None => "Only the user who installed the agent can change these".into(),
+        };
+    }
+    if !s.linked {
+        return "Changes need the box: not connected".into();
+    }
+    "—".into()
+}
+
+/// The value a click on `key`'s switch asks for: the other one — except
+/// santree while its page waits, which is opened again (santree ON).
+pub fn next_value(key: Key, s: &View) -> bool {
+    if let Some(p) = s.pending.iter().find(|p| p.key == key) {
+        return if p.via == Via::Browser { true } else { !p.want };
+    }
+    !match key {
+        Key::AwakeHold => s.awake_hold,
+        Key::ClaudeRemoteControl => s.claude_remote_control,
+        Key::Santree => s.santree,
+    }
+}
+
+/// Whether this user may change the settings: on macOS and Linux the
+/// operator the service names (or root); on Windows anyone at the desktop.
+fn may_change_here(s: &View) -> bool {
+    #[cfg(unix)]
+    {
+        // SAFETY: no arguments; cannot fail.
+        let me = unsafe { libc::getuid() };
+        me == 0 || s.operator_uid == Some(me)
+    }
+    #[cfg(windows)]
+    {
+        let _ = s;
+        true
+    }
+}
+
+/// The Connection submenu's lines (module doc).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConnectionRows {
+    pub title: String,
+    pub link: String,
+    pub vpn: String,
+    pub traffic: String,
+    pub address: String,
+    pub endpoint: String,
+    /// This machine's key: (as the row shows it, whole).
+    pub own_key: (String, String),
+    /// The box's key it trusts.
+    pub box_key: (String, String),
+}
+
+/// The Connection submenu for one read of the link (None: the service did
+/// not answer, or this is the controller).
+pub fn connection_rows(link: Option<&LinkPage>) -> ConnectionRows {
+    let dash = || "—".to_string();
+    let Some(l) = link else {
+        return ConnectionRows {
+            title: "Connection · unknown".into(),
+            link: "Box: —".into(),
+            vpn: "VPN: —".into(),
+            traffic: "Traffic: —".into(),
+            address: "Tunnel address: —".into(),
+            endpoint: "Endpoint: —".into(),
+            own_key: (format!("{OWN_KEY}: —"), dash()),
+            box_key: ("Box's key: —".into(), dash()),
+        };
+    };
+    let at = l.address.as_deref().map(short);
+    let at = at.as_deref().unwrap_or("not found yet");
+    let joined = !(cfg!(target_os = "macos") && l.tunnel.is_none());
+    let link_line = match (l.state.as_deref(), l.error.as_deref()) {
+        _ if !joined => "Box: not logged in — choose Log in…".to_string(),
+        (Some("unpaired"), _) => "Box: not paired — choose Pair with the box…".into(),
+        (Some("approved"), _) if l.connected => match l.since.as_deref() {
+            Some(t) => format!("Box: {at} — approved, linked {}", clock(t)),
+            None => format!("Box: {at} — approved"),
+        },
+        (Some("pending"), _) => format!("Box: {at} — waiting for approval"),
+        (Some("revoked"), _) => format!("Box: {at} — revoked by the box"),
+        (Some("key-changed"), _) => format!("Box: {at} — KEY CHANGED, refused"),
+        (_, Some(e)) => format!("Box: {at} — {}", brief(e, 40)),
+        (Some(s), None) => format!("Box: {at} — {s}"),
+        (None, None) => "Box: none found; set controller_address".into(),
+    };
+    let (title, vpn, traffic, address, endpoint) = match &l.tunnel {
+        Some(t) => {
+            let up = t.error.is_none()
+                && t.last_handshake_secs
+                    .is_some_and(|s| s < HANDSHAKE_STALE_SECS);
+            let vpn = match (&t.error, t.last_handshake_secs) {
+                (Some(e), _) => format!("VPN: down — {}", brief(e, 40)),
+                (None, Some(s)) if s < HANDSHAKE_STALE_SECS => {
+                    format!("VPN: up · handshake {s} s ago")
+                }
+                (None, Some(s)) => format!("VPN: down · last handshake {s} s ago"),
+                (None, None) => "VPN: no handshake yet".into(),
+            };
+            (
+                format!("Connection · VPN {}", if up { "up" } else { "down" }),
+                vpn,
+                format!("Traffic: ↓ {} · ↑ {}", bytes(t.rx_bytes), bytes(t.tx_bytes)),
+                format!(
+                    "Tunnel address: {}",
+                    if t.address.is_empty() {
+                        "—"
+                    } else {
+                        &t.address
+                    }
+                ),
+                format!("Endpoint: {}", short(&t.endpoint)),
+            )
+        }
+        None => (
+            if joined {
+                "Connection · direct".into()
+            } else {
+                "Connection · logged out".into()
+            },
+            if joined {
+                "VPN: none (direct to the box)".into()
+            } else {
+                "VPN: —".into()
+            },
+            "Traffic: —".into(),
+            "Tunnel address: —".into(),
+            "Endpoint: —".into(),
+        ),
+    };
+    let own = if l.fingerprint.is_empty() {
+        (format!("{OWN_KEY}: —"), dash())
+    } else {
+        (
+            format!("{OWN_KEY}: {}", short_fingerprint(&l.fingerprint)),
+            l.fingerprint.clone(),
+        )
+    };
+    let theirs = match &l.controller_fingerprint {
+        Some(fp) => (
+            format!("Box's key: {} (pinned)", short_fingerprint(fp)),
+            fp.clone(),
+        ),
+        None => ("Box's key: none trusted yet".into(), dash()),
+    };
+    ConnectionRows {
+        title,
+        link: link_line,
+        vpn,
+        traffic,
+        address,
+        endpoint,
+        own_key: own,
+        box_key: theirs,
+    }
+}
+
+/// What this machine is called in the menu.
+#[cfg(target_os = "macos")]
+const OWN_KEY: &str = "This Mac's key";
+#[cfg(not(target_os = "macos"))]
+const OWN_KEY: &str = "This machine's key";
+
+/// The Claude submenu's lines: its title, the server's state, its folder,
+/// and the restart's words (how many sessions it ends).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaudeRows {
+    pub title: String,
+    pub server: String,
+    pub folder: String,
+    pub restart: String,
+}
+
+pub fn claude_rows(r: &Report, policy: &Policy) -> ClaudeRows {
+    let live = r.sessions.iter().filter(|s| s.alive).count();
+    let n = |k: usize| format!("{k} session{}", if k == 1 { "" } else { "s" });
+    let version = r
+        .server
+        .version
+        .as_deref()
+        .or(r.cli_version.as_deref())
+        .unwrap_or("");
+    let server = match r.state.as_str() {
+        "running" => format!("Remote control: running {version}"),
+        "starting" => format!("Remote control: starting {version}"),
+        "waiting" => format!(
+            "Remote control: exited — {}",
+            brief(r.detail.as_deref().unwrap_or("retrying"), 40)
+        ),
+        "off" => "Remote control: off (the box's policy)".into(),
+        "not-installed" => "Remote control: Claude Code is not installed for this user".into(),
+        "no-session" => "Remote control: the session is not reporting".into(),
+        "" => "Remote control: —".into(),
+        other => format!("Remote control: {other}"),
+    };
+    let title = match r.state.as_str() {
+        "running" => format!("Claude · {}", n(live)),
+        "off" => "Claude · off".into(),
+        "" => "Claude".into(),
+        _ => "Claude · not running".into(),
+    };
+    let home = |p: &str| match r.home.as_deref() {
+        Some(h) if !h.is_empty() && p.starts_with(h) => format!("~{}", &p[h.len()..]),
+        _ => p.to_string(),
+    };
+    let folder = match (&policy.claude_workdir, &r.workdir) {
+        (Some(w), _) => format!("Folder: {} (set in Daedalus)", short(&home(w))),
+        (None, Some(w)) => format!("Folder: {} (the latest project)", short(&home(w))),
+        (None, None) => "Folder: the latest project".into(),
+    };
+    let restart = if live > 0 {
+        format!("Restart remote control (ends {})", n(live))
+    } else {
+        "Restart remote control".into()
+    };
+    ClaudeRows {
+        title,
+        server,
+        folder,
+        restart,
+    }
+}
+
+/// The santree submenu's lines (macOS, Linux).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SantreeRows {
+    pub title: String,
+    pub host: String,
+    pub open: String,
+    pub refused: String,
+}
+
+pub fn santree_rows(p: Option<&Page>) -> SantreeRows {
+    let door = p.and_then(|p| p.santree.clone()).unwrap_or_default();
+    let on = p.is_some_and(|p| p.policy.santree);
+    let title = if !on {
+        "santree · off".to_string()
+    } else {
+        format!("santree · {} open", door.open)
+    };
+    let host = match p.and_then(|p| p.policy.session_host.as_ref()) {
+        Some(h) if on => format!("Session host: {}", short(&h.address)),
+        _ => "Session host: —".into(),
+    };
+    let open = if door.max == 0 {
+        "Open connections: —".to_string()
+    } else {
+        format!("Open connections: {} of {}", door.open, door.max)
+    };
+    let refused = match &door.last_refused {
+        Some(r) => format!("Last refused: {} · {}", r.code, clock(&r.at)),
+        None => "Last refused: —".into(),
+    };
+    SantreeRows {
+        title,
+        host,
+        open,
+        refused,
+    }
+}
+
+// ── the menu itself ──────────────────────────────────────────────────────
+
+/// The menu's glyphs (macOS): Lucide icons by name, each a template image in
+/// the bundle's Resources as `<name>Template.png` and `@2x` (macos/icons/).
+/// Outside a bundle (a development build) AppKit finds none, and the rows
+/// have no icon.
+pub const ICONS: [&str; 10] = [
+    "layout-dashboard",
+    "settings",
+    "network",
+    "sparkles",
+    "trees",
+    "refresh-cw",
+    "life-buoy",
+    "user",
+    "trash-2",
+    "power",
+];
+
+#[cfg(target_os = "macos")]
+fn glyph(name: &str) -> tray_icon::menu::NativeIcon {
+    debug_assert!(ICONS.contains(&name));
+    tray_icon::menu::NativeIcon::from_name(format!("{name}Template"))
+}
+
+/// A grey status dot for the header (AppKit has green, amber and red; its
+/// "none" is clear), the size of theirs: 36 px for muda's 18 points.
+#[cfg(target_os = "macos")]
+fn grey_dot() -> Result<tray_icon::menu::Icon> {
+    const SIZE: u32 = 36;
+    let (c, r) = (SIZE as f32 / 2.0, 7.0_f32);
+    let mut rgba = Vec::with_capacity((SIZE * SIZE * 4) as usize);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let d = ((x as f32 + 0.5 - c).powi(2) + (y as f32 + 0.5 - c).powi(2)).sqrt();
+            let a = (r + 0.5 - d).clamp(0.0, 1.0);
+            rgba.extend_from_slice(&[142, 142, 147, (a * 255.0) as u8]);
+        }
+    }
+    tray_icon::menu::Icon::from_rgba(rgba, SIZE, SIZE).context("the grey dot")
+}
+
+/// A value's submenu: the whole value (a disabled row) and Copy, where the
+/// OS has a clipboard to reach (not Linux).
+struct Copyable {
+    menu: Submenu,
+    full: MenuItem,
+    #[cfg(any(target_os = "macos", windows))]
+    copy: MenuItem,
+    value: String,
+}
+
+impl Copyable {
+    fn new() -> Result<Self> {
+        let menu = Submenu::new("…", true);
+        let full = MenuItem::new("—", false, None);
+        menu.append(&full).context("building the menu")?;
+        #[cfg(any(target_os = "macos", windows))]
+        let copy = MenuItem::new("Copy", true, None);
+        #[cfg(any(target_os = "macos", windows))]
+        menu.append(&copy).context("building the menu")?;
+        Ok(Self {
+            menu,
+            full,
+            #[cfg(any(target_os = "macos", windows))]
+            copy,
+            value: String::new(),
+        })
+    }
+
+    fn show(&mut self, (row, full): &(String, String)) {
+        self.menu.set_text(row);
+        self.full.set_text(full);
+        let known = full != "—";
+        #[cfg(any(target_os = "macos", windows))]
+        self.copy.set_enabled(known);
+        self.value = if known { full.clone() } else { String::new() };
     }
 }
 
@@ -156,101 +729,197 @@ struct Ui {
     tray: TrayIcon,
     icons: Icons,
     look: Look,
-    line_hold: MenuItem,
-    line_update: MenuItem,
-    line_link: MenuItem,
-    /// The machine's own tunnel (`tunnel_line`): in the menu, under the link's
-    /// line, only while a tunnel config governs the machine.
-    line_tunnel: MenuItem,
-    tunnel_shown: bool,
-    line_key_own: MenuItem,
-    line_key_controller: MenuItem,
-    line_claude: MenuItem,
-    /// The menu, kept to add and take away `join` (and `log_out`).
-    menu: Menu,
-    /// `JOIN_LABEL`: in the menu only while the machine has not joined the
-    /// box — unpaired, or on a Mac logged out.
-    join: MenuItem,
-    join_shown: bool,
-    /// "Log out": on a Mac, in the menu only while it is logged in.
+    header: IconMenuItem,
+    header_now: Option<Header>,
     #[cfg(target_os = "macos")]
-    log_out: MenuItem,
+    grey: tray_icon::menu::Icon,
+    open_app: IconMenuItem,
+    this_machine: IconMenuItem,
+    awake: CheckMenuItem,
+    claude_rc: CheckMenuItem,
+    #[cfg(unix)]
+    santree: CheckMenuItem,
+    note: MenuItem,
+    connection: Submenu,
+    link: MenuItem,
+    vpn: MenuItem,
+    traffic: MenuItem,
+    address: MenuItem,
+    endpoint: MenuItem,
+    own_key: Copyable,
+    box_key: Copyable,
+    claude: Submenu,
+    claude_server: MenuItem,
+    claude_folder: MenuItem,
+    update_claude: MenuItem,
+    restart_claude: MenuItem,
+    open_claude_log: MenuItem,
+    #[cfg(unix)]
+    santree_menu: Submenu,
+    #[cfg(unix)]
+    santree_host: MenuItem,
+    #[cfg(unix)]
+    santree_open: MenuItem,
+    #[cfg(unix)]
+    santree_refused: MenuItem,
+    updates: Submenu,
+    check_now: MenuItem,
+    open_status: MenuItem,
+    open_logs: MenuItem,
+    /// Log in / log out (a Mac), pair (elsewhere): one row whose words swap.
+    account: IconMenuItem,
     #[cfg(target_os = "macos")]
-    log_out_shown: bool,
-    /// "Uninstall Daedalus Agent…", above Quit (os/macos/tray.rs).
+    uninstall: IconMenuItem,
+    quit: IconMenuItem,
+    /// The settings as last read, for a click's next value.
+    settings: Option<View>,
+    /// Whether the account row logs out (a Mac logged in) rather than in.
     #[cfg(target_os = "macos")]
-    uninstall: MenuItem,
-    /// Login Items' switch for the service, off: shown, and opens that pane,
-    /// while the service does not answer because the user turned it off.
-    #[cfg(target_os = "macos")]
-    login_items: MenuItem,
-    #[cfg(target_os = "macos")]
-    login_items_shown: bool,
+    logged_in: bool,
     /// When Login Items was last asked: at most once a minute, and only while
-    /// the service does not answer (review N4).
+    /// the service does not answer.
     #[cfg(target_os = "macos")]
     login_asked: Option<std::time::Instant>,
-    open_status: MenuItem,
-    check_now: MenuItem,
-    restart_claude: MenuItem,
-    open_logs: MenuItem,
-    open_claude_log: MenuItem,
-    quit: MenuItem,
+    #[cfg(target_os = "macos")]
+    switched_off: bool,
 }
 
 impl Ui {
-    fn build(quit_label: &str) -> Result<Self> {
+    fn build() -> Result<Self> {
         let icons = Icons {
             ok: decode(ICON_OK)?,
             warn: decode(ICON_WARN)?,
             off: decode(ICON_OFF)?,
         };
-        let title = MenuItem::new(format!("{DISPLAY_NAME} {VERSION}"), false, None);
-        let line_hold = MenuItem::new("Awake hold: …", false, None);
-        let line_update = MenuItem::new("Updates: …", false, None);
-        let line_link = MenuItem::new("Controller: …", false, None);
-        let line_tunnel = MenuItem::new("VPN: …", false, None);
-        let line_key_own = MenuItem::new("This machine's key: …", false, None);
-        let line_key_controller = MenuItem::new("Controller's key: …", false, None);
-        let line_claude = MenuItem::new("Claude: …", false, None);
-        let join = MenuItem::new(JOIN_LABEL, true, None);
+        let item = |text: &str, enabled: bool| IconMenuItem::new(text, enabled, None, None);
+        let line = |text: &str| MenuItem::new(text, false, None);
+        let header = item("…", true);
+        let about = line(&format!("{DISPLAY_NAME} {VERSION}"));
+        let open_app = item("Open Daedalus", true);
         #[cfg(target_os = "macos")]
-        let log_out = MenuItem::new("Log out", true, None);
-        #[cfg(target_os = "macos")]
-        let uninstall = MenuItem::new(format!("Uninstall {DISPLAY_NAME}…"), true, None);
-        #[cfg(target_os = "macos")]
-        let login_items = MenuItem::new(LOGIN_ITEMS_LABEL, true, None);
-        let open_status = MenuItem::new("Show status", true, None);
-        let check_now = MenuItem::new("Check for updates now", true, None);
-        let restart_claude = MenuItem::new("Restart Claude remote control", true, None);
-        let open_logs = MenuItem::new("Open logs folder", true, None);
-        let open_claude_log = MenuItem::new("Open Claude remote-control log", true, None);
-        let quit = MenuItem::new(quit_label, true, None);
+        let this_machine = IconMenuItem::new(
+            "This Mac in Daedalus…",
+            true,
+            None,
+            Some(cmd(tray_icon::menu::accelerator::Code::Comma)),
+        );
+        #[cfg(not(target_os = "macos"))]
+        let this_machine = item("This machine in Daedalus…", true);
+        let check = |key: Key| CheckMenuItem::new(key.label(), false, false, None);
+        let awake = check(Key::AwakeHold);
+        let claude_rc = check(Key::ClaudeRemoteControl);
+        #[cfg(unix)]
+        let santree = check(Key::Santree);
+        let note = line("—");
 
-        let menu = Menu::new();
-        menu.append_items(&[
-            &title,
-            &line_hold,
-            &line_update,
-            &line_link,
-            &line_key_own,
-            &line_key_controller,
-            &line_claude,
-            &PredefinedMenuItem::separator(),
-            &open_status,
-            &check_now,
-            &restart_claude,
-            &open_logs,
-            &open_claude_log,
-            &PredefinedMenuItem::separator(),
-        ])
-        .context("building the menu")?;
+        let connection = Submenu::new("Connection", true);
+        let (link, vpn, traffic, address, endpoint) = (
+            line("Box: …"),
+            line("VPN: …"),
+            line("Traffic: …"),
+            line("Tunnel address: …"),
+            line("Endpoint: …"),
+        );
+        let own_key = Copyable::new()?;
+        let box_key = Copyable::new()?;
+        connection
+            .append_items(&[
+                &link,
+                &vpn,
+                &traffic,
+                &address,
+                &endpoint,
+                &PredefinedMenuItem::separator(),
+                &own_key.menu,
+                &box_key.menu,
+            ])
+            .context("building the menu")?;
+
+        let claude = Submenu::new("Claude", true);
+        let claude_server = line("Remote control: …");
+        let claude_folder = line("Folder: …");
+        let update_claude = MenuItem::new("Update Claude Code", true, None);
+        let restart_claude = MenuItem::new("Restart remote control", true, None);
+        let open_claude_log = MenuItem::new("Open remote-control log", true, None);
+        claude
+            .append_items(&[
+                &claude_server,
+                &claude_folder,
+                &PredefinedMenuItem::separator(),
+                &update_claude,
+                &restart_claude,
+                &open_claude_log,
+            ])
+            .context("building the menu")?;
+
+        #[cfg(unix)]
+        let santree_menu = Submenu::new("santree", true);
+        #[cfg(unix)]
+        let (santree_host, santree_open, santree_refused) = (
+            line("Session host: …"),
+            line("Open connections: …"),
+            line("Last refused: …"),
+        );
+        #[cfg(unix)]
+        santree_menu
+            .append_items(&[&santree_host, &santree_open, &santree_refused])
+            .context("building the menu")?;
+
+        let updates = Submenu::new("Updates: …", true);
+        let check_now = MenuItem::new("Check for updates now", true, None);
+        updates.append(&check_now).context("building the menu")?;
+        let troubleshoot = Submenu::new("Troubleshoot", true);
+        let open_status = MenuItem::new("Show status (JSON)", true, None);
+        let open_logs = MenuItem::new("Open logs folder", true, None);
+        troubleshoot
+            .append_items(&[&open_status, &open_logs])
+            .context("building the menu")?;
+
+        let account = item(JOIN_LABEL, true);
         #[cfg(target_os = "macos")]
-        menu.append(&uninstall).context("building the menu")?;
-        menu.append(&quit).context("building the menu")?;
+        let uninstall = item(&format!("Uninstall {DISPLAY_NAME}…"), true);
+        #[cfg(target_os = "macos")]
+        let quit = IconMenuItem::new(
+            QUIT_LABEL,
+            true,
+            None,
+            Some(cmd(tray_icon::menu::accelerator::Code::KeyQ)),
+        );
+        #[cfg(not(target_os = "macos"))]
+        let quit = item(QUIT_LABEL, true);
+
+        let sep = PredefinedMenuItem::separator;
+        let (s1, s2, s3, s4, s5) = (sep(), sep(), sep(), sep(), sep());
+        let mut rows: Vec<&dyn IsMenuItem> = vec![&header, &about, &s1, &open_app, &this_machine];
+        rows.extend([&s2 as &dyn IsMenuItem, &awake, &claude_rc]);
+        #[cfg(unix)]
+        rows.push(&santree);
+        rows.extend([&note as &dyn IsMenuItem, &s3, &connection, &claude]);
+        #[cfg(unix)]
+        rows.push(&santree_menu);
+        rows.extend([&updates as &dyn IsMenuItem, &troubleshoot, &s4, &account]);
+        #[cfg(target_os = "macos")]
+        rows.push(&uninstall);
+        rows.extend([&s5 as &dyn IsMenuItem, &quit]);
+        let menu = Menu::new();
+        menu.append_items(&rows).context("building the menu")?;
+
+        #[cfg(target_os = "macos")]
+        {
+            open_app.set_native_icon(Some(glyph("layout-dashboard")));
+            this_machine.set_native_icon(Some(glyph("settings")));
+            connection.set_native_icon(Some(glyph("network")));
+            claude.set_native_icon(Some(glyph("sparkles")));
+            santree_menu.set_native_icon(Some(glyph("trees")));
+            updates.set_native_icon(Some(glyph("refresh-cw")));
+            troubleshoot.set_native_icon(Some(glyph("life-buoy")));
+            account.set_native_icon(Some(glyph("user")));
+            uninstall.set_native_icon(Some(glyph("trash-2")));
+            quit.set_native_icon(Some(glyph("power")));
+        }
 
         let tray = TrayIconBuilder::new()
-            .with_menu(Box::new(menu.clone()))
+            .with_menu(Box::new(menu))
             .with_tooltip(format!("{DISPLAY_NAME} {VERSION}"))
             .with_icon(icons.off.clone())
             .build()
@@ -260,35 +929,54 @@ impl Ui {
             tray,
             icons,
             look: Look::Off,
-            line_hold,
-            line_update,
-            line_link,
-            line_tunnel,
-            tunnel_shown: false,
-            line_key_own,
-            line_key_controller,
-            line_claude,
-            menu,
-            join,
-            join_shown: false,
+            header,
+            header_now: None,
             #[cfg(target_os = "macos")]
-            log_out,
-            #[cfg(target_os = "macos")]
-            log_out_shown: false,
+            grey: grey_dot()?,
+            open_app,
+            this_machine,
+            awake,
+            claude_rc,
+            #[cfg(unix)]
+            santree,
+            note,
+            connection,
+            link,
+            vpn,
+            traffic,
+            address,
+            endpoint,
+            own_key,
+            box_key,
+            claude,
+            claude_server,
+            claude_folder,
+            update_claude,
+            restart_claude,
+            open_claude_log,
+            #[cfg(unix)]
+            santree_menu,
+            #[cfg(unix)]
+            santree_host,
+            #[cfg(unix)]
+            santree_open,
+            #[cfg(unix)]
+            santree_refused,
+            updates,
+            check_now,
+            open_status,
+            open_logs,
+            account,
             #[cfg(target_os = "macos")]
             uninstall,
+            quit,
+            settings: None,
             #[cfg(target_os = "macos")]
-            login_items,
-            #[cfg(target_os = "macos")]
-            login_items_shown: false,
+            logged_in: false,
             #[cfg(target_os = "macos")]
             login_asked: None,
-            open_status,
-            check_now,
-            restart_claude,
-            open_logs,
-            open_claude_log,
-            quit,
+            #[cfg(target_os = "macos")]
+            switched_off: false,
         })
     }
 
@@ -305,204 +993,186 @@ impl Ui {
         self.look = look;
     }
 
-    /// Reflect one read of the page (or its absence) and the supervisor's state.
-    fn show(&mut self, page: Option<&Page>, claude: &Report, claude_wanted: bool) {
-        let claude_line = claude_line(claude);
-        self.line_claude.set_text(&claude_line);
-
-        #[cfg(target_os = "macos")]
-        self.show_login_items(page.is_none());
-        // Login Items has the service switched off (a Mac's, in the menu).
-        #[cfg(target_os = "macos")]
-        let switched_off = self.login_items_shown;
-        #[cfg(not(target_os = "macos"))]
-        let switched_off = false;
-        let Some(p) = page else {
-            self.set_look(Look::Off);
-            self.line_hold.set_text(if switched_off {
-                "Awake hold: the service is off in Login Items"
-            } else {
-                "Awake hold: service not answering"
-            });
-            self.line_update.set_text("Updates: unknown");
-            self.line_link.set_text("Controller: unknown");
-            let _ = self.tray.set_tooltip(Some(format!(
-                "{DISPLAY_NAME} {VERSION}\nService not answering\n{claude_line}"
-            )));
+    /// The header's dot and line; the dot only where the OS draws one.
+    fn set_header(&mut self, h: Header) {
+        if self.header_now.as_ref() == Some(&h) {
             return;
-        };
-
-        let hold = if p.awake_hold {
-            "Awake hold: on".to_string()
-        } else if !p.policy.awake_hold {
-            "Awake hold: off — the box lets this machine sleep".to_string()
-        } else {
-            match &p.hold_error {
-                Some(e) => format!("Awake hold: OFF — {e}"),
-                None => "Awake hold: OFF".to_string(),
-            }
-        };
-        let update = update_line(p);
-        self.line_hold.set_text(&hold);
-        self.line_update.set_text(&update);
-        let (link, own, theirs) = link_lines(p.controller.as_ref());
-        // A log-in waiting for the browser says so where the link would.
+        }
+        self.header.set_text(&h.text);
         #[cfg(target_os = "macos")]
-        let link = crate::os::tray::log_in_note().unwrap_or(link);
-        self.line_link.set_text(&link);
-        self.line_key_own.set_text(&own);
-        self.line_key_controller.set_text(&theirs);
-        self.show_tunnel(p.controller.as_ref().and_then(|l| l.tunnel.as_ref()));
-        let link_bad = p.controller.as_ref().is_some_and(|l| {
-            matches!(
-                l.state.as_deref(),
-                Some("key-changed" | "revoked" | "refused")
-            )
-        });
-        // Not joined to the box: unpaired — on a Mac, no tunnel config (it
-        // logs in rather than pairs, enroll.rs).
-        let unpaired = if cfg!(target_os = "macos") {
-            p.controller.as_ref().is_some_and(|l| l.tunnel.is_none())
-        } else {
-            p.controller
-                .as_ref()
-                .is_some_and(|l| l.state.as_deref() == Some("unpaired"))
-        };
-        self.show_join(unpaired);
-        #[cfg(target_os = "macos")]
-        self.show_log_out(p.controller.as_ref().is_some_and(|l| l.tunnel.is_some()));
-
-        // The hold is a fault only when the box wants it; Claude, only when
-        // it is wanted and not (yet) running.
-        let hold_bad = !p.awake_hold && p.policy.awake_hold;
-        let claude_bad = claude_wanted && !matches!(claude.state.as_str(), "running" | "starting");
-        let short = if link_bad {
-            "controller refused — see the menu"
-        } else if unpaired {
-            UNJOINED
-        } else if hold_bad {
-            "awake hold OFF"
-        } else if p.restart_pending || p.update_available.is_some() {
-            "update pending"
-        } else if p.reinstall_required.is_some() {
-            "a newer version needs a re-install — see the menu"
-        } else if claude_bad {
-            "Claude remote control not running"
-        } else {
-            "up to date"
-        };
-        let _ = self.tray.set_tooltip(Some(format!(
-            "{DISPLAY_NAME} {}\n{short}\n{claude_line}",
-            p.version
-        )));
-
-        let look = if link_bad
-            || unpaired
-            || hold_bad
-            || p.update_available.is_some()
-            || p.reinstall_required.is_some()
-            || p.restart_pending
-            || claude_bad
         {
-            Look::Warn
-        } else {
-            Look::Ok
-        };
-        self.set_look(look);
+            use tray_icon::menu::NativeIcon;
+            match h.dot {
+                Dot::Green => self
+                    .header
+                    .set_native_icon(Some(NativeIcon::StatusAvailable)),
+                Dot::Amber => self
+                    .header
+                    .set_native_icon(Some(NativeIcon::StatusPartiallyAvailable)),
+                Dot::Red => self
+                    .header
+                    .set_native_icon(Some(NativeIcon::StatusUnavailable)),
+                Dot::Grey => self.header.set_icon(Some(self.grey.clone())),
+            }
+        }
+        self.header_now = Some(h);
     }
 
-    /// Where the actions start: after the title, the lines (six, and the
-    /// tunnel's when shown) and the separator.
-    fn actions_at(&self) -> usize {
-        8 + usize::from(self.tunnel_shown)
-    }
-
-    /// "Turn the service on in Login Items…", where joining goes, while the
-    /// service does not answer (`silent`) and Login Items says the user
-    /// switched it off; asked at most once a minute.
+    /// Whether Login Items has the service switched off: asked only while
+    /// the service does not answer (`silent`), at most once a minute.
     #[cfg(target_os = "macos")]
-    fn show_login_items(&mut self, silent: bool) {
-        let now = std::time::Instant::now();
-        let off = silent
-            && match self.login_asked {
-                Some(t) if now.duration_since(t) < std::time::Duration::from_secs(60) => {
-                    self.login_items_shown
-                }
-                _ => {
-                    self.login_asked = Some(now);
-                    crate::os::tray::service_switched_off()
-                }
-            };
+    fn login_items_off(&mut self, silent: bool) -> bool {
         if !silent {
             self.login_asked = None;
+            self.switched_off = false;
+            return false;
         }
-        if off == self.login_items_shown {
-            return;
+        let now = std::time::Instant::now();
+        let due = self
+            .login_asked
+            .is_none_or(|t| now.duration_since(t) >= std::time::Duration::from_secs(60));
+        if due {
+            self.login_asked = Some(now);
+            self.switched_off = crate::os::tray::service_switched_off();
         }
-        let done = if off {
-            self.menu.insert(&self.login_items, self.actions_at())
-        } else {
-            self.menu.remove(&self.login_items)
-        };
-        if done.is_ok() {
-            self.login_items_shown = off;
-        }
+        self.switched_off
     }
 
-    /// The tunnel's line, under the link's, while there is a tunnel.
-    fn show_tunnel(&mut self, tunnel: Option<&crate::link::TunnelStatus>) {
-        if let Some(t) = tunnel {
-            self.line_tunnel.set_text(tunnel_line(t));
+    /// Reflect one read of the page (or its absence) and the supervisor's
+    /// state. Every row is set on every read, so the menu is right even
+    /// while it is open, and a switch muda flipped on its click shows the
+    /// service's value again in the same pass.
+    fn show(&mut self, page: Option<&Page>, claude: &Report, claude_wanted: bool) {
+        #[cfg(target_os = "macos")]
+        let switched_off = self.login_items_off(page.is_none());
+        #[cfg(not(target_os = "macos"))]
+        let switched_off = false;
+        #[allow(unused_mut)]
+        let mut head = header(page, switched_off, claude, claude_wanted);
+        // A log-in waiting for the browser says so, with this Mac's key to
+        // compare with the page's.
+        #[cfg(target_os = "macos")]
+        if let Some(note) = crate::os::tray::log_in_note() {
+            head = Header {
+                dot: Dot::Amber,
+                text: note,
+                login_items: false,
+            };
         }
-        if tunnel.is_some() == self.tunnel_shown {
-            return;
-        }
-        let done = if tunnel.is_some() {
-            // The title, the awake hold, updates and the link come first.
-            self.menu.insert(&self.line_tunnel, 4)
-        } else {
-            self.menu.remove(&self.line_tunnel)
-        };
-        if done.is_ok() {
-            self.tunnel_shown = tunnel.is_some();
-        }
-    }
 
-    /// The joining entry, just above "Show status", while unjoined.
-    fn show_join(&mut self, unjoined: bool) {
-        if unjoined == self.join_shown {
-            return;
-        }
-        let done = if unjoined {
-            self.menu.insert(&self.join, self.actions_at())
-        } else {
-            self.menu.remove(&self.join)
+        // The switches.
+        let settings = page.and_then(|p| p.settings.clone());
+        let may = settings.as_ref().is_some_and(may_change_here);
+        let set_switch = |item: &CheckMenuItem, key: Key| match &settings {
+            Some(s) => {
+                let sw = switch(key, s, may);
+                item.set_text(&sw.text);
+                item.set_checked(sw.checked);
+                item.set_enabled(sw.enabled);
+            }
+            None => {
+                item.set_text(key.label());
+                item.set_checked(false);
+                item.set_enabled(false);
+            }
         };
-        if done.is_ok() {
-            self.join_shown = unjoined;
-        }
-    }
+        set_switch(&self.awake, Key::AwakeHold);
+        set_switch(&self.claude_rc, Key::ClaudeRemoteControl);
+        #[cfg(unix)]
+        set_switch(&self.santree, Key::Santree);
+        self.note.set_text(match &settings {
+            Some(s) => switches_note(s, may),
+            None if page.is_some() => "Restart the service to change these here".into(),
+            None => "—".into(),
+        });
+        self.settings = settings;
 
-    /// "Log out", in the same place, while a Mac is logged in.
-    #[cfg(target_os = "macos")]
-    fn show_log_out(&mut self, logged_in: bool) {
-        if logged_in == self.log_out_shown {
-            return;
+        // The app's two links.
+        let app = app_url();
+        self.open_app.set_enabled(app.is_some());
+        self.this_machine.set_enabled(app.is_some());
+
+        // Connection, Claude, santree, Updates.
+        let link = page.and_then(|p| p.controller.as_ref());
+        let rows = connection_rows(link);
+        self.connection.set_text(&rows.title);
+        self.link.set_text(&rows.link);
+        self.vpn.set_text(&rows.vpn);
+        self.traffic.set_text(&rows.traffic);
+        self.address.set_text(&rows.address);
+        self.endpoint.set_text(&rows.endpoint);
+        self.own_key.show(&rows.own_key);
+        self.box_key.show(&rows.box_key);
+        let policy = page.map(|p| p.policy.clone()).unwrap_or_default();
+        let c = claude_rows(claude, &policy);
+        self.claude.set_text(&c.title);
+        self.claude_server.set_text(&c.server);
+        self.claude_folder.set_text(&c.folder);
+        self.restart_claude.set_text(&c.restart);
+        #[cfg(unix)]
+        {
+            let s = santree_rows(page);
+            self.santree_menu.set_text(&s.title);
+            self.santree_host.set_text(&s.host);
+            self.santree_open.set_text(&s.open);
+            self.santree_refused.set_text(&s.refused);
         }
-        let done = if logged_in {
-            self.menu.insert(&self.log_out, self.actions_at())
-        } else {
-            self.menu.remove(&self.log_out)
+        self.updates.set_text(match page {
+            Some(p) => update_line(p),
+            None => "Updates: unknown".into(),
+        });
+
+        // The account row: log in or out (a Mac), pair (elsewhere).
+        #[cfg(target_os = "macos")]
+        {
+            self.logged_in = page.is_some_and(|p| !logged_out(p));
+            self.account.set_text(if self.logged_in {
+                "Log out of the box…"
+            } else {
+                JOIN_LABEL
+            });
+            self.account.set_enabled(page.is_some());
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let unpaired = page.is_some_and(logged_out);
+            self.account.set_text(if unpaired {
+                JOIN_LABEL
+            } else {
+                "Paired with the box"
+            });
+            self.account.set_enabled(unpaired);
+        }
+
+        // The icon and its tooltip.
+        let look = match (page, head.dot) {
+            (None, _) => Look::Off,
+            (Some(_), Dot::Green) => Look::Ok,
+            (Some(_), _) => Look::Warn,
         };
-        if done.is_ok() {
-            self.log_out_shown = logged_in;
-        }
+        let version = page.map_or(VERSION, |p| p.version.as_str());
+        let _ = self.tray.set_tooltip(Some(format!(
+            "{DISPLAY_NAME} {version}\n{}\n{}",
+            head.text, c.server
+        )));
+        self.set_look(look);
+        self.set_header(head);
     }
 }
 
-/// The Login Items entry (`Ui::show_login_items`).
+/// ⌘ and `code`: a Mac's key equivalent, which works while the menu is open.
 #[cfg(target_os = "macos")]
-const LOGIN_ITEMS_LABEL: &str = "The service is off: turn it on in Login Items…";
+fn cmd(code: tray_icon::menu::accelerator::Code) -> tray_icon::menu::accelerator::Accelerator {
+    tray_icon::menu::accelerator::Accelerator::new(
+        tray_icon::menu::accelerator::Modifiers::META,
+        code,
+    )
+}
+
+/// The app this machine logged in to (config.toml's `app_url`), if any.
+fn app_url() -> Option<String> {
+    config::load_for_user().ok().and_then(|c| c.app_url)
+}
 
 /// The entry that joins the box while the machine has not: a Mac logs in
 /// (enroll.rs, os/macos/tray.rs `join`), every other machine pairs
@@ -511,11 +1181,6 @@ const LOGIN_ITEMS_LABEL: &str = "The service is off: turn it on in Login Items�
 pub const JOIN_LABEL: &str = "Log in…";
 #[cfg(not(target_os = "macos"))]
 pub const JOIN_LABEL: &str = "Pair with the box…";
-/// The tooltip's word for a machine that has not joined.
-#[cfg(target_os = "macos")]
-const UNJOINED: &str = "logged out — Log in… in the menu";
-#[cfg(not(target_os = "macos"))]
-const UNJOINED: &str = "not paired — Pair with the box… in the menu";
 
 /// The pairing dialog's title and prompt (os/*/tray.rs `join`).
 #[cfg(not(target_os = "macos"))]
@@ -686,87 +1351,6 @@ pub fn pair_on_a_thread(ask: fn() -> Option<String>, tell: fn(&str, bool)) {
     }
 }
 
-/// The link's three menu lines: where the machine stands with the
-/// controller, and the two keys — this machine's and the controller's it
-/// trusts, in full, so the operator can compare them with Settings ›
-/// Machines before approving (link/node.rs).
-fn link_lines(link: Option<&crate::session::LinkPage>) -> (String, String, String) {
-    let Some(l) = link else {
-        return (
-            "Controller: not started yet".into(),
-            "This machine's key: —".into(),
-            "Controller's key: —".into(),
-        );
-    };
-    let at = l.address.as_deref().unwrap_or("not found yet");
-    let first = match (l.state.as_deref(), l.error.as_deref()) {
-        (Some("unpaired"), _) => "Controller: not paired — connects to nothing until paired".into(),
-        (Some("approved"), _) => format!("Controller: {at} — approved"),
-        (Some("pending"), _) => {
-            format!("Controller: {at} — waiting for approval; compare both keys")
-        }
-        (Some("revoked"), _) => format!("Controller: {at} — revoked by the box"),
-        (Some("key-changed"), _) => format!("Controller: {at} — KEY CHANGED, refused"),
-        (_, Some(e)) => format!("Controller: {at} — {e}"),
-        (Some(s), None) => format!("Controller: {at} — {s}"),
-        (None, None) => {
-            "Controller: none found; set controller_address (install --controller)".into()
-        }
-    };
-    let own = format!("This machine's key: {}", l.fingerprint);
-    // The one it trusts is config.toml's pin (link/node.rs).
-    let theirs = match (&l.controller_fingerprint, l.state.as_deref()) {
-        (Some(fp), _) => format!("Controller's key: {fp} (pinned)"),
-        (None, Some("unpaired")) => "Controller's key: none trusted yet".into(),
-        (None, _) => "Controller's key: not seen yet".into(),
-    };
-    (first, own, theirs)
-}
-
-/// A session older than this without a new handshake is gone (WireGuard's
-/// REJECT_AFTER_TIME); the tunnel's keepalive handshakes every two minutes.
-const HANDSHAKE_STALE_SECS: u64 = 180;
-
-/// The machine's own tunnel in one menu line (tunnel/): up or down, how
-/// fresh its handshake is, where it goes — or what went wrong.
-fn tunnel_line(t: &crate::link::TunnelStatus) -> String {
-    match (&t.error, t.last_handshake_secs) {
-        (Some(e), _) => format!("VPN: down — {e}"),
-        (None, Some(s)) if s < HANDSHAKE_STALE_SECS => {
-            format!("VPN: up · handshake {s} s ago · {}", t.endpoint)
-        }
-        (None, Some(s)) => format!("VPN: down · last handshake {s} s ago · {}", t.endpoint),
-        (None, None) => format!("VPN: no handshake yet · {}", t.endpoint),
-    }
-}
-
-/// One line for Claude Code, as the menu and the tooltip show it.
-fn claude_line(r: &Report) -> String {
-    let sessions = r.sessions.iter().filter(|s| s.alive).count();
-    let version = r
-        .server
-        .version
-        .as_deref()
-        .or(r.cli_version.as_deref())
-        .unwrap_or("");
-    match r.state.as_str() {
-        "running" => format!(
-            "Claude: remote control running {version} · {sessions} session{}",
-            if sessions == 1 { "" } else { "s" }
-        ),
-        "starting" => format!("Claude: remote control starting {version}"),
-        "waiting" => format!(
-            "Claude: remote control exited — {}",
-            r.detail.as_deref().unwrap_or("retrying")
-        ),
-        "off" => "Claude: remote control off (the box's policy)".to_string(),
-        "not-installed" => "Claude: Claude Code is not installed for this user".to_string(),
-        // Only a tray that watches a session elsewhere (session::Watcher).
-        "no-session" => "Claude: the session is not reporting".to_string(),
-        other => format!("Claude: remote control {other}"),
-    }
-}
-
 /// What a tick or a menu click decided.
 #[derive(PartialEq, Eq)]
 pub enum Flow {
@@ -796,7 +1380,7 @@ impl Tray {
         let places = Places::of_user(&cfg);
         let claude_log = places.claude_log.clone();
         // The icon first, then the session, as it always was.
-        let ui = Ui::build(QUIT_LABEL)?;
+        let ui = Ui::build()?;
         let session = if crate::os::TRAY_OWNS_SESSION {
             Backing::Owns(Box::new(Session::new(places)?))
         } else {
@@ -810,9 +1394,9 @@ impl Tray {
         })
     }
 
-    /// "Show status": the service's status document, as its local socket
-    /// answers it, written to `status.json` in the tray's log directory and
-    /// opened — there is no page to point a browser at.
+    /// "Show status (JSON)": the service's status document, as its local
+    /// socket answers it, written to `status.json` in the tray's log
+    /// directory and opened — there is no page to point a browser at.
     fn show_status(&self) {
         let text = match crate::local::call("status", serde_json::Value::Null) {
             Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
@@ -829,42 +1413,119 @@ impl Tray {
         }
     }
 
+    /// The app, at `path` (empty: its front page); nothing without one.
+    fn open_app(path: &str) {
+        if let Some(app) = app_url() {
+            open(&format!("{}{path}", app.trim_end_matches('/')));
+        }
+    }
+
+    /// A switch was clicked: the other value is asked for (`next_value`),
+    /// the page that confirms santree ON opened, and the page read again at
+    /// once so the row shows what became of it. muda flipped the check on
+    /// the click; the read puts the service's word back.
+    fn ask(&mut self, key: Key) {
+        if let Some(s) = &self.ui.settings {
+            let value = next_value(key, s);
+            let answer = crate::local::call_as::<crate::local::SetAnswer>(
+                "settings.set",
+                serde_json::json!({ "key": key, "value": value }),
+            );
+            if let Ok(crate::local::SetAnswer {
+                confirm_url: Some(url),
+                ..
+            }) = answer
+            {
+                // The service names a page on the app it logged in to; an
+                // https URL and nothing else is handed to the browser.
+                if url.starts_with("https://") {
+                    open(&url);
+                }
+            }
+        }
+        self.session.poll_now();
+    }
+
     /// Every menu click since the last look.
     pub fn menu(&mut self) -> Flow {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
             let id = ev.id();
-            #[cfg(target_os = "macos")]
-            if *id == self.ui.log_out.id() {
-                crate::os::tray::log_out();
-                continue;
+            let ui = &self.ui;
+            if *id == ui.quit.id() {
+                return Flow::Quit;
             }
             #[cfg(target_os = "macos")]
-            if *id == self.ui.uninstall.id() {
+            if *id == ui.uninstall.id() {
                 crate::os::tray::uninstall();
                 continue;
             }
-            #[cfg(target_os = "macos")]
-            if *id == self.ui.login_items.id() {
-                crate::os::tray::open_login_items();
-                continue;
+            #[cfg(any(target_os = "macos", windows))]
+            {
+                let copied = [&ui.own_key, &ui.box_key]
+                    .into_iter()
+                    .find(|k| *id == k.copy.id())
+                    .map(|k| k.value.clone());
+                if let Some(v) = copied {
+                    if !v.is_empty() {
+                        crate::os::tray::copy(&v);
+                    }
+                    continue;
+                }
             }
-            if *id == self.ui.join.id() {
+            if *id == ui.header.id() {
+                #[cfg(target_os = "macos")]
+                if ui.header_now.as_ref().is_some_and(|h| h.login_items) {
+                    crate::os::tray::open_login_items();
+                    continue;
+                }
+                Self::open_app("");
+            } else if *id == ui.open_app.id() {
+                Self::open_app("");
+            } else if *id == ui.this_machine.id() {
+                let node = ui.settings.as_ref().and_then(|s| s.node.clone());
+                Self::open_app(&match node {
+                    Some(n) => format!("/settings?tab=machines&node={n}"),
+                    None => "/settings?tab=machines".into(),
+                });
+            } else if *id == ui.awake.id() {
+                self.ask(Key::AwakeHold);
+            } else if *id == ui.claude_rc.id() {
+                self.ask(Key::ClaudeRemoteControl);
+            } else if cfg!(unix) && self.is_santree(id) {
+                self.ask(Key::Santree);
+            } else if *id == ui.account.id() {
+                #[cfg(target_os = "macos")]
+                if ui.logged_in {
+                    crate::os::tray::log_out();
+                    continue;
+                }
                 crate::os::tray::join();
-            } else if *id == self.ui.open_status.id() {
-                self.show_status();
-            } else if *id == self.ui.check_now.id() {
+            } else if *id == ui.check_now.id() {
                 self.session.check_updates_now();
-            } else if *id == self.ui.restart_claude.id() {
+            } else if *id == ui.update_claude.id() {
+                let _ = crate::local::call("claude.update", serde_json::Value::Null);
+                self.session.poll_now();
+            } else if *id == ui.restart_claude.id() {
                 self.session.restart_claude();
-            } else if *id == self.ui.open_logs.id() {
-                open(&self.logs.to_string_lossy());
-            } else if *id == self.ui.open_claude_log.id() {
+            } else if *id == ui.open_claude_log.id() {
                 open(&self.claude_log.to_string_lossy());
-            } else if *id == self.ui.quit.id() {
-                return Flow::Quit;
+            } else if *id == ui.open_status.id() {
+                self.show_status();
+            } else if *id == ui.open_logs.id() {
+                open(&self.logs.to_string_lossy());
             }
         }
         Flow::Continue
+    }
+
+    #[cfg(unix)]
+    fn is_santree(&self, id: &tray_icon::menu::MenuId) -> bool {
+        *id == self.ui.santree.id()
+    }
+
+    #[cfg(not(unix))]
+    fn is_santree(&self, _: &tray_icon::menu::MenuId) -> bool {
+        false
     }
 
     /// Advance the session and, when it polled, redraw. Quit means an
@@ -895,7 +1556,7 @@ impl Tray {
 /// built app (`DAEDALUS_AGENT_SMOKE`, os/macos/tray.rs).
 #[cfg(target_os = "macos")]
 pub fn smoke() -> Result<()> {
-    Ui::build(QUIT_LABEL).map(|_| ())
+    Ui::build().map(|_| ())
 }
 
 /// Write why the tray could not run where a windowless program can be
@@ -923,33 +1584,400 @@ pub fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::LinkPage;
+    use crate::link::TunnelStatus;
+    use crate::settings::{FailedView, PendingView};
     use std::ffi::OsString;
     use std::path::Path;
 
     #[test]
-    fn a_release_to_re_install_says_so_instead_of_up_to_date() {
-        use crate::session::Page;
+    fn the_updates_row_says_what_the_updater_is_doing() {
         let checked = Page {
             last_update_result: Some("up to date".into()),
             last_update_check: Some("2026-09-30T10:00:00Z".into()),
             ..Page::default()
         };
         assert_eq!(update_line(&checked), "Updates: up to date · 10:00");
-        let pending = Page {
-            update_available: Some("0.23.1".into()),
+        let offered = Page {
+            update_available: Some("0.25.1".into()),
             ..Page::default()
         };
-        assert_eq!(update_line(&pending), "Updates: 0.23.1 available");
+        assert_eq!(update_line(&offered), "Updating to 0.25.1…");
+        let restarting = Page {
+            restart_pending: true,
+            ..Page::default()
+        };
+        assert_eq!(update_line(&restarting), "Update installed — restarting");
         let reinstall = Page {
             reinstall_required: Some(crate::update::ReinstallRequired {
-                version: "0.24.0".into(),
+                version: "0.26.0".into(),
             }),
             ..checked
         };
         assert_eq!(
             update_line(&reinstall),
-            "Daedalus Agent 0.24.0 is available: re-install it from the website or with install.sh"
+            "0.26.0: re-install from the website"
+        );
+        assert_eq!(update_line(&Page::default()), "Updates: not checked yet");
+    }
+
+    fn linked_page() -> Page {
+        Page {
+            awake_hold: true,
+            policy: Policy {
+                awake_hold: true,
+                claude_remote_control: true,
+                ..Default::default()
+            },
+            controller: Some(LinkPage {
+                address: Some("box.lan:7788".into()),
+                state: Some("approved".into()),
+                connected: true,
+                since: Some("2026-09-30T09:12:00Z".into()),
+                fingerprint: "f876:e2c7:1a0b:2c3d:4e5f:6a7b:8c9d:0e1f:2a3b:4c5d:6e7f:8a9b:0c1d:2e3f:4a5b:8029".into(),
+                controller_fingerprint: Some("3a1b:0c9d:1111:2222:3333:4444:5555:6666:7777:8888:9999:aaaa:bbbb:cccc:dddd:77e2".into()),
+                error: None,
+                tunnel: Some(TunnelStatus {
+                    endpoint: "s2.toscanini.me:51820".into(),
+                    address: "10.8.0.5".into(),
+                    last_handshake_secs: Some(42),
+                    rx_bytes: 12_400_000,
+                    tx_bytes: 2_200_000,
+                    ..Default::default()
+                }),
+            }),
+            settings: Some(View {
+                linked: true,
+                awake_hold: true,
+                claude_remote_control: true,
+                operator_uid: Some(501),
+                operator: Some("santiago".into()),
+                ..Default::default()
+            }),
+            ..Page::default()
+        }
+    }
+
+    fn running() -> Report {
+        Report {
+            state: "running".into(),
+            ..Default::default()
+        }
+    }
+
+    /// One test per header state (module doc), in the order they win.
+    #[test]
+    fn the_header_has_one_state_for_every_way_things_stand() {
+        let ok = linked_page();
+        let r = running();
+        let h = |p: Option<&Page>, off: bool, claude: &Report, wanted: bool| {
+            let h = header(p, off, claude, wanted);
+            (h.dot, h.text)
+        };
+        assert_eq!(
+            h(Some(&ok), false, &r, true),
+            (Dot::Green, "Daedalus Agent is connected".into())
+        );
+        // The service is silent: switched off in Login Items, or not answering.
+        let off = header(None, true, &r, true);
+        assert_eq!((off.dot, off.login_items), (Dot::Grey, true));
+        assert_eq!(off.text, "The service is off in Login Items");
+        assert_eq!(
+            h(None, false, &r, true),
+            (Dot::Red, "The service is not answering".into())
+        );
+        // Not joined.
+        let mut out = linked_page();
+        if cfg!(target_os = "macos") {
+            out.controller.as_mut().unwrap().tunnel = None;
+        } else {
+            out.controller.as_mut().unwrap().state = Some("unpaired".into());
+        }
+        let (dot, text) = h(Some(&out), false, &r, true);
+        assert_eq!(dot, Dot::Grey);
+        assert_eq!(text, UNJOINED_HEADER);
+        // The link's states.
+        let with = |f: &dyn Fn(&mut LinkPage)| {
+            let mut p = linked_page();
+            f(p.controller.as_mut().unwrap());
+            p
+        };
+        let changed = with(&|l| l.state = Some("key-changed".into()));
+        assert_eq!(
+            h(Some(&changed), false, &r, true),
+            (Dot::Red, "The box's key changed — refused".into())
+        );
+        let revoked = with(&|l| l.state = Some("revoked".into()));
+        assert_eq!(h(Some(&revoked), false, &r, true).1, "Revoked by the box");
+        let pending = with(&|l| l.state = Some("pending".into()));
+        assert_eq!(
+            h(Some(&pending), false, &r, true),
+            (Dot::Amber, "Waiting for approval in Daedalus".into())
+        );
+        let down = with(&|l| {
+            l.connected = false;
+            l.state = Some("connecting".into());
+            l.error = Some("connection refused by box.lan:7788 after three tries in a row".into());
+        });
+        let (dot, text) = h(Some(&down), false, &r, true);
+        assert_eq!(dot, Dot::Red);
+        assert!(
+            text.starts_with("Disconnected — connection refused"),
+            "{text}"
+        );
+        assert!(text.chars().count() <= "Disconnected — ".chars().count() + 40);
+        let connecting = with(&|l| {
+            l.connected = false;
+            l.state = Some("connecting".into());
+        });
+        assert_eq!(
+            h(Some(&connecting), false, &r, true),
+            (Dot::Amber, "Connecting…".into())
+        );
+        let stale = with(&|l| l.tunnel.as_mut().unwrap().last_handshake_secs = Some(600));
+        assert_eq!(h(Some(&stale), false, &r, true).1, "VPN handshake is stale");
+        // The machine's own.
+        let restarting = Page {
+            restart_pending: true,
+            ..linked_page()
+        };
+        assert_eq!(
+            h(Some(&restarting), false, &r, true).1,
+            "Update installed — restarting"
+        );
+        let unheld = Page {
+            awake_hold: false,
+            ..linked_page()
+        };
+        assert_eq!(
+            h(Some(&unheld), false, &r, true),
+            (Dot::Amber, "Keep awake is not holding".into())
+        );
+        // Not holding because the box lets it sleep: fine.
+        let mut sleeps = unheld;
+        sleeps.policy.awake_hold = false;
+        assert_eq!(h(Some(&sleeps), false, &r, true).0, Dot::Green);
+        let exited = Report {
+            state: "waiting".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            h(Some(&ok), false, &exited, true).1,
+            "Claude remote control is not running"
+        );
+        assert_eq!(h(Some(&ok), false, &exited, false).0, Dot::Green);
+        let mut failed = linked_page();
+        failed.settings.as_mut().unwrap().failed = vec![FailedView {
+            key: Key::AwakeHold,
+            want: false,
+            why: "Daedalus did not apply it".into(),
+        }];
+        assert_eq!(
+            h(Some(&failed), false, &r, true),
+            (Dot::Amber, "A setting was not applied".into())
+        );
+    }
+
+    #[test]
+    fn a_switch_shows_the_box_s_value_or_the_one_on_its_way() {
+        let base = linked_page().settings.unwrap();
+        let sw = switch(Key::AwakeHold, &base, true);
+        assert_eq!(
+            sw,
+            Switch {
+                text: "Keep awake".into(),
+                checked: true,
+                enabled: true
+            }
+        );
+        assert_eq!(switches_note(&base, true), "—");
+        // On its way: the value asked for.
+        let mut s = base.clone();
+        s.pending = vec![PendingView {
+            key: Key::AwakeHold,
+            want: false,
+            via: Via::Box,
+        }];
+        let sw = switch(Key::AwakeHold, &s, true);
+        assert_eq!(
+            (sw.text.as_str(), sw.checked),
+            ("Keep awake — sending…", false)
+        );
+        // A click while it is on its way asks for the other value again.
+        assert!(next_value(Key::AwakeHold, &s));
+        // Not taken: the box's value, and why.
+        let mut s = base.clone();
+        s.failed = vec![FailedView {
+            key: Key::ClaudeRemoteControl,
+            want: false,
+            why: "Daedalus is not listening (the app is down) and more words past forty".into(),
+        }];
+        let sw = switch(Key::ClaudeRemoteControl, &s, true);
+        assert!(sw.checked);
+        assert!(
+            sw.text
+                .starts_with("Claude Remote Control — not changed: Daedalus is not listening"),
+            "{}",
+            sw.text
+        );
+        assert!(sw.text.ends_with('…'));
+        // santree ON waits on the browser; a click opens the page again.
+        let mut s = base.clone();
+        s.pending = vec![PendingView {
+            key: Key::Santree,
+            want: true,
+            via: Via::Browser,
+        }];
+        let sw = switch(Key::Santree, &s, true);
+        assert_eq!(
+            (sw.text.as_str(), sw.checked),
+            ("santree on the box — confirm in the browser…", true)
+        );
+        assert!(next_value(Key::Santree, &s));
+        // On: a click sends OFF.
+        let on = View {
+            santree: true,
+            ..base.clone()
+        };
+        assert!(!next_value(Key::Santree, &on));
+        // Someone else at this Mac: read-only, and says whose they are.
+        let sw = switch(Key::AwakeHold, &base, false);
+        assert!(!sw.enabled);
+        assert_eq!(
+            switches_note(&base, false),
+            "Only santiago can change these"
+        );
+        let nobody = View {
+            operator: None,
+            ..base.clone()
+        };
+        assert_eq!(
+            switches_note(&nobody, false),
+            "Only the user who installed the agent can change these"
+        );
+        // Not linked: disabled, and why.
+        let unlinked = View {
+            linked: false,
+            ..base
+        };
+        assert!(!switch(Key::AwakeHold, &unlinked, true).enabled);
+        assert_eq!(
+            switches_note(&unlinked, true),
+            "Changes need the box: not connected"
+        );
+    }
+
+    #[test]
+    fn the_connection_submenu_shortens_what_is_long_and_keeps_it_whole_for_copy() {
+        let p = linked_page();
+        let rows = connection_rows(p.controller.as_ref());
+        assert_eq!(rows.title, "Connection · VPN up");
+        assert_eq!(rows.link, "Box: box.lan:7788 — approved, linked 09:12");
+        assert_eq!(rows.vpn, "VPN: up · handshake 42 s ago");
+        assert_eq!(rows.traffic, "Traffic: ↓ 12.4 MB · ↑ 2.2 MB");
+        assert_eq!(rows.address, "Tunnel address: 10.8.0.5");
+        assert_eq!(rows.endpoint, "Endpoint: s2.toscanini.me:51820");
+        assert_eq!(rows.own_key.0, format!("{OWN_KEY}: f876:e2c7…8029"));
+        assert!(rows.own_key.1.starts_with("f876:e2c7:1a0b") && rows.own_key.1.ends_with(":8029"));
+        assert_eq!(rows.box_key.0, "Box's key: 3a1b:0c9d…77e2 (pinned)");
+        // Down, and why.
+        let mut l = p.controller.clone().unwrap();
+        l.tunnel.as_mut().unwrap().error = Some("s2.toscanini.me:51820 does not resolve".into());
+        let rows = connection_rows(Some(&l));
+        assert_eq!(rows.title, "Connection · VPN down");
+        assert_eq!(
+            rows.vpn,
+            "VPN: down — s2.toscanini.me:51820 does not resolve"
+        );
+        // Pending: compare both keys.
+        let mut l = p.controller.clone().unwrap();
+        l.state = Some("pending".into());
+        assert_eq!(
+            connection_rows(Some(&l)).link,
+            "Box: box.lan:7788 — waiting for approval"
+        );
+        // Not joined: a Mac logs in, the others pair; nothing to copy.
+        let mut l = p.controller.clone().unwrap();
+        if cfg!(target_os = "macos") {
+            l.tunnel = None;
+            assert_eq!(
+                connection_rows(Some(&l)).link,
+                "Box: not logged in — choose Log in…"
+            );
+            assert_eq!(connection_rows(Some(&l)).title, "Connection · logged out");
+        } else {
+            l.tunnel = None;
+            l.state = Some("unpaired".into());
+            l.controller_fingerprint = None;
+            let rows = connection_rows(Some(&l));
+            assert_eq!(rows.link, "Box: not paired — choose Pair with the box…");
+            assert_eq!(
+                rows.box_key,
+                ("Box's key: none trusted yet".into(), "—".into())
+            );
+            assert_eq!(rows.title, "Connection · direct");
+        }
+        assert_eq!(connection_rows(None).own_key.1, "—");
+        assert_eq!(bytes(999), "999 B");
+        assert_eq!(bytes(3_100), "3.1 KB");
+    }
+
+    #[test]
+    fn claude_and_santree_say_what_runs_and_what_a_restart_ends() {
+        let mut r = running();
+        r.server.version = Some("2.1.4".into());
+        r.home = Some("/Users/santiago".into());
+        r.workdir = Some("/Users/santiago/projects".into());
+        r.sessions = vec![
+            crate::claude::Session {
+                alive: true,
+                ..Default::default()
+            },
+            crate::claude::Session {
+                alive: true,
+                ..Default::default()
+            },
+            crate::claude::Session::default(),
+        ];
+        let c = claude_rows(&r, &Policy::default());
+        assert_eq!(c.title, "Claude · 2 sessions");
+        assert_eq!(c.server, "Remote control: running 2.1.4");
+        assert_eq!(c.folder, "Folder: ~/projects (the latest project)");
+        assert_eq!(c.restart, "Restart remote control (ends 2 sessions)");
+        let set = Policy {
+            claude_workdir: Some("/Users/santiago/work".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            claude_rows(&r, &set).folder,
+            "Folder: ~/work (set in Daedalus)"
+        );
+        let off = Report {
+            state: "off".into(),
+            ..Default::default()
+        };
+        assert_eq!(claude_rows(&off, &Policy::default()).title, "Claude · off");
+
+        let mut p = linked_page();
+        assert_eq!(santree_rows(Some(&p)).title, "santree · off");
+        p.policy.santree = true;
+        p.policy.session_host = Some(crate::link::wire::SessionHost {
+            address: "s2.toscanini.me:7789".into(),
+            public_key: String::new(),
+        });
+        p.santree = Some(crate::shared::SantreeDoor {
+            open: 1,
+            max: 4,
+            last_refused: None,
+        });
+        let s = santree_rows(Some(&p));
+        assert_eq!(
+            s,
+            SantreeRows {
+                title: "santree · 1 open".into(),
+                host: "Session host: s2.toscanini.me:7789".into(),
+                open: "Open connections: 1 of 4".into(),
+                refused: "Last refused: —".into(),
+            }
         );
     }
 
@@ -1046,78 +2074,24 @@ mod tests {
             .all(|l| !l.to_str().unwrap().contains("do shell script cmd &")));
     }
 
+    /// Every glyph the menu names is in the bundle's sources, at both sizes.
     #[test]
-    fn the_tunnel_line_says_up_or_down_how_fresh_and_where() {
-        let t = |error: Option<&str>, secs: Option<u64>| crate::link::TunnelStatus {
-            endpoint: "box.example.org:51820".into(),
-            error: error.map(String::from),
-            last_handshake_secs: secs,
-            ..Default::default()
-        };
-        assert_eq!(
-            tunnel_line(&t(None, Some(12))),
-            "VPN: up · handshake 12 s ago · box.example.org:51820"
-        );
-        assert_eq!(
-            tunnel_line(&t(None, Some(600))),
-            "VPN: down · last handshake 600 s ago · box.example.org:51820"
-        );
-        assert_eq!(
-            tunnel_line(&t(None, None)),
-            "VPN: no handshake yet · box.example.org:51820"
-        );
-        assert_eq!(
-            tunnel_line(&t(Some("box.example.org:51820 does not resolve"), Some(12))),
-            "VPN: down — box.example.org:51820 does not resolve"
-        );
-    }
-
-    #[test]
-    fn the_link_lines_show_both_keys_and_what_is_wrong() {
-        assert!(link_lines(None).0.contains("not started"));
-        let pending = LinkPage {
-            address: Some("box.lan:7788".into()),
-            state: Some("pending".into()),
-            connected: true,
-            fingerprint: "aaaa:bbbb".into(),
-            controller_fingerprint: Some("cccc:dddd".into()),
-            error: None,
-            tunnel: None,
-        };
-        let (first, own, theirs) = link_lines(Some(&pending));
-        assert_eq!(
-            first,
-            "Controller: box.lan:7788 — waiting for approval; compare both keys"
-        );
-        assert_eq!(own, "This machine's key: aaaa:bbbb");
-        assert_eq!(theirs, "Controller's key: cccc:dddd (pinned)");
-        let changed = LinkPage {
-            state: Some("key-changed".into()),
-            error: Some("controller key changed: …".into()),
-            ..pending
-        };
-        assert!(link_lines(Some(&changed)).0.contains("KEY CHANGED"));
-        let approved = LinkPage {
-            state: Some("approved".into()),
-            error: None,
-            ..changed.clone()
-        };
-        let (first, _, _) = link_lines(Some(&approved));
-        assert_eq!(first, "Controller: box.lan:7788 — approved");
-        let nowhere = LinkPage {
-            address: None,
-            state: None,
-            ..approved
-        };
-        assert!(link_lines(Some(&nowhere)).0.contains("controller_address"));
-        let unpaired = LinkPage {
-            state: Some("unpaired".into()),
-            controller_fingerprint: None,
-            connected: false,
-            ..nowhere
-        };
-        let (first, _, theirs) = link_lines(Some(&unpaired));
-        assert!(first.contains("not paired"), "{first}");
-        assert_eq!(theirs, "Controller's key: none trusted yet");
+    fn every_menu_glyph_ships_at_18_and_36_px() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("macos/icons");
+        for name in ICONS {
+            assert!(dir.join(format!("{name}.svg")).is_file(), "{name}.svg");
+            for (file, px) in [
+                (format!("{name}Template.png"), 18),
+                (format!("{name}Template@2x.png"), 36),
+            ] {
+                let f = std::fs::File::open(dir.join(&file)).unwrap();
+                let info = png::Decoder::new(std::io::BufReader::new(f))
+                    .read_info()
+                    .unwrap()
+                    .info()
+                    .clone();
+                assert_eq!((info.width, info.height), (px, px), "{file}");
+            }
+        }
     }
 }

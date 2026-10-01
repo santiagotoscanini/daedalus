@@ -242,6 +242,7 @@ fn serve_one(ctx: &Ctx, mut conn: Conn) {
         Ok(opened) => opened,
         Err(e) => {
             tracing::info!(uid, pid, code = e.code, why = %e.msg, "santree: refused");
+            ctx.shared.santree_refused(e.code);
             let _ = conn.writer.write_all(error_line(e.code, e.msg).as_bytes());
             let _ = conn.writer.flush();
             (conn.close)();
@@ -260,6 +261,8 @@ fn serve_one(ctx: &Ctx, mut conn: Conn) {
     // Piping now: the first line's deadline no longer applies.
     (std::mem::replace(&mut conn.on_hello, Box::new(|| {})))();
     tracing::info!(uid, pid, host = %address, "santree: piping to the session host");
+    // Counted on the status page while it pipes.
+    let _open = ctx.shared.santree_opened();
     let started = Instant::now();
     let end = pipe(conn, tls, &Limits::default());
     if end.refused_key {

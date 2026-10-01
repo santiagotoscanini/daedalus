@@ -44,6 +44,8 @@
 //! | `enroll.begin`   | `{app_url}`      | a log-in begun: key, fingerprint, challenge    |
 //! | `enroll.finish`  | `{code}`         | a sentence; redeemed, tunnel up (root alone)   |
 //! | `enroll.leave`   | —                | a sentence; logged out                         |
+//! | `settings.get`   | —                | the settings, and whether this peer may change them |
+//! | `settings.set`   | `{key, value}`   | `{sent}`, `{unchanged}` or `{confirm_url}` (the operator) |
 //!
 //! The report and the roster are the session's to post; any peer the gate
 //! lets through may, since each of those is a user the machine runs Claude
@@ -57,6 +59,13 @@
 //! own. A log-in's last step does name it (`enroll.finish`, macOS and Linux,
 //! enroll.rs), which is why it is root's alone: the tray runs it behind the
 //! administrator prompt.
+//!
+//! A machine's own settings (settings.rs) are read by any peer the gate
+//! admits, and changed only by the operator — the user santree's socket
+//! serves (`os::operator_allowed`) — on macOS and Linux; on Windows, by
+//! the users the socket admits, for the two settings there. Changing one
+//! asks the box; santree ON sends nothing and answers the page where an
+//! admin confirms it, which the caller opens.
 
 use std::io::Write;
 use std::path::Path;
@@ -148,8 +157,6 @@ fn no_params(m: &str, p: &Value) -> Result<(), ApiError> {
 /// One method for the service's shared state (module doc's table), asked
 /// by `peer` (as the door checked it).
 fn handle(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Value, ApiError> {
-    #[cfg(windows)]
-    let _ = peer; // no log-in on Windows
     let none = |p: &Value| no_params(m, p);
     match m {
         "status" => {
@@ -196,6 +203,11 @@ fn handle(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Val
             none(&p)?;
             link_reload(shared, &crate::link::KeyFiles::here())
         }
+        "settings.get" => {
+            none(&p)?;
+            value(&shared.settings_view(Some(may_change(peer))))
+        }
+        "settings.set" => settings_set(shared, peer, p, &crate::paths::config_path()),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         "enroll.begin" | "enroll.finish" | "enroll.leave" => enroll(shared, peer, m, p),
         _ => Err(ApiError::new(
@@ -221,6 +233,119 @@ fn link_reload(shared: &Shared, files: &crate::link::KeyFiles) -> Result<Value, 
         Ok(false) => Ok("config.toml's link keys are the ones in use".into()),
         Err(e) => Err(ApiError::new(code::INTERNAL, format!("{e:#}"))),
     }
+}
+
+/// Whether `peer` may change this machine's settings (`settings.set`):
+/// on macOS and Linux the operator — root, the service's own uid, the user
+/// who installed the agent (`os::operator_allowed`, as santree's socket and
+/// a log-in); on Windows every user the socket admits, for the two settings
+/// there (neither grants anything on the box).
+fn may_change(peer: Option<&Peer>) -> bool {
+    #[cfg(unix)]
+    return crate::door::peer_allowed(peer, &crate::os::operator_allowed());
+    #[cfg(windows)]
+    {
+        let _ = peer;
+        true
+    }
+}
+
+/// `settings.set`'s parameters: one setting, its value.
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetParams {
+    pub key: crate::settings::Key,
+    pub value: bool,
+}
+
+/// `settings.set`'s answer: exactly one of the three is present.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct SetAnswer {
+    /// Recorded; the link asks the box now.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sent: bool,
+    /// The box already holds that value.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unchanged: bool,
+    /// santree ON: the page where an admin confirms it, for the caller to
+    /// open (the service opens no browser).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm_url: Option<String>,
+}
+
+/// `settings.set` (settings.rs): checked, then recorded and answered at
+/// once — the link sends it, and the status page shows what became of it.
+/// `config` is where the app's address is read for santree ON.
+fn settings_set(
+    shared: &Shared,
+    peer: Option<&Peer>,
+    p: Value,
+    config: &Path,
+) -> Result<Value, ApiError> {
+    use crate::settings::{Asked, Key};
+    let p: SetParams = serde_json::from_value(p).map_err(|e| bad(format!("settings.set: {e}")))?;
+    if !shared.role().link {
+        return Err(ApiError::new(
+            code::UNSUPPORTED,
+            "the controller's settings are the box's own",
+        ));
+    }
+    if !may_change(peer) {
+        let who = peer
+            .map(ToString::to_string)
+            .unwrap_or_else(|| "a peer whose credentials could not be read".into());
+        return Err(ApiError::new(
+            code::FORBIDDEN,
+            format!(
+                "{who} may not change this machine's settings (root and the user who installed \
+                 the agent may)"
+            ),
+        ));
+    }
+    if cfg!(windows) && p.key == Key::Santree {
+        return Err(ApiError::new(
+            code::UNSUPPORTED,
+            "santree has no door on Windows",
+        ));
+    }
+    // santree ON is an admin's, in the browser: the page must exist before
+    // anything is recorded.
+    let mut confirm = None;
+    if p.key == Key::Santree && p.value && !shared.policy().santree {
+        let app = crate::config::load_at(config)
+            .ok()
+            .and_then(|c| c.app_url)
+            .ok_or_else(|| {
+                ApiError::new(
+                    code::UNSUPPORTED,
+                    "turn santree on in Settings › Machines (this machine has not logged in \
+                     from its menu bar, so it knows no page to open)",
+                )
+            })?;
+        let node = shared
+            .node_id()
+            .ok_or_else(|| ApiError::new(code::UNAVAILABLE, "this machine has no key yet"))?;
+        confirm = Some(crate::settings::confirm_url(&app, &node));
+    }
+    let answer = match shared.ask_setting(p.key, p.value)? {
+        Asked::Sent => SetAnswer {
+            sent: true,
+            ..Default::default()
+        },
+        Asked::Unchanged => SetAnswer {
+            unchanged: true,
+            ..Default::default()
+        },
+        Asked::Confirm => SetAnswer {
+            confirm_url: Some(
+                confirm
+                    .ok_or_else(|| ApiError::new(code::INTERNAL, "santree's page was not named"))?,
+            ),
+            ..Default::default()
+        },
+    };
+    tracing::info!(key = ?p.key, value = p.value, ?answer, "settings: asked from this machine");
+    value(&answer)
 }
 
 /// A log-in's three methods (enroll.rs): `begin` and `leave` for the
@@ -575,6 +700,117 @@ mod tests {
             .unwrap_err()
             .msg
             .contains("nix"));
+    }
+
+    /// `settings.set`: the operator's alone; nothing sent for a value the box
+    /// holds; santree ON sends nothing and names the page, or says where to
+    /// turn it on when this machine knows no app.
+    #[cfg(unix)]
+    #[test]
+    fn settings_are_the_operator_s_to_change_and_santree_on_is_the_browser_s() {
+        use crate::settings::Key;
+        let dir = std::env::temp_dir().join(format!("daedalus-local-set-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let with_app = dir.join("config.toml");
+        std::fs::write(
+            &with_app,
+            "app_url = \"https://daedalus-app.example.org\"\n",
+        )
+        .unwrap();
+        let without = dir.join("none.toml");
+
+        let s = shared(Mode::Node);
+        s.set_node("0123456789abcdef".into(), "0123:4567:89ab:cdef".into());
+        s.set_policy(Policy {
+            awake_hold: true,
+            claude_remote_control: true,
+            ..Default::default()
+        });
+        s.set_link(|l| {
+            l.connected = true;
+            l.state = Some("approved".into());
+        });
+        let root = Peer::Uid(0);
+        let set = |peer: &Peer, key: Key, v: bool, cfg: &Path| {
+            settings_set(
+                &s,
+                Some(peer),
+                serde_json::json!({"key": key, "value": v}),
+                cfg,
+            )
+        };
+        let answer = |v: Value| serde_json::from_value::<SetAnswer>(v).unwrap();
+
+        // Someone else: refused, nothing recorded.
+        let e = set(&Peer::Uid(4242), Key::AwakeHold, false, &with_app).unwrap_err();
+        assert_eq!(e.code, code::FORBIDDEN);
+        assert!(s.take_policy_request().is_none());
+        // The value the box holds: nothing to send.
+        assert!(answer(set(&root, Key::AwakeHold, true, &with_app).unwrap()).unchanged);
+        assert!(s.take_policy_request().is_none());
+        // Another value: recorded, and the link sends it.
+        assert!(answer(set(&root, Key::AwakeHold, false, &with_app).unwrap()).sent);
+        let (_, req) = s.take_policy_request().unwrap();
+        assert_eq!(req.awake_hold, Some(false));
+        // santree ON: the page, and nothing on the link.
+        let a = answer(set(&root, Key::Santree, true, &with_app).unwrap());
+        assert_eq!(
+            a.confirm_url.as_deref(),
+            Some(
+                "https://daedalus-app.example.org/settings?tab=machines&node=0123456789abcdef&santree=on"
+            )
+        );
+        assert!(s.take_policy_request().is_none());
+        let view = s.settings_view(None);
+        assert!(view
+            .pending
+            .iter()
+            .any(|p| p.key == Key::Santree && p.via == crate::settings::Via::Browser));
+        // No app known: where to turn it on instead, and nothing recorded.
+        let s2 = shared(Mode::Node);
+        s2.set_node("0123456789abcdef".into(), "x".into());
+        let e = settings_set(
+            &s2,
+            Some(&root),
+            serde_json::json!({"key": "santree", "value": true}),
+            &without,
+        )
+        .unwrap_err();
+        assert_eq!(e.code, code::UNSUPPORTED);
+        assert!(e.msg.contains("Settings › Machines"));
+        assert!(s2.settings_view(None).pending.is_empty());
+        // Exact parameters.
+        assert!(set_raw(
+            &s,
+            &root,
+            serde_json::json!({"key": "providers", "value": true})
+        )
+        .is_err());
+        assert!(set_raw(
+            &s,
+            &root,
+            serde_json::json!({"key": "santree", "value": true, "x": 1})
+        )
+        .is_err());
+        // Read by anyone the door admits; `may_change` says for whom.
+        let got = handle(&s, Some(&Peer::Uid(4242)), "settings.get", Value::Null).unwrap();
+        assert_eq!(got["may_change"], false);
+        assert_eq!(got["node"], "0123456789abcdef");
+        assert_eq!(
+            handle(&s, Some(&root), "settings.get", Value::Null).unwrap()["may_change"],
+            true
+        );
+        // The status page carries the same block, without `may_change`.
+        let page = handle(&s, None, "status", Value::Null).unwrap();
+        assert_eq!(page["settings"]["linked"], true);
+        assert!(page["settings"].get("may_change").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    fn set_raw(s: &Shared, peer: &Peer, p: Value) -> Result<Value, ApiError> {
+        settings_set(s, Some(peer), p, Path::new("/nonexistent"))
     }
 
     /// The socket itself, on unix: served to this uid, answered, refused

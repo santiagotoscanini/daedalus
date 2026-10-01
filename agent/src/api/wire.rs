@@ -26,7 +26,7 @@ use serde_json::Value;
 
 use crate::claude::{Report, Roster, SessionAction, Summary};
 use crate::config::{Mode, TelemetryLevel};
-use crate::link::wire::{Command, Hello, NodeState};
+use crate::link::wire::{Command, Hello, NodeState, PolicyRequest};
 use crate::link::wire::{Policy, ProviderPolicy, ProvidersPolicy};
 use crate::providers::ProviderReport;
 use crate::role::Role;
@@ -46,6 +46,9 @@ pub mod event {
     pub const ROOT_PROGRESS: &str = "root.progress";
     /// An approved machine logged out and asks to be forgotten (`NodeLeft`).
     pub const NODES_LEFT: &str = "nodes.left";
+    /// An approved machine's user asks to change one of its settings
+    /// (`NodePolicyRequest`): the app decides, and its next set carries it.
+    pub const NODES_POLICY_REQUEST: &str = "nodes.policy_request";
 }
 
 // ── the methods ───────────────────────────────────────────────────────────
@@ -462,6 +465,17 @@ pub struct NodeChanged {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct NodeLeft {
     pub id: String,
+}
+
+/// `nodes.policy_request`'s payload: machine `id` asks the box to change the
+/// settings in `changes` (link/wire.rs `PolicyRequest`: absolute values,
+/// never santree on). The controller changes nothing itself; the app writes
+/// the keys the machine sent into its policy and hands the set over again.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct NodePolicyRequest {
+    pub id: String,
+    pub changes: PolicyRequest,
 }
 
 /// `nodes.pending`'s payload: an unknown key connected and waits.

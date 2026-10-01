@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.24.0"
+version = "0.25.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
@@ -8,13 +8,6 @@ repository = "https://github.com/santiagotoscanini/daedalus"
 license = "MIT"
 publish = false
 build = "build.rs"
-
-# Published as a draft (.github/workflows/agent.yml, "Publish"): the operator
-# tries 0.24's Mac app before any machine or the website sees it, then
-# publishes it by hand (README "Releasing"). The next version's bump drops
-# this table.
-[package.metadata.release]
-draft = true
 
 [lib]
 name = "daedalus_agent"

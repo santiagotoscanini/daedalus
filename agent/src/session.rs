@@ -73,6 +73,13 @@ pub struct Page {
     /// The link to the controller (link/), when the page carries one.
     #[serde(default)]
     pub controller: Option<LinkPage>,
+    /// The settings this machine may ask for (settings.rs); absent from an
+    /// agent before 0.25.
+    #[serde(default)]
+    pub settings: Option<crate::settings::View>,
+    /// santree's door (shared.rs `SantreeDoor`); absent where there is none.
+    #[serde(default)]
+    pub santree: Option<crate::shared::SantreeDoor>,
 }
 
 /// The link, as the page reports it (`link::LinkStatus`).
@@ -82,6 +89,8 @@ pub struct LinkPage {
     pub address: Option<String>,
     pub state: Option<String>,
     pub connected: bool,
+    /// When the current connection opened.
+    pub since: Option<String>,
     pub fingerprint: String,
     pub controller_fingerprint: Option<String>,
     pub error: Option<String>,
@@ -331,6 +340,11 @@ impl Session {
         self.next_poll = Instant::now() + Duration::from_secs(1);
     }
 
+    /// Read the page at the next tick: a setting was just asked for.
+    pub fn poll_now(&mut self) {
+        self.next_poll = Instant::now();
+    }
+
     /// Advance the supervisor and, when due, read the page, report, and
     /// apply the answer. Cheap when not due; call it often.
     pub fn tick(&mut self) -> Tick {
@@ -562,6 +576,11 @@ impl Watcher {
     pub fn restart_claude(&mut self) {
         let _ = crate::local::call("claude.restart", serde_json::Value::Null);
         self.next_poll = Instant::now() + POLL;
+    }
+
+    /// Read the page at the next tick.
+    pub fn poll_now(&mut self) {
+        self.next_poll = Instant::now();
     }
 
     /// When due, read the page and the session's report.

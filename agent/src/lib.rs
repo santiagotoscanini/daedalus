@@ -64,6 +64,7 @@ pub mod rpc;
 pub mod santree;
 pub mod session;
 pub mod session_host;
+pub mod settings;
 pub mod shared;
 pub mod state;
 pub mod telemetry;
@@ -307,6 +308,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         None => None,
         Some(Ok(id)) => {
             tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
+            shared.set_node(id.node_id(), id.fingerprint());
             #[cfg(unix)]
             {
                 santree_door = Some(santree::Door::start(Arc::clone(&shared), id.clone()));

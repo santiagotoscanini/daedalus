@@ -22,6 +22,8 @@
 //! node → {"id":10,"ok":{"accepted":true}}      (re-pinned; it reconnects under the new key)
 //! node → {"id":2,"m":"leave","p":{}}              (logging out; enroll.rs)
 //! ctl  ← {"id":2,"ok":{}}                        (the app hears nodes.left; the node closes)
+//! node → {"id":3,"m":"policy_request","p":{"awake_hold":false}}   (settings.rs)
+//! ctl  ← {"id":3,"ok":{"accepted":true}}         (the app hears nodes.policy_request)
 //! both → {"e":"hb"}
 //! ```
 //!
@@ -77,6 +79,49 @@ pub mod name {
     /// node → controller: this machine logs out (enroll.rs) and asks to be
     /// forgotten; acknowledged, then the app hears `nodes.left`.
     pub const LEAVE: &str = "leave";
+    /// node → controller: the machine's user asks the box to change one of
+    /// its settings (`PolicyRequest`); acknowledged once the app was told
+    /// (`nodes.policy_request`). The change is real only when the box's
+    /// next `policy` carries it.
+    pub const POLICY_REQUEST: &str = "policy_request";
+}
+
+/// `policy_request`'s parameters: the settings a machine's own user may ask
+/// the box to change, each an absolute value, so a retry or a replay changes
+/// nothing twice. Nothing else of the policy is the machine's to ask for:
+/// its names, its providers and its address are grants to it, and santree
+/// may only be turned OFF here — turning it on grants a shell on the box,
+/// which an admin does in the browser (settings.rs). Exact: an unknown key
+/// is refused.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub awake_hold: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub claude_remote_control: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub santree: Option<bool>,
+}
+
+impl PolicyRequest {
+    /// At least one setting, and santree only ever off.
+    pub fn check(&self) -> Result<(), String> {
+        if self.awake_hold.is_none()
+            && self.claude_remote_control.is_none()
+            && self.santree.is_none()
+        {
+            return Err("a policy request names at least one setting".into());
+        }
+        if self.santree == Some(true) {
+            return Err("santree is turned on from Daedalus, not from the machine".into());
+        }
+        Ok(())
+    }
 }
 
 /// Where a machine stands with the box: what the app decided, or pending
@@ -706,6 +751,46 @@ mod tests {
             serde_json::from_value::<CommandParams>(json!({"command":"check_update","x":1}))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn a_policy_request_on_the_wire_names_settings_and_never_grants_santree() {
+        let off = PolicyRequest {
+            awake_hold: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(
+            request(3, name::POLICY_REQUEST, &off),
+            r#"{"id":3,"m":"policy_request","p":{"awake_hold":false}}"#
+        );
+        let all = PolicyRequest {
+            awake_hold: Some(true),
+            claude_remote_control: Some(false),
+            santree: Some(false),
+        };
+        assert_eq!(
+            wire(&all),
+            r#"{"awake_hold":true,"claude_remote_control":false,"santree":false}"#
+        );
+        assert!(off.check().is_ok() && all.check().is_ok());
+        // Nothing asked, santree granted: refused.
+        assert!(PolicyRequest::default().check().is_err());
+        let grant = PolicyRequest {
+            santree: Some(true),
+            ..Default::default()
+        };
+        assert!(grant.check().unwrap_err().contains("from Daedalus"));
+        // Exact: a key the machine may not ask for does not parse.
+        for bad in [
+            json!({"awake_hold": false, "providers": {}}),
+            json!({"name": "evil"}),
+            json!({"santree": "yes"}),
+        ] {
+            assert!(
+                serde_json::from_value::<PolicyRequest>(bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

@@ -78,6 +78,45 @@ pub struct Shared {
     /// (enroll.rs), held here and nowhere else.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     log_in: Mutex<Option<crate::enroll::Started>>,
+    /// This machine's node id and fingerprint, once its key is loaded
+    /// (lib.rs): what the settings name it by.
+    node: OnceLock<(String, String)>,
+    /// The settings asked for from this machine, on their way or failed
+    /// (settings.rs).
+    settings: Mutex<crate::settings::Book>,
+    /// santree's door (santree.rs): connections piping now, and the last
+    /// one refused.
+    santree_open: std::sync::atomic::AtomicUsize,
+    santree_refused: Mutex<Option<SantreeRefused>>,
+}
+
+/// Counts one santree connection while it pipes (`Shared::santree_opened`).
+pub struct SantreeOpen<'a>(&'a Shared);
+
+impl Drop for SantreeOpen<'_> {
+    fn drop(&mut self) {
+        self.0
+            .santree_open
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// santree's door on the status page: how many connections pipe now, of
+/// how many it serves at once, and the last refusal.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Serialize, serde::Deserialize)]
+pub struct SantreeDoor {
+    pub open: usize,
+    pub max: usize,
+    pub last_refused: Option<SantreeRefused>,
+}
+
+/// One refusal at santree's door: when, and its code.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
+pub struct SantreeRefused {
+    pub at: String,
+    pub code: String,
 }
 
 struct Live {
@@ -179,6 +218,12 @@ pub(crate) struct Document<'a> {
     /// What the machine is and how it is doing, as `Telemetry::public`
     /// (telemetry.rs); null until the first sample, a few seconds after start.
     telemetry: Option<Telemetry>,
+    /// The settings this machine may ask the box for, and what became of
+    /// the last requests (settings.rs).
+    settings: crate::settings::View,
+    /// santree's door (santree.rs); null where there is none (Windows,
+    /// the controller).
+    santree: Option<SantreeDoor>,
     /// The connection to the controller (link/): its address, both
     /// fingerprints, and what went wrong. Null on the controller itself.
     controller: Option<LinkStatus>,
@@ -202,6 +247,10 @@ impl Shared {
             leave: Mutex::new(None),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             log_in: Mutex::new(None),
+            node: OnceLock::new(),
+            settings: Mutex::new(crate::settings::Book::default()),
+            santree_open: std::sync::atomic::AtomicUsize::new(0),
+            santree_refused: Mutex::new(None),
             inner: Mutex::new(Live {
                 state,
                 awake_hold: false,
@@ -240,10 +289,135 @@ impl Shared {
 
     /// The box's decision, from the controller. Returns whether it changed.
     pub fn set_policy(&self, p: Policy) -> bool {
-        let mut l = self.lock();
-        let changed = l.policy != p;
-        l.policy = p;
+        let changed = {
+            let mut l = self.lock();
+            let changed = l.policy != p;
+            l.policy = p.clone();
+            changed
+        };
+        // A request this policy carries is done (settings.rs).
+        self.settings.lock_ok().settle(&p, Instant::now());
         changed
+    }
+
+    // ── the settings asked for from this machine (settings.rs) ────────────
+
+    /// This machine's node id and fingerprint, once its key is loaded.
+    pub fn set_node(&self, id: String, fingerprint: String) {
+        let _ = self.node.set((id, fingerprint));
+    }
+
+    /// The node id, once known.
+    pub fn node_id(&self) -> Option<String> {
+        self.node.get().map(|(id, _)| id.clone())
+    }
+
+    /// Whether the box can be asked now: the link up, this machine approved.
+    pub fn linked(&self) -> bool {
+        self.lock().link.as_ref().is_some_and(|l| {
+            l.connected
+                && l.state.as_deref() == Some(crate::link::wire::NodeState::Approved.as_str())
+        })
+    }
+
+    /// The machine's user asks for `key` = `value` (settings.rs `Book::ask`);
+    /// a request to send wakes the link.
+    pub fn ask_setting(
+        &self,
+        key: crate::settings::Key,
+        value: bool,
+    ) -> Result<crate::settings::Asked, crate::rpc::ApiError> {
+        let (kept, linked) = (self.policy(), self.linked());
+        let asked = self
+            .settings
+            .lock_ok()
+            .ask(key, value, &kept, linked, Instant::now())?;
+        if asked == crate::settings::Asked::Sent {
+            if let Some(s) = self.stop.get() {
+                s.nudge();
+            }
+        }
+        Ok(asked)
+    }
+
+    /// The settings requests to send now, as one, under a fresh id (link/node.rs).
+    pub fn take_policy_request(&self) -> Option<(u64, crate::link::wire::PolicyRequest)> {
+        self.settings.lock_ok().take_request(Instant::now())
+    }
+
+    /// The controller answered settings request `id` (link/node.rs).
+    pub fn policy_request_answered(&self, id: u64, result: Result<(), String>) {
+        let kept = self.policy();
+        self.settings
+            .lock_ok()
+            .answered(id, result, &kept, Instant::now());
+    }
+
+    /// The settings as the pages show them (settings.rs `View`), with
+    /// `may_change` for the peer asking where there is one.
+    pub fn settings_view(&self, may_change: Option<bool>) -> crate::settings::View {
+        let (kept, linked) = (self.policy(), self.linked());
+        let (pending, failed) = {
+            let mut b = self.settings.lock_ok();
+            b.settle(&kept, Instant::now());
+            (b.pending(), b.failed())
+        };
+        #[cfg(unix)]
+        let operator_uid = crate::os::operator_uid();
+        #[cfg(not(unix))]
+        let operator_uid: Option<u32> = None;
+        #[cfg(unix)]
+        let operator = operator_uid.and_then(crate::os::user_name);
+        #[cfg(not(unix))]
+        let operator: Option<String> = None;
+        let (node, fingerprint) = match self.node.get() {
+            Some((id, fp)) => (Some(id.clone()), Some(fp.clone())),
+            None => (None, None),
+        };
+        crate::settings::View {
+            fingerprint_short: fingerprint
+                .as_deref()
+                .map(crate::settings::short_fingerprint),
+            node,
+            fingerprint,
+            linked,
+            awake_hold: kept.awake_hold,
+            claude_remote_control: kept.claude_remote_control,
+            santree: kept.santree,
+            pending,
+            failed,
+            operator_uid,
+            operator,
+            may_change,
+        }
+    }
+
+    // ── santree's door (santree.rs) ───────────────────────────────────────
+
+    /// A santree connection starts piping; the guard counts it until dropped.
+    pub fn santree_opened(&self) -> SantreeOpen<'_> {
+        self.santree_open
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        SantreeOpen(self)
+    }
+
+    /// santree's door refused a connection with `code`.
+    pub fn santree_refused(&self, code: &str) {
+        *self.santree_refused.lock_ok() = Some(SantreeRefused {
+            at: crate::state::now_rfc3339(),
+            code: code.to_string(),
+        });
+    }
+
+    fn santree_door(&self) -> Option<SantreeDoor> {
+        (cfg!(unix) && self.role.link).then(|| SantreeDoor {
+            open: self.santree_open.load(std::sync::atomic::Ordering::Relaxed),
+            #[cfg(unix)]
+            max: crate::santree::MAX_CONNECTIONS,
+            #[cfg(not(unix))]
+            max: 0,
+            last_refused: self.santree_refused.lock_ok().clone(),
+        })
     }
 
     /// A new sample; `tiers_moved` when it carries static or slow facts or
@@ -724,6 +898,9 @@ impl Shared {
     /// reported, read by the caller outside the lock.
     fn document_with(&self, power_requests: Option<String>, telemetry: bool) -> serde_json::Value {
         let tunnel = self.tunnel_status();
+        // Read before the lock below: each takes it itself.
+        let settings = self.settings_view(None);
+        let santree = self.santree_door();
         let l = self.lock();
         let os_uptime = crate::power::os_uptime_secs();
         let doc = Document {
@@ -760,6 +937,8 @@ impl Shared {
             } else {
                 None
             },
+            settings,
+            santree,
             controller: l.link.clone().map(|c| LinkStatus { tunnel, ..c }),
             state: &l.state,
         };

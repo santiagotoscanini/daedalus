@@ -93,6 +93,8 @@ pub use imp::{
 };
 // the operator: whom santree's socket (santree.rs) and a log-in (enroll.rs) serve
 #[cfg(unix)]
+pub use self::unix::user_name;
+#[cfg(unix)]
 pub use imp::{operator_allowed, operator_uid};
 // Claude Code
 pub use imp::{
@@ -137,6 +139,8 @@ pub mod mac {
 /// Items — and leaving for a new binary.
 #[cfg(feature = "tray")]
 pub mod tray {
+    #[cfg(any(target_os = "macos", windows))]
+    pub use super::imp::tray::copy;
     #[cfg(not(target_os = "macos"))]
     pub use super::imp::tray::pair_elevated;
     pub use super::imp::tray::{join, open, relaunch_self, run};

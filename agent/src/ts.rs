@@ -66,6 +66,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     NodeChanged::export_all(cfg)?;
     NodePending::export_all(cfg)?;
     NodeLeft::export_all(cfg)?;
+    NodePolicyRequest::export_all(cfg)?;
     // Logging in: the app's redeem route (enroll.rs).
     EnrollRedeem::export_all(cfg)?;
     EnrollRedeemed::export_all(cfg)?;

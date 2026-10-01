@@ -392,6 +392,35 @@ fn converse(
                         }
                         said = Instant::now();
                     }
+                    Ok(Incoming::Request { id: rid, m, p }) if m == name::POLICY_REQUEST => {
+                        // The machine's own settings, asked for: only an
+                        // approved machine's, and only what `PolicyRequest`
+                        // names (registry.rs `policy_request`).
+                        registry.record(id, conn_id, name::HB, Value::Null);
+                        let answer = if !registry.is_approved(id) {
+                            Err(ApiError::new(
+                                code::UNAVAILABLE,
+                                "this machine is not approved",
+                            ))
+                        } else {
+                            serde_json::from_value::<wire::PolicyRequest>(p)
+                                .map_err(|e| {
+                                    ApiError::new(code::BAD_REQUEST, format!("policy_request: {e}"))
+                                })
+                                .and_then(|req| registry.policy_request(id, &req))
+                        };
+                        let line = match answer {
+                            Ok(()) => Response::ok(rid, &wire::Accepted { accepted: true }),
+                            Err(e) => Response::err(Some(rid), e),
+                        };
+                        if tls
+                            .send(&serde_json::to_string(&line).unwrap_or_default())
+                            .is_err()
+                        {
+                            return "a write failed";
+                        }
+                        said = Instant::now();
+                    }
                     Ok(Incoming::Request { id: rid, m, .. }) => {
                         registry.record(id, conn_id, name::HB, Value::Null);
                         let e = ApiError::new(

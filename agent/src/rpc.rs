@@ -241,23 +241,32 @@ impl Events {
     }
 
     /// Tell every subscriber; one whose connection is gone is forgotten,
-    /// one whose queue is full misses this event.
-    pub fn publish<P: Serialize>(&self, name: &'static str, payload: &P) {
+    /// one whose queue is full misses this event. Answers how many queues
+    /// took it — subscribers with room, which is not the same as one that
+    /// will act on it: a caller that needs the app to have heard still
+    /// waits for the effect.
+    pub fn publish<P: Serialize>(&self, name: &'static str, payload: &P) -> usize {
         let mut subs = self.lock();
         if subs.is_empty() {
-            return;
+            return 0;
         }
         let Ok(line) = serde_json::to_string(&Event {
             e: name,
             p: payload,
         }) else {
-            return;
+            return 0;
         };
         let line: Arc<str> = line.into();
+        let mut queued = 0;
         subs.retain(|tx| match tx.try_send(Arc::clone(&line)) {
-            Ok(()) | Err(TrySendError::Full(_)) => true,
+            Ok(()) => {
+                queued += 1;
+                true
+            }
+            Err(TrySendError::Full(_)) => true,
             Err(TrySendError::Disconnected(_)) => false,
         });
+        queued
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Vec<SyncSender<Arc<str>>>> {
@@ -276,7 +285,7 @@ mod tests {
         let rx = events.subscribe();
         let gone = events.subscribe();
         drop(gone);
-        events.publish(
+        let told = events.publish(
             wire::event::CLAUDE_CHANGED,
             &wire::ClaudeChanged {
                 reporting: true,
@@ -284,14 +293,17 @@ mod tests {
                 pid: Some(1),
             },
         );
+        // The live one took it; the gone one is not counted.
+        assert_eq!(told, 1);
         assert_eq!(
             &*rx.try_recv().unwrap(),
             r#"{"e":"claude.changed","p":{"reporting":true,"state":"running","pid":1}}"#
         );
         assert_eq!(events.lock().len(), 1);
         // A subscriber that does not read loses events, not its place.
+        let mut took = 0;
         for _ in 0..EVENT_QUEUE + 5 {
-            events.publish(
+            took += events.publish(
                 wire::event::TELEMETRY_UPDATED,
                 &wire::TelemetryUpdated {
                     sampled_at: "t".into(),
@@ -300,5 +312,8 @@ mod tests {
         }
         assert_eq!(rx.try_iter().count(), EVENT_QUEUE);
         assert_eq!(events.lock().len(), 1);
+        // A full queue is not counted as told.
+        assert_eq!(took, EVENT_QUEUE);
+        assert_eq!(Events::default().publish(wire::event::NODES_LEFT, &()), 0);
     }
 }

@@ -57,6 +57,11 @@
 //! session, checked, handed to the session, acknowledged at once; the
 //! outcome rides the next roster (`actions`).
 //!
+//! It asks, too: the settings its user changed from the menu bar or santree
+//! go up as one `policy_request` of absolute values (settings.rs), and the
+//! answer is only an acknowledgement — the box's next `policy` is what
+//! changes anything.
+//!
 //! REVOKED: the machine says so and leaves; it tries again at the slowest
 //! step, in case the box changes its mind.
 
@@ -83,7 +88,8 @@ use crate::state::now_rfc3339;
 pub const PUSH_EVERY: Duration = Duration::from_secs(60);
 /// How often the pushes are looked at.
 const PUSH_CHECK: Duration = Duration::from_secs(2);
-/// The id of the one request a machine sends after `hello` (1): `leave`.
+/// The id of `leave`, the one fixed request a machine sends after `hello`
+/// (1); a settings request takes its own from `settings::FIRST_REQUEST` on.
 const LEAVE_ID: u64 = 2;
 /// How long a DNS-found address is used before the record is asked again.
 const REDISCOVER: Duration = Duration::from_secs(10 * 60);
@@ -928,6 +934,17 @@ fn converse(
                 leaving = Some(tx);
             }
         }
+        // The settings this machine's user asked for (settings.rs), as one
+        // request of absolute values; its answer is routed by its id.
+        if state == NodeState::Approved && leaving.is_none() {
+            if let Some((rid, req)) = shared.take_policy_request() {
+                tracing::info!(?req, "link: asking the box for this machine's settings");
+                if let Err(e) = tls.send(&wire::request(rid, name::POLICY_REQUEST, &req)) {
+                    return Ended::Dropped(format!("a write failed: {e}"));
+                }
+                said = Instant::now();
+            }
+        }
         if shared.link_keys().1 != keys_at {
             return Ended::Dropped(
                 "config.toml names another controller or key now; connecting under it".into(),
@@ -1056,6 +1073,15 @@ fn converse(
                     tls.close();
                     return Ended::Dropped("logged out: the controller heard it".into());
                 }
+            }
+            Ok(Incoming::Answer {
+                id: Some(rid),
+                result,
+            }) if crate::settings::Book::is_request(rid) => {
+                if let Err(e) = &result {
+                    tracing::info!(error = %e.msg, "link: the box refused this machine's settings request");
+                }
+                shared.policy_request_answered(rid, result.map(|_| ()).map_err(|e| e.msg));
             }
             Ok(Incoming::Answer { .. }) => {}
             Err(e) => tracing::debug!(error = %e, "link: a line that is not a message"),

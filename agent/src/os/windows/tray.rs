@@ -224,3 +224,25 @@ pub fn pair_elevated(
         Err(format!("`pair` exited with {code}\n{}", by_hand()))
     }
 }
+
+/// Copy `text` to the clipboard through `clip.exe`, with no console, on a
+/// thread of its own. The values copied are ASCII (keys, addresses), which
+/// every code page `clip` may read them in agrees on.
+pub fn copy(text: &str) {
+    let text = text.to_string();
+    let _ = std::thread::Builder::new()
+        .name("copy".into())
+        .spawn(move || {
+            use std::io::Write;
+            let mut cmd = std::process::Command::new("clip.exe");
+            cmd.stdin(std::process::Stdio::piped());
+            super::hide_console(&mut cmd);
+            let Ok(mut child) = cmd.spawn() else {
+                return;
+            };
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            let _ = child.wait();
+        });
+}

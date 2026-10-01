@@ -349,7 +349,7 @@ fn log_in() -> Result<Option<String>, String> {
     let loopback = Loopback::new().map_err(|e| format!("Not logged in: {e}"))?;
     *NOTE.lock_ok() = Some(format!(
         "Confirm in your browser — this Mac is {}",
-        begin.fingerprint
+        crate::settings::short_fingerprint(&begin.fingerprint)
     ));
     open(&loopback.url(&begin));
     let code = match loopback.wait(LOG_IN_TIMEOUT) {
@@ -420,4 +420,25 @@ fn tell(text: &str, ok: bool) {
         ),
         &[text, TITLE],
     );
+}
+
+/// Copy `text` to the clipboard: muda has no clipboard, so `pbcopy` takes
+/// it on its stdin, on a thread of its own (the menu never waits on it).
+pub fn copy(text: &str) {
+    let text = text.to_string();
+    let _ = std::thread::Builder::new()
+        .name("copy".into())
+        .spawn(move || {
+            use std::io::Write;
+            let Ok(mut child) = std::process::Command::new("/usr/bin/pbcopy")
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+            else {
+                return;
+            };
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            let _ = child.wait();
+        });
 }

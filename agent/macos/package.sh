@@ -64,6 +64,13 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 
+# The menu's icons: template PNGs AppKit finds by name in the bundle's
+# Resources (tray.rs `ICONS`; icons/render.sh makes them from Lucide's SVGs).
+for png in "$here"/icons/*Template.png "$here"/icons/*Template@2x.png; do
+  cp "$png" "$app/Contents/Resources/"
+done
+[ -f "$app/Contents/Resources/powerTemplate@2x.png" ] || { echo "no menu icons in the bundle" >&2; exit 1; }
+
 # ── signing ───────────────────────────────────────────────────────────────
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   identity="$APPLE_SIGNING_IDENTITY"

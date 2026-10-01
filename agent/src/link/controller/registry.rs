@@ -13,11 +13,12 @@ use serde_json::Value;
 
 use crate::api::wire::{
     event, ClaudeSessionSent, CommandOk, DesiredState, NodeChanged, NodeClaude, NodeClaudeRoster,
-    NodeDetail, NodeLeft, NodePending, NodeProviders, NodeSummary, NodeTelemetry,
-    ProviderModelSent, SetDesiredOk,
+    NodeDetail, NodeLeft, NodePending, NodePolicyRequest, NodeProviders, NodeSummary,
+    NodeTelemetry, ProviderModelSent, SetDesiredOk,
 };
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of, Identity};
+use crate::link::wire::PolicyRequest;
 use crate::link::wire::{
     self, name, ClaudeSessionParams, Command, CommandParams, ControllerId, Hello, NodeState,
     StateEvent, Welcome, PROTO,
@@ -25,7 +26,8 @@ use crate::link::wire::{
 use crate::link::wire::{Policy, SessionHost};
 use crate::link::{
     DEAD_AFTER, HEARTBEAT, MAX_CONNECTIONS, MAX_PENDING, MAX_PREAUTH, PENDING_PER_IP, PENDING_TTL,
-    PREAUTH_BUDGET, PREAUTH_PER_IP, UNKNOWN_ADDRESSES, UNKNOWN_PER_MINUTE,
+    POLICY_REQUESTS_PER_MINUTE, PREAUTH_BUDGET, PREAUTH_PER_IP, UNKNOWN_ADDRESSES,
+    UNKNOWN_PER_MINUTE,
 };
 use crate::providers::ProviderReport;
 use crate::rpc::{code, ApiError, Events};
@@ -53,6 +55,7 @@ pub struct Limits {
     pub heartbeat: Duration,
     pub dead_after: Duration,
     pub ack_timeout: Duration,
+    pub policy_requests_per_minute: usize,
 }
 
 impl Default for Limits {
@@ -69,6 +72,7 @@ impl Default for Limits {
             heartbeat: HEARTBEAT,
             dead_after: DEAD_AFTER,
             ack_timeout: ACK_TIMEOUT,
+            policy_requests_per_minute: POLICY_REQUESTS_PER_MINUTE,
         }
     }
 }
@@ -205,6 +209,8 @@ pub(super) struct Reg {
     session_host: Option<SessionHost>,
     /// Unknown keys presented per address, within the last minute.
     pub(super) unknown_by_ip: HashMap<IpAddr, VecDeque<Instant>>,
+    /// Settings requests per approved machine, within the last minute.
+    policy_requests: HashMap<String, VecDeque<Instant>>,
 }
 
 impl Reg {
@@ -658,6 +664,58 @@ impl Registry {
         );
         self.events
             .publish(event::NODES_LEFT, &NodeLeft { id: id.to_string() });
+    }
+
+    /// An approved machine's user asks the box to change one of its
+    /// settings (wire.rs `PolicyRequest`). Checked — at least one setting,
+    /// santree only ever off — and counted against the machine's
+    /// `policy_requests_per_minute`; then the app hears
+    /// `nodes.policy_request`, writes the keys into the machine's policy and
+    /// hands the set over again, which is what changes the machine. The
+    /// controller keeps nothing and changes no policy itself. Refused as
+    /// `unavailable` when no subscriber's queue took the event: the app is
+    /// not listening, and the machine says so rather than wait.
+    pub(super) fn policy_request(&self, id: &str, req: &PolicyRequest) -> Result<(), ApiError> {
+        req.check()
+            .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+        {
+            let mut reg = self.lock();
+            let now = Instant::now();
+            let seen = reg.policy_requests.entry(id.to_string()).or_default();
+            while seen
+                .front()
+                .is_some_and(|t| now.duration_since(*t) >= Duration::from_secs(60))
+            {
+                seen.pop_front();
+            }
+            if seen.len() >= self.limits.policy_requests_per_minute {
+                return Err(busy(format!(
+                    "at most {} settings requests a minute from one machine",
+                    self.limits.policy_requests_per_minute
+                )));
+            }
+            seen.push_back(now);
+        }
+        let told = self.events.publish(
+            event::NODES_POLICY_REQUEST,
+            &NodePolicyRequest {
+                id: id.to_string(),
+                changes: req.clone(),
+            },
+        );
+        tracing::info!(
+            node = id,
+            ?req,
+            told,
+            "link: the machine asks to change its settings"
+        );
+        if told == 0 {
+            return Err(ApiError::new(
+                code::UNAVAILABLE,
+                "Daedalus is not listening (the app is down)",
+            ));
+        }
+        Ok(())
     }
     /// A line from connection `conn_id` of machine `id`: it is alive, and
     /// what it pushed is kept — if it is approved.

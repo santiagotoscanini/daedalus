@@ -307,8 +307,8 @@ mod tests {
             );
             assert!(script.contains(&format!("$BIN/{local}")));
         }
-        // The macOS branch is unchanged: its two universal assets.
-        assert!(script.contains("daedalus-agent-universal-apple-darwin:daedalus-agent"));
-        assert!(script.contains("daedalus-agent-tray-universal-apple-darwin:daedalus-agent-tray"));
+        // The macOS branch fetches the one asset a Mac's updater follows:
+        // the app bundle, zipped (os/macos/mod.rs `ASSETS`).
+        assert!(script.contains("asset=\"daedalus-agent-universal-apple-darwin.app.zip\""));
     }
 }

@@ -622,16 +622,55 @@ controller, where nix pins Claude Code), `update.check` and `link.reload`
 ("Pairing" below), and on macOS and Linux a log-in's three (see "Logging
 in (macOS)"): `enroll.begin` and `enroll.leave` for the operator, as
 santree's socket admits them (`os::operator_allowed`), and `enroll.finish`
-for root alone. There is no pairing method: naming the controller is an
-administrator's, never a socket user's — which is why a log-in's last step
-runs as root. A socket that cannot be made does not stop the service: it is
-tried again every 15 s.
+for root alone. And `settings.get` and `settings.set`, a machine's own settings
+(below, "The menu and a machine's settings"). There is no pairing method:
+naming the controller is an administrator's, never a socket user's — which
+is why a log-in's last step runs as root. A socket that cannot be made does
+not stop the service: it is tried again every 15 s.
 
 The tray, the session and the service are one binary, so the envelope
 moves with a release: the new service restarts the others on the new
 binary at its first start (see "How an update happens"), and a Linux tray
 whose service stops answering after its binary was replaced leaves for the
 new one.
+
+## The menu and a machine's settings
+
+The menu (`src/tray.rs`) has one fixed shape, so it redraws in place while
+it is open: a header with a status dot (green: connected; amber: connecting,
+waiting for approval, a stale VPN handshake, an update restarting, the
+awake hold or Claude not running, a setting that did not take; red: the
+service silent, disconnected, the box's key changed, revoked; grey: logged
+out, or the service switched off in Login Items, where a click on it
+leads), the version, Open Daedalus and "This Mac in Daedalus…" (⌘,), the
+three switches, then Connection ▸ (the link, the VPN, its traffic, both
+keys shortened as `f876:e2c7…8029` with the whole key and Copy in each
+key's submenu), Claude ▸, santree ▸, Updates ▸, Troubleshoot ▸, and last
+Log in… / Log out of the box…, Uninstall… and Quit menu bar app (⌘Q). A
+Mac's rows carry Lucide glyphs (ISC, `assets/LICENSE-lucide`) the bundle
+carries as template images (`macos/icons/`, rendered by its `render.sh`);
+Windows draws no glyphs and no dot, and has no santree rows. Quitting ends
+the menu bar app alone: Claude remote control and the service keep
+running, and launchd starts the app again at the next login.
+
+**The switches** — Keep awake, Claude Remote Control, santree on the box —
+are the machine's own settings, and the box decides them: the service never
+applies one. A click asks the service (`settings.set`), which sends the
+link's `policy_request` (absolute values; the controller allows ten a
+minute per machine and tells the app, which writes only the keys asked for
+and sends the set again). The switch shows the value on its way ("—
+sending…") until the box's policy carries it, and says why when it does not
+within 30 seconds ("— not changed: Daedalus is not listening", "not
+connected to the box", "the controller did not answer", "Daedalus did not
+apply it"). Nothing is queued while the link is down. santree is the
+exception one way: OFF goes the same road, but ON grants a shell on the box,
+so it is never sent — the service answers the page in Daedalus where an
+admin confirms it, Settings › Machines with this machine's "Turn on santree"
+dialog, behind the first eight characters of this Mac's key typed; a click
+while that waits opens it again. Only the user who installed the agent (or
+root) may change them, as only they may use santree's socket; another
+account at the Mac sees them read-only. On Windows every user at the
+desktop may change the two there.
 
 ## The santree socket
 

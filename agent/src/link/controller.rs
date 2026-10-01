@@ -58,6 +58,15 @@
 //! one nobody asked for then. The outcome rides the machine's next
 //! `claude_roster` push, under the request id minted here.
 //!
+//! **Settings asked for by a machine** (`policy_request`, registry.rs):
+//! an approved machine's user may ask for its keep-awake, Claude Remote
+//! Control and santree OFF — never santree on, which grants a shell on the
+//! box and is an admin's, in the browser. The request is checked, counted
+//! against `POLICY_REQUESTS_PER_MINUTE`, and handed to the app as
+//! `nodes.policy_request`; the app writes it and sends the set again, and
+//! that set is the only thing that changes the machine. No subscriber
+//! queue took the event: refused `unavailable`, the app is not listening.
+//!
 //! **santree** (session_host.rs): a machine's policy carries the session
 //! host's address and key while the app turns santree on for it
 //! (registry.rs `effective`), and the host's allow-list is written from each

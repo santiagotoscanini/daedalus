@@ -1901,3 +1901,179 @@ fn a_machine_that_logs_out_is_heard_and_a_revoked_one_hears_it_first() {
     )]);
     assert_eq!(n_revoked.thread.join().unwrap(), Ended::Revoked);
 }
+
+/// The next answer to request `rid` on a raw connection, as a line.
+fn answer_to(t: &mut ltls::Tls, rid: u64) -> String {
+    let want = format!("\"id\":{rid},");
+    for _ in 0..100 {
+        if let ltls::Recv::Line(l) = t.recv().unwrap() {
+            let l = String::from_utf8_lossy(&l).into_owned();
+            if l.contains(&want) {
+                return l;
+            }
+        }
+    }
+    panic!("no answer to request {rid}");
+}
+
+#[test]
+fn a_machine_asks_for_its_settings_and_only_the_app_s_set_changes_them() {
+    use crate::settings::{Asked, Key};
+    let ctl = controller(Limits {
+        policy_requests_per_minute: 4,
+        ..fast()
+    });
+    let nid = id(61);
+    let s = node_shared();
+    let n = spawn_node(
+        target(&ctl, pin_of(&ctl.id)),
+        nid.clone(),
+        Arc::clone(&s),
+        "asker",
+    );
+    let on = crate::link::wire::Policy {
+        awake_hold: true,
+        claude_remote_control: true,
+        ..Default::default()
+    };
+    approve(&ctl.registry, &nid, on.clone());
+    wait_for("approved and linked", 5, || {
+        s.linked() && s.policy().awake_hold
+    });
+    let failed_with = |s: &Shared, needle: &str| {
+        s.settings_view(None)
+            .failed
+            .iter()
+            .any(|f| f.key == Key::AwakeHold && f.why.contains(needle))
+    };
+
+    // The app is down (nobody subscribed): refused, shown, nothing changed.
+    assert_eq!(s.ask_setting(Key::AwakeHold, false).unwrap(), Asked::Sent);
+    wait_for("refused: the app is not listening", 5, || {
+        failed_with(&s, "not listening")
+    });
+    assert!(s.policy().awake_hold);
+
+    // The app listens: it hears the request; the machine's policy moves only
+    // when the app's set carries it.
+    let app = ctl.events.subscribe();
+    let app = &app;
+    assert_eq!(s.ask_setting(Key::AwakeHold, false).unwrap(), Asked::Sent);
+    let heard = |want: &str| {
+        let want = want.to_string();
+        let id = nid.node_id();
+        move || {
+            app.try_iter().any(|l| {
+                l.contains("\"nodes.policy_request\"") && l.contains(&id) && l.contains(&want)
+            })
+        }
+    };
+    wait_for(
+        "the app hears OFF",
+        5,
+        heard(r#""changes":{"awake_hold":false}"#),
+    );
+    assert!(
+        s.settings_view(None).failed.is_empty(),
+        "the failure is replaced"
+    );
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(
+        s.policy().awake_hold,
+        "the controller changes nothing itself"
+    );
+    assert_eq!(s.settings_view(None).pending.len(), 1);
+    let off = crate::link::wire::Policy {
+        awake_hold: false,
+        ..on.clone()
+    };
+    approve(&ctl.registry, &nid, off.clone());
+    wait_for("OFF applied, pending cleared", 5, || {
+        !s.policy().awake_hold && s.settings_view(None).pending.is_empty()
+    });
+
+    // And back ON the same way.
+    assert_eq!(s.ask_setting(Key::AwakeHold, true).unwrap(), Asked::Sent);
+    wait_for(
+        "the app hears ON",
+        5,
+        heard(r#""changes":{"awake_hold":true}"#),
+    );
+    approve(&ctl.registry, &nid, on.clone());
+    wait_for("ON applied", 5, || {
+        s.policy().awake_hold && s.settings_view(None).pending.is_empty()
+    });
+
+    // Its share of a minute is 4 here, and three are spent (the refused one
+    // counts): the fourth goes, the fifth is refused.
+    s.ask_setting(Key::ClaudeRemoteControl, false).unwrap();
+    wait_for(
+        "the app hears the fourth",
+        5,
+        heard(r#""changes":{"claude_remote_control":false}"#),
+    );
+    s.ask_setting(Key::AwakeHold, false).unwrap();
+    wait_for("refused: too many", 5, || failed_with(&s, "a minute"));
+    n.stop();
+
+    // santree ON never travels the link: the controller refuses it from a
+    // machine that tries anyway, as it refuses an unknown setting, and the
+    // app hears nothing of either.
+    let app = ctl.events.subscribe();
+    let other = id(62);
+    approve(&ctl.registry, &other, on.clone());
+    let (mut t, first) = raw(&ctl, &other).unwrap();
+    assert!(first.contains(r#""state":"approved""#), "{first}");
+    t.send(&wire::request(
+        1001,
+        name::POLICY_REQUEST,
+        &serde_json::json!({"santree": true}),
+    ))
+    .unwrap();
+    let a = answer_to(&mut t, 1001);
+    assert!(
+        a.contains("bad_request") && a.contains("from Daedalus"),
+        "{a}"
+    );
+    t.send(&wire::request(
+        1002,
+        name::POLICY_REQUEST,
+        &serde_json::json!({"providers": {}}),
+    ))
+    .unwrap();
+    assert!(answer_to(&mut t, 1002).contains("bad_request"));
+    t.send(&wire::request(
+        1003,
+        name::POLICY_REQUEST,
+        &serde_json::json!({}),
+    ))
+    .unwrap();
+    assert!(answer_to(&mut t, 1003).contains("at least one"));
+    // santree OFF is the machine's to ask.
+    t.send(&wire::request(
+        1004,
+        name::POLICY_REQUEST,
+        &serde_json::json!({"santree": false}),
+    ))
+    .unwrap();
+    assert!(answer_to(&mut t, 1004).contains(r#""ok":{"accepted":true}"#));
+    let lines: Vec<String> = app.try_iter().map(|l| l.to_string()).collect();
+    let asked: Vec<&String> = lines
+        .iter()
+        .filter(|l| l.contains("nodes.policy_request"))
+        .collect();
+    assert_eq!(asked.len(), 1, "{lines:?}");
+    assert!(asked[0].contains(r#""changes":{"santree":false}"#));
+
+    // A machine the app has not approved asks nothing.
+    let stranger = id(63);
+    let (mut t, first) = raw(&ctl, &stranger).unwrap();
+    assert!(first.contains(r#""state":"pending""#), "{first}");
+    t.send(&wire::request(
+        1001,
+        name::POLICY_REQUEST,
+        &serde_json::json!({"awake_hold": false}),
+    ))
+    .unwrap();
+    assert!(answer_to(&mut t, 1001).contains("not approved"));
+}

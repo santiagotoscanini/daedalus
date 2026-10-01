@@ -101,6 +101,9 @@ pub const PENDING_PER_IP: usize = 2;
 pub const PENDING_TTL: Duration = Duration::from_secs(3600);
 /// Unknown keys one address may present in a minute.
 pub const UNKNOWN_PER_MINUTE: usize = 10;
+/// Settings requests (`policy_request`, wire.rs) one approved machine may
+/// send in a minute: each is a write to the app's table and a desired sync.
+pub const POLICY_REQUESTS_PER_MINUTE: usize = 10;
 /// Addresses whose unknown keys are counted at once (the oldest go).
 pub const UNKNOWN_ADDRESSES: usize = 1024;
 /// The SRV record a machine asks for when it has no address.

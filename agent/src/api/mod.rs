@@ -119,8 +119,11 @@
 //! `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
 //! connects and waits for approval; `nodes.left` `{id}` when an approved
 //! machine logs out (the link's `leave`: the app forgets it and deletes its
-//! wg-easy client); `root.progress` `{run, verb, line}` for each line a
-//! running root verb's unit writes.
+//! wg-easy client); `nodes.policy_request` `{id, changes}` when an approved
+//! machine's user asks for one of its settings (the link's
+//! `policy_request`: the app writes the keys `changes` names and sends the
+//! set again; never santree on); `root.progress` `{run, verb, line}` for
+//! each line a running root verb's unit writes.
 
 pub mod conn;
 pub mod wire;
@@ -601,7 +604,7 @@ impl Api {
                     verb: p.verb.clone(),
                     line: line.to_string(),
                 },
-            )
+            );
         });
         match answer {
             Ok(a) => {

@@ -108,13 +108,27 @@ async fn the_agents_client_meets_the_session_host() {
         assert_eq!(hello["ok"]["features"], json!(["workspaces.list"]));
         tls.close();
 
-        // Not in the allow-list: the connect succeeds (TLS 1.3), the first
-        // read carries the host's refusal.
+        // Not in the allow-list: the connect succeeds (TLS 1.3), and the
+        // host's refusal is the first thing read. Nothing is written first:
+        // the host refuses without waiting for a request and closes, and a
+        // write racing that close fails with a broken pipe before the alert
+        // is read.
         let client = Client::new(&stranger).unwrap();
         let mut tls = client
             .connect(TcpStream::connect(addr).unwrap(), pin, WAIT)
             .unwrap_or_else(|e| panic!("{e:?}"));
-        let refused = call(&mut tls, HELLO).unwrap_err();
+        let deadline = Instant::now() + WAIT;
+        let refused = loop {
+            assert!(Instant::now() < deadline, "no refusal in time");
+            match tls.recv() {
+                Ok(Recv::Idle) => {}
+                Ok(Recv::Line(l)) => {
+                    panic!("a stranger was answered: {}", String::from_utf8_lossy(&l))
+                }
+                Ok(Recv::Closed) => panic!("closed without the refusal"),
+                Err(e) => break e,
+            }
+        };
         assert!(
             refused.to_string().contains("AccessDenied"),
             "expected access_denied, got {refused}"

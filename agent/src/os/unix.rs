@@ -335,6 +335,24 @@ pub fn own_uid() -> Option<u32> {
     Some(euid())
 }
 
+/// The account name of `uid`, from the user database; None when it has
+/// no entry.
+pub fn user_name(uid: u32) -> Option<String> {
+    let mut buf = vec![0 as libc::c_char; 4096];
+    // SAFETY: a zeroed passwd is a valid out-parameter; getpwuid_r writes
+    // into it and `buf`, both ours and alive for the call.
+    let mut pw: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut out: *mut libc::passwd = std::ptr::null_mut();
+    // SAFETY: as above; `out` is null or points at `pw`.
+    let rc = unsafe { libc::getpwuid_r(uid, &mut pw, buf.as_mut_ptr(), buf.len(), &mut out) };
+    if rc != 0 || out.is_null() || pw.pw_name.is_null() {
+        return None;
+    }
+    // SAFETY: getpwuid_r succeeded, so pw_name is a NUL-terminated string in `buf`.
+    let name = unsafe { std::ffi::CStr::from_ptr(pw.pw_name) };
+    Some(name.to_string_lossy().into_owned())
+}
+
 fn euid() -> u32 {
     // SAFETY: no arguments; cannot fail.
     unsafe { libc::geteuid() }
