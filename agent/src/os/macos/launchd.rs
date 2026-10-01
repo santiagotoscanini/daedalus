@@ -91,11 +91,22 @@ fn launchctl(args: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn plist(label: &str, program: &Path, args: &[&str], log: &Path, agent: bool) -> String {
+/// A job's plist. `log` takes its stdout and stderr; the menu bar app has
+/// none: it logs into its user's own directory (session.rs), and a fixed
+/// path here would be one file every user's menu bar app shares.
+fn plist(label: &str, program: &Path, args: &[&str], log: Option<&Path>, agent: bool) -> String {
     let mut argv = format!("      <string>{}</string>\n", program.display());
     for a in args {
         argv.push_str(&format!("      <string>{a}</string>\n"));
     }
+    let log = log
+        .map(|l| {
+            format!(
+                "    <key>StandardOutPath</key>\n    <string>{l}</string>\n    <key>StandardErrorPath</key>\n    <string>{l}</string>\n",
+                l = l.display()
+            )
+        })
+        .unwrap_or_default();
     // The LaunchAgent loads only into Aqua (GUI login) sessions and runs as
     // Interactive, so launchd does not throttle it like a background job;
     // the daemon is Background.
@@ -124,15 +135,10 @@ fn plist(label: &str, program: &Path, args: &[&str], log: &Path, agent: bool) ->
     <true/>
     <key>ThrottleInterval</key>
     <integer>5</integer>
-{session}    <key>StandardOutPath</key>
-    <string>{log}</string>
-    <key>StandardErrorPath</key>
-    <string>{log}</string>
-  </dict>
+{session}{log}  </dict>
 </plist>
 "#,
         app = bundle::BUNDLE_ID,
-        log = log.display(),
     )
 }
 
@@ -251,7 +257,7 @@ pub fn install_with(cfg: &Config, opts: &Options) -> Result<()> {
             DAEMON_LABEL,
             &bundle::service_exe(&canonical),
             &["run"],
-            &paths::log_dir().join("launchd.log"),
+            Some(&paths::log_dir().join("launchd.log")),
             false,
         )
         .as_bytes(),
@@ -260,14 +266,7 @@ pub fn install_with(cfg: &Config, opts: &Options) -> Result<()> {
     .context("writing the daemon's plist")?;
     crate::util::write_atomic(
         &tray_plist(),
-        plist(
-            TRAY_LABEL,
-            &bundle::tray_exe(&canonical),
-            &[],
-            Path::new("/tmp/daedalus-agent-tray.log"),
-            true,
-        )
-        .as_bytes(),
+        plist(TRAY_LABEL, &bundle::tray_exe(&canonical), &[], None, true).as_bytes(),
         crate::util::Access::Mode(0o644),
     )
     .context("writing the tray's plist")?;
@@ -786,7 +785,7 @@ mod tests {
             DAEMON_LABEL,
             &bundle::service_exe(&app),
             &["run"],
-            Path::new("/l"),
+            Some(Path::new("/l")),
             false,
         );
         assert!(daemon.contains(
@@ -795,13 +794,10 @@ mod tests {
         assert!(daemon.contains(
             "<key>AssociatedBundleIdentifiers</key>\n    <array>\n      <string>me.toscanini.daedalus-agent-tray</string>"
         ));
-        let tray = plist(
-            TRAY_LABEL,
-            &bundle::tray_exe(&app),
-            &[],
-            Path::new("/l"),
-            true,
-        );
+        let tray = plist(TRAY_LABEL, &bundle::tray_exe(&app), &[], None, true);
+        assert!(daemon.contains("<key>StandardErrorPath</key>\n    <string>/l</string>"));
+        // No log shared by every user's menu bar app.
+        assert!(!tray.contains("StandardOutPath") && !tray.contains("/tmp/"));
         assert!(tray.contains("Daedalus Agent.app/Contents/MacOS/daedalus-agent-tray</string>"));
         assert!(tray.contains("<string>Aqua</string>"));
         assert!(!tray.contains("/Applications/"));
