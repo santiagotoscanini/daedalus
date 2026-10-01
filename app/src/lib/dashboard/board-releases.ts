@@ -4,6 +4,7 @@ import { inflateRawSync } from 'node:zlib'
 
 import { writeAtomic } from '../../host/bridge'
 import { env } from '../../host/env'
+import { swrCache } from '../cache'
 import { gigabytePageSlug, gigabytePageUrl } from '../hardware/gigabyte'
 
 import { pool } from '../http'
@@ -201,7 +202,9 @@ export function parseMsiNote(text: string): { notes: string[]; date: string | nu
 // ── the MSI list ─────────────────────────────────────────────────────────
 
 const noteCache = new Map<string, { notes: string[]; date: string | null }>()
-const listCache = new Map<string, { at: number; releases: BoardRelease[]; error: string | null }>()
+// Per board code: the list and when it was read. A failed read keeps serving
+// the last list, and the page says it is that.
+const LIST_CACHE = swrCache({ ttlMs: LIST_TTL_MS })
 
 async function msiHead(code: string, key: string): Promise<BoardRelease | null> {
   const url = `https://download.msi.com/bos_exe/mb/${code}v${key}.zip`
@@ -433,29 +436,30 @@ export async function boardReleases(id: BoardIdentity): Promise<BoardReleases> {
     return { ...NONE, make, error: 'no MS-xxxx code in the board’s name' }
   }
   const source = `https://download.msi.com/bos_exe/mb/${code}v*.zip`
-  const cached = listCache.get(code)
-  let releases: BoardRelease[]
-  let error: string | null
-  let checkedAt: string | null
-  if (cached !== undefined && Date.now() - cached.at < LIST_TTL_MS) {
-    ;({ releases, error } = cached)
-    checkedAt = new Date(cached.at).toISOString()
-  } else {
+  const attempt: { why: string | null } = { why: null }
+  const list = await LIST_CACHE.get(code, async () => {
     try {
-      const fresh = await msiList(code)
-      listCache.set(code, { at: Date.now(), ...fresh })
-      ;({ releases, error } = fresh)
-      checkedAt = new Date().toISOString()
+      return { at: Date.now(), ...(await msiList(code)) }
     } catch (e) {
-      const why = e instanceof Error ? e.message : String(e)
-      if (cached === undefined) {
-        return { ...NONE, make, source, error: `download.msi.com did not answer: ${why}` }
-      }
-      releases = cached.releases
-      checkedAt = new Date(cached.at).toISOString()
-      error = `download.msi.com did not answer (${why}); this is the list as of the last read`
+      attempt.why = e instanceof Error ? e.message : String(e)
+      return null
+    }
+  })
+  const why = attempt.why
+  if (list === null) {
+    return {
+      ...NONE,
+      make,
+      source,
+      error: `download.msi.com did not answer: ${why ?? 'no answer'}`,
     }
   }
+  const releases = list.releases
+  const checkedAt = new Date(list.at).toISOString()
+  const error =
+    why === null
+      ? list.error
+      : `download.msi.com did not answer (${why}); this is the list as of the last read`
   const runningKey = id.biosVersion === null ? null : msiKey(id.biosVersion)
   const running = runningKey === null ? null : msiVersion(runningKey)
   const at = running === null ? -1 : releases.findIndex((r) => r.version === running)

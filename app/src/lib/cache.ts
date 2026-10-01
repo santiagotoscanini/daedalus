@@ -48,6 +48,9 @@ type SwrCache = {
 
 export function swrCache(opts: { ttlMs: number; retryMs?: number }): SwrCache {
   const slots = new Map<string, Slot>()
+  // A miss already loading: callers that arrive while it runs share it rather
+  // than each asking the upstream the same thing.
+  const loading = new Map<string, Promise<unknown>>()
   const retryMs = opts.retryMs ?? 0
 
   return {
@@ -64,14 +67,20 @@ export function swrCache(opts: { ttlMs: number; retryMs?: number }): SwrCache {
         if (fresh || backingOff) return hit.value as T
       }
 
-      const value = await load()
-      if (value !== null) {
-        slots.set(key, { at: now, tried: now, value })
-        return value
-      }
+      const running = loading.get(key)
+      if (running !== undefined) return running as Promise<T>
 
-      slots.set(key, { at: hit?.at ?? 0, tried: now, value: hit?.value ?? null })
-      return (hit?.value ?? null) as T
+      const p = (async (): Promise<T> => {
+        const value = await load()
+        if (value !== null) {
+          slots.set(key, { at: now, tried: now, value })
+          return value
+        }
+        slots.set(key, { at: hit?.at ?? 0, tried: now, value: hit?.value ?? null })
+        return (hit?.value ?? null) as T
+      })().finally(() => loading.delete(key))
+      loading.set(key, p)
+      return p
     },
 
     forget(key: string): void {

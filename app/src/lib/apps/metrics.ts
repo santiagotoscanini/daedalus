@@ -379,7 +379,7 @@ export type LogLine = { ts: Date; level: string | null; line: string }
  * endpoint — Prometheus would reject the stream selector outright.
  */
 export async function logVolume(ctx: Reads, name: string): Promise<number | null> {
-  return ctx.loki.scalar(`sum(count_over_time({service_name="${name}"}[1h]))`)
+  return ctx.loki.scalar(`sum(count_over_time({service_name=${ctx.loki.quote(name)}}[1h]))`)
 }
 
 /**
@@ -396,7 +396,12 @@ export async function activityLog(
   limit = 60,
   hours = 6,
 ): Promise<LogLine[]> {
-  const lines = await lokiLines(ctx, `{unit="app-${name}-deploy.service"}`, limit, hours)
+  const lines = await lokiLines(
+    ctx,
+    `{unit=${ctx.loki.quote(`app-${name}-deploy.service`)}}`,
+    limit,
+    hours,
+  )
   return lines.sort((a, b) => a.ts.getTime() - b.ts.getTime()).slice(-limit)
 }
 

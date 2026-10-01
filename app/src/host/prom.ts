@@ -3,7 +3,8 @@ import { env } from './env'
 
 // The Prometheus client — every PromQL read in the app goes through these.
 // Reached over the `monitoring` bridge nix/stacks/daedalus/daedalus.nix adds
-// to this container; null/[] on failure per the rule in lib/http.ts.
+// to this container, so each query gets lib/http.ts's one patient attempt
+// rather than the rootless-port ladder; null/[] on failure per the rule there.
 
 export const PROM = () => env.get('PROMETHEUS_URL')
 

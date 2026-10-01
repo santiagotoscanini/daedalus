@@ -8,6 +8,7 @@ import {
   LOKI,
   lokiEntries,
   lokiLatest,
+  lokiQuote,
   lokiScalar,
   lokiSeries,
   lokiStreams,
@@ -99,6 +100,7 @@ export type Ctx = {
   /** The Loki client, same rule; one patient attempt per query (host/loki.ts). */
   loki: {
     url: typeof LOKI
+    quote: typeof lokiQuote
     scalar: typeof lokiScalar
     vector: typeof lokiVector
     series: typeof lokiSeries
@@ -188,6 +190,7 @@ export async function makeCtx(): Promise<Ctx> {
     },
     loki: {
       url: LOKI,
+      quote: lokiQuote,
       scalar: lokiScalar,
       vector: lokiVector,
       series: lokiSeries,

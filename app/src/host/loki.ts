@@ -26,6 +26,15 @@ export const LOKI = () => env.get('LOKI_URL')
 const LOKI_ATTEMPT_MS = [10_000]
 
 /**
+ * A label value for a stream selector (`{unit="…"}`). LogQL string literals take
+ * Go escapes, as PromQL's do (host/prom.ts `promQuote`): the backslash and the
+ * quote need one, and a name is interpolated escaped, never trusted.
+ */
+export function lokiQuote(s: string): string {
+  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+/**
  * LogQL instant query as a number. null means Loki could not be reached; an
  * empty result decodes to 0, because every instant query in this app is a
  * count/sum where "no matching lines" IS zero — rendering it as "—" made a

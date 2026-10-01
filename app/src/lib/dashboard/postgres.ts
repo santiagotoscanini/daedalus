@@ -26,6 +26,7 @@
 // worrying about, and a layout that has not changed in a decade.
 
 import { swrCache } from '../cache'
+import { getText } from '../http'
 import { decodeEntities, stripTags } from '../plain-text'
 import type { ReleaseNote, VersionGap } from './github'
 import { EMPTY_GAP } from './github'
@@ -49,15 +50,6 @@ const MAX_ITEMS = 8
 // Fetch-once-per-TTL, keep the previous answer on failure rather than blank
 // the panel — the two-clock contract documented in lib/cache.ts.
 const cache = swrCache({ ttlMs: TTL_MS, retryMs: RETRY_MS })
-
-async function getText(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) })
-    return res.ok ? await res.text() : null
-  } catch {
-    return null
-  }
-}
 
 type Major = { major: string; latestMinor: string; supported: boolean }
 

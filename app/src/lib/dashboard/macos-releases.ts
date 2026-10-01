@@ -1,4 +1,5 @@
 import { request } from 'node:https'
+import { swrCache } from '../cache'
 
 // What Apple has shipped since the macOS a Mac is running, for the macOS
 // tab: the point releases of its own line it has not taken, and the next
@@ -100,15 +101,12 @@ IQ7aunMZT7XZNn/Bh1XZp5m5MkL72NVxnn6hUrcbvZNCJBIqxw8dtk2cXmPIS4AX
 UKqK1drk/NAJBzewdXUh
 -----END CERTIFICATE-----`
 
-type Cached<T> = { at: number; value: T }
-const tableCache: { v: Cached<TableRow[]> | null } = { v: null }
-const pmvCache: { v: Cached<Map<string, PmvBuild[]>> | null } = { v: null }
-const notesCache = new Map<string, Cached<{ url: string | null; sections: MacNoteSection[] }>>()
-const securityCache = new Map<string, Cached<{ cves: number | null; note: string | null }>>()
-
-function fresh<T>(c: Cached<T> | null | undefined): T | null {
-  return c !== null && c !== undefined && Date.now() - c.at < TTL_MS ? c.value : null
-}
+// Apple's pages move slowly: each read holds for TTL_MS. A read that throws is
+// not kept, so the next asks again.
+const TABLE = swrCache({ ttlMs: TTL_MS })
+const PMV = swrCache({ ttlMs: TTL_MS })
+const NOTES = swrCache({ ttlMs: TTL_MS })
+const SECURITY = swrCache({ ttlMs: TTL_MS })
 
 /* ── the security table ───────────────────────────────────────────────── */
 
@@ -199,12 +197,11 @@ async function fetchText(url: string, headers: Record<string, string> = {}): Pro
 }
 
 async function securityTable(): Promise<TableRow[]> {
-  const hit = fresh(tableCache.v)
-  if (hit !== null) return hit
-  const rows = parseSecurityTable(await fetchText(TABLE_URL))
-  if (rows.length === 0) throw new Error('the security table had no macOS rows')
-  tableCache.v = { at: Date.now(), value: rows }
-  return rows
+  return TABLE.get('', async () => {
+    const rows = parseSecurityTable(await fetchText(TABLE_URL))
+    if (rows.length === 0) throw new Error('the security table had no macOS rows')
+    return rows
+  })
 }
 
 /* ── the version feed ─────────────────────────────────────────────────── */
@@ -264,11 +261,7 @@ export function parsePmv(text: string): Map<string, PmvBuild[]> {
 }
 
 async function versionFeed(): Promise<Map<string, PmvBuild[]>> {
-  const hit = fresh(pmvCache.v)
-  if (hit !== null) return hit
-  const v = parsePmv(await getPinned(PMV_URL))
-  pmvCache.v = { at: Date.now(), value: v }
-  return v
+  return PMV.get('', async () => parsePmv(await getPinned(PMV_URL)))
 }
 
 /**
@@ -384,24 +377,23 @@ async function releaseNotes(
   version: string,
 ): Promise<{ url: string | null; sections: MacNoteSection[] }> {
   const key = notesSlugs(version)[0] ?? version
-  const hit = fresh(notesCache.get(key))
-  if (hit !== null) return hit
-  for (const slug of notesSlugs(version)) {
-    try {
-      const text = await fetchText(
-        `https://developer.apple.com/tutorials/data/documentation/macos-release-notes/${slug}.json`,
-      )
-      const v = {
-        url: `https://developer.apple.com/documentation/macos-release-notes/${slug}`,
-        sections: parseReleaseNotes(text),
+  const notes = await NOTES.get(key, async () => {
+    for (const slug of notesSlugs(version)) {
+      try {
+        const text = await fetchText(
+          `https://developer.apple.com/tutorials/data/documentation/macos-release-notes/${slug}.json`,
+        )
+        return {
+          url: `https://developer.apple.com/documentation/macos-release-notes/${slug}`,
+          sections: parseReleaseNotes(text),
+        }
+      } catch {
+        // the next slug: a major's notes live under its bare number
       }
-      notesCache.set(key, { at: Date.now(), value: v })
-      return v
-    } catch {
-      // the next slug: a major's notes live under its bare number
     }
-  }
-  return { url: null, sections: [] }
+    return null
+  })
+  return notes ?? { url: null, sections: [] }
 }
 
 /** How many CVEs the security page names, or Apple's line that it names none. */
@@ -414,11 +406,7 @@ export function parseSecurityPage(html: string): { cves: number | null; note: st
 }
 
 async function securityContent(url: string): Promise<{ cves: number | null; note: string | null }> {
-  const hit = fresh(securityCache.get(url))
-  if (hit !== null) return hit
-  const v = parseSecurityPage(await fetchText(url))
-  securityCache.set(url, { at: Date.now(), value: v })
-  return v
+  return SECURITY.get(url, async () => parseSecurityPage(await fetchText(url)))
 }
 
 /* ── the answer ───────────────────────────────────────────────────────── */

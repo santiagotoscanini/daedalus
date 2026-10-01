@@ -1,3 +1,4 @@
+import { swrCache } from '../cache'
 import { getJson } from '../http'
 import { githubHeaders } from './github'
 
@@ -23,8 +24,9 @@ export type BrowserLatest = {
   error: string | null
 }
 
-const TTL_MS = 6 * 3600_000
-const cache = new Map<string, { at: number; value: BrowserLatest }>()
+// A good answer holds for six hours; a feed that failed is asked again on the
+// next read, and its last good answer is shown meanwhile, with the failure.
+const CACHE = swrCache({ ttlMs: 6 * 3600_000 })
 
 /** The vendor's platform name for a node's OS and architecture. */
 function chromePlatform(os: string, arch: string): string {
@@ -99,37 +101,31 @@ export async function browserLatest(
 ): Promise<BrowserLatest[]> {
   const out: BrowserLatest[] = []
   for (const kind of [...new Set(kinds)]) {
-    const key = `${kind}/${os}/${arch}`
-    const hit = cache.get(key)
-    if (hit !== undefined && Date.now() - hit.at < TTL_MS) {
-      out.push(hit.value)
-      continue
-    }
-    const read =
+    const reader =
       kind === 'chrome'
-        ? chrome(os, arch)
+        ? () => chrome(os, arch)
         : kind === 'edge'
-          ? edge(os, arch)
+          ? () => edge(os, arch)
           : kind === 'brave'
-            ? brave()
+            ? brave
             : null
-    if (read === null) continue
-    let value: BrowserLatest
-    try {
-      value = await read
-    } catch (e) {
-      value = {
-        kind,
-        latest: hit?.value.latest ?? null,
-        publishedAt: hit?.value.publishedAt ?? null,
-        source: hit?.value.source ?? '',
-        error: e instanceof Error ? e.message : String(e),
+    if (reader === null) continue
+    // What this read's own attempt answered, when it was not a good answer.
+    const attempt: { failed: BrowserLatest | null } = { failed: null }
+    const value = await CACHE.get(`${kind}/${os}/${arch}`, async () => {
+      try {
+        const v = await reader()
+        if (v.error === null) return v
+        attempt.failed = v
+      } catch (e) {
+        const error = e instanceof Error ? e.message : String(e)
+        attempt.failed = { kind, latest: null, publishedAt: null, source: '', error }
       }
-    }
-    // A feed that failed is retried on the next read; a good answer holds
-    // for six hours.
-    if (value.error === null) cache.set(key, { at: Date.now(), value })
-    out.push(value)
+      return null
+    })
+    const failed = attempt.failed
+    if (value !== null) out.push(failed === null ? value : { ...value, error: failed.error })
+    else if (failed !== null) out.push(failed)
   }
   return out
 }

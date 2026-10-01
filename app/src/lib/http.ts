@@ -57,6 +57,23 @@ import type { Result } from './result'
 export const ATTEMPT_MS = [400, 800, 1_500, 2_500]
 
 /**
+ * One patient attempt: for every origin the stall cannot reach — a shared
+ * bridge (prometheus), traefik on its published hostname, the internet. There
+ * a slow answer is the service being slow, and asking again only queues
+ * another request behind the first.
+ */
+export const PATIENT_MS = [8_000]
+
+/** The budget an origin gets: the ladder for a rootless-published host port, else one patient try. */
+export function attemptsFor(url: string): number[] {
+  try {
+    return new URL(url).hostname === 'host.containers.internal' ? ATTEMPT_MS : PATIENT_MS
+  } catch {
+    return PATIENT_MS
+  }
+}
+
+/**
  * Identical GETs in flight at the same moment, answered once.
  *
  * Two readers on one page can legitimately want the same number (host/loki.ts
@@ -117,14 +134,16 @@ export function basicAuth(user: string | undefined, pass: string | undefined): s
  * visit a person makes.
  *
  * Retrying on a short budget turns that ~10.5s hang into a 400ms abort and a
- * fresh connection. The retry is only for a THROWN request (a body that fails
+ * fresh connection — for a `host.containers.internal` origin, which is the
+ * only one the stall reaches; every other origin gets one patient attempt
+ * (`attemptsFor`). The retry is only for a THROWN request (a body that fails
  * to parse included): a 4xx/5xx is the service answering, and asking twice
  * would not change its mind.
  */
 export function getJson<T>(
   url: string,
   init: RequestInit = {},
-  attempts: number[] = ATTEMPT_MS,
+  attempts: number[] = attemptsFor(url),
 ): Promise<T | null> {
   // Only plain GETs are shared. Anything carrying headers, a method or a body
   // is a different request that happens to have the same URL — qBittorrent's
@@ -174,7 +193,7 @@ const timedOut = (e: unknown): boolean =>
 export async function getJsonResult<T>(
   url: string,
   init: RequestInit = {},
-  attempts: number[] = ATTEMPT_MS,
+  attempts: number[] = attemptsFor(url),
 ): Promise<JsonResult<T>> {
   // The last attempt's account of itself. `unreachable` until something
   // throws, for the degenerate case of an empty ladder.
@@ -209,7 +228,7 @@ export async function getJsonResult<T>(
  */
 export async function getText(
   url: string,
-  attempts: number[] = ATTEMPT_MS,
+  attempts: number[] = attemptsFor(url),
 ): Promise<string | null> {
   for (const ms of attempts) {
     try {

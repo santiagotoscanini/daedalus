@@ -261,9 +261,11 @@ here.
   to `/var/log/daedalus-builds/<id>.log`, which is the `/builds` mount
   above.
 - External-service reads follow the escalating-retry rule: retry only
-  thrown requests with a `[400, 800, 1500, 2500]` ms ladder (the
-  rootless-port first-SYN stall), never retry a busy upstream (Loki
-  gets ONE patient attempt).
+  thrown requests with a `[400, 800, 1500, 2500]` ms ladder, and only to a
+  `host.containers.internal` origin (the rootless-port first-SYN stall);
+  every other origin — prometheus over its bridge, traefik, the internet —
+  gets one patient attempt (`lib/http.ts` `attemptsFor`), and Loki one
+  longer one. Never retry a busy upstream.
 - **Stages are a four-rung ladder, spelled out in exactly one place —
   the `APP_STAGES` tuple in `lib/stage.ts`**: `declared` → `off` →
   `lab` → `live`, each adding to the last. `declared` runs nothing at
