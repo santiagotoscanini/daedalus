@@ -53,7 +53,7 @@ let
     port = statusPort;
     controller = {
       api_socket = "${controllerDir}/api.sock";
-      # The app's container runs as the operator (`--user=0:0`, daedalus.nix),
+      # The app's container runs as the operator (`--user=0:0`, container.nix),
       # whom the socket always serves.
       api_allowed_uids = [ ];
       claude_remote_control = true;

@@ -87,7 +87,7 @@ let
   hookBin = "/run/current-system/sw/bin/daedalus-session-host";
 
   # The app writes each workspace's icon here (app/src/host/workspace-icons.ts,
-  # through its /workspace-icons mount, daedalus.nix); this host only reads it
+  # through its /workspace-icons mount, container.nix); this host only reads it
   # (`workspaces.icon`).
   workspaceIcons = workspaceIconsDir;
 

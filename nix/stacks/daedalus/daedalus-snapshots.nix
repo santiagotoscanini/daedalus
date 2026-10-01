@@ -259,7 +259,7 @@ in
     };
 
     # The builder's machinery, for Apps › Builder — only while the builder
-    # exists (builder.nix), like the /builder mount in daedalus.nix. Root:
+    # exists (builder.nix), like the /builder mount in container.nix. Root:
     # buildctl's socket, `zfs get`, the fence check's iptables and the push
     # credential's root-0600 file all want it. Ordered before the container
     # because the mount source must exist (rootless podman cannot create a

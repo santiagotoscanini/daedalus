@@ -254,7 +254,7 @@ rec {
 
   # ── where each snapshot publishes ────────────────────────────────────────
   #
-  # Each is a /run directory the container mounts read-only (daedalus.nix)
+  # Each is a /run directory the container mounts read-only (container.nix)
   # and a snapshot service writes (daedalus-snapshots.nix).
 
   # Where the merged per-container environment is published. /run, so these
@@ -288,7 +288,7 @@ rec {
   # ── the controller ───────────────────────────────────────────────────────
   #
   # The directory the controller's local API socket lives in (controller.nix),
-  # mounted into the container as it is (daedalus.nix). It holds the socket
+  # mounted into the container as it is (container.nix). It holds the socket
   # alone. Written by the controller rather than by a snapshot, but made by
   # tmpfiles at boot and at every switch, so the bind source exists before the
   # container starts whether or not the controller is up.
@@ -332,7 +332,7 @@ rec {
   # What the root verbs that report as they run (build, …) publish: each its
   # `<verb>-status.json` (and a log), written by root into a directory only
   # root can write and mounted read-only into the container at /verbs
-  # (daedalus.nix). The request reaches root through the root helper's run
+  # (container.nix). The request reaches root through the root helper's run
   # file, so root reads nothing the container wrote. Not /run: a status
   # outlives a reboot, like the run it reports. Made by tmpfiles
   # (daedalus-verbs.nix).

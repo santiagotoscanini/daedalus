@@ -178,7 +178,7 @@ here.
   /workspaces, build logs at /builds, the GitHub App's webhook secret at
   /github and its installation token at /github-token, shotter's run
   archive at /shotter (contributed by the shotter stack, not
-  `daedalus.nix`), the encrypt-only `sops` binary at /usr/local/bin/sops, and the
+  `container.nix`), the encrypt-only `sops` binary at /usr/local/bin/sops, and the
   CONFIGURATION repository's git facts at /repo — remote, head, dirty
   counts, drift, last Apply commit, plus the site directory's state and
   a digest per managed file, never the tree itself. (The engine clone's
@@ -189,13 +189,14 @@ here.
   with, so the settings tabs edit against it. The two design documents the MCP
   server serves (`host/mcp/docs.ts`) are in the image, at
   /opt/daedalus/docs; in dev mode the whole engine checkout is also at
-  /engine, read-only, for the tests that read files beside `app/`. **/apply is the
-  only writable mount**, apart from /app, which is this clone itself.
+  /engine, read-only, for the tests that read files beside `app/`. **/workspace-icons and
+  /boards are the only writable mounts** (their readers are the operator's,
+  never root), apart from /app, which is this clone itself.
   Never reach around them (no SSH-ing the host, no reading host paths
   directly) — if a page needs a new host fact, extend the matching
   snapshot script in `nix/stacks/daedalus/host/`
   and its nix wiring.
-- Config values come from env vars bound in `daedalus.nix` (in
+- Config values come from env vars bound in `container.nix` (in
   `nix/stacks/daedalus/`; `src/host/env.ts` is the schema: one
   row per variable, read with `env.get('NAME')`, and a name that is not
   a row does not compile. A new variable is a new row first. Only
