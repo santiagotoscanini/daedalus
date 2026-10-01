@@ -100,18 +100,18 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
         wait = interval;
 
         let now = now_rfc3339();
-        let refused = shared.state().rolled_back.map(|r| r.version);
+        let refused = shared.state.get().rolled_back.map(|r| r.version);
         match check(refused.as_deref()) {
             Err(e) => {
                 tracing::warn!(error = format!("{e:#}"), "update check failed");
-                shared.with_state(|s| {
+                shared.state.edit(|s| {
                     s.last_update_check = Some(now.clone());
                     s.last_update_result = Some(format!("check failed: {e:#}"));
                 });
             }
             Ok(None) => {
-                shared.set_update_available(None);
-                shared.with_state(|s| {
+                shared.update.set_available(None);
+                shared.state.edit(|s| {
                     s.last_update_check = Some(now.clone());
                     s.last_update_result = Some(match &refused {
                         Some(v) => {
@@ -123,9 +123,9 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
             }
             Ok(Some(rel)) => {
                 let label = rel.version.to_string();
-                shared.set_update_available(Some(label.clone()));
+                shared.update.set_available(Some(label.clone()));
                 if let Some(why) = cfg.self_update_off() {
-                    shared.with_state(|s| {
+                    shared.state.edit(|s| {
                         s.last_update_check = Some(now.clone());
                         s.last_update_result = Some(format!("{label} available; {why}"));
                     });
@@ -133,8 +133,8 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
                 }
                 // The `.old` binaries are the version to go back to until
                 // this one has proved itself: nothing replaces them before.
-                if let Some(p) = shared.state().probation {
-                    shared.with_state(|s| {
+                if let Some(p) = shared.state.get().probation {
+                    shared.state.edit(|s| {
                         s.last_update_check = Some(now.clone());
                         s.last_update_result = Some(format!(
                             "{label} available; waiting for {} to prove itself first",
@@ -145,7 +145,7 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
                 }
                 match install(&rel, &shared, &now) {
                     Ok(()) => {
-                        shared.set_restart_pending();
+                        shared.update.set_restart_pending();
                         tracing::info!(
                             version = label,
                             "installed; exiting so the service restarts on it"
@@ -159,7 +159,7 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
                     }
                     Err(e) => {
                         tracing::error!(error = format!("{e:#}"), "update not installed");
-                        shared.with_state(|s| {
+                        shared.state.edit(|s| {
                             s.last_update_check = Some(now.clone());
                             s.last_update_result =
                                 Some(format!("{label} available but not installed: {e:#}"));
@@ -183,7 +183,8 @@ pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> 
     let label = rel.version.to_string();
     let staged = download_and_verify(rel)?;
     shared
-        .with_state_saved(|s| {
+        .state
+        .edit_saved(|s| {
             s.last_update_check = Some(now.to_string());
             s.last_update_result = Some(format!("installed {label}; restarting"));
             s.updated_from = Some(crate::VERSION.into());
@@ -192,7 +193,7 @@ pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> 
         })
         .context("the probation could not be recorded; nothing was replaced")?;
     if let Err(e) = swap_in(&staged) {
-        shared.with_state(|s| s.probation = None);
+        shared.state.edit(|s| s.probation = None);
         return Err(e);
     }
     match installed_version() {
@@ -203,7 +204,7 @@ pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> 
                 Err(e) => format!("the installed binary does not run: {e:#}"),
             };
             let back = roll_back();
-            shared.with_state(|s| {
+            shared.state.edit(|s| {
                 s.probation = None;
                 s.rolled_back = Some(crate::state::RolledBack {
                     version: label.clone(),
@@ -223,7 +224,7 @@ pub fn install(rel: &Release, shared: &Shared, now: &str) -> anyhow::Result<()> 
 }
 
 /// The updater's wait: `total`, cut short by a "check now" — from the
-/// status page or from the box, which nudges the stop (`Shared::
+/// status page or from the box, which nudges the stop (`UpdateState::
 /// request_check`). Returns true when stopped.
 pub(super) fn sleep_until_stop(stop: &Shutdown, shared: &Shared, total: Duration) -> bool {
     let until = std::time::Instant::now() + total;
@@ -231,7 +232,7 @@ pub(super) fn sleep_until_stop(stop: &Shutdown, shared: &Shared, total: Duration
         // Taken before the flag is read, so a request between the two
         // still wakes the wait below.
         let seen = stop.nudges();
-        if shared.take_check_request() {
+        if shared.update.take_check_request() {
             tracing::info!("update check requested from the status page");
             return false;
         }

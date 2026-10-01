@@ -382,17 +382,17 @@ fn scratch(name: &str) -> std::path::PathBuf {
 
 fn node_shared(paired: bool, policy: Policy) -> Arc<Shared> {
     let s = Arc::new(Shared::new(
-        State::default(),
-        crate::facts::Facts::default(),
-        Instant::now(),
-        policy,
         Role::of(Mode::Node),
+        crate::facts::Facts::default(),
+        State::default(),
+        policy,
+        crate::util::Shutdown::new(),
     ));
-    s.set_link_keys(crate::link::LinkKeys {
+    s.link.set_keys(crate::link::LinkKeys {
         pin: paired.then(|| format_fingerprint(&[1; 32])),
         address: None,
     });
-    s.set_link(|l| {
+    s.link.set_status(|l| {
         l.state = Some(if paired {
             LinkState::Approved
         } else {
@@ -443,13 +443,15 @@ fn the_door_says_why_or_pipes() {
     let e = ask();
     assert_eq!(e["id"], serde_json::Value::Null);
     assert_eq!(e["err"]["code"], "unavailable");
-    shared.set_link_keys(crate::link::LinkKeys {
+    shared.link.set_keys(crate::link::LinkKeys {
         pin: Some(format_fingerprint(&[1; 32])),
         address: None,
     });
-    shared.set_link(|l| l.state = Some(LinkState::Approved));
+    shared
+        .link
+        .set_status(|l| l.state = Some(LinkState::Approved));
     assert_eq!(ask()["err"]["code"], "santree_off");
-    shared.set_policy(santree_on(addr));
+    shared.settings.set_policy(santree_on(addr));
     let s = UnixStream::connect(&path).unwrap();
     let ok = first_line(&s);
     assert_eq!(ok["ok"]["host"], addr.to_string());
@@ -462,7 +464,7 @@ fn the_door_says_why_or_pipes() {
     drop(s);
 
     // Another key where the box named this one.
-    shared.set_policy(Policy {
+    shared.settings.set_policy(Policy {
         session_host: Some(SessionHost {
             address: addr.to_string(),
             public_key: "07".repeat(32),

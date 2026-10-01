@@ -161,7 +161,7 @@ pub fn moves_pin(path: &Path, pin: &str) -> bool {
 /// Read the link's keys in `files` again and hand them to the running link;
 /// true when they moved (and the link starts over under them).
 pub fn reload(shared: &Shared, files: &KeyFiles) -> Result<bool> {
-    Ok(shared.set_link_keys(files.load()?))
+    Ok(shared.link.set_keys(files.load()?))
 }
 
 /// The `pair` command as this OS's administrator types it.
@@ -202,7 +202,6 @@ mod tests {
     use crate::config::Mode;
     use crate::role::Role;
     use std::sync::Arc;
-    use std::time::Instant;
 
     fn fp(n: u8) -> String {
         format_fingerprint(&[n; 32])
@@ -217,11 +216,11 @@ mod tests {
 
     fn node_shared() -> Arc<Shared> {
         Arc::new(Shared::new(
-            crate::state::State::default(),
-            crate::facts::Facts::default(),
-            Instant::now(),
-            crate::link::wire::Policy::default(),
             Role::of(Mode::Node),
+            crate::facts::Facts::default(),
+            crate::state::State::default(),
+            crate::link::wire::Policy::default(),
+            crate::util::Shutdown::new(),
         ))
     }
 
@@ -308,7 +307,7 @@ mod tests {
         assert_eq!(cfg.controller_pin.as_deref(), Some(fp(1).as_str()));
         assert_eq!(cfg.controller_address.as_deref(), Some("box.lan:7788"));
         assert!(paired_at(&files).unwrap());
-        let (keys, moved) = shared.link_keys();
+        let (keys, moved) = shared.link.keys();
         assert_eq!((keys.pin.as_deref(), moved), (Some(fp(1).as_str()), 1));
         // Written whole, and the service's: no stray temp file, and on unix
         // not writable by group or others.
@@ -330,7 +329,7 @@ mod tests {
         other.write_at(&path).unwrap();
         assert!(reload(&shared, &files).unwrap());
         assert!(!reload(&shared, &files).unwrap());
-        let (keys, moved) = shared.link_keys();
+        let (keys, moved) = shared.link.keys();
         assert_eq!(keys.pin.as_deref(), Some(fp(2).as_str()));
         assert_eq!(keys.address.as_deref(), Some("box.lan:7788"));
         assert_eq!(moved, 2);
@@ -365,17 +364,17 @@ mod tests {
         assert!(!paired_at(&mac).unwrap());
         let shared = node_shared();
         assert!(!reload(&shared, &mac).unwrap());
-        assert_eq!(shared.link_keys().0, crate::link::LinkKeys::default());
+        assert_eq!(shared.link.keys().0, crate::link::LinkKeys::default());
         // Logged in (enroll.rs writes the tunnel config): the same pin is
         // the link's.
         std::fs::write(&tunnel, "").unwrap();
         assert!(paired_at(&mac).unwrap());
         assert!(reload(&shared, &mac).unwrap());
-        assert_eq!(shared.link_keys().0.pin.as_deref(), Some(fp(3).as_str()));
+        assert_eq!(shared.link.keys().0.pin.as_deref(), Some(fp(3).as_str()));
         // Logged out again: the keys go.
         std::fs::remove_file(&tunnel).unwrap();
         assert!(reload(&shared, &mac).unwrap());
-        assert!(!shared.link_keys().0.paired());
+        assert!(!shared.link.keys().0.paired());
         let _ = std::fs::remove_dir_all(dir);
     }
 

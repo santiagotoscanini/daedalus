@@ -48,7 +48,8 @@ use crate::link::wire::Policy;
 use crate::local::LocalRequest;
 use crate::logging;
 use crate::paths;
-use crate::shared::{Shared, StatusDocument};
+use crate::shared::Shared;
+use crate::status::StatusDocument;
 use crate::VERSION;
 
 /// How often the page is read and the report sent.
@@ -113,7 +114,11 @@ impl Link {
     fn report(&self, report: &Report) -> Option<ReportAnswer> {
         match self {
             Link::Socket => send_report(report),
-            Link::InProcess(shared) => Some(shared.set_claude(report.clone())),
+            Link::InProcess(shared) => Some(
+                shared
+                    .claude
+                    .take_report(report.clone(), &shared.settings.policy()),
+            ),
         }
     }
 
@@ -122,7 +127,7 @@ impl Link {
         match self {
             Link::Socket => send_roster(roster),
             Link::InProcess(shared) => {
-                shared.set_claude_roster(Arc::clone(roster));
+                shared.claude.set_roster(Arc::clone(roster));
                 true
             }
         }
@@ -133,7 +138,7 @@ impl Link {
     fn instruction_waiting(&self) -> bool {
         match self {
             Link::Socket => false,
-            Link::InProcess(shared) => shared.claude_instruction_waiting(),
+            Link::InProcess(shared) => shared.claude.instruction_waiting(),
         }
     }
 }
@@ -255,7 +260,7 @@ impl Session {
     /// not even for the moment before the first report.
     pub fn in_process(shared: Arc<Shared>, places: Places) -> anyhow::Result<Self> {
         let lock = claim_lock(&places.claude_log)?;
-        let policy = shared.policy();
+        let policy = shared.settings.policy();
         let sessions = start_sessions(&places);
         let mut sup = Supervisor::new(
             policy.claude_workdir,

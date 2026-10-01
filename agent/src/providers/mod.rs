@@ -62,21 +62,21 @@ pub const MAX_WORD: usize = 64;
 pub const MAX_ACTIONS: usize = 8;
 
 /// The reader's thread: a read now, then on the cadence above — and at
-/// once after a residency verb (`Shared::request_providers_read`) — each
+/// once after a residency verb (`ProvidersHub::finish_action`) — each
 /// published to `shared` with the verbs' outcomes, for the link to push.
 pub fn run_loop(shared: Arc<Shared>, stop: Shutdown) {
     let mut last_policy: Option<ProvidersPolicy> = None;
     let mut read_at: Option<Instant> = None;
     let mut every = READ_EVERY;
     loop {
-        let policy = shared.policy();
-        let asked = shared.take_providers_read();
+        let policy = shared.settings.policy();
+        let asked = shared.providers.take_read();
         let due = asked
             || read_at.is_none_or(|at| at.elapsed() >= every)
             || last_policy.as_ref() != Some(&policy.providers);
         if due {
-            let mut list = read(&policy, shared.lemonade_installed());
-            let actions = shared.provider_actions();
+            let mut list = read(&policy, shared.telemetry.lemonade_installed());
+            let actions = shared.providers.actions();
             for p in &mut list {
                 p.actions = actions.clone();
             }
@@ -85,7 +85,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Shutdown) {
             } else {
                 READ_EVERY
             };
-            shared.set_providers(list);
+            shared.providers.set(list);
             last_policy = Some(policy.providers);
             read_at = Some(Instant::now());
         }

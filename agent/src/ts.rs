@@ -76,7 +76,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     EnrollRedeem::export_all(cfg)?;
     EnrollRedeemed::export_all(cfg)?;
     // The local socket's status document, which `nodes.get` carries.
-    crate::shared::StatusDocument::export_all(cfg)?;
+    crate::status::StatusDocument::export_all(cfg)?;
     Ok(())
 }
 

@@ -146,14 +146,14 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     // The node, linked to the controller as a paired machine.
     let node = Identity::from_seed([1; 32]);
     let shared = Arc::new(Shared::new(
-        daedalus_agent::state::State::default(),
-        daedalus_agent::facts::Facts::default(),
-        Instant::now(),
-        Policy::default(),
         Role::of(Mode::Node),
+        daedalus_agent::facts::Facts::default(),
+        daedalus_agent::state::State::default(),
+        Policy::default(),
+        Shutdown::new(),
     ));
     let pin = digest(ctl.public_key().as_bytes());
-    shared.set_link_keys(LinkKeys {
+    shared.link.set_keys(LinkKeys {
         pin: Some(format_fingerprint(&pin)),
         address: None,
     });
@@ -189,10 +189,10 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     registry.set_desired(vec![entry(&node, true)]);
     assert_eq!(listed(&allow), vec![node.node_id()]);
     wait_for("the node's policy", || {
-        shared.policy().session_host.is_some()
+        shared.settings.policy().session_host.is_some()
     })
     .await;
-    let told = shared.policy().session_host.unwrap();
+    let told = shared.settings.policy().session_host.unwrap();
     assert_eq!(told.address, host_addr.to_string());
     assert_eq!(told.public_key, hex(&host_key));
     let kept: Value =
@@ -280,7 +280,7 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     tokio::time::timeout(WAIT, client.closed())
         .await
         .expect("the host cut the link");
-    wait_for("santree off on the node", || !shared.policy().santree).await;
+    wait_for("santree off on the node", || !shared.settings.policy().santree).await;
     let mut again = UnixStream::connect(&socket).await.unwrap();
     assert_eq!(verdict(&mut again).await["err"]["code"], "santree_off");
 

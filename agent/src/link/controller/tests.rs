@@ -62,11 +62,11 @@ fn fast() -> Limits {
 
 fn node_shared() -> Arc<Shared> {
     Arc::new(Shared::new(
-        State::default(),
-        crate::facts::Facts::default(),
-        Instant::now(),
-        crate::link::wire::Policy::default(),
         Role::of(Mode::Node),
+        crate::facts::Facts::default(),
+        State::default(),
+        crate::link::wire::Policy::default(),
+        crate::util::Shutdown::new(),
     ))
 }
 
@@ -178,7 +178,7 @@ fn an_approved_machine_connects_and_pushes() {
     let nid = id(1);
     approve(&ctl.registry, &nid, claude_policy());
     let shared = node_shared();
-    shared.set_telemetry(
+    shared.telemetry.set(
         Telemetry {
             sampled_at: "t1".into(),
             process_count: Some(300),
@@ -186,11 +186,14 @@ fn an_approved_machine_connects_and_pushes() {
         },
         true,
     );
-    shared.set_claude(Report {
-        state: crate::claude::ClaudeState::Running,
-        pid: Some(7),
-        ..Default::default()
-    });
+    shared.claude.take_report(
+        Report {
+            state: crate::claude::ClaudeState::Running,
+            pid: Some(7),
+            ..Default::default()
+        },
+        &shared.settings.policy(),
+    );
     let node = spawn_node(
         target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
@@ -229,7 +232,7 @@ fn an_approved_machine_connects_and_pushes() {
     assert_eq!(link.fingerprint, nid.fingerprint());
     assert_eq!(link.controller_fingerprint, Some(ctl.id.fingerprint()));
     // The policy from the answer applied.
-    assert_eq!(node.shared.policy(), claude_policy());
+    assert_eq!(node.shared.settings.policy(), claude_policy());
     assert_eq!(
         ctl.registry
             .get(&nid.node_id(), true)
@@ -288,7 +291,7 @@ fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
     assert_eq!((none.connected, none.providers.is_none()), (false, true));
 
     let shared = node_shared();
-    shared.set_providers(vec![crate::providers::ProviderReport {
+    shared.providers.set(vec![crate::providers::ProviderReport {
         kind: crate::providers::ProviderKind::Lemonade,
         port: 13305,
         running: true,
@@ -332,7 +335,7 @@ fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
     assert!(m.contains("daedalus_agent_provider_models{"), "{m}");
 
     // A document past its bounds is dropped; the last good one stands.
-    node.shared.set_providers(vec![
+    node.shared.providers.set(vec![
         crate::providers::ProviderReport {
             kind: crate::providers::ProviderKind::Lemonade,
             ..Default::default()
@@ -370,10 +373,11 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     });
     wait_for("the machine sees pending", 5, || {
         node.shared
-            .link()
+            .link
+            .status()
             .is_some_and(|l| l.state == Some(crate::link::LinkState::Pending))
     });
-    let link = node.shared.link().unwrap();
+    let link = node.shared.link.status().unwrap();
     assert!(link.connected);
     assert_eq!(link.controller_fingerprint, Some(ctl.id.fingerprint()));
     // A pending machine pushes nothing, and nothing it sends is kept.
@@ -389,7 +393,9 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
 
     let ok = approve(&ctl.registry, &nid, claude_policy());
     assert_eq!(ok.approved, vec![nid.node_id()]);
-    wait_for("the policy", 5, || node.shared.policy() == claude_policy());
+    wait_for("the policy", 5, || {
+        node.shared.settings.policy() == claude_policy()
+    });
     wait_for("the pushes after approval", 5, || {
         ctl.registry
             .get(&nid.node_id(), false)
@@ -398,7 +404,7 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     // The same connection, upgraded in place.
     assert_eq!(summary(&ctl, &nid).unwrap().since, since);
     assert_eq!(
-        node.shared.link().unwrap().state,
+        node.shared.link.status().unwrap().state,
         Some(crate::link::LinkState::Approved)
     );
 
@@ -407,7 +413,7 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     p2.awake_hold = true;
     let ok = approve(&ctl.registry, &nid, p2.clone());
     assert_eq!(ok.policy, vec![nid.node_id()]);
-    wait_for("the new policy", 5, || node.shared.policy() == p2);
+    wait_for("the new policy", 5, || node.shared.settings.policy() == p2);
     assert_eq!(
         approve(&ctl.registry, &nid, p2),
         SetDesiredOk {
@@ -421,7 +427,8 @@ fn an_unknown_key_waits_and_is_approved_without_reconnecting() {
     assert_eq!(ok.pending, vec![nid.node_id()]);
     wait_for("pending again", 5, || {
         node.shared
-            .link()
+            .link
+            .status()
             .is_some_and(|l| l.state == Some(crate::link::LinkState::Pending))
     });
     node.stop();
@@ -508,7 +515,7 @@ fn commands_are_delivered_with_an_ack_or_queued() {
         Arc::clone(&shared),
         "commands",
     );
-    wait_for("the queued check", 5, || shared.take_check_request());
+    wait_for("the queued check", 5, || shared.update.take_check_request());
     // Connected: delivered and acknowledged at once.
     let t = Instant::now();
     assert_eq!(
@@ -521,14 +528,21 @@ fn commands_are_delivered_with_an_ack_or_queued() {
         }
     );
     assert!(t.elapsed() < Duration::from_secs(2), "{:?}", t.elapsed());
-    assert!(shared.claude_instruction_waiting());
-    let answer = shared.set_claude(Report::default());
+    assert!(shared.claude.instruction_waiting());
+    let answer = shared
+        .claude
+        .take_report(Report::default(), &shared.settings.policy());
     assert!(answer.restart && !answer.update);
     assert!(ctl
         .registry
         .command(&nid.node_id(), Command::ClaudeUpdate)
         .is_ok());
-    assert!(shared.set_claude(Report::default()).update);
+    assert!(
+        shared
+            .claude
+            .take_report(Report::default(), &shared.settings.policy())
+            .update
+    );
     node.stop();
 
     // A pending machine is not approved: nothing to deliver to.
@@ -625,14 +639,14 @@ fn residency_verbs_travel_the_link_and_run_on_the_machine() {
         Arc::clone(&shared),
         "residency",
     );
-    wait_for("the policy", 5, || shared.policy() == policy);
+    wait_for("the policy", 5, || shared.settings.policy() == policy);
     let sent = ctl
         .registry
         .provider_model(&nid.node_id(), params("00112233445566bb"))
         .unwrap();
     assert!(sent.delivered);
-    wait_for("the outcome", 10, || !shared.provider_actions().is_empty());
-    let a = &shared.provider_actions()[0];
+    wait_for("the outcome", 10, || !shared.providers.actions().is_empty());
+    let a = &shared.providers.actions()[0];
     assert_eq!(
         (a.request.as_str(), a.ok, a.message.as_str()),
         ("00112233445566bb", true, "Loaded Gemma-4")
@@ -646,7 +660,7 @@ fn residency_verbs_travel_the_link_and_run_on_the_machine() {
         ]
     );
     assert!(
-        shared.take_providers_read(),
+        shared.providers.take_read(),
         "the reader is asked to read again"
     );
     node.stop();
@@ -674,17 +688,20 @@ fn claude_sessions_travel_the_link() {
     assert!(away.msg.contains("not connected"), "{}", away.msg);
 
     let shared = node_shared();
-    shared.set_claude(Report {
-        state: crate::claude::ClaudeState::Running,
-        restarts: 2,
-        ..Default::default()
-    });
+    shared.claude.take_report(
+        Report {
+            state: crate::claude::ClaudeState::Running,
+            restarts: 2,
+            ..Default::default()
+        },
+        &shared.settings.policy(),
+    );
     let roster = Roster {
         reported_at: "t".into(),
         transcript_total: 3,
         ..Default::default()
     };
-    shared.set_claude_roster(roster.clone());
+    shared.claude.set_roster(roster.clone());
     let node = spawn_node(
         target(&ctl, pin_of(&ctl.id)),
         nid.clone(),
@@ -708,10 +725,13 @@ fn claude_sessions_travel_the_link() {
         .claude_session(&nid.node_id(), SessionAction::Stop, "0a1b2c3d")
         .unwrap();
     assert!(sent.delivered && sent.request.len() == 16);
-    let answer = shared.set_claude(Report {
-        state: crate::claude::ClaudeState::Running,
-        ..Default::default()
-    });
+    let answer = shared.claude.take_report(
+        Report {
+            state: crate::claude::ClaudeState::Running,
+            ..Default::default()
+        },
+        &shared.settings.policy(),
+    );
     assert_eq!(answer.sessions.len(), 1);
     assert_eq!(answer.sessions[0].request, sent.request);
     assert_eq!(
@@ -719,7 +739,11 @@ fn claude_sessions_travel_the_link() {
         (SessionAction::Stop, "0a1b2c3d")
     );
     assert!(
-        shared.set_claude(Report::default()).sessions.is_empty(),
+        shared
+            .claude
+            .take_report(Report::default(), &shared.settings.policy())
+            .sessions
+            .is_empty(),
         "once"
     );
 
@@ -729,7 +753,7 @@ fn claude_sessions_travel_the_link() {
         ..claude_policy()
     };
     approve(&ctl.registry, &nid, off.clone());
-    wait_for("the policy", 5, || shared.policy() == off);
+    wait_for("the policy", 5, || shared.settings.policy() == off);
     let refused = ctl
         .registry
         .claude_session(&nid.node_id(), SessionAction::Resume, ID)
@@ -867,7 +891,7 @@ fn a_machine_reconnects_after_the_controller_comes_back() {
     } = ctl;
     drop(listener);
     wait_for("the machine sees it go", 5, || {
-        shared.link().is_some_and(|l| !l.connected)
+        shared.link.status().is_some_and(|l| !l.connected)
     });
     let registry2 = Arc::new(Registry::new(events(), fast()));
     approve(&registry2, &nid, claude_policy());
@@ -879,7 +903,7 @@ fn a_machine_reconnects_after_the_controller_comes_back() {
             .any(|n| n.id == nid.node_id() && n.connected)
     });
     wait_for("the machine sees it back", 5, || {
-        shared.link().is_some_and(|l| l.connected)
+        shared.link.status().is_some_and(|l| l.connected)
     });
     drop(registry);
     stop.stop();
@@ -1155,21 +1179,22 @@ fn the_api_steers_the_machines_through_the_socket() {
         sock_path.display()
     ))
     .unwrap();
-    let cshared = Arc::new(Shared::new(
-        State::default(),
-        crate::facts::Facts::default(),
-        Instant::now(),
-        cfg.initial_policy(),
+    let cshared = Shared::new(
         cfg.role(),
-    ));
+        crate::facts::Facts::default(),
+        State::default(),
+        cfg.initial_policy(),
+        crate::util::Shutdown::new(),
+    );
     let cid = id(210);
-    let registry = Arc::new(Registry::new(cshared.events_handle(), fast()));
-    cshared.set_nodes(Arc::clone(&registry));
-    cshared.set_controller(crate::shared::Controller {
+    let registry = Arc::new(Registry::new(Arc::clone(&cshared.events), fast()));
+    let cshared = Arc::new(cshared.with_controller(crate::shared::ControllerParts {
         keys: Arc::new(Keys::fixed(&cid).unwrap()),
         listen: Some("127.0.0.1:0".into()),
         advertise: vec![],
-    });
+        nodes: Some(Arc::clone(&registry)),
+        session_host: None,
+    }));
     let listener = listen("127.0.0.1:0".parse().unwrap(), &cid, Arc::clone(&registry)).unwrap();
     let api = crate::api::serve(&cfg, Arc::clone(&cshared)).unwrap();
 
@@ -1255,9 +1280,11 @@ fn the_api_steers_the_machines_through_the_socket() {
          "policy":{"policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"/work","santree":false}}}]}});
     let ok = call(set.to_string());
     assert_eq!(ok["ok"]["approved"], serde_json::json!([n]));
-    wait_for("the policy", 5, || shared.policy() == claude_policy());
+    wait_for("the policy", 5, || {
+        shared.settings.policy() == claude_policy()
+    });
 
-    shared.set_telemetry(
+    shared.telemetry.set(
         Telemetry {
             sampled_at: "t9".into(),
             ..Default::default()
@@ -1293,7 +1320,7 @@ fn the_api_steers_the_machines_through_the_socket() {
         c["ok"],
         serde_json::json!({"delivered":true,"queued":false})
     );
-    assert!(shared.claude_instruction_waiting());
+    assert!(shared.claude.instruction_waiting());
     let c = call(format!(
         r#"{{"id":11,"m":"nodes.command","p":{{"id":"{n}","command":"reboot"}}}}"#
     ));
@@ -1304,11 +1331,14 @@ fn the_api_steers_the_machines_through_the_socket() {
     assert!(cl["ok"].get("report").is_some(), "{cl}");
 
     // The machine's Claude sessions: its roster, and one verb delivered.
-    shared.set_claude(Report {
-        state: crate::claude::ClaudeState::Running,
-        ..Default::default()
-    });
-    shared.set_claude_roster(crate::claude::Roster {
+    shared.claude.take_report(
+        Report {
+            state: crate::claude::ClaudeState::Running,
+            ..Default::default()
+        },
+        &shared.settings.policy(),
+    );
+    shared.claude.set_roster(crate::claude::Roster {
         reported_at: "r".into(),
         empty_count: 5,
         ..Default::default()
@@ -1324,7 +1354,9 @@ fn the_api_steers_the_machines_through_the_socket() {
         r#"{{"id":16,"m":"nodes.claude_session","p":{{"id":"{n}","action":"remove","session":"0a1b2c3d"}}}}"#
     ));
     assert_eq!(s["ok"]["delivered"], true, "{s}");
-    let answer = shared.set_claude(Report::default());
+    let answer = shared
+        .claude
+        .take_report(Report::default(), &shared.settings.policy());
     assert_eq!(answer.sessions.len(), 1);
     assert_eq!(
         answer.sessions[0].request,
@@ -1339,7 +1371,7 @@ fn the_api_steers_the_machines_through_the_socket() {
     }
     // The controller's own Claude beside the machine's, labelled as a
     // machine of its own: the controller's node id and hostname.
-    let own = cshared.own_claude_metrics();
+    let own = crate::metrics_page::own_claude_metrics(&cshared);
     let chost = crate::telemetry::escape_label(&crate::facts::hostname());
     assert!(
         own.starts_with(&format!(
@@ -1491,7 +1523,7 @@ fn a_signed_rotation_re_pins_every_machine_in_its_config() {
     let (tshared, tstop, bare) = attempt_in(target_in(&addr, &bare_dir), &bare_id, &bare_dir);
     wait_for("both back under the new key", 5, || {
         [&pshared, &tshared].iter().all(|s| {
-            s.link().is_some_and(|l| {
+            s.link.status().is_some_and(|l| {
                 l.connected && l.controller_fingerprint.as_deref() == Some(&new.fingerprint())
             })
         })
@@ -1659,8 +1691,8 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
         config: path.clone(),
         login: None,
     };
-    let (shared, stop, nid) = (node_shared(), Shutdown::new(), id(90));
-    shared.set_shutdown(stop.clone());
+    let (shared, nid) = (node_shared(), id(90));
+    let stop = shared.stop.clone();
     let thread = {
         let (shared, stop, nid, files) = (
             Arc::clone(&shared),
@@ -1674,12 +1706,13 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
     };
     wait_for("unpaired", 5, || {
         shared
-            .link()
+            .link
+            .status()
             .is_some_and(|l| l.state == Some(crate::link::LinkState::Unpaired))
     });
     std::thread::sleep(Duration::from_millis(1500));
     assert!(!dialled(&bait), "an unpaired machine dialled its address");
-    let l = shared.link().unwrap();
+    let l = shared.link.status().unwrap();
     assert!(!l.connected && l.controller_fingerprint.is_none() && l.error.is_none());
 
     // Paired while it runs (`pair`: the file, then `link.reload`): it dials
@@ -1697,7 +1730,8 @@ fn an_unpaired_machine_dials_nobody_until_it_is_paired() {
     });
     wait_for("pending", 5, || {
         shared
-            .link()
+            .link
+            .status()
             .is_some_and(|l| l.state == Some(crate::link::LinkState::Pending))
     });
     assert!(!dialled(&bait), "the old address was dialled");
@@ -1727,8 +1761,8 @@ fn a_logged_out_mac_dials_nobody_until_it_logs_in() {
         config: path.clone(),
         login: Some(tunnel.clone()),
     };
-    let (shared, stop, nid) = (node_shared(), Shutdown::new(), id(91));
-    shared.set_shutdown(stop.clone());
+    let (shared, nid) = (node_shared(), id(91));
+    let stop = shared.stop.clone();
     let thread = {
         let (shared, stop, nid, files) = (
             Arc::clone(&shared),
@@ -1742,12 +1776,13 @@ fn a_logged_out_mac_dials_nobody_until_it_logs_in() {
     };
     wait_for("logged out", 5, || {
         shared
-            .link()
+            .link
+            .status()
             .is_some_and(|l| l.state == Some(crate::link::LinkState::Unpaired))
     });
     std::thread::sleep(Duration::from_millis(1500));
     assert!(!dialled(&bait), "a logged-out Mac dialled its old address");
-    let l = shared.link().unwrap();
+    let l = shared.link.status().unwrap();
     assert!(!l.connected && l.controller_fingerprint.is_none() && l.error.is_none());
 
     // Logged in while it runs.
@@ -1766,7 +1801,8 @@ fn a_logged_out_mac_dials_nobody_until_it_logs_in() {
     });
     wait_for("pending", 5, || {
         shared
-            .link()
+            .link
+            .status()
             .is_some_and(|l| l.state == Some(crate::link::LinkState::Pending))
     });
     assert!(!dialled(&bait), "the old address was dialled");
@@ -1837,13 +1873,17 @@ fn santree_machines_are_told_the_session_host_and_the_allow_list_leads() {
         entry(&off, DesiredState::Approved, Policy::default()),
     ]);
     // The moment the machine holds santree on, the file already lists it.
-    wait_for("santree on", 5, || s_on.policy().santree);
+    wait_for("santree on", 5, || s_on.settings.policy().santree);
     assert!(listed(&[&on]));
-    assert_eq!(s_on.policy().session_host, Some(host.clone()));
+    assert_eq!(s_on.settings.policy().session_host, Some(host.clone()));
     wait_for("the other approved", 5, || {
         summary(&ctl, &off).is_some_and(|s| s.state == NodeState::Approved)
     });
-    assert_eq!(s_off.policy().session_host, None, "only santree machines");
+    assert_eq!(
+        s_off.settings.policy().session_host,
+        None,
+        "only santree machines"
+    );
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1858,9 +1898,9 @@ fn santree_machines_are_told_the_session_host_and_the_allow_list_leads() {
     };
     ctl.registry.set_session_host(moved.clone());
     wait_for("the new key", 5, || {
-        s_on.policy().session_host.as_ref() == Some(&moved)
+        s_on.settings.policy().session_host.as_ref() == Some(&moved)
     });
-    assert_eq!(s_off.policy().session_host, None);
+    assert_eq!(s_off.settings.policy().session_host, None);
 
     // santree off: out of the file, and the machine told.
     ctl.registry.set_desired(vec![
@@ -1868,8 +1908,8 @@ fn santree_machines_are_told_the_session_host_and_the_allow_list_leads() {
         entry(&off, DesiredState::Approved, Policy::default()),
     ]);
     assert!(listed(&[]));
-    wait_for("santree off", 5, || !s_on.policy().santree);
-    assert_eq!(s_on.policy().session_host, None);
+    wait_for("santree off", 5, || !s_on.settings.policy().santree);
+    assert_eq!(s_on.settings.policy().session_host, None);
     n_on.stop();
     n_off.stop();
     let _ = std::fs::remove_dir_all(dir);
@@ -1897,9 +1937,10 @@ fn a_machine_whose_leave_nobody_heard_stays_linked_and_can_try_again() {
         "unheard",
     );
     approve(&ctl.registry, &nid, Default::default());
-    wait_for("approved and linked", 5, || s.linked());
+    wait_for("approved and linked", 5, || s.link.linked());
     // The app is down: the machine is told so, and keeps its link.
     let refused = s
+        .link
         .request_leave()
         .recv_timeout(Duration::from_secs(5))
         .expect("the controller answered the leave");
@@ -1908,7 +1949,8 @@ fn a_machine_whose_leave_nobody_heard_stays_linked_and_can_try_again() {
     assert!(summary(&ctl, &nid).unwrap().connected);
     // The app is back: the next try is heard, and the machine goes.
     let _app = ctl.events.subscribe();
-    s.request_leave()
+    s.link
+        .request_leave()
         .recv_timeout(Duration::from_secs(5))
         .expect("the controller answered the leave")
         .unwrap();
@@ -1937,7 +1979,7 @@ fn a_machine_that_logs_out_is_heard_and_a_revoked_one_hears_it_first() {
     // Logging out: the machine says so, the controller acknowledges, the
     // machine closes, and the app hears `nodes.left` — the controller
     // forgets nothing itself.
-    let told = s_leaver.request_leave();
+    let told = s_leaver.link.request_leave();
     told.recv_timeout(Duration::from_secs(5))
         .expect("the controller answered the leave")
         .expect("the controller acknowledged the leave");
@@ -1952,7 +1994,9 @@ fn a_machine_that_logs_out_is_heard_and_a_revoked_one_hears_it_first() {
     // Revoked: however busy the machine is pushing, it reads why before
     // its connection goes (the controller closes gracefully).
     for _ in 0..5 {
-        s_revoked.set_link(|l| l.error = Some("x".repeat(64 * 1024)));
+        s_revoked
+            .link
+            .set_status(|l| l.error = Some("x".repeat(64 * 1024)));
     }
     ctl.registry.set_desired(vec![entry(
         &revoked,
@@ -1998,27 +2042,37 @@ fn a_machine_asks_for_its_settings_and_only_the_app_s_set_changes_them() {
     };
     approve(&ctl.registry, &nid, on.clone());
     wait_for("approved and linked", 5, || {
-        s.linked() && s.policy().awake_hold
+        s.link.linked() && s.settings.policy().awake_hold
     });
     let failed_with = |s: &Shared, needle: &str| {
-        s.settings_view(None)
+        crate::status::settings_view(s, None)
             .failed
             .iter()
             .any(|f| f.key == Key::AwakeHold && f.why.contains(needle))
     };
 
     // The app is down (nobody subscribed): refused, shown, nothing changed.
-    assert_eq!(s.ask_setting(Key::AwakeHold, false).unwrap(), Asked::Sent);
+    assert_eq!(
+        s.settings
+            .ask(Key::AwakeHold, false, s.link.linked())
+            .unwrap(),
+        Asked::Sent
+    );
     wait_for("refused: the app is not listening", 5, || {
         failed_with(&s, "not listening")
     });
-    assert!(s.policy().awake_hold);
+    assert!(s.settings.policy().awake_hold);
 
     // The app listens: it hears the request; the machine's policy moves only
     // when the app's set carries it.
     let app = ctl.events.subscribe();
     let app = &app;
-    assert_eq!(s.ask_setting(Key::AwakeHold, false).unwrap(), Asked::Sent);
+    assert_eq!(
+        s.settings
+            .ask(Key::AwakeHold, false, s.link.linked())
+            .unwrap(),
+        Asked::Sent
+    );
     let heard = |want: &str| {
         let want = want.to_string();
         let id = nid.node_id();
@@ -2034,26 +2088,31 @@ fn a_machine_asks_for_its_settings_and_only_the_app_s_set_changes_them() {
         heard(r#""changes":{"awake_hold":false}"#),
     );
     assert!(
-        s.settings_view(None).failed.is_empty(),
+        crate::status::settings_view(&s, None).failed.is_empty(),
         "the failure is replaced"
     );
     std::thread::sleep(Duration::from_millis(300));
     assert!(
-        s.policy().awake_hold,
+        s.settings.policy().awake_hold,
         "the controller changes nothing itself"
     );
-    assert_eq!(s.settings_view(None).pending.len(), 1);
+    assert_eq!(crate::status::settings_view(&s, None).pending.len(), 1);
     let off = crate::link::wire::Policy {
         awake_hold: false,
         ..on.clone()
     };
     approve(&ctl.registry, &nid, off.clone());
     wait_for("OFF applied, pending cleared", 5, || {
-        !s.policy().awake_hold && s.settings_view(None).pending.is_empty()
+        !s.settings.policy().awake_hold && crate::status::settings_view(&s, None).pending.is_empty()
     });
 
     // And back ON the same way.
-    assert_eq!(s.ask_setting(Key::AwakeHold, true).unwrap(), Asked::Sent);
+    assert_eq!(
+        s.settings
+            .ask(Key::AwakeHold, true, s.link.linked())
+            .unwrap(),
+        Asked::Sent
+    );
     wait_for(
         "the app hears ON",
         5,
@@ -2061,18 +2120,22 @@ fn a_machine_asks_for_its_settings_and_only_the_app_s_set_changes_them() {
     );
     approve(&ctl.registry, &nid, on.clone());
     wait_for("ON applied", 5, || {
-        s.policy().awake_hold && s.settings_view(None).pending.is_empty()
+        s.settings.policy().awake_hold && crate::status::settings_view(&s, None).pending.is_empty()
     });
 
     // Its share of a minute is 4 here, and three are spent (the refused one
     // counts): the fourth goes, the fifth is refused.
-    s.ask_setting(Key::ClaudeRemoteControl, false).unwrap();
+    s.settings
+        .ask(Key::ClaudeRemoteControl, false, s.link.linked())
+        .unwrap();
     wait_for(
         "the app hears the fourth",
         5,
         heard(r#""changes":{"claude_remote_control":false}"#),
     );
-    s.ask_setting(Key::AwakeHold, false).unwrap();
+    s.settings
+        .ask(Key::AwakeHold, false, s.link.linked())
+        .unwrap();
     wait_for("refused: too many", 5, || failed_with(&s, "a minute"));
     n.stop();
 

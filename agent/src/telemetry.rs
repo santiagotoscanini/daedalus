@@ -250,7 +250,9 @@ pub fn run_loop(shared: Arc<Shared>, stop: Shutdown, level: TelemetryLevel) {
         }
         let sample = c.sample();
         let doc = assemble(&stat, &slow, &sample, updates.as_ref());
-        shared.set_telemetry(if full { doc } else { doc.minimal() }, moved);
+        shared
+            .telemetry
+            .set(if full { doc } else { doc.minimal() }, moved);
         moved = false;
     }
 }

@@ -35,11 +35,11 @@ fn files(dir: &Path) -> Files {
 
 fn node() -> Shared {
     Shared::new(
-        crate::state::State::default(),
-        crate::facts::Facts::default(),
-        Instant::now(),
-        crate::link::wire::Policy::default(),
         Role::of(Mode::Node),
+        crate::facts::Facts::default(),
+        crate::state::State::default(),
+        crate::link::wire::Policy::default(),
+        crate::util::Shutdown::new(),
     )
 }
 
@@ -298,9 +298,9 @@ fn logging_in_redeems_once_with_the_verifier_and_logging_out_forgets_it() {
     assert_eq!(cfg.controller_pin.as_deref(), Some(fp(1).as_str()));
     assert_eq!(cfg.controller_address.as_deref(), Some("192.168.0.2:7788"));
     assert_eq!(cfg.app_url.as_deref(), Some(APP));
-    assert!(matches!(s.dialer(), Dialer::Tunnel(_)));
-    assert_eq!(s.link_keys().0.pin.as_deref(), Some(fp(1).as_str()));
-    let st = s.tunnel_status().unwrap();
+    assert!(matches!(s.link.dialer(), Dialer::Tunnel(_)));
+    assert_eq!(s.link.keys().0.pin.as_deref(), Some(fp(1).as_str()));
+    let st = s.link.tunnel_status().unwrap();
     assert_eq!(st.address, "10.8.0.5");
     assert_eq!(st.endpoint, "box.example.org:51820");
 
@@ -320,7 +320,7 @@ fn logging_in_redeems_once_with_the_verifier_and_logging_out_forgets_it() {
     // The service starting again takes the tunnel up from the file.
     let again = node();
     start(&again, &f);
-    assert!(matches!(again.dialer(), Dialer::Tunnel(_)));
+    assert!(matches!(again.link.dialer(), Dialer::Tunnel(_)));
 
     // Log out: the file gone, the keys cleared, the app kept for the prompt.
     std::fs::write(&f.policy, "{}").unwrap();
@@ -332,8 +332,8 @@ fn logging_in_redeems_once_with_the_verifier_and_logging_out_forgets_it() {
     assert_eq!(cfg.controller_pin, None);
     assert_eq!(cfg.controller_address, None);
     assert_eq!(cfg.app_url.as_deref(), Some(APP));
-    assert!(matches!(s.dialer(), Dialer::Direct));
-    assert!(!s.link_keys().0.paired());
+    assert!(matches!(s.link.dialer(), Dialer::Direct));
+    assert!(!s.link.keys().0.paired());
     // Logged out already is no error.
     leave(&s, &f).unwrap();
 
@@ -376,7 +376,7 @@ fn logging_in_redeems_once_with_the_verifier_and_logging_out_forgets_it() {
     std::fs::set_permissions(&f.tunnel, std::fs::Permissions::from_mode(0o600)).unwrap();
     let broken = node();
     start(&broken, &f);
-    assert!(matches!(broken.dialer(), Dialer::Refused(_)));
-    assert!(broken.tunnel_status().unwrap().error.is_some());
+    assert!(matches!(broken.link.dialer(), Dialer::Refused(_)));
+    assert!(broken.link.tunnel_status().unwrap().error.is_some());
     let _ = std::fs::remove_dir_all(dir);
 }

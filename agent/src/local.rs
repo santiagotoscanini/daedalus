@@ -33,7 +33,7 @@
 //!
 //! | method           | takes            | answers                                        |
 //! |------------------|------------------|------------------------------------------------|
-//! | `status`         | —                | the status document (shared.rs `Document`)     |
+//! | `status`         | —                | the status document (status.rs)                 |
 //! | `claude`         | —                | the session's full report, or null             |
 //! | `claude.report`  | a `Report`       | the `ReportAnswer` (the session's poll)        |
 //! | `claude.roster`  | a `Roster`       | null                                           |
@@ -190,33 +190,36 @@ pub struct FinishParams {
 fn handle(shared: &Shared, peer: Option<&Peer>, req: LocalRequest) -> Result<Value, ApiError> {
     use LocalRequest as R;
     match req {
-        R::Status => value(&shared.document(shared.power_requests())),
-        R::Claude => value(&shared.claude_report()),
-        R::ClaudeReport(r) => value(&shared.set_claude(*r)),
+        R::Status => value(&crate::status::document(shared)),
+        R::Claude => value(&shared.claude.report()),
+        R::ClaudeReport(r) => value(&shared.claude.take_report(*r, &shared.settings.policy())),
         R::ClaudeRoster(r) => {
-            shared.set_claude_roster(*r);
+            shared.claude.set_roster(*r);
             Ok(Value::Null)
         }
         R::ClaudeRestart => {
-            shared.request_claude_restart();
+            shared.claude.request_restart();
             Ok("restart queued for the session".into())
         }
         R::ClaudeUpdate => {
-            if !shared.role().claude_update {
+            if !shared.role.claude_update {
                 return Err(ApiError::new(
                     ErrorCode::Unsupported,
                     "Claude Code is updated by nix on this machine",
                 ));
             }
-            shared.request_claude_update();
+            shared.claude.request_update();
             Ok("update queued for the session".into())
         }
         R::UpdateCheck => {
-            shared.request_check();
+            shared.update.request_check();
             Ok("checking".into())
         }
         R::LinkReload => link_reload(shared, &crate::link::KeyFiles::here()),
-        R::SettingsGet => value(&shared.settings_view(Some(may_change(peer)))),
+        R::SettingsGet => value(&crate::status::settings_view(
+            shared,
+            Some(may_change(peer)),
+        )),
         R::SettingsSet(p) => settings_set(shared, peer, p, &crate::paths::config_path()),
         R::EnrollBegin(_) | R::EnrollFinish(_) | R::EnrollLeave => enroll(shared, peer, req),
     }
@@ -224,7 +227,7 @@ fn handle(shared: &Shared, peer: Option<&Peer>, req: LocalRequest) -> Result<Val
 
 /// `link.reload` against the link's keys in `files` (module doc).
 fn link_reload(shared: &Shared, files: &crate::link::KeyFiles) -> Result<Value, ApiError> {
-    if !shared.role().link {
+    if !shared.role.link {
         return Err(ApiError::new(
             ErrorCode::Unsupported,
             "the controller has no link to reload",
@@ -288,7 +291,7 @@ fn settings_set(
     config: &Path,
 ) -> Result<Value, ApiError> {
     use crate::settings::{Asked, Key};
-    if !shared.role().link {
+    if !shared.role.link {
         return Err(ApiError::new(
             ErrorCode::Unsupported,
             "the controller's settings are the box's own",
@@ -315,7 +318,7 @@ fn settings_set(
     // santree ON is an admin's, in the browser: the page must exist before
     // anything is recorded.
     let mut confirm = None;
-    if p.key == Key::Santree && p.value && !shared.policy().santree {
+    if p.key == Key::Santree && p.value && !shared.settings.policy().santree {
         let app = crate::config::load_at(config)
             .ok()
             .and_then(|c| c.app_url)
@@ -331,7 +334,7 @@ fn settings_set(
             .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, "this machine has no key yet"))?;
         confirm = Some(crate::settings::confirm_url(&app, &node));
     }
-    let answer = match shared.ask_setting(p.key, p.value)? {
+    let answer = match shared.settings.ask(p.key, p.value, shared.link.linked())? {
         Asked::Sent => SetAnswer {
             sent: true,
             ..Default::default()
@@ -599,7 +602,6 @@ mod tests {
     use crate::link::wire::Policy;
     use crate::role::Role;
     use crate::state::State;
-    use std::time::Instant;
 
     #[test]
     fn the_lines_on_the_wire() {
@@ -653,11 +655,11 @@ mod tests {
 
     fn shared(mode: Mode) -> Shared {
         Shared::new(
-            State::default(),
-            Facts::default(),
-            Instant::now(),
-            Policy::default(),
             Role::of(mode),
+            Facts::default(),
+            State::default(),
+            Policy::default(),
+            crate::util::Shutdown::new(),
         )
     }
 
@@ -678,7 +680,7 @@ mod tests {
         // no method for it, whoever asks and whatever the machine's state.
         let e = ask(&s, None, "link.pair", serde_json::json!({"pin": key})).unwrap_err();
         assert_eq!(e.code, ErrorCode::UnknownMethod);
-        assert_eq!(s.link_keys().0.pin, None);
+        assert_eq!(s.link.keys().0.pin, None);
         assert!(!path.exists());
         // What `pair` does as root: writes the file, then asks for a reload.
         crate::pair::Pairing::new(&key, Some("box.lan:7788"))
@@ -690,7 +692,7 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("new keys"));
-        assert_eq!(s.link_keys().0.pin.as_deref(), Some(key.as_str()));
+        assert_eq!(s.link.keys().0.pin.as_deref(), Some(key.as_str()));
         // A reload with nothing new changes nothing.
         assert!(link_reload(&s, &files)
             .unwrap()
@@ -717,7 +719,7 @@ mod tests {
             ..Default::default()
         })
         .unwrap();
-        s.request_claude_restart();
+        s.claude.request_restart();
         let answer = ask(&s, None, "claude.report", report).unwrap();
         assert_eq!(answer["restart"], true);
         assert_eq!(
@@ -730,7 +732,7 @@ mod tests {
         );
         assert!(ask(&s, None, "claude.update", Value::Null).is_ok());
         assert!(ask(&s, None, "update.check", Value::Null).is_ok());
-        assert!(s.take_check_request());
+        assert!(s.update.take_check_request());
         assert!(ask(&s, None, "claude.report", serde_json::json!({"state": 3})).is_err());
         assert!(ask(&s, None, "status", serde_json::json!({"x": 1})).is_err());
         assert!(ask(&s, None, "reboot", Value::Null)
@@ -763,14 +765,16 @@ mod tests {
         .unwrap();
         let without = dir.join("none.toml");
 
-        let s = shared(Mode::Node);
-        s.set_node("0123456789abcdef".into(), "0123:4567:89ab:cdef".into());
-        s.set_policy(Policy {
+        let s = shared(Mode::Node).with_node(crate::shared::NodeKey {
+            id: "0123456789abcdef".into(),
+            fingerprint: "0123:4567:89ab:cdef".into(),
+        });
+        s.settings.set_policy(Policy {
             awake_hold: true,
             claude_remote_control: true,
             ..Default::default()
         });
-        s.set_link(|l| {
+        s.link.set_status(|l| {
             l.connected = true;
             l.state = Some(crate::link::LinkState::Approved);
         });
@@ -783,13 +787,13 @@ mod tests {
         // Someone else: refused, nothing recorded.
         let e = set(&Peer::Uid(4242), Key::AwakeHold, false, &with_app).unwrap_err();
         assert_eq!(e.code, ErrorCode::Forbidden);
-        assert!(s.take_policy_request().is_none());
+        assert!(s.settings.take_request().is_none());
         // The value the box holds: nothing to send.
         assert!(answer(set(&root, Key::AwakeHold, true, &with_app).unwrap()).unchanged);
-        assert!(s.take_policy_request().is_none());
+        assert!(s.settings.take_request().is_none());
         // Another value: recorded, and the link sends it.
         assert!(answer(set(&root, Key::AwakeHold, false, &with_app).unwrap()).sent);
-        let (_, req) = s.take_policy_request().unwrap();
+        let (_, req) = s.settings.take_request().unwrap();
         assert_eq!(req.awake_hold, Some(false));
         // santree ON: the page, and nothing on the link.
         let a = answer(set(&root, Key::Santree, true, &with_app).unwrap());
@@ -799,15 +803,17 @@ mod tests {
                 "https://daedalus-app.example.org/settings?tab=machines&node=0123456789abcdef&santree=on"
             )
         );
-        assert!(s.take_policy_request().is_none());
-        let view = s.settings_view(None);
+        assert!(s.settings.take_request().is_none());
+        let view = crate::status::settings_view(&s, None);
         assert!(view
             .pending
             .iter()
             .any(|p| p.key == Key::Santree && p.via == crate::settings::Via::Browser));
         // No app known: where to turn it on instead, and nothing recorded.
-        let s2 = shared(Mode::Node);
-        s2.set_node("0123456789abcdef".into(), "x".into());
+        let s2 = shared(Mode::Node).with_node(crate::shared::NodeKey {
+            id: "0123456789abcdef".into(),
+            fingerprint: "x".into(),
+        });
         let e = settings_set(
             &s2,
             Some(&root),
@@ -820,7 +826,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(e.code, ErrorCode::Unsupported);
         assert!(e.msg.contains("Settings › Machines"));
-        assert!(s2.settings_view(None).pending.is_empty());
+        assert!(crate::status::settings_view(&s2, None).pending.is_empty());
         // Exact parameters.
         assert!(set_raw(
             &s,
@@ -891,8 +897,8 @@ mod tests {
             call_at::<String>(&path, &LocalRequest::UpdateCheck).unwrap(),
             "checking"
         );
-        assert!(s.take_check_request());
-        let doc: crate::shared::StatusDocument = call_at(&path, &LocalRequest::Status).unwrap();
+        assert!(s.update.take_check_request());
+        let doc: crate::status::StatusDocument = call_at(&path, &LocalRequest::Status).unwrap();
         assert_eq!(doc.version, crate::VERSION);
         // An answer of another type than asked is said so, not misread.
         assert!(matches!(
@@ -927,6 +933,7 @@ mod tests {
     #[test]
     fn a_dripping_client_is_cut_off_at_the_whole_deadline() {
         use std::io::Write as _;
+        use std::time::Instant;
         let dir = std::env::temp_dir().join(format!("daedalus-drip-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("run").join("agent.sock");

@@ -27,7 +27,7 @@ use crate::config::{Mode, TelemetryLevel};
 use crate::link::wire::{Command, Hello, NodeState, Policy, PolicyRequest};
 use crate::providers::ProviderReport;
 use crate::role::Role;
-use crate::shared::StatusDocument;
+use crate::status::StatusDocument;
 use crate::telemetry::Telemetry;
 
 /// What an agent offers, from its role and config (api/mod.rs

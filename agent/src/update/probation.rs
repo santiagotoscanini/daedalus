@@ -168,7 +168,7 @@ pub fn judge_proof(
 /// and retire the previous binaries.
 pub fn prove(shared: &Shared, rule: &'static str) {
     let mut version = None;
-    shared.with_state(|s| {
+    shared.state.edit(|s| {
         version = s.probation.take().map(|p| p.version);
     });
     if let Some(v) = version {

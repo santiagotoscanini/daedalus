@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::paths::state_path;
+use crate::util::LockExt;
 // The clocks the state and its readers write (time.rs).
 pub use crate::time::{now_rfc3339, rfc3339_ago, rfc3339_of};
 
@@ -80,5 +81,40 @@ impl State {
         }
         let text = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
         crate::util::write_atomic(&path, text.as_bytes(), crate::util::Access::Mode(0o644))
+    }
+}
+
+/// The persisted state behind its lock: the service's (`Shared::state`) and
+/// a verb's own (`update --apply`), so both edit it the same way.
+#[derive(Debug, Default)]
+pub struct StateStore(std::sync::Mutex<State>);
+
+impl StateStore {
+    pub fn new(state: State) -> Self {
+        Self(std::sync::Mutex::new(state))
+    }
+
+    /// The state on disk, or the defaults.
+    pub fn load() -> Self {
+        Self::new(State::load())
+    }
+
+    /// The state as it stands.
+    pub fn get(&self) -> State {
+        self.0.lock_ok().clone()
+    }
+
+    /// Edit and persist it in one step; a failed save is logged.
+    pub fn edit(&self, f: impl FnOnce(&mut State)) {
+        let mut s = self.0.lock_ok();
+        f(&mut s);
+        s.save();
+    }
+
+    /// `edit`, and whether the state reached the disk.
+    pub fn edit_saved(&self, f: impl FnOnce(&mut State)) -> std::io::Result<()> {
+        let mut s = self.0.lock_ok();
+        f(&mut s);
+        s.try_save()
     }
 }

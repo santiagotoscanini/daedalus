@@ -93,7 +93,7 @@ pub fn serve_metrics(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                             200,
                             crate::telemetry::typed(&format!(
                                 "{}{}",
-                                shared.own_claude_metrics(),
+                                own_claude_metrics(&shared),
                                 r.metrics()
                             )),
                             "text/plain; version=0.0.4",
@@ -120,6 +120,25 @@ pub fn serve_metrics(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
     Ok(server)
 }
 
+/// The controller's own Claude series for `/nodes/metrics` — its Remote
+/// Control beside the machines', labelled with the controller's node id
+/// and hostname, so one alert covers both (telemetry/metrics.rs
+/// `claude_text`). Empty on a node.
+pub fn own_claude_metrics(shared: &Shared) -> String {
+    let Some(c) = &shared.controller else {
+        return String::new();
+    };
+    let node = c.keys.forward().node_id();
+    let host = crate::facts::hostname();
+    let labels = crate::telemetry::Labels {
+        node: &node,
+        host: &host,
+        machine: &host,
+        os: &shared.facts.os,
+    };
+    crate::telemetry::claude_text(shared.claude.report().as_ref(), &labels)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,27 +147,33 @@ mod tests {
     use crate::link::wire::Policy;
     use crate::role::Role;
     use crate::state::State;
-    use std::time::Instant;
 
-    fn shared_as(mode: Mode) -> Arc<Shared> {
-        Arc::new(Shared::new(
-            State::default(),
+    /// A controller that listens for machines.
+    fn controller_shared() -> Arc<Shared> {
+        let shared = Shared::new(
+            Role::of(Mode::Controller),
             Facts::default(),
-            Instant::now(),
+            State::default(),
             Policy::default(),
-            Role::of(mode),
-        ))
+            crate::util::Shutdown::new(),
+        );
+        let id = crate::identity::Identity::from_seed([3; 32]);
+        let registry =
+            crate::link::controller::Registry::new(Arc::clone(&shared.events), Default::default());
+        Arc::new(shared.with_controller(crate::shared::ControllerParts {
+            keys: Arc::new(crate::link::rotation::Keys::fixed(&id).unwrap()),
+            listen: None,
+            advertise: Vec::new(),
+            nodes: Some(Arc::new(registry)),
+            session_host: None,
+        }))
     }
 
     /// The controller's page answers `/healthz` and `/nodes/metrics`, and
     /// nothing of the machine: the document is the local socket's.
     #[test]
     fn the_metrics_page_answers_the_scrape_alone() {
-        let shared = shared_as(Mode::Controller);
-        shared.set_nodes(Arc::new(crate::link::controller::Registry::new(
-            shared.events_handle(),
-            Default::default(),
-        )));
+        let shared = controller_shared();
         let port = std::net::TcpListener::bind("0.0.0.0:0")
             .unwrap()
             .local_addr()

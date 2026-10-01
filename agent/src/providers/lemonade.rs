@@ -327,7 +327,7 @@ pub(super) fn read_lemonade(policy: &ProvidersPolicy, installed: bool) -> Option
 }
 
 /// Whether the application inventory the slow facts read lists Lemonade:
-/// kept with each sample (`Shared::lemonade_installed`), so the reader asks
+/// kept with each sample (`TelemetryHub::lemonade_installed`), so the reader asks
 /// a flag rather than copying the telemetry.
 pub fn lemonade_in(apps: &[App]) -> bool {
     apps.iter()

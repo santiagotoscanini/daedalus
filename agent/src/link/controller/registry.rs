@@ -31,8 +31,8 @@ use crate::link::{
 };
 use crate::providers::{ProviderKind, ProviderReport};
 use crate::rpc::{ApiError, ErrorCode, Events};
-use crate::shared::StatusDocument;
 use crate::state::now_rfc3339;
+use crate::status::StatusDocument;
 use crate::telemetry::Telemetry;
 use crate::util::LockExt;
 
@@ -1238,7 +1238,7 @@ impl Registry {
     /// Prometheus text for `/nodes/metrics`: every approved machine's
     /// `daedalus_agent_link_up` (1 while connected), and the connected
     /// ones' telemetry and Claude series (telemetry/metrics.rs; the
-    /// controller's own Claude is added by shared.rs). Every series carries the
+    /// controller's own Claude is added by metrics_page.rs). Every series carries the
     /// machine's `node` id, `host` and `os` from its hello, and `machine`:
     /// the name the app gave it in `nodes.set_desired`, else its hostname.
     pub fn metrics(&self) -> String {

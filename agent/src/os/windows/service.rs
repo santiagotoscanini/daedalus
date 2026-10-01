@@ -322,7 +322,7 @@ fn tray_start(tray: &std::path::Path) {
 // put it back: it runs as LocalSystem, which may take the console user's
 // token and start a process in that session on the interactive desktop.
 // This is what agent_main calls when the tray has not reported for a while
-// (`Shared::tray_reporting`, shared.rs) — `WATCHES_TRAY` below is what
+// (`ClaudeHub::reporting`, shared/claude.rs) — `WATCHES_TRAY` below is what
 // turns that watchdog on; on macOS launchd's KeepAlive and
 // `launchd::kickstart_tray` (os/macos/launchd.rs) do the same.
 

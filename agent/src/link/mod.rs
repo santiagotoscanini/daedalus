@@ -108,8 +108,8 @@ pub const UNKNOWN_ADDRESSES: usize = 1024;
 /// The SRV record a machine asks for when it has no address.
 pub const SRV_SERVICE: &str = "_daedalus-controller._tcp";
 
-/// config.toml's two link keys as the service holds them (shared.rs
-/// `link_keys`): read at start, read again when the machine is paired
+/// config.toml's two link keys as the service holds them (shared/link.rs
+/// `LinkHub::keys`): read at start, read again when the machine is paired
 /// while running (pair.rs `reload`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LinkKeys {

@@ -322,11 +322,11 @@ mod tests {
     fn controller(extra: &str) -> (Arc<Shared>, Arc<Api>) {
         let cfg: Config = toml::from_str(&format!("mode = \"controller\"\n{extra}")).unwrap();
         let shared = Arc::new(Shared::new(
-            crate::state::State::default(),
-            crate::facts::Facts::default(),
-            Instant::now(),
-            cfg.initial_policy(),
             cfg.role(),
+            crate::facts::Facts::default(),
+            crate::state::State::default(),
+            cfg.initial_policy(),
+            crate::util::Shutdown::new(),
         ));
         let api = Arc::new(Api::new(Arc::clone(&shared), &cfg));
         (shared, api)
@@ -594,17 +594,24 @@ mod tests {
             pid: Some(pid),
             ..Default::default()
         };
-        assert!(!shared.set_claude(report(10)).restart);
+        assert!(
+            !shared
+                .claude
+                .take_report(report(10), &shared.settings.policy())
+                .restart
+        );
         send(&mut feed, r#"{"id":3,"m":"claude.restart"}"#);
         wait_for(&sink, 3);
-        assert!(shared.claude_instruction_waiting());
-        let answer = shared.set_claude(report(11));
+        assert!(shared.claude.instruction_waiting());
+        let answer = shared
+            .claude
+            .take_report(report(11), &shared.settings.policy());
         assert!(answer.restart, "the restart rides the next report, once");
-        assert!(!shared.claude_instruction_waiting());
+        assert!(!shared.claude.instruction_waiting());
         send(&mut feed, r#"{"id":4,"m":"claude.status"}"#);
         wait_for(&sink, 4);
         shared
-            .events()
+            .events
             .publish(&crate::api::wire::ApiEvent::NodesLeft(
                 crate::api::wire::NodeLeft {
                     id: "0123456789abcdef".into(),
@@ -669,11 +676,14 @@ mod tests {
             assert_eq!(bad["err"]["code"], "bad_request", "{bad}");
         }
 
-        shared.set_claude(Report {
-            state: crate::claude::ClaudeState::Running,
-            ..Default::default()
-        });
-        shared.set_claude_roster(crate::claude::Roster {
+        shared.claude.take_report(
+            Report {
+                state: crate::claude::ClaudeState::Running,
+                ..Default::default()
+            },
+            &shared.settings.policy(),
+        );
+        shared.claude.set_roster(crate::claude::Roster {
             reported_at: "t".into(),
             transcript_total: 4,
             ..Default::default()
@@ -695,20 +705,27 @@ mod tests {
         assert_eq!(out[2]["ok"]["queued"], true);
         let request = out[2]["ok"]["request"].as_str().unwrap().to_string();
         assert_eq!(request.len(), 16);
-        assert!(shared.claude_instruction_waiting());
+        assert!(shared.claude.instruction_waiting());
         // Handed to the session once, with the next report. Requests on one
         // connection run concurrently, so the two may be queued in either
         // order (Windows CI queues the stop first): matched by selector.
-        let answer = shared.set_claude(Report::default());
+        let answer = shared
+            .claude
+            .take_report(Report::default(), &shared.settings.policy());
         assert_eq!(answer.sessions.len(), 2);
         let resume = answer.sessions.iter().find(|s| s.id == ID).unwrap();
         assert_eq!(resume.request, request);
         assert!(answer.sessions.iter().any(|s| s.id == "0a1b2c3d"));
-        assert!(shared.set_claude(Report::default()).sessions.is_empty());
+        assert!(shared
+            .claude
+            .take_report(Report::default(), &shared.settings.policy())
+            .sessions
+            .is_empty());
         // A session that is not taking them is not piled on.
         for _ in 0..crate::shared::MAX_QUEUED_SESSIONS {
             assert!(shared
-                .queue_claude_session(crate::claude::SessionAction::Stop, "0a1b2c3d".into())
+                .claude
+                .queue_session(crate::claude::SessionAction::Stop, "0a1b2c3d".into())
                 .is_some());
         }
         let out = talk(
@@ -731,7 +748,7 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("no session"));
-        assert!(!shared.claude_instruction_waiting());
+        assert!(!shared.claude.instruction_waiting());
     }
 
     #[test]
@@ -739,13 +756,13 @@ mod tests {
         let (shared, api) = controller("");
         let out = talk(api, &[HELLO, r#"{"id":2,"m":"claude.restart"}"#].join("\n"));
         assert_eq!(out[1]["err"]["code"], "unsupported");
-        assert!(!shared.claude_instruction_waiting());
+        assert!(!shared.claude.instruction_waiting());
     }
 
     #[test]
     fn telemetry_follows_the_level() {
         let (shared, api) = controller("telemetry = \"minimal\"\n");
-        shared.set_telemetry(
+        shared.telemetry.set(
             crate::telemetry::Telemetry {
                 sampled_at: "t".into(),
                 ..Default::default()
@@ -758,7 +775,9 @@ mod tests {
         assert_eq!(out[0]["ok"]["capabilities"], json!(["telemetry.minimal"]));
 
         let (shared, api) = controller("telemetry = \"off\"\n");
-        shared.set_telemetry(crate::telemetry::Telemetry::default(), false);
+        shared
+            .telemetry
+            .set(crate::telemetry::Telemetry::default(), false);
         let out = talk(api, &[HELLO, r#"{"id":2,"m":"telemetry.get"}"#].join("\n"));
         assert_eq!(out[1]["ok"], json!({"level":"off","telemetry":null}));
     }

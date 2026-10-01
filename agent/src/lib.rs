@@ -68,6 +68,7 @@ pub mod session_host;
 pub mod settings;
 pub mod shared;
 pub mod state;
+pub mod status;
 pub mod telemetry;
 pub mod time;
 // The machine's own WireGuard tunnel to the box (macOS and Linux: none on
@@ -147,15 +148,49 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     let state = state::State::load();
     let facts = facts::read();
     tracing::info!(os = %facts.os_name, version = %facts.os_version, cpu = %facts.cpu, "this machine");
-    let shared = Arc::new(shared::Shared::new(
-        state,
-        facts.clone(),
-        started,
-        cfg.initial_policy(),
+    let on_probation = state.probation.is_some();
+    let shared = shared::Shared::new(
         role,
-    ));
+        facts.clone(),
+        state,
+        cfg.initial_policy(),
+        stop.clone(),
+    );
 
-    shared.set_shutdown(stop.clone());
+    // The controller's own key — what every machine pins — and, where
+    // `[controller] listen` names an address, the registry of machines the
+    // API reads (link/) and the session host it follows: built before the
+    // shared state is, so every reader sees them from the first request.
+    let (shared, controller) = if role.node_listener {
+        let (parts, listen) = start_controller(&cfg, &shared, &stop)?;
+        (shared.with_controller(parts), listen)
+    } else {
+        (shared, None)
+    };
+    // The machine's key, made on the first start: without it there is no
+    // link, but the hold and the local socket do not depend on it.
+    let identity = match role.link.then(identity::Identity::load_or_create) {
+        None => None,
+        Some(Ok(id)) => {
+            tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
+            Some(id)
+        }
+        Some(Err(e)) => {
+            tracing::error!(
+                error = format!("{e:#}"),
+                "no identity; the box will not hear from this machine"
+            );
+            None
+        }
+    };
+    let shared = Arc::new(match &identity {
+        Some(id) => shared.with_node(shared::NodeKey {
+            id: id.node_id(),
+            fingerprint: id.fingerprint(),
+        }),
+        None => shared,
+    });
+
     match &start {
         update::Start::Probation(n) => tracing::info!(
             starts = n,
@@ -169,9 +204,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
             "this version did not last, and could not be rolled back"
         ),
         // No update waits for its proof (a `serve` does not count one).
-        _ if role.self_update && shared.state().probation.is_none() => {
-            update::retire_old_binaries()
-        }
+        _ if role.self_update && !on_probation => update::retire_old_binaries(),
         _ => {}
     }
 
@@ -187,9 +220,9 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     // Either one that cannot be bound does not stop the service: it is tried
     // again in the background while the rest runs.
     // The OS's power requests for the status document, read here every
-    // minute rather than inside a request (shared.rs).
+    // minute rather than inside a request (shared/machine.rs).
     let _ = util::spawn_worker("power-requests", &shared, &stop, |shared, stop| loop {
-        shared.refresh_power_requests();
+        shared.power.refresh_requests();
         if stop.wait(Duration::from_secs(60)) {
             return;
         }
@@ -209,62 +242,6 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
             });
     }
 
-    // The controller's own key — what every machine pins — and, where
-    // `[controller] listen` names an address, the registry of machines the
-    // API reads (link/). Set before the API opens, so its capabilities
-    // say `nodes` from the first connection.
-    let controller = if role.node_listener {
-        // The keys, and a rotation under way (link/rotation.rs).
-        let keys = Arc::new(
-            link::rotation::Keys::load(&paths::data_dir()).context("the controller's identity")?,
-        );
-        shared.set_controller(shared::Controller {
-            keys: Arc::clone(&keys),
-            listen: cfg.controller_listen().map(|a| a.to_string()),
-            advertise: cfg.controller.advertise.clone(),
-        });
-        tracing::info!(
-            fingerprint = %keys.forward().fingerprint(),
-            rotating = keys.info().is_some(),
-            "controller identity loaded"
-        );
-        match cfg.controller_listen() {
-            Some(addr) => {
-                let mut registry = link::controller::Registry::new(
-                    shared.events_handle(),
-                    link::controller::Limits::default(),
-                );
-                if let Some(host) = &cfg.controller.session_host {
-                    registry = registry.with_allow_list(host.allow_list.clone());
-                }
-                let registry = Arc::new(registry);
-                shared.set_nodes(Arc::clone(&registry));
-                // The session host this box runs, when nix names one: its
-                // status followed, its key handed to santree machines
-                // (session_host.rs). Never a reason not to start.
-                if let Some(host) = cfg.controller.session_host.clone() {
-                    let status = host.status_file.display().to_string();
-                    let host =
-                        Arc::new(session_host::SessionHost::new(host, Arc::clone(&registry)));
-                    match host.start(&stop) {
-                        Ok(()) => {
-                            tracing::info!(status = %status, "following the session host");
-                            shared.set_session_host(host);
-                        }
-                        Err(e) => tracing::error!(error = %e, "the session host is not followed"),
-                    }
-                }
-                Some((keys, addr, registry))
-            }
-            None => {
-                tracing::info!("no [controller] listen: no machine can connect to this controller");
-                None
-            }
-        }
-    } else {
-        None
-    };
-
     // The controller's door for the app (api/). Opened before the sampler
     // and the session start, so a second instance that got past the local
     // socket (another data directory) stops here without having started
@@ -276,9 +253,16 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     };
 
     // The machines' links, once the API is up (link/controller.rs).
-    let listener = match controller {
-        Some((keys, addr, registry)) => Some(link::controller::listen_with(addr, keys, registry)?),
-        None => None,
+    let listener = match (controller, shared.controller.as_ref()) {
+        (Some(addr), Some(c)) => match &c.nodes {
+            Some(registry) => Some(link::controller::listen_with(
+                addr,
+                Arc::clone(&c.keys),
+                Arc::clone(registry),
+            )?),
+            None => None,
+        },
+        _ => None,
     };
 
     // How this machine reaches the box: through its own tunnel alone when
@@ -289,17 +273,13 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         enroll::start(&shared, &enroll::Files::here());
     }
 
-    // The machine's key, made on the first start, and with it the link to
-    // the controller (link/node.rs). Without the key there is no link, but
-    // the hold and the page above do not depend on it.
-    // santree's door rides the same key, on macOS and Linux (santree.rs).
+    // The link to the controller (link/node.rs), and santree's door, which
+    // rides the same key, on macOS and Linux (santree.rs).
     #[cfg(unix)]
     let mut santree_door = None;
-    let uplink = match role.link.then(identity::Identity::load_or_create) {
+    let uplink = match identity {
         None => None,
-        Some(Ok(id)) => {
-            tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
-            shared.set_node(id.node_id(), id.fingerprint());
+        Some(id) => {
             #[cfg(unix)]
             {
                 santree_door = Some(santree::Door::start(Arc::clone(&shared), id.clone()));
@@ -311,13 +291,6 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
                 })
                 .context("spawning the link")?,
             )
-        }
-        Some(Err(e)) => {
-            tracing::error!(
-                error = format!("{e:#}"),
-                "no identity; the box will not hear from this machine"
-            );
-            None
         }
     };
 
@@ -391,7 +364,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
                 up_for,
                 started.elapsed(),
                 || role.session && !role.session_in_service && os::svc::interactive_user(),
-                shared.tray_reporting(),
+                shared.claude.reporting(),
             );
             match proof {
                 update::Proof::Wait => {}
@@ -409,10 +382,10 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         }
         // A controller key rotation whose grace period is over retires the
         // old key (link/rotation.rs).
-        if let Some(k) = shared.controller_keys() {
-            k.tick();
+        if let Some(c) = &shared.controller {
+            c.keys.tick();
         }
-        let wanted = shared.policy().awake_hold;
+        let wanted = shared.settings.policy().awake_hold;
         if role.keep_awake && hold_wanted != Some(wanted) {
             hold_wanted = Some(wanted);
             if wanted {
@@ -420,12 +393,12 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
                     "daedalus-agent: this machine serves the fleet and is kept awake by the box",
                 ) {
                     Ok(h) => {
-                        shared.set_hold(true, None);
+                        shared.power.set_hold(true, None);
                         Some(h)
                     }
                     Err(e) => {
                         tracing::error!(error = %e, "could not hold the machine awake");
-                        shared.set_hold(false, Some(e.to_string()));
+                        shared.power.set_hold(false, Some(e.to_string()));
                         None
                     }
                 };
@@ -440,13 +413,13 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
                 // The plan's timers stay as they are — the request is what
                 // held the machine, and the plan is the user's to set back.
                 hold = None;
-                shared.set_hold(false, None);
+                shared.power.set_hold(false, None);
                 tracing::info!("awake hold released: the policy for this machine is off");
             }
         }
         if os::svc::WATCHES_TRAY
             && role.tray
-            && !shared.tray_reporting()
+            && !shared.claude.reporting()
             && started.elapsed() > Duration::from_secs(45)
             && tray_tried.elapsed() > Duration::from_secs(60)
         {
@@ -487,4 +460,60 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         std::process::exit(3);
     }
     Ok(())
+}
+
+/// The controller's parts (`shared::ControllerParts`): its keys, and where
+/// `[controller] listen` names an address, the registry of machines and the
+/// session host it follows — with the address the machines' listener takes
+/// once the API is up.
+fn start_controller(
+    cfg: &config::Config,
+    shared: &shared::Shared,
+    stop: &Shutdown,
+) -> Result<(shared::ControllerParts, Option<std::net::SocketAddr>)> {
+    // The keys, and a rotation under way (link/rotation.rs).
+    let keys = Arc::new(
+        link::rotation::Keys::load(&paths::data_dir()).context("the controller's identity")?,
+    );
+    tracing::info!(
+        fingerprint = %keys.forward().fingerprint(),
+        rotating = keys.info().is_some(),
+        "controller identity loaded"
+    );
+    let listen = cfg.controller_listen();
+    let mut parts = shared::ControllerParts {
+        keys,
+        listen: listen.map(|a| a.to_string()),
+        advertise: cfg.controller.advertise.clone(),
+        nodes: None,
+        session_host: None,
+    };
+    if listen.is_none() {
+        tracing::info!("no [controller] listen: no machine can connect to this controller");
+        return Ok((parts, None));
+    }
+    let mut registry = link::controller::Registry::new(
+        Arc::clone(&shared.events),
+        link::controller::Limits::default(),
+    );
+    if let Some(host) = &cfg.controller.session_host {
+        registry = registry.with_allow_list(host.allow_list.clone());
+    }
+    let registry = Arc::new(registry);
+    // The session host this box runs, when nix names one: its status
+    // followed, its key handed to santree machines (session_host.rs). Never
+    // a reason not to start.
+    if let Some(host) = cfg.controller.session_host.clone() {
+        let status = host.status_file.display().to_string();
+        let host = Arc::new(session_host::SessionHost::new(host, Arc::clone(&registry)));
+        match host.start(stop) {
+            Ok(()) => {
+                tracing::info!(status = %status, "following the session host");
+                parts.session_host = Some(host);
+            }
+            Err(e) => tracing::error!(error = %e, "the session host is not followed"),
+        }
+    }
+    parts.nodes = Some(registry);
+    Ok((parts, listen))
 }

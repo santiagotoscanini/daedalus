@@ -200,11 +200,11 @@ impl Ctx {
 
     /// The checks, then the dial (module doc).
     fn open(&self) -> Result<(String, Tls), ApiError> {
-        let (keys, _) = self.shared.link_keys();
-        let state = self.shared.link().and_then(|l| l.state);
-        let (address, key) = admit(keys.paired(), state, &self.shared.policy())?;
+        let (keys, _) = self.shared.link.keys();
+        let state = self.shared.link.status().and_then(|l| l.state);
+        let (address, key) = admit(keys.paired(), state, &self.shared.settings.policy())?;
         let tls = dial(
-            &self.shared.dialer(),
+            &self.shared.link.dialer(),
             &address,
             self.config_for(&key)?,
             DIAL,
@@ -244,7 +244,7 @@ fn serve_one(ctx: &Ctx, mut conn: Conn) {
         Ok(opened) => opened,
         Err(e) => {
             tracing::info!(uid, pid, code = %e.code, why = %e.msg, "santree: refused");
-            ctx.shared.santree_refused(e.code);
+            ctx.shared.santree.refused(e.code);
             let _ = conn.writer.write_all(error_line(e.code, e.msg).as_bytes());
             let _ = conn.writer.flush();
             (conn.close)();
@@ -264,7 +264,7 @@ fn serve_one(ctx: &Ctx, mut conn: Conn) {
     (std::mem::replace(&mut conn.on_hello, Box::new(|| {})))();
     tracing::info!(uid, pid, host = %address, "santree: piping to the session host");
     // Counted on the status page while it pipes.
-    let _open = ctx.shared.santree_opened();
+    let _open = ctx.shared.santree.opened();
     let started = Instant::now();
     let end = pipe(conn, tls, &Limits::default());
     if end.refused_key {

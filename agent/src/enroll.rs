@@ -207,7 +207,7 @@ fn logged_in_already() -> ApiError {
 /// `enroll.begin`: this machine as the app's page needs it, and a fresh
 /// PKCE pair — the verifier kept here, the challenge handed out.
 pub fn begin(shared: &Shared, files: &Files, p: BeginParams) -> Result<Begin, ApiError> {
-    if !shared.role().link {
+    if !shared.role.link {
         return Err(ApiError::new(
             ErrorCode::Unsupported,
             "the controller does not log in to anything",
@@ -221,12 +221,12 @@ pub fn begin(shared: &Shared, files: &Files, p: BeginParams) -> Result<Begin, Ap
         Identity::load_or_create_at(&files.identity).map_err(|e| internal(format!("{e:#}")))?;
     let verifier = Zeroizing::new(random_token());
     let code_challenge = challenge_of(&verifier);
-    shared.set_log_in(Some(Started {
+    shared.link.set_log_in(Some(Started {
         app: app.clone(),
         verifier,
         at: Instant::now(),
     }));
-    let facts = shared.facts();
+    let facts = &shared.facts;
     Ok(Begin {
         app_url: app,
         public_key: id.public_key_hex(),
@@ -282,6 +282,7 @@ pub fn finish(
         ));
     }
     let started = shared
+        .link
         .take_log_in()
         .filter(|s| s.at.elapsed() < LOG_IN_TIMEOUT)
         .ok_or_else(|| unavailable("no log-in waits for this code: start it again"))?;
@@ -353,7 +354,7 @@ pub fn finish(
         crate::link::node::drop_santree(shared);
     }
     // The tunnel first, then the keys: the link's next dial goes through it.
-    shared.set_dialer(Dialer::Tunnel(tunnel));
+    shared.link.set_dialer(Dialer::Tunnel(tunnel));
     crate::pair::reload(shared, &files.keys()).map_err(|e| internal(format!("{e:#}")))?;
     tracing::info!(
         app = %started.app,
@@ -371,13 +372,11 @@ pub fn finish(
 /// `enroll.leave`: tell the controller, then forget the log-in (module
 /// doc). Logged out already is no error.
 pub fn leave(shared: &Shared, files: &Files) -> Result<String, ApiError> {
-    let approved = shared
-        .link()
-        .is_some_and(|l| l.connected && l.state == Some(crate::link::LinkState::Approved));
+    let approved = shared.link.linked();
     if approved {
-        let answer = shared.request_leave().recv_timeout(LEAVE_WAIT);
+        let answer = shared.link.request_leave().recv_timeout(LEAVE_WAIT);
         // Not taken in time: withdrawn, so a later link does not send it.
-        shared.take_leave();
+        shared.link.take_leave();
         match answer {
             Ok(Ok(())) => {}
             // The box answered, and nobody there heard it: logging out now
@@ -392,7 +391,7 @@ pub fn leave(shared: &Shared, files: &Files) -> Result<String, ApiError> {
             ),
         }
     }
-    shared.set_log_in(None);
+    shared.link.set_log_in(None);
     forget_log_in(shared, files, "logged out from this machine")
         .map_err(|e| internal(format!("{e:#}")))?;
     Ok("logged out: this machine no longer reaches the box".into())
@@ -403,14 +402,14 @@ pub fn leave(shared: &Shared, files: &Files) -> Result<String, ApiError> {
 /// kept policy. A failure to clear config.toml leaves every dial refused
 /// rather than let the link try the old address directly.
 pub fn forget_log_in(shared: &Shared, files: &Files, why: &str) -> anyhow::Result<()> {
-    let old = shared.dialer();
+    let old = shared.link.dialer();
     if let Err(e) = crate::config::clear_link_keys_at(&files.config) {
-        shared.set_dialer(Dialer::Refused(format!(
+        shared.link.set_dialer(Dialer::Refused(format!(
             "the log-out did not finish ({e:#}); run `daedalus-agent install` again"
         )));
         return Err(e);
     }
-    shared.set_dialer(Dialer::Direct);
+    shared.link.set_dialer(Dialer::Direct);
     if let Dialer::Tunnel(t) = old {
         t.stop();
     }
@@ -421,7 +420,9 @@ pub fn forget_log_in(shared: &Shared, files: &Files, why: &str) -> anyhow::Resul
             Err(e) => tracing::warn!(path = %p.display(), error = %e, "log-out: not removed"),
         }
     }
-    shared.set_policy(crate::link::wire::Policy::default());
+    shared
+        .settings
+        .set_policy(crate::link::wire::Policy::default());
     crate::pair::reload(shared, &files.keys())?;
     tracing::info!(why, "logged out: no tunnel, no controller trusted");
     Ok(())
@@ -445,7 +446,7 @@ pub fn start(shared: &Shared, files: &Files) {
             "tunnel: refusing every dial until this is fixed (or logged out)"
         );
     }
-    shared.set_dialer(dialer);
+    shared.link.set_dialer(dialer);
 }
 
 // ── the menu bar's half: the URL and the loopback callback ────────────────

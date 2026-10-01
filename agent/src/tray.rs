@@ -93,7 +93,7 @@ use crate::os::tray::{open, relaunch_self};
 use crate::paths;
 use crate::session::{Places, Poll, Session, Tick, Watcher};
 use crate::settings::{short, short_fingerprint, Key, Via, View};
-use crate::shared::StatusDocument;
+use crate::status::StatusDocument;
 use crate::{config, DISPLAY_NAME, VERSION};
 
 /// What the tray stands over; the module doc says which OS has which.
@@ -2120,7 +2120,7 @@ mod tests {
             address: "s2.toscanini.me:7789".into(),
             public_key: String::new(),
         });
-        p.santree = Some(crate::shared::SantreeDoor {
+        p.santree = Some(crate::status::SantreeDoor {
             open: 1,
             max: 4,
             last_refused: None,

@@ -140,7 +140,7 @@ use crate::config::{Config, TelemetryLevel};
 use crate::link::wire::Policy;
 use crate::role::Role;
 use crate::rpc::{error_line, ApiError, ErrorCode, Events};
-use crate::shared::Shared;
+use crate::shared::{ControllerParts, Shared};
 use wire::{ApiRequest, Capability, ClaudeStatus, OsInfo, Queued, SystemInfo, TelemetryGet};
 
 /// The API version this agent speaks.
@@ -290,8 +290,11 @@ impl Api {
                 cfg,
                 Serves {
                     nodes: shared.nodes().is_some(),
-                    santree: shared.session_host().is_some(),
-                    keys: shared.controller_keys().is_some(),
+                    santree: shared
+                        .controller
+                        .as_ref()
+                        .is_some_and(|c| c.session_host.is_some()),
+                    keys: shared.controller.is_some(),
                 },
             ),
             shared,
@@ -324,7 +327,7 @@ impl Api {
     }
 
     pub fn events(&self) -> &Events {
-        self.shared.events()
+        &self.shared.events
     }
 
     fn has(&self, capability: Capability) -> Result<(), ApiError> {
@@ -350,16 +353,16 @@ impl Api {
             R::SystemInfo => to_value(&self.system_info()),
             R::ClaudeStatus => {
                 self.has(Capability::ClaudeRemoteControl)?;
-                let report = self.shared.claude_report();
+                let report = self.shared.claude.report();
                 to_value(&ClaudeStatus {
                     reporting: report.is_some(),
-                    wanted: self.shared.policy().claude_remote_control,
+                    wanted: self.shared.settings.policy().claude_remote_control,
                     report,
                 })
             }
             R::ClaudeRestart => {
                 self.has(Capability::ClaudeRemoteControl)?;
-                if !self.shared.policy().claude_remote_control {
+                if !self.shared.settings.policy().claude_remote_control {
                     return Err(ApiError::new(
                         ErrorCode::Unavailable,
                         "Claude remote control is off on this machine; there is nothing to restart",
@@ -367,18 +370,18 @@ impl Api {
                 }
                 // Queued for nobody, a restart would fire whenever a
                 // session next came up — long after anyone asked.
-                if self.shared.claude_report().is_none() {
+                if self.shared.claude.report().is_none() {
                     return Err(ApiError::new(
                         ErrorCode::Unavailable,
                         "no session is reporting on this machine; there is nothing to restart",
                     ));
                 }
-                self.shared.request_claude_restart();
+                self.shared.claude.request_restart();
                 to_value(&Queued { queued: true })
             }
             R::ClaudeRoster => {
                 self.has(Capability::ClaudeSessions)?;
-                let roster = self.shared.claude_roster();
+                let roster = self.shared.claude.roster();
                 to_value(&wire::ClaudeRosterGet {
                     reporting: roster.is_some(),
                     roster,
@@ -388,13 +391,13 @@ impl Api {
                 self.has(Capability::ClaudeSessions)?;
                 crate::claude::sessions::check_selector(s.action, &s.id)
                     .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
-                if !self.shared.policy().claude_remote_control {
+                if !self.shared.settings.policy().claude_remote_control {
                     return Err(ApiError::new(
                         ErrorCode::Unavailable,
                         "Claude is off on this machine; no session verb runs",
                     ));
                 }
-                if self.shared.claude_report().is_none() {
+                if self.shared.claude.report().is_none() {
                     return Err(ApiError::new(
                         ErrorCode::Unavailable,
                         "no session is reporting on this machine; there is nobody to run it",
@@ -402,7 +405,8 @@ impl Api {
                 }
                 let request = self
                     .shared
-                    .queue_claude_session(s.action, s.id)
+                    .claude
+                    .queue_session(s.action, s.id)
                     .ok_or_else(|| {
                         ApiError::new(
                             ErrorCode::Busy,
@@ -418,7 +422,7 @@ impl Api {
                 level: self.telemetry,
                 telemetry: match self.telemetry {
                     TelemetryLevel::Off => None,
-                    _ => self.shared.telemetry(),
+                    _ => self.shared.telemetry.get(),
                 },
             }),
             R::ActionsGet(q) => {
@@ -432,7 +436,7 @@ impl Api {
                 match q.node {
                     None => {
                         self.has(Capability::ClaudeSessions)?;
-                        let roster = self.shared.claude_roster();
+                        let roster = self.shared.claude.roster();
                         to_value(&wire::ActionOutcome::find(
                             &q.request,
                             roster.as_ref(),
@@ -445,7 +449,7 @@ impl Api {
             R::ControllerRotate(p) => {
                 use crate::link::rotation::{GRACE_DEFAULT, GRACE_MAX, GRACE_MIN};
                 self.has(Capability::Controller)?;
-                let keys = self.shared.controller_keys().ok_or_else(|| {
+                let c = self.shared.controller.as_ref().ok_or_else(|| {
                     ApiError::new(ErrorCode::Unsupported, "this agent holds no link key")
                 })?;
                 let grace = p.grace_secs.map_or(GRACE_DEFAULT, Duration::from_secs);
@@ -459,15 +463,21 @@ impl Api {
                         ),
                     ));
                 }
-                keys.start(grace)
+                c.keys
+                    .start(grace)
                     .map_err(|e| ApiError::new(ErrorCode::Unavailable, e))?;
-                to_value(&self.shared.controller_info())
+                to_value(&c.info())
             }
             R::SantreeStatus => {
                 self.has(Capability::Santree)?;
-                let host = self.shared.session_host().ok_or_else(|| {
-                    ApiError::new(ErrorCode::Unsupported, "no session host on this box")
-                })?;
+                let host = self
+                    .shared
+                    .controller
+                    .as_ref()
+                    .and_then(|c| c.session_host.as_ref())
+                    .ok_or_else(|| {
+                        ApiError::new(ErrorCode::Unsupported, "no session host on this box")
+                    })?;
                 to_value(&host.status())
             }
             R::RootRun(p) => {
@@ -695,7 +705,7 @@ impl Api {
     }
 
     fn system_info(&self) -> SystemInfo {
-        let f = self.shared.facts();
+        let f = &self.shared.facts;
         let os_uptime = crate::power::os_uptime_secs();
         SystemInfo {
             api: API_VERSION,
@@ -710,13 +720,13 @@ impl Api {
                 cpu: f.cpu.clone(),
                 memory_bytes: f.memory_bytes,
             },
-            uptime_secs: self.shared.uptime().as_secs(),
+            uptime_secs: self.shared.started.elapsed().as_secs(),
             os_uptime_secs: os_uptime,
             booted_at: os_uptime.map(crate::state::rfc3339_ago),
             role: self.role,
             telemetry: self.telemetry,
             capabilities: self.capabilities.clone(),
-            controller: self.shared.controller_info(),
+            controller: self.shared.controller.as_ref().map(ControllerParts::info),
         }
     }
 }
@@ -1051,11 +1061,11 @@ mod tests {
         );
         let cfg: Config = toml::from_str(&text).unwrap();
         let shared = Arc::new(Shared::new(
-            crate::state::State::default(),
-            crate::facts::Facts::default(),
-            std::time::Instant::now(),
-            cfg.initial_policy(),
             cfg.role(),
+            crate::facts::Facts::default(),
+            crate::state::State::default(),
+            cfg.initial_policy(),
+            crate::util::Shutdown::new(),
         ));
         let api = Api::new(Arc::clone(&shared), &cfg);
 
@@ -1165,11 +1175,11 @@ mod tests {
         );
         let cfg: Config = toml::from_str(&text).unwrap();
         let shared = Arc::new(Shared::new(
-            crate::state::State::default(),
-            crate::facts::Facts::default(),
-            std::time::Instant::now(),
-            cfg.initial_policy(),
             cfg.role(),
+            crate::facts::Facts::default(),
+            crate::state::State::default(),
+            cfg.initial_policy(),
+            crate::util::Shutdown::new(),
         ));
         let api = Api::new(shared, &cfg);
         let call = |m: &str, p: Value| -> Value {

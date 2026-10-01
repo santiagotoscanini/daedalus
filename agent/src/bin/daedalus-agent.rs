@@ -271,7 +271,7 @@ fn uninstall(args: &[String]) -> Result<()> {
 
 fn status_cmd() -> Result<()> {
     config::load_for_user()?;
-    let doc: daedalus_agent::shared::StatusDocument =
+    let doc: daedalus_agent::status::StatusDocument =
         daedalus_agent::local::call(&LocalRequest::Status)?;
     println!("{}", serde_json::to_string_pretty(&doc)?);
     if doc.controller.and_then(|c| c.state) == Some(daedalus_agent::link::LinkState::Unpaired) {

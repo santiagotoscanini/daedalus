@@ -12,7 +12,7 @@
 //! trusted on first use (trust T1). Without a pin the machine is
 //! **unpaired**: it resolves nothing and dials nobody, and the status page
 //! and the tray say `unpaired` until it is paired, which the service hands
-//! this loop at once (shared.rs `set_link_keys`) — a pairing, or any change
+//! this loop at once (shared/link.rs `LinkHub::set_keys`) — a pairing, or any change
 //! of the two keys, ends the connection in hand and starts over under them.
 //! A connection whose key is not the pinned one is refused: the page and
 //! the tray say "controller key changed", with the key that came
@@ -209,12 +209,12 @@ pub fn run_loop(
 }
 
 /// Wait `total`, cut short by a stop (true) or by the link's keys moving
-/// past `seen` (shared.rs `set_link_keys`); other nudges are slept through.
+/// past `seen` (shared/link.rs `LinkHub::set_keys`); other nudges are slept through.
 fn wait_keys(stop: &Shutdown, shared: &Shared, seen: u64, total: Duration) -> bool {
     let until = Instant::now() + total;
     loop {
         let nudges = stop.nudges();
-        if shared.link_keys().1 != seen {
+        if shared.link.keys().1 != seen {
             return false;
         }
         let left = until.saturating_duration_since(Instant::now());
@@ -229,7 +229,7 @@ fn wait_keys(stop: &Shutdown, shared: &Shared, seen: u64, total: Duration) -> bo
 
 /// `run_loop` with its keys in `files` (link/mod.rs `KeyFiles`: its
 /// config.toml is where a rotation re-pins); the keys it follows are the
-/// service's (`Shared::link_keys`), set here from `cfg` and moved by a
+/// service's (`LinkHub::keys`), set here from `cfg` and moved by a
 /// pairing or a log-in.
 pub fn run_loop_at(
     cfg: Config,
@@ -239,7 +239,7 @@ pub fn run_loop_at(
     stop: Shutdown,
     files: &super::KeyFiles,
 ) {
-    shared.set_link_keys(files.keys(&cfg));
+    shared.link.set_keys(files.keys(&cfg));
     let config_path = files.config.as_path();
     // The TLS side, once: the key's DER is made and loaded one time.
     let client = match tls::Client::new(&id) {
@@ -258,12 +258,12 @@ pub fn run_loop_at(
     // The pin the loop last ran under, to tell a pairing with another box
     // (the santree grant goes) from a rotation (it stays).
     let mut last_pin: Option<Option<String>> = None;
-    shared.set_link(|l| l.fingerprint = id.fingerprint());
+    shared.link.set_status(|l| l.fingerprint = id.fingerprint());
     loop {
         if stop.is_stopped() {
             return;
         }
-        let (keys, keys_at) = shared.link_keys();
+        let (keys, keys_at) = shared.link.keys();
         if keys_at != last_keys {
             // Paired, or pointed elsewhere: start afresh.
             last_keys = keys_at;
@@ -277,7 +277,7 @@ pub fn run_loop_at(
         if !keys.paired() {
             // Unpaired: no address is resolved and nothing is dialled
             // until a pin arrives (module doc).
-            shared.set_link(|l| {
+            shared.link.set_status(|l| {
                 l.address = keys.address.clone();
                 l.found_via = keys.address.as_ref().map(|_| FoundVia::Config);
                 l.state = Some(LinkState::Unpaired);
@@ -294,7 +294,7 @@ pub fn run_loop_at(
         let target = resolve_target(keys.address.as_deref(), keys.pin.as_deref(), || {
             // A machine with a tunnel config reaches the box at its tunnel
             // address, which config.toml names; DNS is never asked for one.
-            if shared.dialer().tunnelled() {
+            if shared.link.dialer().tunnelled() {
                 return None;
             }
             if let Some((f, at)) = &dns_found {
@@ -309,7 +309,7 @@ pub fn run_loop_at(
         let target = match target {
             Ok(Some(t)) => t,
             Ok(None) => {
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.address = None;
                     l.found_via = None;
                     l.state = None;
@@ -323,7 +323,7 @@ pub fn run_loop_at(
             }
             Err(e) => {
                 tracing::warn!(error = %e, "link: no controller to try");
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.state = Some(LinkState::Refused);
                     l.connected = false;
                     l.error = Some(e);
@@ -334,7 +334,7 @@ pub fn run_loop_at(
                 continue;
             }
         };
-        shared.set_link(|l| {
+        shared.link.set_status(|l| {
             l.address = Some(target.address.clone());
             l.found_via = Some(target.found_via);
             l.controller_fingerprint = Some(format_fingerprint(&target.pin));
@@ -361,12 +361,12 @@ pub fn run_loop_at(
                 // config.toml was rewritten; the keys held follow it.
                 // The same box under its new key: the santree grant stays.
                 last_pin = Some(Some(fp.clone()));
-                shared.set_link_keys(super::LinkKeys {
+                shared.link.set_keys(super::LinkKeys {
                     pin: Some(fp.clone()),
                     address: keys.address.clone(),
                 });
                 backoff = BACKOFF_MIN;
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.connected = false;
                     l.since = None;
                     l.error = None;
@@ -382,7 +382,7 @@ pub fn run_loop_at(
                 tracing::info!(why, "link: the connection to the controller ended");
                 // It was up: the machine is quick to come back.
                 backoff = BACKOFF_MIN;
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.connected = false;
                     l.since = None;
                     l.error = Some(why.clone());
@@ -391,7 +391,7 @@ pub fn run_loop_at(
             }
             Ended::Failed(why) => {
                 tracing::info!(address = %target.address, why, "link: controller not reached");
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.connected = false;
                     l.state = Some(LinkState::Connecting);
                     l.error = Some(why.clone());
@@ -416,7 +416,7 @@ pub fn run_loop_at(
                     format_fingerprint(pinned),
                 );
                 tracing::error!("{e}");
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.connected = false;
                     l.state = Some(LinkState::KeyChanged);
                     l.error = Some(e);
@@ -430,7 +430,7 @@ pub fn run_loop_at(
                 // revocation: the log-in is over, and the machine says so
                 // (enroll.rs).
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
-                if shared.dialer().tunnelled() {
+                if shared.link.dialer().tunnelled() {
                     if let Err(e) = crate::enroll::forget_log_in(
                         &shared,
                         &crate::enroll::Files::here(),
@@ -442,7 +442,7 @@ pub fn run_loop_at(
                         );
                     }
                 }
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.connected = false;
                     l.since = None;
                     l.state = Some(LinkState::Revoked);
@@ -452,7 +452,7 @@ pub fn run_loop_at(
             }
             Ended::Version(e) => {
                 tracing::warn!(error = %e, "link: the controller speaks another protocol");
-                shared.set_link(|l| {
+                shared.link.set_status(|l| {
                     l.connected = false;
                     l.state = Some(LinkState::Refused);
                     l.error = Some(e.clone());
@@ -504,9 +504,13 @@ pub fn connect_once(
 ) -> Ended {
     // The keys this attempt was made under: a pairing that moves them ends
     // it (module doc).
-    let keys_at = shared.link_keys().1;
+    let keys_at = shared.link.keys().1;
     // Direct, or through this machine's tunnel alone (net.rs).
-    let sock = match shared.dialer().connect(&target.address, HANDSHAKE_TIMEOUT) {
+    let sock = match shared
+        .link
+        .dialer()
+        .connect(&target.address, HANDSHAKE_TIMEOUT)
+    {
         Ok(s) => s,
         Err(e) => return Ended::Failed(e),
     };
@@ -527,7 +531,7 @@ pub fn connect_once(
         return Ended::Failed("the controller presented no key".into());
     };
     let controller_fp = format_fingerprint(&digest(&controller_key));
-    shared.set_link(|l| {
+    shared.link.set_status(|l| {
         l.fingerprint = client.fingerprint().to_string();
         l.controller_fingerprint = Some(controller_fp.clone());
     });
@@ -569,7 +573,7 @@ pub fn connect_once(
         controller = %welcome.controller.hostname,
         "link: connected to the controller"
     );
-    shared.set_link(|l| {
+    shared.link.set_status(|l| {
         l.connected = true;
         l.since = Some(now_rfc3339());
         l.state = Some(welcome.state.into());
@@ -586,14 +590,14 @@ pub fn connect_once(
         shared,
         stop,
         cadence,
-        shared.role().claude_update,
+        shared.role.claude_update,
         (controller_key, &repin),
         keys_at,
     );
     if !matches!(ended, Ended::Stopped | Ended::Revoked) {
         tls.close();
     }
-    shared.set_link(|l| {
+    shared.link.set_status(|l| {
         l.connected = false;
         l.since = None;
     });
@@ -608,7 +612,7 @@ struct Pushed {
     telemetry: Option<(u64, String, Instant)>,
     providers: Option<(String, Instant)>,
     /// The report's generation and whether it was fresh
-    /// (`Shared::claude_report_generation`).
+    /// (`ClaudeHub::report_generation`).
     claude: Option<((u64, bool), Instant)>,
     /// The roster's generation; None while there is none.
     roster: Option<(Option<u64>, Instant)>,
@@ -646,9 +650,8 @@ impl Pushed {
         let due = |at: &Instant| at.elapsed() >= cadence.push_every;
 
         // The OS's power requests as the service last read them (a command,
-        // run on its own thread every minute: `Shared::refresh_power_requests`).
-        let status =
-            serde_json::to_value(shared.document(shared.power_requests())).unwrap_or_default();
+        // run on its own thread every minute: `PowerHub::refresh_requests`).
+        let status = serde_json::to_value(crate::status::document(shared)).unwrap_or_default();
         let d = status_digest(&status);
         if self
             .status
@@ -659,7 +662,7 @@ impl Pushed {
             self.status = Some((d, Instant::now()));
         }
 
-        if let Some((t, tier)) = shared.telemetry_with_tier() {
+        if let Some((t, tier)) = shared.telemetry.with_tier() {
             let moved = self
                 .telemetry
                 .as_ref()
@@ -682,7 +685,7 @@ impl Pushed {
 
         // The providers, on the same rule, their clocks aside
         // (`providers::digest`); read whatever the telemetry level.
-        if let Some(list) = shared.providers() {
+        if let Some(list) = shared.providers.get() {
             let d = crate::providers::digest(&list);
             if self
                 .providers
@@ -696,13 +699,13 @@ impl Pushed {
 
         // The report when it says something new (its generation, which its
         // clock does not move), or stops being fresh: copied only then.
-        let g = shared.claude_report_generation();
+        let g = shared.claude.report_generation();
         if self
             .claude
             .as_ref()
             .is_none_or(|(prev, at)| *prev != g || due(at))
         {
-            tls.send(&wire::event(name::CLAUDE, &shared.claude_report()))?;
+            tls.send(&wire::event(name::CLAUDE, &shared.claude.report()))?;
             self.claude = Some((g, Instant::now()));
         }
 
@@ -710,7 +713,7 @@ impl Pushed {
         // something new, its clock and the costs that tick by themselves
         // aside (`Roster::moved`). Shared, not copied; the session keeps it
         // within `roster::MAX_BYTES`, well inside a line.
-        let roster = shared.claude_roster_shared();
+        let roster = shared.claude.roster_shared();
         let g = roster.as_ref().map(|(_, g)| *g);
         if self
             .roster
@@ -740,19 +743,22 @@ fn take_claude_session(shared: &Shared, p: Value) -> Result<Accepted, ApiError> 
             "claude_session: the request id is sixteen hex characters",
         ));
     }
-    if !shared.policy().claude_remote_control {
+    if !shared.settings.policy().claude_remote_control {
         return Err(ApiError::new(
             ErrorCode::Unavailable,
             "Claude is off on this machine (the box's policy)",
         ));
     }
-    if shared.claude_report().is_none() {
+    if shared.claude.report().is_none() {
         return Err(ApiError::new(
             ErrorCode::Unavailable,
             "no session is reporting on this machine",
         ));
     }
-    if !shared.queue_claude_session_as(params.request.clone(), params.action, params.id.clone()) {
+    if !shared
+        .claude
+        .queue_session_as(params.request.clone(), params.action, params.id.clone())
+    {
         return Err(ApiError::new(
             ErrorCode::Busy,
             "the session has requests waiting that it has not taken",
@@ -780,12 +786,13 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
         .check()
         .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("provider_model: {e}")))?;
     let port = shared
+        .settings
         .policy()
         .providers
         .lemonade
         .and_then(|l| l.port)
         .unwrap_or(crate::providers::LEMONADE_DEFAULT_PORT);
-    if !shared.begin_provider_action() {
+    if !shared.providers.begin_action() {
         return Err(ApiError::new(
             ErrorCode::Busy,
             "a residency verb is still running on this machine",
@@ -808,7 +815,7 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
                 Err(m) => (false, m),
             };
             tracing::info!(request = %params.request, ok, message = %message, "residency verb ended");
-            shared2.finish_provider_action(crate::providers::ProviderAction {
+            shared2.providers.finish_action(crate::providers::ProviderAction {
                 request: params.request,
                 model: crate::providers::clip(&params.model, crate::providers::MAX_TEXT),
                 ok,
@@ -817,13 +824,15 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
             });
         });
     if spawned.is_err() {
-        shared.finish_provider_action(crate::providers::ProviderAction {
-            request,
-            model: crate::providers::clip(&model, crate::providers::MAX_TEXT),
-            ok: false,
-            message: "could not start the residency verb".into(),
-            at: crate::state::now_rfc3339(),
-        });
+        shared
+            .providers
+            .finish_action(crate::providers::ProviderAction {
+                request,
+                model: crate::providers::clip(&model, crate::providers::MAX_TEXT),
+                ok: false,
+                message: "could not start the residency verb".into(),
+                at: crate::state::now_rfc3339(),
+            });
         return Err(ApiError::new(
             ErrorCode::Unavailable,
             "could not start the residency verb",
@@ -857,7 +866,7 @@ fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accept
     match params.command {
         Command::CheckUpdate => {
             tracing::info!("the controller asked for an update check");
-            shared.request_check();
+            shared.update.request_check();
         }
         Command::ClaudeUpdate if !claude_update => {
             return Err(ApiError::new(
@@ -867,11 +876,11 @@ fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accept
         }
         Command::ClaudeUpdate => {
             tracing::info!("the controller asked for a Claude Code update");
-            shared.request_claude_update();
+            shared.claude.request_update();
         }
         Command::ClaudeRestart => {
             tracing::info!("the controller asked for a Claude remote-control restart");
-            shared.request_claude_restart();
+            shared.claude.request_restart();
         }
     }
     Ok(Accepted { accepted: true })
@@ -891,7 +900,7 @@ fn converse(
     claude_update: bool,
     // The key the handshake proved, and how to re-pin to its successor.
     peer: ([u8; 32], Repin<'_>),
-    // The link keys' count when the attempt began (`Shared::link_keys`).
+    // The link keys' count when the attempt began (`LinkHub::keys`).
     keys_at: u64,
 ) -> Ended {
     let mut state = welcome.state;
@@ -909,7 +918,7 @@ fn converse(
             return Ended::Stopped;
         }
         if state == NodeState::Approved && leaving.is_none() {
-            if let Some(tx) = shared.take_leave() {
+            if let Some(tx) = shared.link.take_leave() {
                 if let Err(e) = tls.send(&wire::request(
                     LEAVE_ID,
                     name::LEAVE,
@@ -924,7 +933,7 @@ fn converse(
         // The settings this machine's user asked for (settings.rs), as one
         // request of absolute values; its answer is routed by its id.
         if state == NodeState::Approved && leaving.is_none() {
-            if let Some((rid, req)) = shared.take_policy_request() {
+            if let Some((rid, req)) = shared.settings.take_request() {
                 tracing::info!(?req, "link: asking the box for this machine's settings");
                 if let Err(e) = tls.send(&wire::request(rid, name::POLICY_REQUEST, &req)) {
                     return Ended::Dropped(format!("a write failed: {e}"));
@@ -932,7 +941,7 @@ fn converse(
                 said = Instant::now();
             }
         }
-        if shared.link_keys().1 != keys_at {
+        if shared.link.keys().1 != keys_at {
             return Ended::Dropped(
                 "config.toml names another controller or key now; connecting under it".into(),
             );
@@ -974,7 +983,7 @@ fn converse(
                         "link: the controller says where this machine stands"
                     );
                     state = s.state;
-                    shared.set_link(|l| l.state = Some(state.into()));
+                    shared.link.set_status(|l| l.state = Some(state.into()));
                     match state {
                         NodeState::Approved => pushed = Pushed::default(),
                         NodeState::Revoked => {
@@ -1079,7 +1088,9 @@ fn converse(
                 if let Err(e) = &result {
                     tracing::info!(error = %e.msg, "link: the box refused this machine's settings request");
                 }
-                shared.policy_request_answered(rid, result.map(|_| ()).map_err(|e| e.msg));
+                shared
+                    .settings
+                    .answered(rid, result.map(|_| ()).map_err(|e| e.msg));
             }
             Ok(Incoming::Answer { .. }) => {}
             Err(e) => tracing::debug!(error = %e, "link: a line that is not a message"),
@@ -1093,7 +1104,7 @@ fn converse(
 /// dialling a host that will turn it away — or the other box's). The rest
 /// of the policy stands as it was.
 pub fn drop_santree(shared: &Shared) {
-    let mut p = shared.policy();
+    let mut p = shared.settings.policy();
     if !p.santree && p.session_host.is_none() {
         return;
     }
@@ -1106,7 +1117,7 @@ pub fn drop_santree(shared: &Shared) {
 /// The box's decision: into the shared state, and — when it moved — kept on
 /// disk, so the next start begins from it (config.rs `last_policy`).
 fn apply_policy(shared: &Shared, p: Policy) {
-    let changed = shared.set_policy(p.clone());
+    let changed = shared.settings.set_policy(p.clone());
     if changed || !crate::paths::policy_path().exists() {
         crate::paths::save_policy(&p);
     }
@@ -1180,15 +1191,15 @@ mod tests {
             ..Policy::default()
         };
         let shared = Shared::new(
-            crate::state::State::default(),
-            crate::facts::Facts::default(),
-            Instant::now(),
-            granted.clone(),
             crate::role::Role::of(crate::config::Mode::Node),
+            crate::facts::Facts::default(),
+            crate::state::State::default(),
+            granted.clone(),
+            crate::util::Shutdown::new(),
         );
         drop_santree(&shared);
         assert_eq!(
-            shared.policy(),
+            shared.settings.policy(),
             Policy {
                 santree: false,
                 session_host: None,
