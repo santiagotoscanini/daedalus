@@ -1,3 +1,5 @@
+import { ceremonyArmed, ceremonyFor, ceremonyRefusal } from '../lib/image-ceremony'
+import { imagePins, manualPins } from './contract/domains/images'
 import { defineFlow, defineGate, type FlowOutcome } from './flow'
 import {
   type ImageTarget,
@@ -13,6 +15,12 @@ import {
 // only translate its outcome into their own response shape: two hand-copied
 // bodies are two bodies that drift. The lock, the pickup window and the order
 // of the steps are host/flow.ts's, shared with Apply and the engine update.
+//
+// The typed-name ceremony (lib/image-ceremony.ts) is checked here too, for the
+// same reason: a gate each door enforces for itself is a gate one door forgets,
+// and a check in the browser is no check at all. A door passes what its caller
+// typed — the panel the names typed into its rows, the MCP tool its `confirm` —
+// and this decides.
 //
 // A queued batch is not a third door. It is the same call with more targets,
 // which is what keeps "several at once" from becoming a second mechanism with
@@ -34,11 +42,39 @@ const gate = defineGate({
   },
 })
 
-export const runImageUpdate: (input: {
+type UpdateInput = {
   targets: ImageTarget[]
+  /** The names the caller typed out. A target whose move owes a ceremony must be among them. */
+  confirm: readonly string[]
   actor: string
-}) => Promise<UpdateOutcome> = defineFlow<
-  { targets: ImageTarget[]; actor: string },
+}
+
+/**
+ * The refusal for the first target whose ceremony was not typed, or null.
+ *
+ * A base's pin is looked up under its id, the name the host agent takes it
+ * by; whether it may move at all is the agent's to say.
+ */
+async function untypedCeremony(input: UpdateInput): Promise<string | null> {
+  const [pins, manual] = await Promise.all([imagePins(), manualPins()])
+  for (const t of input.targets) {
+    const base = manual[t.container]
+    const pin =
+      pins[t.container] ??
+      (base?.tag == null
+        ? undefined
+        : { tag: base.tag, ceremony: base.ceremony, majorCeremony: base.majorCeremony })
+    const ceremony = pin === undefined ? null : ceremonyFor(pin, t.toTag)
+    if (ceremony === null) continue
+    if (!input.confirm.some((typed) => ceremonyArmed(t.container, ceremony, typed))) {
+      return ceremonyRefusal(t.container, ceremony)
+    }
+  }
+  return null
+}
+
+export const runImageUpdate: (input: UpdateInput) => Promise<UpdateOutcome> = defineFlow<
+  UpdateInput,
   Moved,
   'refused'
 >(gate, {
@@ -62,13 +98,21 @@ export const runImageUpdate: (input: {
   // lockstep is gets checked on the host, against the nix-rendered registry
   // that is also the allowlist. Re-checking here would be a second copy of
   // that rule, and the copy the attacker does not have to go through.
-  prepare: async (input) => ({
-    ok: true,
-    value: {
-      targets: input.targets.map((t) => ({ container: t.container, toTag: t.toTag ?? null })),
-    },
-    publish: () => requestImageUpdate(input),
-  }),
+  //
+  // The ceremony is the exception: it is not about whether a pin may move but
+  // whether this caller read what moving it takes down, and the host has no
+  // way to ask.
+  prepare: async (input) => {
+    const untyped = await untypedCeremony(input)
+    if (untyped !== null) return { ok: false, code: 'refused', reason: untyped }
+    return {
+      ok: true,
+      value: {
+        targets: input.targets.map((t) => ({ container: t.container, toTag: t.toTag ?? null })),
+      },
+      publish: () => requestImageUpdate({ targets: input.targets, actor: input.actor }),
+    }
+  },
 })
 
 export type { ImageTarget, ImageUpdateStatus }

@@ -67,7 +67,7 @@ describe('a request naming no container', () => {
     const { runImageUpdate } = await flow()
 
     for (const targets of [[], [{ container: '' }], [{ container: 'iris' }, { container: '' }]]) {
-      expect(await runImageUpdate({ targets, actor: 'santiago' })).toEqual({
+      expect(await runImageUpdate({ targets, confirm: [], actor: 'santiago' })).toEqual({
         ok: false,
         code: 'refused',
         reason: 'no container named',
@@ -89,6 +89,7 @@ describe('a container named twice in one batch', () => {
     expect(
       await runImageUpdate({
         targets: [{ container: 'immich' }, { container: 'iris' }, { container: 'immich' }],
+        confirm: [],
         actor: 'santiago',
       }),
     ).toEqual({ ok: false, code: 'refused', reason: 'immich is in this request twice' })
@@ -106,7 +107,9 @@ describe('an update the host is already running', () => {
     })
     const { runImageUpdate } = await flow()
 
-    expect(await runImageUpdate({ targets: [{ container: 'iris' }], actor: 'santiago' })).toEqual({
+    expect(
+      await runImageUpdate({ targets: [{ container: 'iris' }], confirm: [], actor: 'santiago' }),
+    ).toEqual({
       ok: false,
       code: 'busy',
       reason: 'an update of intel-gpu-exporter is already running (pull)',
@@ -123,8 +126,12 @@ describe('two callers at once', () => {
     // The status file cannot separate them — it still says idle — so this is
     // `pending` plus the chain doing the work.
     const [a, b] = await Promise.all([
-      runImageUpdate({ targets: [{ container: 'iris' }], actor: 'one' }),
-      runImageUpdate({ targets: [{ container: 'anansi', toTag: 'v2' }], actor: 'two' }),
+      runImageUpdate({ targets: [{ container: 'iris' }], confirm: [], actor: 'one' }),
+      runImageUpdate({
+        targets: [{ container: 'anansi', toTag: 'v2' }],
+        confirm: [],
+        actor: 'two',
+      }),
     ])
 
     const applied = [a, b].filter((o): o is Extract<UpdateOutcome, { ok: true }> => o.ok)
@@ -140,5 +147,103 @@ describe('two callers at once', () => {
     expect(request.id).toBe(idOf(only))
     // The surviving request is one caller's, not a blend of the two.
     expect(request.targets.map((t) => t.container)).toEqual(only.targets.map((t) => t.container))
+  })
+})
+
+describe('a pin that owes a ceremony', () => {
+  // The typed-name gate is runImageUpdate's, so the Updates panel and the MCP
+  // tool cannot differ on it — the panel's own check runs in the browser, which
+  // is no check at all. The pins come from /export/images.json, as on the box.
+  let previousExportDir: string | undefined
+
+  beforeEach(async () => {
+    previousExportDir = process.env.EXPORT_DIR
+    process.env.EXPORT_DIR = dir
+    const pin = (tag: string, ceremony: string | null, majorCeremony: string | null = null) => ({
+      image: `example/${tag}`,
+      repo: 'example',
+      tag,
+      digest: 'sha256:0',
+      ceremony,
+      majorCeremony,
+    })
+    await writeFile(
+      join(dir, 'images.json'),
+      JSON.stringify({
+        daedalusExport: 1,
+        domain: 'images',
+        schemaVersion: 2,
+        source: 'nix',
+        generatedAt: new Date().toISOString(),
+        data: {
+          pins: {
+            pg: pin('17', 'restarts every tenant of the shared cluster'),
+            iris: pin('1', null),
+            immich: pin('1.0', null, 'migrates its database'),
+          },
+        },
+      }),
+    )
+  })
+
+  afterEach(() => {
+    if (previousExportDir === undefined) delete process.env.EXPORT_DIR
+    else process.env.EXPORT_DIR = previousExportDir
+  })
+
+  const requests = async () => (await readdir(dir)).filter((f) => f === REQUEST)
+
+  it('is refused unless its name was typed, and nothing is written', async () => {
+    const { runImageUpdate } = await flow()
+    for (const confirm of [[], ['PG'], ['iris']]) {
+      expect(
+        await runImageUpdate({ targets: [{ container: 'pg' }], confirm, actor: 'santiago' }),
+      ).toEqual({
+        ok: false,
+        code: 'refused',
+        reason:
+          'Updating pg restarts every tenant of the shared cluster. Pass confirm: "pg" to proceed.',
+      })
+    }
+    expect(await requests()).toEqual([])
+  })
+
+  it('is refused in a batch when only the other pin was typed', async () => {
+    const { runImageUpdate } = await flow()
+    const outcome = await runImageUpdate({
+      targets: [{ container: 'iris' }, { container: 'pg' }],
+      confirm: ['iris'],
+      actor: 'santiago',
+    })
+    expect(outcome.ok).toBe(false)
+    expect(await requests()).toEqual([])
+  })
+
+  it('goes ahead with the name typed', async () => {
+    const { runImageUpdate } = await flow()
+    const outcome = await runImageUpdate({
+      targets: [{ container: 'iris' }, { container: 'pg' }],
+      confirm: [' pg '],
+      actor: 'santiago',
+    })
+    idOf(outcome)
+    expect(await requests()).toEqual([REQUEST])
+  })
+
+  it('owes a major ceremony only for a move to a new major', async () => {
+    const { runImageUpdate } = await flow()
+    const major = await runImageUpdate({
+      targets: [{ container: 'immich', toTag: '2.0' }],
+      confirm: [],
+      actor: 'santiago',
+    })
+    expect(major).toMatchObject({ ok: false, code: 'refused' })
+    idOf(
+      await runImageUpdate({
+        targets: [{ container: 'immich', toTag: '1.1' }],
+        confirm: [],
+        actor: 'santiago',
+      }),
+    )
   })
 })

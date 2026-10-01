@@ -69,6 +69,8 @@ type QueueItem = {
   tag: string
   lockstep: string[]
   ceremony: string | null
+  /** What the row's ceremony field held when it was queued: the batch's confirmation. */
+  typed: string
 }
 
 export function UpdatesView({ d }: { d: UpdatesData }) {
@@ -91,7 +93,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
     return {
       queued: owner === r.container,
       blockedBy: owner === undefined || owner === r.container ? null : owner,
-      add: (toTag: string | null) => {
+      add: (toTag: string | null, typed: string) => {
         setQueue((q) => [
           ...q.filter((i) => i.container !== r.container),
           {
@@ -101,6 +103,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             lockstep: r.lockstep,
             // What THIS move owes: a new major can, where its re-pull does not.
             ceremony: ceremonyFor({ ...r, tag: r.tag ?? '' }, toTag),
+            typed,
           },
         ])
       },
@@ -377,6 +380,7 @@ function QueuePanel({
                         container: q.container,
                         ...(q.toTag === null ? {} : { toTag: q.toTag }),
                       })),
+                      confirm: queue.map((q) => q.typed),
                     },
                   })
                   // The outcome's `code` is for the MCP tool's caller; a person reads the sentence.

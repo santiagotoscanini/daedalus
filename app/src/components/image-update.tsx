@@ -105,9 +105,10 @@ export type QueueBinding = {
    * `toTag` null means "re-pull the tag it is on" — the channel-pin case.
    *
    * Replaces an existing entry rather than adding a second, so the tag picker
-   * can call it again when the choice changes.
+   * can call it again when the choice changes. `typed` is what the row's
+   * ceremony field holds, which the batch hands the server as its confirmation.
    */
-  add: (toTag: string | null) => void
+  add: (toTag: string | null, typed: string) => void
   remove: () => void
 }
 
@@ -223,7 +224,7 @@ export function UpdateControl({
               // picker has to keep it current — otherwise the row shows one
               // tag and the batch would move to another.
               if (queue?.queued === true) {
-                queue.add(e.target.value === t.tag ? null : e.target.value)
+                queue.add(e.target.value === t.tag ? null : e.target.value, typed)
               }
             }}
           >
@@ -289,6 +290,7 @@ export function UpdateControl({
                       ...(sameTag || to === null ? {} : { toTag: to }),
                     },
                   ],
+                  confirm: [typed],
                 },
               })
               // The outcome's `code` is for the MCP tool's caller; a person reads the sentence.
@@ -323,7 +325,7 @@ export function UpdateControl({
               size="sm"
               disabled={running || !armed}
               onClick={() => {
-                queue.add(sameTag || to === null ? null : to)
+                queue.add(sameTag || to === null ? null : to, typed)
               }}
             >
               Add to queue

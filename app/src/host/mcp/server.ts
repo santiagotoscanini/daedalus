@@ -358,40 +358,17 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
     },
     async (args, actor) => {
       const targets = args.targets as { container: string; toTag?: string }[]
+      const confirm = args.confirm as string | undefined
 
-      // The ceremony gate. `fleet.imageUpdates.<c>.ceremony` names what else
-      // this update takes down, and the box's rule is that the operator types
-      // the container's name first — see lib/image-ceremony.ts, which the
-      // Updates panel uses for the same check. An agent is exactly the caller
-      // this gate exists for, so it is enforced here rather than assumed.
-      //
-      // A base's pin is looked up under its id, the name the host agent takes
-      // it by; whether it may move at all is the agent's to say.
-      const { imagePins, manualPins } = await import('../contract/domains/images')
-      const { ceremonyArmed, ceremonyFor, ceremonyRefusal } = await import(
-        '../../lib/image-ceremony'
-      )
-      const [pins, manual] = await Promise.all([imagePins(), manualPins()])
-      for (const t of targets) {
-        const container = pins[t.container]
-        const base = manual[t.container]
-        const pin =
-          container ??
-          (base?.tag == null
-            ? undefined
-            : { tag: base.tag, ceremony: base.ceremony, majorCeremony: base.majorCeremony })
-        const ceremony = pin === undefined ? null : ceremonyFor(pin, t.toTag)
-        if (!ceremonyArmed(t.container, ceremony, args.confirm as string | undefined)) {
-          return refuse(ceremonyRefusal(t.container, ceremony ?? ''))
-        }
-      }
-
+      // The ceremony gate (lib/image-ceremony.ts) is runImageUpdate's, shared
+      // with the Updates panel: an agent is exactly the caller it exists for.
       const { runImageUpdate } = await import('../update-flow')
       const outcome = await runImageUpdate({
         targets: targets.map((t) => ({
           container: t.container,
           ...(t.toTag === undefined ? {} : { toTag: t.toTag }),
         })),
+        confirm: confirm === undefined ? [] : [confirm],
         actor,
       })
       return outcome.ok

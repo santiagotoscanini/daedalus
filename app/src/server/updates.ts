@@ -1,4 +1,4 @@
-import { arrayOf, asValidator, obj, withMessage } from '../lib/contract/decode'
+import { arrayOf, asValidator, obj, optional, str, withMessage } from '../lib/contract/decode'
 import { containerNameField, imageTargetField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
@@ -50,17 +50,22 @@ export const fetchImageUpdateStatus = readFn.handler(async () => {
  *
  * The validator says what the MCP `image.update` tool's schema says: both are
  * doors onto the same runImageUpdate, and a request one refuses is not one
- * the other should publish to the host.
+ * the other should publish to the host. `confirm` is the names the operator
+ * typed into the rows' ceremony fields; runImageUpdate decides whether they
+ * cover every target that owes one.
  */
 export const requestImageUpdateFn = adminFn
   .validator(
     asValidator(
-      withMessage(obj({ targets: arrayOf(imageTargetField) }), 'expected a list of targets'),
+      withMessage(
+        obj({ targets: arrayOf(imageTargetField), confirm: optional(arrayOf(str), []) }),
+        'expected a list of targets',
+      ),
     ),
   )
   .handler(async ({ data, context }) => {
     const { runImageUpdate } = await import('../host/update-flow')
-    return runImageUpdate({ targets: data.targets, actor: context.actor() })
+    return runImageUpdate({ targets: data.targets, confirm: data.confirm, actor: context.actor() })
   })
 
 // ── the engine ────────────────────────────────────────────────────────────
