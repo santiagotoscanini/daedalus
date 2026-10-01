@@ -99,7 +99,8 @@ in
       description = ''
         Dataset name → how it is tuned and where it mounts. The single source
         of truth for the box's ZFS layout; pools appear as their own root
-        dataset. Defined by the host, never by a stack.
+        dataset. Defined by the host, never by a stack. Empty (the default)
+        switches this whole module off.
       '';
       type = lib.types.attrsOf (
         lib.types.submodule {
@@ -135,7 +136,11 @@ in
     };
   };
 
-  config = {
+  # On only for a host with a dataset table — a ZFS box lists at least its
+  # pools there. A host without one (ext4, or a root pool it leaves untuned)
+  # gets no scrub, trim, snapshots or converge; a zfs `fileSystems` entry still
+  # brings the kernel module on its own.
+  config = lib.mkIf (datasets != { }) {
     boot.supportedFilesystems = [ "zfs" ];
 
     boot.zfs = {

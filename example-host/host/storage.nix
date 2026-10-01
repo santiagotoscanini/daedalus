@@ -6,8 +6,8 @@
 # absolute path per name, which a module reads as `fleet.data.<name>`. `{ }`
 # is a valid answer until an enabled module asks for a name.
 #
-# ZFS is optional: the engine enables the tooling, and a host that keeps a
-# dataset table here gets it converged (`fleet.zfs.datasets`), snapshotted and
+# ZFS is optional: a host that keeps a dataset table here gets ZFS support and
+# the table converged (`fleet.zfs.datasets`), snapshotted and
 # mirrored (`fleet.backup.replications`) — see the engine's platform/zfs.nix
 # and platform/backup.nix. A host on ext4 leaves both unset.
 _: {

@@ -1,5 +1,8 @@
 # ddclient — dynamic DNS for the house's public IP.
 #
+# Off until the host sets `fleet.ddns.enable`: a box behind someone else's
+# NAT, or with a static address, has no record to keep current.
+#
 # Updates the Cloudflare A record for fleet.wanHost every 5 minutes if our
 # home public IP changes. It authenticates with the box's one Cloudflare API
 # token, whose only home is site/vault/cloudflare-api-token.sops (rendered as
@@ -26,70 +29,79 @@
 
 {
   config,
+  lib,
   mkSecretRender,
   ...
 }:
 
 let
   inherit (config.fleet) wanHost;
+  pihole = config.fleet.modules.pihole.enable;
   tokenDir = "/run/ddclient-token";
   tokenFile = "${tokenDir}/token";
 in
 {
-  fleet.dnsHosts = [ "${config.fleet.lanIp} ${wanHost}" ];
+  options.fleet.ddns.enable = lib.mkEnableOption ''
+    dynamic DNS: keep the Cloudflare A record of `fleet.wanHost` on this
+    box's public address, and answer the same name with `fleet.lanIp` on the
+    LAN (split horizon). Needs the Cloudflare API token in
+    `site/vault/cloudflare-api-token.sops`
+  '';
 
-  # ddclient's module splices passwordFile verbatim into `password=`, so it
-  # needs the bare token, not the dotenv line it lives in. Rendered from the
-  # one source rather than stored a second time. `LINE=$(grep …)` fails the
-  # unit under `set -e` if the key is missing: an empty token here would only
-  # surface the next time the WAN address changes, which is the worst moment.
-  # A rotation (site/vault, rendered by platform/site.nix) re-renders the bare
-  # token; ddclient itself reads it on its next timer run.
-  sops.templates."cloudflare-api-token.env".restartUnits = [ "ddclient-token.service" ];
+  config = lib.mkIf config.fleet.ddns.enable {
+    fleet.dnsHosts = [ "${config.fleet.lanIp} ${wanHost}" ];
 
-  systemd.services.ddclient-token = mkSecretRender {
-    description = "Render the Cloudflare API token for ddclient";
-    gates = [ "ddclient.service" ];
-    dir = tokenDir;
-    file = tokenFile;
-    owner = "root";
-    group = "root";
-    prep = ''
-      LINE=$(grep -m1 '^CF_DNS_API_TOKEN=' ${config.fleet.cloudflare.tokenEnvFile})
-      TOKEN=$(printf '%s' "$LINE" | cut -d= -f2- | tr -d '"')
-    '';
-    content = "\${TOKEN}";
-  };
+    # ddclient's module splices passwordFile verbatim into `password=`, so it
+    # needs the bare token, not the dotenv line it lives in. Rendered from the
+    # one source rather than stored a second time. `LINE=$(grep …)` fails the
+    # unit under `set -e` if the key is missing: an empty token here would only
+    # surface the next time the WAN address changes, which is the worst moment.
+    # A rotation (site/vault, rendered by platform/site.nix) re-renders the bare
+    # token; ddclient itself reads it on its next timer run.
+    sops.templates."cloudflare-api-token.env".restartUnits = [ "ddclient-token.service" ];
 
-  services.ddclient = {
-    enable = true;
-    protocol = "cloudflare";
-    zone = config.fleet.baseDomain;
-    # No `username`: ddclient 4 defaults `login` to `token` and sends the
-    # password as a Bearer API token. Any other login (an email address, as
-    # this once had) makes it send the password as the account's Global API
-    # Key instead.
-    passwordFile = tokenFile;
-    ssl = true;
-    usev4 = "webv4";
-    usev6 = "disabled";
-    extraConfig = ''
-      ttl=1
-      webv4=https://cloudflare.com/cdn-cgi/trace
-      webv4-skip='ip='
-    '';
-    domains = [ wanHost ];
-    interval = "300s";
-  };
+    systemd.services.ddclient-token = mkSecretRender {
+      description = "Render the Cloudflare API token for ddclient";
+      gates = [ "ddclient.service" ];
+      dir = tokenDir;
+      file = tokenFile;
+      owner = "root";
+      group = "root";
+      prep = ''
+        LINE=$(grep -m1 '^CF_DNS_API_TOKEN=' ${config.fleet.cloudflare.tokenEnvFile})
+        TOKEN=$(printf '%s' "$LINE" | cut -d= -f2- | tr -d '"')
+      '';
+      content = "\${TOKEN}";
+    };
 
-  # First-boot race: ddclient hits cloudflare.com before pi-hole is
-  # actually serving DNS. Gate on pihole-ready so the first run resolves
-  # (accepted layering inversion: platform/ depending on a catalog unit —
-  # ddclient is host plumbing but the box resolves through modules/pihole;
-  # with that module off the `wants` names no unit and is a no-op)
-  # without burning ~5s of DNS retries.
-  systemd.services.ddclient = {
-    after = [ "pihole-ready.service" ];
-    wants = [ "pihole-ready.service" ];
+    services.ddclient = {
+      enable = true;
+      protocol = "cloudflare";
+      zone = config.fleet.baseDomain;
+      # No `username`: ddclient 4 defaults `login` to `token` and sends the
+      # password as a Bearer API token. Any other login (an email address, as
+      # this once had) makes it send the password as the account's Global API
+      # Key instead.
+      passwordFile = tokenFile;
+      ssl = true;
+      usev4 = "webv4";
+      usev6 = "disabled";
+      extraConfig = ''
+        ttl=1
+        webv4=https://cloudflare.com/cdn-cgi/trace
+        webv4-skip='ip='
+      '';
+      domains = [ wanHost ];
+      interval = "300s";
+    };
+
+    # First-boot race: ddclient hits cloudflare.com before pi-hole is
+    # actually serving DNS. While the catalog's resolver runs on this box, gate
+    # on pihole-ready so the first run resolves without burning ~5s of DNS
+    # retries.
+    systemd.services.ddclient = lib.mkIf pihole {
+      after = [ "pihole-ready.service" ];
+      wants = [ "pihole-ready.service" ];
+    };
   };
 }

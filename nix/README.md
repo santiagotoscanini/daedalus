@@ -151,8 +151,9 @@ read into `fleet.nodes`; optional, a box without machines has none) and
 renders it for every consumer).
 
 Optional, null or empty by default: `fleet.hcPing.keySopsFile`,
-`fleet.claude.mcpSopsFile`, `fleet.zfs.datasets`, `fleet.zfs.arcMaxBytes`,
-`fleet.backup.replications`, `fleet.autoupgrade.inputs`,
+`fleet.claude.mcpSopsFile`, `fleet.zfs.datasets` (empty: no ZFS mechanism
+at all), `fleet.zfs.arcMaxBytes`, `fleet.ddns.enable` (ddclient for
+`fleet.wanHost`), `fleet.backup.replications`, `fleet.autoupgrade.inputs`,
 `fleet.daedalus.routerProduct`, `fleet.builder.npmMirrorHost`,
 `fleet.daedalus.source`, `fleet.daedalus.image`, `fleet.upgradeGuard.*`.
 
@@ -276,8 +277,6 @@ crate's README are the full story.
   tenants, small tools) are still in the reference operator's private
   configuration; each moves as `.claude/rules/nix-engine.md` §7 describes,
   and none is needed for a box to run.
-- **ZFS is assumed.** `platform/zfs.nix` enables ZFS support
-  unconditionally; there is no switch for a box without it.
 - **The generic dashboards know no pools.** The storage and overview
   dashboards name a box's pools, so they are the host's (contributed through
   `fleet.grafanaDashboardsByFolder`); a pool-agnostic version, templated

@@ -118,7 +118,8 @@ the key fails eval):
 
 Optional, null/empty by default, host-defined when wanted:
 `fleet.claude.mcpSopsFile`, `fleet.hcPing.keySopsFile`,
-`fleet.zfs.datasets`, `fleet.zfs.arcMaxBytes`, `fleet.backup.replications`,
+`fleet.zfs.datasets` (empty switches platform/zfs.nix off), `fleet.zfs.arcMaxBytes`,
+`fleet.backup.replications`, `fleet.ddns.enable` (platform/ddclient),
 `fleet.autoupgrade.inputs`, `fleet.upgradeGuard.*` (checks, criticalContainers,
 minContainers, bootFallback.enable).
 
