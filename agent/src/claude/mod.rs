@@ -157,7 +157,7 @@ impl Banner {
 
 /// One session file, as the CLI writes it, plus whether its process lives.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Session {
     pub pid: u32,
@@ -182,7 +182,7 @@ pub struct Session {
 /// The credential clock: the plan and two dates. The tokens are in the same
 /// file and are the reason this struct names what it copies.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Credentials {
     pub present: bool,
@@ -200,7 +200,7 @@ pub struct Credentials {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Settings {
     pub model: Option<String>,
@@ -216,7 +216,7 @@ pub struct Settings {
 /// managed one are both successes that changed nothing, and neither shows up
 /// in a version number.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct UpdateResult {
     pub at: String,
@@ -232,7 +232,7 @@ pub struct UpdateResult {
 /// What the session tells the service, and what the status
 /// page shows.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Report {
     /// Where the `claude` command is; None when it was not found.

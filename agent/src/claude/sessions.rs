@@ -214,7 +214,10 @@ enum Msg {
 #[derive(Default)]
 struct Latest {
     generation: u64,
-    roster: Option<Roster>,
+    roster: Option<Arc<Roster>>,
+    /// The ids of the sessions it lists as managed, for the recovery set
+    /// (session.rs), read every poll without the roster.
+    managed: Vec<String>,
     /// The last recovery's rows.
     recovered: Vec<Recovered>,
     /// A recovery is queued or running.
@@ -271,9 +274,20 @@ impl Sessions {
     }
 
     /// The newest roster and its generation, which moves with each one.
-    pub fn latest(&self) -> Option<(u64, Roster)> {
+    pub fn latest(&self) -> Option<(u64, Arc<Roster>)> {
         let l = self.lock();
         l.roster.clone().map(|r| (l.generation, r))
+    }
+
+    /// The newest roster's generation alone.
+    pub fn generation(&self) -> u64 {
+        self.lock().generation
+    }
+
+    /// The sessions the newest roster lists as managed (resumed by this
+    /// agent, running as their own jobs).
+    pub fn managed_ids(&self) -> Vec<String> {
+        self.lock().managed.clone()
     }
 
     /// The last recovery's rows, for the report.
@@ -293,7 +307,7 @@ struct Worker {
     scanner: Scanner,
     actions: VecDeque<ActionResult>,
     latest: Arc<Mutex<Latest>>,
-    last: Option<Roster>,
+    last: Option<Arc<Roster>>,
     /// The last `claude agents --json`, when, and the profile's two
     /// directories' mtimes then (`agents_now`).
     agents_read: Option<(AgentsStamp, Instant, Option<Vec<Agent>>)>,
@@ -340,9 +354,11 @@ impl Worker {
     fn publish(&mut self, mut r: Roster) {
         r.actions = self.actions.iter().cloned().collect();
         r.fit(roster::MAX_BYTES);
-        self.last = Some(r.clone());
+        let r = Arc::new(r);
+        self.last = Some(Arc::clone(&r));
         let mut l = self.latest();
         l.generation += 1;
+        l.managed = r.managed.iter().map(|m| m.id.clone()).collect();
         l.roster = Some(r);
     }
 
@@ -360,7 +376,7 @@ impl Worker {
         });
         self.actions.truncate(ACTIONS_KEPT);
         // The running state, at once, on the roster already read.
-        if let Some(r) = self.last.clone() {
+        if let Some(r) = self.last.as_deref().cloned() {
             self.publish(r);
         }
         let Outcome(state, detail) = if !wanted {

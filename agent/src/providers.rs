@@ -490,8 +490,9 @@ fn get_json(port: u16, path: &str) -> Result<Value, String> {
 
 /// Lemonade Server (lemonade-server.ai): an OpenAI-compatible model server
 /// under `/api/v1`. A report when it answers, or is installed and does
-/// not; None when there is no sign of it.
-fn read_lemonade(policy: &ProvidersPolicy, apps: &[App]) -> Option<ProviderReport> {
+/// not (`installed`, `lemonade_in` the inventory); None when there is no
+/// sign of it.
+fn read_lemonade(policy: &ProvidersPolicy, installed: bool) -> Option<ProviderReport> {
     let port = policy
         .lemonade
         .as_ref()
@@ -506,11 +507,7 @@ fn read_lemonade(policy: &ProvidersPolicy, apps: &[App]) -> Option<ProviderRepor
     let health = match get_json(port, "/api/v1/health") {
         Ok(h) => h,
         Err(e) => {
-            // Not answering: worth a report only if it is installed, and
-            // the inventory the slow facts read says so.
-            let installed = apps
-                .iter()
-                .any(|a| a.name.to_ascii_lowercase().contains("lemonade"));
+            // Not answering: worth a report only if it is installed.
             r.error = Some(e);
             return installed.then_some(r);
         }
@@ -541,9 +538,20 @@ fn read_lemonade(policy: &ProvidersPolicy, apps: &[App]) -> Option<ProviderRepor
     Some(r)
 }
 
-/// Every provider on this machine, read now.
-pub fn read(policy: &Policy, apps: &[App]) -> Vec<ProviderReport> {
-    read_lemonade(&policy.providers, apps).into_iter().collect()
+/// Whether the application inventory the slow facts read lists Lemonade:
+/// kept with each sample (`Shared::lemonade_installed`), so the reader asks
+/// a flag rather than copying the telemetry.
+pub fn lemonade_in(apps: &[App]) -> bool {
+    apps.iter()
+        .any(|a| a.name.to_ascii_lowercase().contains("lemonade"))
+}
+
+/// Every provider on this machine, read now; `lemonade` says whether the
+/// inventory lists Lemonade.
+pub fn read(policy: &Policy, lemonade: bool) -> Vec<ProviderReport> {
+    read_lemonade(&policy.providers, lemonade)
+        .into_iter()
+        .collect()
 }
 
 /// The document without its clocks: what the link compares to push only
@@ -648,8 +656,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Shutdown) {
             || read_at.is_none_or(|at| at.elapsed() >= every)
             || last_policy.as_ref() != Some(&policy.providers);
         if due {
-            let apps = shared.telemetry().map(|t| t.apps).unwrap_or_default();
-            let mut list = read(&policy, &apps);
+            let mut list = read(&policy, shared.lemonade_installed());
             let actions = shared.provider_actions();
             for p in &mut list {
                 p.actions = actions.clone();
@@ -749,12 +756,17 @@ mod tests {
     #[test]
     fn nothing_installed_and_nothing_answering_is_no_report() {
         // A port nothing listens on: the probe refuses at once.
-        assert!(read_lemonade(&on_port(1), &[]).is_none());
+        assert!(read_lemonade(&on_port(1), false).is_none());
+        assert!(!lemonade_in(&[app("Docker Desktop")]));
     }
 
     #[test]
     fn installed_but_silent_is_found_not_running() {
-        let r = read_lemonade(&on_port(1), &[app("Lemonade Server")]).expect("installed");
+        assert!(lemonade_in(&[
+            app("Docker Desktop"),
+            app("Lemonade Server")
+        ]));
+        let r = read_lemonade(&on_port(1), true).expect("installed");
         assert_eq!(r.kind, "lemonade");
         assert_eq!(r.port, 1);
         assert!(!r.running && !r.healthy);

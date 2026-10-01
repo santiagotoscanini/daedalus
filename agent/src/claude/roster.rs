@@ -229,8 +229,8 @@ impl Roster {
         if total <= max {
             return;
         }
+        // "true" is a byte shorter than "false": the size stands.
         self.truncated = true;
-        total = size(self);
         while total > max {
             let Some(t) = self.transcripts.pop() else {
                 break;
@@ -242,19 +242,25 @@ impl Roster {
         while size(self) > max && self.agents.pop().is_some() {}
     }
 
-    /// The document without what moves by itself: the clock, and the costs
-    /// that tick with every read — what the link compares to push on change.
-    pub fn digest(&self) -> String {
-        let mut r = self.clone();
-        r.reported_at.clear();
-        r.session_stats.clear();
-        r.server = None;
-        for m in &mut r.managed {
-            m.cpu_nsec = None;
-            m.memory_bytes = None;
-            m.log_bytes = None;
+    /// Whether it says something `prev` did not, leaving out what moves by
+    /// itself — the clock, and the costs that tick with every read: what
+    /// the link pushes on (link/node.rs). Field by field, nothing copied.
+    pub fn moved(&self, prev: &Roster) -> bool {
+        fn jobs(r: &Roster) -> Vec<(&str, &str, Option<u32>, &str)> {
+            r.managed
+                .iter()
+                .map(|m| (m.id.as_str(), m.job.as_str(), m.pid, m.log.as_str()))
+                .collect()
         }
-        serde_json::to_string(&r).unwrap_or_default()
+        self.agents_available != prev.agents_available
+            || self.agents != prev.agents
+            || self.transcripts != prev.transcripts
+            || self.transcript_total != prev.transcript_total
+            || self.empty_count != prev.empty_count
+            || self.truncated != prev.truncated
+            || self.actions != prev.actions
+            || self.errors != prev.errors
+            || jobs(self) != jobs(prev)
     }
 }
 

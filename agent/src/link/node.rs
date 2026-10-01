@@ -604,11 +604,13 @@ pub fn connect_once(
 struct Pushed {
     checked: Option<Instant>,
     status: Option<(String, Instant)>,
-    power: Option<(Option<String>, Instant)>,
     telemetry: Option<(u64, String, Instant)>,
     providers: Option<(String, Instant)>,
-    claude: Option<(String, Instant)>,
-    roster: Option<(String, Instant)>,
+    /// The report's generation and whether it was fresh
+    /// (`Shared::claude_report_generation`).
+    claude: Option<((u64, bool), Instant)>,
+    /// The roster's generation; None while there is none.
+    roster: Option<(Option<u64>, Instant)>,
 }
 
 /// The status document without what moves by itself.
@@ -642,12 +644,9 @@ impl Pushed {
         self.checked = Some(Instant::now());
         let due = |at: &Instant| at.elapsed() >= cadence.push_every;
 
-        // The OS's power requests: a command, read on the slow cadence.
-        if self.power.as_ref().is_none_or(|(_, at)| due(at)) {
-            self.power = Some((crate::power::requests_report(), Instant::now()));
-        }
-        let power = self.power.as_ref().and_then(|(p, _)| p.clone());
-        let status = shared.status_value(power);
+        // The OS's power requests as the service last read them (a command,
+        // run on its own thread every minute: `Shared::refresh_power_requests`).
+        let status = shared.status_value(shared.power_requests());
         let d = status_digest(&status);
         if self
             .status
@@ -666,10 +665,10 @@ impl Pushed {
                     *prev_tier != tier || (*prev_at != t.sampled_at && due(at))
                 });
             if moved {
-                let line = wire::event(name::TELEMETRY, &t);
+                let line = wire::event(name::TELEMETRY, &*t);
                 if line.len() > super::MAX_LINE {
                     tracing::warn!(bytes = line.len(), "link: the telemetry document is past the line limit; sent without the application list");
-                    let mut slim = t.clone();
+                    let mut slim = (*t).clone();
                     slim.apps.clear();
                     tls.send(&wire::event(name::TELEMETRY, &slim))?;
                 } else {
@@ -693,41 +692,32 @@ impl Pushed {
             }
         }
 
-        let report = shared.claude_report();
-        let d = match &report {
-            Some(r) => {
-                let mut v = serde_json::to_value(r).unwrap_or(Value::Null);
-                if let Some(o) = v.as_object_mut() {
-                    o.remove("reported_at");
-                }
-                v.to_string()
-            }
-            None => "null".into(),
-        };
+        // The report when it says something new (its generation, which its
+        // clock does not move), or stops being fresh: copied only then.
+        let g = shared.claude_report_generation();
         if self
             .claude
             .as_ref()
-            .is_none_or(|(prev, at)| *prev != d || due(at))
+            .is_none_or(|(prev, at)| *prev != g || due(at))
         {
-            tls.send(&wire::event(name::CLAUDE, &report))?;
-            self.claude = Some((d, Instant::now()));
+            tls.send(&wire::event(name::CLAUDE, &shared.claude_report()))?;
+            self.claude = Some((g, Instant::now()));
         }
 
-        // The roster, on the same rule: its clock and the costs that tick
-        // by themselves aside (`Roster::digest`). The session keeps it
+        // The roster, on the same rule: its generation moves when it says
+        // something new, its clock and the costs that tick by themselves
+        // aside (`Roster::moved`). Shared, not copied; the session keeps it
         // within `roster::MAX_BYTES`, well inside a line.
-        let roster = shared.claude_roster();
-        let d = roster
-            .as_ref()
-            .map(crate::claude::Roster::digest)
-            .unwrap_or_else(|| "null".into());
+        let roster = shared.claude_roster_shared();
+        let g = roster.as_ref().map(|(_, g)| *g);
         if self
             .roster
             .as_ref()
-            .is_none_or(|(prev, at)| *prev != d || due(at))
+            .is_none_or(|(prev, at)| *prev != g || due(at))
         {
-            tls.send(&wire::event(name::CLAUDE_ROSTER, &roster))?;
-            self.roster = Some((d, Instant::now()));
+            let r = roster.as_ref().map(|(r, _)| &**r);
+            tls.send(&wire::event(name::CLAUDE_ROSTER, &r))?;
+            self.roster = Some((g, Instant::now()));
         }
         Ok(())
     }

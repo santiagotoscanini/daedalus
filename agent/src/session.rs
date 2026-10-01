@@ -159,11 +159,11 @@ impl Link {
     }
 
     /// Hand the service the roster; whether it took it.
-    fn roster(&self, roster: &Roster) -> bool {
+    fn roster(&self, roster: &Arc<Roster>) -> bool {
         match self {
             Link::Socket => send_roster(roster),
             Link::InProcess(shared) => {
-                shared.set_claude_roster(roster.clone());
+                shared.set_claude_roster(Arc::clone(roster));
                 true
             }
         }
@@ -387,11 +387,7 @@ impl Session {
     /// ones it ended (claude/recovery.rs).
     fn recover(&mut self, report: &Report) {
         let server = self.sup.server_pid();
-        let managed: Vec<String> = self
-            .sessions
-            .latest()
-            .map(|(_, r)| r.managed.into_iter().map(|m| m.id).collect())
-            .unwrap_or_default();
+        let managed = self.sessions.managed_ids();
         // One read of the process table per poll, and none when no live
         // session file could descend from a server.
         let table = if server.is_some() && report.sessions.iter().any(|s| s.alive) {
@@ -419,13 +415,17 @@ impl Session {
     /// Hand the service the roster when the thread has a new one, and at
     /// least every `ROSTER_RESEND` so the service knows it is fresh.
     fn send_roster(&mut self) {
-        let Some((generation, roster)) = self.sessions.latest() else {
-            return;
-        };
+        let generation = self.sessions.generation();
         let due = self
             .roster_sent
             .is_none_or(|(g, at)| g != generation || at.elapsed() >= ROSTER_RESEND);
-        if due && self.link.roster(&roster) {
+        if !due {
+            return;
+        }
+        let Some((generation, roster)) = self.sessions.latest() else {
+            return;
+        };
+        if self.link.roster(&roster) {
             self.roster_sent = Some((generation, Instant::now()));
         }
     }

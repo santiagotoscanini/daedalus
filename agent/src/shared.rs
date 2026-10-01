@@ -137,6 +137,9 @@ struct Live {
     policy: Policy,
     /// The tray's last report and when it landed.
     claude: Option<(Report, Instant)>,
+    /// Moves when a report says something the last did not (its clock
+    /// aside): what the link compares to push on change (link/node.rs).
+    claude_generation: u64,
     /// What the API's subscribers were last told: a session reporting or
     /// not (`claude.changed`).
     claude_announced: bool,
@@ -150,10 +153,16 @@ struct Live {
     /// Verb requests for the sessions (claude/sessions.rs), accepted by the
     /// API or the link and handed to the session with its next report.
     claude_sessions: Vec<SessionRequest>,
-    /// The session's last roster (claude/roster.rs) and when it landed.
-    claude_roster: Option<(Roster, Instant)>,
-    /// The last telemetry document, from the sampling thread.
-    telemetry: Option<Telemetry>,
+    /// The session's last roster (claude/roster.rs) and when it landed,
+    /// shared rather than copied: it runs to `roster::MAX_BYTES`.
+    claude_roster: Option<(Arc<Roster>, Instant)>,
+    /// Moves when a roster says something the last did not (`Roster::moved`).
+    roster_generation: u64,
+    /// The last telemetry document, from the sampling thread, shared rather
+    /// than copied: its application list is long.
+    telemetry: Option<Arc<Telemetry>>,
+    /// The last sample's inventory lists Lemonade (`providers::lemonade_in`).
+    lemonade_installed: bool,
     /// Moves whenever a sample carries newly read static or slow facts or
     /// OS updates — what the link pushes at once rather than on its
     /// sample cadence (link/node.rs).
@@ -264,6 +273,9 @@ impl Shared {
                 claude_restart_requested: false,
                 claude_sessions: Vec::new(),
                 claude_roster: None,
+                roster_generation: 0,
+                lemonade_installed: false,
+                claude_generation: 0,
                 telemetry: None,
                 telemetry_tier: 0,
                 providers: None,
@@ -423,8 +435,10 @@ impl Shared {
     pub fn set_telemetry(&self, t: Telemetry, tiers_moved: bool) {
         let sampled_at = t.sampled_at.clone();
         {
+            let lemonade = crate::providers::lemonade_in(&t.apps);
             let mut l = self.lock();
-            l.telemetry = Some(t);
+            l.lemonade_installed = lemonade;
+            l.telemetry = Some(Arc::new(t));
             if tiers_moved {
                 l.telemetry_tier += 1;
             }
@@ -436,7 +450,7 @@ impl Shared {
     /// The last telemetry document, at the level config.toml sets; None
     /// before the first sample, or when the level is `off`.
     pub fn telemetry(&self) -> Option<Telemetry> {
-        self.lock().telemetry.clone()
+        self.lock().telemetry.as_deref().cloned()
     }
 
     /// The providers as their reader last found them (providers.rs).
@@ -482,8 +496,13 @@ impl Shared {
         self.lock().providers.clone()
     }
 
+    /// Whether the last sample's application inventory lists Lemonade.
+    pub fn lemonade_installed(&self) -> bool {
+        self.lock().lemonade_installed
+    }
+
     /// The last document with its tier counter (`set_telemetry`).
-    pub fn telemetry_with_tier(&self) -> Option<(Telemetry, u64)> {
+    pub fn telemetry_with_tier(&self) -> Option<(Arc<Telemetry>, u64)> {
         let l = self.lock();
         l.telemetry.clone().map(|t| (t, l.telemetry_tier))
     }
@@ -711,18 +730,44 @@ impl Shared {
         true
     }
 
-    /// The session's roster.
-    pub fn set_claude_roster(&self, r: Roster) {
-        self.lock().claude_roster = Some((r, Instant::now()));
+    /// The session's roster; its generation moves when it says something
+    /// the last one did not (`Roster::moved`).
+    pub fn set_claude_roster(&self, r: impl Into<Arc<Roster>>) {
+        let r = r.into();
+        let mut l = self.lock();
+        if l.claude_roster
+            .as_ref()
+            .is_none_or(|(prev, _)| r.moved(prev))
+        {
+            l.roster_generation += 1;
+        }
+        l.claude_roster = Some((r, Instant::now()));
     }
 
     /// The session's last roster, while it is fresh.
     pub fn claude_roster(&self) -> Option<Roster> {
-        self.lock()
-            .claude_roster
+        self.claude_roster_shared().map(|(r, _)| (*r).clone())
+    }
+
+    /// The same, shared rather than copied, with its generation: what the
+    /// link compares, and sends only when it moved.
+    pub fn claude_roster_shared(&self) -> Option<(Arc<Roster>, u64)> {
+        let l = self.lock();
+        l.claude_roster
             .as_ref()
             .filter(|(_, at)| at.elapsed() < ROSTER_FRESH)
-            .map(|(r, _)| r.clone())
+            .map(|(r, _)| (Arc::clone(r), l.roster_generation))
+    }
+
+    /// The generation of the session's report (`set_claude`), and whether
+    /// one is fresh: what the link compares before it copies the report.
+    pub fn claude_report_generation(&self) -> (u64, bool) {
+        let l = self.lock();
+        let fresh = l
+            .claude
+            .as_ref()
+            .is_some_and(|(_, at)| at.elapsed() < REPORT_FRESH);
+        (l.claude_generation, fresh)
     }
 
     pub fn facts(&self) -> &Facts {
@@ -765,6 +810,17 @@ impl Shared {
             state: Some(r.state.clone()),
             pid: r.pid,
         });
+        // The clock aside: the previous report is replaced just below.
+        let says_more = match l.claude.as_mut() {
+            Some((prev, _)) => {
+                prev.reported_at.clone_from(&r.reported_at);
+                *prev != r
+            }
+            None => true,
+        };
+        if says_more {
+            l.claude_generation += 1;
+        }
         l.claude_announced = true;
         l.claude = Some((r, Instant::now()));
         let answer = ReportAnswer {
@@ -877,8 +933,12 @@ impl Shared {
     /// here: on Windows that is `powercfg`, far too slow for a request
     /// (`refresh_power_requests`, on the service's own thread).
     pub fn document_value(&self) -> serde_json::Value {
-        let power = self.power.lock_ok().clone();
-        self.document_with(power, true)
+        self.document_with(self.power_requests(), true)
+    }
+
+    /// The OS's power requests as last read (`refresh_power_requests`).
+    pub fn power_requests(&self) -> Option<String> {
+        self.power.lock_ok().clone()
     }
 
     /// Read the OS's power requests for the document (a command; call it
@@ -927,7 +987,7 @@ impl Shared {
             claude_update_requested: l.claude_update_requested,
             claude_restart_requested: l.claude_restart_requested,
             telemetry: if telemetry {
-                l.telemetry.as_ref().map(Telemetry::public)
+                l.telemetry.as_deref().map(Telemetry::public)
             } else {
                 None
             },
@@ -944,6 +1004,49 @@ impl Shared {
 mod tests {
     use super::*;
     use crate::config::Mode;
+
+    /// The link pushes on a generation, which moves when a report or a
+    /// roster says something new — never for its clock or the costs that
+    /// tick by themselves, and without the link copying either to compare.
+    #[test]
+    fn generations_move_on_content_not_on_clocks() {
+        let shared = Shared::new(
+            State::default(),
+            Facts::default(),
+            Instant::now(),
+            Policy::default(),
+            Role::of(Mode::Controller),
+        );
+        let report = |state: &str, at: &str| Report {
+            state: state.into(),
+            reported_at: at.into(),
+            ..Default::default()
+        };
+        shared.set_claude(report("running", "t1"));
+        let (g, fresh) = shared.claude_report_generation();
+        assert!(fresh);
+        shared.set_claude(report("running", "t2"));
+        assert_eq!(shared.claude_report_generation().0, g);
+        shared.set_claude(report("waiting", "t3"));
+        assert_eq!(shared.claude_report_generation().0, g + 1);
+
+        let roster = |at: &str, cpu, errors: Vec<String>| Roster {
+            reported_at: at.into(),
+            managed: vec![crate::claude::roster::Managed {
+                id: "a".into(),
+                cpu_nsec: Some(cpu),
+                ..Default::default()
+            }],
+            errors,
+            ..Default::default()
+        };
+        shared.set_claude_roster(roster("t1", 1, vec![]));
+        let (_, g) = shared.claude_roster_shared().unwrap();
+        shared.set_claude_roster(roster("t2", 2, vec![]));
+        assert_eq!(shared.claude_roster_shared().unwrap().1, g);
+        shared.set_claude_roster(roster("t3", 2, vec!["x".into()]));
+        assert_eq!(shared.claude_roster_shared().unwrap().1, g + 1);
+    }
 
     #[test]
     fn claude_changed_covers_reporting_both_ways() {
