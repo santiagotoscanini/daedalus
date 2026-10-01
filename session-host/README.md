@@ -358,8 +358,9 @@ fmt, clippy `-D warnings`, the tests, a `--locked` release build, and
   santree socket, and santree's own `RemoteClient` through it (hello, a PTY
   round trip), cut off within seconds once the policy turns santree off.
 
-The nix build takes santree's crates by the git rev in `Cargo.lock`
-(`allowBuiltinFetchGit`): the rev is the pin, so moving santree is a
-`Cargo.toml` rev change (all four santree entries) and `cargo update -p
-santree-pty` in both crates (one git source: every santree crate moves
-with it), nothing else.
+The nix build (`nix/pkgs/session-host.nix`) takes santree's crates by the git
+rev in `Cargo.lock` and checks them against one `cargoLock.outputHashes`
+entry, so moving santree is a `Cargo.toml` rev change (all four santree
+entries), `cargo update -p santree-pty` in both crates (one git source: every
+santree crate moves with it), and that hash: build
+`.#packages.x86_64-linux.session-host` and take the one it reports.

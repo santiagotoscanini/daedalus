@@ -21,10 +21,11 @@ rustPlatform.buildRustPackage {
   };
   cargoLock = {
     lockFile = crate + "/Cargo.lock";
-    # santree's crates come from its public repository at the rev
-    # Cargo.lock names: that rev is the pin, so no output hash to bump
-    # with each santree move. An evaluation after a bump fetches it.
-    allowBuiltinFetchGit = true;
+    # santree's crates, from its public repository at the rev Cargo.lock
+    # names; one hash covers every crate of that checkout. A santree move
+    # changes the lock and this hash together.
+    outputHashes."santree-agent-kind-0.1.17-beta.18" =
+      "sha256-ataJgIRDIs4cdDRIfTRKknWonBpeweBm7VW4uRoJVJA=";
   };
   doCheck = false;
   meta.mainProgram = "daedalus-session-host";
