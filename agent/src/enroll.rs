@@ -39,10 +39,12 @@
 //! tunnel config exists: log out first.
 //!
 //! **Logging out** (`enroll.leave`): the link tells the controller
-//! (`leave`, answered within `LEAVE_WAIT`, best effort) and the app deletes
-//! the machine's wg-easy client; then `forget_log_in` — the pin and the
+//! (`leave`, answered within `LEAVE_WAIT`) and the app deletes the
+//! machine's wg-easy client; then `forget_log_in` — the pin and the
 //! controller's address out of config.toml, the tunnel stopped,
-//! `tunnel.toml` and the kept policy deleted. A machine the box revokes
+//! `tunnel.toml` and the kept policy deleted. No answer in time is no
+//! reason to stay (the box may be gone), but a refusal is: the box answered
+//! that nobody heard it, so the log-in stays for another try. A machine the box revokes
 //! forgets its log-in the same way (link/node.rs).
 
 use std::path::PathBuf;
@@ -386,13 +388,21 @@ pub fn leave(shared: &Shared, files: &Files) -> Result<String, ApiError> {
         .link()
         .is_some_and(|l| l.connected && l.state.as_deref() == Some("approved"));
     if approved {
-        let told = shared.request_leave().recv_timeout(LEAVE_WAIT).is_ok();
+        let answer = shared.request_leave().recv_timeout(LEAVE_WAIT);
         // Not taken in time: withdrawn, so a later link does not send it.
         shared.take_leave();
-        if !told {
-            tracing::warn!(
+        match answer {
+            Ok(Ok(())) => {}
+            // The box answered, and nobody there heard it: logging out now
+            // would leave the box holding this machine and its tunnel.
+            Ok(Err(why)) => {
+                return Err(unavailable(format!(
+                    "the box did not take the log-out ({why}); this machine is still logged in, try again"
+                )))
+            }
+            Err(_) => tracing::warn!(
                 "log-out: the controller did not acknowledge in time; logging out anyway"
-            );
+            ),
         }
     }
     shared.set_log_in(None);

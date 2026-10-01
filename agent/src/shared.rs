@@ -36,6 +36,10 @@ const ROSTER_FRESH: Duration = Duration::from_secs(180);
 /// Session verb requests waiting for the session, at most.
 pub const MAX_QUEUED_SESSIONS: usize = 8;
 
+/// Where the link answers a log-out's `leave` (`request_leave`): Ok, or the
+/// controller's refusal.
+pub type LeaveAnswer = std::sync::mpsc::SyncSender<Result<(), String>>;
+
 /// The controller's keys (link/rotation.rs) and where machines reach it.
 pub struct Controller {
     pub keys: Arc<crate::link::rotation::Keys>,
@@ -72,8 +76,8 @@ pub struct Shared {
     /// or a log-out (enroll.rs).
     dialer: Mutex<crate::net::Dialer>,
     /// A log-out waiting for the link to tell the controller
-    /// (`request_leave`): answered once the controller acknowledged.
-    leave: Mutex<Option<std::sync::mpsc::SyncSender<()>>>,
+    /// (`request_leave`): answered once the controller answered.
+    leave: Mutex<Option<LeaveAnswer>>,
     /// A log-in begun and not finished: its app and PKCE verifier
     /// (enroll.rs), held here and nowhere else.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -529,9 +533,10 @@ impl Shared {
     }
 
     /// Ask the link to tell the controller this machine leaves (a log-out,
-    /// enroll.rs): the answer comes once the controller acknowledged, and
-    /// never when the link is down — the caller waits a bounded time.
-    pub fn request_leave(&self) -> std::sync::mpsc::Receiver<()> {
+    /// enroll.rs): the answer comes once the controller answered — Ok when
+    /// it acknowledged, its refusal's words when nobody at the box heard it
+    /// — and never when the link is down; the caller waits a bounded time.
+    pub fn request_leave(&self) -> std::sync::mpsc::Receiver<Result<(), String>> {
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         *self.leave.lock_ok() = Some(tx);
         if let Some(s) = self.stop.get() {
@@ -541,7 +546,7 @@ impl Shared {
     }
 
     /// A log-out's request for the link, once (link/node.rs).
-    pub fn take_leave(&self) -> Option<std::sync::mpsc::SyncSender<()>> {
+    pub fn take_leave(&self) -> Option<LeaveAnswer> {
         self.leave.lock_ok().take()
     }
 

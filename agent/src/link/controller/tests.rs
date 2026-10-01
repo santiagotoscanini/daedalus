@@ -1867,6 +1867,36 @@ fn a_leave_nobody_heard_is_not_acknowledged() {
 }
 
 #[test]
+fn a_machine_whose_leave_nobody_heard_stays_linked_and_can_try_again() {
+    let ctl = controller(fast());
+    let nid = id(53);
+    let s = node_shared();
+    let n = spawn_node(
+        target(&ctl, pin_of(&ctl.id)),
+        nid.clone(),
+        Arc::clone(&s),
+        "unheard",
+    );
+    approve(&ctl.registry, &nid, Default::default());
+    wait_for("approved and linked", 5, || s.linked());
+    // The app is down: the machine is told so, and keeps its link.
+    let refused = s
+        .request_leave()
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the controller answered the leave");
+    assert!(refused.unwrap_err().contains("not listening"));
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(summary(&ctl, &nid).unwrap().connected);
+    // The app is back: the next try is heard, and the machine goes.
+    let _app = ctl.events.subscribe();
+    s.request_leave()
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the controller answered the leave")
+        .unwrap();
+    assert!(matches!(n.thread.join().unwrap(), Ended::Dropped(_)));
+}
+
+#[test]
 fn a_machine_that_logs_out_is_heard_and_a_revoked_one_hears_it_first() {
     let ctl = controller(fast());
     let subscribed = ctl.events.subscribe();
@@ -1890,6 +1920,7 @@ fn a_machine_that_logs_out_is_heard_and_a_revoked_one_hears_it_first() {
     // forgets nothing itself.
     let told = s_leaver.request_leave();
     told.recv_timeout(Duration::from_secs(5))
+        .expect("the controller answered the leave")
         .expect("the controller acknowledged the leave");
     wait_for("nodes.left", 5, || {
         subscribed

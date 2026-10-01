@@ -914,7 +914,7 @@ fn converse(
     let mut heard = Instant::now();
     let mut said = Instant::now();
     // A log-out told to the controller, until it acknowledges.
-    let mut leaving: Option<std::sync::mpsc::SyncSender<()>> = None;
+    let mut leaving: Option<crate::shared::LeaveAnswer> = None;
     loop {
         if stop.is_stopped() {
             tls.close();
@@ -1063,14 +1063,25 @@ fn converse(
                 }
             }
             Ok(Incoming::Answer {
-                id: Some(LEAVE_ID), ..
+                id: Some(LEAVE_ID),
+                result,
             }) => {
                 if let Some(tx) = leaving.take() {
-                    // Acknowledged: the leaver closes, and the log-out that
-                    // asked moves the keys (enroll.rs).
-                    let _ = tx.try_send(());
-                    tls.close();
-                    return Ended::Dropped("logged out: the controller heard it".into());
+                    match result {
+                        // Acknowledged: the leaver closes, and the log-out
+                        // that asked moves the keys (enroll.rs).
+                        Ok(_) => {
+                            let _ = tx.try_send(Ok(()));
+                            tls.close();
+                            return Ended::Dropped("logged out: the controller heard it".into());
+                        }
+                        // Nobody at the box heard it: the link stays, and
+                        // the log-out that asked keeps the log-in.
+                        Err(e) => {
+                            tracing::warn!(error = %e.msg, "link: the box did not take the log-out");
+                            let _ = tx.try_send(Err(e.msg));
+                        }
+                    }
                 }
             }
             Ok(Incoming::Answer {
