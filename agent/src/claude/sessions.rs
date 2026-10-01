@@ -225,8 +225,8 @@ struct Latest {
 }
 
 /// The roster and the verbs, on a thread of their own: a scan or a resume
-/// takes seconds, and the session's loop — which the tray drives — must not
-/// wait on either. Dropping this ends the thread after what it is doing.
+/// takes seconds, and the session's loop — which reports to the service
+/// every five seconds — must not wait on either. Dropping this ends the thread after what it is doing.
 pub struct Sessions {
     tx: Sender<Msg>,
     latest: Arc<Mutex<Latest>>,

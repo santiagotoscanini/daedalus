@@ -75,7 +75,9 @@
 //! os/macos/tray.rs: a file lock and a tao event loop; os/linux/tray.rs: a
 //! file lock and GTK's main loop).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use tray_icon::menu::{
@@ -87,7 +89,7 @@ use crate::claude::Report;
 use crate::link::wire::Policy;
 use crate::os::tray::{open, relaunch_self};
 use crate::paths;
-use crate::session::{LinkPage, Page, Places, Session, Tick, Watcher};
+use crate::session::{LinkPage, Page, Places, Poll, Session, Tick, Watcher};
 use crate::settings::{short, short_fingerprint, Key, Via, View};
 use crate::{config, DISPLAY_NAME, VERSION};
 
@@ -134,6 +136,175 @@ impl Backing {
             Backing::Owns(s) => s.tick(),
             Backing::Watches(w) => w.tick(),
         }
+    }
+}
+
+/// What a menu click asks of the backing's thread.
+enum Ask {
+    CheckUpdates,
+    RestartClaude,
+    /// `claude.update` through the service.
+    UpdateClaude,
+    /// A switch: the setting, and the value asked for (`settings.set`).
+    Set(Key, bool),
+    /// The status document, written into this directory and opened.
+    ShowStatus(PathBuf),
+}
+
+/// What the backing's thread tells the tray.
+enum Told {
+    /// A poll, and whether the box wants the server running after it.
+    Polled(Box<Poll>, bool),
+    /// An update swapped the binary: the tray leaves for the new one.
+    VersionChanged,
+}
+
+/// How often the backing's thread ticks when nothing is asked of it.
+const TICK: Duration = Duration::from_millis(250);
+
+/// The backing on a thread of its own. Everything it does can block — the
+/// local socket's calls, and on Windows and macOS the session's
+/// supervision of Claude's jobs (`launchctl`, `taskkill`, `security`, the
+/// waits after a stop) — and the menu must never wait on any of it: the
+/// tray's thread is the OS's UI loop (AppKit's, the Win32 message pump,
+/// GTK's). A click becomes an `Ask` sent here; each poll comes back as a
+/// `Told`, and the tray draws the latest. Dropped, it asks the thread to
+/// end and gives it a moment to, so the session's lock is let go before a
+/// new tray needs it.
+struct Worker {
+    asks: Sender<Ask>,
+    told: Receiver<Told>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Worker {
+    fn start(backing: Backing) -> Result<Self> {
+        let (asks, asked) = std::sync::mpsc::channel();
+        let (tell, told) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("tray-session".into())
+            .spawn(move || run_backing(backing, &asked, &tell))
+            .context("no thread for the session")?;
+        Ok(Self {
+            asks,
+            told,
+            thread: Some(thread),
+        })
+    }
+
+    fn ask(&self, a: Ask) {
+        let _ = self.asks.send(a);
+    }
+
+    /// Everything the thread told since the last look: the newest poll,
+    /// and whether the binary was replaced.
+    fn drain(&self) -> (Option<(Box<Poll>, bool)>, bool) {
+        let mut latest = None;
+        let mut replaced = false;
+        while let Ok(t) = self.told.try_recv() {
+            match t {
+                Told::Polled(p, wanted) => latest = Some((p, wanted)),
+                Told::VersionChanged => replaced = true,
+            }
+        }
+        (latest, replaced)
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        // A closed channel ends the thread's loop at its next look.
+        let (closed, _) = std::sync::mpsc::channel();
+        drop(std::mem::replace(&mut self.asks, closed));
+        let Some(thread) = self.thread.take() else {
+            return;
+        };
+        let until = std::time::Instant::now() + LEAVE_WAIT;
+        while !thread.is_finished() && std::time::Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        if thread.is_finished() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// How long a leaving tray waits for its backing's thread to finish what
+/// it is doing (a stop of Claude's job waits up to five seconds).
+const LEAVE_WAIT: Duration = Duration::from_secs(10);
+
+/// The backing's thread: each ask as it comes, a tick at least every
+/// `TICK`, each poll told; it ends when the tray goes, or once the binary
+/// was replaced (dropping the session, which leaves Claude running in its
+/// jobs and lets its lock go).
+fn run_backing(mut backing: Backing, asked: &Receiver<Ask>, tell: &Sender<Told>) {
+    loop {
+        match asked.recv_timeout(TICK) {
+            Ok(a) => answer(&mut backing, a),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
+        let told = match backing.tick() {
+            Tick::Idle => continue,
+            Tick::VersionChanged => {
+                let _ = tell.send(Told::VersionChanged);
+                return;
+            }
+            Tick::Polled(poll) => Told::Polled(poll, backing.claude_wanted()),
+        };
+        if tell.send(told).is_err() {
+            return;
+        }
+    }
+}
+
+/// One click's work, on the backing's thread.
+fn answer(backing: &mut Backing, a: Ask) {
+    match a {
+        Ask::CheckUpdates => backing.check_updates_now(),
+        Ask::RestartClaude => backing.restart_claude(),
+        Ask::UpdateClaude => {
+            let _ = crate::local::call("claude.update", serde_json::Value::Null);
+            backing.poll_now();
+        }
+        Ask::Set(key, value) => {
+            let answer = crate::local::call_as::<crate::local::SetAnswer>(
+                "settings.set",
+                serde_json::json!({ "key": key, "value": value }),
+            );
+            if let Ok(crate::local::SetAnswer {
+                confirm_url: Some(url),
+                ..
+            }) = answer
+            {
+                // The service names a page on the app it logged in to; an
+                // https URL and nothing else is handed to the browser.
+                if url.starts_with("https://") {
+                    open(&url);
+                }
+            }
+            backing.poll_now();
+        }
+        Ask::ShowStatus(logs) => show_status(&logs),
+    }
+}
+
+/// "Show status (JSON)": the service's status document, as its local
+/// socket answers it, written to `status.json` in the tray's log
+/// directory and opened — there is no page to point a browser at.
+fn show_status(logs: &Path) {
+    let text = match crate::local::call("status", serde_json::Value::Null) {
+        Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+        Err(e) => format!("{{\"error\": {}}}", serde_json::Value::String(e)),
+    };
+    let path = logs.join("status.json");
+    if std::fs::create_dir_all(logs)
+        .and_then(|()| {
+            crate::util::write_atomic(&path, text.as_bytes(), crate::util::Access::Inherit)
+        })
+        .is_ok()
+    {
+        open(&path.to_string_lossy());
     }
 }
 
@@ -1354,13 +1525,13 @@ pub enum Flow {
     Quit,
 }
 
-/// The tray between ticks: what it stands over, the menu, and the two log
-/// paths the menu opens. The platform loops (os/*/tray.rs) drive it — Win32
+/// The tray between ticks: what it stands over (on its own thread, `Worker`),
+/// the menu, and the two log paths the menu opens. The platform loops (os/*/tray.rs) drive it — Win32
 /// messages on Windows, a tao event loop on macOS, GTK's on Linux — and it
 /// knows nothing about any of them. Fields drop in order: an owned session
 /// (its supervisor; the Claude jobs run on) before the icon.
 pub struct Tray {
-    session: Backing,
+    session: Worker,
     ui: Ui,
     logs: PathBuf,
     claude_log: PathBuf,
@@ -1377,36 +1548,18 @@ impl Tray {
         let claude_log = places.claude_log.clone();
         // The icon first, then the session, as it always was.
         let ui = Ui::build()?;
-        let session = if crate::os::TRAY_OWNS_SESSION {
+        let backing = if crate::os::TRAY_OWNS_SESSION {
             Backing::Owns(Box::new(Session::new(places)?))
         } else {
             Backing::Watches(Watcher::new())
         };
+        let session = Worker::start(backing)?;
         Ok(Self {
             session,
             ui,
             logs,
             claude_log,
         })
-    }
-
-    /// "Show status (JSON)": the service's status document, as its local
-    /// socket answers it, written to `status.json` in the tray's log
-    /// directory and opened — there is no page to point a browser at.
-    fn show_status(&self) {
-        let text = match crate::local::call("status", serde_json::Value::Null) {
-            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
-            Err(e) => format!("{{\"error\": {}}}", serde_json::Value::String(e)),
-        };
-        let path = self.logs.join("status.json");
-        if std::fs::create_dir_all(&self.logs)
-            .and_then(|()| {
-                crate::util::write_atomic(&path, text.as_bytes(), crate::util::Access::Inherit)
-            })
-            .is_ok()
-        {
-            open(&path.to_string_lossy());
-        }
     }
 
     /// The app, at `path` (empty: its front page); nothing without one.
@@ -1419,27 +1572,12 @@ impl Tray {
     /// A switch was clicked: the other value is asked for (`next_value`),
     /// the page that confirms santree ON opened, and the page read again at
     /// once so the row shows what became of it. muda flipped the check on
-    /// the click; the read puts the service's word back.
+    /// the click; the read puts the service's word back. All of it on the
+    /// backing's thread (`answer`).
     fn ask(&mut self, key: Key) {
         if let Some(s) = &self.ui.settings {
-            let value = next_value(key, s);
-            let answer = crate::local::call_as::<crate::local::SetAnswer>(
-                "settings.set",
-                serde_json::json!({ "key": key, "value": value }),
-            );
-            if let Ok(crate::local::SetAnswer {
-                confirm_url: Some(url),
-                ..
-            }) = answer
-            {
-                // The service names a page on the app it logged in to; an
-                // https URL and nothing else is handed to the browser.
-                if url.starts_with("https://") {
-                    open(&url);
-                }
-            }
+            self.session.ask(Ask::Set(key, next_value(key, s)));
         }
-        self.session.poll_now();
     }
 
     /// Every menu click since the last look.
@@ -1497,16 +1635,15 @@ impl Tray {
                 }
                 crate::os::tray::join();
             } else if *id == ui.check_now.id() {
-                self.session.check_updates_now();
+                self.session.ask(Ask::CheckUpdates);
             } else if *id == ui.update_claude.id() {
-                let _ = crate::local::call("claude.update", serde_json::Value::Null);
-                self.session.poll_now();
+                self.session.ask(Ask::UpdateClaude);
             } else if *id == ui.restart_claude.id() {
-                self.session.restart_claude();
+                self.session.ask(Ask::RestartClaude);
             } else if *id == ui.open_claude_log.id() {
                 open(&self.claude_log.to_string_lossy());
             } else if *id == ui.open_status.id() {
-                self.show_status();
+                self.session.ask(Ask::ShowStatus(self.logs.clone()));
             } else if *id == ui.open_logs.id() {
                 open(&self.logs.to_string_lossy());
             }
@@ -1524,27 +1661,23 @@ impl Tray {
         false
     }
 
-    /// Advance the session and, when it polled, redraw. Quit means an
-    /// update swapped the binary and we are leaving for the new one — on
-    /// Windows and Linux by starting it first (`os::tray::relaunch_self`);
-    /// under launchd, leaving is enough, as KeepAlive starts it. Claude runs
-    /// on untouched in its jobs, and the new tray re-attaches to them.
+    /// Draw the newest poll the backing's thread told, if one came since
+    /// the last look; never waits on it. Quit means an update swapped the
+    /// binary and we are leaving for the new one — on Windows and Linux by
+    /// starting it first (`os::tray::relaunch_self`); under launchd, leaving
+    /// is enough, as KeepAlive starts it. Claude runs on untouched in its
+    /// jobs, and the new tray re-attaches to them.
     pub fn tick(&mut self) -> Flow {
-        match self.session.tick() {
-            Tick::Idle => Flow::Continue,
-            Tick::VersionChanged => {
-                relaunch_self();
-                Flow::Quit
-            }
-            Tick::Polled(poll) => {
-                self.ui.show(
-                    poll.page.as_ref(),
-                    &poll.report,
-                    self.session.claude_wanted(),
-                );
-                Flow::Continue
-            }
+        let (latest, replaced) = self.session.drain();
+        if replaced {
+            relaunch_self();
+            return Flow::Quit;
         }
+        if let Some((poll, claude_wanted)) = latest {
+            self.ui
+                .show(poll.page.as_ref(), &poll.report, claude_wanted);
+        }
+        Flow::Continue
     }
 }
 
@@ -1584,6 +1717,30 @@ mod tests {
     use crate::settings::{FailedView, PendingView};
     use std::ffi::OsString;
     use std::path::Path;
+
+    /// The backing runs on its own thread: the tray only hands it clicks and
+    /// reads what it told, and neither waits on the backing's calls. A
+    /// watcher with no service to answer it still polls, and is told.
+    #[test]
+    fn the_backing_runs_off_the_ui_thread() {
+        let w = Worker::start(Backing::Watches(Watcher::new())).unwrap();
+        let until = std::time::Instant::now() + Duration::from_secs(10);
+        let first = loop {
+            if let (Some((poll, _)), false) = w.drain() {
+                break poll;
+            }
+            assert!(std::time::Instant::now() < until, "no poll was told");
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert!(first.page.is_none(), "no service in a test");
+        assert_eq!(first.report.state, "no-session");
+        // A click returns at once, whatever the backing does with it.
+        let t = std::time::Instant::now();
+        w.ask(Ask::CheckUpdates);
+        w.ask(Ask::RestartClaude);
+        assert!(t.elapsed() < Duration::from_millis(50));
+        drop(w);
+    }
 
     #[test]
     fn the_updates_row_says_what_the_updater_is_doing() {

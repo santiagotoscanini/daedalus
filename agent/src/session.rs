@@ -25,10 +25,11 @@
 //! (`Tick::VersionChanged`) so its runner can leave for the new one.
 //!
 //! Two runners drive the same `tick`: the tray on Windows and macOS
-//! (tray.rs), which draws what each poll returns, and `daedalus-agent
-//! session` (`run` below), headless — the Linux user unit, which runs with
-//! nobody logged in. A Linux tray does not own a session: it shows the one
-//! the unit runs, through the service (`Watcher`). On the controller the
+//! (tray.rs), on a thread of its own beside the menu's, which draws what
+//! each poll returns, and `daedalus-agent session` (`run` below), headless
+//! — the Linux user unit, which runs with nobody logged in. A Linux tray
+//! does not own a session: it shows the one the unit runs, through the
+//! service (`Watcher`). On the controller the
 //! session is a thread of the service itself (`run_in_service`), and it
 //! reports straight into the service's shared state instead of through
 //! the socket (`Link::InProcess`).

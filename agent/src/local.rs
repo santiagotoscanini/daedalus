@@ -87,8 +87,8 @@ pub const MAX_LINE: usize = crate::door::MAX_LINE;
 /// The whole exchange, from connect to the answer: room for the slowest
 /// method, a log-in's redeem at the app (enroll.rs `REDEEM_TIMEOUT`).
 pub const DEADLINE: Duration = Duration::from_secs(15);
-/// A client's whole exchange: short, since the tray asks from its UI
-/// thread.
+/// A client's whole exchange: short, since the session asks every poll
+/// and a tray's clicks wait behind it.
 pub const CLIENT_DEADLINE: Duration = Duration::from_secs(2);
 /// Connections served at once.
 pub const MAX_CONNECTIONS: usize = 16;
@@ -497,7 +497,7 @@ pub fn call(m: &str, p: Value) -> Result<Value, String> {
 pub const ENROLL_DEADLINE: Duration = DEADLINE;
 
 /// `call` for a method that takes longer than `CLIENT_DEADLINE`, from a
-/// thread that may wait (never the tray's UI thread).
+/// thread that may wait.
 pub fn call_within(m: &str, p: Value, deadline: Duration) -> Result<Value, String> {
     call_at_within(&crate::paths::local_socket(), m, p, deadline)
 }

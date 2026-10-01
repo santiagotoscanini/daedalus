@@ -450,8 +450,8 @@ impl Supervisor {
     /// of it and reported as one.
     ///
     /// ON ITS OWN THREAD, and that is not an optimisation. This is called
-    /// from the session's loop — which the tray drives — the only thing that
-    /// reports to the service, restarts the server and drains the menu.
+    /// from the session's loop — the only thing that reports to the service,
+    /// restarts the server and answers the menu's clicks.
     /// Running the download inline would freeze all of it for up to ten
     /// minutes — the service would see the tray stop reporting and the box
     /// would say "nobody logged on", the opposite of what just happened.

@@ -608,8 +608,9 @@ agent's one envelope (`src/rpc.rs`, the API's and the link's too), 16
 connections at once. The whole exchange has a deadline on both ends, however
 slowly the other end drips its bytes and whether or not it reads: fifteen
 seconds on the service's side (room for a log-in's redeem at the app),
-two on the client's (the tray asks from its UI thread; a log-in's steps wait
-the service's fifteen, from threads of their own) — a watchdog tears the
+two on the client's (the tray asks from its session's thread, never from
+its UI's; a log-in's steps wait the service's fifteen, from threads of
+their own) — a watchdog tears the
 connection down when it passes, the same on every OS (`src/door.rs`). The status
 document never waits on the OS: its power requests (`powercfg` on Windows)
 are read by the service every minute on a thread of their own.
