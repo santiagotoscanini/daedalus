@@ -4,9 +4,9 @@ import { manifest } from '../manifest'
 import { DhcpView } from './dhcp'
 import { DnsView } from './dns'
 import { GeneralView } from './general'
+import { InboundView } from './inbound'
 import { OutboundView } from './outbound'
 import { TraefikView } from './proxy'
-import { InboundView } from './wireguard'
 
 // The Network module's views, one per tab. Why the tabs are cut the way they
 // are is written on each tab in ../manifest.ts.
