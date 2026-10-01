@@ -217,7 +217,7 @@ export function GatewaySync() {
           skipped {s.alias}: {s.why}
         </span>
       ))}
-      {error !== null && <span className="text-(--tone-bad) text-[0.78rem]">{error}</span>}
+      {error !== null && <span className="text-danger text-[0.78rem]">{error}</span>}
     </Stack>
   )
 }
@@ -286,7 +286,7 @@ export function BoxProvider() {
         subgen's faster-whisper, the STT that makes Bazarr's subtitles, on port 9000 of this box.
         Offered, the gateway gets a transcription route to it beside the PC's whisper.
       </span>
-      {error !== null && <span className="text-(--tone-bad) text-[0.78rem]">{error}</span>}
+      {error !== null && <span className="text-danger text-[0.78rem]">{error}</span>}
     </Stack>
   )
 }

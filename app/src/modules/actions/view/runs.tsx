@@ -19,7 +19,7 @@ function RunLine({ r, showFailure = false }: { r: RunRow; showFailure?: boolean 
           <span className="ml-[0.4rem] text-muted-foreground">{r.branch}</span>
         )}
         {showFailure && r.failed !== null && (
-          <span className="ml-[0.4rem] text-(--tone-bad)">
+          <span className="ml-[0.4rem] text-danger">
             {r.failed.job}
             {r.failed.step !== null && ` › ${r.failed.step}`}
           </span>
@@ -157,9 +157,7 @@ export function RunsView({ d }: { d: Runs }) {
                 <span className={ROW_MAIN}>{w.label}</span>
                 <span className={ROW_SIDE}>
                   {num(w.runs)} runs
-                  {w.failed > 0 && (
-                    <span className="text-(--tone-bad)"> · {num(w.failed)} failed</span>
-                  )}
+                  {w.failed > 0 && <span className="text-danger"> · {num(w.failed)} failed</span>}
                   {' · median '}
                   {took(w.p50)}
                 </span>
@@ -183,7 +181,7 @@ export function RunsView({ d }: { d: Runs }) {
                       {num(r.runs)} runs
                       {r.total > r.runs && ` of ${num(r.total)}`}
                       {r.failed > 0 && (
-                        <span className="text-(--tone-bad)"> · {num(r.failed)} failed</span>
+                        <span className="text-danger"> · {num(r.failed)} failed</span>
                       )}
                       {' · median '}
                       {r.p50 === null ? DASH : duration(r.p50)}

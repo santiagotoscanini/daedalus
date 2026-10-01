@@ -27,7 +27,7 @@ function Row({ m }: { m: ModuleSwitch }) {
             <Chip tone="warn">{m.desired ? 'on after Apply' : 'off after Apply'}</Chip>
           </span>
         )}
-        {refused !== null && <span className="ml-[0.4rem] text-(--tone-bad)">{refused}</span>}
+        {refused !== null && <span className="ml-[0.4rem] text-danger">{refused}</span>}
       </span>
       <span className={ROW_SIDE}>
         {m.hostnames.length > 0

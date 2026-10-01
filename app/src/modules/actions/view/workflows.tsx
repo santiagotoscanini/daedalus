@@ -133,7 +133,7 @@ export function WorkflowsView({ d }: { d: Workflows }) {
                           <>
                             {num(w.runs)} runs
                             {w.failed > 0 && (
-                              <span className="text-(--tone-bad)"> · {num(w.failed)} failed</span>
+                              <span className="text-danger"> · {num(w.failed)} failed</span>
                             )}
                             {' · median '}
                             {took(w.p50)}

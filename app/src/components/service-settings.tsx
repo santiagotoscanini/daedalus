@@ -250,7 +250,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
           ))}
         </div>
       )}
-      {refused !== null && <p className={`${FOOT} text-(--tone-bad)`}>{refused}</p>}
+      {refused !== null && <p className={`${FOOT} text-danger`}>{refused}</p>}
     </section>
   )
 }
@@ -350,8 +350,8 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
         )}
       </div>
       {w.aliases.length > 0 && <p className={`${FOOT}`}>also answers at {w.aliases.join(', ')}</p>}
-      {local !== null && <p className={`${FOOT} text-(--tone-bad)`}>{local}</p>}
-      {refused !== null && <p className={`${FOOT} text-(--tone-bad)`}>{refused}</p>}
+      {local !== null && <p className={`${FOOT} text-danger`}>{local}</p>}
+      {refused !== null && <p className={`${FOOT} text-danger`}>{refused}</p>}
     </div>
   )
 }

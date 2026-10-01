@@ -298,7 +298,7 @@ function ModelKind({ group, m }: { group: Group; m: ProviderMachine }) {
 /** What the gateway calls this model, if it carries it at all. */
 function GatewayName({ model }: { model: CatalogEntry }) {
   if (model.routed !== null) {
-    return <span className={`${MONO} text-(--tone-ok)`}>routed as {model.routed}</span>
+    return <span className={`${MONO} text-success`}>routed as {model.routed}</span>
   }
   if (!model.downloaded) return <span>not on disk</span>
   if (model.offerable) return <span className={MONO}>{model.alias} · awaiting the sync</span>
@@ -400,7 +400,7 @@ function ModelAlt({
         )}
       </span>
       {error !== null && (
-        <span className="text-[0.7rem] text-(--tone-bad)" title={error}>
+        <span className="text-[0.7rem] text-danger" title={error}>
           failed
         </span>
       )}
