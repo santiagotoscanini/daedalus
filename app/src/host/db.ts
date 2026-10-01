@@ -22,6 +22,16 @@ const sql =
     // Small ceiling on purpose: this is a single-operator control plane sharing
     // a cluster, not something that should be able to starve its neighbours.
     max: 5,
+    // Same reason, in time: a wedged query or a transaction left open must
+    // not hold one of the five, or the cluster's locks, indefinitely. Nothing
+    // here legitimately runs long — every query is a page read or a small
+    // write — and the migrations, the one slow thing, run on their own client
+    // before this pool opens (server.mjs).
+    connection: {
+      application_name: 'daedalus',
+      statement_timeout: 15_000,
+      idle_in_transaction_session_timeout: 30_000,
+    },
   })
 
 globalForDb.daedalusSql = sql
