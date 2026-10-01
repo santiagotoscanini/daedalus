@@ -534,9 +534,10 @@ the flow and who may run each step; `src/tunnel/mod.rs`'s for the tunnel.
    and a PKCE challenge (`enroll.begin`); the verifier stays in the
    service's memory.
 2. The browser opens the app's enroll page with those, a loopback port and
-   a `state`; the menu shows the fingerprint to check. The operator signs
-   in (Pocket ID), types the fingerprint's first four characters and
-   confirms — or declines, and nothing changes.
+   a `state`; the menu shows the fingerprint to compare with the page's.
+   The operator signs in (Pocket ID) and sees a consent page naming the
+   Mac, its OS, agent version and full key, and confirms only a log-in
+   they just asked for — or declines, and nothing changes.
 3. On confirm the app approves the node, makes its wg-easy client, and
    sends the browser to `http://127.0.0.1:<port>/callback` with a
    single-use code. The menu bar asks for an administrator's password once
@@ -666,7 +667,7 @@ apply it"). Nothing is queued while the link is down. santree is the
 exception one way: OFF goes the same road, but ON grants a shell on the box,
 so it is never sent — the service answers the page in Daedalus where an
 admin confirms it, Settings › Machines with this machine's "Turn on santree"
-dialog, behind the first eight characters of this Mac's key typed; a click
+dialog, which shows this Mac's full key to compare; a click
 while that waits opens it again. Only the user who installed the agent (or
 root) may change them, as only they may use santree's socket; another
 account at the Mac sees them read-only. On Windows every user at the

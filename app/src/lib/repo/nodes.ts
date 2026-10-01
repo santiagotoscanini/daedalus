@@ -16,7 +16,6 @@ import { dhcpHostsMissing, householdMacs, writeDhcpHosts } from '../../host/dhcp
 import { fingerprintOf, releaseTunnel } from '../../host/enroll'
 import { requestGatewaySync } from '../../host/gateway-sync'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
-import { TYPED_LENGTH, typedMatches } from '../agent/enroll'
 import type { NodeClaudeSummary } from '../agent/status'
 import type { NodeForFile } from '../nodes-file'
 import { slugOf } from '../nodes-file'
@@ -184,7 +183,7 @@ function patched(p: PolicyPatch, by: string) {
  */
 export async function setNodePolicy(id: string, p: PolicyPatch, by: string): Promise<boolean> {
   if (p.set.santree === true) {
-    throw new Error('santree is turned on through its confirmation, with the key typed')
+    throw new Error('santree is turned on through its confirmation, never a policy patch')
   }
   // Two machines cannot share a name on the network: the lease, the
   // nodes.json entry and every consumer dial it.
@@ -255,16 +254,14 @@ export type SantreeGrant = { ok: true; already: boolean } | { ok: false; reason:
 
 /**
  * Turn santree on for machine `id` — a shell on the box as its operator,
- * who has root through sudo — once `typed` is the first `TYPED_LENGTH`
- * characters of the machine's key (lib/agent/enroll.ts `typedMatches`): what
- * the admin read off that machine's menu bar or santree, so the grant lands
- * on the machine in front of them. Only an approved row, only the key the
- * page showed (`fingerprint`, checked again against the row), recorded under
- * `by`; then the desired set is sent and its answer awaited, so the reply
- * says what the controller took.
+ * who has root through sudo — once an admin confirmed it on a page that
+ * showed the machine and its key. Only an approved row, only the key the
+ * page showed (`fingerprint`, checked again against the row), only on a box
+ * with a session host, recorded under `by`; then the desired set is sent and
+ * its answer awaited, so the reply says what the controller took.
  */
 export async function grantSantree(
-  input: { id: string; fingerprint: string; typed: string; by: string },
+  input: { id: string; fingerprint: string; by: string },
   deps: { sessionHost: () => Promise<boolean>; sync: () => Promise<void> } = {
     sessionHost: hasSessionHost,
     sync: syncNow,
@@ -277,12 +274,6 @@ export async function grantSantree(
   const fingerprint = fingerprintOf(n.publicKey)
   if (fingerprint !== input.fingerprint) {
     return { ok: false, reason: 'This machine has another key now; reload the page.' }
-  }
-  if (!typedMatches(fingerprint, input.typed)) {
-    return {
-      ok: false,
-      reason: `Those are not the first ${String(TYPED_LENGTH)} characters of this machine's key.`,
-    }
   }
   if (n.policy?.santree === true) return { ok: true, already: true }
   if (!(await deps.sessionHost())) {

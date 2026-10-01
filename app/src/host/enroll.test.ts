@@ -229,8 +229,7 @@ function deps(over: Partial<EnrollDeps> & { store: EnrollStore; wg: WgEasy }): E
 }
 
 const tokenFor = (actor = 'santi', q: EnrollQuery = QUERY, now?: number) =>
-  mintFormToken({ query: q, fingerprint: fingerprintOf(q.key), actor }, now)
-const typed = fingerprintOf(KEY).slice(0, 9)
+  mintFormToken({ query: q, actor }, now)
 
 describe('keys and PKCE', () => {
   it('fingerprints a key as the agent does (SHA-256, hex in fours)', () => {
@@ -406,7 +405,6 @@ describe('Confirm', () => {
     const s = syncOk()
     const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg, sync: s.sync }), {
       token: tokenFor(),
-      typed,
       actor: 'santi',
     })
     if (!r.ok) throw new Error(r.reason)
@@ -455,7 +453,6 @@ describe('Confirm', () => {
     const t = tokenFor()
     const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg, lanIp: '' }), {
       token: t,
-      typed,
       actor: 'santi',
     })
     expect(r).toEqual({
@@ -471,7 +468,7 @@ describe('Confirm', () => {
           throw new Error('unreachable')
         },
       }),
-      { token: t, typed, actor: 'santi' },
+      { token: t, actor: 'santi' },
     )
     expect(down.ok ? null : down.retry).toBe(true)
     expect(mem.nodes.size).toBe(0)
@@ -479,7 +476,6 @@ describe('Confirm', () => {
       (
         await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
           token: t,
-          typed,
           actor: 'santi',
         })
       ).ok,
@@ -490,43 +486,21 @@ describe('Confirm', () => {
     const w = fakeWg({ firewall: true })
     const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
       token: tokenFor(),
-      typed,
       actor: 'santi',
     })
     expect(r.ok).toBe(true)
     expect(w.calls).not.toContain('updateInterface')
   })
 
-  it('refuses a spent token, another admin’s, and the wrong characters, changing nothing', async () => {
+  it('refuses another admin’s token, and a spent one, changing nothing', async () => {
     const w = fakeWg()
-    const t = tokenFor()
+    const t = tokenFor('other')
     expect(
-      (
-        await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
-          token: t,
-          typed: '0000:0000',
-          actor: 'santi',
-        })
-      ).ok,
+      (await confirmEnroll(deps({ store: mem.store, wg: w.wg }), { token: t, actor: 'santi' })).ok,
     ).toBe(false)
-    // The token went with the wrong try.
+    // The token went with the refused try, even for the admin it was minted for.
     expect(
-      (
-        await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
-          token: t,
-          typed,
-          actor: 'santi',
-        })
-      ).ok,
-    ).toBe(false)
-    expect(
-      (
-        await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
-          token: tokenFor('other'),
-          typed,
-          actor: 'santi',
-        })
-      ).ok,
+      (await confirmEnroll(deps({ store: mem.store, wg: w.wg }), { token: t, actor: 'other' })).ok,
     ).toBe(false)
     expect(mem.nodes.size).toBe(0)
     expect(w.calls).toEqual([])
@@ -540,7 +514,7 @@ describe('Confirm', () => {
         wg: w.wg,
         sync: async () => ({ at: '', sent: [], skipped: [], answer: null, error: 'not reachable' }),
       }),
-      { token: tokenFor(), typed, actor: 'santi' },
+      { token: tokenFor(), actor: 'santi' },
     )
     expect(r.ok).toBe(false)
     expect(mem.nodes.has(ID)).toBe(false)
@@ -560,7 +534,6 @@ describe('Confirm', () => {
       const s = syncOk()
       const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg, sync: s.sync }), {
         token: tokenFor(),
-        typed,
         actor: 'santi',
       })
       expect(r.ok).toBe(false)
@@ -581,7 +554,6 @@ describe('Confirm', () => {
     const w = fakeWg({ allowed: '0.0.0.0/0' })
     const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
       token: tokenFor(),
-      typed,
       actor: 'santi',
     })
     expect(r.ok).toBe(false)
@@ -601,7 +573,6 @@ describe('Confirm', () => {
     const w = fakeWg({ failAt: 'configuration' })
     const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
       token: tokenFor(),
-      typed,
       actor: 'santi',
     })
     expect(r.ok).toBe(false)
@@ -619,7 +590,6 @@ describe('Confirm', () => {
     }
     const r = await confirmEnroll(deps({ store, wg: w.wg }), {
       token: tokenFor(),
-      typed,
       actor: 'santi',
     })
     expect(r.ok).toBe(false)
@@ -632,7 +602,6 @@ describe('Confirm', () => {
     const w = fakeWg()
     const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg }), {
       token: tokenFor(),
-      typed,
       actor: 'santi',
     })
     expect(r.ok).toBe(true)
@@ -647,7 +616,6 @@ describe('the redeem', () => {
     const w = fakeWg()
     const r = await confirmEnroll(deps({ store: mem.store, wg: w.wg, now: () => now }), {
       token: tokenFor('santi', QUERY, now),
-      typed,
       actor: 'santi',
     })
     if (!r.ok) throw new Error(r.reason)

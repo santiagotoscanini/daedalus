@@ -6,7 +6,6 @@ import {
   navigationAllowed,
   parseEnrollQuery,
   parseWgQuick,
-  typedMatches,
 } from '../lib/agent/enroll'
 import type { Result } from '../lib/result'
 import type { EnrollRedeemed } from './controller/generated'
@@ -22,8 +21,7 @@ import type { WgEasy } from './wg-easy'
 //                             a one-time form token — minted only for a page
 //                             the menu bar opened (lib/agent/enroll.ts
 //                             `navigationAllowed` says what that means)
-//   Confirm (adminFn)         the token and the fingerprint's first characters
-//                             as the admin typed them from the menu bar →
+//   Confirm (adminFn)         the token, spent by the admin it was minted for →
 //                             the node approved and handed to the controller,
 //                             a wg-easy client made and confined, a single-use
 //                             code → the browser to the machine's loopback
@@ -78,7 +76,6 @@ export function pkceMatches(verifier: string, challenge: string): boolean {
 /** What a page's token binds: exactly the machine it showed, to the admin it showed it to. */
 export type FormToken = {
   query: EnrollQuery
-  fingerprint: string
   actor: string
   expiresAt: number
 }
@@ -213,14 +210,14 @@ async function ensureFirewall(wg: WgEasy): Promise<boolean> {
 // ── Confirm ────────────────────────────────────────────────────────────────
 
 /**
- * The admin's Confirm: spend the page's token, and — only if the typed
- * characters are the fingerprint's — approve the node, wait for the
- * controller's answer, make and confine its wg-easy client, and mint the code.
+ * The admin's Confirm: spend the page's token, and — only if it was minted
+ * for this admin — approve the machine it names, wait for the controller's
+ * answer, make and confine its wg-easy client, and mint the code.
  * The browser's next stop, or why not with everything undone.
  */
 export async function confirmEnroll(
   deps: EnrollDeps,
-  input: { token: string; typed: string; actor: string },
+  input: { token: string; actor: string },
 ): Promise<Outcome<{ callback: string; nodeId: string }>> {
   const now = deps.now ?? Date.now
   const log = deps.log ?? ((l: string) => console.info(l))
@@ -255,13 +252,6 @@ export async function confirmEnroll(
     return {
       ok: false,
       reason: 'This page was opened by someone else. Choose Log in… in the menu bar again.',
-    }
-  }
-  if (!typedMatches(t.fingerprint, input.typed)) {
-    return {
-      ok: false,
-      reason:
-        'Those are not the first characters of this Mac’s fingerprint. Choose Log in… in the menu bar again.',
     }
   }
   const q = t.query
@@ -548,7 +538,7 @@ export async function enrollPage(
   const row = await deps.standing(id)
   return {
     kind: 'ready',
-    token: mintFormToken({ query: q, fingerprint, actor: actor.value }, deps.now),
+    token: mintFormToken({ query: q, actor: actor.value }, deps.now),
     machine: { id, name: q.name, os: q.os, arch: q.arch, version: q.version, fingerprint },
     standing: row === null ? 'new' : row.state,
     declineUrl,

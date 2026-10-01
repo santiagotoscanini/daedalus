@@ -93,24 +93,21 @@ export const saveNodePolicyFn = adminFn
 
 /**
  * Turn santree on for a machine: a shell on the box as its operator, who
- * has root through sudo. The admin types the first characters of the
- * machine's key, read off its menu bar or santree, and lib/repo/nodes.ts
- * `grantSantree` checks them, and the key the page showed, against the row.
+ * has root through sudo. The admin confirms on a page that shows the
+ * machine and its key, and lib/repo/nodes.ts `grantSantree` checks the key
+ * the page showed against the row.
  * The web switch and a Mac's "santree on the box" both arrive here, through
  * the Machines page's confirmation. Answers once the controller has the set.
  */
 export const grantSantreeFn = adminFn
   .validator(
     asValidator(
-      withMessage(
-        obj({ id: nodeIdField, fingerprint: str, typed: str }),
-        'expected a node id, its key and the characters typed',
-      ),
+      withMessage(obj({ id: nodeIdField, fingerprint: str }), 'expected a node id and its key'),
     ),
   )
   .handler(async ({ data, context }) => {
     const { grantSantree } = await import('../lib/repo/nodes')
-    if (data.typed.length > 32 || data.fingerprint.length > 100) {
+    if (data.fingerprint.length > 100) {
       return { ok: false as const, reason: 'That is not a key.' }
     }
     return grantSantree({ ...data, by: context.actor() })

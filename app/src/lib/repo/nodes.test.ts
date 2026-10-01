@@ -147,7 +147,6 @@ describe('a machine asking for its settings', () => {
 describe('turning santree on (the confirmation)', () => {
   const key = '11'.repeat(32)
   const fingerprint = fingerprintOf(key)
-  const typed = fingerprint.slice(0, 9)
   const row = (over: object = {}) => ({
     id: 'n1',
     publicKey: key,
@@ -161,7 +160,7 @@ describe('turning santree on (the confirmation)', () => {
     return d
   }
   const grant = (over: Partial<Parameters<typeof repo.grantSantree>[0]> = {}, d = deps()) =>
-    repo.grantSantree({ id: 'n1', fingerprint, typed, by: 'alice', ...over }, d)
+    repo.grantSantree({ id: 'n1', fingerprint, by: 'alice', ...over }, d)
 
   it('writes santree on under the admin, and answers once the controller has the set', async () => {
     const d = deps()
@@ -173,13 +172,7 @@ describe('turning santree on (the confirmation)', () => {
     expect([h.gateway, h.dhcp]).toEqual([0, 0])
   })
 
-  it('refuses the wrong characters, a key that moved, an unapproved row', async () => {
-    h.rows = [[row()]]
-    const wrong = await grant({ typed: '0000:0000' })
-    expect(wrong.ok).toBe(false)
-    expect(wrong.ok ? '' : wrong.reason).toMatch(/first 8 characters/)
-    h.rows = [[row()]]
-    expect((await grant({ typed: fingerprint.slice(0, 4) })).ok).toBe(false)
+  it('refuses a key that moved, an unapproved row', async () => {
     h.rows = [[row()]]
     expect(await grant({ fingerprint: fingerprintOf('22'.repeat(32)) })).toMatchObject({
       ok: false,

@@ -24,7 +24,7 @@ describe('a change to a machine policy from the page', () => {
     })
     expect(nodePolicyPatch({ id, set: { pinAddress: false } }).unset).toEqual(['pinAddress'])
   })
-  it('never turns santree on: that is the confirmation, with the key typed', () => {
+  it('never turns santree on: that is the confirmation', () => {
     expect(() => nodePolicyPatch({ id, set: { santree: true } })).toThrow(/confirmation/)
     expect(nodePolicyPatch({ id, set: { santree: false } }).set).toEqual({ santree: false })
   })

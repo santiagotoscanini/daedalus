@@ -1,19 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { LaptopIcon } from 'lucide-react'
-import { useEffect, useId, useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { Measure, PageHead } from '../components/page'
-import { ERROR_NOTE, FIELD_LABEL, Mono, NOTE, Section } from '../components/settings/shared'
+import { ERROR_NOTE, Mono, NOTE, Section } from '../components/settings/shared'
 import { Button } from '../components/ui/button'
-import { Input } from '../components/ui/input'
 import type { EnrollPage } from '../host/enroll'
-import { TYPED_LENGTH, typedMatches } from '../lib/agent/enroll'
 import { errorText } from '../lib/redact'
 import { confirmEnrollFn, fetchEnrollPageFn } from '../server/enroll'
 
 // A Mac logs in (agent/README.md "Logging in (macOS)"; host/enroll.ts is the
 // flow). The menu bar's "Log in…" opens this page with the Mac's key, a
-// loopback port and the log-in's state; the admin compares the fingerprint
-// with the menu bar, types its first characters, and confirms or declines.
+// loopback port and the log-in's state: a consent page that names the Mac and
+// shows its full key, where the admin confirms or declines. Confirm is a
+// button, not a form, so a click before the page hydrated does nothing.
 // Either way the browser goes back to the Mac's loopback, which is waiting.
 //
 // The loader's answer is held from the first render on: it was computed for
@@ -98,25 +97,17 @@ const STANDING: Record<Extract<EnrollPage, { kind: 'ready' }>['standing'], strin
 
 function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> }) {
   const m = page.machine
-  const inputId = useId()
-  const [typed, setTyped] = useState('')
-  const field = useRef<HTMLInputElement>(null)
-  // The field is focused from the server's HTML: what was typed before the
-  // page hydrated sits in the DOM but never reached state.
-  useEffect(() => {
-    if (field.current?.value) setTyped(field.current.value)
-  }, [])
   const [error, setError] = useState<string | null>(null)
   const [spent, setSpent] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [busy, start] = useTransition()
-  const matches = typedMatches(m.fingerprint, typed)
 
   const confirm = () => {
+    if (busy || spent) return
     setError(null)
     start(async () => {
       try {
-        const r = await confirmEnrollFn({ data: { token: page.token, typed } })
+        const r = await confirmEnrollFn({ data: { token: page.token } })
         if (!r.ok) {
           // Spent unless the box refused before it looked at the token: a
           // second try then starts from the menu bar.
@@ -137,7 +128,7 @@ function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> })
   return (
     <>
       <PageHead title={`Log in ${m.name}`}>
-        Confirm only if the menu bar of the Mac in front of you shows this fingerprint right now.
+        Confirm only if you just asked for this from that machine.
       </PageHead>
       <Section
         title={m.name}
@@ -154,45 +145,21 @@ function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> })
           box.
         </p>
         {STANDING[page.standing] !== null && <p className={NOTE}>{STANDING[page.standing]}</p>}
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (matches && !busy && !spent) confirm()
-          }}
-        >
-          <label className={FIELD_LABEL} htmlFor={inputId}>
-            The first {TYPED_LENGTH} characters of the fingerprint in the menu bar
-          </label>
-          <Input
-            id={inputId}
-            ref={field}
-            className="max-w-[10rem] font-mono"
-            value={typed}
-            maxLength={12}
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            autoFocus
-            disabled={spent}
-            onChange={(e) => setTyped(e.target.value)}
-          />
-          {error !== null && <p className={ERROR_NOTE}>{error}</p>}
-          {leaving && <p className={NOTE}>Handing over to the Mac…</p>}
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={!matches || busy || spent}>
-              Confirm
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || leaving}
-              onClick={() => goTo(page.declineUrl)}
-            >
-              Decline
-            </Button>
-          </div>
-        </form>
+        {error !== null && <p className={ERROR_NOTE}>{error}</p>}
+        {leaving && <p className={NOTE}>Handing over to the Mac…</p>}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" disabled={busy || spent} onClick={confirm}>
+            Confirm
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || leaving}
+            onClick={() => goTo(page.declineUrl)}
+          >
+            Decline
+          </Button>
+        </div>
       </Section>
     </>
   )

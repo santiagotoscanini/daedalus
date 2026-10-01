@@ -63,15 +63,11 @@ export const fetchEnrollPageFn = readFn.handler(async ({ context }): Promise<Enr
 })
 
 /**
- * Confirm: the page's token and the characters the admin typed from the menu
- * bar. The machine's loopback URL to go to, or why not with nothing changed.
+ * Confirm: the page's token, which names the machine the page showed. The
+ * machine's loopback URL to go to, or why not with nothing changed.
  */
 export const confirmEnrollFn = adminFn
-  .validator(
-    asValidator(
-      withMessage(obj({ token: strMax(64), typed: strMax(16) }), 'expected the page’s token'),
-    ),
-  )
+  .validator(asValidator(withMessage(obj({ token: strMax(64) }), 'expected the page’s token')))
   .handler(async ({ data, context }) => {
     const { confirmEnroll } = await import('../host/enroll')
     const { enrollStore } = await import('../lib/repo/enroll')
@@ -98,6 +94,6 @@ export const confirmEnrollFn = adminFn
         hostAlias: env.get('WG_EASY_HOST_ALIAS') ?? '',
         sessionHostPort: env.get('SESSION_HOST_PORT'),
       },
-      { token: data.token, typed: data.typed, actor: context.actor() },
+      { token: data.token, actor: context.actor() },
     )
   })

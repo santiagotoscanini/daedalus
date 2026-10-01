@@ -358,8 +358,8 @@ function policySantree(ed: PolicyEditor, n: NodeRow, os: string, agentVersion: s
           </span>
           <span className={ASIDE}>
             On, santree on this machine can open terminals and run commands in the box's projects,
-            through its agent: a shell on the box. Turning it on asks for the first characters of
-            the machine's key. Off closes its connections and ends its terminals.
+            through its agent: a shell on the box. Turning it on asks you to confirm, with the
+            machine's key shown to compare. Off closes its connections and ends its terminals.
           </span>
           {ed.askingSantree && !ed.santree && (
             <SantreeGrant n={n} os={os} agentVersion={agentVersion} onClose={ed.closeSantree} />

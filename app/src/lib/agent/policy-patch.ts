@@ -41,7 +41,7 @@ const isPolicyKey = (k: unknown): k is (typeof POLICY_KEYS)[number] =>
  * text bounded and on one line, switches booleans, providers by known kind,
  * hardware from the catalog — and a key set to nothing (a name emptied) is
  * cleared. santree is never set ON here: that is `grantSantreeFn`, behind
- * the machine's key typed.
+ * its confirmation.
  */
 export const nodePolicyPatch = (
   data: unknown,
@@ -59,7 +59,7 @@ export const nodePolicyPatch = (
   }
   const set = checkedPolicy(raw as Record<string, unknown>)
   if (set.santree === true) {
-    throw new Error("santree is turned on through its confirmation, with the machine's key typed")
+    throw new Error('santree is turned on through its confirmation, never a policy patch')
   }
   // A key given and emptied (a name cleared) goes back to its default.
   const emptied = Object.keys(raw).filter((k) => !(k in set)) as (keyof NodePolicy)[]

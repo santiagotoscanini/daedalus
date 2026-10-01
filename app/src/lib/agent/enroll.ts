@@ -2,10 +2,10 @@ import type { WireguardConfig } from '../../host/controller/generated'
 import { hasControlChar } from './policy'
 
 // A Mac's log-in (agent/src/enroll.rs), the pure half: what the enroll page
-// takes from the URL the menu bar opened, what the admin types back, where the
-// browser goes afterwards, and the wg-quick text wg-easy hands out. The half
-// that holds secrets, reaches the database, the controller and wg-easy is
-// host/enroll.ts; the page is routes/agent.enroll.tsx.
+// takes from the URL the menu bar opened, where the browser goes afterwards,
+// and the wg-quick text wg-easy hands out. The half that holds secrets,
+// reaches the database, the controller and wg-easy is host/enroll.ts; the
+// page is routes/agent.enroll.tsx.
 //
 // Pure, and importable by the page: nothing here hashes (node:crypto is the
 // host's), so the fingerprint arrives already computed.
@@ -107,19 +107,6 @@ function bad(reason: string): { ok: false; reason: string } {
   return { ok: false, reason }
 }
 
-/** How many characters of the fingerprint the admin types back before Confirm opens. */
-export const TYPED_LENGTH = 8
-
-/**
- * Whether `typed` is the start of `fingerprint`, as the menu bar shows it: the
- * first `TYPED_LENGTH` hex characters, in either case, separators ignored.
- */
-export function typedMatches(fingerprint: string, typed: string): boolean {
-  const hex = (s: string) => s.replace(/[\s:-]/g, '').toLowerCase()
-  const want = hex(fingerprint).slice(0, TYPED_LENGTH)
-  return want.length === TYPED_LENGTH && hex(typed) === want
-}
-
 /**
  * The menu bar's loopback (enroll.rs `Loopback`): the only place a log-in's
  * answer goes. `http` on 127.0.0.1 is what it binds; nothing else is ever built.
@@ -151,8 +138,9 @@ export function callbackUrl(
  * So `none` is the menu bar, and `same-site` is accepted only when the
  * Referer is the IdP's origin: the sign-in on the way here. The last row is
  * the residue — a stranger's link that happens to need a sign-in looks like
- * the menu bar's — and the typed fingerprint is what stops it: the admin
- * types what the menu bar of the Mac in front of them shows.
+ * the menu bar's — and the page itself is what stops it: it names the
+ * machine and shows its full key, and asks the admin to confirm only a log-in
+ * they just asked for from that machine.
  *
  * Anything but a top-level document navigation (the router's own fetch, an
  * iframe), and a browser that sends no Fetch Metadata at all, are refused.
