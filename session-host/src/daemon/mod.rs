@@ -100,7 +100,7 @@ pub const REAP_AFTER: Duration = Duration::from_secs(3600);
 /// How often exited sessions are looked for.
 pub const REAP_EVERY: Duration = Duration::from_secs(60);
 /// What `hello` names in `features`.
-pub const FEATURES: &[&str] = &[m::WorkspacesList::NAME, workspaces::ICON_METHOD];
+pub const FEATURES: &[&str] = &[m::WorkspacesList::NAME, m::WorkspacesIcon::NAME];
 
 /// The error code of a request refused for a cap.
 fn busy(msg: impl Into<String>) -> WireError {
@@ -392,8 +392,8 @@ impl Daemon {
                 })
                 .await
             }
-            workspaces::ICON_METHOD => {
-                let p = params!(workspaces::IconParams);
+            m::WorkspacesIcon::NAME => {
+                let p = params!(WorkspacesIconParams);
                 blocking(permit!(), move || {
                     workspaces::icon(&this.opts.workspace_icons, &p.name).and_then(|r| ok(&r))
                 })

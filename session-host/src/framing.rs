@@ -1,7 +1,7 @@
 //! Newline framing for the host's side of a connection.
 //!
 //! Copied from santree's `crates/remote/src/framing.rs` at rev
-//! c9766c4539973e7959287d9fc65dff01c585c575, where `read_line` is
+//! 1cb14ac0c8932925e7f228b4a4751b59731bdbce, where `read_line` is
 //! `pub(crate)` and so cannot be imported. The host never passes an idle
 //! bound (the client times a silent link out, and TCP keepalive catches a
 //! vanished peer, serve.rs), so that parameter and its branch are dropped, and

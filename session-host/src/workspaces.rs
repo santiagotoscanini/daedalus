@@ -16,8 +16,11 @@ use std::io::Read;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-use santree_remote_proto::{b64, ErrorCode, WireError, Workspace, WorkspaceSync, WorkspacesResult};
-use serde::{Deserialize, Serialize};
+use santree_remote_proto::{
+    sniff_icon, ErrorCode, WireError, Workspace, WorkspaceIcon, WorkspaceSync, WorkspacesResult,
+    WORKSPACE_ICON_MAX,
+};
+use serde::Deserialize;
 
 /// The largest snapshot read; a real one is well under a kilobyte a clone.
 const MAX_FILE: u64 = 8 * 1024 * 1024;
@@ -120,61 +123,16 @@ pub fn list(file: &Path, root: &Path) -> Result<WorkspacesResult, String> {
 
 // ── workspaces.icon ───────────────────────────────────────────────────────
 
-/// `workspaces.icon {name}`: the workspace's app icon, as the Apps page shows
-/// it. Not in santree-remote-proto at this crate's rev; announced in
-/// `hello.features`, and a client that does not know it never asks.
-pub const ICON_METHOD: &str = "workspaces.icon";
-
-/// The largest icon served. The app writes nothing bigger either.
-pub const MAX_ICON: u64 = 64 * 1024;
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct IconParams {
-    pub name: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IconResult {
-    /// `image/png`, `image/svg+xml`, `image/x-icon` or `image/webp`.
-    pub content_type: &'static str,
-    /// The bytes, standard padded base64.
-    #[serde(with = "b64")]
-    pub data: Vec<u8>,
-}
-
-/// What the bytes are, by their content alone; None for anything santree
-/// is not to be handed. SVG is matched on its opening (a prolog or an
-/// `<svg` element) and must be UTF-8; it is served as data for an image,
-/// never as markup.
-fn sniff(body: &[u8]) -> Option<&'static str> {
-    if body.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
-        return Some("image/png");
-    }
-    if body.len() >= 12 && &body[..4] == b"RIFF" && &body[8..12] == b"WEBP" {
-        return Some("image/webp");
-    }
-    // ICO / CUR: a zero reserved field, then type 1 or 2.
-    if body.len() >= 6 && body[..2] == [0, 0] && matches!(body[2..4], [1, 0] | [2, 0]) {
-        return Some("image/x-icon");
-    }
-    let text = std::str::from_utf8(body).ok()?;
-    let text = text.trim_start_matches('\u{feff}').trim_start();
-    let end = text.char_indices().nth(512).map_or(text.len(), |(i, _)| i);
-    let head = &text[..end];
-    if head.starts_with("<svg") || (head.starts_with("<?xml") && head.contains("<svg")) {
-        return Some("image/svg+xml");
-    }
-    None
-}
+/// The largest icon served ([`WORKSPACE_ICON_MAX`]); the app writes nothing
+/// bigger either.
+const MAX_ICON: u64 = WORKSPACE_ICON_MAX as u64;
 
 /// The icon the control plane exported for workspace `name`: `dir/<name>.icon`
 /// (app/src/host/workspace-icons.ts writes it). Missing, or not a file this
 /// host will serve (a symlink, not a regular file, empty, over [`MAX_ICON`],
-/// not a type [`sniff`] knows): `not_found` — santree draws its own mark.
+/// not a type [`sniff_icon`] knows): `not_found` — santree draws its own mark.
 /// A name that is not one plain component: `bad_request`.
-pub fn icon(dir: &Path, name: &str) -> Result<IconResult, WireError> {
+pub fn icon(dir: &Path, name: &str) -> Result<WorkspaceIcon, WireError> {
     if !plain_name(name) {
         return Err(WireError::new(
             ErrorCode::BadRequest,
@@ -214,14 +172,17 @@ pub fn icon(dir: &Path, name: &str) -> Result<IconResult, WireError> {
     if data.len() as u64 > MAX_ICON {
         return Err(none());
     }
-    let Some(content_type) = sniff(&data) else {
+    let Some(content_type) = sniff_icon(&data) else {
         log::warn!(
             "workspace icon {}: not an image santree renders",
             path.display()
         );
         return Err(none());
     };
-    Ok(IconResult { content_type, data })
+    Ok(WorkspaceIcon {
+        content_type: content_type.to_string(),
+        data,
+    })
 }
 
 #[cfg(test)]
@@ -239,24 +200,6 @@ mod tests {
     }
 
     #[test]
-    fn only_the_four_image_types_are_sniffed() {
-        let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0];
-        assert_eq!(sniff(&png), Some("image/png"));
-        assert_eq!(sniff(b"RIFF\0\0\0\0WEBPVP8 "), Some("image/webp"));
-        assert_eq!(sniff(&[0, 0, 1, 0, 1, 0]), Some("image/x-icon"));
-        assert_eq!(sniff(b"\n <svg xmlns='x'/>"), Some("image/svg+xml"));
-        assert_eq!(
-            sniff("\u{feff}<?xml version='1.0'?><svg/>".as_bytes()),
-            Some("image/svg+xml")
-        );
-        assert_eq!(sniff(b"<?xml version='1.0'?><html/>"), None);
-        assert_eq!(sniff(b"<html><svg/></html>"), None);
-        assert_eq!(sniff(&[0xff, 0xd8, 0xff, 0xe0]), None, "jpeg");
-        assert_eq!(sniff(b"GIF89a"), None);
-        assert_eq!(sniff(b"data:image/png;base64,AAAA"), None);
-    }
-
-    #[test]
     fn icon_serves_the_exported_file_and_nothing_else() {
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path();
@@ -264,7 +207,7 @@ mod tests {
         std::fs::write(d.join("web.icon"), svg).unwrap();
         let got = icon(d, "web").unwrap();
         assert_eq!(
-            (got.content_type, got.data.as_slice()),
+            (got.content_type.as_str(), got.data.as_slice()),
             ("image/svg+xml", &svg[..])
         );
         assert_eq!(

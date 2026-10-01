@@ -22,9 +22,9 @@ path = "src/main.rs"
 # link's TLS profile. The three are a contract santree keeps for this crate
 # (their manifests say so): no santree-core, no specta, ring as the only
 # crypto provider.
-santree-pty = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
-santree-remote-proto = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
-santree-remote-tls = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+santree-pty = { git = "https://github.com/santree-ai/santree", rev = "1cb14ac0c8932925e7f228b4a4751b59731bdbce" }
+santree-remote-proto = { git = "https://github.com/santree-ai/santree", rev = "1cb14ac0c8932925e7f228b4a4751b59731bdbce" }
+santree-remote-tls = { git = "https://github.com/santree-ai/santree", rev = "1cb14ac0c8932925e7f228b4a4751b59731bdbce" }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "io-util", "process", "time", "sync", "macros", "signal"] }
 # Keepalive and TCP_USER_TIMEOUT on accepted sockets; already under tokio.
 socket2 = { version = "0.6", features = ["all"] }
@@ -37,7 +37,7 @@ libc = "0.2"
 
 [dev-dependencies]
 # santree's own client, for the conformance test: the app's side of the wire.
-santree-remote-client = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+santree-remote-client = { git = "https://github.com/santree-ai/santree", rev = "1cb14ac0c8932925e7f228b4a4751b59731bdbce" }
 # test-util: paused time, so the ping test waits out PING_INTERVAL instantly.
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "io-util", "time", "macros", "test-util"] }
 base64 = "0.22"

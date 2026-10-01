@@ -126,8 +126,8 @@ the change is refused).
 ## Protocol
 
 Protocol v1 as santree's
-[`docs/remote.md`](https://github.com/santree-ai/santree/blob/c9766c4539973e7959287d9fc65dff01c585c575/docs/remote.md)
-specifies it at rev `c9766c45`, with the behaviour the doc leaves open taken
+[`docs/remote.md`](https://github.com/santree-ai/santree/blob/1cb14ac0c8932925e7f228b4a4751b59731bdbce/docs/remote.md)
+specifies it at rev `1cb14ac0`, with the behaviour the doc leaves open taken
 from santree's reference daemon (`crates/remote/src/fake.rs`) — `src/daemon/`
 is a port of it. Every wire type comes from `santree-remote-proto` at that
 rev; PTYs are `santree-pty`. The tests check exact wire order with a raw
@@ -139,7 +139,8 @@ per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list", "works
 
 ### Deviations from `docs/remote.md` / `fake.rs`
 
-1. **Transport and identity**: TLS with the node key (above), not ssh stdio.
+1. **Transport and identity**: TLS with the node key (above); the fake is an
+   in-memory link.
 2. **`hooks.push` is served on the local hook socket only.** On the link,
    every method but `hello` answers `bad_request "send hello first"` until a
    hello succeeds, and `hooks.push` is `bad_request` even after.
@@ -169,8 +170,8 @@ per start), `projectsRoot`, `hookBin`, and `features: ["workspaces.list", "works
    timeout, on output that never closes, and when the request is dropped (its
    connection ended). Output is capped at 8 MiB a stream, as the fake: two
    capped streams in base64 still fit one 32 MiB line.
-7. **`workspaces.list`** serves the control plane's snapshot (below). **`workspaces.icon`** is this
-   host's own method (below), not in santree-remote-proto at the pinned rev.
+7. **`workspaces.list`** and **`workspaces.icon`** serve the control plane's
+   snapshot and exported icons (below), where the fake answers from memory.
 8. **Shutdown closes sessions**; under systemd the cgroup kill would take them
    anyway.
 9. **Framing**: `read_line` is copied from santree's `framing.rs` (it is

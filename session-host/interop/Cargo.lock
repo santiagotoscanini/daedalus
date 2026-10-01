@@ -1272,16 +1272,16 @@ dependencies = [
 
 [[package]]
 name = "santree-agent-kind"
-version = "0.1.17-beta.8"
-source = "git+https://github.com/santree-ai/santree?rev=c9766c4539973e7959287d9fc65dff01c585c575#c9766c4539973e7959287d9fc65dff01c585c575"
+version = "0.1.17-beta.18"
+source = "git+https://github.com/santree-ai/santree?rev=1cb14ac0c8932925e7f228b4a4751b59731bdbce#1cb14ac0c8932925e7f228b4a4751b59731bdbce"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "santree-pty"
-version = "0.1.17-beta.8"
-source = "git+https://github.com/santree-ai/santree?rev=c9766c4539973e7959287d9fc65dff01c585c575#c9766c4539973e7959287d9fc65dff01c585c575"
+version = "0.1.17-beta.18"
+source = "git+https://github.com/santree-ai/santree?rev=1cb14ac0c8932925e7f228b4a4751b59731bdbce#1cb14ac0c8932925e7f228b4a4751b59731bdbce"
 dependencies = [
  "anyhow",
  "log",
@@ -1291,8 +1291,8 @@ dependencies = [
 
 [[package]]
 name = "santree-remote-client"
-version = "0.1.17-beta.8"
-source = "git+https://github.com/santree-ai/santree?rev=c9766c4539973e7959287d9fc65dff01c585c575#c9766c4539973e7959287d9fc65dff01c585c575"
+version = "0.1.17-beta.18"
+source = "git+https://github.com/santree-ai/santree?rev=1cb14ac0c8932925e7f228b4a4751b59731bdbce#1cb14ac0c8932925e7f228b4a4751b59731bdbce"
 dependencies = [
  "log",
  "santree-remote-proto",
@@ -1304,8 +1304,8 @@ dependencies = [
 
 [[package]]
 name = "santree-remote-proto"
-version = "0.1.17-beta.8"
-source = "git+https://github.com/santree-ai/santree?rev=c9766c4539973e7959287d9fc65dff01c585c575#c9766c4539973e7959287d9fc65dff01c585c575"
+version = "0.1.17-beta.18"
+source = "git+https://github.com/santree-ai/santree?rev=1cb14ac0c8932925e7f228b4a4751b59731bdbce#1cb14ac0c8932925e7f228b4a4751b59731bdbce"
 dependencies = [
  "base64 0.22.1",
  "santree-agent-kind",
@@ -1316,8 +1316,8 @@ dependencies = [
 
 [[package]]
 name = "santree-remote-tls"
-version = "0.1.17-beta.8"
-source = "git+https://github.com/santree-ai/santree?rev=c9766c4539973e7959287d9fc65dff01c585c575#c9766c4539973e7959287d9fc65dff01c585c575"
+version = "0.1.17-beta.18"
+source = "git+https://github.com/santree-ai/santree?rev=1cb14ac0c8932925e7f228b4a4751b59731bdbce#1cb14ac0c8932925e7f228b4a4751b59731bdbce"
 dependencies = [
  "ring",
  "rustls",

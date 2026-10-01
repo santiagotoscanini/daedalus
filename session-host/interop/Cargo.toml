@@ -16,7 +16,7 @@ publish = false
 daedalus-session-host = { path = ".." }
 daedalus-agent = { path = "../../agent", default-features = false }
 # santree's own client, at the session host's rev: what santree runs.
-santree-remote-client = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
+santree-remote-client = { git = "https://github.com/santree-ai/santree", rev = "1cb14ac0c8932925e7f228b4a4751b59731bdbce" }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "sync", "net", "io-util", "time"] }
 serde_json = "1"
 tempfile = "3"
