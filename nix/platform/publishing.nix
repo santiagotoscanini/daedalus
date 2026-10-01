@@ -104,7 +104,7 @@ let
     self=$1
     in_ns() { "$podman" unshare --rootless-netns "$@"; }
     # One guard at a time: the isolated apps start together (a switch, a
-    # boot), and two of them deleting the same old rule by number race.
+    # boot), and two of them moving the jump at once would leave two.
     exec 9>"${cfg.operator.runtimeDir}/fleet-iso-guard.lock"
     ${pkgs.util-linux}/bin/flock -w 60 9
     ${lib.concatMapStrings (n: ''
@@ -123,15 +123,6 @@ let
       while in_ns "$iptables" -D FORWARD -j FLEET_ISO 2>/dev/null; do :; done
       in_ns "$iptables" -I FORWARD 1 -j FLEET_ISO
     fi
-    # The one-rule-per-app form earlier generations put in FORWARD itself,
-    # removed by its exact spec (never by number: a number read before
-    # another process changes the chain deletes someone else's rule).
-    ${lib.concatMapStrings (n: ''
-      while in_ns "$iptables" -D FORWARD -d ${isoPin n} ! -s ${isoPin n} -m conntrack --ctstate NEW \
-        -m conntrack ! --ctstate DNAT -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP 2>/dev/null; do :; done
-      while in_ns "$iptables" -D FORWARD -d ${isoPin n} ! -s ${isoPin n} -m conntrack --ctstate NEW \
-        -m comment --comment "fleet isolated: ${isoBridge n}-net" -j DROP 2>/dev/null; do :; done
-    '') (lib.attrNames isolatedApps)}
   '';
 in
 {
