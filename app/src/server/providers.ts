@@ -1,8 +1,7 @@
 import type { Ctx } from '../core/ctx'
-import type { ModelAction } from '../host/controller/generated'
+import type { ActionOutcome, ModelAction } from '../host/controller/generated'
 import { asValidator, bool, is, obj, withMessage } from '../lib/contract/decode'
 import { nodeIdField, nonBlankField } from '../lib/contract/fields'
-import type { VerbOutcome } from '../lib/follow-request'
 import { isProviderKind, managesResidency, type ProviderKind } from '../lib/providers/kinds'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'
@@ -180,9 +179,7 @@ export const fetchProviderActionFn = readFn
       ),
     ),
   )
-  .handler(async ({ data, context }): Promise<VerbOutcome | null> => {
+  .handler(async ({ data, context }): Promise<ActionOutcome | null> => {
     const ctx = await context.ctx()
-    const answer = await ctx.controller.call('nodes.providers', { id: data.machine })
-    const a = answer.providers?.flatMap((p) => p.actions).find((x) => x.request === data.request)
-    return a === undefined ? null : { state: a.ok ? 'done' : 'failed', detail: a.message }
+    return ctx.controller.call('actions.get', { node: data.machine, request: data.request })
   })

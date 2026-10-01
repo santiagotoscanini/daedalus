@@ -303,6 +303,14 @@ export const ANSWERS: { [M in keyof Methods]: Decoder<Methods[M][1]> } = {
   'telemetry.get': reads<Methods['telemetry.get'][1]>()(
     obj({ level, telemetry: nullable(telemetry) }),
   ),
+  'actions.get': reads<Methods['actions.get'][1]>()(
+    nullable(
+      obj({
+        state: oneOf({ running: true, done: true, refused: true, failed: true }),
+        detail: str,
+      }),
+    ),
+  ),
   'nodes.list': reads<Methods['nodes.list'][1]>()(obj({ nodes: arrayOf(nodeSummary) })),
   'nodes.get': reads<Methods['nodes.get'][1]>()(
     obj({

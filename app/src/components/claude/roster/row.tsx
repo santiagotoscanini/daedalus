@@ -2,14 +2,13 @@
 // prompt and the grouped metadata under it, and — where there is an honest
 // one — its verb, armed in place.
 import { ClockIcon, FolderGit2Icon, MessagesSquareIcon } from 'lucide-react'
-
+import type { ActionOutcome } from '../../../host/controller/generated'
 // Pure and client-safe — the whole reason the roster's types, its join and
 // the row's derived facts live in lib/ rather than beside the loader. See the
 // header of claude-roster.ts.
 import { type FactIcon, factGroups, promptLine } from '../../../lib/claude-meta'
 import { type RosterEntry, type RowControl, rowControl } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
-import type { VerbOutcome } from '../../../lib/follow-request'
 import { DASH } from '../../../lib/format'
 import { toneStyle } from '../../../lib/tone'
 import { GHOST_BTN } from '../../apps/shared'
@@ -95,7 +94,7 @@ export function RosterRow({
   armed: boolean
   busy: boolean
   /** The board's one followed request: how it stands, null before the first. */
-  outcome: VerbOutcome | null
+  outcome: ActionOutcome | null
   onArm: () => void
   onCancel: () => void
   onConfirm: (control: ActiveControl) => void
@@ -270,7 +269,7 @@ function RowMetaLine({ row }: { row: RosterEntry }) {
 }
 
 /** What the agent last said about THIS row's verb. */
-function RowOutcome({ outcome }: { outcome: VerbOutcome }) {
+function RowOutcome({ outcome }: { outcome: ActionOutcome }) {
   if (outcome.state === 'running')
     return <p className={CTRL_STATE}>{outcome.detail || 'Working…'}</p>
   if (outcome.state === 'done') {

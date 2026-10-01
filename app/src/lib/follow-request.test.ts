@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { followRequest, type VerbOutcome } from './follow-request'
+import type { ActionOutcome } from '../host/controller/generated'
+import { followRequest } from './follow-request'
 
-const answers = (...xs: (VerbOutcome | null | Error)[]) => {
+const answers = (...xs: (ActionOutcome | null | Error)[]) => {
   let i = 0
   return async () => {
     const x = xs[Math.min(i++, xs.length - 1)] ?? null

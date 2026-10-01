@@ -109,6 +109,8 @@ api_methods! {
     "claude.roster" => ClaudeRoster: ClaudeRosterGet,
     "claude.session" => ClaudeSession(ClaudeSession): SessionQueued,
     "telemetry.get" => TelemetryGet: TelemetryGet,
+    /// How a verb request stands, from the document that reports it.
+    "actions.get" => ActionsGet(ActionQuery): Option<ActionOutcome>,
     "nodes.list" => NodesList: NodesList,
     "nodes.get" => NodesGet(NodeId): NodeDetail,
     "nodes.telemetry" => NodesTelemetry(NodeId): NodeTelemetry,
@@ -380,6 +382,65 @@ pub struct ProviderModelSent {
 #[cfg_attr(test, ts(rename = "NodeIdParams"))]
 pub struct NodeId {
     pub id: String,
+}
+
+/// `actions.get`'s parameters: a verb's request id, as `claude.session`,
+/// `nodes.claude_session` or `nodes.provider_model` answered it, and the
+/// machine it went to — absent for the controller's own session.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "ActionQueryParams"))]
+pub struct ActionQuery {
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub node: Option<String>,
+    pub request: String,
+}
+
+/// How a verb request stands, whichever document reports it — a session
+/// verb in the roster's `actions`, a residency verb in the providers'.
+/// `actions.get` answers null while neither lists it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ActionOutcome {
+    pub state: crate::claude::ActionState,
+    /// What was done, or why not, in the machine's own words.
+    pub detail: String,
+}
+
+impl ActionOutcome {
+    /// The request's outcome in a roster or a providers document, if either
+    /// lists it.
+    pub fn find(
+        request: &str,
+        roster: Option<&Roster>,
+        providers: Option<&[ProviderReport]>,
+    ) -> Option<ActionOutcome> {
+        let session = roster
+            .into_iter()
+            .flat_map(|r| &r.actions)
+            .find(|a| a.request == request)
+            .map(|a| ActionOutcome {
+                state: a.state,
+                detail: a.detail.clone(),
+            });
+        session.or_else(|| {
+            providers
+                .into_iter()
+                .flatten()
+                .flat_map(|p| &p.actions)
+                .find(|a| a.request == request)
+                .map(|a| ActionOutcome {
+                    state: if a.ok {
+                        crate::claude::ActionState::Done
+                    } else {
+                        crate::claude::ActionState::Failed
+                    },
+                    detail: a.message.clone(),
+                })
+        })
+    }
 }
 
 /// The longest `DesiredNode::name`, in characters.
@@ -915,6 +976,14 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
                 level: TelemetryLevel::Minimal,
                 telemetry: Some(telemetry.minimal()),
             }),
+        ),
+        (
+            "actions.get",
+            v(&ActionOutcome::find(
+                "00112233445566ff",
+                None,
+                Some(&[provider_report()]),
+            )),
         ),
         (
             "nodes.list",
@@ -1783,6 +1852,34 @@ mod tests {
             }),
             r#"{"delivered":true,"request":"00112233445566ff"}"#
         );
+    }
+
+    #[test]
+    fn an_action_is_found_in_either_document_as_one_outcome() {
+        let r = roster();
+        let p = [provider_report()];
+        // The roster's session verb, as it reads.
+        assert_eq!(
+            wire(&ActionOutcome::find("00112233445566ff", Some(&r), None)),
+            r#"{"state":"done","detail":"stopped"}"#
+        );
+        // The providers' residency verb, its `ok` and `message` as a state and a detail.
+        assert_eq!(
+            wire(&ActionOutcome::find("00112233445566ff", None, Some(&p))),
+            r#"{"state":"done","detail":"Loaded"}"#
+        );
+        let mut failed = provider_report();
+        failed.actions[0].ok = false;
+        failed.actions[0].message = "out of memory".into();
+        assert_eq!(
+            ActionOutcome::find("00112233445566ff", None, Some(&[failed])).map(|o| o.state),
+            Some(crate::claude::ActionState::Failed)
+        );
+        assert_eq!(
+            ActionOutcome::find("ffffffffffffffff", Some(&r), Some(&p)),
+            None
+        );
+        assert_eq!(wire(&None::<ActionOutcome>), "null");
     }
 
     #[test]

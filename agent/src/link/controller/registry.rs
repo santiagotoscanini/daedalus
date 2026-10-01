@@ -12,9 +12,9 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::api::wire::{
-    ApiEvent, Capability, ClaudeSessionSent, CommandOk, DesiredState, NodeClaude, NodeClaudeRoster,
-    NodeDetail, NodeLeft, NodePolicyRequest, NodeProviders, NodeSummary, NodeTelemetry,
-    ProviderModelSent, SetDesiredOk,
+    ActionOutcome, ApiEvent, Capability, ClaudeSessionSent, CommandOk, DesiredState, NodeClaude,
+    NodeClaudeRoster, NodeDetail, NodeLeft, NodePolicyRequest, NodeProviders, NodeSummary,
+    NodeTelemetry, ProviderModelSent, SetDesiredOk,
 };
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of};
@@ -1063,6 +1063,21 @@ impl Registry {
             received_at: t.as_ref().map(|(_, at)| at.clone()),
             telemetry: t.map(|(t, _)| t),
         })
+    }
+
+    /// How a verb request to the machine stands, from its roster or its
+    /// providers document; None while neither lists it.
+    pub fn action(&self, id: &str, request: &str) -> Result<Option<ActionOutcome>, ApiError> {
+        let reg = self.lock();
+        Self::known(&reg, id)?;
+        let e = reg.nodes.get(id);
+        let roster = e
+            .and_then(|e| e.roster.as_ref())
+            .and_then(|(r, _)| r.as_ref());
+        let providers = e
+            .and_then(|e| e.providers.as_ref())
+            .map(|(p, _)| p.as_slice());
+        Ok(ActionOutcome::find(request, roster, providers))
     }
 
     /// The machine's roster of Claude sessions, as it last pushed it.

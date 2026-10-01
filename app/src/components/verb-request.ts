@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { followRequest, type VerbOutcome } from '../lib/follow-request'
+import type { ActionOutcome } from '../host/controller/generated'
+import { followRequest } from '../lib/follow-request'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'
 
@@ -10,17 +11,17 @@ import type { Result } from '../lib/result'
  * or throwing, is a refusal and never reached the machine.
  */
 export function useVerbRequest(opts: {
-  get: (request: string) => Promise<VerbOutcome | null>
+  get: (request: string) => Promise<ActionOutcome | null>
   waitMs: number
   /** Once per ending — router.invalidate lives in the caller. */
-  onSettle?: (o: VerbOutcome) => void
+  onSettle?: (o: ActionOutcome) => void
 }): {
   busy: boolean
-  outcome: VerbOutcome | null
+  outcome: ActionOutcome | null
   start: (send: () => Promise<Result<string>>) => void
 } {
   const [busy, setBusy] = useState(false)
-  const [outcome, setOutcome] = useState<VerbOutcome | null>(null)
+  const [outcome, setOutcome] = useState<ActionOutcome | null>(null)
   const latest = useRef(opts)
   latest.current = opts
   const gone = useRef(false)
@@ -52,7 +53,7 @@ export function useVerbRequest(opts: {
             },
             stop: () => gone.current,
           })
-        const o: VerbOutcome = sent.ok
+        const o: ActionOutcome = sent.ok
           ? await follow(sent.value)
           : { state: 'refused', detail: sent.reason }
         if (gone.current) return

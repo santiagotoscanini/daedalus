@@ -19,7 +19,6 @@ import {
   reads,
   str,
 } from '../contract/decode'
-import type { VerbOutcome } from '../follow-request'
 
 // A machine's roster of Claude Code sessions, as its agent writes it
 // (agent/src/claude/roster/): `claude.roster` on the box's controller,
@@ -147,9 +146,4 @@ export function withStats(
       log_bytes: st?.log_bytes ?? null,
     }
   })
-}
-
-/** A session verb's result as lib/follow-request.ts follows it; null while the roster does not list it. */
-export function sessionOutcome(a: ActionResult | null): VerbOutcome | null {
-  return a === null ? null : { state: a.state, detail: a.detail }
 }

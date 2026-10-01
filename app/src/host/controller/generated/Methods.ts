@@ -1,6 +1,8 @@
 // Generated from agent/src (src/ts.rs). Do not edit: change the Rust type,
 // then run agent/gate.sh gen.
 
+import type { ActionOutcome } from './ActionOutcome'
+import type { ActionQueryParams } from './ActionQueryParams'
 import type { ClaudeRosterGet } from './ClaudeRosterGet'
 import type { ClaudeSessionParams } from './ClaudeSessionParams'
 import type { ClaudeSessionSent } from './ClaudeSessionSent'
@@ -46,6 +48,7 @@ export type Methods = {
   'claude.roster': [null, ClaudeRosterGet]
   'claude.session': [ClaudeSessionParams, SessionQueued]
   'telemetry.get': [null, TelemetryGet]
+  'actions.get': [ActionQueryParams, ActionOutcome | null]
   'nodes.list': [null, NodesList]
   'nodes.get': [NodeIdParams, NodeDetail]
   'nodes.telemetry': [NodeIdParams, NodeTelemetryOk]

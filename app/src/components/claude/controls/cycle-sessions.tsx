@@ -4,7 +4,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { SessionAction } from '../../../host/controller/generated'
-import { sessionOutcome } from '../../../lib/agent/roster'
 import type { RosterEntry } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
 import { followRequest } from '../../../lib/follow-request'
@@ -27,10 +26,9 @@ const VERB_WAIT_MS = 60_000
  */
 async function settle(action: SessionAction, session: string): Promise<void> {
   const { request } = await claudeSessionFn({ data: { node: null, action, session } })
-  const o = await followRequest(
-    async () => sessionOutcome(await fetchClaudeActionFn({ data: { node: null, request } })),
-    { waitMs: VERB_WAIT_MS },
-  )
+  const o = await followRequest(() => fetchClaudeActionFn({ data: { node: null, request } }), {
+    waitMs: VERB_WAIT_MS,
+  })
   if (o.state !== 'done') throw new Error(o.detail)
 }
 

@@ -3,11 +3,12 @@
 // provider, a Claude session resumed or stopped. The wait lives in the
 // browser — it can be interrupted, and no server request is held open for
 // it. The server side is two functions: one that sends and answers the id,
-// and one readFn that says how that request stands, or null while the
-// document does not list it yet. components/verb-request.ts is the hook.
+// and one readFn that says how that request stands (the controller's
+// `actions.get`: one `ActionOutcome`, whichever document reports it), or
+// null while the document does not list it yet. components/verb-request.ts
+// is the hook.
 
-/** How a request stands. `running` until the document names its ending. */
-export type VerbOutcome = { state: 'running' | 'done' | 'refused' | 'failed'; detail: string }
+import type { ActionOutcome } from '../host/controller/generated'
 
 /**
  * Ask `get` every `intervalMs` until it names an ending, or `waitMs` passes. A
@@ -16,14 +17,14 @@ export type VerbOutcome = { state: 'running' | 'done' | 'refused' | 'failed'; de
  * work left to the machine.
  */
 export async function followRequest(
-  get: () => Promise<VerbOutcome | null>,
+  get: () => Promise<ActionOutcome | null>,
   opts: {
     waitMs: number
     intervalMs?: number
-    onProgress?: (o: VerbOutcome) => void
+    onProgress?: (o: ActionOutcome) => void
     stop?: () => boolean
   },
-): Promise<VerbOutcome> {
+): Promise<ActionOutcome> {
   const deadline = Date.now() + opts.waitMs
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, opts.intervalMs ?? 1_000))

@@ -1,4 +1,4 @@
-import type { ActionResult, SessionAction } from '../host/controller/generated'
+import type { ActionOutcome, SessionAction } from '../host/controller/generated'
 import { selectorError } from '../lib/claude-roster'
 import {
   asValidator,
@@ -67,8 +67,8 @@ export const claudeSessionFn = adminFn
   })
 
 /**
- * How one verb request went, from the roster's `actions` — or null while the
- * roster does not list it yet.
+ * How one verb request went (`actions.get`: the roster's `actions`, read by
+ * the controller) — or null while the roster does not list it yet.
  */
 export const fetchClaudeActionFn = readFn
   .validator(
@@ -79,13 +79,12 @@ export const fetchClaudeActionFn = readFn
       ),
     ),
   )
-  .handler(async ({ data, context }): Promise<ActionResult | null> => {
+  .handler(async ({ data, context }): Promise<ActionOutcome | null> => {
     const ctx = await context.ctx()
-    const answer =
-      data.node === null
-        ? await ctx.controller.call('claude.roster')
-        : await ctx.controller.call('nodes.claude_roster', { id: data.node })
-    return answer.roster?.actions.find((a) => a.request === data.request) ?? null
+    return ctx.controller.call('actions.get', {
+      ...(data.node === null ? {} : { node: data.node }),
+      request: data.request,
+    })
   })
 
 /** The Claude page for one node: its row and its live status page. */

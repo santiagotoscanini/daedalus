@@ -61,6 +61,7 @@
 //! | `claude.roster`    | `ClaudeRosterGet`: the session's roster of Claude sessions (claude/roster/) | `claude.sessions` |
 //! | `claude.session`   | `SessionQueued`: one verb `{action, id}` queued for the session; its roster's `actions` reports it under `request` | `claude.sessions` |
 //! | `telemetry.get`    | `TelemetryGet`: the document at the configured level   | —                       |
+//! | `actions.get`      | `ActionOutcome` or null: how one verb request `{request, node?}` stands — the roster's `actions` (a session verb) or the providers' (a residency verb) of that machine, or of the controller's own session | `nodes`, or `claude.sessions` without `node` |
 //! | `nodes.list`       | `NodesList`: every machine known, its standing and connection | `nodes`          |
 //! | `nodes.get`        | `NodeDetail`: one machine's hello, status and open telemetry `{id}` | `nodes`     |
 //! | `nodes.telemetry`  | `NodeTelemetry`: its full telemetry `{id}`             | `nodes`                 |
@@ -421,6 +422,27 @@ impl Api {
                     _ => self.shared.telemetry(),
                 },
             }),
+            R::ActionsGet(q) => {
+                // A request id is what `mint_request` makes: sixteen lowercase hex.
+                if !wire::valid_node_id(&q.request) {
+                    return Err(ApiError::new(
+                        ErrorCode::BadRequest,
+                        "a request id is sixteen lowercase hex characters",
+                    ));
+                }
+                match q.node {
+                    None => {
+                        self.has(Capability::ClaudeSessions)?;
+                        let roster = self.shared.claude_roster();
+                        to_value(&wire::ActionOutcome::find(
+                            &q.request,
+                            roster.as_ref(),
+                            None,
+                        ))
+                    }
+                    Some(id) => to_value(&self.nodes()?.action(checked_id(&id)?, &q.request)?),
+                }
+            }
             R::ControllerRotate(p) => {
                 use crate::link::rotation::{GRACE_DEFAULT, GRACE_MAX, GRACE_MIN};
                 self.has(Capability::Controller)?;

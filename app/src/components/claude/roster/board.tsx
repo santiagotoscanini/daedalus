@@ -15,7 +15,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 // Pure: lib/agent/roster decodes the agent's roster; nothing here needs the machine.
 import type { Roster, SessionAction } from '../../../host/controller/generated'
-import { type ClaudeSession, sessionOutcome } from '../../../lib/agent/roster'
+import type { ClaudeSession } from '../../../lib/agent/roster'
 import { countByState, type RosterEntry, sessionRows } from '../../../lib/claude-roster'
 import { num } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
@@ -76,7 +76,7 @@ export function RosterBoard({
     outcome,
     start,
   } = useVerbRequest({
-    get: async (request) => sessionOutcome(await fetchClaudeActionFn({ data: { node, request } })),
+    get: (request) => fetchClaudeActionFn({ data: { node, request } }),
     waitMs: VERB_WAIT_MS,
     onSettle: () => {
       void router.invalidate()

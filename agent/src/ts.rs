@@ -55,11 +55,13 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     RootFollowOk::export_all(cfg)?;
     RootRunsOk::export_all(cfg)?;
     SantreeStatus::export_all(cfg)?;
+    ActionOutcome::export_all(cfg)?;
     crate::rpc::ApiError::export_all(cfg)?;
     // The parameters.
     HelloParams::export_all(cfg)?;
     ClaudeSession::export_all(cfg)?;
     NodeId::export_all(cfg)?;
+    ActionQuery::export_all(cfg)?;
     NodeClaudeSession::export_all(cfg)?;
     NodeProviderModel::export_all(cfg)?;
     SetDesired::export_all(cfg)?;
