@@ -268,6 +268,11 @@
             selectors.app = [ "a" ];
           };
           pkgs.runCommand "root-verbs" { } "touch $out";
+
+        # The bridge agents' git and rollback behaviour, RUN against temp
+        # repositories with nixos-rebuild, curl and gpg stubbed: no network,
+        # no root (nix/tests/host-scripts).
+        host-scripts = import ./nix/tests/host-scripts { inherit pkgs; };
       };
 
       # `nix flake init -t github:santiagotoscanini/daedalus#config`: the
