@@ -20,10 +20,11 @@ import { ANSWERS, ControllerError, eventOf, parseLine, requestLine } from './wir
 // reload — would lock the app out of its own box. The live client is kept on
 // globalThis, and a re-evaluated copy of this module (HMR) closes the
 // previous copy's before it takes the slot. It connects on the first call,
-// not at import; a connection that closes is re-dialled by the next call,
-// and a dial that fails holds off the next for a backoff that doubles to
-// ten seconds, answering `unreachable` meanwhile rather than hammering a
-// controller that is down.
+// not at import; a connection that closes is re-dialled by the next call —
+// or at once, when the process wants the controller's events — and a dial
+// that fails holds off the next for a backoff that doubles to ten seconds,
+// answering `unreachable` meanwhile rather than hammering a controller that
+// is down.
 //
 // No retry ladder: the socket is local, so a request either answers within
 // the timeout or the controller is wedged, and asking again would only queue
@@ -146,6 +147,7 @@ export function createControllerClient(opts: Options): ControllerClient {
   /** Since when, and why, no connection has held; null while one does or none was tried. */
   let down: { since: number; error: ControllerError } | null = null
   let nextId = 1
+  let redial: ReturnType<typeof setTimeout> | null = null
   const pending = new Map<number, Pending>()
 
   const failAll = (e: ControllerError) => {
@@ -194,6 +196,7 @@ export function createControllerClient(opts: Options): ControllerClient {
         if (live?.socket === socket) {
           live = null
           down = { since: Date.now(), error: e }
+          keepDialled()
         }
         failAll(e)
         if (!settled) {
@@ -282,24 +285,43 @@ export function createControllerClient(opts: Options): ControllerClient {
       })
       socket.on('connect', () => {
         send(socket, 'hello', { api: API_VERSION, client: opts.client })
-          .then((ok) => {
+          .then(async (ok) => {
+            const hello = decode(ANSWERS.hello, ok)
+            // The events belong to the connection, so each one subscribes, and
+            // one that cannot is a connection that failed: it would hold, and
+            // never hand over the event a machine waits on.
+            if (opts.onEvent !== undefined) {
+              decode(ANSWERS['events.subscribe'], await send(socket, 'events.subscribe', null))
+            }
             if (settled) return
             settled = true
-            const l = { socket, hello: decode(ANSWERS.hello, ok) }
+            const l = { socket, hello }
             live = l
             resolve(l)
-            // The events belong to the connection, so each one subscribes.
-            if (opts.onEvent !== undefined) {
-              send(socket, 'events.subscribe', null).catch((e: unknown) => {
-                console.warn(`controller: no events on this connection: ${String(e)}`)
-              })
-            }
           })
           .catch((e: unknown) => {
             drop(e instanceof ControllerError ? e : new ControllerError('protocol', String(e)))
           })
       })
     })
+
+  /**
+   * With events wanted, a connection that ends is dialled again — at once,
+   * then paced by the backoff — and subscribes again, so an event a machine
+   * waits on is not left for the next call to come along.
+   */
+  const keepDialled = () => {
+    if (opts.onEvent === undefined || closed || redial !== null) return
+    redial = setTimeout(
+      () => {
+        redial = null
+        // A failure schedules the next attempt itself (the catch below).
+        connection().catch(() => undefined)
+      },
+      Math.max(0, retryAt - Date.now()),
+    )
+    redial.unref()
+  }
 
   const connection = (): Promise<Live> => {
     if (closed) return Promise.reject(new ControllerError('closed', 'this client was closed'))
@@ -336,6 +358,7 @@ export function createControllerClient(opts: Options): ControllerClient {
         lastError = err
         down = { since: down?.since ?? Date.now(), error: err }
         retryAt = Date.now() + Math.min(backoffMs * 2 ** (failures - 1), backoffMaxMs)
+        keepDialled()
         throw err
       })
       .finally(() => {
@@ -372,6 +395,7 @@ export function createControllerClient(opts: Options): ControllerClient {
     },
     close: () => {
       closed = true
+      if (redial !== null) clearTimeout(redial)
       live?.socket.destroy()
       live = null
     },

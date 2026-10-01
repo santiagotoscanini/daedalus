@@ -477,6 +477,26 @@ describe('the controller’s events', () => {
     expect((await c.call('system.info')).version).toBe('0.13.0')
   })
 
+  it('keep their connection: one that drops is dialled again and subscribed again, with no call', async () => {
+    await serve(agent((req) => (req.m === 'events.subscribe' ? answer(req.id, {}) : null)))
+    const c = client({ onEvent: () => undefined })
+    await c.call('system.info')
+    for (const s of sockets) s.destroy()
+    await tick(100)
+    expect(connections).toBe(2)
+    expect(seen.filter((r) => r.m === 'events.subscribe')).toHaveLength(2)
+    expect(c.link().state).toBe('connected')
+  })
+
+  it('fail the connection when the controller will not subscribe it', async () => {
+    await serve(
+      agent((req) => (req.m === 'events.subscribe' ? fail(req.id, 'busy', 'no room') : null)),
+    )
+    const c = client({ onEvent: () => undefined })
+    expect((await rejection(c.call('system.info'))).code).toBe('busy')
+    expect(c.link().state).toBe('down')
+  })
+
   it('are not asked for by a client with no handler', async () => {
     await serve(agent())
     await client().call('system.info')
