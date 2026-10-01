@@ -318,12 +318,70 @@ pub fn parse_agents(text: &str) -> Option<Vec<Agent>> {
 
 // ── one transcript ────────────────────────────────────────────────────────
 
-/// Where in the line a `"key":"` string value is, and the value.
-fn string_after<'a>(line: &'a str, key: &str) -> Option<&'a str> {
-    let p = line.find(key)? + key.len();
-    let rest = &line[p..];
-    Some(&rest[..rest.find('"')?])
+/// One transcript record, the fields the scan counts, by name: everything
+/// else in it — the conversation, tool inputs and outputs — is skipped
+/// unread (serde's ignored fields), and a value is never taken from a
+/// nested object that happens to use the same key.
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct Record {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    message: Option<Message>,
+    attachment: Option<Typed>,
+    is_sidechain: Option<bool>,
+    timestamp: Option<String>,
+    git_branch: Option<String>,
+    version: Option<String>,
+    last_prompt: Option<String>,
+    #[serde(rename = "totalCostUSD")]
+    total_cost_usd: Option<serde_json::Number>,
+    total_lines_added: Option<serde_json::Number>,
+    total_lines_removed: Option<serde_json::Number>,
+    total_duration: Option<serde_json::Number>,
 }
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct Message {
+    /// The content blocks' types; a plain-text content is none.
+    #[serde(deserialize_with = "blocks")]
+    content: Vec<Typed>,
+}
+
+/// An object by its `type`, and — a tool result's — the blocks inside it.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct Typed {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    #[serde(deserialize_with = "blocks")]
+    content: Vec<Typed>,
+}
+
+impl Typed {
+    fn is(&self, kind: &str) -> bool {
+        self.kind.as_deref() == Some(kind)
+    }
+}
+
+/// A message's content: an array of blocks, or a string (no blocks).
+fn blocks<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Typed>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Content {
+        Blocks(Vec<Typed>),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Content::deserialize(d)? {
+        Content::Blocks(b) => b,
+        Content::Other(_) => Vec::new(),
+    })
+}
+
+/// A transcript line longer than this is skipped unread: one record past
+/// it is a pasted blob, and the scan never holds more than one line.
+const LINE_MAX: usize = 16 << 20;
 
 #[derive(Default)]
 struct Scan {
@@ -339,54 +397,58 @@ struct Scan {
     branch: Option<String>,
     version: Option<String>,
     last_prompt: Option<String>,
-    cost_state: Option<String>,
+    cost: Option<Cost>,
 }
 
 impl Scan {
-    /// One line, as the snapshot's awk pass read it: every test a plain
-    /// substring search first.
-    fn line(&mut self, l: &str) {
-        if l.contains("\"type\":\"user\"") && !l.contains("\"type\":\"tool_result\"") {
-            self.exchanges += 1;
+    /// One record: what it is, what its content blocks are, and the clocks
+    /// and labels it carries at its top level.
+    fn record(&mut self, r: Record, len: usize) {
+        let blocks = r.message.map(|m| m.content).unwrap_or_default();
+        let count = |bs: &[Typed], kind: &str| bs.iter().filter(|b| b.is(kind)).count() as u64;
+        match r.kind.as_deref() {
+            // What was typed: a user record that is not a tool's result.
+            Some("user") if !blocks.iter().any(|b| b.is("tool_result")) => self.exchanges += 1,
+            Some("assistant") => self.replies += 1,
+            Some("last-prompt") if len <= RECORD_MAX => {
+                self.last_prompt = r.last_prompt.clone();
+            }
+            Some("cost-state") if len <= RECORD_MAX => {
+                self.cost = Some(Cost {
+                    usd: r.total_cost_usd.clone(),
+                    lines_added: r.total_lines_added.clone(),
+                    lines_removed: r.total_lines_removed.clone(),
+                    duration_ms: r.total_duration.clone(),
+                });
+            }
+            _ => {}
         }
-        if l.contains("\"type\":\"assistant\"") {
-            self.replies += 1;
+        self.thinking += count(&blocks, "thinking");
+        // Images in the message, and in the tool results it carries.
+        self.images += count(&blocks, "image")
+            + blocks.iter().map(|b| count(&b.content, "image")).sum::<u64>();
+        if r.attachment.is_some_and(|a| a.is("file")) {
+            self.attached += 1;
         }
-        self.thinking += l.matches("{\"type\":\"thinking\"").count() as u64;
-        self.images += l.matches("{\"type\":\"image\",\"source\"").count() as u64;
-        self.attached += l.matches("\"attachment\":{\"type\":\"file\"").count() as u64;
-        if l.contains("\"isSidechain\"") {
+        if let Some(side) = r.is_sidechain {
             self.sidechain_seen = true;
-            self.subagents += l.matches("\"isSidechain\":true").count() as u64;
+            self.subagents += u64::from(side);
         }
-        if let Some(ts) = string_after(l, "\"timestamp\":\"").filter(|t| !t.is_empty()) {
+        if let Some(ts) = r.timestamp.filter(|t| !t.is_empty()) {
             if self.first_ts.is_none() {
-                self.first_ts = Some(ts.to_string());
+                self.first_ts = Some(ts.clone());
             }
-            self.last_ts = Some(ts.to_string());
+            self.last_ts = Some(ts);
         }
-        if self.branch.as_deref().is_none_or(str::is_empty) {
-            if let Some(b) = string_after(l, "\"gitBranch\":\"") {
-                self.branch = Some(b.to_string());
-            }
+        if self.branch.is_none() {
+            self.branch = r.git_branch.filter(|b| !b.is_empty());
         }
-        if self.version.as_deref().is_none_or(str::is_empty) {
-            if let Some(v) = string_after(l, "\"version\":\"") {
-                self.version = Some(v.to_string());
-            }
-        }
-        if l.len() <= RECORD_MAX {
-            if l.contains("\"type\":\"last-prompt\"") {
-                self.last_prompt = Some(l.to_string());
-            }
-            if l.contains("\"type\":\"cost-state\"") {
-                self.cost_state = Some(l.to_string());
-            }
+        if self.version.is_none() {
+            self.version = r.version.filter(|v| !v.is_empty());
         }
     }
 
     fn finish(self) -> Meta {
-        let non_empty = |s: Option<String>| s.filter(|s| !s.is_empty());
         let span_ms = match (
             self.first_ts.as_deref().and_then(epoch_ms),
             self.last_ts.as_deref().and_then(epoch_ms),
@@ -394,26 +456,6 @@ impl Scan {
             (Some(a), Some(b)) if b >= a => Some(b - a),
             _ => None,
         };
-        let last_prompt = self
-            .last_prompt
-            .and_then(|l| serde_json::from_str::<Value>(&l).ok())
-            .and_then(|v| v.get("lastPrompt")?.as_str().and_then(redact::prompt));
-        let cost = self
-            .cost_state
-            .and_then(|l| serde_json::from_str::<Value>(&l).ok())
-            .and_then(|v| {
-                let o = v.as_object()?;
-                let n = |k: &str| match o.get(k) {
-                    Some(Value::Number(n)) => Some(n.clone()),
-                    _ => None,
-                };
-                Some(Cost {
-                    usd: n("totalCostUSD"),
-                    lines_added: n("totalLinesAdded"),
-                    lines_removed: n("totalLinesRemoved"),
-                    duration_ms: n("totalDuration"),
-                })
-            });
         Meta {
             exchanges: self.exchanges,
             replies: self.replies,
@@ -422,30 +464,37 @@ impl Scan {
             attached: self.attached,
             subagents: self.sidechain_seen.then_some(self.subagents),
             span_ms,
-            branch: non_empty(self.branch).map(|b| cut(&b)),
-            cli_version: non_empty(self.version).map(|v| cut(&v)),
-            last_prompt,
-            cost,
+            branch: self.branch.map(|b| cut(&b)),
+            cli_version: self.version.map(|v| cut(&v)),
+            last_prompt: self.last_prompt.as_deref().and_then(redact::prompt),
+            cost: self.cost,
         }
     }
 }
 
 /// One pass over a whole transcript: the counts, the span, the branch and
-/// version, the last prompt and the cost (module doc).
+/// version, the last prompt and the cost (module doc). Each line is one
+/// JSON record; one that does not parse counts for nothing.
 pub fn scan(r: impl Read) -> Meta {
     let mut r = BufReader::with_capacity(256 * 1024, r);
     let mut s = Scan::default();
     let mut buf = Vec::new();
     loop {
         buf.clear();
-        match r.read_until(b'\n', &mut buf) {
+        match r.by_ref().take(LINE_MAX as u64 + 1).read_until(b'\n', &mut buf) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
         }
-        while matches!(buf.last(), Some(b'\n' | b'\r')) {
-            buf.pop();
+        if buf.len() > LINE_MAX {
+            // The rest of an oversized line, unread.
+            if r.skip_until(b'\n').is_err() {
+                break;
+            }
+            continue;
         }
-        s.line(&String::from_utf8_lossy(&buf));
+        if let Ok(rec) = serde_json::from_slice::<Record>(&buf) {
+            s.record(rec, buf.len());
+        }
     }
     s.finish()
 }
@@ -794,6 +843,29 @@ mod tests {
         assert_eq!(bare.subagents, None);
         assert_eq!(bare.span_ms, None);
         assert!(!serde_json::to_string(&m).unwrap().contains("secret"));
+    }
+
+    /// The scan reads records, not text: a key inside a tool's input never
+    /// stands for the record's own, spacing and escapes do not matter, and
+    /// a line past `LINE_MAX` is skipped without stopping the scan.
+    #[test]
+    fn a_scan_reads_each_record_by_its_own_keys() {
+        let lines = [
+            // A tool input that names a version and a branch first.
+            r#"{"type": "assistant", "message": {"content": [{"type": "tool_use", "input": {"version": "9.9.9", "gitBranch": "evil", "timestamp": "2020-01-01T00:00:00Z"}}]}}"#,
+            r#"{"type": "user", "message": {"content": "say \"type\":\"assistant\" here"}, "version": "2.1.283", "gitBranch": "main", "timestamp": "2026-09-27T10:00:00Z"}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"image","source":{}}]}]},"timestamp":"2026-09-27T10:01:00Z"}"#,
+        ];
+        let mut text = lines.join("\n");
+        text.push('\n');
+        // An oversized record in the middle.
+        text.push_str(&format!("{{\"type\":\"user\",\"x\":\"{}\"}}\n", "a".repeat(LINE_MAX)));
+        text.push_str(r#"{"type":"assistant","timestamp":"2026-09-27T10:02:00Z"}"#);
+        let m = scan(text.as_bytes());
+        assert_eq!(m.cli_version.as_deref(), Some("2.1.283"));
+        assert_eq!(m.branch.as_deref(), Some("main"));
+        assert_eq!((m.exchanges, m.replies, m.images), (1, 2, 1));
+        assert_eq!(m.span_ms, Some(120_000));
     }
 
     #[test]
