@@ -3,7 +3,6 @@ import type { LogNeighbour } from '../../../components/logs'
 import { EMPTY } from '../../../components/tokens'
 import type { Tone } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { DASH } from '../../../lib/format'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
@@ -70,23 +69,6 @@ export function ServiceBar<T extends string>({
       <Segmented value={value} onChange={onChange} options={options} label="Service" />
     </div>
   )
-}
-
-/** Whole days as a phrase. Computed on the server — see `daysSince`. */
-export function ago(days: number | null): string {
-  if (days === null) return DASH
-  if (days === 0) return 'today'
-  if (days === 1) return 'yesterday'
-  if (days < 30) return `${String(days)}d ago`
-  if (days < 365) return `${String(Math.round(days / 30))}mo ago`
-  return `${String(Math.round(days / 365))}y ago`
-}
-
-/** The same, forwards. */
-export function inDays(days: number): string {
-  if (days <= 0) return 'today'
-  if (days === 1) return 'tomorrow'
-  return `in ${String(days)}d`
 }
 
 /**

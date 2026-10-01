@@ -1,8 +1,9 @@
+import { Ago } from '../../../components/ago'
 import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { ActionsData } from '../data'
-import { accessTone, accessWord, ago, Ext, imageWord, RunChip, took } from './shared'
+import { accessTone, accessWord, Ext, imageWord, RunChip, took } from './shared'
 
 type Workflows = Extract<ActionsData, { tab: 'workflows' }>
 
@@ -137,7 +138,12 @@ export function WorkflowsView({ d }: { d: Workflows }) {
                             )}
                             {' · median '}
                             {took(w.p50)}
-                            {w.lastRun !== null && ` · last ${ago(w.lastRun.at)}`}
+                            {w.lastRun !== null && (
+                              <>
+                                {' · last '}
+                                <Ago at={w.lastRun.at} />
+                              </>
+                            )}
                           </>
                         )}
                       </span>

@@ -8,7 +8,9 @@ import {
   RESTART_STATE,
 } from '../../../components/armed-confirm'
 import { LogBoard } from '../../../components/logs'
+import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../../../components/part'
 import { usePoll } from '../../../components/poll'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { useArmed } from '../../../components/use-armed'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../../components/viz'
@@ -17,23 +19,7 @@ import { DASH, duration, num, pct } from '../../../lib/format'
 import { errorText } from '../../../lib/redact'
 import { requestRebootFn } from '../../../server/host'
 import type { SystemData } from '../data'
-import {
-  BOARD_FOOT,
-  BOARD_NOTE,
-  HOST_READERS,
-  LIST,
-  MONO,
-  PART,
-  PART_DETAIL,
-  PART_ID,
-  PART_NAME,
-  PARTS,
-  PartPhoto,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-  VIZ_EMPTY,
-} from './shared'
+import { HOST_READERS, PARTS } from './shared'
 
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
@@ -231,9 +217,9 @@ function ControllerBoard({ c }: { c: Host['controller'] }) {
           ]}
         />
       ) : (
-        <p className={VIZ_EMPTY}>Controller not reachable: {c.error}</p>
+        <p className={EMPTY}>Controller not reachable: {c.error}</p>
       )}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         The agent on this box, answering the app over the socket nix mounts into its container. It
         answers for itself for now; the other machines move onto it next. Its Claude row is its own
         report: the box&rsquo;s Claude is still the Claude tab&rsquo;s.
@@ -249,7 +235,7 @@ export function HostView({ d }: { d: Host }) {
         title="Load"
         icon="◔"
         span={8}
-        aside={<span className={BOARD_NOTE}>{num(d.cores)} threads</span>}
+        aside={<span className={NOTE}>{num(d.cores)} threads</span>}
       >
         <Trend values={d.cpuSpark} tone="accent" height={90} />
         <Measures
@@ -260,7 +246,7 @@ export function HostView({ d }: { d: Host }) {
             { k: 'load 15m', v: num(d.load.m15, 2) },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Six hours of cpu, and the load averages beside it for scale: on {num(d.cores)} threads a
           load of {num(d.cores)} is fully committed, not overloaded. What load cannot tell you is
           what those tasks were waiting FOR, which is the panel to the right.
@@ -276,7 +262,7 @@ export function HostView({ d }: { d: Host }) {
             { k: 'Memory stalled', v: pct(d.pressure.memory, 2) },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           The share of time in which <em>something</em> was waiting on each resource rather than
           running. Zero is the healthy reading and the usual one; I/O climbing while cpu stays flat
           is a disk problem wearing a performance problem&rsquo;s clothes.
@@ -335,9 +321,7 @@ export function HostView({ d }: { d: Host }) {
         />
         {d.containers.down.length > 0 && (
           // Named, not counted — "3 containers down" makes you go hunting.
-          <p className={cn(BOARD_FOOT, 'text-danger')}>
-            Not answering: {d.containers.down.join(', ')}
-          </p>
+          <p className={cn(FOOT, 'text-danger')}>Not answering: {d.containers.down.join(', ')}</p>
         )}
       </Board>
 
@@ -354,7 +338,7 @@ export function HostView({ d }: { d: Host }) {
         }
       >
         {d.failedUnitsList.length === 0 ? (
-          <p className={VIZ_EMPTY}>
+          <p className={EMPTY}>
             No systemd unit on the box is in the failed state. Everything that ran either succeeded
             or is still running.
           </p>
@@ -369,7 +353,7 @@ export function HostView({ d }: { d: Host }) {
             ))}
           </ul>
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Named, from the host snapshot. The count in the panel above is prometheus&rsquo;s and can
           lead this list by up to ten minutes. Empty is a weaker claim than it sounds on this box:
           every container unit is a green <span className={MONO}>Type=oneshot</span> whose container
@@ -383,7 +367,7 @@ export function HostView({ d }: { d: Host }) {
         title="Generations"
         icon="⎌"
         span={4}
-        aside={<span className={BOARD_NOTE}>{num(d.generations.length)} on disk</span>}
+        aside={<span className={NOTE}>{num(d.generations.length)} on disk</span>}
       >
         <ul className={LIST}>
           {[...d.generations]
@@ -404,7 +388,7 @@ export function HostView({ d }: { d: Host }) {
               </li>
             ))}
         </ul>
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           The rollback path: reboot and pick one from the systemd-boot menu.{' '}
           <span className={MONO}>configurationLimit = 10</span> bounds that MENU. It does not prune
           the profile, which is why {num(d.generations.length)} are on disk. They cost store space
@@ -419,7 +403,7 @@ export function HostView({ d }: { d: Host }) {
         title="Host journal"
         neighbours={HOST_READERS}
         foot={
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             PID 1&rsquo;s own stream: unit starts, stops and failures for the whole box. Systemd
             files its &ldquo;Starting&rdquo; and &ldquo;Finished&rdquo; lines here rather than under
             the unit they are about, which is why a oneshot that succeeded looks silent in its own

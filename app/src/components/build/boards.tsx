@@ -20,8 +20,8 @@ import { stageExposed } from '../../lib/stage'
 import type { Tone } from '../../lib/tone'
 import type { BuildPageApp } from '../../server/builds'
 import { requesterLabel } from '../apps/builds'
-import { BOARD_FOOT, VIZ_EMPTY } from '../apps/shared'
 import { GuardedAwait } from '../error'
+import { EMPTY, FOOT } from '../tokens'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { BarList, Board, Chip, Facts, Pulse } from '../viz'
 import { FollowLog } from './follow-log'
@@ -136,7 +136,7 @@ export function ResultBoard({
   return (
     <Board title="Result" span={6}>
       {build.digest === null ? (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           {open || build.state === 'queued' ? 'Nothing published yet.' : 'Nothing was published.'}
         </p>
       ) : (
@@ -228,7 +228,7 @@ export function PhasesBoard({ build, open }: { build: BuildView; open: boolean }
           <Step key={s.phase} step={s} />
         ))}
       </ol>
-      {open && build.phase !== '' && <p className={BOARD_FOOT}>Now: {build.phase}</p>}
+      {open && build.phase !== '' && <p className={FOOT}>Now: {build.phase}</p>}
     </Board>
   )
 }
@@ -276,7 +276,7 @@ export function Checks({ build }: { build: BuildView }) {
   const checks = build.checks
   if (checks === null || (checks.ran.length === 0 && checks.failed === null)) {
     return (
-      <p className={VIZ_EMPTY}>
+      <p className={EMPTY}>
         {isOpenBuild(build.state) ? 'No checks have run yet.' : 'No checks ran.'}
       </p>
     )
@@ -304,7 +304,7 @@ export function Checks({ build }: { build: BuildView }) {
           )
         })}
       </ol>
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         {checks.failed === null
           ? `${String(names.length)} ran, none failed.`
           : `${checks.failed} failed, so nothing was built past it.`}
@@ -317,7 +317,7 @@ export function Detection({ build }: { build: BuildView }) {
   const d = build.detection
   if (d === null) {
     return (
-      <p className={VIZ_EMPTY}>
+      <p className={EMPTY}>
         {build.resolvedStrategy === 'dockerfile'
           ? 'Built from the repo’s Dockerfile, so Railpack did not look at it.'
           : isOpenBuild(build.state) || build.state === 'queued'
@@ -376,7 +376,7 @@ export function Detection({ build }: { build: BuildView }) {
         // Never "no warnings": this build was judged by nobody. Every row from
         // before the engine learned to compute them reads this way, and so
         // does one whose detection is not Railpack's at all.
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           No warnings were computed for this build — it predates the checks, so this is not a clean
           bill of health.
         </p>
@@ -394,7 +394,7 @@ export function Detection({ build }: { build: BuildView }) {
           </AlertDescription>
         </Alert>
       ) : (
-        <p className={BOARD_FOOT}>Checked; no warnings.</p>
+        <p className={FOOT}>Checked; no warnings.</p>
       )}
     </>
   )
@@ -409,7 +409,7 @@ export function Detection({ build }: { build: BuildView }) {
 export function Tools({ build }: { build: BuildView }) {
   const packages = build.detection?.packages ?? []
   if (packages.length === 0) {
-    return <p className={VIZ_EMPTY}>Railpack resolved no tools for this build.</p>
+    return <p className={EMPTY}>Railpack resolved no tools for this build.</p>
   }
   return (
     <ul className="m-0 list-none p-0">
@@ -447,7 +447,7 @@ export function ImageBoard({ build }: { build: BuildView }) {
   const run = build.facts?.run ?? null
   if (image === null && run === null) {
     return (
-      <p className={VIZ_EMPTY}>
+      <p className={EMPTY}>
         {build.digest === null
           ? 'No image was published.'
           : 'The host agent recorded no image facts for this build.'}
@@ -508,7 +508,7 @@ export function ImageBoard({ build }: { build: BuildView }) {
         />
       )}
       {layers.length > 0 && (
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Compressed sizes from the manifest — these plus the config are the pull size above.
         </p>
       )}
@@ -526,7 +526,7 @@ export function RailpackSaid({ build }: { build: BuildView }) {
   const spoken = d === null ? [] : railpackSpoke(d)
   if (spoken.length === 0) {
     return (
-      <p className={VIZ_EMPTY}>
+      <p className={EMPTY}>
         {d === null
           ? 'Railpack did not look at this build.'
           : 'Railpack logged nothing above info level.'}
@@ -581,13 +581,13 @@ export function LogBoard({ build, open }: { build: BuildView; open: boolean }) {
       {build.log.available ? (
         <FollowLog text={build.log.text} />
       ) : (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           {build.state === 'queued'
             ? 'Queued. The log starts when the host picks the build up.'
             : 'The host has no log for this build.'}
         </p>
       )}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         {build.log.truncated ? `The last 64 KB of ${bytes(build.log.sizeBytes)}. ` : ''}
         Credentials are redacted twice: by the host as it writes the log, and here as it is read.
       </p>

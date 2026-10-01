@@ -5,18 +5,11 @@ import { appRepo } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
 import { toneStyle } from '../../lib/tone'
 import type { AppTabData } from '../../server/registry'
+import { EMPTY, FOOT } from '../tokens'
 import { Badge } from '../ui/badge'
 import { Board, BoardGrid } from '../viz'
 import { BuildsBoard } from './builds'
-import {
-  type AppRecord,
-  BOARD_FOOT,
-  CHIP,
-  LEDE,
-  SECTION_HEAD,
-  SECTION_HEAD_SMALL,
-  VIZ_EMPTY,
-} from './shared'
+import { type AppRecord, CHIP, LEDE, SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
 
 type ActivityData = Extract<AppTabData, { kind: 'deployments' }>['activity']
 
@@ -175,7 +168,7 @@ function Activity({ activity }: { activity: ActivityData }) {
         aside={<span className="text-[0.73rem] text-(--dim)">last 6 hours</span>}
       >
         {rolled.length === 0 ? (
-          <p className={VIZ_EMPTY}>Nothing in the last 6 hours.</p>
+          <p className={EMPTY}>Nothing in the last 6 hours.</p>
         ) : (
           // Scrolls inside its own bordered box, and takes no negative margins
           // to bleed to the board's edges: a caption follows it, and margins
@@ -207,7 +200,7 @@ function Activity({ activity }: { activity: ActivityData }) {
             ))}
           </div>
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           The deploy timer's own journal: pull, restart, health-check. It logs the same “no change”
           verdict every two minutes, so runs of it are folded into one row with a count.
         </p>

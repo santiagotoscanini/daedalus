@@ -2,11 +2,12 @@ import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useId, useState } from 'react'
 import { ReadinessPanel } from '../components/apps/readiness'
 import { RepoPicker } from '../components/apps/repo-picker'
-import { BOARD_FOOT, SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
+import { SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
 import { Toggle } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { Crumbs, PageHead } from '../components/page'
 import { NewAppSkeleton } from '../components/skeleton'
+import { FOOT } from '../components/tokens'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../components/ui/field'
@@ -323,7 +324,7 @@ function Wizard({ options }: { options: Options }) {
                   label="Prometheus scrape"
                   hint="Only once the app actually serves /metrics. Otherwise it is a permanently-down target."
                 />
-                <p className={BOARD_FOOT}>
+                <p className={FOOT}>
                   Not here, on purpose. <b>SSO</b> is a second, deliberate step on the app’s own
                   page: its client secret is generated on the box, so there is nothing to author
                   first. <b>Operator secrets</b> have no switch at all. Commit a{' '}
@@ -338,7 +339,7 @@ function Wizard({ options }: { options: Options }) {
                     `declared` (the header says why), and the choice moves to
                     the app's page, one click once its first build has
                     published an image. */}
-                <p className={BOARD_FOOT}>
+                <p className={FOOT}>
                   Created <b>declared</b>: the registry row, the database, the data directory and
                   the generated secrets — and nothing running. Promote it to internal or external on
                   its own page once its first build has published an image. The hostname below is

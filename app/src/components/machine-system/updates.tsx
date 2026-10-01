@@ -5,11 +5,11 @@ import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../lib/format'
 import { linkWords } from '../../lib/node-link'
 import type { Tone } from '../../lib/tone'
+import { Ago } from '../ago'
 import { GHOST_BTN } from '../apps/shared'
 import { NodeCommandButton } from '../node-command'
 import { Board, BoardGrid, Chip, Facts } from '../viz'
 import {
-  ago,
   DetailNote,
   EMPTY,
   FOOT,
@@ -117,16 +117,18 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
             },
             {
               k: 'Installed',
-              v: t.os.installedAt === null ? DASH : ago(t.os.installedAt),
+              v: t.os.installedAt === null ? DASH : <Ago at={t.os.installedAt} />,
             },
             {
               k: 'Last patch',
               v:
-                lastCumulative === undefined
-                  ? DASH
-                  : lastCumulative.at === null
-                    ? lastCumulative.title
-                    : ago(lastCumulative.at),
+                lastCumulative === undefined ? (
+                  DASH
+                ) : lastCumulative.at === null ? (
+                  lastCumulative.title
+                ) : (
+                  <Ago at={lastCumulative.at} />
+                ),
             },
           ]}
         />
@@ -235,7 +237,11 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
         )}
         <DetailNote d={d} />
         <p className={FOOT}>
-          {u !== null && u.checkedAt !== null && `Asked ${ago(u.checkedAt)}. `}
+          {u !== null && u.checkedAt !== null && (
+            <>
+              Asked <Ago at={u.checkedAt} />.{' '}
+            </>
+          )}
           What the Windows Update agent answers when searched for what is not installed, which is
           the same list Settings shows; each KB number links to Microsoft&rsquo;s own note on what
           it changes. Installing stays with the person at the machine.
@@ -267,7 +273,7 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
                       </a>
                     )}
                   </span>
-                  <span className={ROW_SIDE}>{x.at === null ? DASH : ago(x.at)}</span>
+                  <span className={ROW_SIDE}>{x.at === null ? DASH : <Ago at={x.at} />}</span>
                 </li>
               )
             })}

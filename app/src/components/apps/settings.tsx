@@ -8,6 +8,7 @@ import { stageExposed } from '../../lib/stage'
 import { deleteAppFn } from '../../server/registry'
 import { TypedConfirm } from '../armed-confirm'
 import { Segmented, Slider, Toggle } from '../controls'
+import { FOOT } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
@@ -15,7 +16,7 @@ import { Input } from '../ui/input'
 import { useAction } from '../use-action'
 import { Board, BoardGrid, Facts } from '../viz'
 import { BuildSettings } from './build-settings'
-import { type AppRecord, BOARD_FOOT, type LoaderData } from './shared'
+import type { AppRecord, LoaderData } from './shared'
 
 export function Settings({
   app,
@@ -84,7 +85,7 @@ export function Settings({
             },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Secrets have no switch because the file is the switch: a tracked{' '}
           <code>stacks/apps/{app.name}-env.sops</code> is loaded into the container, and nothing
           else decides it. Author it with <code>sops</code>, <code>git add</code> it, and the next
@@ -111,7 +112,7 @@ export function Settings({
           }}
         />
         <Facts list rows={[{ k: 'published at', v: <code>{app.effectiveHostname}</code> }]} />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Renaming moves the traefik router, the pi-hole record, the gatus probe, the Cloudflare
           route and <code>AUTH_URL</code>. The container, the database, the sops file and the GitHub
           repo stay keyed by <code>{app.name}</code>. An SSO app cannot complete a login for the
@@ -203,7 +204,7 @@ export function Settings({
             patch({ limitPids: v })
           }}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Enforced by cgroup v2, and only because systemd delegates <code>cpu io memory pids</code>{' '}
           down to <code>user@1000.service</code>. Without that, podman would accept the flags and
           the kernel would ignore them. CPU throttles rather than kills. Memory is the resident cap:
@@ -243,7 +244,7 @@ export function Settings({
             { value: 'native', label: 'App is the client', icon: '⚿' },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           {app.authMode === 'none'
             ? 'No SSO. Whatever login the app ships is the only one — for an app with its own accounts that means its own password form.'
             : app.authMode === 'proxy'
@@ -274,7 +275,7 @@ export function Settings({
             },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           The client is declared, not clicked: this materializes{' '}
           <code>fleet.ssoClients.{app.name}</code>, and a oneshot creates it at the IdP on the next
           Apply. Its secret is generated on the box the first time the client is declared, so there

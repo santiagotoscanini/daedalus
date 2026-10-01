@@ -13,11 +13,12 @@ import { appRepo } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
 import { setBuildSettingsFn } from '../../server/builds'
 import { Segmented, Toggle } from '../controls'
+import { FOOT } from '../tokens'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
 import { Board, Facts } from '../viz'
-import { type AppRecord, BOARD_FOOT, GHOST_BTN } from './shared'
+import { type AppRecord, GHOST_BTN } from './shared'
 
 // Apps › <name> › Settings › Builds. These save on their own server function,
 // not saveApp: the columns are engine-only, so a change here is live at once
@@ -66,7 +67,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
                 { value: 'dockerfile', label: 'Dockerfile' },
               ]}
             />
-            <p className={BOARD_FOOT}>
+            <p className={FOOT}>
               Auto uses Railpack when the repo has a railpack.json, else its Dockerfile when it has
               one, else Railpack.
             </p>
@@ -85,7 +86,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
                 { value: 'candidate', label: 'Candidate' },
               ]}
             />
-            <p className={BOARD_FOOT}>
+            <p className={FOOT}>
               {app.buildPublish === 'candidate'
                 ? 'Pushed as candidate-<sha> and never deployed. For comparing a box build with the image the app runs today.'
                 : 'Pushed as sha-<sha> and latest, and deployed like any other push to the registry.'}
@@ -113,7 +114,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
             ]}
           />
           {app.githubRepoId === null && (
-            <p className={BOARD_FOOT}>
+            <p className={FOOT}>
               The hourly sweep links an app to its GitHub repository by name, through the installed
               App. Builds wait for that.
             </p>
@@ -209,7 +210,7 @@ function EnvMapEditor({
       <h4 id={headId} className="m-0 text-[0.84rem] [font-weight:550]">
         {title}
       </h4>
-      <p className={BOARD_FOOT}>{help}</p>
+      <p className={FOOT}>{help}</p>
       {rows.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-[0.4rem] p-0">
           {rows.map((r) => {

@@ -1,7 +1,8 @@
 import { DASH } from '../../lib/format'
 import type { AppTabData } from '../../server/registry'
+import { FOOT } from '../tokens'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
-import { type AppRecord, BOARD_FOOT, LEDE, STRIP_FOOT } from './shared'
+import { type AppRecord, LEDE, STRIP_FOOT } from './shared'
 
 /**
  * The VPN this app's traffic exits through.
@@ -58,7 +59,7 @@ export function Vpn({
               { k: 'scrape job', v: <code>{app.egressContainer}</code> },
             ]}
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             The app runs with <code>--network=container:{app.egressContainer}</code>, so it has no
             interfaces of its own. Only the namespace owner may publish a port, which is why the
             app’s host port is declared on gluetun.
@@ -74,7 +75,7 @@ export function Vpn({
               { k: 'DNS', v: 'resolved inside the namespace' },
             ]}
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             If the tunnel drops, the app loses the network rather than falling back to the house
             connection. That is the point of borrowing the namespace instead of routing.
           </p>

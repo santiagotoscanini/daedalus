@@ -7,6 +7,7 @@ import { UpdateProgress } from '../../../components/image-update'
 import { NixosCard } from '../../../components/nixos-card'
 import { RebootRequired } from '../../../components/reboot-required'
 import { usePolledStatus } from '../../../components/status'
+import { EMPTY, FOOT, MONO, MONO_FACE, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { ImageUpdateStatus } from '../../../host/image-update'
@@ -15,7 +16,6 @@ import { ceremonyFor } from '../../../lib/image-ceremony'
 import { REBOOT_REQUIRED } from '../../../lib/reboot-required'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../../../server/updates'
 import type { UpdateRow, UpdatesData } from '../data/updates'
-import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 
 // Every pinned image on the box, and what it would take to move it.
 //
@@ -135,7 +135,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         icon="logs"
         span={12}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {d.probeMissing
               ? 'the registry probe has not run'
               : `registry checked ${(d.checkedAt ?? '').slice(0, 10)}`}
@@ -143,7 +143,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         }
       >
         {behind.length === 0 ? (
-          <p className={VIZ_EMPTY}>
+          <p className={EMPTY}>
             Every digest-pinned container is on the newest tag of its shape, and no channel tag has
             moved since it was pinned.
           </p>
@@ -154,7 +154,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             ))}
           </ul>
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Pins come from the flake; the verdicts from a daily registry probe. A tag that MOVED is a
           channel pin like <span className={MONO}>:latest</span> whose image was replaced, so the
           update is the same tag and a new digest. A NEWER TAG is a frozen release pin with a higher
@@ -166,7 +166,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         title="On the newest tag"
         icon="logs"
         span={12}
-        aside={<span className={BOARD_NOTE}>{String(rest.length)} containers</span>}
+        aside={<span className={NOTE}>{String(rest.length)} containers</span>}
       >
         {/* The settled half of the page. Dimmed as a group rather than per
             row: it is a long list whose whole message is "nothing to do here",
@@ -177,7 +177,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             <ImageRow key={r.container} r={r} status={d.status} queue={bind(r)} />
           ))}
         </ul>
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Open one to read what its current version shipped. “No verdict” means the registry did not
           answer for it, or the pin names a channel with nothing to compare against. Treat it as
           unknown.
@@ -188,10 +188,10 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         title="Built on the box"
         icon="logs"
         span={12}
-        aside={<span className={BOARD_NOTE}>{String(d.manual.length)} pins</span>}
+        aside={<span className={NOTE}>{String(d.manual.length)} pins</span>}
       >
         {d.manual.length === 0 ? (
-          <p className={VIZ_EMPTY}>Nothing on this box is pinned outside a container image.</p>
+          <p className={EMPTY}>Nothing on this box is pinned outside a container image.</p>
         ) : (
           <ul className={ROWS}>
             {d.manual.map((r) => (
@@ -204,7 +204,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             ))}
           </ul>
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           The bases of the images built on this box, the build tools, a source commit. A base this
           configuration pins has the Update button: it rewrites the pin, rebuilds the image on the
           new base and checks the container came back carrying it. The rest are commits by hand — an
@@ -282,7 +282,7 @@ function QueuePanel({
       title={title}
       icon="logs"
       span={12}
-      aside={<span className={BOARD_NOTE}>one commit, one rebuild</span>}
+      aside={<span className={NOTE}>one commit, one rebuild</span>}
     >
       {mine && running ? (
         <UpdateProgress status={status} />
@@ -333,7 +333,7 @@ function QueuePanel({
                   {q.toTag === null ? ' — re-pull' : ` → ${q.toTag}`}
                 </span>
                 {q.lockstep.length > 0 && (
-                  <span className={BOARD_NOTE}>with {q.lockstep.join(', ')}</span>
+                  <span className={NOTE}>with {q.lockstep.join(', ')}</span>
                 )}
                 <Button
                   type="button"
@@ -394,7 +394,7 @@ function QueuePanel({
         </>
       )}
 
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         All of it or none of it. The queue becomes one commit and one rebuild, so if the build fails
         — or if any one of these containers does not come back on its new image — the whole commit
         is reverted and every pin here goes back, including the ones that were fine. Update a

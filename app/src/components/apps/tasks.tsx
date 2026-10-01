@@ -17,21 +17,14 @@ import { type AppTabData, runTaskNow, saveApp } from '../../server/registry'
 import { Segmented } from '../controls'
 import { GrafanaLogs } from '../logs'
 import { useRootAction } from '../root-action'
+import { FOOT } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
-import {
-  type AppRecord,
-  BOARD_FOOT,
-  CHIP,
-  GHOST_BTN,
-  LEDE,
-  SECTION_HEAD,
-  SECTION_HEAD_SMALL,
-} from './shared'
+import { type AppRecord, CHIP, GHOST_BTN, LEDE, SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
 
 type TasksData = Extract<AppTabData, { kind: 'tasks' }>
 type TaskRow = TasksData['tasks']['tasks'][number]
@@ -227,7 +220,7 @@ function EmptyState({
         output in Loki and a mail if it fails.
       </p>
       {readOnly ? (
-        <p className={cn(BOARD_FOOT, 'mt-[0.6rem]')}>
+        <p className={cn(FOOT, 'mt-[0.6rem]')}>
           This app is declared by hand in Nix, so its tasks are written there rather than here.
         </p>
       ) : (
@@ -374,7 +367,7 @@ function TaskCard({
       </div>
 
       {task.lastRunAt === null && (
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           No run recorded. Either the timer has not fired since the last boot, or the Apply that
           generates this unit has not happened yet.
         </p>

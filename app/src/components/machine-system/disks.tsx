@@ -3,6 +3,7 @@ import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
+import { DISK_MODEL } from '../part'
 import { MONO_FACE } from '../tokens'
 import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../viz'
 import {
@@ -24,9 +25,6 @@ import {
 } from './shared'
 
 /* ── Disks ────────────────────────────────────────────────────────────── */
-
-/** What SMART calls the drive — the string you would type into a shop. */
-const DISK_MODEL = 'text-[0.94rem] text-foreground tracking-[-0.01em] wrap-anywhere'
 
 function healthChip(h: string | null): { tone: Tone; label: string } {
   switch (h) {

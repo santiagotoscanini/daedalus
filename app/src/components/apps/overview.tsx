@@ -2,11 +2,12 @@ import { useRouter } from '@tanstack/react-router'
 import { DASH, since } from '../../lib/format'
 import { type AppTabData, triggerDeploy } from '../../server/registry'
 import { useRootAction } from '../root-action'
+import { EMPTY } from '../tokens'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
 import { CloneButton } from '../workspace'
 import { DetectionLine } from './builds'
-import { type AppRecord, GHOST_BTN, type LoaderData, STRIP_FOOT, VIZ_EMPTY } from './shared'
+import { type AppRecord, GHOST_BTN, type LoaderData, STRIP_FOOT } from './shared'
 
 /**
  * An image reference short enough to sit in a value column.
@@ -296,7 +297,7 @@ export function Overview({
               ]}
             />
           ) : (
-            <p className={VIZ_EMPTY}>
+            <p className={EMPTY}>
               Not cloned on this box.{' '}
               <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
                 {repo}

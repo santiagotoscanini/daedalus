@@ -1,21 +1,21 @@
 import { LogBoard } from '../../../components/logs'
-import { Board, BoardGrid } from '../../../components/viz'
-import { cn } from '../../../lib/cn'
-import { bytes, DASH, duration, num } from '../../../lib/format'
-import type { SystemData } from '../data'
 import {
-  BOARD_FOOT,
-  BOARD_NOTE,
+  EMPTY,
+  FOOT,
   LIST,
   MONO,
   MONO_FACE,
+  NOTE,
   ROW,
   ROW_MAIN,
   ROW_N,
   ROW_SIDE,
-  SYSTEM_SNAPSHOT,
-  VIZ_EMPTY,
-} from './shared'
+} from '../../../components/tokens'
+import { Board, BoardGrid } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
+import { bytes, DASH, duration, num } from '../../../lib/format'
+import type { SystemData } from '../data'
+import { SYSTEM_SNAPSHOT } from './shared'
 
 /* ── Backups ──────────────────────────────────────────────────────────── */
 
@@ -28,10 +28,10 @@ export function BackupsView({ d }: { d: Backups }) {
         title="Replication"
         icon="⇉"
         span={8}
-        aside={<span className={BOARD_NOTE}>{bytes(d.totalReplicatedBytes)} on the mirror</span>}
+        aside={<span className={NOTE}>{bytes(d.totalReplicatedBytes)} on the mirror</span>}
       >
         {d.pairs.length === 0 ? (
-          <p className={VIZ_EMPTY}>no replication pairs found</p>
+          <p className={EMPTY}>no replication pairs found</p>
         ) : (
           <ul className={LIST}>
             {d.pairs.map((p) => (
@@ -52,7 +52,7 @@ export function BackupsView({ d }: { d: Backups }) {
             ))}
           </ul>
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           syncoid runs hourly and rides the existing auto-snapshots rather than cutting its own, so
           a lag under an hour is the schedule rather than a fault. The source takes a snapshot every
           fifteen minutes and the replica catches the hourly one. It is a{' '}
@@ -80,7 +80,7 @@ export function BackupsView({ d }: { d: Backups }) {
             <span className={ROW_SIDE}>pi-hole&rsquo;s UI-added lists</span>
           </li>
         </ul>
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Both pools are in this box, on this shelf. The mirror survives a drive; it does not
           survive a fire, a theft or a mistake that reaches both pools. The two files below it are
           outside the snapshot tree entirely, and losing the cert store means re-issuing against
@@ -92,7 +92,7 @@ export function BackupsView({ d }: { d: Backups }) {
         title="Snapshot coverage"
         icon="clock"
         span={8}
-        aside={<span className={BOARD_NOTE}>{num(d.coverage.length)} enrolled</span>}
+        aside={<span className={NOTE}>{num(d.coverage.length)} enrolled</span>}
       >
         <ul className={LIST}>
           {d.coverage.map((c) => (
@@ -107,7 +107,7 @@ export function BackupsView({ d }: { d: Backups }) {
 
       <Board title="Deliberately not snapshotted" icon="○" span={4}>
         {d.unsnapshotted.length === 0 ? (
-          <p className={VIZ_EMPTY}>every dataset is enrolled</p>
+          <p className={EMPTY}>every dataset is enrolled</p>
         ) : (
           <ul className={LIST}>
             {d.unsnapshotted.map((u) => (
@@ -118,7 +118,7 @@ export function BackupsView({ d }: { d: Backups }) {
             ))}
           </ul>
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Opted out per dataset with <span className={MONO}>com.sun:auto-snapshot=false</span>. The
           media library is the big one, and it is re-downloadable: snapshotting a terabyte of files
           that can be fetched again buys nothing and costs the deltas.
@@ -138,7 +138,7 @@ export function BackupsView({ d }: { d: Backups }) {
           SYSTEM_SNAPSHOT,
         ]}
         foot={
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Failures send mail; a run that stops happening at all pages through healthchecks, which
             is the failure this cannot detect itself. Both are declared in{' '}
             <span className={MONO}>platform/backup.nix</span>.

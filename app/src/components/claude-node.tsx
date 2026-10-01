@@ -3,12 +3,14 @@ import { Link } from '@tanstack/react-router'
 import { withStats } from '../lib/agent/roster'
 import { NO_ROSTER } from '../lib/claude-roster'
 import type { NodeClaudeData } from '../lib/dashboard/node-claude'
-import { DASH, duration, num, since, text, until } from '../lib/format'
+import { DASH, duration, num, since, text } from '../lib/format'
 import { LINK_UNKNOWN, linkWords } from '../lib/node-link'
 import type { NodeRow } from '../lib/repo/nodes'
 import type { Tone } from '../lib/tone'
+import { Ago, Until } from './ago'
 import { RosterBoard } from './claude/roster/board'
 import { NodeCommandButton } from './node-command'
+import { useNow } from './poll'
 import { ServiceHead } from './service-head'
 import { EMPTY, FOOT, MONO } from './tokens'
 import { Button } from './ui/button'
@@ -65,10 +67,6 @@ function verdict(d: NodeClaudeData): Verdict {
   }
 }
 
-function ago(iso: string | null): number | null {
-  return iso === null ? null : (Date.now() - Date.parse(iso)) / 1000
-}
-
 export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
   const { node, status } = d
   const c = d.report
@@ -76,11 +74,12 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
   const alive = c?.sessions.filter((s) => s.alive) ?? []
   const running = c?.server.version ?? c?.cliVersion ?? node.claude?.serverVersion ?? null
   const envId = c?.server.environmentId ?? null
-  const refreshIn =
-    c?.credentials.refreshExpiresAt == null
-      ? null
-      : (c.credentials.refreshExpiresAt - Date.now()) / 1000
-  const startedAgo = ago(c?.startedAt ?? null)
+  // Mount-time only: the server's clock and the browser's would render two
+  // different durations (components/ago.tsx).
+  const now = useNow(false)
+  const startedAgo =
+    now === null || c?.startedAt == null ? null : (now - Date.parse(c.startedAt)) / 1000
+  const refreshAt = c?.credentials.refreshExpiresAt ?? null
 
   return (
     <>
@@ -190,13 +189,19 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
         <Stat
           label="Login"
           value={
-            refreshIn !== null
-              ? until(refreshIn)
-              : c?.credentials.store === 'keychain'
-                ? 'signed in'
-                : DASH
+            refreshAt !== null ? (
+              <Until at={refreshAt} />
+            ) : c?.credentials.store === 'keychain' ? (
+              'signed in'
+            ) : (
+              DASH
+            )
           }
-          tone={refreshIn !== null && refreshIn < 6 * 86400 ? 'warn' : undefined}
+          tone={
+            now !== null && refreshAt !== null && refreshAt - now < 6 * 86400_000
+              ? 'warn'
+              : undefined
+          }
           sub={
             c === null
               ? undefined
@@ -204,7 +209,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                 ? 'no credentials found'
                 : c.credentials.store === 'keychain'
                   ? 'in the Keychain; dates unread'
-                  : refreshIn === null
+                  : refreshAt === null
                     ? 'no expiry in the file'
                     : 'until re-login'
           }
@@ -329,11 +334,16 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                   {
                     k: 'Access token',
                     v:
-                      c.credentials.expiresAt === null
-                        ? DASH
-                        : until((c.credentials.expiresAt - Date.now()) / 1000),
+                      c.credentials.expiresAt === null ? (
+                        DASH
+                      ) : (
+                        <Until at={c.credentials.expiresAt} />
+                      ),
                   },
-                  { k: 'Refresh token', v: refreshIn === null ? DASH : until(refreshIn) },
+                  {
+                    k: 'Refresh token',
+                    v: refreshAt === null ? DASH : <Until at={refreshAt} />,
+                  },
                   { k: 'Profile', v: <span className={MONO}>{text(c.home)}</span> },
                 ]}
               />
@@ -451,7 +461,7 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
           of them shows up in a version number. */}
       {last !== null && (
         <span className={`w-full text-[0.74rem] ${last.ok ? 'text-(--dim)' : 'text-destructive'}`}>
-          last update {since((Date.now() - Date.parse(last.at)) / 1000)}:{' '}
+          last update <Ago at={last.at} />:{' '}
           {last.from !== null && last.to !== null && last.from !== last.to
             ? `${last.from} → ${last.to} · `
             : ''}

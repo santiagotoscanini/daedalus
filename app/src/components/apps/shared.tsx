@@ -13,17 +13,9 @@ export type AppRecord = NonNullable<LoaderData>['app']
 /** The sentence under a heading, or in place of a panel the app cannot fill. */
 export const LEDE = 'mt-[0.3rem] mb-0 max-w-[74ch] text-[0.9rem] text-(--text-muted)'
 
-/** The caption inside a board, under whatever it explains. */
-export const BOARD_FOOT =
-  'mt-[0.15rem] mb-0 text-[0.73rem] leading-[1.45] text-(--dim) [overflow-wrap:anywhere]'
-
 /** The one line of prose a stat strip is allowed, directly under the numbers. */
 export const STRIP_FOOT =
   'mt-[-0.35rem] mb-[1.4rem] max-w-[74ch] text-[0.73rem] leading-[1.5] text-(--dim)'
-
-/** A board with nothing to show. Centred, so it reads as a state, not a row. */
-export const VIZ_EMPTY =
-  'm-0 py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
 
 /** A rule and a small-caps label, opening a section inside a tab body. */
 export const SECTION_HEAD =

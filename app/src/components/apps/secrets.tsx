@@ -11,12 +11,12 @@ import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '..
 import { when } from '../../lib/format'
 import { removeAppSecretFn, revealEnvVar, setAppSecretFn } from '../../server/registry'
 import { useRootAction } from '../root-action'
+import { EMPTY } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
 import { Board, BoardGrid } from '../viz'
-import { VIZ_EMPTY } from './shared'
 
 type EnvData = { available: boolean; takenAt: string | null; vars: EnvRowData[] }
 
@@ -53,7 +53,7 @@ export function Secrets({
     return (
       <BoardGrid>
         <Board title="Environment" icon="key" span={12}>
-          <p className={VIZ_EMPTY}>
+          <p className={EMPTY}>
             No snapshot yet. Either the container is not running, or{' '}
             <code>daedalus-env-snapshot</code> has not run since it started (every 2 min).
           </p>
@@ -188,7 +188,7 @@ function EnvSection({
       {/* The empty copy already explains where these would come from, so
           showing the legend too says the same thing twice. */}
       {vars.length === 0 ? (
-        <p className={VIZ_EMPTY}>{empty}</p>
+        <p className={EMPTY}>{empty}</p>
       ) : (
         <>
           <p className={ENV_LEGEND}>{legend}</p>
@@ -358,7 +358,7 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
 
       <div className={ENV_TABLE}>
         {keys.length === 0 && (
-          <p className={VIZ_EMPTY}>
+          <p className={EMPTY}>
             No operator secrets yet. The file is created by the first key you add.
           </p>
         )}

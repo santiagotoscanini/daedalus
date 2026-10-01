@@ -1,8 +1,9 @@
 import { bytes, DASH } from '../../lib/format'
 import type { AppTabData } from '../../server/registry'
 import { Bytes } from '../controls'
+import { FOOT } from '../tokens'
 import { BarList, Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
-import { type AppRecord, BOARD_FOOT, LEDE, STRIP_FOOT } from './shared'
+import { type AppRecord, LEDE, STRIP_FOOT } from './shared'
 
 /**
  * The app's database on the shared cluster.
@@ -100,7 +101,7 @@ export function Database({
               { k: 'injected as', v: <code>DATABASE_URL</code> },
             ]}
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             The password is machine-generated on the box and never enters git. Rotate it by deleting{' '}
             <code>stacks/app-db/secrets/{app.name}/env</code> and rebuilding.
           </p>
@@ -116,7 +117,7 @@ export function Database({
               { k: 'deleted', v: fmtRate(data.tuples.deleted) },
             ]}
           />
-          <p className={BOARD_FOOT}>10-minute average, from the cluster’s own counters.</p>
+          <p className={FOOT}>10-minute average, from the cluster’s own counters.</p>
         </Board>
 
         <Board title="Against the cluster" icon="rows" span={4}>
@@ -129,7 +130,7 @@ export function Database({
             }))}
             empty="no databases reporting"
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Every database on the shared cluster by size, this one highlighted.
           </p>
         </Board>

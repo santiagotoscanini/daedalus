@@ -47,7 +47,7 @@ export function bytes(v: number | null | undefined): string {
 }
 
 export function rate(v: number | null | undefined): string {
-  return v === null || v === undefined ? DASH : `${bytes(v)}/s`
+  return v === null || v === undefined || !Number.isFinite(v) ? DASH : `${bytes(v)}/s`
 }
 
 export function text(v: string | null | undefined): string {
@@ -108,6 +108,40 @@ export function duration(seconds: number | null | undefined): string {
   return `${String(Math.round(seconds / 31536000))}y`
 }
 
+/**
+ * How long ago an ISO moment was, as `since` says it — or the string itself
+ * when it does not parse (an OS reports dates its own way). `now` is the
+ * caller's clock: in a render that is `useNow`'s, or the `<Ago>` component
+ * (components/ago.tsx), never a bare `Date.now()`.
+ */
+export function ago(iso: string | null | undefined, now: number): string {
+  if (iso === null || iso === undefined) return DASH
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? iso : since((now - t) / 1000)
+}
+
+/** Whole days ago as a phrase, for a source whose resolution is a day. */
+export function daysAgo(days: number | null | undefined): string {
+  if (days === null || days === undefined || !Number.isFinite(days)) return DASH
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${String(days)}d ago`
+  if (days < 365) return `${String(Math.round(days / 30))}mo ago`
+  return `${String(Math.round(days / 365))}y ago`
+}
+
+/** The same, forwards. */
+export function inDays(days: number): string {
+  if (days <= 0) return 'today'
+  if (days === 1) return 'tomorrow'
+  return `in ${String(days)}d`
+}
+
+/** A temperature in °C, whole degrees. */
+export function temp(c: number | null | undefined): string {
+  return c === null || c === undefined || !Number.isFinite(c) ? DASH : `${c.toFixed(0)}°`
+}
+
 /** A countdown, same one-unit rule as `since`. */
 export function until(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return DASH
@@ -158,6 +192,27 @@ export function logTime(iso: string): string {
     return `${hms}.${String(d.getMilliseconds()).padStart(3, '0')}`
   }
   return `${d.toLocaleString('en-US', { month: 'short', day: '2-digit' })} ${hms}`
+}
+
+/** SMBIOS spells it "12th Gen Intel(R) Core(TM) i5-12600K". Nobody says that. */
+export function cpuName(v: string | null | undefined): string {
+  return v === null || v === undefined
+    ? DASH
+    : v
+        .replace(/\((R|TM)\)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+/** "Micro-Star International Co., Ltd." is a legal name, not a brand. */
+export function shortVendor(v: string | null | undefined): string {
+  if (v === null || v === undefined) return DASH
+  return v
+    .replace(/Micro-Star International Co\., Ltd\.?/i, 'MSI')
+    .replace(/American Megatrends International, LLC\.?/i, 'AMI')
+    .replace(/Apple Inc\.?/i, 'Apple')
+    .replace(/Gigabyte Technology Co\., Ltd\.?/i, 'Gigabyte')
+    .replace(/, (Inc|LLC|Ltd)\.?$/i, '')
 }
 
 /** Country name → flag, for the VPN exit readouts. */

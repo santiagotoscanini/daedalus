@@ -3,9 +3,9 @@ import type { MacRelease } from '../../lib/dashboard/macos-releases'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
+import { Ago } from '../ago'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
 import {
-  ago,
   DetailNote,
   EMPTY,
   FOOT,
@@ -95,16 +95,20 @@ export function NodeMacosView({ d }: { d: NodeSystemData }) {
             },
             {
               k: 'Installed',
-              v: t.os.installedAt === null ? DASH : ago(t.os.installedAt),
+              v: t.os.installedAt === null ? DASH : <Ago at={t.os.installedAt} />,
             },
             {
               k: 'Last update',
               v:
-                lastInstalled === null
-                  ? DASH
-                  : lastInstalled.at === null
-                    ? lastInstalled.title
-                    : `${lastInstalled.title.replace(/^macOS\s+/, '')} · ${ago(lastInstalled.at)}`,
+                lastInstalled === null ? (
+                  DASH
+                ) : lastInstalled.at === null ? (
+                  lastInstalled.title
+                ) : (
+                  <>
+                    {lastInstalled.title.replace(/^macOS\s+/, '')} · <Ago at={lastInstalled.at} />
+                  </>
+                ),
             },
           ]}
         />
@@ -120,7 +124,7 @@ export function NodeMacosView({ d }: { d: NodeSystemData }) {
         span={8}
         aside={
           m?.checkedAt !== undefined && m !== null ? (
-            <span className={NOTE}>read {ago(m.checkedAt)}</span>
+            <span className={NOTE}>read {<Ago at={m.checkedAt} />}</span>
           ) : undefined
         }
       >
@@ -129,7 +133,7 @@ export function NodeMacosView({ d }: { d: NodeSystemData }) {
             { k: 'newest in line', v: newest?.version ?? (m === null ? DASH : m.running.version) },
             {
               k: 'published',
-              v: newest?.date === null || newest === null ? DASH : ago(newest.date),
+              v: newest?.date === null || newest === null ? DASH : <Ago at={newest.date} />,
             },
             { k: 'behind', v: m === null ? DASH : num(behind) },
             {
@@ -260,7 +264,11 @@ export function NodeMacosView({ d }: { d: NodeSystemData }) {
         )}
         <DetailNote d={d} />
         <p className={FOOT}>
-          {u !== null && u.checkedAt !== null && `Asked ${ago(u.checkedAt)}. `}
+          {u !== null && u.checkedAt !== null && (
+            <>
+              Asked <Ago at={u.checkedAt} />.{' '}
+            </>
+          )}
           What <span className={MONO}>softwareupdate</span> lists from the Mac&rsquo;s own last
           scan, which it runs daily: the same list System Settings shows, from the other end of
           Apple&rsquo;s table. Installing is the person at the machine.
@@ -282,7 +290,7 @@ export function NodeMacosView({ d }: { d: NodeSystemData }) {
             {u.installed.map((x, i) => (
               <li key={`${x.title}-${String(i)}`} className={ROW}>
                 <span className={ROW_MAIN}>{x.title}</span>
-                <span className={ROW_SIDE}>{x.at === null ? DASH : ago(x.at)}</span>
+                <span className={ROW_SIDE}>{x.at === null ? DASH : <Ago at={x.at} />}</span>
               </li>
             ))}
           </ul>
@@ -313,7 +321,7 @@ function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
           {major && <Chip tone="info">next major</Chip>}
           {!major && <Chip tone="warn">newer</Chip>}
           {r.build !== null && <span className={`${NOTE} ${MONO}`}>{r.build}</span>}
-          <span className={NOTE}>{r.date === null ? DASH : ago(r.date)}</span>
+          <span className={NOTE}>{r.date === null ? DASH : <Ago at={r.date} />}</span>
           {r.cves !== null && r.cves > 0 && (
             <Chip tone={r.cves >= 20 ? 'bad' : 'warn'}>
               {num(r.cves)} {r.cves === 1 ? 'CVE' : 'CVEs'}

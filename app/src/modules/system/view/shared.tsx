@@ -2,36 +2,7 @@ import type { LogNeighbour } from '../../../components/logs'
 import { DASH } from '../../../lib/format'
 import { type Part, partById } from '../../../lib/hardware/catalog'
 
-/* The part vocabulary is one module for every machine (components/part.tsx);
-   these tabs keep reading it from here. */
-export {
-  PART,
-  PART_DETAIL,
-  PART_ID,
-  PART_NAME,
-  PartHead,
-  PartPhoto,
-} from '../../../components/part'
-
 /* ── shared ───────────────────────────────────────────────────────────── */
-
-/* The board and row vocabulary every category page uses lives in
-   components/tokens.ts. These tabs call four of them by their own longer
-   names, which is why this is an aliased re-export rather than an import in
-   each tab. */
-export {
-  EMPTY as VIZ_EMPTY,
-  FOOT as BOARD_FOOT,
-  LIST,
-  MONO,
-  MONO_FACE,
-  NOTE as BOARD_NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_N,
-  ROW_SIDE,
-  SUB as BOARD_SUB,
-} from '../../../components/tokens'
 
 /**
  * The host reader behind Disks, Pools and Backups.

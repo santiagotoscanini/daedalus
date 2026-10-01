@@ -4,13 +4,13 @@ import type { AppSecretKey } from '../../lib/apps/secret-keys'
 import { cn } from '../../lib/cn'
 
 import { saveApp } from '../../server/registry'
+import { EMPTY } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
 import { Board, BoardGrid } from '../viz'
 import type { AppRecord } from './shared'
-import { VIZ_EMPTY } from './shared'
 
 // The plain half of an app's environment: what is NOT a secret, and so can be
 // read, changed and diffed in the open.
@@ -120,7 +120,7 @@ export function Variables({
 
         <div className="text-[0.85rem]">
           {vars.length === 0 && (
-            <p className={VIZ_EMPTY}>
+            <p className={EMPTY}>
               No variables. Everything this app sees comes from the platform, its image, or its
               secrets.
             </p>

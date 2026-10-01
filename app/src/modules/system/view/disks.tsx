@@ -1,23 +1,23 @@
 import { InfoHint } from '../../../components/hint'
 import { LogBoard } from '../../../components/logs'
+import { DISK_MODEL } from '../../../components/part'
+import {
+  EMPTY,
+  FOOT,
+  LIST,
+  MONO,
+  MONO_FACE,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+  SUB,
+} from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, num, pct } from '../../../lib/format'
 import type { SystemData } from '../data'
-import {
-  BOARD_FOOT,
-  BOARD_NOTE,
-  BOARD_SUB,
-  hours,
-  LIST,
-  MONO,
-  MONO_FACE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-  SYSTEM_SNAPSHOT,
-  VIZ_EMPTY,
-} from './shared'
+import { hours, SYSTEM_SNAPSHOT } from './shared'
 
 /* ── Disks ────────────────────────────────────────────────────────────── */
 
@@ -74,9 +74,6 @@ const PHOTO_W: Record<DiskPhoto['shape'], string> = {
   platter: 'w-[clamp(52px,18%,78px)]',
   stick: 'w-[clamp(104px,33%,150px)]',
 }
-
-/** What SMART calls the drive — the string you would type into a shop. */
-const DISK_MODEL = 'text-[0.94rem] text-foreground tracking-[-0.01em] wrap-anywhere'
 
 /**
  * What Seagate's class code says the drive is.
@@ -251,7 +248,7 @@ export function DisksView({ d }: { d: Disks }) {
     <BoardGrid>
       {d.disks.length === 0 && (
         <Board title="Disks" icon="grid" span={12}>
-          <p className={VIZ_EMPTY}>
+          <p className={EMPTY}>
             No snapshot yet. The host reader has not run, or could not read SMART.
           </p>
         </Board>
@@ -278,7 +275,7 @@ export function DisksView({ d }: { d: Disks }) {
             span={4}
             aside={
               disk.passed === null ? (
-                <span className={BOARD_NOTE}>no SMART</span>
+                <span className={NOTE}>no SMART</span>
               ) : disk.passed ? (
                 <Chip tone="ok">SMART ok</Chip>
               ) : (
@@ -335,7 +332,7 @@ export function DisksView({ d }: { d: Disks }) {
               ]}
             />
 
-            <h4 className={BOARD_SUB}>What would fail first</h4>
+            <h4 className={SUB}>What would fail first</h4>
             <Facts
               rows={
                 nvme
@@ -375,7 +372,7 @@ export function DisksView({ d }: { d: Disks }) {
             />
             {!nvme && (disk.crcErrors ?? 0) > 0 && (
               // The distinction that decides what you'd actually do about it.
-              <p className={cn(BOARD_FOOT, 'text-warning')}>
+              <p className={cn(FOOT, 'text-warning')}>
                 A link CRC error is the <em>cable</em>, not the platter: a transfer that had to be
                 retried between the controller and the drive. It never decrements, so this is a
                 lifetime count. A stable one is nothing. A climbing one means reseating a SATA
@@ -383,7 +380,7 @@ export function DisksView({ d }: { d: Disks }) {
               </p>
             )}
 
-            <h4 className={BOARD_SUB}>Self-tests</h4>
+            <h4 className={SUB}>Self-tests</h4>
             <ul className={LIST}>
               {disk.selfTests.slice(0, 5).map((t, i) => (
                 <li key={`${t.type ?? '?'}-${String(t.hours ?? i)}-${String(i)}`} className={ROW}>
@@ -404,12 +401,12 @@ export function DisksView({ d }: { d: Disks }) {
                   </span>
                 </li>
               ))}
-              {disk.selfTests.length === 0 && <p className={VIZ_EMPTY}>no tests on record</p>}
+              {disk.selfTests.length === 0 && <p className={EMPTY}>no tests on record</p>}
             </ul>
 
             {stats !== undefined && (
               <>
-                <h4 className={BOARD_SUB}>Throughput, 5-minute average</h4>
+                <h4 className={SUB}>Throughput, 5-minute average</h4>
                 <Measures
                   items={[
                     { k: 'read', v: `${bytes(stats.readBytes)}/s` },
@@ -421,7 +418,7 @@ export function DisksView({ d }: { d: Disks }) {
             )}
 
             {failedTest !== undefined && (
-              <p className={cn(BOARD_FOOT, 'text-warning')}>
+              <p className={cn(FOOT, 'text-warning')}>
                 The most recent <b>{failedTest.type ?? 'test'}</b> did not finish:{' '}
                 {failedTest.status ?? 'unknown'}. An interrupted test is not a failing disk; a host
                 reset or a power event ends one. It does mean that scheduled check verified nothing.
@@ -449,7 +446,7 @@ export function DisksView({ d }: { d: Disks }) {
             },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Autodetected across every disk, with no per-drive configuration: the schedule is one
           string in <span className={MONO}>platform/smartd.nix</span>. A drive that reports
           pre-failure sends mail, wired in <span className={MONO}>platform/mail</span>. The results
@@ -463,7 +460,7 @@ export function DisksView({ d }: { d: Disks }) {
         title="smartd"
         neighbours={[SYSTEM_SNAPSHOT]}
         foot={
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             The daemon that runs the tests above and watches every attribute between them. Quiet is
             correct; it speaks when an attribute crosses its threshold.
           </p>

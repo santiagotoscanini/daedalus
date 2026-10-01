@@ -12,9 +12,9 @@ import {
   Trend,
 } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { bytes, num } from '../../../lib/format'
+import { bytes, daysAgo, num } from '../../../lib/format'
 import type { MediaData } from '../data'
-import { ago, EMPTY, FOOT, LIST, MONO, NOTE } from './shared'
+import { EMPTY, FOOT, LIST, MONO, NOTE } from './shared'
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
 
@@ -152,7 +152,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
                       p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS && 'opacity-55',
                     )}
                   >
-                    {ago(p.lastSeenDays)}
+                    {daysAgo(p.lastSeenDays)}
                   </span>
                 </li>
               ))}

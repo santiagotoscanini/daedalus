@@ -1,22 +1,21 @@
 import { LogBoard } from '../../../components/logs'
-import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../components/viz'
-import { cn } from '../../../lib/cn'
-import { bytes, DASH, num, pct } from '../../../lib/format'
-import type { SystemData } from '../data'
+import { PartHead } from '../../../components/part'
 import {
-  BOARD_FOOT,
-  BOARD_NOTE,
-  HOST_READERS,
+  EMPTY,
+  FOOT,
   LIST,
   MONO,
-  PARTS,
-  PartHead,
+  NOTE,
   ROW,
   ROW_MAIN,
   ROW_N,
   ROW_SIDE,
-  VIZ_EMPTY,
-} from './shared'
+} from '../../../components/tokens'
+import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
+import { bytes, DASH, num, pct } from '../../../lib/format'
+import type { SystemData } from '../data'
+import { HOST_READERS, PARTS } from './shared'
 
 /* ── Memory ───────────────────────────────────────────────────────────── */
 
@@ -31,7 +30,7 @@ export function MemoryView({ d }: { d: Memory }) {
         title="Memory"
         icon="rows"
         span={8}
-        aside={<span className={BOARD_NOTE}>{bytes(d.total)} total</span>}
+        aside={<span className={NOTE}>{bytes(d.total)} total</span>}
       >
         <Progress
           pct={d.total === null || d.used === null ? null : (d.used / d.total) * 100}
@@ -45,7 +44,7 @@ export function MemoryView({ d }: { d: Memory }) {
             { k: 'dirty', v: bytes(d.dirty) },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Read <b>available</b>, not used. Linux spends free memory on cache by design, so a box
           with nothing to do still reports most of its memory in use. On this one a large share of
           that is ZFS&rsquo;s cache, which is charged to the kernel and handed back on demand.
@@ -61,7 +60,7 @@ export function MemoryView({ d }: { d: Memory }) {
         icon="rows"
         span={4}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {d.modules.populated === null || d.modules.slots === null
               ? DASH
               : `${num(d.modules.populated)} of ${num(d.modules.slots)} slots`}
@@ -100,7 +99,7 @@ export function MemoryView({ d }: { d: Memory }) {
             },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Read from SMBIOS rather than counted from bytes: the kernel knows how much memory it has
           and nothing about how it arrives. Two slots free against a 128 GB ceiling is the headroom
           this machine has. The full specification is on <b>Build</b>.
@@ -120,7 +119,7 @@ export function MemoryView({ d }: { d: Memory }) {
             { k: 'Hit rate (30m)', v: pct(d.arc.hitRate, 1) },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           {/* The panel that makes the one to its left readable. */}
           The single biggest consumer on this box and the reason &ldquo;used&rdquo; looks alarming.
           ARC grows to fill what nothing else wants and shrinks under pressure. A high hit rate here
@@ -143,7 +142,7 @@ export function MemoryView({ d }: { d: Memory }) {
             { k: 'size', v: bytes(d.zram.total) },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           The only swap on this box, compressed in RAM with no disk behind it. Bytes in here are
           memory pressure that already happened and that no instantaneous gauge would show.
         </p>
@@ -151,7 +150,7 @@ export function MemoryView({ d }: { d: Memory }) {
 
       <Board title="Heaviest containers" icon="grid" span={8}>
         <BarList items={d.topMemory} tone="info" empty="nothing reporting" />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           This is <span className={MONO}>memory.current</span>, which <b>includes page cache</b>. A
           container doing file I/O sits near its limit forever and is perfectly healthy; the cache
           is reclaimed when something else needs it. The number that means a cap is too tight is the
@@ -165,9 +164,9 @@ export function MemoryView({ d }: { d: Memory }) {
         span={4}
         aside={
           d.oomKills === null ? (
-            <span className={BOARD_NOTE}>{DASH}</span>
+            <span className={NOTE}>{DASH}</span>
           ) : d.oomKills > 0 ? (
-            <span className={BOARD_NOTE}>{num(d.oomKills)} all time</span>
+            <span className={NOTE}>{num(d.oomKills)} all time</span>
           ) : (
             <Chip tone="ok">none, ever</Chip>
           )
@@ -176,11 +175,11 @@ export function MemoryView({ d }: { d: Memory }) {
         {/* The total tells "never" from "unreachable" — the filtered list
             answers empty to both. */}
         {d.oomKills !== null && d.oomKilled.length === 0 ? (
-          <p className={VIZ_EMPTY}>no container has ever been OOM-killed</p>
+          <p className={EMPTY}>no container has ever been OOM-killed</p>
         ) : (
           <BarList items={d.oomKilled} tone="warn" empty="prometheus not answering" />
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Named, and only the killed: a fleet of zeros would bury the one counter that matters. This
           moving is what &ldquo;the cap is too tight&rdquo; looks like; a bar to the left resting on
           its limit is not. The kernel log below records which process was chosen and what it was
@@ -193,13 +192,13 @@ export function MemoryView({ d }: { d: Memory }) {
         icon="⊟"
         span={12}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {num(d.capped.length)} capped · {num(d.uncapped)} not
           </span>
         }
       >
         {d.capped.length === 0 ? (
-          <p className={VIZ_EMPTY}>No container has a memory cap.</p>
+          <p className={EMPTY}>No container has a memory cap.</p>
         ) : (
           <ul className={LIST}>
             {d.capped.map((c) => (
@@ -211,7 +210,7 @@ export function MemoryView({ d }: { d: Memory }) {
             ))}
           </ul>
         )}
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           A cap is only enforced because systemd delegates <span className={MONO}>memory</span> to
           the rootless user slice — without that podman accepts the flag and the kernel ignores it.
           The module always emits <span className={MONO}>--memory-swap</span> equal to{' '}
@@ -231,7 +230,7 @@ export function MemoryView({ d }: { d: Memory }) {
         title="Kernel"
         neighbours={HOST_READERS}
         foot={
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Kernel lines carry no unit and no container, so alloy labels them{' '}
             <span className={MONO}>stack=kernel</span>. This is the stream an OOM kill lands in. The
             counter on the panel above says one happened; this says which cgroup was chosen, how

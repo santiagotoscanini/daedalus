@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Board, Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { DASH, duration, since } from '../../../lib/format'
+import { DASH, duration } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
 import type { Access, AnonBudget } from '../data/github'
 import { conclusionTone, conclusionWord } from '../data/parse'
@@ -38,8 +38,6 @@ export function Ext({
     </a>
   )
 }
-
-export const ago = (iso: string): string => since((Date.now() - Date.parse(iso)) / 1000)
 
 export const took = (seconds: number | null): string =>
   seconds === null ? DASH : duration(seconds)

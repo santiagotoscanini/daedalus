@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ago,
   bytes,
   compact,
   DASH,
+  daysAgo,
   duration,
   flag,
   ms,
@@ -10,6 +12,7 @@ import {
   pct,
   rate,
   since,
+  temp,
   text,
   until,
 } from './format'
@@ -18,7 +21,7 @@ import {
 // em dash — "could not read this" must never look like a zero.
 describe('null in, dash out', () => {
   it('holds for every formatter', () => {
-    for (const f of [num, compact, bytes, rate, pct, since, ms, duration, until]) {
+    for (const f of [num, compact, bytes, rate, pct, since, ms, duration, until, daysAgo, temp]) {
       expect(f(null)).toBe(DASH)
       expect(f(undefined)).toBe(DASH)
     }
@@ -28,6 +31,28 @@ describe('null in, dash out', () => {
     expect(text('')).toBe(DASH)
     expect(flag(null)).toBe(DASH)
     expect(flag('')).toBe(DASH)
+    expect(ago(null, 0)).toBe(DASH)
+  })
+})
+
+describe('ago', () => {
+  it('places an ISO moment against the clock it is given', () => {
+    const now = Date.parse('2026-01-02T00:00:00Z')
+    expect(ago('2026-01-01T21:00:00Z', now)).toBe('3h ago')
+    expect(ago('2026-01-01T23:59:50Z', now)).toBe('just now')
+  })
+  it('keeps a string it cannot parse as the OS gave it', () => {
+    expect(ago('yesterday-ish', 0)).toBe('yesterday-ish')
+  })
+})
+
+describe('daysAgo', () => {
+  it('says days, then months, then years', () => {
+    expect(daysAgo(0)).toBe('today')
+    expect(daysAgo(1)).toBe('yesterday')
+    expect(daysAgo(12)).toBe('12d ago')
+    expect(daysAgo(90)).toBe('3mo ago')
+    expect(daysAgo(800)).toBe('2y ago')
   })
 })
 

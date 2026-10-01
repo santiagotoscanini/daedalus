@@ -2,28 +2,14 @@ import { Link } from '@tanstack/react-router'
 
 import type { BoardInfo } from '../../lib/dashboard/board-info'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num } from '../../lib/format'
+import { bytes, DASH, num, shortVendor } from '../../lib/format'
 import { partMatching } from '../../lib/hardware/catalog'
 import { gigabyteRevision } from '../../lib/hardware/gigabyte'
 import type { Tone } from '../../lib/tone'
-import { PartPhoto } from '../part'
+import { Ago } from '../ago'
+import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../part'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
-import {
-  ago,
-  EMPTY,
-  FOOT,
-  LIST,
-  MONO,
-  NOTE,
-  PART,
-  PART_DETAIL,
-  PART_ID,
-  PART_NAME,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-  shortVendor,
-} from './shared'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Motherboard ──────────────────────────────────────────────────────── */
 
@@ -129,10 +115,16 @@ export function BoardView({ info }: { info: BoardInfo }) {
         <p className={FOOT}>
           {r.make === 'msi' && r.error === null && r.releases.length > 0 && (
             <>
-              Read from MSI&rsquo;s download host{r.checkedAt !== null && ` ${ago(r.checkedAt)}`}:
-              every package the board&rsquo;s code has, with its date, and the note at the front of
-              each. The website would be the obvious source and refuses this box, curl and Chromium
-              alike; the packages are plain files.{' '}
+              Read from MSI&rsquo;s download host
+              {r.checkedAt !== null && (
+                <>
+                  {' '}
+                  <Ago at={r.checkedAt} />
+                </>
+              )}
+              : every package the board&rsquo;s code has, with its date, and the note at the front
+              of each. The website would be the obvious source and refuses this box, curl and
+              Chromium alike; the packages are plain files.{' '}
               {r.behind !== null && r.behind > 0 && (
                 <>
                   Being {num(r.behind)} behind is a fact, not a verdict: a BIOS update on a machine
@@ -151,9 +143,14 @@ export function BoardView({ info }: { info: BoardInfo }) {
           {r.make === 'gigabyte' && r.releases.length > 0 && (
             <>
               Read from Gigabyte&rsquo;s support page
-              {r.checkedAt !== null && ` ${ago(r.checkedAt)}`} by this box&rsquo;s own browser — the
-              site refuses every plain client, so the shotter lab reads it, daily and whenever a
-              board is first looked at. {r.note}{' '}
+              {r.checkedAt !== null && (
+                <>
+                  {' '}
+                  <Ago at={r.checkedAt} />
+                </>
+              )}{' '}
+              by this box&rsquo;s own browser — the site refuses every plain client, so the shotter
+              lab reads it, daily and whenever a board is first looked at. {r.note}{' '}
               {r.behind !== null && r.behind > 0 && (
                 <>
                   Being {num(r.behind)} behind is a fact, not a verdict: nothing here flashes

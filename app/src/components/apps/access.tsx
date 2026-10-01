@@ -6,10 +6,11 @@ import { useScheme } from '../../lib/scheme'
 import { useSite } from '../../lib/site-context'
 import { type Tone, toneStyle } from '../../lib/tone'
 import type { AppTabData } from '../../server/registry'
+import { EMPTY, FOOT } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Stat, StatStrip } from '../viz'
-import { BOARD_FOOT, GHOST_BTN, LEDE, STRIP_FOOT, VIZ_EMPTY } from './shared'
+import { GHOST_BTN, LEDE, STRIP_FOOT } from './shared'
 
 type AccessData = Extract<AppTabData, { kind: 'access' }>['access']
 
@@ -44,7 +45,7 @@ export function Access({
     return (
       <BoardGrid>
         <Board title="Access patterns" icon="⊕" span={12}>
-          <p className={VIZ_EMPTY}>
+          <p className={EMPTY}>
             {name} is{' '}
             {stage === 'declared'
               ? 'declared but not running'
@@ -53,7 +54,7 @@ export function Access({
                 : 'internal'}
             , so there are no remote clients to break down.
           </p>
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Client IP and country come from the headers Cloudflare adds at the edge, which only
             exist on requests that arrive through the tunnel. LAN requests reach traefik through
             rootlessport, which replaces the source address: every phone, laptop and WireGuard peer
@@ -96,7 +97,7 @@ export function Access({
     return (
       <BoardGrid>
         <Board title="Access patterns" icon="⊕" span={12} aside={picker}>
-          <p className={VIZ_EMPTY}>Loki did not answer. The access log is the only source here.</p>
+          <p className={EMPTY}>Loki did not answer. The access log is the only source here.</p>
         </Board>
       </BoardGrid>
     )
@@ -157,7 +158,7 @@ export function Access({
       {access.total === 0 ? (
         <BoardGrid>
           <Board title="Where from" icon="⊕" span={12}>
-            <p className={VIZ_EMPTY}>
+            <p className={EMPTY}>
               Nothing arrived through the tunnel in {spec.prose}. The route exists; nothing outside
               is visiting it.
             </p>
@@ -288,7 +289,7 @@ export function Access({
                   </div>
                 ))}
               </div>
-              <p className={BOARD_FOOT}>
+              <p className={FOOT}>
                 4xx and 5xx from the tunnel. Most of this is background noise: the internet scans
                 every public hostname for WordPress paths within hours of the DNS record appearing,
                 and a 404 is the correct answer. The line worth reading is a <em>succeeding</em>{' '}
@@ -371,7 +372,7 @@ function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }
         src={src}
         title={`Remote requests to ${hostname} by country`}
       />
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         Rendered by Grafana. A blank map means this browser has no Grafana session yet. Open it{' '}
         <a href={grafanaUrl} target="_blank" rel="noreferrer">
           once
@@ -414,7 +415,7 @@ function Bars({
   /** One per board, so four lists side by side stay tellable apart. */
   tone: Tone
 }) {
-  if (rows.length === 0) return <p className={VIZ_EMPTY}>Nothing recorded.</p>
+  if (rows.length === 0) return <p className={EMPTY}>Nothing recorded.</p>
   // Scaled against the top row, not the grand total: with one dominant source
   // every other bar would round to an invisible sliver, and the point of the
   // bar is to compare the rows to each other.

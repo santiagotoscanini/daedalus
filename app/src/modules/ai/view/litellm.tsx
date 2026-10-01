@@ -4,7 +4,7 @@ import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../../componen
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { compact, DASH, ms, num, pct } from '../../../lib/format'
+import { compact, DASH, daysAgo, ms, num, pct } from '../../../lib/format'
 import type { LitellmData } from '../data/litellm'
 import {
   AXIS,
@@ -234,7 +234,7 @@ export function LitellmView({ data }: { data: LitellmData }) {
             <p className={REJECTED}>
               <b>{num(data.rejected.keys)}</b> keys never completed a request.{' '}
               <b>{num(data.rejected.requests)}</b> attempts, last{' '}
-              {ago(data.rejected.last, todayDate)}.{' '}
+              {ledgerAgo(data.rejected.last, todayDate)}.{' '}
               {data.rejected.live === 0 ? (
                 'None of them exists on the gateway today.'
               ) : (
@@ -370,7 +370,7 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
               {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
             </span>
           )}
-          <span>{ago(caller.last, today)}</span>
+          <span>{ledgerAgo(caller.last, today)}</span>
         </>
       }
     />
@@ -387,13 +387,10 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
  * browser, and a relative time derived from two different clocks is a
  * hydration mismatch waiting for midnight.
  */
-function ago(date: string | null, today: string): string {
+function ledgerAgo(date: string | null, today: string): string {
   if (date === null || date === '') return DASH
   const days = Math.round((Date.parse(today) - Date.parse(date)) / 86400_000)
-  if (!Number.isFinite(days)) return date
-  if (days <= 0) return 'today'
-  if (days === 1) return 'yesterday'
-  return `${String(days)}d ago`
+  return Number.isFinite(days) ? daysAgo(days) : date
 }
 
 /** `29 req · 28k tok`, or an em dash for a day the gateway served nothing. */

@@ -1,29 +1,30 @@
 import { LogBoard } from '../../../components/logs'
-import { BarList, Board, BoardGrid, Facts, Measures } from '../../../components/viz'
-import { cn } from '../../../lib/cn'
-import { DASH, num, pct } from '../../../lib/format'
-import { partMatching } from '../../../lib/hardware/catalog'
-import type { SystemData } from '../data'
 import {
-  BOARD_FOOT,
-  BOARD_NOTE,
-  BOARD_SUB,
-  HOST_READERS,
-  LIST,
-  MONO,
-  MONO_FACE,
   PART,
   PART_DETAIL,
   PART_ID,
   PART_NAME,
-  PARTS,
   PartHead,
   PartPhoto,
+} from '../../../components/part'
+import {
+  EMPTY,
+  FOOT,
+  LIST,
+  MONO,
+  MONO_FACE,
+  NOTE,
   ROW,
   ROW_MAIN,
   ROW_SIDE,
-  VIZ_EMPTY,
-} from './shared'
+  SUB,
+} from '../../../components/tokens'
+import { BarList, Board, BoardGrid, Facts, Measures } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
+import { cpuName, DASH, num, pct, shortVendor, temp } from '../../../lib/format'
+import { partMatching } from '../../../lib/hardware/catalog'
+import type { SystemData } from '../data'
+import { HOST_READERS, PARTS } from './shared'
 
 /* ── Build ────────────────────────────────────────────────────────────── */
 
@@ -42,7 +43,7 @@ export function BuildView({ d }: { d: Build }) {
         icon="hash"
         span={4}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {board.bios.version === null ? 'no BIOS reading' : `BIOS ${board.bios.version}`}
           </span>
         }
@@ -68,7 +69,7 @@ export function BuildView({ d }: { d: Build }) {
             { k: 'VRM temp', v: temp(d.temps.find((t) => t.label === 'VRM MOS')?.value ?? null) },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Read from SMBIOS, so a BIOS update appears here on its own. It is deliberately not
           compared against anything: MSI publishes no machine-readable list of releases, and the
           only way to claim &ldquo;two behind&rdquo; would be to scrape a vendor page that will
@@ -81,7 +82,7 @@ export function BuildView({ d }: { d: Build }) {
         title="Processor"
         icon="◈"
         span={4}
-        aside={<span className={BOARD_NOTE}>{temp(d.cpu.tempC)}</span>}
+        aside={<span className={NOTE}>{temp(d.cpu.tempC)}</span>}
       >
         <div className={PART}>
           {cpuPart !== null && <PartPhoto part={cpuPart} />}
@@ -106,7 +107,7 @@ export function BuildView({ d }: { d: Build }) {
             { k: 'socket', v: hw.cpu.socket ?? DASH },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Ten cores and sixteen threads is not an error: six of them are efficiency cores with no
           hyperthread. That asymmetry is why the per-core temperature list on Host is uneven. The
           two kinds of core do not run at the same clock and are not meant to.
@@ -118,7 +119,7 @@ export function BuildView({ d }: { d: Build }) {
         icon="❋"
         span={4}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {spinning.length === 0
               ? 'nothing spinning'
               : `${num(spinning.length)} of ${num(d.fans.length)} headers`}
@@ -126,7 +127,7 @@ export function BuildView({ d }: { d: Build }) {
         }
       >
         <PartHead part={PARTS.cooler} />
-        <h4 className={BOARD_SUB}>Fan headers</h4>
+        <h4 className={SUB}>Fan headers</h4>
         <ul className={LIST}>
           {d.fans.map((f) => (
             <li key={f.label} className={ROW}>
@@ -140,9 +141,9 @@ export function BuildView({ d }: { d: Build }) {
               </span>
             </li>
           ))}
-          {d.fans.length === 0 && <p className={VIZ_EMPTY}>no fan sensors; see the note below</p>}
+          {d.fans.length === 0 && <p className={EMPTY}>no fan sensors; see the note below</p>}
         </ul>
-        <h4 className={BOARD_SUB}>Board temperatures</h4>
+        <h4 className={SUB}>Board temperatures</h4>
         <BarList
           items={d.temps.map((t) => ({
             label: t.label,
@@ -152,7 +153,7 @@ export function BuildView({ d }: { d: Build }) {
           tone="info"
           empty="no board sensors"
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           These readings exist because a driver was added for the board&rsquo;s Nuvoton super-I/O
           chip; without it Linux sees three sensors and counts no revolutions at all, which on a
           machine that lives in a cupboard makes a dead fan silent until it is thermal. Headers
@@ -165,7 +166,7 @@ export function BuildView({ d }: { d: Build }) {
         icon="rows"
         span={4}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {hw.memory.populated === null || hw.memory.slots === null
               ? DASH
               : `${num(hw.memory.populated)} of ${num(hw.memory.slots)} slots`}
@@ -200,7 +201,7 @@ export function BuildView({ d }: { d: Build }) {
             },
           ]}
         />
-        <h4 className={BOARD_SUB}>Slots</h4>
+        <h4 className={SUB}>Slots</h4>
         <ul className={LIST}>
           {hw.memory.modules.map((m) => (
             <li key={m.locator ?? '?'} className={ROW}>
@@ -209,9 +210,9 @@ export function BuildView({ d }: { d: Build }) {
               <span className={ROW_SIDE}>{m.rank === null ? DASH : `${num(m.rank)}R`}</span>
             </li>
           ))}
-          {hw.memory.modules.length === 0 && <p className={VIZ_EMPTY}>no modules read</p>}
+          {hw.memory.modules.length === 0 && <p className={EMPTY}>no modules read</p>}
         </ul>
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Both modules sit in the second slot of each channel, which is the pairing the board wants
           for dual channel. The empty slots are the two that would break it if filled wrong. Two
           free slots and a 128 GB ceiling is the upgrade this machine has left.
@@ -223,7 +224,7 @@ export function BuildView({ d }: { d: Build }) {
         icon="◐"
         span={4}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {d.gpu.clients === null ? DASH : `${num(d.gpu.clients)} clients`}
           </span>
         }
@@ -254,7 +255,7 @@ export function BuildView({ d }: { d: Build }) {
             },
           ]}
         />
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           A parked graphics engine reads zero watts and zero megahertz. That is the honest number
           rather than a broken one: it wakes when something asks it to. The package figure beside it
           is the whole chip including the cpu cores, which is why the two are shown together — on an
@@ -268,10 +269,10 @@ export function BuildView({ d }: { d: Build }) {
         title="Power"
         icon="⚡"
         span={4}
-        aside={<span className={BOARD_NOTE}>{PARTS.psu.specs[0]?.v ?? DASH}</span>}
+        aside={<span className={NOTE}>{PARTS.psu.specs[0]?.v ?? DASH}</span>}
       >
         <PartHead part={PARTS.psu} />
-        <h4 className={BOARD_SUB}>Rails, as the board sees them</h4>
+        <h4 className={SUB}>Rails, as the board sees them</h4>
         <ul className={LIST}>
           {['+12V', '+5V', '+3.3V'].map((rail) => {
             const v = d.volts.find((x) => x.label === rail)
@@ -285,7 +286,7 @@ export function BuildView({ d }: { d: Build }) {
             )
           })}
         </ul>
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           The supply itself reports nothing. This model has no monitoring interface, so there is no
           temperature, no load and no fan speed to show, and none of those will ever appear here.
           What the board CAN see is what arrives on each rail, which is the next best question: a
@@ -319,7 +320,7 @@ export function BuildView({ d }: { d: Build }) {
             </div>
           </div>
         </div>
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Six drive bays with two filled, and a 70 mm cooler ceiling that picked the cooler. This is
           the one part on the page that nothing in the machine can report: SMBIOS gives the board
           vendor as the chassis vendor, because a case has no firmware and no way to introduce
@@ -338,26 +339,4 @@ export function BuildView({ d }: { d: Build }) {
       />
     </BoardGrid>
   )
-}
-
-/** "Micro-Star International Co., Ltd." is a legal name, not a brand. */
-function shortVendor(v: string): string {
-  return v
-    .replace(/Micro-Star International Co\., Ltd\.?/i, 'MSI')
-    .replace(/American Megatrends International, LLC\.?/i, 'AMI')
-    .replace(/, (Inc|LLC|Ltd)\.?$/i, '')
-}
-
-/** SMBIOS spells it "12th Gen Intel(R) Core(TM) i5-12600K". Nobody says that. */
-function cpuName(v: string | null): string {
-  return v === null
-    ? DASH
-    : v
-        .replace(/\((R|TM)\)/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-}
-
-function temp(c: number | null): string {
-  return c === null ? DASH : `${c.toFixed(0)}°`
 }

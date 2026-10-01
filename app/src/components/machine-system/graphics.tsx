@@ -4,20 +4,16 @@ import type { NodeApp, NodeTelemetry } from '../../lib/agent/status'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../lib/format'
 import { partMatching } from '../../lib/hardware/catalog'
-import { PartPhoto } from '../part'
+import { Ago } from '../ago'
+import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../part'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
 import {
-  ago,
   DetailNote,
   EMPTY,
   FOOT,
   LIST,
   MONO,
   NOTE,
-  PART,
-  PART_DETAIL,
-  PART_ID,
-  PART_NAME,
   ROW,
   ROW_MAIN,
   ROW_SIDE,
@@ -134,7 +130,12 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
                 <span className={ROW_MAIN}>{a.name}</span>
                 <span className={ROW_SIDE}>
                   {a.version !== null && <span className={MONO}>{a.version}</span>}
-                  {a.installedAt !== null && ` · ${ago(a.installedAt)}`}
+                  {a.installedAt !== null && (
+                    <>
+                      {' · '}
+                      <Ago at={a.installedAt} />
+                    </>
+                  )}
                 </span>
               </li>
             ))}
@@ -218,7 +219,7 @@ function GpuBoard({
             k: 'Windows calls it',
             v: g.driver === null ? DASH : <span className={MONO}>{g.driver}</span>,
           },
-          { k: 'Built', v: g.driverDate === null ? DASH : ago(g.driverDate) },
+          { k: 'Built', v: g.driverDate === null ? DASH : <Ago at={g.driverDate} /> },
         ]}
       />
       <p className={FOOT}>

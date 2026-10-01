@@ -2,11 +2,11 @@ import { Link } from '@tanstack/react-router'
 
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { DASH, duration, num, pct, since, text } from '../../lib/format'
+import { DASH, duration, num, pct, rate, since, temp, text } from '../../lib/format'
 import { partMatching } from '../../lib/hardware/catalog'
 import { linkWords } from '../../lib/node-link'
 import { PROVIDER_NAME, type ProviderKind } from '../../lib/providers/kinds'
-import { PartPhoto } from '../part'
+import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../part'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
 import {
   DetailNote,
@@ -17,15 +17,9 @@ import {
   NOTE,
   NotReadable,
   OS_MARK,
-  PART,
-  PART_DETAIL,
-  PART_ID,
-  PART_NAME,
   ROW,
   ROW_MAIN,
   ROW_SIDE,
-  rate,
-  temp,
   WipBoard,
 } from './shared'
 import { AgentUpdate } from './updates'

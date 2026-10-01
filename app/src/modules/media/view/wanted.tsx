@@ -10,10 +10,9 @@ import {
 } from '../../../components/service-head'
 import { Board, BoardGrid, Chip, Facts, Measures, Progress, RankRow } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { bytes, DASH, num } from '../../../lib/format'
+import { bytes, DASH, daysAgo, inDays, num } from '../../../lib/format'
 import type { MediaData } from '../data'
 import {
-  ago,
   CHECK_ROW,
   EMPTY,
   FEED,
@@ -23,7 +22,6 @@ import {
   FEED_WHEN,
   FOOT,
   HealthChecks,
-  inDays,
   LIST,
   MONO,
   NOTE,
@@ -164,7 +162,7 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
                   <span className="truncate">{r.title}</span>
                   <span className={REQ_SIDE}>{r.kind === 'tv' ? 'series' : 'film'}</span>
                   <span className={REQ_SIDE}>{r.by}</span>
-                  <span className={REQ_WHEN}>{ago(r.ageDays)}</span>
+                  <span className={REQ_WHEN}>{daysAgo(r.ageDays)}</span>
                 </li>
               ))}
             </ul>
@@ -398,7 +396,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
                   <span className={FEED_TITLE} title={h.title}>
                     {h.title}
                   </span>
-                  <span className={FEED_WHEN}>{ago(h.ageDays)}</span>
+                  <span className={FEED_WHEN}>{daysAgo(h.ageDays)}</span>
                 </li>
               ))}
             </ul>

@@ -21,12 +21,6 @@ import { Board, Chip } from '../viz'
 
 export { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../tokens'
 
-/** The part-identity block: the same four strings components/part.tsx exports. */
-export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
-export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-[0.25rem]'
-export const PART_NAME = 'text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere'
-export const PART_DETAIL = 'text-[0.73rem] text-(--text-muted) leading-[1.4]'
-
 export const OS_MARK: Record<string, { src: string; invert: boolean }> = {
   windows: { src: '/icon-windows.svg', invert: false },
   macos: { src: '/icon-apple.svg', invert: true },
@@ -51,48 +45,12 @@ export function ofTotal(used: number | null, total: number | null): string {
   return `${used === null ? DASH : bytes(used)} of ${total === null ? DASH : bytes(total)}`
 }
 
-export function rate(bps: number | null): string {
-  return bps === null ? DASH : `${bytes(bps)}/s`
-}
-
-export function temp(c: number | null | undefined): string {
-  return c == null ? DASH : `${c.toFixed(0)}°`
-}
-
 /** Hours → "13h" | "41d" | "1.2y", as the box's Disks tab says it. */
 export function hours(h: number | null): string {
   if (h === null) return DASH
   if (h < 48) return `${String(h)}h`
   const years = h / 24 / 365
   return years >= 1 ? `${years.toFixed(1)}y` : `${String(Math.round(h / 24))}d`
-}
-
-/** "SMBIOS spells it 12th Gen Intel(R) Core(TM) i5-12600K". Nobody says that. */
-export function cpuName(v: string | null | undefined): string {
-  return v == null
-    ? DASH
-    : v
-        .replace(/\((R|TM)\)/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-}
-
-/** "Micro-Star International Co., Ltd." is a legal name, not a brand. */
-export function shortVendor(v: string | null): string {
-  if (v === null) return DASH
-  return v
-    .replace(/Micro-Star International Co\., Ltd\.?/i, 'MSI')
-    .replace(/American Megatrends International, LLC\.?/i, 'AMI')
-    .replace(/Apple Inc\.?/i, 'Apple')
-    .replace(/Gigabyte Technology Co\., Ltd\.?/i, 'Gigabyte')
-    .replace(/, (Inc|LLC|Ltd)\.?$/i, '')
-}
-
-/** RFC 3339 → "3 days ago", or the string as the OS gave it. */
-export function ago(iso: string | null): string {
-  if (iso === null) return DASH
-  const t = Date.parse(iso)
-  return Number.isNaN(t) ? iso : since((Date.now() - t) / 1000)
 }
 
 /**

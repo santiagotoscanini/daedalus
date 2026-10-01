@@ -1,21 +1,21 @@
 import { LogBoard } from '../../../components/logs'
-import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../components/viz'
-import { cn } from '../../../lib/cn'
-import { bytes, DASH, duration, num, pct, since } from '../../../lib/format'
-import type { SystemData } from '../data'
 import {
-  BOARD_FOOT,
-  BOARD_NOTE,
-  BOARD_SUB,
+  EMPTY,
+  FOOT,
   LIST,
   MONO,
+  NOTE,
   ROW,
   ROW_MAIN,
   ROW_N,
   ROW_SIDE,
-  SYSTEM_SNAPSHOT,
-  VIZ_EMPTY,
-} from './shared'
+  SUB,
+} from '../../../components/tokens'
+import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
+import { bytes, DASH, duration, num, pct, since } from '../../../lib/format'
+import type { SystemData } from '../data'
+import { SYSTEM_SNAPSHOT } from './shared'
 
 /* ── Pools ────────────────────────────────────────────────────────────── */
 
@@ -48,7 +48,7 @@ export function PoolsView({ d }: { d: Pools }) {
             ]}
           />
 
-          <h4 className={BOARD_SUB}>Devices</h4>
+          <h4 className={SUB}>Devices</h4>
           <ul className={LIST}>
             {p.vdevs.map((v) => (
               <li key={v.name} className={ROW}>
@@ -66,9 +66,9 @@ export function PoolsView({ d }: { d: Pools }) {
             ))}
           </ul>
 
-          <h4 className={BOARD_SUB}>Last scrub</h4>
+          <h4 className={SUB}>Last scrub</h4>
           {p.scrub === null ? (
-            <p className={VIZ_EMPTY}>never scrubbed</p>
+            <p className={EMPTY}>never scrubbed</p>
           ) : (
             <Facts
               rows={[
@@ -96,7 +96,7 @@ export function PoolsView({ d }: { d: Pools }) {
               ]}
             />
           )}
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Monthly, and it is the only thing that finds bit-rot: ZFS checksums every block on read,
             but a block nobody reads is never checked. On the mirror a bad copy is repaired from the
             good one; on the single-device pool a scrub can only report.
@@ -109,7 +109,7 @@ export function PoolsView({ d }: { d: Pools }) {
         icon="rows"
         span={12}
         aside={
-          <span className={BOARD_NOTE}>
+          <span className={NOTE}>
             {bytes(d.snapshotBytes)} in {num(d.snapshots)} snapshots
           </span>
         }
@@ -126,7 +126,7 @@ export function PoolsView({ d }: { d: Pools }) {
             </li>
           ))}
         </ul>
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           <b>Used</b> is the dataset plus everything its snapshots still pin; <b>in them</b> is that
           second part alone, data no longer live but held because a snapshot references it. That
           column is the one to watch on <span className={MONO}>rpool/selfhost</span>: 16K recordsize
@@ -150,7 +150,7 @@ export function PoolsView({ d }: { d: Pools }) {
           },
         ]}
         foot={
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Diffs the live dataset properties against the declaration on every rebuild and{' '}
             <span className={MONO}>zfs set</span>s only where they differ, so a silent run means
             reality already matched. It is wanted-by rather than required-by the mounts on purpose:

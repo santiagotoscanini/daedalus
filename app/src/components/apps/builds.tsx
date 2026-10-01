@@ -12,10 +12,11 @@ import { DASH, ms, since } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
 import { buildNowFn, fetchBuilds } from '../../server/builds'
 import { useLiveValue, useNow } from '../poll'
+import { EMPTY, FOOT } from '../tokens'
 import { Button } from '../ui/button'
 import { useAction } from '../use-action'
 import { Board, Chip } from '../viz'
-import { BOARD_FOOT, GHOST_BTN, VIZ_EMPTY } from './shared'
+import { GHOST_BTN } from './shared'
 
 // Builds on this box, as the app pages show them: the board on Deployments,
 // the Build now button, and the one-line detection summary on Overview. The
@@ -99,7 +100,7 @@ export function BuildsBoard({
       )}
 
       {builds.length === 0 ? (
-        buildOnBox && <p className={VIZ_EMPTY}>No builds yet.</p>
+        buildOnBox && <p className={EMPTY}>No builds yet.</p>
       ) : (
         <ol className="m-0 list-none p-0">
           {builds.map((b) => {
@@ -135,7 +136,7 @@ export function BuildsBoard({
         </ol>
       )}
 
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         One build runs at a time. A newer push replaces a build still waiting in the queue rather
         than lining up behind it.
       </p>

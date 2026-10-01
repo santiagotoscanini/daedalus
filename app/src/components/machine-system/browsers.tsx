@@ -3,20 +3,11 @@ import type { NodeBrowser } from '../../lib/agent/status'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { DASH, num } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
+import { Ago } from '../ago'
+import { PART, PART_DETAIL, PART_ID, PART_NAME } from '../part'
 import { ServiceHead } from '../service-head'
 import { Board, BoardGrid, Chip, Facts } from '../viz'
-import {
-  ago,
-  DetailNote,
-  EMPTY,
-  FOOT,
-  MONO,
-  NOTE,
-  PART,
-  PART_DETAIL,
-  PART_ID,
-  PART_NAME,
-} from './shared'
+import { DetailNote, EMPTY, FOOT, MONO, NOTE } from './shared'
 
 /* ── Chromium ─────────────────────────────────────────────────────────── */
 
@@ -214,7 +205,7 @@ function BrowserBoard({
           },
           {
             k: 'Published',
-            v: latest?.publishedAt == null ? DASH : ago(latest.publishedAt),
+            v: latest?.publishedAt == null ? DASH : <Ago at={latest.publishedAt} />,
           },
           {
             k: 'Installed at',

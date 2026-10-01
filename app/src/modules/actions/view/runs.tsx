@@ -1,9 +1,10 @@
+import { Ago } from '../../../components/ago'
 import { AXIS, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Columns, Stat, StatStrip } from '../../../components/viz'
 import { DASH, duration, num, pct } from '../../../lib/format'
 import type { ActionsData } from '../data'
 import type { RunRow } from '../data/runs'
-import { ago, Ext, GrantBoard, imageWord, RunChip, took } from './shared'
+import { Ext, GrantBoard, imageWord, RunChip, took } from './shared'
 
 type Runs = Extract<ActionsData, { tab: 'runs' }>
 
@@ -28,7 +29,7 @@ function RunLine({ r, showFailure = false }: { r: RunRow; showFailure?: boolean 
       <span className={ROW_SIDE}>
         {r.event}
         {r.ranOn.length > 0 && ` · ${r.ranOn.map(imageWord).join(', ')}`} · {took(r.seconds)} ·{' '}
-        {ago(r.createdAt)}
+        <Ago at={r.createdAt} />
       </span>
     </li>
   )

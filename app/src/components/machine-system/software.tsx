@@ -4,11 +4,11 @@ import { type ReactNode, useState } from 'react'
 import type { NodeApp } from '../../lib/agent/status'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../lib/format'
+import { Ago } from '../ago'
 import { GHOST_BTN } from '../apps/shared'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Chip, Facts } from '../viz'
 import {
-  ago,
   DetailNote,
   EMPTY,
   FOOT,
@@ -164,15 +164,16 @@ function WindowsSoftware({ d, apps }: { d: NodeSystemData; apps: NodeApp[] }) {
         <AppList
           apps={[...rest].sort(byName)}
           empty="Nothing else is registered."
-          side={(a) =>
-            [
-              a.version === null ? null : a.version,
-              a.publisher,
-              a.installedAt === null ? null : ago(a.installedAt),
-            ]
-              .filter((x): x is string => x !== null)
-              .join(' · ')
-          }
+          side={(a) => {
+            const text = [a.version, a.publisher].filter((x): x is string => x !== null).join(' · ')
+            if (a.installedAt === null) return text
+            return (
+              <>
+                {text === '' ? '' : `${text} · `}
+                <Ago at={a.installedAt} />
+              </>
+            )
+          }}
           fold={16}
         />
         <DetailNote d={d} />

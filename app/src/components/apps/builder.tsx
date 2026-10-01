@@ -8,25 +8,15 @@ import {
   type TimelineStep,
 } from '../../lib/build-display'
 import { cn } from '../../lib/cn'
-import { bytes, DASH, ms, pct, since } from '../../lib/format'
+import { bytes, DASH, ms, pct } from '../../lib/format'
 import { appRepo } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
 import { type Tone, toneStyle } from '../../lib/tone'
 import { fetchBuilderNow } from '../../server/builds'
+import { Ago } from '../ago'
 import { ImageRow } from '../image-row'
 import { useLiveValue, useNow } from '../poll'
-import {
-  FOOT as BOARD_FOOT,
-  NOTE as BOARD_NOTE,
-  SUB as BOARD_SUB,
-  LIST,
-  MONO,
-  ROW,
-  ROW_MAIN,
-  ROW_N,
-  ROW_SIDE,
-  EMPTY as VIZ_EMPTY,
-} from '../tokens'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Progress, Pulse, Stat, StatStrip } from '../viz'
 import { BuildStateChip, requesterLabel } from './builds'
 
@@ -45,20 +35,16 @@ import { BuildStateChip, requesterLabel } from './builds'
 
 type Builder = BuilderData
 
-const ago = (now: number | null, iso: string | null): string =>
-  now === null || iso === null ? DASH : since((now - Date.parse(iso)) / 1000)
-
 export function BuilderView({ d }: { d: Builder }) {
-  const now = useNow(false)
   return (
     <BoardGrid>
       <NowBoard initial={d.now} />
       <HistoryBoard h={d.history} />
       <StagesBoard h={d.history} />
-      <FailuresBoard h={d.history} now={now} />
+      <FailuresBoard h={d.history} />
       <ToolchainBoard d={d} />
-      <MachineryBoard m={d.machinery} now={now} />
-      <GithubBoard g={d.github} now={now} />
+      <MachineryBoard m={d.machinery} />
+      <GithubBoard g={d.github} />
     </BoardGrid>
   )
 }
@@ -96,7 +82,7 @@ function NowBoard({ initial }: { initial: LiveBuild[] }) {
       icon="logs"
       span={12}
       aside={
-        <span className={cn(BOARD_NOTE, 'inline-flex items-center gap-[0.35rem]')}>
+        <span className={cn(NOTE, 'inline-flex items-center gap-[0.35rem]')}>
           <Pulse on={running > 0} tone="info" />
           {running > 0
             ? `${String(running)} building, ${String(builds.length - running)} queued`
@@ -107,7 +93,7 @@ function NowBoard({ initial }: { initial: LiveBuild[] }) {
       }
     >
       {builds.length === 0 ? (
-        <p className={VIZ_EMPTY}>Nothing is queued or building.</p>
+        <p className={EMPTY}>Nothing is queued or building.</p>
       ) : (
         <ul className={LIST}>
           {builds.map((b) => (
@@ -115,7 +101,7 @@ function NowBoard({ initial }: { initial: LiveBuild[] }) {
           ))}
         </ul>
       )}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         One build runs at a time; a newer push replaces a build still waiting in its lane. A
         candidate build pushes <span className={MONO}>candidate-&lt;sha&gt;</span> and deploys
         nothing. What each build pushed is on the{' '}
@@ -174,7 +160,13 @@ function NowRow({ b, now }: { b: LiveBuild; now: number | null }) {
         ))}
       </ol>
       <span className={cn(ROW_N, 'min-w-[5.5rem] text-[0.72rem] text-(--dim)')}>
-        {b.state === 'queued' ? `asked ${ago(now, b.createdAt)}` : ms(took)}
+        {b.state === 'queued' ? (
+          <>
+            asked <Ago at={b.createdAt} />
+          </>
+        ) : (
+          ms(took)
+        )}
       </span>
     </li>
   )
@@ -190,7 +182,7 @@ function HistoryBoard({ h }: { h: History }) {
       title="History"
       icon="logs"
       span={8}
-      aside={<span className={BOARD_NOTE}>last {String(h.days)} days</span>}
+      aside={<span className={NOTE}>last {String(h.days)} days</span>}
     >
       <StatStrip>
         <Stat label="Builds" value={String(h.total)} />
@@ -202,7 +194,7 @@ function HistoryBoard({ h }: { h: History }) {
         <Stat label="Median build" value={ms(h.medianMs)} sub="hand-off to finish" />
       </StatStrip>
       {h.apps.length === 0 ? (
-        <p className={VIZ_EMPTY}>No builds in this window.</p>
+        <p className={EMPTY}>No builds in this window.</p>
       ) : (
         <ul className={LIST}>
           {h.apps.map((a) => (
@@ -233,7 +225,7 @@ function HistoryBoard({ h }: { h: History }) {
           ))}
         </ul>
       )}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         “Landed” is succeeded over succeeded plus failed: a cancelled or superseded build was
         somebody’s decision, not the builder’s result. A build’s time runs from its hand-off to the
         host to its last word, so the wait in the queue is not in it.
@@ -253,7 +245,7 @@ function StagesBoard({ h }: { h: History }) {
   return (
     <Board title="Stage medians" icon="logs" span={4}>
       <BarList items={items} tone="info" empty="no stage has been timed yet" />
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         Median time per stage over the same window, with how many builds finished it. A stage a
         failed build completed counts.
       </p>
@@ -261,16 +253,16 @@ function StagesBoard({ h }: { h: History }) {
   )
 }
 
-function FailuresBoard({ h, now }: { h: History; now: number | null }) {
+function FailuresBoard({ h }: { h: History }) {
   return (
     <Board
       title="Latest failures"
       icon="warn"
       span={12}
-      aside={<span className={BOARD_NOTE}>{String(h.failed)} in the window</span>}
+      aside={<span className={NOTE}>{String(h.failed)} in the window</span>}
     >
       {h.failures.length === 0 ? (
-        <p className={VIZ_EMPTY}>No build failed in the last {String(h.days)} days.</p>
+        <p className={EMPTY}>No build failed in the last {String(h.days)} days.</p>
       ) : (
         <ul className={LIST}>
           {h.failures.map((f) => (
@@ -287,7 +279,9 @@ function FailuresBoard({ h, now }: { h: History; now: number | null }) {
               <span className={cn(ROW_MAIN, 'text-(--text-muted)')} title={f.error ?? undefined}>
                 {f.error ?? 'no error recorded'}
               </span>
-              <span className={ROW_SIDE}>{ago(now, f.at)}</span>
+              <span className={ROW_SIDE}>
+                <Ago at={f.at} />
+              </span>
             </li>
           ))}
         </ul>
@@ -303,7 +297,7 @@ function ToolchainBoard({ d }: { d: Builder }) {
   return (
     <Board title="Toolchain" icon="logs" span={6}>
       {d.toolchain.rows.length === 0 ? (
-        <p className={VIZ_EMPTY}>The build tools’ pins are not published.</p>
+        <p className={EMPTY}>The build tools’ pins are not published.</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-[0.3rem] p-0">
           {d.toolchain.rows.map((r) => (
@@ -320,11 +314,11 @@ function ToolchainBoard({ d }: { d: Builder }) {
           },
         ]}
       />
-      <h4 className={BOARD_SUB}>mise caches</h4>
+      <h4 className={SUB}>mise caches</h4>
       {facts === null ? (
-        <p className={VIZ_EMPTY}>unknown until the builder snapshot is fresh</p>
+        <p className={EMPTY}>unknown until the builder snapshot is fresh</p>
       ) : facts.mise.length === 0 ? (
-        <p className={VIZ_EMPTY}>no app has a mise cache yet</p>
+        <p className={EMPTY}>no app has a mise cache yet</p>
       ) : (
         <ul className={LIST}>
           {facts.mise.map((m) => (
@@ -338,7 +332,7 @@ function ToolchainBoard({ d }: { d: Builder }) {
           ))}
         </ul>
       )}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         Railpack, its frontend and mise move as one set, pinned in the engine; the checks run on
         their own node image. Release notes and the file each bump edits are on{' '}
         <Link to="/c/$category" params={{ category: 'system' }} search={{ tab: 'updates' }}>
@@ -371,7 +365,7 @@ function unitTone(u: BuilderUnit): Tone {
   return 'muted'
 }
 
-function MachineryBoard({ m, now }: { m: Machinery; now: number | null }) {
+function MachineryBoard({ m }: { m: Machinery }) {
   const f = m.facts
   const quota = f?.storage.quotaBytes ?? null
   const used = f?.storage.usedBytes ?? null
@@ -381,13 +375,19 @@ function MachineryBoard({ m, now }: { m: Machinery; now: number | null }) {
       icon="logs"
       span={6}
       aside={
-        <span className={BOARD_NOTE}>
-          {m.generatedAt === null ? 'never published' : `read ${ago(now, m.generatedAt)}`}
+        <span className={NOTE}>
+          {m.generatedAt === null ? (
+            'never published'
+          ) : (
+            <>
+              read <Ago at={m.generatedAt} />
+            </>
+          )}
         </span>
       }
     >
       {f === null || m.missing !== null ? (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           {MISSING[m.missing ?? 'absent']} Everything here is unknown until it is.
         </p>
       ) : (
@@ -443,13 +443,17 @@ function MachineryBoard({ m, now }: { m: Machinery; now: number | null }) {
               { k: 'Push credential', v: yes(f.credential.wellFormed, 'well-formed', 'refused') },
             ]}
           />
-          <h4 className={BOARD_SUB}>Units</h4>
+          <h4 className={SUB}>Units</h4>
           <ul className={LIST}>
             {f.units.map((u) => (
               <li key={u.unit} className={ROW}>
                 <span className={cn(ROW_MAIN, MONO)}>{u.unit}</span>
                 <span className={ROW_SIDE}>
-                  {u.lastExitAt === null ? '' : `last exit ${ago(now, u.lastExitAt)}`}
+                  {u.lastExitAt !== null && (
+                    <>
+                      last exit <Ago at={u.lastExitAt} />
+                    </>
+                  )}
                 </span>
                 <Chip tone={unitTone(u)}>
                   {u.active}
@@ -460,7 +464,7 @@ function MachineryBoard({ m, now }: { m: Machinery; now: number | null }) {
           </ul>
         </>
       )}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         Read by the host every minute: the fence and the push credential are the exit codes of their
         own checks — neither the rules nor the password leave the host.
       </p>
@@ -472,7 +476,7 @@ function MachineryBoard({ m, now }: { m: Machinery; now: number | null }) {
 
 type Github = Builder['github']
 
-function GithubBoard({ g, now }: { g: Github; now: number | null }) {
+function GithubBoard({ g }: { g: Github }) {
   const site = useSite()
   const inst = g.installation
   return (
@@ -519,9 +523,9 @@ function GithubBoard({ g, now }: { g: Github; now: number | null }) {
           },
         ]}
       />
-      <h4 className={BOARD_SUB}>Latest deliveries</h4>
+      <h4 className={SUB}>Latest deliveries</h4>
       {g.deliveries.length === 0 ? (
-        <p className={VIZ_EMPTY}>none kept (a week’s worth is)</p>
+        <p className={EMPTY}>none kept (a week’s worth is)</p>
       ) : (
         <ul className={LIST}>
           {g.deliveries.map((x) => (
@@ -531,14 +535,16 @@ function GithubBoard({ g, now }: { g: Github; now: number | null }) {
                 {x.action === null ? '' : ` · ${x.action}`}
               </span>
               <span className={cn(ROW_SIDE, MONO)}>{x.outcome}</span>
-              <span className={ROW_SIDE}>{ago(now, x.receivedAt)}</span>
+              <span className={ROW_SIDE}>
+                <Ago at={x.receivedAt} />
+              </span>
             </li>
           ))}
         </ul>
       )}
-      <h4 className={BOARD_SUB}>Reported back</h4>
+      <h4 className={SUB}>Reported back</h4>
       {g.reported.length === 0 ? (
-        <p className={VIZ_EMPTY}>no build has posted a check run yet</p>
+        <p className={EMPTY}>no build has posted a check run yet</p>
       ) : (
         <ul className={LIST}>
           {g.reported.map((b) => (
@@ -576,7 +582,7 @@ function GithubBoard({ g, now }: { g: Github; now: number | null }) {
           ))}
         </ul>
       )}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         Pushes reach the box through the App’s webhook; a delivery with a bad signature is refused
         before anything reads it. Each build reports back as a check run, and a live one as a
         Deployment.

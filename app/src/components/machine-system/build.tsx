@@ -4,14 +4,13 @@ import type { ReactNode } from 'react'
 import type { NodeTelemetry } from '../../lib/agent/status'
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
-import { bytes, DASH, num, pct, since } from '../../lib/format'
+import { bytes, cpuName, DASH, num, pct, shortVendor, since, temp } from '../../lib/format'
 import { type ChosenKind, type Part, partById, partMatching } from '../../lib/hardware/catalog'
 import type { NodeRow } from '../../lib/repo/nodes'
-import { PART_WIDE, PartHead, PartPhoto } from '../part'
+import { Ago } from '../ago'
+import { PART, PART_DETAIL, PART_ID, PART_NAME, PART_WIDE, PartHead, PartPhoto } from '../part'
 import { Board, BoardGrid, Facts, Measures } from '../viz'
 import {
-  ago,
-  cpuName,
   EMPTY,
   FOOT,
   LIST,
@@ -20,16 +19,10 @@ import {
   NOTE,
   NotReadable,
   OS_MARK,
-  PART,
-  PART_DETAIL,
-  PART_ID,
-  PART_NAME,
   ROW,
   ROW_MAIN,
   ROW_SIDE,
   SUB,
-  shortVendor,
-  temp,
 } from './shared'
 
 /* ── Build ────────────────────────────────────────────────────────────── */
@@ -307,7 +300,7 @@ export function NodeBuildView({ d }: { d: NodeSystemData }) {
               ...(t.os.build
                 ? [{ k: 'Build', v: <span className={MONO}>{t.os.build}</span> }]
                 : []),
-              { k: 'Installed', v: ago(t.os.installedAt) },
+              { k: 'Installed', v: <Ago at={t.os.installedAt} /> },
               { k: 'Hardware address', v: <span className={MONO}>{node.mac ?? DASH}</span> },
             ]}
           />
