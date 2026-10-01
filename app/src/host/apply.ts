@@ -57,8 +57,9 @@ const RUNNING_MAX_MS = 35 * 60_000
 /**
  * The status, with a dead run reported as dead.
  *
- * The apply unit has no reaper, so a run killed at its timeout — or a box
- * that went down mid-Apply — leaves the file `running`, and the gate refuses
+ * A run systemd killed is marked failed by the unit's reaper
+ * (nix/stacks/daedalus/host/update-reaper.sh), but a box that went down
+ * mid-Apply runs no reaper and leaves the file `running`, and the gate refuses
  * every Apply while it says so. This clock is what brings the button back.
  */
 export async function readApplyStatus(): Promise<ApplyStatus> {

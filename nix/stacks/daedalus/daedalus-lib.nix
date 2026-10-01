@@ -80,7 +80,7 @@ rec {
     else
       lib.escapeShellArg (toString v);
 
-  # The ExecStopPost every rebuilding verb runs (image, engine, version and
+  # The ExecStopPost every rebuilding verb runs (apply, image, engine, version and
   # claude-code updates): marks a run that died without a terminal status as
   # failed, so the verb's button is not wedged until the app's staleness
   # clock runs out. `nextSteps` ends the message: what to check, no full stop.

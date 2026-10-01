@@ -235,6 +235,15 @@ let
     ];
   };
 
+  # The same undertaker for an Apply: a run killed mid-rebuild (its timeout, OOM)
+  # would otherwise leave apply-status.json `running` and the Apply button
+  # refused until the app's staleness clock ran out.
+  applyReaper = mkUpdateReaper {
+    name = "daedalus-apply-reaper";
+    statusFile = "apply-status.json";
+    nextSteps = "The rebuild may or may not have completed — check `journalctl -u daedalus-apply` and `git log` in ${config.fleet.config.repo} before applying again";
+  };
+
   # The status file's undertaker (host/update-reaper.sh). A queued batch is a
   # long run, so the unit's timeout and the app's clock are both an hour; this
   # bounds the wedge a crash leaves to seconds.
@@ -287,6 +296,7 @@ in
     secretApps
     secretSetScript
     applyScript
+    applyReaper
     powerScript
     workspaceCloneScript
     imageUpdateScript

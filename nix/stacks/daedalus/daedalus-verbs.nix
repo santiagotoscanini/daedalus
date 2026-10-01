@@ -33,6 +33,7 @@ let
     secretApps
     secretSetScript
     applyScript
+    applyReaper
     powerScript
     workspaceCloneScript
     imageUpdateScript
@@ -100,6 +101,8 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${applyScript}/bin/daedalus-apply";
+        # Marks a killed run failed instead of leaving it "running" (host/update-reaper.sh).
+        ExecStopPost = "${applyReaper}/bin/daedalus-apply-reaper";
         # A rebuild can take minutes on a cold cache; the default 90s would
         # SIGTERM it mid-switch.
         TimeoutStartSec = "30min";
