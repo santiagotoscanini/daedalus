@@ -43,8 +43,7 @@
 # DNS reconciler at the wrong place.
 #
 # `registry.file` is the same idea for the app registry: `site/apps.json`,
-# and nothing else — defined only from a source, so an unsourced host that
-# reads it fails naming the option.
+# and nothing else.
 #
 # Source control of that directory is the operator's business, with one
 # exception the agents cannot delegate: a flake sees only git-TRACKED files,
@@ -53,23 +52,17 @@
 
 let
   cfg = config.fleet;
-  sourced = cfg.site.source != null;
 
-  # site.json as the module sees it — read only when a source is set.
-  siteDoc =
-    if sourced then builtins.fromJSON (builtins.readFile "${cfg.site.source}/site.json") else null;
+  # site.json as the module sees it.
+  siteDoc = builtins.fromJSON (builtins.readFile "${cfg.site.source}/site.json");
 
   # site/nodes.json — the approved nodes, as an Apply writes them
   # (platform/nodes.nix says what is in it and why so little). Optional: a
-  # site written before nodes existed, or a box with none, has no file and
-  # no nodes. One schema version so far; a document from a newer control
+  # box with no nodes has no file. One schema version so far; a document from a newer control
   # plane fails here by name rather than as a missing attribute.
   nodesFile = "${cfg.site.source}/nodes.json";
   nodesDoc =
-    if sourced && builtins.pathExists nodesFile then
-      builtins.fromJSON (builtins.readFile nodesFile)
-    else
-      null;
+    if builtins.pathExists nodesFile then builtins.fromJSON (builtins.readFile nodesFile) else null;
   nodesSchemaVersions = [ 1 ];
 
   # site.json `modules.enabled` — the switches the control plane flips.
@@ -84,7 +77,7 @@ let
   # at eval rather than crashing it: an id no imported module declares (a
   # document from a box that runs a stack this one lacks), and a structural
   # module switched off (below).
-  siteSwitches = if sourced then (siteDoc.modules or { }).enabled or { } else { };
+  siteSwitches = (siteDoc.modules or { }).enabled or { };
   declaredSwitches = builtins.attrNames options.fleet.modules;
   knownSwitches = lib.filterAttrs (id: _: builtins.elem id declaredSwitches) siteSwitches;
   unknownSwitches = builtins.attrNames (removeAttrs siteSwitches declaredSwitches);
@@ -106,7 +99,7 @@ let
   # default, weaker than a host's mkForce. A name this host publishes
   # nothing under is refused by the assertion below, by name; the stray
   # entry would also trip publishing.nix's one-upstream assertion.
-  siteWeb = if sourced then (siteDoc.modules or { }).web or { } else { };
+  siteWeb = (siteDoc.modules or { }).web or { };
   webOverride =
     w:
     lib.optionalAttrs (w.label or null != null) {
@@ -121,7 +114,7 @@ let
   # `enabled` and `web` this is not an override of anything: a stack that
   # reads it takes it as its whole roster. An id no imported module declares
   # is refused below, like a switch.
-  sitePlayers = if sourced then (siteDoc.modules or { }).players or { } else { };
+  sitePlayers = (siteDoc.modules or { }).players or { };
   unknownPlayers = builtins.attrNames (removeAttrs sitePlayers declaredSwitches);
 
   unknownWeb = builtins.attrNames (
@@ -176,12 +169,11 @@ in
       };
 
       source = lib.mkOption {
-        type = lib.types.nullOr lib.types.path;
-        default = null;
+        type = lib.types.path;
         description = ''
           Where nix READS site data from: `./site` in the operator's flake
-          (a store path), never `fleet.site.path`. Leaving it null fails
-          eval: there is no fallback location.
+          (a store path), never `fleet.site.path`. No default: there is no
+          fallback location.
         '';
       };
 
@@ -367,7 +359,7 @@ in
         "traefik"
       ];
     }
-    (lib.mkIf sourced {
+    {
       # The sourced constants. Plain definitions, not mkDefault: there must be
       # exactly one place these are written, and it is the document.
       fleet = {
@@ -517,6 +509,6 @@ in
           builtins.toJSON (nodesDoc.schemaVersion or null)
         }, but this engine understands ${builtins.toJSON nodesSchemaVersions}.";
       };
-    })
+    }
   ];
 }

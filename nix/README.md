@@ -118,7 +118,7 @@ error naming it. The template defines every one.
 | `fleet.config.repo` | Where your configuration checkout lives on disk. |
 | `fleet.github.owner` | The account your app repositories live under. |
 | `fleet.github.expectedOwnerId` | That account's numeric id — the one copy the control plane cannot rewrite. |
-| `fleet.site.source` | `./site`. Defaults to null, and null fails evaluation on purpose. |
+| `fleet.site.source` | `./site`. No default. |
 | `fleet.data` | Name → path of each bulk-data root. `{ }` is a valid answer. |
 | `fleet.mail.smtpHost`, `fleet.mail.passwordSopsFile` | The SMTP relay and its encrypted password. |
 | `fleet.git.sshKeySopsFile` | Encrypted SSH key the box pushes to its forge with. |

@@ -248,12 +248,8 @@ rec {
   # only tracked files, so "exists" means "committed by an Apply").
   hooksHost = at "hooks";
 
-  githubAppVault =
-    if config.fleet.site.source == null then
-      null
-    else
-      "${config.fleet.site.source}/vault/github-app.sops";
-  haveGithubApp = githubAppVault != null && builtins.pathExists githubAppVault;
+  githubAppVault = "${config.fleet.site.source}/vault/github-app.sops";
+  haveGithubApp = builtins.pathExists githubAppVault;
   # "" rather than a throw while site.json lacks the App, so the assertion
   # in daedalus.nix is what reports it instead of an eval error inside a unit.
   githubAppField =

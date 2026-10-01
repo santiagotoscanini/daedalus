@@ -57,14 +57,7 @@
 let
   cfg = config.fleet.builder;
 
-  # The same condition as daedalus-lib.nix's `haveGithubApp`, restated: the
-  # App's credentials are in the flake.
-  githubAppVault =
-    if config.fleet.site.source == null then
-      null
-    else
-      "${config.fleet.site.source}/vault/github-app.sops";
-  haveGithubApp = githubAppVault != null && builtins.pathExists githubAppVault;
+  inherit (import ./daedalus-lib.nix { inherit config lib pkgs; }) haveGithubApp;
 
   # buildkit from unstable (0.32; 26.05 ships 0.30, a step back). `[frontend."gateway.v0"]
   # allowedRepositories` needs >= 0.26. legacyPackages rather than a second
