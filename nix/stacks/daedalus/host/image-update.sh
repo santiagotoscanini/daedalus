@@ -147,11 +147,6 @@ TARGETS="$(jq -c '
 TARGET_NAMES="$(jq -c '[.[].container]' <<<"$TARGETS")"
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 
-git_() {
-  setpriv --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups \
-    git -C "$FLAKE" "$@"
-}
-
 # The flake's reads and edits, as the operator. The tree is theirs and
 # writable by them, so root does neither by name (host/lib.sh): a link
 # swapped in for a .nix file between the grep that found it and the sed that
@@ -433,7 +428,7 @@ done < <(jq -r '.[] | select(.changed) | .toDigest' <<<"$MOVES")
 write_status running committing ""
 
 # shellcheck disable=SC2086 # TOUCHED is a space-separated path list by design.
-git_ add -- $TOUCHED
+git_op "$FLAKE" add -- $TOUCHED
 
 # A tag move names both tags; a channel re-pin names the digests instead,
 # because "latest → latest" is a true sentence that carries no information —
@@ -449,24 +444,24 @@ SUMMARY="$(jq -r '
 BODY="$(jq -r '.[] | select(.changed) | "\(.container)\n  \(.repo):\(.fromTag)@\(.fromDigest)\n  → \(.repo):\(.toTag)@\(.toDigest)"' <<<"$MOVES")"
 
 # shellcheck disable=SC2086
-if git_ diff --cached --quiet -- $TOUCHED; then
+if git_op "$FLAKE" diff --cached --quiet -- $TOUCHED; then
   write_status "done" "no-change" ""
   exit 0
 fi
 
 # shellcheck disable=SC2086
-git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+git_op "$FLAKE" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
   commit -q -m "images: $SUMMARY" -m "$BODY" -m "Applied from daedalus by $ACTOR." -- $TOUCHED ||
   fail committing "git commit failed"
 
-COMMIT_SHA="$(git_ rev-parse --short HEAD)"
+COMMIT_SHA="$(git_op "$FLAKE" rev-parse --short HEAD)"
 UPDATE_COMMIT="$COMMIT_SHA"
 
 # --- roll back ------------------------------------------------------------
 # `git revert`, not `reset --hard`: this repo is shared, and a reset really
 # did eat an unrelated commit the first time an apply's switch failed.
 revert_update() {
-  log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+  log_run "$LOGFILE" git_op "$FLAKE" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     revert --no-edit "$UPDATE_COMMIT" ||
     log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
   COMMIT_SHA=""
@@ -592,7 +587,7 @@ fi
 # not in the syncoid mirror, so the remote is the only backup — but a network
 # blip must not turn a successful rebuild into a reported failure.
 write_status running pushing ""
-log_run "$LOGFILE" git_ push ||
+log_run "$LOGFILE" git_op "$FLAKE" push ||
   log_line "$LOGFILE" "push failed (the switch succeeded; the commit is local only)"
 
 write_status "done" "complete" ""

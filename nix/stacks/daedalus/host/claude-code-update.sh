@@ -109,16 +109,6 @@ fi
 
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 
-# git in the engine clone, as the operator. Absolute paths, because the
-# privilege-dropped child does not inherit writeShellApplication's PATH —
-# the trap every sibling script documents. No prompts: a push that wants a
-# passphrase must fail, not hang the unit.
-git_clone() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
-    "$ENV_BIN" HOME="$OPERATOR_HOME" GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes" \
-    "$GIT" -C "$CLONE" "$@"
-}
-
 # The lock's node for $INPUT, as JSON, read as the operator.
 lock_node() {
   { read_as_operator "$FLAKE/flake.lock" 2>/dev/null || true; } |
@@ -162,7 +152,7 @@ manifest_json() {
 FROM_VERSION="$(manifest_json | jq -r '.version // ""' 2>/dev/null || true)"
 [ -n "$FROM_VERSION" ] || fail validating "$MANIFEST_REL has no version"
 
-current="$(git_clone rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+current="$(git_op "$CLONE" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 [ "$current" = "$REF" ] ||
   fail validating "the clone $CLONE is on '${current:-?}', not '$REF' — check it out first"
 
@@ -170,7 +160,7 @@ current="$(git_clone rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 # or the commit below would carry somebody's work-in-progress, and undoing it
 # would throw that work away. The rest of the tree may be dirty; that is the
 # operator's business, and nothing below touches any other path.
-if ! git_clone diff --quiet HEAD -- "$MANIFEST_REL"; then
+if ! git_op "$CLONE" diff --quiet HEAD -- "$MANIFEST_REL"; then
   fail validating "$MANIFEST_REL has uncommitted changes in $CLONE — commit or restore it first"
 fi
 
@@ -262,13 +252,13 @@ lock_workspaces_root ||
 # and the merge never meets a file this run changed. Refuses a diverged clone
 # rather than deciding what to do with unpushed work — push it, then press
 # this again.
-if ! log_run "$LOGFILE" git_clone fetch --quiet --prune origin "$REF"; then
+if ! log_run "$LOGFILE" git_op "$CLONE" fetch --quiet --prune origin "$REF"; then
   fail committing "could not fetch origin/$REF in $CLONE — $(errtail)"
 fi
-ahead="$(git_clone rev-list --count "origin/$REF..$REF" 2>/dev/null || echo "?")"
+ahead="$(git_op "$CLONE" rev-list --count "origin/$REF..$REF" 2>/dev/null || echo "?")"
 [ "$ahead" = 0 ] ||
   fail committing "$CLONE has $ahead commit(s) on '$REF' that are not on origin — push them first"
-if ! log_run "$LOGFILE" git_clone merge --ff-only --quiet "origin/$REF"; then
+if ! log_run "$LOGFILE" git_op "$CLONE" merge --ff-only --quiet "origin/$REF"; then
   fail committing "could not fast-forward $CLONE to origin/$REF — $(errtail)"
 fi
 # Origin may have moved the pin itself since this run read it; writing over
@@ -280,7 +270,7 @@ now="$(manifest_json | jq -r '.version // ""' 2>/dev/null || true)"
 # Put the manifest back as HEAD has it — index and work tree, that one path
 # and nothing else. Validating proved it matched HEAD when this started.
 restore_manifest() {
-  git_clone checkout --quiet HEAD -- "$MANIFEST_REL" ||
+  git_op "$CLONE" checkout --quiet HEAD -- "$MANIFEST_REL" ||
     log_line "$LOGFILE" "could not restore $MANIFEST_REL in $CLONE — restore it by hand"
 }
 
@@ -294,7 +284,7 @@ fi
 # Scoped to the one path: the index is shared with whoever works in this
 # clone, and a commit with a pathspec leaves everything else they staged
 # where it was.
-if ! log_run "$LOGFILE" git_clone -c "user.email=$(commit_email)" -c "user.name=$(commit_name "$HOSTNAME")" \
+if ! log_run "$LOGFILE" git_op "$CLONE" -c "user.email=$(commit_email)" -c "user.name=$(commit_name "$HOSTNAME")" \
   commit --quiet -m "claude-code: pin $FROM_VERSION → $TO_VERSION
 
 The release manifest for $TO_VERSION, signature-verified against
@@ -305,7 +295,7 @@ Pinned from daedalus by $ACTOR." -- "$MANIFEST_REL"; then
   restore_manifest
   fail committing "could not commit $MANIFEST_REL in $CLONE — $commit_error"
 fi
-COMMIT_FULL="$(git_clone rev-parse HEAD 2>/dev/null || true)"
+COMMIT_FULL="$(git_op "$CLONE" rev-parse HEAD 2>/dev/null || true)"
 COMMIT_SHA="${COMMIT_FULL:0:7}"
 
 # Pushed before the handoff, not after: the engine update fast-forwards this
@@ -316,10 +306,10 @@ COMMIT_SHA="${COMMIT_FULL:0:7}"
 # (`--soft`, so no file and no other staged change moves) and the manifest is
 # put back. Never a `reset --hard` — the clone is the operator's working tree
 # and may hold uncommitted work, which a hard reset would destroy.
-if ! log_run "$LOGFILE" git_clone push origin "$REF"; then
+if ! log_run "$LOGFILE" git_op "$CLONE" push origin "$REF"; then
   push_error="$(errtail)"
-  if [ "$(git_clone rev-parse HEAD 2>/dev/null || true)" = "$COMMIT_FULL" ] &&
-    git_clone reset --quiet --soft HEAD~1; then
+  if [ "$(git_op "$CLONE" rev-parse HEAD 2>/dev/null || true)" = "$COMMIT_FULL" ] &&
+    git_op "$CLONE" reset --quiet --soft HEAD~1; then
     restore_manifest
     COMMIT_SHA=""
     fail committing "could not push $REF to origin — $push_error. The pin commit was undone; nothing is pinned and nothing else in $CLONE was touched."

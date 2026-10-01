@@ -123,6 +123,7 @@ rec {
     # Absolute, like every binary a setpriv child runs: it does not inherit
     # writeShellApplication's PATH resolution for the command itself.
     ENV_BIN = "${pkgs.coreutils}/bin/env";
+    GIT = "${pkgs.git}/bin/git";
   };
   # The identities a commit the box makes may carry (host/lib.sh commit_name).
   commitVars = {
@@ -258,7 +259,6 @@ rec {
   workspaceVars = operatorHomeVars // {
     WORKSPACE_ROOT = workspaceRoot;
     OUT_DIR = workspacesDir;
-    GIT = "${pkgs.git}/bin/git";
   };
 
   workspaceRuntimeInputs = [

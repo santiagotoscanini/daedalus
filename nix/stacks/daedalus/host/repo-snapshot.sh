@@ -25,13 +25,8 @@ set -euo pipefail
 
 install -d -m 0755 -o "$OPERATOR_USER" -g "$OPERATOR_GROUP" "$OUT_DIR"
 
-git_() {
-  local dir="$1"
-  shift
-  as_operator \
-    "$ENV_BIN" HOME="$OPERATOR_HOME" \
-    "$GIT" --no-optional-locks -C "$dir" "$@"
-}
+# Every git call here is a read, made with --no-optional-locks: it never
+# takes the index lock a sync or a commit may want.
 
 # Every git fact about one repository, as a JSON object on stdout.
 #
@@ -44,17 +39,17 @@ repo_facts() {
   # Each fact independently, each with an empty fallback: a repo with no
   # upstream, or no Apply commit yet, is a state to report, not a failed run.
   local remote branch head_rev head_subject head_at
-  remote=$(git_ "$dir" remote get-url origin 2>/dev/null || true)
-  branch=$(git_ "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-  head_rev=$(git_ "$dir" rev-parse HEAD 2>/dev/null || true)
-  head_subject=$(git_ "$dir" log -1 --format=%s 2>/dev/null || true)
-  head_at=$(git_ "$dir" log -1 --format=%cI 2>/dev/null || true)
+  remote=$(git_op "$dir" --no-optional-locks remote get-url origin 2>/dev/null || true)
+  branch=$(git_op "$dir" --no-optional-locks rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  head_rev=$(git_op "$dir" --no-optional-locks rev-parse HEAD 2>/dev/null || true)
+  head_subject=$(git_op "$dir" --no-optional-locks log -1 --format=%s 2>/dev/null || true)
+  head_at=$(git_op "$dir" --no-optional-locks log -1 --format=%cI 2>/dev/null || true)
 
   # Porcelain v1: `??` rows are untracked, everything else is a tracked change.
   # The two mean different things to the flake — an untracked file is INVISIBLE
   # to a rebuild, which is the "file not found" trap — so they are counted apart.
   local status line untracked modified
-  status=$(git_ "$dir" status --porcelain=v1 --untracked-files=normal 2>/dev/null || true)
+  status=$(git_op "$dir" --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null || true)
   untracked=0
   modified=0
   while IFS= read -r line; do
@@ -68,12 +63,12 @@ $status
 EOF
 
   local upstream counts ahead behind
-  upstream=$(git_ "$dir" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
+  upstream=$(git_op "$dir" --no-optional-locks rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
   ahead=0
   behind=0
   if [ -n "$upstream" ]; then
     # "<behind>\t<ahead>" — left is the upstream side of the range.
-    counts=$(git_ "$dir" rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null || echo "0	0")
+    counts=$(git_op "$dir" --no-optional-locks rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null || echo "0	0")
     behind=${counts%%	*}
     ahead=${counts##*	}
   fi
@@ -86,7 +81,7 @@ EOF
   apply_rev=""
   apply_subject=""
   apply_at=""
-  apply_line=$(git_ "$dir" log -1 --grep='Applied from daedalus' --format='%H%x1f%s%x1f%cI' 2>/dev/null || true)
+  apply_line=$(git_op "$dir" --no-optional-locks log -1 --grep='Applied from daedalus' --format='%H%x1f%s%x1f%cI' 2>/dev/null || true)
   if [ -n "$apply_line" ]; then
     apply_rev=${apply_line%%$'\x1f'*}
     rest=${apply_line#*$'\x1f'}
@@ -140,7 +135,7 @@ site_file() {
       sha="\"${hash%% *}\""
     fi
     if [ -n "$site_toplevel" ]; then
-      porcelain=$(git_ "$SITE_DIR" status --porcelain=v1 -- "$f" 2>/dev/null | cut -c1-2)
+      porcelain=$(git_op "$SITE_DIR" --no-optional-locks status --porcelain=v1 -- "$f" 2>/dev/null | cut -c1-2)
       case "$porcelain" in
       '') status=clean ;;
       '??') status=untracked ;;
@@ -181,7 +176,7 @@ app_secret_history() {
   if [ -n "$site_toplevel" ] && [ -d "$SITE_DIR/vault/apps" ]; then
     out=$(
       {
-        git_ "$SITE_DIR" log -n 200 --no-color --no-renames --unified=0 \
+        git_op "$SITE_DIR" --no-optional-locks log -n 200 --no-color --no-renames --unified=0 \
           --format='%x01%H%x1f%cI%x1f%an%x1f%b%x02' --patch \
           -- "$SITE_DIR/vault/apps" 2>/dev/null || true
       } | "$AWK" '
@@ -278,7 +273,7 @@ engine=$(engine_lock)
 # arrangement), and the state of each file daedalus manages there.
 site_toplevel=""
 if [ -d "$SITE_DIR" ]; then
-  site_toplevel=$(git_ "$SITE_DIR" rev-parse --show-toplevel 2>/dev/null || true)
+  site_toplevel=$(git_op "$SITE_DIR" --no-optional-locks rev-parse --show-toplevel 2>/dev/null || true)
 fi
 
 # Every file daedalus writes there, not only the two nix reads: README.md and

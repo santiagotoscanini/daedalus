@@ -61,7 +61,6 @@ let
         FLAKE = config.fleet.config.repo;
         SITE_DIR = config.fleet.site.path;
         HOSTNAME = config.networking.hostName;
-        GIT = "${pkgs.git}/bin/git";
         # The workspace lock the clone is mutated under (host/lib.sh).
         WORKSPACES_DIR = workspacesDir;
       };

@@ -71,7 +71,6 @@ let
         CONTROL_PLANE_HOST = config.fleet.apps.daedalus.hostname;
         HEALTH_PATH = config.fleet.apps.daedalus.auth.healthPath;
         LAN_IP = config.fleet.lanIp;
-        GIT = "${pkgs.git}/bin/git";
         # The workspace lock the clone is mutated under (host/lib.sh).
         WORKSPACES_DIR = workspacesDir;
       };

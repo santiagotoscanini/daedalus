@@ -70,10 +70,6 @@ fi
 TARGET="$(jq -r '.target // ""' <<<"$REQ_JSON")"
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 
-git_() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups \
-    git -C "$FLAKE" "$@"
-}
 flake_grep() { as_operator grep "$@"; }
 flake_sed() { as_operator sed "$@"; }
 
@@ -151,17 +147,17 @@ done < <(jq -r '.[] | [.field, .binding, .from, .to] | @tsv' <<<"$MOVES")
 # --- commit ---------------------------------------------------------------
 write_status running committing ""
 # shellcheck disable=SC2086 # TOUCHED is a space-separated path list by design.
-git_ add -- $TOUCHED
+git_op "$FLAKE" add -- $TOUCHED
 SUMMARY="$(jq -r --arg t "$TARGET" '"\($t): " + ([.[] | "\(.field) \(.from) → \(.to)"] | join(", "))' <<<"$MOVES")"
 # shellcheck disable=SC2086
-git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+git_op "$FLAKE" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
   commit -q -m "versions: $SUMMARY" -m "Applied from daedalus by $ACTOR." -- $TOUCHED ||
   fail committing "git commit failed"
-COMMIT_SHA="$(git_ rev-parse --short HEAD)"
+COMMIT_SHA="$(git_op "$FLAKE" rev-parse --short HEAD)"
 UPDATE_COMMIT="$COMMIT_SHA"
 
 revert_commit() {
-  log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+  log_run "$LOGFILE" git_op "$FLAKE" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     revert --no-edit "$UPDATE_COMMIT" ||
     log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
   COMMIT_SHA=""
@@ -264,7 +260,7 @@ fi
 
 # --- push -----------------------------------------------------------------
 write_status running pushing ""
-log_run "$LOGFILE" git_ push ||
+log_run "$LOGFILE" git_op "$FLAKE" push ||
   log_line "$LOGFILE" "push failed (the switch succeeded; the commit is local only)"
 
 write_status "done" "complete" ""

@@ -12,13 +12,6 @@
 # configuration checkout. Nothing here drops privilege, because nothing here
 # has any.
 
-# git with the operator's HOME (its config and known_hosts). Absolute paths,
-# so the command does not depend on the unit's PATH; PATH stays inherited so
-# git finds ssh (runtimeInputs provides it).
-git_op() {
-  "$ENV_BIN" HOME="$OPERATOR_HOME" "$GIT" "$@"
-}
-
 # origin URL → owner/name, or "" for a remote that is not GitHub. The three
 # spellings are the ones git actually writes; anything else publishes as null
 # and the UI shows the workspace without a repo link rather than a wrong one.
@@ -73,7 +66,7 @@ lock_workspaces() {
 # change under `.santree/` still counts, like any other.
 tree_dirty() {
   local s
-  s="$(git_op -C "$1" status --porcelain 2>/dev/null || true)"
+  s="$(git_op "$1" status --porcelain 2>/dev/null || true)"
   [ -n "$(grep -v '^?? \.santree/' <<<"$s" || true)" ]
 }
 
@@ -83,13 +76,13 @@ sync_workspace() {
   err="$(mktemp)"
   result=ok
   detail=""
-  if ! git_op -C "$dir" fetch --quiet --prune 2>"$err"; then
+  if ! git_op "$dir" fetch --quiet --prune 2>"$err"; then
     result=failed
     detail="fetch failed: $(tail -c 200 "$err" | tr '\n' ' ')"
   elif tree_dirty "$dir"; then
     result=dirty
     detail="uncommitted changes — left alone"
-  elif ! git_op -C "$dir" merge --ff-only --quiet '@{upstream}' 2>"$err"; then
+  elif ! git_op "$dir" merge --ff-only --quiet '@{upstream}' 2>"$err"; then
     result=blocked
     detail="not fast-forwardable: $(tail -c 200 "$err" | tr '\n' ' ')"
   fi
@@ -109,16 +102,16 @@ publish_workspaces() {
   for d in "$WORKSPACE_ROOT"/*/; do
     [ -d "${d}.git" ] || continue
     name="$(basename "$d")"
-    remote="$(git_op -C "$d" remote get-url origin 2>/dev/null || true)"
+    remote="$(git_op "$d" remote get-url origin 2>/dev/null || true)"
     slug="$(slug_of "$remote")"
-    branch="$(git_op -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-    head="$(git_op -C "$d" rev-parse --short=12 HEAD 2>/dev/null || true)"
-    head_at="$(git_op -C "$d" log -1 --format=%cI 2>/dev/null || true)"
+    branch="$(git_op "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    head="$(git_op "$d" rev-parse --short=12 HEAD 2>/dev/null || true)"
+    head_at="$(git_op "$d" log -1 --format=%cI 2>/dev/null || true)"
     dirty=false
     tree_dirty "$d" && dirty=true
     # "<ahead>\t<behind>" against the upstream; empty (→ nulls) when the
     # branch tracks nothing, which the UI reports rather than inventing 0/0.
-    counts="$(git_op -C "$d" rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null || true)"
+    counts="$(git_op "$d" rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null || true)"
     ahead="${counts%%[[:space:]]*}"
     behind="${counts##*[[:space:]]}"
     sync="$(jq -c . "$OUT_DIR/.state/$name" 2>/dev/null || echo null)"

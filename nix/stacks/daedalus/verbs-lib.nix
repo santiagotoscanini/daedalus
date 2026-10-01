@@ -80,7 +80,6 @@ let
         HOSTKEY = lib.head config.sops.age.sshKeyPaths;
         SITE_DIR = config.fleet.site.path;
         SECRET_APPS = lib.concatStringsSep " " secretApps;
-        GIT = "${pkgs.git}/bin/git";
         # sopsStatic, the same binary the container bind-mounts. Nothing here
         # runs in a container, but `pkgs.sops` would be a SECOND 49 MB sops in
         # the system closure for no difference in behaviour.
@@ -122,7 +121,6 @@ let
         # site_engine_override): nix's fact, never the document's.
         ENGINE_CLONE = engineRoot;
         VAULT_APP_SECRETS = vaultAppSecrets;
-        GIT = "${pkgs.git}/bin/git";
         LOCKFILE = config.fleet.rebuildLock;
         HOSTNAME = config.networking.hostName;
       };

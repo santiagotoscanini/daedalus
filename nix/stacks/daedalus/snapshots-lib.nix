@@ -263,7 +263,6 @@ let
       OUT_DIR = repoDir;
       REPO_DIR = config.fleet.config.repo;
       SITE_DIR = config.fleet.site.path;
-      GIT = "${pkgs.git}/bin/git";
       JQ = "${pkgs.jq}/bin/jq";
       AWK = "${pkgs.gawk}/bin/awk";
       DATE = "${pkgs.coreutils}/bin/date";

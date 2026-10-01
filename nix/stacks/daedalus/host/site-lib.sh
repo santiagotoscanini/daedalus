@@ -30,19 +30,10 @@
 # refuses links — nothing should be able to plant one there, and nothing
 # here assumes that.
 
-# git as the operator, run from the site directory. Works from a
-# subdirectory of the work tree, which is where $SITE_DIR sits.
-site_git() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
-    "$ENV_BIN" HOME="$OPERATOR_HOME" GIT_TERMINAL_PROMPT=0 \
-    GIT_SSH_COMMAND="ssh -o BatchMode=yes" \
-    "$GIT" -C "$SITE_DIR" "$@"
-}
-
 # The work tree $SITE_DIR belongs to, or "" when it is a plain directory.
 site_toplevel() {
   [ -d "$SITE_DIR" ] || return 0
-  site_git rev-parse --show-toplevel 2>/dev/null || true
+  git_op "$SITE_DIR" rev-parse --show-toplevel 2>/dev/null || true
 }
 
 # Where the previous bytes of site file $1 are kept. A name may carry a
@@ -144,7 +135,7 @@ site_restore() {
     echo "site: no rollback state for $SITE_DIR/$name under $PREV_DIR — check it by hand" >&2
   fi
   if [ -n "$(site_toplevel)" ]; then
-    site_git add -A -- "$SITE_DIR/$name" >/dev/null 2>&1 || true
+    git_op "$SITE_DIR" add -A -- "$SITE_DIR/$name" >/dev/null 2>&1 || true
   fi
 }
 
@@ -153,7 +144,7 @@ site_stage() {
   [ -n "$(site_toplevel)" ] || return 0
   local f
   for f in "$@"; do
-    site_git add -- "$SITE_DIR/$f"
+    git_op "$SITE_DIR" add -- "$SITE_DIR/$f"
   done
 }
 
@@ -175,13 +166,13 @@ site_commit() {
   # Toplevel-relative names, committed from the toplevel: the pathspec then
   # names only what git knows, so a file that was added and removed again
   # cannot fail the commit.
-  mapfile -t changed < <(site_git diff --cached --name-only -- "${paths[@]}")
+  mapfile -t changed < <(git_op "$SITE_DIR" diff --cached --name-only -- "${paths[@]}")
   [ "${#changed[@]}" -gt 0 ] || return 0
-  site_git -C "$top" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+  git_op "$top" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     commit -q -m "$summary" -m "Applied from daedalus by $actor." -- "${changed[@]}"
-  site_git rev-parse --short HEAD
-  if site_git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
-    site_git push -q >/dev/null 2>&1 || echo "site: push failed (the commit is local only)" >&2
+  git_op "$SITE_DIR" rev-parse --short HEAD
+  if git_op "$SITE_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+    git_op "$SITE_DIR" push -q >/dev/null 2>&1 || echo "site: push failed (the commit is local only)" >&2
   fi
 }
 

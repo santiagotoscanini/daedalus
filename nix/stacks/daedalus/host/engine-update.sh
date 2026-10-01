@@ -115,24 +115,6 @@ fi
 
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 
-# git in the configuration checkout, as the operator. Absolute paths, because
-# the privilege-dropped child does not inherit writeShellApplication's PATH —
-# the trap every sibling script documents. No prompts: a fetch or push that
-# wants a passphrase must fail, not hang the unit.
-git_() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
-    "$ENV_BIN" HOME="$OPERATOR_HOME" GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes" \
-    "$GIT" -C "$FLAKE" "$@"
-}
-
-# git in the engine clone, as the operator — the same call aimed at the other
-# tree. $CLONE is set in validating, from the lock.
-git_clone() {
-  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
-    "$ENV_BIN" HOME="$OPERATOR_HOME" GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes" \
-    "$GIT" -C "$CLONE" "$@"
-}
-
 # System nix, not pkgs.nix, as the operator: platform/autoupgrade's reason —
 # the running nix honors /etc/gitconfig's safe.directory for the
 # operator-owned checkout, and a mismatched pkgs.nix trips libgit2's ownership
@@ -158,7 +140,7 @@ override="$(site_engine_override)"
   fail validating "clear the engine override first: the running system is built from the engine clone, not from the pinned engine (site.json developer.engineOverride, Settings › Developer)"
 
 [ -f "$FLAKE/flake.lock" ] || fail validating "$FLAKE has no flake.lock"
-if ! git_ diff --quiet -- flake.lock; then
+if ! git_op "$FLAKE" diff --quiet -- flake.lock; then
   fail validating "flake.lock has uncommitted changes in $FLAKE — commit or restore it first"
 fi
 
@@ -212,22 +194,22 @@ if [ -n "$CLONE" ]; then
   lock_workspaces_root ||
     fail fetching "the workspace lock under $WORKSPACES_DIR was held for 10 minutes (a workspace sync or clone) — nothing was changed"
 
-  current="$(git_clone rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  current="$(git_op "$CLONE" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   [ "$current" = "$REF" ] ||
     fail fetching "the clone $CLONE is on '${current:-?}', not '$REF' (the branch the '$INPUT' input names) — check it out first"
 
-  if ! log_run "$LOGFILE" git_clone fetch --quiet --prune origin "$REF"; then
+  if ! log_run "$LOGFILE" git_op "$CLONE" fetch --quiet --prune origin "$REF"; then
     fail fetching "could not fetch origin/$REF in $CLONE — $(errtail)"
   fi
 
   # Diverged: local commits that origin does not have. Refused, never
   # merged or rebased — those are the operator's commits, and "one branch,
   # main, always" means they belong on origin before anything pins them.
-  ahead="$(git_clone rev-list --count "origin/$REF..$REF" 2>/dev/null || echo "?")"
+  ahead="$(git_op "$CLONE" rev-list --count "origin/$REF..$REF" 2>/dev/null || echo "?")"
   [ "$ahead" = 0 ] ||
     fail fetching "the clone's $REF has $ahead commit(s) that are not on origin/$REF — push them first (one branch, main, always), then update"
 
-  if ! log_run "$LOGFILE" git_clone merge --ff-only --quiet "origin/$REF"; then
+  if ! log_run "$LOGFILE" git_op "$CLONE" merge --ff-only --quiet "origin/$REF"; then
     fail fetching "could not fast-forward $REF in $CLONE — $(errtail)"
   fi
   exec 8<&-
@@ -240,17 +222,17 @@ fi
 write_status running resolving ""
 if ! log_run "$LOGFILE" nix_ flake update "$INPUT" --flake "$FLAKE"; then
   resolve_error="$(errtail)"
-  git_ checkout -- flake.lock
+  git_op "$FLAKE" checkout -- flake.lock
   fail resolving "$resolve_error"
 fi
 
 node="$(lock_node)"
 TO_REV="$(jq -r '.locked.rev // ""' <<<"$node")"
 
-if git_ diff --quiet -- flake.lock || [ "$TO_REV" = "$FROM_REV" ]; then
+if git_op "$FLAKE" diff --quiet -- flake.lock || [ "$TO_REV" = "$FROM_REV" ]; then
   # Already current — or the lock moved without the rev moving (a metadata
   # refresh), which is not an update anyone asked for.
-  git_ checkout -- flake.lock
+  git_op "$FLAKE" checkout -- flake.lock
   TO_REV="$FROM_REV"
   write_status "done" "no-change" ""
   exit 0
@@ -262,7 +244,7 @@ fi
 write_status running building ""
 if ! log_run "$LOGFILE" nixos-rebuild build --flake "$FLAKE#$HOSTNAME"; then
   build_error="$(errtail)"
-  git_ checkout -- flake.lock
+  git_op "$FLAKE" checkout -- flake.lock
   TO_REV=""
   fail building "$build_error"
 fi
@@ -272,8 +254,8 @@ fi
 # person at a shell, and a bare commit would sweep their staged work into a
 # commit titled after an engine bump and then push it.
 write_status running committing ""
-git_ add -- flake.lock
-git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+git_op "$FLAKE" add -- flake.lock
+git_op "$FLAKE" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
   commit -q \
   -m "engine: $INPUT ${FROM_REV:0:7} → ${TO_REV:0:7}" \
   -m "flake.lock: '$INPUT' $FROM_REV → $TO_REV" \
@@ -281,14 +263,14 @@ git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
   -- flake.lock ||
   fail committing "git commit failed"
 
-COMMIT_SHA="$(git_ rev-parse --short HEAD)"
+COMMIT_SHA="$(git_op "$FLAKE" rev-parse --short HEAD)"
 UPDATE_COMMIT="$COMMIT_SHA"
 
 # --- roll back ------------------------------------------------------------
 # `git revert`, not `reset --hard`: this repo is shared, and a reset really
 # did eat an unrelated commit the first time an apply's switch failed.
 rollback() {
-  log_run "$LOGFILE" git_ -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
+  log_run "$LOGFILE" git_op "$FLAKE" -c "user.name=$(commit_name)" -c "user.email=$(commit_email)" \
     revert --no-edit "$UPDATE_COMMIT" ||
     log_line "$LOGFILE" "revert of $UPDATE_COMMIT failed — repo left as-is, resolve by hand"
   log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" || true
@@ -305,7 +287,7 @@ rollback() {
 if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
   log_line "$LOGFILE" "$REBOOT_REASONS"
   write_status running pushing ""
-  log_run "$LOGFILE" git_ push ||
+  log_run "$LOGFILE" git_op "$FLAKE" push ||
     log_line "$LOGFILE" "push failed (the commit is local only)"
   write_status "done" "reboot-required" \
     "$(reboot_note "$REBOOT_REASONS" "Nothing was activated; the lock commit is built and pushed.")"
@@ -356,7 +338,7 @@ fi
 # the only backup — but a network blip must not turn a successful rebuild
 # into a reported failure.
 write_status running pushing ""
-log_run "$LOGFILE" git_ push ||
+log_run "$LOGFILE" git_op "$FLAKE" push ||
   log_line "$LOGFILE" "push failed (the switch succeeded; the commit is local only)"
 
 write_status "done" "complete" ""

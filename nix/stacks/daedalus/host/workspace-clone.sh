@@ -55,7 +55,7 @@ DEST="$WORKSPACE_ROOT/$NAME_PART"
 
 if [ -e "$DEST" ]; then
   [ -d "$DEST/.git" ] || refuse "$DEST exists and is not a git clone"
-  EXISTING="$(slug_of "$(git_op -C "$DEST" remote get-url origin 2>/dev/null || true)")"
+  EXISTING="$(slug_of "$(git_op "$DEST" remote get-url origin 2>/dev/null || true)")"
   if [ "$EXISTING" != "$REPO" ]; then
     refuse "$DEST already holds a clone of '${EXISTING:-something else}'"
   fi
@@ -81,7 +81,7 @@ echo "cloning $REPO"
 TMP="$WORKSPACE_ROOT/.$NAME_PART.cloning"
 rm -rf -- "$TMP"
 ERR="$(mktemp)"
-if ! git_op clone --quiet -- "git@github.com:$REPO.git" "$TMP" 2>"$ERR"; then
+if ! git_op "$WORKSPACE_ROOT" clone --quiet -- "git@github.com:$REPO.git" "$TMP" 2>"$ERR"; then
   rm -rf -- "$TMP"
   refuse "git clone failed: $(tail -c 300 "$ERR" | tr '\n' ' ')"
 fi

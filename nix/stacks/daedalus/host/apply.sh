@@ -251,7 +251,7 @@ site_stage "${WRITTEN[@]}" || fail committing "git add failed"
 
 WRITTEN_PATHS=()
 for w in "${WRITTEN[@]}"; do WRITTEN_PATHS+=("$SITE_DIR/$w"); done
-if [ -n "$(site_toplevel)" ] && site_git diff --quiet HEAD -- "${WRITTEN_PATHS[@]}" 2>/dev/null; then
+if [ -n "$(site_toplevel)" ] && git_op "$SITE_DIR" diff --quiet HEAD -- "${WRITTEN_PATHS[@]}" 2>/dev/null; then
   write_status "done" "no-change" ""
   exit 0
 fi
@@ -391,9 +391,7 @@ fi
 # rebuild into a reported failure.
 write_status running pushing ""
 if [ "$WANT_COMMIT" = "yes" ] && [ -n "$COMMIT_SHA" ]; then
-  log_run "$LOGFILE" setpriv --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups \
-    env HOME="$OPERATOR_HOME" GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes" \
-    git -C "$FLAKE" push ||
+  log_run "$LOGFILE" git_op "$FLAKE" push ||
     log_line "$LOGFILE" "push failed (the switch succeeded; the commit is local only)"
 fi
 

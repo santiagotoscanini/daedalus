@@ -48,6 +48,24 @@ as_operator_fn() {
   as_operator "$BASH" -c "$(declare -f "$fn"); $fn \"\$@\"" "$fn" "$@"
 }
 
+# git in a tree the operator owns — the configuration checkout and its site
+# directory, the engine clone, the workspaces — as the operator, never root:
+# root-made objects in a working tree are the "unable to open loose object"
+# trap. With their HOME (their git config, known_hosts and the SSH identity
+# platform/git gives them) and never a prompt: a fetch or push that wants a
+# passphrase fails instead of hanging the unit. Absolute binaries, because a
+# privilege-dropped child does not inherit writeShellApplication's PATH for the
+# command itself; PATH stays, so git finds ssh. Expects ENV_BIN, GIT and
+# OPERATOR_HOME (daedalus-lib.nix operatorHomeVars).
+#
+#   git_op <dir> <git arguments…>
+git_op() {
+  local dir="$1"
+  shift
+  as_operator "$ENV_BIN" HOME="$OPERATOR_HOME" GIT_TERMINAL_PROMPT=0 \
+    GIT_SSH_COMMAND="ssh -o BatchMode=yes" "$GIT" -C "$dir" "$@"
+}
+
 # [operator] Can the operator create files in directory $1?
 op_can_write() {
   [ -d "$1" ] && [ -w "$1" ] && [ -x "$1" ]
