@@ -3,7 +3,8 @@
 #
 #   default                         node server.mjs, from the bundle the image
 #                                   was built with. Needs DATABASE_URL.
-#   DAEDALUS_DEV=1 + a tree at /app `pnpm install --frozen-lockfile`, then
+#   DAEDALUS_DEV=1 + a tree at /app `pnpm install --frozen-lockfile`, the
+#                                   migrations (migrate.mjs), then
 #                                   `vite dev` against the mounted source.
 #
 # A shell script rather than a node one because both branches end in `exec`:
@@ -43,6 +44,10 @@ if [ "${DAEDALUS_DEV:-}" = "1" ]; then
     pnpm install --frozen-lockfile \
       --config.registry="$REGISTRY" \
       --config.store-dir="${PNPM_STORE_DIR:-/app/.pnpm-store}"
+
+    # The same migration server.mjs runs before it serves (migrate.mjs), so a
+    # dev box is never a schema behind the code it runs. A failure stops here.
+    node migrate.mjs
 
     exec pnpm dev
   fi

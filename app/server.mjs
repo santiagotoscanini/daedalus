@@ -18,15 +18,12 @@ import { extname, join, relative, sep } from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { createBrotliCompress, createGzip } from 'node:zlib'
-import { drizzle } from 'drizzle-orm/postgres-js'
-import { migrate } from 'drizzle-orm/postgres-js/migrator'
-import postgres from 'postgres'
 import { serve } from 'srvx'
+import { runMigrations } from './migrate.mjs'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
 const CLIENT_DIR = join(here, 'dist', 'client')
 const SERVER_ENTRY = join(here, 'dist', 'server', 'server.js')
-const MIGRATIONS_DIR = join(here, 'drizzle')
 
 // --- 1. the rejection guard -------------------------------------------------
 //
@@ -40,25 +37,7 @@ process.on('unhandledRejection', (reason) => {
   console.error('[daedalus] unhandled rejection — kept serving:', reason)
 })
 
-// --- 2. migrations ----------------------------------------------------------
-//
-// drizzle's migrator and `drizzle-kit migrate` keep the same ledger
-// (`drizzle.__drizzle_migrations`), so a database migrated by hand
-// (`pnpm db:migrate`, the dev-mode path) is picked up where it stands. Its own one-connection client, closed before
-// the app opens its pool. A failure here exits non-zero on purpose: serving
-// on a schema the code does not match is how data gets damaged.
-async function runMigrations() {
-  const url = process.env.DATABASE_URL
-  if (url === undefined || url === '') throw new Error('DATABASE_URL is not set')
-  const sql = postgres(url, { max: 1, onnotice: () => {} })
-  try {
-    await migrate(drizzle(sql), { migrationsFolder: MIGRATIONS_DIR })
-  } finally {
-    await sql.end({ timeout: 5 })
-  }
-}
-
-// --- 3. static files --------------------------------------------------------
+// --- 2. static files --------------------------------------------------------
 //
 // Indexed once at start: the set of files is fixed for the life of a build,
 // and a Map lookup means a request path never touches the filesystem unless
@@ -153,9 +132,11 @@ function staticResponse(request, entry, urlPath) {
   return new Response(Readable.toWeb(stream), { headers })
 }
 
-// --- 4. serve ---------------------------------------------------------------
+// --- 3. serve ---------------------------------------------------------------
 
 const started = performance.now()
+// migrate.mjs, the one migration path: the dev branch of docker-entrypoint.sh
+// runs the same file before `pnpm dev`.
 await runMigrations()
 const migrated = performance.now()
 
@@ -198,7 +179,7 @@ const server = serve({
 
 await server.ready()
 
-// --- 5. the background work -------------------------------------------------
+// --- 4. the background work -------------------------------------------------
 //
 // The build scheduler, the gateway sync, the controller link and the rest
 // (src/host/background.ts): started once, now that the process serves, and

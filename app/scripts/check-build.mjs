@@ -18,11 +18,11 @@
 //      nothing reads, and no build put them there in a box's place.
 //   4. A package the server resolves at run time that a production install
 //      does not bring. The build bundles every dependency except what
-//      vite.config.ts externalises, and server.mjs imports a few itself. The
-//      image installs `dependencies` and nothing else, so that list has to be
-//      exactly those packages — everything the bundle swallowed belongs in
-//      devDependencies. One missing is a container that dies at start, or at
-//      the first password hash.
+//      vite.config.ts externalises, and server.mjs and migrate.mjs import a few
+//      themselves. The image installs `dependencies` and nothing else, so that
+//      list has to be exactly those packages — everything the bundle swallowed
+//      belongs in devDependencies. One missing is a container that dies at
+//      start, or at the first password hash.
 //
 // Run by `pnpm build` (scripts/build.mjs), after Vite. No dependencies: it
 // reads `dist/`.
@@ -83,6 +83,7 @@ const BARE =
 const runtime = new Map()
 const serverFiles = [
   new URL('../server.mjs', import.meta.url).pathname,
+  new URL('../migrate.mjs', import.meta.url).pathname,
   ...(await chunks(join(root, 'server'))),
 ]
 for (const file of serverFiles) {

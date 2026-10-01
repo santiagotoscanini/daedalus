@@ -107,7 +107,7 @@ ENTRYPOINT ["daedalus-entrypoint"]
 FROM runtime
 
 # package.json is read at run time for the engine's version (core/site).
-COPY --from=build /src/app/package.json /src/app/server.mjs ./
+COPY --from=build /src/app/package.json /src/app/server.mjs /src/app/migrate.mjs ./
 COPY --from=build /src/app/drizzle ./drizzle
 COPY --from=build /src/app/node_modules ./node_modules
 COPY --from=build /src/app/dist ./dist

@@ -134,11 +134,13 @@ DATABASE_URL=postgres://postgres:x@localhost:5432/postgres pnpm start
 from `public/`) and `dist/server/server.js`. That second file is a fetch
 handler — `export default { fetch }` — and listens on nothing, by design of
 TanStack Start; `server.mjs` is the listener. In order, it registers the
-unhandled-rejection guard, applies `drizzle/` with drizzle's migrator (the
-same ledger `pnpm db:migrate` writes, so a database migrated by hand is
-picked up where it stands, and a failed migration exits non-zero before a
-port opens), then serves `dist/client` and hands everything else to the
-handler. `PORT` (3000) and `HOST` (0.0.0.0) are the only settings of its
+unhandled-rejection guard, applies `drizzle/` with drizzle's migrator
+(`migrate.mjs`; the same ledger `pnpm db:migrate` writes, so a database
+migrated by hand is picked up where it stands, and a failed migration exits
+non-zero before a port opens), then serves `dist/client` and hands
+everything else to the handler, and once it listens starts the process's
+background work (`src/host/background.ts`, through the server entry's
+exports). `PORT` (3000) and `HOST` (0.0.0.0) are the only settings of its
 own. `/assets/*` is `immutable` for a year; the `public/` files keep their
 names between builds and get an hour.
 
@@ -237,7 +239,8 @@ podman run -d --init --name daedalus-dev --user 0:0 --network <net> \
   -v "$PWD/app":/app daedalus
 ```
 
-The entrypoint runs `pnpm install --frozen-lockfile` and then `pnpm dev`
+The entrypoint runs `pnpm install --frozen-lockfile`, the migrations
+(`migrate.mjs`, the file `server.mjs` runs them with) and then `pnpm dev`
 in the mount. The image carries corepack's shims (113 kB) and no pnpm and no
 dev dependency: the pnpm version is the mounted `package.json`'s to name and
 is fetched once into `/app/.corepack`; Vite and everything else come from
@@ -248,8 +251,7 @@ instead of letting pnpm fail. With rootful docker, leave it off if your uid
 is 1000. `NPM_REGISTRY` overrides the registry `pnpm-workspace.yaml` names;
 `PNPM_STORE_DIR` moves the store (default `/app/.pnpm-store`, beside
 `node_modules` so pnpm can hardlink). With the flag set and nothing at
-`/app`, it warns and serves the bundle. Dev mode runs no migrations —
-`pnpm db:migrate`, as before.
+`/app`, it warns and serves the bundle.
 
 `.github/workflows/image.yml` publishes `ghcr.io/<owner>/daedalus:<version>`
 and `:sha-<short sha>` when a `v*` tag is pushed, and only then; the tag
