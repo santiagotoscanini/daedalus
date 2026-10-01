@@ -29,7 +29,7 @@ type Kind = AppTabData['kind']
 type TabData<K extends Kind> = Extract<AppTabData, { kind: K }>
 
 /** What every tab may read beside its own data: the page's frame and its one write. */
-export type AppTabContext = {
+type AppTabContext = {
   frame: NonNullable<LoaderData>
   range: AccessWindow
   /** Saves a field of the registry entry; the page shows a refusal above the tabs. */

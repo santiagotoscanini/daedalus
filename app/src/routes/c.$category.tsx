@@ -273,7 +273,12 @@ function CategoryPage() {
               promise={boards}
               fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
             >
-              {(payload) => <ModuleBoards payload={payload} />}
+              {(payload) => (
+                <ModuleBoards
+                  payload={payload}
+                  fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
+                />
+              )}
             </GuardedAwait>
           )}
         </>

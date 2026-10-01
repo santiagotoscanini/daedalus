@@ -21,13 +21,13 @@ export function PhoneBar({ drawer }: { drawer: Drawer }) {
       )}
     >
       <button
-        ref={drawer.openButton}
         type="button"
         className={ICON_BUTTON}
         aria-label="Open navigation"
         aria-expanded={drawer.open}
-        aria-controls="nav"
-        onClick={drawer.show}
+        onClick={() => {
+          drawer.setOpen(true)
+        }}
       >
         <NavIcon name="menu" size={20} />
       </button>
@@ -36,29 +36,5 @@ export function PhoneBar({ drawer }: { drawer: Drawer }) {
         <span>daedalus</span>
       </Link>
     </header>
-  )
-}
-
-/**
- * Phone only: the dimmed layer behind the open drawer; a tap closes it.
- * Not a button — it duplicates the close control for a pointer, and a screen
- * reader that already has one does not need a second. Kept in the DOM and
- * faded by `data-open` so the transition can play both ways.
- */
-export function Scrim({ drawer }: { drawer: Drawer }) {
-  return (
-    <div
-      className={cn(
-        'hidden max-rail:block max-rail:fixed max-rail:inset-0 max-rail:z-50',
-        'bg-overlay/55 opacity-0 invisible transition-[opacity,visibility]',
-        'duration-200 delay-[0s,200ms]',
-        'data-[open=true]:visible data-[open=true]:opacity-100 data-[open=true]:delay-0',
-      )}
-      data-open={drawer.open ? 'true' : 'false'}
-      onClick={() => {
-        drawer.hide()
-      }}
-      aria-hidden="true"
-    />
   )
 }

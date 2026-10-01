@@ -1,4 +1,3 @@
-import { useRouter } from '@tanstack/react-router'
 import { UnplugIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ControllerLink } from '../host/controller/client'
@@ -12,26 +11,23 @@ import { Alert, AlertDescription } from './ui/alert'
 // Said once, above every page, so the boards that depend on it can say
 // "unknown" instead of each guessing a verdict about the machines.
 //
-// Fetched on the client after the page, again on every navigation, and every
-// few seconds while mounted; nothing is drawn unless the link is down, so there
-// is no loading state to flash.
+// Fetched on the client once the shell has mounted, then every few seconds;
+// it lives in the shell, so a navigation neither remounts nor re-asks it.
+// Nothing is drawn unless the link is down, so there is no loading state to
+// flash.
 
 const POLL_MS = 10_000
 
-export function ControllerBanner() {
-  const router = useRouter()
-  const [link, setLink] = useState<ControllerLink | null>(null)
-  // A read that fails keeps the last answer: the banner is not the page's to break.
-  const load = () => fetchControllerLinkFn().then(setLink, () => undefined)
+// A read that fails keeps the last answer: the banner is not the page's to break.
+const read = (set: (l: ControllerLink) => void) =>
+  fetchControllerLinkFn().then(set, () => undefined)
 
+export function ControllerBanner() {
+  const [link, setLink] = useState<ControllerLink | null>(null)
   useEffect(() => {
-    const read = () => fetchControllerLinkFn().then(setLink, () => undefined)
-    void read()
-    return router.subscribe('onResolved', () => {
-      void read()
-    })
-  }, [router])
-  usePoll(load, POLL_MS, true)
+    void read(setLink)
+  }, [])
+  usePoll(() => read(setLink), POLL_MS, true)
   const now = useNow(link?.state === 'down')
 
   if (link?.state !== 'down') return null

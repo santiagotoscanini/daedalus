@@ -42,6 +42,10 @@ export function useNow(active: boolean): number | null {
  * as a dependency would tear the interval down and restart it on each one —
  * a poll that never quite reaches its own period. The ref means every tick
  * still calls the NEWEST closure, so the values it reads are current.
+ *
+ * A tab nobody can see asks nothing: ticks are skipped while the document is
+ * hidden, and the first thing it does on coming back is ask once, so what
+ * shows is current rather than up to a period old.
  */
 export function usePoll(fn: () => Promise<void>, ms: number, active: boolean): void {
   const latest = useRef(fn)
@@ -50,15 +54,21 @@ export function usePoll(fn: () => Promise<void>, ms: number, active: boolean): v
   useEffect(() => {
     if (!active) return
     let inFlight = false
-    const t = setInterval(() => {
-      if (inFlight) return
+    const tick = () => {
+      if (inFlight || document.visibilityState === 'hidden') return
       inFlight = true
       void latest.current().finally(() => {
         inFlight = false
       })
-    }, ms)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    const t = setInterval(tick, ms)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       clearInterval(t)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [active, ms])
 }

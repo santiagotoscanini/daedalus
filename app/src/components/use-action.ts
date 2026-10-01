@@ -19,7 +19,7 @@ import { errorText } from '../lib/redact'
 
 type Refused = { ok: false; reason: string }
 
-export type ActionOptions<T> = {
+type ActionOptions<T> = {
   /** A step after success and before the reload. */
   onDone?: (value: Exclude<T, Refused>) => unknown
   /** Said in `notice` once the call has succeeded. */

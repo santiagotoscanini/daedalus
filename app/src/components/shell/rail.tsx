@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 import type { Account } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
 import type { ModuleManifest } from '../../lib/modules/manifest'
@@ -15,15 +16,15 @@ import {
   NAV_LABEL,
   NAV_LIST,
 } from './styles'
-import type { Drawer } from './use-rail'
 
-// The rail: one element, two layouts.
+// The rail: one body, two frames.
 //
 //   desktop  a fixed column beside the page, collapsible to 64px of icons
 //   phone    an off-canvas drawer, slid in by the phone bar's menu button
+//            (phone-drawer.tsx)
 //
-// One element rather than two copies of the navigation that drift apart; the
-// two states are kept apart entirely in CSS (`max-rail:` below 52rem).
+// Both frames draw the same RailBody, so the navigation cannot drift between
+// them; the drawer's only exists while it is open.
 //
 //   ┌ RailHead ─────────────┐  logo · collapse chevron (desktop) · close (phone)
 //   │ DirectoryNav          │  Apps, then the modules this box runs
@@ -32,7 +33,7 @@ import type { Drawer } from './use-rail'
 //   │ FleetNav (at the foot)│  modules about every machine · account menu
 //   └───────────────────────┘
 
-type RailProps = {
+export type RailBodyProps = {
   modules: ModuleManifest[]
   app: AppRailContext | null
   path: string
@@ -40,26 +41,12 @@ type RailProps = {
   theme: ThemeChoice
   collapsed: boolean
   onToggleCollapse: () => void
-  drawer: Drawer
+  /** The drawer's close button; the desktop column has none. */
+  close?: ReactNode
 }
 
-export function Rail({
-  modules,
-  app,
-  path,
-  account,
-  theme,
-  collapsed,
-  onToggleCollapse,
-  drawer,
-}: RailProps) {
-  // Two kinds of entry. The directory is what this box RUNS, one row per
-  // subject area. A module with a machine picker is about every machine on
-  // the network, this one included — a different kind of thing, so it sits
-  // at the foot on its own.
-  const directory = modules.filter((m) => m.machinePicker !== true)
-  const fleet = modules.filter((m) => m.machinePicker === true)
-
+/** The desktop column. Below the breakpoint the drawer draws the same body. */
+export function Rail(props: RailBodyProps) {
   return (
     // Fixed, not sticky. A sticky rail depends on the body being the
     // scroller, and every Radix popover (a Select, the account menu) locks the
@@ -67,31 +54,39 @@ export function Rail({
     // page was scrolled to until the next scroll event, which read as the
     // rail vanishing. The grid's first column is the room it takes.
     <aside
-      id="nav"
       className={cn(
         'fixed inset-y-0 left-0 z-20 flex w-(--sidebar-w) flex-col gap-[1.4rem]',
         'border-r border-r-subtle bg-background px-[0.7rem] pt-[1.1rem] pb-[0.9rem]',
-        'nav-collapsed:px-[0.55rem]',
-        // Below the breakpoint it is a drawer. `visibility`, not transform
-        // alone: a rail merely moved off the left edge is still in the tab
-        // order and still read out. The delay keeps it visible for the length
-        // of the closing slide.
-        'max-rail:fixed max-rail:inset-y-0 max-rail:left-0 max-rail:right-auto max-rail:z-[60]',
-        'max-rail:h-[100dvh] max-rail:w-[min(17.5rem,82vw)] max-rail:gap-[1.1rem]',
-        'max-rail:overflow-y-auto max-rail:border-r-border',
-        'max-rail:pt-3 max-rail:pb-[1.4rem] max-rail:pl-[max(0.7rem,env(safe-area-inset-left))]',
-        'max-rail:invisible max-rail:-translate-x-full',
-        'max-rail:transition-[transform,visibility] max-rail:duration-[220ms]',
-        'max-rail:ease-[cubic-bezier(0.4,0,0.2,1)] max-rail:delay-[0s,220ms]',
-        'max-rail:data-[open=true]:visible max-rail:data-[open=true]:translate-x-0',
-        'max-rail:data-[open=true]:delay-0',
+        'nav-collapsed:px-[0.55rem] max-rail:hidden',
       )}
-      data-open={drawer.open ? 'true' : 'false'}
     >
-      <RailHead collapsed={collapsed} onToggleCollapse={onToggleCollapse} drawer={drawer} />
+      <RailBody {...props} />
+    </aside>
+  )
+}
+
+export function RailBody({
+  modules,
+  app,
+  path,
+  account,
+  theme,
+  collapsed,
+  onToggleCollapse,
+  close,
+}: RailBodyProps) {
+  // Two kinds of entry. The directory is what this box RUNS, one row per
+  // subject area. A module with a machine picker is about every machine on
+  // the network, this one included — a different kind of thing, so it sits
+  // at the foot on its own.
+  const directory = modules.filter((m) => m.machinePicker !== true)
+  const fleet = modules.filter((m) => m.machinePicker === true)
+  return (
+    <>
+      <RailHead collapsed={collapsed} onToggleCollapse={onToggleCollapse} close={close} />
       {app !== null ? <AppRail app={app} /> : <DirectoryNav modules={directory} />}
       <FleetNav modules={fleet} path={path} account={account} theme={theme} />
-    </aside>
+    </>
   )
 }
 
@@ -103,11 +98,11 @@ export function Rail({
 function RailHead({
   collapsed,
   onToggleCollapse,
-  drawer,
+  close,
 }: {
   collapsed: boolean
   onToggleCollapse: () => void
-  drawer: Drawer
+  close: ReactNode
 }) {
   return (
     <div className="flex items-center gap-1.5 nav-collapsed:flex-col nav-collapsed:gap-2">
@@ -135,18 +130,7 @@ function RailHead({
         <NavIcon name="chevron" size={17} />
       </button>
 
-      {/* Phone only: closes the drawer and hands focus back to its opener. */}
-      <button
-        ref={drawer.closeButton}
-        type="button"
-        className={cn(ICON_BUTTON, 'hidden max-rail:inline-flex')}
-        aria-label="Close navigation"
-        onClick={() => {
-          drawer.hide(true)
-        }}
-      >
-        <NavIcon name="close" size={18} />
-      </button>
+      {close}
     </div>
   )
 }
