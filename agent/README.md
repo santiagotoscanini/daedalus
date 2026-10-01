@@ -1251,12 +1251,11 @@ header of [`src/config.rs`](src/config.rs) is the reference.
 ```toml
 port = 7787               # the controller's metrics page (/healthz, /nodes/metrics); a node listens on none
 update_check_secs = 600   # how often the release feed is asked
-auto_update = true        # the older spelling of `updates`
 log_level = "info"        # "debug" for a bug report
 search_domains = []       # more domains to ask for _daedalus-controller._tcp
+updates = "self"          # self | report
 # mode = "node"           # node | controller (see "Controller mode")
 # telemetry = "full"      # full | minimal | off
-# updates = "self"        # self | staged | external
 # data_dir = "…"          # see above
 # controller_address = "…" # the controller's link address, host:port; absent: DNS
 # controller_pin = "…"     # its key's fingerprint; absent: unpaired (install --pin, pair --pin; a Mac's log-in)
@@ -1274,9 +1273,8 @@ reported; `off` reads nothing (the page's `telemetry` is null, and
 read at every level (an installed but stopped Lemonade is found through
 the application list, which only `full` reads).
 
-`updates = "self"` installs a newer release (the default); `staged` and
-`external` only report it, as `auto_update = false` does. With no
-`updates` key, `auto_update` decides; with both, `updates` wins.
+`updates = "self"` installs a newer release (the default); `report` only
+says on the status page that one is available.
 
 Claude Code is looked for in `~/.local/bin`, npm's bin, Homebrew's bin and
 PATH. Its remote control runs in the directory the policy names, else the
@@ -1297,7 +1295,7 @@ version its tag's, and carry this binary's own target's required assets (on
 Linux the service alone; the tray is optional and follows only where it is
 installed). So a re-published old binary, another target's binary under
 this one's name or a moved tag is refused. Unless config.toml says only to
-report it (`updates`, or `auto_update = false`), it streams each asset to
+report it (`updates = "report"`), it streams each asset to
 `.new` through a cap at its stated size, hashing on the way, keeps it only
 when size and hash are the manifest's and flushes it to disk, records the
 probation in `state.json` (and installs nothing when that cannot be

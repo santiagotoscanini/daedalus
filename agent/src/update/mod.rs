@@ -27,7 +27,7 @@
 //! operator's, outside this repository.
 //!
 //! Whether a newer release is installed or only reported is config.toml's
-//! `updates`, or the older `auto_update` (`Config::self_update_off`).
+//! `updates` (`Config::self_update_off`).
 //!
 //! The box cannot pin an agent version; the newest release is the pin.
 

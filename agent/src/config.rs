@@ -11,12 +11,11 @@
 //! ```toml
 //! port = 7787                 # the status page's port (loopback on a node)
 //! update_check_secs = 600     # how often the release feed is asked
-//! auto_update = true          # the older spelling of `updates` (below)
 //! log_level = "info"
 //! search_domains = []         # more domains to ask for `_daedalus-controller._tcp`
+//! updates = "self"            # self | report
 //! mode = "node"               # node | controller
 //! telemetry = "full"          # full | minimal | off
-//! updates = "self"            # self | staged | external
 //! data_dir = "…"              # where state, identity and logs live; absent = the OS default
 //! controller_address = "…"    # the controller, host:port; absent = its DNS SRV record
 //! controller_pin = "…"        # its key's fingerprint; absent = unpaired, no controller
@@ -56,10 +55,8 @@
 //! `telemetry` is null and the controller has no telemetry series for it. The
 //! providers (providers.rs) are read whatever the level: the gateway needs
 //! them. `updates` decides whether a
-//! newer release is installed: `self` installs it (today's behaviour);
-//! `staged` and `external` only report it, as `auto_update = false` always
-//! has. When `updates` is absent, `auto_update` decides (true = `self`,
-//! false = report only); when both are present, `updates` wins.
+//! newer release is installed: `self` installs it, `report` only says on
+//! the status page that one is available.
 //! How Claude remote control runs is not a knob: always as a job of the OS
 //! that outlives the agent (jobs/). `install` writes the first five keys, and the controller's two when it
 //! is given them.
@@ -140,15 +137,14 @@ pub struct Config {
     /// How often the feed is asked, in seconds. GitHub allows 60 unauthenticated
     /// requests an hour from one address; the default spends six.
     pub update_check_secs: u64,
-    /// Whether a newer release is installed automatically. Off means the
-    /// status page says one is available and nothing else happens. The
-    /// older spelling of `updates`, which wins when present.
-    pub auto_update: bool,
     /// `info` by default; `debug` for a bug report.
     pub log_level: String,
     /// Search domains to ask for the `_daedalus-controller._tcp` record
     /// besides the ones DHCP handed the adapters.
     pub search_domains: Vec<String>,
+    /// Whether a newer release is installed, or only reported
+    /// (`Config::self_update_off`).
+    pub updates: UpdateMode,
     /// The controller's `host:port`, for the link (link/node.rs); absent
     /// means the `_daedalus-controller._tcp` SRV record. `install --controller` writes it.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -169,10 +165,6 @@ pub struct Config {
     /// How much of the machine the agent reads and reports (module doc).
     #[serde(skip_serializing_if = "is_default")]
     pub telemetry: TelemetryLevel,
-    /// How a newer release reaches this machine; absent means `auto_update`
-    /// decides (`Config::self_update_off`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub updates: Option<UpdateMode>,
     /// Where state, identity and logs live, instead of the OS default. The
     /// environment's `DAEDALUS_AGENT_DATA_DIR` wins over it.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -266,17 +258,16 @@ pub enum TelemetryLevel {
     Off,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum UpdateMode {
     /// The agent installs a newer release itself.
+    #[default]
     #[serde(rename = "self")]
     SelfInstall,
-    /// Fetched and staged, applied on request. Today: reported only.
-    Staged,
-    /// Something else installs releases (nix, a package manager). Today:
-    /// reported only.
-    External,
+    /// The status page says a newer release is available; nothing is
+    /// installed.
+    Report,
 }
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -288,7 +279,6 @@ impl Default for Config {
         Self {
             port: 7787,
             update_check_secs: 600,
-            auto_update: true,
             log_level: "info".into(),
             search_domains: Vec::new(),
             controller_address: None,
@@ -296,7 +286,7 @@ impl Default for Config {
             app_url: None,
             mode: Mode::default(),
             telemetry: TelemetryLevel::default(),
-            updates: None,
+            updates: UpdateMode::default(),
             data_dir: None,
             controller: ControllerConfig::default(),
         }
@@ -364,14 +354,10 @@ impl Config {
 
     /// Why a newer release is only reported and not installed, as the
     /// status page words it; None when the agent installs it itself.
-    /// `updates` decides when present, `auto_update` otherwise.
     pub fn self_update_off(&self) -> Option<&'static str> {
         match self.updates {
-            Some(UpdateMode::SelfInstall) => None,
-            Some(UpdateMode::Staged) => Some("updates = staged"),
-            Some(UpdateMode::External) => Some("updates = external"),
-            None if self.auto_update => None,
-            None => Some("auto_update is off"),
+            UpdateMode::SelfInstall => None,
+            UpdateMode::Report => Some("updates = report"),
         }
     }
 
@@ -699,8 +685,8 @@ mod tests {
     use crate::paths::env_dir;
 
     /// What `install` writes without `--controller` or `--pin`, byte for byte.
-    const WRITTEN_BY_INSTALL: &str = "port = 7787\nupdate_check_secs = 600\nauto_update = true\n\
-                                      log_level = \"info\"\nsearch_domains = []\n";
+    const WRITTEN_BY_INSTALL: &str = "port = 7787\nupdate_check_secs = 600\n\
+                                      log_level = \"info\"\nsearch_domains = []\nupdates = \"self\"\n";
 
     #[test]
     fn install_writes_the_defaults_and_they_parse_back() {
@@ -712,7 +698,7 @@ mod tests {
         assert_eq!(cfg, Config::default());
         assert_eq!(cfg.mode, Mode::Node);
         assert_eq!(cfg.telemetry, TelemetryLevel::Full);
-        assert_eq!(cfg.updates, None);
+        assert_eq!(cfg.updates, UpdateMode::SelfInstall);
         assert_eq!(cfg.data_dir, None);
         assert_eq!(cfg.self_update_off(), None);
     }
@@ -729,37 +715,39 @@ mod tests {
             Config {
                 port: 7790,
                 update_check_secs: 1200,
-                auto_update: false,
                 log_level: "debug".into(),
                 search_domains: vec!["lan".into()],
                 ..Config::default()
             }
         );
-        assert_eq!(cfg.self_update_off(), Some("auto_update is off"));
+        assert_eq!(cfg.self_update_off(), None);
     }
 
     #[test]
     fn the_newer_keys_parse() {
         let cfg: Config = toml::from_str(
-            "mode = \"controller\"\ntelemetry = \"minimal\"\nupdates = \"external\"\n\
+            "mode = \"controller\"\ntelemetry = \"minimal\"\nupdates = \"report\"\n\
              data_dir = \"/srv/agent\"\n",
         )
         .unwrap();
         assert_eq!(cfg.mode, Mode::Controller);
         assert_eq!(cfg.telemetry, TelemetryLevel::Minimal);
-        assert_eq!(cfg.updates, Some(UpdateMode::External));
+        assert_eq!(cfg.updates, UpdateMode::Report);
+        assert_eq!(cfg.self_update_off(), Some("updates = report"));
         assert_eq!(cfg.data_dir.as_deref(), Some(Path::new("/srv/agent")));
-        let off: Config = toml::from_str("telemetry = \"off\"\nupdates = \"staged\"").unwrap();
+        let off: Config = toml::from_str("telemetry = \"off\"").unwrap();
         assert_eq!(off.telemetry, TelemetryLevel::Off);
-        assert_eq!(off.updates, Some(UpdateMode::Staged));
+        for gone in ["staged", "external"] {
+            assert!(toml::from_str::<Config>(&format!("updates = \"{gone}\"")).is_err());
+        }
         let own: Config = toml::from_str("mode = \"node\"\nupdates = \"self\"").unwrap();
         assert_eq!(own.mode, Mode::Node);
-        assert_eq!(own.updates, Some(UpdateMode::SelfInstall));
+        assert_eq!(own.updates, UpdateMode::SelfInstall);
         assert!(toml::from_str::<Config>("mode = \"box\"").is_err());
         // Written back, a non-default value keeps its key.
         let text = toml::to_string_pretty(&cfg).unwrap();
         assert!(text.contains("mode = \"controller\""), "{text}");
-        assert!(text.contains("updates = \"external\""), "{text}");
+        assert!(text.contains("updates = \"report\""), "{text}");
         assert!(text.contains("data_dir = \"/srv/agent\""), "{text}");
     }
 
@@ -894,23 +882,6 @@ mod tests {
         assert_eq!(
             resolve_api_socket(None, None, data),
             abs("data").join("run").join("api.sock")
-        );
-    }
-
-    #[test]
-    fn updates_wins_over_auto_update() {
-        let off = |text: &str| toml::from_str::<Config>(text).unwrap().self_update_off();
-        assert_eq!(off(""), None);
-        assert_eq!(off("auto_update = true"), None);
-        assert_eq!(off("auto_update = false"), Some("auto_update is off"));
-        assert_eq!(off("auto_update = false\nupdates = \"self\""), None);
-        assert_eq!(
-            off("auto_update = true\nupdates = \"staged\""),
-            Some("updates = staged")
-        );
-        assert_eq!(
-            off("auto_update = true\nupdates = \"external\""),
-            Some("updates = external")
         );
     }
 
