@@ -120,7 +120,6 @@ the same directory:
 |---|---|---|
 | `apply-request.json` | `daedalus-apply` | `apply-status.json` + `apply-last.log` + `payload-<id>.json` |
 | `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
-| `version-request.json` | `daedalus-version-update` | `version-status.json` + `version-last.log` |
 | `claude-code-request.json` | `daedalus-claude-code-update` | `claude-code-status.json` + `claude-code-last.log` |
 
 Five rules make this safe, and each of them was learned the hard way:
@@ -205,6 +204,7 @@ helper holding the template's lock, refuses the next.
 | `session-host-restart` | `daedalus-session-host-restart`, which restarts the session host: how a new build takes over, ending every live terminal | 2026-09-29 |
 | `build` + payload, detached | `daedalus-build@<run>` (build-agent.nix): the engine's build request is the payload; progress and the result go to `/verbs/build-status.json`, root's and read-only in the container; the scheduler follows the run until that file names it (BUILDS.md) | 2026-10-01 |
 | `image-update` + payload, detached | `daedalus-image-update@<run>` (daedalus-verbs.nix): `{targets, actor}` is the payload; one commit, one rebuild, verify, revert on failure; progress in `/verbs/image-update-status.json` under the run's id. A `running` file whose run the controller says has ended reads as failed — no clock | 2026-10-01 |
+| `version-update` + payload, detached | `daedalus-version-update@<run>` (version-update.nix): `{target, values, actor}`; rewrite a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure; `/verbs/version-update-status.json` | 2026-10-01 |
 
 ---
 

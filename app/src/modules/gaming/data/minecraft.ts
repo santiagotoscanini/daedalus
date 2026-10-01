@@ -125,7 +125,7 @@ export async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
     paperBuilds(version, build),
     joinsAndLeaves(ctx),
     minecraftRoster(ctx),
-    readVersionUpdateStatus(),
+    readVersionUpdateStatus(ctx),
     updateRows(MINECRAFT_CONTAINERS),
     readImageUpdateStatus(ctx),
   ])

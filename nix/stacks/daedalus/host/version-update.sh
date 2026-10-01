@@ -27,14 +27,16 @@
 # taken of the failed state, minutes old. The snapshot is kept after a
 # success, as the way back to the old version by hand.
 #
-# Runs as root for the rebuild and the dataset; git and every file in the
-# flake or $APPLY_DIR are touched as the operator (host/lib.sh).
+# The root helper's `version-update` verb (version-update.nix), one run at a
+# time, the request its run file's payload (host/lib.sh take_request). Runs as
+# root for the rebuild and the dataset; git and every file in the flake are
+# touched as the operator (host/lib.sh). The status and the log are root's, in
+# $VERBS_DIR, which the container reads and cannot write.
 
 set -euo pipefail
 
-REQ="$APPLY_DIR/version-request.json"
-STATUS="$APPLY_DIR/version-status.json"
-LOGFILE="$APPLY_DIR/version-last.log"
+STATUS="$VERBS_DIR/version-update-status.json"
+LOGFILE="$VERBS_DIR/version-update-last.log"
 
 TARGET=""
 MOVES='[]'
@@ -54,18 +56,10 @@ fail() {
   exit 1
 }
 
-[ -f "$REQ" ] || exit 0
-REQ_JSON="$(read_request "$REQ")" || exit 1
-
-REQ_ID="$(jq -r '.id // ""' <<<"$REQ_JSON")"
-[ -n "$REQ_ID" ] || exit 0
-[[ "$REQ_ID" =~ ^[0-9a-fA-F-]+$ ]] || exit 0
+# The run (host/lib.sh run_id, run_payload).
+REQ_ID="$(run_id)" || exit 1
+REQ_JSON="$(run_payload)"
 STARTED_AT="$(date -Is)"
-
-# Replay guard: the path unit also fires on a daemon-reload at boot.
-if [ -f "$STATUS" ] && [ "$(published_id "$STATUS")" = "$REQ_ID" ]; then
-  exit 0
-fi
 
 TARGET="$(jq -r '.target // ""' <<<"$REQ_JSON")"
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"

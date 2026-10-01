@@ -115,14 +115,9 @@ errtail() {
   log_errtail "$LOGFILE"
 }
 
-# The run file: its id (the helper's run id, which the status carries and the
-# page waits on) and the payload, the request the app built.
-RUN_JSON="$(take_request)" || exit 1
-REQ_ID="$(jq -r '.id' <<<"$RUN_JSON")"
-REQ_JSON="$(jq -r 'if (.payload | type) == "string" then .payload else "{}" end' <<<"$RUN_JSON")"
-# Not an object (the app never sends one): the validation below names no
-# container and says so in the status.
-jq -e 'type == "object"' <<<"$REQ_JSON" >/dev/null 2>&1 || REQ_JSON='{}'
+# The run (host/lib.sh run_id, run_payload).
+REQ_ID="$(run_id)" || exit 1
+REQ_JSON="$(run_payload)"
 STARTED_AT="$(date -Is)"
 COMMIT_SHA=""
 

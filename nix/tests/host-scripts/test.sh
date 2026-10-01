@@ -266,6 +266,19 @@ CREDENTIALS_DIRECTORY="$I/creds" bash "$T/image.sh" >/dev/null 2>&1 || rc=$?
 check "an empty request fails in validating, under the run's id" \
   '[ "$rc" -eq 1 ] && jq -e ".id == \"a1b2c3d4e5f60718\" and .state == \"failed\" and .phase == \"validating\" and (.error | test(\"no container\"))" "$I/verbs/image-update-status.json" >/dev/null'
 
+# ── 9. a version update reads its request from the run file ───────────────
+echo "# version-update: the request is the run file's payload"
+V="$T/version"
+mkdir -p "$V/creds" "$V/verbs"
+agent "$T/version.sh" "VERBS_DIR=$V/verbs FLAKE=$T/none SITE_DIR=$T/none PINS=$I/pins.json" \
+  lib.sh version-update.sh
+jq -n '{id: "b2c3d4e5f6071829", verb: "version-update", selectors: {}, payload: "not json"}' \
+  >"$V/creds/request"
+rc=0
+CREDENTIALS_DIRECTORY="$V/creds" bash "$T/version.sh" >/dev/null 2>&1 || rc=$?
+check "a payload that is not a request fails in validating, under the run's id" \
+  '[ "$rc" -eq 1 ] && jq -e ".id == \"b2c3d4e5f6071829\" and .state == \"failed\" and .phase == \"validating\" and (.error | test(\"no well-formed target\"))" "$V/verbs/version-update-status.json" >/dev/null'
+
 if [ "$fails" -ne 0 ]; then
   cat "$T/apply.out"
   echo "$fails check(s) failed"

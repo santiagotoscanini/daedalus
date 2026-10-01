@@ -1,5 +1,5 @@
-# daedalus-version-update — the host side of daedalus's `version-update`
-# bridge verb: moving a version a stack pins as a plain string rather than as
+# daedalus-version-update — the host side of the root helper's `version-update`
+# verb: moving a version a stack pins as a plain string rather than as
 # an image digest.
 #
 # Some stacks run a version their image does not carry: the image downloads
@@ -11,7 +11,7 @@
 # to prove the new version came up, and optionally the ZFS dataset whose
 # contents the new version may convert irreversibly.
 #
-# The app drops `version-request.json` into the apply dir; this unit rewrites
+# The app asks the helper, the request its payload; this unit rewrites
 # the bindings, commits, builds, snapshots the dataset, switches, runs the
 # stack's verifier, and on any failure after the switch stops the container,
 # rolls the dataset back to that snapshot, reverts the commit and switches
@@ -29,10 +29,10 @@
 
 let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
-    applyDir
+    verbsDir
     mkUpdateReaper
-    bridgeAgent
     mkAgent
+    mkRootVerb
     operatorHomeVars
     commitVars
     ;
@@ -66,7 +66,7 @@ let
       operatorHomeVars
       // commitVars
       // {
-        APPLY_DIR = applyDir;
+        VERBS_DIR = verbsDir;
         FLAKE = config.fleet.config.repo;
         SITE_DIR = config.fleet.site.path;
         PINS = pkgs.writeText "daedalus-version-pins.json" (builtins.toJSON pins);
@@ -85,8 +85,9 @@ let
   # rebuilding verb.
   updateReaper = mkUpdateReaper {
     name = "daedalus-version-update-reaper";
-    statusFile = "version-status.json";
-    nextSteps = "Check `journalctl -u daedalus-version-update`, `git log` in ${config.fleet.config.repo}";
+    dir = verbsDir;
+    statusFile = "version-update-status.json";
+    nextSteps = "Check `journalctl -u 'daedalus-version-update@*'`, `git log` in ${config.fleet.config.repo}";
   };
 in
 
@@ -153,34 +154,27 @@ in
     description = "Versions a stack pins as plain strings, movable from daedalus (host/version-update.sh).";
   };
 
-  config = lib.mkIf config.fleet.modules.daedalus.enable {
-    systemd.services.daedalus-version-update = bridgeAgent // {
-      description = "Move a stack's pinned version and rebuild, on daedalus's behalf";
+  # The values it just moved are in PINS, so a switch changes this unit;
+  # mkRootVerb keeps that switch from restarting the run (and losing its
+  # verify and rollback).
+  config = lib.mkIf config.fleet.modules.daedalus.enable (mkRootVerb {
+    verb = "version-update";
+    unit = "daedalus-version-update";
+    description = "Move a stack's pinned version and rebuild, on daedalus's behalf";
+    verbDescription = "Move a stack's pinned version strings and rebuild onto them";
+    script = updateScript;
+    # A build, two switch attempts, a verifier that may wait out a world
+    # conversion, and a rollback.
+    timeoutStartSec = 60 * 60;
+    # `{target, values, actor}`: a few short strings.
+    payloadMax = 4096;
+    execStopPost = [ "${updateReaper}/bin/daedalus-version-update-reaper" ];
+    unitAttrs = {
       after = [
         "network-online.target"
         "linger-users.service"
       ];
       wants = [ "network-online.target" ];
-      # PINS embeds the values it just moved, so the switch changes this unit;
-      # restarted by that switch it would lose its verify and push phases.
-      restartIfChanged = false;
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${updateScript}/bin/daedalus-version-update";
-        ExecStopPost = "${updateReaper}/bin/daedalus-version-update-reaper";
-        # A build, two switch attempts, a verifier that may wait out a world
-        # conversion, and a rollback. RUNNING_MAX_MS in
-        # app/src/host/version-update.ts is this plus slack.
-        TimeoutStartSec = "60min";
-      };
     };
-
-    systemd.paths.daedalus-version-update = {
-      description = "Watch for a daedalus version update request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/version-request.json";
-    };
-
-    fleet.monitoredJobs.daedalus-version-update = { };
-  };
+  });
 }

@@ -291,7 +291,7 @@ function MinecraftLogsBoard() {
           note: 'Hands the roster to the running server after every start and every Apply that moves it.',
         },
         {
-          source: { unit: 'daedalus-version-update' },
+          source: { unit: 'daedalus-version-update@.service' },
           label: 'daedalus-version-update',
           role: 'the version updater',
           note: 'What an Update above did, phase by phase — the build, the snapshot, the verify, any rollback.',

@@ -421,6 +421,19 @@ take_request() {
   cat -- "$f"
 }
 
+# The run's id: the helper's, which a verb's status carries and the page that
+# started it waits on.
+run_id() {
+  take_request | jq -r '.id'
+}
+
+# The run's payload — the request the app built — as a JSON object: `{}` when
+# it is not one, so the verb's own validation names what is missing.
+run_payload() {
+  take_request |
+    jq -c '(.payload | if type == "string" then (try fromjson catch {}) else {} end) | if type == "object" then . else {} end'
+}
+
 # ── how a root verb's run ended ───────────────────────────────────────────
 #
 # A root verb's unit tells the helper how its run ended in ONE journal entry

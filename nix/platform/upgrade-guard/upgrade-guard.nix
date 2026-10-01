@@ -102,7 +102,7 @@ let
             "daedalus-apply"
             "daedalus-engine-update"
             "daedalus-image-update@"
-            "daedalus-version-update"
+            "daedalus-version-update@"
             "daedalus-claude-code-update"
           ]
         );

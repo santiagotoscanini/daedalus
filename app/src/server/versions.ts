@@ -3,12 +3,12 @@ import { stringMapField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
 // The server functions behind a stack's version-update button
-// (host/version-update.ts). Returns once the request is published; the host
+// (host/version-update.ts). Returns once the host's update has started; it
 // reports everything after that through the status file the page polls.
 
-export const fetchVersionUpdateStatus = readFn.handler(async () => {
+export const fetchVersionUpdateStatus = readFn.handler(async ({ context }) => {
   const { readVersionUpdateStatus } = await import('../host/version-update')
-  return readVersionUpdateStatus()
+  return readVersionUpdateStatus(await context.ctx())
 })
 
 export const requestVersionUpdateFn = adminFn
@@ -19,5 +19,5 @@ export const requestVersionUpdateFn = adminFn
   )
   .handler(async ({ data, context }) => {
     const { runVersionUpdate } = await import('../host/version-update')
-    return runVersionUpdate({ ...data, actor: context.actor })
+    return runVersionUpdate({ ...data, ctx: await context.ctx(), actor: context.actor })
   })

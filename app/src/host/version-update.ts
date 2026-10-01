@@ -1,3 +1,4 @@
+import type { Ctx } from '../core/ctx'
 import {
   arrayOf,
   bool,
@@ -8,17 +9,18 @@ import {
   optional,
   str,
 } from '../lib/contract/decode'
-import { defineBridge } from './bridge'
-import { defineFlow, defineGate, type FlowOutcome } from './flow'
+import { defineFlow, defineRootGate, type FlowOutcome } from './flow'
+import { defineRootVerb } from './root-verb'
 
-// The app half of a version update: one request file, one status file.
+// The app half of a version update: the root helper's `version-update` verb
+// (host/root-verb.ts has the mechanics).
 //
 // A stack that pins its version as plain strings (a game server's release and
 // build) declares them in fleet.versionPins; the host agent rewrites them,
 // commits, builds, snapshots the stack's dataset (when it names one),
 // switches, runs the stack's verifier, and on failure after the switch rolls
 // the dataset and the commit back (nix/stacks/daedalus/host/version-update.sh).
-// What crosses the bridge is a target and the new values — which fields
+// What crosses is a target and the new values, as the payload — which fields
 // exist, what they may look like and where they live is the host's registry,
 // which is also the allowlist.
 
@@ -56,39 +58,32 @@ const STATUS: Decoder<VersionUpdateStatus> = obj({
   commit: optional(nullable(str), null),
 })
 
-const bridge = defineBridge<VersionUpdateStatus>({
-  requestFile: 'version-request.json',
-  statusFile: 'version-status.json',
+const verb = defineRootVerb<VersionUpdateStatus>({
+  verb: 'version-update',
   status: STATUS,
+  ended: (s) =>
+    `The host agent ended during "${s.phase}" without reporting a result. ` +
+    "Check `journalctl -u 'daedalus-version-update@*'`, `git log` in the configuration checkout" +
+    (s.snapshot === '' ? '' : `, and the pre-update snapshot ${s.snapshot}`) +
+    ' before retrying.',
 })
 
-/** daedalus-version-update's TimeoutStartSec (60 min) plus slack; they move together. */
-const RUNNING_MAX_MS = 65 * 60_000
+/** The status, with a run that ended without its last word reported as dead (host/root-verb.ts). */
+export const readVersionUpdateStatus = (
+  ctx: Pick<Ctx, 'controller'>,
+): Promise<VersionUpdateStatus> => verb.readStatus(ctx)
 
-/** The status, with a run that stopped writing reported as dead (host/image-update.ts). */
-export async function readVersionUpdateStatus(): Promise<VersionUpdateStatus> {
-  const s = await bridge.readStatus()
-  if (s.state !== 'running') return s
-  const last = Date.parse(s.finishedAt ?? '')
-  if (Number.isFinite(last) && Date.now() - last < RUNNING_MAX_MS) return s
-  return {
-    ...s,
-    state: 'failed',
-    error:
-      `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
-      'Check `journalctl -u daedalus-version-update`, `git log` in the configuration checkout' +
-      (s.snapshot === '' ? '' : `, and the pre-update snapshot ${s.snapshot}`) +
-      ' before retrying.',
-  }
+type Input = {
+  ctx: Pick<Ctx, 'controller'>
+  target: string
+  values: Record<string, string>
+  actor: string
 }
 
-const gate = defineGate({
-  noun: 'version update',
-  readStatus: readVersionUpdateStatus,
+const gate = defineRootGate({
+  readStatus: (input: Input) => readVersionUpdateStatus(input.ctx),
   running: (s) => `an update of ${s.target} is already running (${s.phase})`,
 })
-
-type Input = { target: string; values: Record<string, string>; actor: string }
 
 /**
  * The one version-update implementation; the button's server function is its
@@ -117,7 +112,12 @@ export const runVersionUpdate: (
   prepare: async (input) => ({
     ok: true,
     value: { target: input.target },
-    publish: () =>
-      bridge.request({ target: input.target, values: input.values, actor: input.actor }),
+    publish: async () => {
+      const started = await verb.start(
+        input.ctx,
+        JSON.stringify({ target: input.target, values: input.values, actor: input.actor }),
+      )
+      return started.ok ? started.id : started
+    },
   }),
 })
