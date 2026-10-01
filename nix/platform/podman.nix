@@ -471,6 +471,11 @@ in
         target ? null, # a stage to stop at (`podman build --target`), or the whole file
         gates, # consumer units; build runs before= / wantedBy= them
         bases ? { }, # build arg → digest-pinned base image
+        # Further `podman build` flags, each one argument: where the build
+        # fetches from (`--build-arg=NPM_REGISTRY=…`, `--add-host=…`), never
+        # what it builds — they are not in the tag, so a flag that changed
+        # the image would leave a stale tag behind it.
+        buildFlags ? [ ],
       }:
       let
         # Interpolation imports a literal path into its own
@@ -492,9 +497,11 @@ in
           else
             throw "mkLocalImage ${name}: give `tagPrefix`, or a digest-pinned `bases.BASE` to take it from";
         image = "localhost/${name}:${prefix}-${ctxHash}";
-        buildArgs = lib.concatStrings (
-          lib.mapAttrsToList (arg: ref: "\n  --build-arg ${lib.escapeShellArg "${arg}=${ref}"} \\") bases
-        );
+        buildArgs =
+          lib.concatStrings (
+            lib.mapAttrsToList (arg: ref: "\n  --build-arg ${lib.escapeShellArg "${arg}=${ref}"} \\") bases
+          )
+          + lib.concatMapStrings (f: "\n  ${lib.escapeShellArg f} \\") buildFlags;
         # Each base is stamped on the image it built, so "does this container
         # run on the new base?" is a question the image answers — the
         # image-update agent's verify step asks exactly that after moving one
