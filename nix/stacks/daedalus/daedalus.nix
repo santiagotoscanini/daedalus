@@ -714,8 +714,16 @@ in
     # apps.ts): the hand-declared apps — only daedalus itself, from `self`, and
     # therefore not editable from the UI — and operatorSecretApps. The committed
     # registry itself arrives beside it as /export/applied.json.
+    # The entry carries what `fleet.daedalus.source` decides on top of self.json,
+    # which cannot say it: a source built on the box (local, dev) has no registry
+    # image and no deploy unit, a published one is pulled and polled. Read off
+    # the entry this module defines, so the page and the unit cannot disagree.
     fleet.export.domains.apps.data = {
-      nixManaged.daedalus = self;
+      nixManaged.daedalus = self // {
+        sourceMode = if source == "published" then "registry" else "local";
+        inherit (config.fleet.apps.daedalus) image;
+        deploy.enable = config.fleet.apps.daedalus.deploy.enable;
+      };
       inherit operatorSecretApps;
     };
 
