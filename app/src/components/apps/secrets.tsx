@@ -26,8 +26,8 @@ type EnvData = { available: boolean; takenAt: string | null; vars: EnvRowData[] 
    instead, collapsing to stacked rows when there is no room for two. */
 const ENV_TABLE = 'text-[0.85rem]'
 const ENV_ROW =
-  'grid grid-cols-[minmax(0,20rem)_minmax(0,1fr)] items-baseline gap-x-[1.25rem] gap-y-[0.35rem] border-b border-b-(--border-soft) py-2 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)]'
-const ENV_LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-(--dim)'
+  'grid grid-cols-[minmax(0,20rem)_minmax(0,1fr)] items-baseline gap-x-[1.25rem] gap-y-[0.35rem] border-b border-b-subtle py-2 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)]'
+const ENV_LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-muted-foreground'
 
 /**
  * Everything the container actually has, grouped by who put it there — which
@@ -75,7 +75,7 @@ export function Secrets({
 
   return (
     <>
-      <Alert className="mb-[1.35rem] border-info/35 bg-info/7 text-(--text-muted)">
+      <Alert className="mb-[1.35rem] border-info/35 bg-info/7 text-subdued">
         <AlertDescription>
           Injected at container start, not hot-reloaded. A change takes effect on the next deploy or
           Apply.
@@ -89,7 +89,7 @@ export function Secrets({
           span={12}
           aside={
             env.takenAt ? (
-              <span className="text-[0.72rem] tracking-normal text-(--dim) normal-case">
+              <span className="text-[0.72rem] tracking-normal text-muted-foreground normal-case">
                 read from the container {<When at={env.takenAt} />}
               </span>
             ) : null
@@ -108,19 +108,19 @@ export function Secrets({
                   {GROUP_LABELS[g].icon}
                 </span>
                 {GROUP_LABELS[g].title}
-                <span className="rounded-full border px-[0.4rem] text-[0.68rem] text-(--dim)">
+                <span className="rounded-full border px-[0.4rem] text-[0.68rem] text-muted-foreground">
                   {vars.length}
                 </span>
               </h4>
               {GROUP_LABELS[g].hint && (
-                <p className="mt-0 mr-0 mb-2 ml-0 text-[0.76rem] text-(--dim)">
+                <p className="mt-0 mr-0 mb-2 ml-0 text-[0.76rem] text-muted-foreground">
                   {GROUP_LABELS[g].hint}
                 </p>
               )}
               {/* Indented under its heading so the groups read as one list
                   broken into parts, rather than as separate tables that happen
                   to be adjacent. */}
-              <div className={cn(ENV_TABLE, 'border-l border-l-(--border-soft) pl-[0.9rem]')}>
+              <div className={cn(ENV_TABLE, 'border-l border-l-subtle pl-[0.9rem]')}>
                 {vars.map((v) => (
                   <EnvRow key={v.key} app={app} v={v} />
                 ))}
@@ -228,7 +228,7 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
         <code>{v.key}</code>
         <span
           className={cn(
-            'flex-none rounded-[4px] border px-[0.35rem] py-[0.05rem] text-[0.6rem] tracking-[0.08em] text-(--dim) uppercase',
+            'flex-none rounded-[4px] border px-[0.35rem] py-[0.05rem] text-[0.6rem] tracking-[0.08em] text-muted-foreground uppercase',
             v.origin === 'registry' && 'border-primary/40 text-primary',
             v.origin === 'image' && 'opacity-55',
           )}
@@ -241,11 +241,11 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
           {shown === null ? (
             // Never break: dots carry no information, so wrapping them just
             // makes a column of them.
-            <code className="tracking-[0.12em] whitespace-nowrap text-(--dim)">••••••••••••</code>
-          ) : (
-            <code>
-              {shown === '' ? <span className="text-(--text-muted)">(empty)</span> : shown}
+            <code className="tracking-[0.12em] whitespace-nowrap text-muted-foreground">
+              ••••••••••••
             </code>
+          ) : (
+            <code>{shown === '' ? <span className="text-subdued">(empty)</span> : shown}</code>
           )}
 
           {v.secret && (
@@ -253,7 +253,7 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
               type="button"
               variant="outline"
               size="sm"
-              className="h-auto flex-none rounded-[6px] bg-(--panel-2) px-[0.4rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-(--raise) disabled:pointer-events-auto disabled:cursor-wait dark:bg-(--panel-2)"
+              className="h-auto flex-none rounded-[6px] bg-raised px-[0.4rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-lifted disabled:pointer-events-auto disabled:cursor-wait dark:bg-raised"
               disabled={busy}
               title={revealed === null ? 'Reveal' : 'Hide'}
               aria-label={revealed === null ? `Reveal ${v.key}` : `Hide ${v.key}`}
@@ -278,7 +278,9 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
           <p className="mt-[0.35rem] mr-0 mb-0 ml-0 text-[0.78rem] text-danger">{error}</p>
         )}
         {v.note && (
-          <p className="mt-[0.35rem] mr-0 mb-0 ml-0 text-[0.78rem] text-(--dim)">{v.note}</p>
+          <p className="mt-[0.35rem] mr-0 mb-0 ml-0 text-[0.78rem] text-muted-foreground">
+            {v.note}
+          </p>
         )}
       </div>
     </div>
@@ -302,7 +304,7 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
 
 const FIELD = INPUT_ROW
 const SMALL_BTN =
-  'h-auto flex-none rounded-[6px] bg-(--panel-2) px-[0.45rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-(--raise) dark:bg-(--panel-2)'
+  'h-auto flex-none rounded-[6px] bg-raised px-[0.45rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-lifted dark:bg-raised'
 
 function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
   const router = useRouter()
@@ -331,7 +333,9 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
       span={12}
       aside={
         busy ? (
-          <span className="text-[0.72rem] tracking-normal text-(--dim) normal-case">working…</span>
+          <span className="text-[0.72rem] tracking-normal text-muted-foreground normal-case">
+            working…
+          </span>
         ) : null
       }
     >
@@ -351,7 +355,7 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
         </Alert>
       )}
       {answer !== null && answer.outcome === 'done' && answer.detail !== '' && (
-        <Alert className="mb-[0.9rem] border-info/35 bg-info/7 text-(--text-muted)">
+        <Alert className="mb-[0.9rem] border-info/35 bg-info/7 text-subdued">
           <AlertDescription>{answer.detail}</AlertDescription>
         </Alert>
       )}
@@ -381,7 +385,7 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
                 />
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[0.76rem] text-(--dim)">
+                  <span className="text-[0.76rem] text-muted-foreground">
                     {k.history === null ? (
                       'not in a commit yet'
                     ) : (
@@ -468,7 +472,7 @@ function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
         )}
       </div>
 
-      <p className="mt-[0.9rem] mr-0 mb-0 ml-0 text-[0.76rem] text-(--dim)">
+      <p className="mt-[0.9rem] mr-0 mb-0 ml-0 text-[0.76rem] text-muted-foreground">
         A write commits the encrypted file straight away; the container picks the new value up on
         the next Apply, which is what rebuilds and restarts it.
       </p>

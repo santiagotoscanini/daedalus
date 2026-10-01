@@ -16,7 +16,7 @@ import { cn } from '../../lib/cn'
  * red fill on a control plane reads as "already broken", not "careful".
  */
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[7px] border border-transparent text-[0.84rem] font-medium no-underline outline-none transition-colors duration-150 hover:no-underline disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--brand-dim) aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[7px] border border-transparent text-[0.84rem] font-medium no-underline outline-none transition-colors duration-150 hover:no-underline disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-dim aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -25,9 +25,9 @@ const buttonVariants = cva(
         secondary:
           'bg-secondary text-secondary-foreground [&:hover:not(:disabled)]:bg-secondary/80',
         outline:
-          'border-(--border) bg-transparent text-foreground [&:hover:not(:disabled)]:bg-(--panel-2)',
+          'border-(--border) bg-transparent text-foreground [&:hover:not(:disabled)]:bg-raised',
         ghost:
-          'bg-transparent text-(--text-muted) [&:hover:not(:disabled)]:bg-(--panel-2) [&:hover:not(:disabled)]:text-foreground',
+          'bg-transparent text-subdued [&:hover:not(:disabled)]:bg-raised [&:hover:not(:disabled)]:text-foreground',
         destructive:
           'border-[color-mix(in_srgb,var(--danger)_50%,var(--border))] bg-transparent text-danger [&:hover:not(:disabled)]:bg-danger/12',
         link: 'border-0 text-primary underline-offset-4 hover:underline',

@@ -127,7 +127,7 @@ function NowRow({ b, now }: { b: LiveBuild; now: number | null }) {
         className="inline-flex min-w-[11rem] items-baseline gap-[0.5rem] no-underline"
       >
         <span className="text-foreground">{b.app}</span>
-        <code className="text-[0.74rem] text-(--dim)">{sha7(b.sha)}</code>
+        <code className="text-[0.74rem] text-muted-foreground">{sha7(b.sha)}</code>
       </Link>
       <BuildStateChip state={b.state} />
       <span className={ROW_SIDE}>
@@ -140,7 +140,7 @@ function NowRow({ b, now }: { b: LiveBuild; now: number | null }) {
             key={s.phase}
             className={cn(
               'inline-flex items-center gap-[0.3rem] text-[0.74rem]',
-              s.status === 'pending' ? 'text-(--dim)' : 'text-(--text-muted)',
+              s.status === 'pending' ? 'text-muted-foreground' : 'text-subdued',
             )}
           >
             {s.status === 'running' ? (
@@ -153,13 +153,13 @@ function NowRow({ b, now }: { b: LiveBuild; now: number | null }) {
               />
             )}
             {s.phase}
-            <span className="font-mono text-[0.7rem] text-(--dim)">
+            <span className="font-mono text-[0.7rem] text-muted-foreground">
               {s.ms === null ? '' : ms(s.ms)}
             </span>
           </li>
         ))}
       </ol>
-      <span className={cn(ROW_N, 'min-w-[5.5rem] text-[0.72rem] text-(--dim)')}>
+      <span className={cn(ROW_N, 'min-w-[5.5rem] text-[0.72rem] text-muted-foreground')}>
         {b.state === 'queued' ? (
           <>
             asked <Ago at={b.createdAt} />
@@ -273,10 +273,10 @@ function FailuresBoard({ h }: { h: History }) {
                 className="inline-flex min-w-[10rem] items-baseline gap-[0.5rem] no-underline"
               >
                 <span className="text-foreground">{f.app}</span>
-                <code className="text-[0.74rem] text-(--dim)">{sha7(f.sha)}</code>
+                <code className="text-[0.74rem] text-muted-foreground">{sha7(f.sha)}</code>
               </Link>
               <Chip tone="bad">{f.phase}</Chip>
-              <span className={cn(ROW_MAIN, 'text-(--text-muted)')} title={f.error ?? undefined}>
+              <span className={cn(ROW_MAIN, 'text-subdued')} title={f.error ?? undefined}>
                 {f.error ?? 'no error recorded'}
               </span>
               <span className={ROW_SIDE}>
@@ -404,7 +404,7 @@ function MachineryBoard({ m }: { m: Machinery }) {
                 v: (
                   <span className="tabular-nums">
                     {bytes(f.buildkit.cacheBytes)}
-                    <span className="text-(--dim)">
+                    <span className="text-muted-foreground">
                       {' '}
                       · {bytes(f.buildkit.reclaimableBytes)} reclaimable
                     </span>
@@ -434,7 +434,9 @@ function MachineryBoard({ m }: { m: Machinery }) {
                     )}
                     <span>
                       {bytes(used)}
-                      {quota !== null && <span className="text-(--dim)"> of {bytes(quota)}</span>}
+                      {quota !== null && (
+                        <span className="text-muted-foreground"> of {bytes(quota)}</span>
+                      )}
                     </span>
                   </span>
                 ),
@@ -554,7 +556,7 @@ function GithubBoard({ g }: { g: Github }) {
                 params={{ name: b.app, id: b.id }}
                 className={cn(ROW_MAIN, 'no-underline')}
               >
-                {b.app} <code className="text-[0.74rem] text-(--dim)">{sha7(b.sha)}</code>
+                {b.app} <code className="text-[0.74rem] text-muted-foreground">{sha7(b.sha)}</code>
               </Link>
               <BuildStateChip state={b.state} />
               {b.checkRunId !== null && (

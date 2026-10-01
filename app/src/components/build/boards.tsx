@@ -106,7 +106,7 @@ function CommitField({
   commit: Promise<BuildCommit | null> | null
   pick: (c: BuildCommit) => string
 }) {
-  const none = <span className="text-(--dim)">{DASH}</span>
+  const none = <span className="text-muted-foreground">{DASH}</span>
   if (commit === null) return none
   return (
     <GuardedAwait resetKey="commit" promise={commit} fallback={none}>
@@ -197,7 +197,7 @@ function tagsRow(build: BuildView): { k: string; v: ReactNode } {
 function Outcome({ outcome }: { outcome: DeployOutcome }) {
   switch (outcome.kind) {
     case 'none':
-      return <span className="text-(--dim)">{DASH}</span>
+      return <span className="text-muted-foreground">{DASH}</span>
     case 'candidate':
       return <span>candidate, not deployed</span>
     case 'pinned':
@@ -209,7 +209,7 @@ function Outcome({ outcome }: { outcome: DeployOutcome }) {
         </span>
       )
     case 'waiting':
-      return <span className="text-(--text-muted)">waiting for the deploy</span>
+      return <span className="text-subdued">waiting for the deploy</span>
     case 'deployed':
       return (
         <span className={outcome.result === 'ok' ? 'text-success' : 'text-danger'}>
@@ -252,12 +252,12 @@ const STEP_NOTE: Partial<Record<TimelineStep['status'], string>> = {
 
 function Step({ step }: { step: TimelineStep }) {
   return (
-    <li className="flex items-center gap-[0.6rem] border-t border-(--border-soft) py-[0.4rem] text-[0.84rem] first:border-t-0 first:pt-0">
+    <li className="flex items-center gap-[0.6rem] border-t border-subtle py-[0.4rem] text-[0.84rem] first:border-t-0 first:pt-0">
       <Pulse on={step.status === 'running'} tone={STEP_TONE[step.status]} />
       <span
         className={
           step.status === 'pending' || step.status === 'skipped'
-            ? 'text-(--dim)'
+            ? 'text-muted-foreground'
             : step.status === 'failed'
               ? 'text-danger'
               : undefined
@@ -265,7 +265,7 @@ function Step({ step }: { step: TimelineStep }) {
       >
         {step.phase}
       </span>
-      <span className="ml-auto font-mono text-[0.78rem] text-(--dim)">
+      <span className="ml-auto font-mono text-[0.78rem] text-muted-foreground">
         {STEP_NOTE[step.status] ?? (step.ms === null ? DASH : ms(step.ms))}
       </span>
     </li>
@@ -293,7 +293,7 @@ export function Checks({ build }: { build: BuildView }) {
           return (
             <li
               key={c}
-              className="flex items-center gap-[0.6rem] border-t border-(--border-soft) py-[0.4rem] text-[0.84rem] first:border-t-0 first:pt-0"
+              className="flex items-center gap-[0.6rem] border-t border-subtle py-[0.4rem] text-[0.84rem] first:border-t-0 first:pt-0"
             >
               <span aria-hidden="true" className={failed ? 'text-danger' : 'text-success'}>
                 {failed ? '✕' : '✓'}
@@ -331,7 +331,7 @@ export function Detection({ build }: { build: BuildView }) {
       DASH
     ) : (
       <span>
-        <code>{p.version}</code> <span className="text-(--dim)">from {p.source}</span>
+        <code>{p.version}</code> <span className="text-muted-foreground">from {p.source}</span>
       </span>
     )
   const warnings = build.warnings
@@ -416,7 +416,7 @@ export function Tools({ build }: { build: BuildView }) {
       {packages.map((p) => (
         <li
           key={p.name}
-          className="grid grid-cols-[7rem_1fr] items-baseline gap-x-3 gap-y-[0.1rem] border-t border-(--border-soft) py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
+          className="grid grid-cols-[7rem_1fr] items-baseline gap-x-3 gap-y-[0.1rem] border-t border-subtle py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
         >
           <code className="truncate" title={p.name}>
             {p.name}
@@ -424,11 +424,11 @@ export function Tools({ build }: { build: BuildView }) {
           <span className="min-w-0">
             <code>{p.version}</code>
             {p.requested !== null && p.requested !== p.version && (
-              <span className="text-(--dim)"> asked for {p.requested}</span>
+              <span className="text-muted-foreground"> asked for {p.requested}</span>
             )}
           </span>
           <span />
-          <span className="min-w-0 text-[0.78rem] text-(--dim) [overflow-wrap:anywhere]">
+          <span className="min-w-0 text-[0.78rem] text-muted-foreground [overflow-wrap:anywhere]">
             from {p.source}
           </span>
         </li>
@@ -538,7 +538,7 @@ export function RailpackSaid({ build }: { build: BuildView }) {
       {spoken.map((l) => (
         <li
           key={`${l.level}:${l.message}`}
-          className="flex flex-wrap items-baseline gap-x-[0.6rem] gap-y-[0.15rem] border-t border-(--border-soft) py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
+          className="flex flex-wrap items-baseline gap-x-[0.6rem] gap-y-[0.15rem] border-t border-subtle py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
         >
           <Chip tone={LOG_TONE[l.level.toLowerCase()] ?? 'muted'}>{l.level.toLowerCase()}</Chip>
           <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{l.message}</span>

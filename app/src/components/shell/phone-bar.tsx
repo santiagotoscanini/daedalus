@@ -15,7 +15,7 @@ export function PhoneBar({ drawer }: { drawer: Drawer }) {
     <header
       className={cn(
         'hidden max-rail:flex max-rail:items-center max-rail:gap-1.5',
-        'sticky top-0 z-40 border-b border-b-(--border-soft) px-3 py-[0.45rem]',
+        'sticky top-0 z-40 border-b border-b-subtle px-3 py-[0.45rem]',
         'pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]',
         'bg-background/88 backdrop-blur-[10px]',
       )}

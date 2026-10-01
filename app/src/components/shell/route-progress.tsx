@@ -27,7 +27,7 @@ export function RouteProgress() {
     <div
       className={cn(
         'fixed top-0 left-0 z-100 h-0.5 w-full origin-[0_50%]',
-        'bg-linear-90 from-(--brand) to-(--brand-dim)',
+        'bg-linear-90 from-primary to-primary-dim',
         'animate-[route-progress_8s_cubic-bezier(0.1,0.8,0.2,1)_forwards]',
         // Someone who asked for less motion still needs the signal, so the
         // bar stays — it just sits at a fixed width instead of sweeping.

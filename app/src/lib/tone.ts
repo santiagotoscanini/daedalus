@@ -28,7 +28,7 @@ const TONE_TOKEN: Record<Tone, string> = {
   warn: 'var(--warning)',
   bad: 'var(--danger)',
   info: 'var(--info)',
-  muted: 'var(--dim)',
+  muted: 'var(--muted-foreground)',
 }
 
 /**

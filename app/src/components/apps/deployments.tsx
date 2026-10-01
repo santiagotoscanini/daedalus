@@ -31,15 +31,15 @@ export function Deployments({
       <p className="mt-0 mr-0 mb-[1.2rem] ml-0 flex flex-wrap items-center gap-x-[1.1rem] gap-y-[0.6rem] font-mono text-[0.82rem] [&>*]:shrink-0">
         {app.sourceMode === 'local' ? (
           <>
-            <span className="text-(--text-muted)">⎇ stacks/{app.name}/app</span>
-            <span className="text-(--text-muted)">source is live, nothing to deploy</span>
+            <span className="text-subdued">⎇ stacks/{app.name}/app</span>
+            <span className="text-subdued">source is live, nothing to deploy</span>
           </>
         ) : (
           <>
             <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
               ⎇ {repo}
             </a>
-            <span className="text-(--text-muted)">
+            <span className="text-subdued">
               {app.buildOnBox ? 'builds run on this box' : 'box builds are off for this app'}
             </span>
           </>
@@ -98,9 +98,9 @@ export function Deployments({
                 />
                 <div
                   className={cn(
-                    'rounded-lg border border-(--border-soft) bg-(--panel) px-[1.05rem] py-[0.8rem]',
+                    'rounded-lg border border-subtle bg-card px-[1.05rem] py-[0.8rem]',
                     d.isCurrent &&
-                      'border-primary/40 bg-[color-mix(in_srgb,var(--brand)_6%,var(--panel))]',
+                      'border-primary/40 bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))]',
                   )}
                 >
                   <div className="flex flex-wrap items-center gap-x-[0.85rem] gap-y-[0.4rem]">
@@ -125,12 +125,12 @@ export function Deployments({
                         view commit ↗
                       </a>
                     ) : (
-                      <span className="text-(--text-muted)">
+                      <span className="text-subdued">
                         {d.shortRevision ? 'no source link' : 'image labels unavailable'}
                       </span>
                     )}
                   </div>
-                  <div className="mt-[0.4rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-(--dim)">
+                  <div className="mt-[0.4rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-muted-foreground">
                     <span>{<When at={d.startedAt} />}</span>
                     <span>{ms(d.durationMs)}</span>
                     <code>{d.digest.slice(0, 12)}</code>
@@ -162,7 +162,7 @@ function Activity({ activity }: { activity: ActivityData }) {
         title="Deploy activity"
         icon="logs"
         span={12}
-        aside={<span className="text-[0.73rem] text-(--dim)">last 6 hours</span>}
+        aside={<span className="text-[0.73rem] text-muted-foreground">last 6 hours</span>}
       >
         {rolled.length === 0 ? (
           <p className={EMPTY}>Nothing in the last 6 hours.</p>
@@ -170,24 +170,22 @@ function Activity({ activity }: { activity: ActivityData }) {
           // Scrolls inside its own bordered box, and takes no negative margins
           // to bleed to the board's edges: a caption follows it, and margins
           // that pulled outward would pull that caption up over the last rows.
-          <div className="max-h-80 overflow-auto overscroll-contain rounded-[9px] border border-(--border-soft) bg-background font-mono text-[0.75rem]">
+          <div className="max-h-80 overflow-auto overscroll-contain rounded-[9px] border border-subtle bg-background font-mono text-[0.75rem]">
             {rolled.map((l) => (
               <div
                 key={l.key}
-                className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-[0.7rem] border-t border-t-(--border-soft) px-[0.7rem] py-[0.26rem] first:border-t-0"
+                className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-[0.7rem] border-t border-t-subtle px-[0.7rem] py-[0.26rem] first:border-t-0"
               >
                 {/* Already formatted by the server — see ActivityRow. */}
-                <time className="whitespace-nowrap text-(--dim)" dateTime={l.ts}>
+                <time className="whitespace-nowrap text-muted-foreground" dateTime={l.ts}>
                   {l.at}
                 </time>
-                <span className="min-w-0 text-(--text-muted) [overflow-wrap:anywhere]">
-                  {l.line}
-                </span>
+                <span className="min-w-0 text-subdued [overflow-wrap:anywhere]">{l.line}</span>
                 {l.count > 1 && (
                   // The repeat count for a folded run. Right-aligned in its own
                   // column so the messages stay on one left edge.
                   <span
-                    className="rounded-[5px] bg-(--panel-2) px-1 tabular-nums whitespace-nowrap text-(--dim)"
+                    className="rounded-[5px] bg-raised px-1 tabular-nums whitespace-nowrap text-muted-foreground"
                     title={`Repeated ${String(l.count)} times, most recently at ${l.lastAt}`}
                   >
                     ×{l.count}

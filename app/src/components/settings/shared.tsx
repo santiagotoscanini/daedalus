@@ -21,10 +21,10 @@ import { Chip } from '../viz'
 export const MONO = 'font-mono text-[0.8rem] [overflow-wrap:anywhere]'
 
 /** The sentence under a section: what the rows above it mean, or what to do. */
-export const NOTE = 'm-0 text-[0.78rem] text-(--text-muted)'
+export const NOTE = 'm-0 text-[0.78rem] text-subdued'
 
 /** The quieter line under a value: when it was read, what it was, what it needs. */
-export const ASIDE = 'text-[0.72rem] text-(--dim)'
+export const ASIDE = 'text-[0.72rem] text-muted-foreground'
 
 /**
  * A section's rows: the label in a column of its own, the value beside it.
@@ -45,11 +45,11 @@ export function Rows({ rows }: { rows: { k: string; v: ReactNode }[] }) {
           key={r.k}
           className={cn(
             'grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] items-baseline gap-x-6',
-            'border-t border-(--border-soft) py-[0.55rem] first:border-t-0 first:pt-0 last:pb-0',
+            'border-t border-subtle py-[0.55rem] first:border-t-0 first:pt-0 last:pb-0',
             'max-[40rem]:grid-cols-1 max-[40rem]:gap-y-1',
           )}
         >
-          <dt className="text-(--dim) text-[0.82rem]">{r.k}</dt>
+          <dt className="text-muted-foreground text-[0.82rem]">{r.k}</dt>
           <dd className="m-0 min-w-0 text-[0.84rem] [font-weight:450]">{r.v}</dd>
         </div>
       ))}
@@ -109,7 +109,7 @@ export function Section({
           ) : icon !== undefined ? (
             <span
               aria-hidden="true"
-              className="inline-flex size-5 flex-none items-center justify-center text-(--text-muted) [&>svg]:size-[18px]"
+              className="inline-flex size-5 flex-none items-center justify-center text-subdued [&>svg]:size-[18px]"
             >
               {icon}
             </span>
@@ -136,7 +136,7 @@ export function Value({ v, unit }: { v: string | null | undefined; unit?: string
   return (
     <Mono>
       {v}
-      {unit !== undefined && <span className="text-(--dim)"> {unit}</span>}
+      {unit !== undefined && <span className="text-muted-foreground"> {unit}</span>}
     </Mono>
   )
 }
@@ -147,7 +147,7 @@ export function Pending({ className }: { className?: string }) {
 }
 
 export function Unset({ label = 'not set' }: { label?: ReactNode }) {
-  return <span className="text-[0.82rem] text-(--dim)">{label}</span>
+  return <span className="text-[0.82rem] text-muted-foreground">{label}</span>
 }
 
 export function ExtLink({ href, children }: { href: string; children?: ReactNode }) {
@@ -164,12 +164,10 @@ export function Commit({ rev, subject, at }: { rev: string; subject?: string; at
     <Stack>
       <Mono>{rev.slice(0, 10)}</Mono>
       {subject !== undefined && subject !== '' && (
-        <span className="text-[0.78rem] text-(--text-muted) [overflow-wrap:anywhere]">
-          {subject}
-        </span>
+        <span className="text-[0.78rem] text-subdued [overflow-wrap:anywhere]">{subject}</span>
       )}
       {at !== undefined && at !== '' && (
-        <span className="text-[0.72rem] text-(--dim)">{<When at={at} />}</span>
+        <span className="text-[0.72rem] text-muted-foreground">{<When at={at} />}</span>
       )}
     </Stack>
   )
@@ -195,7 +193,7 @@ export function SourceNote({
   producer: string
 }) {
   return (
-    <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.74rem] text-(--dim)">
+    <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.74rem] text-muted-foreground">
       {meta.error !== null ? (
         <>
           <Chip tone="bad">unreadable</Chip>
@@ -237,17 +235,17 @@ export function SourceNote({
 
 export const ERROR_NOTE = 'm-0 text-[0.78rem] text-destructive'
 export const FIELD_LABEL = 'font-medium text-[0.8rem]'
-export const PANEL = 'flex flex-col gap-2 rounded-[9px] border border-(--border-soft) p-3'
+export const PANEL = 'flex flex-col gap-2 rounded-[9px] border border-subtle p-3'
 
 /** An armed two-step's box (`ArmedConfirm`) on a settings tab. */
-export const ARMED_PANEL = 'flex flex-col gap-3 rounded-md border border-(--border-soft) p-3'
+export const ARMED_PANEL = 'flex flex-col gap-3 rounded-md border border-subtle p-3'
 
 /** A service that answered, but not with a yes. */
 export function Bad({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-2">
       <Chip tone="bad">failing</Chip>
-      <span className="text-[0.78rem] text-(--text-muted)">{children}</span>
+      <span className="text-[0.78rem] text-subdued">{children}</span>
     </span>
   )
 }

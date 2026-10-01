@@ -176,7 +176,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
                 // stop at a different one, which is the entire comparison this
                 // list exists to make.
                 <li
-                  className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-(--panel-2)"
+                  className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-raised"
                   key={p.name}
                 >
                   <span className="flex min-w-0 items-baseline gap-[0.35rem] text-[0.79rem]">
@@ -186,7 +186,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
                     {/* Deliberately switched off is not a warning at all — it
                         explains the silence rather than reporting it. */}
                     {!p.enabled && (
-                      <em className="flex-none rounded-full border border-border px-[0.35rem] py-[0.02rem] text-[0.6rem] text-(--dim) not-italic">
+                      <em className="flex-none rounded-full border border-border px-[0.35rem] py-[0.02rem] text-[0.6rem] text-muted-foreground not-italic">
                         disabled
                       </em>
                     )}
@@ -196,7 +196,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
                       </em>
                     )}
                   </span>
-                  <span className="block h-[5px] overflow-hidden rounded-[3px] bg-(--raise)">
+                  <span className="block h-[5px] overflow-hidden rounded-[3px] bg-lifted">
                     <span
                       className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none"
                       style={{ width: `${String(Math.max(1.5, ((p.rx + p.tx) / max) * 100))}%` }}
@@ -208,7 +208,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
                   {/* Interpuncts are generated between the items rather than
                       typed, so a peer with no address does not trail a
                       separator into empty space. */}
-                  <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-(--dim) tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
+                  <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
                     {p.ipv4 !== null && <span className={cn(MONO, 'truncate')}>{p.ipv4}</span>}
                     {/* Named rather than arrowed. An arrow on a VPN row is
                         ambiguous by construction — the same byte is the
@@ -539,7 +539,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
               because the unit exits 0 either way. Warn rather than bad — it is
               something to look into, not something that is currently broken. */}
           {(d.lookupFailures.month ?? 0) > 0 && (
-            <p className="mt-[0.5rem] mb-0 rounded-[7px] border border-[color-mix(in_srgb,var(--warning)_32%,transparent)] bg-[color-mix(in_srgb,var(--warning)_7%,transparent)] px-[0.55rem] py-[0.4rem] text-[0.72rem] leading-[1.45] text-(--text-muted) [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums">
+            <p className="mt-[0.5rem] mb-0 rounded-[7px] border border-[color-mix(in_srgb,var(--warning)_32%,transparent)] bg-[color-mix(in_srgb,var(--warning)_7%,transparent)] px-[0.55rem] py-[0.4rem] text-[0.72rem] leading-[1.45] text-subdued [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums">
               ddclient could not work out this house’s address <b>{num(d.lookupFailures.day)}</b>{' '}
               times in the last day, <b>{num(d.lookupFailures.week)}</b> in the week and{' '}
               <b>{num(d.lookupFailures.month)}</b> in the month. Its lookup against{' '}

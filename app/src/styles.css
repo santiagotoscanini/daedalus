@@ -19,12 +19,12 @@
 
 html,
 body {
-  background: var(--bg);
+  background: var(--background);
   /* The page is never wider than the window. Sideways scroll on a phone is
      always a bug here — this is a dashboard of panels, and there is nothing
      off to the right that anybody wants — but ONE overlooked unbreakable
      token in one panel is enough to produce it, and what you then see is a
-     band of bare `--bg` beside content that stops short. The sticky top bar
+     band of bare `--background` beside content that stops short. The sticky top bar
      is the tell: it is exactly one viewport wide, so scrolling past it
      uncovers the background under a bar that looked full-width.
 
@@ -42,7 +42,7 @@ body {
 
 body {
   margin: 0;
-  color: var(--text);
+  color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -67,7 +67,7 @@ code {
 }
 
 a {
-  color: var(--brand);
+  color: var(--primary);
   text-decoration: none;
 }
 a:hover {

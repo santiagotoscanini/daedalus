@@ -43,7 +43,7 @@ import { Board } from './viz'
    positioned over the skeleton inside it — so the box is the same size and
    shape throughout, and uncovering it changes nothing but what is inside. */
 const EMBED_WRAP =
-  'relative h-[22rem] overflow-hidden rounded-[9px] border border-(--border-soft) bg-background max-[50rem]:h-[18rem]'
+  'relative h-[22rem] overflow-hidden rounded-[9px] border border-subtle bg-background max-[50rem]:h-[18rem]'
 /* Log-shaped: ragged lines of the app's own grey, so the wait looks like the
    rest of the dashboard loading rather than like Grafana loading. */
 const EMBED_SKELETON =
@@ -66,7 +66,7 @@ const EMBED_READY = 'animate-none opacity-100 [transition:opacity_0.2s_ease]'
    neighbours. The range bar inside only needs the breathing room the summary
    does not provide. */
 const SUBLOG =
-  'group mt-4 border-t border-(--border-soft) pt-[0.7rem] [&+&]:mt-0 [&>summary+div]:mt-[0.7rem]'
+  'group mt-4 border-t border-subtle pt-[0.7rem] [&+&]:mt-0 [&>summary+div]:mt-[0.7rem]'
 const SUBLOG_SUMMARY = cn(
   'flex cursor-pointer list-none items-center gap-[0.4rem] text-[0.74rem] text-muted-foreground',
   'hover:text-primary [&::-webkit-details-marker]:hidden',

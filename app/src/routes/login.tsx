@@ -92,7 +92,7 @@ function LoginPage() {
         }}
       >
         <span className="inline-flex items-center gap-2 font-medium text-[0.82rem]">
-          <KeyRoundIcon className="size-4 text-(--text-muted)" />
+          <KeyRoundIcon className="size-4 text-subdued" />
           {state.mode === 'setup' ? 'Setup' : 'Sign in'}
         </span>
         {state.mode === 'setup' && (

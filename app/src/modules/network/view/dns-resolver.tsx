@@ -143,7 +143,7 @@ function DeclaredNames({ lan }: { lan: Dns['lan'] }) {
           <li
             key={n.fqdn}
             className={cn(
-              'inline-flex min-w-0 items-center gap-[0.35rem] rounded-[7px] bg-(--panel-2) px-2 py-[0.22rem] text-[0.75rem]',
+              'inline-flex min-w-0 items-center gap-[0.35rem] rounded-[7px] bg-raised px-2 py-[0.22rem] text-[0.75rem]',
               // The one state worth interrupting the wall of names for.
               n.served === false && 'shadow-[inset_0_0_0_1px_var(--danger)]',
             )}
@@ -153,7 +153,9 @@ function DeclaredNames({ lan }: { lan: Dns['lan'] }) {
                     it is a distinction rather than a column — it earns the eye
                     by being rare. */}
             {n.elsewhere && (
-              <span className={cn(MONO, 'text-[0.68rem] text-(--dim) tabular-nums')}>{n.ip}</span>
+              <span className={cn(MONO, 'text-[0.68rem] text-muted-foreground tabular-nums')}>
+                {n.ip}
+              </span>
             )}
             {n.public && <Chip tone="info">public</Chip>}
             {n.served === false && <Chip tone="bad">no route</Chip>}

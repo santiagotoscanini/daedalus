@@ -47,7 +47,7 @@ export function requesterLabel(b: Pick<BuildSummary, 'requestedBy' | 'actor'>): 
 }
 
 const ROW =
-  'grid grid-cols-[6.2rem_4.6rem_minmax(0,1fr)_5.2rem_6.5rem] items-baseline gap-x-[0.8rem] border-t border-(--border-soft) px-[0.2rem] py-[0.45rem] text-[0.8rem] no-underline first:border-t-0 hover:bg-(--panel-2) hover:no-underline max-[40rem]:grid-cols-[6.2rem_4.6rem_minmax(0,1fr)]'
+  'grid grid-cols-[6.2rem_4.6rem_minmax(0,1fr)_5.2rem_6.5rem] items-baseline gap-x-[0.8rem] border-t border-subtle px-[0.2rem] py-[0.45rem] text-[0.8rem] no-underline first:border-t-0 hover:bg-raised hover:no-underline max-[40rem]:grid-cols-[6.2rem_4.6rem_minmax(0,1fr)]'
 
 export function BuildsBoard({
   app,
@@ -84,7 +84,7 @@ export function BuildsBoard({
       aside={<BuildNowButton app={app} disabled={refusal !== undefined} reason={refusal} />}
     >
       {!buildOnBox && (
-        <p className="m-0 text-[0.82rem] text-(--text-muted)">
+        <p className="m-0 text-[0.82rem] text-subdued">
           Box builds are off for this app, so pushes build wherever the repo builds them today.{' '}
           <Link to="/apps/$name" params={{ name: app }} search={{ tab: 'settings' }}>
             Turn on Build on this box
@@ -93,7 +93,7 @@ export function BuildsBoard({
         </p>
       )}
       {buildOnBox && !linked && (
-        <p className="m-0 text-[0.82rem] text-(--text-muted)">
+        <p className="m-0 text-[0.82rem] text-subdued">
           Waiting for the sweep to link this app to its GitHub repository. Pushes and Build now
           start working once it has.
         </p>
@@ -118,16 +118,16 @@ export function BuildsBoard({
                     <BuildStateChip state={b.state} />
                   </span>
                   <code className="text-foreground">{sha7(b.sha)}</code>
-                  <span className="min-w-0 truncate text-(--text-muted)">
+                  <span className="min-w-0 truncate text-subdued">
                     {requesterLabel(b)}
                     {b.publish === 'candidate' && (
-                      <span className="text-(--dim)"> · candidate</span>
+                      <span className="text-muted-foreground"> · candidate</span>
                     )}
                   </span>
-                  <span className="text-right font-mono text-[0.76rem] text-(--dim) max-[40rem]:hidden">
+                  <span className="text-right font-mono text-[0.76rem] text-muted-foreground max-[40rem]:hidden">
                     {took === null || (isOpenBuild(b.state) && now === null) ? DASH : ms(took)}
                   </span>
-                  <span className="text-right text-[0.76rem] text-(--dim) max-[40rem]:hidden">
+                  <span className="text-right text-[0.76rem] text-muted-foreground max-[40rem]:hidden">
                     {now === null ? DASH : since((now - Date.parse(b.createdAt)) / 1000)}
                   </span>
                 </Link>
@@ -199,11 +199,11 @@ type OverviewBuild = {
 export function DetectionLine({ app, build }: { app: string; build: OverviewBuild }) {
   const parts = detectionParts(build.summary.resolvedStrategy, build.detection)
   return (
-    <p className="m-0 flex flex-wrap items-baseline gap-x-[0.45rem] gap-y-1 text-[0.8rem] text-(--text-muted)">
+    <p className="m-0 flex flex-wrap items-baseline gap-x-[0.45rem] gap-y-1 text-[0.8rem] text-subdued">
       {parts.map((p, i) => (
         <span key={p.text} className="inline-flex items-baseline gap-[0.45rem]">
           {i > 0 && (
-            <span aria-hidden="true" className="text-(--dim)">
+            <span aria-hidden="true" className="text-muted-foreground">
               ·
             </span>
           )}

@@ -61,7 +61,7 @@ export function Policy({
   // share: it joins the line once hydration is done (lib/hydrated.ts).
   const hydrated = useHydrated()
   return (
-    <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
+    <div className="flex flex-col gap-3 border-subtle border-t pt-4">
       <h3 className={cn(FIELD_LABEL, 'm-0')}>Policy</h3>
       <Rows
         rows={[

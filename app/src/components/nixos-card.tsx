@@ -48,7 +48,7 @@ function useNixosRelease(): Live {
   return live
 }
 
-const ASIDE = 'ml-2 text-(--dim)'
+const ASIDE = 'ml-2 text-muted-foreground'
 
 export function NixosCard({ facts }: { facts: NixosFacts }) {
   const live = useNixosRelease()

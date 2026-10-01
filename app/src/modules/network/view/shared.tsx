@@ -27,7 +27,7 @@ export const ROWS = 'm-0 flex list-none flex-col p-0'
 
 /** One row of it. */
 export const ROW =
-  'flex min-w-0 items-center gap-[0.45rem] px-[0.1rem] py-[0.34rem] text-[0.77rem] not-first:border-t not-first:border-(--border-soft)'
+  'flex min-w-0 items-center gap-[0.45rem] px-[0.1rem] py-[0.34rem] text-[0.77rem] not-first:border-t not-first:border-subtle'
 
 /** The name in a row. Takes the slack, so the detail is pushed right. */
 export const MAIN = 'min-w-0 flex-auto truncate text-foreground'
@@ -35,7 +35,7 @@ export const MAIN = 'min-w-0 flex-auto truncate text-foreground'
 /** The detail at the end of a row. Truncates: a record's content is 200
     characters of base64 nobody reads on a dashboard. */
 export const SIDE =
-  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-(--dim) tabular-nums'
+  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
 
 /** The count at the end of a row. */
 export const N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
@@ -44,11 +44,11 @@ export const N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
     and colour are left to the caller — a fold inside a board and the fold that
     ends a ranked list are the same mechanism at two weights. */
 const FOLD =
-  "[&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:items-center [&>summary]:gap-[0.45rem] [&>summary]:px-[0.1rem] [&>summary]:py-[0.3rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:before:text-[0.7rem] [&>summary]:before:text-(--dim) [&>summary]:before:transition-transform [&>summary]:before:duration-[0.12s] [&>summary]:before:ease-[ease] [&>summary]:before:content-['▸'] [&[open]>summary]:before:rotate-90"
+  "[&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:items-center [&>summary]:gap-[0.45rem] [&>summary]:px-[0.1rem] [&>summary]:py-[0.3rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:before:text-[0.7rem] [&>summary]:before:text-muted-foreground [&>summary]:before:transition-transform [&>summary]:before:duration-[0.12s] [&>summary]:before:ease-[ease] [&>summary]:before:content-['▸'] [&[open]>summary]:before:rotate-90"
 
 /** The tail of a list, folded. Set apart from the rows above it so the fold
     reads as the end of the list rather than as another row in it. */
-export const MORE = `${FOLD} mt-[0.4rem] border-t border-(--border-soft) [&>summary]:text-[0.72rem] [&>summary]:text-(--text-muted)`
+export const MORE = `${FOLD} mt-[0.4rem] border-t border-subtle [&>summary]:text-[0.72rem] [&>summary]:text-subdued`
 
 /** A folded group inside a board. */
 export const GROUP = `${FOLD} [&>summary]:text-[0.78rem] [&>summary]:text-foreground`
@@ -62,7 +62,7 @@ export const GROUP = `${FOLD} [&>summary]:text-[0.78rem] [&>summary]:text-foregr
  * black on black in the light theme.
  */
 export const ACTION =
-  'inline-flex cursor-pointer items-center rounded-[7px] border border-foreground bg-foreground px-[0.85rem] py-[0.42rem] text-[0.84rem] font-[550] whitespace-nowrap text-background no-underline transition-colors hover:border-foreground/85 hover:bg-foreground/85 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--brand-dim)'
+  'inline-flex cursor-pointer items-center rounded-[7px] border border-foreground bg-foreground px-[0.85rem] py-[0.42rem] text-[0.84rem] font-[550] whitespace-nowrap text-background no-underline transition-colors hover:border-foreground/85 hover:bg-foreground/85 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-dim'
 
 /** The bar that carries a tab's route/tunnel switch. The switch is always at
     the right, whether or not anything sits to its left — `ml-auto` on the last

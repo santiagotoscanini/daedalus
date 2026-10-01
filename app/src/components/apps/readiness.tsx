@@ -31,17 +31,17 @@ const STATE_TONE: Record<CheckState, Tone> = {
 
 /** The fold that replaces the verdict once there is nothing left to do. */
 const FOLD_SUMMARY = cn(
-  "flex cursor-pointer list-none items-center gap-[0.45rem] px-4 py-[0.6rem] text-[0.8rem] text-(--text-muted) before:text-[0.7rem] before:text-(--dim) before:transition-transform before:duration-[120ms] before:content-['▸']",
+  "flex cursor-pointer list-none items-center gap-[0.45rem] px-4 py-[0.6rem] text-[0.8rem] text-subdued before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[120ms] before:content-['▸']",
   '[&::-webkit-details-marker]:hidden',
-  'group-open:border-b group-open:border-b-(--border-soft) group-open:before:rotate-90',
-  'hover:bg-(--panel-2) hover:text-foreground',
+  'group-open:border-b group-open:border-b-subtle group-open:before:rotate-90',
+  'hover:bg-raised hover:text-foreground',
   // Inset: the summary is full-bleed inside a clipping panel, so an outward
   // offset would be cut off by the panel's own rounded edge.
-  'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--brand-dim)',
+  'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-dim',
 )
 
 /** One list of checks, hairline-separated. */
-const CHECKLIST = 'm-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-t-(--border-soft)'
+const CHECKLIST = 'm-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-t-subtle'
 
 export function ReadinessPanel({
   plan,
@@ -62,7 +62,7 @@ export function ReadinessPanel({
 
       {/* Step 3 asks one question and gets one answer, so it is drawn as one
           panel: the verdict, then whatever is still to be done about it. */}
-      <div className="mb-[1.2rem] overflow-hidden rounded-lg border border-(--border-soft) bg-(--panel) [&>*+*]:border-t [&>*+*]:border-t-(--border-soft)">
+      <div className="mb-[1.2rem] overflow-hidden rounded-lg border border-subtle bg-card [&>*+*]:border-t [&>*+*]:border-t-subtle">
         {plan.ready ? (
           // The whole step, once there is nothing worth stopping over. It is
           // the answer now, not a fold under one, so it is drawn at the
@@ -95,7 +95,7 @@ export function ReadinessPanel({
                 <span>{plan.verdict.headline}</span>
                 {/* The image reference the verdict is about, in the face it is
                     written in. */}
-                <span className="font-mono text-[0.86em] text-(--text-muted) [overflow-wrap:anywhere]">
+                <span className="font-mono text-[0.86em] text-subdued [overflow-wrap:anywhere]">
                   {plan.verdict.subject}
                 </span>
               </span>
@@ -168,9 +168,9 @@ function Row({
       </span>
       <span className="grid min-w-0 gap-[0.15rem]">
         <b>{check.label}</b>
-        <span className="text-[0.85rem] text-(--text-muted)">{check.detail}</span>
+        <span className="text-[0.85rem] text-subdued">{check.detail}</span>
         {check.fix !== undefined && (
-          <span className="text-[0.82rem] text-(--dim)">{check.fix}</span>
+          <span className="text-[0.82rem] text-muted-foreground">{check.fix}</span>
         )}
       </span>
     </li>

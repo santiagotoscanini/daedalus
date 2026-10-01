@@ -33,12 +33,12 @@ export const PICKER_HEAD = 'mb-[0.6rem] flex items-center gap-4'
 /** The search field's share of that row. */
 export const PICKER_SEARCH = 'flex-[0_1_22rem]'
 export const PICKER_COUNT =
-  'ml-auto text-[0.7rem] tracking-[0.13em] whitespace-nowrap text-(--dim) uppercase'
+  'ml-auto text-[0.7rem] tracking-[0.13em] whitespace-nowrap text-muted-foreground uppercase'
 
 /** The frame. The border and the radius sit here rather than on the scroller:
     a mask applied to the bordered element fades the border away with the rows. */
 export const PICKER_BOX =
-  'overflow-hidden rounded-lg border border-(--border-soft) bg-card [--repo-row-h:2.9rem]'
+  'overflow-hidden rounded-lg border border-subtle bg-card [--repo-row-h:2.9rem]'
 
 /* One grid for the whole list rather than one per row. A row-level grid sizes
    its chip column to that row's OWN chips, which is why the description used
@@ -55,7 +55,7 @@ export const PICKER_BOX =
 export const REPO_LIST = cn(
   'grid grid-cols-[minmax(6rem,14rem)_auto_minmax(0,1fr)_auto] gap-x-4 overflow-x-hidden overflow-y-auto pb-[1.6rem]',
   'max-h-[calc(var(--repo-row-h)_*_8_+_1.6rem)] mask-b-from-[calc(100%_-_1.6rem)]',
-  '[&>*+*]:border-t [&>*+*]:border-t-(--border-soft)',
+  '[&>*+*]:border-t [&>*+*]:border-t-subtle',
 )
 
 /* Without subgrid the row keeps fixed tracks: the chip column stops sizing
@@ -71,23 +71,23 @@ export const REPO_OPT = cn('group/opt col-span-full grid min-w-0 grid-cols-subgr
 export const REPO_ROW = cn(
   'group/row col-span-full grid min-h-(--repo-row-h) w-full cursor-pointer grid-cols-subgrid items-baseline border-0 bg-transparent px-4 py-[0.62rem] text-left text-foreground',
   NO_SUBGRID,
-  'hover:bg-(--panel-2) hover:no-underline group-aria-selected/opt:bg-(--panel-2) group-aria-selected/opt:no-underline',
+  'hover:bg-raised hover:no-underline group-aria-selected/opt:bg-raised group-aria-selected/opt:no-underline',
   // Inset, unlike the shell's rings: the row is full-bleed inside a clipping
   // frame, so an outward offset would be cut off by the picker box.
-  'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--brand-dim)',
+  'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-dim',
 )
 
-export const PICKER_HINT = 'mt-[0.55rem] mb-0 text-[0.7rem] text-(--dim)'
+export const PICKER_HINT = 'mt-[0.55rem] mb-0 text-[0.7rem] text-muted-foreground'
 
 const REPO_NAME = 'min-w-0 truncate font-semibold'
 const REPO_CHIPS = 'flex items-baseline gap-[0.35rem]'
-const REPO_DESC = 'min-w-0 truncate text-[0.85rem] text-(--text-muted)'
-const REPO_META = 'text-right text-[0.78rem] whitespace-nowrap text-(--dim)'
+const REPO_DESC = 'min-w-0 truncate text-[0.85rem] text-subdued'
+const REPO_META = 'text-right text-[0.78rem] whitespace-nowrap text-muted-foreground'
 
 /* Picked, so the search and the list collapse to the single line they
    produced — the choice is made, and the page below it is the point now. */
 const REPO_PICKED =
-  'flex flex-wrap items-baseline gap-x-[0.9rem] gap-y-[0.45rem] rounded-lg border border-(--border-soft) bg-card px-4 py-[0.7rem]'
+  'flex flex-wrap items-baseline gap-x-[0.9rem] gap-y-[0.45rem] rounded-lg border border-subtle bg-card px-4 py-[0.7rem]'
 
 export function RepoPicker({
   repos,
@@ -308,7 +308,7 @@ export function RepoPicker({
             )
           })}
           {visible.length === 0 && (
-            <div className="col-span-full px-4 py-[1.6rem] text-[0.85rem] text-(--dim)">
+            <div className="col-span-full px-4 py-[1.6rem] text-[0.85rem] text-muted-foreground">
               No repositories match that filter.
             </div>
           )}
@@ -326,7 +326,7 @@ function Cells({ repo, taken }: { repo: Repo; taken: boolean }) {
     <>
       {/* Readable rather than greyed out: a repo that is already an app is a
           destination, not a rejected option. */}
-      <span className={cn(REPO_NAME, taken && 'text-(--text-muted)')}>{repo.name}</span>
+      <span className={cn(REPO_NAME, taken && 'text-subdued')}>{repo.name}</span>
       <Chips repo={repo} taken={taken} />
       <span className={REPO_DESC}>{repo.description ?? '—'}</span>
       <span className={REPO_META}>
@@ -347,7 +347,7 @@ function Cells({ repo, taken }: { repo: Repo; taken: boolean }) {
 function Chips({ repo, taken, className }: { repo: Repo; taken: boolean; className?: string }) {
   return (
     <span className={cn(REPO_CHIPS, className)}>
-      {repo.private && <Chip className={cn(CHIP, 'text-(--text-muted)')}>private</Chip>}
+      {repo.private && <Chip className={cn(CHIP, 'text-subdued')}>private</Chip>}
       {repo.archived && (
         <Chip tone="warn" className={CHIP}>
           archived
@@ -393,8 +393,10 @@ function Derivation({
     <dl className="mt-[0.9rem] mr-0 mb-0 ml-0 grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-[0.35rem] border-l border-l-border py-[0.2rem] pr-0 pl-[1.1rem]">
       {rows.map((r) => (
         <Fragment key={r.label}>
-          <dt className="text-[0.7rem] tracking-[0.13em] text-(--dim) uppercase">{r.label}</dt>
-          <dd className="m-0 font-mono text-[0.86em] text-(--text-muted) wrap-anywhere">
+          <dt className="text-[0.7rem] tracking-[0.13em] text-muted-foreground uppercase">
+            {r.label}
+          </dt>
+          <dd className="m-0 font-mono text-[0.86em] text-subdued wrap-anywhere">
             <Threaded value={r.value} token={name} />
           </dd>
         </Fragment>

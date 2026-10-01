@@ -252,7 +252,7 @@ export function WipBoard({
           {children}
         </div>
         <div className="absolute inset-0 flex items-center justify-center p-3">
-          <span className="rounded-md border border-(--border-soft) bg-(--panel) px-3 py-1.5 text-center text-[0.76rem] text-(--text-muted) leading-[1.4] shadow-sm">
+          <span className="rounded-md border border-subtle bg-card px-3 py-1.5 text-center text-[0.76rem] text-subdued leading-[1.4] shadow-sm">
             {waits}
           </span>
         </div>

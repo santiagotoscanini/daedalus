@@ -40,8 +40,8 @@ const EMPTY: ExternalAppInput = {
 }
 
 const INPUT = INPUT_MONO
-const LABEL = 'font-medium text-(--text-muted) text-[0.8rem]'
-const HINT = 'text-(--dim) text-[0.76rem]'
+const LABEL = 'font-medium text-subdued text-[0.8rem]'
+const HINT = 'text-muted-foreground text-[0.76rem]'
 
 export function ExternalApps({ rows }: { rows: ExternalApp[] }) {
   const ids = {
@@ -98,14 +98,14 @@ export function ExternalApps({ rows }: { rows: ExternalApp[] }) {
           {rows.map((r) => (
             <li
               key={r.id}
-              className="flex flex-wrap items-center justify-between gap-2 border-(--border-soft) border-b pb-2 last:border-0"
+              className="flex flex-wrap items-center justify-between gap-2 border-subtle border-b pb-2 last:border-0"
             >
               <span className="inline-flex min-w-0 flex-col gap-[0.1rem]">
                 <span className="inline-flex items-center gap-2">
                   <span className="font-medium text-[0.82rem]">{r.name}</span>
                   <Chip tone="muted">{r.platform}</Chip>
                 </span>
-                <span className="text-[0.72rem] text-(--dim)">
+                <span className="text-[0.72rem] text-muted-foreground">
                   <Mono>{r.host}</Mono>
                   {r.repo !== null && (
                     <>

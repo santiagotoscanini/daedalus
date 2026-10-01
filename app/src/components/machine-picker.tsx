@@ -74,7 +74,9 @@ export function MachinePicker({
                 {/* How many Claude sessions are on it — on every tab, so the pill
                     is the same width whichever tab is open. */}
                 {n.claude !== null && n.claude.sessions > 0 && (
-                  <span className={`${MONO} text-[0.7rem] text-(--dim)`}>{n.claude.sessions}</span>
+                  <span className={`${MONO} text-[0.7rem] text-muted-foreground`}>
+                    {n.claude.sessions}
+                  </span>
                 )}
               </>,
             )}

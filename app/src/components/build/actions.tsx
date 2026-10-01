@@ -29,7 +29,7 @@ export function CancelBuildButton({ app, id }: { app: string; id: string }) {
   return (
     <span className="inline-flex flex-wrap items-center justify-end gap-[0.6rem] text-[0.76rem]">
       {error !== null && <span className="max-w-[28rem] text-right text-danger">{error}</span>}
-      {armed && <span className="text-(--text-muted)">Stop it where it is?</span>}
+      {armed && <span className="text-subdued">Stop it where it is?</span>}
       <Button
         type="button"
         variant="outline"

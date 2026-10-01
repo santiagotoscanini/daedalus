@@ -53,7 +53,7 @@ function ModelRow({
     onChange({ alias: a === '' || a === m.defaultAlias ? undefined : a })
   }
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_9rem_10rem] items-center gap-3 border-(--border-soft) border-t py-[0.45rem] text-[0.8rem] first:border-t-0 max-[48rem]:grid-cols-[auto_minmax(0,1fr)] max-[48rem]:gap-y-1">
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_9rem_10rem] items-center gap-3 border-subtle border-t py-[0.45rem] text-[0.8rem] first:border-t-0 max-[48rem]:grid-cols-[auto_minmax(0,1fr)] max-[48rem]:gap-y-1">
       <Switch
         checked={offer}
         disabled={busy || !m.downloaded}

@@ -10,15 +10,15 @@ import { cn } from '../../lib/cn'
 /** One row of a menu; exported for the menu that has to exist before React does (account-menu.tsx). */
 export const MENU_ITEM = cn(
   'relative flex cursor-pointer select-none items-center gap-2.5 rounded-[6px] px-2 py-[0.42rem]',
-  'text-[0.84rem] text-(--text-muted) no-underline outline-none hover:no-underline',
-  'data-[highlighted]:bg-(--panel-2) data-[highlighted]:text-foreground',
+  'text-[0.84rem] text-subdued no-underline outline-none hover:no-underline',
+  'data-[highlighted]:bg-raised data-[highlighted]:text-foreground',
   'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
   '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:opacity-70 data-[highlighted]:[&_svg]:opacity-100',
 )
 
 /** The panel a menu's rows sit in; exported with MENU_ITEM for the same reason. */
 export const MENU_PANEL = cn(
-  'z-[80] min-w-[13rem] overflow-hidden rounded-[10px] border border-(--border) bg-(--raise) p-1',
+  'z-[80] min-w-[13rem] overflow-hidden rounded-[10px] border border-(--border) bg-lifted p-1',
   'text-foreground shadow-[0_16px_40px_-16px_rgb(0_0_0/0.45)]',
 )
 
@@ -113,7 +113,7 @@ function DropdownMenuSeparator({
   return (
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn('-mx-1 my-1 h-px bg-(--border-soft)', className)}
+      className={cn('-mx-1 my-1 h-px bg-subtle', className)}
       {...props}
     />
   )

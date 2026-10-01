@@ -47,7 +47,7 @@ const CODE_INK: Record<string, string> = {
    breakdown of the chart directly above, not a ranking anyone needs bars for,
    and at four classes a legend would be longer than the data. */
 const ENDPOINTS =
-  'mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-(--text-muted) [&_b]:tabular-nums'
+  'mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-subdued [&_b]:tabular-nums'
 
 // ── The proxy ──────────────────────────────────────────────────────────────
 
@@ -271,7 +271,7 @@ export function TraefikView({ data: d }: { data: Proxy }) {
                 className="grid min-w-0 grid-cols-[minmax(6rem,12rem)_1fr_auto] items-center gap-[0.7rem] text-[0.8rem]"
                 title={c.sans.join(', ')}
               >
-                <span className={cn(MONO, 'truncate text-(--text-muted)')}>{c.cn}</span>
+                <span className={cn(MONO, 'truncate text-subdued')}>{c.cn}</span>
                 {/* 90 days is Let's Encrypt's full lifetime, so the bar reads
                     as how much of this certificate is left. */}
                 <Progress
@@ -385,12 +385,12 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
   const dropped = codes.filter((x) => x.label === '0').reduce((n, x) => n + x.value, 0)
 
   return (
-    <details className="mt-[0.5rem] [&>summary]:-mx-[0.35rem] [&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:flex-col [&>summary]:gap-[0.3rem] [&>summary]:rounded-[7px] [&>summary]:px-[0.35rem] [&>summary]:py-[0.25rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:hover:bg-(--panel-2) [&[open]>summary]:bg-(--panel-2)">
+    <details className="mt-[0.5rem] [&>summary]:-mx-[0.35rem] [&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:flex-col [&>summary]:gap-[0.3rem] [&>summary]:rounded-[7px] [&>summary]:px-[0.35rem] [&>summary]:py-[0.25rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:hover:bg-raised [&[open]>summary]:bg-raised">
       <summary>
         <span className={cn(SUB, 'm-0 block')}>Response codes, 24h</span>
         {/* The digest wraps rather than scrolls: four short pairs, and at a
             quarter of the grid it lands on two lines, which is fine. */}
-        <span className="flex flex-wrap gap-x-[0.7rem] gap-y-[0.15rem] text-[0.72rem] text-(--dim) tabular-nums [&_b]:font-semibold [&_b]:text-foreground">
+        <span className="flex flex-wrap gap-x-[0.7rem] gap-y-[0.15rem] text-[0.72rem] text-muted-foreground tabular-nums [&_b]:font-semibold [&_b]:text-foreground">
           {classes
             .filter((x) => x.total > 0)
             .map((x) => (
@@ -399,7 +399,10 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
               </span>
             ))}
           {dropped > 0 && (
-            <span className="text-(--dim)" title="Client hung up before an answer was written">
+            <span
+              className="text-muted-foreground"
+              title="Client hung up before an answer was written"
+            >
               no reply <b>{compact(dropped)}</b>
             </span>
           )}

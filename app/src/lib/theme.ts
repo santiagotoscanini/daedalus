@@ -79,11 +79,9 @@ const THEMEABLE = [
   'sidebar-border',
   'sidebar-ring',
   'radius',
-  // The legacy tokens with no shadcn equivalent. theme.css aliases the rest
-  // of the legacy vocabulary (`--bg`, `--panel`, `--text`, `--dim`,
-  // `--brand`) onto the tokens above, but these are literal colours there,
-  // so they have to be settable or a light preset cannot get its raised
-  // layers right.
+  // The app's own five, with no shadcn equivalent (theme.css's header). They
+  // are literal colours there, so they have to be settable or a light preset
+  // cannot get its raised layers right.
   'panel-2',
   'raise',
   'border-soft',

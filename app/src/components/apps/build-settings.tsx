@@ -24,7 +24,7 @@ import { type AppRecord, GHOST_BTN } from './shared'
 // not saveApp: the columns are engine-only, so a change here is live at once
 // and never waits for, or shows up in, an Apply.
 
-const FIELD_LABEL = 'text-[0.76rem] text-(--dim)'
+const FIELD_LABEL = 'text-[0.76rem] text-muted-foreground'
 
 export function BuildSettings({ app }: { app: AppRecord }) {
   const repo = appRepo(useSite(), app.name)
@@ -99,13 +99,13 @@ export function BuildSettings({ app }: { app: AppRecord }) {
                 k: 'repository',
                 v:
                   app.githubRepoId === null ? (
-                    <span className="text-(--text-muted)">not linked yet</span>
+                    <span className="text-subdued">not linked yet</span>
                   ) : (
                     <span>
                       <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
                         {repo}
                       </a>{' '}
-                      <span className="font-mono text-[0.76rem] text-(--dim)">
+                      <span className="font-mono text-[0.76rem] text-muted-foreground">
                         #{app.githubRepoId}
                       </span>
                     </span>

@@ -70,7 +70,7 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
           <p className="m-0 font-medium text-[0.82rem]">
             Copy this now. It is not stored and cannot be shown again.
           </p>
-          <Mono className="block break-all rounded-[6px] bg-(--panel-2) p-2 select-all">
+          <Mono className="block break-all rounded-[6px] bg-raised p-2 select-all">
             {minted.token}
           </Mono>
           <p className={NOTE}>
@@ -137,7 +137,7 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
           {tokens.map((t) => (
             <li
               key={t.id}
-              className="flex flex-wrap items-center justify-between gap-2 border-(--border-soft) border-b pb-2 last:border-0"
+              className="flex flex-wrap items-center justify-between gap-2 border-subtle border-b pb-2 last:border-0"
             >
               <span className="inline-flex flex-col gap-[0.1rem]">
                 <span className="inline-flex items-center gap-2">
@@ -146,7 +146,7 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
                     {t.revokedAt !== null ? 'revoked' : t.scope}
                   </Chip>
                 </span>
-                <span className="text-[0.72rem] text-(--dim)">
+                <span className="text-[0.72rem] text-muted-foreground">
                   minted {<When at={t.createdAt} />} ·{' '}
                   {t.lastUsedAt === null ? (
                     'never used'

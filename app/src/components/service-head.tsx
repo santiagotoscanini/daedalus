@@ -79,7 +79,7 @@ export function ServiceHead({
             is one sentence on a line with a 44px logo and a button beside it,
             and the cap would fold it in half while a third of the header sat
             empty. The header is the measure. */}
-        <p className="mt-[0.3rem] mb-0 max-w-none text-[0.82rem] text-(--text-muted)">{lede}</p>
+        <p className="mt-[0.3rem] mb-0 max-w-none text-[0.82rem] text-subdued">{lede}</p>
       </div>
       {/* The status chip and the one action on the page, kept together at the
           far end. */}
@@ -125,9 +125,7 @@ function VersionCompare({
           <span className="font-mono text-[0.95rem] font-semibold text-foreground tabular-nums [overflow-wrap:anywhere]">
             {r.v ?? DASH}
           </span>
-          <span className="col-span-full text-[0.7rem] leading-[1.35] text-(--text-muted)">
-            {r.note}
-          </span>
+          <span className="col-span-full text-[0.7rem] leading-[1.35] text-subdued">{r.note}</span>
         </span>
       ))}
     </InfoHint>

@@ -80,7 +80,7 @@ export function Settings({
               v: app.operatorSecrets ? (
                 <code>{app.name}-env.sops</code>
               ) : (
-                <span className="text-(--text-muted)">none</span>
+                <span className="text-subdued">none</span>
               ),
             },
           ]}
@@ -343,12 +343,12 @@ function RemovePanel({
           the moment the name is being typed rather than scrolled past to reach
           the box. */}
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] items-start gap-6 max-[50rem]:grid-cols-[minmax(0,1fr)]">
-        <div className="[&>p]:mt-0 [&>p]:mr-0 [&>p]:mb-2 [&>p]:ml-0 [&>p]:text-[0.85rem] [&>p]:leading-[1.55] [&>p]:text-(--text-muted)">
+        <div className="[&>p]:mt-0 [&>p]:mr-0 [&>p]:mb-2 [&>p]:ml-0 [&>p]:text-[0.85rem] [&>p]:leading-[1.55] [&>p]:text-subdued">
           <p>
             Deletes the registry entry. The next Apply removes the container, the traefik router,
             the pi-hole record, the gatus probe and the Cloudflare route.
           </p>
-          <p className="mb-0 text-[0.73rem] leading-[1.45] text-(--dim)">
+          <p className="mb-0 text-[0.73rem] leading-[1.45] text-muted-foreground">
             <b>Not removed:</b>{' '}
             {[
               postgres && `the ${name} database and role on the shared cluster`,
@@ -420,7 +420,7 @@ function TextField({
     // `has-[:disabled]:opacity-100`: a disabled row dims its INPUT, not its
     // label — the label is what says which field is locked.
     <Field className="gap-[0.3rem] py-2 has-[:disabled]:opacity-100">
-      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-(--dim)">
+      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-muted-foreground">
         {label}
       </FieldLabel>
       <Input

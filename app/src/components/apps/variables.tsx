@@ -29,18 +29,18 @@ import type { AppRecord } from './shared'
 // `driftOf` compares these rows against the nix manifest.
 
 const FIELD = INPUT_ROW
-const SMALL_BTN = 'h-auto px-[0.6rem] py-[0.2rem] text-[0.76rem] text-(--text-muted)'
-const LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-(--dim)'
+const SMALL_BTN = 'h-auto px-[0.6rem] py-[0.2rem] text-[0.76rem] text-subdued'
+const LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-muted-foreground'
 // Three columns, not two: the name, the value, and the actions in a column
 // of their own so they line up down the page. Trailing the buttons after the
 // value put them at a different x in every row and wrapped them onto a second
 // line whenever a value was long — a Mapbox token is long — which made one
 // row taller than its neighbours for no reason a reader could use.
 const ROW =
-  'grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] items-baseline gap-x-[1.25rem] gap-y-[0.15rem] border-b border-b-(--border-soft) py-[0.6rem] last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)_auto]'
+  'grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] items-baseline gap-x-[1.25rem] gap-y-[0.15rem] border-b border-b-subtle py-[0.6rem] last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)_auto]'
 /** The note belongs under the value, not beside the key, and needs air above it. */
 const NOTE_CELL =
-  'col-start-2 col-end-4 mt-[0.35rem] mb-0 text-[0.76rem] leading-[1.45] text-(--dim) max-[60rem]:col-start-1'
+  'col-start-2 col-end-4 mt-[0.35rem] mb-0 text-[0.76rem] leading-[1.45] text-muted-foreground max-[60rem]:col-start-1'
 
 export function Variables({
   app,
@@ -92,7 +92,9 @@ export function Variables({
         span={12}
         aside={
           saving ? (
-            <span className="text-[0.72rem] tracking-normal text-(--dim) normal-case">saving…</span>
+            <span className="text-[0.72rem] tracking-normal text-muted-foreground normal-case">
+              saving…
+            </span>
           ) : null
         }
       >
@@ -235,7 +237,7 @@ export function Variables({
           </div>
         )}
 
-        <p className="mt-[0.9rem] mr-0 mb-0 ml-0 text-[0.76rem] text-(--dim)">
+        <p className="mt-[0.9rem] mr-0 mb-0 ml-0 text-[0.76rem] text-muted-foreground">
           A change is saved here straight away and reaches the container at the next <b>Apply</b>,
           which writes <code>site/apps.json</code>, rebuilds and restarts it. Until then the Apps
           page shows this app as changed.

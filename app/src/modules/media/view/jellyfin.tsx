@@ -66,7 +66,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
               {d.playing.map((s, i) => (
                 <li key={`${s.user}-${String(i)}`} className="flex flex-col gap-[0.35rem]">
                   <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-[0.7rem]">
-                    <span className="flex min-w-0 items-center gap-[0.45rem] truncate font-[550] [&_em]:font-normal [&_em]:text-(--text-muted) [&_em]:not-italic">
+                    <span className="flex min-w-0 items-center gap-[0.45rem] truncate font-[550] [&_em]:font-normal [&_em]:text-subdued [&_em]:not-italic">
                       <Pulse on={!s.paused} tone="ok" />
                       {s.title}
                       {s.sub !== null && <em> — {s.sub}</em>}

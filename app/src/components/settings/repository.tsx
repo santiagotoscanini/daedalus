@@ -68,7 +68,7 @@ export function Repository({
             v: dirty ? (
               <span className="inline-flex items-center gap-2">
                 <Chip tone="warn">dirty</Chip>
-                <span className="text-[0.78rem] text-(--text-muted)">
+                <span className="text-[0.78rem] text-subdued">
                   {[
                     f.tree.modified > 0 && `${String(f.tree.modified)} modified`,
                     f.tree.untracked > 0 && `${String(f.tree.untracked)} untracked`,
@@ -85,13 +85,13 @@ export function Repository({
         ]}
       >
         {f.tree.untracked > 0 && (
-          <p className="m-0 text-[0.78rem] text-(--text-muted)">
+          <p className="m-0 text-[0.78rem] text-subdued">
             An untracked file is invisible to a rebuild — the flake only sees what git tracks. Add
             it before building, or the build fails with "file not found".
           </p>
         )}
         {f.upstream !== null && f.upstream.ahead > 0 && (
-          <p className="m-0 text-[0.78rem] text-(--text-muted)">
+          <p className="m-0 text-[0.78rem] text-subdued">
             Commits not yet pushed exist only on this disk, which is not snapshotted. Push.
           </p>
         )}
@@ -143,7 +143,7 @@ export function Repository({
                   {r.applyStatus.state}
                 </Chip>
                 {r.applyStatus.phase !== '' && (
-                  <span className="text-[0.78rem] text-(--text-muted)">{r.applyStatus.phase}</span>
+                  <span className="text-[0.78rem] text-subdued">{r.applyStatus.phase}</span>
                 )}
               </span>
             ),
@@ -151,7 +151,7 @@ export function Repository({
         ]}
       >
         {running !== null && !headRuns && f.head !== null && (
-          <p className="m-0 text-[0.78rem] text-(--text-muted)">
+          <p className="m-0 text-[0.78rem] text-subdued">
             The repository has moved past what is running. Nothing is wrong — a commit without a
             rebuild is normal — but the box does not yet do what HEAD says.
           </p>
@@ -205,7 +205,7 @@ function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) 
   const versioned = dir.toplevel !== null
 
   return (
-    <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
+    <div className="flex flex-col gap-3 border-subtle border-t pt-4">
       <p className="m-0 text-[0.82rem] leading-[1.55]">
         {!dir.exists ? (
           <>
@@ -280,7 +280,7 @@ function CommitAs({ edit, git }: { edit: SiteEdit; git: GitIdentities }) {
     },
   ]
   return (
-    <div className="flex flex-col gap-2 border-(--border-soft) border-t pt-4">
+    <div className="flex flex-col gap-2 border-subtle border-t pt-4">
       <div className="flex flex-wrap items-center gap-3 text-[0.82rem]">
         <span>Commit as</span>
         <SiteSelect edit={edit} field="commits.author" label="Commit as" groups={groups} />
@@ -370,13 +370,13 @@ function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
         </div>
       ))}
       {site.files.some((f) => f.status === 'untracked') && (
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           An untracked file is invisible to a rebuild. This should not happen — daedalus stages what
           it writes — so something else put it there, or a <Mono>git reset</Mono> undid the add.
         </p>
       )}
       {site.files.some((f) => f.current === false) && (
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           {/* Named, not assumed: two files are compared now, and telling the
               operator site.json differs when it is the README that does sends
               them looking in the wrong file. */}
@@ -391,7 +391,7 @@ function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
         </p>
       )}
       {site.files.find((f) => f.name === 'apps.json')?.status === 'absent' && (
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           <Mono>apps.json</Mono> is written only by an Apply, and from here only once nix reads the
           registry from this directory.
         </p>

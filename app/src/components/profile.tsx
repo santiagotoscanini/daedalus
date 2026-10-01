@@ -225,16 +225,14 @@ function Identity({
           alt={name}
           width={112}
           height={112}
-          className="size-28 flex-none rounded-full border border-(--border-soft) object-cover"
+          className="size-28 flex-none rounded-full border border-subtle object-cover"
         />
         <div className="flex min-w-0 flex-col gap-1 max-sm:items-center">
           <h2 className="m-0 truncate font-semibold text-[1.4rem] leading-tight tracking-[-0.01em]">
             {name}
           </h2>
-          <p className="m-0 truncate text-(--text-muted) text-[0.88rem]">{p.username}</p>
-          {p.email !== '' && (
-            <p className="m-0 truncate text-(--text-muted) text-[0.88rem]">{p.email}</p>
-          )}
+          <p className="m-0 truncate text-subdued text-[0.88rem]">{p.username}</p>
+          {p.email !== '' && <p className="m-0 truncate text-subdued text-[0.88rem]">{p.email}</p>}
           {(p.isAdmin || p.groups.length > 0) && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 max-sm:justify-center">
               {p.isAdmin && <Chip tone="ok">Pocket ID admin</Chip>}
@@ -335,7 +333,7 @@ function TextInner({
   return (
     <Field invalid={error !== null} className={cn('gap-1.5', className)}>
       <div className="flex items-baseline justify-between gap-2">
-        <FieldLabel htmlFor={id} className="font-medium text-(--text-muted) text-[0.8rem]">
+        <FieldLabel htmlFor={id} className="font-medium text-subdued text-[0.8rem]">
           {label}
         </FieldLabel>
         {saving && <span className={ASIDE}>Saving…</span>}
@@ -361,7 +359,9 @@ function TextInner({
         <FieldError className="text-[0.76rem]">{error}</FieldError>
       ) : (
         hint !== undefined && (
-          <FieldDescription className="text-(--dim) text-[0.76rem]">{hint}</FieldDescription>
+          <FieldDescription className="text-muted-foreground text-[0.76rem]">
+            {hint}
+          </FieldDescription>
         )
       )}
     </Field>

@@ -34,8 +34,8 @@ export function Identified({
         <Pending />
       ) : live === null ? (
         <>
-          <span className="text-[0.82rem] text-(--dim)">not readable with the token</span>
-          <span className="text-[0.72rem] text-(--text-muted)">needs {needs}</span>
+          <span className="text-[0.82rem] text-muted-foreground">not readable with the token</span>
+          <span className="text-[0.72rem] text-subdued">needs {needs}</span>
         </>
       ) : (
         <span className="inline-flex items-center gap-2">
@@ -63,7 +63,7 @@ export function Token({
   return (
     <span className="inline-flex items-center gap-2">
       <Chip tone="ok">{check.value.status ?? 'active'}</Chip>
-      <span className="text-[0.78rem] text-(--text-muted)">
+      <span className="text-[0.78rem] text-subdued">
         {check.value.expiresOn === null
           ? 'no expiry'
           : `expires ${check.value.expiresOn.slice(0, 10)}`}
@@ -122,7 +122,7 @@ export function ReplaceToken() {
 
   return (
     <form
-      className="flex flex-col gap-2 rounded-[9px] border border-(--border-soft) p-3"
+      className="flex flex-col gap-2 rounded-[9px] border border-subtle p-3"
       onSubmit={(e) => {
         e.preventDefault()
         submit()

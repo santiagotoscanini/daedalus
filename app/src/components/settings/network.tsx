@@ -73,12 +73,12 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
           },
         ]}
       >
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           The LAN address is the box's own. A wrong value strands it after the rebuild — the DNS
           server, this page and SSH all move with it — and the way back in is SSH by the new
           address. An empty interface or gateway leaves the choice to the kernel.
         </p>
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           The public hostname is split-horizon: Pi-hole answers it with the LAN address, the public
           record carries the WAN address. It stays DNS-only at Cloudflare — proxying it would break
           the router-forwarded games and mask the LAN override.
@@ -115,7 +115,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
                   validate={ipv4Error}
                   className="w-[9.5rem]"
                 />
-                <span className="text-(--dim)">–</span>
+                <span className="text-muted-foreground">–</span>
                 <SiteText
                   edit={edit}
                   field="network.dhcp.end"
@@ -151,7 +151,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
           },
         ]}
       >
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           Turning the server off leaves every device on its current lease until it expires, then
           without an address unless something else hands them out. The lease is dnsmasq syntax: a
           number with an optional s/m/h/d/w unit, or <code>infinite</code>.
@@ -177,7 +177,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
           { k: 'Local records', v: <Value v={String(n.dns.lanHosts)} unit="hosts" /> },
         ]}
       >
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           One upstream per line, as an address with an optional <code>#port</code>. Every container
           on the box resolves through Pi-hole too, so an upstream that does not answer is a
           house-wide outage, not a slow lookup.

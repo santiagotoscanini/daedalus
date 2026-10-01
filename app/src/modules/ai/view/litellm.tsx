@@ -144,7 +144,7 @@ export function LitellmView({ data }: { data: LitellmData }) {
 
           <p className={FOOT}>
             {data.endpoints.length > 0 && (
-              <span className="mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-(--text-muted) [&_b]:tabular-nums">
+              <span className="mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-subdued [&_b]:tabular-nums">
                 {data.endpoints.map((e) => (
                   <span key={e.label}>
                     {e.label} <b>{num(e.value)}</b>

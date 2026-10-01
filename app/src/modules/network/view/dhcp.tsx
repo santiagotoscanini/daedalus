@@ -24,7 +24,7 @@ const DEVICE_LIST =
    breakpoint, where the name and address are what gets scanned and the MAC is
    what gets looked up once. */
 const DEVICE_ROW =
-  'grid grid-cols-[1fr_6.6rem_9.4rem_4.6rem] items-center gap-2 border-t border-(--border-soft) py-[0.26rem] text-[0.74rem] text-(--dim) max-[34rem]:grid-cols-[1fr_6.6rem_4.6rem]'
+  'grid grid-cols-[1fr_6.6rem_9.4rem_4.6rem] items-center gap-2 border-t border-subtle py-[0.26rem] text-[0.74rem] text-muted-foreground max-[34rem]:grid-cols-[1fr_6.6rem_4.6rem]'
 
 /**
  * The LAN, in two sections that are one list.
@@ -89,10 +89,10 @@ function DeviceRow({ d }: { d: Device }) {
   const active = d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE
   return (
     <li className={DEVICE_ROW}>
-      <span className={cn('truncate', active ? 'text-foreground' : 'text-(--text-muted)')}>
-        {d.name ?? <span className="text-(--text-muted)">unnamed</span>}
+      <span className={cn('truncate', active ? 'text-foreground' : 'text-subdued')}>
+        {d.name ?? <span className="text-subdued">unnamed</span>}
       </span>
-      <span className={cn(MONO, 'tabular-nums', active && 'text-(--text-muted)')}>{d.ip}</span>
+      <span className={cn(MONO, 'tabular-nums', active && 'text-subdued')}>{d.ip}</span>
       <span
         className={cn(MONO, 'text-[0.66rem] max-[34rem]:hidden')}
         title={

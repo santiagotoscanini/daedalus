@@ -102,20 +102,20 @@ export function ApplyBar({
         // page, and content disappearing under a hard edge reads as the page
         // having ended.
         'border-t bg-card/92 backdrop-blur-md',
-        status.state === 'failed' ? 'border-t-danger' : 'border-t-(--brand-dim)',
+        status.state === 'failed' ? 'border-t-danger' : 'border-t-primary-dim',
       )}
     >
       <div className="min-w-0 text-[0.87rem]">
         {running ? (
           <>
             <strong>Applying…</strong>
-            <ol className="ml-3.5 inline-flex list-none gap-3.5 p-0 text-(--dim) text-xs">
+            <ol className="ml-3.5 inline-flex list-none gap-3.5 p-0 text-muted-foreground text-xs">
               {phases.map((p, i) => (
                 <li
                   key={p}
                   className={cn(
                     p === status.phase && 'text-primary',
-                    i < activeIndex && 'text-(--text-muted) line-through',
+                    i < activeIndex && 'text-subdued line-through',
                   )}
                 >
                   {p}
@@ -144,7 +144,7 @@ export function ApplyBar({
         ) : (
           <>
             <strong>{heading(changed)}</strong>
-            <span className="ml-2.5 text-(--dim)">
+            <span className="ml-2.5 text-muted-foreground">
               {changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
             </span>
             {refusal !== null && <span className="ml-2.5 text-danger">{refusal}</span>}

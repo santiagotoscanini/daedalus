@@ -33,9 +33,9 @@ import { RosterBoard } from './roster'
 /* A dated line — a blog post, an arrival, a departure. */
 const NEWS = 'flex list-none flex-col gap-[0.3rem]'
 const NEWS_ROW =
-  'grid min-w-0 grid-cols-[auto_1fr_auto] items-center gap-[0.6rem] rounded-[7px] bg-(--panel-2) px-[0.45rem] py-[0.3rem]'
+  'grid min-w-0 grid-cols-[auto_1fr_auto] items-center gap-[0.6rem] rounded-[7px] bg-raised px-[0.45rem] py-[0.3rem]'
 const NEWS_TITLE = 'truncate text-[0.8rem] text-foreground no-underline hover:underline'
-const NEWS_DATE = 'text-[0.72rem] whitespace-nowrap tabular-nums text-(--dim)'
+const NEWS_DATE = 'text-[0.72rem] whitespace-nowrap tabular-nums text-muted-foreground'
 
 export const views = defineViews<typeof manifest, Tabs>(manifest, {
   factorio: FactorioView,

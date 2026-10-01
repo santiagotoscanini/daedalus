@@ -44,14 +44,14 @@ export function PageHead({
  * beside it, which reads as a layout bug.
  */
 function Lede({ className, ...props }: ComponentProps<'p'>) {
-  return <p className={cn('mt-1 max-w-[74ch] text-(--text-muted) text-sm', className)} {...props} />
+  return <p className={cn('mt-1 max-w-[74ch] text-subdued text-sm', className)} {...props} />
 }
 
 /** The trail above a detail page's title. */
 export function Crumbs({ className, ...props }: ComponentProps<'p'>) {
   return (
     <p
-      className={cn('mt-0 mb-3.5 text-(--dim) text-[0.84rem] [&_span]:mx-1.5', className)}
+      className={cn('mt-0 mb-3.5 text-muted-foreground text-[0.84rem] [&_span]:mx-1.5', className)}
       {...props}
     />
   )

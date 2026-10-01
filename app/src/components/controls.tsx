@@ -124,7 +124,7 @@ export function StatePill({ state }: { state: AppState }) {
         'gap-[0.4rem] rounded-full py-[0.15rem] pr-[0.6rem] pl-[0.5rem] text-[0.74rem] font-medium',
         toned
           ? 'border-[color-mix(in_srgb,var(--tone)_35%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)]'
-          : 'border-border bg-transparent text-(--text-muted)',
+          : 'border-border bg-transparent text-subdued',
       )}
     >
       <StateDot state={state} />
@@ -160,9 +160,9 @@ export function RefreshButton({
     <button
       type="button"
       className={cn(
-        'inline-flex size-[38px] flex-none cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent p-0 text-(--text-muted)',
-        'enabled:hover:bg-(--panel-2) enabled:hover:text-foreground disabled:cursor-default',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--brand-dim)',
+        'inline-flex size-[38px] flex-none cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent p-0 text-subdued',
+        'enabled:hover:bg-raised enabled:hover:text-foreground disabled:cursor-default',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-dim',
         // Right-aligned and smaller inside a section heading, which is a
         // baseline-aligned flex row — hence the self-alignment, since a 30px
         // button has no useful baseline.
@@ -234,7 +234,7 @@ export function Segmented<T extends string>({
         // `inline-flex` with no wrap is a single unbreakable box as wide as
         // its labels, so a control with five options — or three long ones —
         // would be wider than a phone and scroll the page sideways.
-        'inline-flex max-w-full flex-wrap overflow-hidden rounded-[9px] border bg-(--panel-2)',
+        'inline-flex max-w-full flex-wrap overflow-hidden rounded-[9px] border bg-raised',
       )}
     >
       {options.map((o) => (
@@ -250,8 +250,8 @@ export function Segmented<T extends string>({
           className={cn(
             'inline-flex cursor-pointer items-center gap-[0.35rem] border-0 bg-transparent px-[0.85rem] py-[0.42rem] text-[0.83rem]',
             o.value === value
-              ? 'bg-(--raise) text-foreground shadow-[inset_0_0_0_1px_var(--border)]'
-              : 'text-(--text-muted) enabled:hover:text-foreground',
+              ? 'bg-lifted text-foreground shadow-[inset_0_0_0_1px_var(--border)]'
+              : 'text-subdued enabled:hover:text-foreground',
             (disabled ?? o.disabled) === true && 'cursor-not-allowed opacity-55',
           )}
           onClick={() => {
@@ -308,7 +308,7 @@ export function Slider({
         // without wrapping one word per line. `board` is the query container
         // declared on `BOARD_BODY` (viz.tsx), so the shape follows the panel's
         // width rather than the viewport's.
-        'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-[0.4rem] border-b border-b-(color:--border-soft) py-[0.7rem] last-of-type:border-b-0',
+        'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-[0.4rem] border-b border-b-subtle py-[0.7rem] last-of-type:border-b-0',
         '@min-[34rem]/board:grid-cols-[minmax(15rem,1fr)_minmax(10rem,1.5fr)_6.5rem] @min-[34rem]/board:gap-x-6 @min-[34rem]/board:gap-y-2',
         disabled === true && 'opacity-50',
       )}
@@ -339,8 +339,8 @@ export function Slider({
           // thumb on a full track it would read as a slider that failed to
           // load its value rather than as a ceiling nobody set.
           value === null
-            ? '[&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_var(--dim)] [&::-moz-range-thumb]:bg-card [&::-moz-range-thumb]:shadow-[0_0_0_1px_var(--dim)]'
-            : '[&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_var(--brand)] [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:shadow-[0_0_0_1px_var(--brand)]',
+            ? '[&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_var(--muted-foreground)] [&::-moz-range-thumb]:bg-card [&::-moz-range-thumb]:shadow-[0_0_0_1px_var(--muted-foreground)]'
+            : '[&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_var(--primary)] [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:shadow-[0_0_0_1px_var(--primary)]',
         )}
         min={OFF}
         max={max}
@@ -382,7 +382,7 @@ export function Toggle({
     <label
       htmlFor={id}
       className={cn(
-        'flex cursor-pointer items-start gap-[0.7rem] border-b border-b-(color:--border-soft) py-[0.55rem] last:border-b-0',
+        'flex cursor-pointer items-start gap-[0.7rem] border-b border-b-subtle py-[0.55rem] last:border-b-0',
         disabled === true && 'cursor-not-allowed opacity-50',
       )}
     >

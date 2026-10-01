@@ -72,7 +72,7 @@ export function Access({
   const picker = (
     // Deliberately links, not buttons — the window is in the URL, so a chosen
     // range survives a refresh and can be sent to someone.
-    <nav className="inline-flex gap-[0.15rem] rounded-[8px] border bg-(--panel) p-[0.15rem]">
+    <nav className="inline-flex gap-[0.15rem] rounded-[8px] border bg-card p-[0.15rem]">
       {ACCESS_WINDOWS.map((w) => (
         <Link
           key={w}
@@ -80,8 +80,8 @@ export function Access({
           params={{ name }}
           search={(prev) => ({ ...prev, tab: 'access' as const, range: w })}
           className={cn(
-            'rounded-[6px] px-[0.6rem] py-[0.2rem] text-[0.8rem] text-(--text-muted) no-underline hover:text-foreground hover:no-underline',
-            w === range && 'bg-(--raise) text-foreground',
+            'rounded-[6px] px-[0.6rem] py-[0.2rem] text-[0.8rem] text-subdued no-underline hover:text-foreground hover:no-underline',
+            w === range && 'bg-lifted text-foreground',
           )}
           // "true", not "page": the active window is the current selection,
           // not the current location — the page is the same either side.
@@ -122,7 +122,7 @@ export function Access({
       </div>
 
       {access.truncated && (
-        <Alert className="mb-[1.35rem] border-info/35 bg-info/7 text-(--text-muted)">
+        <Alert className="mb-[1.35rem] border-info/35 bg-info/7 text-subdued">
           <AlertDescription>
             More requests than one query can return. The totals below are exact; the breakdowns
             describe the most recent {num(access.sampled)}.
@@ -268,7 +268,7 @@ export function Access({
                   >
                     {/* Already formatted by the server — see RejectRow. */}
                     <time
-                      className="font-mono text-[0.74rem] text-(--dim) max-[34rem]:hidden"
+                      className="font-mono text-[0.74rem] text-muted-foreground max-[34rem]:hidden"
                       dateTime={r.ts}
                     >
                       {r.at}
@@ -278,10 +278,10 @@ export function Access({
                       className="min-w-0 overflow-hidden font-mono text-[0.76rem] text-ellipsis whitespace-nowrap"
                       title={`${r.method} ${r.path}`}
                     >
-                      <span className="text-(--dim)">{r.method}</span> {r.path}
+                      <span className="text-muted-foreground">{r.method}</span> {r.path}
                     </span>
                     <span
-                      className="flex items-center gap-[0.35rem] whitespace-nowrap text-(--text-muted) max-[34rem]:col-start-2"
+                      className="flex items-center gap-[0.35rem] whitespace-nowrap text-subdued max-[34rem]:col-start-2"
                       title={r.agent}
                     >
                       {r.flag && <span aria-hidden="true">{r.flag}</span>}
@@ -369,7 +369,7 @@ function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }
         // Keyed on the scheme so a theme change remounts the frame rather than
         // mutating its src, which would add a Grafana entry to the history.
         key={scheme}
-        className="block h-96 w-full rounded-[8px] border-0 bg-(--panel-2) [color-scheme:light] dark:[color-scheme:dark] max-[34rem]:h-60"
+        className="block h-96 w-full rounded-[8px] border-0 bg-raised [color-scheme:light] dark:[color-scheme:dark] max-[34rem]:h-60"
         src={src}
         title={`Remote requests to ${hostname} by country`}
       />
@@ -395,7 +395,7 @@ function StatusCode({ code }: { code: string }) {
       className={cn(
         'rounded-[5px] px-[0.35rem] py-[0.05rem] font-mono text-[0.72rem]',
         tone === undefined
-          ? 'bg-(--raise) text-(--text-muted)'
+          ? 'bg-lifted text-subdued'
           : 'bg-[color-mix(in_srgb,var(--tone)_14%,transparent)] text-(--tone)',
       )}
       style={tone === undefined ? undefined : toneStyle(tone)}
@@ -433,16 +433,16 @@ function Bars({
           <span className="flex min-w-0 items-center gap-[0.4rem] overflow-hidden text-ellipsis whitespace-nowrap [&>code]:overflow-hidden [&>code]:text-ellipsis">
             {r.label}
           </span>
-          <span className="h-[6px] overflow-hidden rounded-[3px] bg-(--raise)" aria-hidden="true">
+          <span className="h-[6px] overflow-hidden rounded-[3px] bg-lifted" aria-hidden="true">
             <span
               className="block h-full rounded-[3px] bg-(--tone)"
               style={{ width: `${String(Math.max(2, (r.count / top) * 100))}%` }}
             />
           </span>
-          <span className="text-[0.8rem] tabular-nums whitespace-nowrap text-(--text-muted)">
+          <span className="text-[0.8rem] tabular-nums whitespace-nowrap text-subdued">
             {num(r.count)}
             {total > 0 && (
-              <small className="ml-[0.4rem] text-(--dim)">
+              <small className="ml-[0.4rem] text-muted-foreground">
                 {((r.count / total) * 100).toFixed(0)}%
               </small>
             )}

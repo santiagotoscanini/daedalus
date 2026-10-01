@@ -109,10 +109,7 @@ export function WorkflowsView({ d }: { d: Workflows }) {
             ) : (
               <ul className={LIST}>
                 {r.workflows.map((w) => (
-                  <li
-                    key={w.id}
-                    className="border-(--border-soft) border-t py-[0.45rem] first:border-t-0"
-                  >
+                  <li key={w.id} className="border-subtle border-t py-[0.45rem] first:border-t-0">
                     <div className="flex min-w-0 items-center gap-[0.45rem] text-[0.77rem]">
                       {w.lastRun !== null ? (
                         <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />

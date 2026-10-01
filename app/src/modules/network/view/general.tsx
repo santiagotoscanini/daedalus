@@ -114,14 +114,14 @@ export function GeneralView({ data }: { data: General }) {
           {/* The one number on this page that cannot be read anywhere else on
               the box, so it gets the treatment of a headline rather than a
               table row. */}
-          <div className="mb-[0.7rem] flex flex-col gap-[0.1rem] rounded-[9px] border border-(--border-soft) bg-[linear-gradient(150deg,var(--panel-2),var(--panel))] px-3 py-[0.6rem]">
-            <span className="text-[0.66rem] tracking-[0.09em] text-(--dim) uppercase">
+          <div className="mb-[0.7rem] flex flex-col gap-[0.1rem] rounded-[9px] border border-subtle bg-[linear-gradient(150deg,var(--panel-2),var(--card))] px-3 py-[0.6rem]">
+            <span className="text-[0.66rem] tracking-[0.09em] text-muted-foreground uppercase">
               public address
             </span>
             <strong className="font-mono text-[1.3rem] tracking-[-0.01em] tabular-nums">
               {router.wan ?? DASH}
             </strong>
-            <span className="text-[0.7rem] text-(--dim)">
+            <span className="text-[0.7rem] text-muted-foreground">
               {router.wanError ?? 'this house, as Cloudflare’s edge sees it arrive'}
             </span>
           </div>
@@ -134,7 +134,7 @@ export function GeneralView({ data }: { data: General }) {
             {hops.map((h) => (
               <li
                 key={h.id}
-                className="grid grid-cols-[auto_1fr_auto_minmax(3rem,5rem)] items-center gap-2 py-[0.3rem] not-first:border-t not-first:border-(--border-soft)"
+                className="grid grid-cols-[auto_1fr_auto_minmax(3rem,5rem)] items-center gap-2 py-[0.3rem] not-first:border-t not-first:border-subtle"
               >
                 <Pulse on={h.up === true} tone={h.up === true ? 'ok' : 'bad'} />
                 <span className="text-[0.78rem] text-foreground">{h.label}</span>
@@ -192,12 +192,12 @@ export function GeneralView({ data }: { data: General }) {
                     thing you are looking for, so it rides the model at the size
                     of a footnote. */}
                 {router.hardware !== null && (
-                  <span className="text-[0.7rem] font-normal text-(--dim)">{router.hardware}</span>
+                  <span className="text-[0.7rem] font-normal text-muted-foreground">
+                    {router.hardware}
+                  </span>
                 )}
               </strong>
-              <span className="text-[0.72rem] leading-[1.3] text-(--text-muted)">
-                {router.product}
-              </span>
+              <span className="text-[0.72rem] leading-[1.3] text-subdued">{router.product}</span>
               <a
                 className={cn(ACTION, 'mt-[0.15rem]')}
                 href={router.adminUrl}
@@ -363,7 +363,7 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
       <span className="truncate text-foreground" title={row.name}>
         {row.name}
       </span>
-      <span className="flex h-2 min-w-0 overflow-hidden rounded-full bg-(--panel-2)">
+      <span className="flex h-2 min-w-0 overflow-hidden rounded-full bg-raised">
         <span
           className="bg-primary"
           style={{ width: width(row.in) }}
@@ -375,7 +375,9 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
           title={`${bytes(row.out)} out`}
         />
       </span>
-      <span className={cn(MONO, 'text-[0.7rem] text-(--dim) tabular-nums')}>{bytes(total)}</span>
+      <span className={cn(MONO, 'text-[0.7rem] text-muted-foreground tabular-nums')}>
+        {bytes(total)}
+      </span>
     </li>
   )
 }

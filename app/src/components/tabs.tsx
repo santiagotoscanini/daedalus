@@ -39,7 +39,7 @@ export function TabBar<Id extends string>({
   return (
     <nav
       className={cn(
-        'mb-6 flex gap-1 border-b border-b-(color:--border-soft)',
+        'mb-6 flex gap-1 border-b border-b-subtle',
         // Four tabs plus a dot do not fit on a phone; scroll them rather than
         // wrapping into a second row that pushes the content down everywhere.
         'max-[52rem]:overflow-x-auto max-[52rem]:[scrollbar-width:none] max-[52rem]:[&::-webkit-scrollbar]:hidden',
@@ -69,7 +69,7 @@ export function TabBar<Id extends string>({
               'max-[52rem]:whitespace-nowrap',
               t.id === active
                 ? 'border-b-primary text-foreground'
-                : 'text-(--text-muted) hover:text-foreground',
+                : 'text-subdued hover:text-foreground',
               t.muted === true && 'opacity-55 hover:opacity-90',
             )}
             aria-current={t.id === active ? 'page' : undefined}

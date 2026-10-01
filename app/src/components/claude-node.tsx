@@ -230,10 +230,10 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                     <span>
                       {c.state}
                       {c.detail !== null && (
-                        <span className="text-(--text-muted)"> — {c.detail}</span>
+                        <span className="text-subdued"> — {c.detail}</span>
                       )}
                       {c.lastLine !== null && (
-                        <span className="text-(--text-muted)"> · last line: {c.lastLine}</span>
+                        <span className="text-subdued"> · last line: {c.lastLine}</span>
                       )}
                     </span>
                   ),
@@ -265,7 +265,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                     <span>
                       <span className={MONO}>{text(c.workdir)}</span>
                       {c.workdirVia !== null && (
-                        <span className="text-(--text-muted)"> · {c.workdirVia}</span>
+                        <span className="text-subdued"> · {c.workdirVia}</span>
                       )}
                     </span>
                   ),
@@ -279,7 +279,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                           the path (agent/src/claude/cli.rs) — it decides
                           which verb updates it. */}
                       {c.installMethod !== null && (
-                        <span className="text-(--text-muted)"> · {c.installMethod}</span>
+                        <span className="text-subdued"> · {c.installMethod}</span>
                       )}
                     </span>
                   ),
@@ -414,7 +414,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
 
 /** The row a control sits on, under a board's facts. */
 const CONTROL =
-  'mt-[0.7rem] flex flex-wrap items-center gap-3 border-(--border-soft) border-t pt-[0.75rem]'
+  'mt-[0.7rem] flex flex-wrap items-center gap-3 border-subtle border-t pt-[0.75rem]'
 
 /**
  * Update Claude Code on this machine.
@@ -460,7 +460,7 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
           package-manager install, a refusal from a managed one — and none
           of them shows up in a version number. */}
       {last !== null && (
-        <span className={`w-full text-[0.74rem] ${last.ok ? 'text-(--dim)' : 'text-destructive'}`}>
+        <span className={`w-full text-[0.74rem] ${last.ok ? 'text-muted-foreground' : 'text-destructive'}`}>
           last update <Ago at={last.at} />:{' '}
           {last.from !== null && last.to !== null && last.from !== last.to
             ? `${last.from} → ${last.to} · `

@@ -177,7 +177,7 @@ export function SampleRows({ rows }: { rows: [string, string][] }) {
       {rows.map(([a, b]) => (
         <li
           key={a}
-          className="flex items-center gap-[0.45rem] border-(--border-soft) border-t py-[0.34rem] text-[0.77rem] first:border-t-0"
+          className="flex items-center gap-[0.45rem] border-subtle border-t py-[0.34rem] text-[0.77rem] first:border-t-0"
         >
           <span className="min-w-0 flex-auto truncate">{a}</span>
           <span className="text-[0.68rem] text-muted-foreground tabular-nums">{b}</span>

@@ -59,9 +59,9 @@ const TABS = APP_TABS
    breakpoint exposure becomes a full-width row under the title instead of a
    third column — at that width it was overflowing the card's right edge. */
 const HERO =
-  'mb-6 grid grid-cols-[auto_1fr_auto] items-start gap-5 rounded-xl border border-(--border-soft) bg-card px-6 py-[1.35rem] max-rail:grid-cols-[auto_minmax(0,1fr)] max-rail:gap-x-4 max-rail:gap-y-[0.9rem] max-rail:p-[1.1rem]'
+  'mb-6 grid grid-cols-[auto_1fr_auto] items-start gap-5 rounded-xl border border-subtle bg-card px-6 py-[1.35rem] max-rail:grid-cols-[auto_minmax(0,1fr)] max-rail:gap-x-4 max-rail:gap-y-[0.9rem] max-rail:p-[1.1rem]'
 const HERO_ICON =
-  'grid size-[54px] place-items-center rounded-[12px] border bg-(--panel-2) text-[1.4rem] text-(--dim) max-rail:size-[42px] max-rail:text-[1.15rem]'
+  'grid size-[54px] place-items-center rounded-[12px] border bg-raised text-[1.4rem] text-muted-foreground max-rail:size-[42px] max-rail:text-[1.15rem]'
 const HERO_ICON_TONED =
   'border-[color-mix(in_srgb,var(--tone)_30%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] text-(--tone)'
 /** The two states that are verdicts. The rest get the frame's resting grey. */
@@ -374,21 +374,21 @@ function AppDetail() {
           <h1 className="m-0 flex flex-wrap items-center gap-[0.65rem] text-[1.45rem] font-semibold tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
             {app.name}
             <StatePill state={state} />
-            {readOnly && <Chip className={cn(CHIP, 'text-(--text-muted)')}>nix-managed</Chip>}
+            {readOnly && <Chip className={cn(CHIP, 'text-subdued')}>nix-managed</Chip>}
           </h1>
           <p className={LEDE}>{app.description || 'No description.'}</p>
           <p className={HERO_LINKS}>
             {app.stage === 'declared' ? (
-              <span className="text-(--text-muted)">◌ not running</span>
+              <span className="text-subdued">◌ not running</span>
             ) : app.stage === 'off' ? (
-              <span className="text-(--text-muted)">⏻ not exposed</span>
+              <span className="text-subdued">⏻ not exposed</span>
             ) : (
               <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
                 ↗ {app.effectiveHostname}
               </a>
             )}
             {app.sourceMode === 'local' ? (
-              <span className="text-(--text-muted)">⎇ stacks/{app.name}/app</span>
+              <span className="text-subdued">⎇ stacks/{app.name}/app</span>
             ) : (
               <a
                 href={`https://github.com/${appRepo(site, app.name)}`}
@@ -402,7 +402,7 @@ function AppDetail() {
         </div>
 
         <div className={HERO_EXPOSURE}>
-          <span className="mb-[0.4rem] block text-[0.73rem] text-(--dim)">exposure</span>
+          <span className="mb-[0.4rem] block text-[0.73rem] text-muted-foreground">exposure</span>
           <Segmented
             value={app.stage}
             disabled={readOnly}
@@ -452,12 +452,12 @@ function AppDetail() {
             ]}
           />
           {app.stage === 'off' && (
-            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-(--dim)">
+            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
               No route, DNS or probe. The container still runs.
             </p>
           )}
           {app.stage === 'declared' && (
-            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-(--dim)">
+            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
               Nothing runs. Its database, data directory and secrets exist.
             </p>
           )}
@@ -472,7 +472,7 @@ function AppDetail() {
       )}
 
       {readOnly && (
-        <Alert className="mb-[1.35rem] text-(--text-muted)">
+        <Alert className="mb-[1.35rem] text-subdued">
           <AlertDescription>
             Declared by hand in <code>stacks/daedalus/daedalus.nix</code>, so it is read-only here.
             An Apply that broke this entry would take down the interface you would use to undo it.

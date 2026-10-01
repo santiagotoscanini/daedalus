@@ -40,7 +40,7 @@ const VERDICT: Record<UpdateVerdict, { label: string; tone: Tone }> = {
 /* A release entry's disclosure idiom, one level up (release-notes.tsx). */
 const SUMMARY = cn(
   'flex min-w-0 cursor-pointer list-none items-baseline gap-[0.7rem] px-[0.7rem] py-[0.45rem]',
-  'hover:bg-(--raise) [&::-webkit-details-marker]:hidden',
+  'hover:bg-lifted [&::-webkit-details-marker]:hidden',
   "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
 )
@@ -60,7 +60,7 @@ export function ImageRow({
   return (
     <li>
       <details
-        className="group overflow-hidden rounded-[9px] border border-(--border-soft) bg-(--panel-2)"
+        className="group overflow-hidden rounded-[9px] border border-subtle bg-raised"
         onToggle={(e) => {
           // A failed read is not cached: closing and reopening asks again.
           if (!e.currentTarget.open || (notes !== null && notes.error === null) || !r.hasNotes)
@@ -77,7 +77,7 @@ export function ImageRow({
       >
         <summary className={SUMMARY}>
           <span className="min-w-[11rem] text-[0.84rem] text-foreground">{r.container}</span>
-          <span className={cn(MONO_FACE, 'text-[0.76rem] text-(--text-muted)')}>
+          <span className={cn(MONO_FACE, 'text-[0.76rem] text-subdued')}>
             {r.running.version ?? (r.kind === 'container' ? r.tag : DASH)}
           </span>
           {/* For a moved CHANNEL pin both tags are the same string, so the
@@ -104,7 +104,7 @@ export function ImageRow({
           </span>
         </summary>
 
-        <div className="flex flex-col gap-[0.7rem] border-(--border-soft) border-t px-3 pt-2 pb-[0.7rem]">
+        <div className="flex flex-col gap-[0.7rem] border-subtle border-t px-3 pt-2 pb-[0.7rem]">
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />
           {/* A manual row draws the button only when its base is the
               configuration's to move; a container row always does, even to

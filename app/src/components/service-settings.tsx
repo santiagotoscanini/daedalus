@@ -37,11 +37,11 @@ import { Chip } from './viz'
 const OVERLAY = 'fixed inset-0 z-[70] bg-[color-mix(in_srgb,var(--overlay)_45%,transparent)]'
 const PANEL = cn(
   'fixed top-1/2 left-1/2 z-[71] w-[min(92vw,36rem)] max-h-[88vh] overflow-y-auto',
-  '-translate-x-1/2 -translate-y-1/2 rounded-[12px] border border-(--border) bg-(--panel) p-[1.1rem]',
+  '-translate-x-1/2 -translate-y-1/2 rounded-[12px] border border-(--border) bg-card p-[1.1rem]',
   'text-foreground shadow-[0_24px_60px_-20px_rgb(0_0_0/0.5)] outline-none',
 )
 const INPUT = cn(INPUT_MONO, 'w-[11rem] max-w-full')
-const AFFIX = 'font-mono text-[0.8rem] text-(--dim)'
+const AFFIX = 'font-mono text-[0.8rem] text-muted-foreground'
 
 const EXPOSURE = [
   { value: 'lan', label: 'LAN only' },
@@ -185,7 +185,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
   }
 
   return (
-    <section className="rounded-[10px] border border-(--border-soft) bg-(--panel-2) p-[0.8rem]">
+    <section className="rounded-[10px] border border-subtle bg-raised p-[0.8rem]">
       <div className="flex flex-wrap items-center gap-[0.5rem]">
         <span className={`${MONO} text-[0.9rem]`}>{m.id}</span>
         <Chip tone={desired ? 'ok' : 'muted'}>{desired ? 'on' : 'off'}</Chip>
@@ -213,7 +213,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
         {m.structural && ` · ${STRUCTURAL_WHY[m.id] ?? 'a running box cannot do without it'}`}
       </p>
       {asking && (
-        <div className="mt-[0.6rem] rounded-md border border-(--border-soft) bg-(--panel) p-[0.7rem]">
+        <div className="mt-[0.6rem] rounded-md border border-subtle bg-card p-[0.7rem]">
           <p className="m-0 text-[0.8rem] leading-[1.5]">
             Switching <b>{m.id}</b> off stops{' '}
             {m.containers.map((c, i) => (
@@ -248,7 +248,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
         </div>
       )}
       {m.web.length > 0 && (
-        <div className="mt-[0.7rem] flex flex-col gap-[0.6rem] border-(--border-soft) border-t pt-[0.6rem]">
+        <div className="mt-[0.7rem] flex flex-col gap-[0.6rem] border-subtle border-t pt-[0.6rem]">
           {m.web.map((w) => (
             <WebRow key={w.name} id={m.id} w={w} onMoved={onMoved} />
           ))}
@@ -342,7 +342,7 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
           <Button
             type="button"
             variant="link"
-            className="h-auto p-0 text-[0.72rem] font-normal text-(--text-muted) underline underline-offset-2 hover:text-foreground"
+            className="h-auto p-0 text-[0.72rem] font-normal text-subdued underline underline-offset-2 hover:text-foreground"
             disabled={saving}
             onClick={() => write({ label: null, public: null })}
           >

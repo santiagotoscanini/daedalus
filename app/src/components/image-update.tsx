@@ -232,7 +232,7 @@ export function UpdateControl({
 
       {ceremony !== null && (
         <div className={CEREMONY}>
-          <p className="mb-2 text-[0.78rem] text-(--text-muted)">
+          <p className="mb-2 text-[0.78rem] text-subdued">
             <strong>{t.container}</strong> {ceremony}.
           </p>
           <TypedConfirm name={t.container} value={typed} onChange={setTyped} />
@@ -331,7 +331,7 @@ export function UpdateProgress({ status }: { status: ImageUpdateStatus }) {
             key={p}
             className={cn(
               p === status.phase && 'font-semibold text-primary',
-              i < at && 'text-(--text-muted) line-through',
+              i < at && 'text-subdued line-through',
             )}
           >
             {p}
@@ -364,7 +364,7 @@ function Moves({ status }: { status: ImageUpdateStatus }) {
           key={m.container}
           className={cn('flex gap-[0.6rem]', !m.changed && 'text-muted-foreground')}
         >
-          <span className="min-w-[11rem] text-(--text-muted)">{m.container}</span>
+          <span className="min-w-[11rem] text-subdued">{m.container}</span>
           <span className={MONO}>
             {m.fromTag}
             {m.changed ? ` → ${m.toTag}` : ' — already there'}

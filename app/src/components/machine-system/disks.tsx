@@ -108,7 +108,7 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
           >
             <div className="flex min-w-0 flex-col items-start gap-[0.22rem] pb-2">
               <strong className={DISK_MODEL}>{drive.name || '?'}</strong>
-              <span className="text-[0.72rem] text-(--text-muted) leading-[1.3]">
+              <span className="text-[0.72rem] text-subdued leading-[1.3]">
                 {drive.kind === null
                   ? ssd
                     ? 'solid state'

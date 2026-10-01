@@ -213,8 +213,8 @@ function EmptyState({
   onAdd: () => void
 }) {
   return (
-    <div className="mt-[1.4rem] rounded-lg border border-(--border-soft) border-dashed bg-(--panel) px-[1.05rem] py-[1.1rem]">
-      <p className="m-0 max-w-[74ch] text-[0.9rem] text-(--text-muted)">
+    <div className="mt-[1.4rem] rounded-lg border border-subtle border-dashed bg-card px-[1.05rem] py-[1.1rem]">
+      <p className="m-0 max-w-[74ch] text-[0.9rem] text-subdued">
         {app} runs nothing on a clock. A scheduled task is a command run inside this app’s own
         container on a systemd timer — a nightly digest, an hourly sync, a weekly prune — with its
         output in Loki and a mail if it fails.
@@ -299,7 +299,7 @@ function TaskCard({
   const [confirming, setConfirming] = useState(false)
 
   return (
-    <li className="rounded-lg border border-(--border-soft) bg-(--panel) px-[1.05rem] py-[0.85rem]">
+    <li className="rounded-lg border border-subtle bg-card px-[1.05rem] py-[0.85rem]">
       <div className="flex flex-wrap items-center gap-x-[0.85rem] gap-y-[0.4rem]">
         <code className="text-[0.95rem] font-semibold">{task.id}</code>
         <Outcome task={task} />
@@ -345,16 +345,16 @@ function TaskCard({
         <span>{task.scheduleText}</span>
         {/* The raw string beside the sentence, always. The sentence is this
             app's reading of it; the string is what systemd was given. */}
-        <code className="text-[0.78rem] text-(--dim)">{task.schedule}</code>
+        <code className="text-[0.78rem] text-muted-foreground">{task.schedule}</code>
       </p>
 
       {/* argv, joined for reading only — the quotes mark where one argument
           ends, since that is exactly what a shell string would lose. */}
-      <p className="mt-[0.45rem] mr-0 mb-0 ml-0 font-mono text-[0.8rem] text-(--text-muted) [overflow-wrap:anywhere]">
+      <p className="mt-[0.45rem] mr-0 mb-0 ml-0 font-mono text-[0.8rem] text-subdued [overflow-wrap:anywhere]">
         {task.command.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}
       </p>
 
-      <div className="mt-[0.5rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-(--dim)">
+      <div className="mt-[0.5rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-muted-foreground">
         <span>last run {task.lastRunAt === null ? 'never' : <When at={task.lastRunAt} />}</span>
         <span>
           next {task.nextRunAt === null ? 'not scheduled' : <Until at={task.nextRunAt} />}
@@ -383,7 +383,7 @@ function TaskCard({
  */
 function Outcome({ task }: { task: TaskRow }) {
   if (task.result === null) {
-    return <Chip className={cn(CHIP, 'text-(--text-muted)')}>no run yet</Chip>
+    return <Chip className={cn(CHIP, 'text-subdued')}>no run yet</Chip>
   }
   if (task.result === 'success') {
     return (
@@ -543,10 +543,13 @@ function TaskEditor({
   const commandTouched = args.length > 1 || command.some((a) => a !== '')
 
   return (
-    <li className="rounded-lg border border-primary/40 bg-(--panel) px-[1.05rem] py-[0.95rem]">
+    <li className="rounded-lg border border-primary/40 bg-card px-[1.05rem] py-[0.95rem]">
       <div className="grid grid-cols-2 gap-x-[1.2rem] gap-y-[0.2rem] max-[46rem]:grid-cols-1">
         <Field className="gap-[0.3rem] py-2">
-          <FieldLabel htmlFor={idField} className="text-[0.76rem] font-normal text-(--dim)">
+          <FieldLabel
+            htmlFor={idField}
+            className="text-[0.76rem] font-normal text-muted-foreground"
+          >
             Id
           </FieldLabel>
           <Input
@@ -590,7 +593,10 @@ function TaskEditor({
         </Field>
 
         <Field className="gap-[0.3rem] py-2">
-          <FieldLabel htmlFor={timeoutField} className="text-[0.76rem] font-normal text-(--dim)">
+          <FieldLabel
+            htmlFor={timeoutField}
+            className="text-[0.76rem] font-normal text-muted-foreground"
+          >
             Timeout
           </FieldLabel>
           <Input
@@ -617,7 +623,9 @@ function TaskEditor({
       </div>
 
       <Field className="gap-[0.35rem] py-2">
-        <FieldLabel className="text-[0.76rem] font-normal text-(--dim)">Schedule</FieldLabel>
+        <FieldLabel className="text-[0.76rem] font-normal text-muted-foreground">
+          Schedule
+        </FieldLabel>
         <div>
           <Segmented
             value={mode}
@@ -654,7 +662,7 @@ function TaskEditor({
         ) : (
           <p className="mt-[0.15rem] mr-0 mb-0 ml-0 flex flex-wrap items-baseline gap-x-[0.7rem] text-[0.8rem]">
             <span>{schedule === '' ? 'No schedule yet' : describeSchedule(schedule)}</span>
-            <code className="text-[0.78rem] text-(--dim)">{schedule}</code>
+            <code className="text-[0.78rem] text-muted-foreground">{schedule}</code>
           </p>
         )}
         {mode !== 'custom' && (
@@ -666,11 +674,13 @@ function TaskEditor({
       </Field>
 
       <Field className="gap-[0.35rem] py-2">
-        <FieldLabel className="text-[0.76rem] font-normal text-(--dim)">Command (argv)</FieldLabel>
+        <FieldLabel className="text-[0.76rem] font-normal text-muted-foreground">
+          Command (argv)
+        </FieldLabel>
         <ol className="m-0 flex list-none flex-col gap-[0.35rem] p-0">
           {args.map((a, i) => (
             <li key={a.key} className="flex items-center gap-[0.5rem]">
-              <span className="w-[1.1rem] shrink-0 text-right text-[0.72rem] text-(--dim)">
+              <span className="w-[1.1rem] shrink-0 text-right text-[0.72rem] text-muted-foreground">
                 {i + 1}
               </span>
               <Input
@@ -748,7 +758,7 @@ function TaskEditor({
         >
           Cancel
         </Button>
-        <span className="text-[0.73rem] text-(--dim)">
+        <span className="text-[0.73rem] text-muted-foreground">
           Saved to the registry; the unit appears on the next Apply.
         </span>
       </div>

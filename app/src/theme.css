@@ -1,35 +1,32 @@
 /* The palette, and the only place a colour is written down.
    ─────────────────────────────────────────────────────────────────────────
-   Two vocabularies live here on purpose.
+   The vocabulary is shadcn's (`--background`, `--foreground`, `--primary`,
+   `--muted-foreground`, …) in OKLCH. That is not a style preference: a
+   theme preset — the ones tweakcn emits, and the ones the Appearance page
+   stores — is exactly a `{light, dark}` map over these names. Authoring in
+   any other vocabulary would mean translating every preset by hand.
 
-   The SOURCE vocabulary is shadcn's (`--background`, `--foreground`,
-   `--primary`, `--muted-foreground`, …) in OKLCH. That is not a style
-   preference: a theme preset — the ones tweakcn emits, and the ones the
-   Appearance page stores — is exactly a `{light, dark}` map over these
-   names. Authoring in any other vocabulary would mean translating every
-   preset by hand.
+   Five surfaces and inks shadcn has no name for are this app's own, and a
+   preset may set them too (lib/theme.ts THEMEABLE):
 
-   The LEGACY vocabulary is this app's original one (`--bg`, `--text`,
-   `--brand`, …). ~600 hand-written selectors in styles.css read it, and
-   rewriting them all before anything is themeable would be the big-bang
-   this migration is avoiding. So those names survive as ALIASES onto the
-   shadcn tokens. The consequence is the point: swapping a preset
-   restyles the 6,600 lines of hand-written CSS at the same time as the
-   shadcn components, with no per-selector work.
+     --panel-2      bg-raised        an interactive layer: a field, a menu,
+                                     a toggle, a hover fill — never a card
+     --raise        bg-lifted        one step above that: a chip, a hover
+                                     on a raised layer
+     --border-soft  border-subtle    the hairline inside a card
+     --text-muted   text-subdued     secondary ink, a step darker than
+                                     --muted-foreground in light
+     --brand-dim    *-primary-dim    the brand, quieter: focus rings
 
-   Three legacy names were renamed rather than aliased, because shadcn
-   already uses them for something else and one scope cannot hold both:
-
-     --muted       → --text-muted   (shadcn's --muted is a BACKGROUND)
-     --accent      → --brand        (shadcn's --accent is a hover fill)
-     --accent-dim  → --brand-dim
-
-   `--border` and `--radius` mean the same thing in both and stay shared.
+   They are literal colours rather than derivations because light needs its
+   own surface ladder: on a light page the raised layers go darker, not
+   lighter, so they cannot be mirrored from the dark ones. Code reads them
+   through the utilities on the right (the `@theme inline` block below);
+   `var(--panel-2)` and friends are for inside an arbitrary value.
 
    The dark values are the exact OKLCH of the hex palette this app shipped
-   with (#0a0a0a, #ededed, #e2795a …), converted losslessly, so adopting
-   Tailwind changed no pixel. Light is new — the app was dark-only — and
-   is the mirror of the same hues. */
+   with (#0a0a0a, #ededed, #e2795a …), converted losslessly. Light is the
+   mirror of the same hues. */
 
 :root,
 [data-theme="light"] {
@@ -95,22 +92,12 @@
 
   --radius: 10px;
 
-  /* Legacy aliases. Light needs its own surface ladder rather than a
-     mirror of the dark one: on a light page the RAISED layers go darker,
-     not lighter, so they cannot be derived from the dark definitions. */
-  --bg: var(--background);
-  --panel: var(--card);
+  /* The app's own five (see the header). */
   --panel-2: oklch(0.968 0 0);
   --raise: oklch(0.94 0 0);
   --border-soft: oklch(0.93 0 0);
-  --text: var(--foreground);
   --text-muted: oklch(0.44 0 0);
-  --dim: var(--muted-foreground);
-  --brand: var(--primary);
   --brand-dim: oklch(0.5698 0.134 36.78);
-  --ok: var(--success);
-  --warn: var(--warning);
-  --bad: var(--danger);
 }
 
 [data-theme="dark"] {
@@ -261,6 +248,11 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-raised: var(--panel-2);
+  --color-lifted: var(--raise);
+  --color-subtle: var(--border-soft);
+  --color-subdued: var(--text-muted);
+  --color-primary-dim: var(--brand-dim);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

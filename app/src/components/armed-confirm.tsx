@@ -19,9 +19,9 @@ export const ARM_MS = 10_000
    the cost — and the red — appear only once it is armed, which is the step
    where they can still change the answer. */
 export const RESTART =
-  'mt-[0.7rem] flex flex-col items-start gap-[0.55rem] border-(--border-soft) border-t pt-[0.75rem]'
+  'mt-[0.7rem] flex flex-col items-start gap-[0.55rem] border-subtle border-t pt-[0.75rem]'
 export const RESTART_ARMED = 'border-t-[color-mix(in_srgb,var(--danger)_40%,var(--border-soft))]'
-export const RESTART_COST = 'text-[0.78rem] text-(--text-muted) leading-[1.5]'
+export const RESTART_COST = 'text-[0.78rem] text-subdued leading-[1.5]'
 export const RESTART_STATE = 'text-[0.78rem] leading-[1.5]'
 export const RESTART_NOTE = 'text-[0.7rem] text-muted-foreground leading-[1.5]'
 

@@ -70,7 +70,7 @@ export function Rail({
       id="nav"
       className={cn(
         'fixed inset-y-0 left-0 z-20 flex w-(--sidebar-w) flex-col gap-[1.4rem]',
-        'border-r border-r-(--border-soft) bg-background px-[0.7rem] pt-[1.1rem] pb-[0.9rem]',
+        'border-r border-r-subtle bg-background px-[0.7rem] pt-[1.1rem] pb-[0.9rem]',
         'nav-collapsed:px-[0.55rem]',
         // Below the breakpoint it is a drawer. `visibility`, not transform
         // alone: a rail merely moved off the left edge is still in the tab
@@ -115,7 +115,7 @@ function RailHead({
         <img src="/icon.svg" alt="" width={30} height={30} className="flex-none" />
         <span className="nav-collapsed:hidden">
           daedalus
-          <small className="block font-medium text-(--dim) text-[0.62rem] tracking-[0.2em]">
+          <small className="block font-medium text-muted-foreground text-[0.62rem] tracking-[0.2em]">
             workshop
           </small>
         </span>
@@ -126,7 +126,7 @@ function RailHead({
         type="button"
         className={cn(
           ICON_BUTTON,
-          'size-8 text-(--dim) max-rail:hidden nav-collapsed:[&>svg]:rotate-180',
+          'size-8 text-muted-foreground max-rail:hidden nav-collapsed:[&>svg]:rotate-180',
         )}
         onClick={onToggleCollapse}
         aria-pressed={collapsed}

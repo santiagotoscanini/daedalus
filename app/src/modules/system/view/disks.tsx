@@ -117,10 +117,10 @@ type Segment = {
 /** Alternating weight, not five hues, and one accent — spelled per key because
     an interpolated class name is a class Tailwind never sees. */
 const SEG_INK: Record<Segment['key'], string> = {
-  maker: 'text-(--text-muted)',
+  maker: 'text-subdued',
   capacity: 'text-foreground',
   class: 'text-primary',
-  variant: 'text-(--text-muted)',
+  variant: 'text-subdued',
   config: 'text-foreground',
 }
 
@@ -144,14 +144,14 @@ const SEG_INK: Record<Segment['key'], string> = {
 function ModelDecode({ model, segments }: { model: string; segments: Segment[] }) {
   return (
     <InfoHint
-      className="inline-block max-w-full focus-visible:rounded-[4px] focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-(color:--brand-dim)"
+      className="inline-block max-w-full focus-visible:rounded-[4px] focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-primary-dim"
       cardClassName="top-[calc(100%+0.45rem)] left-0 w-[max(240px,100%)] max-w-[92cqw]"
       label={`${model}, decoded`}
       trigger={
         // The dotted underline is the whole affordance: a disclosure nobody
         // can see is a disclosure nobody opens, and there is no room on this
         // board for a button.
-        <strong className={cn(DISK_MODEL, 'inline border-(--dim) border-b border-dotted')}>
+        <strong className={cn(DISK_MODEL, 'inline border-muted-foreground border-b border-dotted')}>
           {segments.map((s, i) => (
             <span key={`${s.text}-${String(i)}`} className={SEG_INK[s.key]}>
               {s.text}
@@ -299,7 +299,7 @@ export function DisksView({ d }: { d: Disks }) {
                 ) : (
                   <ModelDecode model={disk.model ?? '?'} segments={decoded} />
                 )}
-                <span className="text-[0.72rem] text-(--text-muted) leading-[1.3]">
+                <span className="text-[0.72rem] text-subdued leading-[1.3]">
                   {disk.family ?? (nvme ? 'solid state' : 'hard disk')}
                   {disk.sizeBytes !== null && ` · ${bytes(disk.sizeBytes)}`}
                   {disk.rotationRate !== null &&

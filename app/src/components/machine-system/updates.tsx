@@ -43,7 +43,7 @@ function severityTone(s: string | null): Tone {
  */
 export function AgentUpdate({ node }: { node: NodeSystemData['node'] }) {
   return (
-    <div className="mt-[0.7rem] flex flex-wrap items-center gap-2 border-(--border-soft) border-t pt-[0.75rem]">
+    <div className="mt-[0.7rem] flex flex-wrap items-center gap-2 border-subtle border-t pt-[0.75rem]">
       <NodeCommandButton
         id={node.id}
         command="check_update"

@@ -337,7 +337,7 @@ function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
           <span className="flex flex-col gap-[0.1rem] text-[0.8rem] text-foreground leading-[1.45]">
             {sections.map((s) => (
               <span key={`${s.area}/${s.kind}`}>
-                <span className="text-(--text-muted)">
+                <span className="text-subdued">
                   {s.area}
                   {s.kind !== 'Notes' && ` · ${s.kind.toLowerCase()}`}:
                 </span>{' '}

@@ -18,11 +18,11 @@ import { issueSummary, shotterVerdict } from './verdicts'
    long page — so they lay out as a film row: fixed height, natural width, side
    scroll. Each image is also the link to its full-size self. */
 const SHOT_STRIP = 'mt-[0.6rem] mb-[0.2rem] flex gap-2 overflow-x-auto'
-const SHOT_IMG = 'block h-[150px] w-auto rounded-[6px] border border-(--border) bg-(--panel-2)'
+const SHOT_IMG = 'block h-[150px] w-auto rounded-[6px] border border-(--border) bg-raised'
 /* An excerpt, not the artifact: it scrolls rather than grows, and keeps the
    runner's own line breaks. */
 const SHOT_LOG =
-  'mt-2 max-h-36 overflow-auto rounded-[6px] border border-(--border-soft) bg-(--panel-2) px-[0.6rem] py-2 text-[0.72rem] leading-[1.5] whitespace-pre-wrap text-(--text-muted)'
+  'mt-2 max-h-36 overflow-auto rounded-[6px] border border-subtle bg-raised px-[0.6rem] py-2 text-[0.72rem] leading-[1.5] whitespace-pre-wrap text-subdued'
 
 const shotUrl = (run: string, file: string) => `/api/shot-run/${run}/${file}`
 

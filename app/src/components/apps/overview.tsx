@@ -145,7 +145,7 @@ export function Overview({
               // capture uses (shot-deploy passes --viewport 1280x800), so a
               // fresh shot fits exactly and an older, taller one crops from
               // the top rather than squashing.
-              className="relative mb-[0.6rem] block aspect-16/10 overflow-hidden rounded-lg border bg-(--panel-2)"
+              className="relative mb-[0.6rem] block aspect-16/10 overflow-hidden rounded-lg border bg-raised"
               href={`/api/deploy-shot/${app.name}?v=${deployShot.v}`}
               target="_blank"
               rel="noreferrer"
@@ -319,10 +319,10 @@ export function Overview({
             <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-x-[1.8rem] gap-y-[0.9rem]">
               {notes.map(([k, v]) => (
                 <div key={k} className="min-w-0">
-                  <dt className="text-[0.66rem] font-semibold tracking-[0.13em] text-(--dim) uppercase">
+                  <dt className="text-[0.66rem] font-semibold tracking-[0.13em] text-muted-foreground uppercase">
                     {k}
                   </dt>
-                  <dd className="mt-1 mr-0 mb-0 ml-0 text-[0.88rem] text-(--text-muted)">{v}</dd>
+                  <dd className="mt-1 mr-0 mb-0 ml-0 text-[0.88rem] text-subdued">{v}</dd>
                 </div>
               ))}
             </dl>

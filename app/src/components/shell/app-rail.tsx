@@ -70,7 +70,7 @@ export function AppRail({ app }: { app: AppRailContext }) {
           default would keep this lit on every page of the section. */}
       <Link
         to="/apps"
-        className={cn(NAV_ITEM, 'text-(--dim) hover:text-foreground')}
+        className={cn(NAV_ITEM, 'text-muted-foreground hover:text-foreground')}
         data-label="All apps"
         activeProps={{}}
       >

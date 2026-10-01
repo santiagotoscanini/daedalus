@@ -13,9 +13,9 @@ import type { HomeData } from '../data'
    "home" tints it, and a second border utility layered over a first would be
    decided by the stylesheet's order rather than by the string's. */
 const PERSON =
-  'flex items-center gap-[0.4rem] rounded-full border bg-(--panel-2) px-[0.6rem] py-[0.3rem] text-[0.82rem] [&>em]:text-[0.72rem] [&>em]:not-italic [&>em]:text-(--dim)'
+  'flex items-center gap-[0.4rem] rounded-full border bg-raised px-[0.6rem] py-[0.3rem] text-[0.82rem] [&>em]:text-[0.72rem] [&>em]:not-italic [&>em]:text-muted-foreground'
 const TEMP =
-  'flex max-w-[11rem] min-w-0 flex-col items-start rounded-[8px] bg-(--panel-2) px-[0.6rem] py-[0.35rem] [&>strong]:text-[1.05rem] [&>strong]:font-semibold [&>strong]:tabular-nums [&>em]:max-w-full [&>em]:truncate [&>em]:text-[0.67rem] [&>em]:not-italic [&>em]:text-(--dim)'
+  'flex max-w-[11rem] min-w-0 flex-col items-start rounded-[8px] bg-raised px-[0.6rem] py-[0.35rem] [&>strong]:text-[1.05rem] [&>strong]:font-semibold [&>strong]:tabular-nums [&>em]:max-w-full [&>em]:truncate [&>em]:text-[0.67rem] [&>em]:not-italic [&>em]:text-muted-foreground'
 
 type House = Extract<HomeData, { tab: 'house' }>
 
@@ -61,7 +61,7 @@ export function HouseView({ data: d }: { data: House }) {
               {d.people.map((p) => (
                 <li
                   key={p.name}
-                  className={`${PERSON} ${p.home ? 'border-success/35' : 'border-(--border-soft)'}`}
+                  className={`${PERSON} ${p.home ? 'border-success/35' : 'border-subtle'}`}
                 >
                   <Pulse on={p.home} tone="ok" />
                   <span>{p.name}</span>

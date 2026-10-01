@@ -18,7 +18,7 @@ export const SUB =
 
 /** A board header that carries a live dot beside its reading. */
 export const LIVE =
-  'inline-flex items-center gap-[0.35rem] text-[0.73rem] whitespace-nowrap text-(--text-muted)'
+  'inline-flex items-center gap-[0.35rem] text-[0.73rem] whitespace-nowrap text-subdued'
 
 /**
  * The caption under a board's content, without its ink.
@@ -62,7 +62,7 @@ export const AXIS =
    tabs, the Claude page and several module views. */
 export const LIST = 'flex flex-col'
 export const ROW =
-  'flex min-w-0 items-center gap-[0.45rem] border-(--border-soft) border-t px-[0.1rem] py-[0.34rem] text-[0.77rem] first:border-t-0'
+  'flex min-w-0 items-center gap-[0.45rem] border-subtle border-t px-[0.1rem] py-[0.34rem] text-[0.77rem] first:border-t-0'
 /** The name takes the slack, so the detail is pushed right without a spacer. */
 export const ROW_MAIN = 'min-w-0 flex-auto truncate text-foreground'
 export const ROW_SIDE =

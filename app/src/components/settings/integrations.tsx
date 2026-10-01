@@ -86,7 +86,7 @@ export function Integrations({
         ]}
       >
         <ReplaceToken />
-        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+        <p className="m-0 text-[0.78rem] text-subdued">
           One token does all of it: Zone › Zone › Read and Zone › DNS › Edit for the certificate,
           the tunnel's records, the dynamic address and the domain picker, and Account › Cloudflare
           One Connector: cloudflared › Read for the tunnel. The zone and tunnel names are read with
@@ -152,7 +152,7 @@ export function Integrations({
                 <Stack>
                   <Mono>{<When at={status.mail.lastSentAt} />}</Mono>
                   {status.mail.lastRecipient !== null && (
-                    <span className="text-[0.78rem] text-(--text-muted)">
+                    <span className="text-[0.78rem] text-subdued">
                       to {status.mail.lastRecipient}
                     </span>
                   )}
@@ -188,7 +188,7 @@ export function Integrations({
       />
 
       {status !== null && (
-        <p className="m-0 text-[0.74rem] text-(--dim)">
+        <p className="m-0 text-[0.74rem] text-muted-foreground">
           Checked <Ago at={status.checkedAt} />; each service is asked at most every five minutes.
         </p>
       )}

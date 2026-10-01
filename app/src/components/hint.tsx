@@ -52,7 +52,7 @@ export function InfoHint({
         id={id}
         role="tooltip"
         className={cn(
-          'pointer-events-none absolute z-40 rounded-md border border-border bg-(--raise) p-2.5',
+          'pointer-events-none absolute z-40 rounded-md border border-border bg-lifted p-2.5',
           'text-left font-normal text-foreground text-xs leading-snug tracking-normal normal-case',
           'opacity-0 shadow-lg transition-opacity duration-100',
           'group-hover/hint:opacity-100 group-focus-visible/hint:opacity-100',

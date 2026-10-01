@@ -66,7 +66,7 @@ const APP_STATE: Record<GithubAppState, { tone: Tone; label: string }> = {
  */
 export function GithubApp({ app, notice, onDismissNotice }: GithubAppProps) {
   return (
-    <div className="flex flex-col gap-3 border-t border-(--border-soft) pt-4">
+    <div className="flex flex-col gap-3 border-t border-subtle pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 font-medium text-[0.9rem]">GitHub App</h3>
         {app === null ? (
@@ -381,7 +381,7 @@ function TokenFreshness({ installation: i }: { installation: Installation }) {
           {left <= 0 ? 'expired' : i.stale ? 'stale' : 'fresh'}
         </Chip>
         {left > 0 && (
-          <span className="text-[0.78rem] text-(--text-muted)">
+          <span className="text-[0.78rem] text-subdued">
             expires in <Until at={expires} />
           </span>
         )}

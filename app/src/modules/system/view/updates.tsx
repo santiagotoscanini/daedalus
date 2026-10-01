@@ -325,9 +325,9 @@ function QueuePanel({
             {queue.map((q) => (
               <li
                 key={q.container}
-                className="flex flex-wrap items-center gap-[0.6rem] border-(--border-soft) border-b pb-[0.35rem] last:border-b-0"
+                className="flex flex-wrap items-center gap-[0.6rem] border-subtle border-b pb-[0.35rem] last:border-b-0"
               >
-                <span className="min-w-[11rem] text-(--text-muted)">{q.container}</span>
+                <span className="min-w-[11rem] text-subdued">{q.container}</span>
                 <span className={MONO}>
                   {q.tag}
                   {q.toTag === null ? ' — re-pull' : ` → ${q.toTag}`}
@@ -355,7 +355,7 @@ function QueuePanel({
             // Restated here even though each was confirmed in its own row: by
             // the time six are queued, the one that takes the netns down with
             // it is three screens up.
-            <ul className="mb-[0.7rem] flex flex-col gap-[0.3rem] rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem] text-[0.76rem] text-(--text-muted)">
+            <ul className="mb-[0.7rem] flex flex-col gap-[0.3rem] rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem] text-[0.76rem] text-subdued">
               {ceremonies.map((q) => (
                 <li key={q.container}>
                   <strong>{q.container}</strong> {q.ceremony}.

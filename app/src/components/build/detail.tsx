@@ -136,7 +136,7 @@ function BuildHead({ build, open }: { build: BuildView; open: boolean }) {
         <span className="inline-flex items-baseline gap-2">
           <BuildStateChip state={build.state} />
           {open && build.phase !== '' && (
-            <span className="text-(--dim) text-sm">{build.phase}</span>
+            <span className="text-muted-foreground text-sm">{build.phase}</span>
           )}
         </span>
       }

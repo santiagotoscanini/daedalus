@@ -150,7 +150,7 @@ function HomeNames({ d }: { d: Zone }) {
       </p>
 
       {drift > 0 && (
-        <div className="mt-4 border-t border-(--border-soft) pt-[0.7rem]">
+        <div className="mt-4 border-t border-subtle pt-[0.7rem]">
           <h4 className={cn(SUB, 'flex items-center gap-[0.45rem]')}>
             Not in step
             <Chip tone="warn">{drift}</Chip>
@@ -237,7 +237,7 @@ function Registration({ d }: { d: Zone }) {
               ) : reg.signed ? (
                 <span className="text-success">signed</span>
               ) : (
-                <span className="text-(--dim)">not signed</span>
+                <span className="text-muted-foreground">not signed</span>
               ),
           },
           { k: 'Zone', v: d.cf.status ?? DASH },
@@ -297,7 +297,12 @@ function MailRecords({ d }: { d: Zone }) {
             {/* The exchangers are the answer to "who receives this", so
                     they belong under the name — but they are three words of
                     context, not a heading. */}
-            <p className={cn(MONO, 'mx-0 mt-[0.1rem] mb-[0.45rem] text-[0.7rem] text-(--dim)')}>
+            <p
+              className={cn(
+                MONO,
+                'mx-0 mt-[0.1rem] mb-[0.45rem] text-[0.7rem] text-muted-foreground',
+              )}
+            >
               {m.mx.join(' · ') || 'no MX'}
             </p>
             <Measures

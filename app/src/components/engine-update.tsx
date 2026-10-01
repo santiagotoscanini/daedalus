@@ -88,7 +88,7 @@ export function EngineCard({ e }: { e: EngineFacts }) {
               <span className={cn(MONO_FACE, 'text-[0.8rem]')}>
                 {short(e.pinned?.rev)}
                 {e.pinned?.lastModified != null && (
-                  <span className="ml-2 text-(--dim)">{day(e.pinned.lastModified)}</span>
+                  <span className="ml-2 text-muted-foreground">{day(e.pinned.lastModified)}</span>
                 )}
               </span>
             ),
@@ -101,7 +101,7 @@ export function EngineCard({ e }: { e: EngineFacts }) {
               ) : (
                 <span className={cn(MONO_FACE, 'text-[0.8rem]')}>
                   {short(e.clone.head)}
-                  <span className="ml-2 text-(--dim)">
+                  <span className="ml-2 text-muted-foreground">
                     {e.clone.branch ?? DASH}
                     {e.clone.dirty && ' · dirty'}
                     {(e.clone.behind ?? 0) > 0 && ` · ${String(e.clone.behind)} behind origin`}
@@ -175,7 +175,7 @@ function Run({ status }: { status: EngineUpdateStatus }) {
   const at = PHASES.indexOf(status.phase as (typeof PHASES)[number])
   const revs =
     status.from !== '' ? (
-      <span className={cn(MONO_FACE, 'text-[0.76rem] text-(--dim)')}>
+      <span className={cn(MONO_FACE, 'text-[0.76rem] text-muted-foreground')}>
         {short(status.from)}
         {status.to !== '' && status.to !== status.from && ` → ${short(status.to)}`}
       </span>
@@ -226,7 +226,7 @@ function Run({ status }: { status: EngineUpdateStatus }) {
             key={p}
             className={cn(
               p === status.phase && 'font-semibold text-primary',
-              i < at && 'text-(--text-muted) line-through',
+              i < at && 'text-subdued line-through',
             )}
           >
             {p}

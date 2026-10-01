@@ -31,9 +31,9 @@ const CHANNEL_TONE: Record<string, Tone> = {
 
 const OPTION = cn(
   'flex w-full min-w-0 cursor-pointer items-center gap-[0.6rem] rounded-[8px] border px-[0.6rem] py-[0.4rem] text-left',
-  'border-(--border-soft) bg-(--panel-2) hover:bg-(--raise)',
+  'border-subtle bg-raised hover:bg-lifted',
 )
-const OPTION_ON = 'border-primary/60 bg-(--raise)'
+const OPTION_ON = 'border-primary/60 bg-lifted'
 const CONFIRM = 'rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem]'
 
 const PHASE: Record<string, string> = {
@@ -127,7 +127,7 @@ export function VersionBoard({
               key={key(o)}
               className={cn(
                 OPTION,
-                'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-(--brand-dim)',
+                'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary-dim',
                 chosen !== null && key(o) === key(chosen) && OPTION_ON,
                 running && 'cursor-not-allowed opacity-45',
               )}
@@ -144,9 +144,7 @@ export function VersionBoard({
                 }}
               />
               <span className={cn(MONO, 'text-[0.84rem] text-foreground')}>{o.version}</span>
-              <span className={cn(MONO, 'text-[0.76rem] text-(--text-muted)')}>
-                build {o.build}
-              </span>
+              <span className={cn(MONO, 'text-[0.76rem] text-subdued')}>build {o.build}</span>
               <Chip tone={CHANNEL_TONE[o.channel] ?? 'muted'}>{o.channel.toLowerCase()}</Chip>
               {o.newGame && <Chip tone="info">new game</Chip>}
               {i === 0 && !o.preRelease && <Chip tone="ok">recommended</Chip>}

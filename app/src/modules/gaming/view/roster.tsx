@@ -24,12 +24,12 @@ type Row = Extract<GamingData, { tab: 'minecraft' }>['roster'][number]
 const LIST = 'm-0 flex list-none flex-col gap-[0.3rem] p-0'
 const ROW = cn(
   'grid min-w-0 grid-cols-[2rem_1fr_auto] items-center gap-x-[0.7rem] gap-y-[0.3rem]',
-  'rounded-[8px] bg-(--panel-2) px-[0.55rem] py-[0.45rem]',
+  'rounded-[8px] bg-raised px-[0.55rem] py-[0.45rem]',
 )
 const HEAD = 'size-8 rounded-[5px] [image-rendering:pixelated]'
 const HEAD_BLANK = cn(
   HEAD,
-  'grid place-items-center bg-(--panel) text-[0.8rem] font-semibold text-muted-foreground',
+  'grid place-items-center bg-card text-[0.8rem] font-semibold text-muted-foreground',
 )
 const META = `${NOTE} flex flex-wrap gap-x-[0.6rem] gap-y-[0.1rem]`
 const SIDE = 'flex flex-wrap items-center justify-end gap-[0.5rem]'

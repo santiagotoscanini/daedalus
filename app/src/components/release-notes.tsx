@@ -22,10 +22,10 @@ import { Board } from './viz'
    exact idiom — same triangle, same hover, same open rotation — so that opening
    a container there and opening a release inside it read as one gesture a
    level apart. */
-const REL = 'group overflow-hidden rounded-[9px] border border-(--border-soft) bg-(--panel-2)'
+const REL = 'group overflow-hidden rounded-[9px] border border-subtle bg-raised'
 const REL_SUMMARY = cn(
   'flex min-w-0 cursor-pointer list-none items-baseline gap-[0.6rem] px-[0.6rem] py-[0.45rem]',
-  'hover:bg-(--raise) [&::-webkit-details-marker]:hidden',
+  'hover:bg-lifted [&::-webkit-details-marker]:hidden',
   "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
 )
@@ -34,21 +34,21 @@ const REL_SUMMARY = cn(
    opposite of what the bottom entry means. */
 const REL_RUNNING =
   'rounded-full border border-[color-mix(in_srgb,var(--success)_40%,transparent)] px-[0.35rem] py-[0.05rem] text-[0.6rem] tracking-[0.08em] whitespace-nowrap text-success uppercase'
-const REL_BODY = 'border-t border-(--border-soft) pt-[0.1rem] pr-[0.75rem] pb-[0.6rem] pl-[1.35rem]'
+const REL_BODY = 'border-t border-subtle pt-[0.1rem] pr-[0.75rem] pb-[0.6rem] pl-[1.35rem]'
 const REL_H5 =
   'mt-[0.55rem] mb-[0.2rem] text-[0.66rem] font-semibold tracking-[0.08em] text-primary uppercase'
-const REL_ITEM = 'max-w-[90ch] text-[0.76rem] leading-[1.45] text-(--text-muted)'
+const REL_ITEM = 'max-w-[90ch] text-[0.76rem] leading-[1.45] text-subdued'
 
 /* Each step in the chain points at the next; the last is where you end up, so
    it carries the reading colour and the warning-tinted edge instead of an
    arrow. */
 const CHAIN_STEP =
-  "flex items-center gap-[0.3rem] rounded-[6px] border border-(--border-soft) bg-(--panel-2) px-[0.4rem] py-[0.12rem] text-[0.76rem] text-(--text-muted) after:ml-[0.1rem] after:text-muted-foreground after:content-['→']"
+  "flex items-center gap-[0.3rem] rounded-[6px] border border-subtle bg-raised px-[0.4rem] py-[0.12rem] text-[0.76rem] text-subdued after:ml-[0.1rem] after:text-muted-foreground after:content-['→']"
 const CHAIN_LAST =
   'border-[color-mix(in_srgb,var(--warning)_45%,var(--border))] text-foreground after:content-none'
 
 const COMMIT =
-  'grid min-w-0 grid-cols-[4.5rem_1fr_auto] items-baseline gap-[0.6rem] rounded-[7px] px-[0.45rem] py-[0.24rem] text-[0.76rem] hover:bg-(--panel-2)'
+  'grid min-w-0 grid-cols-[4.5rem_1fr_auto] items-baseline gap-[0.6rem] rounded-[7px] px-[0.45rem] py-[0.24rem] text-[0.76rem] hover:bg-raised'
 
 export type Release = {
   version: string

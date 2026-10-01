@@ -11,7 +11,7 @@ import type { Part } from '../lib/hardware/catalog'
 export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
 export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-[0.25rem]'
 export const PART_NAME = 'text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere'
-export const PART_DETAIL = 'text-[0.73rem] text-(--text-muted) leading-[1.4]'
+export const PART_DETAIL = 'text-[0.73rem] text-subdued leading-[1.4]'
 
 /** What SMART calls a drive — the string you would type into a shop. */
 export const DISK_MODEL = 'text-[0.94rem] text-foreground tracking-[-0.01em] wrap-anywhere'

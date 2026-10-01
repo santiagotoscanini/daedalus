@@ -77,7 +77,7 @@ export function AccountMenu({ account, ...rest }: Props) {
 }
 
 // Radix lights a row through its own attribute; a plain link lights on hover.
-const NATIVE_ITEM = cn(MENU_ITEM, 'hover:bg-(--panel-2) hover:text-foreground')
+const NATIVE_ITEM = cn(MENU_ITEM, 'hover:bg-raised hover:text-foreground')
 
 function NativeMenu({
   active,
@@ -204,7 +204,7 @@ function Menu({
                 <span className="block truncate font-[550] text-[0.86rem] text-foreground">
                   {account.name}
                 </span>
-                <span className="block truncate text-(--dim) text-[0.74rem]">
+                <span className="block truncate text-muted-foreground text-[0.74rem]">
                   {account.email || account.username}
                 </span>
               </span>
@@ -229,7 +229,7 @@ function Menu({
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="pt-1 pb-0.5 text-(--dim) text-[0.7rem] uppercase tracking-[0.08em]">
+        <DropdownMenuLabel className="pt-1 pb-0.5 text-muted-foreground text-[0.7rem] uppercase tracking-[0.08em]">
           Theme
         </DropdownMenuLabel>
         <DropdownMenuRadioGroup

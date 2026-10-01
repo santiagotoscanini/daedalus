@@ -51,10 +51,7 @@ export function RunnersView({ d }: { d: Runners }) {
         >
           <ul className={LIST}>
             {d.machines.map((m) => (
-              <li
-                key={m.id}
-                className="border-(--border-soft) border-t py-[0.45rem] first:border-t-0"
-              >
+              <li key={m.id} className="border-subtle border-t py-[0.45rem] first:border-t-0">
                 <div className="flex min-w-0 items-center gap-[0.45rem] text-[0.77rem]">
                   <Pulse on={m.online === true} tone={m.online === true ? 'ok' : 'muted'} />
                   <span className={ROW_MAIN}>
@@ -79,7 +76,7 @@ export function RunnersView({ d }: { d: Runners }) {
                   {m.labels.map((l) => (
                     <span
                       key={l}
-                      className={`${MONO} rounded border border-(--border-soft) px-[0.3rem] py-[0.05rem]`}
+                      className={`${MONO} rounded border border-subtle px-[0.3rem] py-[0.05rem]`}
                     >
                       {l}
                     </span>

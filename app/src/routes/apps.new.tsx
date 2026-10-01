@@ -69,7 +69,7 @@ export const WIZARD_STEP = 'min-w-0'
 export const FIRST_STEP_HEAD = cn(SECTION_HEAD, 'mt-0 border-t-0 pt-0')
 
 const WARN_BANNER = 'mb-[1.35rem] text-foreground'
-const MUTED_BANNER = 'mb-[1.35rem] text-(--text-muted)'
+const MUTED_BANNER = 'mb-[1.35rem] text-subdued'
 
 function NewAppPage() {
   const site = useSite()
@@ -394,7 +394,7 @@ function Wizard({ options }: { options: Options }) {
               <Button type="button" size="sm" disabled={!canCreate} onClick={create}>
                 {busy ? 'Creating…' : 'Create entry'}
               </Button>
-              <p className="m-0 max-w-[46rem] text-[0.8rem] text-(--dim)">
+              <p className="m-0 max-w-[46rem] text-[0.8rem] text-muted-foreground">
                 Writes the registry row, declared. The next Apply commits site/apps.json and
                 rebuilds — which creates its database, its data directory and its secrets, and
                 starts nothing. Being in that file is what lets the box build the repo at all.
@@ -438,7 +438,7 @@ function WizardField({
     // repo decides it — and dimming its label would say "locked" about the one
     // field the reader most needs to read. The input dims itself.
     <Field className="gap-[0.3rem] py-2 has-[:disabled]:opacity-100">
-      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-(--dim)">
+      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-muted-foreground">
         {label}
       </FieldLabel>
       <Input

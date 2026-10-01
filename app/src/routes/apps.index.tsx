@@ -96,12 +96,12 @@ export const APP_LIST =
   'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-[0.8rem] p-0'
 
 const TALLIES =
-  'mb-[1.1rem] flex flex-wrap items-center gap-x-[1.6rem] gap-y-2 text-[0.88rem] text-(--text-muted) max-[34rem]:gap-x-4 max-[34rem]:gap-y-[0.4rem]'
+  'mb-[1.1rem] flex flex-wrap items-center gap-x-[1.6rem] gap-y-2 text-[0.88rem] text-subdued max-[34rem]:gap-x-4 max-[34rem]:gap-y-[0.4rem]'
 const TALLY = 'inline-flex items-center gap-[0.45rem]'
 const TALLY_COUNT = 'font-semibold text-foreground'
 
 const CARD =
-  'flex min-w-0 flex-col rounded-lg border border-(--border-soft) bg-card transition-colors duration-150 hover:border-foreground/30'
+  'flex min-w-0 flex-col rounded-lg border border-subtle bg-card transition-colors duration-150 hover:border-foreground/30'
 /** Off-box and control-plane cards: dashed, the visual for "listed here, not
     one of the things being managed". */
 const CARD_ASIDE = 'border-dashed bg-transparent'
@@ -111,10 +111,10 @@ const CARD_LINK =
   'flex min-w-0 flex-1 flex-col gap-[0.55rem] px-4 pt-[0.85rem] pb-[0.9rem] text-inherit hover:no-underline'
 const CARD_HEAD = 'flex min-w-0 items-center gap-[0.65rem]'
 const APP_NAME = 'flex min-w-0 items-center gap-2 text-[0.95rem] [font-weight:550]'
-const APP_HOST = 'block truncate text-[0.76rem] text-(--dim)'
+const APP_HOST = 'block truncate text-[0.76rem] text-muted-foreground'
 /** Two lines, then quiet: a card column where one long description makes one
     row twice as tall reads as a layout accident. */
-const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.45] text-(--text-muted)'
+const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.45] text-subdued'
 /** The spark sizes itself from its height and is pushed to the right edge. */
 const CARD_FOOT = 'mt-auto flex items-center gap-[0.6rem] pt-[0.15rem] [&>svg]:ml-auto'
 
@@ -281,7 +281,7 @@ function AppsList({ data }: { data: ListData }) {
               setExposure('declared')
             }}
           >
-            <span aria-hidden="true" className="text-(--dim)">
+            <span aria-hidden="true" className="text-muted-foreground">
               ◌
             </span>{' '}
             <b className={TALLY_COUNT}>{counts.declared}</b> declared
@@ -342,7 +342,9 @@ function AppsList({ data }: { data: ListData }) {
         {managed.map((r) => (
           <AppRow key={r.name} row={r} />
         ))}
-        {managed.length === 0 && <li className="py-10 text-(--dim)">No apps match that filter.</li>}
+        {managed.length === 0 && (
+          <li className="py-10 text-muted-foreground">No apps match that filter.</li>
+        )}
       </ul>
 
       {/* The control plane sits below its own rule rather than in the list.
@@ -392,7 +394,7 @@ function SectionHead({ icon, title, sub }: { icon: ReactNode; title: string; sub
     <h2 className={SECTION_HEAD}>
       {/* Centred by hand because the head aligns its text on the baseline,
           which an image does not have. */}
-      <span className="inline-flex self-center text-(--text-muted)" aria-hidden="true">
+      <span className="inline-flex self-center text-subdued" aria-hidden="true">
         {icon}
       </span>
       {title}
@@ -439,9 +441,9 @@ function ExternalRow({ entry }: { entry: ExternalEntry }) {
         <p className={APP_DESC}>{entry.description}</p>
       </a>
       {entry.repo !== null && (
-        <div className="flex min-w-0 items-center justify-between gap-[0.9rem] border-t border-t-(--border-soft) px-4 pt-[0.6rem] pb-[0.75rem] text-[0.8rem]">
+        <div className="flex min-w-0 items-center justify-between gap-[0.9rem] border-t border-t-subtle px-4 pt-[0.6rem] pb-[0.75rem] text-[0.8rem]">
           <a
-            className="min-w-0 truncate text-(--text-muted)"
+            className="min-w-0 truncate text-subdued"
             href={`https://github.com/${entry.repo}`}
             target="_blank"
             rel="noreferrer"
@@ -483,7 +485,7 @@ function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
               {row.managedInNix && (
                 <Chip
                   tone="muted"
-                  className={cn(CHIP, 'text-(--text-muted)')}
+                  className={cn(CHIP, 'text-subdued')}
                   title="Declared by hand in Nix, read-only here"
                 >
                   nix
@@ -516,7 +518,7 @@ function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
             width={72}
             height={18}
           />
-          <span className="text-[0.74rem] text-(--dim) tabular-nums">
+          <span className="text-[0.74rem] text-muted-foreground tabular-nums">
             {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)} rpm`}
           </span>
         </div>

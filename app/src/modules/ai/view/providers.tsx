@@ -49,7 +49,7 @@ const BOX_MARK = { src: '/icon-nixos.webp', invert: false }
 
 function ChainBoard({ chain }: { chain: Chain }) {
   const cell = (title: string, big: string, lines: string[]) => (
-    <div className="min-w-0 flex-1 rounded-md border border-(--border-soft) px-3 py-2">
+    <div className="min-w-0 flex-1 rounded-md border border-subtle px-3 py-2">
       <p className={`${NOTE} m-0`}>{title}</p>
       <p className="m-0 text-[1.3rem] leading-[1.15] tracking-[-0.015em] tabular-nums [font-weight:550]">
         {big}
@@ -62,7 +62,7 @@ function ChainBoard({ chain }: { chain: Chain }) {
     </div>
   )
   const arrow = (
-    <span aria-hidden className="flex-none self-center text-[1.1rem] text-(--dim)">
+    <span aria-hidden className="flex-none self-center text-[1.1rem] text-muted-foreground">
       →
     </span>
   )
@@ -113,7 +113,7 @@ function ChainBoard({ chain }: { chain: Chain }) {
    everything below. The label earns its line for the same reason: a bare row
    of machine names does not say what picking one does. */
 const PICKER = 'mt-[1.6rem] mb-[1.35rem] flex flex-wrap items-center gap-[0.5rem]'
-const PICKER_LABEL = 'mr-[0.3rem] text-[0.6rem] tracking-[0.09em] text-(--dim) uppercase'
+const PICKER_LABEL = 'mr-[0.3rem] text-[0.6rem] tracking-[0.09em] text-muted-foreground uppercase'
 
 function MachinePills({ machines, active }: { machines: ProviderMachine[]; active: string }) {
   const pill = (selected: boolean) =>
@@ -163,10 +163,9 @@ function MachinePills({ machines, active }: { machines: ProviderMachine[]; activ
 
 /* Styled as a sibling of the changelog's release rows: both are "a stack of
    things you open", and looking alike is the point. */
-const KIND =
-  'border-b border-(--border-soft) last-of-type:border-b-0 [&[open]>summary]:before:rotate-90'
+const KIND = 'border-b border-subtle last-of-type:border-b-0 [&[open]>summary]:before:rotate-90'
 const KIND_SUMMARY =
-  "flex min-w-0 cursor-pointer list-none items-baseline gap-[0.55rem] px-[0.15rem] py-[0.5rem] hover:bg-(--raise) [&::-webkit-details-marker]:hidden before:text-[0.7rem] before:text-(--dim) before:transition-transform before:duration-[0.12s] before:ease-[ease] before:content-['▸']"
+  "flex min-w-0 cursor-pointer list-none items-baseline gap-[0.55rem] px-[0.15rem] py-[0.5rem] hover:bg-lifted [&::-webkit-details-marker]:hidden before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:ease-[ease] before:content-['▸']"
 const KIND_TYPE = 'text-[0.68rem] font-semibold tracking-[0.11em] text-primary uppercase'
 const KIND_FREE =
   'rounded-full border border-warning/40 px-[0.35rem] py-[0.02rem] text-[0.62rem] text-warning'
@@ -174,38 +173,38 @@ const KIND_FREE =
    something. Interpuncts generated rather than typed, so a missing figure
    does not leave a dangling separator. */
 const KIND_AGG =
-  "ml-auto flex gap-[0.45rem] whitespace-nowrap text-[0.7rem] text-(--dim) tabular-nums [&>span+span]:before:mr-[0.45rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']"
+  "ml-auto flex gap-[0.45rem] whitespace-nowrap text-[0.7rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-[0.45rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']"
 const KIND_BODY = 'pt-[0.1rem] pb-[0.7rem]'
 const KIND_EMPTY = 'm-0 text-[0.78rem] text-warning'
 
 /* Only present mid-download, so it is allowed to be loud. */
 const DOWNLOADS = 'm-0 mb-[0.6rem] flex list-none flex-col gap-[0.2rem] p-0'
 const DOWNLOAD =
-  'flex gap-[0.6rem] rounded-[6px] bg-[color-mix(in_srgb,var(--primary)_10%,var(--panel-2))] px-[0.45rem] py-[0.2rem] text-[0.74rem] text-(--text-muted)'
+  'flex gap-[0.6rem] rounded-[6px] bg-[color-mix(in_srgb,var(--primary)_10%,var(--panel-2))] px-[0.45rem] py-[0.2rem] text-[0.74rem] text-subdued'
 
 /* The model in the slot. Given real weight — it is the answer to the kind's
    question, and everything below it is an alternative. */
-const HERO = 'group/hero rounded-[9px] bg-(--panel-2) px-[0.6rem] py-[0.5rem]'
+const HERO = 'group/hero rounded-[9px] bg-raised px-[0.6rem] py-[0.5rem]'
 const HERO_NAME = 'min-w-0 truncate text-[0.85rem] font-semibold text-foreground'
 
 /* The other models of this kind — one click from the slot. */
 const ALTS = 'm-0 mt-[0.3rem] flex list-none flex-col gap-[0.15rem] p-0'
 const ALT =
-  'group/alt flex min-w-0 items-center gap-[0.6rem] rounded-[7px] px-[0.6rem] py-[0.22rem] hover:bg-(--panel-2) max-[46rem]:flex-wrap'
-const ALT_NAME = 'min-w-0 truncate text-[0.8rem] text-(--text-muted)'
+  'group/alt flex min-w-0 items-center gap-[0.6rem] rounded-[7px] px-[0.6rem] py-[0.22rem] hover:bg-raised max-[46rem]:flex-wrap'
+const ALT_NAME = 'min-w-0 truncate text-[0.8rem] text-subdued'
 const ALT_META =
-  'ml-auto flex items-baseline gap-x-[0.9rem] gap-y-0 whitespace-nowrap text-[0.7rem] text-(--dim) tabular-nums max-[46rem]:ml-0'
+  'ml-auto flex items-baseline gap-x-[0.9rem] gap-y-0 whitespace-nowrap text-[0.7rem] text-muted-foreground tabular-nums max-[46rem]:ml-0'
 
 /* The row's button: quiet until wanted. The row is information first and an
    action second, and a column of always-lit buttons would compete with the
    model that is actually running. */
 const QUIET_BTN =
-  'h-auto flex-none px-[0.5rem] py-[0.15rem] text-[0.68rem] text-(--text-muted) opacity-45 transition-opacity duration-[0.12s] focus-visible:opacity-100'
+  'h-auto flex-none px-[0.5rem] py-[0.15rem] text-[0.68rem] text-subdued opacity-45 transition-opacity duration-[0.12s] focus-visible:opacity-100'
 
 /* Build numbers for the runtimes named on the models above. One line: that
    is all they are worth once the runtime itself is stated per model. */
 const BUILDS =
-  'mx-0 mt-[1.1rem] mb-0 flex flex-wrap gap-x-[1.1rem] gap-y-[0.2rem] border-t border-(--border-soft) pt-[0.7rem] text-[0.68rem] text-(--dim)'
+  'mx-0 mt-[1.1rem] mb-0 flex flex-wrap gap-x-[1.1rem] gap-y-[0.2rem] border-t border-subtle pt-[0.7rem] text-[0.68rem] text-muted-foreground'
 
 type Group = { mode: CatalogEntry['mode']; models: CatalogEntry[] }
 
@@ -348,7 +347,7 @@ function ModelHero({ model, m }: { model: CatalogEntry; m: ProviderMachine }) {
         {model.supportsTools && <Chip>tools</Chip>}
         {model.supportsVision && <Chip>vision</Chip>}
         {model.loaded?.pinned === true && <Chip tone="warn">pinned</Chip>}
-        <span className="ml-[0.2rem] text-[0.7rem] text-(--dim)">
+        <span className="ml-[0.2rem] text-[0.7rem] text-muted-foreground">
           <GatewayName model={model} />
         </span>
       </div>
@@ -635,10 +634,10 @@ function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersData['log
                 <span key={`${b.recipe}-${b.backend}`} className="inline-flex gap-[0.35rem]">
                   {b.recipe}
                   {b.url === null ? (
-                    <span className={cn(MONO, 'text-(--text-muted)')}>{b.version ?? DASH}</span>
+                    <span className={cn(MONO, 'text-subdued')}>{b.version ?? DASH}</span>
                   ) : (
                     <a
-                      className={cn(MONO, 'text-(--text-muted) no-underline hover:text-primary')}
+                      className={cn(MONO, 'text-subdued no-underline hover:text-primary')}
                       href={b.url}
                       target="_blank"
                       rel="noreferrer"

@@ -18,7 +18,9 @@ dev loop, data flow and architecture map are in `daedalus-app.md`.
   changing anything about ordering.
 - `src/theme.css` — every colour in the app, once. shadcn token names
   in OKLCH, plus `--success`/`--warning`/`--danger`/`--info`, plus the
-  legacy `--bg`/`--text`/`--brand` names aliased onto them.
+  app's own five surfaces and inks (`bg-raised`, `bg-lifted`,
+  `border-subtle`, `text-subdued`, `*-primary-dim`; its header says which
+  is which).
 - `src/styles.css` — what is left of the original hand-written CSS,
   imported into the `legacy` layer: element defaults (`body`, `code`,
   `a`, `h1`, `h2`), the `@keyframes` that `animate-[…]` utilities
@@ -94,7 +96,7 @@ colour on a component that does NOT take a tone is fine as a utility.
   preset swap would leave them behind. Only token-backed colours
   exist here: `background foreground card popover primary secondary
   muted accent destructive success warning danger info overlay border input
-  ring chart-1..5 sidebar*`.
+  ring chart-1..5 sidebar* raised lifted subtle subdued primary-dim`.
 - Dark is the shipped default but not the only one. Anything that
   assumes a dark background — a white glow, a black shadow, an
   opacity chosen against `#0a0a0a` — is a bug in light mode. Check

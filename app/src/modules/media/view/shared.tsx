@@ -120,7 +120,7 @@ export function HealthChecks({
    for (which subsystem), the message is the part you read once you have found
    it. Below 34rem the two stack. */
 export const CHECK_ROW =
-  'grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-[0.7rem] rounded-[7px] bg-(--panel-2) px-[0.55rem] py-[0.4rem] text-[0.8rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-[0.15rem]'
+  'grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-[0.7rem] rounded-[7px] bg-raised px-[0.55rem] py-[0.4rem] text-[0.8rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-[0.15rem]'
 
 /* Two levels, two literal strings — the fill is a different share of the panel
    for each, so this is a table of two rather than a tone. */

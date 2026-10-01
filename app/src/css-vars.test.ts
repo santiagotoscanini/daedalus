@@ -19,7 +19,7 @@ const SRC = import.meta.dirname
 const EXTERNAL = [/^--spacing$/, /^--tw-/, /^--radix-/]
 
 // A reference is `(--name` right after `var` or a utility's `-`/word char:
-// `text-(--dim)`, `min-h-(--row)`, `calc(var(--span)…)`. Prose like
+// `text-muted-foreground`, `min-h-(--row)`, `calc(var(--span)…)`. Prose like
 // "(--flag)" and CLI argv strings do not match.
 const REF = /[\w-]\((--[a-zA-Z][\w-]*)/g
 const CSS_DECL = /(?<![\w-])(--[a-zA-Z][\w-]*)\s*:/g

@@ -147,8 +147,10 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
       <div className={SWITCH_BAR}>
         {/* What the switch cannot say, and only that: where the selected
             tunnel comes out. Its name and its health are on the button. */}
-        <span className="inline-flex min-w-0 items-baseline gap-[0.55rem] text-[0.86rem] text-(--text-muted)">
-          <span className={cn(MONO, 'text-[0.78rem] text-(--dim)')}>{t.exit.ip ?? DASH}</span>
+        <span className="inline-flex min-w-0 items-baseline gap-[0.55rem] text-[0.86rem] text-subdued">
+          <span className={cn(MONO, 'text-[0.78rem] text-muted-foreground')}>
+            {t.exit.ip ?? DASH}
+          </span>
           <span>{flag(t.exit.country)}</span>
           {t.portForwarding && t.port !== null && <span>port {t.port}</span>}
         </span>
@@ -255,7 +257,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           aside={
             // A provider's mark beside the title — the network a tunnel comes
             // out on is a brand, and the logo says it faster than the word.
-            <span className="inline-flex items-center gap-[0.35rem] text-[0.72rem] text-(--dim) [&_img]:block [&_img]:rounded-[3px]">
+            <span className="inline-flex items-center gap-[0.35rem] text-[0.72rem] text-muted-foreground [&_img]:block [&_img]:rounded-[3px]">
               <img src="/icon-protonvpn.svg" alt="" width={16} height={16} />
               {t.provider}
             </span>

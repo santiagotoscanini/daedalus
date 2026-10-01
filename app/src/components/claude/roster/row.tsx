@@ -39,7 +39,7 @@ const ROW_BTN = 'ml-auto h-auto shrink-0 px-[0.55rem] py-[0.2rem] text-[0.7rem]'
 /* The last prompt. One line, clipped, and in the muted ink the board uses for
    anything that is not a measurement, so it reads as context under the title
    rather than as a second title. */
-const PROMPT = 'mt-[0.22rem] truncate text-[0.72rem] leading-[1.45] text-(--text-muted)'
+const PROMPT = 'mt-[0.22rem] truncate text-[0.72rem] leading-[1.45] text-subdued'
 
 /* The metadata line. Wraps rather than scrolls — a row here is already a
    block, and a horizontal scrollbar inside one would be the third scroll axis
@@ -65,7 +65,7 @@ function FactIconFor({ name }: { name: FactIcon }) {
 /* What DOES belong under the row: the armed state. It carries a sentence
    about what the click costs, which is the one thing worth a second line. */
 const CTRL = 'mt-[0.3rem] flex flex-col items-start gap-[0.3rem]'
-const CTRL_COST = 'text-[0.72rem] text-(--text-muted) leading-[1.5]'
+const CTRL_COST = 'text-[0.72rem] text-subdued leading-[1.5]'
 const CTRL_NOTE = 'text-[0.68rem] text-muted-foreground leading-[1.5]'
 const CTRL_STATE = 'mt-[0.3rem] text-[0.72rem] leading-[1.5]'
 

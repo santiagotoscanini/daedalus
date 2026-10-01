@@ -52,7 +52,7 @@ export function SantreeGrant({
       ref={box}
       role="dialog"
       aria-labelledby={titleId}
-      className="flex flex-col gap-3 rounded-md border border-(--border-soft) p-3"
+      className="flex flex-col gap-3 rounded-md border border-subtle p-3"
     >
       <h4 id={titleId} className="m-0 font-medium text-[0.92rem]">
         Turn on santree for {n.name}

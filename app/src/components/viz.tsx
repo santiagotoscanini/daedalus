@@ -65,7 +65,7 @@ export function Ring({
   return (
     <div className="relative aspect-square flex-none" style={toneStyle(tone, { width: size })}>
       <svg viewBox="0 0 108 108" className="block h-full w-full" aria-hidden="true">
-        <circle className="fill-none stroke-(--raise) [stroke-width:9]" cx="54" cy="54" r={r} />
+        <circle className="fill-none stroke-lifted [stroke-width:9]" cx="54" cy="54" r={r} />
         {pct !== null && (
           <circle
             // ring-sweep runs once on mount so the page reads as its numbers
@@ -88,7 +88,9 @@ export function Ring({
           {value}
         </strong>
         {label !== undefined && (
-          <span className="text-[0.63rem] tracking-[0.06em] text-(--dim) uppercase">{label}</span>
+          <span className="text-[0.63rem] tracking-[0.06em] text-muted-foreground uppercase">
+            {label}
+          </span>
         )}
       </div>
     </div>
@@ -131,10 +133,10 @@ export function BarList({
           className="grid min-w-0 grid-cols-[minmax(4.5rem,8rem)_1fr_auto] items-center gap-[0.6rem]"
           style={toneStyle(i.tone ?? tone)}
         >
-          <span className="truncate text-[0.78rem] text-(--text-muted)" title={i.label}>
+          <span className="truncate text-[0.78rem] text-subdued" title={i.label}>
             {i.label}
           </span>
-          <span className="block h-[7px] min-w-0 overflow-hidden rounded-[4px] bg-(--raise)">
+          <span className="block h-[7px] min-w-0 overflow-hidden rounded-[4px] bg-lifted">
             <span
               className="block h-full origin-left animate-[bar-grow_700ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[4px] bg-(--tone) motion-reduce:animate-none"
               style={{ width: `${String(Math.max(1.5, (i.value / ceiling) * 100))}%` }}
@@ -190,7 +192,7 @@ export function RankRow({
     // container, so a content-sized column is measured per row — the bars
     // would start at a different x on every line and stop at a different one,
     // which is the entire comparison this list exists to make.
-    <li className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-(--panel-2)">
+    <li className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-raised">
       <span className="flex min-w-0 items-baseline gap-[0.35rem] text-[0.79rem]">
         <span
           // A name that cannot be read at face value — an internal credential,
@@ -211,7 +213,7 @@ export function RankRow({
             className={cn(
               'flex-none rounded-full border px-[0.35rem] py-[0.02rem] text-[0.6rem] not-italic',
               b.tone === 'muted'
-                ? 'border-border text-(--dim)'
+                ? 'border-border text-muted-foreground'
                 : 'border-[color-mix(in_srgb,var(--warning)_40%,transparent)] text-warning',
             )}
             title={b.why ?? note ?? undefined}
@@ -220,7 +222,7 @@ export function RankRow({
           </em>
         ))}
       </span>
-      <span className="block h-[5px] overflow-hidden rounded-[3px] bg-(--raise)">
+      <span className="block h-[5px] overflow-hidden rounded-[3px] bg-lifted">
         <span
           // Same growth as every other bar on these pages — `bar-grow` scales
           // on X from the left, so the origin has to be set for it to read as
@@ -233,7 +235,7 @@ export function RankRow({
       {/* Interpuncts are generated between the items rather than typed, so a
           caller with no tokens and no latency does not trail a separator into
           empty space. */}
-      <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-(--dim) tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
+      <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
         {meta}
       </span>
     </li>
@@ -424,7 +426,7 @@ export function Spark({
     colour showing through — which a per-cell border-left cannot promise once
     cells wrap. */
 export const STAT_STRIP =
-  'mb-[0.8rem] grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-px overflow-hidden rounded-lg border border-(--border-soft) bg-(--border-soft)'
+  'mb-[0.8rem] grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-px overflow-hidden rounded-lg border border-subtle bg-subtle'
 
 /** One `Stat` cell. Every cell reserves the third row under the value, so a
     strip mixing cells that have a sparkline with cells that have a caption —
@@ -475,7 +477,7 @@ export function Stat({
 }) {
   return (
     <div className={STAT} title={title} style={tone === undefined ? undefined : toneStyle(tone)}>
-      <span className="truncate text-[0.73rem] font-medium text-(--text-muted)">{label}</span>
+      <span className="truncate text-[0.73rem] font-medium text-subdued">{label}</span>
       <span
         className={cn(
           'text-[1.3rem] leading-[1.15] tracking-[-0.015em] tabular-nums max-[34rem]:text-[1.15rem] [font-weight:550] [overflow-wrap:anywhere]',
@@ -484,13 +486,15 @@ export function Stat({
       >
         {value}
         {unit !== undefined && (
-          <em className="ml-[0.3rem] text-[0.72rem] font-normal text-(--dim) not-italic">{unit}</em>
+          <em className="ml-[0.3rem] text-[0.72rem] font-normal text-muted-foreground not-italic">
+            {unit}
+          </em>
         )}
       </span>
       {spark !== undefined && spark.length > 1 ? (
         <Spark values={spark} tone={tone ?? 'muted'} />
       ) : sub !== undefined ? (
-        <span className="truncate text-[0.7rem] leading-4 text-(--dim)">{sub}</span>
+        <span className="truncate text-[0.7rem] leading-4 text-muted-foreground">{sub}</span>
       ) : null}
     </div>
   )
@@ -519,7 +523,7 @@ export function Progress({
 }) {
   return (
     <span
-      className="block w-full overflow-hidden rounded-full bg-(--raise)"
+      className="block w-full overflow-hidden rounded-full bg-lifted"
       style={toneStyle(tone, { height })}
     >
       <span
@@ -545,7 +549,7 @@ export function Pulse({ on, tone = 'ok' }: { on: boolean; tone?: Tone }) {
         'inline-block size-[7px] flex-none rounded-full',
         on
           ? 'animate-[pulse-beat_2s_ease-in-out_infinite] bg-(--tone) motion-reduce:animate-none'
-          : 'bg-(--dim)',
+          : 'bg-muted-foreground',
       )}
       style={toneStyle(tone)}
       aria-hidden="true"
@@ -568,7 +572,7 @@ export function Chip({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-[5px] border border-[color-mix(in_srgb,var(--tone)_40%,transparent)] bg-(--raise) px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-(--tone) font-[550]',
+        'inline-flex items-center rounded-[5px] border border-[color-mix(in_srgb,var(--tone)_40%,transparent)] bg-lifted px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-(--tone) font-[550]',
         className,
       )}
       title={title}
@@ -583,11 +587,11 @@ export function Chip({
     laptop, the declared span on a desktop — the board grid is 12 wide at
     every size. */
 export const BOARD =
-  'flex min-w-0 flex-col overflow-hidden rounded-lg border border-(--border-soft) bg-card [grid-column:span_var(--span,6)] max-[78rem]:[grid-column:span_min(12,calc(var(--span,6)*2))] max-[50rem]:[grid-column:span_12]'
+  'flex min-w-0 flex-col overflow-hidden rounded-lg border border-subtle bg-card [grid-column:span_var(--span,6)] max-[78rem]:[grid-column:span_min(12,calc(var(--span,6)*2))] max-[50rem]:[grid-column:span_12]'
 
 /** `Board`'s header row. */
 export const BOARD_HEAD =
-  'flex items-baseline justify-between gap-[0.6rem] border-b border-(--border-soft) px-[0.95rem] pt-[0.7rem] pb-[0.55rem]'
+  'flex items-baseline justify-between gap-[0.6rem] border-b border-subtle px-[0.95rem] pt-[0.7rem] pb-[0.55rem]'
 
 /** `Board`'s body. A query container, so controls inside a board lay
     themselves out from the width they actually got: one viewport width gives
@@ -674,11 +678,11 @@ export function Measures({ items }: { items: { k: string; v: ReactNode; tone?: T
           className="flex flex-col gap-[0.05rem]"
           style={m.tone === undefined ? undefined : toneStyle(m.tone)}
         >
-          <dt className="text-[0.6rem] tracking-[0.08em] text-(--dim) uppercase">{m.k}</dt>
+          <dt className="text-[0.6rem] tracking-[0.08em] text-muted-foreground uppercase">{m.k}</dt>
           <dd
             className={cn(
               'm-0 text-[0.85rem] tabular-nums',
-              m.tone === undefined ? 'text-(--text-muted)' : 'text-(--tone)',
+              m.tone === undefined ? 'text-subdued' : 'text-(--tone)',
             )}
           >
             {m.v}
@@ -717,13 +721,13 @@ export function Facts({ rows, list }: { rows: { k: string; v: ReactNode }[]; lis
           className={cn(
             'min-w-0',
             list === true
-              ? 'flex flex-row flex-wrap items-baseline justify-between gap-x-[1.25rem] gap-y-[0.2rem] border-t border-(--border-soft) py-[0.45rem] first:border-t-0 first:pt-0'
+              ? 'flex flex-row flex-wrap items-baseline justify-between gap-x-[1.25rem] gap-y-[0.2rem] border-t border-subtle py-[0.45rem] first:border-t-0 first:pt-0'
               : 'flex flex-col gap-[0.05rem]',
           )}
         >
           <dt
             className={cn(
-              'text-(--dim)',
+              'text-muted-foreground',
               list === true ? 'flex-none text-[0.82rem]' : 'truncate text-[0.73rem]',
             )}
           >

@@ -30,30 +30,30 @@ const SIDE_MONO = `${SIDE} font-mono`
 /* The ends of a column chart's window. Pulled inside the board body's own gap:
    the axis belongs to the chart above it. */
 const COLAXIS =
-  'mt-[-0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] tabular-nums text-(--dim)'
+  'mt-[-0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] tabular-nums text-muted-foreground'
 
 /* The "show all N" toggle under the registration list, on `Button
    variant="outline"`. Left-aligned with the rows rather than centred: it is
    the continuation of the list, not a footer action. */
 const BTN_MORE =
-  'mt-[0.35rem] h-auto self-start px-[0.5rem] py-[0.18rem] text-[0.7rem] text-(--text-muted) hover:border-foreground/30'
+  'mt-[0.35rem] h-auto self-start px-[0.5rem] py-[0.18rem] text-[0.7rem] text-subdued hover:border-foreground/30'
 
 /* The registration list. Half-width board, so the name column gives before the
    bar does: the bar is the comparison and a 3rem one compares nothing, while a
    truncated name is still recognisable and has its full form on hover. */
 const APPS = 'mt-[0.5rem] flex list-none flex-col gap-[0.1rem]'
-const APP = '[&[open]>summary]:bg-(--panel-2)'
+const APP = '[&[open]>summary]:bg-raised'
 const APP_SUMMARY =
-  'grid cursor-pointer list-none grid-cols-[minmax(6rem,11rem)_minmax(3rem,1fr)_2.2rem_auto] items-center gap-[0.6rem] rounded-[7px] px-[0.45rem] py-[0.3rem] text-[0.78rem] hover:bg-(--panel-2) [&::-webkit-details-marker]:hidden'
+  'grid cursor-pointer list-none grid-cols-[minmax(6rem,11rem)_minmax(3rem,1fr)_2.2rem_auto] items-center gap-[0.6rem] rounded-[7px] px-[0.45rem] py-[0.3rem] text-[0.78rem] hover:bg-raised [&::-webkit-details-marker]:hidden'
 /* Every `em` after the name is one badge style: a state that changes what the
    row means ("any account", "proxy gate", "app login"). */
 const APP_NAME =
   'flex min-w-0 items-center gap-[0.4rem] text-foreground [&>span:first-child]:truncate [&>em]:flex-none [&>em]:rounded-full [&>em]:border [&>em]:border-warning/40 [&>em]:px-[0.35rem] [&>em]:py-[0.02rem] [&>em]:text-[0.6rem] [&>em]:text-warning [&>em]:not-italic'
-const APP_WHEN = 'text-right text-[0.7rem] whitespace-nowrap tabular-nums text-(--dim)'
+const APP_WHEN = 'text-right text-[0.7rem] whitespace-nowrap tabular-nums text-muted-foreground'
 const APP_BODY = 'flex flex-col gap-[0.35rem] pt-[0.3rem] pr-[0.45rem] pb-[0.7rem] pl-[1.2rem]'
 
 /* The usage bar: the list is ordered by recency, so volume is drawn here. */
-const TRACK = 'h-[5px] overflow-hidden rounded-[3px] bg-(--raise)'
+const TRACK = 'h-[5px] overflow-hidden rounded-[3px] bg-lifted'
 const FILL =
   'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none'
 const COUNT = 'text-right text-[0.79rem] whitespace-nowrap tabular-nums text-foreground'
@@ -255,7 +255,7 @@ export function IdpView({ data: d }: { data: IdpData }) {
               <li key={u.username} title={u.groups.join(', ')}>
                 <span className={MAIN}>
                   {u.displayName}
-                  {u.admin && <span className="text-(--text-muted)"> · admin</span>}
+                  {u.admin && <span className="text-subdued"> · admin</span>}
                 </span>
                 {u.disabled && <Chip tone="bad">disabled</Chip>}
                 {/* An admin account that is not a person, and the only place

@@ -141,7 +141,7 @@ export function RowsSkeleton({ count = 3, height = 58 }: { count?: number; heigh
       {Array.from({ length: count }, (_, i) => (
         <li key={i}>
           <div
-            className="flex items-center gap-4 rounded-lg border border-(color:--border-soft) bg-card px-4"
+            className="flex items-center gap-4 rounded-lg border border-subtle bg-card px-4"
             style={{ height }}
           >
             <Bar w="0.6rem" h={10} />
@@ -206,8 +206,8 @@ export function BlockSkeleton({ h = 240 }: { h?: number }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-(color:--border-soft)',
-        'bg-[image:linear-gradient(90deg,var(--panel)_0%,var(--panel-2)_50%,var(--panel)_100%)] bg-[length:220%_100%]',
+        'rounded-lg border border-subtle',
+        'bg-[image:linear-gradient(90deg,var(--card)_0%,var(--panel-2)_50%,var(--card)_100%)] bg-[length:220%_100%]',
         SWEEP,
       )}
       style={{ height: h }}

@@ -11,15 +11,15 @@ export type AppRecord = NonNullable<LoaderData>['app']
    Whole literal strings, so Tailwind's scanner still sees every utility. */
 
 /** The sentence under a heading, or in place of a panel the app cannot fill. */
-export const LEDE = 'mt-[0.3rem] mb-0 max-w-[74ch] text-[0.9rem] text-(--text-muted)'
+export const LEDE = 'mt-[0.3rem] mb-0 max-w-[74ch] text-[0.9rem] text-subdued'
 
 /** The one line of prose a stat strip is allowed, directly under the numbers. */
 export const STRIP_FOOT =
-  'mt-[-0.35rem] mb-[1.4rem] max-w-[74ch] text-[0.73rem] leading-[1.5] text-(--dim)'
+  'mt-[-0.35rem] mb-[1.4rem] max-w-[74ch] text-[0.73rem] leading-[1.5] text-muted-foreground'
 
 /** A rule and a small-caps label, opening a section inside a tab body. */
 export const SECTION_HEAD =
-  'mt-10 mr-0 mb-[0.85rem] ml-0 flex flex-wrap items-baseline gap-x-[0.7rem] gap-y-[0.3rem] border-t border-t-(--border-soft) pt-[1.4rem] text-[0.7rem] font-semibold tracking-[0.13em] text-(--dim) uppercase'
+  'mt-10 mr-0 mb-[0.85rem] ml-0 flex flex-wrap items-baseline gap-x-[0.7rem] gap-y-[0.3rem] border-t border-t-subtle pt-[1.4rem] text-[0.7rem] font-semibold tracking-[0.13em] text-muted-foreground uppercase'
 
 /** The subtitle beside a section head, back in sentence case. */
 export const SECTION_HEAD_SMALL = 'text-[0.76rem] font-normal tracking-normal normal-case'
@@ -33,4 +33,4 @@ export const CHIP = 'rounded-full border px-[0.48rem] py-[0.1rem] text-[0.68rem]
  * reads as available but not asked for. A constant because some thirty call
  * sites spell it.
  */
-export const GHOST_BTN = 'text-(--text-muted)'
+export const GHOST_BTN = 'text-subdued'
