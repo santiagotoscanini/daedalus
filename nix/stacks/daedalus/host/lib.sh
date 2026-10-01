@@ -351,8 +351,8 @@ commit_email() {
 # A root verb whose values no list can hold (a slug, a key name) or that
 # carries a payload (a sealed secret) is a template unit, started by the
 # helper as `<unit>@<run id>` after it wrote the request to
-# `<rootRunDir>/<run id>.json` (stacks/daedalus controller.nix, the header's
-# `run file`) — root's, 0600, in a directory only root can open. The unit runs
+# `<rootRunDir>/<run id>.json` (ARCHITECTURE.md "The root
+# helper") — root's, 0600, in a directory only root can open. The unit runs
 # as the operator and never opens it: systemd reads it as root and hands it
 # over as the credential `request` (`LoadCredential=request:…/%i.json`), a
 # private read-only copy in $CREDENTIALS_DIRECTORY that goes when the unit
@@ -397,23 +397,18 @@ run_payload() {
 # nothing another process journals, can pass for a refusal. The words are
 # printed too, for the unit's own journal and the page's progress.
 #
-# journald ties a datagram to its unit by reading the sender's /proc entry,
-# and a `logger` already reaped lands in no unit (measured: 66 of 100), so the
-# sender is held as an unreaped child of a `sleep` for a second: its entry is
-# then always the unit's.
+# `daedalus-agent outcome` sends the entry and stays alive until journald has
+# stored it: journald ties a datagram to its unit by reading the sender's
+# /proc entry, so a sender gone by then would land in no unit.
 #
 # `verb_done` and `refuse` are how a script says it. A refusal is not a
 # failure: the unit declined, exits 0, and leaves no failed unit and no mail.
 # A unit that exits 0 without an outcome entry is `done` with its last line;
-# a non-zero exit is `failed`, whatever it said. Needs `logger` (util-linux)
-# and `sleep` on PATH. Never fails: an entry that could not be written leaves
-# the helper to read the run by its last line.
+# a non-zero exit is `failed`, whatever it said. Needs `daedalus-agent` and
+# `journalctl` on PATH (mkAgent puts them there). Never fails: an entry that
+# could not be written leaves the helper to read the run by its last line.
 outcome() {
-  local kind="$1" words="${2-}" detail
-  printf '%s\n' "$words"
-  detail="$(printf '%s' "$words" | tr '\n\r' '  ' | head -c 2000)"
-  (printf 'MESSAGE=outcome: %s\nDAEDALUS_OUTCOME=%s\nDAEDALUS_DETAIL=%s\n' "$kind" "$kind" "$detail" |
-    logger --journald & exec sleep 1) 2>/dev/null || true
+  daedalus-agent outcome "$1" "${2-}" 2>/dev/null || printf '%s\n' "${2-}"
 }
 
 # The run did what it was asked; $1 says what. The script goes on.

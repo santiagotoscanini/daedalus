@@ -1,5 +1,5 @@
 # Restart the box: the root helper's `reboot` verb (stacks/daedalus
-# controller.nix, `root`). The helper starts this unit and streams what it
+# root-helper.nix). The helper starts this unit and streams what it
 # prints; its outcome entry (host/lib.sh `outcome`) is the answer.
 #
 # There is deliberately no poweroff, halt or shutdown here, nor a verb for

@@ -46,7 +46,9 @@
 //! unit exits 0, so a refusal is not a failed unit) or `done` — and `done`
 //! with its last line when it wrote none. The outcome entry is one journal
 //! entry carrying `OUTCOME_FIELD` (`done` or `refused`) and `DETAIL_FIELD`,
-//! written by host/lib.sh `outcome` and taken only when journald's own
+//! written by host/lib.sh `outcome` through `daedalus-agent outcome`
+//! (outcome.rs, which stays alive until journald has stored it, so the
+//! entry is always the unit's) and taken only when journald's own
 //! fields vouch for it (helper.rs `vouched`: the unit run's
 //! `_SYSTEMD_INVOCATION_ID`, a root or operator `_UID`), never by its text:
 //! a line a unit prints, or an entry another process journals, cannot pass
@@ -90,6 +92,9 @@ pub mod runs;
 
 #[cfg(target_os = "linux")]
 pub mod helper;
+
+#[cfg(target_os = "linux")]
+pub mod outcome;
 
 /// The longest request line read: the largest payload, JSON-escaped, and
 /// room for the rest.

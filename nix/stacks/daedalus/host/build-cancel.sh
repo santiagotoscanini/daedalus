@@ -1,6 +1,6 @@
 # The root helper's `build-cancel` verb: `daedalus-build-cancel@<app>.service`
-# (build-agent.nix), started by the helper (stacks/daedalus controller.nix,
-# `root`) with the app it names as the instance, `$1` here.
+# (build-agent.nix), started by the helper (stacks/daedalus root-helper.nix)
+# with the app it names as the instance, `$1` here.
 #
 # Inlined by build-agent.nix after host/lib.sh and host/build-stages/states.sh;
 # expects STATUS (build-status.json, in the root-only verbs directory) and

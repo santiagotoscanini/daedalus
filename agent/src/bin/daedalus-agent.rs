@@ -30,6 +30,9 @@ fn main() {
         // One connection of the box's root helper (root/): systemd starts
         // it per connection to its socket, never a person.
         "root-helper" => root_helper(rest),
+        // A root verb's unit stating how its run ended (root/outcome.rs):
+        // host/lib.sh `outcome` runs it, never a person.
+        "outcome" => outcome(rest),
         "claude" => claude_cmd(rest),
         // A resumed Claude session's terminal on Windows (os/windows/holder.rs):
         // started by the tray as a detached job, never by hand.
@@ -69,6 +72,7 @@ fn print_help() {
          claude restart       ask the session to restart `claude remote-control`\n  \
          claude-holder …      (Windows) a resumed session's terminal; the tray starts it\n  \
          root-helper --table FILE\n                       (the box) one connection to the root helper; systemd starts it\n  \
+         outcome done|refused WORDS\n                       (the box) a root verb's unit says how its run ended (host/lib.sh)\n  \
          version              print the version"
     );
 }
@@ -81,6 +85,16 @@ fn root_helper(args: &[String]) -> Result<()> {
 #[cfg(not(target_os = "linux"))]
 fn root_helper(_args: &[String]) -> Result<()> {
     bail!("`root-helper` runs on the box, under systemd")
+}
+
+#[cfg(target_os = "linux")]
+fn outcome(args: &[String]) -> Result<()> {
+    daedalus_agent::root::outcome::main(args)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn outcome(_args: &[String]) -> Result<()> {
+    bail!("`outcome` runs in a root verb's unit on the box")
 }
 
 fn run_as_service() -> Result<()> {

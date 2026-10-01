@@ -197,9 +197,14 @@ check "the command runs, setpriv does not" '[ "$out" = "$(printf "ran\nstatus ke
 # ── 5. a refusal is one structured journal entry, and exit 0 ──────────────
 # The root helper reads a run's outcome from DAEDALUS_OUTCOME, matched by
 # the unit's invocation (agent src/root/mod.rs): never from a line's text.
+# `daedalus-agent outcome` sends the entry (agent src/root/outcome.rs, which
+# has its own tests); the stub records what lib.sh hands it, and prints the
+# words as the binary does.
 echo "# outcome: refuse"
-stub logger <<'EOF'
-cat >>"$LOGGED"
+stub daedalus-agent <<'EOF'
+[ "$1" = outcome ] || exit 2
+printf 'DAEDALUS_OUTCOME=%s\nDAEDALUS_DETAIL=%s\n' "$2" "$3" >>"$LOGGED"
+printf '%s\n' "$3"
 EOF
 export LOGGED="$T/logged"
 : >"$LOGGED"
@@ -209,8 +214,8 @@ rc=0
 out="$(bash "$T/refuse.sh" 2>&1)" || rc=$?
 check "a refusal exits 0" '[ "$rc" -eq 0 ]'
 check "and stops the run" '! grep -q "not reached" <<<"$out"'
-check "the entry says refused, on one line" \
-  'grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && grep -qx "DAEDALUS_DETAIL=an apply is running twice over" "$LOGGED"'
+check "the entry says refused, with the words" \
+  'grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && [ "$(sed -n "2,3p" "$LOGGED")" = "$(printf "DAEDALUS_DETAIL=an apply is running\ntwice over")" ]'
 : >"$LOGGED"
 agent "$T/done.sh" 'set -euo pipefail' lib.sh
 echo 'verb_done "rebooting"; echo after' >>"$T/done.sh"

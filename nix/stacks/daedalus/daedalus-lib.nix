@@ -35,7 +35,9 @@ rec {
   #   path                         copied into the store, then its store path
   #   list                         a bash array, each element quoted
   # `excludeShellChecks` passes through to writeShellApplication, which also
-  # runs shellcheck over the whole script when the system is built.
+  # runs shellcheck over the whole script when the system is built. Every
+  # agent gets `daedalus-agent` and `journalctl` on its PATH besides its own
+  # inputs: host/lib.sh `outcome` runs the one and waits through the other.
   mkAgent =
     {
       name,
@@ -45,7 +47,11 @@ rec {
       excludeShellChecks ? [ ],
     }:
     pkgs.writeShellApplication {
-      inherit name runtimeInputs excludeShellChecks;
+      inherit name excludeShellChecks;
+      runtimeInputs = runtimeInputs ++ [
+        (pkgs.callPackage ../../pkgs/daedalus-agent.nix { })
+        config.systemd.package
+      ];
       text =
         lib.concatStrings (lib.mapAttrsToList (n: v: "${n}=${shellValue v}\n") vars)
         + lib.concatMapStrings (f: "\n" + builtins.readFile f) files;
