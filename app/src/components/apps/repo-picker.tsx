@@ -13,15 +13,13 @@
 // end up.
 
 import { Link, useRouter } from '@tanstack/react-router'
-import { Fragment, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
 import type { Repo } from '../../host/github-repos'
 import { cn } from '../../lib/cn'
-import { defaultImage } from '../../lib/site'
-import { useSite } from '../../lib/site-context'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { Chip } from '../viz'
-import { CHIP, GHOST_BTN } from './shared'
+import { Cells, Chips, Derivation, REPO_DESC, REPO_NAME } from './repo-row'
+import { GHOST_BTN } from './shared'
 
 /* The picker's boxes, exported for `NewAppSkeleton`: the placeholder borrows
    them rather than approximating them, which is what keeps the reserved space
@@ -78,11 +76,6 @@ export const REPO_ROW = cn(
 )
 
 export const PICKER_HINT = 'mt-[0.55rem] mb-0 text-[0.7rem] text-muted-foreground'
-
-const REPO_NAME = 'min-w-0 truncate font-semibold'
-const REPO_CHIPS = 'flex items-baseline gap-[0.35rem]'
-const REPO_DESC = 'min-w-0 truncate text-[0.85rem] text-subdued'
-const REPO_META = 'text-right text-[0.78rem] whitespace-nowrap text-muted-foreground'
 
 /* Picked, so the search and the list collapse to the single line they
    produced — the choice is made, and the page below it is the point now. */
@@ -318,118 +311,4 @@ export function RepoPicker({
       <p className={PICKER_HINT}>↑↓ navigate · ↵ {activeTaken ? 'open app' : 'select'}</p>
     </>
   )
-}
-
-/** The four cells of a row, in the order the list's grid tracks expect them. */
-function Cells({ repo, taken }: { repo: Repo; taken: boolean }) {
-  return (
-    <>
-      {/* Readable rather than greyed out: a repo that is already an app is a
-          destination, not a rejected option. */}
-      <span className={cn(REPO_NAME, taken && 'text-subdued')}>{repo.name}</span>
-      <Chips repo={repo} taken={taken} />
-      <span className={REPO_DESC}>{repo.description ?? '—'}</span>
-      <span className={REPO_META}>
-        {repo.language ?? '—'} · {repo.pushedAt ? fmtWhen(repo.pushedAt) : 'never pushed'}
-        {taken && (
-          <span
-            className="ml-2 text-primary opacity-0 transition-opacity duration-[120ms] group-hover/row:opacity-100 group-aria-selected/opt:opacity-100"
-            aria-hidden="true"
-          >
-            →
-          </span>
-        )}
-      </span>
-    </>
-  )
-}
-
-function Chips({ repo, taken, className }: { repo: Repo; taken: boolean; className?: string }) {
-  return (
-    <span className={cn(REPO_CHIPS, className)}>
-      {repo.private && <Chip className={cn(CHIP, 'text-subdued')}>private</Chip>}
-      {repo.archived && (
-        <Chip tone="warn" className={CHIP}>
-          archived
-        </Chip>
-      )}
-      {taken && <Chip className={CHIP}>already an app</Chip>}
-    </span>
-  )
-}
-
-/**
- * What the repository name becomes.
- *
- * The lede promises that everything downstream is derived from this one
- * string; this is that promise rendered, with the name tinted inside each
- * derived value so a single token can be watched propagating into the
- * container, the hostname and the image. Live, because two of the three are
- * overridable in step 2 and the panel is the only place that shows what an
- * override actually did.
- */
-function Derivation({
-  name,
-  hostname,
-  image,
-  postgres,
-}: {
-  name: string
-  hostname: string
-  image: string
-  postgres: boolean
-}) {
-  const site = useSite()
-  const rows = [
-    { label: 'container', value: `app-${name}` },
-    { label: 'hostname', value: hostname.trim() || `${name}.${site.baseDomain}` },
-    { label: 'image', value: image.trim() || defaultImage(site, name) },
-  ]
-  if (postgres) rows.push({ label: 'postgres', value: name })
-
-  return (
-    // A left rule and an indent rather than another bordered panel: these are
-    // consequences of the line above them, not a second thing to read.
-    <dl className="mt-[0.9rem] mr-0 mb-0 ml-0 grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-[0.35rem] border-l border-l-border py-[0.2rem] pr-0 pl-[1.1rem]">
-      {rows.map((r) => (
-        <Fragment key={r.label}>
-          <dt className="text-[0.7rem] tracking-[0.13em] text-muted-foreground uppercase">
-            {r.label}
-          </dt>
-          <dd className="m-0 font-mono text-[0.86em] text-subdued wrap-anywhere">
-            <Threaded value={r.value} token={name} />
-          </dd>
-        </Fragment>
-      ))}
-    </dl>
-  )
-}
-
-/**
- * One occurrence of `token` inside `value`, tinted.
- *
- * Composed from slices rather than from a marked-up string: these values are
- * hostnames and image references, which is exactly the operator-supplied text
- * that must never take a path through innerHTML. An override that no longer
- * contains the name renders plainly — a hostname somebody typed by hand is not
- * a derivation, and colouring a coincidence would be a lie about the mechanism
- * this panel exists to show.
- */
-function Threaded({ value, token }: { value: string; token: string }) {
-  const at = token === '' ? -1 : value.indexOf(token)
-  if (at === -1) return <>{value}</>
-  return (
-    <>
-      {value.slice(0, at)}
-      <span className="text-primary">{token}</span>
-      {value.slice(at + token.length)}
-    </>
-  )
-}
-
-function fmtWhen(iso: string): string {
-  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000)
-  if (days < 1) return 'pushed today'
-  if (days < 30) return `pushed ${String(days)}d ago`
-  return `pushed ${iso.slice(0, 7)}`
 }
