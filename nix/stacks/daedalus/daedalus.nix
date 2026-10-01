@@ -259,6 +259,12 @@ let
       "--add-host=${npmMirror}:host-gateway"
       "--build-arg=NPM_REGISTRY=https://${npmMirror}/"
     ];
+    # A cold build at boot (no tag yet) installs through both: the mirror
+    # modules/verdaccio publishes, and the proxy in front of it.
+    after = lib.optionals (npmMirror != null) [
+      "podman-traefik.service"
+      "podman-verdaccio.service"
+    ];
     gates = [ "podman-app-daedalus.service" ];
   };
 
@@ -823,22 +829,21 @@ in
     # none at all when the build fails, since the new tag would name no image.
     # Here, a failed build refuses the switch with nothing stopped, the
     # previous image keeps running, and a good one leaves the unit a cache
-    # hit. Skipped when the tag already exists — it names its context, so an
-    # Apply that does not move the engine costs one lookup. Run for `boot`
-    # too, so the first start after the reboot does not wait on the mirror.
-    # As the operator: the image lives in their rootless store. Checks run in
-    # name order, hence the `z`: after the upgrade guard and the inhibitors, so
-    # a switch they refuse builds nothing.
+    # hit. The build script skips a tag that already exists — it names its
+    # context, so an Apply that does not move the engine costs one lookup.
+    # Run for `boot` too, so the first start after the reboot does not wait on
+    # the mirror. As the operator, in a cleared environment: the image lives in
+    # their rootless store, and an inherited variable (XDG_DATA_HOME, a
+    # CONTAINERS_* one) would point podman at another. Checks run in name
+    # order, hence the `z`: after the upgrade guard and the inhibitors, so a
+    # switch they refuse builds nothing.
     system.preSwitchChecks.z-daedalus-image = lib.mkIf (appsOn && source == "local") ''
       case "''${2:-}" in
         dry-activate) exit 0 ;;
       esac
       ${pkgs.util-linux}/bin/setpriv --reuid ${config.fleet.operator.user} --regid ${config.fleet.operator.group} --init-groups --inh-caps=-all \
-        ${pkgs.coreutils}/bin/env HOME=${config.fleet.operator.home} XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir} PATH=/run/wrappers/bin \
-        ${pkgs.writeShellScript "app-daedalus-image-prebuild" ''
-          ${pkgs.podman}/bin/podman image exists ${localImage.image} ||
-            exec ${localImage.service.serviceConfig.ExecStart}
-        ''}
+        ${pkgs.coreutils}/bin/env -i HOME=${config.fleet.operator.home} XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir} PATH=/run/wrappers/bin \
+        ${localImage.service.serviceConfig.ExecStart}
     '';
 
     # Its base on System › Updates: the Dockerfile's node, every stage of it. A

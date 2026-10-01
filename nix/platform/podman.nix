@@ -116,6 +116,8 @@ let
       needsDns ? false,
       before ? [ ],
       wantedBy ? [ "multi-user.target" ],
+      # Further units the work needs up first (after= + wants=).
+      after ? [ ],
     }:
     let
       # network-online.target means the link is up, NOT that DNS answers.
@@ -133,12 +135,14 @@ let
         "podman-rootless-ready.service"
         "linger-users.service"
       ]
-      ++ netEdges;
+      ++ netEdges
+      ++ after;
       wants = [
         "podman-rootless-ready.service"
         "linger-users.service"
       ]
-      ++ netEdges;
+      ++ netEdges
+      ++ after;
       path = [ "/run/wrappers" ];
       serviceConfig = {
         Type = "oneshot";
@@ -476,6 +480,9 @@ in
         # what it builds — they are not in the tag, so a flag that changed
         # the image would leave a stale tag behind it.
         buildFlags ? [ ],
+        # Units the build fetches through (a mirror, the proxy serving it),
+        # started before it: a cold build at boot otherwise races them.
+        after ? [ ],
       }:
       let
         # Interpolation imports a literal path into its own
@@ -547,21 +554,30 @@ in
           }
         ) bases;
         # A cold cache pulls the FROM base from its registry, so this
-        # needs real DNS (needsDns), not just network-online.
-        service = mkRootlessOneshot {
-          description = "Build ${image}";
-          needsDns = true;
-          before = gates;
-          wantedBy = gates;
-          execStart = pkgs.writeShellScript "build-${name}-image" ''
-            set -eu
-            cd ${ctx}
-            ${pkgs.podman}/bin/podman build \
-              --tag ${image} \${buildArgs}${labels}
-              --file ${file} \${lib.optionalString (target != null) "\n  --target ${target} \\"}
-              .
-          '';
-        };
+        # needs real DNS (needsDns), not just network-online. An existing
+        # tag is the image this context builds, so a start with it present
+        # (every boot, every restart) builds nothing. `LOCAL_IMAGE` names it
+        # for the weekly prune (platform/podman-prune), which keeps it.
+        service =
+          mkRootlessOneshot {
+            description = "Build ${image}";
+            needsDns = true;
+            before = gates;
+            wantedBy = gates;
+            inherit after;
+            execStart = pkgs.writeShellScript "build-${name}-image" ''
+              set -eu
+              ${pkgs.podman}/bin/podman image exists ${image} && exit 0
+              cd ${ctx}
+              ${pkgs.podman}/bin/podman build \
+                --tag ${image} \${buildArgs}${labels}
+                --file ${file} \${lib.optionalString (target != null) "\n  --target ${target} \\"}
+                .
+            '';
+          }
+          // {
+            environment.LOCAL_IMAGE = image;
+          };
       };
 
     # See the let-binding's doc; state-paths below uses the same mapping.
