@@ -12,6 +12,8 @@
 #              the host agents' scripts built, which shellchecks them
 #   shell      shellcheck over the shell scripts nix never wraps
 #   workflows  actionlint and zizmor over every file in .github/workflows
+#   advisories cargo audit over the three Cargo.lock files and pnpm audit --prod
+#              over app/ and website/ (weekly and by hand only)
 #   codeql     CodeQL's JavaScript/TypeScript and Actions queries; findings land
 #              in the Security tab rather than failing the run
 #
@@ -33,8 +35,9 @@ on:
   pull_request:
     paths-ignore:
       - "website/**"
-  # Weekly as well: CodeQL's queries and the npm registry both move without a
-  # push, and a lockfile that stops installing should be found before a deploy.
+  # Weekly as well: CodeQL's queries, the advisory databases and the npm
+  # registry all move without a push, and a lockfile that stops installing
+  # should be found before a deploy.
   schedule:
     - cron: "17 6 * * 1"
   workflow_dispatch:
@@ -172,6 +175,51 @@ jobs:
           # Fail the run on a finding instead of uploading SARIF: a workflow
           # finding is a one-line fix and belongs in front of the push.
           advanced-security: false
+
+  # Known advisories against what the lockfiles pin: the three Cargo.lock
+  # files and the two pnpm projects' production dependencies. Weekly (and by
+  # hand) only — a new advisory arrives without a push. A finding fails the
+  # run; nothing is installed or built.
+  advisories:
+    name: Advisories (cargo audit, pnpm audit)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+
+      # cargo-audit from the flake's own nixpkgs, against RustSec's database.
+      - name: cargo audit
+        run: |
+          failed=0
+          for lock in agent/Cargo.lock session-host/Cargo.lock session-host/interop/Cargo.lock; do
+            echo "::group::$lock"
+            nix run --inputs-from . nixpkgs#cargo-audit -- audit --file "$lock" || failed=1
+            echo "::endgroup::"
+          done
+          exit "$failed"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # Corepack runs the pnpm each package.json names; audit reads the
+      # lockfile alone.
+      - name: pnpm audit
+        if: ${{ !cancelled() }}
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          failed=0
+          for dir in app website; do
+            echo "::group::$dir"
+            (cd "$dir" && corepack pnpm audit --prod --registry https://registry.npmjs.org/) || failed=1
+            echo "::endgroup::"
+          done
+          exit "$failed"
 
   codeql:
     name: CodeQL
