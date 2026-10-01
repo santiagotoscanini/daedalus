@@ -7,6 +7,7 @@ import type { BuildLane } from '../build-queue'
 import type { BuildStatRow } from '../build-stats'
 import { ACTIVE_BUILD_STATES, type BuildState } from '../builds'
 import { BUILD_LIST_COLUMNS, getBuild, latestSucceeded, listBuilds, toBuildRow } from './builds'
+import { sha256Digest } from './deployments'
 
 // The reads the build UI needs that lib/repo/builds.ts (the queue's own
 // repository) does not have.
@@ -54,12 +55,8 @@ export async function openBuildOf(
   return row
 }
 
-/**
- * The newest deploy that landed this digest. deploy.sh records digests as
- * `sha256:<hex>`; a build status may or may not carry the prefix.
- */
+/** The newest deploy that landed this digest (stored as `sha256:<hex>`, lib/repo/deployments.ts). */
 export async function deploymentOfDigest(appId: string, digest: string) {
-  const hex = digest.replace(/^sha256:/, '')
   const [row] = await db
     .select({
       result: deployments.result,
@@ -67,7 +64,7 @@ export async function deploymentOfDigest(appId: string, digest: string) {
       httpCode: deployments.httpCode,
     })
     .from(deployments)
-    .where(and(eq(deployments.appId, appId), inArray(deployments.digest, [hex, `sha256:${hex}`])))
+    .where(and(eq(deployments.appId, appId), eq(deployments.digest, sha256Digest(digest))))
     .orderBy(desc(deployments.startedAt))
     .limit(1)
   return row

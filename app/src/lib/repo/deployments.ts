@@ -1,109 +1,42 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, gte } from 'drizzle-orm'
 import { db } from '../../host/db'
-import { env } from '../../host/env'
-import { imageInfo } from '../../host/registry'
 import { deployments } from '../../host/schema'
-import { decode, num, obj, optional, str } from '../contract/decode'
 
-// Ingests deploy.sh's journal into Postgres, and reads it back for the UI.
-
-const DEPLOY_STATE = env.get('DEPLOY_STATE_DIR')
-
-const journalLine = obj({
-  startedAt: str,
-  finishedAt: str,
-  app: str,
-  digest: str,
-  previousDigest: optional(str, ''),
-  result: str,
-  durationMs: optional(num, 0),
-  http: optional(str, ''),
-})
-
-type JournalLine = ReturnType<typeof journalLine>
+// The deployments table: deploy.sh's journal as lib/apps/deployments.ts
+// folds it in, and the history the pages read back.
 
 /**
- * Fold `/deploy-state/<app>.log` into the deployments table.
- *
- * Idempotent — the journal is a bounded ring (deploy.sh keeps the last 200
- * lines) that gets re-read on every Deployments tab load and by the build
- * reporter, so re-inserting the same line
- * must be a no-op. The unique index on (app, digest, startedAt) is what makes
- * onConflictDoNothing sufficient.
- *
- * Ingest is a pull rather than a push because most deploys never touch
- * daedalus: the timer and manual runs land only in that script.
+ * The one spelling a digest is stored in: `sha256:<hex>`. Applied on every
+ * write and to every digest a lookup is given, so a match is one equality.
  */
-export async function ingestDeployments(appId: string, appName: string): Promise<void> {
-  let raw: string
-  try {
-    raw = await readFile(join(DEPLOY_STATE, `${appName}.log`), 'utf8')
-  } catch {
-    return // no deploys recorded yet, or the app has no deploy unit
-  }
+export const sha256Digest = (d: string): string => (d.startsWith('sha256:') ? d : `sha256:${d}`)
 
-  const lines = raw
-    .split('\n')
-    .filter((l) => l.trim() !== '')
-    .map((l) => {
-      try {
-        return decode(journalLine, JSON.parse(l))
-      } catch {
-        // A torn last line (appended while we read) is expected; skip it
-        // rather than failing the whole ingest.
-        return null
-      }
-    })
-    .filter((l): l is JournalLine => l !== null)
+/** `digest@startedAt` of the app's rows from `since` on — what an ingest checks a journal against. */
+export async function deploymentKeysSince(appId: string, since: Date): Promise<Set<string>> {
+  const rows = await db
+    .select({ digest: deployments.digest, startedAt: deployments.startedAt })
+    .from(deployments)
+    .where(and(eq(deployments.appId, appId), gte(deployments.startedAt, since)))
+  return new Set(rows.map((r) => deploymentKey(r.digest, r.startedAt)))
+}
 
-  if (lines.length === 0) return
+export const deploymentKey = (digest: string, startedAt: Date): string =>
+  `${sha256Digest(digest)}@${startedAt.toISOString()}`
 
-  // Which of these are new? Resolving image labels costs two registry
-  // round-trips each, so only do it for rows we are actually inserting.
-  const known = new Set(
-    (
-      await db
-        .select({ digest: deployments.digest, startedAt: deployments.startedAt })
-        .from(deployments)
-        .where(eq(deployments.appId, appId))
-    ).map((r) => `${r.digest}@${r.startedAt.toISOString()}`),
-  )
-
-  const fresh = lines.filter(
-    (l) => !known.has(`${l.digest}@${new Date(l.startedAt).toISOString()}`),
-  )
-  if (fresh.length === 0) return
-
-  // Labels are looked up ONCE per digest and stored, not resolved on render:
-  // zot's retention will eventually GC an old manifest and the history should
-  // outlive the image it describes. All digests at once — each lookup is two
-  // requests to the box's own zot, and a first ingest can hold dozens.
-  const digests = [...new Set(fresh.map((l) => l.digest))]
-  const infos = new Map(
-    await Promise.all(digests.map(async (d) => [d, await imageInfo(appName, d)] as const)),
-  )
-
+/**
+ * Insert journal entries. The unique index on (app, digest, startedAt) makes
+ * a line already stored a no-op.
+ */
+export async function insertDeployments(rows: (typeof deployments.$inferInsert)[]): Promise<void> {
+  if (rows.length === 0) return
   await db
     .insert(deployments)
     .values(
-      fresh.map((l) => {
-        const info = infos.get(l.digest)
-        return {
-          appId,
-          digest: l.digest,
-          previousDigest: l.previousDigest || null,
-          result: l.result,
-          httpCode: l.http || null,
-          startedAt: new Date(l.startedAt),
-          finishedAt: new Date(l.finishedAt),
-          durationMs: Number.isFinite(l.durationMs) ? l.durationMs : 0,
-          revision: info?.revision ?? null,
-          sourceUrl: info?.sourceUrl ?? null,
-          imageCreatedAt: info?.createdAt ?? null,
-        }
-      }),
+      rows.map((r) => ({
+        ...r,
+        digest: sha256Digest(r.digest),
+        previousDigest: r.previousDigest ? sha256Digest(r.previousDigest) : null,
+      })),
     )
     .onConflictDoNothing()
 }

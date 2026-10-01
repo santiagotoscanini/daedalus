@@ -11,7 +11,8 @@ import { logTime } from '../format'
 import { effectiveHostname } from '../hostname'
 import { getApp } from '../repo/apps'
 import { overviewBuild, recentBuilds } from '../repo/build-views'
-import { ingestDeployments, listDeployments } from '../repo/deployments'
+import { listDeployments } from '../repo/deployments'
+import { ingestDeployments } from './deployments'
 import {
   activityLog,
   appDatabase,
@@ -152,7 +153,7 @@ export async function loadAppTab(
       // on demand here; the build reporter (core/builds/report.ts) also
       // ingests an app's journal on its own tick while a GitHub Deployment
       // waits for its deploy to land. Ingest is idempotent, so both may run.
-      await ingestDeployments(record.id, name)
+      await ingestDeployments(ctx, record.id, name)
       const [deploys, activity, deploy, builds] = await Promise.all([
         listDeployments(record.id),
         activityLog(ctx, name, 60),

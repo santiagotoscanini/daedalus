@@ -72,12 +72,12 @@ vi.mock('../../lib/repo/apps', () => ({
     return h.app
   },
 }))
-vi.mock('../../lib/repo/deployments', () => ({
-  ingestDeployments: async (appId: string, name: string) => {
+vi.mock('../../lib/apps/deployments', () => ({
+  ingestDeployments: async (_ctx: unknown, appId: string, name: string) => {
     h.ingests.push([appId, name])
   },
-  listDeployments: async () => h.deploys,
 }))
+vi.mock('../../lib/repo/deployments', () => ({ listDeployments: async () => h.deploys }))
 vi.mock('../../host/build-bridge', () => ({ readBuildLogTail: async () => h.log }))
 vi.mock('../../host/contract/domains/site-doc', () => ({
   readCommittedSite: async () => {

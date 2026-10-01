@@ -319,17 +319,18 @@ async function followDeployment(
   if (app === null) {
     status = { state: 'error', description: `${row.app} is no longer registered on ${site.box}.` }
   } else {
-    const deployments = await import('../../lib/repo/deployments')
+    const { ingestDeployments } = await import('../../lib/apps/deployments')
+    const { listDeployments } = await import('../../lib/repo/deployments')
     const now = Date.now()
     if (now - (m.ingestedAt.get(row.appId) ?? 0) >= INGEST_MIN_INTERVAL_MS) {
       m.ingestedAt.set(row.appId, now)
       try {
-        await deployments.ingestDeployments(row.appId, row.app)
+        await ingestDeployments(ctx, row.appId, row.app)
       } catch (e) {
         logOnce(row.id, 'ingest', `deploy journal ingest failed: ${errorText(e)}`)
       }
     }
-    const deploys = await deployments.listDeployments(row.appId, 25)
+    const deploys = await listDeployments(row.appId, 25)
     const match = matchDeploy(deploys, row)
     if (match !== null) {
       status = {
