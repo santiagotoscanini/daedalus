@@ -171,8 +171,9 @@ pub fn read(p: &FsReadParams) -> Result<FsReadResult, WireError> {
 }
 
 /// Write `p.data` to `target` (from [`Root::write_target`]) atomically: a
-/// temp file beside it, then a rename. The temp file is made 0600, so the
-/// content is never readable by others on the way, and given its final mode
+/// temp file beside it, synced, then a rename, and the directory synced. The
+/// temp file is made 0600, so the content is never readable by others on the
+/// way, and given its final mode
 /// (`p.mode`, else the replaced file's, else the umask's default) before the
 /// rename — permission bits only: never setuid, setgid or sticky.
 pub fn write(p: &FsWriteParams, target: &Path) -> Result<(), WireError> {
@@ -204,7 +205,9 @@ pub fn write(p: &FsWriteParams, target: &Path) -> Result<(), WireError> {
         file.set_permissions(std::fs::Permissions::from_mode(mode & 0o777))?;
         file.sync_all()?;
         drop(file);
-        std::fs::rename(&temp, target)
+        std::fs::rename(&temp, target)?;
+        // The rename itself is durable only once its directory is synced.
+        std::fs::File::open(parent)?.sync_all()
     })();
     if let Err(e) = written {
         let _ = std::fs::remove_file(&temp);
