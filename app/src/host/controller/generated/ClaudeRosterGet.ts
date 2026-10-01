@@ -2,7 +2,7 @@
 import type { Roster } from "./Roster";
 
 /**
- * `claude.roster`'s answer: the session's last roster (claude/roster.rs)
+ * `claude.roster`'s answer: the session's last roster (claude/roster/)
  * while it is fresh; `reporting` false and `roster` null otherwise.
  */
 export type ClaudeRosterGet = { reporting: boolean, roster: Roster | null, };

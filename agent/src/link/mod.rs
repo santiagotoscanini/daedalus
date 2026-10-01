@@ -27,8 +27,7 @@
 //! machine with no pin is `unpaired` and dials nobody (node.rs).
 //!
 //! **Enrollment.** A key the app has not approved is held PENDING: the
-//! controller lists it for the app (`nodes.list`, the `nodes.pending`
-//! event) and tells the machine nothing else; the machine shows "waiting
+//! controller lists it for the app (`nodes.list`) and tells the machine nothing else; the machine shows "waiting
 //! for approval" with both fingerprints, its own and the controller's, so
 //! the operator can compare them. When the app's desired set approves the
 //! key (`nodes.set_desired`) the controller upgrades the open connection —

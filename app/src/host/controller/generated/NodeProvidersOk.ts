@@ -3,7 +3,7 @@ import type { ProviderReport } from "./ProviderReport";
 
 /**
  * `nodes.providers`'s answer: the machine's providers as it last pushed
- * them (providers.rs), null until it has, and when they arrived.
+ * them (providers/), null until it has, and when they arrived.
  */
 export type NodeProvidersOk = { id: string, 
 /**

@@ -26,7 +26,7 @@ export type NodeSystemData = {
   /** The full document; null before the machine's first sample reached the controller. */
   telemetry: Telemetry | null
   /**
-   * What the machine's agent read from its providers (agent/src/providers.rs),
+   * What the machine's agent read from its providers (agent/src/providers/),
    * as it last reported them; null until it has.
    */
   providers: ProviderReport[] | null

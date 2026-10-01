@@ -178,7 +178,7 @@ export function RosterBoard({
           states its cost), and the reasoning lives where the behaviour is —
           lib/claude-roster.ts (the two sources, the pid rule, the four verbs),
           lib/claude-meta.ts (the counts, the prompt, why a zero never prints),
-          agent/src/claude/sessions.rs (the selector and its guards). What
+          agent/src/claude/sessions/ (the selector and its guards). What
           stays here is the one thing a reader would otherwise get WRONG, and
           the one limit on what the board is able to claim. */}
       <p className={FOOT}>

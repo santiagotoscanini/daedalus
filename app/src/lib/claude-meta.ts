@@ -5,7 +5,7 @@
 //
 // ── the source, and what it is honest about ───────────────────────────────
 //
-// The machine's agent (agent/src/claude/roster.rs `scan`) makes one pass over
+// The machine's agent (agent/src/claude/roster/transcript.rs `scan`) makes one pass over
 // each transcript whose size or mtime moved and reports the counts below. Two
 // of its decisions are load-bearing here and are the reason this file does
 // not simply print what it is given:

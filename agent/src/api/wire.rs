@@ -283,7 +283,7 @@ pub struct NodeDetail {
 }
 
 /// `nodes.providers`'s answer: the machine's providers as it last pushed
-/// them (providers.rs), null until it has, and when they arrived.
+/// them (providers/), null until it has, and when they arrived.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(test, ts(rename = "NodeProvidersOk"))]
@@ -764,7 +764,7 @@ pub struct ClaudeStatus {
     pub report: Option<Report>,
 }
 
-/// `claude.roster`'s answer: the session's last roster (claude/roster.rs)
+/// `claude.roster`'s answer: the session's last roster (claude/roster/)
 /// while it is fresh; `reporting` false and `roster` null otherwise.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize)]

@@ -7,7 +7,7 @@
 //
 // ── the two sources, and why they stay two ────────────────────────────────
 //
-// The agent's roster (agent/src/claude/roster.rs) carries them separately
+// The agent's roster (agent/src/claude/roster/) carries them separately
 // because they answer different questions and routinely disagree:
 //
 //   agents       `claude agents --json`. Authoritative for what is ALIVE, and
@@ -78,7 +78,7 @@
 // answer the prompt. So the agent resumes a session only in the trusted
 // project directory its transcript's slug names, and refuses anything else up
 // front rather than leaving a unit started and useless — the checks are in
-// agent/src/claude/sessions.rs, and the refusal comes back as the verb's
+// agent/src/claude/sessions/, and the refusal comes back as the verb's
 // outcome. Every machine resumes: the resumed session is a job of the OS of its
 // own (a systemd unit, a launchd job, a detached process under a pseudo-console
 // on Windows), never the agent's child.

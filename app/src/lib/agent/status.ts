@@ -394,10 +394,10 @@ const app = reads<App>()(
 )
 
 /**
- * A telemetry document: the full one (`nodes.telemetry`, the controller's
- * own `telemetry.get`) with drive serials, the heaviest processes, the
- * services that are down and the OS's updates, or the open one `nodes.get`
- * carries without them.
+ * A telemetry document: the full one (`nodes.get` with `full`, the
+ * controller's own `telemetry.get`) with drive serials, the heaviest
+ * processes, the services that are down and the OS's updates, or the open one
+ * without them.
  */
 export const telemetry = reads<Telemetry>()(
   obj({

@@ -56,7 +56,7 @@ export type ProviderMachine = {
   error: string | null
   /** Whether this box may load and unload models here, or only read them. */
   manageable: boolean
-  /** The machine has reported its providers (agent 0.18.0+); always true for the box. */
+  /** The machine has reported its providers; always true for the box. */
   reported: boolean
   /** What the agent found: running, or installed and silent; null with no report of it. */
   presence: { running: boolean; version: string | null } | null

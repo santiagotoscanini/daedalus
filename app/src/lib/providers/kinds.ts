@@ -117,7 +117,7 @@ export function modeOf(labels: readonly string[]): ModelMode {
 
 // A node's provider is read by the node's own agent, on loopback, and
 // reaches this box as the providers document the controller keeps
-// (agent/src/providers.rs; `nodes.providers`). The agent carries the
+// (agent/src/providers/; `nodes.providers`). The agent carries the
 // provider's own words — labels, not modes — and host/controller/wire.ts
 // turns them into the shapes below; nothing here dials a provider.
 

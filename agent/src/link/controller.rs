@@ -24,8 +24,8 @@
 //! the node id of the key the handshake proved and fields within
 //! `Hello::check`'s bounds. Then the key's standing: revoked is told so and
 //! closed; unknown is counted against its address's `UNKNOWN_PER_MINUTE`
-//! and admitted PENDING — restricted: listed and announced to the app
-//! (`nodes.pending`), heartbeats flow, nothing it pushes is kept — within
+//! and admitted PENDING — restricted: listed for the app,
+//! heartbeats flow, nothing it pushes is kept — within
 //! `MAX_PENDING` and `PENDING_PER_IP`; approved gets its policy in the
 //! answer and any commands queued for it. A second connection with the same
 //! key replaces the first. From then on the thread interleaves the

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { apiBase, defaultAlias, modelOf, modeOf, routeFor } from './kinds'
 
 // The gaming PC's Lemonade 10.8.1 catalog of 2026-09-23, as its agent
-// carries it (agent/src/providers.rs: the provider's own words).
+// carries it (agent/src/providers/: the provider's own words).
 const CATALOG = [
   {
     id: 'Chroma1-HD',
