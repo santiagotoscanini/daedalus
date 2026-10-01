@@ -120,7 +120,6 @@ the same directory:
 |---|---|---|
 | `apply-request.json` | `daedalus-apply` | `apply-status.json` + `apply-last.log` + `payload-<id>.json` |
 | `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
-| `claude-code-request.json` | `daedalus-claude-code-update` | `claude-code-status.json` + `claude-code-last.log` |
 
 Five rules make this safe, and each of them was learned the hard way:
 
@@ -205,6 +204,7 @@ helper holding the template's lock, refuses the next.
 | `build` + payload, detached | `daedalus-build@<run>` (build-agent.nix): the engine's build request is the payload; progress and the result go to `/verbs/build-status.json`, root's and read-only in the container; the scheduler follows the run until that file names it (BUILDS.md) | 2026-10-01 |
 | `image-update` + payload, detached | `daedalus-image-update@<run>` (daedalus-verbs.nix): `{targets, actor}` is the payload; one commit, one rebuild, verify, revert on failure; progress in `/verbs/image-update-status.json` under the run's id. A `running` file whose run the controller says has ended reads as failed — no clock | 2026-10-01 |
 | `version-update` + payload, detached | `daedalus-version-update@<run>` (version-update.nix): `{target, values, actor}`; rewrite a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure; `/verbs/version-update-status.json` | 2026-10-01 |
+| `claude-code-update` + payload, detached | `daedalus-claude-code-update@<run>` (claude-code-update.nix): `{actor}`; fetch upstream's latest release manifest, verify its signature, commit and push it in the engine, then hand the rebuild to the engine update; `/verbs/claude-code-update-status.json` | 2026-10-01 |
 
 ---
 

@@ -1,5 +1,6 @@
-# daedalus-claude-code-update — the host side of the `claude-code-update`
-# bridge verb: moving the Claude Code pin this box's CLI is built from.
+# daedalus-claude-code-update — the host side of the root helper's
+# `claude-code-update` verb: moving the Claude Code pin this box's CLI is
+# built from.
 #
 # platform/claude-code/ seals the store binary with DISABLE_UPDATES, so
 # `claude update` is not a path here and a flake bump is the only one. That
@@ -11,7 +12,7 @@
 # means, why the signature is checked, and what makes it refuse.
 #
 # Its own module beside engine-update.nix, and for the same reason: a verb
-# with a script, a unit, a path unit and a reaper is a page of nix.
+# with a script, a unit and a reaper is a page of nix.
 #
 # What it reads from elsewhere:
 #   FLAKE       fleet.config.repo — the lock that names the engine clone. The
@@ -20,7 +21,7 @@
 #               it and the lock is what actually decides.
 #   GIT_EMAIL,
 #   HOSTNAME    the identity of the commit it makes in the engine.
-#   applyDir    daedalus-lib.nix's, like every other bridge agent's.
+#   applyDir    where the engine update's request goes (the handoff).
 
 {
   config,
@@ -34,8 +35,9 @@ let
     applyDir
     workspacesDir
     mkUpdateReaper
-    bridgeAgent
     mkAgent
+    mkRootVerb
+    verbsDir
     operatorHomeVars
     commitVars
     ;
@@ -57,7 +59,9 @@ let
       operatorHomeVars
       // commitVars
       // {
+        # The engine update it hands to is still a bridge verb.
         APPLY_DIR = applyDir;
+        VERBS_DIR = verbsDir;
         FLAKE = config.fleet.config.repo;
         SITE_DIR = config.fleet.site.path;
         HOSTNAME = config.networking.hostName;
@@ -74,47 +78,39 @@ let
   # rebuilding verb.
   updateReaper = mkUpdateReaper {
     name = "daedalus-claude-code-update-reaper";
-    statusFile = "claude-code-status.json";
-    nextSteps = "Check `journalctl -u daedalus-claude-code-update` and `git log` in the engine clone before retrying";
+    dir = verbsDir;
+    statusFile = "claude-code-update-status.json";
+    nextSteps = "Check `journalctl -u 'daedalus-claude-code-update@*'` and `git log` in the engine clone before retrying";
   };
 in
 
 {
-  config = lib.mkIf config.fleet.modules.daedalus.enable {
-    systemd.services.daedalus-claude-code-update = bridgeAgent // {
-      description = "Pin a newer Claude Code release in the engine, on daedalus's behalf";
+  # This one does NOT rebuild — it hands that to the engine update — so it
+  # never runs inside the switch it caused. mkRootVerb's `restartIfChanged =
+  # false` still matters: it lives in the engine, and a bump it makes is
+  # exactly the kind of commit that changes its own ExecStart; restarted
+  # between the push and the handoff it would leave a pinned engine with
+  # nothing asking for the rebuild. A failure here can leave a pushed engine
+  # commit that nothing asked to be built — worth an email rather than a
+  # status nobody reloads.
+  config = lib.mkIf config.fleet.modules.daedalus.enable (mkRootVerb {
+    verb = "claude-code-update";
+    unit = "daedalus-claude-code-update";
+    description = "Pin a newer Claude Code release in the engine, on daedalus's behalf";
+    verbDescription = "Pin upstream's latest Claude Code in the engine and hand the rebuild to the engine update";
+    script = updateScript;
+    # Three small fetches, a signature check and a push. Nothing here
+    # builds; the long budget belongs to the engine verb this hands to.
+    timeoutStartSec = 10 * 60;
+    # `{actor}`: nothing to choose.
+    payloadMax = 1024;
+    execStopPost = [ "${updateReaper}/bin/daedalus-claude-code-update-reaper" ];
+    unitAttrs = {
       after = [
         "network-online.target"
         "linger-users.service"
       ];
       wants = [ "network-online.target" ];
-
-      # This one does NOT rebuild — it hands that to daedalus-engine-update —
-      # so it never runs inside the switch it caused. It still carries the
-      # flag, because it lives in the engine and a bump it makes is exactly
-      # the kind of commit that changes its own ExecStart; being restarted
-      # between the push and the handoff would leave a pinned engine with
-      # nothing asking for the rebuild.
-      restartIfChanged = false;
-
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${updateScript}/bin/daedalus-claude-code-update";
-        ExecStopPost = "${updateReaper}/bin/daedalus-claude-code-update-reaper";
-        # Three small fetches, a signature check and a push. Nothing here
-        # builds; the long budget belongs to the engine verb this hands to.
-        TimeoutStartSec = "10min";
-      };
     };
-
-    systemd.paths.daedalus-claude-code-update = {
-      description = "Watch for a Claude Code pin request";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = "${applyDir}/claude-code-request.json";
-    };
-
-    # A failure here can leave a pushed engine commit that nothing asked to
-    # be built — worth an email rather than a status nobody reloads.
-    fleet.monitoredJobs.daedalus-claude-code-update = { };
-  };
+  });
 }

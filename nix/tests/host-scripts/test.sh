@@ -92,7 +92,8 @@ jq -n --arg u "file://$C" '{root: "root", nodes: {root: {inputs: {daedalus: "dae
 A="$T/apply"
 W="$T/workspaces"
 mkdir -p "$A" "$W" "$T/site"
-echo '{"id":"aaaa-1","actor":"test"}' >"$A/claude-code-request.json"
+mkdir -p "$A/creds"
+jq -n '{id: "aaaa1", verb: "claude-code-update", selectors: {}, payload: ({actor: "test"} | tojson)}' >"$A/creds/request"
 
 stub curl <<'EOF'
 out=/dev/stdout
@@ -113,10 +114,10 @@ EOF
 
 agent "$T/cc.sh" "" lib.sh claude-code-update.sh
 rc=0
-APPLY_DIR="$A" FLAKE="$F" SITE_DIR="$T/site" WORKSPACES_DIR="$W" bash "$T/cc.sh" >"$T/cc.out" 2>&1 || rc=$?
+CREDENTIALS_DIRECTORY="$A/creds" VERBS_DIR="$A" APPLY_DIR="$A" FLAKE="$F" SITE_DIR="$T/site" WORKSPACES_DIR="$W" bash "$T/cc.sh" >"$T/cc.out" 2>&1 || rc=$?
 check "the run fails" '[ "$rc" -ne 0 ]'
 check "at committing, saying the commit was undone" \
-  'jq -e ".state == \"failed\" and .phase == \"committing\" and (.error | test(\"undone\"))" "$A/claude-code-status.json" >/dev/null'
+  'jq -e ".state == \"failed\" and .phase == \"committing\" and (.error | test(\"undone\"))" "$A/claude-code-update-status.json" >/dev/null'
 check "the clone is byte-for-byte as it was" '[ "$(tree_state "$C")" = "$before" ]'
 [ "$fails" -eq 0 ] || cat "$T/cc.out"
 

@@ -1,8 +1,9 @@
+import type { Ctx } from '../core/ctx'
 import { type Decoder, literal, nullable, obj, optional, str } from '../lib/contract/decode'
-import { defineBridge } from './bridge'
+import { defineRootVerb } from './root-verb'
 
-// The app half of moving this box's Claude Code pin. It writes one file and
-// reads another.
+// The app half of moving this box's Claude Code pin: the root helper's
+// `claude-code-update` verb (host/root-verb.ts has the mechanics).
 //
 // The CLI here is a nix package sealed with DISABLE_UPDATES
 // (nix/platform/claude-code/claude-code.nix says why), so `claude update` is
@@ -12,16 +13,17 @@ import { defineBridge } from './bridge'
 // (nix/stacks/daedalus/host/claude-code-update.sh) does exactly that half:
 // fetch the current release, verify the detached signature against
 // Anthropic's published key, commit the manifest into the engine clone, push
-// it, and then publish an `engine-request.json` so the engine-update verb
-// (host/engine-update.ts is its bridge) carries out the rebuild.
+// it, and then hand the rebuild to the engine-update verb
+// (host/engine-update.ts).
 //
 // That handoff is why `state: 'done'` here does not mean the new CLI is
 // installed — it means it is PINNED and the engine update has been asked for.
 // The page follows the engine status from there, and the box's own snapshot
 // ("what the flake holds") is the answer that settles it.
 //
-// No payload and nothing to choose: the release to move to is whatever
-// upstream calls latest, which is the host's answer, published as `to`.
+// Nothing to choose: the payload is the actor, and the release to move to is
+// whatever upstream calls latest, which is the host's answer, published as
+// `to`.
 
 type ClaudeCodeUpdateState = 'idle' | 'running' | 'done' | 'failed'
 
@@ -53,42 +55,20 @@ const CLAUDE_CODE_STATUS: Decoder<ClaudeCodeUpdateStatus> = obj({
   commit: optional(nullable(str), null),
 })
 
-const bridge = defineBridge<ClaudeCodeUpdateStatus>({
-  requestFile: 'claude-code-request.json',
-  statusFile: 'claude-code-status.json',
+const verb = defineRootVerb<ClaudeCodeUpdateStatus>({
+  verb: 'claude-code-update',
   status: CLAUDE_CODE_STATUS,
+  ended: (s) =>
+    `The host agent ended during "${s.phase}" without reporting a result. ` +
+    "Check `journalctl -u 'daedalus-claude-code-update@*'` and `git log` in the engine clone " +
+    'before retrying.',
 })
 
-/**
- * How long a `running` status may go unrefreshed before it is a corpse.
- *
- * Far shorter than the engine's hour, because nothing here builds: a few
- * small fetches, a signature check and a push. The unit's own
- * TimeoutStartSec is 10 minutes (nix/stacks/daedalus/claude-code-update.nix)
- * and this is that plus slack; the two move together. `finishedAt` is the
- * heartbeat: the agent rewrites it at every phase.
- */
-const RUNNING_MAX_MS = 12 * 60_000
+/** The status, with a run that ended without its last word reported as dead (host/root-verb.ts). */
+export const readClaudeCodeUpdateStatus = (
+  ctx: Pick<Ctx, 'controller'>,
+): Promise<ClaudeCodeUpdateStatus> => verb.readStatus(ctx)
 
-/** The status, with a dead run reported as dead. */
-export async function readClaudeCodeUpdateStatus(): Promise<ClaudeCodeUpdateStatus> {
-  const s = await bridge.readStatus()
-  if (s.state !== 'running') return s
-
-  const last = Date.parse(s.finishedAt ?? '')
-  if (Number.isFinite(last) && Date.now() - last < RUNNING_MAX_MS) return s
-
-  return {
-    ...s,
-    state: 'failed',
-    error:
-      `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
-      'Check `journalctl -u daedalus-claude-code-update` and `git log` in the engine clone ' +
-      'before retrying.',
-  }
-}
-
-/** Publish a pin request. Nothing to choose: upstream's latest, or nothing. */
-export async function requestClaudeCodeUpdate(input: { actor: string }): Promise<string> {
-  return bridge.request({ actor: input.actor })
-}
+/** Start a pin. Nothing to choose: upstream's latest, or nothing. */
+export const startClaudeCodeUpdate = (ctx: Pick<Ctx, 'controller'>, input: { actor: string }) =>
+  verb.start(ctx, JSON.stringify({ actor: input.actor }))

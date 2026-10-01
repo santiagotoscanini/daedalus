@@ -39,6 +39,10 @@
 # this pushes, and neither case is ours to resolve. A manifest that is not
 # newer than the one committed, which is a no-op and says so.
 #
+# The root helper's `claude-code-update` verb (claude-code-update.nix), one
+# run at a time; its status and log are root's, in $VERBS_DIR, which the
+# container reads and cannot write.
+#
 # Runs as root because it writes into the engine clone; every git call drops
 # to the operator with setpriv, since that tree is theirs and one root-owned
 # object under .git is the "unable to open loose object" push failure. The
@@ -47,9 +51,8 @@
 
 set -euo pipefail
 
-REQ="$APPLY_DIR/claude-code-request.json"
-STATUS="$APPLY_DIR/claude-code-status.json"
-LOGFILE="$APPLY_DIR/claude-code-last.log"
+STATUS="$VERBS_DIR/claude-code-update-status.json"
+LOGFILE="$VERBS_DIR/claude-code-update-last.log"
 
 # The flake input that carries the manifest, and the manifest's path inside
 # it. Both are the engine's own layout; a configuration that renames the
@@ -92,20 +95,10 @@ errtail() {
   log_errtail "$LOGFILE"
 }
 
-[ -f "$REQ" ] || exit 0
-
-REQ_JSON="$(read_request "$REQ")" || exit 1
-
-REQ_ID="$(jq -r '.id // ""' <<<"$REQ_JSON")"
-[ -n "$REQ_ID" ] || exit 0
-[[ "$REQ_ID" =~ ^[0-9a-fA-F-]+$ ]] || exit 0
+# The run (host/lib.sh run_id, run_payload).
+REQ_ID="$(run_id)" || exit 1
+REQ_JSON="$(run_payload)"
 STARTED_AT="$(date -Is)"
-
-# Replay guard: the path unit fires on a daemon-reload at boot as well as on
-# a write, and without this a completed bump would re-run on every reboot.
-if [ -f "$STATUS" ] && [ "$(published_id "$STATUS")" = "$REQ_ID" ]; then
-  exit 0
-fi
 
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
 

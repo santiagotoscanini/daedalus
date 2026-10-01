@@ -94,9 +94,9 @@ export const fetchNodeClaudeFn = readFn
 
 /* ── moving this box's Claude Code pin ────────────────────────────────── */
 
-export const fetchClaudeCodeUpdateStatus = readFn.handler(async () => {
+export const fetchClaudeCodeUpdateStatus = readFn.handler(async ({ context }) => {
   const { readClaudeCodeUpdateStatus } = await import('../host/claude-code-update')
-  return readClaudeCodeUpdateStatus()
+  return readClaudeCodeUpdateStatus(await context.ctx())
 })
 
 /**
@@ -113,5 +113,5 @@ export const fetchClaudeCodeUpdateStatus = readFn.handler(async () => {
  */
 export const requestClaudeCodeUpdateFn = adminFn.handler(async ({ context }) => {
   const { runClaudeCodeUpdate } = await import('../host/claude-code-flow')
-  return runClaudeCodeUpdate({ actor: context.actor })
+  return runClaudeCodeUpdate({ ctx: await context.ctx(), actor: context.actor })
 })

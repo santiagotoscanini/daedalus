@@ -1,85 +1,132 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readClaudeCodeUpdateStatus } from './claude-code-update'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Ctx } from '../core/ctx'
 
-// The staleness rule, against this verb's own clock (RUNNING_MAX_MS in
-// claude-code-update.ts says why it is not the engine's hour). A test that
-// passed for both numbers would not be testing the one that matters.
+// The Claude Code pin as the app sees it: its status, believed while its run
+// is (host/root-verb.ts), and its one flow — refused under an engine
+// override or while an engine update runs, otherwise a detached
+// `claude-code-update` whose payload is the actor. A fake Ctx's controller
+// records the starts; the status files are real, in temp directories.
 
-let dir: string
-let previous: string | undefined
+let verbs: string
+let apply: string
+let site: string
+let started: unknown[][]
+let follow: unknown
+const previous: Record<string, string | undefined> = {}
+
+const ctx = {
+  controller: {
+    rootFollow: async () => follow,
+    rootStart: async (...args: unknown[]) => {
+      started.push(args)
+      return { run: 'r1', verb: 'claude-code-update', outcome: null, detail: '', verbs: [] }
+    },
+  },
+} as unknown as Pick<Ctx, 'controller'>
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'ccupd-'))
-  previous = process.env.APPLY_DIR
-  process.env.APPLY_DIR = dir
+  verbs = await mkdtemp(join(tmpdir(), 'ccupd-'))
+  apply = await mkdtemp(join(tmpdir(), 'ccupd-apply-'))
+  site = await mkdtemp(join(tmpdir(), 'ccupd-site-'))
+  for (const k of ['VERBS_DIR', 'APPLY_DIR', 'SITE_PATH']) previous[k] = process.env[k]
+  process.env.VERBS_DIR = verbs
+  process.env.APPLY_DIR = apply
+  process.env.SITE_PATH = site
+  started = []
+  follow = { run: { outcome: null, detail: '' } }
 })
 
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true })
-  if (previous === undefined) delete process.env.APPLY_DIR
-  else process.env.APPLY_DIR = previous
+  for (const [k, v] of Object.entries(previous)) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
+  for (const d of [verbs, apply, site]) await rm(d, { recursive: true, force: true })
 })
 
-const status = (state: string, minutesAgo: number, phase = 'committing') =>
+const status = (state: string, phase = 'committing') =>
   writeFile(
-    join(dir, 'claude-code-status.json'),
+    join(verbs, 'claude-code-update-status.json'),
     JSON.stringify({
-      id: 'abc',
+      id: 'r0',
       state,
       phase,
       error: '',
       from: '2.1.259',
       to: '2.1.281',
-      startedAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
-      finishedAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+      startedAt: '2026-10-01T10:00:00Z',
+      finishedAt: '2026-10-01T10:00:00Z',
       commit: '',
     }),
   )
 
-describe('a pin that stopped writing is reported as failed', () => {
-  it('a fresh running status is left alone, versions included', async () => {
-    await status('running', 1)
-    const s = await readClaudeCodeUpdateStatus()
+async function modules() {
+  vi.resetModules()
+  return {
+    ...(await import('./claude-code-update')),
+    ...(await import('./claude-code-flow')),
+  }
+}
+
+describe('the status', () => {
+  it('a running pin is left alone while its run goes on, versions included', async () => {
+    await status('running')
+    const { readClaudeCodeUpdateStatus } = await modules()
+    const s = await readClaudeCodeUpdateStatus(ctx)
     expect(s.state).toBe('running')
     expect(s.from).toBe('2.1.259')
     expect(s.to).toBe('2.1.281')
   })
 
-  // Either side of RUNNING_MAX_MS. A push over a slow line is the reason
-  // there is any slack at all past the unit's own timeout.
-  it('a slow-but-live run inside the unit timeout is left alone', async () => {
-    await status('running', 9)
-    expect((await readClaudeCodeUpdateStatus()).state).toBe('running')
-  })
-
-  it('a running status past the unit timeout becomes failed, phase kept', async () => {
-    await status('running', 15)
-    const s = await readClaudeCodeUpdateStatus()
+  it('a running pin whose run has ended is failed, phase kept', async () => {
+    await status('running')
+    follow = { run: { outcome: 'failed', detail: '' } }
+    const { readClaudeCodeUpdateStatus } = await modules()
+    const s = await readClaudeCodeUpdateStatus(ctx)
     expect(s.state).toBe('failed')
     expect(s.phase).toBe('committing')
-    expect(s.error).toMatch(/stopped writing during "committing"/)
+    expect(s.error).toMatch(/ended during "committing"/)
     expect(s.error).toMatch(/daedalus-claude-code-update/)
   })
+})
 
-  // The engine's window would call this alive. Nothing here builds, so an
-  // hour of silence is an hour of a dead agent holding the button disabled.
-  it("does not inherit the engine verb's hour", async () => {
-    await status('running', 30)
-    expect((await readClaudeCodeUpdateStatus()).state).toBe('failed')
+describe('runClaudeCodeUpdate', () => {
+  it('starts the pin with the actor as its payload', async () => {
+    const { runClaudeCodeUpdate } = await modules()
+    expect(await runClaudeCodeUpdate({ ctx, actor: 'op@example.test' })).toEqual({
+      ok: true,
+      id: 'r1',
+    })
+    expect(started[0]?.slice(0, 2)).toEqual(['claude-code-update', {}])
+    expect(JSON.parse(String(started[0]?.[2]))).toEqual({ actor: 'op@example.test' })
   })
 
-  it('terminal states are never rewritten, and no file is idle', async () => {
-    for (const state of ['done', 'failed', 'idle']) {
-      await status(state, 500)
-      expect((await readClaudeCodeUpdateStatus()).state).toBe(state)
-    }
-    await rm(join(dir, 'claude-code-status.json'))
-    const s = await readClaudeCodeUpdateStatus()
-    expect(s.state).toBe('idle')
-    expect(s.id).toBeNull()
-    expect(s.from).toBe('')
+  it('is refused while a pin runs, or while an engine update does', async () => {
+    await status('running', 'fetching')
+    let m = await modules()
+    expect(await m.runClaudeCodeUpdate({ ctx, actor: 'op' })).toEqual({
+      ok: false,
+      code: 'busy',
+      reason: 'a Claude Code pin is already running (fetching)',
+    })
+    await rm(join(verbs, 'claude-code-update-status.json'))
+    await writeFile(
+      join(apply, 'engine-status.json'),
+      JSON.stringify({
+        id: 'e1',
+        state: 'running',
+        phase: 'building',
+        finishedAt: new Date().toISOString(),
+      }),
+    )
+    m = await modules()
+    expect(await m.runClaudeCodeUpdate({ ctx, actor: 'op' })).toMatchObject({
+      ok: false,
+      code: 'refused',
+    })
+    expect(started).toEqual([])
   })
 })
