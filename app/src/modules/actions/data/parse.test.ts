@@ -63,6 +63,7 @@ describe('the workflow file', () => {
     expect(w.runsOn.slice(0, 3)).toEqual(['windows-latest', 'macos-latest', 'ubuntu-latest'])
     expect(w.runsOn).toContain('ubuntu-latest')
     expect([...w.uses].sort()).toEqual([
+      'actions/attest-build-provenance',
       'actions/checkout',
       'actions/download-artifact',
       'actions/upload-artifact',
