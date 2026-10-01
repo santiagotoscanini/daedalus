@@ -54,6 +54,7 @@ fn check_table(path: &str) -> Result<()> {
         serde_json::from_slice(&bytes).with_context(|| format!("{path} is not a verb table"))?;
     table
         .check()
+        .map(drop)
         .map_err(|why| anyhow::anyhow!("{path} would be refused: {why}"))
 }
 
@@ -83,8 +84,8 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
     let table = std::fs::read(path)
         .map_err(anyhow::Error::from)
         .and_then(|b| serde_json::from_slice::<Table>(&b).map_err(anyhow::Error::from))
-        .and_then(|t| t.check().map(|()| t).map_err(anyhow::Error::msg));
-    let table = match table {
+        .and_then(|t| t.check().map_err(anyhow::Error::msg));
+    let checked = match table {
         Ok(t) => t,
         Err(e) => {
             eprintln!("root helper: the table {path} is unusable: {e:#}");
@@ -98,6 +99,7 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
             return Ok(());
         }
     };
+    let table = &checked.table;
 
     if !peer_allowed(peer, table.allow_uid) {
         let who = peer.map_or("a peer without credentials".into(), |u| format!("uid {u}"));
@@ -128,7 +130,7 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
             return Ok(());
         }
     };
-    let resolved = match table.resolve(&req) {
+    let resolved = match checked.resolve(&req) {
         Ok(r) => r,
         Err((c, msg)) => {
             eprintln!(
@@ -141,7 +143,7 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
     };
     match resolved {
         Resolved::Status => {
-            let verbs = status(&table);
+            let verbs = status(table);
             send(
                 &mut out,
                 &Line::Result {
@@ -158,7 +160,7 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
             run_file,
         } => {
             eprintln!("root helper: {verb} (id {}) starts {unit}", req.id);
-            let (outcome, detail) = run(&table, &unit, timeout, run_file.as_ref(), &mut out);
+            let (outcome, detail) = run(table, &unit, timeout, run_file.as_ref(), &mut out);
             eprintln!("root helper: {verb} (id {}) {outcome:?}: {detail}", req.id);
             send(
                 &mut out,

@@ -65,6 +65,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::time::Duration;
 
+use regex_automata::meta::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::deadline::Deadline;
@@ -323,7 +324,7 @@ pub fn valid_free_value(s: &str, max: usize) -> bool {
 /// `MAX_PATTERN_LEN`, and a regex that compiles. What it compiles to matches
 /// a value whole: the regex is wrapped as `^(?:…)$`, so an alternation
 /// (`^[a-z]+|x$`) cannot leave one branch unanchored.
-pub fn check_pattern(p: &PatternSpec) -> Result<regex_automata::meta::Regex, String> {
+pub fn check_pattern(p: &PatternSpec) -> Result<Regex, String> {
     if !(1..=MAX_PATTERN_LEN).contains(&p.max_len) {
         return Err(format!("max_len is 1 to {MAX_PATTERN_LEN}"));
     }
@@ -337,8 +338,7 @@ pub fn check_pattern(p: &PatternSpec) -> Result<regex_automata::meta::Regex, Str
     {
         return Err(format!("{:?} uses {c:?}", p.regex));
     }
-    regex_automata::meta::Regex::new(&format!("^(?:{})$", p.regex))
-        .map_err(|e| format!("{:?}: {e}", p.regex))
+    Regex::new(&format!("^(?:{})$", p.regex)).map_err(|e| format!("{:?}: {e}", p.regex))
 }
 
 /// A run id: `[A-Za-z0-9_-]{1,64}`.
@@ -389,8 +389,9 @@ fn expand(unit: &str, selectors: &BTreeMap<String, String>) -> String {
     })
 }
 
-/// One table entry, by the rules the evaluation asserts.
-fn check_verb(verb: &str, spec: &VerbSpec) -> Result<(), String> {
+/// One table entry, by the rules the evaluation asserts: its patterns,
+/// compiled, or why not.
+fn check_verb(verb: &str, spec: &VerbSpec) -> Result<Patterns, String> {
     if !valid_name(verb) {
         return Err("not a verb name ([a-z][a-z0-9-]{0,31})".into());
     }
@@ -402,6 +403,7 @@ fn check_verb(verb: &str, spec: &VerbSpec) -> Result<(), String> {
     }
     let named = placeholders(&spec.unit)?;
     let declared: BTreeSet<String> = spec.selectors.keys().cloned().collect();
+    let mut compiled = BTreeMap::new();
     if spec.run_file() {
         // Every value travels in the run file; the unit is a template the
         // run id instantiates.
@@ -425,7 +427,8 @@ fn check_verb(verb: &str, spec: &VerbSpec) -> Result<(), String> {
             if declared.contains(name) {
                 return Err(format!("{name:?} is both a selector and a pattern"));
             }
-            check_pattern(p).map_err(|why| format!("pattern {name:?}: {why}"))?;
+            let re = check_pattern(p).map_err(|why| format!("pattern {name:?}: {why}"))?;
+            compiled.insert(name.clone(), (p.max_len, re));
         }
         if let Some(max) = spec.payload_max {
             if !(1..=MAX_PAYLOAD).contains(&max) {
@@ -454,13 +457,25 @@ fn check_verb(verb: &str, spec: &VerbSpec) -> Result<(), String> {
     if !valid_unit(&expand(&spec.unit, &sample)) {
         return Err(format!("{:?} is not a .service name", spec.unit));
     }
-    Ok(())
+    Ok(compiled)
+}
+
+/// A verb's pattern selectors, compiled: selector → its cap and its regex.
+type Patterns = BTreeMap<String, (usize, Regex)>;
+
+/// A table `Table::check` passed, with every pattern compiled once: the only
+/// thing a request is resolved against.
+#[derive(Debug)]
+pub struct Checked {
+    pub table: Table,
+    /// Verb → its compiled patterns.
+    patterns: BTreeMap<String, Patterns>,
 }
 
 impl Table {
     /// Every rule the evaluation asserts, again: a table this refuses
     /// makes the helper answer nothing but `internal`.
-    pub fn check(&self) -> Result<(), String> {
+    pub fn check(self) -> Result<Checked, String> {
         for (what, p) in [
             ("systemctl", &self.systemctl),
             ("journalctl", &self.journalctl),
@@ -469,19 +484,34 @@ impl Table {
                 return Err(format!("{what} must be an absolute path, not {p:?}"));
             }
         }
+        let mut patterns = BTreeMap::new();
         for (verb, spec) in &self.verbs {
-            check_verb(verb, spec).map_err(|why| format!("verb {verb:?}: {why}"))?;
+            let compiled = check_verb(verb, spec).map_err(|why| format!("verb {verb:?}: {why}"))?;
             if spec.run_file() && !self.run_dir.as_deref().is_some_and(|d| d.starts_with('/')) {
                 return Err(format!(
                     "verb {verb:?} takes a run file, and the table names no absolute run_dir"
                 ));
             }
+            patterns.insert(verb.clone(), compiled);
         }
-        Ok(())
+        Ok(Checked {
+            table: self,
+            patterns,
+        })
     }
 
+    /// Every verb this table answers, `status` first.
+    pub fn known(&self) -> Vec<String> {
+        std::iter::once(STATUS_VERB.to_string())
+            .chain(self.verbs.keys().cloned())
+            .collect()
+    }
+}
+
+impl Checked {
     /// A request, against the table: the unit it starts, or why not.
     pub fn resolve(&self, req: &Request) -> Result<Resolved, Refusal> {
+        let t = &self.table;
         if !valid_id(&req.id) {
             return Err((
                 code::BAD_REQUEST,
@@ -497,27 +527,26 @@ impl Table {
             }
             return Ok(Resolved::Status);
         }
-        let spec = self.verbs.get(&req.verb).ok_or_else(|| {
-            (
+        let (Some(spec), Some(patterns)) = (t.verbs.get(&req.verb), self.patterns.get(&req.verb))
+        else {
+            return Err((
                 code::UNKNOWN_VERB,
                 format!(
                     "no verb {:?}; this helper knows {}",
                     req.verb.chars().take(40).collect::<String>(),
-                    self.known().join(", ")
+                    t.known().join(", ")
                 ),
-            )
-        })?;
+            ));
+        };
         let bad = |msg: String| Err((code::BAD_REQUEST, msg));
         for (k, v) in &req.selectors {
             if let Some(allowed) = spec.selectors.get(k) {
                 if !allowed.contains(v) {
                     return bad(format!("`{}`: {k} is not one of its values", req.verb));
                 }
-            } else if let Some(p) = spec.patterns.get(k) {
-                // The floor, then the regex; the table was checked at start,
-                // so a pattern that does not compile is not this caller's.
-                let fits = valid_free_value(v, p.max_len)
-                    && check_pattern(p).is_ok_and(|re| re.is_match(v.as_str()));
+            } else if let Some((max_len, re)) = patterns.get(k) {
+                // The floor, then the regex.
+                let fits = valid_free_value(v, *max_len) && re.is_match(v.as_str());
                 if !fits {
                     return bad(format!("`{}`: {k} does not have its shape", req.verb));
                 }
@@ -557,7 +586,7 @@ impl Table {
                 run_file: None,
             });
         }
-        let Some(dir) = self.run_dir.as_deref() else {
+        let Some(dir) = t.run_dir.as_deref() else {
             return Err((code::INTERNAL, "the table names no run_dir".into()));
         };
         let template = spec.unit.trim_end_matches(".service").to_string();
@@ -578,13 +607,6 @@ impl Table {
                 template,
             }),
         })
-    }
-
-    /// Every verb this table answers, `status` first.
-    pub fn known(&self) -> Vec<String> {
-        std::iter::once(STATUS_VERB.to_string())
-            .chain(self.verbs.keys().cloned())
-            .collect()
     }
 }
 
@@ -652,8 +674,7 @@ mod tests {
 
     #[test]
     fn a_verb_resolves_to_its_unit_and_nothing_else() {
-        let t = table();
-        t.check().unwrap();
+        let t = table().check().unwrap();
         assert_eq!(
             t.resolve(&req("reboot", &[])).unwrap(),
             Resolved::Run {
@@ -677,7 +698,7 @@ mod tests {
 
     #[test]
     fn what_a_caller_cannot_say() {
-        let t = table();
+        let t = table().check().unwrap();
         let code_of = |r: Request| t.resolve(&r).unwrap_err().0;
         assert_eq!(code_of(req("poweroff", &[])), code::UNKNOWN_VERB);
         assert_eq!(code_of(req("Reboot", &[])), code::UNKNOWN_VERB);
@@ -843,8 +864,7 @@ mod tests {
 
     #[test]
     fn a_pattern_value_goes_to_the_run_file_never_the_unit() {
-        let t = run_table();
-        t.check().unwrap();
+        let t = run_table().check().unwrap();
         let Resolved::Run { unit, run_file, .. } = t
             .resolve(&req("clone", &[("repo", "octo/hello.world")]))
             .unwrap()
@@ -895,7 +915,7 @@ mod tests {
                 max_len: 40,
             },
         );
-        t.check().unwrap();
+        let t = t.check().unwrap();
         let fits = |v: &str| t.resolve(&req("clone", &[("repo", v)])).is_ok();
         assert!(fits("abc") && fits("x"));
         for bad in ["ABC/../x", "abc/def", "ABCx", "abc x"] {
@@ -905,7 +925,7 @@ mod tests {
 
     #[test]
     fn a_payload_is_capped_and_only_for_the_verb_that_takes_one() {
-        let t = run_table();
+        let t = run_table().check().unwrap();
         let with = |verb: &str, sel: &[(&str, &str)], payload: Option<&str>| {
             let mut r = req(verb, sel);
             r.payload = payload.map(str::to_string);
