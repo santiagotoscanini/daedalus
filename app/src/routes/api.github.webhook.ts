@@ -150,14 +150,14 @@ async function handleDelivery(delivery: Delivery, deps: WebhookDeps): Promise<Re
   const plan = await planDelivery(delivery, deps)
   if (plan instanceof Response) return plan
 
-  const [{ withTransaction }, { recordDelivery, setDeliveryOutcome }, { insertOrSupersedeQueued }] =
+  const [{ db }, { recordDelivery, setDeliveryOutcome }, { insertOrSupersedeQueued }] =
     await Promise.all([
       import('../host/db'),
       import('../lib/repo/github-deliveries'),
       import('../lib/repo/builds'),
     ])
 
-  const done = await withTransaction(async (tx): Promise<Reply | null> => {
+  const done = await db.transaction(async (tx): Promise<Reply | null> => {
     const fresh = await recordDelivery(tx, {
       id: delivery.id,
       event: delivery.event,
@@ -221,7 +221,7 @@ async function planPush(delivery: Delivery, deps: WebhookDeps): Promise<Plan | R
     { activeBuilds, latestSucceeded },
   ] = await Promise.all([
     import('../core/github-app'),
-    import('../lib/repo/app-lookup'),
+    import('../lib/repo/apps'),
     import('../lib/repo/builds'),
   ])
 

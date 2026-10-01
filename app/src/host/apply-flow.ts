@@ -40,7 +40,8 @@ const gate = defineGate({
  * preview and both flows below all read it.
  */
 export async function currentChanges() {
-  const { listApps, driftOf } = await import('../lib/repo/apps')
+  const { listApps } = await import('../lib/repo/apps')
+  const { driftOf } = await import('../lib/apps/manifest-map')
   const { manifestEntries } = await import('./nix-manifest')
 
   const records = await listApps()
@@ -152,7 +153,7 @@ async function commitSwitch(): Promise<boolean> {
 
 const apply = defineFlow<string, { changed: { name: string; fields: string[] }[] }, 'noop'>(gate, {
   prepare: async (actor) => {
-    const { toRegistryExport } = await import('../lib/repo/apps')
+    const { toRegistryExport } = await import('../lib/apps/manifest-map')
     const { requestApply, summarise } = await import('./apply')
     const { renderRegistryFile } = await import('../lib/registry-file')
     const { renderSiteMeta } = await import('../core/site')

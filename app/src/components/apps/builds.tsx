@@ -210,7 +210,7 @@ export function BuildNowButton({
   )
 }
 
-export type OverviewBuild = {
+type OverviewBuild = {
   summary: BuildSummary
   detection: Detection | null
   warningCount: number

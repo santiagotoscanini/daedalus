@@ -24,7 +24,7 @@ vi.mock('../../host/db', () => ({
   },
 }))
 
-const { appForRepository } = await import('./app-lookup')
+const { appForRepository } = await import('./apps')
 
 const REPO_ID = 812_004_117
 const dialect = new PgDialect()

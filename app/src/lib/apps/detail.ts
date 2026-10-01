@@ -9,9 +9,10 @@ import { readSite } from '../../host/site'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
-import { driftOf, getApp } from '../repo/apps'
+import { getApp } from '../repo/apps'
 import { appRepo, defaultImage } from '../site'
 import { stageExposed } from '../stage'
+import { driftOf } from './manifest-map'
 
 // The app detail page's frame: the record, whether it has drifted from nix,
 // and the live signals the hero draws. Null for a name the registry does not

@@ -16,7 +16,7 @@
 //             container, so "over the last N days" is the gateway's ledger or
 //             a range query, never a counter read once.
 
-import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { defineLoader } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'
 import { type ConsumersData, loadConsumers } from './consumers'
 import { type GatewayData, loadGateway } from './gateway'
@@ -27,7 +27,6 @@ export type Tabs = {
   gateway: GatewayData
   consumers: ConsumersData
 }
-export type AiData = TabPayload<typeof manifest, Tabs>
 
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   providers: loadProviders,

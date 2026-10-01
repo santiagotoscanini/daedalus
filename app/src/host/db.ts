@@ -49,8 +49,3 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** The pool or a transaction — for repository functions a caller may need to join to its own. */
 export type Executor = typeof db | Tx
-
-/** Run `fn` in one transaction: every write through `tx` commits together or not at all. */
-export function withTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db.transaction(fn)
-}

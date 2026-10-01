@@ -16,7 +16,7 @@ import {
 
 /* ── runs and jobs ────────────────────────────────────────────────────── */
 
-export type RunStatus = 'queued' | 'in_progress' | 'completed' | 'waiting' | 'pending' | 'requested'
+type RunStatus = 'queued' | 'in_progress' | 'completed' | 'waiting' | 'pending' | 'requested'
 
 export type Run = {
   id: number
@@ -191,7 +191,7 @@ function jobSeconds(job: Job, now: number = Date.now()): number | null {
 
 export type RunnerOs = 'linux' | 'windows' | 'macos' | 'unknown'
 
-export type RunsOn = {
+type RunsOn = {
   os: RunnerOs
   /** GitHub's machines, as opposed to `self-hosted`. */
   hosted: boolean

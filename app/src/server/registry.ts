@@ -149,7 +149,8 @@ export const createAppFn = adminFn
   // or taken label too. All this owes is a record to hand it.
   .validator(asValidator(withMessage(obj({ app: recordField }), 'expected an app to create')))
   .handler(async ({ data }): Promise<{ name: string }> => {
-    const { createApp, validateNewApp } = await import('../lib/repo/apps')
+    const { createApp } = await import('../lib/repo/apps')
+    const { validateNewApp } = await import('../lib/apps/validate')
     return createApp(validateNewApp(data.app))
   })
 
@@ -176,7 +177,8 @@ export const saveApp = adminFn
     ),
   )
   .handler(async ({ data }) => {
-    const { updateApp, validateAppPatch } = await import('../lib/repo/apps')
+    const { updateApp } = await import('../lib/repo/apps')
+    const { validateAppPatch } = await import('../lib/apps/validate')
     await updateApp(data.name, validateAppPatch(data.patch))
     return { ok: true }
   })

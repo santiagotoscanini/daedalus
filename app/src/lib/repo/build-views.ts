@@ -4,32 +4,12 @@ import { apps, builds, deployments } from '../../host/schema'
 import { detectionFromStatus } from '../build-detect'
 import { type BuildSummary, type LiveBuild, summarizeBuild } from '../build-display'
 import type { BuildLane } from '../build-queue'
-import type { BuildSettingsPatch } from '../build-settings'
 import type { BuildStatRow } from '../build-stats'
 import { ACTIVE_BUILD_STATES, type BuildState } from '../builds'
 import { BUILD_LIST_COLUMNS, getBuild, latestSucceeded, listBuilds, toBuildRow } from './builds'
 
 // The reads the build UI needs that lib/repo/builds.ts (the queue's own
-// repository) does not have, and the one write to an app's engine-only build
-// columns.
-
-/**
- * Write the build settings. Deliberately not updateApp: these columns are not
- * EDITABLE_FIELDS, nix never reads them, and updatedAt is left alone so a
- * build setting never reads as a registry edit.
- */
-export async function updateBuildSettings(name: string, patch: BuildSettingsPatch): Promise<void> {
-  const set: Partial<typeof apps.$inferInsert> = {}
-  if (patch.buildOnBox !== undefined) set.buildOnBox = patch.buildOnBox
-  if (patch.buildStrategy !== undefined) set.buildStrategy = patch.buildStrategy
-  if (patch.buildPublish !== undefined) set.buildPublish = patch.buildPublish
-  if (patch.buildEnvPlaceholders !== undefined) {
-    set.buildEnvPlaceholders = patch.buildEnvPlaceholders
-  }
-  if (patch.railpackEnv !== undefined) set.railpackEnv = patch.railpackEnv
-  if (Object.keys(set).length === 0) return
-  await db.update(apps).set(set).where(eq(apps.name, name))
-}
+// repository) does not have.
 
 /** The builds board's rows, newest first. */
 export async function recentBuilds(appId: string, limit = 10): Promise<BuildSummary[]> {

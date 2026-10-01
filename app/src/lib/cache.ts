@@ -35,7 +35,7 @@
 
 type Slot = { at: number; tried: number; value: unknown }
 
-export type SwrCache = {
+type SwrCache = {
   get<T>(key: string, load: () => Promise<T>): Promise<T>
   /**
    * Drop a key, so the next read reloads — for the moment right after an

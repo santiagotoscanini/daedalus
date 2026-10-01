@@ -9,7 +9,7 @@ import { NavIcon, type NavIconName } from './nav-icon'
 // styling and `aria-current`, and navigation is always `replace` so stepping
 // through tabs does not fill the history with every one visited on the way.
 
-export type TabItem<Id extends string = string> = {
+type TabItem<Id extends string = string> = {
   id: Id
   label: ReactNode
   /** The status-dot slot, drawn before the label. See c.$category's TabNav. */

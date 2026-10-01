@@ -85,7 +85,7 @@ export function Policy({
  * `withTime` false leaves the time out: the server and the hydration pass
  * render without it, since only the browser knows its own timezone.
  */
-export function changedBy(
+function changedBy(
   n: Pick<NodeRow, 'id' | 'os' | 'policyChangedBy' | 'policyChangedAt'>,
   withTime = true,
 ): string {

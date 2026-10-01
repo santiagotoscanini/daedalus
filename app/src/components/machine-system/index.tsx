@@ -36,7 +36,7 @@ export { BoxHead, MachineHead } from './shared'
 // Claude and Chromium close every row: the remote-control server and the
 // sessions' eyes exist on each machine.
 
-export type NodeTabSpec = {
+type NodeTabSpec = {
   id: string
   label: string
   boardSpans: readonly number[]

@@ -16,7 +16,7 @@ const INSTALL_WATCH_MS = 60_000
 const INSTALL_POLL_MS = 5_000
 
 /** The query /settings validates: the tab plus what GitHub's redirects add. */
-export type GithubLandingSearch = {
+type GithubLandingSearch = {
   tab?: string
   github?: Exclude<GithubCallbackNotice['github'], 'installed'>
   reason?: string

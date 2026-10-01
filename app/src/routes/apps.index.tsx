@@ -200,7 +200,7 @@ function AppsPage() {
   )
 }
 
-export function AppsList({ data }: { data: ListData }) {
+function AppsList({ data }: { data: ListData }) {
   const { apps, applyStatus, external } = data
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')

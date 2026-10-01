@@ -38,15 +38,6 @@ type FtlDevice = {
 }
 
 /**
- * Everything on the LAN as the DHCP tab lists it, for a reader elsewhere —
- * the Machines tab probes each of these for an agent.
- */
-export async function lanDevices(ctx: Ctx): Promise<Device[]> {
-  const dhcp = dhcpConfig((await networkFacts()).dhcp, await loadReservationLines(ctx), undefined)
-  return loadDevices(ctx, dhcp.reservations)
-}
-
-/**
  * Everything on the LAN: what the resolver has seen, and what is reserved.
  *
  * The observed half is the nearest thing this house has to the router's own

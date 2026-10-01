@@ -32,8 +32,8 @@ const h = vi.hoisted(() => ({
   siteChanges: [] as string[],
 }))
 
-vi.mock('../lib/repo/apps', () => ({
-  listApps: async () => h.apps,
+vi.mock('../lib/repo/apps', () => ({ listApps: async () => h.apps }))
+vi.mock('../lib/apps/manifest-map', () => ({
   driftOf: () => h.drift,
   toRegistryExport: () => ({ schemaVersion: 3, apps: {} }),
 }))

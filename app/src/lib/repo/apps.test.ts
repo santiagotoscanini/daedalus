@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ManifestEntry } from '../../host/nix-manifest'
-import { toRow } from '../apps/manifest-map'
+import { driftOf, toRegistryExport, toRow } from '../apps/manifest-map'
+import { validateAppPatch, validateNewApp } from '../apps/validate'
 import { renderRegistryFile } from '../registry-file'
-import { type AppRecord, driftOf, toRegistryExport, validateAppPatch, validateNewApp } from './apps'
+import type { AppRecord } from './apps'
 
 // The registry's central invariant: export → render → parse (what
 // declarations.nix reads back) → export must be lossless, and every field

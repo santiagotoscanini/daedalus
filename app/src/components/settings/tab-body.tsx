@@ -27,7 +27,7 @@ import { Repository } from './repository'
 // Machines and Modules have nothing to draw without theirs, so they wait
 // behind a skeleton instead.
 
-export type SettingsTabData = {
+type SettingsTabData = {
   theme: ThemeChoice
   settings: BoxSettings
   edit: SiteEdit

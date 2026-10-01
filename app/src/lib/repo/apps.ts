@@ -12,22 +12,12 @@ import {
   type NewApp,
   normalizeAuthHealthPath,
 } from '../apps/validate'
+import type { BuildSettingsPatch } from '../build-settings'
 import { appNameError, effectiveHostname, hostnameError } from '../hostname'
 
-// Reads and writes over the app registry.
-//
-// The pure halves live beside it and are re-exported from here, so every
-// importer and every test mock keeps its one path: the request validation in
-// lib/apps/validate.ts, and the manifest ↔ row ↔ export mapping plus the drift
-// comparison against what Nix actually built in lib/apps/manifest-map.ts.
-
-export { driftOf, toRegistryExport } from '../apps/manifest-map'
-export {
-  type AppPatch,
-  type NewApp,
-  validateAppPatch,
-  validateNewApp,
-} from '../apps/validate'
+// Reads and writes over the app registry. The pure halves live beside it: the
+// request validation in lib/apps/validate.ts, and the manifest ↔ row ↔ export
+// mapping plus the drift comparison in lib/apps/manifest-map.ts.
 
 export type AppRecord = typeof apps.$inferSelect & {
   envVars: (typeof appEnvVars.$inferSelect)[]
@@ -305,4 +295,48 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
     if (env !== undefined) await replaceEnvVars(tx, record.id, env)
     if (tasks !== undefined) await replaceTasks(tx, record.id, tasks)
   })
+}
+
+// ── the webhook's lookup and the build settings ────────────────────────────
+
+export type AppRow = typeof apps.$inferSelect
+
+/**
+ * The app pinned to this repository id, else the app named after the repo.
+ *
+ * By id first, so a push from a renamed repo still reaches its app. It does not
+ * build there: the host reads the repository by the app's name, so builds for
+ * the app fail until the app is renamed to match or the repo is renamed back.
+ * The name is only the fallback for an app that is not pinned yet; classifyPush
+ * still refuses a name match whose pin disagrees, so a new repo that takes a
+ * pinned app's old name comes back `repo-mismatch` rather than claiming the app.
+ */
+export async function appForRepository(
+  repoId: number,
+  repoName: string,
+): Promise<AppRow | undefined> {
+  const pinned = await db.query.apps.findFirst({
+    where: eq(apps.githubRepoId, repoId),
+    orderBy: [asc(apps.name)],
+  })
+  if (pinned !== undefined) return pinned
+  return db.query.apps.findFirst({ where: eq(apps.name, repoName.toLowerCase()) })
+}
+
+/**
+ * Write the build settings. Deliberately not updateApp: these columns are not
+ * EDITABLE_FIELDS, nix never reads them, and updatedAt is left alone so a
+ * build setting never reads as a registry edit.
+ */
+export async function updateBuildSettings(name: string, patch: BuildSettingsPatch): Promise<void> {
+  const set: Partial<typeof apps.$inferInsert> = {}
+  if (patch.buildOnBox !== undefined) set.buildOnBox = patch.buildOnBox
+  if (patch.buildStrategy !== undefined) set.buildStrategy = patch.buildStrategy
+  if (patch.buildPublish !== undefined) set.buildPublish = patch.buildPublish
+  if (patch.buildEnvPlaceholders !== undefined) {
+    set.buildEnvPlaceholders = patch.buildEnvPlaceholders
+  }
+  if (patch.railpackEnv !== undefined) set.railpackEnv = patch.railpackEnv
+  if (Object.keys(set).length === 0) return
+  await db.update(apps).set(set).where(eq(apps.name, name))
 }

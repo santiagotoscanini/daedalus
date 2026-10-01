@@ -96,7 +96,8 @@ vi.mock('../../host/nix-manifest', () => ({
   hostnamesTakenBy: async (others: string) => h.taken.filter((x) => x !== others),
 }))
 
-const { createApp, updateApp, validateAppPatch } = await import('./apps')
+const { createApp, updateApp } = await import('./apps')
+const { validateAppPatch } = await import('../apps/validate')
 
 const host = (label: string) => `${label}.${BASE_DOMAIN}`
 

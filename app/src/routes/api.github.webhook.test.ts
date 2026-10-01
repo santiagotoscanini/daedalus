@@ -46,16 +46,18 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('../host/db', () => ({
-  withTransaction: async <T>(fn: (tx: FakeTx) => Promise<T>): Promise<T> => {
-    const tx: FakeTx = {
-      deliveries: new Map(h.deliveries),
-      builds: h.builds.map((b) => ({ ...b })),
-    }
-    h.txs.push(tx)
-    const result = await fn(tx)
-    h.deliveries = tx.deliveries
-    h.builds = tx.builds
-    return result
+  db: {
+    transaction: async <T>(fn: (tx: FakeTx) => Promise<T>): Promise<T> => {
+      const tx: FakeTx = {
+        deliveries: new Map(h.deliveries),
+        builds: h.builds.map((b) => ({ ...b })),
+      }
+      h.txs.push(tx)
+      const result = await fn(tx)
+      h.deliveries = tx.deliveries
+      h.builds = tx.builds
+      return result
+    },
   },
 }))
 vi.mock('../lib/repo/github-deliveries', () => ({
@@ -119,9 +121,7 @@ vi.mock('../lib/repo/builds', () => ({
 }))
 vi.mock('../lib/repo/apps', () => ({
   listApps: async () => h.apps,
-}))
-// The id-first, name-fallback rule itself is lib/repo/app-lookup.test.ts's.
-vi.mock('../lib/repo/app-lookup', () => ({
+  // The id-first, name-fallback rule itself is lib/repo/apps-lookup.test.ts's.
   appForRepository: async (repoId: number, repoName: string) =>
     h.apps.find((a) => a.githubRepoId === repoId) ??
     h.apps.find((a) => a.name === repoName.toLowerCase()),

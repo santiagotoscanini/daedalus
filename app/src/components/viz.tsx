@@ -97,7 +97,7 @@ export function Ring({
 
 /* ── bars ─────────────────────────────────────────────────────────────── */
 
-export type BarItem = { label: string; value: number; display?: string; tone?: Tone }
+type BarItem = { label: string; value: number; display?: string; tone?: Tone }
 
 /**
  * A ranked list as proportional bars — "which of these is the big one".

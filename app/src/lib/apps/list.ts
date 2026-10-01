@@ -6,8 +6,9 @@ import { appStatuses } from '../../host/metrics'
 import { manifestEntries } from '../../host/nix-manifest'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { effectiveHostname } from '../hostname'
-import { driftOf, listApps } from '../repo/apps'
+import { listApps } from '../repo/apps'
 import { stageExposed } from '../stage'
+import { driftOf } from './manifest-map'
 
 // Everything the Apps list page shows: the registry rows, the off-box
 // projects beside them, and the three live facts a row draws — whether the

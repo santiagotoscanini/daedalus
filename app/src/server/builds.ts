@@ -9,7 +9,6 @@ import {
   type LiveBuild,
   summarizeBuild,
 } from '../lib/build-display'
-import type { BuildRow } from '../lib/build-queue'
 import {
   type BuildSettingsPatch,
   buildEnvSizeError,
@@ -38,8 +37,6 @@ const buildRequest = withMessage(
   'expected a build',
 )
 
-const summarize = (row: BuildRow): BuildSummary => summarizeBuild(row)
-
 /** The recent builds of one app, newest first; null when there is no such app. */
 export const fetchBuilds = readFn
   // `limit` is clamped rather than refused: it is a page size, and the only
@@ -51,10 +48,10 @@ export const fetchBuilds = readFn
   )
   .handler(async ({ data }): Promise<BuildSummary[] | null> => {
     const { getApp } = await import('../lib/repo/apps')
-    const { listBuilds, toBuildRow } = await import('../lib/repo/builds')
+    const { recentBuilds } = await import('../lib/repo/build-views')
     const record = await getApp(data.app)
     if (!record) return null
-    return (await listBuilds(record.id, data.limit)).map((r) => summarize(toBuildRow(r)))
+    return recentBuilds(record.id, data.limit)
   })
 
 /** Apps › Builder, the whole tab: fetched only while it is the open one. */
@@ -150,7 +147,7 @@ export const fetchBuild = readFn
     ])
 
     return {
-      ...summarize(row),
+      ...summarizeBuild(row),
       app: row.app,
       reportFailure,
       detection: detectionFromStatus(row.detected),
@@ -327,7 +324,7 @@ export const setBuildSettingsFn = adminFn
       )
       if (tooBig !== null) return { ok: false, reason: tooBig }
     }
-    const { updateBuildSettings } = await import('../lib/repo/build-views')
+    const { updateBuildSettings } = await import('../lib/repo/apps')
     await updateBuildSettings(data.app, data.patch)
     console.info(`[builds] ${actor} set ${Object.keys(data.patch).join(', ')} on ${data.app}`)
     return { ok: true, value: null }

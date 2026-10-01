@@ -68,7 +68,7 @@ const CEREMONY =
   'w-full rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem]'
 
 /** Everything the control needs, and nothing a caller cannot already answer. */
-export type UpdateTarget = {
+type UpdateTarget = {
   container: string
   /** The tag running now. */
   tag: string
@@ -91,7 +91,7 @@ export type UpdateTarget = {
  * to put a list, so there the button is the only way to update and nothing
  * about it changes.
  */
-export type QueueBinding = {
+type QueueBinding = {
   queued: boolean
   /**
    * Set when another queued container already moves this one in lockstep.
