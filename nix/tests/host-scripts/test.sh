@@ -281,34 +281,43 @@ CREDENTIALS_DIRECTORY="$V/creds" bash "$T/version.sh" >/dev/null 2>&1 || rc=$?
 check "a payload that is not a request fails in validating, under the run's id" \
   '[ "$rc" -eq 1 ] && jq -e ".id == \"b2c3d4e5f6071829\" and .state == \"failed\" and .phase == \"validating\" and (.error | test(\"no well-formed target\"))" "$V/verbs/version-update-status.json" >/dev/null'
 
-# ── 10. a pushed Claude Code pin hands the rebuild to the engine update ────
-# As the root helper would start it: a run file of its own in the helper's
-# directory, then that instance of the engine update's template.
-echo "# claude-code-update: the handoff"
+# ── 10. a Claude Code pin run is the pin, then the rebuild, in one run ─────
+# The `claude-code-update` verb names the engine update's unit: its script
+# runs the pin first and goes on, under the same run id, only when the pin
+# moved something. (The pin's own variables are its script's, as mkAgent
+# embeds them; the engine's here name a configuration without the input, so
+# its half ends in validating.)
+echo "# claude-code-update: the pin, then the engine update"
 rm -f "$O/hooks/pre-receive"
-R2="$T/root-runs"
-mkdir -p "$R2"
-: >"$CALLS"
-rc=0
-CREDENTIALS_DIRECTORY="$T/apply/creds" VERBS_DIR="$T/apply" ROOT_RUN_DIR="$R2" FLAKE="$F" \
-  SITE_DIR="$T/site" WORKSPACES_DIR="$T/workspaces" bash "$T/cc.sh" >"$T/cc2.out" 2>&1 || rc=$?
-run="$(sed -n 's/^start --no-block daedalus-engine-update@\([0-9a-f]\{16\}\)\.service$/\1/p' "$CALLS")"
-check "the pin is done, and the engine update started" \
-  '[ "$rc" -eq 0 ] && [ -n "$run" ] && jq -e ".state == \"done\"" "$T/apply/claude-code-update-status.json" >/dev/null'
-check "with a run file carrying the actor" \
-  '[ "$(jq -r "[.id, .verb, (.payload | fromjson | .actor)] | join(\" \")" "$R2/$run.json")" = "$run engine-update test" ]'
-[ "$fails" -eq 0 ] || cat "$T/cc2.out"
-
-# ── 11. the engine update it started reads that run file ──────────────────
-echo "# engine-update: the request is the run file's payload"
 E="$T/engine-run"
-mkdir -p "$E/creds" "$E/verbs"
-cp "$R2/$run.json" "$E/creds/request"
-agent "$T/engine.sh" "VERBS_DIR=$E/verbs FLAKE=$T/none SITE_DIR=$T/none" lib.sh engine-update.sh
+mkdir -p "$E/verbs"
+stub cc-pin <<EOF2
+VERBS_DIR="$E/verbs" FLAKE="$T/config" SITE_DIR="$T/site" WORKSPACES_DIR="$T/workspaces" exec bash "$T/cc.sh"
+EOF2
+agent "$T/engine.sh" "VERBS_DIR=$E/verbs FLAKE=$T/none SITE_DIR=$T/none CLAUDE_CODE_PIN=$T/bin/cc-pin" \
+  lib.sh engine-update.sh
+rc=0
+CREDENTIALS_DIRECTORY="$T/apply/creds" bash "$T/engine.sh" >"$T/cc2.out" 2>&1 || rc=$?
+check "the pin is done" \
+  'jq -e ".id == \"aaaa1\" and .state == \"done\" and .phase == \"complete\"" "$E/verbs/claude-code-update-status.json" >/dev/null'
+check "and the engine update ran next, under the same run" \
+  '[ "$rc" -eq 1 ] && jq -e ".id == \"aaaa1\" and .state == \"failed\" and .phase == \"validating\"" "$E/verbs/engine-update-status.json" >/dev/null'
+[ "$fails" -eq 0 ] || cat "$T/cc2.out"
+rm -f "$E/verbs/engine-update-status.json"
+rc=0
+CREDENTIALS_DIRECTORY="$T/apply/creds" bash "$T/engine.sh" >"$T/cc3.out" 2>&1 || rc=$?
+check "a pin with nothing to move ends the run, and no rebuild starts" \
+  '[ "$rc" -eq 0 ] && jq -e ".phase == \"no-change\"" "$E/verbs/claude-code-update-status.json" >/dev/null && [ ! -e "$E/verbs/engine-update-status.json" ]'
+
+# ── 11. the engine update reads its request from the run file ─────────────
+echo "# engine-update: the request is the run file's payload"
+mkdir -p "$E/creds"
+jq -n '{id: "c3d4e5f607182930", verb: "engine-update", selectors: {}, payload: ({actor: "t"} | tojson)}' \
+  >"$E/creds/request"
 rc=0
 CREDENTIALS_DIRECTORY="$E/creds" bash "$T/engine.sh" >/dev/null 2>&1 || rc=$?
 check "a configuration without the input fails in validating, under the run's id" \
-  '[ "$rc" -eq 1 ] && jq -e ".id == \"$run\" and .state == \"failed\" and .phase == \"validating\"" "$E/verbs/engine-update-status.json" >/dev/null'
+  '[ "$rc" -eq 1 ] && jq -e ".id == \"c3d4e5f607182930\" and .state == \"failed\" and .phase == \"validating\"" "$E/verbs/engine-update-status.json" >/dev/null'
 
 # ── 12. the nodes' DHCP lines: kept, copied, and nothing else let through ──
 echo "# nodes-dhcp"

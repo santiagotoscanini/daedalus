@@ -373,6 +373,12 @@ run_id() {
   take_request | jq -r '.id'
 }
 
+# The verb the run was asked as: the helper's table name, which a unit two
+# verbs share (engine-update.nix) branches on.
+run_verb() {
+  take_request | jq -r '.verb'
+}
+
 # The run's payload — the request the app built — as a JSON object: `{}` when
 # it is not one, so the verb's own validation names what is missing.
 run_payload() {

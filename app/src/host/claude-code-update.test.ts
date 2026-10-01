@@ -86,7 +86,7 @@ describe('the status', () => {
     expect(s.state).toBe('failed')
     expect(s.phase).toBe('committing')
     expect(s.error).toMatch(/ended during "committing"/)
-    expect(s.error).toMatch(/daedalus-claude-code-update/)
+    expect(s.error).toMatch(/daedalus-engine-update@/)
   })
 })
 

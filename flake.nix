@@ -88,7 +88,6 @@
       daedalusModules = [
         "build-agent.nix"
         "builder.nix"
-        "claude-code-update.nix"
         "controller.nix"
         "daedalus-github.nix"
         "daedalus-nodes.nix"

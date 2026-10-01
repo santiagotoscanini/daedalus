@@ -1,5 +1,5 @@
 # Move the Claude Code pin — the engine's own `nix/platform/claude-code/
-# manifest.zst.json` — and hand the rebuild to the engine-update verb.
+# manifest.zst.json` — the first half of the `claude-code-update` verb.
 #
 # The CLI on this box is a nix package, and platform/claude-code/ seals it
 # with DISABLE_UPDATES precisely so that nothing else can move it. That makes
@@ -8,11 +8,12 @@
 #   1. put a newer release manifest in the ENGINE, commit it, push it;
 #   2. move the configuration's `daedalus` lock onto that commit and rebuild.
 #
-# Only (1) is this script's. (2) is `daedalus-engine-update` — already
-# written, already proven, already holding the rebuild lock and the revert —
-# so the last thing this does is start that verb's unit, exactly as the
-# root helper would for System › Updates, and stop. Two small agents composed
-# beat one that re-implements a switch-and-verify it would drift from.
+# Only (1) is this script's. (2) is host/engine-update.sh — already written,
+# already proven, already holding the rebuild lock and the revert — and the
+# verb runs both in one unit, `daedalus-engine-update@<run>`: this first, as
+# that script's child, then the rebuild when this pinned something. Two small
+# scripts composed beat one that re-implements a switch-and-verify it would
+# drift from.
 #
 # ── what "latest" means, and why the signature is checked ─────────────────
 #
@@ -39,9 +40,9 @@
 # this pushes, and neither case is ours to resolve. A manifest that is not
 # newer than the one committed, which is a no-op and says so.
 #
-# The root helper's `claude-code-update` verb (claude-code-update.nix), one
-# run at a time; its status and log are root's, in $VERBS_DIR, which the
-# container reads and cannot write.
+# Run by host/engine-update.sh for the `claude-code-update` verb
+# (engine-update.nix), one run at a time; its status and log are root's, in
+# $VERBS_DIR, which the container reads and cannot write.
 #
 # Runs as root because it writes into the engine clone; every git call drops
 # to the operator with setpriv, since that tree is theirs and one root-owned
@@ -291,7 +292,7 @@ fi
 COMMIT_FULL="$(git_op "$CLONE" rev-parse HEAD 2>/dev/null || true)"
 COMMIT_SHA="${COMMIT_FULL:0:7}"
 
-# Pushed before the handoff, not after: the engine update fast-forwards this
+# Pushed before the rebuild, not after: the engine update fast-forwards this
 # same clone from origin, so a commit that only exists locally would be
 # fast-forwarded away before nix ever resolved it.
 #
@@ -310,36 +311,5 @@ if ! log_run "$LOGFILE" git_op "$CLONE" push origin "$REF"; then
   fail committing "could not push $REF to origin — $push_error. The pin commit $COMMIT_SHA is still in $CLONE (HEAD moved under this run, so it was left alone) — push or drop it by hand."
 fi
 
-# The handoff below starts an engine update, which fast-forwards this clone
-# under the same lock: let go of it first.
-exec 8<&-
-
-# --- hand off -------------------------------------------------------------
-# The engine update's own unit, started the way the root helper starts it: a
-# run file in the helper's directory (root's, and this unit is root) under a
-# run id of its own, then that instance of the template, which reads the file
-# as its credential and drops it when it stops. From here the engine verb owns
-# the rebuild: it takes the rebuild lock, re-resolves the input, builds,
-# commits the configuration's flake.lock, switches, verifies that the control
-# plane answers, reverts if it does not, and pushes. One engine update at a
-# time, as through the helper: one already running refuses the handoff.
-write_status "running" "handing-off" ""
-
-finish_by_hand="Press Update daedalus on System › Updates to finish the move."
-if [ -n "$(systemctl list-units --all --plain --no-legend --state=activating,active,deactivating 'daedalus-engine-update@*.service' 2>/dev/null)" ]; then
-  fail handing-off "pinned $TO_VERSION and pushed it, but an engine update is already running. $finish_by_hand"
-fi
-ENGINE_RUN="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"
-ENGINE_RUN_FILE="$ROOT_RUN_DIR/$ENGINE_RUN.json"
-if ! jq -nc --arg id "$ENGINE_RUN" --arg a "$ACTOR" \
-  '{id: $id, verb: "engine-update", selectors: {}, payload: ({actor: $a} | tojson)}' |
-  (umask 077 && set -o noclobber && cat >"$ENGINE_RUN_FILE"); then
-  fail handing-off "pinned $TO_VERSION and pushed it, but could not write the engine update's run file. $finish_by_hand"
-fi
-if ! systemctl start --no-block "daedalus-engine-update@$ENGINE_RUN.service"; then
-  rm -f -- "$ENGINE_RUN_FILE"
-  fail handing-off "pinned $TO_VERSION and pushed it, but could not start the engine update. $finish_by_hand"
-fi
-
 write_status "done" "complete" ""
-verb_done "pinned $FROM_VERSION → $TO_VERSION ($COMMIT_SHA); engine update $ENGINE_RUN started"
+verb_done "pinned $FROM_VERSION → $TO_VERSION ($COMMIT_SHA); the engine update follows"

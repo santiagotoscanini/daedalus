@@ -103,7 +103,6 @@ let
             "daedalus-engine-update@"
             "daedalus-image-update@"
             "daedalus-version-update@"
-            "daedalus-claude-code-update@"
           ]
         );
     AGE_KEYS = lib.concatStringsSep " " (

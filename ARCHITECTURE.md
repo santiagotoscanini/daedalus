@@ -209,7 +209,7 @@ choose a unit to start.
 | `image-update` + payload, detached | `daedalus-image-update@<run>` | move image pins: one commit, one rebuild, verify, revert on failure |
 | `version-update` + payload, detached | `daedalus-version-update@<run>` | move a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure |
 | `engine-update` + payload, detached | `daedalus-engine-update@<run>` | fast-forward the engine clone, move the lock onto it, build, switch, verify the control plane answers, revert if not, push |
-| `claude-code-update` + payload, detached | `daedalus-claude-code-update@<run>` | pin upstream's latest Claude Code in the engine, push, and start the engine update as the helper would |
+| `claude-code-update` + payload, detached | `daedalus-engine-update@<run>` | pin upstream's latest Claude Code in the engine and push, then the engine update in the same run: one unit, so one lock and one busy check cover both verbs |
 
 Every detached verb reports in `/verbs/<verb>-status.json` under its run's id,
 which the page that started it waits for.

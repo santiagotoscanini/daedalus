@@ -7,8 +7,9 @@
 # purpose: build before anything is committed, one retry on the switch, verify
 # that the thing being updated actually came back, revert rather than reset
 # when it did not, push last and best-effort. The root helper's `engine-update`
-# verb (engine-update.nix), one run at a time; claude-code-update.sh starts it
-# directly too, for the rebuild half of a Claude Code pin.
+# verb (engine-update.nix), one run at a time. The `claude-code-update` verb
+# names this unit too: such a run is the pin (host/claude-code-update.sh, its
+# own script and status) and then, when it moved the pin, this rebuild.
 #
 # ── what "latest" means ───────────────────────────────────────────────────
 #
@@ -100,6 +101,17 @@ STARTED_AT="$(date -Is)"
 COMMIT_SHA=""
 
 ACTOR="$(jq -r '.actor // "daedalus"' <<<"$REQ_JSON")"
+
+# A Claude Code pin: the pin first, and the rebuild only when it moved it.
+# One unit for both halves, so the helper's one lock and one busy check cover
+# the pair — an engine update asked meanwhile is refused — and the run is one
+# run to follow. The pin's refusal or failure is the run's.
+if [ "$(run_verb)" = claude-code-update ]; then
+  "$CLAUDE_CODE_PIN" || exit
+  pinned="$(jq -r --arg id "$REQ_ID" 'select(.id == $id) | "\(.state)/\(.phase)"' \
+    "$VERBS_DIR/claude-code-update-status.json" 2>/dev/null || true)"
+  [ "$pinned" = done/complete ] || exit 0
+fi
 
 # System nix, not pkgs.nix, as the operator: platform/autoupgrade's reason —
 # the running nix honors /etc/gitconfig's safe.directory for the

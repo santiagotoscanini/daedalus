@@ -36,10 +36,9 @@ const CC_IDLE: ClaudeCodeUpdateStatus = {
  * measurement). The supported move is a pin: the engine's release manifest,
  * then the configuration's lock, then a rebuild.
  *
- * Two agents do it. `daedalus-claude-code-update` fetches the release,
- * verifies its signature, commits the manifest into the engine and pushes —
- * then starts an engine update, which is the half that builds and
- * switches. So this control's `done` means PINNED, not installed.
+ * One run does it, in two halves: the pin fetches the release, verifies its
+ * signature, commits the manifest into the engine and pushes — then the same
+ * unit runs the engine update, the half that builds and switches. So this control's `done` means PINNED, not installed.
  *
  * It does NOT narrate the engine half, and that is deliberate. The engine's
  * status is one file with one run in it, so a second poller here would
@@ -79,9 +78,7 @@ export function UpdateClaudeCodeControl({
             ? 'Checking the release signature…'
             : status.phase === 'committing'
               ? 'Pinning it in the engine…'
-              : status.phase === 'handing-off'
-                ? 'Pinned. Asking for the rebuild…'
-                : `Pinning Claude Code… (${status.phase || 'starting'})`}
+              : `Pinning Claude Code… (${status.phase || 'starting'})`}
         </p>
       </div>
     )

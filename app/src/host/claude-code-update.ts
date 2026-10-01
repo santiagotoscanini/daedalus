@@ -13,11 +13,11 @@ import { defineRootVerb } from './root-verb'
 // (nix/stacks/daedalus/host/claude-code-update.sh) does exactly that half:
 // fetch the current release, verify the detached signature against
 // Anthropic's published key, commit the manifest into the engine clone, push
-// it, and then hand the rebuild to the engine-update verb
-// (host/engine-update.ts).
+// it. The verb names the engine update's unit, which runs that half first
+// and the rebuild after it in the same run (host/engine-update.ts).
 //
-// That handoff is why `state: 'done'` here does not mean the new CLI is
-// installed — it means it is PINNED and the engine update has been asked for.
+// That is why `state: 'done'` here does not mean the new CLI is installed
+// — it means it is PINNED and the engine update is under way.
 // The page follows the engine status from there, and the box's own snapshot
 // ("what the flake holds") is the answer that settles it.
 //
@@ -60,7 +60,7 @@ const verb = defineRootVerb<ClaudeCodeUpdateStatus>({
   status: CLAUDE_CODE_STATUS,
   ended: (s) =>
     `The host agent ended during "${s.phase}" without reporting a result. ` +
-    "Check `journalctl -u 'daedalus-claude-code-update@*'` and `git log` in the engine clone " +
+    "Check `journalctl -u 'daedalus-engine-update@*'` and `git log` in the engine clone " +
     'before retrying.',
 })
 
