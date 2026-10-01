@@ -207,11 +207,6 @@ export const SCHEMA = {
     about: 'Where clones land on the host. Display only.',
     source: DAEDALUS,
   },
-  ENGINE_DOCS_DIR: {
-    kind: 'path',
-    about: 'The engine repository root, for the MCP server’s docs.',
-    source: DAEDALUS,
-  },
   DHCP_HOSTS_PATH: {
     kind: 'path',
     about: 'The DHCP reservations pi-hole renders.',
@@ -361,7 +356,7 @@ export const SCHEMA = {
   DAEDALUS_DEV: {
     kind: 'flag',
     about:
-      'This instance is the dev server over a bind-mounted checkout (fleet.daedalus.dev), not the built bundle.',
+      'This instance is the dev server over a bind-mounted checkout (fleet.daedalus.source = "dev"), not the built bundle.',
     source: DAEDALUS,
   },
 

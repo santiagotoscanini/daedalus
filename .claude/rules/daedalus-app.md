@@ -178,9 +178,10 @@ here.
   directory is at /site, read-only like the rest even though it is the
   one directory daedalus writes — the writes go through the bridge —
   and its site.json is THE source of the site constants nix builds
-  with, so the settings tabs edit against it. The engine repository's
-  root is at /engine, for the two design documents the MCP server
-  serves (`host/mcp/docs.ts`). **/apply is the
+  with, so the settings tabs edit against it. The two design documents the MCP
+  server serves (`host/mcp/docs.ts`) are in the image, at
+  /opt/daedalus/docs; in dev mode the whole engine checkout is also at
+  /engine, read-only, for the tests that read files beside `app/`. **/apply is the
   only writable mount**, apart from /app, which is this clone itself.
   Never reach around them (no SSH-ing the host, no reading host paths
   directly) — if a page needs a new host fact, extend the matching

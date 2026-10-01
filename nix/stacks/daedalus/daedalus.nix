@@ -35,7 +35,7 @@
 # Which rebuilds matter, in dev mode:
 #   <clone>/app/**           → nothing. Vite is watching it.
 #   <clone>/app/package.json → `systemctl restart podman-app-daedalus` (re-installs).
-#   Dockerfile, docker-entrypoint.sh
+#   Dockerfile, docker-entrypoint.sh, ARCHITECTURE.md, BUILDS.md
 #                            → nixos-rebuild (runtime context hash → new image
 #                              tag → restart). Nothing else in the repository
 #                              reaches that context.
@@ -180,7 +180,7 @@ let
   # how); the app runs from the bundle inside it. A host that develops the
   # engine runs it in DEV MODE instead (fleet.daedalus.dev): the image's
   # `runtime` stage alone — node, sops, the entrypoint, no bundle — built on
-  # the box from a context of exactly the two files that stage reads, so the
+  # the box from a context of exactly the files that stage reads, so the
   # tag moves when the runtime changes and never when a route is edited; the
   # checkout's app/ is mounted at /app and the entrypoint runs Vite over it.
   # Saving a file is the deploy.
@@ -194,6 +194,8 @@ let
       fileset = lib.fileset.unions [
         ../../../Dockerfile
         ../../../docker-entrypoint.sh
+        ../../../ARCHITECTURE.md
+        ../../../BUILDS.md
       ];
     };
     file = "Dockerfile";
@@ -597,10 +599,6 @@ in
             # only — the page says where a clone landed without restating the path.
             WORKSPACES_PATH = "/workspaces/workspaces.json";
             WORKSPACE_ROOT = workspaceRoot;
-            # Where the MCP server finds ARCHITECTURE.md and BUILDS.md — the engine
-            # repo root, read-only (volumes below). Named rather than hard-coded in
-            # the app so the mount point is one fact, stated here.
-            ENGINE_DOCS_DIR = "/engine";
             # Digest-vs-tag freshness, published daily by daedalus-image-freshness
             # into the same read-only mount.
             IMAGE_FRESHNESS_PATH = "/images/freshness.json";
@@ -684,18 +682,6 @@ in
         # file, like every snapshot here: it is replaced by rename and a
         # single-file bind would pin the old inode.
         "${workspacesDir}:/workspaces:ro"
-        # The ENGINE repository — the public one the dev server already runs from,
-        # read-only, so the MCP server can hand an agent the two design documents
-        # at its repo root (ARCHITECTURE.md, BUILDS.md) before it acts. /app is a
-        # bind of that clone's app/ subdirectory, so nothing above it is reachable
-        # without this.
-        #
-        # The DIRECTORY, never the two files: git replaces a file on every pull and
-        # a single-file bind would pin the old inode — the same rule every snapshot
-        # mount here follows. Widening the mount does NOT widen what is served: the
-        # app reads a hard allowlist of two names (host/mcp/docs.ts), there is no
-        # path parameter, and this is the public engine repo, not this one.
-        "${engineRoot}:/engine:ro"
         # The controller's socket directory (controller.nix): the DIRECTORY,
         # which holds the socket alone — the agent removes and remakes the
         # socket at each start, and a single-file bind would pin the dead one.
@@ -724,7 +710,14 @@ in
       # What the stacks mount into the control plane (fleet.dashboard.<id>.volumes):
       # pi-hole's rendered DHCP reservations at /dhcp, shotter's run archive at
       # /shotter. Each is the owner's contribution, absent with the owner.
-      ++ lib.concatMap (d: d.volumes) dashboard;
+      ++ lib.concatMap (d: d.volumes) dashboard
+      # Dev mode: the whole engine checkout, read-only, for the app's tests run
+      # inside the container (`pnpm vitest run`), which read files beside app/
+      # (the example host's site/, host/build.sh, the Dockerfile). /app is a
+      # bind of that clone's app/ subdirectory, so nothing above it is
+      # reachable without this. The DIRECTORY: git replaces a file on every pull
+      # and a single-file bind would pin the old inode.
+      ++ lib.optional daedalusDev "${engineRoot}:/engine:ro";
     };
 
     # Dev mode builds the runtime stage on the box before the container starts

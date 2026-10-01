@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { env } from '../env'
 
 // The two design documents, served as MCP resources.
 //
@@ -10,21 +9,19 @@ import { env } from '../env'
 // tools drive. Handing those to a caller before it acts is the cheapest
 // possible way to stop it inventing a mental model of this box.
 //
-// WHY A HARD ALLOWLIST. The mount below is a directory, and a resource server
-// that takes a path is a file browser with extra steps. These two names are
-// the whole surface: there is no parameter, no template, and no way to ask for
-// a third file. A doc added later is a line in this table and a redeploy, which
-// is the correct amount of friction for widening what an agent can read.
+// WHY A HARD ALLOWLIST. These two names are the whole surface: there is no
+// parameter, no template, and no way to ask for a third file. A doc added
+// later is a line in this table and a redeploy, which is the correct amount
+// of friction for widening what an agent can read.
 //
-// WHERE THEY COME FROM. The container bind-mounts `/app` — the engine repo's
-// `app/` directory, the dev server's source — and nothing above it, so the
-// repo root's markdown is not reachable through it.
-// nix/stacks/daedalus/daedalus.nix mounts the engine clone read-only at
-// /engine (ENGINE_DOCS_DIR) for exactly these two files. Without that mount a
-// read answers with the sentence below rather than throwing: a missing design
-// doc is a degraded resource, not a broken server.
+// WHERE THEY COME FROM. The image itself: the Dockerfile's runtime stage
+// copies both from the repository root into DOCS_DIR, so the published image,
+// one built on the box and the dev-mode runtime all carry them at the same
+// path, at the engine revision the image was built from. A read that fails
+// answers with the sentence below rather than throwing: a missing design doc
+// is a degraded resource, not a broken server.
 
-const DEFAULT_DIR = '/engine'
+const DOCS_DIR = '/opt/daedalus/docs'
 
 export type McpDoc = {
   uri: string
@@ -53,26 +50,23 @@ export const MCP_DOCS: readonly McpDoc[] = [
   },
 ] as const
 
-const docsDir = (): string => env.get('ENGINE_DOCS_DIR') ?? DEFAULT_DIR
-
 /**
  * A document's text, or an explanation of why it is not here.
  *
- * Never throws. The failure this actually has — the mount missing — is an
- * operations fact the caller can act on, and reading it as a sentence
+ * Never throws. The failure this actually has — an image built without them —
+ * is an operations fact the caller can act on, and reading it as a sentence
  * beats reading it as a stack trace.
  */
 export async function readMcpDoc(doc: McpDoc): Promise<string> {
-  const path = join(docsDir(), doc.file)
+  const path = join(DOCS_DIR, doc.file)
   try {
     return await readFile(path, 'utf8')
   } catch {
     return (
       `${doc.file} is not readable at ${path}.\n\n` +
-      'The engine workspace is mounted read-only into this container by ' +
-      'stacks/daedalus (ENGINE_DOCS_DIR); a mount added but not yet switched ' +
-      'onto the running system looks exactly like this. Read the file from ' +
-      'the engine workspace clone on the host instead.'
+      'The image copies both design documents from the engine repository root ' +
+      '(its Dockerfile, runtime stage); one built without them looks exactly ' +
+      'like this. Read the file from the engine repository instead.'
     )
   }
 }

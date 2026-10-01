@@ -69,11 +69,12 @@ RUN rm -rf node_modules \
  && pnpm install --prod --frozen-lockfile --offline --config.registry="${NPM_REGISTRY}"
 
 # --- runtime -----------------------------------------------------------------
-# Everything but the app: node, corepack's shims, sops, the entrypoint. The
-# final stage puts the bundle on top of it. A box that runs the control plane
-# in dev mode builds THIS stage on its own (`--target runtime`, from a context
-# of just this file and the entrypoint) and mounts its checkout at /app — so
-# that image moves only when the runtime does, never when a route is edited.
+# Everything but the app: node, corepack's shims, sops, the entrypoint, the
+# design documents. The final stage puts the bundle on top of it. A box that
+# runs the control plane in dev mode builds THIS stage on its own (`--target
+# runtime`, from a context of just what it copies) and mounts its checkout at
+# /app — so that image moves only when the runtime does, never when a route is
+# edited.
 FROM ${NODE_IMAGE} AS runtime
 
 # Shims only, a few symlinks: the dev branch fetches the pnpm its mounted tree
@@ -88,6 +89,11 @@ WORKDIR /opt/daedalus
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/daedalus-entrypoint
 # Where core/vault.ts execs it (the sops stage above says why it is here).
 COPY --from=sops --chmod=0755 /sops /usr/local/bin/sops
+
+# The two design documents the MCP server serves (app/src/host/mcp/docs.ts),
+# here rather than in the final stage so the dev-mode image carries them too:
+# every mode reads them from this one place.
+COPY ARCHITECTURE.md BUILDS.md /opt/daedalus/docs/
 
 # No init here: node as PID 1 reaps nothing, so run it with `--init`.
 # server.mjs handles SIGTERM itself either way.
