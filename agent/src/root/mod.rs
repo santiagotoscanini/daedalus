@@ -35,8 +35,7 @@
 //! deletes it; the helper deletes what is left when the start job ends. The
 //! value is on no command line and in no unit name; the helper logs neither
 //! it nor the payload. One such run at a time: any instance of the template
-//! still running refuses the next, and a lock on `<run_dir>/<template>.lock`,
-//! held until the answer, closes the gap between that check and the start.
+//! still running refuses the next.
 //!
 //! **Running a verb** is `systemctl start <unit>`: the work is the unit's,
 //! so it survives a switch restarting its caller, this helper or the
@@ -48,7 +47,13 @@
 //! the exit status, carries the refusal because systemd forgets a
 //! oneshot's exit status once it is inactive (measured: `ExecMainStatus=0`
 //! after an exit 3 listed in `SuccessExitStatus`). A unit already running
-//! is `refused`, never joined. `status` is built in and read-only: every
+//! is `refused`, never joined: systemd would merge a second start into the
+//! first one's job, and both callers would read its end as their own. So
+//! every verb holds a lock, `<run_dir>/<unit>.lock` (`.service` dropped; a
+//! run-file verb's is its template's, `x@.lock`), from before its busy
+//! check until its answer: a second request while it is held is refused,
+//! never queued, and two helpers (one per connection) cannot both find the
+//! unit idle and both start it. `status` is built in and read-only: every
 //! verb, its unit and that unit's state.
 //!
 //! **Framing.** One JSON object per line. In: `Request`, at most
@@ -110,9 +115,8 @@ pub struct Table {
     /// Absolute paths, fixed by nix.
     pub systemctl: String,
     pub journalctl: String,
-    /// Where run files go (module doc); required once any verb takes one.
-    #[serde(default)]
-    pub run_dir: Option<String>,
+    /// Where run files and every verb's lock go (module doc): root's, 0700.
+    pub run_dir: String,
     pub verbs: BTreeMap<String, VerbSpec>,
 }
 
@@ -254,6 +258,8 @@ pub enum Resolved {
         verb: String,
         unit: String,
         timeout: Duration,
+        /// The lock this run holds until its answer (module doc).
+        lock: std::path::PathBuf,
         /// For a run-file verb: the file to write before the start, and the
         /// template whose running instances refuse this run.
         run_file: Option<RunFile>,
@@ -479,6 +485,7 @@ impl Table {
         for (what, p) in [
             ("systemctl", &self.systemctl),
             ("journalctl", &self.journalctl),
+            ("run_dir", &self.run_dir),
         ] {
             if !p.starts_with('/') {
                 return Err(format!("{what} must be an absolute path, not {p:?}"));
@@ -487,11 +494,6 @@ impl Table {
         let mut patterns = BTreeMap::new();
         for (verb, spec) in &self.verbs {
             let compiled = check_verb(verb, spec).map_err(|why| format!("verb {verb:?}: {why}"))?;
-            if spec.run_file() && !self.run_dir.as_deref().is_some_and(|d| d.starts_with('/')) {
-                return Err(format!(
-                    "verb {verb:?} takes a run file, and the table names no absolute run_dir"
-                ));
-            }
             patterns.insert(verb.clone(), compiled);
         }
         Ok(Checked {
@@ -578,17 +580,17 @@ impl Checked {
             _ => {}
         }
         let timeout = Duration::from_secs(spec.timeout_secs);
+        let dir = std::path::Path::new(&t.run_dir);
         if !spec.run_file() {
+            let unit = expand(&spec.unit, &req.selectors);
             return Ok(Resolved::Run {
                 verb: req.verb.clone(),
-                unit: expand(&spec.unit, &req.selectors),
+                lock: dir.join(format!("{}.lock", unit.trim_end_matches(".service"))),
+                unit,
                 timeout,
                 run_file: None,
             });
         }
-        let Some(dir) = t.run_dir.as_deref() else {
-            return Err((code::INTERNAL, "the table names no run_dir".into()));
-        };
         let template = spec.unit.trim_end_matches(".service").to_string();
         let body = serde_json::to_vec(&serde_json::json!({
             "id": req.id,
@@ -601,8 +603,9 @@ impl Checked {
             verb: req.verb.clone(),
             unit: format!("{template}{}.service", req.id),
             timeout,
+            lock: dir.join(format!("{template}.lock")),
             run_file: Some(RunFile {
-                path: std::path::Path::new(dir).join(format!("{}.json", req.id)),
+                path: dir.join(format!("{}.json", req.id)),
                 body,
                 template,
             }),
@@ -644,6 +647,7 @@ mod tests {
     fn table() -> Table {
         serde_json::from_str(
             r#"{"allow_uid":1000,"systemctl":"/bin/systemctl","journalctl":"/bin/journalctl",
+                "run_dir":"/run/daedalus-root-runs",
                 "verbs":{
                   "reboot":{"unit":"daedalus-power.service","description":"Restart the box","timeout_secs":90},
                   "deploy":{"unit":"app-{app}-deploy.service","description":"Deploy an app","timeout_secs":600,
@@ -681,6 +685,7 @@ mod tests {
                 verb: "reboot".into(),
                 unit: "daedalus-power.service".into(),
                 timeout: Duration::from_secs(90),
+                lock: "/run/daedalus-root-runs/daedalus-power.lock".into(),
                 run_file: None
             }
         );
@@ -690,6 +695,7 @@ mod tests {
                 verb: "deploy".into(),
                 unit: "app-blog-deploy.service".into(),
                 timeout: Duration::from_secs(600),
+                lock: "/run/daedalus-root-runs/app-blog-deploy.lock".into(),
                 run_file: None
             }
         );
@@ -865,13 +871,23 @@ mod tests {
     #[test]
     fn a_pattern_value_goes_to_the_run_file_never_the_unit() {
         let t = run_table().check().unwrap();
-        let Resolved::Run { unit, run_file, .. } = t
+        let Resolved::Run {
+            unit,
+            lock,
+            run_file,
+            ..
+        } = t
             .resolve(&req("clone", &[("repo", "octo/hello.world")]))
             .unwrap()
         else {
             panic!("not a run")
         };
         assert_eq!(unit, "ws-clone@0123456789abcdef.service");
+        // Every instance of the template shares one lock.
+        assert_eq!(
+            lock,
+            std::path::Path::new("/run/daedalus-root-runs/ws-clone@.lock")
+        );
         let rf = run_file.unwrap();
         assert_eq!(
             rf.path,
@@ -983,8 +999,7 @@ mod tests {
         };
         let clone = |t: &mut Table| t.verbs.get_mut("clone").unwrap().clone();
         assert!(with(&|_| {}).is_ok());
-        assert!(with(&|t| t.run_dir = None).is_err());
-        assert!(with(&|t| t.run_dir = Some("runs".into())).is_err());
+        assert!(with(&|t| t.run_dir = "runs".into()).is_err());
         for (regex, max) in [
             ("[a-z]+$", 10),
             ("^[a-z]+", 10),

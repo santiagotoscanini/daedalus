@@ -227,7 +227,10 @@
 #                else `done` — or `refused` when the unit's last line is
 #                `refused: <reason>` (it exits 0, so no failed unit). Not an
 #                exit status: systemd forgets a oneshot's once it is inactive.
-#                A unit already running is refused, never joined.
+#                A unit already running is refused, never joined: every verb
+#                holds a lock in <rootRunDir> (its unit's, or its template's)
+#                until its answer, so two requests cannot both start it and
+#                share one job.
 #   moved so far reboot (daedalus-verbs.nix `daedalus-power`); deploy and
 #                task-run (the apps' own deploy and task units, values from the
 #                committed registry); build-cancel (build-agent.nix, a template
@@ -646,8 +649,9 @@ in
       "d ${configDir} 0755 root root -"
       # The root helper's run files: root's alone. A file a unit never
       # came for (its start failed before the helper could remove it) goes
-      # within a day. The helper's per-template locks stay: one aged out
-      # under a holder would let a second helper lock a new file beside it.
+      # within a day. The helper's locks (one per unit or template) stay:
+      # one aged out under a holder would let a second helper lock a new
+      # file beside it.
       "d ${rootRunDir} 0700 root root 1d"
       "x ${rootRunDir}/*.lock"
       "L+ ${configDir}/config.toml - - - - ${configFile}"

@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -157,10 +158,11 @@ fn answer(sock: UnixStream, path: &str) -> Result<()> {
             verb,
             unit,
             timeout,
+            lock,
             run_file,
         } => {
             eprintln!("root helper: {verb} (id {}) starts {unit}", req.id);
-            let (outcome, detail) = run(table, &unit, timeout, run_file.as_ref(), &mut out);
+            let (outcome, detail) = run(table, &unit, timeout, &lock, run_file.as_ref(), &mut out);
             eprintln!("root helper: {verb} (id {}) {outcome:?}: {detail}", req.id);
             send(
                 &mut out,
@@ -361,31 +363,28 @@ impl Relay<'_> {
     }
 }
 
-/// Run a verb: for one with a run file (root/mod.rs, "The run file"), refuse
-/// while another instance of its template runs, write the file, start the
-/// unit, and take away what the unit left of the file once it is done.
+/// Run a verb (root/mod.rs, "Running a verb"): hold its lock, or refuse;
+/// for one with a run file ("The run file"), refuse while another instance
+/// of its template runs and write the file; start the unit; and take away
+/// what the unit left of the file once it is done.
 fn run(
     table: &Table,
     unit: &str,
     timeout: Duration,
+    lock: &Path,
     run_file: Option<&RunFile>,
     out: &mut UnixStream,
 ) -> (Outcome, String) {
-    let Some(rf) = run_file else {
-        return run_unit(table, unit, timeout, out);
-    };
     // Held until this run's answer: two connections at once (each its own
-    // helper process) cannot both find the template idle and both start.
-    let _held = match hold_template(rf) {
+    // helper process) cannot both find the unit idle and both start it.
+    let _held = match hold(lock) {
         Ok(Some(f)) => f,
         Ok(None) => {
+            let what = run_file.map_or(unit.to_string(), |rf| format!("{}…", rf.template));
             return (
                 Outcome::Refused,
-                format!(
-                    "another {}… run is starting; wait for it to finish",
-                    rf.template
-                ),
-            )
+                format!("another {what} run is under way; wait for it to finish"),
+            );
         }
         Err(e) => {
             return (
@@ -393,6 +392,9 @@ fn run(
                 format!("the run directory could not be locked: {e}"),
             )
         }
+    };
+    let Some(rf) = run_file else {
+        return run_unit(table, unit, timeout, out);
     };
     match template_busy(table, &rf.template) {
         Ok(None) => {}
@@ -445,16 +447,19 @@ fn template_busy(table: &Table, template: &str) -> Result<Option<String>, String
         .map(str::to_string))
 }
 
-/// The run directory, when it is this process's own and nobody else's: a
-/// real directory (not a link) of this uid, 0700. Nix makes it (tmpfiles);
-/// the helper never does, since its sandbox can write only inside it.
-fn run_dir(rf: &RunFile) -> std::io::Result<&std::path::Path> {
+/// The run directory `file` is in, when it is this process's own and nobody
+/// else's: a real directory (not a link) of this uid, 0700. Nix makes it
+/// (tmpfiles); the helper never does, since its sandbox can write only
+/// inside it.
+fn run_dir(file: &Path) -> std::io::Result<&Path> {
     use std::io::{Error, ErrorKind};
     use std::os::unix::fs::MetadataExt;
-    let dir = rf
-        .path
-        .parent()
-        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "a run file names no directory"))?;
+    let dir = file.parent().ok_or_else(|| {
+        Error::new(
+            ErrorKind::InvalidInput,
+            "a path in the run directory names none",
+        )
+    })?;
     let m = std::fs::symlink_metadata(dir)?;
     // SAFETY: geteuid has no preconditions.
     let me = unsafe { libc::geteuid() };
@@ -467,11 +472,11 @@ fn run_dir(rf: &RunFile) -> std::io::Result<&std::path::Path> {
     Ok(dir)
 }
 
-/// `<run dir>/<template>.lock`, locked without waiting: the open file while
-/// it is held, None while another helper holds it.
-fn hold_template(rf: &RunFile) -> std::io::Result<Option<std::fs::File>> {
+/// A verb's lock (root/mod.rs, "Running a verb"), taken without waiting:
+/// the open file while it is held, None while another helper holds it.
+fn hold(path: &Path) -> std::io::Result<Option<std::fs::File>> {
     use std::os::unix::fs::OpenOptionsExt;
-    let path = run_dir(rf)?.join(format!("{}.lock", rf.template));
+    run_dir(path)?;
     let f = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -496,7 +501,7 @@ fn hold_template(rf: &RunFile) -> std::io::Result<Option<std::fs::File>> {
 /// run directory (`run_dir`).
 fn write_run_file(rf: &RunFile) -> std::io::Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
-    run_dir(rf)?;
+    run_dir(&rf.path)?;
     let mut f = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -736,6 +741,7 @@ mod tests {
                 "allow_uid": 1000,
                 "systemctl": "/bin/systemctl",
                 "journalctl": "/bin/journalctl",
+                "run_dir": "/run/daedalus-root-runs",
                 "verbs": verbs,
             });
             std::fs::write(&p, t.to_string()).unwrap();
@@ -762,11 +768,14 @@ mod tests {
     }
 
     /// A table whose tools are shell scripts standing in for systemd: the
-    /// unit is loaded and idle, `start` succeeds, and the journal has one
-    /// line for the run, `message`.
+    /// unit is loaded and reads idle, `start` succeeds (after two seconds
+    /// while `slow` exists), and the journal has one line for the run,
+    /// `message`.
     fn fake(dir: &std::path::Path, allow_uid: u32, message: &str) -> String {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::create_dir_all(dir).unwrap();
+        let runs = dir.join("runs");
+        std::fs::create_dir_all(&runs).unwrap();
+        std::fs::set_permissions(&runs, std::fs::Permissions::from_mode(0o700)).unwrap();
         let script = |name: &str, body: &str| {
             let p = dir.join(name);
             std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
@@ -775,7 +784,10 @@ mod tests {
         };
         let systemctl = script(
             "systemctl",
-            "case \"$1\" in\n show) printf 'ActiveState=inactive\\nLoadState=loaded\\nResult=success\\n';;\n start) [ \"$2\" = fake.service ] || exit 5;;\n esac",
+            &format!(
+                "case \"$1\" in\n show) printf 'ActiveState=inactive\\nLoadState=loaded\\nResult=success\\n';;\n start) [ \"$2\" = fake.service ] || exit 5; if [ -e {}/slow ]; then sleep 2; fi;;\n esac",
+                dir.display()
+            ),
         );
         let entry = serde_json::json!({"__CURSOR": "c1", "MESSAGE": message}).to_string();
         let journalctl = script(
@@ -788,6 +800,7 @@ mod tests {
             "allow_uid": allow_uid,
             "systemctl": systemctl,
             "journalctl": journalctl,
+            "run_dir": runs.display().to_string(),
             "verbs": {"reboot": {"unit": "fake.service", "description": "a fake", "timeout_secs": 20}}
         });
         let path = dir.join("table.json");
@@ -880,6 +893,52 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_second_request_for_a_unit_being_started_is_refused_not_joined() {
+        let me = unsafe { libc::geteuid() };
+        let dir = scratch("twice");
+        let _ = std::fs::remove_dir_all(&dir);
+        let table = fake(&dir, me, "rebooting");
+        // The unit reads idle to both (`show`), and its start takes a while:
+        // only the lock tells the second request the first is under way.
+        std::fs::write(dir.join("slow"), "").unwrap();
+        let first = {
+            let table = table.clone();
+            std::thread::spawn(move || converse(&table, "{\"verb\":\"reboot\",\"id\":\"a1\"}\n"))
+        };
+        std::thread::sleep(Duration::from_millis(700));
+        let second = converse(&table, "{\"verb\":\"reboot\",\"id\":\"a2\"}\n");
+        assert!(
+            matches!(second.last(), Some(Line::Result { outcome: Outcome::Refused, detail, .. }) if detail.contains("under way")),
+            "{second:?}"
+        );
+        let first = first.join().unwrap();
+        assert!(
+            matches!(
+                first.last(),
+                Some(Line::Result {
+                    outcome: Outcome::Done,
+                    ..
+                })
+            ),
+            "{first:?}"
+        );
+        // Released with the answer: the next request runs.
+        std::fs::remove_file(dir.join("slow")).unwrap();
+        let next = converse(&table, "{\"verb\":\"reboot\",\"id\":\"a3\"}\n");
+        assert!(
+            matches!(
+                next.last(),
+                Some(Line::Result {
+                    outcome: Outcome::Done,
+                    ..
+                })
+            ),
+            "{next:?}"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -996,7 +1055,7 @@ mod tests {
             "{\"verb\":\"clone\",\"id\":\"r12\",\"selectors\":{\"repo\":\"octo/hello\"}}\n",
         );
         assert!(
-            matches!(lines.last(), Some(Line::Result { outcome: Outcome::Refused, detail, .. }) if detail.contains("starting")),
+            matches!(lines.last(), Some(Line::Result { outcome: Outcome::Refused, detail, .. }) if detail.contains("under way")),
             "{lines:?}"
         );
         assert!(!dir.join("runs/r12.json").exists());
