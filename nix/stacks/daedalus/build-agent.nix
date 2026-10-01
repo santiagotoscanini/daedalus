@@ -365,7 +365,7 @@ in
       {
         # ── cancel ────────────────────────────────────────────────────────────
 
-        # The root helper's `build-cancel` (controller.nix, `root`): one instance
+        # The root helper's `build-cancel` (root-helper.nix): one instance
         # per app, the app its instance name, so the value is a name from
         # buildableApps and the script refuses a build in flight that is not
         # that app's.

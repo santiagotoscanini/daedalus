@@ -160,7 +160,7 @@ rec {
   # agent's final step. It MUST stay in lockstep with the deploy units
   # modules/apps/apps.nix generates (`deploy.enable && running`) — an
   # allowlist wider than those units would let root start a unit that does
-  # not exist, and the root helper's assertions (controller.nix) refuse one.
+  # not exist, and the root helper's assertions (root-helper.nix) refuse one.
   deployableApps = lib.attrNames (
     lib.filterAttrs (
       _: a:
@@ -294,14 +294,25 @@ rec {
   # container starts whether or not the controller is up.
   controllerDir = "/run/daedalus-controller";
 
-  # The controller's own state (controller.nix, the header's `dataDir`): the
+  # The controller's own state (controller.nix): the
   # one place it writes besides that socket's directory — which is why the
   # session host's allow-list, which the controller writes, lives here
   # (session-host.nix).
   controllerDataDir = "${config.fleet.stateRoot}/apps/daedalus/controller";
 
-  # Where the root helper writes a verb's run file (controller.nix, the
-  # header's `run file`) and the verb's unit reads it: root's, 0700, never
+  # Its logs, Claude remote control's among them (claude-logs.nix ships them).
+  controllerLogDir = "${controllerDataDir}/logs";
+
+  # Claude remote control's transient user unit, which the controller starts.
+  claudeUnit = "daedalus-claude-rc";
+
+  # The root helper's socket (root-helper.nix). NOT under controllerDir: that
+  # one is bind-mounted into the app's container, and this socket is the
+  # controller's alone.
+  rootSocket = "/run/daedalus-root/root.sock";
+
+  # Where the root helper writes a verb's run file (ARCHITECTURE.md "The root
+  # helper") and the verb's unit reads it: root's, 0700, never
   # mounted anywhere. The unit gets its file as a systemd credential
   # (`LoadCredential=request:`); host/lib.sh `take_request` is its side.
   rootRunDir = "/run/daedalus-root-runs";
@@ -327,8 +338,8 @@ rec {
   # (daedalus-verbs.nix).
   verbsDir = "/var/lib/daedalus-verbs";
 
-  # One root verb that takes its request as a payload (controller.nix, the
-  # header's `run file`): the template `<unit>@.service` the helper starts
+  # One root verb that takes its request as a payload (ARCHITECTURE.md "The root
+  # helper"): the template `<unit>@.service` the helper starts
   # once per run, running `script` with the run file as its `request`
   # credential (host/lib.sh take_request), the `fleet.daedalus.rootVerbs`
   # entry that names it, and — unless `monitored` is false — its

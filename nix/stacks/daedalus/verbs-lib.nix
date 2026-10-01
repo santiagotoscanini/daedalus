@@ -129,7 +129,7 @@ let
     ];
   };
 
-  # Restart the box: the root helper's `reboot` (controller.nix, `root`). It
+  # Restart the box: the root helper's `reboot` (root-helper.nix). It
   # takes nothing from anyone — host/power.sh has why poweroff exists nowhere.
   powerScript = mkAgent {
     name = "daedalus-power";

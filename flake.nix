@@ -90,6 +90,7 @@
       daedalusModules = [
         "build-agent.nix"
         "builder.nix"
+        "claude-logs.nix"
         "controller.nix"
         "daedalus-github.nix"
         "daedalus-nodes.nix"
@@ -98,6 +99,7 @@
         "daedalus.nix"
         "engine-update.nix"
         "railpack.nix"
+        "root-helper.nix"
         "session-host.nix"
         "version-update.nix"
       ];
@@ -262,8 +264,7 @@
             || throw "agent-scripts found only ${toString (lib.length scripts)} scripts";
           pkgs.runCommand "agent-scripts" { } "${built}touch $out";
 
-        # The root helper's verb table (nix/stacks/daedalus/controller.nix,
-        # `root`): the example host carries `reboot` and `workspace-clone`
+        # The root helper's verb table (nix/stacks/daedalus/root-helper.nix): the example host carries `reboot` and `workspace-clone`
         # with every assertion holding, and a verb whose unit the evaluation
         # can see is wrong is refused, naming itself. The table's own rules —
         # names, selector values, patterns, caps — are the helper's

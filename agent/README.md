@@ -340,7 +340,7 @@ table's one uid (`SO_PEERCRED`; root itself is refused), reads one request
 line `{verb, id, selectors, payload?}`, and answers. No root process stays resident.
 
 The table is nix's (`fleet.daedalus.rootVerbs` in
-`nix/stacks/daedalus/controller.nix`): each verb an existing oneshot unit
+`nix/stacks/daedalus/root-helper.nix`): each verb an existing oneshot unit
 and its selectors, each a fixed list of values spliced into the unit name
 as `{name}`, or a pattern; nothing from the caller becomes a path, a flag
 or a unit name. A verb with a pattern selector or a payload names a

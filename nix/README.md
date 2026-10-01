@@ -223,32 +223,83 @@ checkout's `app/` is mounted into it, so saving a file is the deploy. `CONTRIBUT
 
 ### The controller
 
-`stacks/daedalus/controller.nix` runs the agent (`agent/`, built from the
-crate's own files, no tray) on the box itself in `mode = "controller"`:
-`daedalus-controller.service`, as the operator, status page on loopback
-only. Its config.toml is generated and linked at
-`/var/lib/daedalus-agent/config.toml`, where the agent reads it; state and
-logs live under `<stateRoot>/apps/daedalus/controller`. Its local API socket
-is `/run/daedalus-controller/api.sock`, and that directory is mounted into
-the control plane's container at `/controller` (`CONTROLLER_SOCKET`). The
-container runs as the operator whatever its source, so the socket serves no
-other uid. It also runs the
-box's Claude remote control and the sessions the app resumes, each a
-transient user unit (the header of `stacks/daedalus/controller.nix`).
+`stacks/daedalus/controller.nix` runs the agent (`agent/`, built by
+`nix/pkgs/daedalus-agent.nix` from the crate's own files, no tray) on the box
+itself in `mode = "controller"`: `daedalus-controller.service`, as the
+operator. Its config.toml is generated and linked at
+`/var/lib/daedalus-agent/config.toml`, the agent's fixed Linux path, from a
+root-owned directory, so the operator's process cannot rewrite its own
+policy; the unit restarts when that file changes. State and logs live under
+`<stateRoot>/apps/daedalus/controller`, the one place it writes besides its
+API socket's directory (`ProtectSystem=strict`, home read-only, no setuid:
+the root helper is its only way to root). Everything it asks of systemd,
+logind or the nix daemon goes over a socket, so none of that is blocked; no
+`MemoryDenyWriteExecute`, because `claude` runs under it. A switch that moves
+it restarts it, which ends nothing: the app reconnects, and the Claude units
+it started are transient user units that outlive it.
+
+Its local API socket is `/run/daedalus-controller/api.sock`, and that
+directory is mounted into the control plane's container at `/controller`
+(`CONTROLLER_SOCKET`). The container runs as the operator whatever its
+source, so the socket serves no other uid.
+
+The metrics page (`/healthz`, `/nodes/metrics`) binds every interface on
+`fleet.daedalus.statusPort` (default 7787) and is opened on none: the
+Prometheus container reaches it through the containers' host alias, which
+arrives at the host's own address rather than loopback. The `nodes` job
+scrapes every connected machine's telemetry from it as one target.
 
 The other machines' links reach it on `0.0.0.0:<fleet.daedalus.controllerPort>`
 (default 7788, TLS with both keys pinned), opened in the firewall on
 `fleet.lanInterface` only, and handed to `fleet.modules.wg-easy.tunnelHostPorts`
 so a WireGuard peer reaches it at the LAN address too. It advertises
-`<fleet.wanHost>:<port>`, which the LAN resolver answers with the LAN address,
-and the resolver publishes the same as `_daedalus-controller._tcp.<lanDomain>`
-(`fleet.dnsSrv`; a change to that list restarts pi-hole at the switch). Its
-`identity.key`, what every machine pins, is made on first start in the data
-directory above, on the state tree the host snapshots and replicates. The app
+`<fleet.wanHost>:<port>`, which the LAN resolver answers with the LAN address;
+`<hostName>.<lanDomain>` would not do, since the resolver answers its own
+host's name itself and not with the LAN address. Off the LAN and the tunnel
+that name resolves to the WAN address, where nothing is forwarded, so such a
+machine fails closed. The resolver publishes the same as
+`_daedalus-controller._tcp.<lanDomain>` (`fleet.dnsSrv`; a change to that list
+restarts pi-hole at the switch). Its `identity.key`, what every machine pins,
+is made on first start in the data directory above, on the state tree the
+host snapshots and replicates, so a restore brings the same key back. The app
 puts `controller.{advertise,public_key}` from `system.info` in its install
-lines and pushes its decided keys with `nodes.set_desired`; the
-controller keeps nothing across a restart. `controller.nix`'s header is the
-full story.
+lines and pushes its decided keys with `nodes.set_desired`; the controller
+keeps nothing across a restart.
+
+**Claude remote control.** The controller runs the box's one `claude
+remote-control`, in the configuration checkout, as the transient user unit
+`daedalus-claude-rc`. Only one can serve a directory: a second one there is
+refused at registration ("This folder is already served by a terminal `claude
+remote-control` on this device") and exits, so never start another in the
+checkout beside it. The `claude` it runs is the pinned one
+(`platform/claude-code`), found on the service's PATH. Its unit gets the user
+manager's environment plus, from the agent, `HOME` and this service's PATH with
+`~/.local/bin` in front (so `/run/wrappers`, sudo for sessions that rebuild, is
+on it) and the user manager's PATH after it (bash, git, ssh). A session's
+`SHELL` is the user manager's or the login shell, never `sh`: Claude Code runs
+commands only through bash or zsh. Never add `DISABLE_TELEMETRY`,
+`DO_NOT_TRACK`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`,
+`DISABLE_GROWTHBOOK` or `ANTHROPIC_BASE_URL` to either environment: each
+silently disables remote control.
+
+**Claude's logs** (`stacks/daedalus/claude-logs.nix`) reach Loki as
+`fleet.logFiles` sources: `claude-rc.log` as `unit="daedalus-claude-rc.service"`,
+and every `claude-session-*.log` (not the rotated `.log.1`) as
+`unit="claude-session"`, one `filename` label each. On the way they lose ANSI
+escapes; the status box's repaint (it redraws about once a second, idle or
+not: the frames, the indented session rows, the banner hints); and every line
+carrying `tool_result` — with `--verbose` a session's transcript is in this
+output, and those lines hold what a tool returned, secrets a session read
+included. The full transcripts are in `~/.claude/projects`. The journal
+pipeline's URL-credential redaction (`modules/logging`) is repeated there,
+since a file source skips it. The page's Connection board reads the
+`[HH:MM:SS]` event lines.
+
+**The root helper** (`stacks/daedalus/root-helper.nix`) is ARCHITECTURE.md's
+"The root helper": nix renders `fleet.daedalus.rootVerbs` into its table, has
+the helper itself check that table at build time (`--check-table`), and
+asserts what only the evaluation can see — each unit a verb can start exists,
+is enabled, is a oneshot that does not `RemainAfterExit`, and has no path unit.
 
 ### The session host
 

@@ -268,7 +268,7 @@ this tree has.)
   (a store path). Never `builtins.readFile` through a run-time path.
 - **`host/*.sh` are the privileged half.** They run as root or as the
   operator on a file-drop from the app, or — the verbs that moved to the
-  root helper (`fleet.daedalus.rootVerbs`, controller.nix) — when the
+  root helper (`fleet.daedalus.rootVerbs`, root-helper.nix) — when the
   helper starts their unit; the app's TypeScript side of each is in
   `app/src/host/`. Changing a verb's contract is a change in
   both places, and the app side deploys on save while this side waits for

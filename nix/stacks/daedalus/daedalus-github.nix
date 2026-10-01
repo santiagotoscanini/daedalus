@@ -191,7 +191,7 @@ in
       };
     };
 
-    # The root helper's `github-token` (controller.nix, `root`): the app asks
+    # The root helper's `github-token` (root-helper.nix): the app asks
     # for a fresh token now (a 401, an install that just landed) instead of
     # waiting for the tick. Throttled in the script to one mint a minute, and
     # a start while the timer's run is going is refused, never joined.

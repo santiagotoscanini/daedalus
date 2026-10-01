@@ -1,5 +1,5 @@
 # The daedalus agent (agent/), as the box runs it: the controller and the root
-# helper (stacks/daedalus/controller.nix). Built from the crate's own files only
+# helper (stacks/daedalus/controller.nix, root-helper.nix). Built from the crate's own files only
 # (Cargo.toml, Cargo.lock, build.rs, src/), so a commit that touches anything
 # else in the repository does not rebuild it; its version names that source
 # (`+src.<hash>`, agent/README.md "Versions"). No tray

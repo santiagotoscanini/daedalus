@@ -1,5 +1,5 @@
 # daedalus-verbs — the control plane's host verbs: the root helper's
-# (controller.nix, `root`), each a `fleet.daedalus.rootVerbs` entry naming its
+# (root-helper.nix), each a `fleet.daedalus.rootVerbs` entry naming its
 # unit, and whether a failure mails (monitoredJobs) or is shown on the page
 # that asked — ARCHITECTURE.md's root-helper table lists them all.
 # The scripts are verbs-lib.nix; the shared values daedalus-lib.nix. Part of the
@@ -37,8 +37,8 @@ let
     imageUpdateReaper
     ;
 
-  # What the run-file verbs share — the run file arrives as a credential (the
-  # controller's header, `run file`): no way back up, and a /tmp of their own.
+  # What the run-file verbs share — the run file arrives as a credential
+  # (ARCHITECTURE.md "The root helper"): no way back up, and a /tmp of their own.
   verbSandbox = {
     NoNewPrivileges = true;
     PrivateTmp = true;
@@ -86,7 +86,7 @@ in
         # fallback for a run that beats state-paths.service.
         fleet.statePaths.${prevDir}.mode = "0700";
 
-        # Redeploy: the root helper's `deploy` (controller.nix, `root`) starts the
+        # Redeploy: the root helper's `deploy` (root-helper.nix) starts the
         # app's EXISTING `app-<name>-deploy.service` (modules/apps) — the unit
         # that already pulls, compares the digest, restarts only if it moved,
         # health-checks and mails on failure — and relays its lines. No agent of
@@ -105,8 +105,7 @@ in
           timeoutSec = 600;
         };
 
-        # The workspace clone: the root helper's `workspace-clone` (controller.nix,
-        # `root`). A slug is not a value a list can hold, so it is a pattern
+        # The workspace clone: the root helper's `workspace-clone` (root-helper.nix). A slug is not a value a list can hold, so it is a pattern
         # selector and travels in the run file; the unit is a template the run id
         # instantiates. It runs as the operator — the clones and the SSH identity
         # are theirs — and gets its run file as a credential (the controller's
@@ -149,7 +148,7 @@ in
           timeoutSec = 960;
         };
 
-        # Restart: the root helper's `reboot` (controller.nix, `root`). The
+        # Restart: the root helper's `reboot` (root-helper.nix). The
         # helper starts this unit and relays what it prints; a refusal (host/lib.sh
         # `refuse`) still exits 0, so a refused restart is not a failed unit.
         #
@@ -180,7 +179,7 @@ in
         # sent. The only email this unit could ever deliver is a failure to reboot.
 
         # Set or remove one key in an app's operator-secrets file: the root
-        # helper's `secret-set` (controller.nix, `root`). The key is a pattern
+        # helper's `secret-set` (root-helper.nix). The key is a pattern
         # selector and the sealed value the payload, so both travel in the run
         # file (never a unit name, never argv); the unit is a template the run id
         # instantiates. The app is one of the applied registry's (verbs-lib

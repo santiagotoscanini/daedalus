@@ -19,8 +19,8 @@
 #   listen       `0.0.0.0:<port>` (7789 unless the host says otherwise),
 #                opened on `fleet.lanInterface` ONLY and handed to
 #                `fleet.modules.wg-easy.tunnelHostPorts`, exactly as the
-#                controller's link is (controller.nix, the header's
-#                `firewall` and `tunnel`): LAN or the system VPN, and the
+#                controller's link is (nix/README.md
+#                "The controller"): LAN or the system VPN, and the
 #                router forwards nothing to it. Tunnel peers and containers
 #                arrive over loopback, which has a pre-auth pool of its own
 #                (the crate's README, "The link").

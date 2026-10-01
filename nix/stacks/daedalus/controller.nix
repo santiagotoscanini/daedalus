@@ -1,284 +1,17 @@
 # The controller — the daedalus agent (agent/) on the box itself, in
-# `mode = "controller"`: one process as the operator, the door the app talks to
-# over a unix socket (PLAN feature 13). Today it serves that socket, its
-# local socket (below), the machine's facts at the `minimal` telemetry level,
-# its metrics page and the listener the other machines' links reach (below),
+# `mode = "controller"`: one process as the operator, the door the app talks
+# to over a unix socket. It serves that socket, its local socket, the box's
+# facts at the `minimal` telemetry level, the metrics page every machine's
+# telemetry is scraped from, the listener the other machines' links reach,
 # the box's Claude remote control in the configuration checkout, and the
-# Claude sessions the app asks it to resume (below).
+# Claude sessions the app asks it to resume.
 #
-# Claude remote control:
-#
-#   one server     the box's only one: a second `claude remote-control` in
-#                  the same directory cannot run — registration answers 409,
-#                  "This folder is already served by a terminal `claude
-#                  remote-control` on this device", keyed on the machine and
-#                  the directory (measured 2026-09-28, claude-code 2.1.281),
-#                  and the refused server exits about a minute later. Never
-#                  start another one in the checkout beside it.
-#   the unit       `systemd-run --user --unit=daedalus-claude-rc` (agent
-#                  src/claude/unit.rs): a transient unit of the operator's
-#                  user manager, so a stop or restart of this service leaves
-#                  it running and the next start re-attaches. Its output
-#                  goes to `<dataDir>/logs/claude-rc.log`, unfiltered, rotated
-#                  only when the server next starts; Loki gets it filtered
-#                  (`logs`, below).
-#   claude         found on this service's PATH: the pinned pkgs.claude-code
-#                  (platform/claude-code) is on `path` below, the one
-#                  DISABLE_UPDATES wrapper every other `claude` here is.
-#   environment    the unit gets the user manager's environment plus, from
-#                  the agent, HOME and this service's PATH with
-#                  `~/.local/bin` in front — so /run/wrappers/bin (sudo, for
-#                  sessions that rebuild) is on it — and the user manager's
-#                  own PATH after it (the login's profile: bash, git, ssh;
-#                  this service's PATH has none of them). A resumed session's
-#                  SHELL is the user manager's (else passwd's login shell),
-#                  never `sh`: Claude Code runs commands only through bash
-#                  or zsh.
-#                  Never add DISABLE_TELEMETRY, DO_NOT_TRACK,
-#                  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,
-#                  DISABLE_GROWTHBOOK or ANTHROPIC_BASE_URL to either: each
-#                  silently disables remote control.
-#   sessions       a session resumed from the app (agent
-#                  src/claude/sessions.rs) is another transient user unit,
-#                  `claude-session-<uuid>`, running the same claude under
-#                  `script` (a PTY) piped through `sed` and `grep` (the log
-#                  filter), all found on this service's PATH. Its output
-#                  goes to `<dataDir>/logs/claude-session-<uuid>.log`. The
-#                  sessions open under the Remote Control are kept in
-#                  `<dataDir>/claude-recovery.json` and resumed with the
-#                  same ids after any fresh start of it (a restart of its
-#                  unit, a reboot); a restart of THIS service is not one —
-#                  the agent re-attaches to both kinds of unit.
-#   gcroot         the agent pins the claude each of its units runs (agent
-#                  src/claude/gcroot.rs): `<dataDir>/gcroots/<unit>` links
-#                  the store path, registered as an indirect root with
-#                  `nix-store --add-root` (so `/nix/var/nix/gcroots/auto/`
-#                  points at it) — something the operator may do, so no
-#                  root step here; the daemon's nix is on `path` below. A
-#                  switch restarts this service, not those units, so they
-#                  can go on running a claude no generation still names; a
-#                  link whose unit is gone is swept within a minute.
-#   logs           `fleet.logFiles.claude_rc` (below) ships claude-rc.log to
-#                  Loki as `unit="daedalus-claude-rc.service"`, with the
-#                  rules the old journal pipeline had: ANSI stripped; the
-#                  status box's repaint dropped (it redraws about once a
-#                  second even when idle, ~400k lines a day measured) — the
-#                  box frames, the indented session rows and the banner
-#                  hints; and every line carrying `tool_result` dropped: with
-#                  `--verbose` each session's transcript is in this output,
-#                  and those lines hold what a tool RETURNED, secrets a
-#                  session read included (~1,600 a day). The full
-#                  transcripts are in ~/.claude/projects; Loki loses nothing
-#                  it should keep. The page's Connection board reads the
-#                  `[HH:MM:SS]` event lines from here.
-#                  `fleet.logFiles.claude_session` ships every
-#                  `claude-session-*.log` (not their rotated `.log.1`) as
-#                  `unit="claude-session"`, one `filename` label per session,
-#                  through the same stages.
-#
-# The metrics page, and the machines' metrics:
-#
-#   bind           `0.0.0.0:<fleet.daedalus.statusPort>` (7787 unless the
-#                  host says otherwise), every interface: the
-#                  prometheus container reaches the host through pasta's
-#                  host alias, and its connections arrive at the host's
-#                  own address, not loopback. Every address, loopback
-#                  included, gets `/healthz` and `/nodes/metrics` and a 404
-#                  for anything else (agent 0.20.0): the status document is
-#                  the local socket's (below), never HTTP's.
-#   firewall       CLOSED: the port is in no allowedTCPPorts, so the LAN
-#                  never reaches it; the container's connections are the
-#                  host talking to itself and pass.
-#   scrape         the `nodes` job: `host.containers.internal:<statusPort>`
-#                  at `/nodes/metrics`, every connected machine's telemetry
-#                  in one target, each series labelled `node` (its id),
-#                  `host`, `os` and `machine` (the name the app hands over
-#                  in `nodes.set_desired`). `up` there is the controller;
-#                  each machine is `daedalus_agent_link_up` (the Machine
-#                  Link Down alert, modules/monitoring). The box itself is
-#                  not in it: node-exporter covers the box.
-#
-# The machines' link (agent/README.md, "The link to the controller"):
-#
-#   listen         `0.0.0.0:<fleet.daedalus.controllerPort>` (7788 unless the
-#                  host says otherwise): TLS 1.3, each end pinning the other's
-#                  ed25519 key, no CA and no web server between.
-#   firewall       the port is open on `fleet.lanInterface` ONLY — the link
-#                  is for machines on the network, and the router forwards
-#                  nothing to it.
-#   tunnel         a WireGuard peer reaches it at the LAN address too: the
-#                  tunnel ends in wg-easy's own netns, where the LAN address
-#                  is the netns itself, so the port is handed to
-#                  `fleet.modules.wg-easy.tunnelHostPorts` and DNATed on to
-#                  the host (read only while that module is on). The peer
-#                  resolves the name below through the tunnel's DNS, which
-#                  is the LAN resolver.
-#   advertise      `<fleet.wanHost>:<port>`, what the app hands a machine to
-#                  dial. The public name, because the LAN resolver answers it
-#                  with the LAN address (platform/ddclient puts it in
-#                  fleet.dnsHosts, and modules/pihole makes it local-only, so
-#                  A only, no AAAA to race). `<hostName>.<lanDomain>` is NOT
-#                  that: the resolver answers its own host's name itself, and
-#                  not with the LAN address (measured: 0.0.0.0 and ::1), and
-#                  the name exists only where the host's reservations carry
-#                  it. Off the LAN and off the tunnel the public name
-#                  resolves to the WAN address, where nothing is forwarded
-#                  to this port, so such a machine fails closed.
-#   SRV            `_daedalus-controller._tcp.<lanDomain>` → the same name
-#                  and port, through fleet.dnsSrv: how an agent installed
-#                  without `--controller` finds the listener. modules/pihole
-#                  renders each entry as a `srv-host=` line in pihole.toml,
-#                  so ADDING or changing one restarts the resolver at the
-#                  switch (a few seconds without LAN DNS) — this list is not
-#                  a runtime file. A record is only a first use for the
-#                  machine: anyone who answers DNS on the LAN could redirect
-#                  it, which is why the key is pinned, not the address.
-#   identity.key   the controller's key, made on its first start in
-#                  `data_dir` (0600): what every machine pins. `data_dir` is
-#                  under fleet.stateRoot, which a host snapshots and
-#                  replicates with the rest of its container state (the
-#                  reference host: its frequent/hourly/daily snapshots and
-#                  the nightly mirror of that dataset) — so a restore brings
-#                  the same key back and no machine sees "controller key
-#                  changed". A lost key is exactly that: every machine refuses
-#                  the new one until it is re-pinned. `system.info` states its
-#                  fingerprint (`controller.fingerprint`).
-#
-#   rotation     `controller.rotate` (Settings › Machines, armed first)
-#                  makes `identity.next.key` and `rotation.json` beside it;
-#                  both keys are served for the grace, the machines on agent
-#                  0.19.0+ re-pin themselves, and at its end the new key
-#                  becomes `identity.key`. A restore from a snapshot taken
-#                  mid-rotation brings both back: the rotation resumes, or
-#                  retires the old key at the first start if its end passed.
-#
-#   What the app does with it: puts `controller.{advertise,public_key}` from
-#   system.info in its install lines (`--controller`, `--pin`); pushes its
-#   COMPLETE set of decided keys (`nodes.set_desired`: approved/revoked, each
-#   with its policy) on connect and on every decision, since the controller
-#   keeps nothing across a restart; reads machines through `nodes.*` and
-#   sends commands with `nodes.command`.
-#
-# The session host (session-host.nix), while `fleet.daedalus.sessionHost`
-# is on — `[controller.session_host]` in config.toml (agent
-# src/session_host.rs):
-#
-#   allow-list   written by this controller from every desired set: the
-#                approved machines whose policy turns santree on, 0600 in
-#                `dataDir`, as the operator, only when it changes — and
-#                never before the app's first set after a start, so a
-#                restart cuts no terminal. A revocation made while the
-#                controller is down reaches the host with the next set.
-#   status       the host's status file, read every 2 s: its key goes to
-#                every santree machine in its policy with the address
-#                (`<fleet.wanHost>:<port>`, as `advertise` above), and
-#                `santree.status` answers the app from it — `bin` and
-#                `config` against the running `exe` and `config` say
-#                whether a restart applies an update. A write of the
-#                allow-list that fails is retried every 2 s, and one that
-#                would revoke removes the file meanwhile (the host then
-#                admits nobody).
-#
-# The root helper (agent src/root/): how root actions reach the box
-# without the controller, which runs as the operator, holding any privilege.
-#
-#   root         `daedalus-root.socket` at /run/daedalus-root/root.sock, the
-#                operator's and 0600, `Accept=yes`: each connection starts a
-#                fresh `daedalus-root@` instance — `daedalus-agent
-#                root-helper`, root's uid with an empty capability set and a
-#                strict sandbox — which checks the peer is the operator's uid
-#                (SO_PEERCRED; root itself is refused), reads ONE request line
-#                `{verb, id, selectors}`, and answers. No resident root daemon.
-#   one door     only the controller connects: the app asks `root.run` on the
-#                API socket, and the controller relays the unit's progress as
-#                `root.progress` events and the outcome as the answer. The
-#                socket is outside controllerDir, so the app's container never
-#                sees it.
-#   verbs        `fleet.daedalus.rootVerbs`, contributed by the module that
-#                owns each unit, rendered into the helper's table (with the
-#                operator's uid and the systemctl/journalctl paths): a name, an
-#                EXISTING oneshot unit with no path unit, a timeout, and
-#                selectors that are fixed lists spliced in as `{name}` — never
-#                a path, a flag or a free unit name from the caller. The
-#                helper's own `--check-table` holds the table to the rules it
-#                applies at every start, at build time; the evaluation asserts
-#                only what the helper cannot see (each unit exists, is enabled,
-#                is a oneshot, not RemainAfterExit, has no path unit). `status` is the helper's own
-#                read: the verbs and their units' state.
-#   run file     a value no list can hold is a PATTERN (`patterns.<name>`: an
-#                anchored regex over a small character set, a length cap),
-#                and a sealed secret is a PAYLOAD (`payloadMax`). Neither goes
-#                into a unit name — escaping would quadruple a slug past
-#                systemd's 256-character limit and leave the unit to unescape
-#                `%I` and trust it — nor onto a command line: such a verb names
-#                a template, `x@.service`; the helper writes every selector and
-#                the payload to `<rootRunDir>/<run id>.json` (root's, 0600,
-#                O_EXCL, O_NOFOLLOW, in a 0700 root directory — the one path
-#                its sandbox may write) and starts `x@<run id>`. The unit gets
-#                the file as a systemd credential (`LoadCredential=request:`,
-#                read by systemd as root, handed over read-only in
-#                $CREDENTIALS_DIRECTORY), so it runs as the operator and never
-#                opens root's directory; the helper removes the file once the
-#                unit is done, and the unit's root `ExecStopPost` does again.
-#                One run of such a verb at a time.
-#   running      `systemctl start <unit>`, so the work is the unit's and
-#                survives a switch restarting the helper or the controller; its
-#                journal lines stream back; a failed start job is `failed`,
-#                else what the unit's outcome entry says (host/lib.sh
-#                `outcome`: `done`, or `refused` with the unit exiting 0, so
-#                no failed unit), taken only when journald's own fields
-#                vouch for it, never by a line's text. Not an exit status: systemd forgets a oneshot's
-#                once it is inactive. The controller keeps each run's lines
-#                and outcome for an hour (`root.follow`), so a long verb is
-#                asked with `detach` and answered once it starts.
-#                A unit already running is refused, never joined: every verb
-#                holds a lock in <rootRunDir> (its unit's, or its template's)
-#                until its answer, so two requests cannot both start it and
-#                share one job.
-#   the verbs   ARCHITECTURE.md's root-helper table lists them, each with its
-#                unit; every one is a `fleet.daedalus.rootVerbs` entry.
-#
-# What nix hands it:
-#
-#   the binary    built from the crate's own files only (Cargo.toml,
-#                  Cargo.lock, build.rs, src/), so a commit that touches
-#                  anything else in the repository does not rebuild it; its
-#                  version names that source (`+src.<hash>`). No
-#                  tray (`--no-default-features`), only `daedalus-agent`.
-#   config.toml    generated below. The agent reads it from a FIXED place —
-#                  `/var/lib/daedalus-agent/config.toml`, the Linux default
-#                  directory (agent/src/config.rs); it takes no path on its
-#                  command line, and `DAEDALUS_AGENT_DATA_DIR` is a development
-#                  knob. So tmpfiles links that path to the store file (root's
-#                  directory: the operator's process cannot rewrite its own
-#                  policy), `data_dir` in it moves state and logs under
-#                  stateRoot, and a shell's `daedalus-agent status` reads the
-#                  same file the service does. The unit restarts when the file
-#                  changes (restartTriggers: its own text would not).
-#   the local      `<dataDir>/run/agent.sock`: what `daedalus-agent status`
-#   socket         on the box talks to. The agent makes `run/` 0711 and the
-#                  socket 0666, and serves only root and the operator (the
-#                  peer's uid, SO_PEERCRED); nothing here names it.
-#   dataDir        the one place the service may write besides its socket's
-#                  directory (ProtectSystem=strict, ProtectHome=read-only,
-#                  ReadWritePaths for both, below): besides state.json, the
-#                  logs and the gcroots, the agent writes `run/agent.sock`
-#                  there at every start and `identity.next.key` +
-#                  `rotation.json` in a rotation (each temp + fsync + rename,
-#                  so the directory itself, not only the files).
-#   the socket     `<controllerDir>/api.sock`, in a directory tmpfiles makes
-#                  the operator's before any unit starts, so the app's bind
-#                  source always exists. The agent refuses a directory that is
-#                  a symlink, not its user's, or group/other-writable; it
-#                  changes none it did not make. 0700: the app's container
-#                  runs `--user=0:0` whatever its source, the operator on the
-#                  host, whom the socket always serves.
-#
-# restartIfChanged stays at its default: a switch that moves the agent
-# restarts it, which ends nothing — the app reconnects, and the long-lived
-# children it starts (Claude remote control, resumed sessions) each run in a
-# transient user unit of their own that outlives it. `Restart=always`
-# because the agent is built with `panic = "abort"`.
+# agent/README.md "Controller mode" is what the agent does with each of
+# these; nix/README.md "The controller" is how this box wires them — ports
+# and firewall, the advertised address, config.toml, the unit's environment
+# and sandbox. The root helper is root-helper.nix, Claude's logs
+# claude-logs.nix; the session host the controller writes the allow-list of
+# is session-host.nix.
 {
   config,
   lib,
@@ -290,7 +23,8 @@ let
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     controllerDir
     controllerDataDir
-    rootRunDir
+    claudeUnit
+    rootSocket
     ;
 
   sessionHost = config.fleet.daedalus.sessionHost;
@@ -298,149 +32,17 @@ let
   agent = pkgs.callPackage ../../pkgs/daedalus-agent.nix { };
 
   # Its state (state.json, identity.key, a rotation's files), its local socket
-  # (run/) and logs — writable by the service (the header's `dataDir`). Beside
-  # the control plane's other host-side state (apply/, prev/), and only the
-  # operator's. The session host (session-host.nix, the same uid) reads one
-  # file of it: the allow-list the controller keeps there.
+  # (run/) and logs: the one place the service writes besides its API
+  # socket's directory. The session host (session-host.nix, the same uid)
+  # reads one file of it: the allow-list the controller keeps there.
   dataDir = controllerDataDir;
-  # The agent's logs, Claude remote control's among them (the header's `logs`).
-  logDir = "${dataDir}/logs";
 
   # Where the agent reads config.toml: its Linux default directory.
   configDir = "/var/lib/daedalus-agent";
 
-  # The machines' link: every address, the LAN interface's firewall alone
-  # admitting it (see the header).
   port = config.fleet.daedalus.controllerPort;
-
-  # The status page: every interface, the firewall keeping it from the LAN
-  # (see the header). Written into config.toml so the agent and the scrape
-  # below agree.
+  # Written into config.toml so the agent and the scrape below agree.
   inherit (config.fleet.daedalus) statusPort;
-
-  # Claude remote control's transient user unit (the header's `the unit`).
-  claudeUnit = "daedalus-claude-rc";
-
-  # The root helper (the header's `root`). NOT under controllerDir: that one
-  # is bind-mounted into the app's container, and this socket is the
-  # controller's alone.
-  rootSocket = "/run/daedalus-root/root.sock";
-  inherit (config.fleet.daedalus) rootVerbs;
-  runFileVerb = v: v.patterns != { } || v.payloadMax != null;
-  rootTable = pkgs.writeText "daedalus-root-verbs.json" (
-    builtins.toJSON {
-      allow_uid = config.fleet.operator.uid;
-      systemctl = "${config.systemd.package}/bin/systemctl";
-      journalctl = "${config.systemd.package}/bin/journalctl";
-      run_dir = rootRunDir;
-      verbs = lib.mapAttrs (
-        _: v:
-        {
-          inherit (v) unit description selectors;
-          timeout_secs = v.timeoutSec;
-          patterns = lib.mapAttrs (_: p: {
-            inherit (p) regex;
-            max_len = p.maxLength;
-          }) v.patterns;
-        }
-        // lib.optionalAttrs (v.payloadMax != null) { payload_max = v.payloadMax; }
-      ) rootVerbs;
-    }
-  );
-  # An instance outlives its longest verb's wait by a minute, no more.
-  rootRuntimeMax = 60 + lib.foldl' lib.max 60 (lib.mapAttrsToList (_: v: v.timeoutSec) rootVerbs);
-
-  # The table, held at build time to the rules the helper applies at every
-  # start (agent src/root/mod.rs `Table::check`: names, selector values,
-  # patterns, caps) by the helper itself, so the rules have one home. A table
-  # it would refuse fails the build naming the reason.
-  rootTableChecked = pkgs.runCommand "daedalus-root-verbs-checked.json" { } ''
-    ${lib.getExe agent} root-helper --check-table ${rootTable}
-    cp ${rootTable} $out
-  '';
-
-  # Every unit a verb can name: its template with each selector's values
-  # spliced in (the helper's `expand`); a run-file verb's is its template.
-  expansions =
-    v:
-    if runFileVerb v then
-      [ v.unit ]
-    else
-      map (
-        combo:
-        lib.foldl' (u: k: lib.replaceStrings [ "{${k}}" ] [ combo.${k} ] u) v.unit (lib.attrNames combo)
-      ) (lib.cartesianProduct v.selectors);
-  # What only the evaluation can see, and the helper cannot: each unit a verb
-  # can start exists on this system, is enabled, is a oneshot that does not
-  # RemainAfterExit, and has no path unit — a second door to the same unit,
-  # which the helper's one-run-at-a-time could not see.
-  rootVerbAssertions = lib.concatLists (
-    lib.mapAttrsToList (
-      verb: v:
-      let
-        # `name@instance.service` is its template's, `name@`.
-        svc =
-          u:
-          let
-            stem = lib.removeSuffix ".service" u;
-            at = builtins.match "([^@]*@).*" stem;
-          in
-          if at == null then stem else lib.head at;
-        cfgOf = u: config.systemd.services.${svc u} or null;
-      in
-      map (u: {
-        assertion =
-          lib.hasSuffix ".service" u
-          && cfgOf u != null
-          && (cfgOf u).enable
-          && (cfgOf u).serviceConfig.Type or null == "oneshot"
-          # A start on an active RemainAfterExit oneshot is a no-op that
-          # exits 0: the helper would answer `done` for a run that never was.
-          && !(lib.elem ((cfgOf u).serviceConfig.RemainAfterExit or false) [
-            true
-            "yes"
-            "true"
-            "on"
-            "1"
-          ])
-          && !(config.systemd.paths ? ${svc u});
-        message = "fleet.daedalus.rootVerbs.${verb}: ${u} must be an enabled oneshot service of this system, not RemainAfterExit, with no path unit";
-      }) (expansions v)
-    ) rootVerbs
-  );
-
-  # What both Claude log sources (below) do on the way to Loki (the header's
-  # `logs`). The status-box expression is the grep the server's journal
-  # filter ran before it moved here. A file source skips the journal
-  # pipeline, so its "credentials in URLs" redaction (modules/logging) is
-  # repeated here, verbatim: a session's output can carry an OAuth callback
-  # or a manifest code as well as any journal line can.
-  claudeStages = ''
-    stage.replace {
-      expression = "(\\x1b\\[[0-9;?]*[A-Za-z]|\\x1b\\]8;;[^\\x07]*\\x07)"
-      replace    = ""
-    }
-
-    stage.replace {
-      expression = "(?i)(?:[?&#]|\\\\u0026|&amp;|query=\"|%3F|%26)(?:code|state|id_token_hint|id_token|access_token|refresh_token|token|apikey|api_key|client_secret|password|passwd|secret)(?:=|%3D)((?:[^&\"\\s\\\\]|\\\\[^\"u\\s&]|\\\\u(?:[1-9a-f][0-9a-f]{3}|0[1-9a-f][0-9a-f]{2}|00[013-9a-f][0-9a-f]|002[0-57-9a-f]))*)"
-      replace    = "REDACTED"
-    }
-
-    stage.replace {
-      expression = "/app-manifests/([^/?&\"\\s\\\\]+)"
-      replace    = "REDACTED"
-    }
-
-    stage.drop {
-      expression          = "^·|^[[:space:]]|^$|Continue coding in the Claude|space to show QR code"
-      drop_counter_reason = "claude_rc_status_box"
-    }
-
-    stage.drop {
-      expression          = "tool_result"
-      drop_counter_reason = "claude_rc_tool_output"
-    }
-  '';
 
   configFile = (pkgs.formats.toml { }).generate "daedalus-agent-controller.toml" {
     mode = "controller";
@@ -462,7 +64,7 @@ let
       advertise = [ "${config.fleet.wanHost}:${toString port}" ];
     }
     // lib.optionalAttrs sessionHost.enable {
-      # The session host (session-host.nix; the header's `session host`).
+      # The session host (session-host.nix).
       session_host = {
         address = "${config.fleet.wanHost}:${toString sessionHost.port}";
         allow_list = sessionHost.allowList;
@@ -496,108 +98,12 @@ in
     '';
   };
 
-  options.fleet.daedalus.rootVerbs = lib.mkOption {
-    internal = true;
-    default = { };
-    description = ''
-      The root helper's verbs (the controller's header, `root`): each a
-      name the controller may ask for, the existing oneshot unit it starts,
-      and the selectors it takes — each a fixed list of values, spliced into
-      the unit name where it says `{name}`. Contributed by the module that
-      owns the unit; held to the helper's own rules at build time and at
-      every start, and its units asserted at evaluation.
-    '';
-    type = lib.types.attrsOf (
-      lib.types.submodule {
-        options = {
-          unit = lib.mkOption {
-            type = lib.types.str;
-            description = "The `.service` it starts; `{selector}` marks a template instance.";
-          };
-          description = lib.mkOption {
-            type = lib.types.str;
-            description = "What it does, for `status`.";
-          };
-          timeoutSec = lib.mkOption {
-            type = lib.types.ints.positive;
-            description = "How long the helper waits for the unit's start job before it reports `failed`; the unit's own TimeoutStartSec is what stops the unit.";
-          };
-          selectors = lib.mkOption {
-            type = lib.types.attrsOf (lib.types.listOf lib.types.str);
-            default = { };
-            description = "Selector name → the values it may take.";
-          };
-          patterns = lib.mkOption {
-            type = lib.types.attrsOf (
-              lib.types.submodule {
-                options = {
-                  regex = lib.mkOption {
-                    type = lib.types.str;
-                    description = "Anchored `^…$`, written with letters, digits and `^$[]{}(),|*+?._@ /:-` only (no backslash). Only the helper evaluates it (at build time through `--check-table`, and per request), against the whole value: an alternation cannot leave one branch unanchored.";
-                  };
-                  maxLength = lib.mkOption {
-                    type = lib.types.ints.positive;
-                    description = "The longest value, 1 to 256.";
-                  };
-                };
-              }
-            );
-            default = { };
-            description = "Pattern selector name → the shape its value must have. A verb with one names a template, `x@.service`, and gets its values in a run file, never in its unit name.";
-          };
-          payloadMax = lib.mkOption {
-            type = lib.types.nullOr lib.types.ints.positive;
-            default = null;
-            description = "The largest payload the verb takes, in bytes (at most 262144), delivered in its run file; null for none.";
-          };
-        };
-      }
-    );
-  };
-
   config = lib.mkIf config.fleet.modules.daedalus.enable {
-    assertions = rootVerbAssertions;
     fleet.statePaths.${dataDir}.mode = "0700";
-    # Made by the agent too, but the log shipper bind-mounts it, so it must
-    # exist before the shipper's container starts.
-    fleet.statePaths.${logDir}.mode = "0755";
-
-    # Claude remote control's output, filtered on the way to Loki (the
-    # header's `logs`).
-    fleet.logFiles.claude_rc = {
-      path = "${logDir}/claude-rc.log";
-      mountDir = logDir;
-      # Where the journal put the old unit's lines: `system` is the stack
-      # every host unit without a rule of its own gets.
-      labels = {
-        unit = "${claudeUnit}.service";
-        stack = "system";
-        host = config.networking.hostName;
-        job = claudeUnit;
-        service_name = claudeUnit;
-      };
-      stages = claudeStages;
-    };
-
-    # The resumed sessions' output (the header's `sessions` and `logs`): one
-    # source for the family. The pattern ends in `.log`, so a session's
-    # rotated `.log.1` is not matched; alloy adds a `filename` label per file.
-    fleet.logFiles.claude_session = {
-      path = "${logDir}/claude-session-*.log";
-      mountDir = logDir;
-      labels = {
-        unit = "claude-session";
-        stack = "system";
-        host = config.networking.hostName;
-        job = "claude-session";
-        service_name = "claude-session";
-      };
-      stages = claudeStages;
-    };
 
     # LAN only: never `allowedTCPPorts`, which would open it on every
     # interface. The tunnel's peers arrive through wg-easy's DNAT instead,
-    # which reaches the host over loopback (the header's `tunnel`).
+    # which reaches the host over loopback.
     networking.firewall.interfaces.${config.fleet.lanInterface}.allowedTCPPorts = [ port ];
     fleet.modules.wg-easy.tunnelHostPorts = [ { inherit port; } ];
 
@@ -611,22 +117,14 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${configDir} 0755 root root -"
-      # The root helper's run files: root's alone. A file a unit never
-      # came for (its start failed before the helper could remove it) goes
-      # within a day. The helper's locks (one per unit or template) stay:
-      # one aged out under a holder would let a second helper lock a new
-      # file beside it.
-      "d ${rootRunDir} 0700 root root 1d"
-      "x ${rootRunDir}/*.lock"
       "L+ ${configDir}/config.toml - - - - ${configFile}"
       "d ${controllerDir} 0700 ${config.fleet.operator.user} ${config.fleet.operator.group} -"
     ];
 
     fleet.monitoredJobs.daedalus-controller = { };
 
-    # Every machine's metrics, through the controller (the header's `scrape`).
-    # The job keeps the name the per-machine targets had, so a query by
-    # `job="nodes"` still finds them.
+    # Every machine's metrics, through the controller: one target, each
+    # series labelled with its machine.
     fleet.prometheusScrapes = [
       {
         job_name = "nodes";
@@ -651,10 +149,10 @@ in
       # systemctl / systemd-run / loginctl for its user units, ps for the
       # process count; /run/wrappers as on every operator-run unit (and on
       # the Claude unit's PATH, which is this one's); claude itself, the
-      # pinned one (the header's `claude`); and what a resumed session runs
-      # under (the header's `sessions`): util-linux's `script` for the PTY
+      # pinned one (platform/claude-code); and what a resumed session runs
+      # under: util-linux's `script` for the PTY
       # the CLI needs, sed and grep for its log filter; and `nix-store` (the
-      # daemon's own nix), which pins each unit's claude (the header's `gcroot`).
+      # daemon's own nix), which pins each unit's claude.
       path = [
         "/run/wrappers"
         config.systemd.package
@@ -684,14 +182,14 @@ in
         # and 32 in the handshake; beside telemetry and the session's tools.
         LimitNOFILE = 4096;
 
-        # The root helper is its only way to root (the header's `root`), so
+        # The root helper is its only way to root (root-helper.nix), so
         # it may not take another: no setuid (sudo is on its PATH for the
         # Claude units, which the USER manager runs — not this process's
         # children, so none of this reaches them). It writes its own state
         # and its socket's directory and nothing else; everything it asks
         # of systemd, logind or the nix daemon goes over a socket, which a
-        # read-only filesystem does not stop. Measured under exactly this
-        # (2026-09-29): `systemctl --user`, `systemd-run --user`,
+        # read-only filesystem does not stop. What runs under exactly this:
+        # `systemctl --user`, `systemd-run --user`,
         # `loginctl`, `nix-store --add-root`, `claude --version`. No
         # MemoryDenyWriteExecute or syscall filter: `claude` (a JIT) runs
         # under it.
@@ -724,75 +222,6 @@ in
       unitConfig = {
         StartLimitBurst = 20;
         StartLimitIntervalSec = 600;
-      };
-    };
-
-    # The root helper's door (the header's `root`): the operator's, 0600, so
-    # the kernel lets nobody else connect, and the helper checks the peer
-    # again. Accept=yes: a fresh process per connection, no resident root.
-    systemd.sockets.daedalus-root = {
-      description = "Daedalus root helper: the controller's one door to root";
-      wantedBy = [ "sockets.target" ];
-      socketConfig = {
-        ListenStream = rootSocket;
-        Accept = true;
-        SocketUser = config.fleet.operator.user;
-        SocketGroup = "root";
-        SocketMode = "0600";
-        DirectoryMode = "0755";
-        # The controller asks one verb at a time in practice; this bounds a
-        # flood from its uid without queueing a real request behind it.
-        MaxConnections = 8;
-      };
-    };
-
-    # One connection's root process. It reads the table, the unit states and
-    # the journal and asks systemd to start a unit — nothing else — so it
-    # keeps root's uid and none of its capabilities: PID 1's private socket
-    # and the journal's files are root-owned, which is all it needs
-    # (measured under this exact sandbox, 2026-09-28). The work runs in the
-    # verb's own unit, which a stop of this instance does not touch.
-    systemd.services."daedalus-root@" = {
-      description = "Daedalus root helper: one request from the controller";
-      restartIfChanged = false;
-      # A refusal exits 0; an instance that crashed is not kept for
-      # `systemctl --failed` — its journal says what happened. A [Unit] key:
-      # under serviceConfig systemd ignored it ("Unknown key in [Service]").
-      unitConfig.CollectMode = "inactive-or-failed";
-      serviceConfig = {
-        ExecStart = "${lib.getExe agent} root-helper --table ${rootTableChecked}";
-        StandardInput = "socket";
-        StandardOutput = "journal";
-        StandardError = "journal";
-        RuntimeMaxSec = rootRuntimeMax;
-        CapabilityBoundingSet = "";
-        AmbientCapabilities = "";
-        NoNewPrivileges = true;
-        ProtectSystem = "strict";
-        ProtectHome = true;
-        PrivateTmp = true;
-        PrivateDevices = true;
-        PrivateNetwork = true;
-        IPAddressDeny = "any";
-        RestrictAddressFamilies = "AF_UNIX";
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectKernelLogs = true;
-        ProtectControlGroups = true;
-        ProtectClock = true;
-        ProtectHostname = true;
-        ProtectProc = "invisible";
-        ProcSubset = "pid";
-        RestrictNamespaces = true;
-        RestrictRealtime = true;
-        RestrictSUIDSGID = true;
-        LockPersonality = true;
-        MemoryDenyWriteExecute = true;
-        SystemCallArchitectures = "native";
-        SystemCallFilter = "@system-service";
-        UMask = "0077";
-        # The run files (the header's `run file`), and nothing else.
-        ReadWritePaths = [ rootRunDir ];
       };
     };
   };
