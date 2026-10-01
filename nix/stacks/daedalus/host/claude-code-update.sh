@@ -153,17 +153,24 @@ MANIFEST="$CLONE/$MANIFEST_REL"
 [ -f "$MANIFEST" ] ||
   fail validating "$CLONE has no $MANIFEST_REL — this engine does not pin Claude Code"
 
-FROM_VERSION="$(jq -r '.version // ""' <"$MANIFEST")"
+# The committed manifest's bytes, read as the operator and never through a
+# link: the clone is theirs (host/lib.sh has the rule).
+manifest_json() {
+  read_as_operator "$MANIFEST" 2>/dev/null || true
+}
+
+FROM_VERSION="$(manifest_json | jq -r '.version // ""' 2>/dev/null || true)"
 [ -n "$FROM_VERSION" ] || fail validating "$MANIFEST_REL has no version"
 
 current="$(git_clone rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 [ "$current" = "$REF" ] ||
   fail validating "the clone $CLONE is on '${current:-?}', not '$REF' — check it out first"
 
-# The one file this writes must be clean, or the commit below would carry
-# somebody's work-in-progress. The rest of the tree may be dirty; that is
-# the operator's business and git will not be asked about it.
-if ! git_clone diff --quiet -- "$MANIFEST_REL"; then
+# The one file this writes must be clean — in the work tree AND the index —
+# or the commit below would carry somebody's work-in-progress, and undoing it
+# would throw that work away. The rest of the tree may be dirty; that is the
+# operator's business, and nothing below touches any other path.
+if ! git_clone diff --quiet HEAD -- "$MANIFEST_REL"; then
   fail validating "$MANIFEST_REL has uncommitted changes in $CLONE — commit or restore it first"
 fi
 
@@ -188,7 +195,7 @@ TO_VERSION="$(curl -fsSL --max-time 30 --retry 2 "$RELEASES/latest" 2>/dev/null 
   fail resolving "$RELEASES/latest answered '${TO_VERSION:-<empty>}', which is not a version"
 
 if [ "$TO_VERSION" = "$FROM_VERSION" ]; then
-  write_status "done" "complete" ""
+  write_status "done" "no-change" ""
   echo "claude-code update: already pinned to $TO_VERSION"
   exit 0
 fi
@@ -206,7 +213,7 @@ fetch "$RELEASE_KEY" "$WORK/key.asc" ||
 # against the committed manifest rather than against a literal, so the day
 # upstream renames its artifacts this refuses loudly instead of pinning
 # something the build will ignore.
-want="$(jq -r '.platforms | to_entries[0].value.binary // ""' <"$MANIFEST" 2>/dev/null || true)"
+want="$(manifest_json | jq -r '.platforms | to_entries[0].value.binary // ""' 2>/dev/null || true)"
 got="$(jq -r '.platforms | to_entries[0].value.binary // ""' <"$WORK/manifest.json" 2>/dev/null || true)"
 if [ -n "$want" ] && [ -n "$got" ] && [ "${want##*.}" != "${got##*.}" ]; then
   fail resolving "the pinned manifest names '$want' and $TO_VERSION's names '$got' — pinning it would make the engine's override unreachable and change nothing. platform/claude-code/claude-code.nix has the argument."
@@ -243,30 +250,50 @@ if ! log_run "$LOGFILE" gpg --batch --verify "$WORK/manifest.json.sig" "$WORK/ma
 fi
 
 # --- commit ---------------------------------------------------------------
-# Written as the operator, so the file keeps the ownership the rest of the
-# tree has and the commit below can be made by the same user.
-write_status "running" "committing" ""
+# Everything from here touches the clone, and the clone is also a workspace:
+# the 30-minute sync and the clone verb run git in it under the workspace
+# lock (host/lib.sh lock_workspaces_root), so this takes it too. Held until
+# the push is done; released when fd 8 closes at exit.
+write_status running committing ""
+lock_workspaces_root ||
+  fail committing "the workspace lock under $WORKSPACES_DIR was held for 10 minutes (a workspace sync or clone) — nothing was changed"
 
-if ! as_operator_fn op_publish "$MANIFEST" 0644 json <"$WORK/manifest.json"; then
-  fail committing "could not write $MANIFEST_REL in $CLONE"
-fi
-
-# Pull origin in before committing on top of it, so the push below is a
-# fast-forward. Refuses a diverged clone rather than deciding what to do
-# with unpushed work — push it, then press this again.
+# Pull origin in BEFORE writing, so the commit is a fast-forward of origin
+# and the merge never meets a file this run changed. Refuses a diverged clone
+# rather than deciding what to do with unpushed work — push it, then press
+# this again.
 if ! log_run "$LOGFILE" git_clone fetch --quiet --prune origin "$REF"; then
   fail committing "could not fetch origin/$REF in $CLONE — $(errtail)"
 fi
-ahead="$(git_clone rev-list --count "origin/$REF..$REF" 2>/dev/null || echo 0)"
-if [ "${ahead:-0}" != "0" ]; then
-  git_clone checkout --quiet -- "$MANIFEST_REL" || true
+ahead="$(git_clone rev-list --count "origin/$REF..$REF" 2>/dev/null || echo "?")"
+[ "$ahead" = 0 ] ||
   fail committing "$CLONE has $ahead commit(s) on '$REF' that are not on origin — push them first"
-fi
-if ! log_run "$LOGFILE" git_clone merge --ff-only "origin/$REF"; then
-  git_clone checkout --quiet -- "$MANIFEST_REL" || true
+if ! log_run "$LOGFILE" git_clone merge --ff-only --quiet "origin/$REF"; then
   fail committing "could not fast-forward $CLONE to origin/$REF — $(errtail)"
 fi
+# Origin may have moved the pin itself since this run read it; writing over
+# that would pin against a manifest nobody compared.
+now="$(manifest_json | jq -r '.version // ""' 2>/dev/null || true)"
+[ "$now" = "$FROM_VERSION" ] ||
+  fail committing "origin moved $MANIFEST_REL to '${now:-?}' while this ran — press Update again"
 
+# Put the manifest back as HEAD has it — index and work tree, that one path
+# and nothing else. Validating proved it matched HEAD when this started.
+restore_manifest() {
+  git_clone checkout --quiet HEAD -- "$MANIFEST_REL" ||
+    log_line "$LOGFILE" "could not restore $MANIFEST_REL in $CLONE — restore it by hand"
+}
+
+# Written as the operator, so the file keeps the ownership the rest of the
+# tree has and the commit below can be made by the same user.
+if ! as_operator_fn op_publish "$MANIFEST" 0644 json <"$WORK/manifest.json"; then
+  restore_manifest
+  fail committing "could not write $MANIFEST_REL in $CLONE"
+fi
+
+# Scoped to the one path: the index is shared with whoever works in this
+# clone, and a commit with a pathspec leaves everything else they staged
+# where it was.
 if ! log_run "$LOGFILE" git_clone -c "user.email=$(commit_email)" -c "user.name=$(commit_name "$HOSTNAME")" \
   commit --quiet -m "claude-code: pin $FROM_VERSION → $TO_VERSION
 
@@ -274,18 +301,35 @@ The release manifest for $TO_VERSION, signature-verified against
 $RELEASE_FPR before it was written.
 
 Pinned from daedalus by $ACTOR." -- "$MANIFEST_REL"; then
-  git_clone checkout --quiet -- "$MANIFEST_REL" || true
-  fail committing "could not commit $MANIFEST_REL in $CLONE — $(errtail)"
+  commit_error="$(errtail)"
+  restore_manifest
+  fail committing "could not commit $MANIFEST_REL in $CLONE — $commit_error"
 fi
-COMMIT_SHA="$(git_clone rev-parse --short HEAD 2>/dev/null || true)"
+COMMIT_FULL="$(git_clone rev-parse HEAD 2>/dev/null || true)"
+COMMIT_SHA="${COMMIT_FULL:0:7}"
 
 # Pushed before the handoff, not after: the engine update fast-forwards this
 # same clone from origin, so a commit that only exists locally would be
 # fast-forwarded away before nix ever resolved it.
+#
+# A refused push undoes THIS commit and nothing else: HEAD steps back one
+# (`--soft`, so no file and no other staged change moves) and the manifest is
+# put back. Never a `reset --hard` — the clone is the operator's working tree
+# and may hold uncommitted work, which a hard reset would destroy.
 if ! log_run "$LOGFILE" git_clone push origin "$REF"; then
-  git_clone reset --quiet --hard "origin/$REF" || true
-  fail committing "could not push $REF to origin — $(errtail). The commit was rolled back; nothing is pinned."
+  push_error="$(errtail)"
+  if [ "$(git_clone rev-parse HEAD 2>/dev/null || true)" = "$COMMIT_FULL" ] &&
+    git_clone reset --quiet --soft HEAD~1; then
+    restore_manifest
+    COMMIT_SHA=""
+    fail committing "could not push $REF to origin — $push_error. The pin commit was undone; nothing is pinned and nothing else in $CLONE was touched."
+  fi
+  fail committing "could not push $REF to origin — $push_error. The pin commit $COMMIT_SHA is still in $CLONE (HEAD moved under this run, so it was left alone) — push or drop it by hand."
 fi
+
+# The handoff below starts an engine update, which fast-forwards this clone
+# under the same lock: let go of it first.
+exec 8<&-
 
 # --- hand off -------------------------------------------------------------
 # The same file System › Updates writes. From here the engine verb owns the
