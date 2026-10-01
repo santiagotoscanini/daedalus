@@ -31,8 +31,7 @@ let
   # packet there — traefik's gate never sees it. Netavark's own `isolate`
   # option does not close that, `isolate=strict` included: both only drop
   # what LEAVES an isolated bridge (`-i <bridge> ! -o <bridge>`), so a plain
-  # bridge still reaches it (probed with a throwaway pair of networks,
-  # 2026-09-28: plain → strict-isolated connected).
+  # bridge still reaches it.
   #
   # So one chain, FLEET_ISO, jumped to from the namespace's FORWARD chain,
   # holds one rule per isolated app: a NEW connection whose destination is the
@@ -45,7 +44,7 @@ let
   # port: netavark points traefik's 80/443 at whichever of its addresses it
   # likes, an iso bridge's included, and every container reaching a published
   # hostname (LAN IP → DNAT → traefik) crosses this chain to get there.
-  # Dropping those broke hairpin ingress for the whole box on 2026-09-28. An
+  # Dropping those would break hairpin ingress for the whole box. An
   # isolated app publishes no port of its own, so a DNATed connection into
   # its subnet can only be one to traefik — the gate itself.
   #

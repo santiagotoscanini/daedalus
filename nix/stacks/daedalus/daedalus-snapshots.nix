@@ -127,9 +127,8 @@ in
     # snapshot, so a fresh boot has one before the first render.
     systemd.services.daedalus-image-snapshot = {
       description = "Publish running container image labels for daedalus";
-      # Same gate as the env snapshot: on 2026-09-10 this unit was the
-      # boot's first rootless podman, ran before the user manager had a
-      # bus, and left a pause process that died with it.
+      # Same gate as the env snapshot: run before the user manager has a
+      # bus, it would leave a pause process that dies with its caller.
       after = [
         "podman-rootless-ready.service"
         "linger-users.service"

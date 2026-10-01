@@ -524,14 +524,13 @@ in
         # namespace in a "pause" process; the first podman command of a
         # boot creates it and every later one joins it. At boot the user
         # manager comes up and, in the same second, every bridge oneshot,
-        # image build and container unit invokes podman: on 2026-09-10
-        # seven of them each spawned their own pause process, the
-        # containers ran in a namespace missing the subgid range
-        # ("Additional gid=N is not present in the user namespace",
-        # s6 "unable to set supplementary group list"), and once the
-        # storage had layer temp dirs owned by mapped uids, every podman
-        # call for six hours died with "error removing stale temp dir:
-        # permission denied". Both reboots that day lost the race.
+        # image build and container unit invokes podman, and podman calls
+        # racing there each spawn their own pause process: the containers
+        # then run in a namespace missing the subgid range ("Additional
+        # gid=N is not present in the user namespace", s6 "unable to set
+        # supplementary group list"), and once the storage holds layer temp
+        # dirs owned by mapped uids every podman call fails with "error
+        # removing stale temp dir: permission denied".
         #
         # `podman unshare true` is the cheapest command that creates
         # the pause process, and it does so from a single unit, so
@@ -540,9 +539,7 @@ in
         # A pause process is only good if podman could move it into
         # its own `podman-pause-<id>.scope` under the user manager.
         # That needs the user's session bus, which exists only once
-        # the user manager is up; a podman run before that (the first reboot
-        # with this gate caught a daedalus snapshot doing exactly
-        # this) leaves a pause in its caller's cgroup, which dies with
+        # the user manager is up; a podman run before that leaves a pause in its caller's cgroup, which dies with
         # the caller, and whoever runs next creates another one. So
         # "ready" is checked, not assumed: the pid in the file must be
         # alive AND in a podman-pause scope. Anything else is discarded
@@ -600,8 +597,7 @@ in
         # every rootless unit above `wants` it, so a boot pulls it in
         # ~90 times inside a second. systemd's default start limit is 5
         # in 10s: the unit goes start-limit-hit and stays "failed" while
-        # the whole fleet keeps re-triggering it (18 000 failures logged
-        # on 2026-09-10). Once it has run, a re-run is a no-op, so make
+        # the whole fleet keeps re-triggering it. Once it has run, a re-run is a no-op, so make
         # the first success stick.
         linger-users.serviceConfig.RemainAfterExit = true;
 
