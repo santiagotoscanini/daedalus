@@ -14,9 +14,8 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::api::wire::{event, ClaudeChanged, TelemetryUpdated};
 use crate::claude::{Report, ReportAnswer, Roster, SessionAction, SessionRequest, Summary};
 use crate::facts::Facts;
 use crate::link::wire::Policy;
@@ -120,7 +119,7 @@ pub struct SantreeDoor {
 #[derive(Clone, Debug, Serialize, serde::Deserialize)]
 pub struct SantreeRefused {
     pub at: String,
-    pub code: String,
+    pub code: crate::rpc::ErrorCode,
 }
 
 struct Live {
@@ -140,9 +139,6 @@ struct Live {
     /// Moves when a report says something the last did not (its clock
     /// aside): what the link compares to push on change (link/node.rs).
     claude_generation: u64,
-    /// What the API's subscribers were last told: a session reporting or
-    /// not (`claude.changed`).
-    claude_announced: bool,
     /// Raised by the controller's command or the local socket's `claude.update`; the
     /// tray takes it with its next report. Separate from the restart below
     /// (claude/mod.rs says why).
@@ -188,55 +184,59 @@ struct Live {
 
 /// The tray, as the page describes it.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(test, ts(rename = "StatusTray"))]
-struct Tray {
+pub struct Tray {
     /// A report landed within the freshness window.
-    reporting: bool,
-    last_report: Option<String>,
+    pub reporting: bool,
+    pub last_report: Option<String>,
 }
 
+/// The status document: the agent's picture of this machine, as the local
+/// socket's `status` answers it (the tray, the session, `daedalus-agent
+/// status`) and the link pushes it (`nodes.get` hands it to the app). Its
+/// telemetry travels on its own. Read with defaults: the two ends of the
+/// link are released apart, and a field one side does not write reads as
+/// its default on the other.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Serialize)]
-#[cfg_attr(test, ts(rename = "StatusPage"))]
-pub(crate) struct Document<'a> {
-    agent: &'static str,
-    version: &'static str,
-    hostname: String,
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StatusDocument {
+    pub agent: String,
+    pub version: String,
+    pub hostname: String,
     #[serde(flatten)]
-    facts: &'a Facts,
-    uptime_secs: u64,
+    pub facts: Facts,
+    pub uptime_secs: u64,
     /// The machine's, not the agent's: a small number here after a night is a reboot.
-    os_uptime_secs: Option<u64>,
+    pub os_uptime_secs: Option<u64>,
     /// When the machine booted, RFC 3339 UTC, derived from the OS uptime.
-    booted_at: Option<String>,
-    awake_hold: bool,
-    hold_error: Option<&'a str>,
-    power_requests: Option<String>,
-    update_available: Option<&'a str>,
-    restart_pending: bool,
+    pub booted_at: Option<String>,
+    pub awake_hold: bool,
+    pub hold_error: Option<String>,
+    pub power_requests: Option<String>,
+    pub update_available: Option<String>,
+    pub restart_pending: bool,
     /// What the box asked of this machine.
-    policy: &'a Policy,
+    pub policy: Policy,
     /// Claude Code on this machine, as the tray last reported it; null when
     /// the tray has not reported lately.
-    claude: Option<Summary>,
-    tray: Tray,
-    claude_update_requested: bool,
-    claude_restart_requested: bool,
-    /// What the machine is and how it is doing, as `Telemetry::public`
-    /// (telemetry.rs); null until the first sample, a few seconds after start.
-    telemetry: Option<Telemetry>,
+    pub claude: Option<Summary>,
+    pub tray: Tray,
+    pub claude_update_requested: bool,
+    pub claude_restart_requested: bool,
     /// The settings this machine may ask the box for, and what became of
     /// the last requests (settings.rs).
-    settings: crate::settings::View,
+    pub settings: crate::settings::View,
     /// santree's door (santree.rs); null where there is none (Windows,
     /// the controller).
-    santree: Option<SantreeDoor>,
+    pub santree: Option<SantreeDoor>,
     /// The connection to the controller (link/): its address, both
     /// fingerprints, and what went wrong. Null on the controller itself.
-    controller: Option<LinkStatus>,
+    pub controller: Option<LinkStatus>,
     #[serde(flatten)]
-    state: &'a State,
+    pub state: State,
 }
 
 impl Shared {
@@ -268,7 +268,6 @@ impl Shared {
                 check_requested: false,
                 policy,
                 claude: None,
-                claude_announced: false,
                 claude_update_requested: false,
                 claude_restart_requested: false,
                 claude_sessions: Vec::new(),
@@ -324,10 +323,10 @@ impl Shared {
 
     /// Whether the box can be asked now: the link up, this machine approved.
     pub fn linked(&self) -> bool {
-        self.lock().link.as_ref().is_some_and(|l| {
-            l.connected
-                && l.state.as_deref() == Some(crate::link::wire::NodeState::Approved.as_str())
-        })
+        self.lock()
+            .link
+            .as_ref()
+            .is_some_and(|l| l.connected && l.state == Some(crate::link::LinkState::Approved))
     }
 
     /// The machine's user asks for `key` = `value` (settings.rs `Book::ask`);
@@ -412,10 +411,10 @@ impl Shared {
     }
 
     /// santree's door refused a connection with `code`.
-    pub fn santree_refused(&self, code: &str) {
+    pub fn santree_refused(&self, code: crate::rpc::ErrorCode) {
         *self.santree_refused.lock_ok() = Some(SantreeRefused {
             at: crate::state::now_rfc3339(),
-            code: code.to_string(),
+            code,
         });
     }
 
@@ -433,18 +432,13 @@ impl Shared {
     /// A new sample; `tiers_moved` when it carries static or slow facts or
     /// OS updates read since the last one (telemetry.rs).
     pub fn set_telemetry(&self, t: Telemetry, tiers_moved: bool) {
-        let sampled_at = t.sampled_at.clone();
-        {
-            let lemonade = crate::providers::lemonade_in(&t.apps);
-            let mut l = self.lock();
-            l.lemonade_installed = lemonade;
-            l.telemetry = Some(Arc::new(t));
-            if tiers_moved {
-                l.telemetry_tier += 1;
-            }
+        let lemonade = crate::providers::lemonade_in(&t.apps);
+        let mut l = self.lock();
+        l.lemonade_installed = lemonade;
+        l.telemetry = Some(Arc::new(t));
+        if tiers_moved {
+            l.telemetry_tier += 1;
         }
-        self.events
-            .publish(event::TELEMETRY_UPDATED, &TelemetryUpdated { sampled_at });
     }
 
     /// The last telemetry document, at the level config.toml sets; None
@@ -601,19 +595,6 @@ impl Shared {
         moved
     }
 
-    /// The status document as the link pushes it (link/node.rs): the page
-    /// without its telemetry block, which travels on its own, and with
-    /// the OS's power requests as `power_requests` hands them in (a
-    /// command the caller runs on its own cadence).
-    pub fn status_value(&self, power_requests: Option<String>) -> serde_json::Value {
-        let mut v = serde_json::to_value(self.document_with(power_requests, false))
-            .unwrap_or(serde_json::Value::Null);
-        if let Some(o) = v.as_object_mut() {
-            o.remove("telemetry");
-        }
-        v
-    }
-
     /// The controller's key and addresses, set once in controller mode.
     pub fn set_controller(&self, c: Controller) {
         let _ = self.controller.set(c);
@@ -656,7 +637,7 @@ impl Shared {
             node: &node,
             host: &host,
             machine: &host,
-            os: self.facts.os,
+            os: &self.facts.os,
         };
         crate::telemetry::claude_text(self.claude_report().as_ref(), &labels)
     }
@@ -796,20 +777,8 @@ impl Shared {
     /// instructions. `mem::take` on each, so an instruction is handed out
     /// exactly once — a tray that reports every five seconds must not be
     /// told to update five seconds later all over again.
-    ///
-    /// A report after silence, or whose state or pid differs from the
-    /// previous one, is told to the API's subscribers as `claude.changed`.
     pub fn set_claude(&self, r: Report) -> ReportAnswer {
         let mut l = self.lock();
-        let moved = !l.claude_announced
-            || l.claude
-                .as_ref()
-                .is_none_or(|(prev, _)| prev.state != r.state || prev.pid != r.pid);
-        let changed = moved.then(|| ClaudeChanged {
-            reporting: true,
-            state: Some(r.state.clone()),
-            pid: r.pid,
-        });
         // The clock aside: the previous report is replaced just below.
         let says_more = match l.claude.as_mut() {
             Some((prev, _)) => {
@@ -821,49 +790,14 @@ impl Shared {
         if says_more {
             l.claude_generation += 1;
         }
-        l.claude_announced = true;
         l.claude = Some((r, Instant::now()));
-        let answer = ReportAnswer {
+        ReportAnswer {
             wanted: l.policy.claude_remote_control,
             update: std::mem::take(&mut l.claude_update_requested),
             restart: std::mem::take(&mut l.claude_restart_requested),
             workdir: l.policy.claude_workdir.clone(),
             sessions: std::mem::take(&mut l.claude_sessions),
-        };
-        drop(l);
-        if let Some(c) = changed {
-            self.events.publish(event::CLAUDE_CHANGED, &c);
         }
-        answer
-    }
-
-    /// Tell the API's subscribers when the session has gone quiet: once, as
-    /// `claude.changed` with `reporting: false`, when the last report has
-    /// aged past `REPORT_FRESH`. The service's loop calls it twice a second;
-    /// the next report announces the session again.
-    pub fn check_claude_fresh(&self) {
-        self.announce_silence_after(REPORT_FRESH);
-    }
-
-    fn announce_silence_after(&self, fresh: Duration) {
-        let mut l = self.lock();
-        let stale = l
-            .claude
-            .as_ref()
-            .is_none_or(|(_, at)| at.elapsed() >= fresh);
-        if !(l.claude_announced && stale) {
-            return;
-        }
-        l.claude_announced = false;
-        drop(l);
-        self.events.publish(
-            event::CLAUDE_CHANGED,
-            &ClaudeChanged {
-                reporting: false,
-                state: None,
-                pid: None,
-            },
-        );
     }
 
     /// Whether the tray has reported within the freshness window.
@@ -928,14 +862,6 @@ impl Shared {
         self.inner.lock_ok()
     }
 
-    /// The document as the local socket serves it (local.rs): the open
-    /// telemetry, and the OS's power requests as last read — never read
-    /// here: on Windows that is `powercfg`, far too slow for a request
-    /// (`refresh_power_requests`, on the service's own thread).
-    pub fn document_value(&self) -> serde_json::Value {
-        self.document_with(self.power_requests(), true)
-    }
-
     /// The OS's power requests as last read (`refresh_power_requests`).
     pub fn power_requests(&self) -> Option<String> {
         self.power.lock_ok().clone()
@@ -948,30 +874,31 @@ impl Shared {
         *self.power.lock_ok() = r;
     }
 
-    /// The page as a value: with `Telemetry::public` when `telemetry`,
-    /// with its block null otherwise; `power_requests` is what the OS
-    /// reported, read by the caller outside the lock.
-    fn document_with(&self, power_requests: Option<String>, telemetry: bool) -> serde_json::Value {
+    /// The status document, with the OS's power requests as the caller
+    /// hands them in — read on the service's own thread
+    /// (`refresh_power_requests`): on Windows that is `powercfg`, far too
+    /// slow for a request.
+    pub fn document(&self, power_requests: Option<String>) -> StatusDocument {
         let tunnel = self.tunnel_status();
         // Read before the lock below: each takes it itself.
         let settings = self.settings_view(None);
         let santree = self.santree_door();
         let l = self.lock();
         let os_uptime = crate::power::os_uptime_secs();
-        let doc = Document {
-            agent: crate::SERVICE_NAME,
-            version: crate::VERSION,
+        StatusDocument {
+            agent: crate::SERVICE_NAME.into(),
+            version: crate::VERSION.into(),
             hostname: crate::facts::hostname(),
-            facts: &self.facts,
+            facts: self.facts.clone(),
             uptime_secs: self.started.elapsed().as_secs(),
             os_uptime_secs: os_uptime,
             booted_at: os_uptime.map(crate::state::rfc3339_ago),
             awake_hold: l.awake_hold,
-            hold_error: l.hold_error.as_deref(),
+            hold_error: l.hold_error.clone(),
             power_requests,
-            update_available: l.update_available.as_deref(),
+            update_available: l.update_available.clone(),
             restart_pending: l.restart_pending,
-            policy: &l.policy,
+            policy: l.policy.clone(),
             claude: l
                 .claude
                 .as_ref()
@@ -986,23 +913,18 @@ impl Shared {
             },
             claude_update_requested: l.claude_update_requested,
             claude_restart_requested: l.claude_restart_requested,
-            telemetry: if telemetry {
-                l.telemetry.as_deref().map(Telemetry::public)
-            } else {
-                None
-            },
             settings,
             santree,
             controller: l.link.clone().map(|c| LinkStatus { tunnel, ..c }),
-            state: &l.state,
-        };
-        serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null)
+            state: l.state.clone(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::claude::ClaudeState;
     use crate::config::Mode;
 
     /// The link pushes on a generation, which moves when a report or a
@@ -1017,17 +939,17 @@ mod tests {
             Policy::default(),
             Role::of(Mode::Controller),
         );
-        let report = |state: &str, at: &str| Report {
-            state: state.into(),
+        let report = |state: ClaudeState, at: &str| Report {
+            state,
             reported_at: at.into(),
             ..Default::default()
         };
-        shared.set_claude(report("running", "t1"));
+        shared.set_claude(report(ClaudeState::Running, "t1"));
         let (g, fresh) = shared.claude_report_generation();
         assert!(fresh);
-        shared.set_claude(report("running", "t2"));
+        shared.set_claude(report(ClaudeState::Running, "t2"));
         assert_eq!(shared.claude_report_generation().0, g);
-        shared.set_claude(report("waiting", "t3"));
+        shared.set_claude(report(ClaudeState::Waiting, "t3"));
         assert_eq!(shared.claude_report_generation().0, g + 1);
 
         let roster = |at: &str, cpu, errors: Vec<String>| Roster {
@@ -1046,40 +968,5 @@ mod tests {
         assert_eq!(shared.claude_roster_shared().unwrap().1, g);
         shared.set_claude_roster(roster("t3", 2, vec!["x".into()]));
         assert_eq!(shared.claude_roster_shared().unwrap().1, g + 1);
-    }
-
-    #[test]
-    fn claude_changed_covers_reporting_both_ways() {
-        let shared = Shared::new(
-            State::default(),
-            Facts::default(),
-            Instant::now(),
-            Policy::default(),
-            Role::of(Mode::Controller),
-        );
-        let rx = shared.events().subscribe();
-        let report = |pid| Report {
-            state: "running".into(),
-            pid: Some(pid),
-            ..Default::default()
-        };
-        // Nothing reported yet: no silence to announce.
-        shared.announce_silence_after(Duration::ZERO);
-        shared.set_claude(report(1));
-        shared.set_claude(report(1));
-        shared.announce_silence_after(Duration::from_secs(60));
-        shared.announce_silence_after(Duration::ZERO);
-        shared.announce_silence_after(Duration::ZERO);
-        // The same report after silence is news again.
-        shared.set_claude(report(1));
-        let got: Vec<String> = rx.try_iter().map(|l| l.to_string()).collect();
-        assert_eq!(
-            got,
-            [
-                r#"{"e":"claude.changed","p":{"reporting":true,"state":"running","pid":1}}"#,
-                r#"{"e":"claude.changed","p":{"reporting":false,"state":null,"pid":null}}"#,
-                r#"{"e":"claude.changed","p":{"reporting":true,"state":"running","pid":1}}"#,
-            ]
-        );
     }
 }

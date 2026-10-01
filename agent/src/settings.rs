@@ -47,7 +47,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use crate::link::wire::{Policy, PolicyRequest};
-use crate::rpc::{code, ApiError};
+use crate::rpc::{ApiError, ErrorCode};
 
 /// How long a request waits to be sent and then acknowledged.
 pub const ACK_WAIT: Duration = Duration::from_secs(5);
@@ -205,7 +205,7 @@ impl Book {
                 why: NOT_CONNECTED.into(),
                 at: now,
             });
-            return Err(ApiError::new(code::UNAVAILABLE, NOT_CONNECTED));
+            return Err(ApiError::new(ErrorCode::Unavailable, NOT_CONNECTED));
         }
         self.pending[i] = Some(Pending {
             want: value,
@@ -536,7 +536,7 @@ mod tests {
         // The link is down: failed at once, nothing kept to send later.
         let mut b = Book::default();
         let e = b.ask(Key::AwakeHold, false, &kept, false, t0).unwrap_err();
-        assert_eq!(e.code, code::UNAVAILABLE);
+        assert_eq!(e.code, ErrorCode::Unavailable);
         assert_eq!(why(&b).as_deref(), Some("not connected to the box"));
         assert!(b.take_request(t0).is_none());
 

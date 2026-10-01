@@ -40,59 +40,19 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
-
 use crate::claude::roster::is_uuid;
 use crate::claude::sessions::Context as SessionsContext;
 use crate::claude::{Recovery, Report, ReportAnswer, Roster, SessionAction, Sessions, Supervisor};
 use crate::config;
 use crate::link::wire::Policy;
+use crate::local::LocalRequest;
 use crate::logging;
 use crate::paths;
-use crate::shared::Shared;
+use crate::shared::{Shared, StatusDocument};
 use crate::VERSION;
 
 /// How often the page is read and the report sent.
 pub const POLL: Duration = Duration::from_secs(5);
-
-/// The part of the status page the session and its UI read. Everything
-/// else is ignored.
-#[derive(Deserialize, Default)]
-pub struct Page {
-    pub version: String,
-    pub awake_hold: bool,
-    pub hold_error: Option<String>,
-    pub update_available: Option<String>,
-    pub restart_pending: bool,
-    pub last_update_check: Option<String>,
-    pub last_update_result: Option<String>,
-    #[serde(default)]
-    pub policy: Policy,
-    /// The link to the controller (link/), when the page carries one.
-    #[serde(default)]
-    pub controller: Option<LinkPage>,
-    /// The settings this machine may ask for (settings.rs).
-    pub settings: crate::settings::View,
-    /// santree's door (shared.rs `SantreeDoor`); absent where there is none.
-    #[serde(default)]
-    pub santree: Option<crate::shared::SantreeDoor>,
-}
-
-/// The link, as the page reports it (`link::LinkStatus`).
-#[derive(Deserialize, Default, Clone, Debug)]
-#[serde(default)]
-pub struct LinkPage {
-    pub address: Option<String>,
-    pub state: Option<String>,
-    pub connected: bool,
-    /// When the current connection opened.
-    pub since: Option<String>,
-    pub fingerprint: String,
-    pub controller_fingerprint: Option<String>,
-    pub error: Option<String>,
-    /// The machine's own tunnel, while a log-in governs it.
-    pub tunnel: Option<crate::link::TunnelStatus>,
-}
 
 /// What one `tick` did.
 pub enum Tick {
@@ -108,30 +68,28 @@ pub enum Tick {
 /// One poll: the page (None when the service did not answer) and the
 /// report that was sent.
 pub struct Poll {
-    pub page: Option<Page>,
+    pub page: Option<StatusDocument>,
     pub report: Report,
 }
 
-fn read_page() -> Option<Page> {
-    crate::local::call_as("status", serde_json::Value::Null).ok()
+fn read_page() -> Option<StatusDocument> {
+    crate::local::call(&LocalRequest::Status).ok()
 }
 
 fn request_check() {
-    let _ = crate::local::call("update.check", serde_json::Value::Null);
+    let _ = crate::local::call::<String>(&LocalRequest::UpdateCheck);
 }
 
 /// Send the supervisor's report to the service; its answer says whether the
 /// box wants the server running, where, and whether to update or restart
 /// it now.
 fn send_report(report: &Report) -> Option<ReportAnswer> {
-    crate::local::call_as("claude.report", serde_json::to_value(report).ok()?).ok()
+    crate::local::call(&LocalRequest::ClaudeReport(Box::new(report.clone()))).ok()
 }
 
 /// Send the roster of Claude sessions to the service.
 fn send_roster(roster: &Roster) -> bool {
-    serde_json::to_value(roster)
-        .ok()
-        .is_some_and(|v| crate::local::call("claude.roster", v).is_ok())
+    crate::local::call::<()>(&LocalRequest::ClaudeRoster(Box::new(roster.clone()))).is_ok()
 }
 
 /// How the session reaches the service it reports to.
@@ -145,7 +103,7 @@ pub enum Link {
 }
 
 impl Link {
-    fn page(&self) -> Option<Page> {
+    fn page(&self) -> Option<StatusDocument> {
         match self {
             Link::Socket => read_page(),
             Link::InProcess(_) => None,
@@ -349,7 +307,7 @@ impl Session {
             return Tick::Idle;
         }
         let page = self.link.page();
-        if page.as_ref().is_some_and(Page::replaces_this) {
+        if page.as_ref().is_some_and(StatusDocument::replaces_this) {
             return Tick::VersionChanged;
         }
         let mut report = self.sup.report();
@@ -507,7 +465,7 @@ fn start_sessions(places: &Places) -> Sessions {
 /// The full report the session last sent the service, as its local socket
 /// answers it (`claude`); None when no session reported lately.
 fn read_report() -> Option<Report> {
-    crate::local::call_as::<Option<Report>>("claude", serde_json::Value::Null)
+    crate::local::call::<Option<Report>>(&LocalRequest::Claude)
         .ok()
         .flatten()
 }
@@ -577,7 +535,7 @@ impl Watcher {
 
     /// Ask the session, through the service, to restart the server.
     pub fn restart_claude(&mut self) {
-        let _ = crate::local::call("claude.restart", serde_json::Value::Null);
+        let _ = crate::local::call::<String>(&LocalRequest::ClaudeRestart);
         self.next_poll = Instant::now() + POLL;
     }
 
@@ -605,7 +563,7 @@ impl Watcher {
             return Tick::VersionChanged;
         }
         let report = read_report().unwrap_or_else(|| Report {
-            state: "no-session".into(),
+            state: crate::claude::ClaudeState::NoSession,
             detail: Some("the session unit is not reporting".into()),
             ..Default::default()
         });
@@ -613,7 +571,7 @@ impl Watcher {
     }
 }
 
-impl Page {
+impl StatusDocument {
     /// The service runs a release above this binary's own: an update
     /// replaced it, and its runner leaves for the new one. Only a NEWER one —
     /// an older service (mid-update, or one not yet restarted) is shown, not
@@ -671,7 +629,7 @@ pub fn run() -> anyhow::Result<()> {
         crate::os::on_interrupt(move || stop.stop());
     }
     let mut session = Session::new(places)?;
-    let mut last: Option<(String, bool)> = None;
+    let mut last: Option<(crate::claude::ClaudeState, bool)> = None;
     while !stop.is_stopped() {
         match session.tick() {
             Tick::Idle => {}
@@ -680,7 +638,7 @@ pub fn run() -> anyhow::Result<()> {
                 break;
             }
             Tick::Polled(poll) => {
-                let now = (poll.report.state.clone(), poll.page.is_some());
+                let now = (poll.report.state, poll.page.is_some());
                 if last.as_ref() != Some(&now) {
                     tracing::info!(
                         claude = %poll.report.state,
@@ -718,16 +676,16 @@ pub fn run_in_service(
     };
     tracing::info!(job = places.job, "session starting inside the service");
     let mut session = Session::in_process(shared, places)?;
-    let mut last: Option<String> = None;
+    let mut last: Option<crate::claude::ClaudeState> = None;
     while !stop.is_stopped() {
         if let Tick::Polled(poll) = session.tick() {
-            if last.as_deref() != Some(poll.report.state.as_str()) {
+            if last != Some(poll.report.state) {
                 tracing::info!(
                     claude = %poll.report.state,
                     detail = poll.report.detail.as_deref().unwrap_or(""),
                     "session state"
                 );
-                last = Some(poll.report.state.clone());
+                last = Some(poll.report.state);
             }
         }
         stop.wait(Duration::from_millis(250));
@@ -751,7 +709,7 @@ mod tests {
 
     #[test]
     fn only_a_newer_service_makes_a_session_leave() {
-        let page = |version: &str, restart_pending| Page {
+        let page = |version: &str, restart_pending| StatusDocument {
             version: version.into(),
             restart_pending,
             ..Default::default()
@@ -798,7 +756,7 @@ mod tests {
             linked: true,
             ..Default::default()
         };
-        let p: Page = serde_json::from_str(&format!(
+        let p: StatusDocument = serde_json::from_str(&format!(
             r#"{{"agent":"daedalus-agent","version":"0.14.0","awake_hold":true,
                 "hold_error":null,"update_available":"0.15.0","restart_pending":false,
                 "last_update_check":"2026-09-27T10:00:00Z","last_update_result":"x",
@@ -814,7 +772,7 @@ mod tests {
         assert_eq!(p.update_available.as_deref(), Some("0.15.0"));
         assert!(!p.policy.awake_hold);
         let l = p.controller.unwrap();
-        assert_eq!(l.state.as_deref(), Some("approved"));
+        assert_eq!(l.state, Some(crate::link::LinkState::Approved));
         assert!(l.connected);
     }
 

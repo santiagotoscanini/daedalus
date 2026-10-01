@@ -181,19 +181,67 @@ impl KeyFiles {
     }
 }
 
+/// Where the link stands, as the status page and the tray say it:
+/// `unpaired` (no pin: nothing is dialled until `pair`), `connecting`,
+/// where the box has the machine (`pending`, `approved`, `revoked`),
+/// `refused` (no controller to try, or one that would not have it) and
+/// `key-changed` (the controller proved another key than the pin).
+/// `unknown`: a newer machine's word, read on the controller.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LinkState {
+    Unpaired,
+    Connecting,
+    Pending,
+    Approved,
+    Revoked,
+    Refused,
+    KeyChanged,
+    #[serde(other)]
+    Unknown,
+}
+
+impl std::fmt::Display for LinkState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        crate::util::wire_name(self, f)
+    }
+}
+
+impl From<wire::NodeState> for LinkState {
+    fn from(s: wire::NodeState) -> Self {
+        match s {
+            wire::NodeState::Pending => LinkState::Pending,
+            wire::NodeState::Approved => LinkState::Approved,
+            wire::NodeState::Revoked => LinkState::Revoked,
+            wire::NodeState::Unknown => LinkState::Unknown,
+        }
+    }
+}
+
+/// Where the controller's address came from: config.toml, or a DNS search
+/// (discover.rs).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FoundVia {
+    Config,
+    Dns,
+    #[serde(other)]
+    Unknown,
+}
+
 /// The link as the machine's status page and tray show it (node.rs keeps
 /// it current). Absent on the controller.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct LinkStatus {
     /// The controller's host:port, once known.
     pub address: Option<String>,
-    /// Where the address came from: "config", "stored" or "dns <suffix>".
-    pub found_via: Option<String>,
-    /// "unpaired" (no pin: nothing is dialled until `pair`) |
-    /// "connecting" | "pending" | "approved" | "revoked" | "refused" |
-    /// "key-changed"; null while there is no controller to try.
-    pub state: Option<String>,
+    pub found_via: Option<FoundVia>,
+    /// Null while there is no controller to try.
+    pub state: Option<LinkState>,
     pub connected: bool,
     /// When the current connection opened.
     pub since: Option<String>,
@@ -209,9 +257,7 @@ pub struct LinkStatus {
     pub error: Option<String>,
     /// The machine's own WireGuard tunnel to the box, while a tunnel config
     /// governs it (tunnel/): the link and santree go through it alone.
-    /// Absent without one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    /// Null without one.
     pub tunnel: Option<TunnelStatus>,
 }
 

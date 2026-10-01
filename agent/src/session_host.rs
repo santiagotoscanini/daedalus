@@ -482,7 +482,7 @@ mod tests {
                 ..Policy::default()
             },
             name: Some(format!("machine {n}")),
-            offered: Vec::new(),
+            offer_lemonade: false,
         }
     }
 

@@ -67,7 +67,7 @@ describe('reading the session host', () => {
   it('is nothing on a box without one', async () => {
     const c = client({
       santreeStatus: () =>
-        Promise.reject(new ControllerError('unavailable', 'no session host on this box')),
+        Promise.reject(new ControllerError('unsupported', 'no session host on this box')),
     })
     expect(await readSessionHost({ controller: c })).toBeNull()
   })

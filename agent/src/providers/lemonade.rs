@@ -287,7 +287,7 @@ pub(super) fn read_lemonade(policy: &ProvidersPolicy, installed: bool) -> Option
         .and_then(|p| p.port)
         .unwrap_or(LEMONADE_DEFAULT_PORT);
     let mut r = ProviderReport {
-        kind: "lemonade".into(),
+        kind: ProviderKind::Lemonade,
         port,
         read_at: crate::state::now_rfc3339(),
         ..Default::default()

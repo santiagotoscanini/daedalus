@@ -217,18 +217,18 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
 /// - `daedalus_agent_provider_loaded{…,kind}`: models resident now.
 pub fn providers_text(
     list: &[crate::providers::ProviderReport],
-    offered: impl Fn(&str) -> bool,
+    offered: impl Fn(crate::providers::ProviderKind) -> bool,
     labels: &Labels,
 ) -> String {
     let base = labels.render();
     let mut out = String::new();
     for p in list {
-        let kind = escape_label(&p.kind);
+        let kind = escape_label(&p.kind.to_string());
         out.push_str(&format!(
             "daedalus_agent_provider_up{{{base},kind=\"{kind}\",port=\"{}\",version=\"{}\",offered=\"{}\"}} {}\n",
             p.port,
             escape_label(p.version.as_deref().unwrap_or("")),
-            u8::from(offered(&p.kind)),
+            u8::from(offered(p.kind)),
             u8::from(p.running && p.healthy)
         ));
         out.push_str(&format!(
@@ -256,11 +256,11 @@ pub fn providers_text(
 /// - `daedalus_agent_claude_sessions`: sessions alive under it.
 pub fn claude_text(report: Option<&crate::claude::Report>, labels: &Labels) -> String {
     let base = labels.render();
-    let state = report.map(|r| r.state.as_str()).unwrap_or("none");
+    let state = report.map_or_else(|| "none".to_string(), |r| r.state.to_string());
     let mut out = format!(
         "daedalus_agent_claude_up{{{base},state=\"{}\"}} {}\n",
-        escape_label(state),
-        u8::from(state == "running")
+        escape_label(&state),
+        u8::from(report.is_some_and(|r| r.state == crate::claude::ClaudeState::Running))
     );
     if let Some(r) = report {
         out.push_str(&format!(
@@ -365,7 +365,7 @@ mod tests {
     fn claude_series_carry_the_state_and_the_four_labels() {
         use crate::claude::{Report, Session};
         let r = Report {
-            state: "running".into(),
+            state: crate::claude::ClaudeState::Running,
             restarts: 3,
             sessions: vec![
                 Session {
@@ -385,7 +385,7 @@ mod tests {
             )
         );
         let off = Report {
-            state: "off".into(),
+            state: crate::claude::ClaudeState::Off,
             ..Default::default()
         };
         assert!(claude_text(Some(&off), &PC).starts_with(&format!(

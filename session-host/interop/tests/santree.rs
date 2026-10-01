@@ -70,7 +70,7 @@ fn entry(node: &Identity, santree: bool) -> DesiredEntry {
             ..Policy::default()
         },
         name: Some("MacBook".into()),
-        offered: Vec::new(),
+        offer_lemonade: false,
     }
 }
 
@@ -162,7 +162,7 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
         let (shared, stop, node) = (Arc::clone(&shared), stop_link.clone(), node.clone());
         let target = Target {
             address: listener.local_addr.to_string(),
-            found_via: "config".into(),
+            found_via: daedalus_agent::link::FoundVia::Config,
             pin,
         };
         let config = d.join("node").join("config.toml");

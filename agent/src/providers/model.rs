@@ -6,13 +6,30 @@ use serde::{Deserialize, Serialize};
 
 use super::MAX_TEXT;
 
+/// A model server the agent finds and drives: lemonade, for now. `unknown`:
+/// a newer machine's kind, read on the controller.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderKind {
+    #[default]
+    Lemonade,
+    #[serde(other)]
+    Unknown,
+}
+
+impl std::fmt::Display for ProviderKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        crate::util::wire_name(self, f)
+    }
+}
+
 /// One provider as the `providers` document carries it.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct ProviderReport {
-    /// "lemonade", the one kind the agent detects.
-    pub kind: String,
+    pub kind: ProviderKind,
     /// The port it answers on, or would.
     pub port: u16,
     /// What its health endpoint says it is; None when it is not answering.
@@ -60,7 +77,7 @@ pub enum ModelAction {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderModelParams {
-    pub kind: String,
+    pub kind: ProviderKind,
     pub action: ModelAction,
     pub model: String,
     /// Load only: keep it through the provider's eviction.
@@ -74,7 +91,7 @@ pub struct ProviderModelParams {
 
 impl ProviderModelParams {
     pub fn check(&self) -> Result<(), String> {
-        if self.kind != "lemonade" {
+        if self.kind != ProviderKind::Lemonade {
             return Err(format!(
                 "{} is not a provider kind this agent drives",
                 self.kind

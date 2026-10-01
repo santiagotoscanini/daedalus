@@ -1,8 +1,9 @@
 //! The local API's wire types: every request, answer and event, as serde
 //! writes them. This file is the contract — the app's TypeScript client is
-//! generated from, or checked against, these types, and the golden tests at
-//! the bottom pin each one's exact JSON, so a change here that is not also
-//! a change of `API_VERSION` shows up as a failing test.
+//! generated from these types (ts.rs: each type, the `Methods` map from
+//! `ApiRequest`, the `ApiEvent` union and the constants), and the golden
+//! tests at the bottom pin each one's exact JSON and write it beside the
+//! generated types, where the app's tests read it.
 //!
 //! Framing (api/mod.rs has the rest): one JSON object per line.
 //!
@@ -11,63 +12,147 @@
 //! ← {"id":1,"ok":{"api":1,"version":"0.13.0","mode":"controller",…}}
 //! → {"id":2,"m":"claude.restart"}
 //! ← {"id":2,"err":{"code":"unavailable","msg":"…"}}
-//! ← {"e":"claude.changed","p":{"reporting":true,"state":"running","pid":4242}}
+//! ← {"e":"nodes.left","p":{"id":"0123456789abcdef"}}
 //! ```
 //!
-//! Strict where strictness protects, lenient where it would break a newer
-//! client: the request envelope and `hello`'s parameters ignore fields
-//! they do not know (a newer app may send more, and must still be told
-//! which version this agent speaks), while a method's own parameters are
-//! exact — today every method but `hello` takes none, and one that takes a
-//! selector later refuses what it does not know.
+//! A method's parameters are exact: its own fields and nothing else, and
+//! none at all for a method that takes none (`ApiRequest`). Only `hello`'s
+//! are lenient — a newer app may send more, and must still be told which
+//! version this agent speaks.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::claude::{Report, Roster, SessionAction, Summary};
 use crate::config::{Mode, TelemetryLevel};
-use crate::link::wire::{Command, Hello, NodeState, PolicyRequest};
-use crate::link::wire::{Policy, ProviderPolicy, ProvidersPolicy};
+use crate::link::wire::{Command, Hello, NodeState, Policy, PolicyRequest};
 use crate::providers::ProviderReport;
 use crate::role::Role;
+use crate::shared::StatusDocument;
 use crate::telemetry::Telemetry;
 
-/// The event names, all of them.
-pub mod event {
-    /// Claude remote control's state or pid moved (`ClaudeChanged`).
-    pub const CLAUDE_CHANGED: &str = "claude.changed";
-    /// A new telemetry sample is in (`TelemetryUpdated`).
-    pub const TELEMETRY_UPDATED: &str = "telemetry.updated";
-    /// A machine connected, left, or changed standing (`NodeChanged`).
-    pub const NODES_CHANGED: &str = "nodes.changed";
-    /// An unknown key asks to join (`NodePending`).
-    pub const NODES_PENDING: &str = "nodes.pending";
-    /// A root verb's unit wrote a line (`RootProgress`).
-    pub const ROOT_PROGRESS: &str = "root.progress";
-    /// An approved machine logged out and asks to be forgotten (`NodeLeft`).
-    pub const NODES_LEFT: &str = "nodes.left";
-    /// An approved machine's user asks to change one of its settings
-    /// (`NodePolicyRequest`): the app decides, and its next set carries it.
-    pub const NODES_POLICY_REQUEST: &str = "nodes.policy_request";
+/// What an agent offers, from its role and config (api/mod.rs
+/// `capabilities`): a method whose capability is absent answers
+/// `unsupported`. `unknown`: a newer machine's word, read in its hello.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Capability {
+    /// Claude remote control runs in the user's session (`claude.status`,
+    /// `claude.restart`).
+    #[serde(rename = "claude.remote_control")]
+    ClaudeRemoteControl,
+    /// The agent updates Claude Code (never on the controller: nix pins it).
+    #[serde(rename = "claude.update")]
+    ClaudeUpdate,
+    /// The roster of Claude sessions and their verbs.
+    #[serde(rename = "claude.sessions")]
+    ClaudeSessions,
+    #[serde(rename = "telemetry.full")]
+    TelemetryFull,
+    #[serde(rename = "telemetry.minimal")]
+    TelemetryMinimal,
+    /// A machine reads its providers and drives their residency for the box.
+    #[serde(rename = "providers.residency")]
+    ProvidersResidency,
+    /// The controller listens for machines (`nodes.*`).
+    #[serde(rename = "nodes")]
+    Nodes,
+    /// The controller reaches the root helper (`root.*`).
+    #[serde(rename = "root")]
+    Root,
+    /// The controller follows a session host (`santree.status`).
+    #[serde(rename = "santree")]
+    Santree,
+    /// The controller holds its link key (`controller.rotate`).
+    #[serde(rename = "controller")]
+    Controller,
+    #[serde(rename = "unknown", other)]
+    Unknown,
+}
+
+impl std::fmt::Display for Capability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        crate::util::wire_name(self, f)
+    }
+}
+
+/// The API's methods, each with its parameters and its answer — the one
+/// list: `ApiRequest` is read from it, and ts.rs writes the app's `Methods`
+/// map from it (`signatures`).
+macro_rules! api_methods {
+    ($( $(#[$doc:meta])* $wire:literal => $variant:ident $(($params:ty))? : $answer:ty ),* $(,)?) => {
+        crate::rpc::methods! {
+            /// One request to the API (api/mod.rs's table).
+            #[derive(Clone, Debug, Deserialize)]
+            pub enum ApiRequest {
+                $( $(#[$doc])* $wire => $variant $(($params))? ),*
+            }
+        }
+
+        /// Each method: its name, the TypeScript of its parameters (None:
+        /// it takes none) and of its answer.
+        #[cfg(test)]
+        pub fn signatures(cfg: &ts_rs::Config) -> Vec<(&'static str, Option<String>, String)> {
+            use ts_rs::TS;
+            vec![$( ($wire, None::<String>$(.or(Some(<$params>::name(cfg))))?, <$answer>::name(cfg)) ),*]
+        }
+    };
+}
+
+api_methods! {
+    /// First on every connection.
+    "hello" => Hello(HelloParams): HelloOk,
+    /// The events follow on the same connection.
+    "events.subscribe" => EventsSubscribe: Subscribed,
+    "system.info" => SystemInfo: SystemInfo,
+    "claude.status" => ClaudeStatus: ClaudeStatus,
+    "claude.restart" => ClaudeRestart: Queued,
+    "claude.roster" => ClaudeRoster: ClaudeRosterGet,
+    "claude.session" => ClaudeSession(ClaudeSession): SessionQueued,
+    "telemetry.get" => TelemetryGet: TelemetryGet,
+    "nodes.list" => NodesList: NodesList,
+    "nodes.get" => NodesGet(NodeId): NodeDetail,
+    "nodes.telemetry" => NodesTelemetry(NodeId): NodeTelemetry,
+    "nodes.providers" => NodesProviders(NodeId): NodeProviders,
+    "nodes.claude" => NodesClaude(NodeId): NodeClaude,
+    "nodes.claude_roster" => NodesClaudeRoster(NodeId): NodeClaudeRoster,
+    "nodes.claude_session" => NodesClaudeSession(NodeClaudeSession): ClaudeSessionSent,
+    "nodes.provider_model" => NodesProviderModel(NodeProviderModel): ProviderModelSent,
+    "nodes.set_desired" => NodesSetDesired(SetDesired): SetDesiredOk,
+    "nodes.command" => NodesCommand(NodeCommand): CommandOk,
+    "controller.rotate" => ControllerRotate(ControllerRotate): ControllerInfo,
+    "root.run" => RootRun(RootRun): RootRunOk,
+    "root.follow" => RootFollow(RootFollow): RootFollowOk,
+    "root.runs" => RootRuns(RootRuns): RootRunsOk,
+    "santree.status" => SantreeStatus: SantreeStatus,
+}
+
+/// An event, pushed to a connection that asked for them
+/// (`events.subscribe`): what moved, for the app to act on.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "e", content = "p")]
+pub enum ApiEvent {
+    /// An approved machine logged out and asks to be forgotten.
+    #[serde(rename = "nodes.left")]
+    NodesLeft(NodeLeft),
+    /// An approved machine's user asks to change one of its settings: the
+    /// app decides, and its next set carries it.
+    #[serde(rename = "nodes.policy_request")]
+    NodesPolicyRequest(NodePolicyRequest),
 }
 
 // ── the methods ───────────────────────────────────────────────────────────
 
 /// `hello`'s parameters: the version the client speaks, and who it is (for
-/// the log). Other fields are ignored, and the version is read before
-/// anything else (`hello_api`), so a newer client is always told which
-/// version this agent speaks.
+/// the log, and required). Other fields are ignored, and a missing `client`
+/// is refused only after the version is checked (conn.rs), so a newer client
+/// is always told which version this agent speaks.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct HelloParams {
     pub api: u32,
+    #[serde(default)]
     pub client: String,
-}
-
-/// The API version a `hello` asks for, read from its raw parameters before
-/// they are parsed; None when `api` is missing or not a whole number.
-pub fn hello_api(p: &Value) -> Option<u64> {
-    p.get("api")?.as_u64()
 }
 
 /// `hello`'s answer.
@@ -78,7 +163,7 @@ pub struct HelloOk {
     pub version: String,
     pub mode: Mode,
     pub hostname: String,
-    pub capabilities: Vec<&'static str>,
+    pub capabilities: Vec<Capability>,
 }
 
 /// The operating system and the machine, as `system.info` states them.
@@ -86,13 +171,13 @@ pub struct HelloOk {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct OsInfo {
     /// "linux", "windows", "macos".
-    pub os: &'static str,
+    pub os: String,
     /// "NixOS"; empty when unknown.
     pub name: String,
     /// "25.11"; empty when unknown.
     pub version: String,
     /// "x86_64", "aarch64".
-    pub arch: &'static str,
+    pub arch: String,
     pub cpu: String,
     pub memory_bytes: Option<u64>,
 }
@@ -115,10 +200,9 @@ pub struct SystemInfo {
     /// Which parts of the agent run (role.rs's table).
     pub role: Role,
     pub telemetry: TelemetryLevel,
-    pub capabilities: Vec<&'static str>,
-    /// The controller's own key and where machines reach it; absent
-    /// anywhere but the controller.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Vec<Capability>,
+    /// The controller's own key and where machines reach it; null anywhere
+    /// but the controller.
     pub controller: Option<ControllerInfo>,
 }
 
@@ -183,9 +267,8 @@ pub struct NodeDetail {
     pub node: NodeSummary,
     pub public_key: String,
     pub hello: Option<Hello>,
-    /// The status page's document (`StatusPage`), as the machine sent it.
-    #[cfg_attr(test, ts(type = "unknown"))]
-    pub status: Option<Value>,
+    /// The machine's status document, as it last pushed it.
+    pub status: Option<StatusDocument>,
     pub status_at: Option<String>,
     pub telemetry: Option<Telemetry>,
     pub telemetry_at: Option<String>,
@@ -269,7 +352,7 @@ pub struct ClaudeSessionSent {
 #[cfg_attr(test, ts(rename = "NodeProviderModelParams"))]
 pub struct NodeProviderModel {
     pub id: String,
-    pub kind: String,
+    pub kind: crate::providers::ProviderKind,
     pub action: crate::providers::ModelAction,
     pub model: String,
     #[serde(default)]
@@ -339,64 +422,17 @@ pub enum DesiredState {
     Revoked,
 }
 
-/// The policy as the app sends it: link/wire.rs's `Policy`, field for field,
-/// but exact — a field the controller does not know is refused.
+/// A machine's policy as the app hands it over: the policy the machine is
+/// sent (link/wire.rs `Policy` — its `session_host` is the controller's to
+/// fill, and refused here), and what only the controller keeps: whether the
+/// app offers the machine's lemonade to the gateway (`/nodes/metrics`).
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesiredPolicy {
-    pub awake_hold: bool,
-    pub claude_remote_control: bool,
+    pub policy: Policy,
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
-    pub claude_workdir: Option<String>,
-    #[serde(default)]
-    #[cfg_attr(test, ts(as = "Option<DesiredProviders>", optional))]
-    pub providers: DesiredProviders,
-    /// santree on this machine may open its projects on the box.
-    pub santree: bool,
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DesiredProviders {
-    #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
-    pub lemonade: Option<DesiredProvider>,
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DesiredProvider {
-    #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
-    pub port: Option<u16>,
-    /// The app offers it to the gateway. The controller keeps it for
-    /// `/nodes/metrics` (`offered`); the machine is not told.
-    #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
-    pub offer: Option<bool>,
-}
-
-impl From<DesiredPolicy> for Policy {
-    fn from(p: DesiredPolicy) -> Self {
-        Policy {
-            awake_hold: p.awake_hold,
-            claude_remote_control: p.claude_remote_control,
-            claude_workdir: p.claude_workdir.filter(|w| !w.trim().is_empty()),
-            providers: ProvidersPolicy {
-                lemonade: p
-                    .providers
-                    .lemonade
-                    .map(|l| ProviderPolicy { port: l.port }),
-            },
-            santree: p.santree,
-            // The controller's to fill (registry.rs `effective`), never the app's.
-            session_host: None,
-        }
-    }
+    pub offer_lemonade: bool,
 }
 
 /// `nodes.set_desired`'s answer: how many keys the set holds, and what
@@ -446,15 +482,6 @@ pub struct CommandOk {
     pub queued: bool,
 }
 
-/// `nodes.changed`'s payload.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct NodeChanged {
-    pub id: String,
-    pub state: NodeState,
-    pub connected: bool,
-}
-
 /// `nodes.left`'s payload: an approved machine logged out (enroll.rs) and
 /// asks the app to forget it — its tunnel's client too. The controller
 /// forgets nothing itself: the app's next set does.
@@ -473,15 +500,6 @@ pub struct NodeLeft {
 pub struct NodePolicyRequest {
     pub id: String,
     pub changes: PolicyRequest,
-}
-
-/// `nodes.pending`'s payload: an unknown key connected and waits.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct NodePending {
-    pub id: String,
-    pub fingerprint: String,
-    pub hostname: String,
 }
 
 /// `root.run`'s parameters: one of the root helper's verbs, its selectors
@@ -524,9 +542,8 @@ impl std::fmt::Debug for RootRun {
     }
 }
 
-/// `root.run`'s answer: how the verb ended, with the run's id (its
-/// `root.progress` events carry it, and `root.follow` takes it) and, for
-/// `status`, every verb. `outcome` is null only for a `detach` run that
+/// `root.run`'s answer: how the verb ended, with the run's id (`root.follow`
+/// takes it) and, for `status`, every verb. `outcome` is null only for a `detach` run that
 /// started and goes on.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -616,15 +633,6 @@ pub struct RootRuns {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RootRunsOk {
     pub runs: Vec<RootRunSummary>,
-}
-
-/// `root.progress`'s payload: one line the verb's unit wrote.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RootProgress {
-    pub run: String,
-    pub verb: String,
-    pub line: String,
 }
 
 // ── the session host (session_host.rs) ──────────────────────────────────────
@@ -741,26 +749,6 @@ pub struct TelemetryGet {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Subscribed {}
 
-/// `claude.changed`'s payload. Sent when a session starts reporting, when
-/// its report's state or pid moves, and when it stops reporting (nothing
-/// within the freshness window) — then `reporting` is false and the state
-/// and pid are null.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ClaudeChanged {
-    pub reporting: bool,
-    pub state: Option<String>,
-    pub pid: Option<u32>,
-}
-
-/// `telemetry.updated`'s payload: when the new sample was taken; read it
-/// with `telemetry.get`.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct TelemetryUpdated {
-    pub sampled_at: String,
-}
-
 // ── logging in (enroll.rs): the agent and the app, over HTTPS ─────────────
 
 /// What a machine's service sends to redeem its log-in: `POST
@@ -833,22 +821,28 @@ impl Drop for WireguardConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rpc::{code, ApiError, Event, Request, Response};
-    use serde_json::json;
+    use crate::rpc::{ApiError, ErrorCode, Incoming, Response};
+    use serde_json::{json, Value};
 
     fn wire<T: Serialize>(v: &T) -> String {
         serde_json::to_string(v).unwrap()
     }
 
+    /// One line as the API reads it: the envelope, then the method.
+    fn request(line: &str) -> Result<ApiRequest, ApiError> {
+        Incoming::request(line.as_bytes())
+            .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?
+            .typed()
+    }
+
     #[test]
     fn requests_parse_and_nothing_else_does() {
-        let r: Request = serde_json::from_str(
-            r#"{"id":7,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}"#,
-        )
-        .unwrap();
-        assert_eq!(r.id, 7);
-        assert_eq!(r.m, "hello");
-        let h: HelloParams = serde_json::from_value(r.p).unwrap();
+        let ApiRequest::Hello(h) =
+            request(r#"{"id":7,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}"#)
+                .unwrap()
+        else {
+            panic!("not a hello");
+        };
         assert_eq!(
             h,
             HelloParams {
@@ -856,29 +850,48 @@ mod tests {
                 client: "daedalus-app/2026.9".into()
             }
         );
-        let bare: Request = serde_json::from_str(r#"{"id":8,"m":"system.info"}"#).unwrap();
-        assert_eq!(bare.p, Value::Null);
+        assert!(matches!(
+            request(r#"{"id":8,"m":"system.info"}"#),
+            Ok(ApiRequest::SystemInfo)
+        ));
         for bad in [
             r#"{"m":"hello"}"#,
             r#"{"id":-1,"m":"hello"}"#,
             r#"{"id":1}"#,
             r#"[1,"hello"]"#,
         ] {
-            assert!(Request::parse(bad.as_bytes()).is_err(), "{bad}");
+            assert!(Incoming::request(bad.as_bytes()).is_err(), "{bad}");
         }
         // A newer client's extra fields are ignored, in the envelope and in
-        // hello's parameters; the version is readable before any parse.
-        let newer = Request::parse(
-            br#"{"id":1,"m":"hello","trace":"x","p":{"api":2,"client":"app/9","features":["x"]}}"#,
-        )
-        .unwrap();
-        assert_eq!(hello_api(&newer.p), Some(2));
-        let h: HelloParams =
-            serde_json::from_value(json!({"api":1,"client":"x","features":[]})).unwrap();
-        assert_eq!(h.api, 1);
-        assert!(serde_json::from_value::<HelloParams>(json!({"api":1})).is_err());
-        assert_eq!(hello_api(&json!({"api":"1"})), None);
-        assert_eq!(hello_api(&Value::Null), None);
+        // hello's parameters, and a hello without its client still reads, so
+        // conn.rs can answer the version first.
+        let Ok(ApiRequest::Hello(newer)) =
+            request(r#"{"id":1,"m":"hello","trace":"x","p":{"api":2,"features":["x"]}}"#)
+        else {
+            panic!("a newer hello does not read");
+        };
+        assert_eq!((newer.api, newer.client.as_str()), (2, ""));
+        assert_eq!(
+            request(r#"{"id":1,"m":"hello","p":{"api":"1"}}"#)
+                .unwrap_err()
+                .code,
+            ErrorCode::BadRequest
+        );
+        // Every other method's parameters are exact.
+        for (line, code) in [
+            (
+                r#"{"id":1,"m":"system.info","p":{"x":1}}"#,
+                ErrorCode::BadRequest,
+            ),
+            (
+                r#"{"id":1,"m":"nodes.get","p":{"id":"x","path":"/etc"}}"#,
+                ErrorCode::BadRequest,
+            ),
+            (r#"{"id":1,"m":"nodes.get"}"#, ErrorCode::BadRequest),
+            (r#"{"id":1,"m":"claude.update"}"#, ErrorCode::UnknownMethod),
+        ] {
+            assert_eq!(request(line).unwrap_err().code, code, "{line}");
+        }
     }
 
     #[test]
@@ -887,20 +900,20 @@ mod tests {
         assert_eq!(
             wire(&Response::err(
                 Some(2),
-                ApiError::new(code::UNKNOWN_METHOD, "no method x")
+                ApiError::new(ErrorCode::UnknownMethod, "no method x")
             )),
             r#"{"id":2,"err":{"code":"unknown_method","msg":"no method x"}}"#
         );
         assert_eq!(
             wire(&Response::err(
                 None,
-                ApiError::new(code::BAD_REQUEST, "not JSON")
+                ApiError::new(ErrorCode::BadRequest, "not JSON")
             )),
             r#"{"id":null,"err":{"code":"bad_request","msg":"not JSON"}}"#
         );
         let v = ApiError {
             supported: Some(1),
-            ..ApiError::new(code::VERSION, "this agent speaks api 1")
+            ..ApiError::new(ErrorCode::Version, "this agent speaks api 1")
         };
         assert_eq!(
             wire(&Response::err(Some(3), v)),
@@ -915,7 +928,7 @@ mod tests {
             version: "0.13.0".into(),
             mode: Mode::Controller,
             hostname: "box".into(),
-            capabilities: vec!["claude.remote_control", "telemetry.full"],
+            capabilities: vec![Capability::ClaudeRemoteControl, Capability::TelemetryFull],
         };
         assert_eq!(
             wire(&ok),
@@ -931,10 +944,10 @@ mod tests {
             mode: Mode::Controller,
             hostname: "box".into(),
             os: OsInfo {
-                os: "linux",
+                os: "linux".into(),
                 name: "NixOS".into(),
                 version: "25.11".into(),
-                arch: "x86_64",
+                arch: "x86_64".into(),
                 cpu: "AMD Ryzen 7".into(),
                 memory_bytes: Some(64),
             },
@@ -943,7 +956,11 @@ mod tests {
             booted_at: Some("2026-09-27T10:00:00Z".into()),
             role: Role::of(Mode::Controller),
             telemetry: TelemetryLevel::Minimal,
-            capabilities: vec!["claude.remote_control", "telemetry.minimal", "nodes"],
+            capabilities: vec![
+                Capability::ClaudeRemoteControl,
+                Capability::TelemetryMinimal,
+                Capability::Nodes,
+            ],
             controller: Some(ControllerInfo {
                 rotation: None,
                 public_key: "ab".repeat(32),
@@ -966,12 +983,12 @@ mod tests {
                 r#""fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"],"rotation":null}}"#
             )
         );
-        // Anywhere but the controller the block is absent, not null.
+        // Anywhere but the controller the block is null.
         let bare = SystemInfo {
             controller: None,
             ..info
         };
-        assert!(!wire(&bare).contains("\"controller\":"));
+        assert!(wire(&bare).ends_with(r#""controller":null}"#));
         // A rotation under way: the key going forward, and where it came from.
         let rotating = ControllerInfo {
             public_key: "cd".repeat(32),
@@ -1015,7 +1032,7 @@ mod tests {
             lan_ip: Some("192.168.0.120".into()),
             mac: Some("aa:bb:cc:dd:ee:ff".into()),
             claude: Some(Summary {
-                state: "running".into(),
+                state: crate::claude::ClaudeState::Running,
                 sessions: 2,
                 signed_in: true,
                 ..Default::default()
@@ -1065,8 +1082,8 @@ mod tests {
             node: summary(),
             public_key: "ab".repeat(32),
             hello: None,
-            status: Some(serde_json::json!({"awake_hold": true})),
-            status_at: Some("2026-09-27T10:00:15Z".into()),
+            status: None,
+            status_at: None,
             telemetry: None,
             telemetry_at: None,
             providers: None,
@@ -1078,7 +1095,7 @@ mod tests {
                 "{{{SUMMARY},{}}}",
                 concat!(
                     r#""public_key":"abababababababababababababababababababababababababababababababab","#,
-                    r#""hello":null,"status":{"awake_hold":true},"status_at":"2026-09-27T10:00:15Z","#,
+                    r#""hello":null,"status":null,"status_at":null,"#,
                     r#""telemetry":null,"telemetry_at":null,"providers":null,"providers_at":null"#
                 )
             )
@@ -1109,7 +1126,7 @@ mod tests {
             r#"{"id":"0123456789abcdef","connected":false,"providers":null,"received_at":null}"#
         );
         let report = crate::providers::ProviderReport {
-            kind: "lemonade".into(),
+            kind: crate::providers::ProviderKind::Lemonade,
             port: 13305,
             version: Some("9.1.2".into()),
             running: true,
@@ -1193,8 +1210,9 @@ mod tests {
 
         let set: SetDesired = serde_json::from_value(json!({"nodes":[
             {"id":"0123456789abcdef","public_key":"ab","state":"approved",
-             "policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p","santree":false,
-                       "providers":{"lemonade":{"port":8000,"offer":true}}},
+             "policy":{"policy":{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p","santree":false,
+                                 "providers":{"lemonade":{"port":8000}}},
+                       "offer_lemonade":true},
              "name":"Gaming PC"},
             {"id":"fedcba9876543210","public_key":"cd","state":"revoked"}
         ]}))
@@ -1203,16 +1221,10 @@ mod tests {
         assert_eq!(set.nodes[1].name, None);
         assert_eq!(set.nodes[1].state, DesiredState::Revoked);
         assert_eq!(set.nodes[1].policy, None);
-        // `offer` is the controller's (metrics); the machine's policy leaves it out.
-        assert_eq!(
-            set.nodes[0]
-                .policy
-                .as_ref()
-                .and_then(|p| p.providers.lemonade.as_ref())
-                .and_then(|l| l.offer),
-            Some(true)
-        );
-        let p: Policy = set.nodes[0].policy.clone().unwrap().into();
+        // The offer is the controller's (metrics); the machine's policy is the rest.
+        let d = set.nodes[0].policy.clone().unwrap();
+        assert!(d.offer_lemonade);
+        let p = d.policy;
         assert_eq!(
             serde_json::to_string(&p).unwrap(),
             r#"{"awake_hold":false,"claude_remote_control":true,"claude_workdir":"C:/p","providers":{"lemonade":{"port":8000}}}"#
@@ -1222,7 +1234,7 @@ mod tests {
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved","name":7}]}),
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved","extra":1}]}),
             json!({"nodes":[{"id":"a","public_key":"b","state":"approved",
-                             "policy":{"awake_hold":true,"claude_remote_control":true,"santree":false,"shell":"x"}}]}),
+                             "policy":{"policy":{"awake_hold":true},"shell":"x"}}]}),
             json!({"nodes":[],"more":1}),
         ] {
             assert!(
@@ -1266,26 +1278,20 @@ mod tests {
             r#"{"delivered":true,"queued":false}"#
         );
         assert_eq!(
-            wire(&Event {
-                e: event::NODES_CHANGED,
-                p: NodeChanged {
-                    id: "0123456789abcdef".into(),
-                    state: NodeState::Pending,
-                    connected: true
-                }
-            }),
-            r#"{"e":"nodes.changed","p":{"id":"0123456789abcdef","state":"pending","connected":true}}"#
+            wire(&ApiEvent::NodesLeft(NodeLeft {
+                id: "0123456789abcdef".into()
+            })),
+            r#"{"e":"nodes.left","p":{"id":"0123456789abcdef"}}"#
         );
         assert_eq!(
-            wire(&Event {
-                e: event::NODES_PENDING,
-                p: NodePending {
-                    id: "0123456789abcdef".into(),
-                    fingerprint: "0123:4567".into(),
-                    hostname: "PC".into()
+            wire(&ApiEvent::NodesPolicyRequest(NodePolicyRequest {
+                id: "0123456789abcdef".into(),
+                changes: PolicyRequest {
+                    awake_hold: Some(false),
+                    ..Default::default()
                 }
-            }),
-            r#"{"e":"nodes.pending","p":{"id":"0123456789abcdef","fingerprint":"0123:4567","hostname":"PC"}}"#
+            })),
+            r#"{"e":"nodes.policy_request","p":{"id":"0123456789abcdef","changes":{"awake_hold":false}}}"#
         );
     }
 
@@ -1301,7 +1307,7 @@ mod tests {
             r#"{"reporting":false,"wanted":true,"report":null}"#
         );
         let r = Report {
-            state: "running".into(),
+            state: crate::claude::ClaudeState::Running,
             pid: Some(4242),
             recovered: vec![crate::claude::Recovered {
                 id: "abdda3a9-0cb2-43f1-b13e-37f25a755fce".into(),
@@ -1512,40 +1518,9 @@ mod tests {
     }
 
     #[test]
-    fn restart_subscribe_and_events_on_the_wire() {
+    fn restart_and_subscribe_on_the_wire() {
         assert_eq!(wire(&Queued { queued: true }), r#"{"queued":true}"#);
         assert_eq!(wire(&Subscribed {}), r#"{}"#);
-        assert_eq!(
-            wire(&Event {
-                e: event::CLAUDE_CHANGED,
-                p: ClaudeChanged {
-                    reporting: true,
-                    state: Some("starting".into()),
-                    pid: Some(7)
-                }
-            }),
-            r#"{"e":"claude.changed","p":{"reporting":true,"state":"starting","pid":7}}"#
-        );
-        assert_eq!(
-            wire(&Event {
-                e: event::CLAUDE_CHANGED,
-                p: ClaudeChanged {
-                    reporting: false,
-                    state: None,
-                    pid: None
-                }
-            }),
-            r#"{"e":"claude.changed","p":{"reporting":false,"state":null,"pid":null}}"#
-        );
-        assert_eq!(
-            wire(&Event {
-                e: event::TELEMETRY_UPDATED,
-                p: TelemetryUpdated {
-                    sampled_at: "2026-09-27T10:00:15Z".into()
-                }
-            }),
-            r#"{"e":"telemetry.updated","p":{"sampled_at":"2026-09-27T10:00:15Z"}}"#
-        );
     }
 
     #[test]
@@ -1590,37 +1565,28 @@ mod tests {
 
     #[test]
     fn santree_in_the_desired_set_and_the_status_on_the_wire() {
-        let entry = |policy: Value| json!({"nodes":[{"id":"0123456789abcdef","public_key":"ab","state":"approved","policy":policy}]});
-        // Required: a set that leaves it out is refused.
-        assert!(serde_json::from_value::<SetDesired>(entry(
-            json!({"awake_hold":true,"claude_remote_control":true}),
-        ))
-        .is_err());
+        let entry = |policy: Value| json!({"nodes":[{"id":"0123456789abcdef","public_key":"ab","state":"approved","policy":{"policy":policy}}]});
         let set: SetDesired = serde_json::from_value(entry(
             json!({"awake_hold":true,"claude_remote_control":true,"santree":true}),
         ))
         .unwrap();
-        let p: Policy = set.nodes[0].policy.clone().unwrap().into();
+        let p = set.nodes[0].policy.clone().unwrap().policy;
         assert!(p.santree);
-        assert_eq!(
-            p.session_host, None,
-            "the controller fills it, never the app"
-        );
         assert_eq!(
             serde_json::to_string(&p).unwrap(),
             r#"{"awake_hold":true,"claude_remote_control":true,"santree":true}"#
         );
-        // The app cannot name the session host, nor anything else.
-        for bad in [
-            json!({"awake_hold":true,"claude_remote_control":true,"santree":"yes"}),
-            json!({"awake_hold":true,"claude_remote_control":true,"santree":true,
-                   "session_host":{"address":"evil.example:1","public_key":"00"}}),
-        ] {
-            assert!(
-                serde_json::from_value::<SetDesired>(entry(bad.clone())).is_err(),
-                "{bad}"
-            );
-        }
+        // Off is absent; a value that is not one is refused (api/mod.rs
+        // refuses a session host the app names).
+        let off: SetDesired = serde_json::from_value(entry(
+            json!({"awake_hold":true,"claude_remote_control":true}),
+        ))
+        .unwrap();
+        assert!(!off.nodes[0].policy.clone().unwrap().policy.santree);
+        assert!(serde_json::from_value::<SetDesired>(entry(
+            json!({"awake_hold":true,"claude_remote_control":true,"santree":"yes"})
+        ))
+        .is_err());
 
         let status = SantreeStatus {
             state: SessionHostState::Running,

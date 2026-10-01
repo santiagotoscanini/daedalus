@@ -61,9 +61,10 @@ use crate::config::Config;
 use crate::deadline::Deadline;
 use crate::door::Peer;
 use crate::identity::{format_fingerprint, parse_fingerprint, Identity};
+pub use crate::local::{BeginParams, FinishParams};
 use crate::net::Dialer;
 use crate::paths;
-use crate::rpc::{code, ApiError};
+use crate::rpc::{ApiError, ErrorCode};
 use crate::shared::Shared;
 use crate::tunnel::{Settings, Tunnel, WireguardConfig};
 
@@ -114,13 +115,6 @@ pub struct Started {
     at: Instant,
 }
 
-/// `enroll.begin`'s parameters: the app the operator named.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct BeginParams {
-    pub app_url: String,
-}
-
 /// `enroll.begin`'s answer: what the app's page shows and binds.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Begin {
@@ -136,13 +130,6 @@ pub struct Begin {
     pub version: String,
     /// PKCE, S256: base64url of SHA-256 of the verifier the service keeps.
     pub code_challenge: String,
-}
-
-/// `enroll.finish`'s parameters: the code the loopback took.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct FinishParams {
-    pub code: String,
 }
 
 /// The box's app as the menu bar asks for it: `https://host[:port]`, and
@@ -206,11 +193,11 @@ pub fn may_finish(peer: Option<&Peer>) -> bool {
 }
 
 fn unavailable(msg: impl Into<String>) -> ApiError {
-    ApiError::new(code::UNAVAILABLE, msg)
+    ApiError::new(ErrorCode::Unavailable, msg)
 }
 
 fn internal(e: impl std::fmt::Display) -> ApiError {
-    ApiError::new(code::INTERNAL, e.to_string())
+    ApiError::new(ErrorCode::Internal, e.to_string())
 }
 
 fn logged_in_already() -> ApiError {
@@ -222,14 +209,14 @@ fn logged_in_already() -> ApiError {
 pub fn begin(shared: &Shared, files: &Files, p: BeginParams) -> Result<Begin, ApiError> {
     if !shared.role().link {
         return Err(ApiError::new(
-            code::UNSUPPORTED,
+            ErrorCode::Unsupported,
             "the controller does not log in to anything",
         ));
     }
     if files.tunnel.exists() {
         return Err(logged_in_already());
     }
-    let app = app_url(&p.app_url).map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+    let app = app_url(&p.app_url).map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
     let id =
         Identity::load_or_create_at(&files.identity).map_err(|e| internal(format!("{e:#}")))?;
     let verifier = Zeroizing::new(random_token());
@@ -245,8 +232,8 @@ pub fn begin(shared: &Shared, files: &Files, p: BeginParams) -> Result<Begin, Ap
         public_key: id.public_key_hex(),
         fingerprint: id.fingerprint(),
         hostname: crate::facts::hostname(),
-        os: facts.os.to_string(),
-        arch: facts.arch.to_string(),
+        os: facts.os.clone(),
+        arch: facts.arch.clone(),
         version: crate::VERSION.to_string(),
         code_challenge,
     })
@@ -290,7 +277,7 @@ pub fn finish(
     }
     if !code_ok(&p.code) {
         return Err(ApiError::new(
-            code::BAD_REQUEST,
+            ErrorCode::BadRequest,
             "the code is not one the app hands out",
         ));
     }
@@ -386,7 +373,7 @@ pub fn finish(
 pub fn leave(shared: &Shared, files: &Files) -> Result<String, ApiError> {
     let approved = shared
         .link()
-        .is_some_and(|l| l.connected && l.state.as_deref() == Some("approved"));
+        .is_some_and(|l| l.connected && l.state == Some(crate::link::LinkState::Approved));
     if approved {
         let answer = shared.request_leave().recv_timeout(LEAVE_WAIT);
         // Not taken in time: withdrawn, so a later link does not send it.

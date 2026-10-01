@@ -39,7 +39,7 @@ pub use check::{check, digest};
 pub use lemonade::{clip, lemonade_in, read, residency, LEMONADE_DEFAULT_PORT};
 pub use model::{
     LoadedModel, ModelAction, ModelFigures, ProviderAction, ProviderBackend, ProviderDownload,
-    ProviderModel, ProviderModelParams, ProviderReport,
+    ProviderKind, ProviderModel, ProviderModelParams, ProviderReport,
 };
 
 /// How often the reader reads, and while a download runs.

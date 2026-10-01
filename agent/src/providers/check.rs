@@ -34,7 +34,6 @@ pub fn check(list: &[ProviderReport]) -> Result<(), String> {
         return Err(format!("more than {MAX_PROVIDERS} providers"));
     }
     for p in list {
-        text("kind", &p.kind, MAX_WORD)?;
         opt("version", &p.version, MAX_WORD)?;
         // Every read is stamped: an entry without the stamp is not a read, and
         // keeping it would be a provider answering with an empty catalog.

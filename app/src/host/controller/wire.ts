@@ -18,6 +18,7 @@ import {
   nullable,
   num,
   obj,
+  oneOf,
   optional,
   reads,
   recordOf,
@@ -33,6 +34,7 @@ import {
 } from '../../lib/providers/kinds'
 import type {
   ApiError,
+  Capability,
   ClaudeSessionSent,
   CommandOk,
   Hello,
@@ -144,6 +146,19 @@ const flag = optional(bool, false)
 const mode = literal('node', 'controller')
 const level = literal('full', 'minimal', 'off')
 const nodeState = literal('pending', 'approved', 'revoked', 'unknown')
+const capability = oneOf<Capability>({
+  'claude.remote_control': true,
+  'claude.update': true,
+  'claude.sessions': true,
+  'telemetry.full': true,
+  'telemetry.minimal': true,
+  'providers.residency': true,
+  nodes: true,
+  root: true,
+  santree: true,
+  controller: true,
+  unknown: true,
+})
 
 // ── one line ────────────────────────────────────────────────────────────────
 
@@ -199,7 +214,7 @@ const helloShape = reads<HelloOk>()(
     version: str,
     mode,
     hostname: optional(str, ''),
-    capabilities: optional(arrayOf(str), []),
+    capabilities: optional(arrayOf(capability), []),
   }),
 )
 

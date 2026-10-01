@@ -8,6 +8,7 @@
 use daedalus_agent::util::Shutdown;
 
 use anyhow::{bail, Context, Result};
+use daedalus_agent::local::LocalRequest;
 use daedalus_agent::{agent_main, config, os, role, update, VERSION};
 
 fn main() {
@@ -221,7 +222,7 @@ fn pair(args: &[String]) -> Result<()> {
         daedalus_agent::paths::forget_santree();
     }
     println!("paired: this machine trusts the controller key {}", p.pin);
-    match daedalus_agent::local::call("link.reload", serde_json::Value::Null) {
+    match daedalus_agent::local::call::<String>(&LocalRequest::LinkReload) {
         Ok(_) => println!("the service connects now; `daedalus-agent status` shows the link"),
         Err(e) => println!("the service did not answer ({e}); it reads config.toml when it starts"),
     }
@@ -237,13 +238,11 @@ fn enroll_finish(args: &[String]) -> Result<()> {
     let [code] = args else {
         bail!("usage: daedalus-agent enroll-finish CODE (the menu bar runs it)");
     };
-    let said = daedalus_agent::local::call_within(
-        "enroll.finish",
-        serde_json::json!({ "code": code }),
+    let said: String = daedalus_agent::local::call_within(
+        &LocalRequest::EnrollFinish(daedalus_agent::local::FinishParams { code: code.clone() }),
         daedalus_agent::local::ENROLL_DEADLINE,
-    )
-    .map_err(|e| anyhow::anyhow!("{e}"))?;
-    println!("{}", said.as_str().unwrap_or_default());
+    )?;
+    println!("{said}");
     Ok(())
 }
 
@@ -272,10 +271,10 @@ fn uninstall(args: &[String]) -> Result<()> {
 
 fn status_cmd() -> Result<()> {
     config::load_for_user()?;
-    let body = daedalus_agent::local::call("status", serde_json::Value::Null)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    println!("{}", serde_json::to_string_pretty(&body)?);
-    if body["controller"]["state"] == "unpaired" {
+    let doc: daedalus_agent::shared::StatusDocument =
+        daedalus_agent::local::call(&LocalRequest::Status)?;
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    if doc.controller.and_then(|c| c.state) == Some(daedalus_agent::link::LinkState::Unpaired) {
         eprintln!("\n{}", daedalus_agent::pair::unpaired_hint());
     }
     Ok(())
@@ -288,7 +287,7 @@ fn update_cmd(args: &[String]) -> Result<()> {
     }
     // The running service keeps the state `--apply` writes (the probation
     // the new binary counts its starts against) and would save over it.
-    if apply && daedalus_agent::local::call("status", serde_json::Value::Null).is_ok() {
+    if apply && daedalus_agent::local::call::<serde_json::Value>(&LocalRequest::Status).is_ok() {
         bail!(
             "the service is running: stop it first, or let it install the release itself (`updates = \"self\"`)"
         );
@@ -334,9 +333,8 @@ fn claude_cmd(args: &[String]) -> Result<()> {
     config::load_for_user()?;
     match args.first().map(String::as_str) {
         Some("restart") => {
-            let said = daedalus_agent::local::call("claude.restart", serde_json::Value::Null)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
-            println!("{}", said.as_str().unwrap_or_default());
+            let said: String = daedalus_agent::local::call(&LocalRequest::ClaudeRestart)?;
+            println!("{said}");
             Ok(())
         }
         _ => bail!("usage: daedalus-agent claude restart"),

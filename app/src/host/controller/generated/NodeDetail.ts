@@ -2,6 +2,7 @@
 import type { Hello } from "./Hello";
 import type { NodeState } from "./NodeState";
 import type { ProviderReport } from "./ProviderReport";
+import type { StatusDocument } from "./StatusDocument";
 import type { Summary } from "./Summary";
 import type { Telemetry } from "./Telemetry";
 
@@ -13,9 +14,9 @@ import type { Telemetry } from "./Telemetry";
  */
 export type NodeDetail = { public_key: string, hello: Hello | null, 
 /**
- * The status page's document (`StatusPage`), as the machine sent it.
+ * The machine's status document, as it last pushed it.
  */
-status: unknown, status_at: string | null, telemetry: Telemetry | null, telemetry_at: string | null, providers: Array<ProviderReport> | null, providers_at: string | null, id: string, fingerprint: string, state: NodeState, connected: boolean, 
+status: StatusDocument | null, status_at: string | null, telemetry: Telemetry | null, telemetry_at: string | null, providers: Array<ProviderReport> | null, providers_at: string | null, id: string, fingerprint: string, state: NodeState, connected: boolean, 
 /**
  * When the current connection opened; null while disconnected.
  */

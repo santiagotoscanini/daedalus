@@ -25,6 +25,7 @@ use tao::event_loop::{ControlFlow, EventLoop};
 use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
 use crate::enroll::{Begin, Loopback, Outcome, LOG_IN_TIMEOUT};
+use crate::local::LocalRequest;
 use crate::os::mac::bundle;
 use crate::paths;
 use crate::tray::{write_failure, Flow, Tray};
@@ -343,9 +344,10 @@ fn log_in() -> Result<Option<String>, String> {
     ) else {
         return Ok(None);
     };
-    let begin: Begin =
-        crate::local::call_as("enroll.begin", serde_json::json!({ "app_url": typed }))
-            .map_err(|e| format!("Not logged in: {e}"))?;
+    let begin: Begin = crate::local::call(&LocalRequest::EnrollBegin(crate::local::BeginParams {
+        app_url: typed,
+    }))
+    .map_err(|e| format!("Not logged in: {e}"))?;
     let loopback = Loopback::new().map_err(|e| format!("Not logged in: {e}"))?;
     *NOTE.lock_ok() = Some(format!(
         "Confirm in your browser — this Mac is {}",
@@ -388,12 +390,11 @@ pub fn log_out() {
         if asked.is_none() {
             return Ok(None);
         }
-        crate::local::call_within(
-            "enroll.leave",
-            serde_json::Value::Null,
+        crate::local::call_within::<String>(
+            &LocalRequest::EnrollLeave,
             crate::local::ENROLL_DEADLINE,
         )
-        .map(|v| v.as_str().map(str::to_string))
+        .map(Some)
         .map_err(|e| format!("Not logged out: {e}"))
     });
 }

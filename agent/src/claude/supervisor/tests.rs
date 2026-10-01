@@ -13,14 +13,14 @@ fn not_wanted_is_off_and_only_a_wanted_server_without_claude_is_not_installed() 
     };
     assert_eq!(
         f(false, false, None),
-        Some(("off".to_string(), Some("the policy".to_string())))
+        Some((ClaudeState::Off, Some("the policy".to_string())))
     );
-    assert_eq!(f(false, true, None).unwrap().0, "off");
+    assert_eq!(f(false, true, None).unwrap().0, ClaudeState::Off);
     assert_eq!(
         f(false, true, Some("a job runs")).unwrap().1.unwrap(),
         "the policy — but a job runs"
     );
-    assert_eq!(f(true, false, None).unwrap().0, "not-installed");
+    assert_eq!(f(true, false, None).unwrap().0, ClaudeState::NotInstalled);
     assert_eq!(f(true, true, None), None);
 }
 
@@ -36,7 +36,7 @@ fn a_supervisor_that_is_not_wanted_reports_off() {
         dir.join("gcroots"),
     );
     let r = sup.report();
-    assert_eq!(r.state, "off");
+    assert_eq!(r.state, ClaudeState::Off);
     assert!(sup.server_pid().is_none() && !sup.registered() && sup.starts() == 0);
     assert_eq!(
         r.summary().sessions,
@@ -155,7 +155,7 @@ fn a_quick_exit_backs_off_and_a_long_run_does_not() {
     sup.tick();
     assert!(sup.server_pid().is_none() && sup.failures == 1);
     let r = sup.report();
-    assert_eq!(r.state, "waiting");
+    assert_eq!(r.state, ClaudeState::Waiting);
     assert_eq!(
         r.last_line.as_deref(),
         Some("Error: no login in /home/ana/.claude")

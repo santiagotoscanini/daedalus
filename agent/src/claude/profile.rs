@@ -148,7 +148,7 @@ pub fn read_credentials(dir: &Path) -> Credentials {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
         return Credentials {
             present: true,
-            store: Some("file".into()),
+            store: Some(super::CredentialStore::File),
             ..Default::default()
         };
     };
@@ -172,7 +172,7 @@ pub fn read_credentials(dir: &Path) -> Credentials {
         .unwrap_or_default();
     Credentials {
         present: true,
-        store: Some("file".into()),
+        store: Some(super::CredentialStore::File),
         subscription_type: s("subscriptionType"),
         rate_limit_tier: s("rateLimitTier"),
         expires_at: n("expiresAt"),
@@ -189,7 +189,7 @@ fn keychain_credentials() -> Credentials {
     if KEYCHAIN.get(crate::os::claude_keychain_login) {
         return Credentials {
             present: true,
-            store: Some("keychain".into()),
+            store: Some(super::CredentialStore::Keychain),
             ..Default::default()
         };
     }

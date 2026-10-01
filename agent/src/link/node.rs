@@ -77,10 +77,11 @@ use super::wire::{
     self, name, Accepted, ClaudeSessionParams, Command, CommandParams, Hello, HelloFacts, Incoming,
     NodeState, Policy, RotateParams, StateEvent, Welcome, PROTO,
 };
+use super::{FoundVia, LinkState};
 use super::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT};
 use crate::config::Config;
 use crate::identity::{digest, format_fingerprint, parse_fingerprint, Identity};
-use crate::rpc::{code, ApiError, Response};
+use crate::rpc::{ApiError, ErrorCode, Request, Response};
 use crate::shared::Shared;
 use crate::state::now_rfc3339;
 
@@ -100,7 +101,7 @@ const IDLE_RETRY: Duration = Duration::from_secs(60);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
     pub address: String,
-    pub found_via: String,
+    pub found_via: FoundVia,
     /// The SHA-256 of the key to accept: config.toml's `controller_pin`.
     pub pin: [u8; 32],
 }
@@ -126,9 +127,12 @@ pub fn resolve_target(
         None => return Err(NO_PIN.into()),
     };
     let (address, found_via) = match config_address.map(str::trim).filter(|a| !a.is_empty()) {
-        Some(a) => (a.to_string(), "config".to_string()),
+        Some(a) => (a.to_string(), FoundVia::Config),
         None => match dns() {
-            Some((a, suffix)) => (a, format!("dns {suffix}")),
+            Some((a, suffix)) => {
+                tracing::debug!(address = %a, suffix, "link: the controller found by DNS");
+                (a, FoundVia::Dns)
+            }
             None => return Ok(None),
         },
     };
@@ -177,8 +181,8 @@ pub fn hello_of(cfg: &Config, id: &Identity, facts: &crate::facts::Facts) -> Hel
         proto: PROTO,
         node_id: id.node_id(),
         agent_version: crate::VERSION.into(),
-        os: facts.os.into(),
-        arch: facts.arch.into(),
+        os: facts.os.clone(),
+        arch: facts.arch.clone(),
         hostname: crate::facts::hostname(),
         mac: adapter.mac,
         lan_ip: adapter.ipv4,
@@ -188,10 +192,7 @@ pub fn hello_of(cfg: &Config, id: &Identity, facts: &crate::facts::Facts) -> Hel
             cpu: facts.cpu.clone(),
             memory_bytes: facts.memory_bytes,
         },
-        capabilities: crate::api::capabilities(cfg, false)
-            .into_iter()
-            .map(str::to_string)
-            .collect(),
+        capabilities: crate::api::capabilities(cfg, crate::api::Serves::default()),
         telemetry: cfg.telemetry,
     }
 }
@@ -278,8 +279,8 @@ pub fn run_loop_at(
             // until a pin arrives (module doc).
             shared.set_link(|l| {
                 l.address = keys.address.clone();
-                l.found_via = keys.address.as_ref().map(|_| "config".into());
-                l.state = Some("unpaired".into());
+                l.found_via = keys.address.as_ref().map(|_| FoundVia::Config);
+                l.state = Some(LinkState::Unpaired);
                 l.connected = false;
                 l.since = None;
                 l.controller_fingerprint = None;
@@ -323,7 +324,7 @@ pub fn run_loop_at(
             Err(e) => {
                 tracing::warn!(error = %e, "link: no controller to try");
                 shared.set_link(|l| {
-                    l.state = Some("refused".into());
+                    l.state = Some(LinkState::Refused);
                     l.connected = false;
                     l.error = Some(e);
                 });
@@ -335,9 +336,9 @@ pub fn run_loop_at(
         };
         shared.set_link(|l| {
             l.address = Some(target.address.clone());
-            l.found_via = Some(target.found_via.clone());
+            l.found_via = Some(target.found_via);
             l.controller_fingerprint = Some(format_fingerprint(&target.pin));
-            l.state = Some("connecting".into());
+            l.state = Some(LinkState::Connecting);
         });
         let hello = hello_of(&cfg, &id, &facts);
         let ended = connect_once(
@@ -392,11 +393,11 @@ pub fn run_loop_at(
                 tracing::info!(address = %target.address, why, "link: controller not reached");
                 shared.set_link(|l| {
                     l.connected = false;
-                    l.state = Some("connecting".into());
+                    l.state = Some(LinkState::Connecting);
                     l.error = Some(why.clone());
                 });
                 // An address found by DNS may have moved.
-                if target.found_via.starts_with("dns") {
+                if target.found_via == FoundVia::Dns {
                     dns_found = None;
                 }
                 let w = backoff;
@@ -417,7 +418,7 @@ pub fn run_loop_at(
                 tracing::error!("{e}");
                 shared.set_link(|l| {
                     l.connected = false;
-                    l.state = Some("key-changed".into());
+                    l.state = Some(LinkState::KeyChanged);
                     l.error = Some(e);
                 });
                 BACKOFF_MAX
@@ -444,7 +445,7 @@ pub fn run_loop_at(
                 shared.set_link(|l| {
                     l.connected = false;
                     l.since = None;
-                    l.state = Some("revoked".into());
+                    l.state = Some(LinkState::Revoked);
                     l.error = None;
                 });
                 BACKOFF_MAX
@@ -453,7 +454,7 @@ pub fn run_loop_at(
                 tracing::warn!(error = %e, "link: the controller speaks another protocol");
                 shared.set_link(|l| {
                     l.connected = false;
-                    l.state = Some("refused".into());
+                    l.state = Some(LinkState::Refused);
                     l.error = Some(e.clone());
                 });
                 BACKOFF_MAX
@@ -548,9 +549,9 @@ pub fn connect_once(
                 },
                 Ok(Incoming::Answer { result: Err(e), .. }) => {
                     tls.close();
-                    return match e.code.as_str() {
-                        code::VERSION => Ended::Version(e.msg),
-                        code::REVOKED => Ended::Revoked,
+                    return match e.code {
+                        ErrorCode::Version => Ended::Version(e.msg),
+                        ErrorCode::Revoked => Ended::Revoked,
                         _ => Ended::Failed(format!("refused: {}", e.msg)),
                     };
                 }
@@ -571,7 +572,7 @@ pub fn connect_once(
     shared.set_link(|l| {
         l.connected = true;
         l.since = Some(now_rfc3339());
-        l.state = Some(welcome.state.as_str().into());
+        l.state = Some(welcome.state.into());
         l.error = None;
     });
     // Where a rotation re-pins: config.toml, where the pin is (module doc).
@@ -646,7 +647,8 @@ impl Pushed {
 
         // The OS's power requests as the service last read them (a command,
         // run on its own thread every minute: `Shared::refresh_power_requests`).
-        let status = shared.status_value(shared.power_requests());
+        let status =
+            serde_json::to_value(shared.document(shared.power_requests())).unwrap_or_default();
         let d = status_digest(&status);
         if self
             .status
@@ -729,30 +731,30 @@ impl Pushed {
 /// controller's request id.
 fn take_claude_session(shared: &Shared, p: Value) -> Result<Accepted, ApiError> {
     let params: ClaudeSessionParams = serde_json::from_value(p)
-        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("claude_session: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("claude_session: {e}")))?;
     crate::claude::sessions::check_selector(params.action, &params.id)
-        .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+        .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
     if params.request.len() != 16 || !params.request.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(ApiError::new(
-            code::BAD_REQUEST,
+            ErrorCode::BadRequest,
             "claude_session: the request id is sixteen hex characters",
         ));
     }
     if !shared.policy().claude_remote_control {
         return Err(ApiError::new(
-            code::UNAVAILABLE,
+            ErrorCode::Unavailable,
             "Claude is off on this machine (the box's policy)",
         ));
     }
     if shared.claude_report().is_none() {
         return Err(ApiError::new(
-            code::UNAVAILABLE,
+            ErrorCode::Unavailable,
             "no session is reporting on this machine",
         ));
     }
     if !shared.queue_claude_session_as(params.request.clone(), params.action, params.id.clone()) {
         return Err(ApiError::new(
-            code::BUSY,
+            ErrorCode::Busy,
             "the session has requests waiting that it has not taken",
         ));
     }
@@ -773,10 +775,10 @@ fn take_claude_session(shared: &Shared, p: Value) -> Result<Accepted, ApiError> 
 /// it now is.
 fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiError> {
     let params: crate::providers::ProviderModelParams = serde_json::from_value(p)
-        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("provider_model: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("provider_model: {e}")))?;
     params
         .check()
-        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("provider_model: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("provider_model: {e}")))?;
     let port = shared
         .policy()
         .providers
@@ -785,7 +787,7 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
         .unwrap_or(crate::providers::LEMONADE_DEFAULT_PORT);
     if !shared.begin_provider_action() {
         return Err(ApiError::new(
-            code::BUSY,
+            ErrorCode::Busy,
             "a residency verb is still running on this machine",
         ));
     }
@@ -823,7 +825,7 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
             at: crate::state::now_rfc3339(),
         });
         return Err(ApiError::new(
-            code::UNAVAILABLE,
+            ErrorCode::Unavailable,
             "could not start the residency verb",
         ));
     }
@@ -834,14 +836,14 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
 /// handshake proved (module doc): the new key, when `pinned` signed it.
 pub fn take_rotate(pinned: &[u8; 32], p: Value) -> Result<[u8; 32], ApiError> {
     let params: RotateParams = serde_json::from_value(p)
-        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("rotate: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("rotate: {e}")))?;
     let new = crate::identity::parse_public_key(&params.new_public_key)
-        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("rotate: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("rotate: {e}")))?;
     let sig = hex::decode(&params.signature)
-        .map_err(|_| ApiError::new(code::BAD_REQUEST, "rotate: the signature is not hex"))?;
+        .map_err(|_| ApiError::new(ErrorCode::BadRequest, "rotate: the signature is not hex"))?;
     if !crate::identity::verify_rotation(pinned, &new, &sig) {
         return Err(ApiError::new(
-            code::FORBIDDEN,
+            ErrorCode::Forbidden,
             "rotate: the statement is not the trusted controller key's; nothing re-pinned",
         ));
     }
@@ -851,7 +853,7 @@ pub fn take_rotate(pinned: &[u8; 32], p: Value) -> Result<[u8; 32], ApiError> {
 /// Apply one command from the controller; the answer's body or an error.
 fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accepted, ApiError> {
     let params: CommandParams = serde_json::from_value(p)
-        .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("command: {e}")))?;
+        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("command: {e}")))?;
     match params.command {
         Command::CheckUpdate => {
             tracing::info!("the controller asked for an update check");
@@ -859,7 +861,7 @@ fn take_command(shared: &Shared, p: Value, claude_update: bool) -> Result<Accept
         }
         Command::ClaudeUpdate if !claude_update => {
             return Err(ApiError::new(
-                code::UNSUPPORTED,
+                ErrorCode::Unsupported,
                 "this agent does not update Claude Code",
             ))
         }
@@ -972,7 +974,7 @@ fn converse(
                         "link: the controller says where this machine stands"
                     );
                     state = s.state;
-                    shared.set_link(|l| l.state = Some(state.as_str().into()));
+                    shared.set_link(|l| l.state = Some(state.into()));
                     match state {
                         NodeState::Approved => pushed = Pushed::default(),
                         NodeState::Revoked => {
@@ -989,15 +991,15 @@ fn converse(
                 }
                 _ => {}
             },
-            Ok(Incoming::Request { id, m, p }) => {
+            Ok(Incoming::Request(Request { id, m, p })) => {
                 let mut rotated = None;
                 let answer = match m.as_str() {
                     // Whatever the machine's standing: the key it trusts
                     // hands over to another (module doc).
                     name::ROTATE => match take_rotate(&peer.0, p).and_then(|new| {
-                        (peer.1)(&new)
-                            .map(|()| new)
-                            .map_err(|e| ApiError::new(code::INTERNAL, format!("re-pinning: {e}")))
+                        (peer.1)(&new).map(|()| new).map_err(|e| {
+                            ApiError::new(ErrorCode::Internal, format!("re-pinning: {e}"))
+                        })
                     }) {
                         Ok(new) => {
                             rotated = Some((digest(&peer.0), digest(&new)));
@@ -1028,12 +1030,12 @@ fn converse(
                     }
                     name::COMMAND | name::CLAUDE_SESSION | name::PROVIDER_MODEL => Response::err(
                         Some(id),
-                        ApiError::new(code::UNAVAILABLE, "this machine is not approved"),
+                        ApiError::new(ErrorCode::Unavailable, "this machine is not approved"),
                     ),
                     _ => Response::err(
                         Some(id),
                         ApiError::new(
-                            code::UNKNOWN_METHOD,
+                            ErrorCode::UnknownMethod,
                             format!("no method `{m}` on a machine"),
                         ),
                     ),
@@ -1143,7 +1145,7 @@ mod tests {
         })
         .unwrap()
         .unwrap();
-        assert_eq!((t.found_via.as_str(), t.pin), ("dns lan", [1; 32]));
+        assert_eq!((t.found_via, t.pin), (FoundVia::Dns, [1; 32]));
         // Config address and pin: DNS is never asked.
         let t = resolve_target(Some("box.lan:7788"), Some(&fp(1)), no_dns)
             .unwrap()

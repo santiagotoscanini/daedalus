@@ -45,19 +45,20 @@
 //! the two meet at different versions as a matter of course.
 //!
 //! **Fixed verbs.** The "no shell" rule: each method is a fixed verb with
-//! typed parameters. None takes a command, a path or a flag from the
-//! caller, and none ever will.
+//! typed parameters (wire.rs `ApiRequest`, one list with each method's
+//! answer). None takes a command, a path or a flag from the caller, and
+//! none ever will.
 //!
 //! | method             | answers                                               | needs                   |
 //! |--------------------|-------------------------------------------------------|-------------------------|
 //! | `hello`            | `HelloOk`                                              | first on the connection |
+//! | `events.subscribe` | `{}`, then the events below                           | —                       |
 //! | `system.info`      | `SystemInfo`: version, mode, OS, uptime, role, capabilities | —                  |
 //! | `claude.status`    | `ClaudeStatus`: the session's last report              | `claude.remote_control` |
 //! | `claude.restart`   | `Queued`; the session restarts the server (`unavailable` while off or no session reports) | `claude.remote_control` |
-//! | `claude.roster`    | `ClaudeRosterGet`: the session's roster of Claude sessions (claude/roster.rs) | `claude.sessions` |
+//! | `claude.roster`    | `ClaudeRosterGet`: the session's roster of Claude sessions (claude/roster/) | `claude.sessions` |
 //! | `claude.session`   | `SessionQueued`: one verb `{action, id}` queued for the session; its roster's `actions` reports it under `request` | `claude.sessions` |
 //! | `telemetry.get`    | `TelemetryGet`: the document at the configured level   | —                       |
-//! | `events.subscribe` | `{}`, then the events below                           | —                       |
 //! | `nodes.list`       | `NodesList`: every machine known, its standing and connection | `nodes`          |
 //! | `nodes.get`        | `NodeDetail`: one machine's hello, status and open telemetry `{id}` | `nodes`     |
 //! | `nodes.telemetry`  | `NodeTelemetry`: its full telemetry `{id}`             | `nodes`                 |
@@ -68,11 +69,11 @@
 //! | `nodes.provider_model` | `ProviderModelSent`: one residency verb `{id, kind, action, model, pinned?, replacing?}` delivered and acknowledged | `nodes` |
 //! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
-//! | `controller.rotate`| `ControllerInfo` with its `rotation`: a new controller key, the old one retired after `{grace_secs?}` (link/rotation.rs) | the controller |
+//! | `controller.rotate`| `ControllerInfo` with its `rotation`: a new controller key, the old one retired after `{grace_secs?}` (link/rotation.rs) | `controller` |
 //! | `root.run`         | `RootRunOk`: one root verb `{verb, selectors?, payload?, detach?}` run by the root helper to its end — `done`, `refused` or `failed` with a detail; with `detach`, answered once its unit has started (outcome null); `status` lists the verbs (root/) | `root` |
 //! | `root.follow`      | `RootFollowOk`: a run's lines past `{run, after?}` and how it stands, from the controller's run store (root/runs.rs); `not_found` for a run it does not hold | `root` |
 //! | `root.runs`        | `RootRunsOk`: the runs of `{verb}` the store holds, newest first | `root` |
-//! | `santree.status` | `SantreeStatus`: the session host from its status file — `running`, `stale`, `stopped` or `missing`, its version, whether a restart would apply a newer build, its live PTYs and connections by machine, and why the controller cannot read it or write its allow-list (session_host.rs); `unavailable` where the box has none | — |
+//! | `santree.status`   | `SantreeStatus`: the session host from its status file — `running`, `stale`, `stopped` or `missing`, its version, whether a restart would apply a newer build, its live PTYs and connections by machine, and why the controller cannot read it or write its allow-list (session_host.rs) | `santree` |
 //!
 //! `root.run` answers when the verb's unit has finished, which can be
 //! minutes: a client gives it a timeout of its own, or asks `detach` and
@@ -82,52 +83,46 @@
 //! door to the root helper — the app never connects to that socket.
 //!
 //! The `nodes.*` methods read and steer the machines connected to the
-//! controller (link/controller.rs). Their selector is a node id — sixteen
+//! controller (link/controller/). Their selector is a node id — sixteen
 //! lowercase hex characters, checked before anything else — and their
 //! parameters are exact; `command` is one of `check_update`,
 //! `claude_update`, `claude_restart`. A session verb (`claude.session`
 //! and `nodes.claude_session`) is `resume`, `stop` or `remove` with the
 //! selector each takes — a canonical lowercase uuid for `resume`, that or a
 //! background agent's eight hex digits for `stop`, the eight digits for
-//! `remove` (claude/sessions.rs `check_selector`) — checked here, again by
+//! `remove` (claude/sessions/ `check_selector`) — checked here, again by
 //! the machine that takes it, and again by its session, which refuses
 //! every verb while its policy keeps Claude off. `nodes.claude_session`
 //! reaches only a connected, approved machine that offers
-//! `claude.sessions`, and is never queued for later. `set_desired` checks every entry (an
-//! id that is not its key's, a key twice, a policy field it does not know,
-//! a `name` longer than `MAX_NODE_NAME` characters or with a control
-//! character) before applying any. A machine the controller has never heard of is
-//! `not_found`; a command for one that is not approved is `unavailable`.
-//! All of it is additive to api 1: no earlier method or event changed.
+//! `claude.sessions`, and is never queued for later. `set_desired` checks
+//! every entry (an id that is not its key's, a key twice, a policy that
+//! names the session host, a `name` longer than `MAX_NODE_NAME` characters
+//! or with a control character) before applying any. A machine the
+//! controller has never heard of is `not_found`; a command for one that is
+//! not approved is `unavailable`.
 //!
-//! **Capabilities** come from the role table and the config, never from
-//! the OS (`capabilities`): `claude.remote_control` where a session runs
-//! and may run Claude — on the controller only when `[controller]
-//! claude_remote_control` says so, and `claude.sessions` beside it (the
-//! roster and the session verbs); `claude.update` where the role lets the
-//! agent update Claude Code — never on the controller, whose Claude nix
-//! pins; `telemetry.full` or `telemetry.minimal` as `telemetry` says
-//! (nothing at `off`); `nodes` where the controller listens for machines
-//! (`[controller] listen`); `root` on the controller where `[controller]
-//! root_socket` names the helper. A method whose capability is absent
-//! answers `unsupported`.
+//! **Capabilities** come from the role table, the config and what the
+//! controller serves, never from the OS (`capabilities`):
+//! `claude.remote_control` where a session runs and may run Claude — on the
+//! controller only when `[controller] claude_remote_control` says so, and
+//! `claude.sessions` beside it (the roster and the session verbs);
+//! `claude.update` where the role lets the agent update Claude Code — never
+//! on the controller, whose Claude nix pins; `telemetry.full` or
+//! `telemetry.minimal` as `telemetry` says (nothing at `off`); `nodes` where
+//! the controller listens for machines (`[controller] listen`); `root`
+//! where `[controller] root_socket` names the helper; `santree` where it
+//! follows a session host; `controller` where it holds its link key. A
+//! method whose capability is absent answers `unsupported`.
 //!
-//! **Events** are best effort: a subscriber that does not read fills its
-//! queue (`EVENT_QUEUE`) and loses the events after that, never the
-//! connection; an event says what moved, and the method that reads the
-//! whole picture is the source of truth. `claude.changed` goes out when a
-//! session starts reporting, when a report's state or pid differs from the
-//! previous report's, and when the session stops reporting (no report for
-//! 30 s); `telemetry.updated` with every sample; `nodes.changed` `{id,
-//! state, connected}` when a machine connects, leaves or changes standing;
-//! `nodes.pending` `{id, fingerprint, hostname}` when an unknown key
-//! connects and waits for approval; `nodes.left` `{id}` when an approved
-//! machine logs out (the link's `leave`: the app forgets it and deletes its
-//! wg-easy client); `nodes.policy_request` `{id, changes}` when an approved
-//! machine's user asks for one of its settings (the link's
-//! `policy_request`: the app writes the keys `changes` names and sends the
-//! set again; never santree on); `root.progress` `{run, verb, line}` for
-//! each line a running root verb's unit writes.
+//! **Events** (wire.rs `ApiEvent`) are what the app must act on: `nodes.left`
+//! `{id}` when an approved machine logs out (the link's `leave`: the app
+//! forgets it and deletes its wg-easy client); `nodes.policy_request` `{id,
+//! changes}` when an approved machine's user asks for one of its settings
+//! (the link's `policy_request`: the app writes the keys `changes` names and
+//! sends the set again; never santree on). The machine that asked is
+//! answered only once a subscriber took the event. A subscriber that does
+//! not read fills its queue (`EVENT_QUEUE`) and loses the events after
+//! that, never the connection. Everything else is read when it is wanted.
 
 pub mod conn;
 pub mod wire;
@@ -138,13 +133,13 @@ use std::time::Duration;
 use anyhow::Result;
 use serde::Serialize;
 use serde_json::value::RawValue;
-use serde_json::Value;
 
 use crate::config::{Config, TelemetryLevel};
+use crate::link::wire::Policy;
 use crate::role::Role;
-use crate::rpc::{code, error_line, ApiError, Events};
+use crate::rpc::{error_line, ApiError, ErrorCode, Events};
 use crate::shared::Shared;
-use wire::{ClaudeStatus, OsInfo, Queued, SystemInfo, TelemetryGet};
+use wire::{ApiRequest, Capability, ClaudeStatus, OsInfo, Queued, SystemInfo, TelemetryGet};
 
 /// The API version this agent speaks.
 pub const API_VERSION: u32 = 1;
@@ -217,8 +212,18 @@ pub fn peer_allowed(peer_uid: Option<u32>, own_uid: u32, listed: &[u32]) -> bool
     peer_uid.is_some_and(|p| p == own_uid || listed.contains(&p))
 }
 
+/// What the controller serves beyond its config, as it starts: machines
+/// (`[controller] listen`), a session host it follows, its own link key.
+/// A node serves none of them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Serves {
+    pub nodes: bool,
+    pub santree: bool,
+    pub keys: bool,
+}
+
 /// What this agent offers the app, from its role and config (module doc).
-pub fn capabilities(cfg: &Config, nodes: bool) -> Vec<&'static str> {
+pub fn capabilities(cfg: &Config, serves: Serves) -> Vec<Capability> {
     let role = cfg.role();
     let mut c = Vec::new();
     // A node runs Claude as the box's policy says; the controller only
@@ -228,28 +233,34 @@ pub fn capabilities(cfg: &Config, nodes: bool) -> Vec<&'static str> {
         crate::config::Mode::Controller => cfg.controller.claude_remote_control,
     };
     if role.session && claude {
-        c.push("claude.remote_control");
+        c.push(Capability::ClaudeRemoteControl);
         if role.claude_update {
-            c.push("claude.update");
+            c.push(Capability::ClaudeUpdate);
         }
-        c.push("claude.sessions");
+        c.push(Capability::ClaudeSessions);
     }
     match cfg.telemetry {
-        TelemetryLevel::Full => c.push("telemetry.full"),
-        TelemetryLevel::Minimal => c.push("telemetry.minimal"),
+        TelemetryLevel::Full => c.push(Capability::TelemetryFull),
+        TelemetryLevel::Minimal => c.push(Capability::TelemetryMinimal),
         TelemetryLevel::Off => {}
     }
     // A node reads its providers and drives their residency for the box.
     if role.link {
-        c.push("providers.residency");
+        c.push(Capability::ProvidersResidency);
     }
-    if nodes && role.node_listener {
-        c.push("nodes");
+    if serves.nodes && role.node_listener {
+        c.push(Capability::Nodes);
     }
     // The root helper answers only the controller (root/mod.rs), and only
     // where nix named its socket.
     if role.api_socket && cfg.controller.root_socket.is_some() {
-        c.push("root");
+        c.push(Capability::Root);
+    }
+    if role.api_socket && serves.santree {
+        c.push(Capability::Santree);
+    }
+    if role.api_socket && serves.keys {
+        c.push(Capability::Controller);
     }
     c
 }
@@ -260,7 +271,7 @@ pub struct Api {
     shared: Arc<Shared>,
     role: Role,
     telemetry: TelemetryLevel,
-    capabilities: Vec<&'static str>,
+    capabilities: Vec<Capability>,
     /// The root helper's socket, where `root` is offered.
     root_socket: Option<std::path::PathBuf>,
     /// Every root run this controller asked for, while it keeps them.
@@ -273,7 +284,14 @@ impl Api {
     pub fn new(shared: Arc<Shared>, cfg: &Config) -> Self {
         let role = cfg.role();
         Self {
-            capabilities: capabilities(cfg, shared.nodes().is_some()),
+            capabilities: capabilities(
+                cfg,
+                Serves {
+                    nodes: shared.nodes().is_some(),
+                    santree: shared.session_host().is_some(),
+                    keys: shared.controller_keys().is_some(),
+                },
+            ),
             shared,
             role,
             telemetry: cfg.telemetry,
@@ -307,36 +325,29 @@ impl Api {
         self.shared.events()
     }
 
-    fn has(&self, capability: &str) -> Result<(), ApiError> {
+    fn has(&self, capability: Capability) -> Result<(), ApiError> {
         if self.capabilities.contains(&capability) {
             Ok(())
         } else {
             Err(ApiError::new(
-                code::UNSUPPORTED,
+                ErrorCode::Unsupported,
                 format!("this agent does not offer `{capability}`"),
             ))
         }
     }
 
-    /// One method, after `hello` (conn.rs handles `hello` and
+    /// One method, after `hello` (conn.rs answers `hello` and
     /// `events.subscribe`, which belong to the connection).
-    pub fn call(&self, method: &str, params: &Value) -> Result<Box<RawValue>, ApiError> {
-        let no_params = || match params {
-            Value::Null => Ok(()),
-            Value::Object(m) if m.is_empty() => Ok(()),
-            _ => Err(ApiError::new(
-                code::BAD_REQUEST,
-                format!("`{method}` takes no parameters"),
+    pub fn call(&self, req: ApiRequest) -> Result<Box<RawValue>, ApiError> {
+        use ApiRequest as R;
+        match req {
+            R::Hello(_) | R::EventsSubscribe => Err(ApiError::new(
+                ErrorCode::BadRequest,
+                "`hello` and `events.subscribe` belong to the connection",
             )),
-        };
-        match method {
-            "system.info" => {
-                no_params()?;
-                to_value(&self.system_info())
-            }
-            "claude.status" => {
-                no_params()?;
-                self.has("claude.remote_control")?;
+            R::SystemInfo => to_value(&self.system_info()),
+            R::ClaudeStatus => {
+                self.has(Capability::ClaudeRemoteControl)?;
                 let report = self.shared.claude_report();
                 to_value(&ClaudeStatus {
                     reporting: report.is_some(),
@@ -344,12 +355,11 @@ impl Api {
                     report,
                 })
             }
-            "claude.restart" => {
-                no_params()?;
-                self.has("claude.remote_control")?;
+            R::ClaudeRestart => {
+                self.has(Capability::ClaudeRemoteControl)?;
                 if !self.shared.policy().claude_remote_control {
                     return Err(ApiError::new(
-                        code::UNAVAILABLE,
+                        ErrorCode::Unavailable,
                         "Claude remote control is off on this machine; there is nothing to restart",
                     ));
                 }
@@ -357,37 +367,34 @@ impl Api {
                 // session next came up — long after anyone asked.
                 if self.shared.claude_report().is_none() {
                     return Err(ApiError::new(
-                        code::UNAVAILABLE,
+                        ErrorCode::Unavailable,
                         "no session is reporting on this machine; there is nothing to restart",
                     ));
                 }
                 self.shared.request_claude_restart();
                 to_value(&Queued { queued: true })
             }
-            "claude.roster" => {
-                no_params()?;
-                self.has("claude.sessions")?;
+            R::ClaudeRoster => {
+                self.has(Capability::ClaudeSessions)?;
                 let roster = self.shared.claude_roster();
                 to_value(&wire::ClaudeRosterGet {
                     reporting: roster.is_some(),
                     roster,
                 })
             }
-            "claude.session" => {
-                self.has("claude.sessions")?;
-                let s: wire::ClaudeSession = serde_json::from_value(params.clone())
-                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+            R::ClaudeSession(s) => {
+                self.has(Capability::ClaudeSessions)?;
                 crate::claude::sessions::check_selector(s.action, &s.id)
-                    .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+                    .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
                 if !self.shared.policy().claude_remote_control {
                     return Err(ApiError::new(
-                        code::UNAVAILABLE,
+                        ErrorCode::Unavailable,
                         "Claude is off on this machine; no session verb runs",
                     ));
                 }
                 if self.shared.claude_report().is_none() {
                     return Err(ApiError::new(
-                        code::UNAVAILABLE,
+                        ErrorCode::Unavailable,
                         "no session is reporting on this machine; there is nobody to run it",
                     ));
                 }
@@ -396,7 +403,7 @@ impl Api {
                     .queue_claude_session(s.action, s.id)
                     .ok_or_else(|| {
                         ApiError::new(
-                            code::BUSY,
+                            ErrorCode::Busy,
                             "the session has requests waiting that it has not taken",
                         )
                     })?;
@@ -405,68 +412,51 @@ impl Api {
                     request,
                 })
             }
-            "telemetry.get" => {
-                no_params()?;
-                to_value(&TelemetryGet {
-                    level: self.telemetry,
-                    telemetry: match self.telemetry {
-                        TelemetryLevel::Off => None,
-                        _ => self.shared.telemetry(),
-                    },
-                })
-            }
-            "controller.rotate" => {
+            R::TelemetryGet => to_value(&TelemetryGet {
+                level: self.telemetry,
+                telemetry: match self.telemetry {
+                    TelemetryLevel::Off => None,
+                    _ => self.shared.telemetry(),
+                },
+            }),
+            R::ControllerRotate(p) => {
                 use crate::link::rotation::{GRACE_DEFAULT, GRACE_MAX, GRACE_MIN};
+                self.has(Capability::Controller)?;
                 let keys = self.shared.controller_keys().ok_or_else(|| {
-                    ApiError::new(
-                        code::UNSUPPORTED,
-                        "this agent is not the controller; it has no key to rotate",
-                    )
+                    ApiError::new(ErrorCode::Unsupported, "this agent holds no link key")
                 })?;
-                let p: wire::ControllerRotate = match params {
-                    Value::Null => wire::ControllerRotate::default(),
-                    p => serde_json::from_value(p.clone()).map_err(|e| {
-                        ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}"))
-                    })?,
-                };
                 let grace = p.grace_secs.map_or(GRACE_DEFAULT, Duration::from_secs);
                 if !(GRACE_MIN..=GRACE_MAX).contains(&grace) {
                     return Err(ApiError::new(
-                        code::BAD_REQUEST,
+                        ErrorCode::BadRequest,
                         format!(
-                            "`{method}`: grace_secs is {} to {}",
+                            "`controller.rotate`: grace_secs is {} to {}",
                             GRACE_MIN.as_secs(),
                             GRACE_MAX.as_secs()
                         ),
                     ));
                 }
                 keys.start(grace)
-                    .map_err(|e| ApiError::new(code::UNAVAILABLE, e))?;
+                    .map_err(|e| ApiError::new(ErrorCode::Unavailable, e))?;
                 to_value(&self.shared.controller_info())
             }
-            "santree.status" => {
-                no_params()?;
+            R::SantreeStatus => {
+                self.has(Capability::Santree)?;
                 let host = self.shared.session_host().ok_or_else(|| {
-                    ApiError::new(code::UNAVAILABLE, "no session host on this box")
+                    ApiError::new(ErrorCode::Unsupported, "no session host on this box")
                 })?;
                 to_value(&host.status())
             }
-            "root.run" => {
-                self.has("root")?;
-                let p: wire::RootRun = serde_json::from_value(params.clone())
-                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+            R::RootRun(p) => {
+                self.has(Capability::Root)?;
                 to_value(&self.root_run(p)?)
             }
-            "root.follow" => {
-                self.has("root")?;
-                let p: wire::RootFollow = serde_json::from_value(params.clone())
-                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+            R::RootFollow(p) => {
+                self.has(Capability::Root)?;
                 to_value(&self.root_follow(p)?)
             }
-            "root.runs" => {
-                self.has("root")?;
-                let p: wire::RootRuns = serde_json::from_value(params.clone())
-                    .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))?;
+            R::RootRuns(p) => {
+                self.has(Capability::Root)?;
                 let runs = self
                     .runs
                     .of_verb(&p.verb)
@@ -475,78 +465,23 @@ impl Api {
                     .collect();
                 to_value(&wire::RootRunsOk { runs })
             }
-            m if m.starts_with("nodes.") => self.nodes_call(m, params),
-            _ => Err(ApiError::new(
-                code::UNKNOWN_METHOD,
-                format!("no method `{method}`"),
-            )),
-        }
-    }
-
-    /// The `nodes.*` methods (module doc).
-    fn nodes_call(&self, method: &str, params: &Value) -> Result<Box<RawValue>, ApiError> {
-        let known = [
-            "nodes.list",
-            "nodes.get",
-            "nodes.telemetry",
-            "nodes.providers",
-            "nodes.claude",
-            "nodes.claude_roster",
-            "nodes.claude_session",
-            "nodes.provider_model",
-            "nodes.set_desired",
-            "nodes.command",
-        ];
-        if !known.contains(&method) {
-            return Err(ApiError::new(
-                code::UNKNOWN_METHOD,
-                format!("no method `{method}`"),
-            ));
-        }
-        self.has("nodes")?;
-        let nodes = self
-            .shared
-            .nodes()
-            .ok_or_else(|| ApiError::new(code::UNSUPPORTED, "this agent serves no machines"))?;
-        fn exact<T: serde::de::DeserializeOwned>(method: &str, p: &Value) -> Result<T, ApiError> {
-            serde_json::from_value(p.clone())
-                .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("`{method}`: {e}")))
-        }
-        let id_of = |p: &Value| -> Result<String, ApiError> {
-            let w: wire::NodeId = exact(method, p)?;
-            checked_id(&w.id)?;
-            Ok(w.id)
-        };
-        match method {
-            "nodes.list" => {
-                match params {
-                    Value::Null => {}
-                    Value::Object(m) if m.is_empty() => {}
-                    _ => {
-                        return Err(ApiError::new(
-                            code::BAD_REQUEST,
-                            "`nodes.list` takes no parameters",
-                        ))
-                    }
-                }
-                to_value(&wire::NodesList {
-                    nodes: nodes.list(),
-                })
-            }
-            "nodes.get" => to_value(&nodes.get(&id_of(params)?)?),
-            "nodes.telemetry" => to_value(&nodes.telemetry(&id_of(params)?)?),
-            "nodes.providers" => to_value(&nodes.providers(&id_of(params)?)?),
-            "nodes.claude" => to_value(&nodes.claude(&id_of(params)?)?),
-            "nodes.claude_roster" => to_value(&nodes.claude_roster(&id_of(params)?)?),
-            "nodes.claude_session" => {
-                let c: wire::NodeClaudeSession = exact(method, params)?;
+            R::NodesList => to_value(&wire::NodesList {
+                nodes: self.nodes()?.list(),
+            }),
+            R::NodesGet(p) => to_value(&self.nodes()?.get(checked_id(&p.id)?)?),
+            R::NodesTelemetry(p) => to_value(&self.nodes()?.telemetry(checked_id(&p.id)?)?),
+            R::NodesProviders(p) => to_value(&self.nodes()?.providers(checked_id(&p.id)?)?),
+            R::NodesClaude(p) => to_value(&self.nodes()?.claude(checked_id(&p.id)?)?),
+            R::NodesClaudeRoster(p) => to_value(&self.nodes()?.claude_roster(checked_id(&p.id)?)?),
+            R::NodesClaudeSession(c) => {
+                let nodes = self.nodes()?;
                 checked_id(&c.id)?;
                 crate::claude::sessions::check_selector(c.action, &c.session)
-                    .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+                    .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
                 to_value(&nodes.claude_session(&c.id, c.action, &c.session)?)
             }
-            "nodes.provider_model" => {
-                let c: wire::NodeProviderModel = exact(method, params)?;
+            R::NodesProviderModel(c) => {
+                let nodes = self.nodes()?;
                 checked_id(&c.id)?;
                 let p = crate::providers::ProviderModelParams {
                     kind: c.kind,
@@ -556,25 +491,32 @@ impl Api {
                     replacing: c.replacing,
                     request: crate::claude::sessions::mint_request(),
                 };
-                p.check().map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+                p.check()
+                    .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
                 to_value(&nodes.provider_model(&c.id, p)?)
             }
-            "nodes.set_desired" => {
-                let set: wire::SetDesired = exact(method, params)?;
+            R::NodesSetDesired(set) => {
+                let nodes = self.nodes()?;
                 to_value(&nodes.set_desired(desired_entries(set)?))
             }
-            "nodes.command" => {
-                let c: wire::NodeCommand = exact(method, params)?;
-                checked_id(&c.id)?;
-                to_value(&nodes.command(&c.id, c.command)?)
+            R::NodesCommand(c) => {
+                let nodes = self.nodes()?;
+                to_value(&nodes.command(checked_id(&c.id)?, c.command)?)
             }
-            _ => unreachable!("listed above"),
         }
     }
 
+    /// The machines this controller serves, where `nodes` is offered.
+    fn nodes(&self) -> Result<&Arc<crate::link::controller::Registry>, ApiError> {
+        self.has(Capability::Nodes)?;
+        self.shared
+            .nodes()
+            .ok_or_else(|| ApiError::new(ErrorCode::Unsupported, "this agent serves no machines"))
+    }
+
     /// `root.run`: one verb on the root helper, its unit's lines kept in the
-    /// run store and published as `root.progress` while it runs, its outcome
-    /// the answer — or, with `detach`, the answer as soon as the unit has
+    /// run store while it runs (`root.follow` reads them), its outcome the
+    /// answer — or, with `detach`, the answer as soon as the unit has
     /// started, the rest the store's (`root.follow`). The helper is the
     /// authority on what exists; the words are checked here only so nonsense
     /// costs no root process.
@@ -583,10 +525,10 @@ impl Api {
         let socket = self
             .root_socket
             .clone()
-            .ok_or_else(|| ApiError::new(code::UNSUPPORTED, "no root helper is configured"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::Unsupported, "no root helper is configured"))?;
         if !root::valid_name(&p.verb) {
             return Err(ApiError::new(
-                code::BAD_REQUEST,
+                ErrorCode::BadRequest,
                 "`root.run`: a verb is [a-z][a-z0-9-]{0,31}",
             ));
         }
@@ -595,7 +537,7 @@ impl Api {
             .any(|(k, v)| !root::valid_name(k) || !root::valid_free_value(v, root::MAX_PATTERN_LEN))
         {
             return Err(ApiError::new(
-                code::BAD_REQUEST,
+                ErrorCode::BadRequest,
                 "`root.run`: a selector is a name and a value of printable ASCII, at most 256, not starting with -",
             ));
         }
@@ -604,7 +546,7 @@ impl Api {
             .is_some_and(|x| x.len() > root::MAX_PAYLOAD)
         {
             return Err(ApiError::new(
-                code::BAD_REQUEST,
+                ErrorCode::BadRequest,
                 format!(
                     "`root.run`: a payload is at most {} bytes",
                     root::MAX_PAYLOAD
@@ -622,22 +564,12 @@ impl Api {
         tracing::info!(verb = %verb, run = %run, detach = ?p.detach, "root: asking the helper");
         self.runs.begin(&run, &verb);
         let relay = {
-            let (runs, events) = (Arc::clone(&self.runs), self.shared.events_handle());
+            let runs = Arc::clone(&self.runs);
             let (run, verb) = (run.clone(), verb.clone());
             move || {
                 let answer = root::relay::run(&socket, &request, ROOT_SILENCE, |r| match r {
                     Relayed::Started => runs.started(&run),
-                    Relayed::Progress(line) => {
-                        runs.line(&run, line);
-                        events.publish(
-                            wire::event::ROOT_PROGRESS,
-                            &wire::RootProgress {
-                                run: run.clone(),
-                                verb: verb.clone(),
-                                line: line.to_string(),
-                            },
-                        );
-                    }
+                    Relayed::Progress(line) => runs.line(&run, line),
                 });
                 match answer {
                     Ok(a) => {
@@ -657,9 +589,9 @@ impl Api {
                                 if c == root::code::BAD_REQUEST
                                     || c == root::code::UNKNOWN_VERB =>
                             {
-                                ApiError::new(code::BAD_REQUEST, e.to_string())
+                                ApiError::new(ErrorCode::BadRequest, e.to_string())
                             }
-                            _ => ApiError::new(code::UNAVAILABLE, e.to_string()),
+                            _ => ApiError::new(ErrorCode::Unavailable, e.to_string()),
                         })
                     }
                 }
@@ -688,14 +620,16 @@ impl Api {
                 let _ = tx.send(answer.clone());
                 record(&answer);
             })
-            .map_err(|e| ApiError::new(code::INTERNAL, format!("no thread for the run: {e}")))?;
+            .map_err(|e| {
+                ApiError::new(ErrorCode::Internal, format!("no thread for the run: {e}"))
+            })?;
         let started = self.runs.wait_started(&run, ROOT_DETACH_WAIT);
         if let Ok(answer) = rx.try_recv() {
             return answer;
         }
         if !started {
             return Err(ApiError::new(
-                code::UNAVAILABLE,
+                ErrorCode::Unavailable,
                 format!(
                     "the root helper did not start `{verb}` within {} s; root.follow {run} says what became of it",
                     ROOT_DETACH_WAIT.as_secs()
@@ -718,7 +652,7 @@ impl Api {
             .follow(&p.run, p.after.unwrap_or(0))
             .ok_or_else(|| {
                 ApiError::new(
-                    code::NOT_FOUND,
+                    ErrorCode::NotFound,
                     format!(
                         "no run {:?}: this controller never ran it, or has forgotten it",
                         p.run.chars().take(64).collect::<String>()
@@ -747,10 +681,10 @@ impl Api {
             mode: self.role.mode,
             hostname: crate::facts::hostname(),
             os: OsInfo {
-                os: f.os,
+                os: f.os.clone(),
                 name: f.os_name.clone(),
                 version: f.os_version.clone(),
-                arch: f.arch,
+                arch: f.arch.clone(),
                 cpu: f.cpu.clone(),
                 memory_bytes: f.memory_bytes,
             },
@@ -766,16 +700,17 @@ impl Api {
 }
 
 fn to_value<T: Serialize>(v: &T) -> Result<Box<RawValue>, ApiError> {
-    serde_json::value::to_raw_value(v).map_err(|e| ApiError::new(code::INTERNAL, e.to_string()))
+    serde_json::value::to_raw_value(v)
+        .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))
 }
 
 /// A node id as a selector: sixteen lowercase hex characters.
-fn checked_id(id: &str) -> Result<(), ApiError> {
+fn checked_id(id: &str) -> Result<&str, ApiError> {
     if wire::valid_node_id(id) {
-        Ok(())
+        Ok(id)
     } else {
         Err(ApiError::new(
-            code::BAD_REQUEST,
+            ErrorCode::BadRequest,
             format!("a node id is sixteen lowercase hex characters, not {id:?}"),
         ))
     }
@@ -795,14 +730,16 @@ fn checked_name(id: &str, name: &str) -> Result<(), ApiError> {
         return Ok(());
     };
     Err(ApiError::new(
-        code::BAD_REQUEST,
+        ErrorCode::BadRequest,
         format!("{id}: the name {bad}"),
     ))
 }
 
 /// The app's set, every entry checked before any is applied: the id is its
-/// key's node id, and no id is named twice. An approved entry without a
-/// policy gets `Policy::default()`; a revoked one's policy is kept unused.
+/// key's node id, no id is named twice, and no policy names the session
+/// host (the controller fills it, registry.rs `effective`). An approved
+/// entry without a policy gets `Policy::default()`; a revoked one's policy
+/// is kept unused.
 fn desired_entries(
     set: wire::SetDesired,
 ) -> Result<Vec<crate::link::controller::DesiredEntry>, ApiError> {
@@ -812,11 +749,11 @@ fn desired_entries(
         .map(|n| {
             checked_id(&n.id)?;
             let key = crate::identity::parse_public_key(&n.public_key)
-                .map_err(|e| ApiError::new(code::BAD_REQUEST, format!("{}: {e}", n.id)))?;
+                .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("{}: {e}", n.id)))?;
             let of_key = crate::identity::node_id_of(&key);
             if of_key != n.id {
                 return Err(ApiError::new(
-                    code::BAD_REQUEST,
+                    ErrorCode::BadRequest,
                     format!(
                         "{} is not the node id of its public_key ({of_key} is)",
                         n.id
@@ -825,27 +762,31 @@ fn desired_entries(
             }
             if !seen.insert(n.id.clone()) {
                 return Err(ApiError::new(
-                    code::BAD_REQUEST,
+                    ErrorCode::BadRequest,
                     format!("{} is named twice", n.id),
                 ));
             }
             if let Some(name) = &n.name {
                 checked_name(&n.id, name)?;
             }
-            let offered = n
-                .policy
-                .as_ref()
-                .and_then(|p| p.providers.lemonade.as_ref())
-                .filter(|l| l.offer == Some(true))
-                .map(|_| vec!["lemonade".to_string()])
-                .unwrap_or_default();
+            let (mut policy, offer_lemonade) = n.policy.map_or_else(
+                || (Policy::default(), false),
+                |d| (d.policy, d.offer_lemonade),
+            );
+            if policy.session_host.is_some() {
+                return Err(ApiError::new(
+                    ErrorCode::BadRequest,
+                    format!("{}: the session host is the controller's to name", n.id),
+                ));
+            }
+            policy.claude_workdir = policy.claude_workdir.filter(|w| !w.trim().is_empty());
             Ok(crate::link::controller::DesiredEntry {
                 id: n.id,
                 public_key: key,
                 state: n.state,
-                policy: n.policy.map(Into::into).unwrap_or_default(),
+                policy,
                 name: n.name,
-                offered,
+                offer_lemonade,
             })
         })
         .collect()
@@ -876,7 +817,7 @@ pub fn refusal(peer_uid: Option<u32>) -> String {
         None => "a peer whose credentials could not be read".into(),
     };
     error_line(
-        code::FORBIDDEN,
+        ErrorCode::Forbidden,
         format!("{who} may not use this socket (the agent's own uid and controller.api_allowed_uids may)"),
     )
 }
@@ -884,7 +825,7 @@ pub fn refusal(peer_uid: Option<u32>) -> String {
 /// The line a connection past `max` gets before it is closed.
 pub fn too_many(max: usize) -> String {
     error_line(
-        code::BUSY,
+        ErrorCode::Busy,
         format!("at most {max} connections at once; closing"),
     )
 }
@@ -892,6 +833,7 @@ pub fn too_many(max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
 
     #[test]
     fn the_agents_own_uid_and_the_listed_ones_are_served() {
@@ -928,8 +870,18 @@ mod tests {
     #[test]
     fn capabilities_come_from_the_role_and_the_config() {
         let cfg = |text: &str| toml::from_str::<Config>(text).unwrap();
+        let nodes = Serves {
+            nodes: true,
+            ..Serves::default()
+        };
+        let capabilities = |cfg: &Config, serves: Serves| -> Vec<String> {
+            super::capabilities(cfg, serves)
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        };
         assert_eq!(
-            capabilities(&cfg(""), false),
+            capabilities(&cfg(""), Serves::default()),
             [
                 "claude.remote_control",
                 "claude.update",
@@ -940,7 +892,7 @@ mod tests {
         );
         // A node never offers `nodes`, whatever it is told.
         assert_eq!(
-            capabilities(&cfg("telemetry = \"off\""), true),
+            capabilities(&cfg("telemetry = \"off\""), nodes),
             [
                 "claude.remote_control",
                 "claude.update",
@@ -952,31 +904,99 @@ mod tests {
         // `claude.update`: nix pins Claude there.
         let on = "mode = \"controller\"\n[controller]\nclaude_remote_control = true\n";
         assert_eq!(
-            capabilities(&cfg(on), false),
+            capabilities(&cfg(on), Serves::default()),
             ["claude.remote_control", "claude.sessions", "telemetry.full"]
         );
         assert_eq!(
-            capabilities(&cfg("mode = \"controller\""), false),
+            capabilities(&cfg("mode = \"controller\""), Serves::default()),
             ["telemetry.full"]
         );
         assert_eq!(
-            capabilities(&cfg("mode = \"controller\"\ntelemetry = \"minimal\""), true),
+            capabilities(
+                &cfg("mode = \"controller\"\ntelemetry = \"minimal\""),
+                nodes
+            ),
             ["telemetry.minimal", "nodes"]
         );
         assert_eq!(
-            capabilities(&cfg(&format!("telemetry = \"off\"\n{on}")), false),
+            capabilities(
+                &cfg(&format!("telemetry = \"off\"\n{on}")),
+                Serves::default()
+            ),
             ["claude.remote_control", "claude.sessions"]
         );
         // `root` only on the controller, and only with the helper's socket.
         let root = "mode = \"controller\"\ntelemetry = \"off\"\n[controller]\nroot_socket = \"/run/r.sock\"\n";
-        assert_eq!(capabilities(&cfg(root), false), ["root"]);
+        assert_eq!(capabilities(&cfg(root), Serves::default()), ["root"]);
         let node_root = "telemetry = \"off\"\n[controller]\nroot_socket = \"/run/r.sock\"\n";
-        assert!(!capabilities(&cfg(node_root), false).contains(&"root"));
+        assert!(!capabilities(&cfg(node_root), Serves::default()).contains(&"root".to_string()));
+        // `santree` and `controller` where the controller follows a session
+        // host and holds its link key; a node offers neither.
+        let all = Serves {
+            nodes: true,
+            santree: true,
+            keys: true,
+        };
+        assert_eq!(
+            capabilities(&cfg("mode = \"controller\"\ntelemetry = \"off\""), all),
+            ["nodes", "santree", "controller"]
+        );
+        assert!(capabilities(&cfg("telemetry = \"off\""), all)
+            .iter()
+            .all(|c| c != "santree" && c != "controller"));
     }
 
-    /// `root.run` through a fake helper: the progress goes out as events
-    /// carrying the run's id, the result is the answer, and a helper's
-    /// refusal or absence is an error with the helper's words.
+    /// The app's set: the policy the machine is sent and the offer the
+    /// controller keeps; the session host is the controller's to name.
+    #[test]
+    fn the_desired_set_is_checked_before_it_is_taken() {
+        let id = crate::identity::Identity::from_seed([7; 32]);
+        let set = |policy: Value| -> Result<Vec<crate::link::controller::DesiredEntry>, ApiError> {
+            desired_entries(
+                serde_json::from_value(serde_json::json!({"nodes":[{
+                    "id": id.node_id(), "public_key": id.public_key_hex(),
+                    "state": "approved", "policy": policy
+                }]}))
+                .unwrap(),
+            )
+        };
+        let e = set(serde_json::json!({
+            "policy": {"awake_hold": true, "claude_remote_control": false, "claude_workdir": " ",
+                       "providers": {"lemonade": {"port": 8000}}},
+            "offer_lemonade": true
+        }))
+        .unwrap();
+        assert!(e[0].offer_lemonade);
+        assert_eq!(
+            e[0].policy.claude_workdir, None,
+            "a blank directory is none"
+        );
+        assert_eq!(
+            e[0].policy.providers.lemonade.as_ref().and_then(|l| l.port),
+            Some(8000)
+        );
+        let named = set(serde_json::json!({"policy": {
+            "awake_hold": true, "claude_remote_control": true, "santree": true,
+            "session_host": {"address": "evil.example:1", "public_key": "00"}
+        }}));
+        assert_eq!(named.unwrap_err().code, ErrorCode::BadRequest);
+    }
+
+    /// A request as the app writes it, through the typed door.
+    #[cfg(unix)]
+    fn ask_api(api: &Api, m: &str, p: Value) -> Result<Box<RawValue>, ApiError> {
+        crate::rpc::Request {
+            id: 1,
+            m: m.into(),
+            p,
+        }
+        .typed()
+        .and_then(|r| api.call(r))
+    }
+
+    /// `root.run` through a fake helper: the progress lands in the run store
+    /// under the run's id, the result is the answer, and a helper's refusal
+    /// or absence is an error with the helper's words.
     #[cfg(unix)]
     #[test]
     fn root_run_relays_the_helper() {
@@ -1016,10 +1036,9 @@ mod tests {
             cfg.role(),
         ));
         let api = Api::new(Arc::clone(&shared), &cfg);
-        let events = api.events().subscribe();
 
         let ok: Value = serde_json::from_str(
-            api.call("root.run", &serde_json::json!({"verb": "reboot"}))
+            ask_api(&api, "root.run", serde_json::json!({"verb": "reboot"}))
                 .unwrap()
                 .get(),
         )
@@ -1028,15 +1047,19 @@ mod tests {
         assert_eq!(ok["detail"], "rebooting");
         assert_eq!(ok["verb"], "reboot");
         let run = ok["run"].as_str().unwrap().to_string();
-        let event: Value = serde_json::from_str(&events.try_recv().unwrap()).unwrap();
-        assert_eq!(event["e"], "root.progress");
-        assert_eq!(event["p"]["run"], run.as_str());
-        assert_eq!(event["p"]["line"], "rebooting");
+        let followed: Value = serde_json::from_str(
+            ask_api(&api, "root.follow", serde_json::json!({"run": run}))
+                .unwrap()
+                .get(),
+        )
+        .unwrap();
+        assert_eq!(
+            followed["lines"],
+            serde_json::json!([{"seq": 1, "line": "rebooting"}])
+        );
 
-        let e = api
-            .call("root.run", &serde_json::json!({"verb": "halt"}))
-            .unwrap_err();
-        assert_eq!(e.code, code::BAD_REQUEST);
+        let e = ask_api(&api, "root.run", serde_json::json!({"verb": "halt"})).unwrap_err();
+        assert_eq!(e.code, ErrorCode::BadRequest);
         assert!(e.msg.contains("halt"), "{}", e.msg);
 
         // Nonsense is refused here, before a root process is spent on it.
@@ -1048,8 +1071,8 @@ mod tests {
             serde_json::json!({"verb": "reboot", "unit": "sshd.service"}),
         ] {
             assert_eq!(
-                api.call("root.run", &p).unwrap_err().code,
-                code::BAD_REQUEST,
+                ask_api(&api, "root.run", p.clone()).unwrap_err().code,
+                ErrorCode::BadRequest,
                 "{p}"
             );
         }
@@ -1062,20 +1085,18 @@ mod tests {
 
         // The helper gone: unavailable, saying so.
         drop(std::fs::remove_file(&sock));
-        let e = api
-            .call("root.run", &serde_json::json!({"verb": "reboot"}))
-            .unwrap_err();
-        assert_eq!(e.code, code::UNAVAILABLE);
+        let e = ask_api(&api, "root.run", serde_json::json!({"verb": "reboot"})).unwrap_err();
+        assert_eq!(e.code, ErrorCode::Unavailable);
         let _ = std::fs::remove_dir_all(dir);
 
         // No socket configured: not offered at all.
         let plain: Config = toml::from_str("mode = \"controller\"").unwrap();
         let api = Api::new(shared, &plain);
         assert_eq!(
-            api.call("root.run", &serde_json::json!({"verb": "status"}))
+            ask_api(&api, "root.run", serde_json::json!({"verb": "status"}))
                 .unwrap_err()
                 .code,
-            code::UNSUPPORTED
+            ErrorCode::Unsupported
         );
     }
 
@@ -1130,7 +1151,7 @@ mod tests {
         ));
         let api = Api::new(shared, &cfg);
         let call = |m: &str, p: Value| -> Value {
-            serde_json::from_str(api.call(m, &p).unwrap().get()).unwrap()
+            serde_json::from_str(ask_api(&api, m, p).unwrap().get()).unwrap()
         };
 
         let ok = call(
@@ -1177,10 +1198,10 @@ mod tests {
             .collect();
         assert_eq!(listed, ["refused", "failed"], "newest first");
         assert_eq!(
-            api.call("root.follow", &serde_json::json!({"run": "nope"}))
+            ask_api(&api, "root.follow", serde_json::json!({"run": "nope"}))
                 .unwrap_err()
                 .code,
-            code::NOT_FOUND
+            ErrorCode::NotFound
         );
         let _ = std::fs::remove_dir_all(dir);
     }

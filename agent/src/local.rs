@@ -72,13 +72,14 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::claude::{Report, Roster};
 use crate::door::{Conn, Peer, Policy};
 use crate::jsonl::LineReader;
-use crate::rpc::{code, error_line, line_of, Answer, ApiError, Request, Response};
+use crate::rpc::{error_line, line_of, methods, ApiError, ErrorCode, Incoming, Response};
 use crate::shared::Shared;
 use crate::util::Rebinding;
 
@@ -127,93 +128,97 @@ pub fn refusal(peer: Option<&Peer>) -> String {
         None => "a peer whose credentials could not be read".into(),
     };
     error_line(
-        code::FORBIDDEN,
+        ErrorCode::Forbidden,
         format!("{who} may not use this agent's socket (root, the service's own user and the user it runs Claude for may)"),
     )
 }
 
 /// The line a connection past the limit gets.
 pub fn too_many(max: usize) -> String {
-    error_line(code::BUSY, format!("at most {max} connections at once"))
+    error_line(
+        ErrorCode::Busy,
+        format!("at most {max} connections at once"),
+    )
 }
 
 fn bad(msg: impl Into<String>) -> ApiError {
-    ApiError::new(code::BAD_REQUEST, msg)
+    ApiError::new(ErrorCode::BadRequest, msg)
 }
 
 fn value<T: Serialize>(v: &T) -> Result<Value, ApiError> {
-    serde_json::to_value(v).map_err(|e| ApiError::new(code::INTERNAL, e.to_string()))
+    serde_json::to_value(v).map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))
 }
 
-/// A method that takes no parameters was given none.
-fn no_params(m: &str, p: &Value) -> Result<(), ApiError> {
-    match p {
-        Value::Null => Ok(()),
-        Value::Object(o) if o.is_empty() => Ok(()),
-        _ => Err(bad(format!("`{m}` takes no parameters"))),
+methods! {
+    /// The local socket's methods (module doc's table): a unit variant takes
+    /// no parameters. The service reads a request as this, and a client
+    /// writes one (`call`).
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub enum LocalRequest {
+        "status" => Status,
+        "claude" => Claude,
+        "claude.report" => ClaudeReport(Box<Report>),
+        "claude.roster" => ClaudeRoster(Box<Roster>),
+        "claude.restart" => ClaudeRestart,
+        "claude.update" => ClaudeUpdate,
+        "update.check" => UpdateCheck,
+        "link.reload" => LinkReload,
+        "enroll.begin" => EnrollBegin(BeginParams),
+        "enroll.finish" => EnrollFinish(FinishParams),
+        "enroll.leave" => EnrollLeave,
+        "settings.get" => SettingsGet,
+        "settings.set" => SettingsSet(SetParams),
     }
+}
+
+/// `enroll.begin`'s parameters: the app the operator named.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BeginParams {
+    pub app_url: String,
+}
+
+/// `enroll.finish`'s parameters: the code the loopback took.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FinishParams {
+    pub code: String,
 }
 
 /// One method for the service's shared state (module doc's table), asked
 /// by `peer` (as the door checked it).
-fn handle(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Value, ApiError> {
-    let none = |p: &Value| no_params(m, p);
-    match m {
-        "status" => {
-            none(&p)?;
-            Ok(shared.document_value())
-        }
-        "claude" => {
-            none(&p)?;
-            value(&shared.claude_report())
-        }
-        "claude.report" => {
-            let r: Report =
-                serde_json::from_value(p).map_err(|e| bad(format!("not a report: {e}")))?;
-            value(&shared.set_claude(r))
-        }
-        "claude.roster" => {
-            let r: Roster =
-                serde_json::from_value(p).map_err(|e| bad(format!("not a roster: {e}")))?;
-            shared.set_claude_roster(r);
+fn handle(shared: &Shared, peer: Option<&Peer>, req: LocalRequest) -> Result<Value, ApiError> {
+    use LocalRequest as R;
+    match req {
+        R::Status => value(&shared.document(shared.power_requests())),
+        R::Claude => value(&shared.claude_report()),
+        R::ClaudeReport(r) => value(&shared.set_claude(*r)),
+        R::ClaudeRoster(r) => {
+            shared.set_claude_roster(*r);
             Ok(Value::Null)
         }
-        "claude.restart" => {
-            none(&p)?;
+        R::ClaudeRestart => {
             shared.request_claude_restart();
             Ok("restart queued for the session".into())
         }
-        "claude.update" => {
-            none(&p)?;
+        R::ClaudeUpdate => {
             if !shared.role().claude_update {
                 return Err(ApiError::new(
-                    code::UNSUPPORTED,
+                    ErrorCode::Unsupported,
                     "Claude Code is updated by nix on this machine",
                 ));
             }
             shared.request_claude_update();
             Ok("update queued for the session".into())
         }
-        "update.check" => {
-            none(&p)?;
+        R::UpdateCheck => {
             shared.request_check();
             Ok("checking".into())
         }
-        "link.reload" => {
-            none(&p)?;
-            link_reload(shared, &crate::link::KeyFiles::here())
-        }
-        "settings.get" => {
-            none(&p)?;
-            value(&shared.settings_view(Some(may_change(peer))))
-        }
-        "settings.set" => settings_set(shared, peer, p, &crate::paths::config_path()),
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        "enroll.begin" | "enroll.finish" | "enroll.leave" => enroll(shared, peer, m, p),
-        _ => Err(ApiError::new(
-            code::UNKNOWN_METHOD,
-            format!("no method `{m}`"),
-        )),
+        R::LinkReload => link_reload(shared, &crate::link::KeyFiles::here()),
+        R::SettingsGet => value(&shared.settings_view(Some(may_change(peer)))),
+        R::SettingsSet(p) => settings_set(shared, peer, p, &crate::paths::config_path()),
+        R::EnrollBegin(_) | R::EnrollFinish(_) | R::EnrollLeave => enroll(shared, peer, req),
     }
 }
 
@@ -221,7 +226,7 @@ fn handle(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Val
 fn link_reload(shared: &Shared, files: &crate::link::KeyFiles) -> Result<Value, ApiError> {
     if !shared.role().link {
         return Err(ApiError::new(
-            code::UNSUPPORTED,
+            ErrorCode::Unsupported,
             "the controller has no link to reload",
         ));
     }
@@ -231,7 +236,7 @@ fn link_reload(shared: &Shared, files: &crate::link::KeyFiles) -> Result<Value, 
             Ok("the link follows config.toml's new keys now".into())
         }
         Ok(false) => Ok("config.toml's link keys are the ones in use".into()),
-        Err(e) => Err(ApiError::new(code::INTERNAL, format!("{e:#}"))),
+        Err(e) => Err(ApiError::new(ErrorCode::Internal, format!("{e:#}"))),
     }
 }
 
@@ -251,7 +256,7 @@ fn may_change(peer: Option<&Peer>) -> bool {
 }
 
 /// `settings.set`'s parameters: one setting, its value.
-#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetParams {
     pub key: crate::settings::Key,
@@ -279,14 +284,13 @@ pub struct SetAnswer {
 fn settings_set(
     shared: &Shared,
     peer: Option<&Peer>,
-    p: Value,
+    p: SetParams,
     config: &Path,
 ) -> Result<Value, ApiError> {
     use crate::settings::{Asked, Key};
-    let p: SetParams = serde_json::from_value(p).map_err(|e| bad(format!("settings.set: {e}")))?;
     if !shared.role().link {
         return Err(ApiError::new(
-            code::UNSUPPORTED,
+            ErrorCode::Unsupported,
             "the controller's settings are the box's own",
         ));
     }
@@ -295,7 +299,7 @@ fn settings_set(
             .map(ToString::to_string)
             .unwrap_or_else(|| "a peer whose credentials could not be read".into());
         return Err(ApiError::new(
-            code::FORBIDDEN,
+            ErrorCode::Forbidden,
             format!(
                 "{who} may not change this machine's settings (root and the user who installed \
                  the agent may)"
@@ -304,7 +308,7 @@ fn settings_set(
     }
     if cfg!(windows) && p.key == Key::Santree {
         return Err(ApiError::new(
-            code::UNSUPPORTED,
+            ErrorCode::Unsupported,
             "santree has no door on Windows",
         ));
     }
@@ -317,14 +321,14 @@ fn settings_set(
             .and_then(|c| c.app_url)
             .ok_or_else(|| {
                 ApiError::new(
-                    code::UNSUPPORTED,
+                    ErrorCode::Unsupported,
                     "turn santree on in Settings › Machines (this machine has not logged in \
                      from its menu bar, so it knows no page to open)",
                 )
             })?;
         let node = shared
             .node_id()
-            .ok_or_else(|| ApiError::new(code::UNAVAILABLE, "this machine has no key yet"))?;
+            .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, "this machine has no key yet"))?;
         confirm = Some(crate::settings::confirm_url(&app, &node));
     }
     let answer = match shared.ask_setting(p.key, p.value)? {
@@ -337,10 +341,9 @@ fn settings_set(
             ..Default::default()
         },
         Asked::Confirm => SetAnswer {
-            confirm_url: Some(
-                confirm
-                    .ok_or_else(|| ApiError::new(code::INTERNAL, "santree's page was not named"))?,
-            ),
+            confirm_url: Some(confirm.ok_or_else(|| {
+                ApiError::new(ErrorCode::Internal, "santree's page was not named")
+            })?),
             ..Default::default()
         },
     };
@@ -352,15 +355,16 @@ fn settings_set(
 /// operator, `finish` for root alone — the tray runs it behind the
 /// administrator prompt.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn enroll(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Value, ApiError> {
+fn enroll(shared: &Shared, peer: Option<&Peer>, req: LocalRequest) -> Result<Value, ApiError> {
     let who = || {
         peer.map(ToString::to_string)
             .unwrap_or_else(|| "a peer whose credentials could not be read".into())
     };
-    if m == "enroll.finish" {
+    let files = crate::enroll::Files::here();
+    if let LocalRequest::EnrollFinish(p) = req {
         if !crate::enroll::may_finish(peer) {
             return Err(ApiError::new(
-                code::FORBIDDEN,
+                ErrorCode::Forbidden,
                 format!(
                     "{} may not finish a log-in: it names the box this machine trusts, so it \
                      runs as root (the menu bar asks for an administrator's password)",
@@ -368,19 +372,12 @@ fn enroll(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Val
                 ),
             ));
         }
-        let p: crate::enroll::FinishParams =
-            serde_json::from_value(p).map_err(|e| bad(format!("enroll.finish: {e}")))?;
-        return crate::enroll::finish(
-            shared,
-            &crate::enroll::Files::here(),
-            p,
-            crate::enroll::redeem_https,
-        )
-        .map(Value::from);
+        return crate::enroll::finish(shared, &files, p, crate::enroll::redeem_https)
+            .map(Value::from);
     }
     if !crate::enroll::may_enroll(peer) {
         return Err(ApiError::new(
-            code::FORBIDDEN,
+            ErrorCode::Forbidden,
             format!(
                 "{} may not log this machine in or out (root and the user who installed the \
                  agent may)",
@@ -388,31 +385,35 @@ fn enroll(shared: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Val
             ),
         ));
     }
-    if m == "enroll.begin" {
-        let p: crate::enroll::BeginParams =
-            serde_json::from_value(p).map_err(|e| bad(format!("enroll.begin: {e}")))?;
-        value(&crate::enroll::begin(
-            shared,
-            &crate::enroll::Files::here(),
-            p,
-        )?)
-    } else {
-        no_params(m, &p)?;
-        crate::enroll::leave(shared, &crate::enroll::Files::here()).map(Value::from)
+    match req {
+        LocalRequest::EnrollBegin(p) => value(&crate::enroll::begin(shared, &files, p)?),
+        _ => crate::enroll::leave(shared, &files).map(Value::from),
     }
+}
+
+/// Windows has no log-in: a machine there is paired (pair.rs).
+#[cfg(windows)]
+fn enroll(_: &Shared, _: Option<&Peer>, _: LocalRequest) -> Result<Value, ApiError> {
+    Err(ApiError::new(
+        ErrorCode::Unsupported,
+        "no log-in on Windows: pair the machine (`daedalus-agent pair`)",
+    ))
 }
 
 /// The answer to one request line from `peer`.
 fn answer(shared: &Shared, peer: Option<&Peer>, line: &[u8]) -> Response {
-    match Request::parse(line) {
-        Ok(r) => match handle(shared, peer, &r.m, r.p) {
-            Ok(v) => Response::ok(r.id, &v),
-            Err(e) => Response::err(Some(r.id), e),
-        },
-        Err(e) => Response::err(
-            crate::rpc::salvage_id(line),
-            bad(format!("not a request: {e}")),
-        ),
+    let r = match Incoming::request(line) {
+        Ok(r) => r,
+        Err(e) => {
+            return Response::err(
+                crate::rpc::salvage_id(line),
+                bad(format!("not a request: {e}")),
+            )
+        }
+    };
+    match r.typed().and_then(|req| handle(shared, peer, req)) {
+        Ok(v) => Response::ok(r.id, &v),
+        Err(e) => Response::err(Some(r.id), e),
     }
 }
 
@@ -424,7 +425,7 @@ fn serve_one(shared: &Shared, c: Conn) {
         Err(e) if crate::jsonl::is_too_long(&e) => Response::err(
             None,
             ApiError::new(
-                code::TOO_LARGE,
+                ErrorCode::TooLarge,
                 format!("a line is at most {MAX_LINE} bytes"),
             ),
         ),
@@ -487,9 +488,30 @@ pub fn serve(shared: Arc<Shared>) -> anyhow::Result<crate::os::LocalSocket> {
     Ok(socket)
 }
 
-/// Ask the service: one method, its answer or why not.
-pub fn call(m: &str, p: Value) -> Result<Value, String> {
-    call_at(&crate::paths::local_socket(), m, p)
+/// Why a call to the service failed: it could not be reached or read
+/// (`Transport`), it answered an error (`Remote`, with its code), or its
+/// answer is not the type asked for (`Decode`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum CallError {
+    Transport(String),
+    Remote { code: ErrorCode, msg: String },
+    Decode(String),
+}
+
+impl std::fmt::Display for CallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CallError::Transport(s) | CallError::Decode(s) => f.write_str(s),
+            CallError::Remote { msg, .. } => f.write_str(msg),
+        }
+    }
+}
+
+impl std::error::Error for CallError {}
+
+/// Ask the service: one method, its answer as `T` or why not.
+pub fn call<T: DeserializeOwned>(req: &LocalRequest) -> Result<T, CallError> {
+    call_at(&crate::paths::local_socket(), req)
 }
 
 /// A log-in's or log-out's whole exchange (enroll.rs): a redeem at the app,
@@ -498,60 +520,77 @@ pub const ENROLL_DEADLINE: Duration = DEADLINE;
 
 /// `call` for a method that takes longer than `CLIENT_DEADLINE`, from a
 /// thread that may wait.
-pub fn call_within(m: &str, p: Value, deadline: Duration) -> Result<Value, String> {
-    call_at_within(&crate::paths::local_socket(), m, p, deadline)
+pub fn call_within<T: DeserializeOwned>(
+    req: &LocalRequest,
+    deadline: Duration,
+) -> Result<T, CallError> {
+    call_at_within(&crate::paths::local_socket(), req, deadline)
 }
 
 /// The request line a client sends: one request, id 1.
-fn request_line(m: &str, p: Value) -> String {
+fn request_line(req: &LocalRequest) -> String {
     #[derive(Serialize)]
     struct Out<'a> {
         id: u64,
-        m: &'a str,
-        p: Value,
+        #[serde(flatten)]
+        req: &'a LocalRequest,
     }
-    line_of(&Out { id: 1, m, p })
+    line_of(&Out { id: 1, req })
 }
 
 /// The same, at `path`.
-pub fn call_at(path: &Path, m: &str, p: Value) -> Result<Value, String> {
-    call_at_within(path, m, p, CLIENT_DEADLINE)
+pub fn call_at<T: DeserializeOwned>(path: &Path, req: &LocalRequest) -> Result<T, CallError> {
+    call_at_within(path, req, CLIENT_DEADLINE)
 }
 
-fn call_at_within(path: &Path, m: &str, p: Value, deadline: Duration) -> Result<Value, String> {
-    let c = crate::os::connect_local(path, deadline)
-        .map_err(|e| format!("the agent did not answer at {} ({e})", path.display()))?;
+fn call_at_within<T: DeserializeOwned>(
+    path: &Path,
+    req: &LocalRequest,
+    deadline: Duration,
+) -> Result<T, CallError> {
+    let transport = CallError::Transport;
+    let c = crate::os::connect_local(path, deadline).map_err(|e| {
+        transport(format!(
+            "the agent did not answer at {} ({e})",
+            path.display()
+        ))
+    })?;
     let mut w = c.writer;
     // A refusal is written before the request is read: a failed write is
     // only an error when no answer came either.
     let sent = w
-        .write_all(request_line(m, p).as_bytes())
+        .write_all(request_line(req).as_bytes())
         .and_then(|()| w.flush())
-        .map_err(|e| format!("sending to the agent: {e}"));
+        .map_err(|e| transport(format!("sending to the agent: {e}")));
     let read = LineReader::new(c.reader, MAX_LINE).next_line();
     (c.close)();
     let line = match read {
         Ok(Some(line)) => line,
         Ok(None) => {
             sent?;
-            return Err("the agent closed without answering".into());
+            return Err(transport("the agent closed without answering".into()));
         }
         Err(e) => {
             sent?;
-            return Err(format!("reading the agent's answer: {e}"));
+            return Err(transport(format!("reading the agent's answer: {e}")));
         }
     };
-    match crate::rpc::Answer::parse(&line) {
-        Ok(Answer::Ok(v)) => Ok(v),
-        Ok(Answer::Err { msg, .. }) => Err(msg),
-        Err(e) => Err(format!("the agent's answer did not parse: {e}")),
+    match Incoming::parse(&line) {
+        Ok(Incoming::Answer { result: Ok(v), .. }) => serde_json::from_value(v)
+            .map_err(|e| CallError::Decode(format!("the agent's answer: {e}"))),
+        Ok(Incoming::Answer { result: Err(e), .. }) => Err(CallError::Remote {
+            code: e.code,
+            msg: e.msg,
+        }),
+        Ok(_) => Err(CallError::Decode(
+            "the agent wrote something other than an answer".into(),
+        )),
+        Err(e) => Err(CallError::Decode(format!(
+            "the agent's answer did not parse: {e}"
+        ))),
     }
 }
 
-/// `call`, typed.
-pub fn call_as<T: serde::de::DeserializeOwned>(m: &str, p: Value) -> Result<T, String> {
-    serde_json::from_value(call(m, p)?).map_err(|e| format!("`{m}`'s answer: {e}"))
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,8 +604,15 @@ mod tests {
     #[test]
     fn the_lines_on_the_wire() {
         assert_eq!(
-            request_line("status", Value::Null),
-            "{\"id\":1,\"m\":\"status\",\"p\":null}\n"
+            request_line(&LocalRequest::Status),
+            "{\"id\":1,\"m\":\"status\"}\n"
+        );
+        assert_eq!(
+            request_line(&LocalRequest::SettingsSet(SetParams {
+                key: crate::settings::Key::AwakeHold,
+                value: false
+            })),
+            "{\"id\":1,\"m\":\"settings.set\",\"p\":{\"key\":\"awake_hold\",\"value\":false}}\n"
         );
         let s = shared(Mode::Node);
         let a = |line: &str| line_of(&answer(&s, None, line.as_bytes()));
@@ -590,19 +636,19 @@ mod tests {
             too_many(16),
             "{\"id\":null,\"err\":{\"code\":\"busy\",\"msg\":\"at most 16 connections at once\"}}\n"
         );
-        // The client reads both shapes, a null answer included.
-        assert_eq!(
-            Answer::parse(b"{\"id\":1,\"ok\":null}"),
-            Ok(Answer::Ok(Value::Null))
-        );
-        assert_eq!(
-            Answer::parse(b"{\"id\":1,\"err\":{\"code\":\"busy\",\"msg\":\"m\"}}"),
-            Ok(Answer::Err {
-                code: "busy".into(),
-                msg: "m".into()
-            })
-        );
-        assert!(Answer::parse(b"{\"id\":1}").is_err());
+        // A unit method sent with an empty object is still that method.
+        assert!(a(r#"{"id":3,"m":"status","p":{}}"#).contains("bad_request"));
+    }
+
+    /// A request as a client writes it, read as the service reads it.
+    fn ask(s: &Shared, peer: Option<&Peer>, m: &str, p: Value) -> Result<Value, ApiError> {
+        crate::rpc::Request {
+            id: 1,
+            m: m.into(),
+            p,
+        }
+        .typed()
+        .and_then(|r| handle(s, peer, r))
     }
 
     fn shared(mode: Mode) -> Shared {
@@ -630,8 +676,8 @@ mod tests {
         let s = shared(Mode::Node);
         // Pairing is an administrator's (`pair`, elevated): the socket has
         // no method for it, whoever asks and whatever the machine's state.
-        let e = handle(&s, None, "link.pair", serde_json::json!({"pin": key})).unwrap_err();
-        assert_eq!(e.code, code::UNKNOWN_METHOD);
+        let e = ask(&s, None, "link.pair", serde_json::json!({"pin": key})).unwrap_err();
+        assert_eq!(e.code, ErrorCode::UnknownMethod);
         assert_eq!(s.link_keys().0.pin, None);
         assert!(!path.exists());
         // What `pair` does as root: writes the file, then asks for a reload.
@@ -656,47 +702,44 @@ mod tests {
             link_reload(&shared(Mode::Controller), &files)
                 .unwrap_err()
                 .code,
-            code::UNSUPPORTED
+            ErrorCode::Unsupported
         );
-        assert!(handle(&s, None, "link.reload", serde_json::json!({"x": 1})).is_err());
+        assert!(ask(&s, None, "link.reload", serde_json::json!({"x": 1})).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn the_methods_reach_the_shared_state() {
         let s = shared(Mode::Node);
-        assert_eq!(
-            handle(&s, None, "claude", Value::Null).unwrap(),
-            Value::Null
-        );
+        assert_eq!(ask(&s, None, "claude", Value::Null).unwrap(), Value::Null);
         let report = serde_json::to_value(Report {
-            state: "running".into(),
+            state: crate::claude::ClaudeState::Running,
             ..Default::default()
         })
         .unwrap();
         s.request_claude_restart();
-        let answer = handle(&s, None, "claude.report", report).unwrap();
+        let answer = ask(&s, None, "claude.report", report).unwrap();
         assert_eq!(answer["restart"], true);
         assert_eq!(
-            handle(&s, None, "claude", Value::Null).unwrap()["state"],
+            ask(&s, None, "claude", Value::Null).unwrap()["state"],
             "running"
         );
         assert_eq!(
-            handle(&s, None, "status", Value::Null).unwrap()["claude"]["state"],
+            ask(&s, None, "status", Value::Null).unwrap()["claude"]["state"],
             "running"
         );
-        assert!(handle(&s, None, "claude.update", Value::Null).is_ok());
-        assert!(handle(&s, None, "update.check", Value::Null).is_ok());
+        assert!(ask(&s, None, "claude.update", Value::Null).is_ok());
+        assert!(ask(&s, None, "update.check", Value::Null).is_ok());
         assert!(s.take_check_request());
-        assert!(handle(&s, None, "claude.report", serde_json::json!({"state": 3})).is_err());
-        assert!(handle(&s, None, "status", serde_json::json!({"x": 1})).is_err());
-        assert!(handle(&s, None, "reboot", Value::Null)
+        assert!(ask(&s, None, "claude.report", serde_json::json!({"state": 3})).is_err());
+        assert!(ask(&s, None, "status", serde_json::json!({"x": 1})).is_err());
+        assert!(ask(&s, None, "reboot", Value::Null)
             .unwrap_err()
             .msg
             .contains("no method"));
         // nix pins Claude on the controller.
         let c = shared(Mode::Controller);
-        assert!(handle(&c, None, "claude.update", Value::Null)
+        assert!(ask(&c, None, "claude.update", Value::Null)
             .unwrap_err()
             .msg
             .contains("nix"));
@@ -729,22 +772,17 @@ mod tests {
         });
         s.set_link(|l| {
             l.connected = true;
-            l.state = Some("approved".into());
+            l.state = Some(crate::link::LinkState::Approved);
         });
         let root = Peer::Uid(0);
         let set = |peer: &Peer, key: Key, v: bool, cfg: &Path| {
-            settings_set(
-                &s,
-                Some(peer),
-                serde_json::json!({"key": key, "value": v}),
-                cfg,
-            )
+            settings_set(&s, Some(peer), SetParams { key, value: v }, cfg)
         };
         let answer = |v: Value| serde_json::from_value::<SetAnswer>(v).unwrap();
 
         // Someone else: refused, nothing recorded.
         let e = set(&Peer::Uid(4242), Key::AwakeHold, false, &with_app).unwrap_err();
-        assert_eq!(e.code, code::FORBIDDEN);
+        assert_eq!(e.code, ErrorCode::Forbidden);
         assert!(s.take_policy_request().is_none());
         // The value the box holds: nothing to send.
         assert!(answer(set(&root, Key::AwakeHold, true, &with_app).unwrap()).unchanged);
@@ -773,11 +811,14 @@ mod tests {
         let e = settings_set(
             &s2,
             Some(&root),
-            serde_json::json!({"key": "santree", "value": true}),
+            SetParams {
+                key: Key::Santree,
+                value: true,
+            },
             &without,
         )
         .unwrap_err();
-        assert_eq!(e.code, code::UNSUPPORTED);
+        assert_eq!(e.code, ErrorCode::Unsupported);
         assert!(e.msg.contains("Settings › Machines"));
         assert!(s2.settings_view(None).pending.is_empty());
         // Exact parameters.
@@ -794,15 +835,15 @@ mod tests {
         )
         .is_err());
         // Read by anyone the door admits; `may_change` says for whom.
-        let got = handle(&s, Some(&Peer::Uid(4242)), "settings.get", Value::Null).unwrap();
+        let got = ask(&s, Some(&Peer::Uid(4242)), "settings.get", Value::Null).unwrap();
         assert_eq!(got["may_change"], false);
         assert_eq!(got["node"], "0123456789abcdef");
         assert_eq!(
-            handle(&s, Some(&root), "settings.get", Value::Null).unwrap()["may_change"],
+            ask(&s, Some(&root), "settings.get", Value::Null).unwrap()["may_change"],
             true
         );
         // The status page carries the same block, without `may_change`.
-        let page = handle(&s, None, "status", Value::Null).unwrap();
+        let page = ask(&s, None, "status", Value::Null).unwrap();
         assert_eq!(page["settings"]["linked"], true);
         assert!(page["settings"].get("may_change").is_none());
         let _ = std::fs::remove_dir_all(&dir);
@@ -810,7 +851,7 @@ mod tests {
 
     #[cfg(unix)]
     fn set_raw(s: &Shared, peer: &Peer, p: Value) -> Result<Value, ApiError> {
-        settings_set(s, Some(peer), p, Path::new("/nonexistent"))
+        ask(s, Some(peer), "settings.set", p)
     }
 
     /// The socket itself, on unix: served to this uid, answered, refused
@@ -847,15 +888,17 @@ mod tests {
             assert_eq!(mode(path.parent().unwrap()), 0o711);
         }
         assert_eq!(
-            call_at(&path, "update.check", Value::Null).unwrap(),
+            call_at::<String>(&path, &LocalRequest::UpdateCheck).unwrap(),
             "checking"
         );
         assert!(s.take_check_request());
-        let doc = call_at(&path, "status", Value::Null).unwrap();
-        assert_eq!(doc["version"], crate::VERSION);
-        assert!(call_at(&path, "nope", Value::Null)
-            .unwrap_err()
-            .contains("no method"));
+        let doc: crate::shared::StatusDocument = call_at(&path, &LocalRequest::Status).unwrap();
+        assert_eq!(doc.version, crate::VERSION);
+        // An answer of another type than asked is said so, not misread.
+        assert!(matches!(
+            call_at::<u32>(&path, &LocalRequest::UpdateCheck),
+            Err(CallError::Decode(_))
+        ));
         drop(served);
 
         // A gate that says no: one line, closed.
@@ -865,10 +908,16 @@ mod tests {
             |_| unreachable!("refused before serving"),
         )
         .unwrap();
-        let e = call_at(&path, "status", Value::Null).unwrap_err();
-        assert!(e.starts_with("uid "), "{e}");
+        let e = call_at::<Value>(&path, &LocalRequest::Status).unwrap_err();
+        assert!(
+            matches!(&e, CallError::Remote { code: ErrorCode::Forbidden, msg } if msg.starts_with("uid ")),
+            "{e:?}"
+        );
         drop(refusing);
-        assert!(call_at(&path, "status", Value::Null).is_err());
+        assert!(matches!(
+            call_at::<Value>(&path, &LocalRequest::Status),
+            Err(CallError::Transport(_))
+        ));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

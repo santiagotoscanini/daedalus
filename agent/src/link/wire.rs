@@ -35,7 +35,6 @@
 //! machine's when it updates), so an addition must never break the other.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::claude::SessionAction;
 use crate::config::TelemetryLevel;
@@ -51,7 +50,7 @@ pub mod name {
     pub const COMMAND: &str = "command";
     /// both ways, every `HEARTBEAT`.
     pub const HB: &str = "hb";
-    /// node → controller: the status document (`shared::Shared::status_value`).
+    /// node → controller: the status document (`shared::StatusDocument`).
     pub const STATUS: &str = "status";
     /// node → controller: the full telemetry document.
     pub const TELEMETRY: &str = "telemetry";
@@ -175,7 +174,7 @@ pub struct Hello {
     pub lan_ip: Option<String>,
     pub facts: HelloFacts,
     /// What the agent offers (`api::capabilities` for its role).
-    pub capabilities: Vec<String>,
+    pub capabilities: Vec<crate::api::wire::Capability>,
     /// How much telemetry it reads.
     pub telemetry: TelemetryLevel,
 }
@@ -243,9 +242,6 @@ impl Hello {
         }
         if self.capabilities.len() > 32 {
             return Err("more than 32 capabilities".into());
-        }
-        for c in &self.capabilities {
-            token("a capability", c, 64)?;
         }
         text("facts.os_name", &self.facts.os_name, 256)?;
         text("facts.os_version", &self.facts.os_version, 256)?;
@@ -429,71 +425,7 @@ pub struct Accepted {
     pub accepted: bool,
 }
 
-/// Any line, told apart by its fields: a request carries `m`, an event
-/// `e`, an answer `ok` or `err`.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Incoming {
-    Request {
-        id: u64,
-        m: String,
-        p: Value,
-    },
-    Event {
-        e: String,
-        p: Value,
-    },
-    Answer {
-        id: Option<u64>,
-        result: Result<Value, AnswerError>,
-    },
-}
-
-/// An `err` as read back.
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
-#[serde(default)]
-pub struct AnswerError {
-    pub code: String,
-    pub msg: String,
-    pub supported: Option<u32>,
-}
-
-impl Incoming {
-    pub fn parse(line: &[u8]) -> Result<Incoming, String> {
-        let v: Value = serde_json::from_slice(line).map_err(|e| e.to_string())?;
-        let Value::Object(mut o) = v else {
-            return Err("a line is a JSON object".into());
-        };
-        if let Some(m) = o.get("m").and_then(Value::as_str).map(str::to_string) {
-            let id = o
-                .get("id")
-                .and_then(Value::as_u64)
-                .ok_or("a request has a numeric id")?;
-            return Ok(Incoming::Request {
-                id,
-                m,
-                p: o.remove("p").unwrap_or(Value::Null),
-            });
-        }
-        if let Some(e) = o.get("e").and_then(Value::as_str).map(str::to_string) {
-            return Ok(Incoming::Event {
-                e,
-                p: o.remove("p").unwrap_or(Value::Null),
-            });
-        }
-        let id = o.get("id").and_then(Value::as_u64);
-        if let Some(ok) = o.remove("ok") {
-            return Ok(Incoming::Answer { id, result: Ok(ok) });
-        }
-        if let Some(err) = o.remove("err") {
-            let err: AnswerError = serde_json::from_value(err).map_err(|e| e.to_string())?;
-            return Ok(Incoming::Answer {
-                id,
-                result: Err(err),
-            });
-        }
-        Err("neither a request, an event nor an answer".into())
-    }
-}
+pub use crate::rpc::Incoming;
 
 /// A request as a line (no newline).
 pub fn request<P: Serialize>(id: u64, m: &str, p: &P) -> String {
@@ -523,7 +455,7 @@ pub const HB_LINE: &str = r#"{"e":"hb"}"#;
 mod tests {
     use super::*;
     use crate::claude::Roster;
-    use crate::rpc::{code, ApiError, Response};
+    use crate::rpc::Response;
     use serde_json::json;
 
     fn wire<T: Serialize>(v: &T) -> String {
@@ -546,7 +478,10 @@ mod tests {
                 cpu: "AMD Ryzen 9".into(),
                 memory_bytes: Some(64),
             },
-            capabilities: vec!["claude.remote_control".into(), "telemetry.full".into()],
+            capabilities: vec![
+                crate::api::wire::Capability::ClaudeRemoteControl,
+                crate::api::wire::Capability::TelemetryFull,
+            ],
             telemetry: TelemetryLevel::Full,
         }
     }
@@ -573,8 +508,7 @@ mod tests {
             Box::new(|h| h.mac = Some("aa-bb-cc-dd-ee-ff".into())),
             Box::new(|h| h.lan_ip = Some("192.168.0.300".into())),
             Box::new(|h| h.lan_ip = Some("fe80::1".into())),
-            Box::new(|h| h.capabilities = vec!["x".into(); 33]),
-            Box::new(|h| h.capabilities = vec!["a b".into()]),
+            Box::new(|h| h.capabilities = vec![crate::api::wire::Capability::Root; 33]),
             Box::new(|h| h.facts.cpu = "c".repeat(257)),
             Box::new(|h| h.node_id = "xyz".into()),
         ];
@@ -691,7 +625,7 @@ mod tests {
             );
         }
         let load = crate::providers::ProviderModelParams {
-            kind: "lemonade".into(),
+            kind: crate::providers::ProviderKind::Lemonade,
             action: crate::providers::ModelAction::Load,
             model: "Gemma-4".into(),
             pinned: true,
@@ -806,55 +740,6 @@ mod tests {
         .is_err());
         assert!(serde_json::from_value::<RotateParams>(json!({"new_public_key":"x"})).is_err());
     }
-    #[test]
-    fn incoming_lines_are_told_apart() {
-        assert_eq!(
-            Incoming::parse(br#"{"id":3,"m":"command","p":{"command":"check_update"}}"#).unwrap(),
-            Incoming::Request {
-                id: 3,
-                m: "command".into(),
-                p: json!({"command":"check_update"})
-            }
-        );
-        assert_eq!(
-            Incoming::parse(HB_LINE.as_bytes()).unwrap(),
-            Incoming::Event {
-                e: "hb".into(),
-                p: Value::Null
-            }
-        );
-        assert_eq!(
-            Incoming::parse(br#"{"id":1,"ok":{"x":1}}"#).unwrap(),
-            Incoming::Answer {
-                id: Some(1),
-                result: Ok(json!({"x":1}))
-            }
-        );
-        let v = ApiError {
-            supported: Some(1),
-            ..ApiError::new(code::VERSION, "speaks 1")
-        };
-        let line = wire(&Response::err(Some(1), v));
-        assert_eq!(
-            Incoming::parse(line.as_bytes()).unwrap(),
-            Incoming::Answer {
-                id: Some(1),
-                result: Err(AnswerError {
-                    code: "version".into(),
-                    msg: "speaks 1".into(),
-                    supported: Some(1)
-                })
-            }
-        );
-        for bad in [&b"[1]"[..], b"{}", br#"{"m":"x"}"#, b"nope"] {
-            assert!(
-                Incoming::parse(bad).is_err(),
-                "{:?}",
-                std::str::from_utf8(bad)
-            );
-        }
-    }
-
     #[test]
     fn santree_rides_the_policy_and_either_side_may_be_older() {
         let host = SessionHost {

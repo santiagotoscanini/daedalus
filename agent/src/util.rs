@@ -234,6 +234,15 @@ pub fn write_atomic(path: &Path, bytes: &[u8], access: Access) -> std::io::Resul
     Ok(())
 }
 
+/// A unit variant as serde names it on the wire: the one spelling, for a
+/// log line or a label (`Display` of the wire enums).
+pub fn wire_name<T: serde::Serialize>(v: &T, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match serde_json::to_value(v) {
+        Ok(serde_json::Value::String(s)) => f.write_str(&s),
+        _ => f.write_str("?"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

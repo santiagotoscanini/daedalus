@@ -98,6 +98,61 @@ impl SessionAction {
     }
 }
 
+/// Where Claude remote control stands, as the report says it: `off` (not
+/// wanted, whatever else is true), `not-installed` (wanted, no `claude`),
+/// then how the job stands — `starting`, `running`, `waiting` (to start
+/// again), `stopped`. `no-session` is the tray's own word for a session
+/// that is not reporting. `unknown`: a newer machine's word, read on the
+/// controller (the link's two ends are released apart).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClaudeState {
+    Off,
+    NotInstalled,
+    Starting,
+    Running,
+    Waiting,
+    Stopped,
+    #[default]
+    NoSession,
+    #[serde(other)]
+    Unknown,
+}
+
+impl std::fmt::Display for ClaudeState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        crate::util::wire_name(self, f)
+    }
+}
+
+/// How Claude Code was installed, read off the path it was found at
+/// (cli.rs `install_method`): it decides which verb updates it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InstallMethod {
+    Native,
+    Npm,
+    Homebrew,
+    Winget,
+    Path,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Where the login is kept: `.credentials.json`, or the macOS login
+/// keychain (whose dates are not readable without a prompt).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CredentialStore {
+    File,
+    Keychain,
+    #[serde(other)]
+    Unknown,
+}
+
 /// How a verb request stands.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,10 +241,7 @@ pub struct Session {
 #[serde(default)]
 pub struct Credentials {
     pub present: bool,
-    /// "file" (`.credentials.json`) or "keychain" (macOS, where the CLI
-    /// keeps the login in the login keychain and the dates are not
-    /// readable without a prompt).
-    pub store: Option<String>,
+    pub store: Option<CredentialStore>,
     pub subscription_type: Option<String>,
     pub rate_limit_tier: Option<String>,
     /// Milliseconds since the epoch, both.
@@ -237,24 +289,22 @@ pub struct UpdateResult {
 pub struct Report {
     /// Where the `claude` command is; None when it was not found.
     pub path: Option<String>,
-    /// How it was installed, inferred from that path: native | npm |
-    /// homebrew | winget | path. It decides which verb updates it, so the
-    /// page shows it beside the button that runs one.
-    pub install_method: Option<String>,
+    /// How it was installed, inferred from that path; the page shows it
+    /// beside the button that updates it.
+    pub install_method: Option<InstallMethod>,
     /// `claude --version`.
     pub cli_version: Option<String>,
     /// What the last `claude update` on this machine did, and when. None
     /// until one has been asked for.
     pub last_update: Option<UpdateResult>,
-    /// off (not wanted, whatever else is true) | not-installed (wanted, no
-    /// `claude`) | starting | running | waiting | stopped
-    pub state: String,
+    pub state: ClaudeState,
     /// One line more, when the state has a reason.
     pub detail: Option<String>,
     /// What the server printed last, while it waits to be started again
     /// (`waiting`): its own words, which can name a path, so the summary
     /// leaves them out. Absent from the wire when there is none.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
     pub last_line: Option<String>,
     pub pid: Option<u32>,
     pub started_at: Option<String>,
@@ -300,7 +350,7 @@ pub struct Recovered {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Summary {
-    pub state: String,
+    pub state: ClaudeState,
     /// The state's reason (never the server's own words: `last_line`).
     pub detail: Option<String>,
     pub cli_version: Option<String>,
@@ -315,7 +365,7 @@ pub struct Summary {
 impl Report {
     pub fn summary(&self) -> Summary {
         Summary {
-            state: self.state.clone(),
+            state: self.state,
             detail: self.detail.clone(),
             cli_version: self.cli_version.clone(),
             server_version: self.server.version.clone(),

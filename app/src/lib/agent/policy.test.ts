@@ -4,10 +4,13 @@ import { effectivePolicy, wireName, wirePolicy } from './policy'
 describe('the policy a machine hears', () => {
   it('is the agent’s defaults for an empty policy', () => {
     expect(wirePolicy({})).toEqual({
-      awake_hold: true,
-      claude_remote_control: true,
-      santree: false,
-      providers: { lemonade: { port: 13305, offer: false } },
+      policy: {
+        awake_hold: true,
+        claude_remote_control: true,
+        santree: false,
+        providers: { lemonade: { port: 13305 } },
+      },
+      offer_lemonade: false,
     })
   })
 
@@ -22,24 +25,27 @@ describe('the policy a machine hears', () => {
       hardware: { finish: 'space-black' },
     })
     expect(p).toEqual({
-      awake_hold: false,
-      claude_remote_control: false,
-      claude_workdir: 'C:/work',
-      santree: false,
-      providers: { lemonade: { port: 9000, offer: true } },
+      policy: {
+        awake_hold: false,
+        claude_remote_control: false,
+        claude_workdir: 'C:/work',
+        santree: false,
+        providers: { lemonade: { port: 9000 } },
+      },
+      offer_lemonade: true,
     })
   })
 
   it('always sends santree, off unless the policy turns it on', () => {
     expect(effectivePolicy({}).santree).toBe(false)
-    expect(wirePolicy({}).santree).toBe(false)
-    expect(wirePolicy({ santree: false }).santree).toBe(false)
-    expect(wirePolicy({ santree: true }).santree).toBe(true)
+    expect(wirePolicy({}).policy.santree).toBe(false)
+    expect(wirePolicy({ santree: false }).policy.santree).toBe(false)
+    expect(wirePolicy({ santree: true }).policy.santree).toBe(true)
   })
 
   it('treats a blank workdir as none', () => {
     expect(effectivePolicy({ claudeWorkdir: '   ' }).claudeWorkdir).toBeNull()
-    expect('claude_workdir' in wirePolicy({ claudeWorkdir: '   ' })).toBe(false)
+    expect('claude_workdir' in wirePolicy({ claudeWorkdir: '   ' }).policy).toBe(false)
   })
 })
 

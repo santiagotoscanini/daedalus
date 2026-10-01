@@ -9,22 +9,23 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::os;
 use crate::util::LockExt;
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Facts {
     /// "windows", "macos", "linux" — `std::env::consts::OS`.
-    pub os: &'static str,
+    pub os: String,
     /// "Windows 11 Pro"; empty when unknown.
     pub os_name: String,
     /// "24H2 (26100.4652)"; empty when unknown.
     pub os_version: String,
     /// "x86_64", "aarch64".
-    pub arch: &'static str,
+    pub arch: String,
     /// The processor's marketing name, as the firmware reports it.
     pub cpu: String,
     /// Physical memory, in bytes.
@@ -33,10 +34,10 @@ pub struct Facts {
 
 pub fn read() -> Facts {
     Facts {
-        os: std::env::consts::OS,
+        os: std::env::consts::OS.into(),
         os_name: os::os_name(),
         os_version: os::os_version(),
-        arch: std::env::consts::ARCH,
+        arch: std::env::consts::ARCH.into(),
         cpu: os::cpu_name(),
         memory_bytes: os::memory_bytes(),
     }

@@ -8,6 +8,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use super::profile::home_dir;
+use super::InstallMethod;
 use crate::exec;
 
 /// The `claude` command: the native install's place first, then npm's, then
@@ -45,18 +46,18 @@ pub fn find_cli() -> Option<PathBuf> {
 /// no-op that answers "Claude is up to date!", and the upgrade goes through
 /// that manager — which is what `CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE`
 /// on the spawned server asks Claude Code to do for itself.
-pub fn install_method(cli: &Path) -> &'static str {
+pub fn install_method(cli: &Path) -> InstallMethod {
     let p = cli.to_string_lossy().replace('\\', "/").to_lowercase();
     if p.contains("/.local/bin/") || p.contains("/.local/share/claude/") {
-        "native"
+        InstallMethod::Native
     } else if p.contains("/npm/") || p.contains("/node_modules/") {
-        "npm"
+        InstallMethod::Npm
     } else if p.contains("/homebrew/") || p.contains("/cellar/") {
-        "homebrew"
+        InstallMethod::Homebrew
     } else if p.contains("/winget") || p.contains("/windowsapps/") {
-        "winget"
+        InstallMethod::Winget
     } else {
-        "path"
+        InstallMethod::Path
     }
 }
 
@@ -93,18 +94,27 @@ mod tests {
     #[test]
     fn the_install_method_is_read_off_the_path() {
         let m = |p: &str| install_method(Path::new(p));
-        assert_eq!(m("/home/u/.local/bin/claude"), "native");
-        assert_eq!(m("C:\\Users\\u\\.local\\bin\\claude.exe"), "native");
-        assert_eq!(m("/home/u/.local/share/claude/versions/2.1.281"), "native");
-        assert_eq!(m("C:\\Users\\u\\AppData\\Roaming\\npm\\claude.cmd"), "npm");
+        assert_eq!(m("/home/u/.local/bin/claude"), InstallMethod::Native);
+        assert_eq!(
+            m("C:\\Users\\u\\.local\\bin\\claude.exe"),
+            InstallMethod::Native
+        );
+        assert_eq!(
+            m("/home/u/.local/share/claude/versions/2.1.281"),
+            InstallMethod::Native
+        );
+        assert_eq!(
+            m("C:\\Users\\u\\AppData\\Roaming\\npm\\claude.cmd"),
+            InstallMethod::Npm
+        );
         assert_eq!(
             m("/usr/lib/node_modules/@anthropic-ai/claude-code/claude"),
-            "npm"
+            InstallMethod::Npm
         );
-        assert_eq!(m("/opt/homebrew/bin/claude"), "homebrew");
+        assert_eq!(m("/opt/homebrew/bin/claude"), InstallMethod::Homebrew);
         // Anything else is still updatable by `claude update`; it just has
         // no name, and the page says nothing rather than guessing.
-        assert_eq!(m("/usr/local/bin/claude"), "path");
+        assert_eq!(m("/usr/local/bin/claude"), InstallMethod::Path);
     }
 
     // Every branch of the update record has to produce something a person

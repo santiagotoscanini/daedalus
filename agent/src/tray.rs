@@ -85,12 +85,15 @@ use tray_icon::menu::{
 };
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-use crate::claude::Report;
+use crate::claude::{ClaudeState, Report};
 use crate::link::wire::Policy;
+use crate::link::{LinkState, LinkStatus};
+use crate::local::LocalRequest;
 use crate::os::tray::{open, relaunch_self};
 use crate::paths;
-use crate::session::{LinkPage, Page, Places, Poll, Session, Tick, Watcher};
+use crate::session::{Places, Poll, Session, Tick, Watcher};
 use crate::settings::{short, short_fingerprint, Key, Via, View};
+use crate::shared::StatusDocument;
 use crate::{config, DISPLAY_NAME, VERSION};
 
 /// What the tray stands over; the module doc says which OS has which.
@@ -264,14 +267,13 @@ fn answer(backing: &mut Backing, a: Ask) {
         Ask::CheckUpdates => backing.check_updates_now(),
         Ask::RestartClaude => backing.restart_claude(),
         Ask::UpdateClaude => {
-            let _ = crate::local::call("claude.update", serde_json::Value::Null);
+            let _ = crate::local::call::<String>(&LocalRequest::ClaudeUpdate);
             backing.poll_now();
         }
         Ask::Set(key, value) => {
-            let answer = crate::local::call_as::<crate::local::SetAnswer>(
-                "settings.set",
-                serde_json::json!({ "key": key, "value": value }),
-            );
+            let answer = crate::local::call::<crate::local::SetAnswer>(&LocalRequest::SettingsSet(
+                crate::local::SetParams { key, value },
+            ));
             if let Ok(crate::local::SetAnswer {
                 confirm_url: Some(url),
                 ..
@@ -293,9 +295,12 @@ fn answer(backing: &mut Backing, a: Ask) {
 /// socket answers it, written to `status.json` in the tray's log
 /// directory and opened — there is no page to point a browser at.
 fn show_status(logs: &Path) {
-    let text = match crate::local::call("status", serde_json::Value::Null) {
+    let text = match crate::local::call::<serde_json::Value>(&LocalRequest::Status) {
         Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
-        Err(e) => format!("{{\"error\": {}}}", serde_json::Value::String(e)),
+        Err(e) => format!(
+            "{{\"error\": {}}}",
+            serde_json::Value::String(e.to_string())
+        ),
     };
     let path = logs.join("status.json");
     if std::fs::create_dir_all(logs)
@@ -408,13 +413,13 @@ const HANDSHAKE_STALE_SECS: u64 = 180;
 
 /// Whether the machine has not joined the box: unpaired — on a Mac, no
 /// tunnel config (it logs in rather than pairs, enroll.rs).
-fn logged_out(p: &Page) -> bool {
+fn logged_out(p: &StatusDocument) -> bool {
     if cfg!(target_os = "macos") {
         p.controller.as_ref().is_some_and(|l| l.tunnel.is_none())
     } else {
         p.controller
             .as_ref()
-            .is_some_and(|l| l.state.as_deref() == Some("unpaired"))
+            .is_some_and(|l| l.state == Some(LinkState::Unpaired))
     }
 }
 
@@ -424,7 +429,7 @@ fn logged_out(p: &Page) -> bool {
 /// machine, grey when nothing is joined, amber when something wants a look,
 /// green otherwise.
 pub fn header(
-    page: Option<&Page>,
+    page: Option<&StatusDocument>,
     switched_off: bool,
     claude: &Report,
     claude_wanted: bool,
@@ -448,10 +453,10 @@ pub fn header(
         return h(Dot::Grey, UNJOINED_HEADER);
     }
     if let Some(l) = &p.controller {
-        match l.state.as_deref() {
-            Some("key-changed") => return h(Dot::Red, "The box's key changed — refused"),
-            Some("revoked") => return h(Dot::Red, "Revoked by the box"),
-            Some("pending") => return h(Dot::Amber, "Waiting for approval in Daedalus"),
+        match l.state {
+            Some(LinkState::KeyChanged) => return h(Dot::Red, "The box's key changed — refused"),
+            Some(LinkState::Revoked) => return h(Dot::Red, "Revoked by the box"),
+            Some(LinkState::Pending) => return h(Dot::Amber, "Waiting for approval in Daedalus"),
             _ if !l.connected => {
                 return match &l.error {
                     Some(e) => h(Dot::Red, &format!("Disconnected — {}", brief(e, 40))),
@@ -475,7 +480,7 @@ pub fn header(
     if p.policy.awake_hold && !p.awake_hold {
         return h(Dot::Amber, "Keep awake is not holding");
     }
-    if claude_wanted && !matches!(claude.state.as_str(), "running" | "starting") {
+    if claude_wanted && !matches!(claude.state, ClaudeState::Running | ClaudeState::Starting) {
         return h(Dot::Amber, "Claude remote control is not running");
     }
     if !p.settings.failed.is_empty() {
@@ -492,14 +497,14 @@ const UNJOINED_HEADER: &str = "Not paired — choose Pair with the box…";
 
 /// The top-level Updates row (the updater applies an offered release by
 /// itself, update/: there is nothing to click but a check).
-fn update_line(p: &Page) -> String {
+fn update_line(p: &StatusDocument) -> String {
     if p.restart_pending {
         return "Update installed — restarting".to_string();
     }
     match (
         &p.update_available,
-        &p.last_update_result,
-        &p.last_update_check,
+        &p.state.last_update_result,
+        &p.state.last_update_check,
     ) {
         (Some(v), _, _) => format!("Updating to {v}…"),
         (None, Some(r), Some(t)) => format!("Updates: {} · {}", brief(r, 32), clock(t)),
@@ -607,7 +612,7 @@ pub struct ConnectionRows {
 
 /// The Connection submenu for one read of the link (None: the service did
 /// not answer, or this is the controller).
-pub fn connection_rows(link: Option<&LinkPage>) -> ConnectionRows {
+pub fn connection_rows(link: Option<&LinkStatus>) -> ConnectionRows {
     let dash = || "—".to_string();
     let Some(l) = link else {
         return ConnectionRows {
@@ -624,16 +629,16 @@ pub fn connection_rows(link: Option<&LinkPage>) -> ConnectionRows {
     let at = l.address.as_deref().map(short);
     let at = at.as_deref().unwrap_or("not found yet");
     let joined = !(cfg!(target_os = "macos") && l.tunnel.is_none());
-    let link_line = match (l.state.as_deref(), l.error.as_deref()) {
+    let link_line = match (l.state, l.error.as_deref()) {
         _ if !joined => "Box: not logged in — choose Log in…".to_string(),
-        (Some("unpaired"), _) => "Box: not paired — choose Pair with the box…".into(),
-        (Some("approved"), _) if l.connected => match l.since.as_deref() {
+        (Some(LinkState::Unpaired), _) => "Box: not paired — choose Pair with the box…".into(),
+        (Some(LinkState::Approved), _) if l.connected => match l.since.as_deref() {
             Some(t) => format!("Box: {at} — approved, linked {}", clock(t)),
             None => format!("Box: {at} — approved"),
         },
-        (Some("pending"), _) => format!("Box: {at} — waiting for approval"),
-        (Some("revoked"), _) => format!("Box: {at} — revoked by the box"),
-        (Some("key-changed"), _) => format!("Box: {at} — KEY CHANGED, refused"),
+        (Some(LinkState::Pending), _) => format!("Box: {at} — waiting for approval"),
+        (Some(LinkState::Revoked), _) => format!("Box: {at} — revoked by the box"),
+        (Some(LinkState::KeyChanged), _) => format!("Box: {at} — KEY CHANGED, refused"),
         (_, Some(e)) => format!("Box: {at} — {}", brief(e, 40)),
         (Some(s), None) => format!("Box: {at} — {s}"),
         (None, None) => "Box: none found; set controller_address".into(),
@@ -734,23 +739,23 @@ pub fn claude_rows(r: &Report, policy: &Policy) -> ClaudeRows {
         .as_deref()
         .or(r.cli_version.as_deref())
         .unwrap_or("");
-    let server = match r.state.as_str() {
-        "running" => format!("Remote control: running {version}"),
-        "starting" => format!("Remote control: starting {version}"),
-        "waiting" => format!(
+    let server = match r.state {
+        ClaudeState::Running => format!("Remote control: running {version}"),
+        ClaudeState::Starting => format!("Remote control: starting {version}"),
+        ClaudeState::Waiting => format!(
             "Remote control: exited — {}",
             brief(r.detail.as_deref().unwrap_or("retrying"), 40)
         ),
-        "off" => "Remote control: off (the box's policy)".into(),
-        "not-installed" => "Remote control: Claude Code is not installed for this user".into(),
-        "no-session" => "Remote control: the session is not reporting".into(),
-        "" => "Remote control: —".into(),
+        ClaudeState::Off => "Remote control: off (the box's policy)".into(),
+        ClaudeState::NotInstalled => {
+            "Remote control: Claude Code is not installed for this user".into()
+        }
+        ClaudeState::NoSession => "Remote control: the session is not reporting".into(),
         other => format!("Remote control: {other}"),
     };
-    let title = match r.state.as_str() {
-        "running" => format!("Claude · {}", n(live)),
-        "off" => "Claude · off".into(),
-        "" => "Claude".into(),
+    let title = match r.state {
+        ClaudeState::Running => format!("Claude · {}", n(live)),
+        ClaudeState::Off => "Claude · off".into(),
         _ => "Claude · not running".into(),
     };
     let home = |p: &str| match r.home.as_deref() {
@@ -784,7 +789,7 @@ pub struct SantreeRows {
     pub refused: String,
 }
 
-pub fn santree_rows(p: Option<&Page>) -> SantreeRows {
+pub fn santree_rows(p: Option<&StatusDocument>) -> SantreeRows {
     let door = p.and_then(|p| p.santree.clone()).unwrap_or_default();
     let on = p.is_some_and(|p| p.policy.santree);
     let title = if !on {
@@ -1210,7 +1215,7 @@ impl Ui {
     /// state. Every row is set on every read, so the menu is right even
     /// while it is open, and a switch muda flipped on its click shows the
     /// service's value again in the same pass.
-    fn show(&mut self, page: Option<&Page>, claude: &Report, claude_wanted: bool) {
+    fn show(&mut self, page: Option<&StatusDocument>, claude: &Report, claude_wanted: bool) {
         #[cfg(target_os = "macos")]
         let switched_off = self.login_items_off(page.is_none());
         #[cfg(not(target_os = "macos"))]
@@ -1733,7 +1738,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         };
         assert!(first.page.is_none(), "no service in a test");
-        assert_eq!(first.report.state, "no-session");
+        assert_eq!(first.report.state, ClaudeState::NoSession);
         // A click returns at once, whatever the backing does with it.
         let t = std::time::Instant::now();
         w.ask(Ask::CheckUpdates);
@@ -1744,40 +1749,48 @@ mod tests {
 
     #[test]
     fn the_updates_row_says_what_the_updater_is_doing() {
-        let checked = Page {
-            last_update_result: Some("up to date".into()),
-            last_update_check: Some("2026-09-30T10:00:00Z".into()),
-            ..Page::default()
+        let checked = StatusDocument {
+            state: crate::state::State {
+                last_update_result: Some("up to date".into()),
+                last_update_check: Some("2026-09-30T10:00:00Z".into()),
+                ..Default::default()
+            },
+            ..StatusDocument::default()
         };
         assert_eq!(update_line(&checked), "Updates: up to date · 10:00");
-        let offered = Page {
+        let offered = StatusDocument {
             update_available: Some("0.25.1".into()),
-            ..Page::default()
+            ..StatusDocument::default()
         };
         assert_eq!(update_line(&offered), "Updating to 0.25.1…");
-        let restarting = Page {
+        let restarting = StatusDocument {
             restart_pending: true,
-            ..Page::default()
+            ..StatusDocument::default()
         };
         assert_eq!(update_line(&restarting), "Update installed — restarting");
-        assert_eq!(update_line(&Page::default()), "Updates: not checked yet");
+        assert_eq!(
+            update_line(&StatusDocument::default()),
+            "Updates: not checked yet"
+        );
     }
 
-    fn linked_page() -> Page {
-        Page {
+    fn linked_page() -> StatusDocument {
+        StatusDocument {
             awake_hold: true,
             policy: Policy {
                 awake_hold: true,
                 claude_remote_control: true,
                 ..Default::default()
             },
-            controller: Some(LinkPage {
+            controller: Some(LinkStatus {
                 address: Some("box.lan:7788".into()),
-                state: Some("approved".into()),
+                found_via: None,
+                state: Some(LinkState::Approved),
                 connected: true,
                 since: Some("2026-09-30T09:12:00Z".into()),
                 fingerprint: "f876:e2c7:1a0b:2c3d:4e5f:6a7b:8c9d:0e1f:2a3b:4c5d:6e7f:8a9b:0c1d:2e3f:4a5b:8029".into(),
                 controller_fingerprint: Some("3a1b:0c9d:1111:2222:3333:4444:5555:6666:7777:8888:9999:aaaa:bbbb:cccc:dddd:77e2".into()),
+                rotated: None,
                 error: None,
                 tunnel: Some(TunnelStatus {
                     endpoint: "s2.toscanini.me:51820".into(),
@@ -1796,13 +1809,13 @@ mod tests {
                 operator: Some("santiago".into()),
                 ..Default::default()
             },
-            ..Page::default()
+            ..StatusDocument::default()
         }
     }
 
     fn running() -> Report {
         Report {
-            state: "running".into(),
+            state: ClaudeState::Running,
             ..Default::default()
         }
     }
@@ -1812,7 +1825,7 @@ mod tests {
     fn the_header_has_one_state_for_every_way_things_stand() {
         let ok = linked_page();
         let r = running();
-        let h = |p: Option<&Page>, off: bool, claude: &Report, wanted: bool| {
+        let h = |p: Option<&StatusDocument>, off: bool, claude: &Report, wanted: bool| {
             let h = header(p, off, claude, wanted);
             (h.dot, h.text)
         };
@@ -1833,32 +1846,32 @@ mod tests {
         if cfg!(target_os = "macos") {
             out.controller.as_mut().unwrap().tunnel = None;
         } else {
-            out.controller.as_mut().unwrap().state = Some("unpaired".into());
+            out.controller.as_mut().unwrap().state = Some(LinkState::Unpaired);
         }
         let (dot, text) = h(Some(&out), false, &r, true);
         assert_eq!(dot, Dot::Grey);
         assert_eq!(text, UNJOINED_HEADER);
         // The link's states.
-        let with = |f: &dyn Fn(&mut LinkPage)| {
+        let with = |f: &dyn Fn(&mut LinkStatus)| {
             let mut p = linked_page();
             f(p.controller.as_mut().unwrap());
             p
         };
-        let changed = with(&|l| l.state = Some("key-changed".into()));
+        let changed = with(&|l| l.state = Some(LinkState::KeyChanged));
         assert_eq!(
             h(Some(&changed), false, &r, true),
             (Dot::Red, "The box's key changed — refused".into())
         );
-        let revoked = with(&|l| l.state = Some("revoked".into()));
+        let revoked = with(&|l| l.state = Some(LinkState::Revoked));
         assert_eq!(h(Some(&revoked), false, &r, true).1, "Revoked by the box");
-        let pending = with(&|l| l.state = Some("pending".into()));
+        let pending = with(&|l| l.state = Some(LinkState::Pending));
         assert_eq!(
             h(Some(&pending), false, &r, true),
             (Dot::Amber, "Waiting for approval in Daedalus".into())
         );
         let down = with(&|l| {
             l.connected = false;
-            l.state = Some("connecting".into());
+            l.state = Some(LinkState::Connecting);
             l.error = Some("connection refused by box.lan:7788 after three tries in a row".into());
         });
         let (dot, text) = h(Some(&down), false, &r, true);
@@ -1870,7 +1883,7 @@ mod tests {
         assert!(text.chars().count() <= "Disconnected — ".chars().count() + 40);
         let connecting = with(&|l| {
             l.connected = false;
-            l.state = Some("connecting".into());
+            l.state = Some(LinkState::Connecting);
         });
         assert_eq!(
             h(Some(&connecting), false, &r, true),
@@ -1879,7 +1892,7 @@ mod tests {
         let stale = with(&|l| l.tunnel.as_mut().unwrap().last_handshake_secs = Some(600));
         assert_eq!(h(Some(&stale), false, &r, true).1, "VPN handshake is stale");
         // The machine's own.
-        let restarting = Page {
+        let restarting = StatusDocument {
             restart_pending: true,
             ..linked_page()
         };
@@ -1887,7 +1900,7 @@ mod tests {
             h(Some(&restarting), false, &r, true).1,
             "Update installed — restarting"
         );
-        let unheld = Page {
+        let unheld = StatusDocument {
             awake_hold: false,
             ..linked_page()
         };
@@ -1900,7 +1913,7 @@ mod tests {
         sleeps.policy.awake_hold = false;
         assert_eq!(h(Some(&sleeps), false, &r, true).0, Dot::Green);
         let exited = Report {
-            state: "waiting".into(),
+            state: ClaudeState::Waiting,
             ..Default::default()
         };
         assert_eq!(
@@ -2033,7 +2046,7 @@ mod tests {
         );
         // Pending: compare both keys.
         let mut l = p.controller.clone().unwrap();
-        l.state = Some("pending".into());
+        l.state = Some(LinkState::Pending);
         assert_eq!(
             connection_rows(Some(&l)).link,
             "Box: box.lan:7788 — waiting for approval"
@@ -2049,7 +2062,7 @@ mod tests {
             assert_eq!(connection_rows(Some(&l)).title, "Connection · logged out");
         } else {
             l.tunnel = None;
-            l.state = Some("unpaired".into());
+            l.state = Some(LinkState::Unpaired);
             l.controller_fingerprint = None;
             let rows = connection_rows(Some(&l));
             assert_eq!(rows.link, "Box: not paired — choose Pair with the box…");
@@ -2095,7 +2108,7 @@ mod tests {
             "Folder: ~/work (set in Daedalus)"
         );
         let off = Report {
-            state: "off".into(),
+            state: ClaudeState::Off,
             ..Default::default()
         };
         assert_eq!(claude_rows(&off, &Policy::default()).title, "Claude · off");

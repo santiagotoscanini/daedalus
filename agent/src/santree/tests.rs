@@ -165,23 +165,25 @@ fn the_checks_say_why_in_order() {
         session_host: Some(host.clone()),
         ..Policy::default()
     };
-    let code_of = |paired, state: Option<&str>, p: &Policy| admit(paired, state, p).unwrap_err();
+    let code_of =
+        |paired, state: Option<LinkState>, p: &Policy| admit(paired, state, p).unwrap_err();
     let e = code_of(false, None, &on);
-    assert_eq!(e.code, code::UNAVAILABLE);
+    assert_eq!(e.code, ErrorCode::Unavailable);
     assert!(e.msg.contains("not paired"), "{}", e.msg);
-    for state in ["pending", "revoked"] {
+    for state in [LinkState::Pending, LinkState::Revoked] {
+        let what = format!("{state:?}");
         let e = code_of(true, Some(state), &on);
-        assert_eq!(e.code, code::UNAVAILABLE, "{state}");
+        assert_eq!(e.code, ErrorCode::Unavailable, "{what}");
     }
     assert_eq!(
-        code_of(true, Some("approved"), &Policy::default()).code,
-        code::SANTREE_OFF
+        code_of(true, Some(LinkState::Approved), &Policy::default()).code,
+        ErrorCode::SantreeOff
     );
     let unnamed = Policy {
         session_host: None,
         ..on.clone()
     };
-    let e = code_of(true, Some("approved"), &unnamed);
+    let e = code_of(true, Some(LinkState::Approved), &unnamed);
     assert!(e.msg.contains("no session host"), "{}", e.msg);
     let bad = Policy {
         session_host: Some(SessionHost {
@@ -191,12 +193,12 @@ fn the_checks_say_why_in_order() {
         ..on.clone()
     };
     assert_eq!(
-        code_of(true, Some("approved"), &bad).code,
-        code::UNAVAILABLE
+        code_of(true, Some(LinkState::Approved), &bad).code,
+        ErrorCode::Unavailable
     );
     // A controller that restarts, or one not reached yet: the kept policy
     // stands, and the host's allow-list decides.
-    for state in [Some("approved"), Some("connecting"), None] {
+    for state in [Some(LinkState::Approved), Some(LinkState::Connecting), None] {
         assert_eq!(
             admit(true, state, &on).unwrap(),
             ("box.example.org:7789".to_string(), [0xab; 32])
@@ -230,7 +232,7 @@ fn the_first_line_is_the_agents_envelope() {
         )
     );
     assert_eq!(
-        error_line(code::SANTREE_OFF, "off"),
+        error_line(ErrorCode::SantreeOff, "off"),
         "{\"id\":null,\"err\":{\"code\":\"santree_off\",\"msg\":\"off\"}}\n"
     );
 }
@@ -242,7 +244,7 @@ fn a_host_with_another_key_is_host_key_changed_and_a_closed_port_unavailable() {
     let e = dial(&Dialer::Direct, &addr.to_string(), other, DIAL)
         .map(|_| ())
         .unwrap_err();
-    assert_eq!(e.code, code::HOST_KEY_CHANGED, "{}", e.msg);
+    assert_eq!(e.code, ErrorCode::HostKeyChanged, "{}", e.msg);
 
     let closed = TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -252,7 +254,7 @@ fn a_host_with_another_key_is_host_key_changed_and_a_closed_port_unavailable() {
     let e = dial(&Dialer::Direct, &closed.to_string(), config(), DIAL)
         .map(|_| ())
         .unwrap_err();
-    assert_eq!(e.code, code::UNAVAILABLE);
+    assert_eq!(e.code, ErrorCode::Unavailable);
     assert!(e.msg.contains("did not answer"), "{}", e.msg);
     assert!(t.elapsed() < Duration::from_secs(6), "{:?}", t.elapsed());
 }
@@ -390,7 +392,13 @@ fn node_shared(paired: bool, policy: Policy) -> Arc<Shared> {
         pin: paired.then(|| format_fingerprint(&[1; 32])),
         address: None,
     });
-    s.set_link(|l| l.state = Some(if paired { "approved" } else { "unpaired" }.into()));
+    s.set_link(|l| {
+        l.state = Some(if paired {
+            LinkState::Approved
+        } else {
+            LinkState::Unpaired
+        })
+    });
     s
 }
 
@@ -439,7 +447,7 @@ fn the_door_says_why_or_pipes() {
         pin: Some(format_fingerprint(&[1; 32])),
         address: None,
     });
-    shared.set_link(|l| l.state = Some("approved".into()));
+    shared.set_link(|l| l.state = Some(LinkState::Approved));
     assert_eq!(ask()["err"]["code"], "santree_off");
     shared.set_policy(santree_on(addr));
     let s = UnixStream::connect(&path).unwrap();

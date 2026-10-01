@@ -65,18 +65,12 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     RootFollow::export_all(cfg)?;
     RootRuns::export_all(cfg)?;
     // The events.
-    ClaudeChanged::export_all(cfg)?;
-    TelemetryUpdated::export_all(cfg)?;
-    NodeChanged::export_all(cfg)?;
-    NodePending::export_all(cfg)?;
-    NodeLeft::export_all(cfg)?;
-    NodePolicyRequest::export_all(cfg)?;
+    ApiEvent::export_all(cfg)?;
     // Logging in: the app's redeem route (enroll.rs).
     EnrollRedeem::export_all(cfg)?;
     EnrollRedeemed::export_all(cfg)?;
-    RootProgress::export_all(cfg)?;
-    // A machine's status page, which `nodes.get` carries as it came.
-    crate::shared::Document::export_all(cfg)?;
+    // The local socket's status document, which `nodes.get` carries.
+    crate::shared::StatusDocument::export_all(cfg)?;
     Ok(())
 }
 

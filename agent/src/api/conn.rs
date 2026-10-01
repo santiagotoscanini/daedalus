@@ -24,13 +24,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
-use serde_json::Value;
 
-use super::wire::{hello_api, HelloParams, Subscribed};
+use super::wire::{ApiRequest, HelloParams, Subscribed};
 use super::{Api, API_VERSION, MAX_LINE};
 use crate::door::Conn;
 use crate::jsonl::LineReader;
-use crate::rpc::{code, salvage_id, ApiError, Request, Response};
+use crate::rpc::{salvage_id, ApiError, ErrorCode, Incoming, Response};
 use crate::util::LockExt;
 
 /// How much of a client's self-description reaches the log.
@@ -87,20 +86,20 @@ fn read_line<R: Read>(r: &mut LineReader<R>) -> Line {
     }
 }
 
-/// `hello`'s answer: the version first, from the raw parameters, so any
-/// client of another version is told which one this agent speaks whatever
-/// else it sent; then the parameters, leniently (wire.rs).
-fn hello(api: &Api, id: u64, p: Value) -> Result<(Response, String), Response> {
-    let asked = hello_api(&p);
-    if let Some(v) = asked.filter(|v| *v != u64::from(API_VERSION)) {
+/// `hello`'s answer: the version first, so any client of another version
+/// is told which one this agent speaks whatever else it sent; then who the
+/// client is, which it must say.
+fn hello(api: &Api, id: u64, p: HelloParams) -> Result<(Response, String), Response> {
+    if p.api != API_VERSION {
         return Err(Response::err(
             Some(id),
             ApiError {
                 supported: Some(API_VERSION),
                 ..ApiError::new(
-                    code::VERSION,
+                    ErrorCode::Version,
                     format!(
-                        "this agent speaks api {API_VERSION}, not {v}; {} is version {}",
+                        "this agent speaks api {API_VERSION}, not {}; {} is version {}",
+                        p.api,
                         crate::SERVICE_NAME,
                         crate::VERSION
                     ),
@@ -108,13 +107,13 @@ fn hello(api: &Api, id: u64, p: Value) -> Result<(Response, String), Response> {
             },
         ));
     }
-    match serde_json::from_value::<HelloParams>(p) {
-        Ok(h) => Ok((Response::ok(id, &api.hello()), h.client)),
-        Err(e) => Err(Response::err(
+    if p.client.is_empty() {
+        return Err(Response::err(
             Some(id),
-            ApiError::new(code::BAD_REQUEST, format!("hello: {e}")),
-        )),
+            ApiError::new(ErrorCode::BadRequest, "hello: name the client (`client`)"),
+        ));
     }
+    Ok((Response::ok(id, &api.hello()), p.client))
 }
 
 /// A client's self-description, cut for the log.
@@ -156,7 +155,7 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
                 out.send(&Response::err(
                     None,
                     ApiError::new(
-                        code::TOO_LARGE,
+                        ErrorCode::TooLarge,
                         format!("a line is at most {MAX_LINE} bytes; closing"),
                     ),
                 ));
@@ -165,20 +164,27 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
             Line::Text(t) if t.iter().all(u8::is_ascii_whitespace) => continue,
             Line::Text(t) => t,
         };
-        let req = match Request::parse(&text) {
+        let req = match Incoming::request(&text) {
             Ok(r) => r,
             Err(e) => {
                 out.send(&Response::err(
                     salvage_id(&text),
-                    ApiError::new(code::BAD_REQUEST, format!("not a request: {e}")),
+                    ApiError::new(ErrorCode::BadRequest, format!("not a request: {e}")),
                 ));
                 continue;
             }
         };
         let id = req.id;
+        let req = match req.typed::<ApiRequest>() {
+            Ok(r) => r,
+            Err(e) => {
+                out.send(&Response::err(Some(id), e));
+                continue;
+            }
+        };
 
-        if req.m == "hello" {
-            match hello(&api, id, req.p) {
+        if let ApiRequest::Hello(p) = req {
+            match hello(&api, id, p) {
                 Ok((answer, name)) => {
                     if client.is_none() {
                         tracing::info!(client = %logged(&name), "api: client connected");
@@ -197,25 +203,14 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
             out.send(&Response::err(
                 Some(id),
                 ApiError::new(
-                    code::BAD_REQUEST,
+                    ErrorCode::BadRequest,
                     format!("the first request must be `hello` (api {API_VERSION})"),
                 ),
             ));
             continue;
         }
 
-        if req.m == "events.subscribe" {
-            match &req.p {
-                Value::Null => {}
-                Value::Object(m) if m.is_empty() => {}
-                _ => {
-                    out.send(&Response::err(
-                        Some(id),
-                        ApiError::new(code::BAD_REQUEST, "`events.subscribe` takes no parameters"),
-                    ));
-                    continue;
-                }
-            }
+        if let ApiRequest::EventsSubscribe = req {
             // Subscribed before the answer goes out, so no event can fall
             // between the two; the thread starts after it, so none comes
             // before it.
@@ -246,7 +241,7 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
             out.send(&Response::err(
                 Some(id),
                 ApiError::new(
-                    code::BUSY,
+                    ErrorCode::Busy,
                     format!("at most {max_in_flight} requests in flight on one connection"),
                 ),
             ));
@@ -256,7 +251,7 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
         let spawned = std::thread::Builder::new()
             .name("api-request".into())
             .spawn(move || {
-                let response = match api.call(&req.m, &req.p) {
+                let response = match api.call(req) {
                     Ok(v) => Response::raw(id, v),
                     Err(e) => Response::err(Some(id), e),
                 };
@@ -269,7 +264,7 @@ pub fn serve_connection(api: Arc<Api>, conn: Conn) {
                 in_flight.fetch_sub(1, Ordering::AcqRel);
                 out.send(&Response::err(
                     Some(id),
-                    ApiError::new(code::BUSY, format!("no thread for the request: {e}")),
+                    ApiError::new(ErrorCode::Busy, format!("no thread for the request: {e}")),
                 ));
             }
         }
@@ -297,7 +292,7 @@ mod tests {
     use crate::claude::Report;
     use crate::config::Config;
     use crate::shared::Shared;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::time::Instant;
 
     /// A writer the test can read back after the connection ends.
@@ -568,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_status_restart_and_the_changed_event() {
+    fn claude_status_restart_and_an_event() {
         let (shared, api) = controller("[controller]\nclaude_remote_control = true\n");
         // Nothing reported yet.
         let out = talk(
@@ -580,7 +575,8 @@ mod tests {
             json!({"reporting":false,"wanted":true,"report":null})
         );
 
-        // A subscriber, a report, a restart asked, a new pid reported.
+        // A subscriber, a report, a restart asked, a new pid reported, and an
+        // event on its way.
         let (reader, mut feed) = pipe();
         let sink = Sink::default();
         let conn = {
@@ -594,21 +590,27 @@ mod tests {
         send(&mut feed, r#"{"id":2,"m":"events.subscribe"}"#);
         wait_for(&sink, 2);
         let report = |pid| Report {
-            state: "running".into(),
+            state: crate::claude::ClaudeState::Running,
             pid: Some(pid),
             ..Default::default()
         };
         assert!(!shared.set_claude(report(10)).restart);
-        // The same state and pid again is no event.
-        shared.set_claude(report(10));
         send(&mut feed, r#"{"id":3,"m":"claude.restart"}"#);
-        wait_for(&sink, 4);
+        wait_for(&sink, 3);
         assert!(shared.claude_instruction_waiting());
         let answer = shared.set_claude(report(11));
         assert!(answer.restart, "the restart rides the next report, once");
         assert!(!shared.claude_instruction_waiting());
         send(&mut feed, r#"{"id":4,"m":"claude.status"}"#);
-        wait_for(&sink, 6);
+        wait_for(&sink, 4);
+        shared
+            .events()
+            .publish(&crate::api::wire::ApiEvent::NodesLeft(
+                crate::api::wire::NodeLeft {
+                    id: "0123456789abcdef".into(),
+                },
+            ));
+        wait_for(&sink, 5);
         drop(feed);
         conn.join().unwrap();
 
@@ -616,10 +618,7 @@ mod tests {
         let events: Vec<&Value> = lines.iter().filter(|l| l.get("e").is_some()).collect();
         assert_eq!(
             events,
-            [
-                &json!({"e":"claude.changed","p":{"reporting":true,"state":"running","pid":10}}),
-                &json!({"e":"claude.changed","p":{"reporting":true,"state":"running","pid":11}}),
-            ]
+            [&json!({"e":"nodes.left","p":{"id":"0123456789abcdef"}})]
         );
         let by_id = |id: u64| lines.iter().find(|l| l["id"] == id).unwrap();
         assert_eq!(by_id(2)["ok"], json!({}));
@@ -671,7 +670,7 @@ mod tests {
         }
 
         shared.set_claude(Report {
-            state: "running".into(),
+            state: crate::claude::ClaudeState::Running,
             ..Default::default()
         });
         shared.set_claude_roster(crate::claude::Roster {

@@ -18,7 +18,7 @@ use super::profile::{
     read_settings,
 };
 use super::workdir::pick_workdir;
-use super::{gcroot, Banner, Credentials, Report, Settings, UpdateResult};
+use super::{gcroot, Banner, ClaudeState, Credentials, Report, Settings, UpdateResult};
 use crate::jobs::{self as job, JobState, Jobs, LogTail, ServerJob};
 use crate::os::jobs;
 use crate::state::{now_rfc3339, rfc3339_ago};
@@ -644,7 +644,7 @@ impl Supervisor {
         };
         let (state, detail) = self.state();
         // While it waits to start again, what it said last is the why.
-        let last_line = (state == "waiting")
+        let last_line = (state == ClaudeState::Waiting)
             .then(|| self.recent_lines.back().cloned())
             .flatten()
             .filter(|l| !l.is_empty());
@@ -654,7 +654,7 @@ impl Supervisor {
         };
         Report {
             path: self.cli.as_ref().map(|p| p.display().to_string()),
-            install_method: self.cli.as_deref().map(|p| install_method(p).to_string()),
+            install_method: self.cli.as_deref().map(install_method),
             cli_version: self.cli_version.clone(),
             last_update: self.last_update.clone(),
             state,
@@ -685,7 +685,7 @@ impl Supervisor {
     /// the reason, and any job of its name running unmanaged), then
     /// `not-installed` when it is wanted and there is no `claude`, then
     /// how the job stands.
-    fn state(&self) -> (String, Option<String>) {
+    fn state(&self) -> (ClaudeState, Option<String>) {
         let facts = StateFacts {
             wanted: self.wanted,
             installed: self.cli.is_some(),
@@ -700,18 +700,18 @@ impl Supervisor {
                 || self.now().saturating_duration_since(r.since) > REGISTER_WAIT
             {
                 // Windows: a job the tray's job object kept (os/windows/jobs.rs).
-                return ("running".into(), self.jobs.caveat(&self.job));
+                return (ClaudeState::Running, self.jobs.caveat(&self.job));
             }
-            return ("starting".into(), None);
+            return (ClaudeState::Starting, None);
         }
         if let Some(at) = self.next_start {
             let left = at.saturating_duration_since(self.now());
             return (
-                "waiting".into(),
+                ClaudeState::Waiting,
                 Some(format!("retrying in {}", short_duration(left))),
             );
         }
-        ("stopped".into(), self.last_exit.clone())
+        (ClaudeState::Stopped, self.last_exit.clone())
     }
 }
 
@@ -726,17 +726,17 @@ struct StateFacts<'a> {
 }
 
 impl StateFacts<'_> {
-    fn settled(&self) -> Option<(String, Option<String>)> {
+    fn settled(&self) -> Option<(ClaudeState, Option<String>)> {
         if !self.wanted {
             let detail = match self.foreign {
                 Some(f) => format!("{} — but {f}", self.off_reason),
                 None => self.off_reason.to_string(),
             };
-            return Some(("off".into(), Some(detail)));
+            return Some((ClaudeState::Off, Some(detail)));
         }
         if !self.installed {
             return Some((
-                "not-installed".into(),
+                ClaudeState::NotInstalled,
                 Some("no `claude` command in ~/.local/bin, npm's bin, Homebrew's or PATH".into()),
             ));
         }

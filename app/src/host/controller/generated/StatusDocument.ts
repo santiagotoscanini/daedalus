@@ -7,9 +7,16 @@ import type { RolledBack } from "./RolledBack";
 import type { SantreeDoor } from "./SantreeDoor";
 import type { StatusTray } from "./StatusTray";
 import type { Summary } from "./Summary";
-import type { Telemetry } from "./Telemetry";
 
-export type StatusPage = { agent: string, version: string, hostname: string, uptime_secs: number, 
+/**
+ * The status document: the agent's picture of this machine, as the local
+ * socket's `status` answers it (the tray, the session, `daedalus-agent
+ * status`) and the link pushes it (`nodes.get` hands it to the app). Its
+ * telemetry travels on its own. Read with defaults: the two ends of the
+ * link are released apart, and a field one side does not write reads as
+ * its default on the other.
+ */
+export type StatusDocument = { agent: string, version: string, hostname: string, uptime_secs: number, 
 /**
  * The machine's, not the agent's: a small number here after a night is a reboot.
  */
@@ -27,11 +34,6 @@ policy: Policy,
  * the tray has not reported lately.
  */
 claude: Summary | null, tray: StatusTray, claude_update_requested: boolean, claude_restart_requested: boolean, 
-/**
- * What the machine is and how it is doing, as `Telemetry::public`
- * (telemetry.rs); null until the first sample, a few seconds after start.
- */
-telemetry: Telemetry | null, 
 /**
  * The settings this machine may ask the box for, and what became of
  * the last requests (settings.rs).

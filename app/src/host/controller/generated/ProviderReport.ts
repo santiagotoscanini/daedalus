@@ -4,16 +4,13 @@ import type { ModelFigures } from "./ModelFigures";
 import type { ProviderAction } from "./ProviderAction";
 import type { ProviderBackend } from "./ProviderBackend";
 import type { ProviderDownload } from "./ProviderDownload";
+import type { ProviderKind } from "./ProviderKind";
 import type { ProviderModel } from "./ProviderModel";
 
 /**
  * One provider as the `providers` document carries it.
  */
-export type ProviderReport = { 
-/**
- * "lemonade", the one kind the agent detects.
- */
-kind: string, 
+export type ProviderReport = { kind: ProviderKind, 
 /**
  * The port it answers on, or would.
  */

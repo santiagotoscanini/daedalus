@@ -12,9 +12,9 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::api::wire::{
-    event, ClaudeSessionSent, CommandOk, DesiredState, NodeChanged, NodeClaude, NodeClaudeRoster,
-    NodeDetail, NodeLeft, NodePending, NodePolicyRequest, NodeProviders, NodeSummary,
-    NodeTelemetry, ProviderModelSent, SetDesiredOk,
+    ApiEvent, Capability, ClaudeSessionSent, CommandOk, DesiredState, NodeClaude, NodeClaudeRoster,
+    NodeDetail, NodeLeft, NodePolicyRequest, NodeProviders, NodeSummary, NodeTelemetry,
+    ProviderModelSent, SetDesiredOk,
 };
 use crate::claude::{Report, Roster, SessionAction};
 use crate::identity::{fingerprint, node_id_of};
@@ -29,8 +29,9 @@ use crate::link::{
     POLICY_REQUESTS_PER_MINUTE, PREAUTH_BUDGET, PREAUTH_PER_IP, UNKNOWN_ADDRESSES,
     UNKNOWN_PER_MINUTE,
 };
-use crate::providers::ProviderReport;
-use crate::rpc::{code, ApiError, Events};
+use crate::providers::{ProviderKind, ProviderReport};
+use crate::rpc::{ApiError, ErrorCode, Events};
+use crate::shared::StatusDocument;
 use crate::state::now_rfc3339;
 use crate::telemetry::Telemetry;
 use crate::util::LockExt;
@@ -118,7 +119,7 @@ struct Entry {
     /// is dropped.
     hostname: Option<String>,
     hello: Option<Hello>,
-    status: Option<(Value, String)>,
+    status: Option<(StatusDocument, String)>,
     telemetry: Option<(Telemetry, String)>,
     claude: Option<(Option<Report>, String)>,
     roster: Option<(Option<Roster>, String)>,
@@ -182,9 +183,9 @@ struct Desired {
     policy: Policy,
     /// What the pages call the machine; `/nodes/metrics` labels it `machine`.
     name: Option<String>,
-    /// The provider kinds the app offers to the gateway; `/nodes/metrics`
-    /// labels their `provider_up` `offered="1"`.
-    offered: Vec<String>,
+    /// The app offers its lemonade to the gateway; `/nodes/metrics` labels
+    /// that `provider_up` `offered="1"`.
+    offer_lemonade: bool,
 }
 
 /// One entry of the app's set, checked (api/mod.rs parses and validates).
@@ -195,7 +196,9 @@ pub struct DesiredEntry {
     pub state: DesiredState,
     pub policy: Policy,
     pub name: Option<String>,
-    pub offered: Vec<String>,
+    /// The app offers its lemonade to the gateway (`/nodes/metrics`); the
+    /// machine is not told.
+    pub offer_lemonade: bool,
 }
 
 #[derive(Default)]
@@ -340,7 +343,7 @@ impl Drop for PreauthSlot {
 }
 
 pub(super) fn busy(msg: impl Into<String>) -> ApiError {
-    ApiError::new(code::BUSY, msg)
+    ApiError::new(ErrorCode::Busy, msg)
 }
 
 /// What the controller knows about the machines (module doc).
@@ -445,17 +448,6 @@ impl Registry {
         self.inner.lock_ok()
     }
 
-    fn changed(&self, id: &str, state: NodeState, connected: bool) {
-        self.events.publish(
-            event::NODES_CHANGED,
-            &NodeChanged {
-                id: id.to_string(),
-                state,
-                connected,
-            },
-        );
-    }
-
     /// A pre-auth slot for a connection from `bucket`, or None when the
     /// pool, or this address's share of it, is full.
     pub(super) fn preauth_slot(self: &Arc<Self>, bucket: IpAddr) -> Option<PreauthSlot> {
@@ -515,7 +507,7 @@ impl Registry {
         let id = node_id_of(&key);
         if hello.node_id != id {
             return Admission::Refuse(ApiError::new(
-                code::BAD_REQUEST,
+                ErrorCode::BadRequest,
                 format!(
                     "hello names node {:?}, but the key this connection proved is node {id}",
                     hello.node_id
@@ -529,13 +521,13 @@ impl Registry {
         let state = match reg.desired.get(&id) {
             Some(d) if d.public_key != key => {
                 return Admission::Refuse(ApiError::new(
-                    code::FORBIDDEN,
+                    ErrorCode::Forbidden,
                     format!("node id {id} is decided for another key; this key is not it"),
                 ))
             }
             Some(d) if d.state == DesiredState::Revoked => {
                 return Admission::Refuse(ApiError::new(
-                    code::REVOKED,
+                    ErrorCode::Revoked,
                     "revoked: the box has turned this machine's key away",
                 ))
             }
@@ -598,7 +590,6 @@ impl Registry {
         };
         let conn_id = self.next_conn.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
-        let hostname = hello.hostname.clone();
         let entry = reg
             .nodes
             .entry(id.clone())
@@ -609,7 +600,7 @@ impl Registry {
             let _ = old.tx.send(Out::Close);
         }
         entry.public_key = key;
-        entry.hostname = Some(hostname.clone());
+        entry.hostname = Some(hello.hostname.clone());
         entry.hello = Some(hello);
         entry.conn = Some(Conn {
             id: conn_id,
@@ -621,17 +612,6 @@ impl Registry {
         });
         entry.touch();
         drop(reg);
-        self.changed(&id, state, true);
-        if state == NodeState::Pending {
-            self.events.publish(
-                event::NODES_PENDING,
-                &NodePending {
-                    id: id.clone(),
-                    fingerprint: fingerprint(&key),
-                    hostname,
-                },
-            );
-        }
         Admission::Welcome {
             welcome: Box::new(Welcome {
                 proto: PROTO,
@@ -665,7 +645,7 @@ impl Registry {
     pub(super) fn left(&self, id: &str) -> Result<(), ApiError> {
         let told = self
             .events
-            .publish(event::NODES_LEFT, &NodeLeft { id: id.to_string() });
+            .publish(&ApiEvent::NodesLeft(NodeLeft { id: id.to_string() }));
         tracing::info!(
             node = id,
             told,
@@ -673,7 +653,7 @@ impl Registry {
         );
         if told == 0 {
             return Err(ApiError::new(
-                code::UNAVAILABLE,
+                ErrorCode::Unavailable,
                 "Daedalus is not listening (the app is down); the log-out was not heard",
             ));
         }
@@ -691,7 +671,7 @@ impl Registry {
     /// not listening, and the machine says so rather than wait.
     pub(super) fn policy_request(&self, id: &str, req: &PolicyRequest) -> Result<(), ApiError> {
         req.check()
-            .map_err(|e| ApiError::new(code::BAD_REQUEST, e))?;
+            .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
         {
             let mut reg = self.lock();
             let now = Instant::now();
@@ -710,13 +690,12 @@ impl Registry {
             }
             seen.push_back(now);
         }
-        let told = self.events.publish(
-            event::NODES_POLICY_REQUEST,
-            &NodePolicyRequest {
+        let told = self
+            .events
+            .publish(&ApiEvent::NodesPolicyRequest(NodePolicyRequest {
                 id: id.to_string(),
                 changes: req.clone(),
-            },
-        );
+            }));
         tracing::info!(
             node = id,
             ?req,
@@ -725,7 +704,7 @@ impl Registry {
         );
         if told == 0 {
             return Err(ApiError::new(
-                code::UNAVAILABLE,
+                ErrorCode::Unavailable,
                 "Daedalus is not listening (the app is down)",
             ));
         }
@@ -751,7 +730,10 @@ impl Registry {
             tracing::warn!(node = id, error = %err, "link: a {what} that does not parse; dropped");
         };
         match e {
-            name::STATUS if p.is_object() => entry.status = Some((p, at)),
+            name::STATUS => match serde_json::from_value::<StatusDocument>(p) {
+                Ok(s) => entry.status = Some((s, at)),
+                Err(err) => bad("status document", err),
+            },
             name::TELEMETRY => match serde_json::from_value::<Telemetry>(p) {
                 Ok(t) => entry.telemetry = Some((t, at)),
                 Err(err) => bad("telemetry document", err),
@@ -816,8 +798,6 @@ impl Registry {
             }
         }
         reg.prune();
-        drop(reg);
-        self.changed(id, state, false);
     }
 
     /// The app's complete set of decided keys (module doc). The caller
@@ -847,7 +827,7 @@ impl Registry {
                         state: d.state,
                         policy: d.policy,
                         name: d.name,
-                        offered: d.offered,
+                        offer_lemonade: d.offer_lemonade,
                     },
                 )
             })
@@ -856,7 +836,6 @@ impl Registry {
             nodes: reg.desired.len(),
             ..Default::default()
         };
-        let mut changes = Vec::new();
         let mut ids: Vec<String> = before.keys().cloned().collect();
         ids.extend(
             reg.desired
@@ -931,15 +910,8 @@ impl Registry {
                     _ => {}
                 }
             }
-            if was != now {
-                changes.push((id, now, connected));
-            }
         }
         reg.prune();
-        drop(reg);
-        for (id, state, connected) in changes {
-            self.changed(&id, state, connected);
-        }
         ok
     }
 
@@ -949,11 +921,14 @@ impl Registry {
         match reg.state_of(id) {
             NodeState::Approved => {}
             NodeState::Unknown if !reg.desired.contains_key(id) && !reg.nodes.contains_key(id) => {
-                return Err(ApiError::new(code::NOT_FOUND, format!("no machine {id}")))
+                return Err(ApiError::new(
+                    ErrorCode::NotFound,
+                    format!("no machine {id}"),
+                ))
             }
             other => {
                 return Err(ApiError::new(
-                    code::UNAVAILABLE,
+                    ErrorCode::Unavailable,
                     format!("machine {id} is {}, not approved", other.as_str()),
                 ))
             }
@@ -986,7 +961,7 @@ impl Registry {
                 queued: false,
             }),
             Ok(Err(msg)) => Err(ApiError::new(
-                code::UNAVAILABLE,
+                ErrorCode::Unavailable,
                 format!("machine {id} refused it: {msg}"),
             )),
             // The connection ended before an answer: keep it for the next.
@@ -1007,7 +982,7 @@ impl Registry {
                     c.acks.remove(&req);
                 }
                 Err(ApiError::new(
-                    code::UNAVAILABLE,
+                    ErrorCode::Unavailable,
                     format!(
                         "machine {id} did not acknowledge within {} s",
                         self.limits.ack_timeout.as_secs()
@@ -1030,7 +1005,10 @@ impl Registry {
         if reg.nodes.contains_key(id) || reg.desired.contains_key(id) {
             Ok(())
         } else {
-            Err(ApiError::new(code::NOT_FOUND, format!("no machine {id}")))
+            Err(ApiError::new(
+                ErrorCode::NotFound,
+                format!("no machine {id}"),
+            ))
         }
     }
 
@@ -1113,7 +1091,7 @@ impl Registry {
         let request = crate::claude::sessions::mint_request();
         self.deliver(
             id,
-            "claude.sessions",
+            Capability::ClaudeSessions,
             "a session verb",
             "Claude is not run there",
             name::CLAUDE_SESSION,
@@ -1141,7 +1119,7 @@ impl Registry {
     ) -> Result<ProviderModelSent, ApiError> {
         self.deliver(
             id,
-            "providers.residency",
+            Capability::ProvidersResidency,
             "a residency verb",
             "it reads no providers",
             name::PROVIDER_MODEL,
@@ -1160,7 +1138,7 @@ impl Registry {
     fn deliver<P: serde::Serialize>(
         &self,
         id: &str,
-        capability: &str,
+        capability: Capability,
         what: &str,
         without: &str,
         m: &str,
@@ -1170,11 +1148,14 @@ impl Registry {
         match reg.state_of(id) {
             NodeState::Approved => {}
             NodeState::Unknown if !reg.desired.contains_key(id) && !reg.nodes.contains_key(id) => {
-                return Err(ApiError::new(code::NOT_FOUND, format!("no machine {id}")))
+                return Err(ApiError::new(
+                    ErrorCode::NotFound,
+                    format!("no machine {id}"),
+                ))
             }
             other => {
                 return Err(ApiError::new(
-                    code::UNAVAILABLE,
+                    ErrorCode::Unavailable,
                     format!("machine {id} is {}, not approved", other.as_str()),
                 ))
             }
@@ -1183,16 +1164,16 @@ impl Registry {
             .nodes
             .get(id)
             .and_then(|e| e.hello.as_ref())
-            .is_some_and(|h| h.capabilities.iter().any(|c| c == capability));
+            .is_some_and(|h| h.capabilities.contains(&capability));
         let Some(conn) = reg.nodes.get_mut(id).and_then(|e| e.conn.as_mut()) else {
             return Err(ApiError::new(
-                code::UNAVAILABLE,
+                ErrorCode::Unavailable,
                 format!("machine {id} is not connected; {what} is never kept for later"),
             ));
         };
         if !offers {
             return Err(ApiError::new(
-                code::UNSUPPORTED,
+                ErrorCode::Unsupported,
                 format!("machine {id} does not offer `{capability}` ({without})"),
             ));
         }
@@ -1204,11 +1185,11 @@ impl Registry {
         match rx.recv_timeout(self.limits.ack_timeout) {
             Ok(Ok(())) => Ok(()),
             Ok(Err(msg)) => Err(ApiError::new(
-                code::UNAVAILABLE,
+                ErrorCode::Unavailable,
                 format!("machine {id} refused it: {msg}"),
             )),
             Err(RecvTimeoutError::Disconnected) => Err(ApiError::new(
-                code::UNAVAILABLE,
+                ErrorCode::Unavailable,
                 format!("machine {id} left before acknowledging it"),
             )),
             Err(RecvTimeoutError::Timeout) => {
@@ -1217,7 +1198,7 @@ impl Registry {
                     c.acks.remove(&req);
                 }
                 Err(ApiError::new(
-                    code::UNAVAILABLE,
+                    ErrorCode::Unavailable,
                     format!(
                         "machine {id} did not acknowledge within {} s",
                         self.limits.ack_timeout.as_secs()
@@ -1255,7 +1236,7 @@ impl Registry {
             os: String,
             agent_version: String,
             connected: bool,
-            offered: Vec<String>,
+            offer_lemonade: bool,
             telemetry: Option<Telemetry>,
             claude: Option<Report>,
             providers: Option<Vec<ProviderReport>>,
@@ -1280,7 +1261,7 @@ impl Registry {
                         os: h.os.clone(),
                         agent_version: h.agent_version.clone(),
                         connected,
-                        offered: d.offered.clone(),
+                        offer_lemonade: d.offer_lemonade,
                         // A machine that left says nothing but its `link_up`
                         // (below): only a connected one's are copied.
                         telemetry: e
@@ -1332,7 +1313,7 @@ impl Registry {
                 if let Some(list) = &r.providers {
                     out.push_str(&crate::telemetry::providers_text(
                         list,
-                        |k| r.offered.iter().any(|o| o == k),
+                        |k| k == ProviderKind::Lemonade && r.offer_lemonade,
                         &labels,
                     ));
                 }

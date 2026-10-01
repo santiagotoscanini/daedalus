@@ -97,11 +97,14 @@ describe('the desired set', () => {
       // metrics: nothing else of the box's own (names,
       // models, hardware), the workdir trimmed.
       policy: {
-        awake_hold: false,
-        claude_remote_control: true,
-        claude_workdir: 'C:/p',
-        santree: true,
-        providers: { lemonade: { port: 8000, offer: true } },
+        policy: {
+          awake_hold: false,
+          claude_remote_control: true,
+          claude_workdir: 'C:/p',
+          santree: true,
+          providers: { lemonade: { port: 8000 } },
+        },
+        offer_lemonade: true,
       },
     })
     // A revoked key hears no policy, santree or not: the allow-list never holds it.
@@ -114,10 +117,13 @@ describe('the desired set', () => {
     expect(byId.get(nodeIdOf(KEY_C))).not.toHaveProperty('name')
     // The agent's defaults for an empty policy; no workdir key at all.
     expect(byId.get(nodeIdOf(KEY_C))?.policy).toEqual({
-      awake_hold: true,
-      claude_remote_control: true,
-      santree: false,
-      providers: { lemonade: { port: 13305, offer: false } },
+      policy: {
+        awake_hold: true,
+        claude_remote_control: true,
+        santree: false,
+        providers: { lemonade: { port: 13305 } },
+      },
+      offer_lemonade: false,
     })
     // Sorted by id, so the same table sends the same set.
     expect(nodes.map((n) => n.id)).toEqual([...nodes.map((n) => n.id)].sort())

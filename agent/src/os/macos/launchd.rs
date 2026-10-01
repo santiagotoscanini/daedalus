@@ -383,9 +383,8 @@ pub fn uninstall_app() -> Result<()> {
     unsafe {
         libc::setsid();
     }
-    match crate::local::call_within(
-        "enroll.leave",
-        serde_json::Value::Null,
+    match crate::local::call_within::<String>(
+        &crate::local::LocalRequest::EnrollLeave,
         crate::local::ENROLL_DEADLINE,
     ) {
         Ok(_) => println!("logged out of the box"),

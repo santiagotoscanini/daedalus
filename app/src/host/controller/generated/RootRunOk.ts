@@ -3,9 +3,8 @@ import type { RootOutcome } from "./RootOutcome";
 import type { RootVerb } from "./RootVerb";
 
 /**
- * `root.run`'s answer: how the verb ended, with the run's id (its
- * `root.progress` events carry it, and `root.follow` takes it) and, for
- * `status`, every verb. `outcome` is null only for a `detach` run that
+ * `root.run`'s answer: how the verb ended, with the run's id (`root.follow`
+ * takes it) and, for `status`, every verb. `outcome` is null only for a `detach` run that
  * started and goes on.
  */
 export type RootRunOk = { run: string, verb: string, outcome: RootOutcome | null, detail: string, verbs?: Array<RootVerb>, };

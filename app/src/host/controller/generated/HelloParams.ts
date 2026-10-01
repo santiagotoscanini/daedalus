@@ -2,8 +2,8 @@
 
 /**
  * `hello`'s parameters: the version the client speaks, and who it is (for
- * the log). Other fields are ignored, and the version is read before
- * anything else (`hello_api`), so a newer client is always told which
- * version this agent speaks.
+ * the log, and required). Other fields are ignored, and a missing `client`
+ * is refused only after the version is checked (conn.rs), so a newer client
+ * is always told which version this agent speaks.
  */
 export type HelloParams = { api: number, client: string, };

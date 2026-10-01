@@ -65,7 +65,7 @@ function restartConfirm(livePtys: number): string {
 
 /**
  * The line, or null on a box without a session host (the controller answers
- * `unavailable`), where the page shows nothing. A controller that cannot be
+ * `unsupported`), where the page shows nothing. A controller that cannot be
  * asked is a line that says why.
  */
 export async function readSessionHost(
@@ -74,7 +74,7 @@ export async function readSessionHost(
   try {
     return sessionHostLine(await ctx.controller.santreeStatus())
   } catch (e) {
-    if (e instanceof ControllerError && e.code === 'unavailable') return null
+    if (e instanceof ControllerError && e.code === 'unsupported') return null
     return {
       chip: 'unknown',
       tone: 'muted',

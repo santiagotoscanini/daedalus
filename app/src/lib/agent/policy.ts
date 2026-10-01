@@ -40,26 +40,23 @@ export function effectivePolicy(p: NodePolicy): EffectivePolicy {
 }
 
 /**
- * The agent's `Policy` on the wire (`DesiredPolicy`, generated from wire.rs):
- * the controller takes it exactly (deny_unknown_fields), so a key it does not
- * know would refuse the whole desired set.
+ * The machine's policy as the controller takes it (`DesiredPolicy`, generated
+ * from wire.rs): the agent's `Policy`, and whether the gateway is offered the
+ * machine's lemonade — which the controller keeps for `/nodes/metrics` (the
+ * "Model Server Down" alert fires on offered ones) and the machine is not told.
  */
 export function wirePolicy(p: NodePolicy): DesiredPolicy {
   const e = effectivePolicy(p)
   return {
-    awake_hold: e.awakeHold,
-    claude_remote_control: e.claudeRemoteControl,
-    ...(e.claudeWorkdir === null ? {} : { claude_workdir: e.claudeWorkdir }),
-    santree: e.santree,
-    // Where each provider listens, so the agent reads the right port; and
-    // whether the gateway is offered it, which the controller keeps for
-    // `/nodes/metrics` (the "Model Server Down" alert fires on offered ones).
-    providers: {
-      lemonade: {
-        port: e.providers.lemonade.port,
-        offer: p.providers?.lemonade?.offer === true,
-      },
+    policy: {
+      awake_hold: e.awakeHold,
+      claude_remote_control: e.claudeRemoteControl,
+      ...(e.claudeWorkdir === null ? {} : { claude_workdir: e.claudeWorkdir }),
+      santree: e.santree,
+      // Where each provider listens, so the agent reads the right port.
+      providers: { lemonade: { port: e.providers.lemonade.port } },
     },
+    offer_lemonade: p.providers?.lemonade?.offer === true,
   }
 }
 

@@ -78,6 +78,23 @@ export function literal<const L extends readonly string[]>(...allowed: L): Decod
   }
 }
 
+/**
+ * One word of a union the producer's types name, given as a record over it:
+ * a word the union gains or loses is a compile error at the record, never a
+ * list kept by hand beside it.
+ *
+ *     const capability = oneOf<Capability>({ nodes: true, root: true, … })
+ */
+export function oneOf<U extends string>(words: Record<U, true>): Decoder<U> {
+  const allowed = Object.keys(words)
+  return (v, p) => {
+    if (typeof v !== 'string' || !Object.hasOwn(words, v)) {
+      throw new DecodeError(p, `expected one of ${allowed.join(' | ')}, got ${JSON.stringify(v)}`)
+    }
+    return v as U
+  }
+}
+
 export function nullable<T>(d: Decoder<T>): Decoder<T | null> {
   return (v, p) => (v === null ? null : d(v, p))
 }

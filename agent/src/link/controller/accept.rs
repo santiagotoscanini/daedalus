@@ -17,7 +17,7 @@ use crate::link::wire::{
     self, name, Command, CommandParams, Hello, Incoming, MAX_HELLO_LINE, PROTO,
 };
 use crate::link::MAX_LINE;
-use crate::rpc::{code, ApiError, Response};
+use crate::rpc::{ApiError, ErrorCode, Request, Response};
 
 use super::registry::{busy, ip_bucket, Admission, Out, PreauthSlot, Registry};
 
@@ -128,12 +128,12 @@ fn pre_admission(tls: &mut Tls, deadline: Instant) -> Option<(u64, Hello)> {
         }
     };
     let (req_id, p) = match Incoming::parse(&first) {
-        Ok(Incoming::Request { id, m, p }) if m == name::HELLO => (id, p),
-        Ok(Incoming::Request { id, .. }) => {
+        Ok(Incoming::Request(Request { id, m, p })) if m == name::HELLO => (id, p),
+        Ok(Incoming::Request(Request { id, .. })) => {
             refuse(
                 tls,
                 Some(id),
-                ApiError::new(code::BAD_REQUEST, "the first request must be `hello`"),
+                ApiError::new(ErrorCode::BadRequest, "the first request must be `hello`"),
             );
             return None;
         }
@@ -142,7 +142,7 @@ fn pre_admission(tls: &mut Tls, deadline: Instant) -> Option<(u64, Hello)> {
                 tls,
                 None,
                 ApiError::new(
-                    code::BAD_REQUEST,
+                    ErrorCode::BadRequest,
                     "the first line must be a `hello` request",
                 ),
             );
@@ -157,7 +157,7 @@ fn pre_admission(tls: &mut Tls, deadline: Instant) -> Option<(u64, Hello)> {
         let e = ApiError {
             supported: Some(PROTO),
             ..ApiError::new(
-                code::VERSION,
+                ErrorCode::Version,
                 format!(
                     "this controller speaks link protocol {PROTO}, not {v}; it is daedalus-agent {}",
                     crate::VERSION
@@ -176,7 +176,7 @@ fn pre_admission(tls: &mut Tls, deadline: Instant) -> Option<(u64, Hello)> {
             refuse(
                 tls,
                 Some(req_id),
-                ApiError::new(code::BAD_REQUEST, format!("hello: {e}")),
+                ApiError::new(ErrorCode::BadRequest, format!("hello: {e}")),
             );
             None
         }
@@ -382,7 +382,7 @@ fn converse(
                         }
                         registry.ack(id, conn_id, req, result.map(|_| ()).map_err(|e| e.msg));
                     }
-                    Ok(Incoming::Request { id: rid, m, .. })
+                    Ok(Incoming::Request(Request { id: rid, m, .. }))
                         if m == name::LEAVE && registry.is_approved(id) =>
                     {
                         // Heard and acknowledged, and the machine closes once
@@ -400,20 +400,25 @@ fn converse(
                         }
                         said = Instant::now();
                     }
-                    Ok(Incoming::Request { id: rid, m, p }) if m == name::POLICY_REQUEST => {
+                    Ok(Incoming::Request(Request { id: rid, m, p }))
+                        if m == name::POLICY_REQUEST =>
+                    {
                         // The machine's own settings, asked for: only an
                         // approved machine's, and only what `PolicyRequest`
                         // names (registry.rs `policy_request`).
                         registry.record(id, conn_id, name::HB, Value::Null);
                         let answer = if !registry.is_approved(id) {
                             Err(ApiError::new(
-                                code::UNAVAILABLE,
+                                ErrorCode::Unavailable,
                                 "this machine is not approved",
                             ))
                         } else {
                             serde_json::from_value::<wire::PolicyRequest>(p)
                                 .map_err(|e| {
-                                    ApiError::new(code::BAD_REQUEST, format!("policy_request: {e}"))
+                                    ApiError::new(
+                                        ErrorCode::BadRequest,
+                                        format!("policy_request: {e}"),
+                                    )
                                 })
                                 .and_then(|req| registry.policy_request(id, &req))
                         };
@@ -429,10 +434,10 @@ fn converse(
                         }
                         said = Instant::now();
                     }
-                    Ok(Incoming::Request { id: rid, m, .. }) => {
+                    Ok(Incoming::Request(Request { id: rid, m, .. })) => {
                         registry.record(id, conn_id, name::HB, Value::Null);
                         let e = ApiError::new(
-                            code::UNKNOWN_METHOD,
+                            ErrorCode::UnknownMethod,
                             format!(
                                 "no method `{}` on the controller",
                                 m.chars().take(64).collect::<String>()

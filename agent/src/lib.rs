@@ -412,8 +412,6 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         if let Some(k) = shared.controller_keys() {
             k.tick();
         }
-        // A session that went quiet is news to the API's subscribers.
-        shared.check_claude_fresh();
         let wanted = shared.policy().awake_hold;
         if role.keep_awake && hold_wanted != Some(wanted) {
             hold_wanted = Some(wanted);

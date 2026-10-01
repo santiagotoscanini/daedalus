@@ -80,8 +80,9 @@ use crate::door::{Conn, Peer};
 use crate::identity::Identity;
 use crate::link::tls::{self, Tls};
 use crate::link::wire::Policy;
+use crate::link::LinkState;
 use crate::net::{Dialer, Sock};
-use crate::rpc::{code, error_line, line_of, ApiError, Body, Response};
+use crate::rpc::{error_line, line_of, ApiError, Body, ErrorCode, Response};
 use crate::shared::Shared;
 use crate::util::{LockExt, Rebinding};
 
@@ -103,14 +104,14 @@ const SERVER_NAME: &str = "daedalus-session-host";
 const CHUNK: usize = 16 * 1024;
 
 fn unavailable(msg: impl Into<String>) -> ApiError {
-    ApiError::new(code::UNAVAILABLE, msg)
+    ApiError::new(ErrorCode::Unavailable, msg)
 }
 
 /// Where a santree connection may go — the session host's address and key —
 /// from this machine's standing and its kept policy; the refusal otherwise.
 pub fn admit(
     paired: bool,
-    link_state: Option<&str>,
+    link_state: Option<LinkState>,
     policy: &Policy,
 ) -> Result<(String, [u8; 32]), ApiError> {
     if !paired {
@@ -119,17 +120,17 @@ pub fn admit(
         ));
     }
     match link_state {
-        Some("pending") => {
+        Some(LinkState::Pending) => {
             return Err(unavailable(
                 "the box has not approved this machine yet (Settings › Machines)",
             ))
         }
-        Some("revoked") => return Err(unavailable("the box revoked this machine")),
+        Some(LinkState::Revoked) => return Err(unavailable("the box revoked this machine")),
         _ => {}
     }
     if !policy.santree {
         return Err(ApiError::new(
-            code::SANTREE_OFF,
+            ErrorCode::SantreeOff,
             "santree is off for this machine (Settings › Machines)",
         ));
     }
@@ -161,7 +162,7 @@ pub fn dial(
     Tls::client(sock, config, SERVER_NAME, deadline.timeout(within)).map_err(|e| {
         if tls::pin_refused(&e) {
             ApiError::new(
-                code::HOST_KEY_CHANGED,
+                ErrorCode::HostKeyChanged,
                 format!(
                     "the session host at {address} proved another key than the one the box named; \
                      refusing it"
@@ -192,7 +193,7 @@ impl Ctx {
             }
         }
         let c = tls::pinned_client(&self.identity, key)
-            .map_err(|e| ApiError::new(code::INTERNAL, format!("no TLS client: {e:#}")))?;
+            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("no TLS client: {e:#}")))?;
         *held = Some((*key, Arc::clone(&c)));
         Ok(c)
     }
@@ -201,7 +202,7 @@ impl Ctx {
     fn open(&self) -> Result<(String, Tls), ApiError> {
         let (keys, _) = self.shared.link_keys();
         let state = self.shared.link().and_then(|l| l.state);
-        let (address, key) = admit(keys.paired(), state.as_deref(), &self.shared.policy())?;
+        let (address, key) = admit(keys.paired(), state, &self.shared.policy())?;
         let tls = dial(
             &self.shared.dialer(),
             &address,
@@ -242,7 +243,7 @@ fn serve_one(ctx: &Ctx, mut conn: Conn) {
     let (address, tls) = match ctx.open() {
         Ok(opened) => opened,
         Err(e) => {
-            tracing::info!(uid, pid, code = e.code, why = %e.msg, "santree: refused");
+            tracing::info!(uid, pid, code = %e.code, why = %e.msg, "santree: refused");
             ctx.shared.santree_refused(e.code);
             let _ = conn.writer.write_all(error_line(e.code, e.msg).as_bytes());
             let _ = conn.writer.flush();
@@ -288,7 +289,7 @@ fn door_policy(allow: crate::door::Allow) -> crate::door::Policy {
         allow,
         refusal: Arc::new(refusal),
         busy: error_line(
-            code::BUSY,
+            ErrorCode::Busy,
             format!("at most {MAX_CONNECTIONS} santree connections at once"),
         ),
         max_connections: MAX_CONNECTIONS,
@@ -306,7 +307,7 @@ pub fn refusal(peer: Option<&Peer>) -> String {
         None => "a peer whose credentials could not be read".into(),
     };
     error_line(
-        code::FORBIDDEN,
+        ErrorCode::Forbidden,
         format!(
             "{who} may not use santree's socket (root and the user who installed the agent may)"
         ),

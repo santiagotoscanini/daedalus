@@ -4,7 +4,7 @@ import type {
   Report,
   RolledBack,
   Session,
-  StatusPage,
+  StatusDocument,
   Summary,
   Telemetry,
   TunnelStatus,
@@ -330,7 +330,7 @@ const claude = reads<Report>()(
   }),
 )
 
-const shape = reads<StatusPage>()(
+const shape = reads<StatusDocument>()(
   obj({
     version: str,
     hostname: optional(str, ''),

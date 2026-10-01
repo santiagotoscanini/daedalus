@@ -36,7 +36,7 @@ fn installed_but_silent_is_found_not_running() {
         app("Lemonade Server")
     ]));
     let r = read_lemonade(&on_port(1), true).expect("installed");
-    assert_eq!(r.kind, "lemonade");
+    assert_eq!(r.kind, ProviderKind::Lemonade);
     assert_eq!(r.port, 1);
     assert!(!r.running && !r.healthy);
     assert!(r.models.is_empty());
@@ -154,7 +154,7 @@ fn figures_from_the_exposition() {
 #[test]
 fn the_digest_ignores_the_clock() {
     let a = vec![ProviderReport {
-        kind: "lemonade".into(),
+        kind: ProviderKind::Lemonade,
         read_at: "2026-09-28T10:00:00Z".into(),
         ..Default::default()
     }];
@@ -168,7 +168,7 @@ fn the_digest_ignores_the_clock() {
 #[test]
 fn check_holds_the_bounds() {
     let ok = vec![ProviderReport {
-        kind: "lemonade".into(),
+        kind: ProviderKind::Lemonade,
         read_at: "2026-09-28T10:00:00Z".into(),
         models: vec![ProviderModel {
             id: "m".into(),
