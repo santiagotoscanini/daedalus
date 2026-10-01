@@ -67,7 +67,6 @@ pub(super) fn fetch_verified(rel: &Release, a: &Asset, path: &Path) -> Result<()
     );
     let resp = crate::http::agent()
         .get(&a.url)
-        .set("User-Agent", USER_AGENT)
         .timeout(std::time::Duration::from_secs(600))
         .call()
         .with_context(|| format!("downloading {}", a.local_name))?;

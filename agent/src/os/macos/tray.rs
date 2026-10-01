@@ -351,7 +351,7 @@ fn log_in() -> Result<Option<String>, String> {
     let loopback = Loopback::new().map_err(|e| format!("Not logged in: {e}"))?;
     *NOTE.lock_ok() = Some(format!(
         "Confirm in your browser — this Mac is {}",
-        crate::settings::short_fingerprint(&begin.fingerprint)
+        crate::util::short_fingerprint(&begin.fingerprint)
     ));
     open(&loopback.url(&begin));
     let code = match loopback.wait(LOG_IN_TIMEOUT) {
@@ -390,12 +390,9 @@ pub fn log_out() {
         if asked.is_none() {
             return Ok(None);
         }
-        crate::local::call_within::<String>(
-            &LocalRequest::EnrollLeave,
-            crate::local::ENROLL_DEADLINE,
-        )
-        .map(Some)
-        .map_err(|e| format!("Not logged out: {e}"))
+        crate::local::call_within::<String>(&LocalRequest::EnrollLeave, crate::local::DEADLINE)
+            .map(Some)
+            .map_err(|e| format!("Not logged out: {e}"))
     });
 }
 

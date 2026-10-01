@@ -13,7 +13,8 @@ use std::time::Duration;
 
 /// Windows' LocalSystem.
 pub const SYSTEM_SID: &str = "S-1-5-18";
-/// The longest line a door reads (either way on the local socket).
+/// The longest line any door of this agent reads or writes: the local
+/// socket, the API, the link.
 pub const MAX_LINE: usize = 1 << 20;
 
 /// One connection's transport, as the os layer hands it over.
@@ -95,6 +96,27 @@ pub fn windows_allowed(logged_on: Vec<String>) -> Allowed {
 /// The gate: a peer whose credentials could not be read is refused.
 pub fn peer_allowed(peer: Option<&Peer>, allowed: &Allowed) -> bool {
     peer.is_some_and(|p| allowed.peers.contains(p))
+}
+
+/// The line a peer the door refuses gets before its connection is closed:
+/// who it is, and who `may` use `socket` instead.
+pub fn refusal(socket: &str, peer: Option<&Peer>, may: &str) -> String {
+    let who = peer.map_or_else(
+        || "a peer whose credentials could not be read".to_string(),
+        ToString::to_string,
+    );
+    crate::rpc::error_line(
+        crate::rpc::ErrorCode::Forbidden,
+        format!("{who} may not use {socket} ({may} may)"),
+    )
+}
+
+/// The line a connection past `max` gets before it is closed.
+pub fn busy(max: usize) -> String {
+    crate::rpc::error_line(
+        crate::rpc::ErrorCode::Busy,
+        format!("at most {max} connections at once"),
+    )
 }
 
 /// What a client can learn about the server end without opening the

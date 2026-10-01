@@ -30,7 +30,7 @@ pub fn init_logging_to(
     std::fs::create_dir_all(dir).context("creating the log directory")?;
     let file = tracing_appender::rolling::daily(dir, name);
     let (writer, guard) = tracing_appender::non_blocking(file);
-    let filter = EnvFilter::try_new(&cfg.log_level).unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_new(cfg.log_level.as_str()).context("log_level")?;
     let to_file = fmt::layer()
         .with_writer(writer)
         .with_ansi(false)

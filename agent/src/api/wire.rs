@@ -1307,7 +1307,7 @@ mod tests {
                 r#""uptime_secs":5,"os_uptime_secs":100,"booted_at":"2026-09-27T10:00:00Z","#,
                 r#""role":{"mode":"controller","link":false,"self_update":false,"keep_awake":false,"#,
                 r#""installer":false,"session":true,"session_in_service":true,"claude_update":false,"#,
-                r#""tray":false,"status_on_lan":true,"api_socket":true,"node_listener":true},"#,
+                r#""tray":false,"metrics_page":true,"api_socket":true,"node_listener":true},"#,
                 r#""telemetry":"minimal","capabilities":["claude.remote_control","telemetry.minimal","nodes"],"#,
                 r#""controller":{"public_key":"abababababababababababababababababababababababababababababababab","#,
                 r#""fingerprint":"3f2a:9c01","listen":"0.0.0.0:7788","advertise":["box.lan:7788"],"rotation":null}}"#

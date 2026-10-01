@@ -9,7 +9,7 @@
 //! The knobs, with their defaults:
 //!
 //! ```toml
-//! port = 7787                 # the status page's port (loopback on a node)
+//! port = 7787                 # the controller's metrics page's port (no page on a node)
 //! update_check_secs = 600     # how often the release feed is asked
 //! log_level = "info"
 //! search_domains = []         # more domains to ask for `_daedalus-controller._tcp`
@@ -87,8 +87,10 @@
 //! the gate. Root (uid 0) cannot be listed.
 //!
 //! On a node the table is ignored, except that it must parse: a key it
-//! does not know is an error in every mode, so a typo in what nix writes
-//! fails loudly instead of leaving a default in place.
+//! does not know, or a value that is not what its key takes — a path that
+//! is not absolute, an address that is not host:port — is an error in
+//! every mode, so a typo in what nix writes fails loudly instead of leaving
+//! a default in place. So is a `log_level` that is not a filter.
 //!
 //! The data directory is `C:\ProgramData\daedalus-agent` on Windows,
 //! `/Library/Application Support/daedalus-agent` on macOS and
@@ -132,13 +134,14 @@ pub const DEFAULT_REPO: &str = "santiagotoscanini/daedalus";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    /// The port the status page answers on.
+    /// The port the controller's metrics page answers on (metrics_page.rs);
+    /// a node listens on nothing.
     pub port: u16,
     /// How often the feed is asked, in seconds. GitHub allows 60 unauthenticated
     /// requests an hour from one address; the default spends six.
     pub update_check_secs: u64,
     /// `info` by default; `debug` for a bug report.
-    pub log_level: String,
+    pub log_level: LogLevel,
     /// Search domains to ask for the `_daedalus-controller._tcp` record
     /// besides the ones DHCP handed the adapters.
     pub search_domains: Vec<String>,
@@ -183,13 +186,13 @@ pub struct ControllerConfig {
     pub claude_remote_control: bool,
     /// The directory it runs in; absent = the most recent trusted project.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub claude_workdir: Option<String>,
+    pub claude_workdir: Option<AbsPath>,
     /// Its job's name: the transient systemd user unit, without `.service`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_unit: Option<String>,
     /// Where the local API socket is made.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_socket: Option<PathBuf>,
+    pub api_socket: Option<AbsPath>,
     /// Host uids the socket serves besides the agent's own (module doc).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub api_allowed_uids: Vec<u32>,
@@ -200,7 +203,7 @@ pub struct ControllerConfig {
     /// Where the machines' link is accepted, `address:port`; absent means
     /// the controller listens for no machine.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub listen: Option<String>,
+    pub listen: Option<std::net::SocketAddr>,
     /// The `host:port`s machines should dial, as `system.info` names them
     /// to the app; one, or a list.
     #[serde(
@@ -208,7 +211,7 @@ pub struct ControllerConfig {
         deserialize_with = "one_or_many",
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub advertise: Vec<String>,
+    pub advertise: Vec<HostPort>,
     /// The session host on this box (`[controller.session_host]`): the
     /// controller writes its allow-list and reads its status file
     /// (session_host.rs). Absent means there is none.
@@ -223,18 +226,18 @@ pub struct ControllerConfig {
 pub struct SessionHostConfig {
     /// Where machines dial it, `host:port`: handed to each santree node in
     /// its policy.
-    pub address: String,
+    pub address: HostPort,
     /// The allow-list the controller writes and the host reads.
-    pub allow_list: PathBuf,
+    pub allow_list: AbsPath,
     /// The status file the host writes and the controller reads.
-    pub status_file: PathBuf,
+    pub status_file: AbsPath,
     /// The installed binary, as `/proc/self/exe` names it: a running host
     /// whose `exe` differs has an update waiting for a restart.
-    pub bin: PathBuf,
+    pub bin: AbsPath,
     /// The installed host's `--config` file: a running host whose `config`
     /// differs was started on another one (a port, a root), and a restart
     /// applies it too.
-    pub config: PathBuf,
+    pub config: AbsPath,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -270,6 +273,118 @@ pub enum UpdateMode {
     Report,
 }
 
+/// `log_level`: a tracing filter (`info`, `debug`, `daedalus_agent=debug`),
+/// checked when config.toml is read — one that does not parse stops the
+/// agent with the reason rather than leaving it at `info` unsaid.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct LogLevel(String);
+
+impl LogLevel {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        Self("info".into())
+    }
+}
+
+impl TryFrom<String> for LogLevel {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        tracing_subscriber::EnvFilter::try_new(&s).map_err(|e| {
+            format!("log_level {s:?} is not a filter such as \"info\" or \"debug\": {e}")
+        })?;
+        Ok(Self(s))
+    }
+}
+
+impl From<LogLevel> for String {
+    fn from(l: LogLevel) -> Self {
+        l.0
+    }
+}
+
+/// `host:port`, `a.b.c.d:port` or `[v6]:port`, with a port that is not 0
+/// (`valid_host_port`), at most 255 characters.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct HostPort(String);
+
+impl HostPort {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for HostPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl TryFrom<String> for HostPort {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        if s.len() > 255 || !valid_host_port(&s) {
+            return Err(format!("{s:?} is not host:port"));
+        }
+        Ok(Self(s))
+    }
+}
+
+impl TryFrom<&str> for HostPort {
+    type Error = String;
+    fn try_from(s: &str) -> Result<Self, String> {
+        s.to_string().try_into()
+    }
+}
+
+impl From<HostPort> for String {
+    fn from(h: HostPort) -> Self {
+        h.0
+    }
+}
+
+/// An absolute path: a relative one would resolve against whatever
+/// directory the process started in.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "PathBuf", into = "PathBuf")]
+pub struct AbsPath(PathBuf);
+
+impl std::ops::Deref for AbsPath {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl TryFrom<PathBuf> for AbsPath {
+    type Error = String;
+    fn try_from(p: PathBuf) -> Result<Self, String> {
+        if !p.is_absolute() {
+            return Err(format!("{} is not an absolute path", p.display()));
+        }
+        Ok(Self(p))
+    }
+}
+
+impl TryFrom<&str> for AbsPath {
+    type Error = String;
+    fn try_from(p: &str) -> Result<Self, String> {
+        PathBuf::from(p).try_into()
+    }
+}
+
+impl From<AbsPath> for PathBuf {
+    fn from(p: AbsPath) -> Self {
+        p.0
+    }
+}
+
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
 }
@@ -279,7 +394,7 @@ impl Default for Config {
         Self {
             port: 7787,
             update_check_secs: 600,
-            log_level: "info".into(),
+            log_level: LogLevel::default(),
             search_domains: Vec::new(),
             controller_address: None,
             controller_pin: None,
@@ -311,7 +426,11 @@ impl Config {
             Mode::Controller => crate::link::wire::Policy {
                 awake_hold: false,
                 claude_remote_control: self.controller.claude_remote_control,
-                claude_workdir: self.controller.claude_workdir.clone(),
+                claude_workdir: self
+                    .controller
+                    .claude_workdir
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().into_owned()),
                 ..Default::default()
             },
         }
@@ -333,7 +452,7 @@ impl Config {
     /// Where the local API socket is made (module doc).
     pub fn api_socket(&self) -> PathBuf {
         resolve_api_socket(
-            non_empty(self.controller.api_socket.clone()),
+            self.controller.api_socket.clone().map(PathBuf::from),
             std::env::var_os("XDG_RUNTIME_DIR"),
             data_dir,
         )
@@ -342,10 +461,10 @@ impl Config {
     /// Where the controller accepts the machines' link; None when
     /// `[controller] listen` names nothing (or this is not the controller).
     pub fn controller_listen(&self) -> Option<std::net::SocketAddr> {
-        if self.mode != Mode::Controller {
-            return None;
+        match self.mode {
+            Mode::Controller => self.controller.listen,
+            Mode::Node => None,
         }
-        non_empty_str(self.controller.listen.as_deref()).and_then(|l| l.parse().ok())
     }
 
     pub fn update_interval(&self) -> Duration {
@@ -373,19 +492,6 @@ impl Config {
         // `[controller]` is read only in controller mode, so only there can
         // it stop the agent.
         if self.mode == Mode::Controller {
-            if let Some(p) = non_empty(self.controller.api_socket.clone()) {
-                if !p.is_absolute() {
-                    bail!(
-                        "controller.api_socket must be an absolute path, not {}",
-                        p.display()
-                    );
-                }
-            }
-            if let Some(w) = non_empty_str(self.controller.claude_workdir.as_deref()) {
-                if !Path::new(w).is_absolute() {
-                    bail!("controller.claude_workdir must be an absolute path, not {w}");
-                }
-            }
             let uids = &self.controller.api_allowed_uids;
             if uids.contains(&0) {
                 bail!("controller.api_allowed_uids may not name root (uid 0)");
@@ -398,43 +504,12 @@ impl Config {
             if uids.contains(&65534) {
                 bail!("controller.api_allowed_uids may not name uid 65534 (the overflow uid unmapped peers get)");
             }
-            if let Some(l) = non_empty_str(self.controller.listen.as_deref()) {
-                if l.parse::<std::net::SocketAddr>().is_err() {
-                    bail!("controller.listen must be an address and port such as 0.0.0.0:7788, not {l:?}");
-                }
-            }
-            for a in &self.controller.advertise {
-                if !valid_host_port(a) {
-                    bail!("controller.advertise names host:port pairs, not {a:?}");
-                }
-            }
             if let Some(u) = non_empty_str(self.controller.claude_unit.as_deref()) {
                 if !valid_unit_name(u) {
                     bail!(
                         "controller.claude_unit must be a plain unit name (letters, digits, \
                          `-`, `_`, `.`, `:`; not starting with `-`; without `.service`), not {u:?}"
                     );
-                }
-            }
-            if let Some(s) = &self.controller.session_host {
-                if s.address.len() > 255 || !valid_host_port(&s.address) {
-                    bail!(
-                        "controller.session_host.address is host:port, not {:?}",
-                        s.address
-                    );
-                }
-                for (key, p) in [
-                    ("allow_list", &s.allow_list),
-                    ("status_file", &s.status_file),
-                    ("bin", &s.bin),
-                    ("config", &s.config),
-                ] {
-                    if !p.is_absolute() {
-                        bail!(
-                            "controller.session_host.{key} must be an absolute path, not {}",
-                            p.display()
-                        );
-                    }
                 }
             }
         }
@@ -461,12 +536,16 @@ pub fn valid_host_port(s: &str) -> bool {
 }
 
 /// `advertise` as one string or a list of them.
-fn one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+fn one_or_many<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
     #[derive(Deserialize)]
     #[serde(untagged)]
-    enum OneOrMany {
-        One(String),
-        Many(Vec<String>),
+    enum OneOrMany<T> {
+        One(T),
+        Many(Vec<T>),
     }
     Ok(match OneOrMany::deserialize(d)? {
         OneOrMany::One(s) => vec![s],
@@ -715,7 +794,7 @@ mod tests {
             Config {
                 port: 7790,
                 update_check_secs: 1200,
-                log_level: "debug".into(),
+                log_level: "debug".to_string().try_into().unwrap(),
                 search_domains: vec!["lan".into()],
                 ..Config::default()
             }
@@ -749,6 +828,18 @@ mod tests {
         assert!(text.contains("mode = \"controller\""), "{text}");
         assert!(text.contains("updates = \"report\""), "{text}");
         assert!(text.contains("data_dir = \"/srv/agent\""), "{text}");
+    }
+
+    /// A `log_level` that is no filter stops the agent, saying so — never a
+    /// silent `info`.
+    #[test]
+    fn a_log_level_is_a_filter_or_refused() {
+        let ok: Config = toml::from_str("log_level = \"daedalus_agent=debug,info\"").unwrap();
+        assert_eq!(ok.log_level.as_str(), "daedalus_agent=debug,info");
+        for bad in ["verbose=7", "x=loud"] {
+            let e = toml::from_str::<Config>(&format!("log_level = \"{bad}\"")).unwrap_err();
+            assert!(e.to_string().contains("log_level"), "{bad}: {e}");
+        }
     }
 
     #[test]
@@ -792,11 +883,13 @@ mod tests {
         assert!(!p.awake_hold && !p.claude_remote_control && p.claude_workdir.is_none());
         assert_eq!(bare.claude_unit(), claude_unit_name());
 
-        // The same table on a node changes nothing, and never stops it.
-        let node: Config = toml::from_str(
-            "[controller]\nclaude_remote_control = false\nclaude_unit = \"-x\"\napi_socket = \"rel\"\n",
-        )
-        .unwrap();
+        // The same table on a node changes nothing, and a value only the
+        // controller checks (its unit's name) never stops it; one that is
+        // not what its key takes does not parse, in any mode.
+        let node: Config =
+            toml::from_str("[controller]\nclaude_remote_control = false\nclaude_unit = \"-x\"\n")
+                .unwrap();
+        assert!(toml::from_str::<Config>("[controller]\napi_socket = \"rel\"\n").is_err());
         assert!(node.validate().is_ok());
         assert_eq!(node.initial_policy(), crate::link::wire::Policy::default());
         assert_eq!(node.claude_unit(), claude_unit_name());
@@ -806,10 +899,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn the_controller_table_is_checked_in_controller_mode() {
+        // Read as the agent reads it: parsed, then checked.
         let check = |table: &str| {
             toml::from_str::<Config>(&format!("mode = \"controller\"\n[controller]\n{table}"))
-                .unwrap()
-                .validate()
+                .map_err(anyhow::Error::from)
+                .and_then(|c| c.validate())
         };
         assert!(check("api_socket = \"rel/api.sock\"").is_err());
         assert!(check("claude_unit = \"-rf\"").is_err());
@@ -841,7 +935,7 @@ mod tests {
         .unwrap();
         assert!(ok.validate().is_ok());
         let s = ok.controller.session_host.as_ref().unwrap();
-        assert_eq!(s.allow_list, PathBuf::from("/c/allow.json"));
+        assert_eq!(&*s.allow_list, Path::new("/c/allow.json"));
         assert!(check(&host("box.example.org", "/c/a.json")).is_err());
         assert!(check(&host("box.example.org:7789", "c/a.json")).is_err());
         assert!(check(
@@ -986,10 +1080,11 @@ mod tests {
         ] {
             assert!(!valid_host_port(bad), "{bad}");
         }
+        // Read as the agent reads it: parsed, then checked.
         let check = |table: &str| {
             toml::from_str::<Config>(&format!("mode = \"controller\"\n[controller]\n{table}"))
-                .unwrap()
-                .validate()
+                .map_err(anyhow::Error::from)
+                .and_then(|c| c.validate())
         };
         assert!(check("listen = \"0.0.0.0:7788\"").is_ok());
         assert!(check("listen = \"box.lan:7788\"").is_err());
@@ -1004,7 +1099,10 @@ mod tests {
             cfg.controller_listen(),
             Some("127.0.0.1:7788".parse().unwrap())
         );
-        assert_eq!(cfg.controller.advertise, ["box.lan:7788"]);
+        assert_eq!(
+            cfg.controller.advertise,
+            ["box.lan:7788".try_into().unwrap()]
+        );
         // A node never listens, whatever the table says.
         let node: Config = toml::from_str("[controller]\nlisten = \"127.0.0.1:7788\"\n").unwrap();
         assert_eq!(node.controller_listen(), None);

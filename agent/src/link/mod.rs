@@ -68,8 +68,6 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-/// The longest line either side sends or reads: the local API's.
-pub const MAX_LINE: usize = crate::api::MAX_LINE;
 /// How long one read waits before the loop looks at its queue again.
 pub const TICK: Duration = Duration::from_millis(200);
 /// How often each side says it is there.

@@ -128,11 +128,15 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     let listener = listen("127.0.0.1:0".parse().unwrap(), &ctl, Arc::clone(&registry)).unwrap();
     let host = SessionHost::new(
         SessionHostConfig {
-            address: host_addr.to_string(),
-            allow_list: allow.clone(),
-            status_file: d.join("state").join("status.json"),
-            bin: "/nix/store/x-daedalus-session-host/bin/daedalus-session-host".into(),
-            config: "/nix/store/y-daedalus-session-host.json".into(),
+            address: host_addr.to_string().try_into().unwrap(),
+            allow_list: allow.clone().try_into().unwrap(),
+            status_file: d.join("state").join("status.json").try_into().unwrap(),
+            bin: "/nix/store/x-daedalus-session-host/bin/daedalus-session-host"
+                .try_into()
+                .unwrap(),
+            config: "/nix/store/y-daedalus-session-host.json"
+                .try_into()
+                .unwrap(),
         },
         Arc::clone(&registry),
     );

@@ -245,7 +245,7 @@ fn enroll_finish(args: &[String]) -> Result<()> {
     };
     let said: String = daedalus_agent::local::call_within(
         &LocalRequest::EnrollFinish(daedalus_agent::local::FinishParams { code: code.clone() }),
-        daedalus_agent::local::ENROLL_DEADLINE,
+        daedalus_agent::local::DEADLINE,
     )?;
     println!("{said}");
     Ok(())

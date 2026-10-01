@@ -77,14 +77,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::claude::{Report, Roster};
-use crate::door::{Conn, Peer, Policy};
+use crate::door::{Conn, Peer, Policy, MAX_LINE};
 use crate::jsonl::LineReader;
-use crate::rpc::{error_line, line_of, methods, ApiError, ErrorCode, Incoming, Response};
+use crate::rpc::{line_of, methods, ApiError, ErrorCode, Incoming, Response};
 use crate::shared::Shared;
 use crate::util::Rebinding;
 
-/// The longest line either way.
-pub const MAX_LINE: usize = crate::door::MAX_LINE;
 /// The whole exchange, from connect to the answer: room for the slowest
 /// method, a log-in's redeem at the app (enroll.rs `REDEEM_TIMEOUT`).
 pub const DEADLINE: Duration = Duration::from_secs(15);
@@ -101,7 +99,7 @@ pub fn policy(allow: crate::door::Allow, max: usize, deadline: Duration) -> Poli
         what: "local",
         allow,
         refusal: Arc::new(refusal),
-        busy: too_many(max),
+        busy: crate::door::busy(max),
         max_connections: max,
         first_line: deadline,
         write_timeout: deadline,
@@ -123,21 +121,10 @@ pub fn service_policy() -> Policy {
 
 /// The line a refused peer gets before its connection is closed.
 pub fn refusal(peer: Option<&Peer>) -> String {
-    let who = match peer {
-        Some(p) => p.to_string(),
-        None => "a peer whose credentials could not be read".into(),
-    };
-    error_line(
-        ErrorCode::Forbidden,
-        format!("{who} may not use this agent's socket (root, the service's own user and the user it runs Claude for may)"),
-    )
-}
-
-/// The line a connection past the limit gets.
-pub fn too_many(max: usize) -> String {
-    error_line(
-        ErrorCode::Busy,
-        format!("at most {max} connections at once"),
+    crate::door::refusal(
+        "this agent's socket",
+        peer,
+        "root, the service's own user and the user it runs Claude for",
     )
 }
 
@@ -517,10 +504,6 @@ pub fn call<T: DeserializeOwned>(req: &LocalRequest) -> Result<T, CallError> {
     call_at(&crate::paths::local_socket(), req)
 }
 
-/// A log-in's or log-out's whole exchange (enroll.rs): a redeem at the app,
-/// or the controller's goodbye, inside the service's own `DEADLINE`.
-pub const ENROLL_DEADLINE: Duration = DEADLINE;
-
 /// `call` for a method that takes longer than `CLIENT_DEADLINE`, from a
 /// thread that may wait.
 pub fn call_within<T: DeserializeOwned>(
@@ -635,7 +618,7 @@ mod tests {
              (root, the service's own user and the user it runs Claude for may)\"}}\n"
         );
         assert_eq!(
-            too_many(16),
+            crate::door::busy(16),
             "{\"id\":null,\"err\":{\"code\":\"busy\",\"msg\":\"at most 16 connections at once\"}}\n"
         );
         // A unit method sent with an empty object is still that method.

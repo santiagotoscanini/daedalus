@@ -40,12 +40,12 @@ claude_update: boolean,
 tray: boolean, 
 /**
  * The metrics page answers on every interface's `port`: `/healthz`
- * and `/nodes/metrics` (status.rs) — the box's Prometheus container
+ * and `/nodes/metrics` (metrics_page.rs) — the box's Prometheus container
  * reaches it through pasta's host alias, and the host firewall keeps
  * the port closed to the LAN. A node has no page: it listens on
  * nothing, loopback included.
  */
-status_on_lan: boolean, 
+metrics_page: boolean, 
 /**
  * The local API socket is served (api/).
  */

@@ -139,14 +139,12 @@ use serde_json::value::RawValue;
 use crate::config::{Config, TelemetryLevel};
 use crate::link::wire::Policy;
 use crate::role::Role;
-use crate::rpc::{error_line, ApiError, ErrorCode, Events};
+use crate::rpc::{ApiError, ErrorCode, Events};
 use crate::shared::{ControllerParts, Shared};
 use wire::{ApiRequest, Capability, ClaudeStatus, OsInfo, Queued, SystemInfo, TelemetryGet};
 
 /// The API version this agent speaks.
 pub const API_VERSION: u32 = 1;
-/// The longest line read or accepted, request or otherwise.
-pub const MAX_LINE: usize = 1 << 20;
 /// Requests one connection may have in flight before `busy`.
 pub const MAX_IN_FLIGHT: usize = 32;
 /// Connections served at once.
@@ -162,56 +160,36 @@ pub const ROOT_SILENCE: Duration = Duration::from_secs(2 * 60 * 60);
 /// waiting for it (the run goes on, and `root.follow` reads it).
 pub const ROOT_DETACH_WAIT: Duration = Duration::from_secs(30);
 
-/// What the socket enforces before a connection reaches `conn` (the os
-/// layer applies it; `Limits::of` is the service's).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Limits {
-    /// Host uids served besides the agent's own.
-    pub allowed_uids: Vec<u32>,
-    pub max_connections: usize,
-    pub hello_deadline: Duration,
-    pub write_timeout: Duration,
-}
-
-impl Limits {
-    pub fn of(cfg: &Config) -> Self {
-        Self {
-            allowed_uids: cfg.controller.api_allowed_uids.clone(),
-            max_connections: MAX_CONNECTIONS,
-            hello_deadline: HELLO_DEADLINE,
-            write_timeout: WRITE_TIMEOUT,
-        }
-    }
-
-    /// The door's policy (door.rs): this agent's own uid and the listed
-    /// ones, `hello` within its deadline, the file modes opened to others
-    /// when uids are listed.
-    pub fn policy(&self) -> crate::door::Policy {
-        let own = crate::os::own_uid().unwrap_or(u32::MAX);
-        let listed = self.allowed_uids.clone();
-        let uid = |p: Option<&crate::door::Peer>| match p {
-            Some(crate::door::Peer::Uid(u)) => Some(*u),
-            _ => None,
-        };
-        crate::door::Policy {
-            what: "api",
-            allow: std::sync::Arc::new(move |p| peer_allowed(uid(p), own, &listed)),
-            refusal: std::sync::Arc::new(move |p| refusal(uid(p))),
-            busy: too_many(self.max_connections),
-            max_connections: self.max_connections,
-            first_line: self.hello_deadline,
-            write_timeout: self.write_timeout,
-            whole: None,
-            open_to_others: !self.allowed_uids.is_empty(),
-        }
+/// The door's policy (door.rs), what the socket enforces before a
+/// connection reaches `conn`: the peer's uid, as the kernel states it, is
+/// this agent's own or one config.toml lists (`peer_allowed`, a peer whose
+/// credentials could not be read refused); `hello` within its deadline;
+/// the file modes opened to others when uids are listed.
+/// Whom the API serves: this agent's own uid and the listed ones — root
+/// only when it is the agent's own.
+fn allowed(own_uid: u32, listed: &[u32]) -> crate::door::Allowed {
+    crate::door::Allowed {
+        peers: std::iter::once(own_uid)
+            .chain(listed.iter().copied())
+            .map(crate::door::Peer::Uid)
+            .collect(),
     }
 }
 
-/// The one check on who may talk to the API: the peer's uid, as the kernel
-/// states it, is this agent's own or one config.toml lists. A peer whose
-/// credentials could not be read is refused.
-pub fn peer_allowed(peer_uid: Option<u32>, own_uid: u32, listed: &[u32]) -> bool {
-    peer_uid.is_some_and(|p| p == own_uid || listed.contains(&p))
+pub fn policy(cfg: &Config) -> crate::door::Policy {
+    let listed = &cfg.controller.api_allowed_uids;
+    let allowed = allowed(crate::os::own_uid().unwrap_or(u32::MAX), listed);
+    crate::door::Policy {
+        what: "api",
+        allow: Arc::new(move |p| crate::door::peer_allowed(p, &allowed)),
+        refusal: Arc::new(refusal),
+        busy: crate::door::busy(MAX_CONNECTIONS),
+        max_connections: MAX_CONNECTIONS,
+        first_line: HELLO_DEADLINE,
+        write_timeout: WRITE_TIMEOUT,
+        whole: None,
+        open_to_others: !listed.is_empty(),
+    }
 }
 
 /// What the controller serves beyond its config, as it starts: machines
@@ -426,7 +404,7 @@ impl Api {
                 },
             }),
             R::ActionsGet(q) => {
-                // A request id is what `mint_request` makes: sixteen lowercase hex.
+                // A request id is what `util::mint_id` makes: sixteen lowercase hex.
                 if !wire::valid_node_id(&q.request) {
                     return Err(ApiError::new(
                         ErrorCode::BadRequest,
@@ -521,7 +499,7 @@ impl Api {
                     model: c.model,
                     pinned: c.pinned.unwrap_or(false),
                     replacing: c.replacing,
-                    request: crate::claude::sessions::mint_request(),
+                    request: crate::util::mint_id(),
                 };
                 p.check()
                     .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
@@ -585,7 +563,7 @@ impl Api {
                 ),
             ));
         }
-        let run = crate::claude::sessions::mint_request();
+        let run = crate::util::mint_id();
         let verb = p.verb.clone();
         let request = root::Request {
             verb: p.verb,
@@ -829,36 +807,24 @@ fn desired_entries(
 pub fn serve(cfg: &Config, shared: Arc<Shared>) -> Result<crate::os::LocalSocket> {
     let path = cfg.api_socket();
     let api = Arc::new(Api::new(shared, cfg));
-    let limits = Limits::of(cfg);
-    let socket = crate::os::serve_api_socket(&path, &limits.policy(), move |c| {
+    let socket = crate::os::serve_api_socket(&path, &policy(cfg), move |c| {
         conn::serve_connection(Arc::clone(&api), c);
     })?;
     tracing::info!(
         socket = %path.display(),
         api = API_VERSION,
-        allowed_uids = ?limits.allowed_uids,
+        allowed_uids = ?cfg.controller.api_allowed_uids,
         "local API answering"
     );
     Ok(socket)
 }
 
 /// The line a refused peer gets before its connection is closed.
-pub fn refusal(peer_uid: Option<u32>) -> String {
-    let who = match peer_uid {
-        Some(uid) => format!("uid {uid}"),
-        None => "a peer whose credentials could not be read".into(),
-    };
-    error_line(
-        ErrorCode::Forbidden,
-        format!("{who} may not use this socket (the agent's own uid and controller.api_allowed_uids may)"),
-    )
-}
-
-/// The line a connection past `max` gets before it is closed.
-pub fn too_many(max: usize) -> String {
-    error_line(
-        ErrorCode::Busy,
-        format!("at most {max} connections at once; closing"),
+pub fn refusal(peer: Option<&crate::door::Peer>) -> String {
+    crate::door::refusal(
+        "this socket",
+        peer,
+        "the agent's own uid and controller.api_allowed_uids",
     )
 }
 
@@ -869,33 +835,42 @@ mod tests {
 
     #[test]
     fn the_agents_own_uid_and_the_listed_ones_are_served() {
-        assert!(peer_allowed(Some(1000), 1000, &[]));
+        use crate::door::{peer_allowed, Peer};
+        let served = |peer: Option<u32>, own: u32, listed: &[u32]| {
+            peer_allowed(peer.map(Peer::Uid).as_ref(), &allowed(own, listed))
+        };
+        assert!(served(Some(1000), 1000, &[]));
         // Another user on the machine, root included.
-        assert!(!peer_allowed(Some(1001), 1000, &[]));
-        assert!(!peer_allowed(Some(0), 1000, &[]));
+        assert!(!served(Some(1001), 1000, &[]));
+        assert!(!served(Some(0), 1000, &[]));
         // Credentials that could not be read are no credentials.
-        assert!(!peer_allowed(None, 1000, &[]));
-        assert!(!peer_allowed(None, 1000, &[100999]));
+        assert!(!served(None, 1000, &[]));
+        assert!(!served(None, 1000, &[100999]));
         // An agent run as root serves root and nobody else.
-        assert!(peer_allowed(Some(0), 0, &[]));
-        assert!(!peer_allowed(Some(1000), 0, &[]));
+        assert!(served(Some(0), 0, &[]));
+        assert!(!served(Some(1000), 0, &[]));
         // The published app image's `node` user, when nix lists it; the
         // agent's own uid stays served whatever the list says.
-        assert!(peer_allowed(Some(100999), 1000, &[100999]));
-        assert!(peer_allowed(Some(1000), 1000, &[100999]));
-        assert!(!peer_allowed(Some(100998), 1000, &[100999]));
+        assert!(served(Some(100999), 1000, &[100999]));
+        assert!(served(Some(1000), 1000, &[100999]));
+        assert!(!served(Some(100998), 1000, &[100999]));
+        // A SID is never a uid.
+        assert!(!peer_allowed(
+            Some(&Peer::Sid("S-1-5-18".into())),
+            &allowed(1000, &[])
+        ));
     }
 
     #[test]
     fn the_lines_a_closed_connection_gets() {
         assert_eq!(
-            refusal(Some(1001)),
+            refusal(Some(&crate::door::Peer::Uid(1001))),
             "{\"id\":null,\"err\":{\"code\":\"forbidden\",\"msg\":\"uid 1001 may not use this socket \
              (the agent's own uid and controller.api_allowed_uids may)\"}}\n"
         );
         assert_eq!(
-            too_many(16),
-            "{\"id\":null,\"err\":{\"code\":\"busy\",\"msg\":\"at most 16 connections at once; closing\"}}\n"
+            crate::door::busy(16),
+            "{\"id\":null,\"err\":{\"code\":\"busy\",\"msg\":\"at most 16 connections at once\"}}\n"
         );
     }
 

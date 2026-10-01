@@ -26,8 +26,9 @@ use std::time::Duration;
 use serde::Serialize;
 
 use super::wire::{ApiRequest, HelloParams, Subscribed};
-use super::{Api, API_VERSION, MAX_LINE};
+use super::{Api, API_VERSION};
 use crate::door::Conn;
+use crate::door::MAX_LINE;
 use crate::jsonl::LineReader;
 use crate::rpc::{salvage_id, ApiError, ErrorCode, Incoming, Response};
 use crate::util::LockExt;

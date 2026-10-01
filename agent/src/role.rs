@@ -54,11 +54,11 @@ pub struct Role {
     /// A tray may run (where the OS has one and a desktop is present).
     pub tray: bool,
     /// The metrics page answers on every interface's `port`: `/healthz`
-    /// and `/nodes/metrics` (status.rs) — the box's Prometheus container
+    /// and `/nodes/metrics` (metrics_page.rs) — the box's Prometheus container
     /// reaches it through pasta's host alias, and the host firewall keeps
     /// the port closed to the LAN. A node has no page: it listens on
     /// nothing, loopback included.
-    pub status_on_lan: bool,
+    pub metrics_page: bool,
     /// The local API socket is served (api/).
     pub api_socket: bool,
     /// The machines' links are accepted (link/controller.rs), where
@@ -79,7 +79,7 @@ impl Role {
                 session_in_service: false,
                 claude_update: true,
                 tray: true,
-                status_on_lan: false,
+                metrics_page: false,
                 api_socket: false,
                 node_listener: false,
             },
@@ -93,7 +93,7 @@ impl Role {
                 session_in_service: true,
                 claude_update: false,
                 tray: false,
-                status_on_lan: true,
+                metrics_page: true,
                 api_socket: true,
                 node_listener: true,
             },
@@ -121,12 +121,12 @@ mod tests {
         assert!(node.link && node.self_update && node.keep_awake && node.installer);
         assert!(node.session && node.tray && node.claude_update);
         assert!(!node.session_in_service && !node.api_socket && !node.node_listener);
-        assert!(!node.status_on_lan);
+        assert!(!node.metrics_page);
         assert!(node.allow_install("install").is_ok());
 
         let c = Role::of(Mode::Controller);
         assert!(!c.link && !c.self_update && !c.keep_awake && !c.installer && !c.tray);
-        assert!(!c.claude_update && c.status_on_lan);
+        assert!(!c.claude_update && c.metrics_page);
         assert!(c.session && c.session_in_service && c.api_socket && c.node_listener);
         let e = c.allow_install("uninstall").unwrap_err().to_string();
         assert!(e.contains("controller mode") && e.contains("nix"), "{e}");

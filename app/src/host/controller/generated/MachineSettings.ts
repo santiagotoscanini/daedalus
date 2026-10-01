@@ -14,7 +14,7 @@ export type MachineSettings = {
  */
 node: string | null, 
 /**
- * Its key's fingerprint, whole, and as the menu shows it (`short`).
+ * Its key's fingerprint, whole, and as the menu shows it (`util::short_fingerprint`).
  */
 fingerprint: string | null, fingerprint_short: string | null, 
 /**

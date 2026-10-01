@@ -243,9 +243,65 @@ pub fn wire_name<T: serde::Serialize>(v: &T, f: &mut std::fmt::Formatter<'_>) ->
     }
 }
 
+/// A fingerprint as the menu shows it: the first two groups and the last —
+/// `f876:e2c7…8029`. Anything else goes through `short`.
+pub fn short_fingerprint(fp: &str) -> String {
+    let groups: Vec<&str> = fp.split(':').collect();
+    if groups.len() < 4 || groups.iter().any(|g| g.is_empty()) {
+        return short(fp);
+    }
+    format!("{}:{}…{}", groups[0], groups[1], groups[groups.len() - 1])
+}
+
+/// The menu's rule for a long value: past `SHORT_MAX` characters, the first
+/// `SHORT_HEAD`, an ellipsis, and the last `SHORT_TAIL`. The whole value is
+/// in the item's submenu, with Copy.
+pub fn short(value: &str) -> String {
+    let n = value.chars().count();
+    if n <= SHORT_MAX {
+        return value.to_string();
+    }
+    let head: String = value.chars().take(SHORT_HEAD).collect();
+    let tail: String = value.chars().skip(n - SHORT_TAIL).collect();
+    format!("{head}…{tail}")
+}
+
+pub const SHORT_MAX: usize = 28;
+pub const SHORT_HEAD: usize = 18;
+pub const SHORT_TAIL: usize = 8;
+
+/// A request id — a session verb's, a residency verb's, a root run's:
+/// sixteen lowercase hex characters from the OS's randomness.
+pub fn mint_id() -> String {
+    let mut b = [0u8; 8];
+    rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut b);
+    hex::encode(b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_shortening_rule() {
+        assert_eq!(
+            short_fingerprint(
+                "f876:e2c7:1a0b:2c3d:4e5f:6a7b:8c9d:0e1f:2a3b:4c5d:6e7f:8a9b:0c1d:2e3f:4a5b:8029"
+            ),
+            "f876:e2c7…8029"
+        );
+        assert_eq!(short("box.lan:7788"), "box.lan:7788");
+        let exactly = "a".repeat(SHORT_MAX);
+        assert_eq!(short(&exactly), exactly);
+        let long = "averyveryverylonghostname.example.org:51820";
+        let s = short(long);
+        assert_eq!(s, "averyveryverylongh…rg:51820");
+        assert_eq!(s.chars().count(), SHORT_HEAD + 1 + SHORT_TAIL);
+        // Not a fingerprint: the general rule.
+        assert_eq!(short_fingerprint("abc"), "abc");
+        // Characters, never bytes: no panic on a multi-byte one.
+        assert_eq!(short(&"é".repeat(40)).chars().count(), 27);
+    }
 
     #[test]
     fn a_stop_reaches_a_waiter_at_once_and_a_nudge_only_those_who_asked() {

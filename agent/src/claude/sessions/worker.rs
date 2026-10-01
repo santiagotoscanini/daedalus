@@ -10,8 +10,7 @@ use std::time::Instant;
 
 use super::verbs::{agents, refused, Outcome};
 use super::{
-    check_selector, mint_request, Context, Latest, Msg, ACTIONS_KEPT, AGENTS_MAX_AGE, LOG_KEEP,
-    REFRESH,
+    check_selector, Context, Latest, Msg, ACTIONS_KEPT, AGENTS_MAX_AGE, LOG_KEEP, REFRESH,
 };
 use crate::claude::cli::find_cli;
 use crate::claude::profile::{claude_dir, read_session_files};
@@ -133,7 +132,7 @@ impl Worker {
         let mut rows = Vec::new();
         for id in ids {
             let req = SessionRequest {
-                request: mint_request(),
+                request: crate::util::mint_id(),
                 action: SessionAction::Resume,
                 id: id.clone(),
             };

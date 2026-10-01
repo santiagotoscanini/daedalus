@@ -288,10 +288,7 @@ fn door_policy(allow: crate::door::Allow) -> crate::door::Policy {
         what: "santree",
         allow,
         refusal: Arc::new(refusal),
-        busy: error_line(
-            ErrorCode::Busy,
-            format!("at most {MAX_CONNECTIONS} santree connections at once"),
-        ),
+        busy: crate::door::busy(MAX_CONNECTIONS),
         max_connections: MAX_CONNECTIONS,
         first_line: FIRST_LINE,
         write_timeout: WRITE_TIMEOUT,
@@ -302,15 +299,10 @@ fn door_policy(allow: crate::door::Allow) -> crate::door::Policy {
 
 /// The line a refused peer gets before its connection is closed.
 pub fn refusal(peer: Option<&Peer>) -> String {
-    let who = match peer {
-        Some(p) => p.to_string(),
-        None => "a peer whose credentials could not be read".into(),
-    };
-    error_line(
-        ErrorCode::Forbidden,
-        format!(
-            "{who} may not use santree's socket (root and the user who installed the agent may)"
-        ),
+    crate::door::refusal(
+        "santree's socket",
+        peer,
+        "root and the user who installed the agent",
     )
 }
 

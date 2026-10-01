@@ -131,7 +131,7 @@ impl ClaudeHub {
     /// when `MAX_QUEUED_SESSIONS` already wait: a session that is not
     /// taking them is not one to pile more on.
     pub fn queue_session(&self, action: SessionAction, id: String) -> Option<String> {
-        let request = crate::claude::sessions::mint_request();
+        let request = crate::util::mint_id();
         self.queue_session_as(request.clone(), action, id)
             .then_some(request)
     }

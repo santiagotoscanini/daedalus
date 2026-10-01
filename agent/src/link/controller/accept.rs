@@ -10,13 +10,13 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use serde_json::Value;
 
+use crate::door::MAX_LINE;
 use crate::identity::{node_id_of, Identity};
 use crate::link::rotation::{ConnResolver, Keys, Served};
 use crate::link::tls::{Recv, Tls};
 use crate::link::wire::{
     self, name, Command, CommandParams, Hello, Incoming, MAX_HELLO_LINE, PROTO,
 };
-use crate::link::MAX_LINE;
 use crate::rpc::{ApiError, ErrorCode, Request, Response};
 
 use super::registry::{busy, ip_bucket, Admission, Out, PreauthSlot, Registry};

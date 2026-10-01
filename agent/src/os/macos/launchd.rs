@@ -385,7 +385,7 @@ pub fn uninstall_app() -> Result<()> {
     }
     match crate::local::call_within::<String>(
         &crate::local::LocalRequest::EnrollLeave,
-        crate::local::ENROLL_DEADLINE,
+        crate::local::DEADLINE,
     ) {
         Ok(_) => println!("logged out of the box"),
         Err(e) => {

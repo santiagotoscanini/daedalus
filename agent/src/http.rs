@@ -8,13 +8,16 @@
 
 use std::sync::OnceLock;
 
+/// What every request says it is: this build's version (`crate::VERSION`).
+pub const USER_AGENT: &str = concat!("daedalus-agent/", env!("DAEDALUS_VERSION"));
+
 /// A shared agent: one connection pool, one TLS configuration.
 pub fn agent() -> ureq::Agent {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     AGENT
         .get_or_init(|| {
             crate::os::tls(ureq::AgentBuilder::new())
-                .user_agent(concat!("daedalus-agent/", env!("CARGO_PKG_VERSION")))
+                .user_agent(USER_AGENT)
                 .build()
         })
         .clone()

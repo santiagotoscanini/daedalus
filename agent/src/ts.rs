@@ -156,7 +156,7 @@ fn constants() -> String {
         (
             "The longest line either side writes, in bytes (api/mod.rs).",
             "MAX_LINE",
-            crate::api::MAX_LINE.to_string(),
+            crate::door::MAX_LINE.to_string(),
         ),
         (
             "How long the controller waits for a machine to acknowledge a verb it relays, in ms (link/controller/registry.rs).",

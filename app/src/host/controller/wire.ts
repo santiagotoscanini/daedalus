@@ -287,7 +287,7 @@ export const ANSWERS: { [M in keyof Methods]: Decoder<Methods[M][1]> } = {
         session_in_service: bool,
         claude_update: bool,
         tray: bool,
-        status_on_lan: bool,
+        metrics_page: bool,
         api_socket: bool,
         node_listener: bool,
       }),

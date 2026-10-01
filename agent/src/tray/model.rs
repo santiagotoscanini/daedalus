@@ -4,8 +4,9 @@
 use crate::claude::{ClaudeState, Report};
 use crate::link::wire::Policy;
 use crate::link::{LinkState, LinkStatus};
-use crate::settings::{short, short_fingerprint, Key, Via, View};
+use crate::settings::{Key, Via, View};
 use crate::status::StatusDocument;
+use crate::util::{short, short_fingerprint};
 use crate::DISPLAY_NAME;
 
 // ── what the menu says: pure, and tested ──────────────────────────────────

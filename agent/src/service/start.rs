@@ -38,7 +38,12 @@ pub fn start_controller(cfg: &Config, shared: &Shared, stop: &Shutdown) -> Resul
     let mut parts = ControllerParts {
         keys,
         listen: listen.map(|a| a.to_string()),
-        advertise: cfg.controller.advertise.clone(),
+        advertise: cfg
+            .controller
+            .advertise
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
         nodes: None,
         session_host: None,
     };
@@ -51,7 +56,7 @@ pub fn start_controller(cfg: &Config, shared: &Shared, stop: &Shutdown) -> Resul
         link::controller::Limits::default(),
     );
     if let Some(host) = &cfg.controller.session_host {
-        registry = registry.with_allow_list(host.allow_list.clone());
+        registry = registry.with_allow_list(host.allow_list.to_path_buf());
     }
     let registry = Arc::new(registry);
     // The session host this box runs, when nix names one: its status

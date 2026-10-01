@@ -45,8 +45,9 @@ use rustls::{
     SignatureScheme,
 };
 
-use super::{cert, crypto, MAX_LINE, TICK, WRITE_TIMEOUT};
+use super::{cert, crypto, TICK, WRITE_TIMEOUT};
 use crate::deadline::Deadline;
+use crate::door::MAX_LINE;
 use crate::identity::{digest, Identity};
 use crate::jsonl::LineBuf;
 use crate::net::Sock;

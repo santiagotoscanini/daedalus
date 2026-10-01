@@ -152,7 +152,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     // service: it is tried again in the background while the rest runs.
     let local_door = local::Door::start(Arc::clone(&shared));
     let metrics = role
-        .status_on_lan
+        .metrics_page
         .then(|| metrics_page::Page::start(cfg.port, Arc::clone(&shared)));
     // After an update, the tray or the session started again on the new
     // binary so it matches the service (os `restart_desktop_side`).

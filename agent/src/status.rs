@@ -145,9 +145,7 @@ pub fn settings_view(shared: &Shared, may_change: Option<bool>) -> crate::settin
         None => (None, None),
     };
     crate::settings::View {
-        fingerprint_short: fingerprint
-            .as_deref()
-            .map(crate::settings::short_fingerprint),
+        fingerprint_short: fingerprint.as_deref().map(crate::util::short_fingerprint),
         node,
         fingerprint,
         linked,

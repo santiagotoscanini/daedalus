@@ -1104,7 +1104,7 @@ impl Registry {
         action: SessionAction,
         session: &str,
     ) -> Result<ClaudeSessionSent, ApiError> {
-        let request = crate::claude::sessions::mint_request();
+        let request = crate::util::mint_id();
         self.deliver(
             id,
             Capability::ClaudeSessions,

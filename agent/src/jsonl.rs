@@ -14,17 +14,27 @@ use crate::deadline::Deadline;
 /// How much one read takes.
 const CHUNK: usize = 16 * 1024;
 
-/// A line past the maximum.
+/// A line past the maximum, inside the `io::Error` a read returns
+/// (`too_long`, `is_too_long`).
+#[derive(Debug)]
+pub struct TooLong(pub usize);
+
+impl std::fmt::Display for TooLong {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "a line is at most {} bytes", self.0)
+    }
+}
+
+impl std::error::Error for TooLong {}
+
+/// A line past `max`.
 pub fn too_long(max: usize) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!("a line is at most {max} bytes"),
-    )
+    io::Error::new(io::ErrorKind::InvalidData, TooLong(max))
 }
 
 /// Whether `e` is a line past the maximum (`too_long`).
 pub fn is_too_long(e: &io::Error) -> bool {
-    e.kind() == io::ErrorKind::InvalidData && e.to_string().starts_with("a line is at most")
+    e.get_ref().is_some_and(|inner| inner.is::<TooLong>())
 }
 
 /// Bytes received, and the lines in them.
@@ -196,6 +206,11 @@ mod tests {
         let mut long = LineBuf::new(8);
         long.push(b"123456789");
         assert!(is_too_long(&long.take().unwrap_err()));
+        // Told by its type, not by words another error could carry.
+        assert!(!is_too_long(&io::Error::new(
+            io::ErrorKind::InvalidData,
+            "a line is at most 8 bytes"
+        )));
         // A whole line past it too.
         let mut whole = LineBuf::new(3);
         whole.push(b"1234\n");

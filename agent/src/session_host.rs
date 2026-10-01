@@ -378,7 +378,7 @@ impl SessionHost {
         };
         match crate::identity::parse_public_key(key) {
             Ok(key) => self.registry.set_session_host(Pin {
-                address: self.cfg.address.clone(),
+                address: self.cfg.address.to_string(),
                 public_key: hex::encode(key),
             }),
             Err(e) => {
@@ -419,8 +419,8 @@ impl SessionHost {
                     // a new store path: a new port, root or file), installed
                     // since it started.
                     out.restart_pending = file.exe.as_deref().map(Path::new)
-                        != Some(self.cfg.bin.as_path())
-                        || file.config.as_deref().map(Path::new) != Some(self.cfg.config.as_path());
+                        != Some(&*self.cfg.bin)
+                        || file.config.as_deref().map(Path::new) != Some(&*self.cfg.config);
                     out.live_ptys = file.sessions;
                     out.connections = self.grouped(&file.connections);
                     if let Some(e) = &file.allow_list.error {
@@ -646,11 +646,11 @@ mod tests {
         );
         let host = SessionHost::new(
             SessionHostConfig {
-                address: "b:1".into(),
-                allow_list: path.clone(),
-                status_file: dir.join("status.json"),
-                bin: "/b".into(),
-                config: "/c".into(),
+                address: "b:1".try_into().unwrap(),
+                allow_list: path.clone().try_into().unwrap(),
+                status_file: dir.join("status.json").try_into().unwrap(),
+                bin: "/b".try_into().unwrap(),
+                config: "/c".try_into().unwrap(),
             },
             Arc::clone(&reg),
         );
@@ -702,11 +702,15 @@ mod tests {
     fn host_at(dir: &Path, registry: Arc<Registry>) -> SessionHost {
         SessionHost::new(
             SessionHostConfig {
-                address: "box.example.org:7789".into(),
-                allow_list: dir.join("allow.json"),
-                status_file: dir.join("status.json"),
-                bin: "/nix/store/aaaa-daedalus-session-host-0.1.0/bin/daedalus-session-host".into(),
-                config: "/nix/store/cccc-daedalus-session-host.json".into(),
+                address: "box.example.org:7789".try_into().unwrap(),
+                allow_list: dir.join("allow.json").try_into().unwrap(),
+                status_file: dir.join("status.json").try_into().unwrap(),
+                bin: "/nix/store/aaaa-daedalus-session-host-0.1.0/bin/daedalus-session-host"
+                    .try_into()
+                    .unwrap(),
+                config: "/nix/store/cccc-daedalus-session-host.json"
+                    .try_into()
+                    .unwrap(),
             },
             registry,
         )

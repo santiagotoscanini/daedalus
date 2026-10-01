@@ -103,13 +103,6 @@ pub fn check_selector(action: SessionAction, id: &str) -> Result<(), String> {
     })
 }
 
-/// A request id: sixteen hex characters from the OS's randomness.
-pub fn mint_request() -> String {
-    let mut b = [0u8; 8];
-    rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut b);
-    hex::encode(b)
-}
-
 /// What the verbs and the roster need to know about this session.
 #[derive(Clone, Debug)]
 pub struct Context {
@@ -277,10 +270,10 @@ mod tests {
                 assert!(check_selector(a, bad).is_err(), "{a:?} {bad}");
             }
         }
-        let r = mint_request();
+        let r = crate::util::mint_id();
         assert_eq!(r.len(), 16);
         assert!(r.bytes().all(|b| b.is_ascii_hexdigit()));
-        assert_ne!(r, mint_request());
+        assert_ne!(r, crate::util::mint_id());
         assert_eq!(label_of("s2-server"), "s2-server");
         assert_eq!(label_of("Santiago’s MacBook Pro"), "Santiago-s-MacBook-Pro");
         assert_eq!(label_of(""), "daedalus");

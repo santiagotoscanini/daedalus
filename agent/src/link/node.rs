@@ -671,7 +671,7 @@ impl Pushed {
                 });
             if moved {
                 let line = wire::event(name::TELEMETRY, &*t);
-                if line.len() > super::MAX_LINE {
+                if line.len() > crate::door::MAX_LINE {
                     tracing::warn!(bytes = line.len(), "link: the telemetry document is past the line limit; sent without the application list");
                     let mut slim = (*t).clone();
                     slim.apps.clear();

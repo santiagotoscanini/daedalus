@@ -1,6 +1,6 @@
 //! The controller's metrics page. No HTTP answers on a node: a machine
 //! listens on nothing, loopback included. The controller keeps one small
-//! page on `port` (role.rs `status_on_lan`), on every interface, for one
+//! page on `port` (role.rs `metrics_page`), on every interface, for one
 //! reader — the box's Prometheus, whose container reaches the host through
 //! pasta's host alias, so its connections arrive at the host's LAN address,
 //! not loopback — while the host firewall keeps the port closed to the LAN
@@ -47,7 +47,7 @@ impl Drop for Bound {
 impl Page {
     pub fn start(port: u16, shared: Arc<Shared>) -> Self {
         Self(Rebinding::start(
-            "status-bind",
+            "metrics-bind",
             BIND_RETRY,
             move || match serve_metrics(port, Arc::clone(&shared)) {
                 Ok(s) => Some(Bound(s)),

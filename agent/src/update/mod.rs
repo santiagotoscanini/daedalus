@@ -88,7 +88,6 @@ pub const RELEASE_PUBLIC_KEYS: &[&str] =
 pub use crate::os::{ASSETS, OPTIONAL_ASSETS};
 
 pub(super) const TAG_PREFIX: &str = "agent-v";
-pub(super) const USER_AGENT: &str = concat!("daedalus-agent/", env!("CARGO_PKG_VERSION"));
 
 pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Shutdown) {
     let interval = cfg.update_interval();

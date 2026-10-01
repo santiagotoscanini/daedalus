@@ -268,7 +268,6 @@ pub fn check(refused: Option<&str>) -> Result<Option<Release>> {
 pub(super) fn fetch_capped(url: &str, cap: u64) -> Result<Vec<u8>> {
     let mut req = crate::http::agent()
         .get(url)
-        .set("User-Agent", USER_AGENT)
         .timeout(Duration::from_secs(30));
     if url.starts_with("https://api.github.com/") {
         req = req.set("Accept", "application/vnd.github+json");

@@ -24,7 +24,7 @@
     "session_in_service": true,
     "claude_update": false,
     "tray": false,
-    "status_on_lan": true,
+    "metrics_page": true,
     "api_socket": true,
     "node_listener": true
   },

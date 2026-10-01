@@ -386,7 +386,7 @@ pub struct FailedView {
 pub struct View {
     /// This machine's node id (16 hex); null before its key is loaded.
     pub node: Option<String>,
-    /// Its key's fingerprint, whole, and as the menu shows it (`short`).
+    /// Its key's fingerprint, whole, and as the menu shows it (`util::short_fingerprint`).
     pub fingerprint: Option<String>,
     pub fingerprint_short: Option<String>,
     /// The link is up and the box approved this machine: a request can go.
@@ -406,33 +406,6 @@ pub struct View {
     #[cfg_attr(test, ts(optional))]
     pub may_change: Option<bool>,
 }
-
-/// A fingerprint as the menu shows it: the first two groups and the last —
-/// `f876:e2c7…8029`. Anything else goes through `short`.
-pub fn short_fingerprint(fp: &str) -> String {
-    let groups: Vec<&str> = fp.split(':').collect();
-    if groups.len() < 4 || groups.iter().any(|g| g.is_empty()) {
-        return short(fp);
-    }
-    format!("{}:{}…{}", groups[0], groups[1], groups[groups.len() - 1])
-}
-
-/// The menu's rule for a long value: past `SHORT_MAX` characters, the first
-/// `SHORT_HEAD`, an ellipsis, and the last `SHORT_TAIL`. The whole value is
-/// in the item's submenu, with Copy.
-pub fn short(value: &str) -> String {
-    let n = value.chars().count();
-    if n <= SHORT_MAX {
-        return value.to_string();
-    }
-    let head: String = value.chars().take(SHORT_HEAD).collect();
-    let tail: String = value.chars().skip(n - SHORT_TAIL).collect();
-    format!("{head}…{tail}")
-}
-
-pub const SHORT_MAX: usize = 28;
-pub const SHORT_HEAD: usize = 18;
-pub const SHORT_TAIL: usize = 8;
 
 /// The page that turns santree on for machine `node`, on the app at
 /// `app_url` (enroll.rs `app_url`'s form: https, no trailing slash).
@@ -651,24 +624,7 @@ mod tests {
     }
 
     #[test]
-    fn the_shortening_rule() {
-        assert_eq!(
-            short_fingerprint(
-                "f876:e2c7:1a0b:2c3d:4e5f:6a7b:8c9d:0e1f:2a3b:4c5d:6e7f:8a9b:0c1d:2e3f:4a5b:8029"
-            ),
-            "f876:e2c7…8029"
-        );
-        assert_eq!(short("box.lan:7788"), "box.lan:7788");
-        let exactly = "a".repeat(SHORT_MAX);
-        assert_eq!(short(&exactly), exactly);
-        let long = "averyveryverylonghostname.example.org:51820";
-        let s = short(long);
-        assert_eq!(s, "averyveryverylongh…rg:51820");
-        assert_eq!(s.chars().count(), SHORT_HEAD + 1 + SHORT_TAIL);
-        // Not a fingerprint: the general rule.
-        assert_eq!(short_fingerprint("abc"), "abc");
-        // Characters, never bytes: no panic on a multi-byte one.
-        assert_eq!(short(&"é".repeat(40)).chars().count(), 27);
+    fn the_confirm_url() {
         assert_eq!(
             confirm_url("https://daedalus-app.example.org", "0123456789abcdef"),
             "https://daedalus-app.example.org/settings?tab=machines&node=0123456789abcdef&santree=on"
