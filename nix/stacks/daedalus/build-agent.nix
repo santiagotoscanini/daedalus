@@ -12,7 +12,9 @@
 #                                              (one file per stage; not named
 #                                              `build/`, which editors hide)
 #     ExecStopPost   host/build-reaper.sh      a run that died unannounced
-#                                              reads `failed: interrupted`;
+#                                              reads `failed: interrupted`,
+#                                              one that never started (the
+#                                              fence) fails its build;
 #                                              then the run file goes
 #   daedalus-build-cancel@<app>.service    the root helper's `build-cancel` →
 #                                          host/build-cancel.sh
@@ -321,8 +323,9 @@ in
           # Fail closed, first thing: no fence, no start. The egress fence is
           # firewall extraCommands (builder.nix), and a reload that failed
           # halfway leaves no OUTPUT jump — then the start fails here instead
-          # of a build reaching the LAN, and the helper's answer is the check's
-          # own words, which the engine puts on the build. `+`: as root,
+          # of a build reaching the LAN; the reaper (ExecStopPost) then
+          # publishes the build failed under its own id, so the engine folds
+          # it however long the app was away. `+`: as root,
           # outside this unit's sandboxing, where iptables can read the
           # tables. build.sh runs fenceCheck again per build, for a fence
           # removed after the daemon started.

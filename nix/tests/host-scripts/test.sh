@@ -235,6 +235,22 @@ out="$(CREDENTIALS_DIRECTORY="$B/creds" bash "$T/build.sh" 2>&1)" || rc=$?
 check "a path-shaped build id is refused" '[ "$rc" -eq 1 ] && grep -q "no usable build id" <<<"$out"'
 check "and nothing is published" '[ -z "$(ls -A "$B/verbs")" ]'
 
+# ── 6b. a run that ended before the build published answers for its build ──
+# The fence check (ExecStartPre) refusing the start runs no build.sh at all:
+# the reaper publishes the failure under the request's build id, so the build
+# is not left queued with no words.
+echo "# build-reaper: a run that never started"
+mkdir -p "$B/reaper"
+agent "$T/reaper.sh" "STATUS=$B/reaper/build-status.json LOG_DIR=$B/reaper WORK_ROOT=$B/reaper SETPRIV=setpriv BUILD_USER=nobody BUILD_GROUP=nogroup" \
+  lib.sh build-stages/states.sh build-reaper.sh
+echo '{"version":1,"id":"0ld1","state":"succeeded","phase":"done"}' >"$B/reaper/build-status.json"
+jq -n '{id: "r2", verb: "build", selectors: {}, payload: ({version: 1, id: "abc123", app: "chismed", sha: "deadbeef"} | tojson)}' >"$B/creds/request"
+SERVICE_RESULT=success CREDENTIALS_DIRECTORY="$B/creds" bash "$T/reaper.sh"
+check "a clean run leaves the status alone" 'jq -e ".id == \"0ld1\"" "$B/reaper/build-status.json" >/dev/null'
+SERVICE_RESULT=exit-code CREDENTIALS_DIRECTORY="$B/creds" bash "$T/reaper.sh"
+check "a failed start fails its own build, saying the builder may be unfenced" \
+  'jq -e ".id == \"abc123\" and .app == \"chismed\" and .state == \"failed\" and (.error | test(\"unfenced\"))" "$B/reaper/build-status.json" >/dev/null'
+
 # ── 7. a cancel stops only the named app's build ──────────────────────────
 echo "# build-cancel"
 stub systemctl <<'EOF'
