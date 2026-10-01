@@ -9,7 +9,7 @@
 //! root on macOS. So the SESSION (session.rs, which the tray runs)
 //! supervises the server, in the desktop session with the user's
 //! credentials, and reports to the service over its local socket
-//! (`claude.report`, local.rs). The service keeps the full
+//! (`claude.report`, ipc/local/). The service keeps the full
 //! report for the `claude` method and the link, puts a summary on the status page,
 //! and hands the session back what the box decided: whether the
 //! server should run at all and where (policy), and its two instructions —

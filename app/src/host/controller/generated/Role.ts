@@ -6,7 +6,7 @@ import type { Mode } from "./Mode";
  */
 export type Role = { mode: Mode, 
 /**
- * Keep the link to the controller (link/node.rs).
+ * Keep the link to the controller (node/link.rs).
  */
 link: boolean, 
 /**
@@ -47,11 +47,11 @@ tray: boolean,
  */
 metrics_page: boolean, 
 /**
- * The local API socket is served (api/).
+ * The local API socket is served (controller/api/).
  */
 api_socket: boolean, 
 /**
- * The machines' links are accepted (link/controller.rs), where
+ * The machines' links are accepted (controller/link/), where
  * `[controller] listen` names an address.
  */
 node_listener: boolean, };

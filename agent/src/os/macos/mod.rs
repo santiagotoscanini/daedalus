@@ -32,8 +32,8 @@ pub mod tray;
 pub use super::unix::{
     claude_holder, connect_local, contain, create_private, ensure_private, file_owner,
     hide_console, isolate, kill_tree, local_socket_path, lock_exclusive, mark_executable,
-    monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_api_socket, serve_local,
-    try_lock_exclusive, unseal, LocalSocket, Tree, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
+    monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_local, try_lock_exclusive,
+    unseal, LocalSocket, Tree, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
 };
 pub use facts::{cpu_name, hostname, memory_bytes, os_name, os_version};
 pub use launchd as svc;
@@ -81,7 +81,7 @@ pub fn user_log_dir() -> Option<PathBuf> {
 /// recover — in `~/Library/Application Support/daedalus-agent`. Under
 /// `DAEDALUS_AGENT_DATA_DIR` (a development run) None: the moved directory.
 pub fn user_state_dir() -> Option<PathBuf> {
-    if std::env::var_os(crate::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
+    if std::env::var_os(crate::core::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
         return None;
     }
     std::env::var_os("HOME").map(|h| {
@@ -103,18 +103,18 @@ pub fn port_holder(port: u16) -> Option<String> {
 
 // ── the local socket ──────────────────────────────────────────────────────
 
-/// Whom the agent's local socket serves (local.rs): root, the service's own
+/// Whom the agent's local socket serves (ipc/local/): root, the service's own
 /// uid, and the user at the console — the owner of `/dev/console`, whose
 /// menu bar app runs Claude — read at each connection, since it changes
 /// with the person logged in.
-pub fn local_allowed() -> crate::door::Allowed {
+pub fn local_allowed() -> crate::ipc::door::Allowed {
     use std::os::unix::fs::MetadataExt;
     let console: Vec<u32> = std::fs::metadata("/dev/console")
         .map(|m| m.uid())
         .into_iter()
         .filter(|u| *u != 0)
         .collect();
-    crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &console)
+    crate::ipc::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &console)
 }
 
 /// The operator: whom santree's socket (santree.rs) and a log-in
@@ -124,9 +124,9 @@ pub fn local_allowed() -> crate::door::Allowed {
 /// a santree connection is a shell on the box, and a log-in hands the Mac
 /// to a box, so another account that fast-user-switches in gets
 /// `forbidden`.
-pub fn operator_allowed() -> crate::door::Allowed {
+pub fn operator_allowed() -> crate::ipc::door::Allowed {
     let installer: Vec<u32> = operator_uid().into_iter().collect();
-    crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
+    crate::ipc::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
 }
 
 /// The installing user, when `install` recorded one.

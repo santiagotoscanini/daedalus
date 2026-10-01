@@ -8,7 +8,7 @@
 //!
 //! - the machine (`PinnedController`) accepts the controller only if the
 //!   SHA-256 of the key it presents equals the pin, config.toml's and
-//!   nothing else (link/node.rs): there is no first use.
+//!   nothing else (node/link.rs): there is no first use.
 //!   The key a refused controller presented is kept for the message, and
 //!   labelled UNPROVEN: the pin check runs before the handshake signature,
 //!   so nothing proves the peer holds it. A key is taken as the
@@ -18,7 +18,7 @@
 //!   the copy rustls loads is wiped as it is (crypto.rs);
 //! - the controller (`AnyEd25519Machine`) accepts any ed25519 key at the
 //!   TLS layer: whether that key is approved, pending or revoked is decided
-//!   right after, from the key the handshake proved (link/controller.rs),
+//!   right after, from the key the handshake proved (controller/link/),
 //!   so an unknown machine can still reach the pending list.
 //!
 //! No hostname is checked (there is no name to check against: the key is
@@ -46,10 +46,10 @@ use rustls::{
 };
 
 use super::{cert, crypto, TICK, WRITE_TIMEOUT};
-use crate::deadline::Deadline;
-use crate::door::MAX_LINE;
 use crate::identity::{digest, Identity};
-use crate::jsonl::LineBuf;
+use crate::ipc::deadline::Deadline;
+use crate::ipc::door::MAX_LINE;
+use crate::ipc::jsonl::LineBuf;
 use crate::net::Sock;
 use crate::util::LockExt;
 
@@ -339,6 +339,7 @@ pub fn pinned_id_of(sni: Option<&str>) -> Option<&str> {
 }
 
 /// An identity as rustls presents it: its certificate and signing key.
+#[cfg(feature = "controller")]
 pub(crate) fn certified(id: &Identity) -> anyhow::Result<Arc<rustls::sign::CertifiedKey>> {
     let (certs, key) = certificate_and_key(id);
     let signing = crypto::provider().key_provider.load_private_key(key)?;
@@ -472,7 +473,7 @@ impl Tls {
     }
 
     /// Accept lines up to `n` bytes (a connection not yet admitted reads
-    /// less than `MAX_LINE`, link/controller.rs).
+    /// less than `MAX_LINE`, controller/link/).
     pub fn set_max_line(&mut self, n: usize) {
         self.lines.set_max(n.min(MAX_LINE));
     }
@@ -587,7 +588,7 @@ impl Tls {
     /// then what the peer still sends read and dropped until it closes too
     /// or `linger` passes, then torn down. Closing outright with the
     /// peer's bytes unread resets the connection, and a reset can take the
-    /// last lines with it (a revocation, link/controller/).
+    /// last lines with it (a revocation, controller/link/).
     pub fn close_gracefully(&mut self, linger: Duration) {
         self.conn.send_close_notify();
         let _ = self.flush();

@@ -5,7 +5,7 @@
 //! `claude remote-control` (claude/) — never as its child: as a job of the
 //! OS it starts and watches (a systemd user unit, a launchd job, a detached
 //! process; jobs/), which outlives it. Every `POLL` it reads the
-//! service's status document through the local socket (local.rs), sends
+//! service's status document through the local socket (ipc/local/), sends
 //! the service a report of the supervisor (`claude.report`), and applies
 //! the `ReportAnswer` —
 //! run it or not, where, and the one-shot update and restart. The service
@@ -43,13 +43,13 @@ use std::time::{Duration, Instant};
 use crate::claude::roster::is_uuid;
 use crate::claude::sessions::Context as SessionsContext;
 use crate::claude::{Recovery, Report, ReportAnswer, Roster, SessionAction, Sessions, Supervisor};
-use crate::config;
+use crate::core::config;
+use crate::core::logging;
+use crate::core::paths;
+use crate::core::shared::Shared;
+use crate::core::status::StatusDocument;
+use crate::ipc::local::LocalRequest;
 use crate::link::wire::Policy;
-use crate::local::LocalRequest;
-use crate::logging;
-use crate::paths;
-use crate::shared::Shared;
-use crate::status::StatusDocument;
 use crate::VERSION;
 
 /// How often the page is read and the report sent.
@@ -91,29 +91,29 @@ pub struct Poll {
 }
 
 fn read_page() -> Option<StatusDocument> {
-    crate::local::call(&LocalRequest::Status).ok()
+    crate::ipc::local::call(&LocalRequest::Status).ok()
 }
 
 fn request_check() {
-    let _ = crate::local::call::<String>(&LocalRequest::UpdateCheck);
+    let _ = crate::ipc::local::call::<String>(&LocalRequest::UpdateCheck);
 }
 
 /// Send the supervisor's report to the service; its answer says whether the
 /// box wants the server running, where, and whether to update or restart
 /// it now.
 fn send_report(report: &Report) -> Option<ReportAnswer> {
-    crate::local::call(&LocalRequest::ClaudeReport(Box::new(report.clone()))).ok()
+    crate::ipc::local::call(&LocalRequest::ClaudeReport(Box::new(report.clone()))).ok()
 }
 
 /// Send the roster of Claude sessions to the service.
 fn send_roster(roster: &Roster) -> bool {
-    crate::local::call::<()>(&LocalRequest::ClaudeRoster(Box::new(roster.clone()))).is_ok()
+    crate::ipc::local::call::<()>(&LocalRequest::ClaudeRoster(Box::new(roster.clone()))).is_ok()
 }
 
 /// How the session reaches the service it reports to.
 pub enum Link {
     /// The service in another process, through its local socket (a tray,
-    /// the Linux session unit; local.rs).
+    /// the Linux session unit; ipc/local/).
     Socket,
     /// The service in this process (the controller): the report lands in
     /// its shared state directly, and there is no page to read.
@@ -481,7 +481,7 @@ fn start_sessions(places: &Places) -> Sessions {
                 .parent()
                 .map(std::path::Path::to_path_buf)
                 .unwrap_or_default(),
-            label: crate::claude::sessions::label_of(&crate::facts::hostname()),
+            label: crate::claude::sessions::label_of(&crate::core::facts::hostname()),
             roots: places.state_dir.join("gcroots"),
         },
         Box::new(crate::os::jobs::Os),
@@ -491,7 +491,7 @@ fn start_sessions(places: &Places) -> Sessions {
 /// The full report the session last sent the service, as its local socket
 /// answers it (`claude`); None when no session reported lately.
 fn read_report() -> Option<Report> {
-    crate::local::call::<Option<Report>>(&LocalRequest::Claude)
+    crate::ipc::local::call::<Option<Report>>(&LocalRequest::Claude)
         .ok()
         .flatten()
 }
@@ -563,7 +563,7 @@ impl Backing for Watcher {
 
     /// Ask the session, through the service, to restart the server.
     fn restart_claude(&mut self) {
-        let _ = crate::local::call::<String>(&LocalRequest::ClaudeRestart);
+        let _ = crate::ipc::local::call::<String>(&LocalRequest::ClaudeRestart);
         self.next_poll = Instant::now() + POLL;
     }
 
@@ -780,7 +780,7 @@ mod tests {
 
     #[test]
     fn the_page_reads_what_the_status_page_writes() {
-        let settings = crate::settings::View {
+        let settings = crate::node::settings::View {
             linked: true,
             ..Default::default()
         };

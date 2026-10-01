@@ -47,7 +47,7 @@ fn launchctl(args: &[&str]) -> Result<(i32, String), String> {
 }
 
 fn plist_path(name: &str) -> PathBuf {
-    crate::paths::user_state_dir()
+    crate::core::paths::user_state_dir()
         .join("jobs")
         .join(format!("{}.plist", jobs::launchd_label(name)))
 }

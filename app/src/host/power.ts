@@ -3,7 +3,7 @@ import type { RootRunOk } from './controller/generated'
 import { ControllerError } from './controller/wire'
 
 // Restarting the box: the root helper's `reboot` verb, asked through the
-// controller (`root.run`; agent/src/root/, nix/stacks/daedalus/controller.nix
+// controller (`root.run`; agent/src/controller/root/, nix/stacks/daedalus/controller.nix
 // `root`), the app's one door to root. The helper starts the host's power unit
 // (host/power.sh), which refuses mid-rebuild and has no way to power the box
 // OFF — that asymmetry is the requirement: the way back on is physical, and

@@ -24,7 +24,7 @@ fn is_nixos() -> bool {
 
 pub fn read_updates() -> Updates {
     let mut u = Updates {
-        checked_at: Some(crate::state::now_rfc3339()),
+        checked_at: Some(crate::core::state::now_rfc3339()),
         ..Default::default()
     };
     if crate::exec::locate("apt").is_some() {

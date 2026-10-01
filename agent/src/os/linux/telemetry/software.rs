@@ -225,7 +225,7 @@ fn date_of(epoch: u64) -> Option<String> {
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_secs();
-    let ts = crate::state::rfc3339_ago(now.checked_sub(epoch)?);
+    let ts = crate::core::state::rfc3339_ago(now.checked_sub(epoch)?);
     Some(ts[..10].to_string())
 }
 

@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 
-use crate::paths;
+use crate::core::paths;
 use crate::tray::{Flow, Tray};
 
 /// The libraries tray-icon loads at run time for the icon, Ayatana's first.
@@ -204,12 +204,12 @@ fn tell(said: Result<String, String>) {
 pub fn pair_elevated(
     exe: &std::path::Path,
     args: &[String],
-    p: &crate::pair::Pairing,
+    p: &crate::node::pair::Pairing,
 ) -> Result<String, String> {
     let by_hand = || {
         format!(
             "In a terminal:\n  {}",
-            crate::pair::command_line(&p.pin, p.controller.as_deref())
+            crate::node::pair::command_line(&p.pin, p.controller.as_deref())
         )
     };
     let Some(pkexec) = find_pkexec() else {

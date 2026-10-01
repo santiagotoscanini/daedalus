@@ -1,5 +1,5 @@
 # The root helper — how root actions reach the box without the controller,
-# which runs as the operator, holding any privilege (agent src/root/).
+# which runs as the operator, holding any privilege (agent src/controller/root/).
 # ARCHITECTURE.md "The root helper" is the design: the socket, the one request
 # a connection carries, run files for patterns and payloads, how the outcome
 # is read, and the table of verbs. Here: the verb table nix renders from
@@ -49,7 +49,7 @@ let
   rootRuntimeMax = 60 + lib.foldl' lib.max 60 (lib.mapAttrsToList (_: v: v.timeoutSec) rootVerbs);
 
   # The table, held at build time to the rules the helper applies at every
-  # start (agent src/root/mod.rs `Table::check`: names, selector values,
+  # start (agent src/controller/root/mod.rs `Table::check`: names, selector values,
   # patterns, caps) by the helper itself, so the rules have one home. A table
   # it would refuse fails the build naming the reason.
   rootTableChecked = pkgs.runCommand "daedalus-root-verbs-checked.json" { } ''

@@ -164,7 +164,7 @@ impl Collect for Collector {
             .and_then(|m| m.modified())
             .ok()
             .and_then(|t| std::time::SystemTime::now().duration_since(t).ok())
-            .map(|ago| crate::state::rfc3339_ago(ago.as_secs()));
+            .map(|ago| crate::core::state::rfc3339_ago(ago.as_secs()));
         let os = Os {
             kernel: line("uname", &["-r"]),
             build: line("sw_vers", &["--buildVersion"]),

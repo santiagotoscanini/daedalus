@@ -19,7 +19,7 @@
 //! in `errors` so the page can say so.
 //!
 //! Two views of the document. The whole of it goes up the link to the
-//! controller (link/node.rs), and the box draws from it the same pages it
+//! controller (node/link.rs), and the box draws from it the same pages it
 //! draws for itself. The status page and the controller's `nodes.get`
 //! carry `public()`: nothing that identifies a person — no serial numbers,
 //! no process list, no service list, no updates, no installed applications,
@@ -53,9 +53,9 @@ use crate::util::Shutdown;
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
-use crate::config::TelemetryLevel;
-use crate::shared::Shared;
-use crate::state::now_rfc3339;
+use crate::core::config::TelemetryLevel;
+use crate::core::shared::Shared;
+use crate::core::state::now_rfc3339;
 
 /// How often the sampled facts are read.
 pub const SAMPLE_EVERY: Duration = Duration::from_secs(15);

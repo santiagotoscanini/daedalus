@@ -11,9 +11,9 @@ use crate::claude::profile::{claude_dir, home_dir, read_session_files};
 use crate::claude::roster::{self, is_uuid, Agent};
 use crate::claude::workdir::trusted_projects;
 use crate::claude::{cli::find_cli, gcroot, ActionState};
+use crate::core::state::now_rfc3339;
 use crate::jobs::{self as job, JobState, SessionJob};
 use crate::os::jobs;
-use crate::state::now_rfc3339;
 
 /// `claude agents --json`, or None when it did not answer with an array.
 pub(super) fn agents(cli: Option<&Path>) -> Option<Vec<Agent>> {

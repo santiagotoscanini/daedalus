@@ -10,8 +10,8 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use super::app_url;
 use super::model::*;
 use crate::claude::Report;
-use crate::settings::{Key, View};
-use crate::status::StatusDocument;
+use crate::core::status::StatusDocument;
+use crate::node::settings::{Key, View};
 use crate::{DISPLAY_NAME, VERSION};
 
 /// What quitting does: the tray alone (module doc).

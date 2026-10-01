@@ -18,7 +18,7 @@
 //! characters of the same digest. The key signs nothing but the link's
 //! certificate and TLS handshake (link/cert.rs, link/crypto.rs) — and, for
 //! the controller's, the one statement that hands its trust to a new key
-//! (`sign_rotation`, under a context of its own; link/rotation.rs).
+//! (`sign_rotation`, under a context of its own; controller/rotation.rs).
 
 use std::path::Path;
 
@@ -26,8 +26,8 @@ use anyhow::{bail, Context, Result};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 
+use crate::core::paths::data_dir;
 use crate::os::{seal, unseal};
-use crate::paths::data_dir;
 
 pub const FILE: &str = "identity.key";
 
@@ -103,7 +103,7 @@ impl Identity {
         Self::load_or_create_at(path)
     }
 
-    /// The controller's rotation statement (link/rotation.rs): this key
+    /// The controller's rotation statement (controller/rotation.rs): this key
     /// vouching for `new`, over `rotation_message`.
     pub fn sign_rotation(&self, new: &[u8; 32]) -> [u8; 64] {
         use ed25519_dalek::Signer;

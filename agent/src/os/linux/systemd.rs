@@ -22,7 +22,7 @@
 //! Who the session belongs to, and whether `install` turned lingering on,
 //! is kept in the data directory's `session.json`, so `uninstall` undoes
 //! exactly that — and the service's local socket serves that user
-//! (local.rs). Nothing listens on the network, so no firewall is touched.
+//! (ipc/local/). Nothing listens on the network, so no firewall is touched.
 //!
 //! `run` is `agent_main` with SIGTERM as the stop: systemd sends it on
 //! `stop`, `restart` and at shutdown (the relay is unix.rs's
@@ -36,9 +36,9 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{self, Config};
+use crate::core::config::{self, Config};
+use crate::core::paths;
 use crate::exec;
-use crate::paths;
 use crate::TRAY_EXE;
 
 /// Where `install` keeps the binaries it registers: root's, 0755, made by

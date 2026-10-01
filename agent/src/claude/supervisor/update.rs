@@ -36,7 +36,7 @@ use std::time::Duration;
 
 use super::super::cli::{cli_version, last_meaningful};
 use super::super::UpdateResult;
-use crate::state::now_rfc3339;
+use crate::core::state::now_rfc3339;
 
 /// The deadline of one `claude update`.
 const UPDATE_FOR: Duration = Duration::from_secs(600);

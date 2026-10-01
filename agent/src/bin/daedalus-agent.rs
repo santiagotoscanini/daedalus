@@ -8,9 +8,11 @@
 use daedalus_agent::util::Shutdown;
 
 use anyhow::{bail, Context, Result};
-use daedalus_agent::local::LocalRequest;
+use daedalus_agent::core::{config, role};
+use daedalus_agent::ipc::local::LocalRequest;
+use daedalus_agent::node::update;
 use daedalus_agent::service::agent_main;
-use daedalus_agent::{config, os, role, update, VERSION};
+use daedalus_agent::{os, VERSION};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -83,24 +85,24 @@ fn print_help() {
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(feature = "controller")]
 fn root_helper(args: &[String]) -> Result<()> {
-    daedalus_agent::root::helper::main(args)
+    daedalus_agent::controller::root::helper::main(args)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(feature = "controller"))]
 fn root_helper(_args: &[String]) -> Result<()> {
-    bail!("`root-helper` runs on the box, under systemd")
+    bail!("`root-helper` runs on the box, under systemd (a node's build has none)")
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(feature = "controller")]
 fn outcome(args: &[String]) -> Result<()> {
-    daedalus_agent::root::outcome::main(args)
+    daedalus_agent::controller::root::outcome::main(args)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(feature = "controller"))]
 fn outcome(_args: &[String]) -> Result<()> {
-    bail!("`outcome` runs in a root verb's unit on the box")
+    bail!("`outcome` runs in a root verb's unit on the box (a node's build has none)")
 }
 
 fn run_as_service() -> Result<()> {
@@ -134,13 +136,13 @@ fn install(args: &[String]) -> Result<()> {
 fn install_os(args: &[String]) -> Result<()> {
     // Without --pin the machine installs unpaired: it runs and dials nobody
     // until `pair` names the controller (pair.rs).
-    let (pairing, controller) = daedalus_agent::pair::parse_args(args)?;
+    let (pairing, controller) = daedalus_agent::node::pair::parse_args(args)?;
     // Paired with another box: the last one's santree grant goes before the
     // service starts again.
     if pairing.as_ref().is_some_and(|p| {
-        daedalus_agent::pair::moves_pin(&daedalus_agent::paths::config_path(), &p.pin)
+        daedalus_agent::node::pair::moves_pin(&daedalus_agent::core::paths::config_path(), &p.pin)
     }) {
-        daedalus_agent::paths::forget_santree();
+        daedalus_agent::core::paths::forget_santree();
     }
     let cfg = config::Config {
         controller_pin: pairing.map(|p| p.pin),
@@ -148,8 +150,8 @@ fn install_os(args: &[String]) -> Result<()> {
         ..config::Config::default()
     };
     os::svc::install(&cfg)?;
-    if !daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
-        println!("\n{}", daedalus_agent::pair::unpaired_hint());
+    if !daedalus_agent::node::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
+        println!("\n{}", daedalus_agent::node::pair::unpaired_hint());
     }
     Ok(())
 }
@@ -180,8 +182,8 @@ fn install_os(args: &[String]) -> Result<()> {
         }
     }
     os::mac::install_with(&config::Config::default(), &opts)?;
-    if !daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
-        println!("\n{}", daedalus_agent::pair::unpaired_hint());
+    if !daedalus_agent::node::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
+        println!("\n{}", daedalus_agent::node::pair::unpaired_hint());
     }
     Ok(())
 }
@@ -196,23 +198,23 @@ fn pair(args: &[String]) -> Result<()> {
     if cfg!(target_os = "macos") {
         bail!("a Mac logs in from its menu bar instead (\"Log in…\")");
     }
-    let path = daedalus_agent::paths::config_path();
+    let path = daedalus_agent::core::paths::config_path();
     if args.len() == 1 && args[0] == "--check" {
-        if daedalus_agent::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
+        if daedalus_agent::node::pair::paired_at(&daedalus_agent::link::KeyFiles::here())? {
             println!("paired");
             return Ok(());
         }
         println!("not paired");
         std::process::exit(1);
     }
-    let (pairing, _) = daedalus_agent::pair::parse_args(args)?;
+    let (pairing, _) = daedalus_agent::node::pair::parse_args(args)?;
     let Some(p) = pairing else {
         bail!(
             "--pin is required: the controller key from Settings › Machines, as in\n  {}",
-            daedalus_agent::pair::command_line("<key>", None)
+            daedalus_agent::node::pair::command_line("<key>", None)
         );
     };
-    let moved = daedalus_agent::pair::moves_pin(&path, &p.pin);
+    let moved = daedalus_agent::node::pair::moves_pin(&path, &p.pin);
     p.write_at(&path).with_context(|| {
         format!(
             "config.toml is the service's: run `pair` as {}",
@@ -224,10 +226,10 @@ fn pair(args: &[String]) -> Result<()> {
         )
     })?;
     if moved {
-        daedalus_agent::paths::forget_santree();
+        daedalus_agent::core::paths::forget_santree();
     }
     println!("paired: this machine trusts the controller key {}", p.pin);
-    match daedalus_agent::local::call::<String>(&LocalRequest::LinkReload) {
+    match daedalus_agent::ipc::local::call::<String>(&LocalRequest::LinkReload) {
         Ok(_) => println!("the service connects now; `daedalus-agent status` shows the link"),
         Err(e) => println!("the service did not answer ({e}); it reads config.toml when it starts"),
     }
@@ -243,9 +245,11 @@ fn enroll_finish(args: &[String]) -> Result<()> {
     let [code] = args else {
         bail!("usage: daedalus-agent enroll-finish CODE (the menu bar runs it)");
     };
-    let said: String = daedalus_agent::local::call_within(
-        &LocalRequest::EnrollFinish(daedalus_agent::local::FinishParams { code: code.clone() }),
-        daedalus_agent::local::DEADLINE,
+    let said: String = daedalus_agent::ipc::local::call_within(
+        &LocalRequest::EnrollFinish(daedalus_agent::ipc::local::FinishParams {
+            code: code.clone(),
+        }),
+        daedalus_agent::ipc::local::DEADLINE,
     )?;
     println!("{said}");
     Ok(())
@@ -276,11 +280,11 @@ fn uninstall(args: &[String]) -> Result<()> {
 
 fn status_cmd() -> Result<()> {
     config::load_for_user()?;
-    let doc: daedalus_agent::status::StatusDocument =
-        daedalus_agent::local::call(&LocalRequest::Status)?;
+    let doc: daedalus_agent::core::status::StatusDocument =
+        daedalus_agent::ipc::local::call(&LocalRequest::Status)?;
     println!("{}", serde_json::to_string_pretty(&doc)?);
     if doc.controller.and_then(|c| c.state) == Some(daedalus_agent::link::LinkState::Unpaired) {
-        eprintln!("\n{}", daedalus_agent::pair::unpaired_hint());
+        eprintln!("\n{}", daedalus_agent::node::pair::unpaired_hint());
     }
     Ok(())
 }
@@ -311,14 +315,14 @@ fn update_cmd(args: &[String]) -> Result<()> {
     } else {
         None
     };
-    let store = daedalus_agent::state::StateStore::load();
+    let store = daedalus_agent::core::state::StateStore::load();
     let refused = store.get().rolled_back.map(|r| r.version);
     match update::check(refused.as_deref())? {
         None => println!("no newer release than {VERSION}"),
         Some(rel) => {
             println!("newer release: {} ({})", rel.version, rel.tag);
             if apply {
-                update::install(&rel, &store, &daedalus_agent::state::now_rfc3339())?;
+                update::install(&rel, &store, &daedalus_agent::core::state::now_rfc3339())?;
                 println!(
                     "installed {}; start the service to run it (on probation: the previous binaries stay until it proves itself)",
                     rel.version
@@ -333,7 +337,7 @@ fn claude_cmd(args: &[String]) -> Result<()> {
     config::load_for_user()?;
     match args.first().map(String::as_str) {
         Some("restart") => {
-            let said: String = daedalus_agent::local::call(&LocalRequest::ClaudeRestart)?;
+            let said: String = daedalus_agent::ipc::local::call(&LocalRequest::ClaudeRestart)?;
             println!("{said}");
             Ok(())
         }

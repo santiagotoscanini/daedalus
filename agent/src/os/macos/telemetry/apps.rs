@@ -126,7 +126,7 @@ fn app_source(path: &str, file: &str, id: Option<&str>, casks: &HashSet<String>)
 fn modified_day(path: &str) -> Option<String> {
     let t = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
     let ago = std::time::SystemTime::now().duration_since(t).ok()?;
-    let stamp = crate::state::rfc3339_ago(ago.as_secs());
+    let stamp = crate::core::state::rfc3339_ago(ago.as_secs());
     stamp.get(..10).map(str::to_string)
 }
 

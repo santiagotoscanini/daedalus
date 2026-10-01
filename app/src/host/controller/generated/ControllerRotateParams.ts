@@ -2,7 +2,7 @@
 
 /**
  * `controller.rotate`'s parameters: how long both keys are served before
- * the old one retires, in seconds (link/rotation.rs `GRACE_MIN` to
+ * the old one retires, in seconds (controller/rotation.rs `GRACE_MIN` to
  * `GRACE_MAX`; absent, `GRACE_DEFAULT`). Its answer is the controller as
  * `system.info` then states it (`ControllerInfo`, with its `rotation`).
  */

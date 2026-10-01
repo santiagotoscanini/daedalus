@@ -25,7 +25,7 @@
 //!   process tree, and relaying Ctrl-C / SIGTERM;
 //! - the local sockets: the agent's own door for the tray, the session and
 //!   the verbs — a unix socket, a named pipe on Windows — with the peer the
-//!   kernel names and whom it may serve (local.rs); and the controller's API,
+//!   kernel names and whom it may serve (ipc/local/); and the controller's API,
 //!   a unix socket served to this process's own uid
 //!   by its peer credentials, made and cleaned up (api/; unix.rs — Windows
 //!   is never a controller and refuses);
@@ -86,10 +86,8 @@ pub use imp::{
     contain, hide_console, isolate, kill_tree, lock_exclusive, monotonic_usec, on_interrupt,
     pid_alive, process_table, try_lock_exclusive, Tree,
 };
-// the local sockets: the controller's API (api/) and the agent's own door (local.rs)
-pub use imp::{
-    connect_local, local_allowed, local_socket_path, serve_api_socket, serve_local, LocalSocket,
-};
+// the local sockets: the controller's API (controller/api/) and the agent's own door (ipc/local/)
+pub use imp::{connect_local, local_allowed, local_socket_path, serve_local, LocalSocket};
 // the operator: whom santree's socket (santree.rs) and a log-in (enroll.rs) serve
 #[cfg(unix)]
 pub use self::unix::user_name;

@@ -1,14 +1,17 @@
 //! The service: `run` under the service manager, `serve` in a terminal.
-//! `agent_main` brings up what this machine's role runs (role.rs) — the
-//! controller's parts (`start_controller`) or a node's link and santree
-//! door (`start_node`), the local socket, the workers — then keeps the
+//! `agent_main` brings up what this machine's role runs (core/role.rs) —
+//! the controller's parts and doors (controller.rs, the `controller`
+//! feature) or a node's link and santree door (node.rs), the local socket,
+//! the workers — then keeps the
 //! awake hold (`HoldKeeper`), an update's probation (`Probation`) and, on
 //! Windows, the tray (`TrayWatchdog`) until `stop` is raised, and takes it
 //! all down in order.
 
+#[cfg(feature = "controller")]
+mod controller;
 mod hold;
+mod node;
 mod probation;
-mod start;
 mod watchdog;
 mod workers;
 
@@ -18,12 +21,17 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 
+use crate::core::{config, facts, logging, paths, state};
+use crate::ipc::local;
+use crate::node::update;
+use crate::os;
 use crate::util::Shutdown;
-use crate::{config, facts, local, logging, metrics_page, os, paths, state, update};
 
+#[cfg(feature = "controller")]
+pub use controller::{start_controller, ControllerDoors, ControllerStart};
 pub use hold::HoldKeeper;
+pub use node::{start_node, NodeDoor};
 pub use probation::Probation;
-pub use start::{start_controller, start_node, ControllerStart, NodeDoor};
 pub use watchdog::TrayWatchdog;
 pub use workers::Workers;
 
@@ -74,6 +82,12 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
         mode = ?role.mode,
         "daedalus-agent starting"
     );
+    if role.mode == config::Mode::Controller && !cfg!(feature = "controller") {
+        anyhow::bail!(
+            "config.toml says mode = \"controller\", and this is a node's build: the box builds its \
+             own with the `controller` feature"
+        );
+    }
 
     // One service per data directory (a port another process holds is
     // waited out, metrics_page.rs `Page`).
@@ -92,7 +106,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     let facts = facts::read();
     tracing::info!(os = %facts.os_name, version = %facts.os_version, cpu = %facts.cpu, "this machine");
     let on_probation = state.probation.is_some();
-    let base = crate::shared::Shared::new(
+    let base = crate::core::shared::Shared::new(
         role,
         facts.clone(),
         state,
@@ -103,6 +117,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     // `[controller] listen` names an address, the registry of machines and
     // the session host: built before the shared state is, so every reader
     // sees them from the first request.
+    #[cfg(feature = "controller")]
     let (base, listen) = if role.node_listener {
         let c = start_controller(&cfg, &base, &stop)?;
         (base.with_controller(c.parts), c.listen)
@@ -113,7 +128,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     // link, but the hold and the local socket do not depend on it.
     let identity = role.link.then(load_identity).flatten();
     let shared = Arc::new(match &identity {
-        Some(id) => base.with_node(crate::shared::NodeKey {
+        Some(id) => base.with_node(crate::core::shared::NodeKey {
             id: id.node_id(),
             fingerprint: id.fingerprint(),
         }),
@@ -146,14 +161,10 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
             return;
         }
     });
-    // The local socket for the tray, the session and the verbs (local.rs),
-    // and on the controller the metrics page Prometheus scrapes
-    // (metrics_page.rs). Either one that cannot be bound does not stop the
-    // service: it is tried again in the background while the rest runs.
+    // The local socket for the tray, the session and the verbs (ipc/local/):
+    // one that cannot be made does not stop the service — it is tried again
+    // in the background while the rest runs.
     let local_door = local::Door::start(Arc::clone(&shared));
-    let metrics = role
-        .metrics_page
-        .then(|| metrics_page::Page::start(cfg.port, Arc::clone(&shared)));
     // After an update, the tray or the session started again on the new
     // binary so it matches the service (os `restart_desktop_side`).
     if matches!(start, update::Start::Probation(1)) && role.session && !role.session_in_service {
@@ -165,26 +176,12 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
             });
     }
 
-    // The controller's door for the app (api/), opened before the sampler
-    // and the session start, so a second instance that got past the local
-    // socket (another data directory) stops here without having started
-    // either — above all, without touching the Claude unit; then the
-    // machines' listener (link/controller/).
-    let api = if role.api_socket {
-        Some(crate::api::serve(&cfg, Arc::clone(&shared))?)
-    } else {
-        None
-    };
-    let listener = start::listen_for_machines(listen, &shared)?;
-
-    // A node's way to the box: the link and santree's door.
-    let node = start_node(&cfg, &shared, identity, &facts, &mut workers)?;
     let doors = Doors {
-        _listener: listener,
-        _node: node,
-        _api: api,
+        #[cfg(feature = "controller")]
+        _controller: ControllerDoors::open(&cfg, &shared, listen)?,
+        // A node's way to the box: the link and santree's door.
+        _node: start_node(&cfg, &shared, identity, &facts, &mut workers)?,
         local: local_door,
-        _metrics: metrics,
     };
 
     if cfg.telemetry == config::TelemetryLevel::Off {
@@ -201,7 +198,7 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
     // what it finds up: on every node, whatever the telemetry level.
     if role.link {
         workers
-            .spawn("providers", crate::providers::run_loop)
+            .spawn("providers", crate::node::providers::run_loop)
             .context("spawning the providers' reader")?;
     }
     // The controller's session runs here, in this process (role.rs).
@@ -235,7 +232,8 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
             break;
         }
         // A controller key rotation whose grace period is over retires the
-        // old key (link/rotation.rs).
+        // old key (controller/rotation.rs).
+        #[cfg(feature = "controller")]
         if let Some(c) = &shared.controller {
             c.keys.tick();
         }
@@ -258,14 +256,12 @@ pub fn agent_main(stop: Shutdown, foreground: bool) -> Result<()> {
 }
 
 /// What the service answers on, closed in this order when dropped: the
-/// machines' listener, santree's door, the API, the local socket, the
-/// metrics page.
+/// controller's doors, santree's, the local socket.
 struct Doors {
-    _listener: Option<crate::link::controller::Listener>,
+    #[cfg(feature = "controller")]
+    _controller: ControllerDoors,
     _node: NodeDoor,
-    _api: Option<crate::os::LocalSocket>,
     local: local::Door,
-    _metrics: Option<metrics_page::Page>,
 }
 
 /// This machine's key, made on the first start; None, logged, when it

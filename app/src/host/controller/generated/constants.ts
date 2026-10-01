@@ -7,13 +7,13 @@ export const AGENT_VERSION = '0.25.0'
 /** The API version (api/mod.rs). */
 export const API_VERSION = 1
 
-/** The longest line either side writes, in bytes (api/mod.rs). */
+/** The longest line either side writes, in bytes (ipc/door.rs). */
 export const MAX_LINE = 1048576
 
-/** How long the controller waits for a machine to acknowledge a verb it relays, in ms (link/controller/registry.rs). */
+/** How long the controller waits for a machine to acknowledge a verb it relays, in ms (controller/link/registry.rs). */
 export const ACK_TIMEOUT_MS = 5000
 
-/** How long a detached `root.run` may take to start before the controller answers, in ms (api/mod.rs). */
+/** How long a detached `root.run` may take to start before the controller answers, in ms (controller/api/mod.rs). */
 export const ROOT_DETACH_WAIT_MS = 30000
 
 /** The longest name `nodes.set_desired` takes, in characters (api/wire.rs). */

@@ -175,7 +175,7 @@ pub(super) fn read_os(errors: &mut Vec<String>) -> Os {
             .map(|d| d.as_secs())
             .unwrap_or(0);
         let install = u64::from(install);
-        (install > 0 && install <= now).then(|| crate::state::rfc3339_ago(now - install))
+        (install > 0 && install <= now).then(|| crate::core::state::rfc3339_ago(now - install))
     });
     if installed_at.is_none() {
         errors.push("OS install date is not in the registry".into());

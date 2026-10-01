@@ -37,7 +37,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::claude::SessionAction;
-use crate::config::TelemetryLevel;
+use crate::core::config::TelemetryLevel;
 
 /// The link protocol this agent speaks.
 pub const PROTO: u32 = 1;
@@ -124,7 +124,7 @@ impl PolicyRequest {
 /// Where a machine stands with the box: what the app decided, or pending
 /// while it has decided nothing. `Unknown` is the controller's word, in its
 /// own API, for a key it has seen but that is neither connected nor in the
-/// app's set (link/controller.rs); a machine is never told it.
+/// app's set (controller/link/); a machine is never told it.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -326,7 +326,7 @@ impl SessionHost {
     /// The address and the key, checked: `host:port` of at most 255 bytes,
     /// and 32 bytes of hex.
     pub fn checked(&self) -> Result<(&str, [u8; 32]), String> {
-        if self.address.len() > 255 || !crate::config::valid_host_port(&self.address) {
+        if self.address.len() > 255 || !crate::core::config::valid_host_port(&self.address) {
             return Err(format!(
                 "the session host's address {:?} is not host:port",
                 self.address
@@ -428,7 +428,7 @@ pub struct Accepted {
     pub accepted: bool,
 }
 
-pub use crate::rpc::Incoming;
+pub use crate::ipc::rpc::Incoming;
 
 /// A request as a line (no newline).
 pub fn request<P: Serialize>(id: u64, m: &str, p: &P) -> String {
@@ -458,7 +458,7 @@ pub const HB_LINE: &str = r#"{"e":"hb"}"#;
 pub(crate) mod tests {
     use super::*;
     use crate::claude::Roster;
-    use crate::rpc::Response;
+    use crate::ipc::rpc::Response;
     use serde_json::json;
 
     fn wire<T: Serialize>(v: &T) -> String {
@@ -627,9 +627,9 @@ pub(crate) mod tests {
                 "{bad}"
             );
         }
-        let load = crate::providers::ProviderModelParams {
-            kind: crate::providers::ProviderKind::Lemonade,
-            action: crate::providers::ModelAction::Load,
+        let load = crate::node::providers::ProviderModelParams {
+            kind: crate::node::providers::ProviderKind::Lemonade,
+            action: crate::node::providers::ModelAction::Load,
             model: "Gemma-4".into(),
             pinned: true,
             replacing: Some("Qwen3".into()),
@@ -648,7 +648,7 @@ pub(crate) mod tests {
             json!({"kind":"lemonade","action":"delete","model":"m","request":"00112233445566ff"}),
         ] {
             assert!(
-                serde_json::from_value::<crate::providers::ProviderModelParams>(bad.clone())
+                serde_json::from_value::<crate::node::providers::ProviderModelParams>(bad.clone())
                     .is_err(),
                 "{bad}"
             );
@@ -659,7 +659,7 @@ pub(crate) mod tests {
             json!({"kind":"lemonade","action":"unload","model":"m","replacing":"n","request":"00112233445566ff"}),
             json!({"kind":"lemonade","action":"load","model":"m","request":"short"}),
         ] {
-            let p: crate::providers::ProviderModelParams =
+            let p: crate::node::providers::ProviderModelParams =
                 serde_json::from_value(bad.clone()).unwrap();
             assert!(p.check().is_err(), "{bad}");
         }

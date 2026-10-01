@@ -245,7 +245,7 @@ impl Roster {
 
     /// Whether it says something `prev` did not, leaving out what moves by
     /// itself — the clock, and the costs that tick with every read: what
-    /// the link pushes on (link/node.rs). Field by field, nothing copied.
+    /// the link pushes on (node/link.rs). Field by field, nothing copied.
     pub fn moved(&self, prev: &Roster) -> bool {
         fn jobs(r: &Roster) -> Vec<(&str, &str, Option<u32>, &str)> {
             r.managed

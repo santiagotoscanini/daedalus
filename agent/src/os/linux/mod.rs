@@ -29,8 +29,8 @@ pub mod tray;
 pub use super::unix::{
     claude_holder, connect_local, contain, create_private, ensure_private, file_owner,
     hide_console, isolate, kill_tree, local_socket_path, lock_exclusive, mark_executable,
-    monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_api_socket, serve_local,
-    try_lock_exclusive, unseal, LocalSocket, Tree, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
+    monotonic_usec, on_interrupt, own_uid, pid_alive, seal, serve_local, try_lock_exclusive,
+    unseal, LocalSocket, Tree, CLAUDE_CLI_NAMES, CONFIG_ACCESS,
 };
 pub use net::{primary_adapter, srv_lookup};
 pub use power::{converge_plan, os_uptime_secs, requests_report, Hold};
@@ -67,7 +67,7 @@ pub fn default_data_dir() -> PathBuf {
 /// Under `DAEDALUS_AGENT_DATA_DIR` — a development run — None, so they
 /// write beside the service's logs in the moved directory.
 pub fn user_log_dir() -> Option<PathBuf> {
-    if std::env::var_os(crate::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
+    if std::env::var_os(crate::core::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
         return None;
     }
     let state = std::env::var_os("XDG_STATE_HOME")
@@ -95,13 +95,13 @@ pub fn port_holder(port: u16) -> Option<String> {
 
 // ── the local socket ──────────────────────────────────────────────────────
 
-/// Whom the agent's local socket serves (local.rs): root, the service's own
+/// Whom the agent's local socket serves (ipc/local/): root, the service's own
 /// uid, and the user `install` enabled the session for (`session.json`) —
 /// read at each connection, since `install` records it after the service
 /// is up.
-pub fn local_allowed() -> crate::door::Allowed {
+pub fn local_allowed() -> crate::ipc::door::Allowed {
     let session: Vec<u32> = systemd::session_uid().into_iter().collect();
-    crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &session)
+    crate::ipc::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &session)
 }
 
 /// The operator: whom santree's socket (santree.rs) and a log-in
@@ -109,9 +109,9 @@ pub fn local_allowed() -> crate::door::Allowed {
 /// recorded (`session.json`), the one who ran it under `sudo`; the same set
 /// as the local socket's. A santree connection is a shell on the box, so it
 /// is this list and never who is logged in.
-pub fn operator_allowed() -> crate::door::Allowed {
+pub fn operator_allowed() -> crate::ipc::door::Allowed {
     let installer: Vec<u32> = operator_uid().into_iter().collect();
-    crate::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
+    crate::ipc::door::unix_allowed(super::unix::own_uid().unwrap_or(0), &installer)
 }
 
 /// The installing user, when `install` recorded one.

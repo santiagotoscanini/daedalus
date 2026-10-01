@@ -30,7 +30,7 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
-use crate::update::Slot;
+use crate::node::update::Slot;
 
 pub const APP_NAME: &str = "Daedalus Agent.app";
 /// The bundle's identifier: the menu bar app's, its main executable.
@@ -286,7 +286,7 @@ pub fn check(app: &Path, want: &semver::Version, signed: bool) -> Result<()> {
             })?;
         }
     }
-    let said = crate::update::version_of(&service_exe(app))?;
+    let said = crate::node::update::version_of(&service_exe(app))?;
     if said != *want {
         bail!("the bundle's service says {said}, not {want}");
     }

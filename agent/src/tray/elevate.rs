@@ -18,7 +18,7 @@ pub const PAIR_PROMPT: &str = "Paste the controller key from Settings › Machin
 /// reason it did not, for the answer's dialog. Pairing names the
 /// controller that commands this machine's service, so it asks what
 /// `install` asks; the tray never writes config.toml, and the local
-/// socket has no door for it (local.rs). The paste is checked first
+/// socket has no door for it (ipc/local/). The paste is checked first
 /// (pair.rs `parse_pasted`): nothing malformed ever reaches the prompt,
 /// and only the checked key and address — a fingerprint and host:port —
 /// reach the command line.
@@ -33,14 +33,14 @@ pub fn pair_pasted(text: &str) -> std::result::Result<String, String> {
 #[cfg(not(target_os = "macos"))]
 pub(super) fn pair_command(
     text: &str,
-) -> std::result::Result<(PathBuf, Vec<String>, crate::pair::Pairing), String> {
-    let p = crate::pair::parse_pasted(text).map_err(|e| format!("{e:#}"))?;
+) -> std::result::Result<(PathBuf, Vec<String>, crate::node::pair::Pairing), String> {
+    let p = crate::node::pair::parse_pasted(text).map_err(|e| format!("{e:#}"))?;
     Ok((agent_exe()?, pair_args(&p), p))
 }
 
 /// `pair --pin KEY [--controller HOST:PORT]` for a checked pairing.
 #[cfg(not(target_os = "macos"))]
-pub fn pair_args(p: &crate::pair::Pairing) -> Vec<String> {
+pub fn pair_args(p: &crate::node::pair::Pairing) -> Vec<String> {
     let mut a = vec!["pair".to_string(), "--pin".to_string(), p.pin.clone()];
     if let Some(c) = &p.controller {
         a.extend(["--controller".to_string(), c.clone()]);

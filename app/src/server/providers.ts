@@ -21,7 +21,7 @@ import { adminFn, readFn } from './fn'
 //
 // Through the controller, never at the machine: `nodes.provider_model`
 // hands the verb to the machine's agent, which runs it against its provider
-// on its own loopback (agent/src/providers/lemonade.rs `residency`) and reports the
+// on its own loopback (agent/src/node/providers/lemonade.rs `residency`) and reports the
 // outcome in its next providers document under the request id this call
 // gets back — reading again at once, so the document that carries the
 // outcome also shows the slot as it now is. The page follows that id with

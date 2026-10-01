@@ -44,7 +44,7 @@ import {
 
 // A machine's documents as the box reads them — its status document, its
 // Claude report and summary, its telemetry — exactly as the agent writes
-// them (agent/src/shared.rs, claude/, telemetry/). Each decoder is held to
+// them (agent/src/core/status.rs, claude/, telemetry/). Each decoder is held to
 // the generated type both ways (`reads`), so the loaders take the generated
 // types themselves; the controller hands these documents over in its
 // answers (host/controller/wire.ts).

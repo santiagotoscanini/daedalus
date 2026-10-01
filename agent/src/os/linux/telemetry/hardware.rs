@@ -85,7 +85,7 @@ pub(super) fn read_static() -> (Static, Vec<PathBuf>) {
             .and_then(|m| m.created())
             .ok()
             .and_then(|t| std::time::SystemTime::now().duration_since(t).ok())
-            .map(|ago| crate::state::rfc3339_ago(ago.as_secs())),
+            .map(|ago| crate::core::state::rfc3339_ago(ago.as_secs())),
     };
 
     let cpu = read_cpu(&mut errors);

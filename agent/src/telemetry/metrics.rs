@@ -1,5 +1,5 @@
 //! The telemetry document as Prometheus text: what the controller serves
-//! at `/nodes/metrics` for every connected machine (link/controller.rs).
+//! at `/nodes/metrics` for every connected machine (controller/link/).
 
 use super::Telemetry;
 
@@ -216,8 +216,8 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
 /// - `daedalus_agent_provider_models{…,kind}`: catalog entries on disk.
 /// - `daedalus_agent_provider_loaded{…,kind}`: models resident now.
 pub fn providers_text(
-    list: &[crate::providers::ProviderReport],
-    offered: impl Fn(crate::providers::ProviderKind) -> bool,
+    list: &[crate::node::providers::ProviderReport],
+    offered: impl Fn(crate::node::providers::ProviderKind) -> bool,
     labels: &Labels,
 ) -> String {
     let base = labels.render();

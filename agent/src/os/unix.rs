@@ -1,7 +1,7 @@
 //! What macOS and Linux share: the machine's name from `gethostname`, the
 //! identity file's 0600 posture, the executable bit, the Ctrl-C / SIGTERM
 //! relay, processes in groups of their own, and the two unix sockets — the
-//! controller's API (api/) and the agent's local door (local.rs), one
+//! controller's API (controller/api/) and the agent's local door (ipc/local/), one
 //! server core with a gate each. Each OS module re-exports the parts it
 //! uses.
 
@@ -238,7 +238,7 @@ pub fn try_lock_exclusive(path: &Path) -> std::io::Result<Option<std::fs::File>>
 
 // ── the local sockets: the API's and the agent's own ───────────────────────
 
-/// The API's socket (api/), served by a thread until this is dropped,
+/// The API's socket (controller/api/), served by a thread until this is dropped,
 /// which stops accepting and removes the socket.
 pub struct LocalSocket {
     path: std::path::PathBuf,
@@ -558,32 +558,6 @@ fn clear_stale(path: &Path) -> Result<()> {
     }
 }
 
-/// Serve the API's socket at `path` (api/): the directory made if missing
-/// (0700) or checked if not (`socket_dir`), a stale socket removed, another
-/// instance refused, the socket 0600 — or, open to others, 0711 and 0666.
-/// Each connection `policy.allow`s, while fewer than `max_connections` are
-/// open, is handed to `on_conn` on a thread of its own; any other peer gets
-/// `policy.refusal`, one past the limit `policy.busy`, and is closed.
-pub fn serve_api_socket<F>(
-    path: &Path,
-    policy: &crate::door::Policy,
-    on_conn: F,
-) -> Result<LocalSocket>
-where
-    F: Fn(crate::door::Conn) + Send + Sync + 'static,
-{
-    serve_gated(path, policy.clone(), on_conn)
-}
-
-/// Serve the agent's local socket at `path` (local.rs), as the API's: the
-/// policy says 0711 and 0666, and every exchange has its whole deadline.
-pub fn serve_local<F>(path: &Path, policy: &crate::door::Policy, on_conn: F) -> Result<LocalSocket>
-where
-    F: Fn(crate::door::Conn) + Send + Sync + 'static,
-{
-    serve_gated(path, policy.clone(), on_conn)
-}
-
 /// Where the agent's local socket is: `run/agent.sock` in the data
 /// directory, which moves with `DAEDALUS_AGENT_DATA_DIR` (`dev` names the
 /// pipe on Windows, and nothing here).
@@ -595,9 +569,9 @@ pub fn local_socket_path(data_dir: &Path, dev: Option<&str>) -> std::path::PathB
 /// Connect to the agent's local socket at `path`, the whole exchange
 /// within `timeout`, and only when the other end is one to trust
 /// (`door::server_trusted`: root or this user, owning the socket file).
-pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::door::Conn> {
-    use crate::deadline::{Deadline, Watchdog};
-    use crate::door::{server_trusted, Peer, ServerSide};
+pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::ipc::door::Conn> {
+    use crate::ipc::deadline::{Deadline, Watchdog};
+    use crate::ipc::door::{server_trusted, Peer, ServerSide};
     use std::os::unix::fs::MetadataExt;
     let file_owner = std::fs::metadata(path).ok().map(|m| m.uid());
     let stream = std::os::unix::net::UnixStream::connect(path)?;
@@ -606,7 +580,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::d
         uid: peer_uid(&stream),
         file_owner,
     };
-    if !server_trusted(&side, Some(&Peer::Uid(euid())), crate::door::dev_run()) {
+    if !server_trusted(&side, Some(&Peer::Uid(euid())), crate::ipc::door::dev_run()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             format!(
@@ -622,7 +596,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> std::io::Result<crate::d
         let _ = cut.shutdown(std::net::Shutdown::Both);
     });
     let dog = std::sync::Mutex::new(Some(dog));
-    Ok(crate::door::Conn {
+    Ok(crate::ipc::door::Conn {
         reader: Box::new(stream),
         writer: Box::new(writer),
         on_hello: Box::new(|| {}),
@@ -644,8 +618,8 @@ struct Acceptor {
     write_timeout: Duration,
 }
 
-impl crate::door::Listener for Acceptor {
-    fn accept(&self) -> Option<std::io::Result<crate::door::Accepted>> {
+impl crate::ipc::door::Listener for Acceptor {
+    fn accept(&self) -> Option<std::io::Result<crate::ipc::door::Accepted>> {
         let accepted = self.listener.accept();
         if self.stop.load(Ordering::Relaxed) {
             return None;
@@ -655,15 +629,15 @@ impl crate::door::Listener for Acceptor {
             // after the timeout.
             stream.set_write_timeout(Some(self.write_timeout))?;
             let (uid, pid) = peer_cred(&stream);
-            let peer = uid.map(crate::door::Peer::Uid);
+            let peer = uid.map(crate::ipc::door::Peer::Uid);
             let (writer, ctl, half, cut) = (
                 stream.try_clone()?,
                 stream.try_clone()?,
                 stream.try_clone()?,
                 stream.try_clone()?,
             );
-            Ok(crate::door::Accepted {
-                conn: crate::door::Conn {
+            Ok(crate::ipc::door::Accepted {
+                conn: crate::ipc::door::Conn {
                     reader: Box::new(stream),
                     writer: Box::new(writer),
                     on_hello: Box::new(|| {}),
@@ -679,18 +653,30 @@ impl crate::door::Listener for Acceptor {
                 abort: Arc::new(move || {
                     let _ = cut.shutdown(std::net::Shutdown::Both);
                 }),
-                peer: crate::door::PeerAt::Now(peer),
+                peer: crate::ipc::door::PeerAt::Now(peer),
             })
         }))
     }
 }
 
-/// The core of both: make the directory and the socket, then serve it as a
-/// door (door.rs `serve`).
-fn serve_gated<F>(path: &Path, gate: crate::door::Policy, on_conn: F) -> Result<LocalSocket>
+/// Serve a local socket at `path` as a door (door.rs `serve`) — the agent's
+/// own (ipc/local/: 0711 and 0666, every exchange within its whole
+/// deadline) and, on the controller, the API's (controller/api/): the
+/// directory made if missing (0700) or checked if not (`socket_dir`), a
+/// stale socket removed, another instance refused, the socket 0600 — or,
+/// open to others, 0711 and 0666. Each connection `policy.allow`s, while
+/// fewer than `max_connections` are open, is handed to `on_conn` on a
+/// thread of its own; any other peer gets `policy.refusal`, one past the
+/// limit `policy.busy`, and is closed.
+pub fn serve_local<F>(
+    path: &Path,
+    policy: &crate::ipc::door::Policy,
+    on_conn: F,
+) -> Result<LocalSocket>
 where
-    F: Fn(crate::door::Conn) + Send + Sync + 'static,
+    F: Fn(crate::ipc::door::Conn) + Send + Sync + 'static,
 {
+    let gate = policy.clone();
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
     let dir = path
@@ -714,7 +700,8 @@ where
         stop: Arc::clone(&stop),
         write_timeout: gate.write_timeout,
     };
-    crate::door::serve(acceptor, gate, on_conn).context("spawning a socket's accept thread")?;
+    crate::ipc::door::serve(acceptor, gate, on_conn)
+        .context("spawning a socket's accept thread")?;
     Ok(LocalSocket {
         path: path.to_path_buf(),
         ino,
@@ -726,8 +713,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::door::Conn;
-    use crate::door::Policy;
+    use crate::ipc::door::Conn;
+    use crate::ipc::door::Policy;
     use std::io::{BufRead, BufReader, Read, Write};
 
     fn scratch(name: &str) -> std::path::PathBuf {
@@ -755,7 +742,7 @@ mod tests {
         let own = euid();
         Policy {
             what: "test",
-            allow: Arc::new(move |p| p == Some(&crate::door::Peer::Uid(own))),
+            allow: Arc::new(move |p| p == Some(&crate::ipc::door::Peer::Uid(own))),
             refusal: Arc::new(|_| "refused\n".into()),
             busy: "busy\n".into(),
             max_connections: 16,
@@ -785,7 +772,7 @@ mod tests {
         let dir = scratch("life");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("run").join("api.sock");
-        let sock = serve_api_socket(&path, &limits(), echo).unwrap();
+        let sock = serve_local(&path, &limits(), echo).unwrap();
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&path), 0o600);
         assert_eq!(mode(path.parent().unwrap()), 0o700);
@@ -794,7 +781,7 @@ mod tests {
         writeln!(c, "ping").unwrap();
         assert_eq!(read_one(&c), "ping\n");
         // A second instance is refused while this one answers.
-        let e = serve_api_socket(&path, &limits(), echo)
+        let e = serve_local(&path, &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -810,7 +797,7 @@ mod tests {
         // then — which is exactly a second instance, so wait it out.
         let until = std::time::Instant::now() + Duration::from_secs(5);
         let sock = loop {
-            match serve_api_socket(&path, &limits(), echo) {
+            match serve_local(&path, &limits(), echo) {
                 Ok(s) => break s,
                 Err(e) if std::time::Instant::now() < until => {
                     assert!(e.to_string().contains("already answers"), "{e}");
@@ -821,7 +808,7 @@ mod tests {
         };
         drop(sock);
         std::fs::write(&path, "not a socket").unwrap();
-        let e = serve_api_socket(&path, &limits(), echo)
+        let e = serve_local(&path, &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -832,10 +819,10 @@ mod tests {
         // group or others can write it, or when it is a symlink.
         let run = path.parent().unwrap();
         std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o750)).unwrap();
-        drop(serve_api_socket(&path, &limits(), echo).unwrap());
+        drop(serve_local(&path, &limits(), echo).unwrap());
         assert_eq!(mode(run), 0o750);
         std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o770)).unwrap();
-        let e = serve_api_socket(&path, &limits(), echo)
+        let e = serve_local(&path, &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -843,7 +830,7 @@ mod tests {
         assert_eq!(mode(run), 0o770, "never chmods a directory it did not make");
         let link = dir.join("link");
         std::os::unix::fs::symlink(run, &link).unwrap();
-        let e = serve_api_socket(&link.join("api.sock"), &limits(), echo)
+        let e = serve_local(&link.join("api.sock"), &limits(), echo)
             .err()
             .unwrap()
             .to_string();
@@ -863,7 +850,7 @@ mod tests {
             open_to_others: true,
             ..limits()
         };
-        let sock = serve_api_socket(&path, &open, echo).unwrap();
+        let sock = serve_local(&path, &open, echo).unwrap();
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&path), 0o666);
         assert_eq!(mode(path.parent().unwrap()), 0o711);
@@ -909,7 +896,7 @@ mod tests {
             max_connections: 1,
             ..limits()
         };
-        let sock = serve_api_socket(&path, &one, echo).unwrap();
+        let sock = serve_local(&path, &one, echo).unwrap();
         let mut first = std::os::unix::net::UnixStream::connect(&path).unwrap();
         writeln!(first, "held").unwrap();
         assert_eq!(read_one(&first), "held\n");
@@ -946,7 +933,7 @@ mod tests {
             first_line: Duration::from_millis(200),
             ..limits()
         };
-        let sock = serve_api_socket(&path, &quick, echo).unwrap();
+        let sock = serve_local(&path, &quick, echo).unwrap();
         let c = std::os::unix::net::UnixStream::connect(&path).unwrap();
         let t = std::time::Instant::now();
         let mut rest = String::new();
@@ -968,7 +955,7 @@ mod tests {
         let done = std::sync::Arc::new(AtomicBool::new(false));
         let sock = {
             let done = std::sync::Arc::clone(&done);
-            serve_api_socket(&path, &quick, move |c: Conn| {
+            serve_local(&path, &quick, move |c: Conn| {
                 // Write until the socket gives up on the reader.
                 let mut w = c.writer;
                 let chunk = vec![b'x'; 64 * 1024];
@@ -1003,7 +990,7 @@ mod tests {
             max_connections: 1,
             ..limits()
         };
-        let sock = serve_api_socket(&path, &quick, |c: Conn| {
+        let sock = serve_local(&path, &quick, |c: Conn| {
             // Reads forever, as the API's reader does before `hello`.
             let mut sink = Vec::new();
             let _ = std::io::Read::read_to_end(&mut { c.reader }, &mut sink);
@@ -1081,7 +1068,7 @@ mod tests {
         let dir = scratch("gone");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("api.sock");
-        let sock = serve_api_socket(&path, &limits(), |_| {}).unwrap();
+        let sock = serve_local(&path, &limits(), |_| {}).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
         let t = std::time::Instant::now();
         drop(sock);

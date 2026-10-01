@@ -270,7 +270,7 @@
         # with every assertion holding, and a verb whose unit the evaluation
         # can see is wrong is refused, naming itself. The table's own rules —
         # names, selector values, patterns, caps — are the helper's
-        # (`Table::check`, tested in agent/src/root), run on the rendered
+        # (`Table::check`, tested in agent/src/controller/root), run on the rendered
         # table at build time by `root-helper --check-table`; evaluation no
         # longer mirrors them.
         root-verbs =

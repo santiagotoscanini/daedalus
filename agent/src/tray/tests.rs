@@ -1,11 +1,11 @@
 use super::*;
 use crate::claude::{ClaudeState, Report};
+use crate::core::status::StatusDocument;
 use crate::link::wire::Policy;
 use crate::link::TunnelStatus;
 use crate::link::{LinkState, LinkStatus};
-use crate::settings::{FailedView, PendingView};
-use crate::settings::{Via, View};
-use crate::status::StatusDocument;
+use crate::node::settings::{FailedView, PendingView};
+use crate::node::settings::{Via, View};
 use std::ffi::OsString;
 use std::path::Path;
 
@@ -38,7 +38,7 @@ fn the_backing_runs_off_the_ui_thread() {
 #[test]
 fn the_updates_row_says_what_the_updater_is_doing() {
     let checked = StatusDocument {
-        state: crate::state::State {
+        state: crate::core::state::State {
             last_update_result: Some("up to date".into()),
             last_update_check: Some("2026-09-30T10:00:00Z".into()),
             ..Default::default()
@@ -413,7 +413,7 @@ fn claude_and_santree_say_what_runs_and_what_a_restart_ends() {
         address: "s2.toscanini.me:7789".into(),
         public_key: String::new(),
     });
-    p.santree = Some(crate::status::SantreeDoor {
+    p.santree = Some(crate::core::status::SantreeDoor {
         open: 1,
         max: 4,
         last_refused: None,
@@ -434,7 +434,7 @@ fn claude_and_santree_say_what_runs_and_what_a_restart_ends() {
 #[test]
 fn the_tray_pairs_through_the_elevated_verb_with_checked_words_only() {
     let key = crate::identity::format_fingerprint(&[6; 32]);
-    let args = |text: &str| crate::pair::parse_pasted(text).map(|p| pair_args(&p));
+    let args = |text: &str| crate::node::pair::parse_pasted(text).map(|p| pair_args(&p));
     assert_eq!(
         args(&format!(
             "sudo daedalus-agent pair --pin '{key}' --controller box.lan:7788"

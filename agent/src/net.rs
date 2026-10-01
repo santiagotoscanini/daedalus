@@ -2,7 +2,7 @@
 //! its hardware address, and the DNS search suffixes DHCP handed it — the
 //! last being how the agent finds the box (see discover.rs). And how it
 //! reaches the box: the `Dialer`, which every connection to the controller
-//! (link/node.rs) and to the session host (santree.rs) goes through, and
+//! (node/link.rs) and to the session host (santree.rs) goes through, and
 //! the `Sock` it hands back.
 //!
 //! The reading is per OS (`os::primary_adapter`): Windows reads
@@ -22,7 +22,7 @@ use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
-use crate::deadline::Deadline;
+use crate::ipc::deadline::Deadline;
 
 #[derive(Clone, Debug, Default)]
 pub struct Adapter {
@@ -45,7 +45,7 @@ pub fn primary() -> Adapter {
 pub enum Sock {
     Tcp(TcpStream),
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    Tunnel(crate::tunnel::Stream),
+    Tunnel(crate::node::tunnel::Stream),
 }
 
 impl From<TcpStream> for Sock {
@@ -144,7 +144,7 @@ pub enum Dialer {
     Direct,
     /// Only the box's address inside the machine's own tunnel.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    Tunnel(std::sync::Arc<crate::tunnel::Tunnel>),
+    Tunnel(std::sync::Arc<crate::node::tunnel::Tunnel>),
     /// A tunnel config is there but the tunnel is not: every dial refused,
     /// with why.
     Refused(String),

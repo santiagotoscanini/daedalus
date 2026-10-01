@@ -5,7 +5,7 @@
 //! under the search domain DHCP handed out. The agent asks config.toml's
 //! `search_domains`, then each suffix its adapters carry (net.rs), and takes
 //! the first answer. A `controller_address` in config.toml wins over all of
-//! it (link/node.rs), for a machine whose DNS is not the box's. What DNS
+//! it (node/link.rs), for a machine whose DNS is not the box's. What DNS
 //! names is only an address: the key is still the pin's.
 //!
 //! The records come from the OS (`os::srv_lookup`): on Windows its resolver
@@ -14,7 +14,7 @@
 //! needed. Which record is used is `dns::pick`'s, the same everywhere: the
 //! lowest priority, then the heaviest weight.
 
-use crate::config::Config;
+use crate::core::config::Config;
 use crate::net::Adapter;
 
 /// The controller's `host:port` and the suffix that named it; None when no

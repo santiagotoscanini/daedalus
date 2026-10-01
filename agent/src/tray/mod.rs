@@ -4,7 +4,7 @@
 //!
 //! A separate, windowless program in the desktop session, because the
 //! service runs in session 0 where there is no taskbar to draw on. The
-//! session reads the status document through the local socket (local.rs)
+//! session reads the status document through the local socket (ipc/local/)
 //! every `session::POLL`; the tray reflects each read: the icon (ember when
 //! all is well, an amber dot when something wants attention, grey when the
 //! service does not answer), the tooltip, and the menu.
@@ -87,12 +87,12 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use tray_icon::menu::MenuEvent;
 
-use crate::config;
-use crate::local::LocalRequest;
+use crate::core::config;
+use crate::core::paths;
+use crate::ipc::local::LocalRequest;
+use crate::node::settings::Key;
 use crate::os::tray::{open, relaunch_self};
-use crate::paths;
 use crate::session::{Backing, Places, Poll, Session, Tick, Watcher};
-use crate::settings::Key;
 
 pub mod elevate;
 mod menu;
@@ -226,14 +226,14 @@ fn answer(backing: &mut dyn Backing, a: Ask) {
         Ask::CheckUpdates => backing.check_updates_now(),
         Ask::RestartClaude => backing.restart_claude(),
         Ask::UpdateClaude => {
-            let _ = crate::local::call::<String>(&LocalRequest::ClaudeUpdate);
+            let _ = crate::ipc::local::call::<String>(&LocalRequest::ClaudeUpdate);
             backing.poll_now();
         }
         Ask::Set(key, value) => {
-            let answer = crate::local::call::<crate::local::SetAnswer>(&LocalRequest::SettingsSet(
-                crate::local::SetParams { key, value },
-            ));
-            if let Ok(crate::local::SetAnswer {
+            let answer = crate::ipc::local::call::<crate::ipc::local::SetAnswer>(
+                &LocalRequest::SettingsSet(crate::ipc::local::SetParams { key, value }),
+            );
+            if let Ok(crate::ipc::local::SetAnswer {
                 confirm_url: Some(url),
                 ..
             }) = answer
@@ -254,7 +254,7 @@ fn answer(backing: &mut dyn Backing, a: Ask) {
 /// socket answers it, written to `status.json` in the tray's log
 /// directory and opened — there is no page to point a browser at.
 fn show_status(logs: &Path) {
-    let text = match crate::local::call::<serde_json::Value>(&LocalRequest::Status) {
+    let text = match crate::ipc::local::call::<serde_json::Value>(&LocalRequest::Status) {
         Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
         Err(e) => format!(
             "{{\"error\": {}}}",

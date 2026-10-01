@@ -3,8 +3,8 @@
 //! controller has approved this machine. The guard releases it on a clean
 //! stop, the OS on any other.
 
-use crate::power;
-use crate::shared::Shared;
+use crate::core::shared::Shared;
+use crate::node::power;
 
 #[derive(Default)]
 pub struct HoldKeeper {

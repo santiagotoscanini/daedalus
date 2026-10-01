@@ -144,7 +144,7 @@ fn parse_install_history(plist: &plist::Value, keep: usize) -> Vec<Installed> {
 /// "restart pending" flag a tool can read, so that stays `None`.
 pub fn read_updates() -> Updates {
     let mut u = Updates {
-        checked_at: Some(crate::state::now_rfc3339()),
+        checked_at: Some(crate::core::state::now_rfc3339()),
         ..Default::default()
     };
     let mut cached = Command::new("softwareupdate");

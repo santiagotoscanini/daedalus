@@ -39,9 +39,9 @@ use windows::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
+use crate::core::state::now_rfc3339;
 use crate::jobs::{self, JobRecord, JobState, Jobs, ServerJob, SessionJob};
 use crate::jobs::{Listed, UnitCost};
-use crate::state::now_rfc3339;
 
 pub const JOB_KIND: &str = "a process detached from the tray";
 
@@ -55,7 +55,7 @@ fn spawned() -> &'static Mutex<HashMap<String, Child>> {
 }
 
 fn jobs_dir() -> PathBuf {
-    crate::paths::user_state_dir().join("jobs")
+    crate::core::paths::user_state_dir().join("jobs")
 }
 
 fn record_path(name: &str) -> PathBuf {
@@ -237,7 +237,7 @@ fn holder_exe() -> Result<PathBuf, String> {
             installed.display()
         ));
     }
-    let holders = crate::paths::user_state_dir().join("holder");
+    let holders = crate::core::paths::user_state_dir().join("holder");
     std::fs::create_dir_all(&holders).map_err(|e| format!("{}: {e}", holders.display()))?;
     let copy = holders.join(jobs::holder_file(crate::VERSION));
     let same = |a: &Path, b: &Path| {

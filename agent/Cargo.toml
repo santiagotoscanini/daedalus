@@ -33,6 +33,9 @@ required-features = ["tray"]
 
 [features]
 default = ["tray"]
+# The controller: the agent on the box (controller/), Linux only. Nix builds
+# it with this; a node's release does not.
+controller = []
 # The tray's dependencies: tray-icon everywhere, tao's event loop and Login
 # Items' status on macOS, GTK's on Linux.
 tray = ["dep:tray-icon", "dep:tao", "dep:gtk", "dep:objc2-service-management", "dep:objc2-foundation"]

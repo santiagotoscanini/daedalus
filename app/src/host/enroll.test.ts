@@ -33,7 +33,7 @@ import { makeWgEasy, type WgEasy } from './wg-easy'
 const KEY = 'ab'.repeat(32)
 const ID = nodeIdOf(KEY)
 const VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWjOEjXk'
-/** The agent's own golden (agent/src/enroll/tests.rs `pkce_is_rfc_7636_s256`). */
+/** The agent's own golden (agent/src/node/enroll/tests.rs `pkce_is_rfc_7636_s256`). */
 const CHALLENGE = 'VYFANLqdx_HDV6BqEhluZJ63rtrIPROSSFdB3P6G83I'
 const STATE = 'S'.repeat(43)
 const LAN = '192.168.0.2'

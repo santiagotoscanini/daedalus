@@ -55,7 +55,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     RootRunsOk::export_all(cfg)?;
     SantreeStatus::export_all(cfg)?;
     ActionOutcome::export_all(cfg)?;
-    crate::rpc::ApiError::export_all(cfg)?;
+    crate::ipc::rpc::ApiError::export_all(cfg)?;
     // The parameters.
     HelloParams::export_all(cfg)?;
     ClaudeSession::export_all(cfg)?;
@@ -76,7 +76,7 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     EnrollRedeem::export_all(cfg)?;
     EnrollRedeemed::export_all(cfg)?;
     // The local socket's status document, which `nodes.get` carries.
-    crate::status::StatusDocument::export_all(cfg)?;
+    crate::core::status::StatusDocument::export_all(cfg)?;
     Ok(())
 }
 
@@ -154,19 +154,19 @@ fn constants() -> String {
             crate::api::API_VERSION.to_string(),
         ),
         (
-            "The longest line either side writes, in bytes (api/mod.rs).",
+            "The longest line either side writes, in bytes (ipc/door.rs).",
             "MAX_LINE",
-            crate::door::MAX_LINE.to_string(),
+            crate::ipc::door::MAX_LINE.to_string(),
         ),
         (
-            "How long the controller waits for a machine to acknowledge a verb it relays, in ms (link/controller/registry.rs).",
+            "How long the controller waits for a machine to acknowledge a verb it relays, in ms (controller/link/registry.rs).",
             "ACK_TIMEOUT_MS",
-            ms(crate::link::controller::ACK_TIMEOUT).to_string(),
+            ms(crate::controller::link::ACK_TIMEOUT).to_string(),
         ),
         (
-            "How long a detached `root.run` may take to start before the controller answers, in ms (api/mod.rs).",
+            "How long a detached `root.run` may take to start before the controller answers, in ms (controller/api/mod.rs).",
             "ROOT_DETACH_WAIT_MS",
-            ms(crate::api::ROOT_DETACH_WAIT).to_string(),
+            ms(crate::controller::api::ROOT_DETACH_WAIT).to_string(),
         ),
         (
             "The longest name `nodes.set_desired` takes, in characters (api/wire.rs).",
@@ -181,7 +181,7 @@ fn constants() -> String {
         (
             "The port a lemonade answers on unless its policy names another (providers/lemonade.rs).",
             "LEMONADE_DEFAULT_PORT",
-            crate::providers::LEMONADE_DEFAULT_PORT.to_string(),
+            crate::node::providers::LEMONADE_DEFAULT_PORT.to_string(),
         ),
     ] {
         out.push_str(&format!("/** {doc} */\nexport const {name} = {value}\n\n"));

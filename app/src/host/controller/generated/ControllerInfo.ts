@@ -7,7 +7,7 @@ import type { RotationInfo } from "./RotationInfo";
  * is bound to (null when it listens for no machine), and the `host:port`s
  * config.toml says machines should dial — what the app hands an install
  * command — and, while its key is rotated, where the key came from
- * (link/rotation.rs; `public_key` is then the new key, the one to pin).
+ * (controller/rotation.rs; `public_key` is then the new key, the one to pin).
  */
 export type ControllerInfo = { public_key: string, fingerprint: string, listen: string | null, advertise: Array<string>, 
 /**

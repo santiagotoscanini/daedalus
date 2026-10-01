@@ -196,8 +196,8 @@ check "the command runs, setpriv does not" '[ "$out" = "$(printf "ran\nstatus ke
 
 # ── 5. a refusal is one structured journal entry, and exit 0 ──────────────
 # The root helper reads a run's outcome from DAEDALUS_OUTCOME, matched by
-# the unit's invocation (agent src/root/mod.rs): never from a line's text.
-# `daedalus-agent outcome` sends the entry (agent src/root/outcome.rs, which
+# the unit's invocation (agent src/controller/root/mod.rs): never from a line's text.
+# `daedalus-agent outcome` sends the entry (agent src/controller/root/outcome.rs, which
 # has its own tests); the stub records what lib.sh hands it, and prints the
 # words as the binary does.
 echo "# outcome: refuse"

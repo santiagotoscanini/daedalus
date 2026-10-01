@@ -160,7 +160,7 @@ fn message_box(text: &str, ok: bool) {
 pub fn pair_elevated(
     exe: &std::path::Path,
     args: &[String],
-    p: &crate::pair::Pairing,
+    p: &crate::node::pair::Pairing,
 ) -> Result<String, String> {
     use windows::core::{w, HSTRING, PCWSTR};
     use windows::Win32::Foundation::{CloseHandle, ERROR_CANCELLED};
@@ -175,7 +175,7 @@ pub fn pair_elevated(
     let by_hand = || {
         format!(
             "In an administrator PowerShell:\n  {}",
-            crate::pair::command_line(&p.pin, p.controller.as_deref())
+            crate::node::pair::command_line(&p.pin, p.controller.as_deref())
         )
     };
     let file = HSTRING::from(exe.as_os_str());

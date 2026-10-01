@@ -19,9 +19,9 @@ use super::profile::{
 };
 use super::workdir::pick_workdir;
 use super::{gcroot, Banner, ClaudeState, Credentials, Report, Settings, UpdateResult};
+use crate::core::state::{now_rfc3339, rfc3339_ago};
 use crate::jobs::{self as job, JobState, Jobs, LogTail, ServerJob};
 use crate::os::jobs;
-use crate::state::{now_rfc3339, rfc3339_ago};
 
 mod update;
 

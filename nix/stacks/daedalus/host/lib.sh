@@ -389,7 +389,7 @@ run_payload() {
 # ── how a root verb's run ended ───────────────────────────────────────────
 #
 # A root verb's unit tells the helper how its run ended in ONE journal entry
-# (agent src/root/mod.rs, "Running a verb"): DAEDALUS_OUTCOME (`done` or
+# (agent src/controller/root/mod.rs, "Running a verb"): DAEDALUS_OUTCOME (`done` or
 # `refused`) and DAEDALUS_DETAIL (the words, on one line). Any process may
 # journal those fields, so the helper takes the entry only when journald's
 # own fields vouch for it — the unit run's invocation id, and a root or

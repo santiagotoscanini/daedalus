@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
-use crate::shared::Shared;
+use crate::core::shared::Shared;
 use crate::util::Shutdown;
 
 pub struct Workers {

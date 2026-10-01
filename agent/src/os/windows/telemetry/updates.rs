@@ -111,7 +111,7 @@ pub fn read_updates() -> Updates {
             ..Default::default()
         },
     };
-    u.checked_at = Some(crate::state::now_rfc3339());
+    u.checked_at = Some(crate::core::state::now_rfc3339());
     u.reboot_pending = Some(reg_key_exists(REBOOT_WU) || reg_key_exists(REBOOT_CBS));
     u
 }

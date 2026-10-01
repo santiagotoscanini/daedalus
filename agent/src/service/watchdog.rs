@@ -7,8 +7,8 @@
 
 use std::time::{Duration, Instant};
 
+use crate::core::shared::Shared;
 use crate::os;
-use crate::shared::Shared;
 
 /// How long after the service's start a silent tray is first looked for.
 const GRACE: Duration = Duration::from_secs(45);

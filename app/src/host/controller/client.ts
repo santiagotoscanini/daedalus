@@ -9,7 +9,7 @@ import { ANSWERS, ControllerError, eventOf, parseLine, requestLine } from './wir
 
 // The app's one door to the controller: the agent on the box, over the unix
 // socket nix mounts into this container (CONTROLLER_SOCKET). The protocol is
-// agent/README.md "Controller mode" and agent/src/api/: newline-delimited
+// agent/README.md "Controller mode" and agent/src/controller/api/: newline-delimited
 // JSON, `hello` first, answers matched by `id` because the agent runs
 // requests concurrently. Every method is `call(method, params)`, typed by
 // the generated `Methods` map and decoded by its answer's decoder (./wire.ts

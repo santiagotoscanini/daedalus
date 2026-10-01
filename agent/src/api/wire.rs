@@ -5,7 +5,7 @@
 //! tests at the bottom pin each one's exact JSON and write it beside the
 //! generated types, where the app's tests read it.
 //!
-//! Framing (api/mod.rs has the rest): one JSON object per line.
+//! Framing (controller/api/mod.rs has the rest): one JSON object per line.
 //!
 //! ```text
 //! → {"id":1,"m":"hello","p":{"api":1,"client":"daedalus-app/2026.9"}}
@@ -23,11 +23,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::claude::{Report, Roster, SessionAction, Summary};
-use crate::config::{Mode, TelemetryLevel};
+use crate::core::config::{Mode, TelemetryLevel};
+use crate::core::role::Role;
+use crate::core::status::StatusDocument;
 use crate::link::wire::{Command, Hello, NodeState, Policy, PolicyRequest};
-use crate::providers::ProviderReport;
-use crate::role::Role;
-use crate::status::StatusDocument;
+use crate::node::providers::ProviderReport;
 use crate::telemetry::Telemetry;
 
 /// What an agent offers, from its role and config (api/mod.rs
@@ -80,8 +80,8 @@ impl std::fmt::Display for Capability {
 /// map from it (`signatures`).
 macro_rules! api_methods {
     ($( $(#[$doc:meta])* $wire:literal => $variant:ident $(($params:ty))? : $answer:ty ),* $(,)?) => {
-        crate::rpc::methods! {
-            /// One request to the API (api/mod.rs's table).
+        crate::ipc::rpc::methods! {
+            /// One request to the API (controller/api/mod.rs's table).
             #[derive(Clone, Debug, Deserialize)]
             pub enum ApiRequest {
                 $( $(#[$doc])* $wire => $variant $(($params))? ),*
@@ -207,12 +207,28 @@ pub struct SystemInfo {
     pub controller: Option<ControllerInfo>,
 }
 
+/// A rotation under way, as `system.info` states it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RotationInfo {
+    /// The key being retired, hex, and its fingerprint.
+    pub from_public_key: String,
+    pub from_fingerprint: String,
+    /// RFC 3339.
+    pub started_at: String,
+    /// When the old key is retired, RFC 3339 (wall-clock time).
+    pub retires_at: String,
+    /// Machines connected under the old key now: each has been sent the
+    /// statement, and one that stays is an agent that does not know it.
+    pub old_key_connections: u32,
+}
+
 /// The controller as `system.info` states it: the key every machine pins,
 /// as hex and as its fingerprint (identity.rs), the address its listener
 /// is bound to (null when it listens for no machine), and the `host:port`s
 /// config.toml says machines should dial — what the app hands an install
 /// command — and, while its key is rotated, where the key came from
-/// (link/rotation.rs; `public_key` is then the new key, the one to pin).
+/// (controller/rotation.rs; `public_key` is then the new key, the one to pin).
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ControllerInfo {
@@ -221,10 +237,10 @@ pub struct ControllerInfo {
     pub listen: Option<String>,
     pub advertise: Vec<String>,
     /// The rotation under way; null when none is.
-    pub rotation: Option<crate::link::rotation::RotationInfo>,
+    pub rotation: Option<RotationInfo>,
 }
 
-// ── the machines (link/controller.rs) ─────────────────────────────────────
+// ── the machines (controller/link/) ─────────────────────────────────────
 
 /// A machine as `nodes.list` lists it: identity, standing, connection,
 /// and what its `hello` said. The hello's fields are null for a key the app
@@ -348,8 +364,8 @@ pub struct ClaudeSessionSent {
 #[cfg_attr(test, ts(rename = "NodeProviderModelParams"))]
 pub struct NodeProviderModel {
     pub id: String,
-    pub kind: crate::providers::ProviderKind,
-    pub action: crate::providers::ModelAction,
+    pub kind: crate::node::providers::ProviderKind,
+    pub action: crate::node::providers::ModelAction,
     pub model: String,
     #[serde(default)]
     #[cfg_attr(test, ts(optional))]
@@ -517,7 +533,7 @@ pub struct SetDesiredOk {
 }
 
 /// `controller.rotate`'s parameters: how long both keys are served before
-/// the old one retires, in seconds (link/rotation.rs `GRACE_MIN` to
+/// the old one retires, in seconds (controller/rotation.rs `GRACE_MIN` to
 /// `GRACE_MAX`; absent, `GRACE_DEFAULT`). Its answer is the controller as
 /// `system.info` then states it (`ControllerInfo`, with its `rotation`).
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -569,6 +585,41 @@ pub struct NodePolicyRequest {
     pub changes: PolicyRequest,
 }
 
+/// How a verb ended.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(rename = "RootOutcome"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Outcome {
+    /// The unit ran and exited 0.
+    Done,
+    /// The unit (or the helper: already running) declined; `detail` says why.
+    Refused,
+    /// The unit failed, or gave no result in time.
+    Failed,
+}
+
+/// One verb as `status` states it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(rename = "RootVerb"))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerbState {
+    pub verb: String,
+    pub unit: String,
+    pub description: String,
+    pub selectors: std::collections::BTreeMap<String, Vec<String>>,
+    /// Pattern selector → its regex.
+    pub patterns: std::collections::BTreeMap<String, String>,
+    /// The largest payload it takes, if it takes one.
+    pub payload_max: Option<usize>,
+    /// The unit's `ActiveState` — a template's is `activating` while an
+    /// instance runs, else `inactive`; null when systemd could not be asked
+    /// or the unit has a selector in its name.
+    pub active_state: Option<String>,
+    /// Its `Result` from the last run.
+    pub result: Option<String>,
+}
+
 /// `root.run`'s parameters: one of the root helper's verbs, its selectors
 /// and, for a verb that takes one, a payload (root/mod.rs, "The run file").
 /// The helper's table is the authority; this side checks only the shape of
@@ -617,11 +668,11 @@ impl std::fmt::Debug for RootRun {
 pub struct RootRunOk {
     pub run: String,
     pub verb: String,
-    pub outcome: Option<crate::root::Outcome>,
+    pub outcome: Option<Outcome>,
     pub detail: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, ts(optional))]
-    pub verbs: Option<Vec<crate::root::VerbState>>,
+    pub verbs: Option<Vec<VerbState>>,
 }
 
 /// `root.follow`'s parameters: a run, and the last line the caller has.
@@ -647,22 +698,8 @@ pub struct RootRunSummary {
     pub finished_at: Option<String>,
     /// The helper started the verb's unit.
     pub started: bool,
-    pub outcome: Option<crate::root::Outcome>,
+    pub outcome: Option<Outcome>,
     pub detail: String,
-}
-
-impl From<crate::root::runs::Summary> for RootRunSummary {
-    fn from(s: crate::root::runs::Summary) -> Self {
-        Self {
-            run: s.run,
-            verb: s.verb,
-            started_at: crate::state::rfc3339_of(s.started_at),
-            finished_at: s.finished_at.map(crate::state::rfc3339_of),
-            started: s.started,
-            outcome: s.outcome,
-            detail: s.detail,
-        }
-    }
 }
 
 /// One line a run's unit wrote, numbered from 1.
@@ -889,10 +926,9 @@ impl Drop for WireguardConfig {
 /// them — the golden tests' own values. ts.rs writes them beside the
 /// generated types (`fixtures/<name>.json`), where the app's tests decode
 /// every one with the decoder its method names.
-#[cfg(test)]
+#[cfg(all(test, feature = "controller"))]
 pub(crate) fn fixtures() -> Vec<(String, String)> {
     use crate::claude::Session;
-    use crate::root::{Outcome, VerbState};
     use tests::{provider_report, report, roster, summary};
     fn v<T: Serialize>(x: &T) -> String {
         serde_json::to_string_pretty(x).expect("a fixture serialises")
@@ -903,7 +939,7 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
         fingerprint: "77aa:0102".into(),
         listen: Some("0.0.0.0:7788".into()),
         advertise: vec!["box.lan:7788".into()],
-        rotation: Some(crate::link::rotation::RotationInfo {
+        rotation: Some(RotationInfo {
             from_public_key: "ab".repeat(32),
             from_fingerprint: "3f2a:9c01".into(),
             started_at: "2026-09-28T10:00:00Z".into(),
@@ -1126,12 +1162,12 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
     ));
     out.push((
         "error.version".into(),
-        v(&crate::rpc::Response::err(
+        v(&crate::ipc::rpc::Response::err(
             Some(1),
-            crate::rpc::ApiError {
+            crate::ipc::rpc::ApiError {
                 supported: Some(crate::api::API_VERSION),
-                ..crate::rpc::ApiError::new(
-                    crate::rpc::ErrorCode::Version,
+                ..crate::ipc::rpc::ApiError::new(
+                    crate::ipc::rpc::ErrorCode::Version,
                     "this agent speaks api 1",
                 )
             },
@@ -1143,7 +1179,7 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rpc::{ApiError, ErrorCode, Incoming, Response};
+    use crate::ipc::rpc::{ApiError, ErrorCode, Incoming, Response};
     use serde_json::{json, Value};
 
     fn wire<T: Serialize>(v: &T) -> String {
@@ -1325,7 +1361,7 @@ mod tests {
             fingerprint: "77aa:0102".into(),
             listen: None,
             advertise: vec![],
-            rotation: Some(crate::link::rotation::RotationInfo {
+            rotation: Some(RotationInfo {
                 from_public_key: "ab".repeat(32),
                 from_fingerprint: "3f2a:9c01".into(),
                 started_at: "2026-09-28T10:00:00Z".into(),
@@ -1611,38 +1647,38 @@ mod tests {
     }
 
     /// A provider with one of everything.
-    pub fn provider_report() -> crate::providers::ProviderReport {
-        crate::providers::ProviderReport {
-            kind: crate::providers::ProviderKind::Lemonade,
+    pub fn provider_report() -> crate::node::providers::ProviderReport {
+        crate::node::providers::ProviderReport {
+            kind: crate::node::providers::ProviderKind::Lemonade,
             port: 13305,
             version: Some("9.1.2".into()),
             running: true,
             healthy: true,
-            loaded: vec![crate::providers::LoadedModel {
+            loaded: vec![crate::node::providers::LoadedModel {
                 id: "Gemma-4".into(),
                 device: Some("gpu".into()),
                 max_context: Some(65536),
                 pinned: true,
             }],
-            models: vec![crate::providers::ProviderModel {
+            models: vec![crate::node::providers::ProviderModel {
                 id: "Gemma-4".into(),
                 labels: vec!["tool-calling".into()],
                 downloaded: true,
                 size_gb: Some(7.5),
                 recipe: Some("llamacpp".into()),
             }],
-            downloads: vec![crate::providers::ProviderDownload {
+            downloads: vec![crate::node::providers::ProviderDownload {
                 model: "Qwen".into(),
                 percent: Some(12.5),
                 status: "downloading".into(),
             }],
-            backends: vec![crate::providers::ProviderBackend {
+            backends: vec![crate::node::providers::ProviderBackend {
                 recipe: "llamacpp".into(),
                 backend: "vulkan".into(),
                 version: Some("b6000".into()),
                 url: None,
             }],
-            figures: vec![crate::providers::ModelFigures {
+            figures: vec![crate::node::providers::ModelFigures {
                 model: "Gemma-4".into(),
                 requests: Some(3.0),
                 tps: Some(40.0),
@@ -1650,7 +1686,7 @@ mod tests {
             }],
             read_at: "2026-09-28T10:00:00Z".into(),
             error: None,
-            actions: vec![crate::providers::ProviderAction {
+            actions: vec![crate::node::providers::ProviderAction {
                 request: "00112233445566ff".into(),
                 model: "Gemma-4".into(),
                 ok: true,
@@ -1954,7 +1990,7 @@ mod tests {
             serde_json::to_string(&p).unwrap(),
             r#"{"awake_hold":true,"claude_remote_control":true,"santree":true}"#
         );
-        // Off is absent; a value that is not one is refused (api/mod.rs
+        // Off is absent; a value that is not one is refused (controller/api/mod.rs
         // refuses a session host the app names).
         let off: SetDesired = serde_json::from_value(entry(
             json!({"awake_hold":true,"claude_remote_control":true}),

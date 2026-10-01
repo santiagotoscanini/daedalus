@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { readCapped } from '../lib/read-capped'
 
-// Where a machine's service redeems its log-in (agent/src/enroll.rs
+// Where a machine's service redeems its log-in (agent/src/node/enroll.rs
 // `redeem_https`): `{code, code_verifier}` in, the machine's tunnel and the
 // controller it pins out (api/wire.rs `EnrollRedeemed`).
 //

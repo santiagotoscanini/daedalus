@@ -32,8 +32,8 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::bundle;
-use crate::config::{self, Config};
-use crate::paths;
+use crate::core::config::{self, Config};
+use crate::core::paths;
 
 pub const DAEMON_LABEL: &str = "me.toscanini.daedalus-agent";
 pub const TRAY_LABEL: &str = "me.toscanini.daedalus-agent-tray";
@@ -223,7 +223,7 @@ pub fn install_with(cfg: &Config, opts: &Options) -> Result<()> {
     slot.retire();
     // An update on probation is over: this is the version the operator put
     // here.
-    let mut state = crate::state::State::load();
+    let mut state = crate::core::state::State::load();
     if state.probation.take().is_some() {
         state.save();
     }
@@ -383,9 +383,9 @@ pub fn uninstall_app() -> Result<()> {
     unsafe {
         libc::setsid();
     }
-    match crate::local::call_within::<String>(
-        &crate::local::LocalRequest::EnrollLeave,
-        crate::local::DEADLINE,
+    match crate::ipc::local::call_within::<String>(
+        &crate::ipc::local::LocalRequest::EnrollLeave,
+        crate::ipc::local::DEADLINE,
     ) {
         Ok(_) => println!("logged out of the box"),
         Err(e) => {
@@ -398,11 +398,11 @@ pub fn uninstall_app() -> Result<()> {
     }
     let slot = bundle::slot();
     for p in [slot.live.clone(), slot.work.clone()] {
-        crate::update::remove(&p)?;
+        crate::node::update::remove(&p)?;
     }
     let dragged = Path::new(bundle::APPLICATIONS_COPY);
     if bundle::info(dragged).is_ok_and(|i| i.id == bundle::BUNDLE_ID) {
-        crate::update::remove(dragged)?;
+        crate::node::update::remove(dragged)?;
     }
     println!(
         "Daedalus Agent removed; its data stays in {}",

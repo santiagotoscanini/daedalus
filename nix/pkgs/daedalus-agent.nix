@@ -3,7 +3,8 @@
 # (Cargo.toml, Cargo.lock, build.rs, src/), so a commit that touches anything
 # else in the repository does not rebuild it; its version names that source
 # (`+src.<hash>`, agent/README.md "Versions"). No tray
-# (`--no-default-features`), only `daedalus-agent`. The tests run in the
+# (`--no-default-features`), the controller (`controller`), only
+# `daedalus-agent`. The tests run in the
 # crate's own gate (agent/gate.sh) and in CI, not here.
 { lib, rustPlatform }:
 
@@ -30,6 +31,9 @@ rustPlatform.buildRustPackage {
   inherit src;
   cargoLock.lockFile = crate + "/Cargo.lock";
   buildNoDefaultFeatures = true;
+  # The controller (src/controller/): what the box runs and a node's release
+  # does not carry.
+  buildFeatures = [ "controller" ];
   # The build's identity in its version (agent/build.rs): not a release.
   env.DAEDALUS_BUILD_ID = "src.${srcId}";
   cargoBuildFlags = [

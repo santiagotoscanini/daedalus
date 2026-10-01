@@ -13,7 +13,7 @@ import type { DesiredSync } from './controller/nodes'
 import { nodeIdOf } from './controller/nodes'
 import type { WgEasy } from './wg-easy'
 
-// A Mac's log-in, the app's half (agent/src/enroll.rs is the machine's; the
+// A Mac's log-in, the app's half (agent/src/node/enroll.rs is the machine's; the
 // flow is agent/README.md "Logging in (macOS)"):
 //
 //   GET  /agent/enroll        the page: the machine's name and fingerprint, and

@@ -1,7 +1,8 @@
 #!/bin/sh
 # The agent's gate, from a Linux box without Rust on it: fmt, clippy for
-# Linux (with the GTK tray, and without it as the static service is built),
-# Windows and macOS, the tests, and the static musl service, in a throwaway
+# Linux (with the GTK tray and the controller, and without either as the
+# static service is built), Windows and macOS, the tests (the controller's
+# with them), and the static musl service, in a throwaway
 # rust container. `fmt` and `all` run `cargo fmt`, which rewrites the tree;
 # every mode ends with `cargo fmt --check`. Prints "GATE OK" only when every
 # part passed; exits non-zero otherwise.
@@ -68,7 +69,7 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
     if [ "$what" = fmt ] || [ "$what" = all ]; then cargo fmt; fi
     if [ "$what" = gen ]; then
       echo "--- generating the app'"'"'s wire types"
-      if ! DAEDALUS_TS_WRITE=1 cargo test --lib ts:: > /tmp/gen.log 2>&1; then
+      if ! DAEDALUS_TS_WRITE=1 cargo test --lib --features controller ts:: > /tmp/gen.log 2>&1; then
         failed=1
         grep -E "^(error|warning)|panicked" -A12 /tmp/gen.log | head -60
       fi
@@ -93,7 +94,7 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
       printf "%s\n" "#!/bin/sh" "exec $zig_dir/zig ar \"\$@\"" > /usr/local/bin/zar
       chmod 755 /usr/local/bin/zcc-aarch64-macos /usr/local/bin/zar
       export CC_aarch64_apple_darwin=/usr/local/bin/zcc-aarch64-macos AR_aarch64_apple_darwin=/usr/local/bin/zar
-      for t in "" "--no-default-features" "--target x86_64-pc-windows-gnu" "--target aarch64-apple-darwin"; do
+      for t in "--features controller" "--no-default-features" "--target x86_64-pc-windows-gnu" "--target aarch64-apple-darwin"; do
         echo "--- clippy $t"
         if ! cargo clippy $t --all-targets -- -D warnings > /tmp/clippy.log 2>&1; then
           failed=1
@@ -110,7 +111,7 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
       fi
     fi
     if [ "$what" = test ] || [ "$what" = gen ] || [ "$what" = all ]; then
-      if ! cargo test > /tmp/test.log 2>&1; then failed=1; fi
+      if ! cargo test --features controller > /tmp/test.log 2>&1; then failed=1; fi
       grep -E "test result|FAILED|panicked" /tmp/test.log
       grep -A8 "generated wire types" /tmp/test.log | head -40
     fi

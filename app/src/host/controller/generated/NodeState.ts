@@ -4,6 +4,6 @@
  * Where a machine stands with the box: what the app decided, or pending
  * while it has decided nothing. `Unknown` is the controller's word, in its
  * own API, for a key it has seen but that is neither connected nor in the
- * app's set (link/controller.rs); a machine is never told it.
+ * app's set (controller/link/); a machine is never told it.
  */
 export type NodeState = "pending" | "approved" | "revoked" | "unknown";

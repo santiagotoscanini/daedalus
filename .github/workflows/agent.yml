@@ -13,7 +13,7 @@
 # `release.json` — the product, version and tag, and per asset its target,
 # role, name, SHA-256 and size — signs it once with the release key under
 # its own context, and publishes a GitHub release every installed agent
-# watches (agent/src/update/). Every asset carries a build provenance
+# watches (agent/src/node/update/). Every asset carries a build provenance
 # attestation as well. Every build is `--locked`, and a tag whose
 # commit is not on main publishes nothing. A version whose Cargo.toml says
 # `[package.metadata.release] draft = true` is published as a draft, which
@@ -109,8 +109,12 @@ jobs:
       - name: Clippy without the tray (Linux, as the static service is built)
         if: runner.os == 'Linux'
         run: cargo clippy --locked --no-default-features --all-targets -- -D warnings
+      # The controller (src/controller/): Linux only, as the box builds it.
+      - name: Clippy with the controller (Linux)
+        if: runner.os == 'Linux'
+        run: cargo clippy --locked --features controller --all-targets -- -D warnings
       - name: Test
-        run: cargo test --locked
+        run: cargo test --locked ${{ runner.os == 'Linux' && '--features controller' || '' }}
       # The Mac's app as a release packages it (agent/macos/package.sh),
       # signed ad hoc: the bundle and its icon, the zip, the disk image's
       # window laid out by Finder — then what a Mac runs of it.
@@ -481,7 +485,7 @@ jobs:
           pattern: agent-dist-*
           path: dist
           merge-multiple: true
-      # What the release is, as the updater reads it (agent/src/update/
+      # What the release is, as the updater reads it (agent/src/node/update/
       # feed.rs): each asset's target, role, name, SHA-256 and size.
       - name: Manifest
         env:
@@ -512,7 +516,7 @@ jobs:
           set -euo pipefail
           umask 077
           printf '%s\n' "$AGENT_SIGNING_KEY" > key.pem
-          # The manifest, under its own context (agent/src/update/signature.rs).
+          # The manifest, under its own context (agent/src/node/update/signature.rs).
           { printf 'daedalus-agent release manifest v1\000'; cat dist/release.json; } > signed.bin
           openssl pkeyutl -sign -inkey key.pem -rawin -in signed.bin -out dist/release.json.sig
           [ "$(stat -c %s dist/release.json.sig)" = 64 ] || { echo "the manifest signature is not 64 bytes"; exit 1; }
@@ -523,11 +527,11 @@ jobs:
           cat dist/SHA256SUMS
       # The agent's compiled-in keys must accept what was just signed, or
       # every installed agent would refuse this release: checked with the
-      # current key (the first listed in agent/src/update/mod.rs).
+      # current key (the first listed in agent/src/node/update/mod.rs).
       - name: Verify against the compiled-in key
         run: |
           set -euo pipefail
-          hex="$(grep -A1 'RELEASE_PUBLIC_KEYS' agent/src/update/mod.rs | grep -o '"[0-9a-f]\{64\}"' | head -1 | tr -d '"')"
+          hex="$(grep -A1 'RELEASE_PUBLIC_KEYS' agent/src/node/update/mod.rs | grep -o '"[0-9a-f]\{64\}"' | head -1 | tr -d '"')"
           printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
           openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in signed.bin -sigfile dist/release.json.sig
       # GitHub's build provenance for every asset, the manifest and the

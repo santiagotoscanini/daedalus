@@ -16,8 +16,8 @@ use crate::claude::cli::find_cli;
 use crate::claude::profile::{claude_dir, read_session_files};
 use crate::claude::roster::{self, is_uuid, ActionResult, Agent, Managed, Roster, Scanner};
 use crate::claude::{gcroot, ActionState, Recovered, SessionAction, SessionRequest};
+use crate::core::state::now_rfc3339;
 use crate::jobs::{JobState, Jobs};
-use crate::state::now_rfc3339;
 use crate::util::LockExt;
 
 /// The profile's `sessions` and `jobs` directories' mtimes: they move when

@@ -3,8 +3,9 @@
 
 use std::time::{Duration, Instant};
 
-use crate::shared::Shared;
-use crate::{os, update};
+use crate::core::shared::Shared;
+use crate::node::update;
+use crate::os;
 
 /// How often the proof is judged.
 const LOOK_EVERY: Duration = Duration::from_secs(5);

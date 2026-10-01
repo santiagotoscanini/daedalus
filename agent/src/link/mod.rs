@@ -1,7 +1,7 @@
 //! The link: every machine's one connection to the controller, the box's
 //! agent (PLAN, feature 13). A star — machines dial OUT to the controller
 //! and keep the connection; they never contact the app, and only the
-//! controller talks to the app, over its local socket (api/). The link
+//! controller talks to the app, over its local socket (controller/api/). The link
 //! carries control messages only: who a machine is, how it is, what it
 //! runs, and the box's word back. Data-plane traffic (a model server's
 //! requests) never rides it.
@@ -57,10 +57,7 @@
 //! reads).
 
 pub mod cert;
-pub mod controller;
 pub mod crypto;
-pub mod node;
-pub mod rotation;
 pub mod tls;
 pub mod wire;
 
@@ -144,7 +141,10 @@ impl KeyFiles {
     /// The service's own: config.toml and tunnel.toml in their directories,
     /// under this system's rule.
     pub fn here() -> Self {
-        Self::on_this_os(crate::paths::config_path(), crate::paths::tunnel_path())
+        Self::on_this_os(
+            crate::core::paths::config_path(),
+            crate::core::paths::tunnel_path(),
+        )
     }
 
     /// `config` and `tunnel` under this system's rule: a Mac logs in.
@@ -162,7 +162,7 @@ impl KeyFiles {
 
     /// config.toml's keys as the link follows them: `cfg`'s, or none while
     /// logged out.
-    pub fn keys(&self, cfg: &crate::config::Config) -> LinkKeys {
+    pub fn keys(&self, cfg: &crate::core::config::Config) -> LinkKeys {
         if self.logged_out() {
             return LinkKeys::default();
         }
@@ -174,7 +174,7 @@ impl KeyFiles {
 
     /// `keys`, reading config.toml (an absent file names none).
     pub fn load(&self) -> anyhow::Result<LinkKeys> {
-        Ok(self.keys(&crate::config::load_at(&self.config)?))
+        Ok(self.keys(&crate::core::config::load_at(&self.config)?))
     }
 }
 

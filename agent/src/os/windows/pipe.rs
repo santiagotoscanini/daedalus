@@ -1,4 +1,4 @@
-//! The agent's local door on Windows (local.rs): a named pipe whose DACL
+//! The agent's local door on Windows (ipc/local/): a named pipe whose DACL
 //! lets SYSTEM, the pipe's owner and the interactive users in — the users
 //! read and write data, never create an instance of their own, so nobody
 //! can stand a second server up beside the service — and that refuses
@@ -57,8 +57,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::System::IO::CancelIoEx;
 
-use crate::door::Conn;
-use crate::door::{Allowed, Peer, Policy};
+use crate::ipc::door::Conn;
+use crate::ipc::door::{Allowed, Peer, Policy};
 use crate::util::LockExt;
 
 /// SYSTEM and the pipe's owner (the service) everything; the interactive
@@ -130,7 +130,7 @@ fn client_sid(h: HANDLE) -> Option<Peer> {
 /// What the client can see of the server without opening its process
 /// (which a non-elevated user cannot, the service being SYSTEM): the pipe
 /// object's owner, and the server's session.
-fn server_side(h: HANDLE) -> crate::door::ServerSide {
+fn server_side(h: HANDLE) -> crate::ipc::door::ServerSide {
     let mut owner = PSID::default();
     let mut sd = PSECURITY_DESCRIPTOR::default();
     // SAFETY: out pointers valid for the call; `owner` points into `sd`,
@@ -170,7 +170,7 @@ fn server_side(h: HANDLE) -> crate::door::ServerSide {
     let session = unsafe { GetNamedPipeServerSessionId(h, &mut session) }
         .ok()
         .map(|()| session);
-    crate::door::ServerSide::Pipe {
+    crate::ipc::door::ServerSide::Pipe {
         owner: owner_sid,
         owner_privileged: privileged,
         session,
@@ -189,7 +189,7 @@ fn own_sid() -> Option<Peer> {
     }
 }
 
-/// Whom the pipe serves (local.rs): SYSTEM, this process's own user (a
+/// Whom the pipe serves (ipc/local/): SYSTEM, this process's own user (a
 /// development run's), and the user of every session someone is logged on
 /// to, at the console or remotely — each of whom has a tray that runs
 /// Claude. Read at each connection.
@@ -223,7 +223,7 @@ pub fn local_allowed() -> Allowed {
     }
     sids.sort();
     sids.dedup();
-    crate::door::windows_allowed(sids)
+    crate::ipc::door::windows_allowed(sids)
 }
 
 /// The pipe's name: `\\.\pipe\daedalus-agent`, or with a development run's
@@ -375,8 +375,8 @@ struct Acceptor {
     next: Mutex<Option<usize>>,
 }
 
-impl crate::door::Listener for Acceptor {
-    fn accept(&self) -> Option<io::Result<crate::door::Accepted>> {
+impl crate::ipc::door::Listener for Acceptor {
+    fn accept(&self) -> Option<io::Result<crate::ipc::door::Accepted>> {
         loop {
             let waiting = self.next.lock_ok().take();
             let this = match waiting {
@@ -415,10 +415,10 @@ impl crate::door::Listener for Acceptor {
             }
             let raw_h = this.0 as usize;
             let (conn, abort) = conn_of(this, true);
-            return Some(Ok(crate::door::Accepted {
+            return Some(Ok(crate::ipc::door::Accepted {
                 conn,
                 abort,
-                peer: crate::door::PeerAt::AfterRequest(Box::new(move || {
+                peer: crate::ipc::door::PeerAt::AfterRequest(Box::new(move || {
                     client_sid(HANDLE(raw_h as *mut c_void))
                 })),
             }));
@@ -481,7 +481,7 @@ where
         stop: Arc::clone(&stop),
         next: Mutex::new(Some(first.0 as usize)),
     };
-    crate::door::serve(acceptor, policy.clone(), on_conn)
+    crate::ipc::door::serve(acceptor, policy.clone(), on_conn)
         .context("spawning the pipe's accept thread")?;
     Ok(LocalSocket { name, stop })
 }
@@ -493,7 +493,7 @@ where
 /// returned connection has `timeout`: past it every call on the pipe is
 /// cancelled, again until the connection is closed.
 pub fn connect_local(path: &Path, timeout: Duration) -> io::Result<Conn> {
-    use crate::deadline::{Deadline, Watchdog};
+    use crate::ipc::deadline::{Deadline, Watchdog};
     let name = wide(path);
     let deadline = Deadline::after(timeout);
     let h = loop {
@@ -523,7 +523,7 @@ pub fn connect_local(path: &Path, timeout: Duration) -> io::Result<Conn> {
     // tray cannot open. The pipe object's owner and the server's session
     // say who made it (`door::server_trusted`).
     let side = server_side(h);
-    if !crate::door::server_trusted(&side, own_sid().as_ref(), crate::door::dev_run()) {
+    if !crate::ipc::door::server_trusted(&side, own_sid().as_ref(), crate::ipc::door::dev_run()) {
         // SAFETY: ours.
         unsafe {
             let _ = CloseHandle(h);

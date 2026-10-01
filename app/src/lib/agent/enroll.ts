@@ -2,7 +2,7 @@ import type { WireguardConfig } from '../../host/controller/generated'
 import { MAX_HOSTNAME } from '../../host/controller/generated/constants'
 import { hasControlChar } from './policy'
 
-// A Mac's log-in (agent/src/enroll.rs), the pure half: what the enroll page
+// A Mac's log-in (agent/src/node/enroll.rs), the pure half: what the enroll page
 // takes from the URL the menu bar opened, where the browser goes afterwards,
 // and the wg-quick text wg-easy hands out. The half that holds secrets,
 // reaches the database, the controller and wg-easy is host/enroll.ts; the

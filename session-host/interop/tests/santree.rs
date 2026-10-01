@@ -18,17 +18,17 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use daedalus_agent::api::wire::{DesiredState, SessionHostState};
-use daedalus_agent::config::{Config as AgentConfig, Mode, SessionHostConfig};
+use daedalus_agent::core::config::{Config as AgentConfig, Mode, SessionHostConfig};
 use daedalus_agent::identity::{digest, format_fingerprint, Identity};
-use daedalus_agent::link::controller::{listen, DesiredEntry, Limits, Registry};
-use daedalus_agent::link::node::{connect_once, hello_of, Cadence, Target};
+use daedalus_agent::controller::link::{listen, DesiredEntry, Limits, Registry};
+use daedalus_agent::node::link::{connect_once, hello_of, Cadence, Target};
 use daedalus_agent::link::tls::Client;
 use daedalus_agent::link::wire::Policy;
 use daedalus_agent::link::LinkKeys;
-use daedalus_agent::role::Role;
-use daedalus_agent::rpc::Events;
-use daedalus_agent::session_host::SessionHost;
-use daedalus_agent::shared::Shared;
+use daedalus_agent::core::role::Role;
+use daedalus_agent::ipc::rpc::Events;
+use daedalus_agent::controller::session_host::SessionHost;
+use daedalus_agent::core::shared::Shared;
 use daedalus_agent::util::Shutdown;
 use daedalus_session_host::{Config, Server};
 use santree_remote_client::proto::{Anchor, PtyOpenParams};
@@ -151,8 +151,8 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     let node = Identity::from_seed([1; 32]);
     let shared = Arc::new(Shared::new(
         Role::of(Mode::Node),
-        daedalus_agent::facts::Facts::default(),
-        daedalus_agent::state::State::default(),
+        daedalus_agent::core::facts::Facts::default(),
+        daedalus_agent::core::state::State::default(),
         Policy::default(),
         Shutdown::new(),
     ));
@@ -174,7 +174,7 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
             let hello = hello_of(
                 &AgentConfig::default(),
                 &node,
-                &daedalus_agent::facts::read(),
+                &daedalus_agent::core::facts::read(),
             );
             let client = Client::new(&node).unwrap();
             connect_once(
@@ -208,12 +208,12 @@ async fn santree_reaches_the_session_host_through_the_nodes_agent() {
     // 2. santree on the node's socket.
     let socket = d.join("node").join("run").join("santree.sock");
     let own = daedalus_agent::os::own_uid().unwrap();
-    let _door = daedalus_agent::santree::serve_at(
+    let _door = daedalus_agent::node::santree::serve_at(
         &socket,
         Arc::clone(&shared),
         node.clone(),
         Arc::new(move |peer| {
-            daedalus_agent::door::peer_allowed(peer, &daedalus_agent::door::unix_allowed(own, &[]))
+            daedalus_agent::ipc::door::peer_allowed(peer, &daedalus_agent::ipc::door::unix_allowed(own, &[]))
         }),
     )
     .unwrap();

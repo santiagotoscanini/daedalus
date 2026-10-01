@@ -45,8 +45,6 @@ pub use telemetry::{read_updates, Collector};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::Result;
-
 // ── paths ─────────────────────────────────────────────────────────────────
 
 pub const TRAY_EXE: &str = "daedalus-agent-tray.exe";
@@ -76,7 +74,7 @@ pub fn user_log_dir() -> Option<PathBuf> {
 /// the user's, not the machine's: `%LOCALAPPDATA%\daedalus-agent`. Under
 /// `DAEDALUS_AGENT_DATA_DIR` (a development run) None: the moved directory.
 pub fn user_state_dir() -> Option<PathBuf> {
-    if std::env::var_os(crate::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
+    if std::env::var_os(crate::core::paths::DATA_DIR_ENV).is_some_and(|v| !v.is_empty()) {
         return None;
     }
     std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join(crate::SERVICE_NAME))
@@ -130,25 +128,6 @@ pub fn try_lock_exclusive(path: &Path) -> std::io::Result<Option<std::fs::File>>
 /// Windows).
 pub fn monotonic_usec() -> Option<u64> {
     None
-}
-
-// ── the local sockets ─────────────────────────────────────────────────────
-
-/// Refused: the controller's API is a unix socket with peer credentials,
-/// and controller mode, the only role that serves it, runs on Linux (the
-/// box). The agent's own local door is the named pipe (pipe.rs).
-pub fn serve_api_socket<F>(
-    path: &Path,
-    _policy: &crate::door::Policy,
-    _on_conn: F,
-) -> Result<LocalSocket>
-where
-    F: Fn(crate::door::Conn) + Send + Sync + 'static,
-{
-    anyhow::bail!(
-        "no local API socket at {} on Windows: controller mode runs on the box, a Linux machine",
-        path.display()
-    )
 }
 
 // ── identity ──────────────────────────────────────────────────────────────

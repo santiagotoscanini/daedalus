@@ -2,10 +2,10 @@
 //! connection, Claude and santree submenus — tested without a menu.
 
 use crate::claude::{ClaudeState, Report};
+use crate::core::status::StatusDocument;
 use crate::link::wire::Policy;
 use crate::link::{LinkState, LinkStatus};
-use crate::settings::{Key, Via, View};
-use crate::status::StatusDocument;
+use crate::node::settings::{Key, Via, View};
 use crate::util::{short, short_fingerprint};
 use crate::DISPLAY_NAME;
 
