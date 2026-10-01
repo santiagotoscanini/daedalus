@@ -38,6 +38,7 @@ libc = "0.2"
 [dev-dependencies]
 # santree's own client, for the conformance test: the app's side of the wire.
 santree-remote-client = { git = "https://github.com/santree-ai/santree", rev = "c9766c4539973e7959287d9fc65dff01c585c575" }
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "io-util", "time", "macros"] }
+# test-util: paused time, so the ping test waits out PING_INTERVAL instantly.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "io-util", "time", "macros", "test-util"] }
 base64 = "0.22"
 tempfile = "3"

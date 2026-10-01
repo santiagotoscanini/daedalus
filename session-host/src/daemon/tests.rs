@@ -9,7 +9,6 @@ use super::*;
 
 fn options(root: &std::path::Path) -> Options {
     Options {
-        version: "0".into(),
         hostname: "h".into(),
         user: "u".into(),
         home: "/h".into(),
@@ -17,7 +16,6 @@ fn options(root: &std::path::Path) -> Options {
         hook_bin: "/bin/true".into(),
         workspaces: root.join("none.json"),
         workspace_icons: root.join("icons"),
-        ping_interval: Duration::from_secs(15),
         hook_queue_cap: 10,
     }
 }
@@ -267,4 +265,28 @@ fn a_failed_attach_to_a_known_session_is_io() {
     lock(&daemon.sessions).remove(&id);
     assert_eq!(attach(id), ErrorCode::NotFound);
     daemon.close_all();
+}
+
+/// The first ping comes after one [`PING_INTERVAL`], not at once (on paused
+/// time: nothing else on the connection is timed).
+#[tokio::test(start_paused = true)]
+async fn the_first_ping_comes_after_one_interval() {
+    use tokio::io::AsyncBufReadExt;
+    let dir = tempfile::tempdir().unwrap();
+    let a = Identity::generate().unwrap();
+    let list = dir.path().join("allow.json");
+    write_allow(&list, &[&a]);
+    let daemon = Daemon::new(options(dir.path()), "b".into(), AllowList::open(list));
+    let (ours, theirs) = tokio::io::duplex(64 * 1024);
+    let peer = Peer {
+        key: a.public_key(),
+        node: node(&a),
+        addr: "127.0.0.1:1".parse().unwrap(),
+    };
+    let started = tokio::time::Instant::now();
+    tokio::spawn(serve_conn(daemon, theirs, peer));
+    let mut lines = tokio::io::BufReader::new(ours).lines();
+    let first = lines.next_line().await.unwrap().unwrap();
+    assert_eq!(first, r#"{"e":"ping"}"#);
+    assert_eq!(started.elapsed(), PING_INTERVAL);
 }

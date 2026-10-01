@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use santree_remote_proto::{HOOK_QUEUE_CAP, PING_INTERVAL};
+use santree_remote_proto::HOOK_QUEUE_CAP;
 use santree_remote_tls::{rustls::ServerConfig, Identity};
 use tokio::net::{TcpListener, TcpStream, UnixListener};
 use tokio::sync::Semaphore;
@@ -90,7 +90,6 @@ impl Server {
         let (user, home) = sys::user_and_home();
         let daemon = Daemon::new(
             Options {
-                version: env!("CARGO_PKG_VERSION").to_string(),
                 hostname: sys::hostname(),
                 user,
                 home,
@@ -98,7 +97,6 @@ impl Server {
                 hook_bin: config.hook_bin.clone(),
                 workspaces: config.workspaces.clone(),
                 workspace_icons: config.workspace_icons.clone(),
-                ping_interval: PING_INTERVAL,
                 hook_queue_cap: HOOK_QUEUE_CAP,
             },
             sys::new_boot_id()?,
@@ -163,7 +161,6 @@ impl Server {
             tasks.push(tokio::spawn(accept_tls(
                 listener,
                 self.tls.clone(),
-                self.allow.clone(),
                 daemon.clone(),
                 preauth.clone(),
                 conns.clone(),
@@ -176,7 +173,7 @@ impl Server {
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(", "),
-            daemon.options().version,
+            crate::VERSION,
             daemon.boot_id(),
             santree_remote_tls::fingerprint(&self.identity.public_key())
         );
@@ -221,7 +218,6 @@ fn tune(stream: &TcpStream) -> std::io::Result<()> {
 async fn accept_tls(
     listener: TcpListener,
     tls: Arc<ServerConfig>,
-    allow: Arc<AllowList>,
     daemon: Arc<Daemon>,
     preauth: Arc<Preauth>,
     conns: ConnTasks,
@@ -245,7 +241,7 @@ async fn accept_tls(
             log::warn!("{addr}: setting keepalive: {e}");
             continue;
         }
-        let (tls, allow, daemon) = (tls.clone(), allow.clone(), daemon.clone());
+        let (tls, daemon) = (tls.clone(), daemon.clone());
         let refusals = refusals.clone();
         track(&conns, async move {
             let accepted =
@@ -281,7 +277,7 @@ async fn accept_tls(
                 return;
             };
             let node = crate::allow::node_id_of(&key);
-            daemon::serve_conn(daemon, allow, stream, Peer { key, node, addr }).await;
+            daemon::serve_conn(daemon, stream, Peer { key, node, addr }).await;
         });
     }
 }

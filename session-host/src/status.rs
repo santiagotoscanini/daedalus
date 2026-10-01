@@ -115,7 +115,7 @@ impl StatusWriter {
             schema_version: 1,
             generated_at: rfc3339(SystemTime::now()),
             state: if running { "running" } else { "stopped" },
-            version: daemon.options().version.clone(),
+            version: crate::VERSION.to_string(),
             protocol: PROTOCOL_VERSION,
             boot_id: daemon.boot_id().to_string(),
             pid: std::process::id(),

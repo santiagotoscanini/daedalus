@@ -511,26 +511,6 @@ async fn an_unlisted_key_gets_access_denied_on_its_first_read() {
     assert_eq!(Refusal::of(&e), Some(Refusal::HostKeyMismatch), "{e}");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn the_first_ping_comes_after_one_interval() {
-    let dir = tempdir();
-    let host = Host::start(dir.path());
-    let mut raw = host.greeted().await;
-    let started = Instant::now();
-    let mut line = String::new();
-    let n = tokio::time::timeout(Duration::from_secs(20), raw.reader.read_line(&mut line))
-        .await
-        .expect("no ping within 20s")
-        .unwrap();
-    assert!(n > 0);
-    assert_eq!(line.trim_end(), r#"{"e":"ping"}"#);
-    let waited = started.elapsed();
-    assert!(
-        waited >= Duration::from_secs(13),
-        "first ping after {waited:?}"
-    );
-}
-
 // ── 2. reattach without gaps or duplicates ────────────────────────────────
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

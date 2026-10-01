@@ -346,8 +346,8 @@ fmt, clippy `-D warnings`, the tests, a `--locked` release build, and
 
 - `tests/host.rs` drives the built binary over TLS on `127.0.0.1:0` with
   throwaway keys. The tests need `sh`, `seq`, `sleep` and `git` on `PATH` and a
-  writable `/tmp` (socket paths must fit 108 bytes); one waits the full 15 s
-  for the first ping.
+  writable `/tmp` (socket paths must fit 108 bytes). The first ping's
+  timing is a unit test on paused time.
 - `interop/` is a crate of its own so the agent's dependency tree stays out of
   this crate's lock and nix build. It runs a host in process and connects with
   `daedalus_agent::link::tls::Client` — an allowed node key is answered, an

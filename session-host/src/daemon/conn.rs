@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 
 use super::pty::SessState;
 use super::*;
-use crate::allow::{AllowList, AllowSet};
+use crate::allow::AllowSet;
 use crate::framing::{read_line, ReadEnd};
 
 /// One connection's outgoing queue, bounded by bytes ([`OUT_QUEUE_BYTES`]).
@@ -95,14 +95,14 @@ fn admits(set: &AllowSet, key: &[u8; 32], node: &str) -> bool {
 
 /// Serve one admitted connection until it closes, its node leaves the
 /// allow-list, or it stops reading.
-pub async fn serve_conn<S>(daemon: Arc<Daemon>, allow: Arc<AllowList>, stream: S, peer: Peer)
+pub async fn serve_conn<S>(daemon: Arc<Daemon>, stream: S, peer: Peer)
 where
     S: AsyncRead + AsyncWrite + Send + 'static,
 {
     // Subscribed before this re-check, so a revocation that landed between
     // the handshake's check and now is seen here, and one after it by the
     // watch below.
-    let mut allowed = allow.subscribe();
+    let mut allowed = daemon.allow.subscribe();
     if !admits(&allowed.borrow_and_update(), &peer.key, &peer.node) {
         log::info!(
             "node {} from {}: no longer allowed; closed",
@@ -164,9 +164,8 @@ where
     let mut writer_task = tokio::spawn(write_out(writer, out_rx, queued, stopped));
     let ping_task = {
         let conn = conn.clone();
-        let every = daemon.opts.ping_interval;
         tokio::spawn(async move {
-            let mut ticks = tokio::time::interval(every);
+            let mut ticks = tokio::time::interval(PING_INTERVAL);
             ticks.tick().await;
             loop {
                 ticks.tick().await;

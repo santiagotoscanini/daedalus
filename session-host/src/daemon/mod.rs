@@ -105,8 +105,6 @@ fn busy(msg: impl Into<String>) -> WireError {
 
 #[derive(Debug, Clone)]
 pub struct Options {
-    /// This host's own version (`hello.version`).
-    pub version: String,
     pub hostname: String,
     pub user: String,
     pub home: String,
@@ -114,7 +112,6 @@ pub struct Options {
     pub hook_bin: String,
     pub workspaces: PathBuf,
     pub workspace_icons: PathBuf,
-    pub ping_interval: Duration,
     pub hook_queue_cap: usize,
 }
 
@@ -197,10 +194,6 @@ impl Daemon {
         &self.boot_id
     }
 
-    pub fn options(&self) -> &Options {
-        &self.opts
-    }
-
     /// Resolves after the next status-relevant change (or at once, if one
     /// happened since the last wait).
     pub async fn changed(&self) {
@@ -231,7 +224,7 @@ impl Daemon {
         }
         let result = ok(&HelloResult {
             protocol: PROTOCOL_VERSION,
-            version: self.opts.version.clone(),
+            version: crate::VERSION.to_string(),
             hostname: self.opts.hostname.clone(),
             user: self.opts.user.clone(),
             home: self.opts.home.clone(),
