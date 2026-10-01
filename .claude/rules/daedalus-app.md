@@ -10,25 +10,26 @@ cluster, pnpm 11, node ≥ 24, TS 6. This is the box's admin UI; the NixOS
 module that runs it is this repo's `nix/stacks/daedalus/daedalus.nix`.
 
 The dev loop (what a change needs, what restarts what) and the
-verification commands — typecheck, biome, vitest, a page fetched under the
-SSO gate, pixels through the shotter image, the two baseline page errors —
-are in the root `CLAUDE.md`, which is always loaded. They are not repeated
-here.
+verification commands — the throwaway-container gate, `shot daedalus` for
+pages under the SSO gate — are in the root `CLAUDE.md`, which is always
+loaded. They are not repeated here.
 
 ## Architecture map
 
 - `src/routes/` — TanStack file-based routes: `__root.tsx`,
   `index.tsx` (redirects to `/apps`), `c.$category.tsx` (the category
   dashboard shell), `apps.index.tsx` / `apps.$name.tsx` (loader + frame
-  only; its tab bodies live in `src/components/apps/*`) /
+  only; its tab bodies live in `src/components/apps/`, mapped by
+  `tab-views.tsx`) /
   `apps.new.tsx`, `apps_.$name.builds.$id.tsx` (one build: its log,
   facts and cancel), `settings.tsx`, `claude.tsx`, `profile.tsx`,
   `login.tsx` (the break-glass local login, a 404 unless site.json turns
   it on — `core/local-login.ts`), and `settings_.github.callback.ts`,
   where GitHub returns the App manifest's `?code&state`. The `api.*.ts`
   server routes are only what an
-  outside caller needs — healthz, the GitHub push webhook, app-icon,
-  profile-picture, and the two image servers — `shot-run` for a
+  outside caller needs — healthz, the GitHub push webhook, a Mac's
+  log-in (`agent/enroll`), app-icon, profile-picture, and the two image
+  servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
   screenshot. No route is a "scriptable twin" of a button: the UI's
   writes go through server functions (`src/server/**`) and an agent's
@@ -50,12 +51,12 @@ here.
   compile error. The contract is `lib/modules/{manifest,tabs}.ts`; the
   registries are `lib/modules/registry.ts` (manifests, client-safe),
   `host/modules.ts` (loaders, lazy) and `components/modules/boards.tsx`
-  (views, eager). A new module = a new directory; nothing else changes.
+  (views, one lazy chunk per module). A new module = a new directory; nothing else changes.
 - **Loaders reach the machine only through `Ctx`** (`core/ctx.ts`:
   env, secret, gateway, exportPath, snapshot, store, http, prom, loki,
   github, hosts, site, controller, modules). `ctx.controller` is the agent on
   the box over its unix socket (`host/controller/`: one connection per
-  process, kept on globalThis so a Vite reload cannot leak one — the agent
+  process, kept on globalThis so a re-evaluated module cannot leak one — the agent
   serves 16), and the only way the app reaches the other machines:
   `host/controller/nodes.ts` hands it the desired set (every approved and
   revoked key with its policy) on each (re)connection and after every
@@ -150,7 +151,7 @@ here.
   points at `src/host/schema.ts`).
 - `src/host/` — everything that needs the machine: the root verbs, one
   module per verb (`root.ts`, `root-verb.ts`, then e.g. `apply.ts`, `build-verb.ts`,
-  `deploy.ts`, `image-update.ts`, `engine-update.ts`, `secret-set-request.ts`
+  `deploy.ts`, `image-update.ts`, `engine-update.ts`, `secret-set.ts`
   — the full set is below), the flows (`*-flow.ts`), the MCP server
   (`mcp/`), the database (`db.ts`, `schema.ts`), the env schema and the snapshot
   readers (`env.ts`, `env-snapshot.ts`, `nix-manifest.ts`,
@@ -173,12 +174,11 @@ here.
   the versioned `/export` domains (with the applied registry at
   /export/applied.json), the env snapshot at /env-snapshot,
   image labels and freshness at /images, SMART/ZFS/generations at
-  /system, the DHCP reservations at
-  /dhcp, deploy state at /deploy-state, project workspace clones at
+  /system, the builder's machinery at /builder, deploy state at /deploy-state, project workspace clones at
   /workspaces, build logs at /builds, the GitHub App's webhook secret at
-  /github and its installation token at /github-token, shotter's run
-  archive at /shotter (contributed by the shotter stack, not
-  `container.nix`), the encrypt-only `sops` binary at /usr/local/bin/sops, and the
+  /github and its installation token at /github-token, and what stacks contribute through `fleet.dashboard.<id>.volumes`
+  (pi-hole's DHCP reservations at /dhcp, wg-easy's credential at
+  /wg-easy, shotter's run archive at /shotter), the encrypt-only `sops` binary at /usr/local/bin/sops, and the
   CONFIGURATION repository's git facts at /repo — remote, head, dirty
   counts, drift, last Apply commit, plus the site directory's state and
   a digest per managed file, never the tree itself. (The engine clone's
@@ -188,10 +188,10 @@ here.
   and its site.json is THE source of the site constants nix builds
   with, so the settings tabs edit against it. The two design documents the MCP
   server serves (`host/mcp/docs.ts`) are in the image, at
-  /opt/daedalus/docs; in dev mode the whole engine checkout is also at
-  /engine, read-only, for the tests that read files beside `app/`. **/workspace-icons and
-  /boards are the only writable mounts** (their readers are the operator's,
-  never root), apart from /app, which is this clone itself.
+  /opt/daedalus/docs. **/workspace-icons and /boards are the only
+  writable data mounts** (their readers are the operator's, never root);
+  /controller is the controller's socket directory. Dev mode adds the
+  clone's `app/` at /app and the engine checkout read-only at /engine.
   Never reach around them (no SSH-ing the host, no reading host paths
   directly) — if a page needs a new host fact, extend the matching
   snapshot script in `nix/stacks/daedalus/host/`
@@ -227,19 +227,18 @@ here.
 - Secrets (service API keys) arrive via rendered env files
   (`DASH_*`). The app only ever GETs with them.
 - Writes to the box go through ONE door: the controller's `root.run`
-  (`ControllerClient.rootRun`; ARCHITECTURE.md "The root helper", whose
+  (`ctx.controller.call('root.run', …)`; ARCHITECTURE.md "The root helper", whose
   verb table is the list), reached through `host/root.ts` `runRoot`. The
   container holds no host privilege and never touches the helper's
   socket. A short verb answers with its outcome, and a button waits on it
   with `components/root-action.tsx` `useRootAction` (`host/power.ts` is
   the pattern; `deploy.ts`, `task-run.ts`, `build-verb.ts`
   `requestBuildCancel`, `core/github-app.ts` `requestTokenRefresh`,
-  `workspaces.ts`, `secret-set-request.ts`, `dhcp-hosts.ts`). A verb that
-  runs longer than a request should wait is asked with `rootStart`
-  (`detach`): the answer comes once its unit started, its status is
+  `workspaces.ts`, `secret-set.ts`, `dhcp-hosts.ts`). A verb that
+  runs longer than a request should wait is asked with `detach`: the answer comes once its unit started, its status is
   `/verbs/<verb>-status.json` (root's, read-only here), and
   `host/root-verb.ts` `defineRootVerb` is the one reader — a `running`
-  file whose run `rootFollow` says has ended reads as failed, never by a
+  file whose run `root.follow` says has ended reads as failed, never by a
   clock. Those are `apply.ts`, `build-verb.ts`, `image-update.ts`,
   `version-update.ts`, `claude-code-update.ts`, `engine-update.ts`; the
   host half of each is in `nix/stacks/daedalus/`.

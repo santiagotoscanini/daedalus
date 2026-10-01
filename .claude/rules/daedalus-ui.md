@@ -2,6 +2,7 @@
 paths:
   - "app/src/components/**"
   - "app/src/routes/**"
+  - "app/src/modules/**"
   - "app/src/*.css"
 ---
 
@@ -9,7 +10,7 @@ paths:
 
 Tailwind v4 + shadcn (new-york), on top of tokens a theme preset can
 replace at runtime. This file is how to write a component here; the
-dev loop, data flow and architecture map are in `daedalus-app.md`.
+data flow and architecture map are in `daedalus-app.md`.
 
 ## The three stylesheets
 
@@ -41,11 +42,11 @@ checks). What a component looks like:
 1. Utilities through `cn()` (`src/lib/cn.ts`), which lets a caller's
    `className` override the component's own. Repeated class strings
    are module-level `UPPER_CASE` constants; the shared ones live in
-   `src/components/tokens.ts` (`MONO`, `FOOT`, `ROW`…), `viz.tsx`
+   `src/components/tokens.ts` (`MONO`, `FOOT`, `ROW`…), `viz/`
    (`BOARD`, `STAT`…) and a directory's `shared.tsx` (`BOARD_FOOT`,
    `SECTION_HEAD`, `GHOST_BTN`…) — reuse before re-spelling.
 2. Reach for a shadcn primitive in `src/components/ui/` before
-   hand-rolling: `Card` for a panel, `Chip` (`viz.tsx`) for a pill, `Picker` for
+   hand-rolling: `Card` for a panel, `Chip` (`viz/stats.tsx`) for a pill, `Picker` for
    a closed list (it wraps `Select`; nothing else uses `Select`
    directly), `Field` for a form row, `Alert` (body in
    `AlertDescription`, never bare text — its grid puts bare text in a
@@ -58,10 +59,20 @@ checks). What a component looks like:
    quiet bordered one, `ghost` muted text, `destructive` outlined in
    the danger colour. A link styled as a button is `<Button asChild>`.
    Never hand-roll a `BTN_*` constant beside it.
-4. **Keep an exported API identical** when restyling. The shared
+4. **Use the shared behaviour, never a local copy**: `useAction`
+   (`use-action.ts`) for a button that runs something, `usePoll` /
+   `useLiveValue` (`poll.ts`) for a value that moves, `ArmedConfirm` /
+   `TypedConfirm` for a confirm step, `Toggle` (`slider.tsx`) for a
+   switch, `<Ago>` / `<Until>` / `<When>` (`ago.tsx`) for a time and
+   `lib/format.ts` for every number — a time rendered from the clock
+   during render is a hydration mismatch.
+5. **One component per board, under 400 lines a file**
+   (`src/file-size.test.ts` fails a longer one; its allowlist names the
+   exceptions and why).
+6. **Keep an exported API identical** when restyling. The shared
    components have many call sites; a props change turns a restyle into
    a refactor.
-5. A loading skeleton borrows the real component's box constant
+7. A loading skeleton borrows the real component's box constant
    (`BOARD`, `STAT_STRIP`, `APP_LIST`…) rather than approximating it,
    so nothing reflows when data lands.
 
@@ -122,8 +133,8 @@ are no component tests — the suite is node-side tests over `src/lib`,
 `src/core`, `src/host` and the modules' data. So the check is a browser
 (the shotter command in the root `CLAUDE.md`):
 
-1. `events.json` before the pictures, always, against the baseline of
-   page errors `CLAUDE.md` names. Anything above that is yours.
+1. `events.json` before the pictures, always: the baseline is zero page
+   errors, so any is yours.
 2. Compare against a before-shot of the same page. Restyling is
    supposed to change how a page looks, so "it renders" is not the
    bar — the bar is that nothing LOST information: no dropped label,

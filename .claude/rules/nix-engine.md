@@ -17,9 +17,9 @@ behind a switch that defaults OFF — §7), `example-host/` (the host a
 stranger starts from, and the one `nix flake check` evaluates) and
 `nix/tests/` (that evaluation). `example-host/site/` is also the one sample of
 each site and registry document both halves of the app↔nix contract test.
-`flake.nix` exports it as ONE module, `nixosModules.default`,
-`templates.config`
-and `lib.path`. Its MODULES take nothing from the flake's inputs — the host
+`flake.nix` exports it as ONE module, `nixosModules.default`, beside
+`templates.config`, `lib.path` and the two Rust binaries as
+`packages` (`nix/pkgs/`). Its MODULES take nothing from the flake's inputs — the host
 picks the nixpkgs they are evaluated against and imports sops-nix beside
 them; the inputs serve `nix fmt` and the checks only.
 
@@ -113,7 +113,7 @@ the key fails eval):
 - asserted equal, not yet sourced: `identity.hostname` = `networking.hostName`, `identity.owner` = `fleet.github.owner`, `identity.operator.user` = `fleet.operator.user`.
 - `site.json` `modules.enabled` (optional, id → bool) defines `fleet.modules.<id>.enable` at `mkOverride 60` — the control plane's "Switch off" on a service's page lands there; `fleet.structuralModules` (engine default: the spine) is what it refuses, and `/export/switches.json` tells the page which those are and which containers a stack owns.
 - `site.json` `modules.players` (optional, id → `[{ name, uuid, op }]`) defines `fleet.site.players.<id>` — a game server's whole roster, written from its page after the vendor resolved each name; the stack reads it (the reference host's Minecraft hands it to the running server without a restart). An id no imported module declares fails evaluation.
-- `site/apps.json` must exist (`fleet.registry.file`); `site/nodes.json` is optional and becomes `fleet.nodes` (`platform/nodes.nix`: the approved machines by id, name and what each offers; never a MAC or an address — the control plane binds MAC to name at runtime through `stacks/daedalus`'s `nodes/dhcp-hosts` and the resolver's `dhcp-hostsdir`).
+- `site/apps.json` must exist (`fleet.registry.file`); `site/nodes.json` is optional and becomes `fleet.nodes` (`platform/nodes.nix`: the approved machines by id, name and what each offers; never a MAC or an address — the control plane binds MAC to name at runtime through the `nodes-dhcp` root verb and the resolver's `dhcp-hostsdir`).
 
 Optional, null/empty by default, host-defined when wanted:
 `fleet.claude.mcpSopsFile`, `fleet.hcPing.keySopsFile`,
@@ -183,7 +183,7 @@ by hand, as ordinary engine commits, and each is declared as a
 `fleet.manualPins` entry so System › Updates lists it with the file to
 edit: `nodeImage` in `stacks/daedalus/build-agent.nix`, `railpackFrontend`
 (with the Railpack release hashes) in `stacks/daedalus/railpack.nix`, the
-dev image's `ARG NODE_IMAGE` in the root `Dockerfile`, and `pgBase` in
+control plane image's base, `ARG NODE_IMAGE` in the root `Dockerfile`, and `pgBase` in
 `modules/app-db/app-db.nix` — kept here on purpose: a pg restart is a
 fleet event the update agent's verify step cannot see. The bases of the
 OTHER images the catalog builds are the host's, so the Update button moves
@@ -193,12 +193,10 @@ them (§7).
 
 This repo has exactly ONE branch, `main`, always — `nix/`, `flake.nix`,
 `flake.lock` and `statix.toml` sit at its root beside `app/`, and it is
-published. Never create another branch or a second worktree for nix work.
-On the operator's box the clone is also bind-mounted into the running
-control plane, where a save under `app/` is a live deploy; the dev server
-does not watch `nix/`, so nix work in the same checkout is safe — but
-**never touch `app/**` while doing it**, and stage by path
-(`git add nix flake.nix flake.lock`), never `git add -A`.
+published. Never create another branch. Nothing in the checkout is live —
+the control plane's image is built from the locked rev too — so the loop
+below is how `app/` reaches a box as well. Stage by path, never
+`git add -A`.
 
 1. Edit here. `git add` new files — a flake sees only TRACKED files, in
    this repo exactly as in the host's.
@@ -267,13 +265,11 @@ this tree has.)
 - **Eval is pure.** `fleet.config.repo` and `fleet.site.path` are run-time
   strings for units and agents; the module side reads `fleet.site.source`
   (a store path). Never `builtins.readFile` through a run-time path.
-- **`host/*.sh` are the privileged half.** They run as root or as the
-  operator on a file-drop from the app, or — the verbs that moved to the
-  root helper (`fleet.daedalus.rootVerbs`, root-helper.nix) — when the
-  helper starts their unit; the app's TypeScript side of each is in
-  `app/src/host/`. Changing a verb's contract is a change in
-  both places, and the app side deploys on save while this side waits for
-  a lock bump — land the tolerant reader first.
+- **`host/*.sh` are the privileged half.** A root verb's script runs
+  when the root helper starts its unit (`fleet.daedalus.rootVerbs`,
+  `root-helper.nix`); timers run the snapshots. The app's side of each
+  verb is in `app/src/host/`; both ship in the same engine rev, so a
+  verb's contract changes in both places in one commit.
 - **Every commit moves the whole input.** A host sees this repo as one
   store path, and a module that embeds a path into it (`${./host/x.sh}`,
   a `readFile`d asset's directory) embeds that store path. So at the next

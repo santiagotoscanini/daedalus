@@ -3,127 +3,107 @@
 Notes for a Claude Code session working here. Read this, then let the
 path-scoped rules load as you touch files.
 
-## What this repo is, and is not
+## What this repo is
 
-- **Is:** the Daedalus app (`app/`, TanStack Start + React 19 + Vite 8,
-  drizzle-orm, Tailwind v4 + shadcn) and its public landing site
-  (`website/`, a standalone pnpm project deployed to GitHub Pages by
-  `.github/workflows/website.yml`). Public: `santiagotoscanini/daedalus`.
-- **Also is:** the app builder. Daedalus owns the fleet's image builds —
-  the box's GitHub App takes the push webhook, the queue and
-  the root helper's `build` verb live in `app/src/lib/` (`builds.ts`,
-  `build-queue.ts`) and `app/src/host/` (`build-verb.ts`, the half that
-  touches the host), the driver that dispatches them and
-  reports back in `app/src/core/builds/` (`scheduler.ts`, `report.ts`), and
-  results reach GitHub as a check run plus a Deployment. The app repos carry
-  no workflow files; a `railpack.json` is the normal build path, and a repo's
-  own Dockerfile is still a supported strategy.
-- **Also is:** the NixOS side. `nix/platform/**` (the OS-level base),
-  `nix/stacks/daedalus/**` (`daedalus.nix`, the builder, the engine's own
-  updater, the host agents `host/*.sh` — apply, deploy, build, image and
-  engine updates, app secrets, the snapshot scripts) and `nix/modules/<id>/`
-  (the catalog: the spine every box needs, plus leaves), exported by the
-  root `flake.nix` as one module, `nixosModules.default`, and
-  `templates.config` (a host to start from, and the host CI evaluates). The
-  operator's private
-  configuration takes it as a flake input pinned by rev. It lives on
-  `main` with everything else — this repo has exactly ONE branch, always
-  — at the root beside `app/`. On the operator's box this clone is
-  bind-mounted into the running app: a save under `app/` is a live
-  deploy, the dev server does not watch `nix/`, so nix work here is safe
-  as long as it stays out of `app/`.
-  Anything that changes how the container is built, what env it gets, or
-  what host fact reaches it is a `nix/` change: `nix fmt` + `nix flake
-  check`, commit on `main`, push,
-  then `nix flake update daedalus` + a rebuild in the configuration.
-  Read `nix/README.md`, and `.claude/rules/nix-engine.md` loads on
-  `nix/**`. `example-host/` evaluates as a whole host in `nix flake
-  check`, but most of the reference host's stacks are still in its private
-  configuration — `nix/README.md` "What is NOT done yet" is the list; do
-  not describe the engine as finished.
-- The `website/` docs page inventories the operator's external setup.
-  Keep it honest about what the linked repo contains.
+- **The app** (`app/`, TanStack Start + React 19 + Vite 8, drizzle-orm,
+  Tailwind v4 + shadcn) and its public landing site (`website/`, a
+  standalone pnpm project deployed to GitHub Pages by
+  `.github/workflows/website.yml`; its docs page inventories the
+  operator's external setup — keep it honest about what this repo
+  contains). Public: `santiagotoscanini/daedalus`.
+- **The app builder.** The box's GitHub App takes the push webhook; the
+  queue and the build verb's app half are `app/src/lib/` (`builds.ts`,
+  `build-queue.ts`), `app/src/host/build-verb.ts` and
+  `app/src/core/builds/` (`scheduler.ts`, `report.ts`). App repos carry no
+  workflow files — [BUILDS.md](BUILDS.md).
+- **The NixOS side** (`nix/`): `platform/`, `stacks/daedalus/` (the control
+  plane, the builder, the controller and root helper, the root verbs'
+  `host/*.sh`) and the catalog `modules/<id>/`, exported by the root
+  `flake.nix` as one module, `nixosModules.default`. `example-host/`
+  evaluates as a whole host in `nix flake check`; most of the reference
+  host's stacks are still in its private configuration — `nix/README.md`
+  "What is NOT done yet" is the list; do not describe the engine as
+  finished.
+- **The agent** (`agent/`) and **the session host** (`session-host/`), each
+  with its README and `gate.sh`.
+
+This repo has exactly ONE branch, `main`, always. Never create another.
 
 ## The dev loop
 
-On the box, the running container is in dev mode (`fleet.daedalus.source = "dev"`):
-it bind-mounts this clone's `app/` at `/app` and runs the Vite dev server
-against it. What a change needs:
+The operator's box runs the production image, built on the box from the
+engine rev its configuration locks (`fleet.daedalus.source = "local"`).
+Nothing in this checkout is live: `app/` and `nix/` alike reach the box
+only through a commit.
 
-- `app/src/**` → nothing. Saving the file is the deploy; Vite compile
-  errors land in `podman logs app-daedalus`.
-- `app/package.json` → `sudo systemctl restart podman-app-daedalus`
-  (re-runs `pnpm install --frozen-lockfile`; the npm registry is a hard
-  startup dependency, minutes on a cold cache). `dependencies` holds only
-  what the built server resolves at run time; everything the build
-  bundles, React included, is `pnpm add -D` — CONTRIBUTING.md "Building
-  and running the built server" says why, and `check-build` enforces it.
-- routes added/renamed → `pnpm generate-routes`, or `pnpm typecheck`,
-  which runs it. `app/src/routeTree.gen.ts` is generated and
-  gitignored; never edit it.
-- schema changes → `pnpm db:generate` / `pnpm db:migrate`.
-- anything under `nix/`, and the image's context (`Dockerfile`,
-  `docker-entrypoint.sh`) → `nix fmt` + `nix flake check`, commit on
-  `main`, push, then `nix flake update daedalus` and a rebuild in the
-  configuration repo.
+1. Edit, run the gates below, commit on `main` (as `santiago`; stage by
+   path), `git push origin main` — pushing is the normal step, because a
+   host's lock must only ever name a rev a fresh clone contains.
+2. In the configuration (`/etc/nixos`): `nix flake update daedalus`, then
+   its rebuild loop. The image is built as a pre-switch check: a failed
+   build refuses the switch and the running image stays. System › Updates
+   › Engine is step 2 as one button, reverting if the control plane does
+   not come back.
 
-No node/pnpm on the host: everything runs inside the container.
+What a change also needs:
+
+- `app/package.json` → `dependencies` holds only what the built server
+  resolves at run time; everything the build bundles, React included, is a
+  `devDependency` — CONTRIBUTING.md "Building and running the built
+  server" says why, and `check-build` enforces it.
+- routes added/renamed → `tsr generate` (the typecheck gate runs it).
+  `app/src/routeTree.gen.ts` is generated and gitignored.
+- schema changes → `pnpm db:generate`; migrations apply at server start.
+- `nix/`, `Dockerfile`, `docker-entrypoint.sh` → `nix fmt` + `nix flake
+  check`; `.claude/rules/nix-engine.md` loads on `nix/**`.
+
+`fleet.daedalus.source = "dev"` (a bind-mounted `app/` under `vite dev`)
+exists for a host that wants one; this box does not use it.
 
 ## Verify before calling it done
 
-```
-podman exec app-daedalus sh -lc 'cd /app && pnpm typecheck'
-podman exec app-daedalus sh -lc 'cd /app && pnpm exec biome check .'
-podman exec app-daedalus sh -lc 'cd /app && pnpm vitest run'
-```
-
-Content under the SSO gate — a GET carrying the reader token the container
-holds, which the request gate (`app/src/core/request-gate.ts`) lets read
-with no identity; anything else that dials the container is refused:
+No node on the host. The app's gate runs in a throwaway container over
+the clone's installed `node_modules` (an overlay, so nothing is written to
+it); a `package.json` change needs that install refreshed first:
 
 ```
-podman exec app-daedalus node -e \
-  "fetch('http://localhost:3000/<page>',{headers:{'x-reader-token':process.env.READER_TOKEN}}).then(r=>r.text()).then(t=>console.log(t.includes('<needle>')))"
+podman run --rm -v <clone>:/w -v <clone>/app/node_modules:/w/app/node_modules:O \
+  -w /w/app -e CI=true docker.io/library/node:24 bash -c \
+  'node_modules/.bin/biome check . && node_modules/.bin/tsr generate && node_modules/.bin/tsc --noEmit && node_modules/.bin/vitest run'
 ```
 
-Pixels under the gate — `shot daedalus`, which runs the shotter image on
-the app's own bridge and sends the reader token to `app-daedalus` alone
-(the box's `stacks/shotter`). Reads only: a driver that presses a button
-is refused, as it should be.
+`agent/gate.sh` and `session-host/gate.sh` are the Rust gates.
+
+Pages under the SSO gate: `shot daedalus`, which drives the shotter image
+against `app-daedalus` with the reader token (the request gate,
+`app/src/core/request-gate.ts`, lets a GET carrying it read with no
+identity). Reads only: a driver that presses a button is refused.
 
 ```
 shot daedalus quick /<page> [label]
 shot daedalus run <driver>.mjs [label]
 ```
 
-Read `events.json` in the run dir before trusting the PNGs. Two
-pageErrors per load is the documented baseline (the HMR websocket 302s
-at the gate; a pre-existing Date.now() hydration mismatch) — compare
-against that, not zero.
+Read `events.json` in the run dir before trusting the PNGs; the baseline
+is zero page errors.
 
 ## The rules are the guides
 
-`.claude/rules/daedalus-app.md` (loads on `app/**`) is the architecture
-map, the data-flow rules (snapshot mounts, env schema, the app side of
-the root verbs, the escalating-retry ladder) and the style rule.
-`ARCHITECTURE.md` and `BUILDS.md` are the design as a reader outside the
-code needs it — the root helper and its verb table, the two loops,
-trust boundaries — and the MCP server serves both to agents.
-`.claude/rules/daedalus-ui.md` (loads on `app/src/components/**`,
-`app/src/routes/**`, `app/src/*.css`) is how to write a component:
-the three stylesheets, the cascade layer order, the colour-literal ban.
-`.claude/rules/nix-engine.md` (loads on `nix/**` and `flake.nix`)
-is the law for the NixOS side: no box identity, the engine
-declares and the host defines, no container pins, the two-repo dev loop.
-They are THE style and architecture guides; this file only points at
-them. When they disagree with code you find, the rule wins and the code
-is the bug.
+- `.claude/rules/daedalus-app.md` (loads on `app/**`): the architecture
+  map, the data-flow rules, the style rule.
+- `.claude/rules/daedalus-ui.md` (loads on components, routes, module
+  views and the stylesheets): how to write a component.
+- `.claude/rules/nix-engine.md` (loads on `nix/**`, `flake.nix`,
+  `example-host/**`): no box identity, the engine declares and the host
+  defines, no container pins.
+- `ARCHITECTURE.md` and `BUILDS.md` are the design for a reader outside
+  the code (the MCP server serves both to agents).
+
+When they disagree with code you find, the rule wins and the code is the
+bug.
 
 ## Commits
 
-Commit often, as `santiago`. This clone is one of the box's project
-workspaces: a timer fast-forwards it every 30 minutes and after every
-deploy, but leaves a dirty or diverged tree alone, so local work is
-never overwritten. The clone lives under `~/projects`, which is
-snapshotted and mirrored; the remote is still the copy that survives a
-disk. Pushing is the operator's call unless told otherwise.
+Commit often. This clone is one of the box's project workspaces: a timer
+fast-forwards it every 30 minutes, but leaves a dirty or diverged tree
+alone, so local work is never overwritten.
