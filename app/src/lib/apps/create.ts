@@ -1,5 +1,6 @@
 import type { Ctx } from '../../core/ctx'
 import { repoFileExists } from '../../core/github-app'
+import { publishingFacts } from '../../host/contract/domains/publishing'
 import { listRepos } from '../../host/github-repos'
 import { manifestEntries } from '../../host/nix-manifest'
 import { imageInfo } from '../../host/registry'
@@ -22,10 +23,11 @@ import { appRepo, defaultImage, registryHostPattern } from '../site'
  * itself, since picking a repo is what every later step keys off.
  */
 export async function loadNewAppOptions() {
-  const [repos, names, manifest] = await Promise.all([
+  const [repos, names, manifest, publishing] = await Promise.all([
     listRepos(),
     listAppNames(),
     manifestEntries(),
+    publishingFacts(),
   ])
 
   // A name is taken if EITHER source knows it: the database holds what
@@ -34,7 +36,8 @@ export async function loadNewAppOptions() {
   // fail at the last step.
   const taken = [...new Set([...names, ...manifest.map((m) => m.name)])]
 
-  return { taken, ...repos }
+  // The labels no app may take: the name derives the hostname.
+  return { taken, reservedLabels: publishing.reservedLabels, ...repos }
 }
 
 /**

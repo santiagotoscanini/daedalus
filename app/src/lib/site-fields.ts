@@ -1,6 +1,6 @@
 import type { SiteField } from '../core/site'
 import type { SiteDocument } from '../core/site/file'
-import { RESERVED_LABELS } from './hostname'
+import type { ReservedLabels } from './hostname'
 
 // The client half of editing site.json: reading a dotted field out of the
 // document, and the light, local validators the inputs run before a save.
@@ -46,17 +46,21 @@ export function hostnameShapeError(value: string): string | null {
  * The control plane's name: the one label in front of the domain. Lower-case,
  * because that is what the build asserts for every published hostname, and
  * never one of the reserved labels — the same list an app's hostname is held
- * to, since the control plane is published exactly like one.
+ * to (`reserved`, lib/hostname.ts), since the control plane is published
+ * exactly like one.
  */
-export function controlPlaneLabelError(value: string): string | null {
+export function controlPlaneLabelError(
+  value: string,
+  reserved: ReservedLabels = {},
+): string | null {
   const v = value.trim()
   if (v === '') return 'a name is required.'
   if (v.length > 63) return '63 characters at most.'
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(v)) {
     return 'lower-case letters, digits and inner hyphens — it is one part of a hostname.'
   }
-  const reserved = RESERVED_LABELS[v]
-  if (reserved) return `${v} ${reserved} Pick another name.`
+  const why = Object.hasOwn(reserved, v) ? reserved[v] : undefined
+  if (why) return `${v} ${why} Pick another name.`
   return null
 }
 

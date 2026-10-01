@@ -236,13 +236,17 @@ async function refuseUnknown(
   const unchanged = (f: SiteField) =>
     committed !== null && sameValue(getField(committed, f), patch[f])
 
-  // The control plane's name. A label the build would refuse, the landing
-  // page's name, or a hostname some other app already answers at never gets
+  // The control plane's name. A label the build would refuse, a reserved
+  // label, or a hostname some other app already answers at never gets
   // as far as a draft.
   if ('identity.controlPlane' in patch && !unchanged('identity.controlPlane')) {
     const label = patch['identity.controlPlane']
+    const { publishingFacts } = await import('../../host/contract/domains/publishing')
+    const { takenHostnames, reservedLabels } = await publishingFacts()
     const problem =
-      typeof label === 'string' ? controlPlaneLabelError(label) : 'the name must be text'
+      typeof label === 'string'
+        ? controlPlaneLabelError(label, reservedLabels)
+        : 'the name must be text'
     if (problem !== null) throw new Error(problem)
     if (committed !== null && committed.identity.baseDomain !== next.identity.baseDomain) {
       throw new Error(
@@ -254,8 +258,6 @@ async function refuseUnknown(
     const own = [committed?.identity.controlPlane, committed?.identity.controlPlanePrevious]
       .filter((l): l is string => typeof l === 'string' && l !== '')
       .map((l) => `${l}.${domain}`)
-    const { publishingFacts } = await import('../../host/contract/domains/publishing')
-    const { takenHostnames } = await publishingFacts()
     if (takenHostnames.includes(host) && !own.includes(host)) {
       throw new Error(`${host} is already published on this box.`)
     }

@@ -15,7 +15,8 @@ import { readSnapshot } from '../snapshot'
 
 // /export/publishing.json — the publish registry as platform/publishing.nix
 // declares it: the FULL per-webApp record, the taken-hostname list for the
-// live collision check, direct ingress, and the VPN egress map
+// live collision check, the reserved labels (fleet.reservedLabels), direct
+// ingress, and the VPN egress map
 // (fleet.vpnEgress, with each tunnel's tenants added by
 // nix/stacks/daedalus/daedalus.nix from their own netns flags).
 
@@ -35,6 +36,8 @@ type WebAppRecord = {
 export type PublishingFacts = {
   webApps: Record<string, WebAppRecord>
   takenHostnames: string[]
+  /** Labels under the domain no app may take (fleet.reservedLabels), each with why. */
+  reservedLabels: Record<string, string>
   directIngress: { name: string; port: number; proto: string; note: string }[]
   vpnEgress: {
     container: string
@@ -64,6 +67,7 @@ const shape = obj({
     }),
   ),
   takenHostnames: optional(arrayOf(str), []),
+  reservedLabels: optional(recordOf(str), {}),
   directIngress: optional(
     arrayOf(obj({ name: str, port: num, proto: str, note: optional(str, '') })),
     [],
@@ -87,7 +91,13 @@ const shape = obj({
   ),
 })
 
-const EMPTY: PublishingFacts = { webApps: {}, takenHostnames: [], directIngress: [], vpnEgress: [] }
+const EMPTY: PublishingFacts = {
+  webApps: {},
+  takenHostnames: [],
+  reservedLabels: {},
+  directIngress: [],
+  vpnEgress: [],
+}
 
 export async function publishingFacts(): Promise<PublishingFacts> {
   const r = await readSnapshot({

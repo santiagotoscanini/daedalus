@@ -117,6 +117,7 @@ export const APP_TAB_VIEWS: { [K in Kind]: K extends Inlined ? Inline : Streamed
         readOnly={frame.app.managedInNix}
         patch={patch}
         takenHostnames={frame.takenHostnames}
+        reservedLabels={frame.reservedLabels}
         stateRoot={frame.stateRoot}
       />
     ),

@@ -47,22 +47,14 @@ export function isAppName(v: unknown): v is string {
 }
 
 /**
- * Labels under the base domain that an app may never claim, and why.
- *
- * `daedalus` is the project's public landing page: a hand-managed CNAME to
- * GitHub Pages that is deliberately NOT a fleet hostname, so it is absent from
- * the `taken` list a collision check reads — nothing else would catch it, and
- * cloudflared-route-sync would reconcile the Pages record away.
- *
- * `hooks` is the GitHub App's webhook, published on the tunnel entrypoint
- * only. An app claiming it either collides with that router or lands behind a
- * public CNAME the operator never chose. Nix asserts this one; the edit is
- * where it should be caught.
+ * Labels under the base domain that an app may never claim, each with why (the
+ * rest of a sentence that starts with the label): nix's `fleet.reservedLabels`,
+ * read from /export/publishing.json (`publishingFacts().reservedLabels`). The
+ * engine reserves `hooks`, the GitHub App's webhook; a host adds the names it
+ * publishes outside the box, which no `taken` list holds. Nix asserts them; the
+ * edit is where they should be caught.
  */
-export const RESERVED_LABELS: Readonly<Record<string, string>> = {
-  daedalus: 'is the project’s public landing page, a record this box does not own.',
-  hooks: 'is reserved for the GitHub App’s webhook.',
-}
+export type ReservedLabels = Readonly<Record<string, string>>
 
 /**
  * Is this usable as an app's key?
@@ -75,8 +67,13 @@ export const RESERVED_LABELS: Readonly<Record<string, string>> = {
  * chosen.
  *
  * @param taken app names already in the registry or declared by hand in Nix.
+ * @param reserved the box's reserved labels (`ReservedLabels`).
  */
-export function appNameError(name: string, taken: readonly string[] = []): string | null {
+export function appNameError(
+  name: string,
+  taken: readonly string[] = [],
+  reserved: ReservedLabels = {},
+): string | null {
   const n = name.trim().toLowerCase()
   if (n === '') return 'pick a repository first.'
   if (taken.includes(n)) return `${n} is already an app on this box.`
@@ -84,8 +81,8 @@ export function appNameError(name: string, taken: readonly string[] = []): strin
     return 'may use lowercase letters, digits and inner hyphens only. It becomes a DNS label, a container name and a postgres role.'
   }
   // The name derives the default hostname, so a reserved label is reserved here too.
-  const reserved = RESERVED_LABELS[n]
-  if (reserved) return `${n} ${reserved}`
+  const why = Object.hasOwn(reserved, n) ? reserved[n] : undefined
+  if (why) return `${n} ${why}`
   // Last, so the message is about the length rather than the syntax — and it
   // is the one part of `isAppName` worth its own sentence.
   if (n.length > APP_NAME_MAX) {
@@ -100,12 +97,14 @@ export function appNameError(name: string, taken: readonly string[] = []): strin
  *        refuses two routers on one entrypoint+host, since traefik's pick
  *        between identical rules is nondeterministic — and that failure lands
  *        mid-Apply, after the commit.
+ * @param reserved the box's reserved labels (`ReservedLabels`).
  * @returns an operator-facing reason, or null when the hostname is usable.
  */
 export function hostnameError(
   site: Site,
   value: string,
   taken: readonly string[] = [],
+  reserved: ReservedLabels = {},
 ): string | null {
   const domain = site.baseDomain
   const h = value.trim().toLowerCase()
@@ -128,10 +127,10 @@ export function hostnameError(
     return 'may use lowercase letters, digits and inner hyphens only.'
   }
   // Checked after the shape rules so the message is about the name, not the
-  // syntax. `taken` cannot cover these: one is not published from this box at
-  // all, and the other is published by a raw router rather than a webApp.
-  const reserved = RESERVED_LABELS[label]
-  if (reserved) return `${label} ${reserved} Pick another name.`
+  // syntax. `taken` cannot cover these: they are published outside the box, or
+  // by a raw router rather than a webApp.
+  const why = Object.hasOwn(reserved, label) ? reserved[label] : undefined
+  if (why) return `${label} ${why} Pick another name.`
   return null
 }
 

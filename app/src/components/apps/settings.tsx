@@ -16,12 +16,14 @@ export function Settings({
   readOnly,
   patch,
   takenHostnames,
+  reservedLabels,
   stateRoot,
 }: {
   app: AppRecord
   readOnly: boolean
   patch: (p: AppPatch) => void
   takenHostnames: NonNullable<LoaderData>['takenHostnames']
+  reservedLabels: NonNullable<LoaderData>['reservedLabels']
   /** `fleet.stateRoot` on the host, from the site export. */
   stateRoot: string
 }) {
@@ -93,7 +95,7 @@ export function Settings({
           value={app.hostname ?? ''}
           placeholder={`${app.name}.${site.baseDomain}`}
           disabled={readOnly}
-          validate={(v) => hostnameError(site, v, takenHostnames)}
+          validate={(v) => hostnameError(site, v, takenHostnames, reservedLabels)}
           hint={
             <>
               Empty uses the default. Must be one level under <code>{site.baseDomain}</code>, the

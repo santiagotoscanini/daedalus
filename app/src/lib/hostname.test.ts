@@ -4,12 +4,18 @@ import {
   effectiveHostname,
   hostnameError,
   isAppName,
-  RESERVED_LABELS,
+  type ReservedLabels,
 } from './hostname'
 import { siteFrom } from './site'
 
 const BASE_DOMAIN = 'box.test'
 const SITE = siteFrom({ baseDomain: BASE_DOMAIN })
+// As /export/publishing.json carries them: the engine's `hooks`, and one a host
+// publishes outside the box.
+const RESERVED: ReservedLabels = {
+  hooks: 'is reserved for the GitHub App’s webhook.',
+  daedalus: 'is the project’s public landing page, a record this box does not own.',
+}
 
 describe('isAppName', () => {
   it('takes every name on this box', () => {
@@ -120,23 +126,33 @@ describe('effectiveHostname', () => {
   })
 })
 
-// The reserved labels are the one collision `taken` cannot catch: `daedalus`
-// is a GitHub Pages record this box does not publish at all, so it never
-// appears in the box's own hostname list, and route-sync would reconcile it
-// away. Before this rule both validators returned null for it.
+// The reserved labels are the one collision `taken` cannot catch: a record the
+// box does not publish at all never appears in its own hostname list, and
+// route-sync would reconcile it away. They come from the export, so a label
+// is reserved exactly where the box says so.
 describe('reserved labels', () => {
-  for (const label of Object.keys(RESERVED_LABELS)) {
+  for (const label of Object.keys(RESERVED)) {
     it(`refuses ${label} as a hostname`, () => {
-      expect(hostnameError(SITE, `${label}.${BASE_DOMAIN}`)).toContain(label)
+      expect(hostnameError(SITE, `${label}.${BASE_DOMAIN}`, [], RESERVED)).toContain(label)
     })
 
     it(`refuses ${label} as an app name, because the name derives the hostname`, () => {
-      expect(appNameError(label)).toContain(label)
+      expect(appNameError(label, [], RESERVED)).toContain(label)
     })
   }
 
   it('still allows a name that merely contains a reserved label', () => {
-    expect(hostnameError(SITE, `daedalus-app.${BASE_DOMAIN}`)).toBeNull()
-    expect(appNameError('daedalus-app')).toBeNull()
+    expect(hostnameError(SITE, `daedalus-app.${BASE_DOMAIN}`, [], RESERVED)).toBeNull()
+    expect(appNameError('daedalus-app', [], RESERVED)).toBeNull()
+  })
+
+  it('reserves nothing a box does not', () => {
+    expect(hostnameError(SITE, `daedalus.${BASE_DOMAIN}`)).toBeNull()
+    expect(appNameError('daedalus')).toBeNull()
+  })
+
+  it('is not fooled by a name an object already has', () => {
+    expect(appNameError('constructor', [], RESERVED)).toBeNull()
+    expect(hostnameError(SITE, `constructor.${BASE_DOMAIN}`, [], RESERVED)).toBeNull()
   })
 })

@@ -77,6 +77,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     // path is the nix fact rather than a string typed into a component.
     stateRoot: site.data.stateRoot,
     takenHostnames: publishing.takenHostnames.filter((h) => h !== hostname),
+    reservedLabels: publishing.reservedLabels,
     // Authoritative record from the app's own deploy unit — a deploy also
     // runs from the timer and from a manual systemctl start, neither of
     // which goes through daedalus.

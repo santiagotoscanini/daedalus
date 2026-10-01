@@ -30,6 +30,8 @@ export type BoxSettings = {
     timezone: string
     operator: OperatorAccount & { email: string }
     owner: string
+    /** Labels under the domain the control plane may not take (fleet.reservedLabels). */
+    reservedLabels: Record<string, string>
   }
   network: {
     lanIp: string

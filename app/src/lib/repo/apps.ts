@@ -149,7 +149,8 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
     ...(await manifestEntries()).map((m) => m.name),
   ]
 
-  const nameErr = appNameError(name, taken)
+  const { takenHostnames, reservedLabels } = await publishingFacts()
+  const nameErr = appNameError(name, taken, reservedLabels)
   if (nameErr) throw new Error(`name ${nameErr}`)
 
   const hostname = input.hostname?.trim().toLowerCase() || null
@@ -157,7 +158,8 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
   const hostErr = hostnameError(
     site,
     hostname ?? effectiveHostname(site, name, null),
-    (await publishingFacts()).takenHostnames,
+    takenHostnames,
+    reservedLabels,
   )
   if (hostErr) throw new Error(`hostname ${hostErr}`)
 
@@ -276,8 +278,9 @@ async function normalizeHostname(
   const { publishingFacts } = await import('../../host/contract/domains/publishing')
   const site = readSite()
   const own = effectiveHostname(site, name, record.hostname)
-  const taken = (await publishingFacts()).takenHostnames.filter((h) => h !== own)
-  const err = hostnameError(site, hostname, taken)
+  const { takenHostnames, reservedLabels } = await publishingFacts()
+  const taken = takenHostnames.filter((h) => h !== own)
+  const err = hostnameError(site, hostname, taken, reservedLabels)
   if (err) throw new Error(`hostname ${err}`)
   return hostname.trim().toLowerCase() || null
 }

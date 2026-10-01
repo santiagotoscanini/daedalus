@@ -72,7 +72,7 @@ export function Wizard({ options }: { options: Options }) {
   // is what the image override is for.
   const name = repo?.name ?? ''
 
-  const nameErr = repo ? appNameError(name, options.taken) : null
+  const nameErr = repo ? appNameError(name, options.taken, options.reservedLabels) : null
   const hostErr = hostnameError(site, hostname)
 
   // Re-check whenever the thing being checked changes. The result is about a

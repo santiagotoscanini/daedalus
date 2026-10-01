@@ -1,5 +1,6 @@
 import { readApplyStatus } from '../../host/apply'
 import { networkSnapshot } from '../../host/contract/domains/network'
+import { publishingFacts } from '../../host/contract/domains/publishing'
 import { repoFacts } from '../../host/contract/domains/repo'
 import { type SiteIdentity, siteIdentity } from '../../host/contract/domains/site'
 import type { SnapshotResult } from '../../host/contract/snapshot'
@@ -32,11 +33,12 @@ function controlPlaneOf(s: SiteIdentity): BoxSettings['general']['controlPlane']
 }
 
 export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
-  const [site, network, repo, applyStatus] = await Promise.all([
+  const [site, network, repo, applyStatus, publishing] = await Promise.all([
     siteIdentity(),
     networkSnapshot(),
     repoFacts(),
     readApplyStatus(ctx),
+    publishingFacts(),
   ])
   const s = site.data
   // The one fact about how THIS app is run: fleet.daedalus.source = "dev" sets
@@ -53,6 +55,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       timezone: s.timezone,
       operator: { user: s.operator.user, group: s.operator.group, email: s.mail.alertTo },
       owner: s.owner,
+      reservedLabels: publishing.reservedLabels,
     },
     network: {
       lanIp: s.lanIp,

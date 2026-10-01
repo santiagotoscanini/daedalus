@@ -452,6 +452,11 @@ in
     # the tenant list comes from each container's own --network=container:
     # flag, which only this module reads.
     fleet.export.domains.publishing.data.vpnEgress = vpnEgress;
+    # And the labels no app may take, for the app to refuse at the edit what
+    # the assertions above refuse at the build.
+    fleet.export.domains.publishing.data.reservedLabels = lib.mapAttrs (
+      _: r: r.reason
+    ) config.fleet.reservedLabels;
 
     # What only Nix knows about the app registry (app/src/host/contract/domains/
     # apps.ts): the hand-declared apps — only daedalus itself, from `self` — on

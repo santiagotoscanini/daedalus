@@ -11,10 +11,12 @@ import {
 } from './site-fields'
 
 describe('controlPlaneLabelError', () => {
-  it('takes one lower-case label and refuses the landing page’s name', () => {
-    expect(controlPlaneLabelError('daedalus-app')).toBeNull()
-    expect(controlPlaneLabelError(' admin ')).toBeNull()
-    expect(controlPlaneLabelError('daedalus')).toMatch(/landing page/)
+  it('takes one lower-case label and refuses a reserved one', () => {
+    const reserved = { daedalus: 'is the project’s public landing page.' }
+    expect(controlPlaneLabelError('daedalus-app', reserved)).toBeNull()
+    expect(controlPlaneLabelError(' admin ', reserved)).toBeNull()
+    expect(controlPlaneLabelError('daedalus', reserved)).toMatch(/landing page/)
+    expect(controlPlaneLabelError('daedalus')).toBeNull()
     expect(controlPlaneLabelError('')).not.toBeNull()
     expect(controlPlaneLabelError('Admin')).not.toBeNull()
     expect(controlPlaneLabelError('a.b')).not.toBeNull()

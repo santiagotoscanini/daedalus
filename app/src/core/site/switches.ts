@@ -44,6 +44,7 @@ const publishingDecoder = obj({
     {},
   ),
   takenHostnames: optional(arrayOf(str), []),
+  reservedLabels: optional(recordOf(str), {}),
 })
 
 const NONE: WebOverride = { label: null, public: null }
@@ -90,7 +91,7 @@ export async function moduleSwitches(ctx: Ctx): Promise<ModuleSwitch[]> {
     ctx.snapshot({
       path: ctx.exportPath('publishing.json'),
       decoder: publishingDecoder,
-      fallback: { webApps: {}, takenHostnames: [] },
+      fallback: { webApps: {}, takenHostnames: [], reservedLabels: {} },
     }),
     ctx.snapshot({
       path: ctx.exportPath('images.json'),
@@ -197,8 +198,14 @@ export async function setModuleWeb(
     if (label !== null && label !== '') {
       const { hostnameError } = await import('../../lib/hostname')
       const own = [w.hostname, ...w.aliases]
-      const taken = (await takenHostnames(ctx)).filter((h) => !own.includes(h))
-      const why = hostnameError(ctx.site, `${label}.${ctx.site.baseDomain}`, taken)
+      const published = await publishedNames(ctx)
+      const taken = published.takenHostnames.filter((h) => !own.includes(h))
+      const why = hostnameError(
+        ctx.site,
+        `${label}.${ctx.site.baseDomain}`,
+        taken,
+        published.reservedLabels,
+      )
       if (why !== null) return { ok: false, reason: why }
     }
     next.label = label === null || label === '' ? null : label
@@ -217,11 +224,14 @@ export async function setModuleWeb(
   return { ok: true }
 }
 
-async function takenHostnames(ctx: Ctx): Promise<string[]> {
+/** The hostnames the box publishes, and the labels it reserves. */
+async function publishedNames(
+  ctx: Ctx,
+): Promise<{ takenHostnames: string[]; reservedLabels: Record<string, string> }> {
   const publishing = await ctx.snapshot({
     path: ctx.exportPath('publishing.json'),
     decoder: publishingDecoder,
-    fallback: { webApps: {}, takenHostnames: [] },
+    fallback: { webApps: {}, takenHostnames: [], reservedLabels: {} },
   })
-  return publishing.data.takenHostnames
+  return publishing.data
 }

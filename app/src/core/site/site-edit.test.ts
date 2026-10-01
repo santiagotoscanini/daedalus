@@ -25,6 +25,7 @@ const h = vi.hoisted(() => ({
       timezone: 'UTC',
       owner: 'o',
       operator: { user: 'u', group: 'g' },
+      reservedLabels: {},
     },
     network: {
       lanIp: '10.0.0.2',
