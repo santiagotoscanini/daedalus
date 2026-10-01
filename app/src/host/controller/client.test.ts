@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { type ControllerClient, createControllerClient } from './client'
+import { type ControllerClient, createControllerClient, MACHINE_ACK_MS } from './client'
 import { ControllerError, nodeLeftId } from './wire'
 
 // The client against a fake controller on a real unix socket: the framing,
@@ -205,6 +205,40 @@ describe('the controller client', () => {
     ;(late as (() => void) | null)?.()
     await tick(20)
     expect((await c.systemInfo()).api).toBe(1)
+  })
+
+  it('waits out a machine’s acknowledgement on the calls the controller relays', async () => {
+    // The fake answers everything a little past the client's own timeout — as
+    // a controller does while it waits on a machine's ack.
+    const slow = (req: Req, sock: Socket) => {
+      const ok =
+        req.m === 'nodes.command'
+          ? { delivered: true, queued: false }
+          : req.m === 'claude.status'
+            ? { reporting: false, wanted: false, report: null }
+            : { delivered: true, request: 'r-1' }
+      setTimeout(() => sock.write(answer(req.id, ok)), 300)
+      return null
+    }
+    await serve(agent(slow))
+    const c = client({ timeoutMs: 150 })
+    const node = '0123456789abcdef'
+    expect(await c.nodesCommand(node, 'check_update')).toEqual({ delivered: true, queued: false })
+    expect(await c.nodesClaudeSession(node, 'resume', 's-1')).toEqual({ request: 'r-1' })
+    expect(
+      await c.nodesProviderModel(node, { kind: 'lemonade', action: 'load', model: 'm' }),
+    ).toEqual({ request: 'r-1' })
+    // A call the controller answers itself keeps the short timeout.
+    expect((await rejection(c.claudeStatus())).code).toBe('timeout')
+  })
+
+  it('restates the agent’s ACK_TIMEOUT', () => {
+    const rust = readFileSync(
+      new URL('../../../../agent/src/link/controller/registry.rs', import.meta.url),
+      'utf8',
+    )
+    const secs = /pub const ACK_TIMEOUT: Duration = Duration::from_secs\((\d+)\);/.exec(rust)?.[1]
+    expect(Number(secs) * 1000).toBe(MACHINE_ACK_MS)
   })
 
   it('dials again after the controller closes the connection', async () => {

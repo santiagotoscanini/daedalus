@@ -74,6 +74,14 @@ import {
 
 /** One call, and the hello, answer within this long or fail `timeout`. */
 const TIMEOUT_MS = 3_000
+/**
+ * How long the controller waits for a machine to acknowledge a verb it relays
+ * (`nodes.command`, `nodes.claude_session`, `nodes.provider_model`): the
+ * agent's `ACK_TIMEOUT` in agent/src/link/controller/registry.rs, restated.
+ * Those calls wait this plus the client's own timeout, so the controller's
+ * answer — the ack, or its own `timeout` — is what the caller hears.
+ */
+export const MACHINE_ACK_MS = 5_000
 /** The first wait after a failed dial; doubled per failure, up to the max. */
 const BACKOFF_MS = 250
 const BACKOFF_MAX_MS = 10_000
@@ -190,6 +198,7 @@ type Live = { socket: Socket; hello: HelloOk }
  */
 export function createControllerClient(opts: Options): ControllerClient {
   const timeoutMs = opts.timeoutMs ?? TIMEOUT_MS
+  const relayedMs = MACHINE_ACK_MS + timeoutMs
   const backoffMs = opts.backoffMs ?? BACKOFF_MS
   const backoffMaxMs = opts.backoffMaxMs ?? BACKOFF_MAX_MS
 
@@ -423,13 +432,13 @@ export function createControllerClient(opts: Options): ControllerClient {
     nodesTelemetry: (id) => call('nodes.telemetry', nodeTelemetryAnswer, { id }),
     nodesProviders: (id) => call('nodes.providers', nodeProvidersAnswer, { id }),
     nodesProviderModel: (id, verb) =>
-      call('nodes.provider_model', providerModelSent, { id, ...verb }),
+      call('nodes.provider_model', providerModelSent, { id, ...verb }, relayedMs),
     nodesClaude: (id) => call('nodes.claude', nodeClaudeAnswer, { id }),
     nodesClaudeRoster: (id) => call('nodes.claude_roster', nodeClaudeRosterAnswer, { id }),
     nodesClaudeSession: (id, action, session) =>
-      call('nodes.claude_session', claudeSessionSent, { id, action, session }),
+      call('nodes.claude_session', claudeSessionSent, { id, action, session }, relayedMs),
     nodesSetDesired: (nodes) => call('nodes.set_desired', setDesiredOk, { nodes }),
-    nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }),
+    nodesCommand: (id, command) => call('nodes.command', commandOk, { id, command }, relayedMs),
     controllerRotate: (p) => call('controller.rotate', controllerRotated, p),
     rootRun: (verb, selectors, waitMs, payload) =>
       call(
