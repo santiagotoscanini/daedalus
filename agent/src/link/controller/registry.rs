@@ -1245,47 +1245,94 @@ impl Registry {
     /// machine's `node` id, `host` and `os` from its hello, and `machine`:
     /// the name the app gave it in `nodes.set_desired`, else its hostname.
     pub fn metrics(&self) -> String {
-        let reg = self.lock();
-        let mut ids: Vec<&String> = reg.nodes.keys().collect();
-        ids.sort();
+        /// One approved machine, copied out under the lock: the text is
+        /// formatted after it is released, so a scrape never holds up the
+        /// links (or an admission) for the time telemetry takes to render.
+        struct Row {
+            id: String,
+            host: String,
+            machine: String,
+            os: String,
+            agent_version: String,
+            connected: bool,
+            offered: Vec<String>,
+            telemetry: Option<Telemetry>,
+            claude: Option<Report>,
+            providers: Option<Vec<ProviderReport>>,
+        }
+        let rows: Vec<Row> = {
+            let reg = self.lock();
+            let mut ids: Vec<&String> = reg.nodes.keys().collect();
+            ids.sort();
+            ids.into_iter()
+                .filter_map(|id| {
+                    let d = reg.decided(id)?;
+                    if d.state != DesiredState::Approved {
+                        return None;
+                    }
+                    let e = &reg.nodes[id];
+                    let h = e.hello.as_ref()?;
+                    let connected = e.conn.is_some();
+                    Some(Row {
+                        id: id.clone(),
+                        host: h.hostname.clone(),
+                        machine: d.name.clone().unwrap_or_else(|| h.hostname.clone()),
+                        os: h.os.clone(),
+                        agent_version: h.agent_version.clone(),
+                        connected,
+                        offered: d.offered.clone(),
+                        // A machine that left says nothing but its `link_up`
+                        // (below): only a connected one's are copied.
+                        telemetry: e
+                            .telemetry
+                            .as_ref()
+                            .filter(|_| connected)
+                            .map(|(t, _)| t.clone()),
+                        claude: e
+                            .claude
+                            .as_ref()
+                            .filter(|_| connected)
+                            .and_then(|(r, _)| r.clone()),
+                        providers: e
+                            .providers
+                            .as_ref()
+                            .filter(|_| connected)
+                            .map(|(l, _)| l.clone()),
+                    })
+                })
+                .collect()
+        };
         let mut out = String::new();
-        for id in ids {
-            let Some(d) = reg.decided(id) else { continue };
-            if d.state != DesiredState::Approved {
-                continue;
-            }
-            let e = &reg.nodes[id];
-            let Some(h) = &e.hello else { continue };
+        for r in &rows {
             let labels = crate::telemetry::Labels {
-                node: id,
-                host: &h.hostname,
-                machine: d.name.as_deref().unwrap_or(&h.hostname),
-                os: &h.os,
+                node: &r.id,
+                host: &r.host,
+                machine: &r.machine,
+                os: &r.os,
             };
             out.push_str(&format!(
                 "daedalus_agent_link_up{{{}}} {}\n",
                 labels.render(),
-                u8::from(e.conn.is_some())
+                u8::from(r.connected)
             ));
-            if let (Some((t, _)), Some(_)) = (&e.telemetry, &e.conn) {
+            if let Some(t) = &r.telemetry {
                 out.push_str(&crate::telemetry::metrics_text(
                     t,
-                    &h.agent_version,
+                    &r.agent_version,
                     &labels,
                 ));
             }
             // A connected machine's Claude, from its last report; a machine
             // that left says nothing (its `link_up` is 0), rather than a
             // state it may no longer be in.
-            if e.conn.is_some() {
-                let report = e.claude.as_ref().and_then(|(r, _)| r.as_ref());
-                out.push_str(&crate::telemetry::claude_text(report, &labels));
+            if r.connected {
+                out.push_str(&crate::telemetry::claude_text(r.claude.as_ref(), &labels));
                 // Its providers likewise: an asleep machine's model server
                 // is Machine Link Down's business, not Model Server Down's.
-                if let Some((list, _)) = &e.providers {
+                if let Some(list) = &r.providers {
                     out.push_str(&crate::telemetry::providers_text(
                         list,
-                        |k| d.offered.iter().any(|o| o == k),
+                        |k| r.offered.iter().any(|o| o == k),
                         &labels,
                     ));
                 }
