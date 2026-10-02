@@ -593,8 +593,9 @@ with every change under `agent/src` meant to ship.
 
 ## Releasing
 
-Bump `version` in `Cargo.toml` and run `agent/gate.sh`, which also moves
-`session-host/interop/Cargo.lock` to it; commit both, tag
+Bump `version` in `Cargo.toml`, run `agent/gate.sh gen` (the app's
+generated `constants.ts` carries the version) and `agent/gate.sh`, which also
+moves `session-host/interop/Cargo.lock` to it; commit them all, tag
 `agent-v<version>` on a commit on `main`, push the tag.
 [`.github/workflows/agent.yml`](../.github/workflows/agent.yml) builds the
 Windows binaries, Daedalus Agent.app (universal; zipped for the updater,
