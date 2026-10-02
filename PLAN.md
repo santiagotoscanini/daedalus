@@ -463,12 +463,7 @@ stable — code cites them.
 
 Hand edits the UI cannot make for itself:
 
-1. **Move `AGENT_SIGNING_KEY` into the `release` environment.** GitHub →
-   the engine repo → Settings → Environments → `release` (it already requires
-   the operator's approval and only `agent-v*` tags, which a ruleset keeps
-   immutable): add the secret there and delete the repository-level one
-   (`.github/workflows/agent.yml` reads whichever exists).
-2. **The spare release key.** The agent trusts a list of release keys
+1. **The spare release key.** The agent trusts a list of release keys
    (`RELEASE_PUBLIC_KEYS`, `agent/src/node/update/mod.rs`) and lists one. Make the
    spare OFFLINE, never on the box or a runner:
    `openssl genpkey -algorithm ed25519 -out spare.pem`; keep `spare.pem`
@@ -477,18 +472,12 @@ Hand edits the UI cannot make for itself:
    Add that hex as the list's second entry in a release signed with the
    current key; from then on a release signed with the spare that drops
    the first is the way out of a lost or leaked current key.
-3. **Grant the build App `actions: read`.** GitHub → Settings → Developer
-   settings → GitHub Apps → the box's App → Permissions & events →
-   Repository permissions → Actions: Read-only → Save; then open the App's
-   installation on the account and accept.
-4. **Drop the PC's line from the household reservations.**
+2. **Drop the PC's line from the household reservations.**
    `host/sops/pihole/dhcp-hosts.sops` still names the gaming PC, which is
    why the control plane skips that MAC in its own file ("named by the
    household file" on Settings › Machines). Delete that line and rebuild:
    the runtime line takes over on the next policy save.
-5. **Drop `DEPLOY_HOOK_TOKEN`** from `host/sops/registry/env.sops`: nothing
-   reads it.
-6. **The first `v*` tag** (Phase 10b, open decision 2) — one
+3. **The first `v*` tag** (Phase 10b, open decision 2) — one
    act, when the operator chooses.
 
 ## Engine polish
