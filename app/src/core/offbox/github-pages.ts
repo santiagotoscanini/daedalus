@@ -171,7 +171,7 @@ export async function discoverPages(
           platform: 'GitHub Pages',
           account: inst.account,
           state: 'needs-permission',
-          detail: `the App’s installation on ${inst.account} has not accepted Pages: read`,
+          detail: 'Pages: read is not accepted on this installation yet',
         })
         return
       }

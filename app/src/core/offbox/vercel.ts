@@ -224,7 +224,7 @@ export async function discoverVercel(
           platform: 'Vercel',
           account: null,
           state: 'not-configured',
-          detail: 'no Vercel token — add one in Settings › Integrations',
+          detail: 'no token yet',
         },
       ],
     }
