@@ -318,8 +318,7 @@ stable — code cites them.
    payload the control plane hands a root verb; what a service manages
    through its own API (LiteLLM's model table) is driven through that API.
    **Order of work**, each step usable on its own:
-   1. Providers as declared services: start, stop, install and update
-      Lemonade from the box through the agent.
+   1. Lemonade managed by the agent — item 14.
    2. Per-model counters from each provider — what the two WIP boards on
       the Providers tab wait for — and GPU figures from the agent.
    3. `pinAddress` gets its switch on Settings › Machines (the policy field
@@ -437,6 +436,70 @@ stable — code cites them.
     - **Costs.** A santree session host on a machine other than the box
       would be a port, not a recompile — Windows above all (ConPTY, pwsh,
       paths, hook callbacks).
+
+14. **Lemonade managed by the agent.** daedalus installs, updates (a pinned
+    version), starts and stops Lemonade on the machines that offer it, and
+    the old-version workarounds go. Providers are LAN-only; LiteLLM keeps
+    dialling each one directly, so the control plane never sits in the
+    inference path. Pools, route parking, keys and a published UI are out
+    of scope.
+    - **The full official app on every OS**, run the way upstream ships it.
+      Windows: the MSI (per-user by default); the server lives inside the
+      tray `LemonadeServer.exe` and reads models and settings from the
+      profile that runs it, so it serves only while a user is logged in.
+      macOS: the `.pkg`'s root LaunchDaemon `ai.lemonadeserver.server` plus
+      its tray. Linux: the `.deb`/`.rpm`'s `lemond.service`. Lemonade has no
+      self-updater, so a pin holds.
+    - **Detection** reads the install itself (Windows `Software\AMD\Lemonade
+      Server` in HKCU/HKLM, the package, the pkg receipt), not the app
+      inventory. The report gains install method, scope, version (from
+      `/health`, never the MSI's `26.40.0`), pid, owning session, startup
+      state and the last lifecycle outcome.
+    - **Verbs** beside `provider_model` and shaped like it:
+      `provider_install {kind, version, url, size, sha256}` and
+      `provider_power {kind, wanted}`. The box resolves the asset for the
+      node's OS once from GitHub's release API and refuses one without a
+      digest; the agent accepts only lemonade-sdk release URLs and verifies
+      with `store_verified`.
+    - **Install** is a journaled state machine (a reboot mid-install resumes
+      or reports): download and verify, keep the previous installer, stop
+      gracefully, install silently, wait for `/health` to report the target,
+      re-apply `host=0.0.0.0`, the port and `broadcast=false` through
+      `lemonade config set`, apply the wanted power state; on failure
+      reinstall the previous one (the MSI blocks downgrades, so uninstall
+      first). The catalog ids are compared before and after, and a vanished
+      offered id is reported (aliases derive from ids). Windows runs msiexec
+      in the user's session through the session jobs, so the MSI's relaunch
+      runs as the user and not SYSTEM; it adopts the existing scope, refuses
+      another user's per-user install, and retries 1618.
+    - **Power.** Windows: start `LemonadeServer.exe --silent` in the session
+      and check the owning process (the global mutex makes a second launch
+      exit 0 silently); stop with `/internal/shutdown`; always-on through
+      `StartupApproved\StartupFolder`, which survives the shortcut every
+      upgrade reinstalls; a tray Quit is a sticky manual-off until the next
+      logon or an operator action. macOS: `launchctl` on the vendor label.
+      Linux: `systemctl`.
+    - **In daedalus.** `nodes.policy.providers.lemonade` gains `pin`,
+      `wanted` and `alwaysOn`. A badge slot on `ModuleRow` and a dot on the
+      AI row: green when every wanted server runs, amber for an update, an
+      unmanaged install, a stale report or no user session, red when wanted
+      and down. AI › Providers per machine: version and update with notes
+      (`versionGap`, a tag pattern for `vYYYY.WW.N`), Install/Update behind
+      an armed confirm, Start/Stop, always-on, Open Lemonade
+      (`http://<name>.<lanDomain>:<port>`), load/unload, the last outcome
+      and its log tail. MCP write tools for install and power.
+    - **Fixes.** A failed `/models` read reports an unknown catalog, never an
+      empty one (today gateway-sync deletes every route of the node on it).
+      Reranking becomes an ordinary synced route on a LiteLLM rerank provider
+      (Lemonade serves `/v1/rerank` since v2026.40); the `/reranking`
+      pass-through and `@lemonadeHost@` leave `/etc/nixos`, and Open WebUI
+      reranks through the alias. `lemonade.md` and the litellm header are
+      rewritten for the managed install.
+    - **Order.** The route-wipe fix; detection, the report, the dot and the
+      page; the Windows verbs, with the gaming PC moving from 10.8.1 through
+      them (if 10.8.1 predates the MSI's upgrade code it reports as
+      unmanaged and is uninstalled by hand once); reranking and docs; macOS
+      and Linux when such a node offers Lemonade.
 
 ---
 
