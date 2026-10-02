@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pagesRow, pagesState, pagesWarnings } from './github-pages'
+import { deploymentState, pagesRow, pagesState, pagesWarnings } from './github-pages'
 
 // The mapping from GitHub's `/repos/{o}/{r}/pages` answer to a row. Field
 // names and values as GitHub's REST docs give them.
@@ -19,6 +19,7 @@ describe('pagesRow', () => {
         https_certificate: { state: 'approved', expires_at: '2026-12-01' },
       },
       { at: '2026-10-01T10:00:00Z', sha: 'abc1234def' },
+      null,
       NOW,
     )
     expect(row).toEqual({
@@ -40,14 +41,26 @@ describe('pagesRow', () => {
       REPO,
       { html_url: 'https://santree-ai.github.io/santree/', status: null },
       null,
+      null,
       NOW,
     )
     expect(row?.host).toBe('santree-ai.github.io')
     expect(row?.state).toBe('unknown')
   })
 
+  it("reads a workflow site's state from its last deployment, /pages saying null", () => {
+    const row = pagesRow(
+      REPO,
+      { html_url: 'https://santree.toscanini.me/', cname: 'santree.toscanini.me', status: null },
+      { at: '2026-10-01T19:13:08Z', sha: '8a7d9a6' },
+      'live',
+      NOW,
+    )
+    expect(row?.state).toBe('live')
+  })
+
   it('is null when GitHub gives no address at all', () => {
-    expect(pagesRow(REPO, { status: 'built' }, null, NOW)).toBeNull()
+    expect(pagesRow(REPO, { status: 'built' }, null, null, NOW)).toBeNull()
   })
 })
 
@@ -90,5 +103,18 @@ describe('pagesWarnings', () => {
 
   it('says nothing about a github.io site without enforced HTTPS', () => {
     expect(pagesWarnings({ cname: null, https_enforced: false }, NOW)).toEqual([])
+  })
+})
+
+describe('deploymentState', () => {
+  it.each([
+    ['success', 'live'],
+    ['in_progress', 'building'],
+    ['queued', 'building'],
+    ['failure', 'failed'],
+    ['error', 'failed'],
+    ['inactive', 'unknown'],
+  ])('%s → %s', (s, state) => {
+    expect(deploymentState(s)).toBe(state)
   })
 })

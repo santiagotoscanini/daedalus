@@ -66,6 +66,8 @@ export function pagesRow(
   repo: { fullName: string; name: string; description: string | null },
   site: PagesSite,
   deployed: ExternalApp['deployed'],
+  /** The last publish's own word, for a site whose `/pages` status is null. */
+  published: SiteState | null,
   now = Date.now(),
 ): ExternalApp | null {
   const htmlUrl = str(site.html_url)
@@ -85,7 +87,10 @@ export function pagesRow(
     platform: 'GitHub Pages',
     description: repo.description,
     repo: repo.fullName,
-    state: pagesState(site.status),
+    state:
+      site.status === null || site.status === undefined
+        ? (published ?? 'unknown')
+        : pagesState(site.status),
     deployed,
     warnings: pagesWarnings(site, now),
     dashboardUrl: `https://github.com/${repo.fullName}/settings/pages`,
@@ -137,15 +142,30 @@ async function installations(
   return { list, status }
 }
 
-/** The last publish: a legacy build, or a workflow site's deployment. */
-async function lastDeploy(
+/** A deployment status's word → the row's state (GitHub's states for deployment statuses). */
+export function deploymentState(state: unknown): SiteState {
+  if (state === 'success') return 'live'
+  if (state === 'in_progress' || state === 'queued' || state === 'pending') return 'building'
+  if (state === 'failure' || state === 'error') return 'failed'
+  return 'unknown'
+}
+
+type Publish = { deployed: ExternalApp['deployed']; state: SiteState | null }
+
+/**
+ * The last publish and how it went. A workflow-built site has no `/pages`
+ * status at all (GitHub answers null), so its state is its latest
+ * `github-pages` deployment's latest status; a branch-built one has its
+ * last build.
+ */
+async function lastPublish(
   ctx: Ctx,
   fullName: string,
   buildType: unknown,
   as: number | null,
-): Promise<ExternalApp['deployed']> {
+): Promise<Publish> {
   if (buildType === 'workflow') {
-    const r = await ghApp<{ sha?: unknown; created_at?: unknown }[]>(
+    const r = await ghApp<{ id?: unknown; sha?: unknown; created_at?: unknown }[]>(
       ctx,
       `/repos/${fullName}/deployments?environment=github-pages&per_page=1`,
       {},
@@ -153,16 +173,29 @@ async function lastDeploy(
     )
     const d = r.status === 200 && Array.isArray(r.body) ? r.body[0] : undefined
     const at = str(d?.created_at)
-    return at === null ? null : { at, sha: str(d?.sha) }
+    if (at === null || typeof d?.id !== 'number') return { deployed: null, state: null }
+    const s = await ghApp<{ state?: unknown }[]>(
+      ctx,
+      `/repos/${fullName}/deployments/${String(d.id)}/statuses?per_page=1`,
+      {},
+      as,
+    )
+    const latest = s.status === 200 && Array.isArray(s.body) ? s.body[0] : undefined
+    return {
+      deployed: { at, sha: str(d.sha) },
+      state: latest === undefined ? null : deploymentState(latest.state),
+    }
   }
-  const r = await ghApp<{ commit?: unknown; created_at?: unknown }>(
+  const r = await ghApp<{ status?: unknown; commit?: unknown; created_at?: unknown }>(
     ctx,
     `/repos/${fullName}/pages/builds/latest`,
     {},
     as,
   )
   const at = r.status === 200 ? str(r.body?.created_at) : null
-  return at === null ? null : { at, sha: str(r.body?.commit) }
+  return at === null
+    ? { deployed: null, state: null }
+    : { deployed: { at, sha: str(r.body?.commit) }, state: pagesState(r.body?.status) }
 }
 
 const SLUG = /^[\w.-]+\/[\w.-]+$/
@@ -211,8 +244,8 @@ export async function discoverPages(
             }
             return null
           }
-          const deployed = await lastDeploy(ctx, repo.fullName, r.body.build_type, inst.as)
-          return pagesRow(repo, r.body, deployed)
+          const published = await lastPublish(ctx, repo.fullName, r.body.build_type, inst.as)
+          return pagesRow(repo, r.body, published.deployed, published.state)
         }),
       )
       for (const row of rows) if (row !== null) sites.push(row)
