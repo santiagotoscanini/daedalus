@@ -43,7 +43,7 @@ pub fn check(list: &[ProviderReport]) -> Result<(), String> {
         text("read_at", &p.read_at, MAX_WORD)?;
         opt("error", &p.error, MAX_TEXT)?;
         if p.loaded.len() > MAX_LOADED
-            || p.models.len() > MAX_MODELS
+            || p.models.as_ref().is_some_and(|m| m.len() > MAX_MODELS)
             || p.downloads.len() > MAX_DOWNLOADS
             || p.backends.len() > MAX_BACKENDS
             || p.figures.len() > MAX_MODELS
@@ -54,7 +54,7 @@ pub fn check(list: &[ProviderReport]) -> Result<(), String> {
             text("loaded.id", &m.id, MAX_TEXT)?;
             opt("loaded.device", &m.device, MAX_WORD)?;
         }
-        for m in &p.models {
+        for m in p.models.iter().flatten() {
             text("models.id", &m.id, MAX_TEXT)?;
             opt("models.recipe", &m.recipe, MAX_WORD)?;
             if m.labels.len() > MAX_LABELS {
@@ -87,6 +87,29 @@ pub fn check(list: &[ProviderReport]) -> Result<(), String> {
             text("actions.model", &a.model, MAX_TEXT)?;
             text("actions.message", &a.message, MAX_TEXT)?;
             text("actions.at", &a.at, MAX_WORD)?;
+        }
+        if let Some(i) = &p.install {
+            opt("install.location", &i.location, MAX_TEXT)?;
+            opt("install.installer_version", &i.installer_version, MAX_WORD)?;
+            opt("install.user", &i.user, MAX_TEXT)?;
+        }
+        opt("owner", &p.owner, MAX_TEXT)?;
+        if let Some(l) = &p.lifecycle {
+            text("lifecycle.request", &l.request, MAX_WORD)?;
+            text("lifecycle.version", &l.version, MAX_WORD)?;
+            opt("lifecycle.from_version", &l.from_version, MAX_WORD)?;
+            text("lifecycle.message", &l.message, MAX_TEXT)?;
+            text("lifecycle.started_at", &l.started_at, MAX_WORD)?;
+            text("lifecycle.at", &l.at, MAX_WORD)?;
+            if l.vanished.len() > MAX_MODELS || l.log_tail.len() > MAX_LOG_LINES {
+                return Err(format!("{}: a lifecycle list past its bound", p.kind));
+            }
+            for v in &l.vanished {
+                text("lifecycle.vanished", v, MAX_TEXT)?;
+            }
+            for line in &l.log_tail {
+                text("lifecycle.log_tail", line, MAX_TEXT)?;
+            }
         }
     }
     Ok(())

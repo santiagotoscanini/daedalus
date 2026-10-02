@@ -818,6 +818,7 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
             tracing::info!(request = %params.request, ok, message = %message, "residency verb ended");
             shared2.providers.finish_action(crate::node::providers::ProviderAction {
                 request: params.request,
+                verb: crate::node::providers::ProviderVerb::Model,
                 model: crate::node::providers::clip(&params.model, crate::node::providers::MAX_TEXT),
                 ok,
                 message: crate::node::providers::clip(&message, crate::node::providers::MAX_TEXT),
@@ -829,6 +830,7 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
             .providers
             .finish_action(crate::node::providers::ProviderAction {
                 request,
+                verb: crate::node::providers::ProviderVerb::Model,
                 model: crate::node::providers::clip(&model, crate::node::providers::MAX_TEXT),
                 ok: false,
                 message: "could not start the residency verb".into(),
@@ -837,6 +839,135 @@ fn take_provider_model(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
         return Err(ApiError::new(
             ErrorCode::Unavailable,
             "could not start the residency verb",
+        ));
+    }
+    Ok(Accepted { accepted: true })
+}
+
+/// Take an install or update from the controller: checked here — the
+/// release where the agent downloads from (`check`), the policy's pin, an
+/// install the agent may touch (`install::refusal`) — then journalled and
+/// run on a thread of its own for as long as it takes, the slot held
+/// throughout; acknowledged at once. Its phases ride the `providers`
+/// documents that follow (`lifecycle`), its outcome `actions`.
+fn take_provider_install(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiError> {
+    use crate::node::providers::{install, lemonade_port, ProviderInstallParams};
+    let bad = |e: String| ApiError::new(ErrorCode::BadRequest, format!("provider_install: {e}"));
+    let params: ProviderInstallParams =
+        serde_json::from_value(p).map_err(|e| bad(e.to_string()))?;
+    params.check().map_err(bad)?;
+    let policy = shared.settings.policy();
+    let found = crate::os::lemonade::find();
+    let running =
+        crate::node::providers::health_version(lemonade_port(&policy.providers)).is_some();
+    let pin = policy
+        .providers
+        .lemonade
+        .as_ref()
+        .and_then(|l| l.pin.as_ref());
+    if let Some(why) = install::refusal(&params, &found, running, pin) {
+        return Err(ApiError::new(ErrorCode::Unavailable, why));
+    }
+    if !shared.providers.begin_action() {
+        return Err(ApiError::new(
+            ErrorCode::Busy,
+            "a provider verb or install is still running on this machine",
+        ));
+    }
+    tracing::info!(
+        request = %params.request,
+        version = %params.version,
+        url = %params.url,
+        "the controller asked for a provider install"
+    );
+    if let Err(e) = install::begin(shared, &params) {
+        shared
+            .providers
+            .finish_action(crate::node::providers::ProviderAction {
+                request: params.request,
+                verb: crate::node::providers::ProviderVerb::Install,
+                model: params.version,
+                ok: false,
+                message: crate::node::providers::clip(&e, crate::node::providers::MAX_TEXT),
+                at: crate::core::state::now_rfc3339(),
+            });
+        return Err(ApiError::new(ErrorCode::Unavailable, e));
+    }
+    Ok(Accepted { accepted: true })
+}
+
+/// Take a start or a stop from the controller: the operator's word, which
+/// stands over the policy's `wanted` until the policy moves (power.rs), run
+/// on a thread of its own and acknowledged at once; the outcome rides the
+/// next `providers` document.
+fn take_provider_power(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiError> {
+    use crate::node::providers::{lemonade_port, power, PowerWanted, ProviderPowerParams};
+    let bad = |e: String| ApiError::new(ErrorCode::BadRequest, format!("provider_power: {e}"));
+    let params: ProviderPowerParams = serde_json::from_value(p).map_err(|e| bad(e.to_string()))?;
+    params.check().map_err(bad)?;
+    let policy = shared.settings.policy();
+    let found = crate::os::lemonade::find();
+    if found.install.is_none() {
+        return Err(ApiError::new(
+            ErrorCode::Unavailable,
+            "no install of it on this machine",
+        ));
+    }
+    if params.wanted == PowerWanted::Start && found.console.is_none() {
+        return Err(ApiError::new(
+            ErrorCode::Unavailable,
+            "no user session: it runs in a logged-on user's tray",
+        ));
+    }
+    if !shared.providers.begin_action() {
+        return Err(ApiError::new(
+            ErrorCode::Busy,
+            "a provider verb or install is still running on this machine",
+        ));
+    }
+    tracing::info!(request = %params.request, wanted = %params.wanted, "the controller asked for a provider power verb");
+    let lemonade = policy.providers.lemonade.clone().unwrap_or_default();
+    shared
+        .providers
+        .set_operator(params.wanted, lemonade.wanted);
+    let port = lemonade_port(&policy.providers);
+    let shared2 = Arc::clone(shared);
+    let request = params.request.clone();
+    let spawned = std::thread::Builder::new()
+        .name("provider-power".into())
+        .spawn(move || {
+            let result = match params.wanted {
+                PowerWanted::Start => power::start(&found, port),
+                PowerWanted::Stop => power::stop(&found, port),
+            };
+            let (ok, message) = match result {
+                Ok(m) => (true, m),
+                Err(m) => (false, m),
+            };
+            tracing::info!(request = %params.request, ok, message = %message, "provider power verb ended");
+            shared2.providers.finish_action(crate::node::providers::ProviderAction {
+                request: params.request,
+                verb: crate::node::providers::ProviderVerb::Power,
+                model: params.wanted.to_string(),
+                ok,
+                message: crate::node::providers::clip(&message, crate::node::providers::MAX_TEXT),
+                at: crate::core::state::now_rfc3339(),
+            });
+        });
+    if spawned.is_err() {
+        shared
+            .providers
+            .finish_action(crate::node::providers::ProviderAction {
+                request,
+                verb: crate::node::providers::ProviderVerb::Power,
+                ok: false,
+                message: "could not start the power verb".into(),
+                at: crate::core::state::now_rfc3339(),
+                ..Default::default()
+            });
+        return Err(ApiError::new(
+            ErrorCode::Unavailable,
+            "could not start the power verb",
         ));
     }
     Ok(Accepted { accepted: true })
@@ -1038,7 +1169,23 @@ fn converse(
                             Err(e) => Response::err(Some(id), e),
                         }
                     }
-                    name::COMMAND | name::CLAUDE_SESSION | name::PROVIDER_MODEL => Response::err(
+                    name::PROVIDER_INSTALL if state == NodeState::Approved => {
+                        match take_provider_install(shared, p) {
+                            Ok(a) => Response::ok(id, &a),
+                            Err(e) => Response::err(Some(id), e),
+                        }
+                    }
+                    name::PROVIDER_POWER if state == NodeState::Approved => {
+                        match take_provider_power(shared, p) {
+                            Ok(a) => Response::ok(id, &a),
+                            Err(e) => Response::err(Some(id), e),
+                        }
+                    }
+                    name::COMMAND
+                    | name::CLAUDE_SESSION
+                    | name::PROVIDER_MODEL
+                    | name::PROVIDER_INSTALL
+                    | name::PROVIDER_POWER => Response::err(
                         Some(id),
                         ApiError::new(ErrorCode::Unavailable, "this machine is not approved"),
                     ),

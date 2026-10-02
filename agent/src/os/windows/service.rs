@@ -363,22 +363,74 @@ pub const WATCHES_TRAY: bool = true;
 /// Start the tray as the user at the console, in their session, with their
 /// environment. Err when nobody is logged on, or the token is refused.
 pub fn launch_tray_or_session() -> Result<()> {
+    let exe = std::env::current_exe().context("locating this binary")?;
+    let tray = exe.with_file_name(TRAY_EXE);
+    if !tray.exists() {
+        bail!("no {TRAY_EXE} beside the service");
+    }
+    let child = as_console_user(&format!("\"{}\"", tray.display()))
+        .context("starting the tray as the console user")?;
+    tracing::info!(pid = child.pid, "tray started in the console session");
+    Ok(())
+}
+
+/// A process the service started as the console user: its pid, and its
+/// handle until dropped, to wait for its exit.
+pub struct ConsoleChild {
+    pub pid: u32,
+    process: windows::Win32::Foundation::HANDLE,
+}
+
+// SAFETY: a process handle is a kernel handle, usable from any thread.
+unsafe impl Send for ConsoleChild {}
+
+impl ConsoleChild {
+    /// Its exit code, once it exits within `timeout`; None past it (it is
+    /// left running).
+    pub fn wait(&self, timeout: Duration) -> Option<u32> {
+        use windows::Win32::Foundation::WAIT_OBJECT_0;
+        use windows::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject};
+        let ms = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX - 1);
+        // SAFETY: the handle is open until drop.
+        unsafe {
+            if WaitForSingleObject(self.process, ms) != WAIT_OBJECT_0 {
+                return None;
+            }
+            let mut code = 0u32;
+            GetExitCodeProcess(self.process, &mut code).ok()?;
+            Some(code)
+        }
+    }
+}
+
+impl Drop for ConsoleChild {
+    fn drop(&mut self) {
+        // SAFETY: closed once, here.
+        unsafe {
+            let _ = windows::Win32::Foundation::CloseHandle(self.process);
+        }
+    }
+}
+
+/// Run `cmdline` as the user at the console, in their session, on their
+/// desktop, with their environment — what the service, as LocalSystem, may
+/// do with that user's token: the tray, and a provider's installer and
+/// server (os/windows/lemonade.rs), which must run as the user and not as
+/// SYSTEM. Err when nobody is logged on, or the token is refused.
+pub fn as_console_user(cmdline: &str) -> Result<ConsoleChild> {
     use std::ffi::c_void;
     use windows::core::{PCWSTR, PWSTR};
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};
     use windows::Win32::System::RemoteDesktop::{WTSGetActiveConsoleSessionId, WTSQueryUserToken};
     use windows::Win32::System::Threading::{
-        CreateProcessAsUserW, CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION, STARTUPINFOW,
+        CreateProcessAsUserW, CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION,
+        STARTUPINFOW,
     };
 
-    let exe = std::env::current_exe().context("locating this binary")?;
-    let tray = exe.with_file_name(TRAY_EXE);
-    if !tray.exists() {
-        bail!("no {TRAY_EXE} beside the service");
-    }
     // SAFETY: Win32 calls in the documented order; every handle and block
-    // taken is released before returning.
+    // taken is released before returning, but the process handle, which
+    // the ConsoleChild owns.
     unsafe {
         let session = WTSGetActiveConsoleSessionId();
         if session == 0xFFFF_FFFF {
@@ -388,10 +440,7 @@ pub fn launch_tray_or_session() -> Result<()> {
         WTSQueryUserToken(session, &mut token).context("taking the console user's token")?;
         let mut env: *mut c_void = std::ptr::null_mut();
         let env_ok = CreateEnvironmentBlock(&mut env, Some(token), false).is_ok();
-        let mut cmd: Vec<u16> = format!("\"{}\"", tray.display())
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
+        let mut cmd: Vec<u16> = cmdline.encode_utf16().chain(std::iter::once(0)).collect();
         let mut desktop: Vec<u16> = "winsta0\\default"
             .encode_utf16()
             .chain(std::iter::once(0))
@@ -409,7 +458,7 @@ pub fn launch_tray_or_session() -> Result<()> {
             None,
             None,
             false,
-            CREATE_UNICODE_ENVIRONMENT,
+            CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
             if env_ok {
                 Some(env as *const c_void)
             } else {
@@ -423,18 +472,11 @@ pub fn launch_tray_or_session() -> Result<()> {
             let _ = DestroyEnvironmentBlock(env);
         }
         let _ = CloseHandle(token);
-        match r {
-            Ok(()) => {
-                let _ = CloseHandle(pi.hThread);
-                let _ = CloseHandle(pi.hProcess);
-                tracing::info!(
-                    session,
-                    pid = pi.dwProcessId,
-                    "tray started in the console session"
-                );
-                Ok(())
-            }
-            Err(e) => Err(e).context("starting the tray as the console user"),
-        }
+        r.context("starting a process as the console user")?;
+        let _ = CloseHandle(pi.hThread);
+        Ok(ConsoleChild {
+            pid: pi.dwProcessId,
+            process: pi.hProcess,
+        })
     }
 }

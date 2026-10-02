@@ -2,7 +2,7 @@
 
 /**
  * `actions.get`'s parameters: a verb's request id, as `claude.session`,
- * `nodes.claude_session` or `nodes.provider_model` answered it, and the
+ * `nodes.claude_session` or a `nodes.provider_*` verb answered it, and the
  * machine it went to — absent for the controller's own session.
  */
 export type ActionQueryParams = { node?: string, request: string, };

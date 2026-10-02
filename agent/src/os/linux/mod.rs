@@ -19,6 +19,7 @@
 //! command; unix.rs has what macOS shares.
 
 pub mod jobs;
+pub mod lemonade;
 mod net;
 mod power;
 pub mod systemd;

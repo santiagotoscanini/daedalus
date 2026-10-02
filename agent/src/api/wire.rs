@@ -53,6 +53,10 @@ pub enum Capability {
     /// A machine reads its providers and drives their residency for the box.
     #[serde(rename = "providers.residency")]
     ProvidersResidency,
+    /// A machine installs, updates, starts and stops its providers for the
+    /// box (`nodes.provider_install`, `nodes.provider_power`).
+    #[serde(rename = "providers.lifecycle")]
+    ProvidersLifecycle,
     /// The controller listens for machines (`nodes.*`).
     #[serde(rename = "nodes")]
     Nodes,
@@ -118,6 +122,8 @@ api_methods! {
     "nodes.claude_roster" => NodesClaudeRoster(NodeId): NodeClaudeRoster,
     "nodes.claude_session" => NodesClaudeSession(NodeClaudeSession): ClaudeSessionSent,
     "nodes.provider_model" => NodesProviderModel(NodeProviderModel): ProviderModelSent,
+    "nodes.provider_install" => NodesProviderInstall(NodeProviderInstall): ProviderInstallSent,
+    "nodes.provider_power" => NodesProviderPower(NodeProviderPower): ProviderPowerSent,
     "nodes.set_desired" => NodesSetDesired(SetDesired): SetDesiredOk,
     "nodes.command" => NodesCommand(NodeCommand): CommandOk,
     "controller.rotate" => ControllerRotate(ControllerRotate): ControllerInfo,
@@ -384,6 +390,53 @@ pub struct ProviderModelSent {
     pub request: String,
 }
 
+/// `nodes.provider_install`'s parameters: the machine, the provider's kind,
+/// and the release for this machine's OS as the app resolved it — its tag,
+/// the asset's URL (Lemonade's GitHub releases alone), size and SHA-256.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "NodeProviderInstallParams"))]
+pub struct NodeProviderInstall {
+    pub id: String,
+    pub kind: crate::node::providers::ProviderKind,
+    pub version: String,
+    pub url: String,
+    pub size: u64,
+    pub sha256: String,
+}
+
+/// `nodes.provider_install`'s answer: the machine took the install; its
+/// providers documents carry its phases (`lifecycle`) and the outcome under
+/// `request` (`actions`).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProviderInstallSent {
+    pub delivered: bool,
+    pub request: String,
+}
+
+/// `nodes.provider_power`'s parameters: the machine, the provider's kind,
+/// and whether it should run.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, ts(rename = "NodeProviderPowerParams"))]
+pub struct NodeProviderPower {
+    pub id: String,
+    pub kind: crate::node::providers::ProviderKind,
+    pub wanted: crate::node::providers::PowerWanted,
+}
+
+/// `nodes.provider_power`'s answer: the machine took the verb; the outcome
+/// rides its providers document under `request` (`actions`).
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProviderPowerSent {
+    pub delivered: bool,
+    pub request: String,
+}
+
 /// `nodes.get`'s parameters: the machine, and whether its telemetry and
 /// providers document ride along (`full`).
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -407,7 +460,7 @@ pub struct NodeId {
 }
 
 /// `actions.get`'s parameters: a verb's request id, as `claude.session`,
-/// `nodes.claude_session` or `nodes.provider_model` answered it, and the
+/// `nodes.claude_session` or a `nodes.provider_*` verb answered it, and the
 /// machine it went to — absent for the controller's own session.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -1100,6 +1153,20 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
             }),
         ),
         (
+            "nodes.provider_install",
+            v(&ProviderInstallSent {
+                delivered: true,
+                request: "00112233445566ff".into(),
+            }),
+        ),
+        (
+            "nodes.provider_power",
+            v(&ProviderPowerSent {
+                delivered: true,
+                request: "00112233445566ff".into(),
+            }),
+        ),
+        (
             "nodes.set_desired",
             v(&SetDesiredOk {
                 nodes: 2,
@@ -1511,7 +1578,14 @@ mod tests {
                 r#""backends":[{"recipe":"llamacpp","backend":"vulkan","version":"b6000","url":null}],"#,
                 r#""figures":[{"model":"Gemma-4","requests":3.0,"input_tokens":null,"output_tokens":null,"#,
                 r#""tps":40.0,"ttft_ms":null,"device":null,"checkpoint":null}],"#,
-                r#""read_at":"2026-09-28T10:00:00Z","error":null,"actions":[{"request":"00112233445566ff","model":"Gemma-4","ok":true,"message":"Loaded","at":"2026-09-28T09:59:00Z"}]}],"received_at":"2026-09-28T10:00:01Z"}"#
+                r#""read_at":"2026-09-28T10:00:00Z","error":null,"actions":[{"request":"00112233445566ff","verb":"model","model":"Gemma-4","ok":true,"message":"Loaded","at":"2026-09-28T09:59:00Z"}],"#,
+                r#""install":{"method":"msi","scope":"user","location":"C:\\Users\\op\\AppData\\Local\\lemonade_server","#,
+                r#""installer_version":"26.40.0","user":"PC\\op"},"pid":4321,"session":1,"owner":"PC\\op","#,
+                r#""no_user_session":false,"startup":"enabled","wanted":"start","manual_off":false,"#,
+                r#""lifecycle":{"request":"00112233445566aa","version":"v2026.40.0","from_version":"10.8.1","#,
+                r#""phase":"done","message":"2026.40.0 is running","vanished":["Old-Model"],"#,
+                r#""log_tail":["Installation success or error status: 0."],"#,
+                r#""started_at":"2026-09-28T09:50:00Z","at":"2026-09-28T09:55:00Z"}}],"received_at":"2026-09-28T10:00:01Z"}"#
             )
         );
     }
@@ -1669,13 +1743,13 @@ mod tests {
                 max_context: Some(65536),
                 pinned: true,
             }],
-            models: vec![crate::node::providers::ProviderModel {
+            models: Some(vec![crate::node::providers::ProviderModel {
                 id: "Gemma-4".into(),
                 labels: vec!["tool-calling".into()],
                 downloaded: true,
                 size_gb: Some(7.5),
                 recipe: Some("llamacpp".into()),
-            }],
+            }]),
             downloads: vec![crate::node::providers::ProviderDownload {
                 model: "Qwen".into(),
                 percent: Some(12.5),
@@ -1697,11 +1771,37 @@ mod tests {
             error: None,
             actions: vec![crate::node::providers::ProviderAction {
                 request: "00112233445566ff".into(),
+                verb: crate::node::providers::ProviderVerb::Model,
                 model: "Gemma-4".into(),
                 ok: true,
                 message: "Loaded".into(),
                 at: "2026-09-28T09:59:00Z".into(),
             }],
+            install: Some(crate::node::providers::ProviderInstall {
+                method: crate::node::providers::ProviderInstallMethod::Msi,
+                scope: crate::node::providers::ProviderInstallScope::User,
+                location: Some(r"C:\Users\op\AppData\Local\lemonade_server".into()),
+                installer_version: Some("26.40.0".into()),
+                user: Some(r"PC\op".into()),
+            }),
+            pid: Some(4321),
+            session: Some(1),
+            owner: Some(r"PC\op".into()),
+            no_user_session: false,
+            startup: Some(crate::node::providers::ProviderStartup::Enabled),
+            wanted: Some(crate::node::providers::PowerWanted::Start),
+            manual_off: false,
+            lifecycle: Some(crate::node::providers::ProviderLifecycle {
+                request: "00112233445566aa".into(),
+                version: "v2026.40.0".into(),
+                from_version: Some("10.8.1".into()),
+                phase: crate::node::providers::LifecyclePhase::Done,
+                message: "2026.40.0 is running".into(),
+                vanished: vec!["Old-Model".into()],
+                log_tail: vec!["Installation success or error status: 0.".into()],
+                started_at: "2026-09-28T09:50:00Z".into(),
+                at: "2026-09-28T09:55:00Z".into(),
+            }),
         }
     }
 

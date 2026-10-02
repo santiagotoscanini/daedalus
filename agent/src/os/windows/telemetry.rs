@@ -71,13 +71,13 @@
 //! the drives' and updates' deadlines (the Store's is in `apps`).
 
 mod apps;
-mod browsers;
+pub(super) mod browsers;
 mod drives;
 mod hardware;
 mod pdh;
 mod powershell;
-mod processes;
-mod registry;
+pub(super) mod processes;
+pub(super) mod registry;
 mod services;
 mod smbios;
 mod updates;
@@ -123,12 +123,12 @@ const NO_GPU_TEMPERATURE: &str = "GPU temperature is not readable without vendor
 
 // ---------------------------------------------------------------- strings
 
-fn wide(s: &str) -> Vec<u16> {
+pub(super) fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 /// A NUL-terminated UTF-16 buffer as a trimmed String; None when empty.
-fn from_wide(buf: &[u16]) -> Option<String> {
+pub(super) fn from_wide(buf: &[u16]) -> Option<String> {
     let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
     let s = String::from_utf16_lossy(&buf[..end]).trim().to_string();
     (!s.is_empty()).then_some(s)

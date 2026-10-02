@@ -239,7 +239,7 @@ pub(super) struct ConsoleUser {
 /// take as LocalSystem (the same call that starts the tray). None when
 /// nobody is at the console, or the token is refused — this process is not
 /// the service.
-fn console_sid_from_token() -> Option<String> {
+pub(in crate::os::windows) fn console_sid_from_token() -> Option<String> {
     // SAFETY: the token handle is written on success and closed on every
     // path; the SID string is freed after it is copied out.
     unsafe {
@@ -259,7 +259,7 @@ fn console_sid_from_token() -> Option<String> {
 ///
 /// # Safety
 /// `token` is an open token handle with TOKEN_QUERY access.
-unsafe fn token_user_sid(token: HANDLE) -> Option<String> {
+pub(in crate::os::windows) unsafe fn token_user_sid(token: HANDLE) -> Option<String> {
     let mut len: u32 = 0;
     // A size query: it fails with ERROR_INSUFFICIENT_BUFFER and the size.
     let _ = GetTokenInformation(token, TokenUser, None, 0, &mut len);
@@ -290,7 +290,7 @@ unsafe fn token_user_sid(token: HANDLE) -> Option<String> {
 /// The loaded hives under `HKEY_USERS` that belong to logged-on accounts:
 /// an `S-1-5-21-…` SID (not its `_Classes` twin) with a `Volatile
 /// Environment` key, which logon writes and logoff unloads.
-fn logged_on_sids() -> Result<Vec<String>, String> {
+pub(in crate::os::windows) fn logged_on_sids() -> Result<Vec<String>, String> {
     let names = reg_subkeys(HKEY_USERS, PCWSTR::null())?;
     Ok(names
         .into_iter()

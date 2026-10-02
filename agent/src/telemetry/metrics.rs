@@ -213,7 +213,8 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
 ///   silent or answers unhealthy. `offered` is "1" when the app offers it to
 ///   the gateway (`nodes.set_desired`), which is what "Model Server Down"
 ///   alerts on.
-/// - `daedalus_agent_provider_models{…,kind}`: catalog entries on disk.
+/// - `daedalus_agent_provider_models{…,kind}`: catalog entries on disk;
+///   absent while the catalog could not be read.
 /// - `daedalus_agent_provider_loaded{…,kind}`: models resident now.
 pub fn providers_text(
     list: &[crate::node::providers::ProviderReport],
@@ -231,10 +232,12 @@ pub fn providers_text(
             u8::from(offered(p.kind)),
             u8::from(p.running && p.healthy)
         ));
-        out.push_str(&format!(
-            "daedalus_agent_provider_models{{{base},kind=\"{kind}\"}} {}\n",
-            p.models.iter().filter(|m| m.downloaded).count()
-        ));
+        if let Some(models) = &p.models {
+            out.push_str(&format!(
+                "daedalus_agent_provider_models{{{base},kind=\"{kind}\"}} {}\n",
+                models.iter().filter(|m| m.downloaded).count()
+            ));
+        }
         out.push_str(&format!(
             "daedalus_agent_provider_loaded{{{base},kind=\"{kind}\"}} {}\n",
             p.loaded.len()

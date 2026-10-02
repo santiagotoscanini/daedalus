@@ -147,6 +147,7 @@ const capability = oneOf<Capability>({
   'telemetry.full': true,
   'telemetry.minimal': true,
   'providers.residency': true,
+  'providers.lifecycle': true,
   nodes: true,
   root: true,
   santree: true,
@@ -220,8 +221,10 @@ const providerReport = reads<ProviderReport>()(
     running: bool,
     healthy: bool,
     loaded: arrayOf(obj({ id: str, device: nstr, max_context: nint, pinned: bool })),
-    models: arrayOf(
-      obj({ id: str, labels: arrayOf(str), downloaded: bool, size_gb: nnum, recipe: nstr }),
+    models: nullable(
+      arrayOf(
+        obj({ id: str, labels: arrayOf(str), downloaded: bool, size_gb: nnum, recipe: nstr }),
+      ),
     ),
     downloads: arrayOf(obj({ model: str, percent: nnum, status: str })),
     backends: arrayOf(obj({ recipe: str, backend: str, version: nstr, url: nstr })),
@@ -239,7 +242,56 @@ const providerReport = reads<ProviderReport>()(
     ),
     read_at: str,
     error: nstr,
-    actions: arrayOf(obj({ request: str, model: str, ok: bool, message: str, at: str })),
+    actions: arrayOf(
+      obj({
+        request: str,
+        verb: oneOf({ model: true, install: true, power: true }),
+        model: str,
+        ok: bool,
+        message: str,
+        at: str,
+      }),
+    ),
+    install: nullable(
+      obj({
+        method: oneOf({ msi: true, pkg: true, deb: true, rpm: true }),
+        scope: oneOf({ user: true, machine: true }),
+        location: nstr,
+        installer_version: nstr,
+        user: nstr,
+      }),
+    ),
+    pid: nint,
+    session: nint,
+    owner: nstr,
+    no_user_session: bool,
+    startup: nullable(oneOf({ enabled: true, disabled: true, missing: true })),
+    wanted: nullable(oneOf({ start: true, stop: true })),
+    manual_off: bool,
+    lifecycle: nullable(
+      obj({
+        request: str,
+        version: str,
+        from_version: nstr,
+        phase: oneOf({
+          downloading: true,
+          stopping: true,
+          installing: true,
+          verifying: true,
+          wiring: true,
+          powering: true,
+          rolling_back: true,
+          done: true,
+          failed: true,
+          rolled_back: true,
+        }),
+        message: str,
+        vanished: arrayOf(str),
+        log_tail: arrayOf(str),
+        started_at: str,
+        at: str,
+      }),
+    ),
   }),
 )
 
@@ -343,6 +395,8 @@ export const ANSWERS: { [M in keyof Methods]: Decoder<Methods[M][1]> } = {
   ),
   'nodes.claude_session': reads<Methods['nodes.claude_session'][1]>()(delivered),
   'nodes.provider_model': reads<Methods['nodes.provider_model'][1]>()(delivered),
+  'nodes.provider_install': reads<Methods['nodes.provider_install'][1]>()(delivered),
+  'nodes.provider_power': reads<Methods['nodes.provider_power'][1]>()(delivered),
   'nodes.set_desired': reads<Methods['nodes.set_desired'][1]>()(
     obj({ nodes: int, approved: ids, revoked: ids, pending: ids, policy: ids }),
   ),

@@ -1,11 +1,12 @@
 //! What the service reads of the machine itself: the last telemetry
-//! sample, the providers and their residency verbs, the awake hold and the
+//! sample, the providers and their verbs, the awake hold and the
 //! OS's power requests, and santree's door.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::node::providers::{ProviderAction, ProviderReport};
+use crate::node::providers::power::Operator;
+use crate::node::providers::{PowerWanted, ProviderAction, ProviderLifecycle, ProviderReport};
 use crate::telemetry::Telemetry;
 use crate::util::LockExt;
 
@@ -17,8 +18,6 @@ pub struct TelemetryHub(Mutex<Sample>);
 struct Sample {
     /// Shared rather than copied: its application list is long.
     doc: Option<Arc<Telemetry>>,
-    /// The sample's inventory lists Lemonade (`providers::lemonade_in`).
-    lemonade_installed: bool,
     /// Moves whenever a sample carries newly read static or slow facts or
     /// OS updates — what the link pushes at once rather than on its sample
     /// cadence (node/link.rs).
@@ -29,9 +28,7 @@ impl TelemetryHub {
     /// A new sample; `tiers_moved` when it carries static or slow facts or
     /// OS updates read since the last one (telemetry.rs).
     pub fn set(&self, t: Telemetry, tiers_moved: bool) {
-        let lemonade = crate::node::providers::lemonade_in(&t.apps);
         let mut s = self.0.lock_ok();
-        s.lemonade_installed = lemonade;
         s.doc = Some(Arc::new(t));
         if tiers_moved {
             s.tier += 1;
@@ -49,14 +46,9 @@ impl TelemetryHub {
         let s = self.0.lock_ok();
         s.doc.clone().map(|t| (t, s.tier))
     }
-
-    /// Whether the last sample's application inventory lists Lemonade.
-    pub fn lemonade_installed(&self) -> bool {
-        self.0.lock_ok().lemonade_installed
-    }
 }
 
-/// The providers on this machine (providers/) and their residency verbs.
+/// The providers on this machine (providers/) and their verbs.
 #[derive(Default)]
 pub struct ProvidersHub(Mutex<Providers>);
 
@@ -64,12 +56,17 @@ pub struct ProvidersHub(Mutex<Providers>);
 struct Providers {
     /// From their reader; None until its first read.
     reports: Option<Vec<ProviderReport>>,
-    /// The residency verbs' outcomes, newest last.
+    /// The verbs' outcomes, newest last.
     actions: Vec<ProviderAction>,
-    /// A residency verb is running; a second is refused until it ends.
+    /// A verb or an install is running; another is refused until it ends.
     busy: bool,
-    /// Raised when a verb ends: the reader reads again at once.
+    /// Raised when a verb ends or an install moves: the reader reads again
+    /// at once.
     read: bool,
+    /// The last install, from its journal (providers/install.rs).
+    lifecycle: Option<ProviderLifecycle>,
+    /// The operator's last power verb (providers/power.rs).
+    operator: Option<Operator>,
 }
 
 impl ProvidersHub {
@@ -83,7 +80,8 @@ impl ProvidersHub {
         self.0.lock_ok().reports.clone()
     }
 
-    /// Claim the one residency slot; false while a verb runs.
+    /// Claim the one slot every verb and install shares; false while one
+    /// runs.
     pub fn begin_action(&self) -> bool {
         let mut p = self.0.lock_ok();
         !std::mem::replace(&mut p.busy, true)
@@ -110,6 +108,39 @@ impl ProvidersHub {
     /// Whether a read was asked for since the last call.
     pub fn take_read(&self) -> bool {
         std::mem::take(&mut self.0.lock_ok().read)
+    }
+
+    /// Ask the reader to read again at once.
+    pub fn ask_read(&self) {
+        self.0.lock_ok().read = true;
+    }
+
+    /// Whether a verb or an install holds the slot.
+    pub fn busy(&self) -> bool {
+        self.0.lock_ok().busy
+    }
+
+    pub fn set_lifecycle(&self, l: Option<ProviderLifecycle>) {
+        self.0.lock_ok().lifecycle = l;
+    }
+
+    pub fn lifecycle(&self) -> Option<ProviderLifecycle> {
+        self.0.lock_ok().lifecycle.clone()
+    }
+
+    /// The operator asked for `wanted` while the policy said `policy`.
+    pub fn set_operator(&self, wanted: PowerWanted, policy: Option<PowerWanted>) {
+        let mut p = self.0.lock_ok();
+        let generation = p.operator.map_or(1, |o| o.generation + 1);
+        p.operator = Some(Operator {
+            wanted,
+            policy,
+            generation,
+        });
+    }
+
+    pub fn operator(&self) -> Option<Operator> {
+        self.0.lock_ok().operator
     }
 }
 

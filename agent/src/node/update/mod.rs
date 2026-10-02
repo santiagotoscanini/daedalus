@@ -54,6 +54,7 @@ pub use probation::*;
 pub use signature::*;
 #[cfg(target_os = "macos")]
 pub use slot::{remove, Slot};
+pub(crate) use swap::download_verified;
 #[cfg(target_os = "macos")]
 pub(crate) use swap::version_of;
 use swap::*;

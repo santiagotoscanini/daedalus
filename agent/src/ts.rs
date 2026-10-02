@@ -47,6 +47,8 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     NodeClaudeRoster::export_all(cfg)?;
     ClaudeSessionSent::export_all(cfg)?;
     ProviderModelSent::export_all(cfg)?;
+    ProviderInstallSent::export_all(cfg)?;
+    ProviderPowerSent::export_all(cfg)?;
     SetDesiredOk::export_all(cfg)?;
     CommandOk::export_all(cfg)?;
     ControllerInfo::export_all(cfg)?;
@@ -64,6 +66,8 @@ fn export_all(cfg: &Config) -> Result<(), ts_rs::ExportError> {
     ActionQuery::export_all(cfg)?;
     NodeClaudeSession::export_all(cfg)?;
     NodeProviderModel::export_all(cfg)?;
+    NodeProviderInstall::export_all(cfg)?;
+    NodeProviderPower::export_all(cfg)?;
     SetDesired::export_all(cfg)?;
     NodeCommand::export_all(cfg)?;
     ControllerRotate::export_all(cfg)?;

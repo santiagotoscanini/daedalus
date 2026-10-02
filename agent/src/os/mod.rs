@@ -37,6 +37,9 @@
 //!   never the agent's children (a systemd user unit, a launchd job, a
 //!   detached process; jobs/), with the Windows session's terminal
 //!   holder (`claude_holder`);
+//! - providers: Lemonade's install, process and startup as the OS records
+//!   them, its installer, power and startup switch (`lemonade`,
+//!   node/providers/);
 //! - telemetry: the `Collector` and the OS-updates reader (telemetry.rs);
 //! - `svc`: installing, removing and running the service, and starting
 //!   the tray (the verbs in bin/daedalus-agent.rs, the watchdog in lib.rs);
@@ -101,6 +104,13 @@ pub use imp::{claude_holder, claude_keychain_login, process_stats, CLAUDE_CLI_NA
 /// what it calls a job. The same names on every OS.
 pub mod jobs {
     pub use super::imp::jobs::{server_env, Os, JOB_KIND};
+}
+/// A provider's install, process and startup, and the calls that change
+/// them (node/providers/): the same names on every OS.
+pub mod lemonade {
+    pub use super::imp::lemonade::{
+        find, install, log_path, set_startup, start, stop, uninstall, INSTALLERS,
+    };
 }
 // telemetry
 pub use imp::{read_updates, Collector};

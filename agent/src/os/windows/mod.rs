@@ -23,6 +23,7 @@ mod dpapi;
 mod facts;
 mod holder;
 pub mod jobs;
+pub mod lemonade;
 mod net;
 mod pipe;
 mod power;

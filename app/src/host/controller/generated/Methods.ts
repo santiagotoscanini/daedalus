@@ -19,10 +19,14 @@ import type { NodeCommandParams } from './NodeCommandParams'
 import type { NodeDetail } from './NodeDetail'
 import type { NodeGetParams } from './NodeGetParams'
 import type { NodeIdParams } from './NodeIdParams'
+import type { NodeProviderInstallParams } from './NodeProviderInstallParams'
 import type { NodeProviderModelParams } from './NodeProviderModelParams'
+import type { NodeProviderPowerParams } from './NodeProviderPowerParams'
 import type { NodeProvidersOk } from './NodeProvidersOk'
 import type { NodesList } from './NodesList'
+import type { ProviderInstallSent } from './ProviderInstallSent'
 import type { ProviderModelSent } from './ProviderModelSent'
+import type { ProviderPowerSent } from './ProviderPowerSent'
 import type { Queued } from './Queued'
 import type { RootFollowOk } from './RootFollowOk'
 import type { RootFollowParams } from './RootFollowParams'
@@ -56,6 +60,8 @@ export type Methods = {
   'nodes.claude_roster': [NodeIdParams, NodeClaudeRosterOk]
   'nodes.claude_session': [NodeClaudeSessionParams, ClaudeSessionSent]
   'nodes.provider_model': [NodeProviderModelParams, ProviderModelSent]
+  'nodes.provider_install': [NodeProviderInstallParams, ProviderInstallSent]
+  'nodes.provider_power': [NodeProviderPowerParams, ProviderPowerSent]
   'nodes.set_desired': [SetDesired, SetDesiredOk]
   'nodes.command': [NodeCommandParams, CommandOk]
   'controller.rotate': [ControllerRotateParams, ControllerInfo]

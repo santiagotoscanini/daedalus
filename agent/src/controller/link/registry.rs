@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::api::wire::{
     ActionOutcome, ApiEvent, Capability, ClaudeSessionSent, CommandOk, DesiredState, NodeClaude,
     NodeClaudeRoster, NodeDetail, NodeLeft, NodePolicyRequest, NodeProviders, NodeSummary,
-    ProviderModelSent, SetDesiredOk,
+    ProviderInstallSent, ProviderModelSent, ProviderPowerSent, SetDesiredOk,
 };
 use crate::claude::{Report, Roster, SessionAction};
 use crate::core::state::now_rfc3339;
@@ -1149,6 +1149,52 @@ impl Registry {
             &params,
         )?;
         Ok(ProviderModelSent {
+            delivered: true,
+            request: params.request,
+        })
+    }
+
+    /// Install or update one of the machine's providers to one release:
+    /// delivered to a connected, approved machine that offers
+    /// `providers.lifecycle`, acknowledged within `ACK_TIMEOUT`, never
+    /// queued. It runs for minutes on the machine; its phases ride the
+    /// providers document (`lifecycle`), the outcome `actions` under
+    /// `request`.
+    pub fn provider_install(
+        &self,
+        id: &str,
+        params: crate::node::providers::ProviderInstallParams,
+    ) -> Result<ProviderInstallSent, ApiError> {
+        self.deliver(
+            id,
+            Capability::ProvidersLifecycle,
+            "an install",
+            "it manages no providers",
+            name::PROVIDER_INSTALL,
+            &params,
+        )?;
+        Ok(ProviderInstallSent {
+            delivered: true,
+            request: params.request,
+        })
+    }
+
+    /// Start or stop one of the machine's providers, delivered as
+    /// `provider_install` is; the outcome rides `actions` under `request`.
+    pub fn provider_power(
+        &self,
+        id: &str,
+        params: crate::node::providers::ProviderPowerParams,
+    ) -> Result<ProviderPowerSent, ApiError> {
+        self.deliver(
+            id,
+            Capability::ProvidersLifecycle,
+            "a power verb",
+            "it manages no providers",
+            name::PROVIDER_POWER,
+            &params,
+        )?;
+        Ok(ProviderPowerSent {
             delivered: true,
             request: params.request,
         })

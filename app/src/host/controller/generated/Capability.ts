@@ -5,4 +5,4 @@
  * `capabilities`): a method whose capability is absent answers
  * `unsupported`. `unknown`: a newer machine's word, read in its hello.
  */
-export type Capability = "claude.remote_control" | "claude.update" | "claude.sessions" | "telemetry.full" | "telemetry.minimal" | "providers.residency" | "nodes" | "root" | "santree" | "controller" | "unknown";
+export type Capability = "claude.remote_control" | "claude.update" | "claude.sessions" | "telemetry.full" | "telemetry.minimal" | "providers.residency" | "providers.lifecycle" | "nodes" | "root" | "santree" | "controller" | "unknown";

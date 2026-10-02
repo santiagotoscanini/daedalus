@@ -45,9 +45,11 @@ pub fn capabilities(cfg: &Config, serves: Serves) -> Vec<Capability> {
         TelemetryLevel::Minimal => c.push(Capability::TelemetryMinimal),
         TelemetryLevel::Off => {}
     }
-    // A node reads its providers and drives their residency for the box.
+    // A node reads its providers and drives their residency, install and
+    // power for the box.
     if role.link {
         c.push(Capability::ProvidersResidency);
+        c.push(Capability::ProvidersLifecycle);
     }
     if serves.nodes && role.node_listener {
         c.push(Capability::Nodes);
@@ -90,7 +92,8 @@ mod tests {
                 "claude.update",
                 "claude.sessions",
                 "telemetry.full",
-                "providers.residency"
+                "providers.residency",
+                "providers.lifecycle"
             ]
         );
         // A node never offers `nodes`, whatever it is told.
@@ -100,7 +103,8 @@ mod tests {
                 "claude.remote_control",
                 "claude.update",
                 "claude.sessions",
-                "providers.residency"
+                "providers.residency",
+                "providers.lifecycle"
             ]
         );
         // The controller offers Claude only when nix turned it on, and never

@@ -59,12 +59,42 @@
       "actions": [
         {
           "request": "00112233445566ff",
+          "verb": "model",
           "model": "Gemma-4",
           "ok": true,
           "message": "Loaded",
           "at": "2026-09-28T09:59:00Z"
         }
-      ]
+      ],
+      "install": {
+        "method": "msi",
+        "scope": "user",
+        "location": "C:\\Users\\op\\AppData\\Local\\lemonade_server",
+        "installer_version": "26.40.0",
+        "user": "PC\\op"
+      },
+      "pid": 4321,
+      "session": 1,
+      "owner": "PC\\op",
+      "no_user_session": false,
+      "startup": "enabled",
+      "wanted": "start",
+      "manual_off": false,
+      "lifecycle": {
+        "request": "00112233445566aa",
+        "version": "v2026.40.0",
+        "from_version": "10.8.1",
+        "phase": "done",
+        "message": "2026.40.0 is running",
+        "vanished": [
+          "Old-Model"
+        ],
+        "log_tail": [
+          "Installation success or error status: 0."
+        ],
+        "started_at": "2026-09-28T09:50:00Z",
+        "at": "2026-09-28T09:55:00Z"
+      }
     }
   ],
   "received_at": "2026-09-28T10:00:01Z"

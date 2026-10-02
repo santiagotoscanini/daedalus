@@ -24,8 +24,9 @@ claude_remote_control: boolean,
  */
 claude_workdir?: string | null, 
 /**
- * What the box knows about the providers on this machine — for now,
- * the port to look for each on. Absent when it names none.
+ * What the box wants of the providers on this machine: the port to
+ * look for each on, its pinned release, whether it runs and starts on
+ * its own. Absent when it names none.
  */
 providers?: ProvidersPolicy, 
 /**

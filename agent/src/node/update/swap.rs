@@ -65,12 +65,7 @@ pub(super) fn fetch_verified(rel: &Release, a: &Asset, path: &Path) -> Result<()
         bytes = a.size,
         "downloading"
     );
-    let resp = crate::http::agent()
-        .get(&a.url)
-        .timeout(std::time::Duration::from_secs(600))
-        .call()
-        .with_context(|| format!("downloading {}", a.local_name))?;
-    store_verified(resp.into_reader(), path, a.size, &a.sha256)
+    download_verified(&a.url, path, a.size, &a.sha256)
         .with_context(|| format!("{}: {}", rel.tag, a.local_name))?;
     tracing::info!(asset = a.local_name, "verified against the signed manifest");
     Ok(())
@@ -95,4 +90,21 @@ pub(crate) fn version_of(exe: &Path) -> Result<semver::Version> {
     semver::Version::parse(v)
         .map(|v| release_version(&v))
         .with_context(|| format!("{} version said {out:?}", exe.display()))
+}
+
+/// `url` into `path` through `store_verified`, within ten minutes: what
+/// the agent's own update and a provider's installer (providers/install.rs)
+/// both download with.
+pub(crate) fn download_verified(
+    url: &str,
+    path: &Path,
+    size: u64,
+    sha256: &[u8; 32],
+) -> Result<()> {
+    let resp = crate::http::agent()
+        .get(url)
+        .timeout(std::time::Duration::from_secs(600))
+        .call()
+        .with_context(|| format!("downloading {url}"))?;
+    store_verified(resp.into_reader(), path, size, sha256)
 }

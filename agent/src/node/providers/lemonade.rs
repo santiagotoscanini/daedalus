@@ -1,6 +1,7 @@
 //! Lemonade Server, read and driven over loopback: its health, catalog,
-//! downloads, backends and per-model figures, and the two residency
-//! verbs.
+//! downloads, backends and per-model figures, the two residency verbs, and
+//! the calls an install and the power verbs make of the server itself
+//! (`/internal/shutdown`, `/internal/set`).
 
 use std::io::Read;
 use std::time::Duration;
@@ -9,7 +10,6 @@ use serde_json::Value;
 
 use super::*;
 use crate::link::wire::{Policy, ProvidersPolicy};
-use crate::telemetry::App;
 
 pub const LEMONADE_DEFAULT_PORT: u16 = 13305;
 
@@ -276,20 +276,31 @@ fn get_json(port: u16, path: &str) -> Result<Value, String> {
     serde_json::from_str(&get(port, path)?).map_err(|_| format!("{path} is not JSON"))
 }
 
-/// Lemonade Server (lemonade-server.ai): an OpenAI-compatible model server
-/// under `/api/v1`. A report when it answers, or is installed and does
-/// not (`installed`, `lemonade_in` the inventory); None when there is no
-/// sign of it.
-pub(super) fn read_lemonade(policy: &ProvidersPolicy, installed: bool) -> Option<ProviderReport> {
-    let port = policy
+/// The port the policy names for Lemonade, or its default.
+pub fn lemonade_port(policy: &ProvidersPolicy) -> u16 {
+    policy
         .lemonade
         .as_ref()
         .and_then(|p| p.port)
-        .unwrap_or(LEMONADE_DEFAULT_PORT);
+        .unwrap_or(LEMONADE_DEFAULT_PORT)
+}
+
+/// Lemonade Server (lemonade-server.ai): an OpenAI-compatible model server
+/// under `/api/v1`. A report when it answers, or is installed and does
+/// not (`found`, the OS's word on the install); None when there is no sign
+/// of it.
+pub(super) fn read_lemonade(policy: &ProvidersPolicy, found: &Found) -> Option<ProviderReport> {
+    let port = lemonade_port(policy);
     let mut r = ProviderReport {
         kind: ProviderKind::Lemonade,
         port,
         read_at: crate::core::state::now_rfc3339(),
+        install: found.install.clone(),
+        pid: found.pid,
+        session: found.session,
+        owner: found.owner.clone(),
+        no_user_session: found.console.is_none(),
+        startup: found.startup,
         ..Default::default()
     };
     let health = match get_json(port, "/api/v1/health") {
@@ -297,14 +308,16 @@ pub(super) fn read_lemonade(policy: &ProvidersPolicy, installed: bool) -> Option
         Err(e) => {
             // Not answering: worth a report only if it is installed.
             r.error = Some(e);
-            return installed.then_some(r);
+            return found.install.is_some().then_some(r);
         }
     };
     r.running = true;
     (r.healthy, r.version, r.loaded) = parse_health(&health);
     let mut errors = Vec::new();
+    // A catalog that cannot be read is unknown, never empty: an empty one
+    // would tell the gateway every model of this machine is gone.
     match get_json(port, "/api/v1/models") {
-        Ok(v) => r.models = parse_models(&v),
+        Ok(v) => r.models = Some(parse_models(&v)),
         Err(e) => errors.push(e),
     }
     // The page's detail: best-effort, and a failure costs its own panel.
@@ -326,20 +339,45 @@ pub(super) fn read_lemonade(policy: &ProvidersPolicy, installed: bool) -> Option
     Some(r)
 }
 
-/// Whether the application inventory the slow facts read lists Lemonade:
-/// kept with each sample (`TelemetryHub::lemonade_installed`), so the reader asks
-/// a flag rather than copying the telemetry.
-pub fn lemonade_in(apps: &[App]) -> bool {
-    apps.iter()
-        .any(|a| a.name.to_ascii_lowercase().contains("lemonade"))
-}
-
-/// Every provider on this machine, read now; `lemonade` says whether the
-/// inventory lists Lemonade.
-pub fn read(policy: &Policy, lemonade: bool) -> Vec<ProviderReport> {
-    read_lemonade(&policy.providers, lemonade)
+/// Every provider on this machine, read now; `found` is the OS's word on
+/// Lemonade's install and process.
+pub fn read(policy: &Policy, found: &Found) -> Vec<ProviderReport> {
+    read_lemonade(&policy.providers, found)
         .into_iter()
         .collect()
+}
+
+/// The version the server's health states, when it answers.
+pub fn health_version(port: u16) -> Option<String> {
+    let (_, version, _) = parse_health(&get_json(port, "/api/v1/health").ok()?);
+    version
+}
+
+/// The catalog's downloaded ids: what the gateway may offer.
+pub fn offered_ids(port: u16) -> Result<Vec<String>, String> {
+    Ok(parse_models(&get_json(port, "/api/v1/models")?)
+        .into_iter()
+        .filter(|m| m.downloaded)
+        .map(|m| m.id)
+        .collect())
+}
+
+/// Ask the server to end: it unloads its models and exits (the tray's Quit
+/// calls the same).
+pub fn shutdown(port: u16) -> Result<String, String> {
+    post(port, "/internal/shutdown", &serde_json::json!({}))
+}
+
+/// The wiring the agent owns, in the server's own settings — those of the
+/// profile that runs it, which is why it goes through the server rather
+/// than a CLI the agent would run as itself: every address, the policy's
+/// port, and no broadcast (the box finds it through the agent).
+pub fn wire(port: u16) -> Result<String, String> {
+    post(
+        port,
+        "/internal/set",
+        &serde_json::json!({ "host": "0.0.0.0", "port": port, "broadcast": false }),
+    )
 }
 
 /// POST a residency call on loopback: the provider's word on a 200 whose

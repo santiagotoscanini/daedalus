@@ -19,7 +19,7 @@ pub(super) fn reg_sz(sub: PCWSTR, value: PCWSTR) -> Option<String> {
 /// `HKEY_USERS`. A null `value` reads the key's default value. A
 /// `REG_EXPAND_SZ` comes back expanded (as `RegGetValue` does without
 /// `RRF_NOEXPAND`), with THIS process's environment, which is the service's.
-pub(super) fn reg_sz_at(root: HKEY, sub: PCWSTR, value: PCWSTR) -> Option<String> {
+pub(in crate::os::windows) fn reg_sz_at(root: HKEY, sub: PCWSTR, value: PCWSTR) -> Option<String> {
     let mut len: u32 = 0;
     // SAFETY: a size query, then a read into a buffer of that size; `sub`
     // and `value` are NUL-terminated (or null) for the whole call.
@@ -99,7 +99,7 @@ pub(super) fn reg_key_exists(sub: PCWSTR) -> bool {
     reg_key_exists_at(HKEY_LOCAL_MACHINE, sub)
 }
 
-pub(super) fn reg_key_exists_at(root: HKEY, sub: PCWSTR) -> bool {
+pub(in crate::os::windows) fn reg_key_exists_at(root: HKEY, sub: PCWSTR) -> bool {
     let mut h = HKEY::default();
     // SAFETY: `sub` is NUL-terminated; the handle is written on success
     // and closed right away.

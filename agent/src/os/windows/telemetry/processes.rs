@@ -31,7 +31,7 @@ fn image_name(s: &str) -> String {
 }
 
 /// Every process's pid and image name, from one Toolhelp snapshot.
-pub(super) fn process_snapshot() -> Result<Vec<(u32, String)>, String> {
+pub(in crate::os::windows) fn process_snapshot() -> Result<Vec<(u32, String)>, String> {
     // SAFETY: the snapshot handle is closed below on every path.
     let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }
         .map_err(|e| format!("CreateToolhelp32Snapshot failed: {e}"))?;

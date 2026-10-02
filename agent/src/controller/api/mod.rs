@@ -61,7 +61,7 @@
 //! | `claude.roster`    | `ClaudeRosterGet`: the session's roster of Claude sessions (claude/roster/) | `claude.sessions` |
 //! | `claude.session`   | `SessionQueued`: one verb `{action, id}` queued for the session; its roster's `actions` reports it under `request` | `claude.sessions` |
 //! | `telemetry.get`    | `TelemetryGet`: the document at the configured level   | —                       |
-//! | `actions.get`      | `ActionOutcome` or null: how one verb request `{request, node?}` stands — the roster's `actions` (a session verb) or the providers' (a residency verb) of that machine, or of the controller's own session | `nodes`, or `claude.sessions` without `node` |
+//! | `actions.get`      | `ActionOutcome` or null: how one verb request `{request, node?}` stands — the roster's `actions` (a session verb) or the providers' (a provider verb) of that machine, or of the controller's own session | `nodes`, or `claude.sessions` without `node` |
 //! | `nodes.list`       | `NodesList`: every machine known, its standing, connection, shape and status document | `nodes` |
 //! | `nodes.get`        | `NodeDetail`: one machine's key and hello; with `full`, its telemetry and providers document too `{id, full?}` | `nodes` |
 //! | `nodes.providers`  | `NodeProviders`: its providers document `{id}`        | `nodes`                 |
@@ -69,6 +69,8 @@
 //! | `nodes.claude_roster` | `NodeClaudeRoster`: its roster of Claude sessions `{id}` | `nodes`             |
 //! | `nodes.claude_session` | `ClaudeSessionSent`: one verb `{id, action, session}` delivered and acknowledged | `nodes` |
 //! | `nodes.provider_model` | `ProviderModelSent`: one residency verb `{id, kind, action, model, pinned?, replacing?}` delivered and acknowledged | `nodes` |
+//! | `nodes.provider_install` | `ProviderInstallSent`: one install or update `{id, kind, version, url, size, sha256}` delivered and acknowledged; it runs on, its phases in the providers document | `nodes` |
+//! | `nodes.provider_power` | `ProviderPowerSent`: start or stop `{id, kind, wanted}` delivered and acknowledged | `nodes` |
 //! | `nodes.set_desired`| `SetDesiredOk`: the app's complete approved/revoked set with policies and names `{nodes:[…]}` | `nodes` |
 //! | `nodes.command`    | `CommandOk`: delivered, or queued `{id, command}`      | `nodes`                 |
 //! | `controller.rotate`| `ControllerInfo` with its `rotation`: a new controller key, the old one retired after `{grace_secs?}` (controller/rotation.rs) | `controller` |
@@ -451,6 +453,33 @@ impl Api {
                 p.check()
                     .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
                 to_value(&nodes.provider_model(&c.id, p)?)
+            }
+            R::NodesProviderInstall(c) => {
+                let nodes = self.nodes()?;
+                checked_id(&c.id)?;
+                let p = crate::node::providers::ProviderInstallParams {
+                    request: crate::util::mint_id(),
+                    kind: c.kind,
+                    version: c.version,
+                    url: c.url,
+                    size: c.size,
+                    sha256: c.sha256,
+                };
+                p.check()
+                    .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
+                to_value(&nodes.provider_install(&c.id, p)?)
+            }
+            R::NodesProviderPower(c) => {
+                let nodes = self.nodes()?;
+                checked_id(&c.id)?;
+                let p = crate::node::providers::ProviderPowerParams {
+                    request: crate::util::mint_id(),
+                    kind: c.kind,
+                    wanted: c.wanted,
+                };
+                p.check()
+                    .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
+                to_value(&nodes.provider_power(&c.id, p)?)
             }
             R::NodesSetDesired(set) => {
                 let nodes = self.nodes()?;

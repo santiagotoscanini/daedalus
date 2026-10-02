@@ -215,7 +215,7 @@ export function ProvidersBoard({ f }: { f: HostFacts }) {
               </span>
               <span className={cn(ROW_SIDE, MONO)}>
                 {p.running
-                  ? `${num(p.models.filter((m) => m.downloaded).length)} on disk · ${num(p.loaded.length)} loaded · `
+                  ? `${p.models === null ? 'catalog unknown' : `${num(p.models.filter((m) => m.downloaded).length)} on disk`} · ${num(p.loaded.length)} loaded · `
                   : ''}
                 port {String(p.port)}
               </span>

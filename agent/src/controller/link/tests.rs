@@ -317,11 +317,11 @@ fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
             port: 13305,
             running: true,
             healthy: true,
-            models: vec![crate::node::providers::ProviderModel {
+            models: Some(vec![crate::node::providers::ProviderModel {
                 id: "Gemma-4".into(),
                 downloaded: true,
                 ..Default::default()
-            }],
+            }]),
             read_at: "2026-09-28T10:00:00Z".into(),
             ..Default::default()
         }]);
@@ -338,7 +338,10 @@ fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
     });
     let p = ctl.registry.providers(&nid.node_id()).unwrap();
     assert!(p.connected && p.received_at.is_some());
-    assert_eq!(p.providers.as_ref().unwrap()[0].models[0].id, "Gemma-4");
+    assert_eq!(
+        p.providers.as_ref().unwrap()[0].models.as_ref().unwrap()[0].id,
+        "Gemma-4"
+    );
     // The full read carries them; the plain one does not.
     let d = ctl.registry.get(&nid.node_id(), true).unwrap();
     assert_eq!(d.providers, p.providers);
@@ -643,7 +646,10 @@ fn residency_verbs_travel_the_link_and_run_on_the_machine() {
         request: request.into(),
     };
     let mut policy = claude_policy();
-    policy.providers.lemonade = Some(crate::link::wire::ProviderPolicy { port: Some(port) });
+    policy.providers.lemonade = Some(crate::link::wire::ProviderPolicy {
+        port: Some(port),
+        ..Default::default()
+    });
     approve(&ctl.registry, &nid, policy.clone());
     // Approved and away: never kept for later.
     let away = ctl

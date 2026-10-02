@@ -23,6 +23,7 @@ pub mod bundle;
 mod facts;
 pub mod jobs;
 pub mod launchd;
+pub mod lemonade;
 mod net;
 mod power;
 mod telemetry;

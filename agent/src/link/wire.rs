@@ -18,6 +18,8 @@
 //! node → {"id":8,"ok":{"accepted":true}}
 //! ctl  ← {"id":9,"m":"provider_model","p":{"kind":"lemonade","action":"load","model":"…","pinned":false,"replacing":null,"request":"<16 hex>"}}
 //! node → {"id":9,"ok":{"accepted":true}}
+//! ctl  ← {"id":11,"m":"provider_install","p":{"request":"<16 hex>","kind":"lemonade","version":"v2026.40.0","url":"https://github.com/lemonade-sdk/…","size":…,"sha256":"<64 hex>"}}
+//! ctl  ← {"id":12,"m":"provider_power","p":{"request":"<16 hex>","kind":"lemonade","wanted":"stop"}}
 //! ctl  ← {"id":10,"m":"rotate","p":{"new_public_key":"<64 hex>","signature":"<128 hex>"}}
 //! node → {"id":10,"ok":{"accepted":true}}      (re-pinned; it reconnects under the new key)
 //! node → {"id":2,"m":"leave","p":{}}              (logging out; enroll.rs)
@@ -65,6 +67,13 @@ pub mod name {
     /// controller → node: one residency verb on one model, acknowledged;
     /// the outcome rides the next `providers` document (providers/).
     pub const PROVIDER_MODEL: &str = "provider_model";
+    /// controller → node: install or update a provider to one release,
+    /// acknowledged; it runs for minutes, and its phases and outcome ride
+    /// the `providers` documents that follow (providers/install.rs).
+    pub const PROVIDER_INSTALL: &str = "provider_install";
+    /// controller → node: start or stop a provider, acknowledged; the
+    /// outcome rides the next `providers` document.
+    pub const PROVIDER_POWER: &str = "provider_power";
     /// controller → node: where the machine stands.
     pub const STATE: &str = "state";
     /// controller → node: its key hands over to a new one — the statement
@@ -291,8 +300,9 @@ pub struct Policy {
     /// most recently used trusted project.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_workdir: Option<String>,
-    /// What the box knows about the providers on this machine — for now,
-    /// the port to look for each on. Absent when it names none.
+    /// What the box wants of the providers on this machine: the port to
+    /// look for each on, its pinned release, whether it runs and starts on
+    /// its own. Absent when it names none.
     #[serde(default, skip_serializing_if = "ProvidersPolicy::is_empty")]
     pub providers: ProvidersPolicy,
     /// santree on this machine may open its projects on the box: the
@@ -360,6 +370,31 @@ pub struct ProviderPolicy {
     /// The port the provider answers on; None means the kind's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    /// The release the box pins. Nothing installs it but `provider_install`,
+    /// which the agent refuses for any other release while one is pinned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin: Option<ProviderPin>,
+    /// Run it, or not: the agent starts it again when it is found stopped —
+    /// unless its user stopped it (`manual_off`) — and stops it when this
+    /// turns to `stop`. None leaves it as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wanted: Option<crate::node::providers::PowerWanted>,
+    /// Start it with the user's logon (Windows) or the machine's boot, kept
+    /// so by the agent. None leaves the startup as the install made it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub always_on: Option<bool>,
+}
+
+/// One release of a provider, as the box resolved it for this machine's
+/// OS: `provider_install`'s release, asset and digest.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProviderPin {
+    pub version: String,
+    pub url: String,
+    pub size: u64,
+    pub sha256: String,
 }
 
 impl Default for Policy {

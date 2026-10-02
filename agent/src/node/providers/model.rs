@@ -1,6 +1,6 @@
 //! The `providers` document's types: one provider, its models, what it
-//! has loaded and downloads, and the residency verbs' requests and
-//! outcomes.
+//! has loaded and downloads, its install and power state, and the verbs'
+//! requests and outcomes.
 
 use serde::{Deserialize, Serialize};
 
@@ -42,8 +42,9 @@ pub struct ProviderReport {
     pub healthy: bool,
     /// What is resident right now.
     pub loaded: Vec<LoadedModel>,
-    /// Its catalog, as it lists it.
-    pub models: Vec<ProviderModel>,
+    /// Its catalog, as it lists it; None when it could not be read — an
+    /// unknown catalog, never an empty one (the gateway keeps its routes).
+    pub models: Option<Vec<ProviderModel>>,
     /// What it is fetching; empty at rest.
     pub downloads: Vec<ProviderDownload>,
     /// The inference runtimes installed, with the build serving each.
@@ -56,9 +57,146 @@ pub struct ProviderReport {
     /// What went wrong reading it, in a sentence; None when every read
     /// answered.
     pub error: Option<String>,
-    /// The last residency verbs the box asked for here (`provider_model`)
-    /// and how each went, newest last, at most `MAX_ACTIONS`.
+    /// The last verbs the box asked for here (`provider_model`,
+    /// `provider_install`, `provider_power`) and how each went, newest
+    /// last, at most `MAX_ACTIONS`.
     pub actions: Vec<ProviderAction>,
+    /// The install the agent found, read off the install itself (the
+    /// registry, the package, the pkg receipt); None when there is none —
+    /// a server answering without one is an install the agent cannot
+    /// manage.
+    pub install: Option<ProviderInstall>,
+    /// The server's process, when one runs.
+    pub pid: Option<u32>,
+    /// Windows: the session it runs in, and the account that runs it.
+    pub session: Option<u32>,
+    pub owner: Option<String>,
+    /// Windows: nobody is logged on, so the server cannot run — it lives in
+    /// the user's tray. Always false elsewhere.
+    pub no_user_session: bool,
+    /// Whether it starts on its own: at logon (Windows) or at boot.
+    pub startup: Option<ProviderStartup>,
+    /// What the box wants of it: the operator's last power verb while the
+    /// policy has not moved since, else the policy's `wanted`.
+    pub wanted: Option<PowerWanted>,
+    /// It stopped while wanted, and not by the box (the tray's Quit): left
+    /// off until the next logon or the operator's start.
+    pub manual_off: bool,
+    /// The last install or update, as its journal holds it — under way, or
+    /// how it ended, with the installer's log tail.
+    pub lifecycle: Option<ProviderLifecycle>,
+}
+
+/// How the provider was installed.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderInstallMethod {
+    /// Windows: the MSI.
+    #[default]
+    Msi,
+    /// macOS: the `.pkg`.
+    Pkg,
+    /// Linux: the `.deb` or the `.rpm`.
+    Deb,
+    Rpm,
+}
+
+/// Whose install it is: one user's profile, or the machine's.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderInstallScope {
+    #[default]
+    User,
+    Machine,
+}
+
+/// The install itself.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ProviderInstall {
+    pub method: ProviderInstallMethod,
+    pub scope: ProviderInstallScope,
+    /// Where it is installed.
+    pub location: Option<String>,
+    /// The installer's own version — the MSI's ProductVersion, the
+    /// package's — which is not the server's (`version`, from its health).
+    pub installer_version: Option<String>,
+    /// Windows, a per-user install: the account whose profile holds it.
+    pub user: Option<String>,
+}
+
+/// Whether the provider starts on its own.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderStartup {
+    Enabled,
+    Disabled,
+    /// Windows: no Startup-folder shortcut to approve.
+    Missing,
+}
+
+/// Whether the provider should run.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PowerWanted {
+    Start,
+    Stop,
+}
+
+impl std::fmt::Display for PowerWanted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        crate::util::wire_name(self, f)
+    }
+}
+
+/// Where an install stands. The last three are how it ended.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LifecyclePhase {
+    #[default]
+    Downloading,
+    Stopping,
+    Installing,
+    Verifying,
+    Wiring,
+    Powering,
+    RollingBack,
+    Done,
+    Failed,
+    RolledBack,
+}
+
+impl LifecyclePhase {
+    pub fn ended(self) -> bool {
+        matches!(self, Self::Done | Self::Failed | Self::RolledBack)
+    }
+}
+
+/// The last install, as the report carries it.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ProviderLifecycle {
+    pub request: String,
+    /// The release asked for, and the one running before.
+    pub version: String,
+    pub from_version: Option<String>,
+    pub phase: LifecyclePhase,
+    /// What happened last, in a sentence.
+    pub message: String,
+    /// Catalog ids offered before the install and gone after it: the
+    /// aliases derived from them have nothing behind them now.
+    pub vanished: Vec<String>,
+    /// The end of the installer's log, at most `MAX_LOG_LINES` lines.
+    pub log_tail: Vec<String>,
+    pub started_at: String,
+    pub at: String,
 }
 
 /// A residency verb: put a model into the accelerator, or take it out.
@@ -91,12 +229,7 @@ pub struct ProviderModelParams {
 
 impl ProviderModelParams {
     pub fn check(&self) -> Result<(), String> {
-        if self.kind != ProviderKind::Lemonade {
-            return Err(format!(
-                "{} is not a provider kind this agent drives",
-                self.kind
-            ));
-        }
+        check_kind(self.kind)?;
         let name = |what: &str, s: &str| {
             if s.trim().is_empty() || s.len() > MAX_TEXT || s.chars().any(char::is_control) {
                 Err(format!("{what} is not a model name"))
@@ -111,19 +244,147 @@ impl ProviderModelParams {
             }
             name("replacing", r)?;
         }
-        if self.request.len() != 16 || !self.request.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err("the request id is sixteen hex characters".into());
-        }
-        Ok(())
+        check_request(&self.request)
     }
 }
 
-/// How one residency verb went, under the controller's request id.
+fn check_request(request: &str) -> Result<(), String> {
+    if request.len() != 16 || !request.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("the request id is sixteen hex characters".into());
+    }
+    Ok(())
+}
+
+fn check_kind(kind: ProviderKind) -> Result<(), String> {
+    if kind != ProviderKind::Lemonade {
+        return Err(format!("{kind} is not a provider kind this agent drives"));
+    }
+    Ok(())
+}
+
+/// The one place a provider's installer may come from: Lemonade's own
+/// GitHub releases. The box resolves the asset; the agent downloads only
+/// from here, and keeps it only at the size and SHA-256 the box named.
+pub const LEMONADE_RELEASES: &str = "https://github.com/lemonade-sdk/lemonade/releases/download/";
+/// The largest installer the agent downloads.
+pub const MAX_INSTALLER: u64 = 2 << 30;
+
+/// A release's version as both sides spell it: a tag (`v2026.40.0`) or
+/// what the server's health says (`2026.40.0`), compared without the `v`.
+pub fn same_version(a: &str, b: &str) -> bool {
+    let bare = |s: &str| s.trim().trim_start_matches(['v', 'V']).to_string();
+    !a.trim().is_empty() && bare(a) == bare(b)
+}
+
+/// `provider_install`'s parameters: install or update a provider to one
+/// release, downloaded from `url` and kept only at `size` bytes of
+/// `sha256` — the box resolved them from the release, the agent checks
+/// where they point (`check`) and what arrived (`store_verified`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderInstallParams {
+    pub request: String,
+    pub kind: ProviderKind,
+    /// The release's tag, `v2026.40.0`.
+    pub version: String,
+    pub url: String,
+    pub size: u64,
+    /// 64 hex characters.
+    pub sha256: String,
+}
+
+impl ProviderInstallParams {
+    pub fn check(&self) -> Result<(), String> {
+        check_kind(self.kind)?;
+        check_request(&self.request)?;
+        let v = &self.version;
+        if v.is_empty()
+            || v.len() > 64
+            || !v
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+'))
+        {
+            return Err("the version is not a release tag".into());
+        }
+        // releases/download/<tag>/<file>: this release, one plain file.
+        let rest = self
+            .url
+            .strip_prefix(LEMONADE_RELEASES)
+            .ok_or_else(|| format!("an installer comes from {LEMONADE_RELEASES} alone"))?;
+        let (tag, file) = rest
+            .split_once('/')
+            .ok_or("the URL names no release asset")?;
+        if tag != v {
+            return Err(format!("the URL is release {tag}'s, not {v}'s"));
+        }
+        if self.url.len() > MAX_TEXT
+            || file.is_empty()
+            || file.starts_with('.')
+            || !file
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'+'))
+        {
+            return Err("the URL's file name is not a plain asset name".into());
+        }
+        if self.size == 0 || self.size > MAX_INSTALLER {
+            return Err(format!("{} bytes is no installer", self.size));
+        }
+        if self.sha256.len() != 64 || !self.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("sha256 is not 64 hex characters".into());
+        }
+        Ok(())
+    }
+
+    /// The asset's file name, the URL's last segment (`check` held it plain).
+    pub fn file_name(&self) -> &str {
+        self.url.rsplit('/').next().unwrap_or_default()
+    }
+
+    /// The SHA-256 as bytes.
+    pub fn digest(&self) -> Option<[u8; 32]> {
+        hex::decode(&self.sha256).ok()?.try_into().ok()
+    }
+}
+
+/// `provider_power`'s parameters: run the provider, or not.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderPowerParams {
+    pub request: String,
+    pub kind: ProviderKind,
+    pub wanted: PowerWanted,
+}
+
+impl ProviderPowerParams {
+    pub fn check(&self) -> Result<(), String> {
+        check_kind(self.kind)?;
+        check_request(&self.request)
+    }
+}
+
+/// Which verb an action was.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderVerb {
+    /// `provider_model`.
+    #[default]
+    Model,
+    /// `provider_install`.
+    Install,
+    /// `provider_power`.
+    Power,
+}
+
+/// How one verb went, under the controller's request id.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct ProviderAction {
     pub request: String,
+    pub verb: ProviderVerb,
+    /// What it acted on: the model, the release installed, or the power
+    /// state asked for (`start`, `stop`).
     pub model: String,
     pub ok: bool,
     /// The provider's word on it, or why it failed.

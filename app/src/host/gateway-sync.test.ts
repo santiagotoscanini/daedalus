@@ -33,13 +33,26 @@ const model = (id: string, over: Partial<ProviderModel> = {}): ProviderModel => 
 })
 
 /** A catalog entry as a machine's agent writes it. */
-const wireModel = (id: string): ProviderReport['models'][number] => ({
+const wireModel = (id: string): NonNullable<ProviderReport['models']>[number] => ({
   id,
   labels: [],
   downloaded: true,
   size_gb: null,
   recipe: null,
 })
+
+/** A report's install, power and lifecycle fields, as an agent with nothing to say writes them. */
+const LIFECYCLE_NONE = {
+  install: null,
+  pid: null,
+  session: null,
+  owner: null,
+  no_user_session: false,
+  startup: null,
+  wanted: null,
+  manual_off: false,
+  lifecycle: null,
+} satisfies Partial<ProviderReport>
 
 const reading = (
   models: ProviderModel[],
@@ -360,6 +373,7 @@ describe('a node its agent has not reported for', () => {
           read_at: '2026-09-28T10:00:00Z',
           error: null,
           actions: [],
+          ...LIFECYCLE_NONE,
         },
       ],
     })
@@ -369,6 +383,42 @@ describe('a node its agent has not reported for', () => {
       const s = await reconcile(gw, [{ provider: pc, reading: r }], () => undefined, 1)
       expect(s.deleted).toEqual([])
     }
+    expect(gw.log).toEqual([])
+  })
+
+  it('keeps every route while a running provider has an unreadable catalog', async () => {
+    const gw = fakeGateway(held())
+    const unknown = nodeReading(
+      'lemonade',
+      pc.base,
+      {
+        id: 'pc',
+        connected: true,
+        received_at: '2026-09-28T10:00:31Z',
+        providers: [
+          {
+            kind: 'lemonade',
+            port: 13305,
+            version: '2026.40.0',
+            running: true,
+            healthy: true,
+            loaded: [],
+            models: null,
+            downloads: [],
+            backends: [],
+            figures: [],
+            read_at: '2026-09-28T10:00:30Z',
+            error: 'did not answer /api/v1/models',
+            actions: [],
+            ...LIFECYCLE_NONE,
+          },
+        ],
+      },
+      Date.parse('2026-09-28T10:01:00Z'),
+    )
+    expect(unknown).toMatchObject({ reachable: false, reported: true })
+    const s = await reconcile(gw, [{ provider: pc, reading: unknown }], () => undefined, 1)
+    expect(s.deleted).toEqual([])
     expect(gw.log).toEqual([])
   })
 
@@ -388,6 +438,7 @@ describe('a node its agent has not reported for', () => {
       read_at: '2026-09-28T10:00:30Z',
       error: 'did not answer /metrics',
       actions: [],
+      ...LIFECYCLE_NONE,
     }
     const r = nodeReading(
       'lemonade',

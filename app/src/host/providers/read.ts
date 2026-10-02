@@ -94,9 +94,9 @@ function silent(
   }
 }
 
-/** A report's catalog as the page's models: modes from the labels. */
+/** A report's catalog as the page's models: modes from the labels; none while it is unknown. */
 function modelsOf(r: ProviderReport): ProviderModel[] {
-  return r.models.map((m) =>
+  return (r.models ?? []).map((m) =>
     modelOf({
       id: m.id,
       labels: m.labels,
@@ -144,6 +144,12 @@ export function nodeReading(
   }
   if (!r.running) {
     return silent(kind, base, r.error ?? 'installed, not running', now, r, true)
+  }
+  // Answering, but its catalog could not be read: unknown, not empty — silent,
+  // so the gateway keeps this machine's routes (gateway-sync.ts) rather than
+  // deleting every one of them.
+  if (r.models === null) {
+    return silent(kind, base, r.error ?? 'its catalog could not be read', now, r, true)
   }
   const readAt = Date.parse(r.read_at)
   return {
