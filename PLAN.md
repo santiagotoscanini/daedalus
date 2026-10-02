@@ -437,64 +437,22 @@ stable — code cites them.
       would be a port, not a recompile — Windows above all (ConPTY, pwsh,
       paths, hook callbacks).
 
-14. **Lemonade managed by the agent.** daedalus installs, updates (a pinned
-    version), starts and stops Lemonade on the machines that offer it, and
-    the old-version workarounds go. Providers are LAN-only; LiteLLM keeps
-    dialling each one directly, so the control plane never sits in the
-    inference path. Pools, route parking, keys and a published UI are out
-    of scope.
-    - **The full official app on every OS**, run the way upstream ships it.
-      Windows: the MSI (per-user by default); the server lives inside the
-      tray `LemonadeServer.exe` and reads models and settings from the
-      profile that runs it, so it serves only while a user is logged in.
-      macOS: the `.pkg`'s root LaunchDaemon `ai.lemonadeserver.server` plus
-      its tray. Linux: the `.deb`/`.rpm`'s `lemond.service`. Lemonade has no
-      self-updater, so a pin holds.
-    - **Detection** reads the install itself (Windows `Software\AMD\Lemonade
-      Server` in HKCU/HKLM, the package, the pkg receipt), not the app
-      inventory. The report gains install method, scope, version (from
-      `/health`, never the MSI's `26.40.0`), pid, owning session, startup
-      state and the last lifecycle outcome.
-    - **Verbs** beside `provider_model` and shaped like it:
-      `provider_install {kind, version, url, size, sha256}` and
-      `provider_power {kind, wanted}`. The box resolves the asset for the
-      node's OS once from GitHub's release API and refuses one without a
-      digest; the agent accepts only lemonade-sdk release URLs and verifies
-      with `store_verified`.
-    - **Install** is a journaled state machine (a reboot mid-install resumes
-      or reports): download and verify, keep the previous installer, stop
-      gracefully, install silently, wait for `/health` to report the target,
-      re-apply `host=0.0.0.0`, the port and `broadcast=false` through
-      `lemonade config set`, apply the wanted power state; on failure
-      reinstall the previous one (the MSI blocks downgrades, so uninstall
-      first). The catalog ids are compared before and after, and a vanished
-      offered id is reported (aliases derive from ids). Windows runs msiexec
-      in the user's session through the session jobs, so the MSI's relaunch
-      runs as the user and not SYSTEM; it adopts the existing scope, refuses
-      another user's per-user install, and retries 1618.
-    - **Power.** Windows: start `LemonadeServer.exe --silent` in the session
-      and check the owning process (the global mutex makes a second launch
-      exit 0 silently); stop with `/internal/shutdown`; always-on through
-      `StartupApproved\StartupFolder`, which survives the shortcut every
-      upgrade reinstalls; a tray Quit is a sticky manual-off until the next
-      logon or an operator action. macOS: `launchctl` on the vendor label.
-      Linux: `systemctl`.
-    - **In daedalus.** `nodes.policy.providers.lemonade` gains `pin`,
-      `wanted` and `alwaysOn`. A badge slot on `ModuleRow` and a dot on the
-      AI row: green when every wanted server runs, amber for an update, an
-      unmanaged install, a stale report or no user session, red when wanted
-      and down. AI › Providers per machine: version and update with notes
-      (`versionGap`, a tag pattern for `vYYYY.WW.N`), Install/Update behind
-      an armed confirm, Start/Stop, always-on, Open Lemonade
-      (`https://lemonade-<name>.<baseDomain>`, behind the gate), load/unload, the last outcome
-      and its log tail. MCP write tools for install and power.
-    - **Fixes.** A failed `/models` read reports an unknown catalog, never an
-      empty one (today gateway-sync deletes every route of the node on it).
-    - **Order.** The route-wipe fix; detection, the report, the dot and the
-      page; the Windows verbs, with the gaming PC moving from 10.8.1 through
-      them (if 10.8.1 predates the MSI's upgrade code it reports as
-      unmanaged and is uninstalled by hand once); macOS
-      and Linux when such a node offers Lemonade.
+14. **Lemonade managed by the agent: what remains.** Install/update,
+    start/stop, always-on, detection, the AI rail dot, the Providers page,
+    `allowed_origins` and the `lemonade-<name>` hostname run on the gaming
+    PC (agent 0.28.0, Lemonade v2026.40.0). Still owed:
+    - **Windows paths never exercised:** a reboot mid-install resuming from
+      the journal, a failed verify rolling back (uninstall + previous MSI),
+      a tray Quit staying off until the next logon, Start/Stop and the
+      always-on switch pressed from the page.
+    - **macOS and Linux** install and power are compile-checked only; prove
+      them on the first such node that offers Lemonade (macOS: the agent
+      reports no pid for the root `lemond`).
+    - **TheNoise** (ROCm image backend) reaches Windows in 2026.41: update
+      through the page, move the `z-image` alias to
+      `Z-Image-Turbo-TheNoise`, recheck `--clip-on-cpu`.
+    - The Providers page once showed a stale "not answering" on first view
+      while the controller already said running; right on reload.
 
 ---
 
