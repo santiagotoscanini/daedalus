@@ -8,18 +8,17 @@ import { Ago } from '../../../../components/ago'
 import { FOOT, MONO, MONO_FACE } from '../../../../components/tokens'
 import { Alert, AlertDescription } from '../../../../components/ui/alert'
 import { Board, Chip, Measures, type Tone } from '../../../../components/viz'
-import type { LifecyclePhase, ProviderInstall } from '../../../../host/controller/generated'
+import type { LifecyclePhase } from '../../../../host/controller/generated'
 import { cn } from '../../../../lib/cn'
 import { DASH } from '../../../../lib/format'
+import {
+  installText,
+  type LifecycleFacts,
+  processText,
+  unmanagedInstall,
+} from '../../../../lib/providers/lifecycle-text'
 import type { ProviderMachine } from '../../data/providers'
 import { LifecycleControls, underWay } from './lifecycle-controls'
-
-const METHOD: Record<ProviderInstall['method'], string> = {
-  msi: 'MSI',
-  pkg: 'macOS package',
-  deb: '.deb package',
-  rpm: '.rpm package',
-}
 
 const STARTUP = { enabled: 'yes', disabled: 'no', missing: 'no entry' } as const
 
@@ -36,11 +35,18 @@ const PHASE: Record<LifecyclePhase, { label: string; tone: Tone }> = {
   rolled_back: { label: 'rolled back', tone: 'warn' },
 }
 
-function installText(i: ProviderInstall | null | undefined, present: boolean): string {
-  if (i == null) return present ? 'not one the agent can manage' : 'none'
-  const scope =
-    i.scope === 'machine' ? 'per machine' : `per user${i.user === null ? '' : ` (${i.user})`}`
-  return `${METHOD[i.method]} · ${scope}`
+/** The page's facts for the install and process lines (lib/providers/lifecycle-text.ts). */
+function factsOf(m: ProviderMachine): LifecycleFacts {
+  const g = m.managed
+  return {
+    speaks: m.speaksLifecycle,
+    present: m.presence !== null,
+    running: m.presence?.running === true,
+    install: g?.install,
+    pid: g?.pid,
+    session: g?.session,
+    owner: g?.owner,
+  }
 }
 
 export function LifecycleBoard({ m }: { m: ProviderMachine }) {
@@ -53,14 +59,8 @@ export function LifecycleBoard({ m }: { m: ProviderMachine }) {
       : m.presence !== null
         ? { label: 'stopped', tone: 'muted' }
         : { label: 'not installed', tone: 'muted' }
-  const process =
-    g?.pid == null
-      ? 'not running'
-      : [
-          `pid ${String(g.pid)}`,
-          ...(g.session === null ? [] : [`session ${String(g.session)}`]),
-          ...(g.owner === null ? [] : [g.owner]),
-        ].join(' · ')
+  const facts = factsOf(m)
+  const install = installText(facts)
 
   return (
     <Board
@@ -73,13 +73,13 @@ export function LifecycleBoard({ m }: { m: ProviderMachine }) {
         items={[
           {
             k: 'install',
-            v: installText(g?.install, m.presence !== null),
-            ...(g !== null && g.install === null && m.presence !== null ? { tone: 'warn' } : {}),
+            v: install.text,
+            ...(install.tone === null ? {} : { tone: install.tone }),
           },
           { k: 'version', v: m.version ?? DASH },
           { k: 'installer', v: g?.install?.installer_version ?? DASH },
           { k: 'starts on its own', v: g?.startup == null ? DASH : STARTUP[g.startup] },
-          { k: 'process', v: process },
+          { k: 'process', v: processText(facts) },
           { k: 'pinned release', v: m.asked?.pin ?? 'none' },
         ]}
       />
@@ -110,7 +110,12 @@ function Notices({ m }: { m: ProviderMachine }) {
       'Its user quit it from the tray. It stays off until the next logon or a Start here; the agent does not fight it.',
     )
   }
-  if (g !== null && g.install === null && m.presence !== null) {
+  if (m.speaksLifecycle === false) {
+    notes.push(
+      'This machine’s agent is too old to report how Lemonade was installed and how it runs, or to install, update, start and stop it. Update the agent; this page fills in with its next report.',
+    )
+  }
+  if (unmanagedInstall(factsOf(m))) {
     notes.push(
       'This server is not an install the agent can manage (no MSI or package record — an older installer). Uninstall it by hand once, then Install here; the models and settings in the profile stay.',
     )

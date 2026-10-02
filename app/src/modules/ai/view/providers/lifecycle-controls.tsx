@@ -57,6 +57,9 @@ const failed = (o: ReturnType<typeof useVerbRequest>['outcome']) =>
   o !== null && o.state !== 'running' && o.state !== 'done' ? o.detail : null
 
 export function LifecycleControls({ m }: { m: ProviderMachine }) {
+  // An agent that predates install and power would refuse every one of these
+  // (host/providers/lifecycle.ts); the board's notice says to update it.
+  if (m.speaksLifecycle !== true) return null
   return (
     <div className="mt-[0.9rem] flex flex-col gap-[0.6rem]">
       <div className="flex flex-wrap items-center gap-x-[1.2rem] gap-y-[0.5rem]">

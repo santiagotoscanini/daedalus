@@ -1,11 +1,13 @@
 import type { Ctx } from '../../core/ctx'
 import {
+  installKnown,
   type LemonadeFacts,
   lemonadeDot,
   type StatusDot,
 } from '../../lib/providers/lemonade-status'
 import { allNodeRows } from '../../lib/repo/nodes'
 import { lemonadeUpdate } from './lemonade-release'
+import { speaksLifecycle } from './lifecycle'
 import { STALE_MS } from './read'
 
 // Every approved machine's Lemonade as the dot's facts (lib/providers/
@@ -18,12 +20,16 @@ export async function lemonadeFacts(ctx: Pick<Ctx, 'controller'>, now = Date.now
   const rows = (await allNodeRows()).filter((n) => n.state === 'approved')
   return Promise.all(
     rows.map(async (n): Promise<LemonadeFacts> => {
-      const answer = await ctx.controller.call('nodes.providers', { id: n.id }).catch(() => null)
+      const [answer, speaks] = await Promise.all([
+        ctx.controller.call('nodes.providers', { id: n.id }).catch(() => null),
+        speaksLifecycle(ctx, n.id),
+      ])
       const r = answer?.providers?.find((p) => p.kind === 'lemonade') ?? null
       const at = answer?.received_at == null ? Number.NaN : Date.parse(answer.received_at)
       const policy = n.policy?.providers?.lemonade
       return {
         name: n.policy?.displayName?.trim() || n.hostname,
+        offered: policy?.offer === true,
         current:
           answer?.connected === true &&
           answer.providers !== null &&
@@ -34,7 +40,7 @@ export async function lemonadeFacts(ctx: Pick<Ctx, 'controller'>, now = Date.now
             ? null
             : {
                 running: r.running,
-                managed: r.install !== null,
+                install: installKnown(speaks, r.install),
                 noUserSession: r.no_user_session,
                 manualOff: r.manual_off,
                 wanted: r.wanted,
@@ -47,7 +53,7 @@ export async function lemonadeFacts(ctx: Pick<Ctx, 'controller'>, now = Date.now
   )
 }
 
-/** The AI row's dot, or null when no machine has Lemonade or is asked to. */
+/** The AI row's dot, or null when no machine the box has a stake in has Lemonade. */
 export async function lemonadeStatus(ctx: Pick<Ctx, 'controller'>): Promise<StatusDot | null> {
   return lemonadeDot(await lemonadeFacts(ctx))
 }

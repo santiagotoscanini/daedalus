@@ -3,6 +3,7 @@ import type { PowerWanted } from '../../../host/controller/generated'
 import { type FleetProvider, readFleetProviders } from '../../../host/providers/fleet'
 import { type GatewayRoute, gatewayRoutes } from '../../../host/providers/gateway'
 import { lemonadeUpdate } from '../../../host/providers/lemonade-release'
+import { speaksLifecycle } from '../../../host/providers/lifecycle'
 import type { ProviderDetail, ProviderManaged } from '../../../host/providers/read'
 import type { ProviderPolicy } from '../../../host/schema'
 import {
@@ -70,6 +71,11 @@ export type ProviderMachine = {
   /** The install and how it runs, as the agent last reported them; null for the box or without a report. */
   managed: ProviderManaged | null
   /**
+   * Its agent speaks install and power, so `managed` is what it found rather
+   * than fields an older agent leaves empty; null without a hello (and for the box).
+   */
+  speaksLifecycle: boolean | null
+  /**
    * What the box asks of it (the policy): the pinned release, run or not,
    * start on its own. Null for this box's own, which has no lifecycle here.
    */
@@ -135,6 +141,12 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       ? undefined
       : nodes.find((n) => n.id === p.machine)?.policy.providers?.[p.kind]
 
+  const speaks = await Promise.all(
+    read.map(({ provider }) =>
+      provider.machine === 'box' ? null : speaksLifecycle(ctx, provider.machine),
+    ),
+  )
+
   const updates = await Promise.all(
     read.map(({ provider, reading }) =>
       provider.kind === 'lemonade' && provider.machine !== 'box'
@@ -184,6 +196,7 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       offerableCount: models.filter((m) => m.offerable).length,
       detail,
       managed: reading.managed,
+      speaksLifecycle: speaks[i] ?? null,
       asked:
         provider.machine === 'box'
           ? null

@@ -56,6 +56,22 @@ async function setLemonade(
   await syncDesired(ctx)
 }
 
+/**
+ * Whether the machine's agent speaks install and power, and so reports the
+ * install, its process and its startup: null when it has not said hello since
+ * the controller started, or the controller did not answer. An agent that
+ * predates them sends a report with those fields empty, which says nothing of
+ * the install; the pages must not read it as "none".
+ */
+export async function speaksLifecycle(
+  ctx: Pick<Ctx, 'controller'>,
+  id: string,
+): Promise<boolean | null> {
+  const detail = await ctx.controller.call('nodes.get', { id, full: false }).catch(() => null)
+  const hello = detail?.hello ?? null
+  return hello === null ? null : hello.capabilities.includes('providers.lifecycle')
+}
+
 /** The machine's hello, when its agent speaks the lifecycle verbs. */
 async function lifecycleHello(ctx: Ctx, id: string) {
   const detail = await ctx.controller.call('nodes.get', { id, full: false })
