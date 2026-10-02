@@ -376,17 +376,22 @@ function AppHero({
             },
           ]}
         />
-        {app.stage === 'off' && (
-          <p className={EXPOSURE_NOTE}>No route, DNS or probe. The container still runs.</p>
-        )}
-        {app.stage === 'declared' && (
+        {/* A saved stage above declared with no image yet (saved before the
+            gate, or the image went away) is said too: the Apply refuses it. */}
+        {imageWait !== undefined ? (
           <p className={EXPOSURE_NOTE}>
-            {imageWait === undefined
-              ? 'Nothing runs. Its database, data directory and secrets exist.'
-              : app.firstImage === 'missing'
-                ? 'First build pending. The other rungs open once it has published an image.'
-                : imageWait}
+            {app.firstImage === 'missing'
+              ? 'First build pending. The other rungs open once it has published an image.'
+              : imageWait}
           </p>
+        ) : app.stage === 'off' ? (
+          <p className={EXPOSURE_NOTE}>No route, DNS or probe. The container still runs.</p>
+        ) : (
+          app.stage === 'declared' && (
+            <p className={EXPOSURE_NOTE}>
+              Nothing runs. Its database, data directory and secrets exist.
+            </p>
+          )
         )}
       </div>
     </section>

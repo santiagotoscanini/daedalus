@@ -65,9 +65,12 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     readWorkspaces(),
     readDeployShot(name),
     siteIdentity(),
-    // Asked only of an app that runs nothing yet: the exposure control offers
-    // the running rungs once its first image exists (./image-gate.ts).
-    stageRuns(record.stage) ? Promise.resolve(null) : firstImage(box, record),
+    // Asked only of an app that runs nothing on the box yet (its APPLIED
+    // stage): the exposure control offers the running rungs once its first
+    // image exists (./image-gate.ts), whatever stage is saved but unapplied.
+    manifest !== undefined && stageRuns(manifest.stage)
+      ? Promise.resolve(null)
+      : firstImage(box, record),
   ])
 
   return {
