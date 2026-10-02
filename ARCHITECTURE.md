@@ -458,8 +458,10 @@ machine reports its status document and telemetry up that link; the app
 hands the controller the desired set — every approved or revoked key, with
 its policy — and reads the machines through `nodes.*` calls. It never dials
 a machine. A provider a machine offers (a Lemonade model server) is read by
-that machine's agent and reported the same way, and the app keeps
-LiteLLM's routes in step with it through LiteLLM's own API.
+that machine's agent and reported the same way, and installed, updated,
+started and stopped by it on the controller's verbs (`nodes.provider_install`,
+`nodes.provider_power`); the app keeps LiteLLM's routes in step with it
+through LiteLLM's own API, and an unread catalog keeps them as they are.
 
 The app↔controller contract is defined once, in Rust: `agent/gate.sh gen`
 generates the TypeScript types, the `Methods` map, the constants and golden

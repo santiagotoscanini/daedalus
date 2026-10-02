@@ -19,13 +19,15 @@ beside it where there is a desktop. It
   temperatures, network, battery, pending OS updates, browsers and
   applications, at the level `telemetry` sets (the header of
   `src/telemetry.rs`, and each OS's collector);
-- **reads its providers** — a model server such as Lemonade, on loopback —
-  and runs the box's two residency verbs on them (`src/node/providers/`);
+- **reads its providers** — a model server such as Lemonade, on loopback,
+  its install read off the install itself — runs the box's two residency
+  verbs on them, and installs, updates, starts and stops them (see
+  "Providers");
 - **follows the box's policy** once an admin approves the machine on
   Settings › Machines — keep awake, Claude remote control and where,
-  provider ports, santree — and its commands (check for updates, update
-  Claude Code, restart Claude). The last policy is kept in `policy.json`,
-  so a restart starts from it;
+  providers (port, pinned release, power, startup), santree — and its
+  commands (check for updates, update Claude Code, restart Claude). The
+  last policy is kept in `policy.json`, so a restart starts from it;
 - **runs Claude Code's remote control** the way the box runs its own, as a
   job of the OS that outlives the agent, keeps the roster of Claude
   sessions with its three verbs, and brings back the sessions a restart of
@@ -440,6 +442,47 @@ record). Every verb is refused while the policy keeps Claude off. A
 development run with `DAEDALUS_AGENT_DATA_DIR` names its jobs apart, so it
 never touches an installed agent's.
 
+## Providers
+
+`src/node/providers/` reads a model server on loopback every minute and
+pushes the `providers` document up the link. Lemonade is the one kind.
+
+- **Found by its install**, never by the app inventory
+  (`os::lemonade::find`): on Windows the MSI's `Software\AMD\Lemonade
+  Server` key in the console user's hive (per-user, the MSI's default) or
+  HKLM (per-machine), and `LemonadeServer.exe`'s process, session and
+  account; on macOS the pkg receipt and the `ai.lemonadeserver.server`
+  LaunchDaemon; on Linux the package that owns `lemond.service`. The
+  version is `/health`'s, never the installer's. A catalog that cannot be
+  read is reported unknown (`models: null`), never empty.
+- **`provider_install`** installs or updates to one release: only from
+  `github.com/lemonade-sdk/lemonade/releases/download/<tag>/`, kept only at
+  the size and SHA-256 the box sent, and refused while the policy pins
+  another, while nobody is logged on (Windows), for another user's per-user
+  install, or over a server no installer registered. A journal in
+  `providers/lemonade-install.json` holds each step before it runs —
+  download, graceful stop, silent install, `/health` at the target,
+  `/internal/set` wiring (every address, the port, no broadcast), the
+  wanted power state — so a reboot resumes it; a failure reinstalls the
+  installer the last good install kept (Windows uninstalls first: the MSI
+  blocks a downgrade). Catalog ids gone after it are reported (`vanished`)
+  with the installer log's tail. On Windows msiexec runs in the console
+  user's session with their token, so the MSI's relaunch runs as them; a
+  per-machine install runs as SYSTEM, and the server it relaunches outside
+  the session is moved into it.
+- **`provider_power`** starts or stops it — Windows: `LemonadeServer.exe
+  --silent` in the user's session, `/internal/shutdown`; macOS: launchctl
+  on the label; Linux: systemctl. The operator's word stands until the
+  policy's `wanted` moves. A server seen running and then gone without the
+  box asking (the tray's Quit) stays off until the next logon or an
+  operator start (`manual_off`, kept across agent restarts, not reboots).
+- **`always_on`** keeps the OS's own startup switch: Explorer's
+  `StartupApproved\StartupFolder` value for the Startup shortcut, launchd's
+  enable/disable, systemd's.
+
+One verb runs at a time; each outcome is a row of the document's
+`actions` under the controller's request id.
+
 ## Verbs
 
 ```
@@ -479,6 +522,7 @@ C:\ProgramData\daedalus-agent\state.json                  the last update check 
 C:\ProgramData\daedalus-agent\identity.key                the machine's key
 C:\ProgramData\daedalus-agent\policy.json                 the last policy the controller sent
 C:\ProgramData\daedalus-agent\agent.lock                  held while the service runs: one per data directory
+C:\ProgramData\daedalus-agent\providers\              a provider install's journal, its installers (the last good one kept), the user's manual-off
 C:\ProgramData\daedalus-agent\logs\agent.log.*            the service's daily log
 \\.\pipe\daedalus-agent                                   the local socket
 %LOCALAPPDATA%\daedalus-agent\logs\                       the tray's and the session's logs, claude-rc.log, claude-session-<uuid>.log
