@@ -405,6 +405,11 @@ export const SCHEMA = {
     about: 'The supergateway fronting yazio-mcp.',
     source: 'stacks/yazio-mcp fleet.dashboard.yazio-mcp.env',
   },
+  GETBASED_REV: {
+    kind: 'string',
+    about: 'The getbased source commit the health record is built from.',
+    source: 'stacks/getbased fleet.dashboard.getbased.env',
+  },
   PGVECTOR_REV: {
     kind: 'string',
     about: 'The source commit litellm-pgvector is built from.',

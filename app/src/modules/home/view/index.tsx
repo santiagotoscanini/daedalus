@@ -5,7 +5,6 @@ import { FilesView } from './files'
 import { FinanceView } from './finance'
 import { HouseView } from './house'
 import { IdpView } from './idp'
-import { PantryView } from './pantry'
 import { PhotosView } from './photos'
 import { ToolsView } from './tools'
 
@@ -23,7 +22,6 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   house: HouseView,
   photos: PhotosView,
   files: FilesView,
-  pantry: PantryView,
   signin: IdpView,
   finance: FinanceView,
   tools: ToolsView,

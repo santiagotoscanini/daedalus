@@ -4,15 +4,17 @@ import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/ser
 import { FOOT, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { num } from '../../../lib/format'
-import type { HomeData } from '../data'
-import { FOOT_WARN } from './shared'
+import type { HealthData } from '../data'
+import { FOOT_WARN, ServerPair } from './shared'
 
-// Home › Pantry: Grocy — stock past its date, and the chores and tasks lists.
+// Health › Pantry: Grocy — stock past its date, and the chores and tasks lists —
+// and the MCP server that lets a model read and write the same stock.
 
-type Pantry = Extract<HomeData, { tab: 'pantry' }>
+type Pantry = Extract<HealthData, { tab: 'pantry' }>
 
 export function PantryView({ data: d }: { data: Pantry }) {
   const alarm = (d.overdue ?? 0) + (d.expired ?? 0)
+  const listsEmpty = d.chores.total === 0 && d.tasks.total === 0
 
   return (
     <>
@@ -25,8 +27,9 @@ export function PantryView({ data: d }: { data: Pantry }) {
         compare={compareOf(d.gap, 'from /api/system/info')}
         lede={
           <>
-            Household stock, chores and tasks. A PHP-FPM image, so it is one of the two containers
-            here that refuse to run as container root and keep the linuxserver default uid instead.
+            Household stock, chores and tasks: what food is in the house, and what is about to go
+            off. A PHP-FPM image, so it is one of the containers that refuse to run as container
+            root and keep the linuxserver default uid instead.
           </>
         }
         actions={<Open name="Grocy" host="grocy" />}
@@ -89,14 +92,28 @@ export function PantryView({ data: d }: { data: Pantry }) {
               },
             ]}
           />
-          <p className={FOOT}>
-            Both lists are empty on this instance. The stock half is what it is used for.
-          </p>
+          {listsEmpty && (
+            <p className={FOOT}>Both lists are empty. The stock half is what it is used for.</p>
+          )}
         </Board>
 
         <Changelog gap={d.gap} span={12} />
 
         <LogBoard source={{ container: 'grocy' }} title="Grocy logs" />
+
+        <ServerPair
+          label="Grocy MCP"
+          container="mcp-grocy"
+          version={d.mcp.version}
+          gap={d.mcp.gap}
+          note={
+            <p className={FOOT}>
+              The same stock as a tool server on the LLM gateway, so a model can check what is in
+              the house or add a purchase. It talks to Grocy&rsquo;s API with its own key; what
+              models called it lands in the gateway&rsquo;s tool counts on AI › Gateway.
+            </p>
+          }
+        />
       </BoardGrid>
     </>
   )

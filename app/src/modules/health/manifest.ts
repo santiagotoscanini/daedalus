@@ -1,0 +1,44 @@
+import type { ModuleManifest } from '../../lib/modules/manifest'
+
+export const manifest = {
+  id: 'health',
+  label: 'Health',
+  lede: 'One person’s record, and the services that feed what they eat and how they train.',
+  order: 35,
+  // Shaped to Record, which opens by default.
+  boardSpans: [8, 4, 6, 6],
+  // A tab per subject, in the order a body is read: the record that holds
+  // everything measured, then the three inputs to it — food in the house,
+  // food eaten, training done.
+  //
+  // The rule divides a service you open from a tool server a model calls.
+  // Record and Pantry are applications with their own pages; Nutrition and
+  // Training are MCP servers that exist only behind the gateway, with no UI
+  // to open, so their tabs are a version and a log.
+  tabs: [
+    {
+      id: 'record',
+      label: 'Record',
+      probes: ['getbased', 'getbased-relay'],
+      boardSpans: [8, 4, 6, 6],
+      nix: 'getbased',
+    },
+    // Grocy and the MCP server that puts it on the gateway: one subject, so
+    // one tab, shown while either half is.
+    {
+      id: 'pantry',
+      label: 'Pantry',
+      probe: 'grocy',
+      boardSpans: [8, 4, 12],
+      nix: ['grocy', 'grocy-mcp'],
+    },
+    {
+      id: 'nutrition',
+      label: 'Nutrition',
+      boardSpans: [4, 4, 4],
+      dividerBefore: true,
+      nix: 'yazio-mcp',
+    },
+    { id: 'training', label: 'Training', boardSpans: [6, 6], nix: 'hevy-mcp' },
+  ],
+} as const satisfies ModuleManifest

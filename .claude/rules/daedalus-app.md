@@ -36,7 +36,7 @@ loaded. They are not repeated here.
   through the MCP tools at `/mcp` (`host/mcp/`) — those are the two
   doors onto a flow.
 - **The dashboard modules — `src/modules/<id>/`**: one directory per
-  category page (actions, ai, database, gaming, home, media, monitoring,
+  category page (actions, ai, database, gaming, health, home, media, monitoring,
   network, system),
   found by `import.meta.glob`, never listed. Each holds `manifest.ts`
   (pure data: label, lede, rail `order`, the tabs with their probes,

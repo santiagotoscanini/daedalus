@@ -199,25 +199,19 @@ type NeighbourData = LitellmData['neighbours'][number]
  * things ever wanted from a container with no page of its own: what would
  * change if I updated it, and what has it been saying. The title carries the
  * verdict, so the row answers "is anything here behind" before it is read.
- *
- * A container that is two projects (`via`) gets a third of the row for each:
- * two changelogs and the one log, rather than one changelog silently speaking
- * for both.
  */
 export function NeighbourPair({ n }: { n: NeighbourData }) {
   const behind = n.gap?.behind.length ?? n.build?.behind.length ?? 0
   const unit =
     n.gap !== null ? (behind === 1 ? 'release behind' : 'releases behind') : 'commits behind'
   const count = String(behind)
-  const span = n.via === null ? 6 : 4
-  const viaBehind = n.via?.gap?.behind.length ?? 0
 
   return (
     <>
       <Changelog
         gap={n.gap}
         build={n.build}
-        span={span}
+        span={6}
         title={behind === 0 ? `${n.label} — current` : `${n.label} — ${count} ${unit}`}
         aside={
           <span className={NOTE}>
@@ -226,30 +220,10 @@ export function NeighbourPair({ n }: { n: NeighbourData }) {
         }
         foot={<p className={FOOT}>{n.note}</p>}
       />
-      {n.via !== null && (
-        <Changelog
-          gap={n.via.gap}
-          span={span}
-          title={
-            viaBehind === 0
-              ? `${n.via.label} — current`
-              : `${n.via.label} — ${String(viaBehind)} ${viaBehind === 1 ? 'release behind' : 'releases behind'}`
-          }
-          aside={
-            <span className={NOTE}>
-              {n.via.version === null ? (
-                'version unknown'
-              ) : (
-                <span className={MONO}>{n.via.version}</span>
-              )}
-            </span>
-          }
-        />
-      )}
       <Board
         title={`${n.label} logs`}
         icon="logs"
-        span={span}
+        span={6}
         aside={<span className={NOTE}>{n.role}</span>}
       >
         <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />

@@ -20,6 +20,7 @@ export type NavIconName =
   | 'ai'
   | 'media'
   | 'home'
+  | 'health'
   | 'gaming'
   | 'network'
   | 'system'
@@ -74,6 +75,13 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
     <>
       <path d="M3.6 10.5 12 3.8l8.4 6.7v8.3a1.7 1.7 0 0 1-1.7 1.7H5.3a1.7 1.7 0 0 1-1.7-1.7Z" />
       <path d="M9.5 20.5v-5.9h5v5.9" />
+    </>
+  ),
+  // A heart with a pulse through it: the record is measurements over time.
+  health: (
+    <>
+      <path d="M12 20.2s-7.9-4.6-7.9-10.3A4.4 4.4 0 0 1 12 7.5a4.4 4.4 0 0 1 7.9 2.4c0 5.7-7.9 10.3-7.9 10.3Z" />
+      <path d="M3.6 12.6h4.2l1.7-2.8 2.6 5 1.6-2.2h6.7" />
     </>
   ),
   gaming: (

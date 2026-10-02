@@ -11,8 +11,8 @@ export const manifest = {
   // version, the verdict on it, or the log.
   //
   // The rule (`dividerBefore`) divides WHOSE data it is. To its left, what the whole house
-  // shares: the automation, the photo library, the file sync, the pantry,
-  // and the directory of who can open any of them. To its right, what one
+  // shares: the automation, the photo library, the file sync, and the
+  // directory of who can open any of them. To its right, what one
   // person keeps here. It is the only axis on which Wealthfolio and
   // Nextcloud differ — every other reading of "home" puts them together.
   //
@@ -35,7 +35,6 @@ export const manifest = {
       boardSpans: [8, 4, 4, 4],
       nix: 'nextcloud',
     },
-    { id: 'pantry', label: 'Pantry', probe: 'grocy', boardSpans: [8, 4, 12], nix: 'grocy' },
     // Pocket ID — ./view/idp.tsx says why it is a Home tab.
     {
       id: 'signin',
