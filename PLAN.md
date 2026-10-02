@@ -450,14 +450,12 @@ stable — code cites them.
    contain secrets a session read. The claude-rc journal keeps its own copy
    ≤1 month (root-only). Open question: exclude or prune them from ZFS
    snapshots/backups.
-2. **License for the engine.** No `LICENSE` file exists; the Rust crates
-   already declare MIT in `Cargo.toml`. Needed before the first `v*` tag.
-3. **`--init` as the default in `mkRootlessContainer`.** node as PID 1
+2. **`--init` as the default in `mkRootlessContainer`.** node as PID 1
    never reaps orphaned grandchildren (yazio leaked a pid per session to
    the 2048 ceiling; plutus had 35 chromium zombies). The apps platform has
    it; the other sixty containers do not, and the general fix is one line
    touching all of them.
-4. **Rewriting published history** for the three commits that carried the
+3. **Rewriting published history** for the three commits that carried the
    router's retail name in the public engine. Low sensitivity; it is an
    option.
 
@@ -492,7 +490,7 @@ Hand edits the UI cannot make for itself:
    the runtime line takes over on the next policy save.
 6. **Drop `DEPLOY_HOOK_TOKEN`** from `host/sops/registry/env.sops`: nothing
    reads it.
-7. **The first tag and the license** (Phase 10b, open decision 2) — one
+7. **The first `v*` tag** (Phase 10b, open decision 2) — one
    act, when the operator chooses.
 
 ## Engine polish
