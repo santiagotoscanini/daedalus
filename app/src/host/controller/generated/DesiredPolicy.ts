@@ -4,7 +4,9 @@ import type { Policy } from "./Policy";
 /**
  * A machine's policy as the app hands it over: the policy the machine is
  * sent (link/wire.rs `Policy` — its `session_host` is the controller's to
- * fill, and refused here), and what only the controller keeps: whether the
- * app offers the machine's lemonade to the gateway (`/nodes/metrics`).
+ * fill, and refused here), and what only the controller keeps for
+ * `/nodes/metrics`: whether the app offers the machine's lemonade to the
+ * gateway, and whether the machine's link going down should alert
+ * (`daedalus_agent_link_alert`; on unless the app says otherwise).
  */
-export type DesiredPolicy = { policy: Policy, offer_lemonade: boolean, };
+export type DesiredPolicy = { policy: Policy, offer_lemonade: boolean, alert_link: boolean, };

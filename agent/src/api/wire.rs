@@ -507,8 +507,10 @@ pub enum DesiredState {
 
 /// A machine's policy as the app hands it over: the policy the machine is
 /// sent (link/wire.rs `Policy` — its `session_host` is the controller's to
-/// fill, and refused here), and what only the controller keeps: whether the
-/// app offers the machine's lemonade to the gateway (`/nodes/metrics`).
+/// fill, and refused here), and what only the controller keeps for
+/// `/nodes/metrics`: whether the app offers the machine's lemonade to the
+/// gateway, and whether the machine's link going down should alert
+/// (`daedalus_agent_link_alert`; on unless the app says otherwise).
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -516,6 +518,12 @@ pub struct DesiredPolicy {
     pub policy: Policy,
     #[serde(default)]
     pub offer_lemonade: bool,
+    #[serde(default = "alert_link_default")]
+    pub alert_link: bool,
+}
+
+const fn alert_link_default() -> bool {
+    true
 }
 
 /// `nodes.set_desired`'s answer: how many keys the set holds, and what
@@ -1540,6 +1548,7 @@ mod tests {
         // The offer is the controller's (metrics); the machine's policy is the rest.
         let d = set.nodes[0].policy.clone().unwrap();
         assert!(d.offer_lemonade);
+        assert!(d.alert_link, "an absent alert switch is on");
         let p = d.policy;
         assert_eq!(
             serde_json::to_string(&p).unwrap(),

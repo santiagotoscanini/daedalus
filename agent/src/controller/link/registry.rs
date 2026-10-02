@@ -186,6 +186,9 @@ struct Desired {
     /// The app offers its lemonade to the gateway; `/nodes/metrics` labels
     /// that `provider_up` `offered="1"`.
     offer_lemonade: bool,
+    /// Its link going down should alert: `/nodes/metrics`'
+    /// `daedalus_agent_link_alert`, which Machine Link Down reads.
+    alert_link: bool,
 }
 
 /// One entry of the app's set, checked (controller/api/mod.rs parses and validates).
@@ -199,6 +202,9 @@ pub struct DesiredEntry {
     /// The app offers its lemonade to the gateway (`/nodes/metrics`); the
     /// machine is not told.
     pub offer_lemonade: bool,
+    /// Its link going down should alert (`/nodes/metrics`); the machine is
+    /// not told.
+    pub alert_link: bool,
 }
 
 #[derive(Default)]
@@ -835,6 +841,7 @@ impl Registry {
                         policy: d.policy,
                         name: d.name,
                         offer_lemonade: d.offer_lemonade,
+                        alert_link: d.alert_link,
                     },
                 )
             })
@@ -1236,7 +1243,10 @@ impl Registry {
     }
 
     /// Prometheus text for `/nodes/metrics`: every approved machine's
-    /// `daedalus_agent_link_up` (1 while connected), and the connected
+    /// `daedalus_agent_link_up` (1 while connected) and
+    /// `daedalus_agent_link_alert` (1 unless the app turned its alert off;
+    /// labelled `node` alone, and there before the machine's first hello
+    /// since a restart), and the connected
     /// ones' telemetry and Claude series (telemetry/metrics.rs; the
     /// controller's own Claude is added by metrics_page.rs). Every series carries the
     /// machine's `node` id, `host` and `os` from its hello, and `machine`:
@@ -1257,11 +1267,25 @@ impl Registry {
             claude: Option<Report>,
             providers: Option<Vec<ProviderReport>>,
         }
-        let rows: Vec<Row> = {
+        let (rows, alerts): (Vec<Row>, Vec<(String, bool)>) = {
             let reg = self.lock();
+            // Every approved machine's alert switch, hello or not: after a
+            // restart a machine that has not connected since has no
+            // `link_up`, and Machine Link Down counts it down from its
+            // history, so the switch must be there to exclude it.
+            let mut alerts: Vec<(String, bool)> = reg
+                .desired
+                .keys()
+                .filter_map(|id| {
+                    let d = reg.decided(id)?;
+                    (d.state == DesiredState::Approved).then(|| (id.clone(), d.alert_link))
+                })
+                .collect();
+            alerts.sort();
             let mut ids: Vec<&String> = reg.nodes.keys().collect();
             ids.sort();
-            ids.into_iter()
+            let rows = ids
+                .into_iter()
                 .filter_map(|id| {
                     let d = reg.decided(id)?;
                     if d.state != DesiredState::Approved {
@@ -1297,9 +1321,17 @@ impl Registry {
                             .map(|(l, _)| l.clone()),
                     })
                 })
-                .collect()
+                .collect();
+            (rows, alerts)
         };
         let mut out = String::new();
+        // Node ids are 16 hex digits (api/mod.rs `checked_id`): no escaping.
+        for (id, on) in &alerts {
+            out.push_str(&format!(
+                "daedalus_agent_link_alert{{node=\"{id}\"}} {}\n",
+                u8::from(*on)
+            ));
+        }
         for r in &rows {
             let labels = crate::telemetry::Labels {
                 node: &r.id,

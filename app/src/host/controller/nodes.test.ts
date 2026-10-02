@@ -68,6 +68,7 @@ describe('the desired set', () => {
           providers: { lemonade: { port: 8000 } },
         },
         offer_lemonade: true,
+        alert_link: true,
       },
     })
     // A revoked key hears no policy, santree or not: the allow-list never holds it.
@@ -87,6 +88,7 @@ describe('the desired set', () => {
         providers: { lemonade: { port: 13305 } },
       },
       offer_lemonade: false,
+      alert_link: true,
     })
     // Sorted by id, so the same table sends the same set.
     expect(nodes.map((n) => n.id)).toEqual([...nodes.map((n) => n.id)].sort())

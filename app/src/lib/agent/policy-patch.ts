@@ -30,6 +30,7 @@ const POLICY_KEYS = [
   'awakeHold',
   'claudeRemoteControl',
   'santree',
+  'alertLinkDown',
 ] as const satisfies readonly (keyof NodePolicy)[]
 
 const isPolicyKey = (k: unknown): k is (typeof POLICY_KEYS)[number] =>
@@ -145,7 +146,7 @@ function checkedPolicy(o: Record<string, unknown>): NodePolicy {
     }
     if (Object.keys(hardware).length > 0) policy.hardware = hardware
   }
-  for (const k of ['awakeHold', 'claudeRemoteControl', 'santree'] as const) {
+  for (const k of ['awakeHold', 'claudeRemoteControl', 'santree', 'alertLinkDown'] as const) {
     if (o[k] !== undefined) {
       if (typeof o[k] !== 'boolean') throw new Error(`${k} must be true or false`)
       policy[k] = o[k]

@@ -156,6 +156,15 @@ export function usePolicyEditor(n: NodeRow, opts: { askSantree?: boolean } = {})
     showClaude(v)
     save(only('claudeRemoteControl', v))
   }
+  const [alertLink, showAlertLink] = useShown(
+    n.policy.alertLinkDown ?? POLICY_DEFAULTS.alertLinkDown,
+    busy,
+    failed,
+  )
+  const setAlertLink = (v: boolean) => {
+    showAlertLink(v)
+    save(only('alertLinkDown', v))
+  }
   // ON asks first (the confirmation); OFF is a save like the others.
   const [askingSantree, setAskingSantree] = useState(
     opts.askSantree === true && n.policy.santree !== true,
@@ -195,6 +204,8 @@ export function usePolicyEditor(n: NodeRow, opts: { askSantree?: boolean } = {})
     setAwake,
     claude,
     setClaude,
+    alertLink,
+    setAlertLink,
     santree,
     setSantree,
     askingSantree,

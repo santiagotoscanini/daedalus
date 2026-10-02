@@ -1,4 +1,4 @@
-// The policy's later sections, a row list each: awake, Claude, santree, hardware.
+// The policy's later sections, a row list each: awake, alert, Claude, santree, hardware.
 
 import type { KeyboardEvent } from 'react'
 import type { MachineShape } from '../../../lib/dashboard/machines'
@@ -32,6 +32,32 @@ export function policyAwake(ed: PolicyEditor): Row[] {
           <span className={ASIDE}>
             On, the agent holds a power request for as long as it runs and turns the plan's sleep
             timers off. Off releases the request; the plan is left as it is.
+          </span>
+        </Stack>
+      ),
+    },
+  ]
+}
+
+/** Whether Machine Link Down mails when the machine's link is down. */
+export function policyAlert(ed: PolicyEditor): Row[] {
+  return [
+    {
+      k: 'Alert when disconnected',
+      v: (
+        <Stack>
+          <span className="inline-flex items-center gap-3">
+            <Switch
+              checked={ed.alertLink}
+              disabled={ed.busy}
+              onCheckedChange={ed.setAlertLink}
+              aria-label="Alert when disconnected"
+            />
+            <span className="text-[0.82rem]">{ed.alertLink ? 'alerts' : 'quiet'}</span>
+          </span>
+          <span className={ASIDE}>
+            On, Grafana's Machine Link Down fires after the link has been down for 5 minutes. Turn
+            it off for a laptop that sleeps or leaves the house; the pages still show it offline.
           </span>
         </Stack>
       ),

@@ -726,9 +726,9 @@ fn desired_entries(
             if let Some(name) = &n.name {
                 checked_name(&n.id, name)?;
             }
-            let (mut policy, offer_lemonade) = n.policy.map_or_else(
-                || (Policy::default(), false),
-                |d| (d.policy, d.offer_lemonade),
+            let (mut policy, offer_lemonade, alert_link) = n.policy.map_or_else(
+                || (Policy::default(), false, true),
+                |d| (d.policy, d.offer_lemonade, d.alert_link),
             );
             if policy.session_host.is_some() {
                 return Err(ApiError::new(
@@ -744,6 +744,7 @@ fn desired_entries(
                 policy,
                 name: n.name,
                 offer_lemonade,
+                alert_link,
             })
         })
         .collect()
@@ -838,10 +839,12 @@ mod tests {
         let e = set(serde_json::json!({
             "policy": {"awake_hold": true, "claude_remote_control": false, "claude_workdir": " ",
                        "providers": {"lemonade": {"port": 8000}}},
-            "offer_lemonade": true
+            "offer_lemonade": true,
+            "alert_link": false
         }))
         .unwrap();
         assert!(e[0].offer_lemonade);
+        assert!(!e[0].alert_link);
         assert_eq!(
             e[0].policy.claude_workdir, None,
             "a blank directory is none"

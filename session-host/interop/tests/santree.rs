@@ -71,6 +71,7 @@ fn entry(node: &Identity, santree: bool) -> DesiredEntry {
         },
         name: Some("MacBook".into()),
         offer_lemonade: false,
+        alert_link: true,
     }
 }
 

@@ -11,6 +11,7 @@ describe('the policy a machine hears', () => {
         providers: { lemonade: { port: 13305 } },
       },
       offer_lemonade: false,
+      alert_link: true,
     })
   })
 
@@ -21,6 +22,7 @@ describe('the policy a machine hears', () => {
       awakeHold: false,
       claudeRemoteControl: false,
       claudeWorkdir: ' C:/work ',
+      alertLinkDown: false,
       providers: { lemonade: { port: 9000, offer: true, models: {} } },
       hardware: { finish: 'space-black' },
     })
@@ -33,6 +35,7 @@ describe('the policy a machine hears', () => {
         providers: { lemonade: { port: 9000 } },
       },
       offer_lemonade: true,
+      alert_link: false,
     })
   })
 

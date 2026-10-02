@@ -17,6 +17,8 @@ export const POLICY_DEFAULTS = {
   awakeHold: true,
   claudeRemoteControl: true,
   santree: false,
+  /** Not the agent's: the controller's, for Machine Link Down. */
+  alertLinkDown: true,
 } as const
 
 export type EffectivePolicy = {
@@ -43,8 +45,10 @@ export function effectivePolicy(p: NodePolicy): EffectivePolicy {
 /**
  * The machine's policy as the controller takes it (`DesiredPolicy`, generated
  * from wire.rs): the agent's `Policy`, and whether the gateway is offered the
- * machine's lemonade — which the controller keeps for `/nodes/metrics` (the
- * "Model Server Down" alert fires on offered ones) and the machine is not told.
+ * machine's lemonade and whether its link going down alerts — which the
+ * controller keeps for `/nodes/metrics` ("Model Server Down" fires on offered
+ * providers, "Machine Link Down" on alerting machines) and the machine is not
+ * told.
  */
 export function wirePolicy(p: NodePolicy): DesiredPolicy {
   const e = effectivePolicy(p)
@@ -58,6 +62,7 @@ export function wirePolicy(p: NodePolicy): DesiredPolicy {
       providers: { lemonade: { port: e.providers.lemonade.port } },
     },
     offer_lemonade: p.providers?.lemonade?.offer === true,
+    alert_link: p.alertLinkDown ?? POLICY_DEFAULTS.alertLinkDown,
   }
 }
 

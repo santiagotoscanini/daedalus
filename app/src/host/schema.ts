@@ -706,6 +706,12 @@ export type NodePolicy = {
    */
   santree?: boolean
   /**
+   * Machine Link Down alerts when this machine's link to the controller is
+   * down. The controller labels it in /nodes/metrics; the machine never
+   * hears it. Unset is on: off suits a laptop that sleeps or leaves home.
+   */
+  alertLinkDown?: boolean
+  /**
    * The parts nothing in the machine reports — case, cooler, power supply —
    * chosen from lib/hardware/catalog.ts by id. Only the pages read these;
    * the agent never hears them.

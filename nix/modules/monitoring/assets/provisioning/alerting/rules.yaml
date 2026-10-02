@@ -1239,6 +1239,10 @@ groups:
       # seen in the last day and absent now as down too (on(node), so a
       # rename is not a second machine). The price: a machine revoked or
       # forgotten reads as down until its day of history runs out. The
+      # `unless` drops a machine whose "Alert when disconnected" is off
+      # (Settings › Machines): the controller serves that switch as
+      # `daedalus_agent_link_alert` for every approved machine, hello or
+      # not, so it holds after a restart too. The
       # controller itself down is Scrape Target Down above. noDataState OK:
       # a box with no approved machines has no series.
       - uid: machine-link-down-1
@@ -1251,7 +1255,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: daedalus_agent_link_up or on(node) (last_over_time(daedalus_agent_link_up[1d]) * 0)
+              expr: (daedalus_agent_link_up or on(node) (last_over_time(daedalus_agent_link_up[1d]) * 0)) unless on(node) (daedalus_agent_link_alert == 0)
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200

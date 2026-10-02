@@ -19,6 +19,7 @@ import { ProviderModels } from '../provider-models'
 import { ASIDE, ERROR_NOTE, FIELD_LABEL, Mono, Rows, Stack } from '../shared'
 import {
   blurOnEnter,
+  policyAlert,
   policyAwake,
   policyClaude,
   policyHardware,
@@ -27,10 +28,10 @@ import {
 import { type PolicyEditor, usePolicyEditor } from './use-policy-editor'
 
 // What the box asks of an approved machine, one row per thing it can ask:
-// its names, the model servers it offers, keeping it awake, Claude, santree,
-// and the parts nothing in it reports. Each row saves on its own
-// (./use-policy-editor.ts). The groups below return rows, not cards, so the
-// whole policy stays one list.
+// its names, the model servers it offers, keeping it awake, alerting when it
+// is disconnected, Claude, santree, and the parts nothing in it reports. Each
+// row saves on its own (./use-policy-editor.ts). The groups below return rows,
+// not cards, so the whole policy stays one list.
 
 export type Row = { k: string; v: ReactNode }
 
@@ -63,6 +64,7 @@ export function Policy({
           ...policyNames(ed, n, lanDomain),
           ...policyProviders(ed, n, lanDomain),
           ...policyAwake(ed),
+          ...policyAlert(ed),
           ...policyClaude(ed, n),
           ...policySantree(ed, n, os, agentVersion),
           ...policyHardware(ed, n, shape),

@@ -149,6 +149,7 @@ fn entry(nid: &Identity, state: DesiredState, policy: crate::link::wire::Policy)
         policy,
         name: None,
         offer_lemonade: false,
+        alert_link: true,
     }
 }
 
@@ -262,6 +263,13 @@ fn an_approved_machine_connects_and_pushes() {
         "{m}"
     );
     assert!(
+        m.contains(&format!(
+            "daedalus_agent_link_alert{{node=\"{}\"}} 1\n",
+            nid.node_id()
+        )),
+        "{m}"
+    );
+    assert!(
         m.contains(&format!("daedalus_agent_processes{{{labels}}} 300\n")),
         "{m}"
     );
@@ -285,7 +293,18 @@ fn a_machine_pushes_its_providers_and_the_controller_keeps_them() {
     let nid = id(40);
     let mut e = entry(&nid, DesiredState::Approved, claude_policy());
     e.offer_lemonade = true;
+    e.alert_link = false;
     ctl.registry.set_desired(vec![e]);
+    // The alert switch is there before the machine ever says hello, so
+    // Machine Link Down can leave it out after a controller restart.
+    let m = ctl.registry.metrics();
+    assert_eq!(
+        m,
+        format!(
+            "daedalus_agent_link_alert{{node=\"{}\"}} 0\n",
+            nid.node_id()
+        )
+    );
     // Before any document: known, and null.
     let none = ctl.registry.providers(&nid.node_id()).unwrap();
     assert_eq!((none.connected, none.providers.is_none()), (false, true));
@@ -1135,6 +1154,7 @@ fn a_decision_is_for_a_key_not_an_id() {
         policy: claude_policy(),
         name: None,
         offer_lemonade: false,
+        alert_link: true,
     }]);
     let (_t, line) = raw(&ctl, &nid).unwrap();
     assert!(

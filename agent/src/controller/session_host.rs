@@ -483,6 +483,7 @@ mod tests {
             },
             name: Some(format!("machine {n}")),
             offer_lemonade: false,
+            alert_link: true,
         }
     }
 
