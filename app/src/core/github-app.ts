@@ -1,6 +1,11 @@
 import { readCommittedSite } from '../host/contract/domains/site-doc'
 import type { SnapshotResult } from '../host/contract/snapshot'
-import { type GithubInstallation, readGithubInstallation, usableToken } from '../host/github-token'
+import {
+  type GithubInstallation,
+  readGithubInstallation,
+  readOtherInstallations,
+  usableToken,
+} from '../host/github-token'
 import { runRoot } from '../host/root'
 import type { Result } from '../lib/result'
 import type { Ctx } from './ctx'
@@ -32,6 +37,23 @@ export async function appIdentity(_ctx: Ctx): Promise<SiteGithubApp | null> {
 /** The installation file the host's minter publishes (GITHUB_TOKEN_PATH). */
 export function installationState(ctx: Ctx): Promise<SnapshotResult<GithubInstallation>> {
   return readGithubInstallation(ctx.env)
+}
+
+/**
+ * The App's other installations (GITHUB_INSTALLATIONS_PATH) — read-only tokens
+ * for the accounts and orgs besides the owner's. Empty until the App is
+ * installed somewhere else.
+ */
+export function otherInstallations(ctx: Ctx): Promise<SnapshotResult<GithubInstallation[]>> {
+  return readOtherInstallations(ctx.env)
+}
+
+/** The token for installation `as`, the owner's when null; null when none is usable. */
+async function tokenFor(ctx: Ctx, as: number | null): Promise<string | null> {
+  if (as === null) return usableToken(await installationState(ctx))
+  const others = await otherInstallations(ctx)
+  const entry = others.data.find((i) => i.installationId === as)
+  return entry === undefined ? null : usableToken({ ...others, data: entry })
 }
 
 // On globalThis so a Vite re-evaluation does not reset the debounce.
@@ -93,16 +115,19 @@ export function retryAfterMs(status: number, headers: Headers, now = Date.now())
 }
 
 /**
- * One call to the GitHub API as the installation. Never throws and never
- * retries: a 401 asks the host for a new token (once, debounced) and a rate
- * limit comes back as `retryAfterMs`, and what to do next is the caller's call.
+ * One call to the GitHub API as the installation — the owner's, or `as`, one
+ * of the other installations (read-only, for discovery). Never throws and
+ * never retries: a 401 asks the host for a new token (once, debounced) and a
+ * rate limit comes back as `retryAfterMs`, and what to do next is the
+ * caller's call.
  */
 export async function ghApp<T = unknown>(
   ctx: Ctx,
   path: string,
   init: RequestInit = {},
+  as: number | null = null,
 ): Promise<GhResult<T>> {
-  const token = usableToken(await installationState(ctx))
+  const token = await tokenFor(ctx, as)
   if (token === null) {
     await requestTokenRefresh(ctx)
     return none('no-token')
@@ -214,6 +239,9 @@ export type InstallationRepo = {
   /** The two the create form's picker renders; nothing else reads them. */
   description: string | null
   language: string | null
+  /** Whether GitHub Pages is on — what the off-box list asks `/pages` about. */
+  hasPages: boolean
+  homepage: string | null
 }
 
 /** lib/result.ts's shape plus the backoff a rate-limited listing asks for. */
@@ -247,19 +275,26 @@ function readRepo(raw: unknown): InstallationRepo | null {
     pushedAt: typeof r.pushed_at === 'string' ? r.pushed_at : null,
     description: text(r.description),
     language: text(r.language),
+    hasPages: r.has_pages === true,
+    homepage: text(r.homepage),
   }
 }
 
 const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 
-/** Every repository the installation can see, by name. */
-export async function listInstallationRepos(ctx: Ctx): Promise<InstallationRepos> {
+/** Every repository the installation (`as`, the owner's when null) can see, by name. */
+export async function listInstallationRepos(
+  ctx: Ctx,
+  as: number | null = null,
+): Promise<InstallationRepos> {
   const repos: InstallationRepo[] = []
   let total = 0
   for (let page = 1; page <= MAX_PAGES; page++) {
     const r = await ghApp<{ total_count?: unknown; repositories?: unknown }>(
       ctx,
       `/installation/repositories?per_page=${String(PER_PAGE)}&page=${String(page)}`,
+      {},
+      as,
     )
     if (r.status !== 200 || r.body === null) {
       return { ok: false, reason: describeGhFailure(r), retryAfterMs: r.retryAfterMs }

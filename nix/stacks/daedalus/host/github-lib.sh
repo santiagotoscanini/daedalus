@@ -180,14 +180,15 @@ gh_installation() {
   fi
 }
 
-# Mint an installation token for the installation gh_installation found.
-# $1 = the request body file (the permissions to narrow the token to). On
-# success the token answer (token, expires_at, …) is in $GH_TMP/token.json.
+# Mint an installation token. $1 = the request body file (the permissions to
+# narrow the token to); $2 = the installation object, gh_installation's by
+# default. On success the token answer (token, expires_at, …) is in
+# $GH_TMP/token.json.
 gh_mint() {
   set +x
-  local body="$1" id
+  local body="$1" inst="${2:-$GH_TMP/installation.json}" id
   GH_ERROR=""
-  id="$(jq -r '.id // ""' "$GH_TMP/installation.json" 2>/dev/null || true)"
+  id="$(jq -r '.id // ""' "$inst" 2>/dev/null || true)"
   if ! [[ "$id" =~ ^[0-9]+$ ]]; then
     GH_ERROR="the installation GitHub listed has no numeric id"
     return 1
@@ -213,4 +214,31 @@ gh_revoke() {
   jq -j '.token // ""' "$file" | gh_write_config "$GH_TMP/revoke.curlrc" || return 1
   gh_api DELETE /installation/token "$GH_TMP/revoke.curlrc" || return 1
   [ "$GH_STATUS" = 204 ]
+}
+
+# Narrow wanted permissions file $1 ({"permissions":{…}}) to what installation
+# file $2 was granted — a granted `write` covers a wanted `read` — into the
+# request body $3, and the names left out into $4 as a JSON array. GitHub
+# refuses a whole token (422) that names one permission the installation was
+# not granted, so asking for the intersection is what lets a permission be
+# added here before the operator accepts it there: until then the box keeps
+# every other one and reports the missing one.
+gh_narrow() {
+  local wanted="$1" inst="$2" req="$3" missing="$4"
+  jq -c --slurpfile i "$inst" '
+    def rank: {"read": 1, "write": 2, "admin": 3}[.] // 0;
+    ($i[0].permissions // {}) as $g
+    | {permissions: (.permissions | with_entries(select(($g[.key] // "" | rank) >= (.value | rank))))}
+  ' "$wanted" >"$req" || return 1
+  jq -c --slurpfile r "$req" '[.permissions | keys[] | select(in($r[0].permissions) | not)]' \
+    "$wanted" >"$missing"
+}
+
+# Every installation of the App except the one gh_installation picked, and
+# not suspended, into $GH_TMP/others.json as an array. Reads the listing
+# gh_installation left in $GH_TMP/body, so call it straight after that.
+gh_other_installations() {
+  jq -c --argjson owner "$OWNER_ID" \
+    '[.[] | select(.account.id != $owner and .suspended_at == null)]' \
+    "$GH_TMP/body" >"$GH_TMP/others.json"
 }

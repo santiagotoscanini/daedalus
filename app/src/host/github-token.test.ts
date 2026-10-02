@@ -8,6 +8,7 @@ import {
   NO_INSTALLATION,
   publicInstallation,
   readGithubInstallation,
+  readOtherInstallations,
   tokenUsable,
   usableToken,
 } from './github-token'
@@ -64,7 +65,12 @@ describe('readGithubInstallation', () => {
     const r = await readGithubInstallation(env)
     expect(r.available).toBe(true)
     expect(r.stale).toBe(false)
-    expect(r.data).toEqual({ ...OK, reason: null })
+    expect(r.data).toEqual({ ...OK, reason: null, missingPermissions: [] })
+  })
+
+  it('carries the permissions the installation was not granted', async () => {
+    await write({ ...OK, missingPermissions: ['pages'] })
+    expect((await readGithubInstallation(env)).data.missingPermissions).toEqual(['pages'])
   })
 
   it('decodes an App that is not installed', async () => {
@@ -170,5 +176,48 @@ describe('publicInstallation', () => {
     expect(JSON.stringify(p)).not.toContain(TOKEN)
     expect(p.hasToken).toBe(true)
     expect(publicInstallation(NO_INSTALLATION).hasToken).toBe(false)
+  })
+})
+
+describe('readOtherInstallations', () => {
+  const othersPath = () => join(dir, 'installations.json')
+  const othersEnv = (name: string) =>
+    name === 'GITHUB_INSTALLATIONS_PATH' ? othersPath() : undefined
+  const ENTRY = {
+    installationId: 91_000_001,
+    account: { login: 'santree-ai', id: 55_555_555 },
+    repositorySelection: 'all',
+    state: 'ok',
+    reason: null,
+    token: TOKEN,
+    expiresAt: '2026-09-11T20:45:00Z',
+    missingPermissions: [],
+    mintedAt: '2026-09-11T19:45:00Z',
+  }
+
+  it('decodes each installation into the owner file’s shape', async () => {
+    await writeFile(othersPath(), JSON.stringify({ version: 1, installations: [ENTRY] }), 'utf8')
+    const r = await readOtherInstallations(othersEnv)
+    expect(r.available).toBe(true)
+    expect(r.data).toEqual([{ version: 1, ...ENTRY }])
+    expect(usableToken({ ...r, data: r.data[0] ?? NO_INSTALLATION }, NOW)).toBe(TOKEN)
+  })
+
+  it('is empty when the minter has published nothing', async () => {
+    const r = await readOtherInstallations(othersEnv)
+    expect(r.available).toBe(false)
+    expect(r.data).toEqual([])
+  })
+
+  it('never quotes a token from a malformed file', async () => {
+    await writeFile(
+      othersPath(),
+      JSON.stringify({ version: 1, installations: [{ ...ENTRY, state: TOKEN }] }),
+      'utf8',
+    )
+    const r = await readOtherInstallations(othersEnv)
+    expect(r.data).toEqual([])
+    expect(JSON.stringify(r)).not.toContain(TOKEN)
+    expect(errors.join('\n')).not.toContain(TOKEN)
   })
 })

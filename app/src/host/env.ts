@@ -229,6 +229,11 @@ export const SCHEMA = {
     about: 'The GitHub App’s minted installation token.',
     source: DAEDALUS,
   },
+  GITHUB_INSTALLATIONS_PATH: {
+    kind: 'path',
+    about: 'Read-only tokens for the App’s other installations.',
+    source: DAEDALUS,
+  },
   GITHUB_APP_DIR: {
     kind: 'path',
     about: 'The directory holding the App’s webhook secret.',

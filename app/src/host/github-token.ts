@@ -1,5 +1,6 @@
 import type { EnvReader } from '../lib/builds'
 import {
+  arrayOf,
   DecodeError,
   type Decoder,
   literal,
@@ -38,6 +39,8 @@ export type GithubInstallation = {
   repositorySelection: string | null
   token: string | null
   expiresAt: string | null
+  /** What the minter wanted but the installation was not granted (the token lacks it). */
+  missingPermissions: string[]
   mintedAt: string
 }
 
@@ -50,6 +53,7 @@ export const NO_INSTALLATION: GithubInstallation = {
   repositorySelection: null,
   token: null,
   expiresAt: null,
+  missingPermissions: [],
   mintedAt: '',
 }
 
@@ -98,6 +102,7 @@ const githubInstallationDecoder: Decoder<GithubInstallation> = withoutValues(
     repositorySelection: optional(nullable(str), null),
     token: optional(nullable(str), null),
     expiresAt: optional(nullable(str), null),
+    missingPermissions: optional(arrayOf(str), []),
     mintedAt: str,
   }),
 )
@@ -111,6 +116,49 @@ export async function readGithubInstallation(
     path: env('GITHUB_TOKEN_PATH') ?? DEFAULT_GITHUB_TOKEN_PATH,
     decoder: githubInstallationDecoder,
     fallback: NO_INSTALLATION,
+    acceptVersions: [1],
+    maxAgeMs: GITHUB_TOKEN_MAX_AGE_MS,
+  })
+}
+
+const DEFAULT_GITHUB_INSTALLATIONS_PATH = '/github-token/installations.json'
+
+/**
+ * The App's OTHER installations — every account or org it is installed on
+ * besides the owner's — as the minter publishes them beside the owner's file:
+ * one read-only token each (contents, metadata, actions, pages, deployments), for
+ * discovery and never for building. Entries share GithubInstallation's shape
+ * so `usableToken` and `publicInstallation` apply to them unchanged.
+ */
+const otherInstallationsDecoder: Decoder<GithubInstallation[]> = withoutValues((v, p) =>
+  obj({
+    version: versionOne,
+    installations: arrayOf(
+      obj({
+        state: literal('ok', 'error'),
+        reason: optional(
+          nullable((v, p) => redactSecrets(str(v, p))),
+          null,
+        ),
+        installationId: num,
+        account: obj({ login: str, id: num }),
+        repositorySelection: optional(nullable(str), null),
+        token: optional(nullable(str), null),
+        expiresAt: optional(nullable(str), null),
+        missingPermissions: optional(arrayOf(str), []),
+        mintedAt: str,
+      }),
+    ),
+  })(v, p).installations.map((i) => ({ version: 1 as const, ...i })),
+)
+
+export async function readOtherInstallations(
+  env: EnvReader = processEnv,
+): Promise<SnapshotResult<GithubInstallation[]>> {
+  return readSnapshot({
+    path: env('GITHUB_INSTALLATIONS_PATH') ?? DEFAULT_GITHUB_INSTALLATIONS_PATH,
+    decoder: otherInstallationsDecoder,
+    fallback: [],
     acceptVersions: [1],
     maxAgeMs: GITHUB_TOKEN_MAX_AGE_MS,
   })

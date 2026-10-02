@@ -39,6 +39,7 @@ describe('buildManifest', () => {
       public: false,
       default_permissions: {
         actions: 'read',
+        pages: 'read',
         contents: 'read',
         metadata: 'read',
         checks: 'write',

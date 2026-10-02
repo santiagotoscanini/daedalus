@@ -95,6 +95,9 @@ in
             # dir; mounted only once the App exists, and read as "no App yet"
             # until then.
             GITHUB_TOKEN_PATH = "/github-token/installation.json";
+            # Read-only tokens for every other installation (another account or
+            # org): what the off-box list discovers Pages sites with.
+            GITHUB_INSTALLATIONS_PATH = "/github-token/installations.json";
             GITHUB_APP_DIR = "/github";
 
             # The non-secret half of what the DNS panel needs; the token rides
