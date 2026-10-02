@@ -238,7 +238,9 @@ fn a_switch_shows_the_box_s_value_or_the_one_on_its_way() {
             enabled: true
         }
     );
-    assert_eq!(switches_note(&base, true), "—");
+    assert_eq!(switches_note(Some(&base), true), None);
+    assert_eq!(switches_note(None, true), None);
+    assert_eq!(mark(&sw), Mark::Check);
     // On its way: the value asked for.
     let mut s = base.clone();
     s.pending = vec![PendingView {
@@ -251,6 +253,7 @@ fn a_switch_shows_the_box_s_value_or_the_one_on_its_way() {
         (sw.text.as_str(), sw.checked),
         ("Keep awake — sending…", false)
     );
+    assert_eq!(mark(&sw), Mark::Blank);
     // A click while it is on its way asks for the other value again.
     assert!(next_value(Key::AwakeHold, &s));
     // Not taken: the box's value, and why.
@@ -292,16 +295,16 @@ fn a_switch_shows_the_box_s_value_or_the_one_on_its_way() {
     let sw = switch(Key::AwakeHold, &base, false);
     assert!(!sw.enabled);
     assert_eq!(
-        switches_note(&base, false),
-        "Only santiago can change these"
+        switches_note(Some(&base), false).as_deref(),
+        Some("Only santiago can change these")
     );
     let nobody = View {
         operator: None,
         ..base.clone()
     };
     assert_eq!(
-        switches_note(&nobody, false),
-        "Only the user who installed the agent can change these"
+        switches_note(Some(&nobody), false).as_deref(),
+        Some("Only the user who installed the agent can change these")
     );
     // Not linked: disabled, and why.
     let unlinked = View {
@@ -310,8 +313,8 @@ fn a_switch_shows_the_box_s_value_or_the_one_on_its_way() {
     };
     assert!(!switch(Key::AwakeHold, &unlinked, true).enabled);
     assert_eq!(
-        switches_note(&unlinked, true),
-        "Changes need the box: not connected"
+        switches_note(Some(&unlinked), true).as_deref(),
+        Some("Changes need the box: not connected")
     );
 }
 

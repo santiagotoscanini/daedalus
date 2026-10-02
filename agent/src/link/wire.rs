@@ -383,6 +383,12 @@ pub struct ProviderPolicy {
     /// so by the agent. None leaves the startup as the install made it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub always_on: Option<bool>,
+    /// Every origin a browser may write to it from, as the box names the
+    /// machine (its LAN name, its address, its published hostname). The
+    /// agent keeps the server's own setting equal to it, so it REPLACES the
+    /// server's same-origin rule: an origin missing here is refused.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_origins: Vec<String>,
 }
 
 /// One release of a provider, as the box resolved it for this machine's

@@ -22,4 +22,11 @@ wanted?: PowerWanted | null,
  * Start it with the user's logon (Windows) or the machine's boot, kept
  * so by the agent. None leaves the startup as the install made it.
  */
-always_on?: boolean | null, };
+always_on?: boolean | null, 
+/**
+ * Every origin a browser may write to it from, as the box names the
+ * machine (its LAN name, its address, its published hostname). The
+ * agent keeps the server's own setting equal to it, so it REPLACES the
+ * server's same-origin rule: an origin missing here is refused.
+ */
+allowed_origins?: Array<string>, };

@@ -23,8 +23,9 @@
 //! - **verifying**: the server answers and its health states the target
 //!   version, within `VERIFY_DEADLINE`; a server running outside the user's
 //!   session is moved into it.
-//! - **wiring**: every address, the policy's port, no broadcast
-//!   (lemonade.rs `wire`); a failure is reported, not rolled back.
+//! - **wiring**: every address, the policy's port, no broadcast, the
+//!   box's origins (lemonade.rs `wire`); a failure is reported, not rolled
+//!   back. The reader keeps the same wiring on every read after.
 //! - **powering**: the box's `wanted` — or, without one, as it was before.
 //!
 //! The ids offered before and not after are reported (`vanished`): the
@@ -420,7 +421,7 @@ fn step(
         }
         LifecyclePhase::Wiring => {
             let mut notes = Vec::new();
-            if let Err(e) = wire(port) {
+            if let Err(e) = wire(&shared.settings.policy().providers) {
                 notes.push(format!("its wiring was not applied: {e}"));
             }
             match (&j.before, offered_ids(port)) {
@@ -480,7 +481,7 @@ fn step(
             j.log_tail = host::log_tail(&log);
             match back {
                 Ok(()) => {
-                    let _ = wire(port);
+                    let _ = wire(&shared.settings.policy().providers);
                     j.message = format!("{failure}; rolled back to {from}");
                     Ok(LifecyclePhase::RolledBack)
                 }

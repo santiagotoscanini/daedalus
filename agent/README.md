@@ -462,8 +462,9 @@ pushes the `providers` document up the link. Lemonade is the one kind.
   install, or over a server no installer registered. A journal in
   `providers/lemonade-install.json` holds each step before it runs —
   download, graceful stop, silent install, `/health` at the target,
-  `/internal/set` wiring (every address, the port, no broadcast), the
-  wanted power state — so a reboot resumes it; a failure reinstalls the
+  `/internal/set` wiring (every address, the port, no broadcast, the
+  origins the box names — kept on every read after, so a restart or a new
+  origin is wired within a minute), the wanted power state — so a reboot resumes it; a failure reinstalls the
   installer the last good install kept (Windows uninstalls first: the MSI
   blocks a downgrade). Catalog ids gone after it are reported (`vanished`)
   with the installer log's tail. On Windows msiexec runs in the console

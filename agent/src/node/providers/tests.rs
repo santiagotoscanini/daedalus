@@ -5,6 +5,7 @@ use super::host::{
 use super::install::{refusal, resume_phase, vanished, Journal};
 use super::lemonade::{
     parse_backends, parse_downloads, parse_figures, parse_health, parse_models, read_lemonade,
+    unwired, wiring, MAX_ORIGINS,
 };
 use super::power::{effective, Converge, Input, ManualOff, Operator, Step};
 use super::*;
@@ -628,4 +629,104 @@ fn check_bounds_the_lifecycle() {
     assert!(check(&r).is_ok());
     r[0].lifecycle.as_mut().unwrap().log_tail.push("l".into());
     assert!(check(&r).is_err());
+}
+
+fn with_origins(origins: &[&str]) -> ProvidersPolicy {
+    ProvidersPolicy {
+        lemonade: Some(ProviderPolicy {
+            port: Some(13305),
+            allowed_origins: origins.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        }),
+    }
+}
+
+#[test]
+fn the_policy_carries_the_origins_and_writes_none_when_empty() {
+    let p: Policy = serde_json::from_value(json!({"providers":{"lemonade":{
+        "port": 13305,
+        "allowed_origins": ["http://gpu-box.lan:13305", "https://lemonade-gpu-box.example.org"]
+    }}}))
+    .unwrap();
+    assert_eq!(
+        p.providers.lemonade.unwrap().allowed_origins,
+        vec![
+            "http://gpu-box.lan:13305".to_string(),
+            "https://lemonade-gpu-box.example.org".to_string()
+        ]
+    );
+    assert_eq!(
+        serde_json::to_value(with_origins(&[]).lemonade.unwrap()).unwrap(),
+        json!({"port": 13305})
+    );
+}
+
+#[test]
+fn the_wiring_joins_the_box_s_origins_and_keeps_the_rest() {
+    let want = wiring(&with_origins(&[
+        "http://gpu-box.lan:13305",
+        "http://192.0.2.10:13305",
+        "https://lemonade-gpu-box.example.org",
+    ]));
+    assert_eq!(
+        Value::Object(want),
+        json!({
+            "host": "0.0.0.0",
+            "port": 13305,
+            "broadcast": false,
+            "allowed_origins": "http://gpu-box.lan:13305,http://192.0.2.10:13305,https://lemonade-gpu-box.example.org"
+        })
+    );
+    // No origins: the server's own same-origin rule again.
+    assert_eq!(
+        wiring(&ProvidersPolicy::default())["allowed_origins"],
+        json!("")
+    );
+    assert_eq!(wiring(&ProvidersPolicy::default())["port"], json!(13305));
+}
+
+#[test]
+fn an_origin_the_server_could_not_hold_whole_is_left_out() {
+    let long = format!("https://{}.example.org", "a".repeat(MAX_TEXT));
+    let want = wiring(&with_origins(&[
+        "http://a.lan:1,http://evil.example",
+        "http://b.lan :1",
+        "http://c.lan:1\n",
+        "",
+        &long,
+        "http://d.lan:1",
+        "http://d.lan:1",
+    ]));
+    assert_eq!(want["allowed_origins"], json!("http://d.lan:1"));
+    let many: Vec<String> = (0..40).map(|i| format!("http://n{i}.lan:1")).collect();
+    let refs: Vec<&str> = many.iter().map(String::as_str).collect();
+    let joined = wiring(&with_origins(&refs))["allowed_origins"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(joined.split(',').count(), MAX_ORIGINS);
+}
+
+#[test]
+fn only_what_the_server_does_not_hold_is_set() {
+    let want = wiring(&with_origins(&["http://gpu-box.lan:13305"]));
+    let wired = json!({
+        "host": "0.0.0.0", "port": 13305, "broadcast": false,
+        "allowed_origins": "http://gpu-box.lan:13305", "log_level": "info"
+    });
+    assert!(unwired(&wired, &want).is_empty());
+    // A fresh install: localhost, broadcasting, no origins.
+    let fresh =
+        json!({"host": "localhost", "port": 13305, "broadcast": true, "allowed_origins": ""});
+    let change = unwired(&fresh, &want);
+    assert_eq!(
+        Value::Object(change),
+        json!({"host": "0.0.0.0", "broadcast": false, "allowed_origins": "http://gpu-box.lan:13305"})
+    );
+    // A key the server does not report is set too.
+    let old = json!({"host": "0.0.0.0", "port": 13305, "broadcast": false});
+    assert_eq!(
+        unwired(&old, &want).keys().collect::<Vec<_>>(),
+        vec!["allowed_origins"]
+    );
 }

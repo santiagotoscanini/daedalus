@@ -208,18 +208,39 @@ pub fn switch(key: Key, s: &View, may_change: bool) -> Switch {
 }
 
 /// The row under the switches: who may change them, or why they cannot be
-/// changed now; "—" when they can.
-pub fn switches_note(s: &View, may_change: bool) -> String {
+/// changed now; None — no row — when they can, or before the service has
+/// answered (the switches are greyed then, and the header says why).
+pub fn switches_note(s: Option<&View>, may_change: bool) -> Option<String> {
+    let s = s?;
     if !may_change {
-        return match &s.operator {
+        return Some(match &s.operator {
             Some(name) => format!("Only {name} can change these"),
             None => "Only the user who installed the agent can change these".into(),
-        };
+        });
     }
     if !s.linked {
-        return "Changes need the box: not connected".into();
+        return Some("Changes need the box: not connected".into());
     }
-    "—".into()
+    None
+}
+
+/// What sits in a switch's leading column, where the other rows carry their
+/// glyph: a check while it is on, an empty glyph-sized space while it is
+/// off — so a switch's words start where every other row's do. A Mac draws
+/// it as the row's image (menu.rs); elsewhere no row has a glyph and the
+/// OS's own check column does the same.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mark {
+    Check,
+    Blank,
+}
+
+pub fn mark(sw: &Switch) -> Mark {
+    if sw.checked {
+        Mark::Check
+    } else {
+        Mark::Blank
+    }
 }
 
 /// The value a click on `key`'s switch asks for: the other one — except

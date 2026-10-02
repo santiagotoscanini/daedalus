@@ -2,9 +2,9 @@
 //! rows model.rs makes (`Ui::show`).
 
 use anyhow::{Context, Result};
-use tray_icon::menu::{
-    CheckMenuItem, IconMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu,
-};
+#[cfg(not(target_os = "macos"))]
+use tray_icon::menu::CheckMenuItem;
+use tray_icon::menu::{IconMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 use super::app_url;
@@ -61,7 +61,8 @@ pub(super) fn decode(png: &[u8]) -> Result<Icon> {
 /// Outside a bundle (a development build) AppKit finds none, and the rows
 /// have no icon.
 #[cfg(any(test, target_os = "macos"))]
-pub const ICONS: [&str; 10] = [
+pub const ICONS: [&str; 11] = [
+    "check",
     "layout-dashboard",
     "settings",
     "network",
@@ -95,6 +96,24 @@ pub(super) fn grey_dot() -> Result<tray_icon::menu::Icon> {
         }
     }
     tray_icon::menu::Icon::from_rgba(rgba, SIZE, SIZE).context("the grey dot")
+}
+
+/// A switch's row. On a Mac it is an image row like every other, whose
+/// image is its `Mark` — AppKit's own state column would put the check in
+/// a gutter left of every other row's glyph and the switch's words left of
+/// theirs. Elsewhere no row has a glyph, so the OS's check column is the
+/// leading column.
+#[cfg(target_os = "macos")]
+pub(super) type Toggle = IconMenuItem;
+#[cfg(not(target_os = "macos"))]
+pub(super) type Toggle = CheckMenuItem;
+
+/// An empty image the size of a glyph: an unchecked switch's mark (a Mac).
+#[cfg(target_os = "macos")]
+pub(super) fn blank() -> Result<tray_icon::menu::Icon> {
+    const SIZE: u32 = 36;
+    let rgba = vec![0u8; (SIZE * SIZE * 4) as usize];
+    tray_icon::menu::Icon::from_rgba(rgba, SIZE, SIZE).context("the blank mark")
 }
 
 /// A value's submenu: the whole value (a disabled row) and Copy, where the
@@ -145,11 +164,22 @@ pub(super) struct Ui {
     pub(super) grey: tray_icon::menu::Icon,
     pub(super) open_app: IconMenuItem,
     pub(super) this_machine: IconMenuItem,
-    pub(super) awake: CheckMenuItem,
-    pub(super) claude_rc: CheckMenuItem,
+    pub(super) awake: Toggle,
+    pub(super) claude_rc: Toggle,
     #[cfg(unix)]
-    pub(super) santree: CheckMenuItem,
+    pub(super) santree: Toggle,
+    #[cfg(target_os = "macos")]
+    pub(super) blank: tray_icon::menu::Icon,
+    /// Each switch's mark as last drawn, by `Key`: an image is set only
+    /// when it changes.
+    #[cfg(target_os = "macos")]
+    pub(super) marks: [Option<Mark>; 3],
+    /// The row under the switches, in the menu only while it has something
+    /// to say (`switches_note`), at `note_at`.
     pub(super) note: MenuItem,
+    pub(super) note_shown: bool,
+    pub(super) note_at: usize,
+    pub(super) menu: Menu,
     pub(super) connection: Submenu,
     pub(super) link: MenuItem,
     pub(super) vpn: MenuItem,
@@ -215,12 +245,15 @@ impl Ui {
         );
         #[cfg(not(target_os = "macos"))]
         let this_machine = item("This machine in Daedalus…", true);
+        #[cfg(target_os = "macos")]
+        let check = |key: Key| IconMenuItem::new(key.label(), false, None, None);
+        #[cfg(not(target_os = "macos"))]
         let check = |key: Key| CheckMenuItem::new(key.label(), false, false, None);
         let awake = check(Key::AwakeHold);
         let claude_rc = check(Key::ClaudeRemoteControl);
         #[cfg(unix)]
         let santree = check(Key::Santree);
-        let note = line("—");
+        let note = line("");
 
         let connection = Submenu::new("Connection", true);
         let (link, vpn, traffic, address, endpoint) = (
@@ -304,7 +337,9 @@ impl Ui {
         rows.extend([&s2 as &dyn IsMenuItem, &awake, &claude_rc]);
         #[cfg(unix)]
         rows.push(&santree);
-        rows.extend([&note as &dyn IsMenuItem, &s3, &connection, &claude]);
+        // The note joins here when it has something to say (`Ui::show`).
+        let note_at = rows.len();
+        rows.extend([&s3 as &dyn IsMenuItem, &connection, &claude]);
         #[cfg(unix)]
         rows.push(&santree_menu);
         rows.extend([&updates as &dyn IsMenuItem, &troubleshoot, &s4, &account]);
@@ -329,7 +364,7 @@ impl Ui {
         }
 
         let tray = TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
+            .with_menu(Box::new(menu.clone()))
             .with_tooltip(format!("{DISPLAY_NAME} {VERSION}"))
             .with_icon(icons.off.clone())
             .build()
@@ -349,7 +384,14 @@ impl Ui {
             claude_rc,
             #[cfg(unix)]
             santree,
+            #[cfg(target_os = "macos")]
+            blank: blank()?,
+            #[cfg(target_os = "macos")]
+            marks: [None; 3],
             note,
+            note_shown: false,
+            note_at,
+            menu,
             connection,
             link,
             vpn,
@@ -448,6 +490,52 @@ impl Ui {
         self.switched_off
     }
 
+    /// One switch's row: its words, whether it can be clicked, and its mark
+    /// in the leading column (`Mark`).
+    fn draw_switch(&mut self, key: Key, sw: &Switch) {
+        let item = match key {
+            Key::AwakeHold => &self.awake,
+            Key::ClaudeRemoteControl => &self.claude_rc,
+            #[cfg(unix)]
+            Key::Santree => &self.santree,
+            #[cfg(not(unix))]
+            Key::Santree => return,
+        };
+        item.set_text(&sw.text);
+        item.set_enabled(sw.enabled);
+        let m = mark(sw);
+        #[cfg(target_os = "macos")]
+        {
+            let slot = &mut self.marks[key as usize];
+            if *slot != Some(m) {
+                match m {
+                    Mark::Check => item.set_native_icon(Some(glyph("check"))),
+                    Mark::Blank => item.set_icon(Some(self.blank.clone())),
+                }
+                *slot = Some(m);
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        item.set_checked(m == Mark::Check);
+    }
+
+    /// The row under the switches, in the menu only while there is
+    /// something to say: inserted at its place, removed when it has gone.
+    fn show_note(&mut self, note: Option<String>) {
+        match note {
+            Some(text) => {
+                self.note.set_text(&text);
+                if !self.note_shown {
+                    self.note_shown = self.menu.insert(&self.note, self.note_at).is_ok();
+                }
+            }
+            None if self.note_shown => {
+                self.note_shown = self.menu.remove(&self.note).is_err();
+            }
+            None => {}
+        }
+    }
+
     /// Reflect one read of the page (or its absence) and the supervisor's
     /// state. Every row is set on every read, so the menu is right even
     /// while it is open, and a switch muda flipped on its click shows the
@@ -478,27 +566,22 @@ impl Ui {
         // The switches.
         let settings = page.map(|p| p.settings.clone());
         let may = settings.as_ref().is_some_and(may_change_here);
-        let set_switch = |item: &CheckMenuItem, key: Key| match &settings {
-            Some(s) => {
-                let sw = switch(key, s, may);
-                item.set_text(&sw.text);
-                item.set_checked(sw.checked);
-                item.set_enabled(sw.enabled);
-            }
-            None => {
-                item.set_text(key.label());
-                item.set_checked(false);
-                item.set_enabled(false);
-            }
+        let switch_of = |key: Key| match &settings {
+            Some(s) => switch(key, s, may),
+            None => Switch {
+                text: key.label().to_string(),
+                checked: false,
+                enabled: false,
+            },
         };
-        set_switch(&self.awake, Key::AwakeHold);
-        set_switch(&self.claude_rc, Key::ClaudeRemoteControl);
+        self.draw_switch(Key::AwakeHold, &switch_of(Key::AwakeHold));
+        self.draw_switch(
+            Key::ClaudeRemoteControl,
+            &switch_of(Key::ClaudeRemoteControl),
+        );
         #[cfg(unix)]
-        set_switch(&self.santree, Key::Santree);
-        self.note.set_text(match &settings {
-            Some(s) => switches_note(s, may),
-            None => "—".into(),
-        });
+        self.draw_switch(Key::Santree, &switch_of(Key::Santree));
+        self.show_note(switches_note(settings.as_ref(), may));
         self.settings = settings;
 
         // The app's two links.

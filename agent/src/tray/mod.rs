@@ -9,10 +9,11 @@
 //! all is well, an amber dot when something wants attention, grey when the
 //! service does not answer), the tooltip, and the menu.
 //!
-//! **The menu** has one fixed structure — nothing is inserted or removed
-//! while it lives, so it redraws in place even while it is open (tao's timer
-//! runs in the menu's run-loop mode): a row that does not apply says so
-//! ("—") rather than vanishing.
+//! **The menu** has one fixed structure, so it redraws in place even while
+//! it is open (tao's timer runs in the menu's run-loop mode): a row that
+//! does not apply says so ("—") rather than vanishing. The one exception is
+//! the note under the switches, which is in the menu only while they cannot
+//! be changed and it says why.
 //!
 //! ```text
 //! ● Daedalus Agent is connected          the header: a status dot and one line (click: Open Daedalus)
@@ -24,7 +25,7 @@
 //! ✓ Keep awake                           the settings this machine may ask for (settings.rs)
 //! ✓ Claude Remote Control
 //!   santree on the box                   (not on Windows: santree has no door there)
-//!   —                                    who may change them, or why not now
+//!   Only <operator> can change these     why not, while they cannot be changed (else no row)
 //! ───
 //!   Connection · VPN up ▸                the link, the tunnel, both keys (shortened; Copy in each key's submenu)
 //!   Claude · 2 sessions ▸                Claude Code's facts and verbs
@@ -39,8 +40,10 @@
 //!
 //! On a Mac each row carries a Lucide glyph (`ICONS`), a template image the
 //! bundle carries in Resources (macos/icons/), and the header AppKit's own
-//! status dot: green, amber, red, and a grey one drawn here (`Dot`). Windows
-//! draws neither: the header's words carry the state there.
+//! status dot: green, amber, red, and a grey one drawn here (`Dot`). A switch
+//! carries its check as that glyph (`Mark`), so its words line up with the
+//! rest. Windows draws none of them: the header's words carry the state
+//! there, and the switches use the menu's own check column.
 //!
 //! **A switch** asks the service (`settings.set`) and reads the page again at
 //! once: the check shows the box's value, or the value on its way while the

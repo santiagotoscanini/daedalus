@@ -371,13 +371,61 @@ pub fn shutdown(port: u16) -> Result<String, String> {
 /// The wiring the agent owns, in the server's own settings — those of the
 /// profile that runs it, which is why it goes through the server rather
 /// than a CLI the agent would run as itself: every address, the policy's
-/// port, and no broadcast (the box finds it through the agent).
-pub fn wire(port: u16) -> Result<String, String> {
-    post(
-        port,
-        "/internal/set",
-        &serde_json::json!({ "host": "0.0.0.0", "port": port, "broadcast": false }),
-    )
+/// port, no broadcast (the box finds it through the agent), and the origins
+/// the box names (`ProviderPolicy::allowed_origins`). Only what differs from
+/// the server's `/internal/config` is set, so a server already wired is
+/// left alone — the reader asks this on every read of a running server.
+pub fn wire(policy: &ProvidersPolicy) -> Result<String, String> {
+    let port = lemonade_port(policy);
+    let config = get_json(port, "/internal/config")?;
+    let change = unwired(&config, &wiring(policy));
+    if change.is_empty() {
+        return Ok("already wired".into());
+    }
+    let keys = change.keys().cloned().collect::<Vec<_>>().join(", ");
+    post(port, "/internal/set", &Value::Object(change)).map(|_| format!("set {keys}"))
+}
+
+/// The most origins the server is told: a machine has three names.
+pub(super) const MAX_ORIGINS: usize = 16;
+
+/// The settings `wire` keeps; the server takes the origins as one
+/// comma-joined string. An origin it could not hold whole (a comma, a
+/// space, a control character, past `MAX_TEXT`) is left out, as is a
+/// repeat; the rest keep the box's order.
+pub(super) fn wiring(policy: &ProvidersPolicy) -> serde_json::Map<String, Value> {
+    let named = policy
+        .lemonade
+        .as_ref()
+        .map_or(&[][..], |l| &l.allowed_origins[..]);
+    let mut origins: Vec<&str> = Vec::new();
+    for o in named {
+        let whole = !o.is_empty()
+            && o.len() <= MAX_TEXT
+            && !o
+                .chars()
+                .any(|c| c == ',' || c.is_whitespace() || c.is_control());
+        if whole && !origins.contains(&o.as_str()) && origins.len() < MAX_ORIGINS {
+            origins.push(o);
+        }
+    }
+    let mut want = serde_json::Map::new();
+    want.insert("host".into(), Value::from("0.0.0.0"));
+    want.insert("port".into(), Value::from(lemonade_port(policy)));
+    want.insert("broadcast".into(), Value::from(false));
+    want.insert("allowed_origins".into(), Value::from(origins.join(",")));
+    want
+}
+
+/// The keys of `want` the server's config does not already hold.
+pub(super) fn unwired(
+    config: &Value,
+    want: &serde_json::Map<String, Value>,
+) -> serde_json::Map<String, Value> {
+    want.iter()
+        .filter(|(k, v)| config.get(k.as_str()) != Some(*v))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
 }
 
 /// POST a residency call on loopback: the provider's word on a 200 whose

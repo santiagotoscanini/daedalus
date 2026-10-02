@@ -16,7 +16,8 @@
 //! report carries it with the process, its startup and the last install.
 //! The box installs, updates, starts and stops it through two verbs beside
 //! the residency ones: `provider_install` (install.rs) and `provider_power`
-//! (power.rs), and keeps it as its policy says (`wanted`, `always_on`).
+//! (power.rs), and keeps it as its policy says (`wanted`, `always_on`) and
+//! wired as the box names it (`allowed_origins`, lemonade.rs `wire`).
 //!
 //! **When.** `run_loop` reads every `READ_EVERY`, every `READ_DOWNLOADING`
 //! while a download runs (a percentage a minute old is worthless), and at
@@ -90,6 +91,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Shutdown) {
     let mut converge = power::Converge::new(power::load_manual_off());
     let mut last_policy: Option<ProvidersPolicy> = None;
     let mut read_at: Option<Instant> = None;
+    let mut last_wire: Option<Result<String, String>> = None;
     let mut every = READ_EVERY;
     loop {
         let policy = shared.settings.policy();
@@ -133,11 +135,25 @@ pub fn run_loop(shared: Arc<Shared>, stop: Shutdown) {
                 }
             }
             // What the steps changed is in this read, not the next.
-            let found = if steps.is_empty() {
-                found
+            let (found, running) = if steps.is_empty() {
+                (found, running)
             } else {
-                crate::os::lemonade::find()
+                (crate::os::lemonade::find(), health_version(port).is_some())
             };
+            // The wiring, kept on every read of a running server: after a
+            // start (the agent's or its user's), and when the box's origins
+            // change. Said only when it changes something or fails anew.
+            if running && !shared.providers.busy() {
+                let outcome = wire(&policy.providers);
+                match &outcome {
+                    Ok(m) if m != "already wired" => tracing::info!(what = %m, "provider wired"),
+                    Err(e) if last_wire.as_ref() != Some(&outcome) => {
+                        tracing::warn!(error = %e, "provider not wired")
+                    }
+                    _ => {}
+                }
+                last_wire = Some(outcome);
+            }
             let mut list = read(&policy, &found);
             let actions = shared.providers.actions();
             let lifecycle = shared.providers.lifecycle();
