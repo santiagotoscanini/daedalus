@@ -473,6 +473,7 @@ Hand edits the UI cannot make for itself:
 
 ## Engine polish
 
+- **The tunnel under a closed window.** smoltcp ignores the ACK in a segment that arrives outside a closed receive window, so a tunnel consumer that stops reading until its own write completes can stall until `TCP_TIMEOUT` (the test echo did exactly that). santree's pipe reads on its own thread; audit the controller link's read/write pattern over the tunnel, or fix it upstream in smoltcp.
 - **Local development behind the request gate.** A laptop run answers 403
   to anything without `X-Proxy-Proof` (CONTRIBUTING.md "The request gate"),
   so a plain browser needs a header extension. A dev-server-only way in —
