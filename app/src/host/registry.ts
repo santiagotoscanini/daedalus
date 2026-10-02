@@ -162,6 +162,31 @@ export async function imageInfo(repo: string, reference: string): Promise<ImageI
   }
 }
 
+/**
+ * Whether the registry holds this reference, as a gate can use it: `missing`
+ * only on the registry's own 404, `unknown` when it did not answer or the
+ * repository path is not one (imageInfo folds both into "no digest", which is
+ * right for a history row and wrong for a refusal).
+ */
+export async function imagePresence(
+  repo: string,
+  reference: string,
+): Promise<'present' | 'missing' | 'unknown'> {
+  // A tag or a digest, nothing that could climb out of `manifests/`.
+  if (!REPO_PATH.test(repo) || !/^\w[\w.:-]{0,127}$/.test(reference)) return 'unknown'
+  try {
+    const res = await fetch(`${REGISTRY()}/v2/${repo}/manifests/${reference}`, {
+      method: 'HEAD',
+      headers: { Accept: MANIFEST_ACCEPT },
+      signal: AbortSignal.timeout(8_000),
+    })
+    if (res.ok) return 'present'
+    return res.status === 404 ? 'missing' : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 /** github.com/owner/repo + sha → a commit URL, when both are known. */
 export function commitUrl(sourceUrl: string | null, revision: string | null): string | null {
   if (!sourceUrl || !revision) return null

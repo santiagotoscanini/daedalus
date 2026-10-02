@@ -49,7 +49,7 @@ export function planDispatch(
     else if (app.githubRepoId === null) {
       held.push({
         row,
-        reason: `${row.app} has no GitHub repository pinned yet; it builds once the hourly sweep finds a repository named ${row.app}.`,
+        reason: `${row.app} has no GitHub repository pinned yet; it builds once Build now or the hourly sweep links it to a repository named ${row.app}.`,
       })
     } else candidates.push(row)
   }

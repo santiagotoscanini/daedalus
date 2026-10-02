@@ -19,14 +19,15 @@ import { defineFlow, defineGate, type FlowOutcome } from './flow'
 // to carry.
 
 /**
- * `noop` is runApply's and `pending` is runSecretApply's; one union because
+ * `noop` and `no-image` (an app stepping into a running rung before its first
+ * image exists) are runApply's, `pending` is runSecretApply's; one union because
  * the doors that render a refusal do not care which flow it came from. The
  * `code` is the word a machine caller branches on: the MCP tool puts it in
  * front of the sentence, and the button shows only the sentence.
  */
 export type ApplyOutcome = FlowOutcome<
   { changed: { name: string; fields: string[] }[] },
-  'noop' | 'pending'
+  'noop' | 'pending' | 'no-image'
 >
 
 type WithCtx = { ctx: Pick<Ctx, 'controller'> }
@@ -66,6 +67,13 @@ export async function currentChanges() {
   // every Apply, and counts as a change when its bytes differ from the
   // committed file — a join, a rename, a provider switched on or off.
   const nodesFile = await nodesChange()
+
+  // An app stepping into a running rung whose image is not in the registry
+  // would fail the switch and roll the whole Apply back (lib/apps/image-gate.ts).
+  const { applyImageBlockers } = await import('../lib/apps/image-gate')
+  const { readSite } = await import('./site')
+  const imageBlocked = await applyImageBlockers(readSite(), records, manifest)
+
   const changed = [
     ...appChanges,
     // The switches field is one entry in `changes` and several words on the
@@ -81,7 +89,7 @@ export async function currentChanges() {
     ...(nodesFile.changed ? [{ name: 'nodes', fields: nodesFile.fields }] : []),
   ]
 
-  return { records, site, nodesFile, changed }
+  return { records, site, nodesFile, changed, imageBlocked }
 }
 
 /**
@@ -156,48 +164,52 @@ async function commitSwitch(): Promise<boolean> {
 
 type ApplyInput = WithCtx & { actor: string }
 
-const apply = defineFlow<ApplyInput, { changed: { name: string; fields: string[] }[] }, 'noop'>(
-  gate,
-  {
-    prepare: async ({ ctx, actor }) => {
-      const { toRegistryExport } = await import('../lib/apps/manifest-map')
-      const { startApply, summarise } = await import('./apply')
-      const { renderRegistryFile } = await import('../lib/registry-file')
-      const { renderSiteMeta } = await import('../core/site')
+const apply = defineFlow<
+  ApplyInput,
+  { changed: { name: string; fields: string[] }[] },
+  'noop' | 'no-image'
+>(gate, {
+  prepare: async ({ ctx, actor }) => {
+    const { toRegistryExport } = await import('../lib/apps/manifest-map')
+    const { startApply, summarise } = await import('./apply')
+    const { renderRegistryFile } = await import('../lib/registry-file')
+    const { renderSiteMeta } = await import('../core/site')
 
-      const { records, site, nodesFile, changed } = await currentChanges()
-      if (changed.length === 0) {
-        return { ok: false, code: 'noop', reason: 'nothing to apply' }
-      }
+    const { records, site, nodesFile, changed, imageBlocked } = await currentChanges()
+    if (changed.length === 0) {
+      return { ok: false, code: 'noop', reason: 'nothing to apply' }
+    }
+    if (imageBlocked.length > 0) {
+      return { ok: false, code: 'no-image', reason: imageBlocked.join(' ') }
+    }
 
-      return {
-        ok: true,
-        value: { changed },
-        publish: async () => {
-          const started = await startApply(ctx, {
-            // Finished files, not data structures: the host agent writes these
-            // bytes verbatim and never parses them. apps.json and nodes.json
-            // always — their renders are idempotent and the agent reports
-            // no-change; site.json only when its desired document differs from
-            // the committed one; README.md and daedalus.json always — the README
-            // is rendered from the document, and the point of the stamp is that
-            // every write into the directory says which engine made it.
-            files: {
-              'apps.json': renderRegistryFile(toRegistryExport(records)),
-              'nodes.json': nodesFile.text,
-              ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
-              ...(await renderSiteMeta(site.desired, actor)),
-            },
-            summary: summarise(changed),
-            actor,
-            commit: await commitSwitch(),
-          })
-          return started.ok ? started.id : started
-        },
-      }
-    },
+    return {
+      ok: true,
+      value: { changed },
+      publish: async () => {
+        const started = await startApply(ctx, {
+          // Finished files, not data structures: the host agent writes these
+          // bytes verbatim and never parses them. apps.json and nodes.json
+          // always — their renders are idempotent and the agent reports
+          // no-change; site.json only when its desired document differs from
+          // the committed one; README.md and daedalus.json always — the README
+          // is rendered from the document, and the point of the stamp is that
+          // every write into the directory says which engine made it.
+          files: {
+            'apps.json': renderRegistryFile(toRegistryExport(records)),
+            'nodes.json': nodesFile.text,
+            ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
+            ...(await renderSiteMeta(site.desired, actor)),
+          },
+          summary: summarise(changed),
+          actor,
+          commit: await commitSwitch(),
+        })
+        return started.ok ? started.id : started
+      },
+    }
   },
-)
+})
 
 export function runApply(ctx: Pick<Ctx, 'controller'>, actor: string): Promise<ApplyOutcome> {
   return apply({ ctx, actor })
@@ -309,10 +321,17 @@ export async function applyPreview(ctx: Pick<Ctx, 'controller'>): Promise<{
   /** Why a new Apply would be refused right now, or null. */
   blocked: string | null
 }> {
-  const [{ changed, site }, blocker] = await Promise.all([currentChanges(), gate.blocked({ ctx })])
+  const [{ changed, site, imageBlocked }, blocker] = await Promise.all([
+    currentChanges(),
+    gate.blocked({ ctx }),
+  ])
   return {
     changed,
     site: [...site.changes],
-    blocked: blocker?.reason ?? null,
+    blocked:
+      blocker?.reason ??
+      (changed.length > 0 && imageBlocked.length > 0
+        ? `no-image: ${imageBlocked.join(' ')}`
+        : null),
   }
 }

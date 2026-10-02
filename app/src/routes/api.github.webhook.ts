@@ -35,7 +35,8 @@ import {
 // and a failure rolls the record back with the build, so the redelivery that
 // recovers it is not refused as a duplicate.
 //
-// Nothing here calls GitHub or starts a build. A push queues a row and wakes
+// Nothing here starts a build, and the one GitHub call is the link of an app
+// that is not linked yet (planPush). A push queues a row and wakes
 // the scheduler (core/builds/scheduler.ts), which hands it to the host, and the host
 // builds only when the sha is still the branch tip, which is what stops a
 // replayed or out-of-order push.
@@ -230,11 +231,22 @@ async function planPush(delivery: Delivery, deps: WebhookDeps): Promise<Plan | R
   const installation = await installationState(deps)
   const app = (await appForRepository(event.repository.id, event.repository.name)) ?? null
 
-  const routed = routePush(event, {
+  const pushCtx = {
     ownerId: identity.ownerId,
     installationId: installation.available ? installation.data.installationId : null,
-    app,
-  })
+  }
+  let routed = routePush(event, { ...pushCtx, app })
+  // An app named after the repo but not linked yet: link it now through the
+  // installed App's own listing (core/builds/link.ts), never from this
+  // payload, then route again. The second pass still refuses a repo whose id
+  // is not the one the listing pinned.
+  if (routed.kind === 'ignore' && routed.reason === 'repo-not-pinned' && app !== null) {
+    const { linkAppRepo } = await import('../core/builds/link')
+    const link = await linkAppRepo(deps, app)
+    if (link.ok) {
+      routed = routePush(event, { ...pushCtx, app: { ...app, githubRepoId: link.value.repoId } })
+    }
+  }
   if (routed.kind === 'ignore') return ignored(routed.reason)
 
   const { intent } = routed

@@ -62,6 +62,13 @@ const HERO_LINKS =
    the descendant rules are what tell it so, since it cannot know on its own. */
 const HERO_EXPOSURE =
   'text-right max-rail:col-span-full max-rail:text-left max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center'
+const EXPOSURE_NOTE =
+  'mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground'
+/** Why the running rungs are closed to an app with no image yet; absent when they are open. */
+const IMAGE_WAIT: Partial<Record<NonNullable<AppRecord['firstImage']>, string>> = {
+  missing: "First build pending. The container can run once its image is in the box's registry.",
+  unknown: "The box's registry did not answer, so whether this app has an image yet is not known.",
+}
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
@@ -257,6 +264,7 @@ function AppHero({
   const site = useSite()
   const readOnly = app.managedInNix
   const iconTone = ICON_TONE[state]
+  const imageWait = app.firstImage === null ? undefined : IMAGE_WAIT[app.firstImage]
   return (
     <section className={HERO}>
       {/* The app's own icon, in a frame that keeps carrying state. Identity
@@ -317,6 +325,11 @@ function AppHero({
           // and having an image. "Off" adds the container back and withholds
           // only the ingress: no traefik router, no DNS, no probe, but it
           // runs and it deploys.
+          //
+          // Every rung that runs a container waits for the first image: an
+          // Apply that declares one with nothing to pull fails the switch and
+          // rolls back (lib/apps/image-gate.ts). The save and the Apply refuse
+          // it too; this is where it is explained.
           options={[
             {
               value: 'declared',
@@ -340,24 +353,39 @@ function AppHero({
               // ingress is gone. The platform asserts this
               // (nix/modules/apps/apps.nix); catching it here turns a failed
               // Apply into an explanation.
-              disabled: app.authMode === 'proxy',
+              disabled: imageWait !== undefined || app.authMode === 'proxy',
               reason:
-                app.authMode === 'proxy'
+                imageWait ??
+                (app.authMode === 'proxy'
                   ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
-                  : undefined,
+                  : undefined),
             },
-            { value: 'lab', label: 'Internal', icon: '⛨' },
-            { value: 'live', label: 'External', icon: '↗' },
+            {
+              value: 'lab',
+              label: 'Internal',
+              icon: '⛨',
+              disabled: imageWait !== undefined,
+              reason: imageWait,
+            },
+            {
+              value: 'live',
+              label: 'External',
+              icon: '↗',
+              disabled: imageWait !== undefined,
+              reason: imageWait,
+            },
           ]}
         />
         {app.stage === 'off' && (
-          <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
-            No route, DNS or probe. The container still runs.
-          </p>
+          <p className={EXPOSURE_NOTE}>No route, DNS or probe. The container still runs.</p>
         )}
         {app.stage === 'declared' && (
-          <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground">
-            Nothing runs. Its database, data directory and secrets exist.
+          <p className={EXPOSURE_NOTE}>
+            {imageWait === undefined
+              ? 'Nothing runs. Its database, data directory and secrets exist.'
+              : app.firstImage === 'missing'
+                ? 'First build pending. The other rungs open once it has published an image.'
+                : imageWait}
           </p>
         )}
       </div>

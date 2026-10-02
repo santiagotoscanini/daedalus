@@ -39,7 +39,8 @@ const orDefault = <T extends string>(allowed: readonly T[], v: string, fallback:
 /**
  * Build the default branch's tip now. The tip is asked of GitHub, never taken
  * from the caller. Refused for an app whose box builds are off, and for one
- * the sweep has not linked to its repository yet.
+ * whose repository the installed App cannot see; an app not linked yet is
+ * linked first (./link.ts).
  *
  * Always forced: insertOrSupersedeQueued has no "already built" skip (only
  * build-queue.ts `enqueue` does), so asking for a tip that already built
@@ -61,20 +62,16 @@ export async function buildNow(input: { app: string; actor: string }): Promise<B
       reason: `Box builds are off for ${app}. Turn on Build on this box in its settings.`,
     }
   }
-  if (record.githubRepoId === null) {
-    return {
-      ok: false,
-      reason:
-        'Waiting for the sweep to link the repo: the box has not matched this app to a GitHub repository yet.',
-    }
-  }
-
   const { makeCtx } = await import('../ctx')
   const { ghApp, describeGhFailure, repoById } = await import('../github-app')
+  const { linkAppRepo } = await import('./link')
   const ctx = await makeCtx()
-  // By id rather than owner/name: the id is what the sweep linked, and it is
+  // An app not linked yet is linked now, by the same lookup the sweep makes.
+  const link = await linkAppRepo(ctx, record)
+  if (!link.ok) return link
+  // By id rather than owner/name: the id is what the link pinned, and it is
   // still right after a rename. The name that comes back is a label.
-  const found = await repoById(ctx, record.githubRepoId)
+  const found = await repoById(ctx, link.value.repoId)
   if (!found.ok) return { ok: false, reason: found.reason }
   const { fullName, defaultBranch: branch } = found.value
   const tip = await ghApp<{ sha?: unknown }>(

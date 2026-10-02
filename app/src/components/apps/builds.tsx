@@ -58,7 +58,7 @@ export function BuildsBoard({
   app: string
   initial: BuildSummary[]
   buildOnBox: boolean
-  /** The sweep has matched the app to its GitHub repository. */
+  /** The app is pinned to its GitHub repository (core/builds/link.ts). */
   linked: boolean
 }) {
   const anyOpen = (bs: BuildSummary[]) => bs.some((b) => isOpenBuild(b.state))
@@ -71,11 +71,8 @@ export function BuildsBoard({
   const open = anyOpen(builds)
   const now = useNow(open)
 
-  const refusal = !buildOnBox
-    ? 'Box builds are off for this app.'
-    : !linked
-      ? 'Waiting for the sweep to link the repo.'
-      : undefined
+  // Not linked is no refusal: Build now links the repo first.
+  const refusal = !buildOnBox ? 'Box builds are off for this app.' : undefined
 
   return (
     <Board
@@ -94,8 +91,8 @@ export function BuildsBoard({
       )}
       {buildOnBox && !linked && (
         <p className="m-0 text-[0.82rem] text-subdued">
-          Waiting for the sweep to link this app to its GitHub repository. Pushes and Build now
-          start working once it has.
+          Not linked to its GitHub repository yet. Build now or the next push links it through the
+          installed App.
         </p>
       )}
 

@@ -116,8 +116,8 @@ export function BuildSettings({ app }: { app: AppRecord }) {
           />
           {app.githubRepoId === null && (
             <p className={FOOT}>
-              The hourly sweep links an app to its GitHub repository by name, through the installed
-              App. Builds wait for that.
+              An app is linked to the repository of the same name the installed App can see. Build
+              now or the next push links it; the hourly sweep tries too.
             </p>
           )}
           {error !== null && (

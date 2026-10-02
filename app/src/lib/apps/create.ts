@@ -1,3 +1,4 @@
+import { linkAppRepo, type RepoLink } from '../../core/builds/link'
 import type { Ctx } from '../../core/ctx'
 import { repoFileExists } from '../../core/github-app'
 import { publishingFacts } from '../../host/contract/domains/publishing'
@@ -6,8 +7,10 @@ import { manifestEntries } from '../../host/nix-manifest'
 import { imageInfo } from '../../host/registry'
 import { swrCache } from '../cache'
 import type { RepoBuild } from '../readiness'
-import { listAppNames } from '../repo/apps'
-import { appRepo, defaultImage, registryHostPattern } from '../site'
+import { createApp, getApp, listAppNames } from '../repo/apps'
+import { appRepo, defaultImage } from '../site'
+import { gatedReference } from './image-gate'
+import { validateNewApp } from './validate'
 
 // The reads behind the create form: what it can be pointed at, whether the
 // image it would produce exists yet, and what the repository says about how it
@@ -86,22 +89,41 @@ export async function appPreflight(ctx: Ctx, data: { name: string; image: string
   // Only images on the box's own zot can be verified from here — an override
   // pointing at GHCR or docker.io is reported as unverified rather than
   // guessed at, because a wrong "missing" would block a legitimate fork.
-  // `<repo>` then an optional `:tag` or `@digest`; the leading separator is
-  // dropped either way, since the manifest endpoint takes both as a bare
-  // reference.
-  const local = new RegExp(`^${registryHostPattern(site)}/(?<repo>[^:@]+)(?<ref>[:@].+)?$`).exec(
-    effectiveImage,
-  )
+  const local = gatedReference(site, {
+    name: data.name,
+    image: data.image,
+    sourceMode: 'registry',
+    managedInNix: false,
+  })
   // Two independent upstreams — the box's own zot and GitHub — so they are
   // asked together rather than one behind the other.
   const [imageState, build] = await Promise.all([
-    local?.groups?.repo === undefined
+    local === null
       ? Promise.resolve('unverifiable' as const)
-      : imageInfo(local.groups.repo, (local.groups.ref ?? ':latest').slice(1)).then((info) =>
+      : imageInfo(local.repo, local.reference).then((info) =>
           info.digest === null ? ('missing' as const) : ('present' as const),
         ),
     repoBuild(ctx, data.name),
   ])
 
   return { effectiveImage, imageState, repoBuild: build }
+}
+
+/**
+ * Create the entry, then link it to its GitHub repository straight away, so
+ * its first push or Build now does not wait for the hourly sweep. The entry
+ * stands either way: a link that fails is reported beside it, and Build now
+ * (or the sweep) tries again.
+ */
+export async function createAppLinked(
+  ctx: Ctx,
+  input: Record<string, unknown>,
+): Promise<{ name: string; link: RepoLink }> {
+  const { name } = await createApp(validateNewApp(input))
+  const record = await getApp(name)
+  const link: RepoLink =
+    record === undefined
+      ? { ok: false, reason: `${name} was created, but could not be read back to link it.` }
+      : await linkAppRepo(ctx, record)
+  return { name, link }
 }

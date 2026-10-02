@@ -146,10 +146,9 @@ export const createAppFn = adminFn
   // the name, which it checks with appNameError so a create refuses a reserved
   // or taken label too. All this owes is a record to hand it.
   .validator(asValidator(withMessage(obj({ app: recordField }), 'expected an app to create')))
-  .handler(async ({ data }): Promise<{ name: string }> => {
-    const { createApp } = await import('../lib/repo/apps')
-    const { validateNewApp } = await import('../lib/apps/validate')
-    return createApp(validateNewApp(data.app))
+  .handler(async ({ data, context }) => {
+    const { createAppLinked } = await import('../lib/apps/create')
+    return createAppLinked(await context.ctx(), data.app)
   })
 
 export const deleteAppFn = adminFn
@@ -174,10 +173,18 @@ export const saveApp = adminFn
       ),
     ),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateApp } = await import('../lib/repo/apps')
     const { validateAppPatch } = await import('../lib/apps/validate')
-    await updateApp(data.name, validateAppPatch(data.patch))
+    const { stageChangeRefusal } = await import('../lib/apps/image-gate')
+    const patch = validateAppPatch(data.patch)
+    // A rung that runs a container needs an image to pull: refused here, as
+    // the exposure control already says, rather than at the Apply's switch.
+    if (patch.stage !== undefined) {
+      const refused = await stageChangeRefusal(await context.ctx(), data.name, patch.stage)
+      if (refused !== null) throw new Error(refused)
+    }
+    await updateApp(data.name, patch)
     return { ok: true }
   })
 

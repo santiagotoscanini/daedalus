@@ -157,9 +157,7 @@ function BuildActions({
       ? 'No app by that name.'
       : !app.buildOnBox
         ? 'Box builds are off for this app.'
-        : !app.linked
-          ? 'Waiting for the sweep to link the repo.'
-          : undefined
+        : undefined
 
   return (
     <div className="mb-5 flex flex-wrap items-center gap-2">

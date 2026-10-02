@@ -19,8 +19,8 @@ import { Board } from '../viz'
  * looking at.
  *
  * The honest part is the list of what does NOT go away. `deleteApp` removes a
- * declaration; the postgres database, the data directory and any sops file
- * outlive it, because a UI button should not be able to destroy data that
+ * declaration (and the rows that cascade from it); the postgres database, the
+ * data directory, the machine-state secrets and any sops file outlive it, because a UI button should not be able to destroy data that
  * takes a restore to get back. Reclaiming them stays a deliberate act at a
  * shell, and the panel says so instead of leaving you to find out.
  */
@@ -55,7 +55,8 @@ export function RemovePanel({
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] items-start gap-6 max-[50rem]:grid-cols-[minmax(0,1fr)]">
         <div className="[&>p]:mt-0 [&>p]:mr-0 [&>p]:mb-2 [&>p]:ml-0 [&>p]:text-[0.85rem] [&>p]:leading-[1.55] [&>p]:text-subdued">
           <p>
-            Deletes the registry entry. The next Apply removes the container, the traefik router,
+            Deletes the registry entry with its variables, tasks, build and deploy history, and its
+            link to the GitHub repository. The next Apply removes the container, the traefik router,
             the pi-hole record, the gatus probe and the Cloudflare route.
           </p>
           <p className="mb-0 text-[0.73rem] leading-[1.45] text-muted-foreground">
@@ -63,13 +64,14 @@ export function RemovePanel({
             {[
               postgres && `the ${name} database and role on the shared cluster`,
               storage && dataDir,
-              `stacks/apps/secrets/${name}/`,
-              `any stacks/apps/${name}-env.sops`,
-              'the GitHub repo and its published images',
+              'its generated secrets in the box’s machine state',
+              `any site/vault/apps/${name}-env.sops`,
+              'the GitHub repo and its images in the box’s registry',
             ]
               .filter((s): s is string => typeof s === 'string')
               .join(', ')}
-            . Those are data, and removing them is a separate, deliberate act.
+            . Those are data, and removing them is a separate, deliberate act. An app created again
+            under the same name picks them back up.
           </p>
         </div>
         <div className="flex flex-col items-stretch gap-[0.6rem]">

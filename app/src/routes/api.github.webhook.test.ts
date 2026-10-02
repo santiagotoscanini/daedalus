@@ -43,6 +43,18 @@ const h = vi.hoisted(() => ({
   txs: [] as FakeTx[],
   enqueueExecs: [] as unknown[],
   seq: 0,
+  /** What linking an unpinned app answers: the repository id the App listing names, or a refusal. */
+  link: null as number | null,
+  linked: [] as string[],
+}))
+
+vi.mock('../core/builds/link', () => ({
+  linkAppRepo: async (_ctx: unknown, app: { name: string }) => {
+    h.linked.push(app.name)
+    return h.link === null
+      ? { ok: false, reason: 'not visible' }
+      : { ok: true, value: { repoId: h.link, fullName: null } }
+  },
 }))
 
 vi.mock('../lib/repo/pool', () => ({
@@ -275,6 +287,8 @@ beforeEach(async () => {
   h.txs = []
   h.enqueueExecs = []
   h.seq = 0
+  h.link = null
+  h.linked = []
   vi.spyOn(console, 'info').mockImplementation(() => undefined)
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -602,6 +616,27 @@ describe('handleGithubWebhook: push', () => {
     expect(await res.json()).toEqual({ status: 'ignored', reason })
     expect(h.builds).toHaveLength(0)
     expect(h.enqueueExecs).toHaveLength(0)
+  })
+
+  it('links an unpinned app through the App listing, then builds the push', async () => {
+    h.apps = [iris({ githubRepoId: null })]
+    h.link = REPO_ID
+    const res = await handleGithubWebhook(delivery('push', pushBody()), deps)
+    expect(await res.json()).toEqual({ status: 'queued', build: 'build-1', superseded: 0 })
+    expect(h.linked).toEqual(['iris'])
+  })
+
+  it('refuses a push whose repo is not the one the App listing links', async () => {
+    h.apps = [iris({ githubRepoId: null })]
+    h.link = REPO_ID + 9
+    const res = await handleGithubWebhook(delivery('push', pushBody()), deps)
+    expect(await res.json()).toEqual({ status: 'ignored', reason: 'repo-mismatch' })
+    expect(h.builds).toHaveLength(0)
+  })
+
+  it('asks for no link when the app is already pinned', async () => {
+    await handleGithubWebhook(delivery('push', pushBody()), deps)
+    expect(h.linked).toEqual([])
   })
 
   it('builds a renamed repo for its pinned app, and not a new repo under the old name', async () => {

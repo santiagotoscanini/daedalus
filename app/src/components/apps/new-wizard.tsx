@@ -61,6 +61,8 @@ export function Wizard({ options }: { options: Options }) {
   const [preflight, setPreflight] = useState<Preflight | null>(null)
   const [checking, setChecking] = useState(false)
   const { run, busy, error } = useAction()
+  // Created, but not linked to its repository (lib/apps/create.ts createAppLinked).
+  const [unlinked, setUnlinked] = useState<{ name: string; reason: string } | null>(null)
 
   // The manual re-run trigger for the check below.
   const [recheck, setRecheck] = useState(0)
@@ -126,7 +128,8 @@ export function Wizard({ options }: { options: Options }) {
   // No readiness term: the entry is a database row, and the app it declares
   // starts nothing until it is promoted. What is still checked is what would
   // corrupt the registry — a name or a hostname that is not free or not legal.
-  const canCreate = repo !== null && nameErr === null && hostErr === null && !busy && !checking
+  const canCreate =
+    repo !== null && nameErr === null && hostErr === null && !busy && !checking && unlinked === null
 
   const create = () => {
     if (!repo) return
@@ -151,8 +154,12 @@ export function Wizard({ options }: { options: Options }) {
         // Straight to the app's own page: the entry exists in the database as
         // `declared`, and that page is where the Apply that makes it real
         // lives — and, after the first build, the promotion off `declared`.
-        onDone: () =>
-          router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'settings' } }),
+        // Unless the repository could not be linked: that is said here, once,
+        // before leaving.
+        onDone: (r) =>
+          r.link.ok
+            ? router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'settings' } })
+            : setUnlinked({ name: r.name, reason: r.link.reason }),
       },
     )
   }
@@ -274,10 +281,11 @@ export function Wizard({ options }: { options: Options }) {
                 <p className={FOOT}>
                   Not here, on purpose. <b>SSO</b> is a second, deliberate step on the app’s own
                   page: its client secret is generated on the box, so there is nothing to author
-                  first. <b>Operator secrets</b> have no switch at all. Commit a{' '}
-                  <code>{name || '<name>'}-env.sops</code> to <code>stacks/apps/</code> and the next
-                  rebuild loads it. <b>VPN egress</b> is the one thing that still needs the flake.
-                  It wants a gluetun instance to exist before anything can join its netns.
+                  first. <b>Operator secrets</b> have no switch at all. Once the entry is applied,
+                  set them on the app’s Secrets tab, which writes{' '}
+                  <code>site/vault/apps/{name || '<name>'}-env.sops</code>; the next rebuild loads
+                  it. <b>VPN egress</b> is the one thing that still needs the flake. It wants a
+                  gluetun instance to exist before anything can join its netns.
                 </p>
               </Board>
 
@@ -334,6 +342,22 @@ export function Wizard({ options }: { options: Options }) {
             {error !== null && (
               <Alert variant="warning" className={WARN_BANNER}>
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {unlinked !== null && (
+              <Alert variant="warning" className={WARN_BANNER}>
+                <AlertDescription>
+                  Created {unlinked.name}, but it is not linked to a GitHub repository, so it cannot
+                  build yet. {unlinked.reason} Build now on{' '}
+                  <Link
+                    to="/apps/$name"
+                    params={{ name: unlinked.name }}
+                    search={{ tab: 'deployments' }}
+                  >
+                    its page
+                  </Link>{' '}
+                  tries again.
+                </AlertDescription>
               </Alert>
             )}
 

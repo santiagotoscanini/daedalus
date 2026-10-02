@@ -1,7 +1,8 @@
 // The scheduler's hourly sweep, run out of band from the tick: retention (old
 // webhook deliveries, finished builds' heavy columns, year-old deploys,
-// expired enroll codes), pin each registry app to its GitHub repository by name,
-// and enqueue a default-branch HEAD that no push delivered (tunnel down, a
+// expired enroll codes), pin each registry app to its GitHub repository by name
+// (the backstop: creating the app, Build now and a push link it first —
+// core/builds/link.ts), and enqueue a default-branch HEAD that no push delivered (tunnel down, a
 // lost delivery, a container restart). scheduler.ts decides when it runs; the
 // record it leaves is stored as `builds.lastSweep` (no page reads it yet).
 
@@ -147,11 +148,8 @@ async function pinApp(
 ): Promise<number | null | 'raced'> {
   const repoId = app.githubRepoId
   if (repoId === null && named !== undefined) {
-    const repo = await import('../../lib/repo/builds')
-    if (!(await repo.pinGithubRepoId(app.id, named.id))) return 'raced'
-    console.info(
-      `[builds] pinned ${app.name} to ${named.fullName} (repository id ${String(named.id)})`,
-    )
+    const { pinNamed } = await import('./link')
+    if (!(await pinNamed(app, named))) return 'raced'
     record.pinned.push(app.name)
     return named.id
   }

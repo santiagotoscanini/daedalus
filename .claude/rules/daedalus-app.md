@@ -273,7 +273,13 @@ loaded. They are not repeated here.
   the committed `apps.json` and an entry above `declared` whose image
   does not exist fails the switch and reverts its own Apply. The order
   is create → Apply → build → promote → Apply, and the promotion is
-  offered on the app's page rather than left to be remembered. When
+  offered on the app's page rather than left to be remembered. The
+  promotion waits for the image: `lib/apps/image-gate.ts` asks zot for
+  the exact reference the container pulls, and the exposure control,
+  the save and the Apply (preview included) all refuse a step into a
+  running rung while it is missing. Creating an app links it to its
+  repository at once (`core/builds/link.ts`, the lookup the hourly
+  sweep makes, shared with Build now and the webhook). When
   reading a stage, ask the question you mean — `stageRuns` or
   `stageExposed` — never `!== 'off'`, which counts a declared app as
   exposed.

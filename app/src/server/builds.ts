@@ -74,8 +74,6 @@ export type BuildPageApp = {
   postgres: boolean
   egressContainer: string | null
   buildOnBox: boolean
-  /** Matched to its GitHub repository by the sweep, and buildable at all. */
-  linked: boolean
 }
 
 /** The app around a build page: one row, for the rail and the Build again button. */
@@ -94,7 +92,6 @@ export const fetchBuildApp = readFn
       postgres: r.postgres,
       egressContainer: r.egressContainer,
       buildOnBox: r.buildOnBox,
-      linked: r.githubRepoId !== null && !r.managedInNix && r.sourceMode !== 'local',
     }
   })
 

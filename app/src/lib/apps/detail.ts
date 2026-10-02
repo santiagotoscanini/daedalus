@@ -10,7 +10,8 @@ import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
 import { getApp } from '../repo/apps'
 import { appRepo, defaultImage } from '../site'
-import { stageExposed } from '../stage'
+import { stageExposed, stageRuns } from '../stage'
+import { type FirstImage, firstImage } from './image-gate'
 import { asDeclared, driftOf } from './manifest-map'
 import { appStatuses } from './metrics'
 
@@ -51,6 +52,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     workspaces,
     deployShot,
     site,
+    image,
   ] = await Promise.all([
     appStatuses(ctx, [name]),
     readApplyStatus(ctx),
@@ -63,6 +65,9 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     readWorkspaces(),
     readDeployShot(name),
     siteIdentity(),
+    // Asked only of an app that runs nothing yet: the exposure control offers
+    // the running rungs once its first image exists (./image-gate.ts).
+    stageRuns(record.stage) ? Promise.resolve(null) : firstImage(box, record),
   ])
 
   return {
@@ -95,6 +100,8 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
       deployEnable: record.deployEnable,
       image: record.image,
       effectiveImage: record.image ?? defaultImage(box, record.name),
+      /** Null for an app already running; see image-gate.ts. */
+      firstImage: image as FirstImage | null,
       hostname: record.hostname,
       effectiveHostname: hostname,
       description: record.description,

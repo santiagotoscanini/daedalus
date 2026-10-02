@@ -140,8 +140,8 @@ export type PushContext = {
   installationId: number | null
   /**
    * The app named by the lowercased repo name; null when none exists. Its
-   * githubRepoId is null until the repo picker or the installation listing
-   * pins it — never a push.
+   * githubRepoId is null until the installation listing pins it
+   * (core/builds/link.ts) — never a push's own payload.
    */
   app: { githubRepoId: number | null } | null
 }
