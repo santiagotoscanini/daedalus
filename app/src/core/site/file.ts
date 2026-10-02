@@ -36,6 +36,14 @@ export type SiteGithubApp = {
   ownerId: number
 }
 
+/**
+ * An account or org besides the owner whose installation of the App the box
+ * trusts: the token minter gives it a read-only token, which is how its Pages
+ * sites reach the off-box list. Keyed by numeric id — a login can be renamed
+ * and a new account can take the old name; the login is kept for the page.
+ */
+export type SiteTrustedAccount = { login: string; id: number }
+
 export type SiteDocument = {
   schemaVersion: 1
   identity: {
@@ -63,10 +71,11 @@ export type SiteDocument = {
   /** Identifiers, not credentials — the ids in every dash.cloudflare.com URL.
       The API token is sealed in the vault (core/settings/cloudflare-token.ts). */
   cloudflare: { accountId: string; zoneId: string; tunnelId: string }
-  /** Absent means no App, the same as `app: null`. No settings tab edits it:
-      it is carried from the committed document, and only the App-creation
-      callback writes a new one. */
-  github?: { app: SiteGithubApp | null }
+  /** Absent means no App, the same as `app: null`. No settings tab edits
+      `app`: it is carried from the committed document, and only the
+      App-creation callback writes a new one. `trustedAccounts` is edited from
+      Settings › Integrations (core/site/trusted-accounts.ts). */
+  github?: { app: SiteGithubApp | null; trustedAccounts: SiteTrustedAccount[] }
   /**
    * The break-glass local login (core/local-login.ts). Absent means off, and
    * off means the login route does not exist. Deliberately NOT in core/site's
@@ -184,6 +193,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     // The running box's switches are its own files' word; the document
     // carries only what the operator moved, which a box read back is none.
     modules: { enabled: {}, web: {}, players: {} },
+    github: { app: null, trustedAccounts: [] },
   }
 }
 
@@ -203,6 +213,7 @@ function identityAsWritten(identity: SiteDocument['identity']): Record<string, u
 export function renderSiteFile(doc: SiteDocument): string {
   const { github, developer, commits, modules, ...rest } = doc
   const app = github?.app ?? null
+  const trusted = [...(github?.trustedAccounts ?? [])].sort((a, b) => a.id - b.id)
   const switched = Object.keys(modules.enabled).sort()
   // A webApp is written while either field says something, each field only
   // while it does: a null is the host's word, and the host's word is absence.
@@ -265,18 +276,26 @@ export function renderSiteFile(doc: SiteDocument): string {
     // Last, and copied key by key. The fixed order keeps a new App a single
     // block in the diff, and nothing else on the caller's object can reach a
     // committed file (the manifest conversion reply also carries the private key).
-    ...(app === null
+    // `trustedAccounts` only while it holds someone, so a box that trusts no
+    // one else renders the bytes it always did.
+    ...(app === null && trusted.length === 0
       ? {}
       : {
           github: {
-            app: {
-              id: app.id,
-              slug: app.slug,
-              clientId: app.clientId,
-              htmlUrl: app.htmlUrl,
-              owner: app.owner,
-              ownerId: app.ownerId,
-            },
+            app:
+              app === null
+                ? null
+                : {
+                    id: app.id,
+                    slug: app.slug,
+                    clientId: app.clientId,
+                    htmlUrl: app.htmlUrl,
+                    owner: app.owner,
+                    ownerId: app.ownerId,
+                  },
+            ...(trusted.length === 0
+              ? {}
+              : { trustedAccounts: trusted.map((a) => ({ login: a.login, id: a.id })) }),
           },
         }),
   }

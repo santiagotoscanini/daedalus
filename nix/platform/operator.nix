@@ -137,6 +137,34 @@ in
       '';
     };
 
+    # Accounts besides the owner whose installation of the App the box trusts
+    # with a READ-ONLY token (the minter's OTHER_PERMISSIONS) — how an org's
+    # Pages sites reach the off-box list. Sourced from site.json
+    # (`github.trustedAccounts`, edited in Settings › Integrations), unlike
+    # `expectedOwnerId` below, on purpose: the worst a planted entry buys is
+    # read access to repositories whose owner installed this App themselves,
+    # less than the owner's token the container already holds. Builds,
+    # checks and deployments never use these tokens.
+    trustedAccounts = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            # GitHub's login charset: it reaches the minter's journal lines.
+            login = lib.mkOption {
+              type = lib.types.strMatching "[A-Za-z0-9-]+";
+              description = "The account's login, for the page and the journal.";
+            };
+            id = lib.mkOption {
+              type = lib.types.ints.positive;
+              description = "The account's numeric id — what the minter matches, because a login can be renamed.";
+            };
+          };
+        }
+      );
+      default = [ ];
+      description = "GitHub accounts (beyond the App's owner) the token minter mints read-only tokens for.";
+    };
+
     # The account the box trusts to own the App and every repository it
     # builds. A constant of this box, NOT sourced from site.json: the daedalus
     # container writes site.json through Apply, and a planted `ownerId` there

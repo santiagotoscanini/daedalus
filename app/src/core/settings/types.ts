@@ -108,12 +108,18 @@ export type VercelStatus = {
 
 /** One installation of the GitHub App, as the host's minter last published it. */
 export type InstallationStatus = {
+  installationId: number | null
   account: string
+  accountId: number | null
   /** The owner's installation: the one that builds. The rest only read. */
   owner: boolean
   selection: string | null
-  ok: boolean
+  /** `untrusted`: installed by an account the box has not been told to trust, so no token.
+      `not-installed`: trusted, but the account has not installed the App yet. */
+  state: 'ok' | 'error' | 'untrusted' | 'not-installed'
   reason: string | null
+  /** Trusted in the site draft, but the next Apply has not written it yet (either way). */
+  pending: 'trust' | 'untrust' | null
   /** Permissions the box asks for that this installation has not accepted. */
   missing: string[]
 }

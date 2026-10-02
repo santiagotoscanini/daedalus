@@ -103,8 +103,9 @@ const shape = obj({
           ownerId: int,
         }),
       ),
+      trustedAccounts: optional(arrayOf(obj({ login: str, id: int })), []),
     }),
-    { app: null },
+    { app: null, trustedAccounts: [] },
   ),
 })
 

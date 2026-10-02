@@ -437,7 +437,10 @@ async function applyApp(
           : `site.json now names another GitHub App (id ${String(current)}). Discard ${app.slug} and start again.`,
     }
   }
-  const siteJson = renderSiteFile({ ...site.value.doc, github: { app } })
+  const siteJson = renderSiteFile({
+    ...site.value.doc,
+    github: { trustedAccounts: site.value.doc.github?.trustedAccounts ?? [], app },
+  })
   try {
     const { runSecretApply } = await import('../../host/apply-flow')
     const outcome = await runSecretApply(

@@ -152,6 +152,19 @@ export function playerChangeWords(
   })
 }
 
+/** The trusted GitHub accounts, as the Apply bar words them: "github: santree-ai trusted". */
+export function trustChangeWords(
+  committed: readonly { login: string; id: number }[],
+  desired: readonly { login: string; id: number }[],
+): string[] {
+  const a = new Set(committed.map((x) => x.id))
+  const b = new Set(desired.map((x) => x.id))
+  return [
+    ...desired.filter((x) => !a.has(x.id)).map((x) => `github: ${x.login} trusted`),
+    ...committed.filter((x) => !b.has(x.id)).map((x) => `github: ${x.login} untrusted`),
+  ]
+}
+
 /**
  * The site fields the Apply bar lists: every changed field by name, except
  * the module fields, which are spelled out per entry ("n8n off") — the
@@ -163,7 +176,11 @@ export function siteBarFields(
 ): string[] {
   return [
     ...changes.filter(
-      (f) => f !== 'modules.enabled' && f !== 'modules.web' && f !== 'modules.players',
+      (f) =>
+        f !== 'modules.enabled' &&
+        f !== 'modules.web' &&
+        f !== 'modules.players' &&
+        f !== 'github.trustedAccounts',
     ),
     ...moduleChanges,
   ]

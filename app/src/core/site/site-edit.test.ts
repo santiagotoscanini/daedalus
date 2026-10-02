@@ -94,6 +94,7 @@ const committed: SiteDocument = {
       owner: 'o',
       ownerId: 42,
     },
+    trustedAccounts: [],
   },
 }
 

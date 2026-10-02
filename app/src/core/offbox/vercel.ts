@@ -19,14 +19,14 @@ export type VercelScope = { teamId: string | null; slug: string; name: string }
 type Failure = { status: number | null; error: string | null }
 type Got<T> = { ok: true; value: T } | { ok: false; reason: Failure }
 
-/** One GET as the token, `teamId` added when the scope is a team. */
+/** One GET as the token — the configured one, or `token` for a candidate being checked. */
 async function vercel<T>(
   ctx: Ctx,
   path: string,
   scope: VercelScope | null,
   query: Record<string, string> = {},
+  token: string = ctx.secret('VERCEL_API_TOKEN'),
 ): Promise<Got<T>> {
-  const token = ctx.secret('VERCEL_API_TOKEN')
   if (token === '') return { ok: false, reason: { status: null, error: 'not-configured' } }
   const params = new URLSearchParams(query)
   if (scope?.teamId) params.set('teamId', scope.teamId)
@@ -46,36 +46,52 @@ export function describeVercelFailure(f: Failure): string {
   return `Vercel answered ${String(f.status)}`
 }
 
-type User = { user?: { username?: unknown; name?: unknown; defaultTeamId?: unknown } }
+type User = { user?: { username?: unknown } }
 type Teams = { teams?: { id?: unknown; slug?: unknown; name?: unknown }[] }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 
 /**
- * Who the token is and which scopes it reaches. A team-scoped token refuses
- * `/v2/user`'s personal scope for projects but still names its user; the
- * team list is what it can actually read.
+ * Who the token is and which scopes it reaches, for any of Vercel's three
+ * kinds of token. A full-account token names its user and lists its teams,
+ * and each team is read with `teamId`. A team- or project-scoped token may be
+ * refused both user-level reads; Vercel infers its scope, so it is read with
+ * no `teamId` at all (the one null scope) — proven by listing a project.
  */
 export async function vercelScopes(
   ctx: Ctx,
+  token: string = ctx.secret('VERCEL_API_TOKEN'),
 ): Promise<{ ok: true; user: string; scopes: VercelScope[] } | { ok: false; reason: string }> {
   const [user, teams] = await Promise.all([
-    vercel<User>(ctx, '/v2/user', null),
-    vercel<Teams>(ctx, '/v2/teams', null, { limit: '50' }),
+    vercel<User>(ctx, '/v2/user', null, {}, token),
+    vercel<Teams>(ctx, '/v2/teams', null, { limit: '50' }, token),
   ])
-  if (!user.ok) return { ok: false, reason: describeVercelFailure(user.reason) }
-  const username = str(user.value.user?.username) ?? 'personal'
   const scopes: VercelScope[] = []
   for (const t of teams.ok ? (teams.value.teams ?? []) : []) {
     const id = str(t.id)
     const slug = str(t.slug)
     if (id !== null && slug !== null) scopes.push({ teamId: id, slug, name: str(t.name) ?? slug })
   }
-  // The personal scope last: on accounts where it is also a team (Vercel's
-  // default team), the team entry above already reads the same projects and
-  // dedup by project id keeps the first.
-  scopes.push({ teamId: null, slug: username, name: username })
-  return { ok: true, user: username, scopes }
+  const username = user.ok ? str(user.value.user?.username) : null
+  if (username !== null) {
+    // The personal scope last: where it is also a team (Vercel's default
+    // team), the team entry above reads the same projects, and dedup by
+    // project id keeps the first.
+    scopes.push({ teamId: null, slug: username, name: username })
+    return { ok: true, user: username, scopes }
+  }
+  if (scopes.length > 0) return { ok: true, user: scopes[0]?.slug ?? 'team', scopes }
+  // Neither answered: a scoped token, or no token Vercel knows. Listing a
+  // project in the inferred scope tells the two apart.
+  const probe = await vercel(ctx, '/v10/projects', null, { limit: '1' }, token)
+  if (!probe.ok) {
+    return { ok: false, reason: describeVercelFailure(user.ok ? probe.reason : user.reason) }
+  }
+  return {
+    ok: true,
+    user: 'scoped token',
+    scopes: [{ teamId: null, slug: 'scoped', name: 'scoped token' }],
+  }
 }
 
 /** When the token expires (ISO), or null when it never does or Vercel would not say. */
@@ -88,6 +104,7 @@ export async function vercelTokenExpiry(ctx: Ctx): Promise<string | null> {
 /** `/v10/projects`' project, the fields read here. */
 type Project = {
   id?: unknown
+  accountId?: unknown
   name?: unknown
   framework?: unknown
   link?: { type?: unknown; org?: unknown; repo?: unknown } | null
@@ -157,7 +174,10 @@ export function vercelRow(p: Project, scope: VercelScope, warnings: string[]): E
         ? null
         : { at: new Date(createdAt).toISOString(), sha: str(prod?.meta?.githubCommitSha) },
     warnings: p.paused === true ? ['paused', ...warnings] : warnings,
-    dashboardUrl: `https://vercel.com/${scope.slug}/${name}`,
+    dashboardUrl:
+      scope.slug === ''
+        ? 'https://vercel.com/dashboard'
+        : `https://vercel.com/${scope.slug}/${name}`,
   }
 }
 
@@ -212,6 +232,17 @@ async function projectsIn(ctx: Ctx, scope: VercelScope): Promise<Got<Project[]>>
   return { ok: true, value: out }
 }
 
+/** The team slug behind a scoped token's projects, for the dashboard links. */
+async function scopedSlug(ctx: Ctx, p: Project | undefined): Promise<VercelScope> {
+  const fallback = { teamId: null, slug: '', name: 'scoped token' }
+  const account = str(p?.accountId)
+  if (account === null) return fallback
+  const r = await vercel<{ slug?: unknown; name?: unknown }>(ctx, `/v2/teams/${account}`, null)
+  if (!r.ok) return fallback
+  const slug = str(r.value.slug)
+  return slug === null ? fallback : { teamId: null, slug, name: str(r.value.name) ?? slug }
+}
+
 /** Every project the token can see, and one status per scope. */
 export async function discoverVercel(
   ctx: Ctx,
@@ -261,8 +292,11 @@ export async function discoverVercel(
       seen.add(id)
       return true
     })
+    // A scoped token reads in an inferred scope with no slug of its own;
+    // the project's account names it, where the token may ask.
+    const named = s.slug === 'scoped' ? await scopedSlug(ctx, fresh[0]) : s
     const rows = await Promise.all(
-      fresh.map(async (p) => vercelRow(p, s, await domainWarnings(ctx, p, s))),
+      fresh.map(async (p) => vercelRow(p, named, await domainWarnings(ctx, p, s))),
     )
     for (const row of rows) if (row !== null) sites.push(row)
     status.push({ platform: 'Vercel', account: s.slug, state: 'ok', detail: null })
@@ -387,4 +421,16 @@ export async function vercelDetail(
         }
       : null,
   }
+}
+
+/** Whether a project list answers in any of the scopes — the proof a candidate token is useful. */
+export async function vercelProjectsReadable(
+  ctx: Ctx,
+  scopes: VercelScope[],
+  token: string,
+): Promise<boolean> {
+  for (const s of scopes) {
+    if ((await vercel(ctx, '/v10/projects', s, { limit: '1' }, token)).ok) return true
+  }
+  return false
 }

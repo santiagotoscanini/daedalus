@@ -374,6 +374,8 @@ in
         # `or`: absent (or `"github": null`) until an App exists. The fields are
         # picked by name so a key the engine adds later cannot fail the
         # submodule's type check before this module learns about it.
+        # Picked by name, like `app`. Absent until someone is trusted.
+        github.trustedAccounts = map (a: { inherit (a) login id; }) (siteDoc.github.trustedAccounts or [ ]);
         github.app =
           let
             app = siteDoc.github.app or null;

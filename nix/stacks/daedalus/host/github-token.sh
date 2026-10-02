@@ -195,10 +195,14 @@ local_failure() {
 
 # ── the other installations ───────────────────────────────────────────────
 #
-# Every account or org the App is installed on besides the owner's gets a
-# READ-ONLY token ($OTHER_PERMISSIONS, narrowed to its grant) in
-# $OTHERS_OUT: { version: 1, installations: [ { installationId, account,
-# repositorySelection, state ok|error, reason, token, expiresAt,
+# Every account or org the App is installed on besides the owner's, and
+# that the operator TRUSTS ($TRUSTED_ACCOUNT_IDS, from site.json's
+# github.trustedAccounts), gets a READ-ONLY token ($OTHER_PERMISSIONS,
+# narrowed to its grant). A public App can be installed by anyone: any other
+# installation is listed as state: untrusted, with no token, so the page can
+# offer to trust it — and a token it held while it was trusted is revoked.
+# All in $OTHERS_OUT: { version: 1, installations: [ { installationId, account,
+# repositorySelection, state ok|error|untrusted, reason, token, expiresAt,
 # missingPermissions, mintedAt, lastError? } ] }. The engine discovers what
 # those accounts host (their Pages sites) with it; nothing builds from them,
 # so nothing there needs more. Same failure rule per entry as the primary:
@@ -206,6 +210,25 @@ local_failure() {
 # An installation that is gone simply drops out — its last token dies
 # within the hour. Never fails the run: the owner's token is the one that
 # matters, and it is already published.
+
+# Whether account id $1 is one the operator trusts.
+trusted_account() {
+  local t
+  for t in "${TRUSTED_ACCOUNT_IDS[@]}"; do
+    [ "$t" = "$1" ] && return 0
+  done
+  return 1
+}
+
+# Revoke the token the previous file held for installation id $1, if any:
+# its account is no longer trusted. Best-effort — it expires within the hour.
+revoke_other() {
+  [ -f "$OTHERS_OUT" ] && [ ! -L "$OTHERS_OUT" ] || return 0
+  jq -c --argjson id "$1" 'first((.installations // [])[] | select(.installationId == $id and (.token | type) == "string" and .token != ""))' \
+    "$OTHERS_OUT" >"$GH_TMP/revoke.json" 2>/dev/null || return 0
+  [ -s "$GH_TMP/revoke.json" ] || return 0
+  gh_revoke "$GH_TMP/revoke.json" || echo "could not revoke the token of untrusted installation $1; it expires on its own" >&2
+}
 
 # The previous entry for installation id $1, still usable, with lastError
 # ($2) recorded, on stdout as one line; nothing when there is none.
@@ -229,6 +252,23 @@ mint_others() {
     jq ".[$i]" "$GH_TMP/others.json" >"$GH_TMP/other.json"
     id="$(jq -r '.id' "$GH_TMP/other.json")"
     login="$(jq -r '.account.login' "$GH_TMP/other.json")"
+    if ! trusted_account "$(jq -r '.account.id' "$GH_TMP/other.json")"; then
+      revoke_other "$id"
+      jq -nc --slurpfile inst "$GH_TMP/other.json" --arg mintedAt "$NOW_ISO" '
+        $inst[0] as $i | {
+          installationId: $i.id,
+          account: { login: $i.account.login, id: $i.account.id },
+          repositorySelection: $i.repository_selection,
+          state: "untrusted",
+          reason: "not trusted on this box",
+          token: null,
+          expiresAt: null,
+          missingPermissions: [],
+          mintedAt: $mintedAt
+        }' >>"$GH_TMP/others.jsonl"
+      echo "installation $id on $login is not trusted; no token" >&2
+      continue
+    fi
     if gh_narrow "$GH_TMP/other-wanted.json" "$GH_TMP/other.json" \
       "$GH_TMP/other-request.json" "$GH_TMP/other-missing.json" &&
       gh_mint "$GH_TMP/other-request.json" "$GH_TMP/other.json"; then

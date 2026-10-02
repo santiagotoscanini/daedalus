@@ -28,7 +28,7 @@ const GITHUB_TOKEN_MAX_AGE_MS = 70 * 60_000
 /** Less than this left and a clone or a check-run PATCH could outlive the token. */
 const TOKEN_MIN_REMAINING_MS = 5 * 60_000
 
-type GithubInstallationState = 'ok' | 'not-installed' | 'error'
+type GithubInstallationState = 'ok' | 'not-installed' | 'error' | 'untrusted'
 
 export type GithubInstallation = {
   version: 1
@@ -126,16 +126,19 @@ const DEFAULT_GITHUB_INSTALLATIONS_PATH = '/github-token/installations.json'
 /**
  * The App's OTHER installations — every account or org it is installed on
  * besides the owner's — as the minter publishes them beside the owner's file:
- * one read-only token each (contents, metadata, actions, pages, deployments), for
- * discovery and never for building. Entries share GithubInstallation's shape
- * so `usableToken` and `publicInstallation` apply to them unchanged.
+ * one read-only token each (contents, metadata, actions, pages, deployments),
+ * for discovery and never for building — and only for an account the
+ * operator trusts (site.json github.trustedAccounts). Any other is listed
+ * `untrusted`, without a token, so the page can offer to trust it. Entries
+ * share GithubInstallation's shape so `usableToken` and `publicInstallation`
+ * apply to them unchanged.
  */
 const otherInstallationsDecoder: Decoder<GithubInstallation[]> = withoutValues((v, p) =>
   obj({
     version: versionOne,
     installations: arrayOf(
       obj({
-        state: literal('ok', 'error'),
+        state: literal('ok', 'error', 'untrusted'),
         reason: optional(
           nullable((v, p) => redactSecrets(str(v, p))),
           null,

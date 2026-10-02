@@ -136,27 +136,73 @@ async function vercel(ctx: Ctx): Promise<VercelStatus> {
  * to grant — the operator's step, named on the page.
  */
 async function installations(ctx: Ctx): Promise<InstallationStatus[]> {
-  const { installationState, otherInstallations } = await import('../github-app')
-  const [owner, others] = await Promise.all([installationState(ctx), otherInstallations(ctx)])
+  const [{ installationState, otherInstallations }, { siteEdit }] = await Promise.all([
+    import('../github-app'),
+    import('../site'),
+  ])
+  const [owner, others, edit] = await Promise.all([
+    installationState(ctx),
+    otherInstallations(ctx),
+    siteEdit(ctx),
+  ])
+  const committed = new Set((edit.committed?.github?.trustedAccounts ?? []).map((a) => a.id))
+  const desired = new Set((edit.desired.github?.trustedAccounts ?? []).map((a) => a.id))
   const out: InstallationStatus[] = []
   if (owner.available && owner.data.account !== null) {
     out.push({
+      installationId: owner.data.installationId,
       account: owner.data.account.login,
+      accountId: owner.data.account.id,
       owner: true,
       selection: owner.data.repositorySelection,
-      ok: owner.data.state === 'ok',
+      state: owner.data.state === 'ok' ? 'ok' : 'error',
       reason: owner.data.reason,
+      pending: null,
       missing: owner.data.missingPermissions,
     })
   }
   for (const i of others.data) {
+    const id = i.account?.id ?? null
+    const pending =
+      id === null || committed.has(id) === desired.has(id)
+        ? null
+        : desired.has(id)
+          ? ('trust' as const)
+          : ('untrust' as const)
     out.push({
+      installationId: i.installationId,
       account: i.account?.login ?? String(i.installationId),
+      accountId: id,
       owner: false,
       selection: i.repositorySelection,
-      ok: i.state === 'ok',
+      state: i.state === 'untrusted' ? 'untrusted' : i.state === 'ok' ? 'ok' : 'error',
       reason: i.reason,
+      pending,
       missing: i.missingPermissions,
+    })
+  }
+  // Trusted (or being trusted, or being let go) but not installed: the row
+  // that carries the install link with the account picked.
+  const installed = new Set(others.data.map((i) => i.account?.id))
+  const named = [
+    ...(edit.committed?.github?.trustedAccounts ?? []),
+    ...(edit.desired.github?.trustedAccounts ?? []),
+  ]
+  const seen = new Set<number>()
+  for (const a of named) {
+    if (installed.has(a.id) || seen.has(a.id)) continue
+    seen.add(a.id)
+    out.push({
+      installationId: null,
+      account: a.login,
+      accountId: a.id,
+      owner: false,
+      selection: null,
+      state: 'not-installed',
+      reason: null,
+      pending:
+        committed.has(a.id) === desired.has(a.id) ? null : desired.has(a.id) ? 'trust' : 'untrust',
+      missing: [],
     })
   }
   return out
@@ -189,24 +235,28 @@ const failedCheck = (token: string): { ok: false; reason: string | null } =>
 async function load(ctx: Ctx): Promise<IntegrationStatus> {
   const cfToken = ctx.secret('CF_API_TOKEN')
   const vercelToken = ctx.secret('VERCEL_API_TOKEN')
-  const [cf, m, v, inst] = await Promise.all([
+  const [cf, m, v] = await Promise.all([
     settled(cloudflare(ctx), { token: failedCheck(cfToken), zone: null, tunnel: null }),
     settled(mail(ctx), { lastSentAt: null, lastRecipient: null }),
     settled(vercel(ctx), { token: failedCheck(vercelToken), user: null, scopes: [] }),
-    settled(installations(ctx), []),
   ])
   return {
     checkedAt: new Date().toISOString(),
     cloudflare: cf,
     mail: m,
     vercel: v,
-    installations: inst,
+    installations: [],
   }
 }
 
 let cached: (() => Promise<IntegrationStatus>) | null = null
 
-export function integrationStatus(ctx: Ctx): Promise<IntegrationStatus> {
+/**
+ * The cached checks, with the installations read fresh: those are two local
+ * files and the site draft, and a Trust click must show at once.
+ */
+export async function integrationStatus(ctx: Ctx): Promise<IntegrationStatus> {
   cached ??= swrValue({ ttlMs: TTL_MS }, () => load(ctx))
-  return cached()
+  const [status, inst] = await Promise.all([cached(), settled(installations(ctx), [])])
+  return { ...status, installations: inst }
 }

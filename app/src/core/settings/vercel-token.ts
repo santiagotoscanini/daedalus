@@ -1,4 +1,3 @@
-import { getJsonResult } from '../../lib/http'
 import type { Result } from '../../lib/result'
 import {
   VERCEL_TOKEN_FILE,
@@ -6,7 +5,6 @@ import {
   vercelTokenShapeError,
 } from '../../lib/vercel-token'
 import type { Ctx } from '../ctx'
-import { VERCEL_API } from '../offbox/vercel'
 import { sealForVault } from '../vault'
 
 // Settings › Integrations › Vercel › Replace token.
@@ -25,40 +23,14 @@ import { sealForVault } from '../vault'
 /** The Apply's request id, and who the new token reads as. */
 export type VercelTokenOutcome = Result<{ id: string; user: string }>
 
-async function check(token: string): Promise<Result<string>> {
-  const headers = { Authorization: `Bearer ${token}` }
-  const user = await getJsonResult<{ user?: { username?: unknown } }>(`${VERCEL_API}/v2/user`, {
-    headers,
-  })
-  if (!user.ok) {
-    return {
-      ok: false,
-      reason:
-        user.reason.status === null
-          ? 'Vercel did not answer; nothing was changed.'
-          : 'Vercel does not recognise this token.',
-    }
+async function check(ctx: Ctx, token: string): Promise<Result<string>> {
+  const { vercelScopes, vercelProjectsReadable } = await import('../offbox/vercel')
+  const who = await vercelScopes(ctx, token)
+  if (!who.ok) return { ok: false, reason: `Not applied: ${who.reason}.` }
+  if (!(await vercelProjectsReadable(ctx, who.scopes, token))) {
+    return { ok: false, reason: 'The token cannot list projects in any scope it reaches.' }
   }
-  const name = typeof user.value.user?.username === 'string' ? user.value.user.username : 'unknown'
-  const teams = await getJsonResult<{ teams?: { id?: unknown }[] }>(
-    `${VERCEL_API}/v2/teams?limit=1`,
-    {
-      headers,
-    },
-  )
-  const team =
-    teams.ok && typeof teams.value.teams?.[0]?.id === 'string' ? teams.value.teams[0].id : null
-  const projects = await getJsonResult(
-    `${VERCEL_API}/v10/projects?limit=1${team === null ? '' : `&teamId=${encodeURIComponent(team)}`}`,
-    { headers },
-  )
-  if (!projects.ok) {
-    return {
-      ok: false,
-      reason: 'The token cannot list projects; give it the team that holds them.',
-    }
-  }
-  return { ok: true, value: name }
+  return { ok: true, value: who.user }
 }
 
 export async function replaceVercelToken(
@@ -73,7 +45,7 @@ export async function replaceVercelToken(
     return { ok: false, reason: 'That is the token the box already uses.' }
   }
 
-  const checked = await check(token)
+  const checked = await check(ctx, token)
   if (!checked.ok) return checked
 
   const sealed = await sealForVault(VERCEL_TOKEN_FILE, token)

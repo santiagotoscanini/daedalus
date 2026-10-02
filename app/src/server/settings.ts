@@ -10,7 +10,7 @@ import type {
 } from '../core/settings/types'
 import type { VercelTokenOutcome } from '../core/settings/vercel-token'
 import type { McpTokenRow } from '../host/mcp/tokens'
-import { asValidator, bool, is, obj, optional, str, withMessage } from '../lib/contract/decode'
+import { asValidator, bool, int, is, obj, optional, str, withMessage } from '../lib/contract/decode'
 import { strMax } from '../lib/contract/fields'
 import { isMcpScope } from '../lib/mcp'
 import type { Result } from '../lib/result'
@@ -19,7 +19,7 @@ import { adminFn, readFn } from './fn'
 
 // Server functions behind Settings: the read-only facts (core/settings), the
 // live integration checks, the secrets set from the UI (the Cloudflare token,
-// the GitHub App) and the preferences — theme, projects, MCP tokens, the
+// the GitHub App and the accounts it trusts) and the preferences — theme, MCP tokens, the
 // admins switch. Values in the preference store never reach the site repo and
 // never trigger a rebuild — see the `settings` table comment in
 // host/schema.ts for where that line is drawn.
@@ -57,6 +57,32 @@ export const replaceCloudflareTokenFn = adminFn
   .handler(async ({ data, context }): Promise<TokenReplaceOutcome> => {
     const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
     return replaceCloudflareToken(await context.ctx(), context.actor, data.token)
+  })
+
+/**
+ * Settings › Integrations › GitHub › installations: trust the account behind
+ * an installation the minter reported, or stop trusting one
+ * (core/site/trusted-accounts.ts). Site edits, applied with the next Apply.
+ */
+export const trustInstallationFn = adminFn
+  .validator(asValidator(withMessage(obj({ installationId: int }), 'expected an installation id')))
+  .handler(async ({ data, context }) => {
+    const { trustInstallation } = await import('../core/site/trusted-accounts')
+    return trustInstallation(await context.ctx(), data.installationId)
+  })
+
+export const trustAccountFn = adminFn
+  .validator(asValidator(withMessage(obj({ login: str }), 'expected an account name')))
+  .handler(async ({ data, context }) => {
+    const { trustAccount } = await import('../core/site/trusted-accounts')
+    return trustAccount(await context.ctx(), data.login)
+  })
+
+export const untrustAccountFn = adminFn
+  .validator(asValidator(withMessage(obj({ id: int }), 'expected an account id')))
+  .handler(async ({ data, context }) => {
+    const { untrustAccount } = await import('../core/site/trusted-accounts')
+    return untrustAccount(await context.ctx(), data.id)
   })
 
 /**

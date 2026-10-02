@@ -116,6 +116,15 @@ async function installations(
     const account = i.account?.login ?? String(i.installationId)
     if (i.state === 'ok' && i.installationId !== null) {
       list.push({ as: i.installationId, account, missing: i.missingPermissions })
+    } else if (i.state === 'untrusted') {
+      // Someone installed the App and the operator has not said yes: no
+      // token, no rows, and the place to say yes.
+      status.push({
+        platform: 'GitHub Pages',
+        account,
+        state: 'needs-permission',
+        detail: 'installed the App but is not trusted yet',
+      })
     } else {
       status.push({
         platform: 'GitHub Pages',

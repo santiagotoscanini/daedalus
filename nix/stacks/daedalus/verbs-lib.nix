@@ -281,6 +281,9 @@ let
       # The trusted constant, never site.json's copy (platform/site.nix
       # asserts the two agree).
       OWNER_ID = config.fleet.github.expectedOwnerId;
+      # The accounts besides the owner it may mint (read-only) tokens for:
+      # site.json's `github.trustedAccounts`, by numeric id.
+      TRUSTED_ACCOUNT_IDS = map (a: a.id) config.fleet.github.trustedAccounts;
       OUT_DIR = githubTokenDir;
     };
     files = [

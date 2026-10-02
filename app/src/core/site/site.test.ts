@@ -81,7 +81,7 @@ describe('site.json round trip', () => {
     const withApp = renderSiteFile({
       ...doc,
       developer: { engineOverride: true },
-      github: { app: APP },
+      github: { app: APP, trustedAccounts: [] },
     })
     expect(withApp.indexOf('"developer"')).toBeLessThan(withApp.indexOf('"github"'))
   })
@@ -146,7 +146,7 @@ describe('site.json round trip', () => {
     const back = decodeSiteDocument(JSON.parse(once))
     expect(renderSiteFile(back)).toBe(once)
     // The decoder names the absent App; the renderer leaves it out again.
-    expect(back).toEqual({ ...doc, github: { app: null } })
+    expect(back).toEqual({ ...doc, github: { app: null, trustedAccounts: [] } })
   })
 
   it('ignores the preamble keys and refuses a wrong type', () => {
@@ -199,7 +199,7 @@ describe('site.json round trip', () => {
 })
 
 describe('the github block', () => {
-  const withApp: SiteDocument = { ...doc, github: { app: APP } }
+  const withApp: SiteDocument = { ...doc, github: { app: APP, trustedAccounts: [] } }
 
   it('round-trips byte for byte, as the last key', () => {
     const bytes = renderSiteFile(withApp)
@@ -218,7 +218,9 @@ describe('the github block', () => {
   })
 
   it('is left out without an App, so an older file keeps its bytes', () => {
-    expect(renderSiteFile({ ...doc, github: { app: null } })).toBe(renderSiteFile(doc))
+    expect(renderSiteFile({ ...doc, github: { app: null, trustedAccounts: [] } })).toBe(
+      renderSiteFile(doc),
+    )
     expect(renderSiteFile(doc)).not.toContain('"github"')
   })
 
@@ -233,7 +235,10 @@ describe('the github block', () => {
       slug: APP.slug,
       id: APP.id,
     }
-    const bytes = renderSiteFile({ ...doc, github: { app: reply as unknown as SiteGithubApp } })
+    const bytes = renderSiteFile({
+      ...doc,
+      github: { app: reply as unknown as SiteGithubApp, trustedAccounts: [] },
+    })
     expect(bytes).not.toContain('PRIVATE KEY')
     expect(bytes).not.toContain('webhook_secret')
     expect(bytes).toBe(renderSiteFile(withApp))
@@ -312,8 +317,49 @@ describe('changesBetween', () => {
 
   it('reports nothing pending for a github block the committed file already holds', () => {
     const committed = decodeSiteDocument(
-      JSON.parse(renderSiteFile({ ...doc, github: { app: APP } })),
+      JSON.parse(renderSiteFile({ ...doc, github: { app: APP, trustedAccounts: [] } })),
     )
     expect(changesBetween(committed, structuredClone(committed))).toEqual([])
+  })
+})
+
+describe('github.trustedAccounts', () => {
+  const trusting: SiteDocument = {
+    ...doc,
+    github: {
+      app: APP,
+      trustedAccounts: [
+        { login: 'zeta', id: 9 },
+        { login: 'santree-ai', id: 296_897_829 },
+      ],
+    },
+  }
+
+  it('round-trips, sorted by id, and is left out while empty', () => {
+    const once = renderSiteFile(trusting)
+    const back = decodeSiteDocument(JSON.parse(once))
+    expect(back.github?.trustedAccounts.map((a) => a.id)).toEqual([9, 296_897_829])
+    expect(renderSiteFile(back)).toBe(once)
+    expect(renderSiteFile({ ...doc, github: { app: APP, trustedAccounts: [] } })).not.toContain(
+      'trustedAccounts',
+    )
+  })
+
+  it('writes the block for trusted accounts even before an App exists', () => {
+    const bytes = renderSiteFile({
+      ...doc,
+      github: { app: null, trustedAccounts: [{ login: 'a', id: 1 }] },
+    })
+    expect(JSON.parse(bytes).github).toEqual({
+      app: null,
+      trustedAccounts: [{ login: 'a', id: 1 }],
+    })
+  })
+
+  it('is a change the Apply bar reports', () => {
+    const committed = decodeSiteDocument(
+      JSON.parse(renderSiteFile({ ...doc, github: { app: APP, trustedAccounts: [] } })),
+    )
+    expect(changesBetween(committed, trusting)).toEqual(['github.trustedAccounts'])
   })
 })

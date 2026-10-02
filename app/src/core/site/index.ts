@@ -99,6 +99,9 @@ const EDITABLE = [
   'modules.web',
   // A game server's roster (core/site/players.ts), worded per account.
   'modules.players',
+  // The accounts besides the owner whose installation of the GitHub App the
+  // box trusts (core/site/trusted-accounts.ts), worded per account.
+  'github.trustedAccounts',
 ] as const
 
 /** One field of the document that the UI may edit. Dotted path into SiteDocument. */
@@ -165,14 +168,21 @@ export async function runningSite(ctx: Ctx): Promise<SiteDocument> {
 }
 
 export function getField(doc: SiteDocument, field: SiteField): unknown {
-  return field.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)[k], doc)
+  // A step that is absent (`github`, on a document without an App) reads as
+  // undefined rather than throwing; setField creates it.
+  return field
+    .split('.')
+    .reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], doc)
 }
 
 function setField(doc: SiteDocument, field: SiteField, value: unknown): SiteDocument {
   const keys = field.split('.')
   const out = structuredClone(doc) as unknown as Record<string, unknown>
   let cursor = out
-  for (const k of keys.slice(0, -1)) cursor = cursor[k] as Record<string, unknown>
+  for (const k of keys.slice(0, -1)) {
+    cursor[k] ??= {}
+    cursor = cursor[k] as Record<string, unknown>
+  }
   cursor[keys[keys.length - 1] as string] = value
   return out as unknown as SiteDocument
 }
@@ -194,7 +204,7 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   // can never be pinned to a stale value by an old draft.
   const desired =
     draft === null ? base : EDITABLE.reduce((acc, f) => setField(acc, f, getField(draft, f)), base)
-  const { moduleChangeWords, playerChangeWords, webChangeWords } = await import(
+  const { moduleChangeWords, playerChangeWords, trustChangeWords, webChangeWords } = await import(
     '../../lib/module-switch'
   )
   return {
@@ -208,6 +218,10 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
             ...moduleChangeWords(committedDoc.modules.enabled, desired.modules.enabled),
             ...webChangeWords(committedDoc.modules.web, desired.modules.web),
             ...playerChangeWords(committedDoc.modules.players, desired.modules.players),
+            ...trustChangeWords(
+              committedDoc.github?.trustedAccounts ?? [],
+              desired.github?.trustedAccounts ?? [],
+            ),
           ],
     render: { before: committed.ok ? committed.value.bytes : null, after: renderSiteFile(desired) },
   }
@@ -261,6 +275,15 @@ async function refuseUnknown(
     if (takenHostnames.includes(host) && !own.includes(host)) {
       throw new Error(`${host} is already published on this box.`)
     }
+  }
+
+  // The trusted GitHub accounts. Each login reaches the token minter's
+  // shell through nix, so its charset is GitHub's own and nothing more; the
+  // owner is trusted by being the owner and is never listed.
+  if ('github.trustedAccounts' in patch && !unchanged('github.trustedAccounts')) {
+    const { trustedAccountsError } = await import('./trusted-accounts')
+    const problem = trustedAccountsError(patch['github.trustedAccounts'], next.github?.app ?? null)
+    if (problem !== null) throw new Error(problem)
   }
 
   // Retiring the old address. Only from the new one, since reaching the page
