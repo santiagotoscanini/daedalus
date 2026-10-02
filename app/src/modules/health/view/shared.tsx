@@ -1,6 +1,3 @@
-import type { ReactNode } from 'react'
-import { LogBoard } from '../../../components/logs'
-import { Changelog } from '../../../components/release-notes'
 import { FOOT_BASE, MONO, NOTE } from '../../../components/tokens'
 import type { VersionGap } from '../../../lib/dashboard/github'
 
@@ -25,37 +22,5 @@ export function VersionAside({ version }: { version: string | null }) {
     <span className={NOTE}>
       {version === null ? 'version unknown' : <span className={MONO}>{version}</span>}
     </span>
-  )
-}
-
-/**
- * A container with no page of its own: what a re-pull would bring, and what it
- * has been saying. The two things ever wanted from an MCP server, which has no
- * UI to open and no state to inspect.
- */
-export function ServerPair({
-  label,
-  container,
-  version,
-  gap,
-  note,
-}: {
-  label: string
-  container: string
-  version: string | null
-  gap: VersionGap
-  note: ReactNode
-}) {
-  return (
-    <>
-      <Changelog
-        gap={gap}
-        span={12}
-        title={gapTitle(label, gap)}
-        aside={<VersionAside version={version} />}
-        foot={note}
-      />
-      <LogBoard source={{ container }} title={`${label} logs`} />
-    </>
   )
 }

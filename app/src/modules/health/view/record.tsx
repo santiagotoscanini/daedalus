@@ -97,7 +97,18 @@ export function RecordView({ data: d }: { data: Record_ }) {
           aside={<VersionAside version={d.relay.version} />}
         />
 
-        <LogBoard source={{ container: 'getbased-relay' }} title="Relay logs" />
+        <LogBoard
+          source={{ container: 'getbased' }}
+          title="getbased logs"
+          neighbours={[
+            {
+              source: { container: 'getbased-relay' },
+              label: 'Sync relay',
+              role: 'what keeps the devices in step',
+              note: 'One line per device connecting and leaving, and a warning when a write is refused for going over a storage quota. A device that will not sync shows here as a connection that closes at once, or as no connection at all.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )

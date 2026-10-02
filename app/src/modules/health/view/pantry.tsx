@@ -5,7 +5,7 @@ import { FOOT, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { HealthData } from '../data'
-import { FOOT_WARN, ServerPair } from './shared'
+import { FOOT_WARN, gapTitle, VersionAside } from './shared'
 
 // Health › Pantry: Grocy — stock past its date, and the chores and tasks lists —
 // and the MCP server that lets a model read and write the same stock.
@@ -97,22 +97,32 @@ export function PantryView({ data: d }: { data: Pantry }) {
           )}
         </Board>
 
-        <Changelog gap={d.gap} span={12} />
-
-        <LogBoard source={{ container: 'grocy' }} title="Grocy logs" />
-
-        <ServerPair
-          label="Grocy MCP"
-          container="mcp-grocy"
-          version={d.mcp.version}
+        <Changelog gap={d.gap} span={6} />
+        <Changelog
           gap={d.mcp.gap}
-          note={
+          span={6}
+          title={gapTitle('Grocy MCP', d.mcp.gap)}
+          aside={<VersionAside version={d.mcp.version} />}
+          foot={
             <p className={FOOT}>
               The same stock as a tool server on the LLM gateway, so a model can check what is in
-              the house or add a purchase. It talks to Grocy&rsquo;s API with its own key; what
-              models called it lands in the gateway&rsquo;s tool counts on AI › Gateway.
+              the house or add a purchase. What models called it is in the tool counts on AI ›
+              Gateway.
             </p>
           }
+        />
+
+        <LogBoard
+          source={{ container: 'grocy' }}
+          title="Grocy logs"
+          neighbours={[
+            {
+              source: { container: 'mcp-grocy' },
+              label: 'Grocy MCP',
+              role: 'the tool server in front of it',
+              note: 'It reaches Grocy’s API with its own key, so a model’s failed stock call shows here first and only then, if at all, in Grocy’s own log.',
+            },
+          ]}
         />
       </BoardGrid>
     </>
